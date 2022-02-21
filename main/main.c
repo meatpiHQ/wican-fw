@@ -162,6 +162,7 @@ static void can_tx_task(void *pvParameters)
 
 	while(1)
 	{
+
 		twai_message_t tx_msg;
 		xQueueReceive(xMsg_Rx_Queue, &ucTCP_RX_Buffer, portMAX_DELAY);
 #ifdef MSG_PRINT

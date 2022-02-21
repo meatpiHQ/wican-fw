@@ -1,4 +1,4 @@
-build/
+build/*.*
 esp_idf_components/
 # Prerequisites
 *.d
@@ -52,4 +52,3 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
-
