@@ -23,7 +23,7 @@
 #define UDP_PORT			0
 #define TCP_PORT			1
 
-#define SOCKETCAN			0
+#define SLCAN				0
 #define REALDASH			1
 
 typedef struct _device_config
@@ -53,8 +53,8 @@ int8_t config_server_get_can_rate(void);
 int8_t config_server_get_can_mode(void);
 int8_t config_server_get_port_type(void);
 int32_t config_server_get_port(void);
-void config_server_wifi_connected(bool flag);
-bool config_server_get_wifi_connected(void);
+//void config_server_wifi_connected(bool flag);
+//bool config_server_get_wifi_connected(void);
 void config_server_set_sta_ip(char* ip);
 void config_server_get_sta_ip(char* ip);
 char *config_server_get_ap_pass(void);
@@ -65,3 +65,6 @@ int config_server_ble_pass(void);
 //char config_server_get_ble_tempfn(void);
 int8_t config_server_get_ble_config(void);
 void config_server_set_ble_config(uint8_t b);
+void config_server_restart(void);
+bool config_server_ws_connected(void);
+

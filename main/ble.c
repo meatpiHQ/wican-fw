@@ -16,7 +16,6 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include <string.h>
-#include "tcp_server.h"
 #include "lwip/sockets.h"
 
 #include <stdio.h>
@@ -27,8 +26,9 @@
 #include "esp_gatt_common_api.h"
 
 #include "ble.h"
-#include "tcp_server.h"
+#include "comm_server.h"
 #include "config_server.h"
+#include "wifi_network.h"
 /* Attributes State Machine */
 enum
 {
@@ -452,6 +452,9 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
             break;
         case ESP_GATTS_CONNECT_EVT:
             ESP_LOGI(GATTS_TABLE_TAG, "ESP_GATTS_CONNECT_EVT");
+        	config_server_stop();
+        	wifi_network_deinit();
+
     	    spp_conn_id = param->connect.conn_id;
     	    spp_gatts_if = gatts_if;
     	    is_connected = true;
@@ -462,6 +465,8 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
             break;
         case ESP_GATTS_DISCONNECT_EVT:
             ESP_LOGI(GATTS_TABLE_TAG, "ESP_GATTS_DISCONNECT_EVT, disconnect reason 0x%x", param->disconnect.reason);
+            wifi_network_restart();
+        	config_server_restart();
             is_connected = false;
             gpio_set_level(conn_led, 1);
             xEventGroupClearBits(s_ble_event_group, BLE_CONNECTED_BIT);

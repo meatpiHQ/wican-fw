@@ -14,7 +14,7 @@
 #include "lwip/sockets.h"
 #include "lwip/sys.h"
 #include <lwip/netdb.h>
-#include "tcp_server.h"
+#include "comm_server.h"
 
 #define TAG 		__func__
 
@@ -420,7 +420,7 @@ int8_t tcp_server_init(uint32_t port, QueueHandle_t *xTXp_Queue, QueueHandle_t *
 }
 void tcp_server_suspend(void)
 {
-	vTaskResume(xserver_handle);
+	vTaskSuspend(xserver_handle);
 	vTaskSuspend(xtx_handle);
 	vTaskSuspend(xrx_handle);
 }

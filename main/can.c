@@ -9,7 +9,7 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include <string.h>
-#include "tcp_server.h"
+#include "comm_server.h"
 #include "lwip/sockets.h"
 #include "driver/twai.h"
 #include "can.h"
@@ -254,4 +254,10 @@ esp_err_t can_send(twai_message_t *message, TickType_t ticks_to_wait)
 		return twai_transmit(message, ticks_to_wait);
 	}
 	else return ESP_ERR_INVALID_STATE;
+}
+
+bool can_is_enabled(void)
+{
+	EventBits_t uxBits = xEventGroupGetBits(s_can_event_group);
+	return (uxBits & CAN_ENABLE_BIT);
 }
