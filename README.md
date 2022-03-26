@@ -21,7 +21,6 @@ WiCAN also works with **BUSMaster**, for monitoring and logging CAN bus traffic.
 
 WiFi and CAN configuration can be set configuration web server.
 
-**Note: Schematics and source code Firmware will released soon!**
 
 ## [**Programming Examples**](https://github.com/meatpiHQ/programming_examples/tree/master/CAN)
 
