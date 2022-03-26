@@ -4,7 +4,7 @@
 ---
 ### **Description**:
 
-WiCAN is a **OBD-II WiFi/BLE** to **CAN **adapter based on **ESP32-C3**, it is the great tool for car hacking. The original firmware can interface directly with RealDash over WiFI or BLE. [**Realdash **](http://realdash.net/)allows you to create your own custom dashboard with stunning graphics, it's available on ANDROID, IOS AND WINDOWS 10.It can connect to your existing WiFi network or any device can connect to it's **WiFi access point**.
+WiCAN is a **OBD-II WiFi/BLE** to **CAN** adapter based on **ESP32-C3**, it is the great tool for car hacking. The original firmware can interface directly with RealDash over WiFI or BLE. [**Realdash **](http://realdash.net/)allows you to create your own custom dashboard with stunning graphics, it's available on ANDROID, IOS AND WINDOWS 10.It can connect to your existing WiFi network or any device can connect to it's **WiFi access point**.
 
 WiCAN also works with **BUSMaster**, for monitoring and logging CAN bus traffic.
 
