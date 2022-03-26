@@ -2,6 +2,15 @@
 
 [www.meatpi.com](https://www.meatpi.com)
 ---
+
+**Note: This is the intial release although all the functions and features work, optimization/clean up are still required.**
+
+### **Build**
+
+1. Install ESP-IDF v4.4.
+2. Clone porject.
+3. Open project and build.
+
 ### **Description**:
 
 WiCAN is a **OBD-II WiFi/BLE** to **CAN** adapter based on **ESP32-C3**, it is the great tool for car hacking. The original firmware can interface directly with RealDash over WiFI or BLE. [**Realdash **](http://realdash.net/)allows you to create your own custom dashboard with stunning graphics, it's available on ANDROID, IOS AND WINDOWS 10.It can connect to your existing WiFi network or any device can connect to it's **WiFi access point**.
