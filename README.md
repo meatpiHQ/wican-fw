@@ -10,7 +10,7 @@ WiCAN also works with **BUSMaster**, for monitoring and logging CAN bus traffic.
 
 **Also available API for LabView, C#, VB.Net, Delphi, Python** - In case you're writing your own software.
 
-WiFi and CAN configuration can be set configuration web server. [Documentation](https://github.com/meatpiHQ/WiCAN). 
+WiFi and CAN configuration can be set configuration web server.
 
 **Note: Schematics and source code Firmware will released soon!**
 
