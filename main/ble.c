@@ -44,7 +44,7 @@
 
 #include "esp_log.h"
 #include "esp_gatt_common_api.h"
-
+#include "types.h"
 #include "ble.h"
 #include "comm_server.h"
 #include "config_server.h"
@@ -406,7 +406,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
 {
 	esp_gatt_rsp_t rsp;
 //	static uint8_t test2[1] = {0};
-	static xTCP_Buffer rx_buffer;
+	static xdev_buffer rx_buffer;
 //	static uint8_t test1[] = {0x66 ,0x33 ,0x22 ,0x11 ,0xBB ,0x00 ,0x00 ,0x00 ,0x11 ,0x00 ,0x00 ,0x00 ,0x33 ,0x00 ,0x00 ,0x00 ,0xA4 ,0x3C ,0xD9 ,0x49};
     switch (event) {
         case ESP_GATTS_REG_EVT:
@@ -445,6 +445,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
             if(profile_handle_table[IDX_CHAR_VAL_A] == param->write.handle)
             {
 				memcpy(rx_buffer.ucElement, param->write.value, param->write.len);
+				rx_buffer.dev_channel = DEV_BLE;
 				rx_buffer.usLen = param->write.len;
 				xQueueSend(*xBle_RX_Queue, ( void * ) &rx_buffer, portMAX_DELAY );
             }
@@ -558,7 +559,7 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
 
 static void ble_task(void *pvParameters)
 {
-	static xTCP_Buffer tx_buffer;
+	static xdev_buffer tx_buffer;
 	while(1)
 	{
 		ESP_LOGI(GATTS_TABLE_TAG, "wait BLE_CONNECTED_BIT");
@@ -623,7 +624,7 @@ void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t conn
 //	ext_adv_raw_data = uid;
 	strcat((char*)ext_adv_raw_data, (char*)uid);
 	ESP_LOGE(GATTS_TABLE_TAG, "uid: %s", uid);
-	ESP_LOGE(GATTS_TABLE_TAG, "ext_adv_raw_data: %s", ext_adv_raw_data);
+	ESP_LOGE(GATTS_TABLE_TAG, "ext_adv_raw_data: %s, size:%d", ext_adv_raw_data, strlen((char*)ext_adv_raw_data));
 	conn_led = connected_led;
 
 	xBle_TX_Queue = xTXp_Queue;
