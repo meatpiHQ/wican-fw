@@ -34,12 +34,17 @@
 #include "comm_server.h"
 #include "lwip/sockets.h"
 #include "driver/twai.h"
+#include "types.h"
 #include "config_server.h"
 #include "realdash.h"
 #include "slcan.h"
 #include "can.h"
 #include "ble.h"
 #include "wifi_network.h"
+#include "esp_mac.h"
+#include "esp_ota_ops.h"
+#include "nvs.h"
+#include "nvs_flash.h"
 #define TAG 		__func__
 #define TX_GPIO_NUM             	0
 #define RX_GPIO_NUM             	3
@@ -50,11 +55,10 @@
 #define BLE_EN_PIN_SEL		(1ULL<<BLE_EN_PIN_NUM)
 #define BLE_Enabled()		(!gpio_get_level(BLE_EN_PIN_NUM))
 
-
 //static SemaphoreHandle_t xLed_Semaphore;
-static QueueHandle_t xMsg_Tx_Queue, xMsg_Rx_Queue;
-static xTCP_Buffer ucTCP_RX_Buffer;
-static xTCP_Buffer ucTCP_TX_Buffer;
+static QueueHandle_t xMsg_Tx_Queue, xMsg_Rx_Queue, xmsg_ws_tx_queue, xmsg_ble_tx_queue;
+static xdev_buffer ucTCP_RX_Buffer;
+static xdev_buffer ucTCP_TX_Buffer;
 
 static uint8_t protocol = SLCAN;
 
@@ -102,7 +106,14 @@ static void process_led(bool state)
 		gpio_set_level(ACTIVE_LED_GPIO_NUM, 1);
 	}
 }
-
+//TODO: make this pretty?
+void send_to_host(char* str, QueueHandle_t *q)
+{
+	ucTCP_TX_Buffer.usLen = strlen(str);
+	memcpy(ucTCP_TX_Buffer.ucElement, str, ucTCP_TX_Buffer.usLen);
+	xQueueSend( *q, ( void * ) &ucTCP_TX_Buffer, portMAX_DELAY );
+//	ESP_LOGI(TAG, "%s", str);
+}
 static void can_tx_task(void *pvParameters)
 {
 	uint8_t processed_index;
@@ -110,39 +121,37 @@ static void can_tx_task(void *pvParameters)
 	while(1)
 	{
 		twai_message_t tx_msg;
+		int temp_len = 0;
 		xQueueReceive(xMsg_Rx_Queue, &ucTCP_RX_Buffer, portMAX_DELAY);
-#ifdef MSG_PRINT
+//		ESP_LOG_BUFFER_CHAR(TAG, ucTCP_RX_Buffer.ucElement, ucTCP_RX_Buffer.usLen);
+//#ifdef MSG_PRINT
 		uint32_t i;
 //		ucTCP_RX_Buffer.ucElement[ucTCP_RX_Buffer.usLen] = 0;
 //		ESP_LOGI(TAG, "\r\n      Received %d bytes: %s\r\n", ucTCP_RX_Buffer.usLen, ucTCP_RX_Buffer.ucElement);
-		ESP_LOGI(TAG, "TCP Received %d", ucTCP_RX_Buffer.usLen);
-		for(i = 0; i < ucTCP_RX_Buffer.usLen; i++)
-		{
-			printf("HEX value = %x, Character = %c\n", ucTCP_RX_Buffer.ucElement[i] , ucTCP_RX_Buffer.ucElement[i] );
-		}
+//		ESP_LOGI(TAG, "TCP Received %d", ucTCP_RX_Buffer.usLen);
+//		for(i = 0; i < ucTCP_RX_Buffer.usLen; i++)
+//		{
+//			printf("HEX value = %x, Character = %c\n", ucTCP_RX_Buffer.ucElement[i] , ucTCP_RX_Buffer.ucElement[i] );
+//		}
 //		printf()
-#endif
-
+//#endif
+		temp_len = ucTCP_RX_Buffer.usLen;
 		if(protocol == SLCAN || config_server_ws_connected())
 		{
 			uint8_t* msg_ptr = ucTCP_RX_Buffer.ucElement;
-			char* ret;
+//			ESP_LOG_BUFFER_HEX(TAG, ucTCP_RX_Buffer.ucElement, ucTCP_RX_Buffer.usLen);
 
-			processed_index = 0;
-			while(processed_index != (ucTCP_RX_Buffer.usLen))
+			if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI)
 			{
-				ucTCP_RX_Buffer.usLen -= processed_index;
-				msg_ptr += processed_index;
-				ret = slcan_parse_str(msg_ptr, ucTCP_RX_Buffer.usLen, &tx_msg, &processed_index);
-				if(ret != 0)
-				{
-					ucTCP_TX_Buffer.usLen = strlen(ret);
-					memcpy(ucTCP_TX_Buffer.ucElement, ret, ucTCP_TX_Buffer.usLen);
-					xQueueSend( xMsg_Tx_Queue, ( void * ) &ucTCP_TX_Buffer, portMAX_DELAY );
-				}
-				processed_index++;
-
-//				ESP_LOGI(TAG, "ucTCP_RX_Buffer.usLen: %d, processed_index: %d", ucTCP_RX_Buffer.usLen, processed_index);
+				slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xMsg_Tx_Queue);
+			}
+			else if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI_WS)
+			{
+				slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xmsg_ws_tx_queue);
+			}
+			else if(ucTCP_RX_Buffer.dev_channel == DEV_BLE)
+			{
+				slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xmsg_ble_tx_queue);
 			}
 		}
 		else if(protocol == REALDASH)
@@ -206,39 +215,33 @@ static void can_rx_task(void *pvParameters)
 				}
 
 
-//				ESP_LOGI(TAG, "Sending  %d", ucTCP_TX_Buffer.usLen);
-//				for(uint8_t i = 0; i < ucTCP_TX_Buffer.usLen; i++)
-//				{
-//					printf("HEX value = %x, Character = %c\n", ucTCP_TX_Buffer.ucElement[i] , ucTCP_TX_Buffer.ucElement[i] );
-//				}
-//				if(!ble_flag)
+				if(tcp_port_open())
 				{
 					xQueueSend( xMsg_Tx_Queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(2000) );
 				}
-//				else
-//				{
-//					ble_realdash_send(ucTCP_TX_Buffer.ucElement, ucTCP_TX_Buffer.usLen);
-//				}
+				if(config_server_ws_connected())
+				{
+					xQueueSend( xmsg_ws_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(2000) );
+				}
+				if(ble_connected())
+				{
+					xQueueSend( xmsg_ble_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(2000) );
+				}
 
-//		        twai_message_t tx_msg;
-//				if(real_dash_parse_66(&tx_msg, ucTCP_TX_Buffer.ucElement))
-//				{
-//					tx_msg.identifier +=1;
-//					twai_transmit(&tx_msg, portMAX_DELAY);
-//				}
-//				else
-//				{
-//					ESP_LOGE(TAG, "error real_dash_parse_66!");
-//				}
+//				ESP_LOGI(TAG, "Sending  %d", ucTCP_TX_Buffer.usLen);
+
 			}
         }
 	}
 }
-
+#define PROJECT_VER1 	"@PROJECT_VER@"
 static uint8_t uid[33];
 void app_main(void)
 {
 	int32_t port;
+
+//	vTaskDelay(pdMS_TO_TICKS(2000));
+
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -260,16 +263,17 @@ void app_main(void)
 	gpio_set_level(CONNECTED_LED_GPIO_NUM, 1);
 	gpio_set_level(ACTIVE_LED_GPIO_NUM, 1);
 
-	io_conf.mode = GPIO_MODE_INPUT;
-	io_conf.pull_up_en = 1;
-	io_conf.pin_bit_mask = BLE_EN_PIN_SEL;
-	gpio_config(&io_conf);
+//	io_conf.mode = GPIO_MODE_INPUT;
+//	io_conf.pull_up_en = 1;
+//	io_conf.pin_bit_mask = BLE_EN_PIN_SEL;
+//	gpio_config(&io_conf);
 
-    xMsg_Rx_Queue = xQueueCreate(100, sizeof( xTCP_Buffer) );
-    xMsg_Tx_Queue = xQueueCreate(100, sizeof( xTCP_Buffer) );
-
-	config_server_start(&xMsg_Tx_Queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
-
+    xMsg_Rx_Queue = xQueueCreate(100, sizeof( xdev_buffer) );
+    xMsg_Tx_Queue = xQueueCreate(100, sizeof( xdev_buffer) );
+    xmsg_ws_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
+    xmsg_ble_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
+	config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
+	slcan_init(&send_to_host);
 	can_init();
 
 	protocol = config_server_protocol();
@@ -325,11 +329,18 @@ void app_main(void)
         sprintf((char *)uid,"WiCAN_%02x%02x%02x%02x%02x%02x",
                 derived_mac_addr[0], derived_mac_addr[1], derived_mac_addr[2],
                 derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
-    	ble_init(&xMsg_Tx_Queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, pass, &uid[0]);
+    	ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, pass, &uid[0]);
     }
 
     xTaskCreate(can_rx_task, "main_task", 4096, (void*)AF_INET, 5, NULL);
     xTaskCreate(can_tx_task, "can_tx_task", 4096, (void*)AF_INET, 5, NULL);
+
+    const esp_partition_t *running = esp_ota_get_running_partition();
+    esp_app_desc_t running_app_info;
+    if (esp_ota_get_partition_description(running, &running_app_info) == ESP_OK)
+    {
+        ESP_LOGI(TAG, "Running firmware version: %s", running_app_info.version);
+    }
 //    esp_log_level_set("*", ESP_LOG_INFO);
 //    xTaskCreate(monitor_task, "monitor_task", 4096, (void*)AF_INET, 5, NULL);
 

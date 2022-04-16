@@ -47,7 +47,7 @@ uint8_t sl_bitrate[] = {CAN_10K, CAN_20K, CAN_50K, CAN_100K,
 
 
 TimerHandle_t xSlTimer = NULL;
-
+void (*slcan_response)(char*, QueueHandle_t *q);
 
 static uint16_t slcan_get_time(void)
 {
@@ -320,7 +320,7 @@ static const char version[] = "V2011\r";
 static const char ack[] = "\r";
 static const char status[] = "F00\r";
 
-char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, uint8_t *processed_index)
+char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t *q)
 {
 //	twai_message_t frame;
 	uint8_t i, k;
@@ -655,31 +655,43 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, uint8_t 
 							frame->self = 0;
 						}
 
-						can_send(frame, 1);
+						if (ESP_ERR_INVALID_STATE == can_send(frame, 1))
+						{
+							ESP_LOGE(TAG, "can_send error");
+						}
 					}
 					cmd_ret = cmd;
 					msg_index = 0;
 //					ESP_LOGI(TAG, "end of command");
 					state = SL_HEADER;
 					cmd = SL_NONE;
-					*processed_index = i;
+//					*processed_index = i;
+//					ESP_LOGI(TAG, "cmd_ret: %d", cmd_ret);
 					switch(cmd_ret)
 					{
 						case SL_SERIAL:
 						{
-							return (char*)serial;
+							slcan_response((char*)serial, q);
+							break;
+//							return (char*)serial;
 						}
 						case SL_VER:
 						{
-							return (char*)version;
+							slcan_response((char*)version, q);
+							break;
+//							return (char*)version;
 						}
 						case SL_STATUS:
 						{
-							return (char*)status;
+							slcan_response((char*)status, q);
+							break;
+//							return (char*)status;
 						}
 						default:
 						{
-							return (char*)ack;
+							slcan_response((char*)ack, q);
+							break;
+//							return (char*)ack;
 						}
 					}
 					break;
@@ -688,287 +700,10 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, uint8_t 
 			}
 		}
 	}
-//	for(i = 0; i < len; i++)
-//	{
-//		switch(state)
-//		{
-//			case SL_HEADER:
-//			{
-//			    if (buf[i] == 'O')
-//			    {
-//			        // Open channel command
-//			    	can_silent(0);
-//			        can_enable();
-////			    	ESP_LOGI(TAG, "open command");
-//			    	state = SL_END;
-//			    	cmd = SL_OPEN;
-//			    	break;
-//
-//			    }
-//			    else if (buf[i] == 'Y')
-//			    {
-//			        // Open loop back mode
-////			    	ESP_LOGI(TAG, "Open loop back command");
-//			    	state = SL_END;
-//			    	cmd = SL_OPEN;
-//			    	break;
-//
-//			    }
-//			    else if (buf[i] == 'C')
-//			    {
-//			        // Close channel command
-//			        can_disable();
-////			    	ESP_LOGI(TAG, "close command");
-//			    	state = SL_END;
-//			    	cmd = SL_CLOSE;
-//			    	break;
-//
-//			    }
-//			    else if (buf[i] == 'L')
-//			    {
-////			    	ESP_LOGI(TAG, "Listen mode command");
-//			    	can_silent(1);
-//			    	can_enable();
-//			    	state = SL_END;
-//			    	cmd = SL_MUTE;
-//			    	break;
-//
-//			    }
-//			    else if (buf[i] == 'S')
-//			    {
-//			        // Set bitrate command
-////			    	ESP_LOGI(TAG, "speed command");
-//			    	state = SL_BODY;
-//			    	cmd = SL_SPEED;
-//			    	break;
-//
-//			    }
-//			    else if (buf[i] == 'a' || buf[i] == 'A')
-//			    {
-//			        // Set autoretry command
-//
-//			    	state = SL_BODY;
-//			    	cmd = SL_AUTO;
-//			    	break;
-//
-//			    }
-//				else if (buf[i] == 'v' || buf[i] == 'V')
-//				{
-//			        // Report firmware version and remote
-//			    	state = SL_END;
-//			    	cmd = SL_VER;
-//			    	break;
-//
-//			    }
-//				else if (buf[i] == 't' || buf[i] == 'T')
-//				{
-//					state = SL_BODY;
-//					if(buf[i] == 't')
-//					{
-//						cmd = SL_DATA_STD;
-//						ext_flag = 0;
-//					}
-//					else
-//					{
-//						cmd = SL_DATA_EXT;
-//						ext_flag = 1;
-//					}
-//					break;
-//
-//			    }
-//				else if (buf[i] == 'r' || buf[i] == 'R')
-//				{
-//					state = SL_BODY;
-//					if(buf[i] == 'r')
-//					{
-//						cmd = SL_REMOTE_STD;
-//						ext_flag = 0;
-//					}
-//					else
-//					{
-//						cmd = SL_REMOTE_EXT;
-//						ext_flag = 1;
-//					}
-//					break;
-//			    }
-//				else if(buf[i] == 'N')
-//				{
-//					cmd = SL_SERIAL;
-//					state = SL_END;
-//					break;
-//				}
-//				else if(buf[i] == 'Z')
-//				{
-//					cmd = SL_TSTAMP;
-//					state = SL_BODY;
-//					ESP_LOGW(TAG, "Timestamp enable");
-//					break;
-//				}
-//				else if(buf[i] == 'm')
-//				{
-//					cmd = SL_MASK_REG;
-//					state = SL_BODY;
-//					break;
-//				}
-//				else if(buf[i] == 'M')
-//				{
-//					cmd = SL_ACP_CODE;
-//					state = SL_BODY;
-//					break;
-//				}
-//				else if(buf[i] == 'F')
-//				{
-//			    	state = SL_END;
-//			    	cmd = SL_STATUS;
-//					break;
-//				}
-//				else
-//				{
-//			        // Error, unknown command
-////			        return -1;
-//					break;
-//			    }
-//				break;
-//			}
-//			case SL_BODY:
-//			{
-//				time_old = time_now;
-//				if(cmd == SL_SPEED || cmd == SL_MUTE || cmd == SL_AUTO ||
-//					cmd == SL_TSTAMP || cmd == SL_ACP_CODE || cmd == SL_MASK_REG)
-//				{
-//					switch(cmd)
-//					{
-//						case SL_SPEED:
-//						{
-//							uint8_t b = ascii_to_num(buf[i]) - 1;
-//					    	// Check for valid bitrate
-//							if(b >= 8)
-//							{
-//								can_set_bitrate(6);
-//								state = SL_END;
-//								break;
-//							}
-//
-//							can_set_bitrate(sl_bitrate[b]);
-//							state = SL_END;
-//							break;
-//						}
-//						case SL_AUTO:
-//						{
-//							state = SL_END;
-//							break;
-//						}
-//						case SL_TSTAMP:
-//						{
-//							state = SL_END;
-//							if(buf[i] == '0')
-//							{
-//								timestamp_flag = 0;
-//							}
-//							else if(buf[i] == '1')
-//							{
-//								timestamp_flag = 1;
-//							}
-//							break;
-//						}
-//						case SL_ACP_CODE:
-//						{
-//							msg_index++;
-//							if(msg_index == 8)
-//							{
-//								msg_index = 0;
-//								state = SL_END;
-//							}
-//							break;
-//						}
-//						case SL_MASK_REG:
-//						{
-//							msg_index++;
-//							if(msg_index == 8)
-//							{
-//								msg_index = 0;
-//								state = SL_END;
-//							}
-//							break;
-//						}
-//					}
-//					break;
-//				}
-//				else
-//				{
-//					if(slcan_set_frame(buf[i], frame, ext_flag) == 0)
-//					{
-////						state = SL_END;
-//						break;
-//					}
-//					else
-//					{
-//						switch(cmd)
-//						{
-//							case SL_REMOTE_STD:
-//							{
-//								frame->rtr = 1;
-//								frame->extd = 0;
-//								state = SL_END;
-//								break;
-//							}
-//							case SL_DATA_STD:
-//							{
-//								frame->rtr = 0;
-//								frame->extd = 0;
-//								state = SL_END;
-//								break;
-//							}
-//							case SL_REMOTE_EXT:
-//							{
-//								frame->rtr = 1;
-//								frame->extd = 1;
-//								state = SL_END;
-//								break;
-//							}
-//							case SL_DATA_EXT:
-//							{
-//								frame->rtr = 0;
-//								frame->extd = 1;
-//								state = SL_END;
-//								break;
-//							}
-//
-//							break;
-//						}
-////						twai_transmit(frame, portMAX_DELAY);
-////						state = SL_END;
-//						break;
-//					}
-//					break;
-//				}
-//
-//				break;
-//			}
-//			case SL_END:
-//			{
-//				if(cmd == SL_REMOTE_STD || cmd == SL_DATA_STD || cmd == SL_REMOTE_EXT || cmd == SL_DATA_EXT)
-//				{
-//					can_send(frame, 1);
-//				}
-//				if(buf[i] == '\r')
-//				{
-//
-//					cmd_ret = cmd;
-////					ESP_LOGI(TAG, "end of command");
-//					state = SL_HEADER;
-//					cmd = SL_NONE;
-//					return cmd_ret;
-//				}
-//				break;
-//			}
-//		}
-//	}
 
 	return 0;
 }
 
-// Parse an incoming slcan command from the USB CDC port
 int8_t slcan_parse_str1(uint8_t *buf, uint8_t len, twai_message_t *frame)
 {
 //	twai_message_t frame;
@@ -1136,31 +871,8 @@ int8_t slcan_parse_str1(uint8_t *buf, uint8_t len, twai_message_t *frame)
 
     return 0;
 }
-//static void vSlTimerCallback( TimerHandle_t xTimer )
-//{
-//
-//}
-//void slcan_inti_timer(void)
-//{
-//
-//    xSlTimer= xTimerCreate
-//                       ( /* Just a text name, not used by the RTOS
-//                         kernel. */
-//                         "SlTimer",
-//                         /* The timer period in ticks, must be
-//                         greater than 0. */
-//						 pdMS_TO_TICKS(60000),
-//                         /* The timers will auto-reload themselves
-//                         when they expire. */
-//                         pdTRUE,
-//                         /* The ID is used to store a count of the
-//                         number of times the timer has expired, which
-//                         is initialised to 0. */
-//                         ( void * ) 0,
-//                         /* Each timer calls the same callback when
-//                         it expires. */
-//						 vSlTimerCallback
-//                       );
-//    xTimerStart(xSlTimer, 0);
-//
-//}
+
+void slcan_init(void (*send_to_host)(char*, QueueHandle_t *q))
+{
+	slcan_response = send_to_host;
+}
