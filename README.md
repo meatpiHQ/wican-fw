@@ -2,6 +2,13 @@
 
 [www.meatpi.com](https://www.meatpi.com)
 ---
+- [Build](#build)
+- [Description](#description)
+- [Configuration](#configuration)
+  - [WiFi/CAN Configuration](#1-wifican-configuration)
+  - [BUSMaster](#2-busmaster)
+  - [Realdash](#3-realdash)
+- [Firmware Update](#firmware-update)
 
 **Note: This is the intial release although all the functions and features work, optimization/clean up are still required.**
 
@@ -39,7 +46,7 @@ WiFi and CAN configuration can be set configuration web server.
 # Configuration:
 --------
 
-# 1. WiFi/CAN Configuration:
+## 1. WiFi/CAN Configuration:
 1. Power up the device using the USB cable, or by plugging into the OBD-II connector. 
 2. The blue LED will light ON, and a WiFi device access point will start. The SSID will look like: WiCAN_xxxxxxxxxxxx
 3. Connect to the SSID using the default password: @meatpi#
@@ -51,10 +58,10 @@ WiFi and CAN configuration can be set configuration web server.
 
 ![Configuration page](https://github.com/meatpiHQ/WiCAN/blob/main/images/settings40.png?raw=true "Config page")
 
-# 2. BUSMaster
+## 2. BUSMaster
 You need to download the right version of BUSMaster provided in this [**Link**](https://bit.ly/3yGgGTm). Here is how to setup the hardware. 
 
-## **Device Configuration:**
+### **Device Configuration:**
 
 1. Go to configuration webpage.
 2. Baudrate can be set in BUSMaster configuration
@@ -62,7 +69,7 @@ You need to download the right version of BUSMaster provided in this [**Link**](
 4. Set "Protocol" = slcan
 5. Click submit changes.
 
-## **BUSMaster Configuration:**
+### **BUSMaster Configuration:**
 
 1. Select VSCom CAN-API by clicking on 'Driver Selection -> VSCom CAN-API"
 2. Then Click on 'Channel Configuration -> Advanced' 
@@ -74,7 +81,7 @@ You need to download the right version of BUSMaster provided in this [**Link**](
 
 <img src="https://user-images.githubusercontent.com/94690098/158798541-0317aa4f-ebf5-4e57-83b0-ea3fefeaf4e9.png" width="350" height="500" >
 
-# 3. ReadDash
+## 3. RealDash
 WiCAN can connect with RealDash using WiFi or BLE. The Protocol and CAN bitrate must be set using the configuration page. BLE is only support on Android and IOS. Windows 10 only supports WiFi connection.
 
 ## **WiFi Device Configuration:**
@@ -100,12 +107,26 @@ WiCAN can connect with RealDash using WiFi or BLE. The Protocol and CAN bitrate 
 2. Select the baudrate
 3. Set the "BLE Status" to enable
 
-# 4. Firmware Update
-Use the ESP flash tool to update the firmware, just follow the same setting in the picture below. Also "esptool.py" can also be used to flash a new firmware.
+# Firmware Update
 
-<img src="https://user-images.githubusercontent.com/94690098/158790496-31827bf3-4bda-47db-971d-ac1d53ad7972.PNG" width="350" height="600" >
+## 1. OTA:
+1. Download the latest release version, or compile your own.
+1. Go the device [configuration page](#device-configuration).
+2. Click on the "About" tab.
+3. Click on "Choose File".
+4. Select the binary file. Eample: wican-fw_v130.bin
+5. Click update, update should take about 30sec.
 
+**Note: for firmware version v1.00 use USB cable to flash the unit.**
+
+<img src="https://user-images.githubusercontent.com/94690098/163678507-f9822f57-bbe1-42a4-82c4-501cd7834ba0.png" width="350" height="300" >
+
+## 2. USB:
+
+Use the [**ESP flash tool**](https://www.espressif.com/en/support/download/other-tools) to update the firmware, just follow the same setting in the picture below. Make sure to select ESP32-C3 and USB mode. **esptool.py** also can also be used to flash a new firmware.
+
+<img src="https://user-images.githubusercontent.com/94690098/163678940-9ac2a2d3-153c-4d57-9da5-397714e82ce6.png" width="350" height="600" >
 
 ---
 
-© 2022 meatPi Electronics | www.meatpi.com | PO Box 5005 Clayton, VIC 3168, AustraliaS
+Â© 2022 meatPi Electronics | www.meatpi.com | PO Box 5005 Clayton, VIC 3168, AustraliaS
