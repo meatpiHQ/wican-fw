@@ -34,6 +34,7 @@
 #include "lwip/sockets.h"
 #include "lwip/sys.h"
 #include <lwip/netdb.h>
+#include "types.h"
 #include "comm_server.h"
 
 #define TAG 		__func__
@@ -60,7 +61,7 @@ static void tcp_server_rx_task(void *pvParameters)
 {
 //	int addr_family = (int)pvParameters;
 //    int len;
-    static xTCP_Buffer rx_buffer;
+    static xdev_buffer rx_buffer;
 
 wait_skt_rx:
 	xEventGroupWaitBits(
@@ -93,6 +94,7 @@ wait_skt_rx:
 			}
 			else
 			{
+				rx_buffer.dev_channel = DEV_WIFI;
 				rx_buffer.ucElement[rx_buffer.usLen] = 0; // Null-terminate whatever is received and treat it like a string
 //				ESP_LOGI(TAG, "Received %d bytes: %s", rx_buffer.usLen, rx_buffer.ucElement);
 		        //TODO: what happens if blocked for ever?
@@ -108,7 +110,7 @@ static void udp_server_rx_task(void *pvParameters)
 {
 //	int addr_family = (int)pvParameters;
 //    int len;
-    static xTCP_Buffer rx_buffer;
+    static xdev_buffer rx_buffer;
 
 wait_skt_rx:
 	xEventGroupWaitBits(
@@ -138,6 +140,7 @@ wait_skt_rx:
 			}
 			else
 			{
+				rx_buffer.dev_channel = DEV_WIFI;
 				rx_buffer.ucElement[rx_buffer.usLen] = 0; // Null-terminate whatever is received and treat it like a string
 //				ESP_LOGI(TAG, "Received %d bytes: %s", rx_buffer.usLen, rx_buffer.ucElement);
 		        //TODO: what happens if blocked for ever?
@@ -152,7 +155,7 @@ wait_skt_rx:
 static void udp_server_tx_task(void *pvParameters)
 {
 //	int addr_family = (int)pvParameters;
-	static xTCP_Buffer tx_buffer;
+	static xdev_buffer tx_buffer;
 	struct sockaddr_in Recv_addr;
 
 	Recv_addr.sin_family       = AF_INET;
@@ -191,7 +194,7 @@ wait_skt_tx:
 static void tcp_server_tx_task(void *pvParameters)
 {
 //	int addr_family = (int)pvParameters;
-	static xTCP_Buffer tx_buffer;
+	static xdev_buffer tx_buffer;
 wait_skt_tx:
 	xEventGroupWaitBits(
 					  xSocketEventGroup,   /* The event group being tested. */
