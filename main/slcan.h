@@ -68,7 +68,7 @@ typedef struct _sl_message
 	uint8_t len;
 }sl_message_t;
 
-void slcan_init(void (*send_to_host)(char*, QueueHandle_t *q));
+void slcan_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q));
 char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t *q);
 int8_t slcan_parse_frame(uint8_t *buf, twai_message_t *frame);
 

@@ -47,6 +47,7 @@
 
 #define SLCAN				0
 #define REALDASH			1
+#define SAVVYCAN			2
 
 typedef struct _device_config
 {

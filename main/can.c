@@ -63,7 +63,7 @@ static const twai_timing_config_t twai_timing_config[] = {
 static TimerHandle_t xCAN_EN_Timer;
 //static uint8_t silent = 0;
 //static uint8_t auto_retransmit = 0;
-static uint8_t datarate = 0;
+static uint8_t datarate = CAN_500K;
 //static uint8_t bus_state = OFF_BUS;
 //static uint32_t mask = 0xFFFFFFFF;
 //static uint32_t filter = 0;
@@ -141,6 +141,7 @@ void can_enable(void)
 	}
 
 	ESP_ERROR_CHECK(twai_start());
+	twai_clear_receive_queue();
 	can_unblock();
 	can_cfg.bus_state = ON_BUS;
 }
@@ -217,7 +218,10 @@ void can_set_bitrate(uint8_t rate)
 	}
 	datarate = rate;
 }
-
+uint8_t can_get_bitrate(void)
+{
+	return datarate;
+}
 static void vCAN_EN_Callback( TimerHandle_t xTimer )
 {
 	xEventGroupSetBits(s_can_event_group, CAN_ENABLE_BIT);
@@ -278,6 +282,11 @@ esp_err_t can_send(twai_message_t *message, TickType_t ticks_to_wait)
 
 bool can_is_enabled(void)
 {
-	EventBits_t uxBits = xEventGroupGetBits(s_can_event_group);
-	return (uxBits & CAN_ENABLE_BIT);
+	if(can_cfg.bus_state == ON_BUS)
+	{
+		return true;
+	}
+	else return false;
+//	EventBits_t uxBits = xEventGroupGetBits(s_can_event_group);
+//	return (uxBits & CAN_ENABLE_BIT);
 }

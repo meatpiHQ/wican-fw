@@ -18,8 +18,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include  "freertos/queue.h"
@@ -45,6 +43,8 @@
 #include "esp_ota_ops.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+#include "gvret.h"
+
 #define TAG 		__func__
 #define TX_GPIO_NUM             	0
 #define RX_GPIO_NUM             	3
@@ -55,22 +55,12 @@
 #define BLE_EN_PIN_SEL		(1ULL<<BLE_EN_PIN_NUM)
 #define BLE_Enabled()		(!gpio_get_level(BLE_EN_PIN_NUM))
 
-//static SemaphoreHandle_t xLed_Semaphore;
 static QueueHandle_t xMsg_Tx_Queue, xMsg_Rx_Queue, xmsg_ws_tx_queue, xmsg_ble_tx_queue;
 static xdev_buffer ucTCP_RX_Buffer;
 static xdev_buffer ucTCP_TX_Buffer;
 
 static uint8_t protocol = SLCAN;
 
-static int s_retry_num = 0;
-
-static EventGroupHandle_t s_wifi_event_group;
-#define WIFI_CONNECTED_BIT 			BIT0
-#define WIFI_FAIL_BIT     			BIT1
-#define WIFI_DISCONNECTED_BIT      	BIT2
-#define EXAMPLE_ESP_MAXIMUM_RETRY 	10
-//char sta_ip[20] = {0};
-TimerHandle_t xLedTimer;
 
 static void process_led(bool state)
 {
@@ -106,41 +96,38 @@ static void process_led(bool state)
 		gpio_set_level(ACTIVE_LED_GPIO_NUM, 1);
 	}
 }
+
 //TODO: make this pretty?
-void send_to_host(char* str, QueueHandle_t *q)
+void send_to_host(char* str, uint32_t len, QueueHandle_t *q)
 {
-	ucTCP_TX_Buffer.usLen = strlen(str);
+	if(len == 0)
+	{
+		ucTCP_TX_Buffer.usLen = strlen(str);
+	}
+	else
+	{
+		ucTCP_TX_Buffer.usLen = len;
+	}
 	memcpy(ucTCP_TX_Buffer.ucElement, str, ucTCP_TX_Buffer.usLen);
 	xQueueSend( *q, ( void * ) &ucTCP_TX_Buffer, portMAX_DELAY );
 //	ESP_LOGI(TAG, "%s", str);
 }
+
 static void can_tx_task(void *pvParameters)
 {
-	uint8_t processed_index;
-
 	while(1)
 	{
 		twai_message_t tx_msg;
-		int temp_len = 0;
+
 		xQueueReceive(xMsg_Rx_Queue, &ucTCP_RX_Buffer, portMAX_DELAY);
-//		ESP_LOG_BUFFER_CHAR(TAG, ucTCP_RX_Buffer.ucElement, ucTCP_RX_Buffer.usLen);
-//#ifdef MSG_PRINT
-		uint32_t i;
-//		ucTCP_RX_Buffer.ucElement[ucTCP_RX_Buffer.usLen] = 0;
-//		ESP_LOGI(TAG, "\r\n      Received %d bytes: %s\r\n", ucTCP_RX_Buffer.usLen, ucTCP_RX_Buffer.ucElement);
-//		ESP_LOGI(TAG, "TCP Received %d", ucTCP_RX_Buffer.usLen);
-//		for(i = 0; i < ucTCP_RX_Buffer.usLen; i++)
-//		{
-//			printf("HEX value = %x, Character = %c\n", ucTCP_RX_Buffer.ucElement[i] , ucTCP_RX_Buffer.ucElement[i] );
-//		}
-//		printf()
-//#endif
-		temp_len = ucTCP_RX_Buffer.usLen;
+
+//		ESP_LOG_BUFFER_HEX(TAG, ucTCP_RX_Buffer.ucElement, ucTCP_RX_Buffer.usLen);
+
+		uint8_t* msg_ptr = ucTCP_RX_Buffer.ucElement;
+		int temp_len = ucTCP_RX_Buffer.usLen;
+
 		if(protocol == SLCAN || config_server_ws_connected())
 		{
-			uint8_t* msg_ptr = ucTCP_RX_Buffer.ucElement;
-//			ESP_LOG_BUFFER_HEX(TAG, ucTCP_RX_Buffer.ucElement, ucTCP_RX_Buffer.usLen);
-
 			if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI)
 			{
 				slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xMsg_Tx_Queue);
@@ -160,23 +147,19 @@ static void can_tx_task(void *pvParameters)
 
 			can_send(&tx_msg, portMAX_DELAY);
 		}
+		else if(protocol == SAVVYCAN)
+		{
+			gvret_parse(msg_ptr, temp_len, &tx_msg, &xMsg_Tx_Queue);
+		}
 	}
 }
+
 static void can_rx_task(void *pvParameters)
 {
-	static uint32_t num_msg = 0;
-//	static int64_t time_old = 0;
+//	static uint32_t num_msg = 0;
+	static int64_t time_old = 0;
 
-//	vTaskDelay(pdMS_TO_TICKS(30000));
-//	config_server_stop();
-//	wifi_network_deinit();
-//	vTaskDelay(pdMS_TO_TICKS(30000));
-//	wifi_network_init();
-//	config_server_restart();
-//	while(1){
-//		vTaskDelay(pdMS_TO_TICKS(30000));
-//	}
-//	time_old = esp_timer_get_time();
+	time_old = esp_timer_get_time();
 	while(1)
 	{
         twai_message_t rx_msg;
@@ -193,17 +176,11 @@ static void can_rx_task(void *pvParameters)
 //        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
 //        		num_msg = 0;
 //        	}
-//        	active_led(1);
+
         	process_led(1);
-#ifdef MSG_PRINT
-			ESP_LOGI(TAG, "ID: 0x%04x Data: %02x %02x %02x %02x %02x %02x %02x %02x", rx_msg.identifier, rx_msg.data[0], rx_msg.data[1], rx_msg.data[2], rx_msg.data[3], rx_msg.data[4], rx_msg.data[5], rx_msg.data[6], rx_msg.data[7]);
-#endif
+
 			if(tcp_port_open() || ble_connected() || config_server_ws_connected())
 			{
-#ifdef MSG_PRINT
-				ESP_LOGI(TAG, "sending to socket");
-#endif
-
 				memset(ucTCP_TX_Buffer.ucElement, 0, sizeof(ucTCP_TX_Buffer.ucElement));
 				if(protocol == SLCAN || config_server_ws_connected())
 				{
@@ -213,7 +190,10 @@ static void can_rx_task(void *pvParameters)
 				{
 					ucTCP_TX_Buffer.usLen = real_dash_set_66(&rx_msg, ucTCP_TX_Buffer.ucElement);
 				}
-
+				else if(protocol == SAVVYCAN)
+				{
+					ucTCP_TX_Buffer.usLen = gvret_parse_can_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
+				}
 
 				if(tcp_port_open())
 				{
@@ -227,20 +207,14 @@ static void can_rx_task(void *pvParameters)
 				{
 					xQueueSend( xmsg_ble_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(2000) );
 				}
-
-//				ESP_LOGI(TAG, "Sending  %d", ucTCP_TX_Buffer.usLen);
-
 			}
         }
 	}
 }
-#define PROJECT_VER1 	"@PROJECT_VER@"
-static uint8_t uid[33];
+
 void app_main(void)
 {
-	int32_t port;
-
-//	vTaskDelay(pdMS_TO_TICKS(2000));
+	static uint8_t uid[33];
 
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_netif_init());
@@ -263,17 +237,13 @@ void app_main(void)
 	gpio_set_level(CONNECTED_LED_GPIO_NUM, 1);
 	gpio_set_level(ACTIVE_LED_GPIO_NUM, 1);
 
-//	io_conf.mode = GPIO_MODE_INPUT;
-//	io_conf.pull_up_en = 1;
-//	io_conf.pin_bit_mask = BLE_EN_PIN_SEL;
-//	gpio_config(&io_conf);
-
     xMsg_Rx_Queue = xQueueCreate(100, sizeof( xdev_buffer) );
     xMsg_Tx_Queue = xQueueCreate(100, sizeof( xdev_buffer) );
     xmsg_ws_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
     xmsg_ble_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
 	config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
 	slcan_init(&send_to_host);
+
 	can_init();
 
 	protocol = config_server_protocol();
@@ -301,11 +271,14 @@ void app_main(void)
 
 		can_enable();
 	}
+	else if(protocol == SAVVYCAN)
+	{
+		gvret_init(&send_to_host);
+		can_enable();
+	}
 
 	wifi_network_init();
-	port = config_server_get_port();
-	ESP_LOGI(TAG, "Port: %d",port);
-
+	int32_t port = config_server_get_port();
 
 	if(port == -1)
 	{
@@ -342,7 +315,5 @@ void app_main(void)
         ESP_LOGI(TAG, "Running firmware version: %s", running_app_info.version);
     }
 //    esp_log_level_set("*", ESP_LOG_INFO);
-//    xTaskCreate(monitor_task, "monitor_task", 4096, (void*)AF_INET, 5, NULL);
-
 }
 
