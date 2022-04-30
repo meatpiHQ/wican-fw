@@ -157,9 +157,9 @@ static void can_tx_task(void *pvParameters)
 static void can_rx_task(void *pvParameters)
 {
 //	static uint32_t num_msg = 0;
-	static int64_t time_old = 0;
+//	static int64_t time_old = 0;
 
-	time_old = esp_timer_get_time();
+//	time_old = esp_timer_get_time();
 	while(1)
 	{
         twai_message_t rx_msg;
@@ -305,7 +305,7 @@ void app_main(void)
     	ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, pass, &uid[0]);
     }
 
-    xTaskCreate(can_rx_task, "main_task", 4096, (void*)AF_INET, 5, NULL);
+    xTaskCreate(can_rx_task, "can_rx_task", 4096, (void*)AF_INET, 5, NULL);
     xTaskCreate(can_tx_task, "can_tx_task", 4096, (void*)AF_INET, 5, NULL);
 
     const esp_partition_t *running = esp_ota_get_running_partition();
