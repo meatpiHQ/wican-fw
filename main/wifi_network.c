@@ -43,8 +43,6 @@ static const char *WIFI_TAG = "wifi_network";
 static esp_netif_t* ap_netif;
 static esp_netif_t* sta_netif;
 
-
-static int s_retry_num = 0;
 static EventGroupHandle_t s_wifi_event_group = NULL;
 #define WIFI_CONNECTED_BIT 			BIT0
 #define WIFI_FAIL_BIT     			BIT1
@@ -53,13 +51,9 @@ static EventGroupHandle_t s_wifi_event_group = NULL;
 #define EXAMPLE_ESP_MAXIMUM_RETRY 	10
 char sta_ip[20] = {0};
 
-static const TickType_t connect_delay[] = {2000, 4000, 6000,8000,10000,10000};
-
 static void wifi_network_event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
 {
-	static int64_t last_try = 0;
-
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
     {
     	ESP_LOGI(WIFI_TAG, "WIFI_EVENT_STA_START");
@@ -68,23 +62,10 @@ static void wifi_network_event_handler(void* arg, esp_event_base_t event_base,
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
     {
     	ESP_LOGI(WIFI_TAG, "WIFI_EVENT_STA_DISCONNECTED");
-//    	config_server_wifi_connected(0);
 
     	xEventGroupSetBits(s_wifi_event_group, WIFI_DISCONNECTED_BIT);
-
-		if((WIFI_INIT_BIT & xEventGroupGetBits(s_wifi_event_group)))
-		{
-	    	if(esp_timer_get_time() > (last_try + connect_delay[s_retry_num]*1000))
-	    	{
-	    		last_try = esp_timer_get_time();
-				esp_wifi_connect();
-				s_retry_num++;
-				s_retry_num %= 6;
-				ESP_LOGI(WIFI_TAG, "retry to connect to the AP");
-	    	}
-		}
-
-
+		esp_wifi_connect();
+		ESP_LOGI(WIFI_TAG, "retry to connect to the AP");
     }
     else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
     {
@@ -95,10 +76,9 @@ static void wifi_network_event_handler(void* arg, esp_event_base_t event_base,
         sprintf(sta_ip, "%d.%d.%d.%d", IP2STR(&event->ip_info.ip));
 
         config_server_set_sta_ip(sta_ip);
-        s_retry_num = 0;
+
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
         xEventGroupClearBits(s_wifi_event_group, WIFI_DISCONNECTED_BIT);
-//        config_server_wifi_connected(1);
     }
 
     if (event_id == WIFI_EVENT_AP_STACONNECTED)
@@ -124,16 +104,8 @@ static void wifi_network_event_handler(void* arg, esp_event_base_t event_base,
 void wifi_network_deinit(void)
 {
 	xEventGroupClearBits(s_wifi_event_group, WIFI_INIT_BIT);
-//	ESP_ERROR_CHECK(esp_event_handler_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_network_event_handler));
-//	ESP_ERROR_CHECK(esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_network_event_handler));
-//	esp_netif_dhcps_stop(ap_netif);
-//	esp_netif_destroy_default_wifi(ap_netif);
-//	ESP_ERROR_CHECK(esp_wifi_clear_default_wifi_driver_and_handlers(sta_netif));
-//	esp_netif_destroy(sta_netif);
-//	esp_netif_destroy_default_wifi(sta_netif);
+
 	ESP_LOGW(WIFI_TAG, "wifi deinit");
-//    ESP_ERROR_CHECK(esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &wifi_network_event_handler));
-//    ESP_ERROR_CHECK(esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_network_event_handler));
 	esp_wifi_disconnect();
     esp_err_t err = esp_wifi_stop();
 
@@ -141,21 +113,6 @@ void wifi_network_deinit(void)
     {
         return;
     }
-//    ESP_ERROR_CHECK(err);
-//    ESP_ERROR_CHECK(esp_wifi_deinit());
-//
-////    ESP_ERROR_CHECK(esp_wifi_clear_default_wifi_driver_and_handlers(ap_netif));
-////    esp_netif_destroy(ap_netif);
-//	esp_netif_dhcps_stop(ap_netif);
-//	esp_netif_destroy_default_wifi(ap_netif);
-//    ap_netif = NULL;
-//
-//    if(sta_netif != NULL)
-//    {
-//		ESP_ERROR_CHECK(esp_wifi_clear_default_wifi_driver_and_handlers(sta_netif));
-//		esp_netif_destroy(sta_netif);
-//		ap_netif = NULL;
-//    }
 }
 void wifi_network_restart(void)
 {
