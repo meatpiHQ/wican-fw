@@ -262,6 +262,7 @@ void wifi_network_init(void)
     ESP_ERROR_CHECK(esp_wifi_start());
     xEventGroupSetBits(s_wifi_event_group, WIFI_INIT_BIT);
     xEventGroupSetBits(s_wifi_event_group, WIFI_DISCONNECTED_BIT);
+    xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECT_IDLE_BIT);
 //    esp_wifi_connect();
     ESP_LOGI(WIFI_TAG, "wifi_init finished.");
 
