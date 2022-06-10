@@ -195,6 +195,8 @@ static void tcp_server_tx_task(void *pvParameters)
 {
 //	int addr_family = (int)pvParameters;
 	static xdev_buffer tx_buffer;
+	static uint8_t send_buf[1400];
+	static uint32_t send_buf_len = 0;
 wait_skt_tx:
 	xEventGroupWaitBits(
 					  xSocketEventGroup,   /* The event group being tested. */
@@ -205,27 +207,64 @@ wait_skt_tx:
 	ESP_LOGI(TAG, "Socket connected...");
 	while(1)
 	{
-		xQueueReceive(*xTX_Queue, ( void * ) &tx_buffer, portMAX_DELAY);
-//		ESP_LOGI(TAG, "Sending %d bytes: %s", tx_buffer.usLen, tx_buffer.ucElement);
-        if( xSemaphoreTake( xTCP_Socket_Semaphore, portMAX_DELAY ) == pdTRUE )
-        {
-            int to_write = tx_buffer.usLen;
-            while (to_write > 0)
-            {
-                int written = send(sock, tx_buffer.ucElement + (tx_buffer.usLen - to_write), to_write, 0);
-                if (written < 0)
-                {
-                    ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
-                    xEventGroupSetBits( xSocketEventGroup, PORT_CLOSED_BIT );
-                    xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
-                    xSemaphoreGive( xTCP_Socket_Semaphore );
-                    goto wait_skt_tx;
-                }
-                to_write -= written;
-            }
-
-        }
-        xSemaphoreGive( xTCP_Socket_Semaphore );
+		xQueuePeek(*xTX_Queue, ( void * ) &tx_buffer, portMAX_DELAY);
+		send_buf_len = 0;
+		while(xQueuePeek(*xTX_Queue, ( void * ) &tx_buffer, 0) == pdTRUE)
+		{
+			if(send_buf_len + tx_buffer.usLen < sizeof(send_buf))
+			{
+				xQueueReceive(*xTX_Queue, ( void * ) &tx_buffer, 0);
+				memcpy(send_buf, tx_buffer.ucElement+send_buf_len, tx_buffer.usLen);
+				send_buf_len += tx_buffer.usLen;
+			}
+			else
+			{
+				break;
+			}
+		}
+		if(send_buf_len != 0)
+		{
+			if( xSemaphoreTake( xTCP_Socket_Semaphore, portMAX_DELAY ) == pdTRUE )
+			{
+				int to_write = send_buf_len;
+				while (to_write > 0)
+				{
+					int written = send(sock, send_buf + (send_buf_len - to_write), to_write, 0);
+					if (written < 0)
+					{
+						ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
+						xEventGroupSetBits( xSocketEventGroup, PORT_CLOSED_BIT );
+						xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
+						xSemaphoreGive( xTCP_Socket_Semaphore );
+						goto wait_skt_tx;
+					}
+					to_write -= written;
+				}
+			}
+			xSemaphoreGive( xTCP_Socket_Semaphore );
+//			vTaskDelay(pdMS_TO_TICKS(1));
+		}
+//		xQueueReceive(*xTX_Queue, ( void * ) &tx_buffer, portMAX_DELAY);
+////		ESP_LOGI(TAG, "Sending %d bytes: %s", tx_buffer.usLen, tx_buffer.ucElement);
+//        if( xSemaphoreTake( xTCP_Socket_Semaphore, portMAX_DELAY ) == pdTRUE )
+//        {
+//            int to_write = tx_buffer.usLen;
+//            while (to_write > 0)
+//            {
+//                int written = send(sock, tx_buffer.ucElement + (tx_buffer.usLen - to_write), to_write, 0);
+//                if (written < 0)
+//                {
+//                    ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
+//                    xEventGroupSetBits( xSocketEventGroup, PORT_CLOSED_BIT );
+//                    xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
+//                    xSemaphoreGive( xTCP_Socket_Semaphore );
+//                    goto wait_skt_tx;
+//                }
+//                to_write -= written;
+//            }
+//
+//        }
+//        xSemaphoreGive( xTCP_Socket_Semaphore );
 	}
 }
 
