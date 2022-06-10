@@ -44,14 +44,15 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "gvret.h"
-
+#include "sleep_mode.h"
 #define TAG 		__func__
 #define TX_GPIO_NUM             	0
 #define RX_GPIO_NUM             	3
 #define CONNECTED_LED_GPIO_NUM		8
 #define ACTIVE_LED_GPIO_NUM			9
 #define BLE_EN_PIN_NUM				5
-#define GPIO_OUTPUT_PIN_SEL  ((1ULL<<CONNECTED_LED_GPIO_NUM) | (1ULL<<ACTIVE_LED_GPIO_NUM))
+#define PWR_LED_GPIO_NUM			7
+#define GPIO_OUTPUT_PIN_SEL  ((1ULL<<CONNECTED_LED_GPIO_NUM) | (1ULL<<ACTIVE_LED_GPIO_NUM) | (1ULL<<PWR_LED_GPIO_NUM))
 #define BLE_EN_PIN_SEL		(1ULL<<BLE_EN_PIN_NUM)
 #define BLE_Enabled()		(!gpio_get_level(BLE_EN_PIN_NUM))
 
@@ -314,6 +315,8 @@ void app_main(void)
     {
         ESP_LOGI(TAG, "Running firmware version: %s", running_app_info.version);
     }
+    sleep_mode_init();
+    gpio_set_level(PWR_LED_GPIO_NUM, 1);
 //    esp_log_level_set("*", ESP_LOG_INFO);
 }
 

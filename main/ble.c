@@ -701,5 +701,11 @@ void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t conn
     esp_log_level_set(GATTS_TABLE_TAG, ESP_LOG_NONE);
 }
 
-
+void ble_disable(void)
+{
+	esp_bluedroid_disable();
+	esp_bluedroid_deinit();
+	esp_bt_controller_disable();
+	esp_bt_controller_deinit();
+}
 
