@@ -258,7 +258,7 @@ void wifi_network_init(void)
 	esp_netif_dhcps_start(ap_netif);
 
 	ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config_ap));
-
+	ESP_ERROR_CHECK(esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20));
     ESP_ERROR_CHECK(esp_wifi_start());
     xEventGroupSetBits(s_wifi_event_group, WIFI_INIT_BIT);
     xEventGroupSetBits(s_wifi_event_group, WIFI_DISCONNECTED_BIT);
