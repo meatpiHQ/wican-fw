@@ -315,8 +315,14 @@ void app_main(void)
     {
         ESP_LOGI(TAG, "Running firmware version: %s", running_app_info.version);
     }
-    sleep_mode_init();
+
+    if(config_server_get_sleep_config())
+    {
+    	sleep_mode_init();
+    }
+
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
+    esp_ota_mark_app_valid_cancel_rollback();
 //    esp_log_level_set("*", ESP_LOG_INFO);
 }
 

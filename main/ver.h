@@ -22,6 +22,6 @@
 #ifndef __VER_H__
 #define __VER_H__
 
-#define HW_VERSION		"v2.10"
+//#define HW_VERSION		"v3.00"
 
 #endif
