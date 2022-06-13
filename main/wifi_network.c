@@ -203,7 +203,7 @@ void wifi_network_init(void)
                                                         &wifi_network_event_handler,
                                                         NULL,
                                                         &instance_got_ip));
-
+    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     static wifi_config_t wifi_config_sta = {
         .sta = {
             .ssid = "",
