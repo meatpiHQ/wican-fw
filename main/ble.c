@@ -560,28 +560,93 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
 static void ble_task(void *pvParameters)
 {
 	static xdev_buffer tx_buffer;
+	static uint8_t ble_send_buf[490];
+	static uint32_t ble_send_buf_len = 0;
+	static uint32_t num_msg = 0;
+	static int64_t time_old = 0;
+	static int64_t send_time = 0;
 	while(1)
 	{
-		ESP_LOGI(GATTS_TABLE_TAG, "wait BLE_CONNECTED_BIT");
-		xEventGroupWaitBits(s_ble_event_group,
-							BLE_CONNECTED_BIT,
-							pdFALSE,
-							pdFALSE,
-							portMAX_DELAY);
-		ESP_LOGI(GATTS_TABLE_TAG, "BLE_CONNECTED_BIT");
+		//		ESP_LOGI(GATTS_TABLE_TAG, "wait BLE_CONNECTED_BIT");
+				xEventGroupWaitBits(s_ble_event_group,
+									BLE_CONNECTED_BIT,
+									pdFALSE,
+									pdFALSE,
+									portMAX_DELAY);
+		//		ESP_LOGI(GATTS_TABLE_TAG, "BLE_CONNECTED_BIT");
 
-		xQueueReceive(*xBle_TX_Queue, ( void * ) &tx_buffer, portMAX_DELAY);
+				xQueuePeek(*xBle_TX_Queue, ( void * ) &tx_buffer, portMAX_DELAY);
+		//		memcpy(ble_send_buf, tx_buffer.ucElement, tx_buffer.usLen);
+		//		ble_send_buf_len = tx_buffer.usLen;
+				xEventGroupWaitBits(s_ble_event_group,
+									BLE_CONNECTED_BIT,
+									pdFALSE,
+									pdFALSE,
+									portMAX_DELAY);
 
-		while(!ble_tx_ready())
-		{
-			vTaskDelay(pdMS_TO_TICKS(1));
-		}
-		xEventGroupWaitBits(s_ble_event_group,
-							BLE_CONNECTED_BIT,
-							pdFALSE,
-							pdFALSE,
-							portMAX_DELAY);
-		ble_send(tx_buffer.ucElement, tx_buffer.usLen);
+
+
+				while(!ble_tx_ready())
+				{
+					vTaskDelay(pdMS_TO_TICKS(1));
+				}
+				int free_packet = esp_ble_get_cur_sendable_packets_num(spp_conn_id);
+
+				if(free_packet)
+				{
+					while((xQueuePeek(*xBle_TX_Queue, ( void * ) &tx_buffer, 0) == pdTRUE))
+					{
+						if(ble_send_buf_len + tx_buffer.usLen < sizeof(ble_send_buf))
+						{
+							xQueueReceive(*xBle_TX_Queue, ( void * ) &tx_buffer, 0);
+
+							memcpy(ble_send_buf+ble_send_buf_len, tx_buffer.ucElement, tx_buffer.usLen);
+							num_msg++;
+							ble_send_buf_len += tx_buffer.usLen;
+							if(esp_timer_get_time() - time_old > 1000*1000)
+							{
+								time_old = esp_timer_get_time();
+
+		//						ESP_LOGI(GATTS_TABLE_TAG, "msg %u/sec", num_msg);
+								num_msg = 0;
+							}
+						}
+						else
+						{
+			//				xEventGroupWaitBits(s_ble_event_group,
+			//									BLE_CONNECTED_BIT,
+			//									pdFALSE,
+			//									pdFALSE,
+			//									portMAX_DELAY);
+		//					ESP_LOG_BUFFER_HEXDUMP(GATTS_TABLE_TAG, ble_send_buf, ble_send_buf_len, ESP_LOG_INFO);
+		//					vTaskDelay(pdMS_TO_TICKS(30000));
+							ble_send(ble_send_buf, ble_send_buf_len);
+							ble_send_buf_len = 0;
+							if(--free_packet == 0)
+							{
+								break;
+							}
+						}
+					}
+					if(free_packet != 0 && ble_send_buf_len != 0)
+					{
+						ble_send(ble_send_buf, ble_send_buf_len);
+						ble_send_buf_len = 0;
+					}
+				}
+
+		//		ESP_LOGI(GATTS_TABLE_TAG, "esp_ble_get_cur_sendable_packets_num 1: %d", esp_ble_get_cur_sendable_packets_num(spp_conn_id));
+		//		while(!ble_tx_ready())
+		//		{
+		//			vTaskDelay(pdMS_TO_TICKS(1));
+		//		}
+		//		xEventGroupWaitBits(s_ble_event_group,
+		//							BLE_CONNECTED_BIT,
+		//							pdFALSE,
+		//							pdFALSE,
+		//							portMAX_DELAY);
+		//		ble_send(ble_send_buf, ble_send_buf_len);
+		//		ESP_LOGI(GATTS_TABLE_TAG, "esp_ble_get_cur_sendable_packets_num 2: %d", esp_ble_get_cur_sendable_packets_num(spp_conn_id));
 	}
 }
 

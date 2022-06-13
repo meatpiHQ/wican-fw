@@ -195,6 +195,7 @@ static void tcp_server_tx_task(void *pvParameters)
 {
 //	int addr_family = (int)pvParameters;
 	static xdev_buffer tx_buffer;
+
 wait_skt_tx:
 	xEventGroupWaitBits(
 					  xSocketEventGroup,   /* The event group being tested. */
@@ -205,27 +206,31 @@ wait_skt_tx:
 	ESP_LOGI(TAG, "Socket connected...");
 	while(1)
 	{
-		xQueueReceive(*xTX_Queue, ( void * ) &tx_buffer, portMAX_DELAY);
-//		ESP_LOGI(TAG, "Sending %d bytes: %s", tx_buffer.usLen, tx_buffer.ucElement);
-        if( xSemaphoreTake( xTCP_Socket_Semaphore, portMAX_DELAY ) == pdTRUE )
-        {
-            int to_write = tx_buffer.usLen;
-            while (to_write > 0)
-            {
-                int written = send(sock, tx_buffer.ucElement + (tx_buffer.usLen - to_write), to_write, 0);
-                if (written < 0)
-                {
-                    ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
-                    xEventGroupSetBits( xSocketEventGroup, PORT_CLOSED_BIT );
-                    xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
-                    xSemaphoreGive( xTCP_Socket_Semaphore );
-                    goto wait_skt_tx;
-                }
-                to_write -= written;
-            }
+		xQueuePeek(*xTX_Queue, ( void * ) &tx_buffer, portMAX_DELAY);
 
-        }
-        xSemaphoreGive( xTCP_Socket_Semaphore );
+		while(xQueuePeek(*xTX_Queue, ( void * ) &tx_buffer, 0) == pdTRUE)
+		{
+			if( xSemaphoreTake( xTCP_Socket_Semaphore, portMAX_DELAY ) == pdTRUE )
+			{
+				int to_write = tx_buffer.usLen;
+				xQueueReceive(*xTX_Queue, ( void * ) &tx_buffer, 0);
+				while (to_write > 0)
+				{
+					int written = send(sock, tx_buffer.ucElement + (tx_buffer.usLen - to_write), to_write, 0);
+					if (written < 0)
+					{
+						ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
+						xEventGroupSetBits( xSocketEventGroup, PORT_CLOSED_BIT );
+						xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
+						xSemaphoreGive( xTCP_Socket_Semaphore );
+						goto wait_skt_tx;
+					}
+					to_write -= written;
+				}
+			}
+			xSemaphoreGive( xTCP_Socket_Semaphore );
+		}
+		vTaskDelay(pdMS_TO_TICKS(1));
 	}
 }
 
