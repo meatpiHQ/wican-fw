@@ -94,7 +94,7 @@ static uint16_t adc1_chan_mask = BIT(7);
 static uint16_t adc2_chan_mask = 0;
 static adc_channel_t channel[1] = {ADC1_CHANNEL_7};
 #endif
-#define THRESHOLD_VOLTAGE		13.1f
+#define THRESHOLD_VOLTAGE		13.0f
 #define SLEEP_TIME_DELAY		(60*1000*1000)
 #define WAKEUP_TIME_DELAY		(6*1000*1000)
 
