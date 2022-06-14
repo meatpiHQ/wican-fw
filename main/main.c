@@ -166,8 +166,7 @@ static void can_rx_task(void *pvParameters)
         twai_message_t rx_msg;
         esp_err_t ret = 0xFF;
         process_led(0);
-        ret = can_receive(&rx_msg, pdMS_TO_TICKS(1));
-        if(ret == ESP_OK)
+        while(can_receive(&rx_msg, 0) ==  ESP_OK)
         {
 //        	num_msg++;
 //        	if(esp_timer_get_time() - time_old > 1000*1000)
@@ -210,6 +209,7 @@ static void can_rx_task(void *pvParameters)
 				}
 			}
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
 	}
 }
 
