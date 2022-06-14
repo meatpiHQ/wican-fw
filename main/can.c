@@ -290,3 +290,12 @@ bool can_is_enabled(void)
 //	EventBits_t uxBits = xEventGroupGetBits(s_can_event_group);
 //	return (uxBits & CAN_ENABLE_BIT);
 }
+
+uint32_t can_msgs_to_rx(void)
+{
+	twai_status_info_t status_info;
+
+	twai_get_status_info(&status_info);
+
+	return status_info.msgs_to_rx;
+}
