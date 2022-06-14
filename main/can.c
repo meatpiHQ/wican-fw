@@ -71,7 +71,7 @@ static can_cfg_t can_cfg;
 
 #define TWAI_CONFIG(tx_io_num, rx_io_num, op_mode) {.mode = op_mode, .tx_io = tx_io_num, .rx_io = rx_io_num,        \
                                                                     .clkout_io = TWAI_IO_UNUSED, .bus_off_io = TWAI_IO_UNUSED,      \
-                                                                    .tx_queue_len = 30, .rx_queue_len = 30,                           \
+                                                                    .tx_queue_len = 100, .rx_queue_len = 100,                           \
                                                                     .alerts_enabled = TWAI_ALERT_NONE,  .clkout_divider = 0,        \
                                                                     .intr_flags = ESP_INTR_FLAG_LEVEL1}
 
