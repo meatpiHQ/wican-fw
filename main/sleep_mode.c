@@ -48,6 +48,13 @@
 #include "sleep_mode.h"
 #include "ble.h"
 #include "esp_sleep.h"
+#include "lwip/sockets.h"
+#include "lwip/dns.h"
+#include "lwip/netdb.h"
+
+#include "esp_log.h"
+#include "mqtt_client.h"
+
 
 #define TIMES              256
 #define GET_UNIT(x)        ((x>>3) & 0x1)
@@ -100,6 +107,72 @@ static adc_channel_t channel[1] = {ADC1_CHANNEL_7};
 
 static QueueHandle_t voltage_queue;
 static esp_adc_cal_characteristics_t adc1_chars;
+
+
+static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
+{
+    ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%d", base, event_id);
+    esp_mqtt_event_handle_t event = event_data;
+    esp_mqtt_client_handle_t client = event->client;
+    int msg_id;
+    switch ((esp_mqtt_event_id_t)event_id) {
+    case MQTT_EVENT_CONNECTED:
+        ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
+        msg_id = esp_mqtt_client_publish(client, "/topic/qos1", "data_33", 0, 1, 0);
+        ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
+
+        break;
+    case MQTT_EVENT_DISCONNECTED:
+        ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
+        break;
+
+    case MQTT_EVENT_SUBSCRIBED:
+        ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
+        break;
+    case MQTT_EVENT_UNSUBSCRIBED:
+        ESP_LOGI(TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
+        break;
+    case MQTT_EVENT_PUBLISHED:
+        ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
+        esp_mqtt_client_disconnect(client);
+        esp_mqtt_client_stop(client);
+        break;
+    case MQTT_EVENT_DATA:
+        ESP_LOGI(TAG, "MQTT_EVENT_DATA");
+        printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
+        printf("DATA=%.*s\r\n", event->data_len, event->data);
+        break;
+    case MQTT_EVENT_ERROR:
+        ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
+//        if (event->error_handle->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
+//            log_error_if_nonzero("reported from esp-tls", event->error_handle->esp_tls_last_esp_err);
+//            log_error_if_nonzero("reported from tls stack", event->error_handle->esp_tls_stack_err);
+//            log_error_if_nonzero("captured as transport's socket errno",  event->error_handle->esp_transport_sock_errno);
+//            ESP_LOGI(TAG, "Last errno string (%s)", strerror(event->error_handle->esp_transport_sock_errno));
+//
+//        }
+        break;
+    default:
+        ESP_LOGI(TAG, "Other event id:%d", event->event_id);
+        break;
+    }
+}
+static esp_mqtt_client_handle_t client = NULL;
+static void mqtt_app_start(void)
+{
+    esp_mqtt_client_config_t mqtt_cfg = {
+        .uri = "mqtt://mqtt.eclipseprojects.io",
+    };
+
+    if(client == NULL)
+    {
+    	client = esp_mqtt_client_init(&mqtt_cfg);
+        /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
+        esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
+    }
+
+    esp_mqtt_client_start(client);
+}
 
 
 static void continuous_adc_init(uint16_t adc1_chan_mask, uint16_t adc2_chan_mask, adc_channel_t *channel, uint8_t channel_num)
@@ -199,6 +272,7 @@ static void adc_task(void *pvParameters)
     static uint8_t sleep_state = 0;
     static int64_t sleep_detect_time = 0;
     static int64_t wakeup_detect_time = 0;
+    static int64_t pub_time = 0;
 
     memset(result, 0xcc, TIMES);
     adc_calibration_init();
@@ -321,6 +395,24 @@ static void adc_task(void *pvParameters)
     	    		wakeup_detect_time = esp_timer_get_time();
     	    		ESP_LOGI(TAG, "low voltage, value: %u, voltage: %f",adc_val, battery_voltage);
     	    		sleep_state = WAKEUP_STATE;
+    	    	}
+
+    	    	if(battery_voltage < 10.0f)
+    	    	{
+    	    		ESP_LOGI(TAG, " wake up do something");
+    	    		if(esp_timer_get_time() - pub_time > (20*1000*1000))
+    	    		{
+    	    			pub_time = esp_timer_get_time();
+        	    		wifi_network_init();
+        	    		vTaskDelay(5000 / portTICK_PERIOD_MS);
+        	    		if(wifi_network_is_connected())
+        	    		{
+        	    			ESP_LOGI(TAG, " wifi connectred try to publish");
+        	    			mqtt_app_start();
+        	    		}
+    	    		}
+
+//    	    		vTaskDelay((120*1000) / portTICK_PERIOD_MS);
     	    	}
     			break;
     		}

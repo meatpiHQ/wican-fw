@@ -169,17 +169,23 @@ static void wifi_conn_task(void *pvParameters)
 		s_retry_num %= (sizeof(connect_delay)/sizeof(TickType_t));
 	}
 }
-
+static TaskHandle_t xwifi_handle = NULL;
 void wifi_network_init(void)
 {
 	if(s_wifi_event_group == NULL)
 	{
 		s_wifi_event_group = xEventGroupCreate();
-	}
-	xEventGroupClearBits(s_wifi_event_group, WIFI_INIT_BIT);
-	ap_netif = esp_netif_create_default_wifi_ap();
+		ap_netif = esp_netif_create_default_wifi_ap();
 
-	sta_netif = esp_netif_create_default_wifi_sta();
+		sta_netif = esp_netif_create_default_wifi_sta();
+	}
+
+	if(xEventGroupGetBits(s_wifi_event_group) & WIFI_INIT_BIT)
+	{
+		return;
+	}
+//	xEventGroupClearBits(s_wifi_event_group, WIFI_INIT_BIT);
+
 
     int8_t channel = config_server_get_ap_ch();
 	if(channel == -1)
@@ -233,7 +239,10 @@ void wifi_network_init(void)
     	strcpy( (char*)wifi_config_sta.sta.password, (char*)config_server_get_sta_pass());
     	ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
     	ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config_sta) );
-    	xTaskCreate(wifi_conn_task, "wifi_conn_task", 4096, (void*)AF_INET, 5, NULL);
+    	if(xwifi_handle == NULL)
+    	{
+    		xTaskCreate(wifi_conn_task, "wifi_conn_task", 4096, (void*)AF_INET, 5, &xwifi_handle);
+    	}
     }
     else
     {
