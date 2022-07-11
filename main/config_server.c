@@ -880,12 +880,6 @@ static void config_server_load_cfg(char *cfg)
 	strcpy(device_config.ble_pass, key->valuestring);
 	ESP_LOGE(TAG, "device_config.ble_pass: %s", device_config.ble_pass);
 
-	key = cJSON_GetObjectItem(root,"ble_status");
-	if(key == 0)
-	{
-		goto config_error;
-	}
-
 	key = cJSON_GetObjectItem(root,"sleep_status");
 	if(key == 0)
 	{
@@ -894,6 +888,13 @@ static void config_server_load_cfg(char *cfg)
 
 	strcpy(device_config.sleep_status, key->valuestring);
 	ESP_LOGE(TAG, "device_config.sleep_status: %s", device_config.sleep_status);
+
+
+	key = cJSON_GetObjectItem(root,"ble_status");
+	if(key == 0)
+	{
+		goto config_error;
+	}
 
 	strcpy(device_config.ble_status, key->valuestring);
 	ESP_LOGE(TAG, "device_config.ble_status: %s", device_config.ble_status);
