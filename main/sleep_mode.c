@@ -136,7 +136,7 @@ static void continuous_adc_init(uint16_t adc1_chan_mask, uint16_t adc2_chan_mask
     }
     dig_cfg.adc_pattern = adc_pattern;
     ESP_ERROR_CHECK(adc_digi_controller_configure(&dig_cfg));
-    esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, SOC_ADC_DIGI_MAX_BITWIDTH, 0, &adc1_chars);
+    esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_DEFAULT, 0, &adc1_chars);
 
 
 }
