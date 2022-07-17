@@ -318,7 +318,16 @@ void app_main(void)
 
     if(config_server_get_sleep_config())
     {
-    	sleep_mode_init();
+    	float sleep_voltage = 0;
+
+    	if(config_server_get_sleep_volt(&sleep_voltage) != -1)
+    	{
+    		sleep_mode_init(sleep_voltage);
+    	}
+    	else
+    	{
+    		sleep_mode_init(13.1f);
+    	}
     }
 
     gpio_set_level(PWR_LED_GPIO_NUM, 1);

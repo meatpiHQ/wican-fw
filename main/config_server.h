@@ -64,6 +64,7 @@ typedef struct _device_config
 	char ble_pass[18];
 	char ble_status[32];
 	char sleep_status[32];
+	char sleep_volt[32];
 }device_config_t;
 
 
@@ -91,4 +92,6 @@ int8_t config_server_get_ble_config(void);
 void config_server_set_ble_config(uint8_t b);
 void config_server_restart(void);
 bool config_server_ws_connected(void);
+int8_t config_server_get_sleep_volt(float *sleep_volt);
+
 
