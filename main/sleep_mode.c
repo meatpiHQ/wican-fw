@@ -94,9 +94,11 @@ static uint16_t adc1_chan_mask = BIT(7);
 static uint16_t adc2_chan_mask = 0;
 static adc_channel_t channel[1] = {ADC1_CHANNEL_7};
 #endif
-#define THRESHOLD_VOLTAGE		13.0f
-#define SLEEP_TIME_DELAY		(60*1000*1000)
+//#define THRESHOLD_VOLTAGE		13.0f
+#define SLEEP_TIME_DELAY		(180*1000*1000)
 #define WAKEUP_TIME_DELAY		(6*1000*1000)
+
+static float sleep_voltage = 13.1f;
 
 static QueueHandle_t voltage_queue;
 static esp_adc_cal_characteristics_t adc1_chars;
@@ -288,7 +290,7 @@ static void adc_task(void *pvParameters)
     	{
     		case RUN_STATE:
     		{
-    	    	if(battery_voltage < THRESHOLD_VOLTAGE)
+    	    	if(battery_voltage < sleep_voltage)
     	    	{
     	    		ESP_LOGI(TAG, "low voltage, value: %u, voltage: %f",adc_val, battery_voltage);
     	    		sleep_detect_time = esp_timer_get_time();
@@ -298,7 +300,7 @@ static void adc_task(void *pvParameters)
     		}
     		case SLEEP_DETECTED:
     		{
-    	    	if(battery_voltage > THRESHOLD_VOLTAGE)
+    	    	if(battery_voltage > sleep_voltage)
     	    	{
     	    		ESP_LOGI(TAG, "low voltage, value: %u, voltage: %f",adc_val, battery_voltage);
     	    		sleep_state = RUN_STATE;
@@ -316,7 +318,7 @@ static void adc_task(void *pvParameters)
     		case SLEEP_STATE:
     		{
     			ESP_LOGI(TAG, "Go to sleep");
-    	    	if(battery_voltage > THRESHOLD_VOLTAGE)
+    	    	if(battery_voltage > sleep_voltage)
     	    	{
     	    		wakeup_detect_time = esp_timer_get_time();
     	    		ESP_LOGI(TAG, "low voltage, value: %u, voltage: %f",adc_val, battery_voltage);
@@ -326,7 +328,7 @@ static void adc_task(void *pvParameters)
     		}
     		case WAKEUP_STATE:
     		{
-    	    	if(battery_voltage > THRESHOLD_VOLTAGE)
+    	    	if(battery_voltage > sleep_voltage)
     	    	{
     	    		if((esp_timer_get_time() - wakeup_detect_time) > WAKEUP_TIME_DELAY)
     	    		{
@@ -337,7 +339,7 @@ static void adc_task(void *pvParameters)
 
     	    		}
     	    	}
-    	    	else if(battery_voltage < THRESHOLD_VOLTAGE)
+    	    	else if(battery_voltage < sleep_voltage)
     	    	{
     	    		sleep_state = SLEEP_STATE;
     	    	}
@@ -372,8 +374,10 @@ int8_t sleep_mode_get_voltage(float *val)
 	else return -1;
 }
 
-int8_t sleep_mode_init(void)
+int8_t sleep_mode_init(float sleep_volt)
 {
+	sleep_voltage = sleep_volt;
+	ESP_LOGW(TAG, "sleep_volt: %2.2f", sleep_volt);
 	voltage_queue = xQueueCreate(1, sizeof( float) );
 	xTaskCreate(adc_task, "adc_task", 4096, (void*)AF_INET, 5, NULL);
 
