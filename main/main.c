@@ -278,7 +278,7 @@ void app_main(void)
 		can_enable();
 	}
 
-	wifi_network_init();
+	wifi_network_init(NULL, NULL);
 	int32_t port = config_server_get_port();
 
 	if(port == -1)

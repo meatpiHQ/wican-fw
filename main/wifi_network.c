@@ -126,6 +126,12 @@ void wifi_network_deinit(void)
 	esp_wifi_disconnect();
     esp_err_t err = esp_wifi_stop();
 
+    esp_event_handler_unregister(IP_EVENT,
+    								IP_EVENT_STA_GOT_IP,
+									&wifi_network_event_handler);
+    esp_event_handler_unregister(WIFI_EVENT,
+									ESP_EVENT_ANY_ID,
+									&wifi_network_event_handler);
     if (err == ESP_ERR_WIFI_NOT_INIT)
     {
         return;
@@ -170,7 +176,7 @@ static void wifi_conn_task(void *pvParameters)
 	}
 }
 static TaskHandle_t xwifi_handle = NULL;
-void wifi_network_init(void)
+void wifi_network_init(char* sta_ssid, char* sta_pass)
 {
 	if(s_wifi_event_group == NULL)
 	{
@@ -233,10 +239,19 @@ void wifi_network_init(void)
         },
     };
     wifi_config_ap.ap.channel = channel;
-    if(config_server_get_wifi_mode() == APSTA_MODE)
+
+    if(config_server_get_wifi_mode() == APSTA_MODE || (sta_ssid != 0 && sta_pass != 0))
     {
-    	strcpy( (char*)wifi_config_sta.sta.ssid, (char*)config_server_get_sta_ssid());
-    	strcpy( (char*)wifi_config_sta.sta.password, (char*)config_server_get_sta_pass());
+    	if(sta_ssid == 0 && sta_pass == 0)
+    	{
+    		strcpy( (char*)wifi_config_sta.sta.ssid, (char*)config_server_get_sta_ssid());
+    		strcpy( (char*)wifi_config_sta.sta.password, (char*)config_server_get_sta_pass());
+    	}
+    	else
+    	{
+        	strcpy( (char*)wifi_config_sta.sta.ssid, (char*)sta_ssid);
+        	strcpy( (char*)wifi_config_sta.sta.password, (char*)sta_pass);
+    	}
     	ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
     	ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config_sta) );
     	if(xwifi_handle == NULL)

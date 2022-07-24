@@ -65,6 +65,14 @@ typedef struct _device_config
 	char ble_status[32];
 	char sleep_status[32];
 	char sleep_volt[32];
+	char batt_alert[32];
+	char batt_alert_ssid[65];
+	char batt_alert_pass[65];
+	char batt_alert_volt[32];
+	char batt_alert_protocol[65];
+	char batt_alert_url[256];
+	char batt_alert_port[32];
+	char batt_alert_topic[256];
 }device_config_t;
 
 
@@ -93,5 +101,12 @@ void config_server_set_ble_config(uint8_t b);
 void config_server_restart(void);
 bool config_server_ws_connected(void);
 int8_t config_server_get_sleep_volt(float *sleep_volt);
-
+int8_t config_server_get_battery_alret_config(void);
+int32_t config_server_get_alret_port(void);
+char *config_server_get_alret_ssid(void);
+char *config_server_get_alret_pass(void);
+char *config_server_get_alret_protocol(void);
+char *config_server_get_alret_url(void);
+char *config_server_get_alret_topic(void);
+int8_t config_server_get_alret_volt(float *alert_volt);
 

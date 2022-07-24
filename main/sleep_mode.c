@@ -105,6 +105,10 @@ static adc_channel_t channel[1] = {ADC1_CHANNEL_7};
 #define SLEEP_TIME_DELAY		(180*1000*1000)
 #define WAKEUP_TIME_DELAY		(6*1000*1000)
 
+static EventGroupHandle_t s_mqtt_event_group = NULL;
+#define MQTT_CONNECTED_BIT 			BIT0
+#define PUB_SUCCESS_BIT     		BIT1
+
 static float sleep_voltage = 13.1f;
 
 static QueueHandle_t voltage_queue;
@@ -116,16 +120,17 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%d", base, event_id);
     esp_mqtt_event_handle_t event = event_data;
     esp_mqtt_client_handle_t client = event->client;
-    int msg_id;
+
     switch ((esp_mqtt_event_id_t)event_id) {
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-        msg_id = esp_mqtt_client_publish(client, "/topic/qos1", "data_33", 0, 1, 0);
-        ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
-
+        xEventGroupSetBits(s_mqtt_event_group, MQTT_CONNECTED_BIT);
+        xEventGroupClearBits(s_mqtt_event_group, PUB_SUCCESS_BIT);
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
+        xEventGroupClearBits(s_mqtt_event_group, MQTT_CONNECTED_BIT);
+//        esp_mqtt_client_stop(client);
         break;
 
     case MQTT_EVENT_SUBSCRIBED:
@@ -136,8 +141,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         break;
     case MQTT_EVENT_PUBLISHED:
         ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
+        xEventGroupSetBits(s_mqtt_event_group, PUB_SUCCESS_BIT);
         esp_mqtt_client_disconnect(client);
-        esp_mqtt_client_stop(client);
+
         break;
     case MQTT_EVENT_DATA:
         ESP_LOGI(TAG, "MQTT_EVENT_DATA");
@@ -163,17 +169,36 @@ static esp_mqtt_client_handle_t client = NULL;
 static void mqtt_app_start(void)
 {
     esp_mqtt_client_config_t mqtt_cfg = {
-        .uri = "mqtt://mqtt.eclipseprojects.io",
+        .uri = config_server_get_alret_url(),
+		.port = config_server_get_alret_port(),
     };
-
+    ESP_LOGI(TAG, "mqtt_cfg.uri: %s", mqtt_cfg.uri);
     if(client == NULL)
     {
     	client = esp_mqtt_client_init(&mqtt_cfg);
         /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
         esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
+        esp_mqtt_client_start(client);
+    }
+    else
+    {
+    	esp_mqtt_client_reconnect(client);
     }
 
-    esp_mqtt_client_start(client);
+    EventBits_t bits = xEventGroupWaitBits(s_mqtt_event_group,
+						MQTT_CONNECTED_BIT,
+						pdFALSE,
+						pdFALSE,
+						pdMS_TO_TICKS(2000));
+    if (bits & MQTT_CONNECTED_BIT)
+    {
+        int msg_id = esp_mqtt_client_publish(client, config_server_get_alret_topic(), "data_33", 0, 1, 0);
+        ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
+    }
+    else
+    {
+    	ESP_LOGE(TAG, "unable to connect to broker...");
+    }
 }
 
 
@@ -275,6 +300,12 @@ static void adc_task(void *pvParameters)
     static int64_t sleep_detect_time = 0;
     static int64_t wakeup_detect_time = 0;
     static int64_t pub_time = 0;
+    static float alert_voltage = 0;
+
+    if(config_server_get_alret_volt(&alert_voltage) != -1)
+    {
+    	alert_voltage = 16.0f;
+    }
 
     memset(result, 0xcc, TIMES);
     adc_calibration_init();
@@ -399,18 +430,33 @@ static void adc_task(void *pvParameters)
     	    		sleep_state = WAKEUP_STATE;
     	    	}
 
-    	    	if(battery_voltage < 10.0f)
+    	    	if(battery_voltage < alert_voltage)
     	    	{
     	    		ESP_LOGI(TAG, " wake up do something");
     	    		if(esp_timer_get_time() - pub_time > (20*1000*1000))
     	    		{
     	    			pub_time = esp_timer_get_time();
-        	    		wifi_network_init();
-        	    		vTaskDelay(5000 / portTICK_PERIOD_MS);
+        	    		wifi_network_init(config_server_get_alret_ssid(), config_server_get_alret_pass());
+        	    		vTaskDelay(10000 / portTICK_PERIOD_MS);
         	    		if(wifi_network_is_connected())
         	    		{
         	    			ESP_LOGI(TAG, " wifi connectred try to publish");
         	    			mqtt_app_start();
+//        	    			vTaskDelay(5000 / portTICK_PERIOD_MS);
+        	    		    EventBits_t bits = xEventGroupWaitBits(s_mqtt_event_group,
+																	PUB_SUCCESS_BIT,
+																	pdFALSE,
+																	pdFALSE,
+																	pdMS_TO_TICKS(2000));
+        	    		    if (bits & PUB_SUCCESS_BIT)
+        	    		    {
+        	    		    	ESP_LOGI(TAG, "publish ok");
+        	    		    }
+        	    		    else
+        	    		    {
+        	    		    	ESP_LOGE(TAG, "publish error");
+        	    		    }
+        	    			wifi_network_deinit();
         	    		}
     	    		}
 
@@ -470,6 +516,7 @@ int8_t sleep_mode_init(float sleep_volt)
 {
 	sleep_voltage = sleep_volt;
 	ESP_LOGW(TAG, "sleep_volt: %2.2f", sleep_volt);
+	s_mqtt_event_group = xEventGroupCreate();
 	voltage_queue = xQueueCreate(1, sizeof( float) );
 	xTaskCreate(adc_task, "adc_task", 4096, (void*)AF_INET, 5, NULL);
 
