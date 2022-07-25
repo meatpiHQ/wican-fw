@@ -323,7 +323,7 @@ static const char status[] = "F00\r";
 char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t *q)
 {
 //	twai_message_t frame;
-	uint8_t i, k;
+	uint8_t i;
 	static uint8_t state = SL_HEADER;
 	static uint8_t cmd = SL_NONE;
 //	static uint8_t ext_flag = 0;

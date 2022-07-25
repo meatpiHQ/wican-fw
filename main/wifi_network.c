@@ -59,7 +59,7 @@ static const TickType_t connect_delay[] = {10000, 20000, 30000, 45000, 30000,200
 static void wifi_network_event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
 {
-	static int64_t last_try = 0;
+//	static int64_t last_try = 0;
 
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
     {
@@ -73,7 +73,7 @@ static void wifi_network_event_handler(void* arg, esp_event_base_t event_base,
 
     	xEventGroupSetBits(s_wifi_event_group, WIFI_DISCONNECTED_BIT);
     	xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECT_IDLE_BIT);
-
+    	xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
     else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
     {

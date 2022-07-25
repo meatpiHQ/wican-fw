@@ -89,15 +89,15 @@ static uint8_t manufacturer[]="MeatPi";
 
 static uint16_t profile_handle_table[HRS_IDX_NB];
 //static uint8_t *ext_adv_raw_data;
-static uint8_t ext_adv_raw_data[64] = {
-        0x02, 0x01, 0x06,
-        0x02, 0x0a, 0xeb, 0x03, 0x03, 0xab, 0xcd,
-        0x11, 0X09,0x00
-};
+//static uint8_t ext_adv_raw_data[64] = {
+//        0x02, 0x01, 0x06,
+//        0x02, 0x0a, 0xeb, 0x03, 0x03, 0xab, 0xcd,
+//        0x11, 0X09,0x00
+//};
 
-static esp_ble_gap_ext_adv_t ext_adv[1] = {
-    [0] = {EXT_ADV_HANDLE, EXT_ADV_DURATION, EXT_ADV_MAX_EVENTS},
-};
+//static esp_ble_gap_ext_adv_t ext_adv[1] = {
+//    [0] = {EXT_ADV_HANDLE, EXT_ADV_DURATION, EXT_ADV_MAX_EVENTS},
+//};
 
 static esp_ble_adv_params_t heart_rate_adv_params = {
     .adv_int_min        = 0x100,
@@ -625,7 +625,7 @@ static void ble_task(void *pvParameters)
 	static uint32_t ble_send_buf_len = 0;
 	static uint32_t num_msg = 0;
 	static int64_t time_old = 0;
-	static int64_t send_time = 0;
+//	static int64_t send_time = 0;
 	while(1)
 	{
 		//		ESP_LOGI(GATTS_TABLE_TAG, "wait BLE_CONNECTED_BIT");

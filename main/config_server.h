@@ -73,6 +73,7 @@ typedef struct _device_config
 	char batt_alert_url[256];
 	char batt_alert_port[32];
 	char batt_alert_topic[256];
+	char batt_alert_time[16];
 }device_config_t;
 
 
@@ -101,12 +102,12 @@ void config_server_set_ble_config(uint8_t b);
 void config_server_restart(void);
 bool config_server_ws_connected(void);
 int8_t config_server_get_sleep_volt(float *sleep_volt);
-int8_t config_server_get_battery_alret_config(void);
-int32_t config_server_get_alret_port(void);
-char *config_server_get_alret_ssid(void);
-char *config_server_get_alret_pass(void);
-char *config_server_get_alret_protocol(void);
-char *config_server_get_alret_url(void);
-char *config_server_get_alret_topic(void);
-int8_t config_server_get_alret_volt(float *alert_volt);
-
+int8_t config_server_get_battery_alert_config(void);
+int32_t config_server_get_alert_port(void);
+char *config_server_get_alert_ssid(void);
+char *config_server_get_alert_pass(void);
+char *config_server_get_alert_protocol(void);
+char *config_server_get_alert_url(void);
+char *config_server_get_alert_topic(void);
+int8_t config_server_get_alert_volt(float *alert_volt);
+int config_server_get_alert_time(void);

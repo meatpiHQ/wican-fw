@@ -164,7 +164,7 @@ static void can_rx_task(void *pvParameters)
 	while(1)
 	{
         twai_message_t rx_msg;
-        esp_err_t ret = 0xFF;
+//        esp_err_t ret = 0xFF;
         process_led(0);
         while(can_receive(&rx_msg, 0) ==  ESP_OK)
         {

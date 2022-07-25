@@ -119,13 +119,12 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 {
     ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%d", base, event_id);
     esp_mqtt_event_handle_t event = event_data;
-    esp_mqtt_client_handle_t client = event->client;
+//    esp_mqtt_client_handle_t client = event->client;
 
     switch ((esp_mqtt_event_id_t)event_id) {
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
         xEventGroupSetBits(s_mqtt_event_group, MQTT_CONNECTED_BIT);
-        xEventGroupClearBits(s_mqtt_event_group, PUB_SUCCESS_BIT);
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
@@ -142,8 +141,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     case MQTT_EVENT_PUBLISHED:
         ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
         xEventGroupSetBits(s_mqtt_event_group, PUB_SUCCESS_BIT);
-        esp_mqtt_client_disconnect(client);
-
         break;
     case MQTT_EVENT_DATA:
         ESP_LOGI(TAG, "MQTT_EVENT_DATA");
@@ -166,11 +163,11 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     }
 }
 static esp_mqtt_client_handle_t client = NULL;
-static void mqtt_app_start(void)
+static void mqtt_init(void)
 {
     esp_mqtt_client_config_t mqtt_cfg = {
-        .uri = config_server_get_alret_url(),
-		.port = config_server_get_alret_port(),
+        .uri = config_server_get_alert_url(),
+		.port = config_server_get_alert_port(),
     };
     ESP_LOGI(TAG, "mqtt_cfg.uri: %s", mqtt_cfg.uri);
     if(client == NULL)
@@ -189,11 +186,16 @@ static void mqtt_app_start(void)
 						MQTT_CONNECTED_BIT,
 						pdFALSE,
 						pdFALSE,
-						pdMS_TO_TICKS(2000));
+						pdMS_TO_TICKS(10000));
     if (bits & MQTT_CONNECTED_BIT)
     {
-        int msg_id = esp_mqtt_client_publish(client, config_server_get_alret_topic(), "data_33", 0, 1, 0);
-        ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
+    	static char pub_data[128];
+    	float batt_voltage = 0;
+    	sleep_mode_get_voltage(&batt_voltage);
+    	sprintf(pub_data, "{\"alert\": \"low_battery\", \"battery_voltage\": %f}", batt_voltage);
+        int msg_id = esp_mqtt_client_publish(client, config_server_get_alert_topic(), pub_data, 0, 1, 0);
+        ESP_LOGI(TAG, "publish, msg_id=%d", msg_id);
+
     }
     else
     {
@@ -301,8 +303,14 @@ static void adc_task(void *pvParameters)
     static int64_t wakeup_detect_time = 0;
     static int64_t pub_time = 0;
     static float alert_voltage = 0;
+    static uint64_t alert_time;
 
-    if(config_server_get_alret_volt(&alert_voltage) != -1)
+    alert_time = config_server_get_alert_time();
+    alert_time *= (3600000000);
+
+    ESP_LOGW(TAG, "%" PRIu64 "\n", alert_time);
+
+    if(config_server_get_alert_volt(&alert_voltage) != -1)
     {
     	alert_voltage = 16.0f;
     }
@@ -389,6 +397,7 @@ static void adc_task(void *pvParameters)
     	float battery_voltage;
 
     	battery_voltage = (adc_val*116)/(16*1000.0f);
+    	battery_voltage += 0.2;
     	xQueueOverwrite( voltage_queue, &battery_voltage );
 
     	switch(sleep_state)
@@ -430,37 +439,49 @@ static void adc_task(void *pvParameters)
     	    		sleep_state = WAKEUP_STATE;
     	    	}
 
-    	    	if(battery_voltage < alert_voltage)
+    	    	if(config_server_get_battery_alert_config())
     	    	{
-    	    		ESP_LOGI(TAG, " wake up do something");
-    	    		if(esp_timer_get_time() - pub_time > (20*1000*1000))
-    	    		{
-    	    			pub_time = esp_timer_get_time();
-        	    		wifi_network_init(config_server_get_alret_ssid(), config_server_get_alret_pass());
-        	    		vTaskDelay(10000 / portTICK_PERIOD_MS);
-        	    		if(wifi_network_is_connected())
-        	    		{
-        	    			ESP_LOGI(TAG, " wifi connectred try to publish");
-        	    			mqtt_app_start();
-//        	    			vTaskDelay(5000 / portTICK_PERIOD_MS);
-        	    		    EventBits_t bits = xEventGroupWaitBits(s_mqtt_event_group,
-																	PUB_SUCCESS_BIT,
-																	pdFALSE,
-																	pdFALSE,
-																	pdMS_TO_TICKS(2000));
-        	    		    if (bits & PUB_SUCCESS_BIT)
-        	    		    {
-        	    		    	ESP_LOGI(TAG, "publish ok");
-        	    		    }
-        	    		    else
-        	    		    {
-        	    		    	ESP_LOGE(TAG, "publish error");
-        	    		    }
-        	    			wifi_network_deinit();
-        	    		}
-    	    		}
-
-//    	    		vTaskDelay((120*1000) / portTICK_PERIOD_MS);
+					if(battery_voltage < alert_voltage)
+					{
+						ESP_LOGW(TAG, "battery alert!");
+						if(((esp_timer_get_time() - pub_time) > alert_time) || (pub_time == 0))
+						{
+							pub_time = esp_timer_get_time();
+							wifi_network_init(config_server_get_alert_ssid(), config_server_get_alert_pass());
+							vTaskDelay(1000 / portTICK_PERIOD_MS);
+							uint8_t count = 0;
+							while(!wifi_network_is_connected())
+							{
+								vTaskDelay(1000 / portTICK_PERIOD_MS);
+								if(count++ > 10)
+								{
+									break;
+								}
+							}
+							if(wifi_network_is_connected())
+							{
+								ESP_LOGI(TAG, " wifi connectred try to publish");
+								mqtt_init();
+								EventBits_t bits = xEventGroupWaitBits(s_mqtt_event_group,
+																		PUB_SUCCESS_BIT,
+																		pdFALSE,
+																		pdFALSE,
+																		pdMS_TO_TICKS(10000));
+								if (bits & PUB_SUCCESS_BIT)
+								{
+									ESP_LOGI(TAG, "publish ok");
+									xEventGroupClearBits(s_mqtt_event_group, PUB_SUCCESS_BIT);
+								}
+								else
+								{
+									ESP_LOGE(TAG, "publish error");
+								}
+								esp_mqtt_client_disconnect(client);
+								vTaskDelay(1000 / portTICK_PERIOD_MS);
+								wifi_network_deinit();
+							}
+						}
+					}
     	    	}
     			break;
     		}
@@ -505,7 +526,7 @@ static void adc_task(void *pvParameters)
 int8_t sleep_mode_get_voltage(float *val)
 {
 
-	if(xQueueReceive( voltage_queue, val, 0 ))
+	if(xQueuePeek( voltage_queue, val, 0 ))
 	{
 		return 1;
 	}
