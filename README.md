@@ -6,6 +6,7 @@
 <img src="https://user-images.githubusercontent.com/94690098/182027614-9d580e96-2a8e-4fe3-8672-bb6a6fd616f2.png" >
 </p>
 
+- [Important Notes](#important-notes)
 - [Build](#build)
 - [Description](#description)
 - [Configuration](#configuration)
@@ -17,6 +18,11 @@
   - [USB](#2-usb)
 
 **Note: This is the intial release although all the functions and features work, optimization/clean up are still required.**
+# **Important Notes**:
+
+- The OBD2 adapter is not designed to powered of the USB connecter. The USB connector can power the adapter to flash custom firmware or hardreset the deivce and can also be used for debuging.
+- It is highly recommanded to turn OFF the BLE if not used. Otherwise it might affect the preformance.
+- When the BLE is connected, the device configuration access point will be disabled i.e you won't be able to configure the device unless you disconnect the BLE, by turning off the BLE on your phone or device.
 
 # **Build**:
 
@@ -61,6 +67,8 @@ WiFi and CAN configuration can be set configuration web server.
 6. The WiFi menu lets you configure the WiFi parameters. It is recommended that you change the AP access point.
 7. The CAN menu allows to choose the protocol set the bitrate and TCP/UPD port number.
 8. When ready click submit Changes button and the device will store the configuration reboot immediately.
+
+**Note: If you intend to use the device in AP mode it is recommand that you disable the BLE function**
 
 ![Configuration page](https://github.com/meatpiHQ/WiCAN/blob/main/images/settings40.png?raw=true "Config page")
 
@@ -112,6 +120,8 @@ WiCAN can connect with RealDash using WiFi or BLE. The Protocol and CAN bitrate 
 1. Go to configuration webpage.
 2. Select the baudrate
 3. Set the "BLE Status" to enable
+
+**Note: When the BLE is connected, the device will automatically turn off the WiFi configuration access point. Once BLE is disconnected the configuration access point will turn back on.**  
 
 # Firmware Update
 
