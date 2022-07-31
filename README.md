@@ -2,6 +2,10 @@
 
 [www.meatpi.com](https://www.meatpi.com)
 ---
+<p align="center">
+<img src="https://user-images.githubusercontent.com/94690098/182027614-9d580e96-2a8e-4fe3-8672-bb6a6fd616f2.png" >
+</p>
+
 - [Build](#build)
 - [Description](#description)
 - [Configuration](#configuration)
@@ -9,6 +13,8 @@
   - [BUSMaster](#2-busmaster)
   - [Realdash](#3-realdash)
 - [Firmware Update](#firmware-update)
+  - [OTA](#1-ota)
+  - [USB](#2-usb)
 
 **Note: This is the intial release although all the functions and features work, optimization/clean up are still required.**
 
@@ -117,6 +123,8 @@ WiCAN can connect with RealDash using WiFi or BLE. The Protocol and CAN bitrate 
 4. Select the binary file. Eample: wican-fw_v130.bin
 5. Click update, update should take about 30sec.
 
+**NOTE: After flashing, the device configuration might be erased.**
+
 **Note: for firmware version v1.00 use USB cable to flash the unit.**
 
 <img src="https://user-images.githubusercontent.com/94690098/163678507-f9822f57-bbe1-42a4-82c4-501cd7834ba0.png" width="350" height="300" >
@@ -124,8 +132,24 @@ WiCAN can connect with RealDash using WiFi or BLE. The Protocol and CAN bitrate 
 ## 2. USB:
 
 Use the [**ESP flash tool**](https://www.espressif.com/en/support/download/other-tools) to update the firmware, just follow the same setting in the picture below. Make sure to select ESP32-C3 and USB mode. **esptool.py** also can also be used to flash a new firmware.
+1. Download [**ESP flash tool**](https://www.espressif.com/en/support/download/other-tools)
+2. Download the latest firmware zip file from the [**releases**](https://github.com/meatpiHQ/wican-fw/releases) page. 
+3. Select ESP32C3, develop and USB then click ok
 
-<img src="https://user-images.githubusercontent.com/94690098/163678940-9ac2a2d3-153c-4d57-9da5-397714e82ce6.png" width="350" height="600" >
+![image](https://user-images.githubusercontent.com/94690098/182028074-7cd55122-a129-4fd3-bad9-e66f1f8d3ca3.png)
+
+4. Set the configuration as the picture below, select and fill in the address for each binary.
+
+<img src="https://user-images.githubusercontent.com/94690098/182028212-e8e90e71-7758-4d2d-88dc-aebf95a2e4a8.png" width="350" height="600" >
+
+5. Short the pins as shown, the plug in the USB cable.
+
+![image](https://user-images.githubusercontent.com/94690098/182028671-18d523de-466d-4c28-998d-c4330dd33ae7.png)
+
+6. After you plug in the USB cable the Orange LED will light up. Now click START button on the flash tool.
+
+**NOTE: After flashing, the device configuration might be erased.**
+
 
 ---
 
