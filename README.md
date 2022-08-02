@@ -2,15 +2,30 @@
 
 [www.meatpi.com](https://www.meatpi.com)
 ---
+<p align="center">
+<img src="https://user-images.githubusercontent.com/94690098/182027614-9d580e96-2a8e-4fe3-8672-bb6a6fd616f2.png" >
+</p>
+
+- [Important Notes](#important-notes)
 - [Build](#build)
 - [Description](#description)
+- [Features](#features)
+  - [Sleep mode](#1-sleep-mode)
+  - [Battery Alert](#2-battery-alert)
 - [Configuration](#configuration)
   - [WiFi/CAN Configuration](#1-wifican-configuration)
   - [BUSMaster](#2-busmaster)
   - [Realdash](#3-realdash)
 - [Firmware Update](#firmware-update)
+  - [OTA](#1-ota)
+  - [USB](#2-usb)
 
 **Note: This is the intial release although all the functions and features work, optimization/clean up are still required.**
+# **Important Notes**:
+
+- The OBD2 adapter is not designed to powered of the USB connecter. The USB connector can power the adapter to flash custom firmware or hardreset the deivce and can also be used for debuging.
+- It is highly recommanded to turn OFF the BLE if not used. Otherwise it might affect the preformance.
+- When the BLE is connected, the device configuration access point will be disabled i.e you won't be able to configure the device unless you disconnect the BLE, by turning off the BLE on your phone or device.
 
 # **Build**:
 
@@ -43,6 +58,20 @@ WiFi and CAN configuration can be set configuration web server.
 
 ![Modes](https://github.com/meatpiHQ/WiCAN/blob/main/images/modes.PNG?raw=true "Connection Mode" )
 
+# Features:
+--------
+
+## 1. Sleep Mode:
+
+WiCAN can be permanently attached to the car without worrying about draining the battery. It monitors the battery voltage and can detect when the alternator is ON. When the engine is ON the battery continuously charging and the voltage will be about 13.5V(can vary with different car models). When the engine is OFF the battery voltage drops to about 12.8V(full battery) -  WiCAN can detect this drop, and if the voltage remains under the threshold for **3 min** it will go to sleep and the current consumption will drop below **1mA**. If the engine is turned ON it will immediately wake up and enable the WiFi/BLE. 
+The threshold voltage is configurable and can be set in the configuration page, the default value is 13V. 
+
+## 2. Battery Alert:
+
+This is an important feature for most car enthusiast who own multiple cars that are only driven few times a year.  Basically if a car is not used in few month the battery will go flat and needs to be jumped. WiCAN can be configured to send an alert when the battery voltage drops under a certain level. Sleep mode has to be enabled for this feature to be useful. **For now alerts can be sent on MQTT, more protocols are coming soon. If there is a specific protocol you want to be supported let me know.**
+
+![image](https://user-images.githubusercontent.com/94690098/182034543-8025c5ab-5e38-43a0-9ec8-014d4301fcf0.png)
+
 # Configuration:
 --------
 
@@ -55,6 +84,8 @@ WiFi and CAN configuration can be set configuration web server.
 6. The WiFi menu lets you configure the WiFi parameters. It is recommended that you change the AP access point.
 7. The CAN menu allows to choose the protocol set the bitrate and TCP/UPD port number.
 8. When ready click submit Changes button and the device will store the configuration reboot immediately.
+
+**Note: If you intend to use the device in AP mode it is recommand that you disable the BLE function**
 
 ![Configuration page](https://github.com/meatpiHQ/WiCAN/blob/main/images/settings40.png?raw=true "Config page")
 
@@ -107,6 +138,8 @@ WiCAN can connect with RealDash using WiFi or BLE. The Protocol and CAN bitrate 
 2. Select the baudrate
 3. Set the "BLE Status" to enable
 
+**Note: When the BLE is connected, the device will automatically turn off the WiFi configuration access point. Once BLE is disconnected the configuration access point will turn back on.**  
+
 # Firmware Update
 
 ## 1. OTA:
@@ -117,6 +150,8 @@ WiCAN can connect with RealDash using WiFi or BLE. The Protocol and CAN bitrate 
 4. Select the binary file. Eample: wican-fw_v130.bin
 5. Click update, update should take about 30sec.
 
+**NOTE: After flashing, the device configuration might be erased.**
+
 **Note: for firmware version v1.00 use USB cable to flash the unit.**
 
 <img src="https://user-images.githubusercontent.com/94690098/163678507-f9822f57-bbe1-42a4-82c4-501cd7834ba0.png" width="350" height="300" >
@@ -124,8 +159,24 @@ WiCAN can connect with RealDash using WiFi or BLE. The Protocol and CAN bitrate 
 ## 2. USB:
 
 Use the [**ESP flash tool**](https://www.espressif.com/en/support/download/other-tools) to update the firmware, just follow the same setting in the picture below. Make sure to select ESP32-C3 and USB mode. **esptool.py** also can also be used to flash a new firmware.
+1. Download [**ESP flash tool**](https://www.espressif.com/en/support/download/other-tools)
+2. Download the latest firmware zip file from the [**releases**](https://github.com/meatpiHQ/wican-fw/releases) page. 
+3. Select ESP32C3, develop and USB then click ok
 
-<img src="https://user-images.githubusercontent.com/94690098/163678940-9ac2a2d3-153c-4d57-9da5-397714e82ce6.png" width="350" height="600" >
+![image](https://user-images.githubusercontent.com/94690098/182028074-7cd55122-a129-4fd3-bad9-e66f1f8d3ca3.png)
+
+4. Set the configuration as the picture below, select and fill in the address for each binary.
+
+<img src="https://user-images.githubusercontent.com/94690098/182028212-e8e90e71-7758-4d2d-88dc-aebf95a2e4a8.png" width="350" height="600" >
+
+5. Short the pins as shown, the plug in the USB cable.
+
+![image](https://user-images.githubusercontent.com/94690098/182028671-18d523de-466d-4c28-998d-c4330dd33ae7.png)
+
+6. After you plug in the USB cable the Orange LED will light up. Now click START button on the flash tool.
+
+**NOTE: After flashing, the device configuration might be erased.**
+
 
 ---
 
