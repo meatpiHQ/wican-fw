@@ -243,9 +243,20 @@ void app_main(void)
     xmsg_ws_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
     xmsg_ble_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
 	config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
+
 	slcan_init(&send_to_host);
 
-	can_init();
+	int8_t can_datarate = config_server_get_can_rate();
+	(can_datarate != -1) ? can_init(can_datarate):can_init(CAN_250K);
+
+	if(config_server_get_can_mode() == CAN_NORMAL)
+	{
+		can_set_silent(0);
+	}
+	else
+	{
+		can_set_silent(1);
+	}
 
 	protocol = config_server_protocol();
 
@@ -260,14 +271,6 @@ void app_main(void)
 		{
 			ESP_LOGE(TAG, "error going to default CAN_500K");
 			can_set_bitrate(CAN_500K);
-		}
-		if(config_server_get_can_mode() == CAN_NORMAL)
-		{
-			can_set_silent(0);
-		}
-		else
-		{
-			can_set_silent(1);
 		}
 
 		can_enable();
@@ -332,6 +335,6 @@ void app_main(void)
 
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
     esp_ota_mark_app_valid_cancel_rollback();
-//    esp_log_level_set("*", ESP_LOG_INFO);
+    esp_log_level_set("*", ESP_LOG_INFO);
 }
 

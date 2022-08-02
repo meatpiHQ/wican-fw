@@ -212,7 +212,7 @@ void can_set_mask(uint32_t m)
 
 void can_set_bitrate(uint8_t rate)
 {
-	if(can_cfg.bus_state == ON_BUS)
+	if(can_cfg.bus_state == ON_BUS || can_cfg.auto_bitrate)
 	{
 		return;
 	}
@@ -226,7 +226,7 @@ static void vCAN_EN_Callback( TimerHandle_t xTimer )
 {
 	xEventGroupSetBits(s_can_event_group, CAN_ENABLE_BIT);
 }
-void can_init(void)
+void can_init(uint8_t bitrate)
 {
 	s_can_event_group = xEventGroupCreate();
 	xCAN_EN_Timer= xTimerCreate
@@ -251,17 +251,75 @@ void can_init(void)
 	{
 		xTimerStop( xCAN_EN_Timer, 0 );
 	}
+
+	if(bitrate == CAN_AUTO)
+	{
+		can_cfg.auto_bitrate = 1;
+		can_cfg.bus_state = OFF_BUS;
+		can_set_bitrate(CAN_100K);
+	}
 }
 
 
 esp_err_t can_receive(twai_message_t *message, TickType_t ticks_to_wait)
 {
+	esp_err_t ret;
+	static uint32_t rx_error;
+	static uint8_t store_silent_flag = 0;
+	static uint8_t bitrate_found = 1;
+
 	xEventGroupWaitBits(s_can_event_group,
 							CAN_ENABLE_BIT,
 							pdFALSE,
 							pdFALSE,
 							portMAX_DELAY);
-	return twai_receive(message, ticks_to_wait);
+
+	if(can_cfg.auto_bitrate)
+	{
+		ret = twai_receive(message, 0);
+
+		if(ret == ESP_OK)
+		{
+			rx_error = 0;
+			bitrate_found = 1;
+			if(bitrate_found == 0)
+			{
+				bitrate_found = 1;
+				if(store_silent_flag != can_cfg.silent)
+				{
+					can_cfg.silent = store_silent_flag;
+					can_disable();
+					can_enable();
+				}
+			}
+		}
+		else
+		{
+			rx_error++;
+			if(bitrate_found == 1)
+			{
+				bitrate_found = 0;
+				store_silent_flag = can_cfg.silent;
+			}
+
+			if(rx_error >=120)
+			{
+				ESP_LOGW(TAG, "try differnt baudrate");
+				rx_error = 0;
+
+				can_disable();
+				can_cfg.silent = 1;
+				datarate++;
+				datarate %= (CAN_1000K+1);
+				can_enable();
+			}
+		}
+		return ret;
+	}
+	else
+	{
+		return twai_receive(message, ticks_to_wait);
+	}
 }
 
 esp_err_t can_send(twai_message_t *message, TickType_t ticks_to_wait)

@@ -21,7 +21,7 @@
 
 #ifndef __CAN_H__
 #define __CAN_H__
-
+#include "driver/twai.h"
 
 #define TX_GPIO_NUM             	0
 #define RX_GPIO_NUM             	3
@@ -37,7 +37,7 @@
 #define CAN_500K			8
 #define CAN_800K			9
 #define CAN_1000K			10
-
+#define CAN_AUTO			11
 typedef struct {
 	uint8_t bus_state;
 	uint8_t silent;
@@ -49,6 +49,7 @@ typedef struct {
 	uint8_t sjw;
 	uint32_t filter;
 	uint32_t mask;
+	uint8_t auto_bitrate;
 }can_cfg_t;
 
 
@@ -62,9 +63,10 @@ void can_set_mask(uint32_t m);
 void can_set_bitrate(uint8_t rate);
 esp_err_t can_receive(twai_message_t *message, TickType_t ticks_to_wait);
 esp_err_t can_send(twai_message_t *message, TickType_t ticks_to_wait);
-void can_init(void);
+void can_init(uint8_t bitrate);
 uint8_t can_is_silent(void);
 bool can_is_enabled(void);
 uint8_t can_get_bitrate(void);
 uint32_t can_msgs_to_rx(void);
+
 #endif
