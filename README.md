@@ -4,7 +4,7 @@
 ---
 <br/><br/>
 
-## Launching on [**Crowd Supply**](https://www.crowdsupply.com/meatpi-electronics/wican) click [**here**](https://www.crowdsupply.com/meatpi-electronics/wican) to subscribe for notification. 
+## Launching on [**Crowd Supply**](https://www.crowdsupply.com/meatpi-electronics/wican) soon click [**here**](https://www.crowdsupply.com/meatpi-electronics/wican) to subscribe for notification. 
 
 <br/><br/>
 
