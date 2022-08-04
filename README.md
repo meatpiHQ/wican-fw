@@ -9,16 +9,16 @@
 ## WiCAN-USB Pinout
 
 <p align="center">
-<img src="https://user-images.githubusercontent.com/94690098/182846779-335f63d2-8e0b-4367-a281-6e54e7f45b7c.png" width="656" height="222">
+<img src="https://user-images.githubusercontent.com/94690098/182854398-6d143970-f07d-4a5f-ae9f-35ac566af170.png" >
 </p>
 
 ## WiCAN-OBD2 Pinout
 
 <p align="center">
-<img src="https://user-images.githubusercontent.com/94690098/182845721-0c1886a4-b2ad-455d-8892-b30888652e9e.png" width="569" height="265">
+<img src="https://user-images.githubusercontent.com/94690098/182854687-911bae04-9bdd-4947-8363-e088e278b3b8.png" >
 </p>
 
-
+---
 
 - [Important Notes](#important-notes)
 - [Build](#build)
