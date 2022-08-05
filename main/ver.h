@@ -22,6 +22,11 @@
 #ifndef __VER_H__
 #define __VER_H__
 
-//#define HW_VERSION		"v3.00"
+#define RESERVED_VER			0
+#define RESERVED_VER1			1
+#define WICAN_V300				2
+#define WICAN_USB_V100			3
+
+extern uint8_t project_hardware_rev;
 
 #endif

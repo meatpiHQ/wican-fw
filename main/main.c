@@ -32,6 +32,7 @@
 #include "comm_server.h"
 #include "lwip/sockets.h"
 #include "driver/twai.h"
+#include "ver.h"
 #include "types.h"
 #include "config_server.h"
 #include "realdash.h"
@@ -62,6 +63,7 @@ static xdev_buffer ucTCP_TX_Buffer;
 
 static uint8_t protocol = SLCAN;
 
+uint8_t project_hardware_rev;
 
 static void process_led(bool state)
 {
@@ -317,6 +319,17 @@ void app_main(void)
     if (esp_ota_get_partition_description(running, &running_app_info) == ESP_OK)
     {
         ESP_LOGI(TAG, "Running firmware version: %s", running_app_info.version);
+        ESP_LOGI(TAG, "Project Name: %s", running_app_info.project_name);
+
+        if(strstr(running_app_info.project_name, "usb") != 0)
+        {
+        	project_hardware_rev = WICAN_USB_V100;
+        	ESP_LOGI(TAG, "project_hardware_rev: USB");
+        }
+        else
+        {
+        	ESP_LOGI(TAG, "project_hardware_rev: OBD");
+        }
     }
 
     if(config_server_get_sleep_config())
@@ -335,6 +348,6 @@ void app_main(void)
 
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
     esp_ota_mark_app_valid_cancel_rollback();
-    esp_log_level_set("*", ESP_LOG_INFO);
+//    esp_log_level_set("*", ESP_LOG_INFO);
 }
 

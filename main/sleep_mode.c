@@ -54,7 +54,7 @@
 
 #include "esp_log.h"
 #include "mqtt_client.h"
-
+#include "ver.h"
 
 #define TIMES              256
 #define GET_UNIT(x)        ((x>>3) & 0x1)
@@ -396,7 +396,14 @@ static void adc_task(void *pvParameters)
     	adc_val = (uint32_t)(avg/count);
     	float battery_voltage;
 
-    	battery_voltage = (adc_val*116)/(16*1000.0f);
+    	if(project_hardware_rev == WICAN_V300)
+    	{
+    		battery_voltage = (adc_val*116)/(16*1000.0f);
+    	}
+    	else if(project_hardware_rev == WICAN_USB_V100)
+    	{
+    		battery_voltage = (adc_val*106.49f)/(6.49f*1000.0f);
+    	}
     	battery_voltage += 0.2;
     	xQueueOverwrite( voltage_queue, &battery_voltage );
 
