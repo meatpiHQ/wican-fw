@@ -329,21 +329,32 @@ void app_main(void)
         else
         {
         	ESP_LOGI(TAG, "project_hardware_rev: OBD");
+            if(strstr(running_app_info.project_name, "hv210") != 0)
+            {
+            	project_hardware_rev = WICAN_V210;
+            }
+            else
+            {
+            	project_hardware_rev = WICAN_V300;
+            }
         }
     }
 
-    if(config_server_get_sleep_config())
+    if(project_hardware_rev != WICAN_V210)
     {
-    	float sleep_voltage = 0;
+		if(config_server_get_sleep_config())
+		{
+			float sleep_voltage = 0;
 
-    	if(config_server_get_sleep_volt(&sleep_voltage) != -1)
-    	{
-    		sleep_mode_init(sleep_voltage);
-    	}
-    	else
-    	{
-    		sleep_mode_init(13.1f);
-    	}
+			if(config_server_get_sleep_volt(&sleep_voltage) != -1)
+			{
+				sleep_mode_init(sleep_voltage);
+			}
+			else
+			{
+				sleep_mode_init(13.1f);
+			}
+		}
     }
 
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
