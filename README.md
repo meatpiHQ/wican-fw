@@ -191,7 +191,7 @@ Use the [**ESP flash tool**](https://www.espressif.com/en/support/download/other
 
 <img src="https://user-images.githubusercontent.com/94690098/182028212-e8e90e71-7758-4d2d-88dc-aebf95a2e4a8.png" width="350" height="600" >
 
-5. Short the pins as shown, the plug in the USB cable.
+5. Short the pins as shown, then plug in the USB cable.
 
 ![image](https://user-images.githubusercontent.com/94690098/182028671-18d523de-466d-4c28-998d-c4330dd33ae7.png)
 
