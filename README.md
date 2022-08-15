@@ -202,4 +202,4 @@ Use the [**ESP flash tool**](https://www.espressif.com/en/support/download/other
 
 ---
 
-© 2022 meatPi Electronics | www.meatpi.com | PO Box 5005 Clayton, VIC 3168, AustraliaS
+© 2022 meatPi Electronics | www.meatpi.com | PO Box 5005 Clayton, VIC 3168, Australia
