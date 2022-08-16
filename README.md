@@ -28,6 +28,7 @@
 
 ---
 
+- [Features Wishlist](#features-wishlist)
 - [Important Notes](#important-notes)
 - [Build](#build)
 - [Description](#description)
@@ -42,7 +43,14 @@
   - [OTA](#1-ota)
   - [USB](#2-usb)
 
-**Note: This is the intial release although all the functions and features work, optimization/clean up are still required.**
+# **Features Wishlist**:
+
+- CAN Auto baudrate
+- Support ELM327 OBD2 protocol 
+- Support ELM327 protocol and Realdash protocol simultaneously on WiFi and BLE 
+- Add option to send an Email on battery alert 
+- Expand alerts to include other CAN parameters parsed from DBC files.
+
 # **Important Notes**:
 
 - The OBD2 adapter is not designed to powered of the USB connecter. The USB connector can power the adapter to flash custom firmware or hardreset the deivce and can also be used for debuging.
