@@ -1265,7 +1265,7 @@ void config_server_restart(void)
         httpd_register_uri_handler(server, &load_config_uri);
         httpd_register_uri_handler(server, &logo_uri);
         httpd_register_uri_handler(server, &ws);
-
+        httpd_register_uri_handler(server, &file_upload);
         return;
     }
 
