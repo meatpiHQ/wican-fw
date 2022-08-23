@@ -3,9 +3,9 @@
 [www.meatpi.com](https://www.meatpi.com)
 ---
 
-## [**Pre-order on Crowd Supply**](https://www.crowdsupply.com/meatpi-electronics/wican) 
+## [**Pre-order on Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics/wican) 
 
-## [webCAN](http://webcan.meatpi.com/?i=1) Comming soon!
+## [webCAN](http://webcan.meatpi.com/) Comming soon!
 
 <br/><br/>
 
@@ -40,6 +40,7 @@
   - [WiFi/CAN Configuration](#1-wifican-configuration)
   - [BUSMaster](#2-busmaster)
   - [Realdash](#3-realdash)
+  - [webCAN](http://webcan.meatpi.com)
 - [Firmware Update](#firmware-update)
   - [OTA](#1-ota)
   - [USB](#2-usb)
