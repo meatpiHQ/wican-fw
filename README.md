@@ -3,7 +3,7 @@
 [www.meatpi.com](https://www.meatpi.com)
 ---
 
-## Launching on [**Crowd Supply**](https://www.crowdsupply.com/meatpi-electronics/wican) soon click [**here**](https://www.crowdsupply.com/meatpi-electronics/wican) to subscribe for notification. 
+## [**Pre-order on Crowd Supply**](https://www.crowdsupply.com/meatpi-electronics/wican) 
 
 ## [webCAN](http://webcan.meatpi.com/?i=1) Comming soon!
 
