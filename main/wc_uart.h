@@ -18,26 +18,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifndef __WC_UART_H__
+#define __WC_UART_H__
 
-#ifndef __TYPES_H__
-#define __TYPES_H__
-
-#define DEV_BUFFER_LENGTH	64
-
-typedef enum
-{
-	DEV_WIFI = 0,
-	DEV_WIFI_WS,
-	DEV_BLE,
-	DEV_UART
-}dev_channel_t;
-
-
-typedef struct __xdev_buffer
-{
-	int usLen;
-	uint8_t ucElement[DEV_BUFFER_LENGTH];
-	dev_channel_t dev_channel;
-}xdev_buffer;
+void wc_uart_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t connected_led);
+bool wc_uart_enabled(void);
 
 #endif
