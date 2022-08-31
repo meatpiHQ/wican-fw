@@ -119,7 +119,7 @@ void can_enable(void)
 	{
 		return;
 	}
-
+	gpio_set_level(CAN_STDBY_GPIO_NUM, 0);
 	twai_timing_config_t *t_config;
 	t_config = (twai_timing_config_t *)&twai_timing_config[datarate];
 //	t_config = (twai_timing_config_t *)&twai_timing_config[CAN_500K];
@@ -152,6 +152,7 @@ void can_disable(void)
 	{
 		return;
 	}
+	gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
 	can_block();
 	ESP_ERROR_CHECK(twai_stop());
 	ESP_ERROR_CHECK(twai_driver_uninstall());

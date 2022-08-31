@@ -25,6 +25,7 @@
 
 #define TX_GPIO_NUM             	0
 #define RX_GPIO_NUM             	3
+#define CAN_STDBY_GPIO_NUM			6
 
 #define CAN_5K				0
 #define CAN_10K				1

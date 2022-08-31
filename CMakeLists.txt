@@ -3,13 +3,13 @@
 cmake_minimum_required(VERSION 3.5)
 
 
-#set(PROJECT_PREF "wican-fw")
+set(PROJECT_PREF "wican-fw")
 #set(PROJECT_VER "v154_hv210")
-#set(PROJECT_VER "v153_hv300")
+set(PROJECT_VER "v154_hv300")
 
 
-set(PROJECT_PREF "wican-fw-usb")
-set(PROJECT_VER "v154_hv100")
+#set(PROJECT_PREF "wican-fw-usb")
+#set(PROJECT_VER "v154_hv100")
 
 set(PROJECT_VERU ${PROJECT_VER})
 set(PROJECT_BIN "${PROJECT_PREF}_${PROJECT_VERU}")
