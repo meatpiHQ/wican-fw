@@ -214,10 +214,10 @@ static void can_rx_task(void *pvParameters)
 				{
 					xQueueSend( xmsg_ble_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(2000) );
 				}
-				if(project_hardware_rev == WICAN_USB_V100)
-				{
-					xQueueSend( xmsg_uart_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
-				}
+			}
+//			if(project_hardware_rev == WICAN_USB_V100)
+			{
+				xQueueSend( xmsg_uart_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
 			}
         }
         vTaskDelay(pdMS_TO_TICKS(1));
@@ -335,7 +335,7 @@ void app_main(void)
         {
         	project_hardware_rev = WICAN_USB_V100;
         	ESP_LOGI(TAG, "project_hardware_rev: USB");
-        	wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
+
         }
         else
         {
@@ -367,7 +367,7 @@ void app_main(void)
 			}
 		}
     }
-
+    wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
     esp_ota_mark_app_valid_cancel_rollback();
 //    esp_log_level_set("*", ESP_LOG_INFO);
