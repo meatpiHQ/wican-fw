@@ -100,7 +100,7 @@ static void uart_tx_task(void *arg)
 void wc_uart_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t connected_led)
 {
     const uart_config_t uart_config = {
-        .baud_rate = 115200,
+        .baud_rate = 6000000,
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,

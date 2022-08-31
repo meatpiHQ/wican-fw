@@ -46,6 +46,7 @@
 #include "nvs_flash.h"
 #include "gvret.h"
 #include "sleep_mode.h"
+#include "wc_uart.h"
 #define TAG 		__func__
 #define TX_GPIO_NUM             	0
 #define RX_GPIO_NUM             	3
@@ -57,7 +58,7 @@
 #define BLE_EN_PIN_SEL		(1ULL<<BLE_EN_PIN_NUM)
 #define BLE_Enabled()		(!gpio_get_level(BLE_EN_PIN_NUM))
 
-static QueueHandle_t xMsg_Tx_Queue, xMsg_Rx_Queue, xmsg_ws_tx_queue, xmsg_ble_tx_queue;
+static QueueHandle_t xMsg_Tx_Queue, xMsg_Rx_Queue, xmsg_ws_tx_queue, xmsg_ble_tx_queue, xmsg_uart_tx_queue;
 static xdev_buffer ucTCP_RX_Buffer;
 static xdev_buffer ucTCP_TX_Buffer;
 
@@ -143,6 +144,10 @@ static void can_tx_task(void *pvParameters)
 			{
 				slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xmsg_ble_tx_queue);
 			}
+			else if(ucTCP_RX_Buffer.dev_channel == DEV_UART)
+			{
+				slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xmsg_uart_tx_queue);
+			}
 		}
 		else if(protocol == REALDASH)
 		{
@@ -209,6 +214,10 @@ static void can_rx_task(void *pvParameters)
 				{
 					xQueueSend( xmsg_ble_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(2000) );
 				}
+				if(project_hardware_rev == WICAN_USB_V100)
+				{
+					xQueueSend( xmsg_uart_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
+				}
 			}
         }
         vTaskDelay(pdMS_TO_TICKS(1));
@@ -244,6 +253,7 @@ void app_main(void)
     xMsg_Tx_Queue = xQueueCreate(100, sizeof( xdev_buffer) );
     xmsg_ws_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
     xmsg_ble_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
+    xmsg_uart_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
 	config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
 
 	slcan_init(&send_to_host);
@@ -325,6 +335,7 @@ void app_main(void)
         {
         	project_hardware_rev = WICAN_USB_V100;
         	ESP_LOGI(TAG, "project_hardware_rev: USB");
+        	wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
         }
         else
         {
@@ -359,6 +370,6 @@ void app_main(void)
 
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
     esp_ota_mark_app_valid_cancel_rollback();
-    esp_log_level_set("*", ESP_LOG_INFO);
+//    esp_log_level_set("*", ESP_LOG_INFO);
 }
 
