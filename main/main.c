@@ -186,7 +186,7 @@ static void can_rx_task(void *pvParameters)
 
         	process_led(1);
 
-			if(tcp_port_open() || ble_connected() || config_server_ws_connected())
+			if(tcp_port_open() || ble_connected() || config_server_ws_connected() || project_hardware_rev == WICAN_USB_V100)
 			{
 				memset(ucTCP_TX_Buffer.ucElement, 0, sizeof(ucTCP_TX_Buffer.ucElement));
 				if(protocol == SLCAN || config_server_ws_connected())
@@ -214,10 +214,10 @@ static void can_rx_task(void *pvParameters)
 				{
 					xQueueSend( xmsg_ble_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(2000) );
 				}
-			}
-//			if(project_hardware_rev == WICAN_USB_V100)
-			{
-				xQueueSend( xmsg_uart_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
+//				if(project_hardware_rev == WICAN_USB_V100)
+				{
+					xQueueSend( xmsg_uart_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
+				}
 			}
         }
         vTaskDelay(pdMS_TO_TICKS(1));
