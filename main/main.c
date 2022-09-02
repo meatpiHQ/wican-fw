@@ -214,7 +214,7 @@ static void can_rx_task(void *pvParameters)
 				{
 					xQueueSend( xmsg_ble_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(2000) );
 				}
-//				if(project_hardware_rev == WICAN_USB_V100)
+				if(project_hardware_rev == WICAN_USB_V100)
 				{
 					xQueueSend( xmsg_uart_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
 				}
