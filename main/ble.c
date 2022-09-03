@@ -88,6 +88,7 @@ static uint8_t dev_name[32] = {0};
 static uint8_t manufacturer[]="MeatPi";
 
 static uint16_t profile_handle_table[HRS_IDX_NB];
+TaskHandle_t xble_handle = NULL;
 //static uint8_t *ext_adv_raw_data;
 //static uint8_t ext_adv_raw_data[64] = {
 //        0x02, 0x01, 0x06,
@@ -139,7 +140,7 @@ static esp_ble_adv_data_t heart_rate_scan_rsp_config = {
 };
 
 static uint8_t conn_led = 0;
-static EventGroupHandle_t s_ble_event_group;
+static EventGroupHandle_t s_ble_event_group = NULL;
 #define BLE_CONNECTED_BIT 			BIT0
 #define BLE_CONGEST_BIT				BIT1
 esp_ble_gap_ext_adv_params_t ext_adv_params_2M = {
@@ -183,7 +184,7 @@ static struct gatts_profile_inst heart_rate_profile_tab[HEART_PROFILE_NUM] = {
 
 };
 
-static QueueHandle_t *xBle_TX_Queue, *xBle_RX_Queue;
+static QueueHandle_t *xBle_TX_Queue = NULL, *xBle_RX_Queue = NULL;
 /* Service */
 //static const uint16_t GATTS_SERVICE_UUID_TEST      = 0x00FF;
 //static const uint16_t GATTS_CHAR_UUID_TEST_A       = 0xFF01;
@@ -748,16 +749,27 @@ void ble_send(uint8_t* buf, uint8_t buf_len)
 void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t connected_led, int passkey, uint8_t* uid)
 {
 	esp_err_t ret;
-	strcpy((char*)dev_name, (char*)uid);
-//	ext_adv_raw_data = uid;
-//	strcat((char*)ext_adv_raw_data, (char*)uid);
-//	ESP_LOGE(GATTS_TABLE_TAG, "uid: %s", uid);
-//	ESP_LOGE(GATTS_TABLE_TAG, "ext_adv_raw_data: %s, size:%d", ext_adv_raw_data, strlen((char*)ext_adv_raw_data));
-	conn_led = connected_led;
 
-	xBle_TX_Queue = xTXp_Queue;
-	xBle_RX_Queue = xRXp_Queue;
-	s_ble_event_group = xEventGroupCreate();
+	if(conn_led == 0 && dev_name[0] == 0)
+	{
+		strcpy((char*)dev_name, (char*)uid);
+		conn_led = connected_led;
+	}
+
+	if(xBle_TX_Queue == NULL)
+	{
+		xBle_TX_Queue = xTXp_Queue;
+	}
+	if(xBle_TX_Queue == NULL)
+	{
+		xBle_RX_Queue = xRXp_Queue;
+	}
+
+	if(s_ble_event_group == NULL)
+	{
+		s_ble_event_group = xEventGroupCreate();
+	}
+
 	xEventGroupClearBits(s_ble_event_group, BLE_CONNECTED_BIT);
 	xEventGroupClearBits(s_ble_event_group, BLE_CONGEST_BIT);
 	ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
@@ -829,7 +841,11 @@ void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t conn
 	esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(uint8_t));
 	esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(uint8_t));
 
-    xTaskCreate(ble_task, "ble_task", 4096, (void*)AF_INET, 5, NULL);
+	if(xble_handle == NULL)
+	{
+		xTaskCreate(ble_task, "ble_task", 4096, (void*)AF_INET, 5, &xble_handle);
+	}
+
     esp_log_level_set(GATTS_TABLE_TAG, ESP_LOG_NONE);
 }
 
@@ -840,4 +856,8 @@ void ble_disable(void)
 	esp_bt_controller_disable();
 	esp_bt_controller_deinit();
 }
-
+void ble_enable(void)
+{
+	ble_init(0,0,0,0,0);
+//	esp_bluedroid_enable();
+}

@@ -26,4 +26,5 @@ bool ble_connected(void);
 void ble_send(uint8_t* buf, uint8_t buf_len);
 bool ble_tx_ready(void);
 void ble_disable(void);
+void ble_enable(void);
 #endif
