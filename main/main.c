@@ -130,15 +130,18 @@ static void can_tx_task(void *pvParameters)
 		uint8_t* msg_ptr = ucTCP_RX_Buffer.ucElement;
 		int temp_len = ucTCP_RX_Buffer.usLen;
 
-		if(protocol == SLCAN || config_server_ws_connected())
+		if(config_server_ws_connected())
+		{
+			if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI_WS)
+			{
+				slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xmsg_ws_tx_queue);
+			}
+		}
+		if(protocol == SLCAN)
 		{
 			if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI)
 			{
 				slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xMsg_Tx_Queue);
-			}
-			else if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI_WS)
-			{
-				slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xmsg_ws_tx_queue);
 			}
 			else if(ucTCP_RX_Buffer.dev_channel == DEV_BLE)
 			{
@@ -186,10 +189,18 @@ static void can_rx_task(void *pvParameters)
 
         	process_led(1);
 
-			if(tcp_port_open() || ble_connected() || config_server_ws_connected() || project_hardware_rev == WICAN_USB_V100)
+        	if(config_server_ws_connected())
+        	{
+        		ucTCP_TX_Buffer.usLen = slcan_parse_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
+				if(config_server_ws_connected())
+				{
+					xQueueSend( xmsg_ws_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(2000) );
+				}
+        	}
+			if(tcp_port_open() || ble_connected() || project_hardware_rev == WICAN_USB_V100)
 			{
 				memset(ucTCP_TX_Buffer.ucElement, 0, sizeof(ucTCP_TX_Buffer.ucElement));
-				if(protocol == SLCAN || config_server_ws_connected())
+				if(protocol == SLCAN)
 				{
 					ucTCP_TX_Buffer.usLen = slcan_parse_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
 				}
@@ -205,10 +216,6 @@ static void can_rx_task(void *pvParameters)
 				if(tcp_port_open())
 				{
 					xQueueSend( xMsg_Tx_Queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(2000) );
-				}
-				if(config_server_ws_connected())
-				{
-					xQueueSend( xmsg_ws_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(2000) );
 				}
 				if(ble_connected())
 				{
@@ -335,7 +342,7 @@ void app_main(void)
         {
         	project_hardware_rev = WICAN_USB_V100;
         	ESP_LOGI(TAG, "project_hardware_rev: USB");
-
+        	wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
         }
         else
         {
@@ -367,9 +374,9 @@ void app_main(void)
 			}
 		}
     }
-    wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
+
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
     esp_ota_mark_app_valid_cancel_rollback();
-//    esp_log_level_set("*", ESP_LOG_INFO);
+    esp_log_level_set("*", ESP_LOG_NONE);
 }
 
