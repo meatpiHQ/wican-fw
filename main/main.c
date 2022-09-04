@@ -221,7 +221,7 @@ static void can_rx_task(void *pvParameters)
 				{
 					xQueueSend( xmsg_ble_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(2000) );
 				}
-				if(project_hardware_rev == WICAN_USB_V100)
+				else if(project_hardware_rev == WICAN_USB_V100)
 				{
 					xQueueSend( xmsg_uart_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
 				}
@@ -377,6 +377,11 @@ void app_main(void)
 
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
     esp_ota_mark_app_valid_cancel_rollback();
+//    while(1)
+//    {
+//		ESP_LOGI(TAG, "free heap : %d", xPortGetFreeHeapSize());
+//		vTaskDelay(pdMS_TO_TICKS(2000));
+//    }
     esp_log_level_set("*", ESP_LOG_NONE);
 }
 
