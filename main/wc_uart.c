@@ -29,6 +29,7 @@
 #include "string.h"
 #include "driver/gpio.h"
 #include "types.h"
+#include "lwip/sockets.h"
 
 static const int RX_BUF_SIZE = 1024;
 
@@ -117,8 +118,8 @@ void wc_uart_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t 
 //    esp_err_t uart_set_pin(uart_port_t uart_num, int tx_io_num, int rx_io_num, int rts_io_num, int cts_io_num);
 //    uart_set_pin(UART_NUM_0, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, 2, 10);
     uart_set_pin(UART_NUM_0, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-    xTaskCreate(uart_tx_task, "uart_tx_task", 1024*2, NULL, configMAX_PRIORITIES-1, NULL);
-    xTaskCreate(uart_rx_task, "uart_rx_task", 1024*2, NULL, configMAX_PRIORITIES-1, NULL);
+    xTaskCreate(uart_tx_task, "uart_tx_task", 1024*2, NULL, (void*)AF_INET, NULL);
+    xTaskCreate(uart_rx_task, "uart_rx_task", 1024*2, NULL, (void*)AF_INET, NULL);
 
 }
 
