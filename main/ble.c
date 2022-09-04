@@ -540,8 +540,8 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
             break;
         case ESP_GATTS_DISCONNECT_EVT:
             ESP_LOGI(GATTS_TABLE_TAG, "ESP_GATTS_DISCONNECT_EVT, disconnect reason 0x%x", param->disconnect.reason);
-            wifi_network_restart();
-        	config_server_restart();
+//            wifi_network_restart();
+//        	config_server_restart();
             is_connected = false;
             gpio_set_level(conn_led, 1);
             /* start advertising again when missing the connect */
@@ -745,7 +745,7 @@ void ble_send(uint8_t* buf, uint8_t buf_len)
 		esp_ble_gatts_send_indicate(spp_gatts_if, spp_conn_id, profile_handle_table[IDX_CHAR_VAL_A],buf_len, buf, false);
 	}
 }
-
+static uint32_t ble_pass_key = 0;
 void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t connected_led, int passkey, uint8_t* uid)
 {
 	esp_err_t ret;
@@ -754,6 +754,8 @@ void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t conn
 	{
 		strcpy((char*)dev_name, (char*)uid);
 		conn_led = connected_led;
+		ble_pass_key = passkey;
+		ESP_LOGW(GATTS_TABLE_TAG, "ble passkey: %d", ble_pass_key);
 	}
 
 	if(xBle_TX_Queue == NULL)
@@ -772,7 +774,7 @@ void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t conn
 
 	xEventGroupClearBits(s_ble_event_group, BLE_CONNECTED_BIT);
 	xEventGroupClearBits(s_ble_event_group, BLE_CONGEST_BIT);
-	ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
+//	ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_BLE));
 
 	esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
 	ret = esp_bt_controller_init(&bt_cfg);
@@ -828,7 +830,9 @@ void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t conn
 //	uint32_t passkey = 123456;
 	uint8_t auth_option = ESP_BLE_ONLY_ACCEPT_SPECIFIED_AUTH_DISABLE;
 	uint8_t oob_support = ESP_BLE_OOB_DISABLE;
-	esp_ble_gap_set_security_param(ESP_BLE_SM_SET_STATIC_PASSKEY, &passkey, sizeof(uint32_t));
+
+	esp_ble_gap_set_security_param(ESP_BLE_SM_CLEAR_STATIC_PASSKEY, &ble_pass_key, sizeof(uint32_t));
+	esp_ble_gap_set_security_param(ESP_BLE_SM_SET_STATIC_PASSKEY, &ble_pass_key, sizeof(uint32_t));
 	esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, sizeof(uint8_t));
 	esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, sizeof(uint8_t));
 	esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, sizeof(uint8_t));
@@ -846,7 +850,7 @@ void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t conn
 		xTaskCreate(ble_task, "ble_task", 4096, (void*)AF_INET, 5, &xble_handle);
 	}
 
-    esp_log_level_set(GATTS_TABLE_TAG, ESP_LOG_NONE);
+//    esp_log_level_set(GATTS_TABLE_TAG, ESP_LOG_NONE);
 }
 
 void ble_disable(void)
