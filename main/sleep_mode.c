@@ -163,6 +163,13 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     }
 }
 static esp_mqtt_client_handle_t client = NULL;
+static void mqtt_publish(char* subtopic, char* payload)
+{
+    char full_topic[256];
+    sprintf(full_topic, "%s/%s", config_server_get_alert_topic(), subtopic);
+    int msg_id = esp_mqtt_client_publish(client, full_topic, payload, 0, 1, 0);
+    ESP_LOGI(TAG, "publish, msg_id=%d, topic=%s, payload=%s", msg_id, full_topic, payload);
+}
 static void mqtt_init(void)
 {
     esp_mqtt_client_config_t mqtt_cfg = {
@@ -189,13 +196,13 @@ static void mqtt_init(void)
 						pdMS_TO_TICKS(10000));
     if (bits & MQTT_CONNECTED_BIT)
     {
-    	static char pub_data[128];
     	float batt_voltage = 0;
     	sleep_mode_get_voltage(&batt_voltage);
-    	sprintf(pub_data, "{\"alert\": \"low_battery\", \"battery_voltage\": %f}", batt_voltage);
-        int msg_id = esp_mqtt_client_publish(client, config_server_get_alert_topic(), pub_data, 0, 1, 0);
-        ESP_LOGI(TAG, "publish, msg_id=%d", msg_id);
-
+    	// sprintf(pub_data, "{\"alert\": \"low_battery\", \"battery_voltage\": %f}", batt_voltage);
+        mqtt_publish("alert", "low_battery");
+        static char batt_voltage_str[17];
+        sprintf(batt_voltage_str, "%f", batt_voltage);
+        mqtt_publish("battery_voltage", batt_voltage_str);
     }
     else
     {
