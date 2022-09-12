@@ -48,6 +48,7 @@
 #define SLCAN				0
 #define REALDASH			1
 #define SAVVYCAN			2
+#define OBD_ELM327			3					  
 
 typedef struct _device_config
 {

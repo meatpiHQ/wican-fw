@@ -47,6 +47,7 @@
 #include "gvret.h"
 #include "sleep_mode.h"
 #include "wc_uart.h"
+#include "elm327.h"
 #define TAG 		__func__
 #define TX_GPIO_NUM             	0
 #define RX_GPIO_NUM             	3
@@ -58,7 +59,7 @@
 #define BLE_EN_PIN_SEL		(1ULL<<BLE_EN_PIN_NUM)
 #define BLE_Enabled()		(!gpio_get_level(BLE_EN_PIN_NUM))
 
-static QueueHandle_t xMsg_Tx_Queue, xMsg_Rx_Queue, xmsg_ws_tx_queue, xmsg_ble_tx_queue, xmsg_uart_tx_queue;
+static QueueHandle_t xMsg_Tx_Queue, xMsg_Rx_Queue, xmsg_ws_tx_queue, xmsg_ble_tx_queue, xmsg_uart_tx_queue, xmsg_obd_rx_queue;
 static xdev_buffer ucTCP_RX_Buffer;
 static xdev_buffer ucTCP_TX_Buffer;
 
@@ -162,6 +163,10 @@ static void can_tx_task(void *pvParameters)
 		{
 			gvret_parse(msg_ptr, temp_len, &tx_msg, &xMsg_Tx_Queue);
 		}
+		else if(protocol == OBD_ELM327)
+		{
+			elm327_process_cmd(msg_ptr, temp_len, &tx_msg, &xMsg_Tx_Queue);
+		}
 	}
 }
 
@@ -211,6 +216,10 @@ static void can_rx_task(void *pvParameters)
 				else if(protocol == SAVVYCAN)
 				{
 					ucTCP_TX_Buffer.usLen = gvret_parse_can_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
+				}
+				else if(protocol == OBD_ELM327)
+				{
+					xQueueSend( xmsg_obd_rx_queue, ( void * ) &rx_msg, pdMS_TO_TICKS(0) );
 				}
 
 				if(tcp_port_open())
@@ -266,7 +275,7 @@ void app_main(void)
 	slcan_init(&send_to_host);
 
 	int8_t can_datarate = config_server_get_can_rate();
-	(can_datarate != -1) ? can_init(can_datarate):can_init(CAN_250K);
+	(can_datarate != -1) ? can_init(can_datarate):can_init(CAN_500K);
 
 	if(config_server_get_can_mode() == CAN_NORMAL)
 	{
@@ -278,6 +287,7 @@ void app_main(void)
 	}
 
 	protocol = config_server_protocol();
+	protocol = OBD_ELM327;
 
 	if(protocol == REALDASH)
 	{
@@ -297,6 +307,11 @@ void app_main(void)
 	else if(protocol == SAVVYCAN)
 	{
 		gvret_init(&send_to_host);
+		can_enable();
+	}
+	else if(protocol == OBD_ELM327)
+	{
+		can_init(CAN_500K);
 		can_enable();
 	}
 
