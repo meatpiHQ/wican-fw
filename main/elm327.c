@@ -32,14 +32,36 @@
 #include "driver/twai.h"
 #include "slcan.h"
 #include "can.h"
+#include "std_pid.h"
 
 #define TAG 		__func__
+
+#define SERVICE_01			0x01
+#define SERVICE_02			0x02
+#define SERVICE_03			0x03
+#define SERVICE_04			0x04
+#define SERVICE_05			0x05
+#define SERVICE_09			0x09
+#define SERVICE_UNKNOWN		0xFF
+const static uint8_t service_01_rsp_len[] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+											1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+											1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+											1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+											1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+											1, 1, 1, 1, 1, 2, 1, 1, 1, 3, 2, 1, 2, 2, 1, 1, 1, 2, 2, 1,
+											2, 2, 2, 2, 2, 1, 1, 3, 1, 9, 9, 2, 1, 2, 1, 1, 3, 9, 9, 2,
+											4, 1, 1, 2, 1, 1, 1, 1, 3, 2, 2, 2, 1, 4, 1, 1, 2, 1, 2, 1,
+											2, 1, 1, 1, 1, 1, 1, 1};
+
+uint8_t service_09_rsp_len[] = {1, 1, 4, 1, 255, 1, 255, 1, 1, 1, 4, 1}; //255 unknow
+
+
 
 static QueueHandle_t *can_rx_queue = NULL;
 
 const char *ok_str = "OK";
 const char *question_mark_str = "?";
-const char *device_description = "ELM327 v2.3";
+const char *device_description = "ELM327 v1.3a";
 const char *identify = "OBDLink MX";
 
 
@@ -266,22 +288,39 @@ static char* elm327_input_voltage(const char* command_str)
 }
 
 
-static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *q)
+static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 {
 	twai_message_t txframe;
+	uint8_t service_num;
 
 	ESP_LOGI(TAG, "PID req, cmd_buffer: %s", cmd);
-	if((!strncmp(cmd, "0100",4) || !strncmp(cmd, "0900",4)) && (elm327_config.protocol != '6'))
+	ESP_LOG_BUFFER_HEX(TAG, cmd, strlen(cmd));
+
+	if(!strncmp(cmd, "01",2))
+	{
+		service_num = SERVICE_01;
+	}
+	else if(!strncmp(cmd, "09",2))
+	{
+		service_num = SERVICE_09;
+	}
+	else
+	{
+		service_num = SERVICE_UNKNOWN;
+	}
+
+
+	if((service_num == SERVICE_01 || service_num == SERVICE_09) && (elm327_config.protocol != '6'))
 	{
 		if(elm327_config.protocol == '1' || elm327_config.protocol == '2')
 		{
 			strcat(rsp, "NO DATA\r\r>");
-			elm327_response((char*)rsp, 0, q);
+			elm327_response((char*)rsp, 0, queue);
 		}
 		else
 		{
 			strcat(rsp, "BUS INIT: ...ERROR\r\r>");
-			elm327_response((char*)rsp, 0, q);
+			elm327_response((char*)rsp, 0, queue);
 		}
 
 	}
@@ -302,10 +341,11 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *q)
 		txframe.data[7] = 0xAA;
 
 		uint16_t req_pid = 0;
-		uint8_t req_mode = 0;
+//		uint8_t req_mode = 0;
 		uint8_t req_expected_rsp = 0xFF;
 
-		if(strlen(cmd) == 4 || strlen(cmd) == 5)
+//		if(strlen(cmd) == 4 || strlen(cmd) == 5)
+		if(service_num == SERVICE_01 || service_num == SERVICE_09)
 		{
 			if(strlen(cmd) == 5)
 			{
@@ -317,16 +357,21 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *q)
 				}
 			}
 
-			uint32_t value = strtol((char *) cmd, NULL, 16); //the pid format is always in hex
+			uint32_t value = strtol((char *) cmd, NULL, 16);
 			uint8_t pidnum = (uint8_t)(value & 0xFF);
 			uint8_t mode = (uint8_t)((value >> 8) & 0xFF);
+
+			if(req_expected_rsp == 0xFF && elm327_config.ecu_address != 0x7DF)
+			{
+				req_expected_rsp = service_01_rsp_len[0];
+			}
 
             txframe.data[0] = 2;
             txframe.data[1] = mode;
             txframe.data[2] = pidnum;
 			txframe.data_length_code = 8;
 			req_pid = pidnum;
-			req_mode = mode;
+//			req_mode = mode;
 		}
 		else if(strlen(cmd) == 6)
 		{
@@ -343,8 +388,7 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *q)
 		uint8_t number_of_rsp = 0;
 		char tmp[10];
 
-
-
+		memset(tmp, 0, sizeof(tmp));
 		while(timeout_flag == 0)
 		{
 			if( xQueueReceive(*can_rx_queue, ( void * ) &rx_frame, xwait_time) == pdPASS )
@@ -367,12 +411,12 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *q)
 							strcat((char*)rsp, (char*)tmp);
 						}
 
-						strcat((char*)rsp, "\r");
-						ESP_LOGI(TAG, "ELM327 send: %s", rsp);
-
-						elm327_response(rsp, 0, q);
+//						strcat((char*)rsp, "\r");
+						ESP_LOGW(TAG, "ELM327 send: %s", rsp);
+//						ESP_LOG_BUFFER_HEX(TAG, rsp, strlen(rsp));
+						elm327_response(rsp, 0, queue);
 						memset(rsp, 0, strlen(rsp));
-
+						strcat((char*)rsp, "\r");
 						if(req_expected_rsp != 0xFF)
 						{
 							if(req_expected_rsp == number_of_rsp)
@@ -403,6 +447,9 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *q)
 				timeout_flag = 1;
 			}
 		}
+
+		ESP_LOGW(TAG, "Response time: %u", (uint32_t)((esp_timer_get_time() - txtime)/1000));
+
 		if(rsp_found == 0)
 		{
 			strcat((char*)rsp, "NO DATA\r\r>");
@@ -411,7 +458,8 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *q)
 		{
 			strcat((char*)rsp, "\r>");
 		}
-		elm327_response(rsp, 0, q);
+		elm327_response(rsp, 0, queue);
+
 	}
 
 	return 0;
@@ -494,15 +542,34 @@ int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, twai_message_t *frame, Queu
 
 				elm327_response((char*)cmd_response, 0, q);
 				memset(cmd_response, 0, sizeof(cmd_response));
-
 				strcat(cmd_response, "\r>");
-				ESP_LOGI(TAG, "rsp: %s", cmd_response);
+
+				elm327_response((char*)cmd_response, 0, q);
+			}
+			else if(!strncmp(cmd_buffer, "vti", 3) || !strncmp(cmd_buffer, "sti", 3))
+			{
+				strcat(cmd_response, (char*)question_mark_str);
+				if(elm327_config.linefeed)
+				{
+					strcat(cmd_response, "\r\n");
+				}
+				else
+				{
+					strcat(cmd_response, "\r");
+				}
+				elm327_response((char*)cmd_response, 0, q);
+				memset(cmd_response, 0, sizeof(cmd_response));
+				strcat(cmd_response, "\r>");
 
 				elm327_response((char*)cmd_response, 0, q);
 			}
 			else	//this is a request
 			{
-				elm327_request(cmd_buffer, cmd_response,q);
+				memset(cmd_response, 0, sizeof(cmd_response));
+				if(strlen(cmd_buffer) > 0)
+				{
+					elm327_request(cmd_buffer, cmd_response,q);
+				}
 //				ESP_LOGI(TAG, "PID req, cmd_buffer: %s", cmd_buffer);
 //				if((!strncmp(cmd_buffer, "0100",4) || !strncmp(cmd_buffer, "0900",4)) && (elm327_config.protocol != '6'))
 //				{
@@ -645,6 +712,8 @@ int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, twai_message_t *frame, Queu
 //						strcat((char*)cmd_response, "\r>");
 //					}
 //					elm327_response(cmd_response, 0, q);
+//
+//					ESP_LOGW(TAG, "Response time: %u", (uint32_t)((esp_timer_get_time() - txtime)/1000));
 //				}
 			}
 

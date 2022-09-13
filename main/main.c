@@ -105,16 +105,22 @@ static void process_led(bool state)
 //TODO: make this pretty?
 void send_to_host(char* str, uint32_t len, QueueHandle_t *q)
 {
+	static xdev_buffer xsend_buffer;
+
 	if(len == 0)
 	{
-		ucTCP_TX_Buffer.usLen = strlen(str);
+		xsend_buffer.usLen = strlen(str);
 	}
 	else
 	{
-		ucTCP_TX_Buffer.usLen = len;
+		xsend_buffer.usLen = len;
 	}
-	memcpy(ucTCP_TX_Buffer.ucElement, str, ucTCP_TX_Buffer.usLen);
-	xQueueSend( *q, ( void * ) &ucTCP_TX_Buffer, portMAX_DELAY );
+	memcpy(xsend_buffer.ucElement, str, xsend_buffer.usLen);
+	xQueueSend( *q, ( void * ) &xsend_buffer, portMAX_DELAY );
+
+//	ESP_LOG_BUFFER_HEX(TAG, ucTCP_TX_Buffer.ucElement, xsend_buffer.usLen);
+	memset(xsend_buffer.ucElement, 0, sizeof(xsend_buffer.ucElement));
+	xsend_buffer.usLen = 0;
 //	ESP_LOGI(TAG, "%s", str);
 }
 
@@ -205,6 +211,8 @@ static void can_rx_task(void *pvParameters)
 			if(tcp_port_open() || ble_connected() || project_hardware_rev == WICAN_USB_V100)
 			{
 				memset(ucTCP_TX_Buffer.ucElement, 0, sizeof(ucTCP_TX_Buffer.ucElement));
+				ucTCP_TX_Buffer.usLen = 0;
+
 				if(protocol == SLCAN)
 				{
 					ucTCP_TX_Buffer.usLen = slcan_parse_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
@@ -222,17 +230,20 @@ static void can_rx_task(void *pvParameters)
 					xQueueSend( xmsg_obd_rx_queue, ( void * ) &rx_msg, pdMS_TO_TICKS(0) );
 				}
 
-				if(tcp_port_open())
+				if(ucTCP_TX_Buffer.usLen != 0)
 				{
-					xQueueSend( xMsg_Tx_Queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(2000) );
-				}
-				if(ble_connected())
-				{
-					xQueueSend( xmsg_ble_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(2000) );
-				}
-				else if(project_hardware_rev == WICAN_USB_V100)
-				{
-					xQueueSend( xmsg_uart_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
+					if(tcp_port_open())
+					{
+						xQueueSend( xMsg_Tx_Queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(2000) );
+					}
+					if(ble_connected())
+					{
+						xQueueSend( xmsg_ble_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(2000) );
+					}
+					else if(project_hardware_rev == WICAN_USB_V100)
+					{
+						xQueueSend( xmsg_uart_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
+					}
 				}
 			}
         }
@@ -270,6 +281,7 @@ void app_main(void)
     xmsg_ws_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
     xmsg_ble_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
     xmsg_uart_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
+    xmsg_obd_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
 	config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
 
 	slcan_init(&send_to_host);
@@ -287,7 +299,7 @@ void app_main(void)
 	}
 
 	protocol = config_server_protocol();
-	protocol = OBD_ELM327;
+//	protocol = OBD_ELM327;
 
 	if(protocol == REALDASH)
 	{
@@ -313,6 +325,7 @@ void app_main(void)
 	{
 		can_init(CAN_500K);
 		can_enable();
+		elm327_init(&send_to_host, &xmsg_obd_rx_queue);
 	}
 
 	wifi_network_init(NULL, NULL);
@@ -344,7 +357,7 @@ void app_main(void)
     }
 
     xTaskCreate(can_rx_task, "can_rx_task", 4096, (void*)AF_INET, 5, NULL);
-    xTaskCreate(can_tx_task, "can_tx_task", 4096, (void*)AF_INET, 5, NULL);
+    xTaskCreate(can_tx_task, "can_tx_task", 4096*2, (void*)AF_INET, 5, NULL);
 
     const esp_partition_t *running = esp_ota_get_running_partition();
     esp_app_desc_t running_app_info;
