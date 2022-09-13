@@ -47,9 +47,10 @@
 
 # **Features Wishlist**:
 
-- ~~CAN Auto baudrate~~
-- Support ELM327 OBD2 protocol 
+- ~~CAN Auto baudrate~~ **DONE**
+- ~~Support ELM327 OBD2 protocol~~ **DONE** (Basic support) 
 - Home Assistant Integrations
+- Extended ELM327 support 
 - Support ELM327 protocol and Realdash protocol simultaneously on WiFi and BLE 
 - Add option to send an Email on battery alert 
 - Expand alerts to include other CAN parameters parsed from DBC files.
