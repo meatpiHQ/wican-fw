@@ -242,10 +242,10 @@ static uint8_t slcan_set_frame(uint8_t byte, twai_message_t *frame, uint8_t msg_
 				if(index == 8)
 				{
 					frame->extd = 1;
-					frame->identifier = (((id[7]<<4)+id[6]) & 0xFF) |
-							((((id[5]<<4)+id[4]) << 8) & 0x0000FF00) |
-							((((id[3]<<4)+id[2]) << 16) & 0x00FF0000) |
-							((((id[1]<<4)+id[0]) << 24) & 0xFF000000);
+					frame->identifier = (((id[6]<<4)+id[7]) & 0xFF) |
+							((((id[4]<<4)+id[5]) << 8) & 0x0000FF00) |
+							((((id[2]<<4)+id[3]) << 16) & 0x00FF0000) |
+							((((id[0]<<4)+id[1]) << 24) & 0xFF000000);
 					frame_state = SL_FRAME_DLC;
 					index = 0;
 				}
@@ -257,7 +257,7 @@ static uint8_t slcan_set_frame(uint8_t byte, twai_message_t *frame, uint8_t msg_
 				if(index == 3)
 				{
 					frame->extd = 0;
-					frame->identifier = (((id[2]<<4)+id[1]) & 0xFF) |
+					frame->identifier = (((id[1]<<4)+id[2]) & 0xFF) |
 							((id[0]<<8) & 0x00000F00) ;
 					frame_state = SL_FRAME_DLC;
 					index = 0;
