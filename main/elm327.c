@@ -309,6 +309,8 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 		service_num = SERVICE_UNKNOWN;
 	}
 
+	//return if length > 4
+
 
 	if((service_num == SERVICE_01 || service_num == SERVICE_09) && (elm327_config.protocol != '6'))
 	{
@@ -380,21 +382,23 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 		}
 
 		can_send(&txframe, 1);
-
-		TickType_t xwait_time = (elm327_config.req_timeout*4.096) / portTICK_PERIOD_MS;
+		TickType_t xtimeout = (elm327_config.req_timeout*4.096) / portTICK_PERIOD_MS;
+		TickType_t xwait_time;
 		int64_t txtime = esp_timer_get_time();
 		uint8_t timeout_flag = 0;
 		uint8_t rsp_found = 0;
 		uint8_t number_of_rsp = 0;
 		char tmp[10];
-
+		xwait_time = xtimeout;
 		memset(tmp, 0, sizeof(tmp));
 		while(timeout_flag == 0)
 		{
 			if( xQueueReceive(*can_rx_queue, ( void * ) &rx_frame, xwait_time) == pdPASS )
 			{
+				xwait_time = xtimeout;
 				if(rx_frame.identifier >= 0x7E8 && rx_frame.identifier <= 0x7EF)
 				{
+					//reset timeout after response is received
 					if(rx_frame.data[2] == req_pid)
 					{
 						rsp_found = 1;
@@ -432,15 +436,16 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 
 					}
 				}
-
-				xwait_time -= (((esp_timer_get_time() - txtime)/1000)/portTICK_PERIOD_MS);
-				ESP_LOGI(TAG, "xwait_time: %d", xwait_time);
-				if(xwait_time > (elm327_config.req_timeout*4.096))
+				else
 				{
-					xwait_time = 0;
-					timeout_flag = 1;
+					xwait_time -= (((esp_timer_get_time() - txtime)/1000)/portTICK_PERIOD_MS);
+					ESP_LOGI(TAG, "xwait_time: %d", xwait_time);
+					if(xwait_time > (elm327_config.req_timeout*4.096))
+					{
+						xwait_time = 0;
+						timeout_flag = 1;
+					}
 				}
-
 			}
 			else
 			{
