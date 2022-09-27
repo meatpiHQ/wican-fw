@@ -115,3 +115,7 @@ char *config_server_get_alert_url(void);
 char *config_server_get_alert_topic(void);
 int8_t config_server_get_alert_volt(float *alert_volt);
 int config_server_get_alert_time(void);
+char *config_server_get_alert_mqtt_user(void);
+char *config_server_get_alert_mqtt_pass(void);
+
+
