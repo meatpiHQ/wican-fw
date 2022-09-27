@@ -48,7 +48,8 @@
 #define SLCAN				0
 #define REALDASH			1
 #define SAVVYCAN			2
-#define OBD_ELM327			3					  
+#define OBD_ELM327			3
+#define MQTT				4
 
 typedef struct _device_config
 {
@@ -75,6 +76,8 @@ typedef struct _device_config
 	char batt_alert_port[32];
 	char batt_alert_topic[256];
 	char batt_alert_time[16];
+	char batt_mqtt_user[64];
+	char batt_mqtt_pass[64];
 }device_config_t;
 
 
