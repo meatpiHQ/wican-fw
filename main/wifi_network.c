@@ -54,7 +54,7 @@ static EventGroupHandle_t s_wifi_event_group = NULL;
 #define EXAMPLE_ESP_MAXIMUM_RETRY 	10
 char sta_ip[20] = {0};
 
-static const TickType_t connect_delay[] = {10000, 20000, 30000, 45000, 30000,20000};
+static const TickType_t connect_delay[] = {2000, 2000, 2000, 2000, 2000,2000};
 
 static void wifi_network_event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)

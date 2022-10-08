@@ -69,6 +69,8 @@ static char *device_id;
 static char mqtt_sub_topic[128];
 static uint8_t mqtt_led = 0;
 
+static QueueHandle_t *xmqtt_tx_queue;
+
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
     ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%d", base, event_id);
@@ -140,7 +142,7 @@ void mqtt_publish_can(twai_message_t *message)
 				message->identifier, message->data_length_code, message->rtr?"true":"false", message->extd?"true":"false",message->data[0], message->data[1], message->data[2], message->data[3],
 				message->data[4], message->data[5], message->data[6], message->data[7]);
 
-		int msg_id = esp_mqtt_client_enqueue(client, mqtt_topic, mqtt_data, 0, 0, 0, 1);
+		int msg_id = esp_mqtt_client_publish(client, mqtt_topic, mqtt_data, 0, 0, 0);
 
 		ESP_LOGI(TAG, "publish, msg_id=%d", msg_id);
     }
@@ -228,8 +230,47 @@ int mqtt_connected(void)
 
 	return (bits & MQTT_CONNECTED_BIT);
 }
+
+
+static void mqtt_task(void *pvParameters)
+{
+	static xdev_buffer tx_buffer;
+	static char json_buffer[1600] = {0};
+	static char tmp[150];
+	twai_message_t tx_frame;
+	static char mqtt_topic[128];
+
+	sprintf(mqtt_topic, "wican/%s/can/rx", device_id);
+
+	while(1)
+	{
+		xQueuePeek(*xmqtt_tx_queue, ( void * ) &tx_frame, portMAX_DELAY);
+		json_buffer[0] = 0;
+
+//		sprintf(mqtt_data, "{\"bus\":\"0\",\"type\":\"rx\",\"frame\":{\"id\":%u,\"dlc\":%u,\"rtr\":%s,\"extd\":%s,\"data\":[%u,%u,%u,%u,%u,%u,%u,%u]}}",
+//				message->identifier, message->data_length_code, message->rtr?"true":"false", message->extd?"true":"false",message->data[0], message->data[1], message->data[2], message->data[3],
+//				message->data[4], message->data[5], message->data[6], message->data[7]);
+		sprintf(json_buffer, "{\"bus\":\"0\",\"type\":\"rx\",\"ts\":%u,\"frame\":[", (pdTICKS_TO_MS(xTaskGetTickCount())%60000));
+//pdTICKS_TO_MS(xTaskGetTickCount())%60000
+		while(xQueuePeek(*xmqtt_tx_queue, ( void * ) &tx_buffer, 0) == pdTRUE)
+		{
+			xQueueReceive(*xmqtt_tx_queue, ( void * ) &tx_buffer, 0);
+			sprintf(tmp, "{\"id\":%u,\"dlc\":%u,\"rtr\":%s,\"extd\":%s,\"data\":[%u,%u,%u,%u,%u,%u,%u,%u]},",tx_frame.identifier, tx_frame.data_length_code, tx_frame.rtr?"true":"false",
+																										tx_frame.extd?"true":"false",tx_frame.data[0], tx_frame.data[1], tx_frame.data[2], tx_frame.data[3],
+																										tx_frame.data[4], tx_frame.data[5], tx_frame.data[6], tx_frame.data[7]);
+			strcat((char*)json_buffer, (char*)tmp);
+		}
+		json_buffer[strlen(json_buffer)] = 0;
+		strcat((char*)json_buffer, "]}");
+
+		esp_mqtt_client_publish(client, mqtt_topic, json_buffer, 0, 0, 0);
+		vTaskDelay(pdMS_TO_TICKS(1));
+	}
+
+}
+
 //wifi_network_is_connected
-void mqtt_init(char* id, uint8_t connected_led)
+void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
 {
     esp_mqtt_client_config_t mqtt_cfg = {
         .uri = "mqtt://192.168.31.2",
@@ -241,7 +282,7 @@ void mqtt_init(char* id, uint8_t connected_led)
 		.out_buffer_size = 1024*5,
         .buffer_size = 1024*5
     };
-
+    xmqtt_tx_queue = xtx_queue;
     mqtt_led = connected_led;
     device_id = id;
     sprintf(mqtt_sub_topic, "wican/%s/can/tx", device_id);
@@ -259,7 +300,7 @@ void mqtt_init(char* id, uint8_t connected_led)
     {
     	esp_mqtt_client_reconnect(client);
     }
-
+    xTaskCreate(mqtt_task, "mqtt_task", 4096, (void*)AF_INET, 5, NULL);
 //    EventBits_t bits = xEventGroupWaitBits(s_mqtt_event_group,
 //											MQTT_CONNECTED_BIT,
 //											pdFALSE,

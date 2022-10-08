@@ -20,5 +20,5 @@
 
 
 void mqtt_publish_can(twai_message_t *message);
-void mqtt_init(char* id, uint8_t connected_led);
+void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue);
 int mqtt_connected(void);

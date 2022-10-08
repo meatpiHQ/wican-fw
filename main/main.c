@@ -61,7 +61,7 @@
 #define BLE_EN_PIN_SEL		(1ULL<<BLE_EN_PIN_NUM)
 #define BLE_Enabled()		(!gpio_get_level(BLE_EN_PIN_NUM))
 
-static QueueHandle_t xMsg_Tx_Queue, xMsg_Rx_Queue, xmsg_ws_tx_queue, xmsg_ble_tx_queue, xmsg_uart_tx_queue, xmsg_obd_rx_queue;
+static QueueHandle_t xMsg_Tx_Queue, xMsg_Rx_Queue, xmsg_ws_tx_queue, xmsg_ble_tx_queue, xmsg_uart_tx_queue, xmsg_obd_rx_queue, xmsg_mqtt_rx_queue;
 static xdev_buffer ucTCP_RX_Buffer;
 static xdev_buffer ucTCP_TX_Buffer;
 
@@ -199,7 +199,6 @@ static void can_rx_task(void *pvParameters)
 //        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
 //        		num_msg = 0;
 //        	}
-        	ESP_LOGI(TAG, "here1");
         	process_led(1);
 
         	if(config_server_ws_connected())
@@ -234,7 +233,8 @@ static void can_rx_task(void *pvParameters)
 				}
 				else if(protocol == MQTT)
 				{
-					mqtt_publish_can(&rx_msg);
+//					mqtt_publish_can(&rx_msg);
+					xQueueSend( xmsg_mqtt_rx_queue, ( void * ) &rx_msg, pdMS_TO_TICKS(0) );
 				}
 
 				if(ucTCP_TX_Buffer.usLen != 0)
@@ -288,7 +288,7 @@ void app_main(void)
     xmsg_ws_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
     xmsg_ble_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
     xmsg_uart_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
-    xmsg_obd_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
+//    xmsg_obd_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
 	config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
 
 
@@ -341,13 +341,16 @@ void app_main(void)
 	{
 		can_init(CAN_500K);
 		can_enable();
+		xmsg_obd_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
 		elm327_init(&send_to_host, &xmsg_obd_rx_queue);
 	}
 	else if(protocol == MQTT)
 	{
+		xmsg_mqtt_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
 		can_init(CAN_500K);
 		can_enable();
-		mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM);
+
+		mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM, &xmsg_mqtt_rx_queue);
 	}
 
 
