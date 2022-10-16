@@ -124,29 +124,11 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     }
 }
 
-//note: can id and type are redundant
-//message json format: {"bus":"can0","type":"rx","frame":{"id":123,"dlc":8, "rtr": false, "extd": false,"data":[1,2,3,4,5,6,7,8]}}
-//message json format: {"bus":"can0","type":"tx","frame":{"id":123,"dlc":8, "rtr": false, "extd": false,"data":[1,2,3,4,5,6,7,8]}}
-//send to can topic: "wican/84f703406f75/can/tx"
-//receive can topic: "wican/84f703406f75/can/rx/+" or "wican/84f703406f75/can/rx/can-id-in-hex"
+//receive can topic:wican/84f703406f75/can/rx
+///received message json format:{"bus":"0","type":"rx","ts":34610,"frame":[{"id":123,"dlc":8,"rtr":false,"extd":false,"data":[1,2,3,4,5,6,7,8]},{"id":124,"dlc":8,"rtr":false,"extd":true,"data":[1,2,3,4,5,6,7,8]}]}
 
-void mqtt_publish_can(twai_message_t *message)
-{
-	static char mqtt_data[128];
-	static char mqtt_topic[128];
-
-    if (mqtt_connected())
-    {
-		sprintf(mqtt_topic, "wican/%s/can/rx/%x", device_id, message->identifier);
-		sprintf(mqtt_data, "{\"bus\":\"0\",\"type\":\"rx\",\"frame\":{\"id\":%u,\"dlc\":%u,\"rtr\":%s,\"extd\":%s,\"data\":[%u,%u,%u,%u,%u,%u,%u,%u]}}",
-				message->identifier, message->data_length_code, message->rtr?"true":"false", message->extd?"true":"false",message->data[0], message->data[1], message->data[2], message->data[3],
-				message->data[4], message->data[5], message->data[6], message->data[7]);
-
-		int msg_id = esp_mqtt_client_publish(client, mqtt_topic, mqtt_data, 0, 0, 0);
-
-		ESP_LOGI(TAG, "publish, msg_id=%d", msg_id);
-    }
-}
+//send to can topic:wican/84f703406f75/can/tx
+//send message json format: {"bus":"0","type":"tx","frame":[{"id":123,"dlc":8,"rtr":false,"extd":true,"data":[1,2,3,4,5,6,7,8]},{"id":124,"dlc":8,"rtr":false,"extd":true,"data":[1,2,3,4,5,6,7,8]}]}
 
 static void mqtt_parse_data(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
@@ -155,68 +137,86 @@ static void mqtt_parse_data(void *handler_args, esp_event_base_t base, int32_t e
 	cJSON *frame = NULL;
 	esp_mqtt_event_handle_t event = event_data;
 
-	root = cJSON_Parse(event->data);
+	if(strncmp(event->topic, mqtt_sub_topic, strlen(mqtt_sub_topic)) == 0)
+	{
+		root = cJSON_Parse(event->data);
 
-    if (root == NULL)
-    {
-    	ESP_LOGE(TAG, "error parsing json");
-    	goto end;
-    }
+		if (root == NULL)
+		{
 
-    frame = cJSON_GetObjectItem(root, "frame");
+			goto end;
+		}
 
-    cJSON * frame_data = cJSON_GetObjectItem(frame, "data");
+		cJSON *frame_ary = cJSON_GetObjectItem(root, "frame");
 
-    if (frame_data == NULL || !cJSON_IsArray(frame_data))
-    {
-    	ESP_LOGE(TAG, "error parsing json");
-    	goto end;
-    }
+		if(frame_ary ==  NULL || !cJSON_IsArray(frame_ary))
+		{
+			ESP_LOGE(TAG, "error parsing json frame");
+			goto end;
+		}
 
-    cJSON * frame_id = cJSON_GetObjectItem(frame, "id");
-    if (frame_id == NULL || !cJSON_IsNumber(frame_id))
-    {
-    	ESP_LOGE(TAG, "error parsing json");
-    	goto end;
-    }
+		for (int i = 0 ; i < cJSON_GetArraySize(frame_ary) ; i++)
+		{
 
-    cJSON * frame_dlc = cJSON_GetObjectItem(frame, "dlc");
-    if (frame_dlc == NULL || !cJSON_IsNumber(frame_dlc))
-    {
-    	ESP_LOGE(TAG, "error parsing json");
-    	goto end;
-    }
+			frame = cJSON_GetArrayItem(frame_ary, i);
 
-    cJSON * frame_extd = cJSON_GetObjectItem(frame, "extd");
-    if (frame_extd == NULL || !cJSON_IsBool(frame_extd))
-    {
-    	ESP_LOGE(TAG, "error parsing json");
-    	goto end;
-    }
+			if(frame ==  NULL)
+			{
+				ESP_LOGE(TAG, "error parsing json here");
+				goto end;
+			}
 
-    cJSON * frame_rtr = cJSON_GetObjectItem(frame, "rtr");
-    if (frame_rtr == NULL || !cJSON_IsBool(frame_rtr))
-    {
-    	ESP_LOGE(TAG, "error parsing json");
-    	goto end;
-    }
+			cJSON * frame_data = cJSON_GetObjectItem(frame, "data");
 
-    can_frame.identifier = (frame_id->valuedouble > 0x1FFFFFFF) ? 0x1FFFFFFF:frame_id->valuedouble;
-    can_frame.data_length_code = (frame_dlc->valuedouble > 8) ? 8:frame_dlc->valuedouble;
-    can_frame.extd = cJSON_IsTrue(frame_extd)?1:0;
-    can_frame.rtr = cJSON_IsTrue(frame_rtr)?1:0;;
+			if (frame_data == NULL || !cJSON_IsArray(frame_data))
+			{
+				goto end;
+			}
 
-    ESP_LOGI(TAG, " frame_id: %u, frame_dlc: %u ", (uint32_t)frame_id->valuedouble, (uint32_t)frame_dlc->valuedouble);
+			cJSON * frame_id = cJSON_GetObjectItem(frame, "id");
+			if (frame_id == NULL || !cJSON_IsNumber(frame_id))
+			{
+				goto end;
+			}
 
-    for (int i = 0 ; i < cJSON_GetArraySize(frame_data) ; i++)
-    {
-    	ESP_LOGI(TAG, " data: %d ",cJSON_GetArrayItem(frame_data, i)->valueint);
-    	can_frame.data[i] = cJSON_GetArrayItem(frame_data, i)->valueint;
-    }
+			cJSON * frame_dlc = cJSON_GetObjectItem(frame, "dlc");
+			if (frame_dlc == NULL || !cJSON_IsNumber(frame_dlc))
+			{
+				goto end;
+			}
 
-    can_send(&can_frame, 0);
+			cJSON * frame_extd = cJSON_GetObjectItem(frame, "extd");
+			if (frame_extd == NULL || !cJSON_IsBool(frame_extd))
+			{
+				goto end;
+			}
 
+			cJSON * frame_rtr = cJSON_GetObjectItem(frame, "rtr");
+			if (frame_rtr == NULL || !cJSON_IsBool(frame_rtr))
+			{
+				goto end;
+			}
+
+			can_frame.identifier = cJSON_IsTrue(frame_rtr) ? frame_id->valueint&TWAI_EXTD_ID_MASK:frame_id->valueint&TWAI_STD_ID_MASK;//(frame_id->valuedouble > 0x1FFFFFFF) ? 0x1FFFFFFF:frame_id->valuedouble;
+			can_frame.data_length_code = (frame_dlc->valuedouble > 8) ? 8:frame_dlc->valuedouble;
+			can_frame.extd = cJSON_IsTrue(frame_extd)?1:0;
+			can_frame.rtr = cJSON_IsTrue(frame_rtr)?1:0;;
+
+			ESP_LOGI(TAG, " frame_id: %u, frame_dlc: %u ", (uint32_t)frame_id->valuedouble, (uint32_t)frame_dlc->valuedouble);
+
+			for (int i = 0 ; i < cJSON_GetArraySize(frame_data) ; i++)
+			{
+				ESP_LOGI(TAG, " data: %d ",cJSON_GetArrayItem(frame_data, i)->valueint);
+				can_frame.data[i] = cJSON_GetArrayItem(frame_data, i)->valueint;
+			}
+			can_frame.self = 0;
+			can_enable();
+			can_send(&can_frame, 1);
+		}
+	}
+    return;
 end:
+	ESP_LOGE(TAG, "error parsing json");
 	cJSON_Delete(root);
 }
 
@@ -242,28 +242,46 @@ static void mqtt_task(void *pvParameters)
 
 	sprintf(mqtt_topic, "wican/%s/can/rx", device_id);
 
+	while(!wifi_network_is_connected())
+	{
+		vTaskDelay(pdMS_TO_TICKS(1000));
+	}
+
+	/* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
+	esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
+	esp_mqtt_client_register_event(client, MQTT_EVENT_DATA, mqtt_parse_data, NULL);
+	esp_mqtt_client_start(client);
+
 	while(1)
 	{
 		xQueuePeek(*xmqtt_tx_queue, ( void * ) &tx_frame, portMAX_DELAY);
-		json_buffer[0] = 0;
-
-//		sprintf(mqtt_data, "{\"bus\":\"0\",\"type\":\"rx\",\"frame\":{\"id\":%u,\"dlc\":%u,\"rtr\":%s,\"extd\":%s,\"data\":[%u,%u,%u,%u,%u,%u,%u,%u]}}",
-//				message->identifier, message->data_length_code, message->rtr?"true":"false", message->extd?"true":"false",message->data[0], message->data[1], message->data[2], message->data[3],
-//				message->data[4], message->data[5], message->data[6], message->data[7]);
-		sprintf(json_buffer, "{\"bus\":\"0\",\"type\":\"rx\",\"ts\":%u,\"frame\":[", (pdTICKS_TO_MS(xTaskGetTickCount())%60000));
-//pdTICKS_TO_MS(xTaskGetTickCount())%60000
-		while(xQueuePeek(*xmqtt_tx_queue, ( void * ) &tx_buffer, 0) == pdTRUE)
+		if(mqtt_connected())
 		{
-			xQueueReceive(*xmqtt_tx_queue, ( void * ) &tx_buffer, 0);
-			sprintf(tmp, "{\"id\":%u,\"dlc\":%u,\"rtr\":%s,\"extd\":%s,\"data\":[%u,%u,%u,%u,%u,%u,%u,%u]},",tx_frame.identifier, tx_frame.data_length_code, tx_frame.rtr?"true":"false",
-																										tx_frame.extd?"true":"false",tx_frame.data[0], tx_frame.data[1], tx_frame.data[2], tx_frame.data[3],
-																										tx_frame.data[4], tx_frame.data[5], tx_frame.data[6], tx_frame.data[7]);
-			strcat((char*)json_buffer, (char*)tmp);
-		}
-		json_buffer[strlen(json_buffer)] = 0;
-		strcat((char*)json_buffer, "]}");
+			json_buffer[0] = 0;
 
-		esp_mqtt_client_publish(client, mqtt_topic, json_buffer, 0, 0, 0);
+	//		sprintf(mqtt_data, "{\"bus\":\"0\",\"type\":\"rx\",\"frame\":{\"id\":%u,\"dlc\":%u,\"rtr\":%s,\"extd\":%s,\"data\":[%u,%u,%u,%u,%u,%u,%u,%u]}}",
+	//				message->identifier, message->data_length_code, message->rtr?"true":"false", message->extd?"true":"false",message->data[0], message->data[1], message->data[2], message->data[3],
+	//				message->data[4], message->data[5], message->data[6], message->data[7]);
+			sprintf(json_buffer, "{\"bus\":\"0\",\"type\":\"rx\",\"ts\":%u,\"frame\":[", (pdTICKS_TO_MS(xTaskGetTickCount())%60000));
+	//pdTICKS_TO_MS(xTaskGetTickCount())%60000
+
+			if(strlen(json_buffer) < (sizeof(json_buffer) -128))
+			{
+				while(xQueuePeek(*xmqtt_tx_queue, ( void * ) &tx_buffer, 0) == pdTRUE)
+				{
+					xQueueReceive(*xmqtt_tx_queue, ( void * ) &tx_buffer, 0);
+					sprintf(tmp, "{\"id\":%u,\"dlc\":%u,\"rtr\":%s,\"extd\":%s,\"data\":[%u,%u,%u,%u,%u,%u,%u,%u]},",tx_frame.identifier, tx_frame.data_length_code, tx_frame.rtr?"true":"false",
+																												tx_frame.extd?"true":"false",tx_frame.data[0], tx_frame.data[1], tx_frame.data[2], tx_frame.data[3],
+																												tx_frame.data[4], tx_frame.data[5], tx_frame.data[6], tx_frame.data[7]);
+					strcat((char*)json_buffer, (char*)tmp);
+				}
+				json_buffer[strlen(json_buffer)-1] = 0;
+			}
+			strcat((char*)json_buffer, "]}");
+
+			esp_mqtt_client_publish(client, mqtt_topic, json_buffer, 0, 0, 0);
+
+		}
 		vTaskDelay(pdMS_TO_TICKS(1));
 	}
 
@@ -287,38 +305,11 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
     device_id = id;
     sprintf(mqtt_sub_topic, "wican/%s/can/tx", device_id);
     ESP_LOGI(TAG, "device_id: %s, mqtt_cfg.uri: %s", device_id, mqtt_cfg.uri);
-    if(client == NULL)
-    {
-    	s_mqtt_event_group = xEventGroupCreate();
-    	client = esp_mqtt_client_init(&mqtt_cfg);
-        /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
-        esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
-        esp_mqtt_client_register_event(client, MQTT_EVENT_DATA, mqtt_parse_data, NULL);
-        esp_mqtt_client_start(client);
-    }
-    else
-    {
-    	esp_mqtt_client_reconnect(client);
-    }
+
+
+    s_mqtt_event_group = xEventGroupCreate();
+    client = esp_mqtt_client_init(&mqtt_cfg);
+
     xTaskCreate(mqtt_task, "mqtt_task", 4096, (void*)AF_INET, 5, NULL);
-//    EventBits_t bits = xEventGroupWaitBits(s_mqtt_event_group,
-//											MQTT_CONNECTED_BIT,
-//											pdFALSE,
-//											pdFALSE,
-//											pdMS_TO_TICKS(10000));
-//    if (bits & MQTT_CONNECTED_BIT)
-//    {
-//    	static char pub_data[128];
-//    	float batt_voltage = 0;
-//    	sleep_mode_get_voltage(&batt_voltage);
-//    	sprintf(pub_data, "{\"alert\": \"low_battery\", \"battery_voltage\": %f}", batt_voltage);
-//        int msg_id = esp_mqtt_client_publish(client, config_server_get_alert_topic(), pub_data, 0, 1, 0);
-//        ESP_LOGI(TAG, "publish, msg_id=%d", msg_id);
-//
-//    }
-//    else
-//    {
-//    	ESP_LOGE(TAG, "unable to connect to broker...");
-//    }
 }
 

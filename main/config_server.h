@@ -49,7 +49,6 @@
 #define REALDASH			1
 #define SAVVYCAN			2
 #define OBD_ELM327			3
-#define MQTT				4
 
 typedef struct _device_config
 {
@@ -78,6 +77,12 @@ typedef struct _device_config
 	char batt_alert_time[16];
 	char batt_mqtt_user[64];
 	char batt_mqtt_pass[64];
+	char mqtt_en[10];
+	char mqtt_url[256];
+	char mqtt_port[32];
+	char mqtt_user[64];
+	char mqtt_pass[64];
+
 }device_config_t;
 
 
@@ -117,5 +122,8 @@ int8_t config_server_get_alert_volt(float *alert_volt);
 int config_server_get_alert_time(void);
 char *config_server_get_alert_mqtt_user(void);
 char *config_server_get_alert_mqtt_pass(void);
-
-
+int8_t config_server_mqtt_en_config(void);
+char *config_server_get_mqtt_url(void);
+int32_t config_server_get_mqtt_port(void);
+char *config_server_get_mqtt_user(void);
+char *config_server_get_mmqtt_pass(void);

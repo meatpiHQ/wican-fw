@@ -164,7 +164,7 @@ static void can_tx_task(void *pvParameters)
 		else if(protocol == REALDASH)
 		{
 			real_dash_parse_66(&tx_msg, ucTCP_RX_Buffer.ucElement);
-
+			tx_msg.self = 0;
 			can_send(&tx_msg, portMAX_DELAY);
 		}
 		else if(protocol == SAVVYCAN)
@@ -189,6 +189,7 @@ static void can_rx_task(void *pvParameters)
         twai_message_t rx_msg;
 //        esp_err_t ret = 0xFF;
         process_led(0);
+
         while(can_receive(&rx_msg, 0) ==  ESP_OK)
         {
 //        	num_msg++;
@@ -209,7 +210,7 @@ static void can_rx_task(void *pvParameters)
 					xQueueSend( xmsg_ws_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(2000) );
 				}
         	}
-        	//TODO: optimize
+        	//TODO: optimize, useless ifs
 			if(tcp_port_open() || ble_connected() || project_hardware_rev == WICAN_USB_V100 || mqtt_connected())
 			{
 				memset(ucTCP_TX_Buffer.ucElement, 0, sizeof(ucTCP_TX_Buffer.ucElement));
@@ -231,7 +232,9 @@ static void can_rx_task(void *pvParameters)
 				{
 					xQueueSend( xmsg_obd_rx_queue, ( void * ) &rx_msg, pdMS_TO_TICKS(0) );
 				}
-				else if(protocol == MQTT)
+
+
+				if(mqtt_connected())
 				{
 //					mqtt_publish_can(&rx_msg);
 					xQueueSend( xmsg_mqtt_rx_queue, ( void * ) &rx_msg, pdMS_TO_TICKS(0) );
@@ -316,7 +319,7 @@ void app_main(void)
 
 	protocol = config_server_protocol();
 //	protocol = OBD_ELM327;
-//	protocol = MQTT;
+
 	if(protocol == REALDASH)
 	{
 		int can_datarate = config_server_get_can_rate();
@@ -344,7 +347,8 @@ void app_main(void)
 		xmsg_obd_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
 		elm327_init(&send_to_host, &xmsg_obd_rx_queue);
 	}
-	else if(protocol == MQTT)
+
+	if(config_server_mqtt_en_config())
 	{
 		xmsg_mqtt_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
 		can_init(CAN_500K);
@@ -352,6 +356,14 @@ void app_main(void)
 
 		mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM, &xmsg_mqtt_rx_queue);
 	}
+//	else if(protocol == MQTT)
+//	{
+//		xmsg_mqtt_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
+//		can_init(CAN_500K);
+//		can_enable();
+//
+//		mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM, &xmsg_mqtt_rx_queue);
+//	}
 
 
 	wifi_network_init(NULL, NULL);
@@ -431,6 +443,6 @@ void app_main(void)
 //		ESP_LOGI(TAG, "free heap : %d", xPortGetFreeHeapSize());
 //		vTaskDelay(pdMS_TO_TICKS(2000));
 //    }
-//    esp_log_level_set("*", ESP_LOG_NONE);
+    esp_log_level_set("*", ESP_LOG_NONE);
 }
 
