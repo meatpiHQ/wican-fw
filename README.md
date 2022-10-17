@@ -41,6 +41,10 @@
   - [BUSMaster](#2-busmaster)
   - [Realdash](#3-realdash)
   - [webCAN](http://webcan.meatpi.com)
+- [MQTT](#mqtt)
+  - [Status](#1-status)
+  - [Receive Frames](#2-receive-frames)
+  - [Transmit Frames](#3-transmit-frames)
 - [Firmware Update](#firmware-update)
   - [OTA](#1-ota)
   - [USB](#2-usb)
@@ -173,6 +177,45 @@ WiCAN can connect with RealDash using WiFi or BLE. The Protocol and CAN bitrate 
 3. Set the "BLE Status" to enable
 
 **Note: When the BLE is connected, the device will automatically turn off the WiFi configuration access point. Once BLE is disconnected the configuration access point will turn back on.**  
+
+# MQTT
+
+Currently only non-secure MQTT is supported, it's highly recommended that you only use it with local MQTT broker and not use public brokers otherwise your CAN bus might be publicly exposed.
+
+![image](https://user-images.githubusercontent.com/94690098/196186799-7299fe23-8d98-40e0-ad72-a4aeaf695110.png)
+
+To use MQTT client simply Enable in the configuration page and fill in the broker details. You also need to note the device ID, which will be used to communicate with the device. The device ID "xxxxxxxxxxxx" is part of the AP ssid mentioned in [WiFi/CAN Configuration](#1-wifican-configuration) WiCAN_xxxxxxxxxxxx. This will alow you to communicate with multiple WiCAN device if needed.
+
+Example: If the AP ssid is "WiCAN_112233445566", the device ID is 112233445566. 
+
+## 1. Status:  
+
+When the device connects to the MQTT broker it will publish a status message to the status topic.
+
+### - Status Topic: wican/xxxxxxxxxxxx/status
+### - Status Message JSON:  
+
+{"status": "offline"} or {"status": "online"}
+
+## 2. Receive Frames:
+
+To receive CAN frames simply subscribe to the receive topic. Each MQTT message might contain more than 1 frame.
+
+### - Receive Topic: wican/xxxxxxxxxxxx/can/rx
+### - Received Message JSON: 
+
+{"bus":0,"type":"rx","ts":34610,"frame":[{"id":123,"dlc":8,"rtr":false,"extd":false,"data":[1,2,3,4,5,6,7,8]},{"id":124,"dlc":8,"rtr":false,"extd":true,"data":[1,2,3,4,5,6,7,8]}]}
+### - Received Message JSON Schema:
+![image](https://user-images.githubusercontent.com/94690098/196184692-40c84504-580c-449f-9876-3d373dd11560.png)
+
+## 3. Transmit Frames:
+
+### - Transmit Topic: wican/xxxxxxxxxxxx/can/tx
+### - Transmit Message JSON: 
+{"bus":0,"type":"tx","frame":[{"id":123,"dlc":8,"rtr":false,"extd":true,"data":[1,2,3,4,5,6,7,8]},{"id":124,"dlc":8,"rtr":false,"extd":true,"data":[1,2,3,4,5,6,7,8]}]}
+### - Transmit Message JSON Schema:
+![image](https://user-images.githubusercontent.com/94690098/196187228-3923204e-1b87-4ece-bb72-406e338a5831.png)
+
 
 # Firmware Update
 
