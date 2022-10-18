@@ -67,6 +67,7 @@ static EventGroupHandle_t s_mqtt_event_group = NULL;
 static esp_mqtt_client_handle_t client = NULL;
 static char *device_id;
 static char mqtt_sub_topic[128];
+static char mqtt_status_topic[128];
 static uint8_t mqtt_led = 0;
 
 static QueueHandle_t *xmqtt_tx_queue;
@@ -85,6 +86,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
 			esp_mqtt_client_subscribe(client, mqtt_sub_topic, 0);
 			gpio_set_level(mqtt_led, 0);
+			esp_mqtt_client_publish(client, mqtt_status_topic, "{\"status\": \"online\"}", 0, 0, 0);
 			break;
 		case MQTT_EVENT_DISCONNECTED:
 			ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
@@ -128,7 +130,10 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 ///received message json format:{"bus":"0","type":"rx","ts":34610,"frame":[{"id":123,"dlc":8,"rtr":false,"extd":false,"data":[1,2,3,4,5,6,7,8]},{"id":124,"dlc":8,"rtr":false,"extd":true,"data":[1,2,3,4,5,6,7,8]}]}
 
 //send to can topic:wican/84f703406f75/can/tx
-//send message json format: {"bus":"0","type":"tx","frame":[{"id":123,"dlc":8,"rtr":false,"extd":true,"data":[1,2,3,4,5,6,7,8]},{"id":124,"dlc":8,"rtr":false,"extd":true,"data":[1,2,3,4,5,6,7,8]}]}
+//send message json format: {"bus":0,"type":"tx","frame":[{"id":123,"dlc":8,"rtr":false,"extd":true,"data":[1,2,3,4,5,6,7,8]},{"id":124,"dlc":8,"rtr":false,"extd":true,"data":[1,2,3,4,5,6,7,8]}]}
+
+//															 	    id:0x7E0                                          PID: 47 or0x2F
+//get fuel level send: {"bus":0,"type":"tx","ts":35519,"frame":[{"id":2016,"dlc":8,"rtr":false,"extd":false,"data":[2,1,47,170,170,170,170,170]}]}
 
 static void mqtt_parse_data(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
@@ -298,12 +303,17 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
 		.disable_auto_reconnect = false,
 		.reconnect_timeout_ms = 5000,
 		.out_buffer_size = 1024*5,
-        .buffer_size = 1024*5
+        .buffer_size = 1024*5,
+		.lwt_topic = mqtt_status_topic,
+		.lwt_msg = "{\"status\": \"offline\"}",
+		.keepalive = 30
     };
     xmqtt_tx_queue = xtx_queue;
     mqtt_led = connected_led;
     device_id = id;
     sprintf(mqtt_sub_topic, "wican/%s/can/tx", device_id);
+    sprintf(mqtt_status_topic, "wican/%s/status", device_id);
+
     ESP_LOGI(TAG, "device_id: %s, mqtt_cfg.uri: %s", device_id, mqtt_cfg.uri);
 
 
