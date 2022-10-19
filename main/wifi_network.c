@@ -54,7 +54,7 @@ static EventGroupHandle_t s_wifi_event_group = NULL;
 #define EXAMPLE_ESP_MAXIMUM_RETRY 	10
 char sta_ip[20] = {0};
 
-static const TickType_t connect_delay[] = {10000, 20000, 30000, 45000, 30000,20000};
+static const TickType_t connect_delay[] = {1000, 1000, 1000, 1000, 1000,1000};
 
 static void wifi_network_event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
@@ -181,6 +181,11 @@ static void wifi_conn_task(void *pvParameters)
 		ESP_LOGI(WIFI_TAG, "Trying to connect...");
 		xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECT_IDLE_BIT);
 		esp_wifi_connect();
+		xEventGroupWaitBits(s_wifi_event_group,
+					WIFI_CONNECT_IDLE_BIT,
+		            pdFALSE,
+		            pdTRUE,
+		            portMAX_DELAY);
 		vTaskDelay(pdTICKS_TO_MS(connect_delay[s_retry_num++]));
 		s_retry_num %= (sizeof(connect_delay)/sizeof(TickType_t));
 	}

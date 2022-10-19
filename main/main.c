@@ -48,6 +48,8 @@
 #include "sleep_mode.h"
 #include "wc_uart.h"
 #include "elm327.h"
+#include "mqtt.h"
+
 #define TAG 		__func__
 #define TX_GPIO_NUM             	0
 #define RX_GPIO_NUM             	3
@@ -59,7 +61,7 @@
 #define BLE_EN_PIN_SEL		(1ULL<<BLE_EN_PIN_NUM)
 #define BLE_Enabled()		(!gpio_get_level(BLE_EN_PIN_NUM))
 
-static QueueHandle_t xMsg_Tx_Queue, xMsg_Rx_Queue, xmsg_ws_tx_queue, xmsg_ble_tx_queue, xmsg_uart_tx_queue, xmsg_obd_rx_queue;
+static QueueHandle_t xMsg_Tx_Queue, xMsg_Rx_Queue, xmsg_ws_tx_queue, xmsg_ble_tx_queue, xmsg_uart_tx_queue, xmsg_obd_rx_queue, xmsg_mqtt_rx_queue;
 static xdev_buffer ucTCP_RX_Buffer;
 static xdev_buffer ucTCP_TX_Buffer;
 
@@ -162,7 +164,7 @@ static void can_tx_task(void *pvParameters)
 		else if(protocol == REALDASH)
 		{
 			real_dash_parse_66(&tx_msg, ucTCP_RX_Buffer.ucElement);
-
+			tx_msg.self = 0;
 			can_send(&tx_msg, portMAX_DELAY);
 		}
 		else if(protocol == SAVVYCAN)
@@ -187,6 +189,7 @@ static void can_rx_task(void *pvParameters)
         twai_message_t rx_msg;
 //        esp_err_t ret = 0xFF;
         process_led(0);
+
         while(can_receive(&rx_msg, 0) ==  ESP_OK)
         {
 //        	num_msg++;
@@ -197,7 +200,6 @@ static void can_rx_task(void *pvParameters)
 //        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
 //        		num_msg = 0;
 //        	}
-
         	process_led(1);
 
         	if(config_server_ws_connected())
@@ -208,7 +210,8 @@ static void can_rx_task(void *pvParameters)
 					xQueueSend( xmsg_ws_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(2000) );
 				}
         	}
-			if(tcp_port_open() || ble_connected() || project_hardware_rev == WICAN_USB_V100)
+        	//TODO: optimize, useless ifs
+			if(tcp_port_open() || ble_connected() || project_hardware_rev == WICAN_USB_V100 || mqtt_connected())
 			{
 				memset(ucTCP_TX_Buffer.ucElement, 0, sizeof(ucTCP_TX_Buffer.ucElement));
 				ucTCP_TX_Buffer.usLen = 0;
@@ -228,6 +231,13 @@ static void can_rx_task(void *pvParameters)
 				else if(protocol == OBD_ELM327)
 				{
 					xQueueSend( xmsg_obd_rx_queue, ( void * ) &rx_msg, pdMS_TO_TICKS(0) );
+				}
+
+
+				if(mqtt_connected())
+				{
+//					mqtt_publish_can(&rx_msg);
+					xQueueSend( xmsg_mqtt_rx_queue, ( void * ) &rx_msg, pdMS_TO_TICKS(0) );
 				}
 
 				if(ucTCP_TX_Buffer.usLen != 0)
@@ -250,11 +260,11 @@ static void can_rx_task(void *pvParameters)
         vTaskDelay(pdMS_TO_TICKS(1));
 	}
 }
-
+static uint8_t derived_mac_addr[6] = {0};
+static uint8_t uid[33];
+static uint8_t ble_uid[33];
 void app_main(void)
 {
-	static uint8_t uid[33];
-
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -281,9 +291,18 @@ void app_main(void)
     xmsg_ws_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
     xmsg_ble_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
     xmsg_uart_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
-    xmsg_obd_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
+//    xmsg_obd_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
 	config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
 
+
+
+    ESP_ERROR_CHECK(esp_read_mac(derived_mac_addr, ESP_MAC_WIFI_SOFTAP));
+    sprintf((char *)ble_uid,"WiC_%02x%02x%02x%02x%02x%02x",
+            derived_mac_addr[0], derived_mac_addr[1], derived_mac_addr[2],
+            derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
+    sprintf((char *)uid,"%02x%02x%02x%02x%02x%02x",
+            derived_mac_addr[0], derived_mac_addr[1], derived_mac_addr[2],
+            derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
 	slcan_init(&send_to_host);
 
 	int8_t can_datarate = config_server_get_can_rate();
@@ -325,8 +344,27 @@ void app_main(void)
 	{
 		can_init(CAN_500K);
 		can_enable();
+		xmsg_obd_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
 		elm327_init(&send_to_host, &xmsg_obd_rx_queue);
 	}
+
+	if(config_server_mqtt_en_config())
+	{
+		xmsg_mqtt_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
+		can_init(CAN_500K);
+		can_enable();
+
+		mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM, &xmsg_mqtt_rx_queue);
+	}
+//	else if(protocol == MQTT)
+//	{
+//		xmsg_mqtt_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
+//		can_init(CAN_500K);
+//		can_enable();
+//
+//		mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM, &xmsg_mqtt_rx_queue);
+//	}
+
 
 	wifi_network_init(NULL, NULL);
 	int32_t port = config_server_get_port();
@@ -347,17 +385,12 @@ void app_main(void)
     if(config_server_get_ble_config())
     {
     	int pass = config_server_ble_pass();
-        uint8_t derived_mac_addr[6] = {0};
 
-        ESP_ERROR_CHECK(esp_read_mac(derived_mac_addr, ESP_MAC_WIFI_SOFTAP));
-        sprintf((char *)uid,"WiC_%02x%02x%02x%02x%02x%02x",
-                derived_mac_addr[0], derived_mac_addr[1], derived_mac_addr[2],
-                derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
-    	ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, pass, &uid[0]);
+    	ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, pass, &ble_uid[0]);
     }
 
     xTaskCreate(can_rx_task, "can_rx_task", 4096, (void*)AF_INET, 5, NULL);
-    xTaskCreate(can_tx_task, "can_tx_task", 4096*2, (void*)AF_INET, 5, NULL);
+    xTaskCreate(can_tx_task, "can_tx_task", 4096, (void*)AF_INET, 5, NULL);
 
     const esp_partition_t *running = esp_ota_get_running_partition();
     esp_app_desc_t running_app_info;

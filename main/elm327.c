@@ -380,7 +380,7 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 
 //		        	req_pid = pidnum;
 		}
-
+		txframe.self = 0;
 		can_send(&txframe, 1);
 		TickType_t xtimeout = (elm327_config.req_timeout*4.096) / portTICK_PERIOD_MS;
 		TickType_t xwait_time;

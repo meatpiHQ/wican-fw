@@ -377,6 +377,7 @@ void gvret_parse(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t
 						//this would be the checksum byte. Compute and compare.
 						//temp8 = checksumCalc(buff, step);
 						frame->rtr = 0;
+						frame->self = 0;
 						if (ESP_ERR_INVALID_STATE == can_send(frame, 1))
 						{
 							ESP_LOGE(__func__, "can_send error");

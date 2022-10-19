@@ -168,6 +168,10 @@ static void mqtt_init(void)
     esp_mqtt_client_config_t mqtt_cfg = {
         .uri = config_server_get_alert_url(),
 		.port = config_server_get_alert_port(),
+		.username = config_server_get_alert_mqtt_user(),
+		.password = config_server_get_alert_mqtt_pass(),
+//		.disable_auto_reconnect = 1,
+		.reconnect_timeout_ms = 4000
     };
     ESP_LOGI(TAG, "mqtt_cfg.uri: %s", mqtt_cfg.uri);
     if(client == NULL)
@@ -307,7 +311,7 @@ static void adc_task(void *pvParameters)
 
     alert_time = config_server_get_alert_time();
     alert_time *= (3600000000);
-
+//    alert_time = 10000000;
     ESP_LOGW(TAG, "%" PRIu64 "\n", alert_time);
 
     if(config_server_get_alert_volt(&alert_voltage) != -1)
