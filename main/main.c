@@ -134,7 +134,7 @@ static void can_tx_task(void *pvParameters)
 
 		xQueueReceive(xMsg_Rx_Queue, &ucTCP_RX_Buffer, portMAX_DELAY);
 
-//		ESP_LOG_BUFFER_HEX(TAG, ucTCP_RX_Buffer.ucElement, ucTCP_RX_Buffer.usLen);
+		ESP_LOG_BUFFER_HEX(TAG, ucTCP_RX_Buffer.ucElement, ucTCP_RX_Buffer.usLen);
 
 		uint8_t* msg_ptr = ucTCP_RX_Buffer.ucElement;
 		int temp_len = ucTCP_RX_Buffer.usLen;
@@ -173,7 +173,15 @@ static void can_tx_task(void *pvParameters)
 		}
 		else if(protocol == OBD_ELM327)
 		{
-			elm327_process_cmd(msg_ptr, temp_len, &tx_msg, &xMsg_Tx_Queue);
+			if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI)
+			{
+				elm327_process_cmd(msg_ptr, temp_len, &tx_msg, &xMsg_Tx_Queue);
+			}
+			else if(ucTCP_RX_Buffer.dev_channel == DEV_BLE)
+			{
+				ESP_LOGI(TAG, "HERE");
+				elm327_process_cmd(msg_ptr, temp_len, &tx_msg, &xmsg_ble_tx_queue);
+			}
 		}
 	}
 }
@@ -230,7 +238,10 @@ static void can_rx_task(void *pvParameters)
 				}
 				else if(protocol == OBD_ELM327)
 				{
-					xQueueSend( xmsg_obd_rx_queue, ( void * ) &rx_msg, pdMS_TO_TICKS(0) );
+					if((rx_msg.identifier >= 0x7E8 && rx_msg.identifier <= 0x7EF) || (rx_msg.identifier >= 0x18DAF100 && rx_msg.identifier <= 0x18DAF1FF))
+					{
+						xQueueSend( xmsg_obd_rx_queue, ( void * ) &rx_msg, pdMS_TO_TICKS(0) );
+					}
 				}
 
 
@@ -342,7 +353,8 @@ void app_main(void)
 	}
 	else if(protocol == OBD_ELM327)
 	{
-		can_init(CAN_500K);
+//		can_init(CAN_500K);
+		can_set_bitrate(can_datarate);
 		can_enable();
 		xmsg_obd_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
 		elm327_init(&send_to_host, &xmsg_obd_rx_queue);
@@ -351,7 +363,7 @@ void app_main(void)
 	if(config_server_mqtt_en_config())
 	{
 		xmsg_mqtt_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
-		can_init(CAN_500K);
+//		can_init(CAN_500K);
 		can_enable();
 
 		mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM, &xmsg_mqtt_rx_queue);
@@ -443,6 +455,6 @@ void app_main(void)
 //		ESP_LOGI(TAG, "free heap : %d", xPortGetFreeHeapSize());
 //		vTaskDelay(pdMS_TO_TICKS(2000));
 //    }
-    esp_log_level_set("*", ESP_LOG_NONE);
+//    esp_log_level_set("*", ESP_LOG_NONE);
 }
 

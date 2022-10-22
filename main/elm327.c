@@ -87,7 +87,8 @@ static _xelm327_config_t elm327_config = {
 	.protocol = '6',
 	.linefeed = 1,
 	.echo = 1,
-	.ecu_address = 0x7E0,
+//	.ecu_address = 0x7E0,
+	.ecu_address = 0x7DF,
 	.space_print = 1,
 	.header = 0,
 
@@ -217,6 +218,42 @@ static char* elm327_set_protocol(const char* command_str)
 
 	elm327_config.protocol = command_str[2];
 	ESP_LOGI(TAG, "elm327_config.protocol: %c", elm327_config.protocol);
+
+	if(elm327_config.protocol == '6' || elm327_config.protocol == '7')
+	{
+		can_disable();
+		vTaskDelay(pdMS_TO_TICKS(15));
+		can_set_bitrate(CAN_500K);
+
+		if(elm327_config.protocol == '7')
+		{
+			elm327_config.ecu_address = 0x18DB33F1;
+		}
+		else
+		{
+			elm327_config.ecu_address = 0x7DF;
+		}
+
+		can_enable();
+		vTaskDelay(pdMS_TO_TICKS(15));
+	}
+	else if(elm327_config.protocol == '8' || elm327_config.protocol == '9')
+	{
+		can_disable();
+		vTaskDelay(pdMS_TO_TICKS(15));
+		can_set_bitrate(CAN_250K);
+		if(elm327_config.protocol == '9')
+		{
+			elm327_config.ecu_address = 0x18DB33F1;
+		}
+		else
+		{
+			elm327_config.ecu_address = 0x7DF;
+		}
+		can_enable();
+		vTaskDelay(pdMS_TO_TICKS(15));
+	}
+
 	return (char*)ok_str;
 }
 
@@ -312,7 +349,7 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 	//return if length > 4
 
 
-	if((service_num == SERVICE_01 || service_num == SERVICE_09) && (elm327_config.protocol != '6'))
+	if((service_num == SERVICE_01 || service_num == SERVICE_09) && (elm327_config.protocol != '6') && (elm327_config.protocol != '8'))
 	{
 		if(elm327_config.protocol == '1' || elm327_config.protocol == '2')
 		{
@@ -331,7 +368,12 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 		twai_message_t rx_frame;
 
 		txframe.identifier = elm327_config.ecu_address;
-		txframe.extd = false;
+		if(elm327_config.ecu_address > TWAI_STD_ID_MASK)
+		{
+			txframe.extd = true;
+		}
+		else txframe.extd = false;
+
 		txframe.rtr = 0;
 		txframe.data[0] = 0xAA;
 		txframe.data[1] = 0xAA;
@@ -357,13 +399,15 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 				{
 					req_expected_rsp = 0xFF;
 				}
+				ESP_LOGW(TAG, "req_expected_rsp 1: %u", req_expected_rsp);
 			}
 
 			uint32_t value = strtol((char *) cmd, NULL, 16);
 			uint8_t pidnum = (uint8_t)(value & 0xFF);
 			uint8_t mode = (uint8_t)((value >> 8) & 0xFF);
 
-			if(req_expected_rsp == 0xFF && elm327_config.ecu_address != 0x7DF)
+//			if(req_expected_rsp == 0xFF && elm327_config.ecu_address != 0x7DF && elm327_config.ecu_address != 0x18DB33F1)
+			if(0)
 			{
 				req_expected_rsp = service_01_rsp_len[0];
 			}
@@ -391,12 +435,13 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 		char tmp[10];
 		xwait_time = xtimeout;
 		memset(tmp, 0, sizeof(tmp));
+		ESP_LOGW(TAG, "req_expected_rsp: %u", req_expected_rsp);
 		while(timeout_flag == 0)
 		{
 			if( xQueueReceive(*can_rx_queue, ( void * ) &rx_frame, xwait_time) == pdPASS )
 			{
 				xwait_time = xtimeout;
-				if(rx_frame.identifier >= 0x7E8 && rx_frame.identifier <= 0x7EF)
+				if((rx_frame.identifier >= 0x7E8 && rx_frame.identifier <= 0x7EF) || (rx_frame.identifier >= 0x18DAF100 && rx_frame.identifier <= 0x18DAF1FF ))
 				{
 					//reset timeout after response is received
 					if(rx_frame.data[2] == req_pid)
@@ -415,12 +460,12 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 							strcat((char*)rsp, (char*)tmp);
 						}
 
-//						strcat((char*)rsp, "\r");
+						strcat((char*)rsp, "\r");
 						ESP_LOGW(TAG, "ELM327 send: %s", rsp);
 //						ESP_LOG_BUFFER_HEX(TAG, rsp, strlen(rsp));
 						elm327_response(rsp, 0, queue);
 						memset(rsp, 0, strlen(rsp));
-						strcat((char*)rsp, "\r");
+//						strcat((char*)rsp, "\r");
 						if(req_expected_rsp != 0xFF)
 						{
 							if(req_expected_rsp == number_of_rsp)

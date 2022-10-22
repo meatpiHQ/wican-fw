@@ -762,7 +762,7 @@ void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t conn
 	{
 		xBle_TX_Queue = xTXp_Queue;
 	}
-	if(xBle_TX_Queue == NULL)
+	if(xBle_RX_Queue == NULL)
 	{
 		xBle_RX_Queue = xRXp_Queue;
 	}

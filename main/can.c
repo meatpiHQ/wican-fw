@@ -35,7 +35,7 @@
 #include "can.h"
 
 
-static EventGroupHandle_t s_can_event_group;
+static EventGroupHandle_t s_can_event_group = NULL;
 #define CAN_ENABLE_BIT 		BIT0
 
 #define TAG 		__func__
@@ -229,25 +229,28 @@ static void vCAN_EN_Callback( TimerHandle_t xTimer )
 }
 void can_init(uint8_t bitrate)
 {
-	s_can_event_group = xEventGroupCreate();
-	xCAN_EN_Timer= xTimerCreate
-                       ( /* Just a text name, not used by the RTOS
-                         kernel. */
-                         "CANTimer",
-                         /* The timer period in ticks, must be
-                         greater than 0. */
-						 pdMS_TO_TICKS(1000),
-                         /* The timers will auto-reload themselves
-                         when they expire. */
-                         pdFALSE,
-                         /* The ID is used to store a count of the
-                         number of times the timer has expired, which
-                         is initialised to 0. */
-                         ( void * ) 0,
-                         /* Each timer calls the same callback when
-                         it expires. */
-						 vCAN_EN_Callback
-                       );
+	if(s_can_event_group == NULL)
+	{
+		s_can_event_group = xEventGroupCreate();
+		xCAN_EN_Timer= xTimerCreate
+						   ( /* Just a text name, not used by the RTOS
+							 kernel. */
+							 "CANTimer",
+							 /* The timer period in ticks, must be
+							 greater than 0. */
+							 pdMS_TO_TICKS(10),
+							 /* The timers will auto-reload themselves
+							 when they expire. */
+							 pdFALSE,
+							 /* The ID is used to store a count of the
+							 number of times the timer has expired, which
+							 is initialised to 0. */
+							 ( void * ) 0,
+							 /* Each timer calls the same callback when
+							 it expires. */
+							 vCAN_EN_Callback
+						   );
+	}
 	if( xTimerIsTimerActive( xCAN_EN_Timer ) != pdFALSE )
 	{
 		xTimerStop( xCAN_EN_Timer, 0 );

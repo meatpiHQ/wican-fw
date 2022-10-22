@@ -227,13 +227,14 @@ end:
 
 int mqtt_connected(void)
 {
-	EventBits_t bits = xEventGroupWaitBits(s_mqtt_event_group,
-											MQTT_CONNECTED_BIT,
-											pdFALSE,
-											pdFALSE,
-											pdMS_TO_TICKS(0));
+	EventBits_t uxBits;
+	if(s_mqtt_event_group != NULL)
+	{
+		uxBits = xEventGroupGetBits(s_mqtt_event_group);
 
-	return (bits & MQTT_CONNECTED_BIT);
+		return (uxBits & MQTT_CONNECTED_BIT)?1:0;
+	}
+	else return 0;
 }
 
 
