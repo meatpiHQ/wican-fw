@@ -40,6 +40,7 @@
   - [WiFi/CAN Configuration](#1-wifican-configuration)
   - [BUSMaster](#2-busmaster)
   - [Realdash](#3-realdash)
+  - [SavvyCAN](#4-savvycan)
   - [webCAN](http://webcan.meatpi.com)
 - [MQTT](#mqtt)
   - [Status](#1-status)
@@ -177,6 +178,15 @@ WiCAN can connect with RealDash using WiFi or BLE. The Protocol and CAN bitrate 
 3. Set the "BLE Status" to enable
 
 **Note: When the BLE is connected, the device will automatically turn off the WiFi configuration access point. Once BLE is disconnected the configuration access point will turn back on.**  
+
+## 4. SavvyCAN
+
+1. Download [SavvyCAN](https://www.savvycan.com/)
+2. Connect to the device AP.
+3. Open SavvyCAN and Click Connection->Open Connection Window->Add New Device
+4. Select "Network Connection", if you're on the same network it auto detect the IP.
+5. Click Create New Connection.
+6. Then select "Enable Bus" checkbox.
 
 # MQTT
 
