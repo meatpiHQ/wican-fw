@@ -22,7 +22,7 @@
 #ifndef SLEEP_MODE_h
 #define SLEEP_MODE_h
 
-int8_t sleep_mode_init(float sleep_volt);
+int8_t sleep_mode_init(uint8_t enable, float sleep_volt);
 int8_t sleep_mode_get_voltage(float *val);
 
 #endif

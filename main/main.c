@@ -190,12 +190,22 @@ static void can_rx_task(void *pvParameters)
 {
 //	static uint32_t num_msg = 0;
 //	static int64_t time_old = 0;
-
+//	float bvoltage = 0;
 //	time_old = esp_timer_get_time();
 	while(1)
 	{
         twai_message_t rx_msg;
 //        esp_err_t ret = 0xFF;
+
+
+//    	time_old = esp_timer_get_time();
+//    	if((esp_timer_get_time() - time_old) > 1000000)
+//    	{
+//    		sleep_mode_get_voltage(&bvoltage);
+//    		time_old = esp_timer_get_time();
+//
+//    		ESP_LOGI(TAG, "bvoltage: %f", bvoltage);
+//    	}
         process_led(0);
 
         while(can_receive(&rx_msg, 0) ==  ESP_OK)
@@ -415,7 +425,7 @@ void app_main(void)
         {
         	project_hardware_rev = WICAN_USB_V100;
         	ESP_LOGI(TAG, "project_hardware_rev: USB");
-        	wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
+//        	wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
         }
         else
         {
@@ -439,13 +449,21 @@ void app_main(void)
 
 			if(config_server_get_sleep_volt(&sleep_voltage) != -1)
 			{
-				sleep_mode_init(sleep_voltage);
+				sleep_mode_init(1, sleep_voltage);
 			}
 			else
 			{
-				sleep_mode_init(13.1f);
+				sleep_mode_init(0, 13.1f);
 			}
 		}
+		else
+		{
+			sleep_mode_init(0, 13.1f);
+		}
+    }
+    else
+    {
+    	sleep_mode_init(0, 13.1f);
     }
 
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
@@ -455,6 +473,6 @@ void app_main(void)
 //		ESP_LOGI(TAG, "free heap : %d", xPortGetFreeHeapSize());
 //		vTaskDelay(pdMS_TO_TICKS(2000));
 //    }
-//    esp_log_level_set("*", ESP_LOG_NONE);
+    esp_log_level_set("*", ESP_LOG_NONE);
 }
 

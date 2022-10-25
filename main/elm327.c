@@ -33,7 +33,7 @@
 #include "slcan.h"
 #include "can.h"
 #include "std_pid.h"
-
+#include "sleep_mode.h"
 #define TAG 		__func__
 
 #define SERVICE_01			0x01
@@ -319,8 +319,17 @@ static char* elm327_describe_protocol_num(const char* command_str)
 
 static char* elm327_input_voltage(const char* command_str)
 {
-	static char volt[] = "13.5V";
+	static char volt[10] = "";
+	float voltage = 0;
 
+	if(sleep_mode_get_voltage(&voltage) != -1)
+	{
+		sprintf(volt, "%.1fV",voltage);
+	}
+	else
+	{
+		sprintf(volt, "%.1f",0);
+	}
 	return (char*)volt;
 }
 

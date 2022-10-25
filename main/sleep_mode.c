@@ -103,15 +103,15 @@ static adc_channel_t channel[1] = {ADC1_CHANNEL_7};
 #endif
 //#define THRESHOLD_VOLTAGE		13.0f
 #define SLEEP_TIME_DELAY		(180*1000*1000)
-#define WAKEUP_TIME_DELAY		(6*1000*1000)
+#define WAKEUP_TIME_DELAY		(200*1000)
 
 static EventGroupHandle_t s_mqtt_event_group = NULL;
 #define MQTT_CONNECTED_BIT 			BIT0
 #define PUB_SUCCESS_BIT     		BIT1
 
 static float sleep_voltage = 13.1f;
-
-static QueueHandle_t voltage_queue;
+static uint8_t enable_sleep = 0;
+static QueueHandle_t voltage_queue = NULL;
 static esp_adc_cal_characteristics_t adc1_chars;
 
 
@@ -359,9 +359,7 @@ static void adc_task(void *pvParameters)
 				for (int i = 0; i < ret_num; i += ADC_RESULT_BYTE)
 				{
 					adc_digi_output_data_t *p = (void*)&result[i];
-		#if CONFIG_IDF_TARGET_ESP32
-					ESP_LOGI(TAG, "Unit: %d, Channel: %d, Value: %x", 1, p->type1.channel, p->type1.data);
-		#else
+
 					if (ADC_CONV_MODE == ADC_CONV_SINGLE_UNIT_1 || ADC_CONV_MODE == ADC_CONV_ALTER_UNIT)
 					{
 						if (check_valid_data(p))
@@ -376,19 +374,13 @@ static void adc_task(void *pvParameters)
 							ESP_LOGI(TAG, "Invalid data [%d_%d_%x]", p->type2.unit+1, p->type2.channel, p->type2.data);
 						}
 					}
-		#if CONFIG_IDF_TARGET_ESP32S2
-					else if (ADC_CONV_MODE == ADC_CONV_SINGLE_UNIT_2) {
-						ESP_LOGI(TAG, "Unit: %d, Channel: %d, Value: %x", 2, p->type1.channel, p->type1.data);
-					} else if (ADC_CONV_MODE == ADC_CONV_SINGLE_UNIT_1) {
-						ESP_LOGI(TAG, "Unit: %d, Channel: %d, Value: %x", 1, p->type1.channel, p->type1.data);
-					}
-		#endif  //#if CONFIG_IDF_TARGET_ESP32S2
-		#endif
 				}
 				//See `note 1`
 //				ESP_LOGI(TAG, "value: %u",(uint32_t)(avg/count));
 				vTaskDelay(10);
-			} else if (ret == ESP_ERR_TIMEOUT) {
+			}
+			else if (ret == ESP_ERR_TIMEOUT)
+			{
 				/**
 				 * ``ESP_ERR_TIMEOUT``: If ADC conversion is not finished until Timeout, you'll get this return error.
 				 * Here we set Timeout ``portMAX_DELAY``, so you'll never reach this branch.
@@ -409,125 +401,134 @@ static void adc_task(void *pvParameters)
     		battery_voltage = (adc_val*106.49f)/(6.49f*1000.0f);
     	}
     	battery_voltage += 0.2;
-    	xQueueOverwrite( voltage_queue, &battery_voltage );
-
-    	switch(sleep_state)
+    	if(project_hardware_rev == WICAN_V210)
     	{
-    		case RUN_STATE:
-    		{
-    	    	if(battery_voltage < sleep_voltage)
-    	    	{
-    	    		ESP_LOGI(TAG, "low voltage, value: %u, voltage: %f",adc_val, battery_voltage);
-    	    		sleep_detect_time = esp_timer_get_time();
-    	    		sleep_state++;
-    	    	}
-    			break;
-    		}
-    		case SLEEP_DETECTED:
-    		{
-    	    	if(battery_voltage > sleep_voltage)
-    	    	{
-    	    		ESP_LOGI(TAG, "low voltage, value: %u, voltage: %f",adc_val, battery_voltage);
-    	    		sleep_state = RUN_STATE;
-    	    	}
+    		battery_voltage = -1;
+    	}
 
-    	    	if((esp_timer_get_time() - sleep_detect_time) > SLEEP_TIME_DELAY)
-    	    	{
-    	    		sleep_state = SLEEP_STATE;
-//    	    		wifi_network_deinit();
-//    	    		ble_disable();
-    	    	}
-
-    			break;
-    		}
-    		case SLEEP_STATE:
-    		{
-    			ESP_LOGI(TAG, "Go to sleep");
-    	    	if(battery_voltage > sleep_voltage)
-    	    	{
-    	    		wakeup_detect_time = esp_timer_get_time();
-    	    		ESP_LOGI(TAG, "low voltage, value: %u, voltage: %f",adc_val, battery_voltage);
-    	    		sleep_state = WAKEUP_STATE;
-    	    	}
-
-    	    	if(config_server_get_battery_alert_config())
-    	    	{
-					if(battery_voltage < alert_voltage)
+    	xQueueOverwrite( voltage_queue, &battery_voltage );
+    	if(enable_sleep == 1)
+    	{
+			switch(sleep_state)
+			{
+				case RUN_STATE:
+				{
+					if(battery_voltage < sleep_voltage)
 					{
-						ESP_LOGW(TAG, "battery alert!");
-						if(((esp_timer_get_time() - pub_time) > alert_time) || (pub_time == 0))
+						ESP_LOGI(TAG, "low voltage, value: %u, voltage: %f",adc_val, battery_voltage);
+						sleep_detect_time = esp_timer_get_time();
+						sleep_state++;
+					}
+					break;
+				}
+				case SLEEP_DETECTED:
+				{
+					if(battery_voltage > sleep_voltage)
+					{
+						ESP_LOGI(TAG, "low voltage, value: %u, voltage: %f",adc_val, battery_voltage);
+						sleep_state = RUN_STATE;
+					}
+
+					if((esp_timer_get_time() - sleep_detect_time) > SLEEP_TIME_DELAY)
+					{
+						sleep_state = SLEEP_STATE;
+	//    	    		wifi_network_deinit();
+	//    	    		ble_disable();
+					}
+
+					break;
+				}
+				case SLEEP_STATE:
+				{
+					ESP_LOGI(TAG, "Go to sleep");
+					if(battery_voltage > sleep_voltage)
+					{
+						wakeup_detect_time = esp_timer_get_time();
+						ESP_LOGI(TAG, "low voltage, value: %u, voltage: %f",adc_val, battery_voltage);
+						sleep_state = WAKEUP_STATE;
+					}
+
+					if(config_server_get_battery_alert_config())
+					{
+						if(battery_voltage < alert_voltage)
 						{
-							pub_time = esp_timer_get_time();
-							wifi_network_init(config_server_get_alert_ssid(), config_server_get_alert_pass());
-							vTaskDelay(1000 / portTICK_PERIOD_MS);
-							uint8_t count = 0;
-							while(!wifi_network_is_connected())
+							ESP_LOGW(TAG, "battery alert!");
+							if(((esp_timer_get_time() - pub_time) > alert_time) || (pub_time == 0))
 							{
+								pub_time = esp_timer_get_time();
+								wifi_network_init(config_server_get_alert_ssid(), config_server_get_alert_pass());
 								vTaskDelay(1000 / portTICK_PERIOD_MS);
-								if(count++ > 10)
+								uint8_t count = 0;
+								while(!wifi_network_is_connected())
 								{
-									break;
+									vTaskDelay(1000 / portTICK_PERIOD_MS);
+									if(count++ > 10)
+									{
+										break;
+									}
 								}
-							}
-							if(wifi_network_is_connected())
-							{
-								ESP_LOGI(TAG, " wifi connectred try to publish");
-								mqtt_init();
-								EventBits_t bits = xEventGroupWaitBits(s_mqtt_event_group,
-																		PUB_SUCCESS_BIT,
-																		pdFALSE,
-																		pdFALSE,
-																		pdMS_TO_TICKS(10000));
-								if (bits & PUB_SUCCESS_BIT)
+								if(wifi_network_is_connected())
 								{
-									ESP_LOGI(TAG, "publish ok");
-									xEventGroupClearBits(s_mqtt_event_group, PUB_SUCCESS_BIT);
+									ESP_LOGI(TAG, " wifi connectred try to publish");
+									mqtt_init();
+									EventBits_t bits = xEventGroupWaitBits(s_mqtt_event_group,
+																			PUB_SUCCESS_BIT,
+																			pdFALSE,
+																			pdFALSE,
+																			pdMS_TO_TICKS(10000));
+									if (bits & PUB_SUCCESS_BIT)
+									{
+										ESP_LOGI(TAG, "publish ok");
+										xEventGroupClearBits(s_mqtt_event_group, PUB_SUCCESS_BIT);
+									}
+									else
+									{
+										ESP_LOGE(TAG, "publish error");
+									}
+									esp_mqtt_client_disconnect(client);
+									vTaskDelay(1000 / portTICK_PERIOD_MS);
+									wifi_network_deinit();
 								}
-								else
-								{
-									ESP_LOGE(TAG, "publish error");
-								}
-								esp_mqtt_client_disconnect(client);
-								vTaskDelay(1000 / portTICK_PERIOD_MS);
-								wifi_network_deinit();
 							}
 						}
 					}
-    	    	}
-    			break;
-    		}
-    		case WAKEUP_STATE:
-    		{
-    	    	if(battery_voltage > sleep_voltage)
-    	    	{
-    	    		if((esp_timer_get_time() - wakeup_detect_time) > WAKEUP_TIME_DELAY)
-    	    		{
-        	    		ESP_LOGI(TAG, "Wake up now...");
-//        	    		sleep_state = RUN_STATE;
-        	    		vTaskDelay(3000 / portTICK_PERIOD_MS);
-        	    		esp_restart();
+					break;
+				}
+				case WAKEUP_STATE:
+				{
+					if(battery_voltage > sleep_voltage)
+					{
+						if((esp_timer_get_time() - wakeup_detect_time) > WAKEUP_TIME_DELAY)
+						{
+							ESP_LOGI(TAG, "Wake up now...");
+							esp_restart();
 
-    	    		}
-    	    	}
-    	    	else if(battery_voltage < sleep_voltage)
-    	    	{
-    	    		sleep_state = SLEEP_STATE;
-    	    	}
-    			break;
-    		}
+						}
+					}
+					else if(battery_voltage < sleep_voltage)
+					{
+						sleep_state = SLEEP_STATE;
+					}
+					break;
+				}
+			}
+
+	//    	ESP_LOGI(TAG, "value: %u",adc_val);
+			if(sleep_state == SLEEP_STATE)
+			{
+				ESP_LOGW(TAG, "sleeping");
+				can_disable();
+				wifi_network_deinit();
+				ble_disable();
+				esp_sleep_enable_timer_wakeup(2*1000000);
+				esp_light_sleep_start();;
+			}
+			else vTaskDelay(pdMS_TO_TICKS(1000));
     	}
-
-//    	ESP_LOGI(TAG, "value: %u",adc_val);
-    	if(sleep_state == SLEEP_STATE)
+    	else
     	{
-    		ESP_LOGW(TAG, "sleeping");
-    		can_disable();
-    		wifi_network_deinit();
-    		ble_disable();
-    		esp_sleep_enable_timer_wakeup(2*1000000);
-    		esp_light_sleep_start();;
+    		vTaskDelay(pdMS_TO_TICKS(1000));
     	}
-    	else vTaskDelay(1000);
     }
 
     adc_digi_stop();
@@ -537,16 +538,20 @@ static void adc_task(void *pvParameters)
 
 int8_t sleep_mode_get_voltage(float *val)
 {
-
-	if(xQueuePeek( voltage_queue, val, 0 ))
+	if(voltage_queue != NULL)
 	{
-		return 1;
+		if(xQueuePeek( voltage_queue, val, 0 ))
+		{
+			return 1;
+		}
+		else return -1;
 	}
-	else return -1;
+	return -1;
 }
 
-int8_t sleep_mode_init(float sleep_volt)
+int8_t sleep_mode_init(uint8_t enable, float sleep_volt)
 {
+	enable_sleep = enable;
 	sleep_voltage = sleep_volt;
 	ESP_LOGW(TAG, "sleep_volt: %2.2f", sleep_volt);
 	s_mqtt_event_group = xEventGroupCreate();
