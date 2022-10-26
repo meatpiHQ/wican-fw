@@ -425,7 +425,7 @@ void app_main(void)
         {
         	project_hardware_rev = WICAN_USB_V100;
         	ESP_LOGI(TAG, "project_hardware_rev: USB");
-//        	wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
+        	wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
         }
         else
         {
