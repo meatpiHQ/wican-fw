@@ -42,6 +42,9 @@
   - [Realdash](#3-realdash)
   - [SavvyCAN](#4-savvycan)
   - [webCAN](http://webcan.meatpi.com)
+- [SocketCAN](#socketcan)
+  - [WiFi](#1-wifi)
+  - [USB](#2-usb)
 - [MQTT](#mqtt)
   - [Status](#1-status)
   - [Receive Frames](#2-receive-frames)
@@ -189,6 +192,27 @@ WiCAN can connect with RealDash using WiFi or BLE. The Protocol and CAN bitrate 
 4. Select "Network Connection", if you're on the same network it auto detect the IP.
 5. Click Create New Connection.
 6. Then select "Enable Bus" checkbox.
+
+# SocketCAN
+
+## 1. WIFi:
+
+Change to protocol in the device configuration page to "slcan", then create a virtual serial port over TCP on your Linux machine. If WiCAN is connected to your home network replace "192.168.80.1" with device IP.
+
+```
+sudo socat pty,link=/dev/netcan0,raw tcp:192.168.80.1:3333 &
+sudo slcand -o -c -s8 /dev/netcan0 can0
+sudo ifconfig can0 txqueuelen 1000
+sudo ifconfig can0 up
+```
+
+## 2. USB
+
+```
+sudo slcand -o -s6 -t sw -S 4000000 /dev/ttyACM0 can0
+sudo ifconfig can0 txqueuelen 1000
+sudo ifconfig can0 up
+```
 
 # MQTT
 
