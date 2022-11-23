@@ -46,6 +46,8 @@
   - [Status](#1-status)
   - [Receive Frames](#2-receive-frames)
   - [Transmit Frames](#3-transmit-frames)
+- [Home Assistant](#home-assistant)
+
 - [Firmware Update](#firmware-update)
   - [OTA](#1-ota)
   - [USB](#2-usb)
@@ -225,6 +227,38 @@ To receive CAN frames simply subscribe to the receive topic. Each MQTT message m
 {"bus":0,"type":"tx","frame":[{"id":123,"dlc":8,"rtr":false,"extd":true,"data":[1,2,3,4,5,6,7,8]},{"id":124,"dlc":8,"rtr":false,"extd":true,"data":[1,2,3,4,5,6,7,8]}]}
 ### - Transmit Message JSON Schema:
 ![image](https://user-images.githubusercontent.com/94690098/196187228-3923204e-1b87-4ece-bb72-406e338a5831.png)
+
+# Home Assistant
+WiCAN is able to send CAN bus messages to Home Assistant using MQTT protocol. I found that using Node-RED is the simplest way to create automation based on the CAN messages received. This short video highlights some of the steps https://youtu.be/oR5HQIUPR9I
+
+1. Install Home Assistant [Mosquitto broker add-on](https://github.com/home-assistant/addons/blob/master/mosquitto/DOCS.md)
+2. Create Home Assistant new user account for WiCAN. These user credentials will be used to set up the MQTT setting for WiCAN.
+3. Connect to WiCAN access point WiCAN_xxxxxxxxxxxx then, using a web browser, go to http://192.168.80.1/
+4. Set the "Mode" to Ap+Station
+5. Fill in your Home WiFi network SSID and Password.
+6. Enable [MQTT](#mqtt) and fill in the Home Assistant credentials created in step 2
+7. Install Home Assistant [Node-RED Add-on](https://github.com/hassio-addons/addon-node-red)
+8. Download "wican_example_flow.json" and replace device_id with your WiCAN ID.
+9. Open Node-RED Add-on and import the edited "wican_example_flow.json"
+10. Double click on the subsction Node and edit the server fill in MQTT broker IP address and credentials created in step 2
+11. Click deploy.
+12. To create a new MQTT sensor, you’ll need to edit the configuration.yaml file by adding the following lines:
+
+```
+mqtt:
+  sensor:
+    - name: "Amb Temp"
+      state_topic: "CAR1/Amb_Temp"
+      unit_of_measurement: "C"
+      value_template: "{{ value_json.amb_temp }}"
+    - name: "Fuel Level"
+      state_topic: "CAR1/Fuel_Level"
+      unit_of_measurement: "%"
+      value_template: "{{ value_json.fuel_level }}"
+```
+11. Restart Home assistant
+12. After restart go to dashboard and Add new Card entity.
+
 
 
 # Firmware Update
