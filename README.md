@@ -213,6 +213,25 @@ sudo slcand -o -s6 -t sw -S 4000000 /dev/ttyACM0 can0
 sudo ifconfig can0 txqueuelen 1000
 sudo ifconfig can0 up
 ```
+# ELM327 OBD2 Protocol
+
+1. Go to configuration webpage.
+2. Select the baudrate
+3. Set "Port Type" = TCP
+4. Set "Protocol" = elm327
+5. Enable BLE if needed. [Note](https://github.com/meatpiHQ/wican-fw#important-notes)
+6. Click submit changes.
+
+### OBD2 in RealDash 
+
+1. Go to garage then click on the dashboard.
+2. Click Add connection.
+3. Select Adapter ``` OBD2 ```
+4. Select Bluetooth or WiFi
+5. If WiFi fill in the IP 192.168.80.1 and port 3333. 
+6. Click on ``` OBD2 PROTOCOL ``` and select your car protocol, (11 bit ID, 500Kbit) or (11 bit ID, 250Kbit)
+7. Activate ``` Request Only First Reply ```
+8. Click Done.
 
 # MQTT
 
