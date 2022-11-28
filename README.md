@@ -262,7 +262,7 @@ WiCAN is able to send CAN bus messages to Home Assistant using MQTT protocol. I 
 5. Fill in your Home WiFi network SSID and Password.
 6. Enable [MQTT](#mqtt) and fill in the Home Assistant credentials created in step 2
 7. Install Home Assistant [Node-RED Add-on](https://github.com/hassio-addons/addon-node-red)
-8. Download "wican_example_flow.json" and replace device_id with your WiCAN ID.
+8. Download [wican_example_flow.json](https://github.com/meatpiHQ/wican-fw/blob/main/ha/wican_example_flow.json) and replace **device_id** with your WiCAN ID.
 9. Open Node-RED Add-on and import the edited "wican_example_flow.json"
 10. Double click on the subsction Node and edit the server fill in MQTT broker IP address and credentials created in step 2
 11. Click deploy.
@@ -283,6 +283,20 @@ mqtt:
 11. Restart Home assistant
 12. After restart go to dashboard and Add new Card entity.
 
+## Workflow summery
+
+In this example we've got one Node subscribed to topic ``` wican/device_id/status ```, when WiCAN connects to the local network it will publish ``` {"status": "online"}  ```. Once the Node function ``` Send Get  Amb Temp req ``` receives online status it will send a OBD2 request to get the ambient temperature. The OBD2 request message looks like this:
+
+``` { "bus": "0", "type": "tx", "frame": [{ "id": 2015, "dlc": 8, "rtr": false, "extd": false, "data": [2, 1, 70, 170, 170, 170, 170, 170] }] } ```
+
+Frame ID : 2015 or 0x7DF
+PID: 70 or 0x46
+
+Here is a good [reference](https://www.csselectronics.com/pages/obd2-pid-table-on-board-diagnostics-j1979) on how to construct a PID request. Note select DEC from drop down list.
+
+We have another Node subscribed to topic ``` wican/device_id/can/rx ```, once the car ECU responds to the request the function ``` Parse Amb Temp RSP ``` will parse the message and publish a message to topic ``` CAR1/Amb_Temp ```. Notice that when you edited ``` configuration.yaml ``` file create an MQTT Entity that subscribes to ``` CAR1/Amb_Temp ``` and expects a message ``` { value_json.amb_temp } ``` with unit_of_measurement C.
+
+![image](https://user-images.githubusercontent.com/94690098/204269457-32f6e6b5-c9be-44d0-b41c-36fa61b82258.png)
 
 
 # Firmware Update
