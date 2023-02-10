@@ -297,10 +297,10 @@ static void mqtt_task(void *pvParameters)
 void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
 {
     esp_mqtt_client_config_t mqtt_cfg = {
-        .uri = "mqtt://192.168.31.2",
-		.port = 1883,
-		.username = "meatpi",
-		.password = "meatpi",
+        .uri = config_server_get_mqtt_url(),
+		.port = config_server_get_mqtt_port(),
+		.username = config_server_get_mqtt_user(),
+		.password = config_server_get_mmqtt_pass(),
 		.disable_auto_reconnect = false,
 		.reconnect_timeout_ms = 5000,
 		.out_buffer_size = 1024*5,
