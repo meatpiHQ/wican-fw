@@ -55,7 +55,7 @@
 
 - [Firmware Update](#firmware-update)
   - [OTA](#1-ota)
-  - [USB](#2-usb)
+  - [USB Flash](#2-usb-flash)
 
 # **Features Wishlist**:
 
@@ -336,7 +336,7 @@ We have another Node subscribed to topic ``` wican/device_id/can/rx ```, once th
 
 <img src="https://user-images.githubusercontent.com/94690098/163678507-f9822f57-bbe1-42a4-82c4-501cd7834ba0.png" width="350" height="300" >
 
-## 2. USB:
+## 2. USB Flash:
 
 Use the [**ESP flash tool**](https://www.espressif.com/en/support/download/other-tools) to update the firmware, just follow the same setting in the picture below. Make sure to select ESP32-C3 and USB mode. **esptool.py** also can also be used to flash a new firmware.
 1. Download [**ESP flash tool**](https://www.espressif.com/en/support/download/other-tools)
