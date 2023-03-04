@@ -180,6 +180,8 @@ WiCAN can connect with RealDash using WiFi or BLE. The Protocol and CAN bitrate 
 
 ## **BLE Device Configuration:**
 
+## If you're using firmware verion v1.64 or below please update to a newer version before enabling BLE
+
 1. Go to configuration webpage.
 2. Select the baudrate
 3. Set the "BLE Status" to enable
@@ -217,6 +219,8 @@ sudo ifconfig can0 up
 ```
 # ELM327 OBD2 Protocol
 
+## If you're using firmware verion v1.64 or below please update to a newer version before enabling BLE
+
 1. Go to configuration webpage.
 2. Select the baudrate
 3. Set "Port Type" = TCP
@@ -236,6 +240,8 @@ sudo ifconfig can0 up
 8. Click Done.
 
 # MQTT
+
+## If you're using firmware verion v1.64 or below please update to a newer version before enabling MQTT
 
 Currently only non-secure MQTT is supported, it's highly recommended that you only use it with local MQTT broker and not use public brokers otherwise your CAN bus might be publicly exposed.
 
