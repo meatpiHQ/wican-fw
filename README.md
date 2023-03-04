@@ -3,7 +3,9 @@
 [www.meatpi.com](https://www.meatpi.com)
 ---
 
-## [**Pre-order on Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics/wican) 
+## Please update to the [latest firmware version](https://github.com/meatpiHQ/wican-fw/releases/)
+
+## [**Order on Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics/wican) 
 
 ## [webCAN](http://webcan.meatpi.com/) Comming soon!
 
@@ -180,7 +182,7 @@ WiCAN can connect with RealDash using WiFi or BLE. The Protocol and CAN bitrate 
 
 ## **BLE Device Configuration:**
 
-## If you're using firmware verion v1.64 or below please update to a newer version before enabling BLE
+**If you're using firmware verion v1.64 or below please update to the [latest version](https://github.com/meatpiHQ/wican-fw/releases/) before enabling BLE**
 
 1. Go to configuration webpage.
 2. Select the baudrate
@@ -219,7 +221,7 @@ sudo ifconfig can0 up
 ```
 # ELM327 OBD2 Protocol
 
-## If you're using firmware verion v1.64 or below please update to a newer version before enabling BLE
+**If you're using firmware verion v1.64 or below please update to the [latest version](https://github.com/meatpiHQ/wican-fw/releases/) before enabling BLE**
 
 1. Go to configuration webpage.
 2. Select the baudrate
@@ -241,7 +243,7 @@ sudo ifconfig can0 up
 
 # MQTT
 
-## If you're using firmware verion v1.64 or below please update to a newer version before enabling MQTT
+## If you're using firmware verion v1.64 or below please update to the [latest version](https://github.com/meatpiHQ/wican-fw/releases/) before enabling MQTT
 
 Currently only non-secure MQTT is supported, it's highly recommended that you only use it with local MQTT broker and not use public brokers otherwise your CAN bus might be publicly exposed.
 
