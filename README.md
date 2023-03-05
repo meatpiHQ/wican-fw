@@ -104,7 +104,7 @@ WiFi and CAN configuration can be set configuration web server.
 - WiFi and CAN configured using web interface.
 - Diode protection for the USB port
 
-![Modes](https://github.com/meatpiHQ/WiCAN/blob/main/images/modes.PNG?raw=true "Connection Mode" )
+![Modes](https://user-images.githubusercontent.com/94690098/222961571-bd137341-808a-4f0a-9528-789fe24d640e.png "Connection Mode")
 
 # Features:
 --------
