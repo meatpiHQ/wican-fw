@@ -228,6 +228,7 @@ static char* elm327_set_protocol(const char* command_str)
 		if(elm327_config.protocol == '7')
 		{
 			elm327_config.ecu_address = 0x18DB33F1;
+//			elm327_config.ecu_address = 0x18DAF10A;
 		}
 		else
 		{
@@ -245,6 +246,8 @@ static char* elm327_set_protocol(const char* command_str)
 		if(elm327_config.protocol == '9')
 		{
 			elm327_config.ecu_address = 0x18DB33F1;
+//			elm327_config.ecu_address = 0x18DAF10A;
+
 		}
 		else
 		{
@@ -358,7 +361,7 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 	//return if length > 4
 
 
-	if((service_num == SERVICE_01 || service_num == SERVICE_09) && (elm327_config.protocol != '6') && (elm327_config.protocol != '8'))
+	if((service_num == SERVICE_01 || service_num == SERVICE_09) && (elm327_config.protocol != '6') && (elm327_config.protocol != '8') && (elm327_config.protocol != '7') && (elm327_config.protocol != '9'))
 	{
 		if(elm327_config.protocol == '1' || elm327_config.protocol == '2')
 		{
@@ -394,7 +397,7 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 		txframe.data[7] = 0xAA;
 
 		uint16_t req_pid = 0;
-//		uint8_t req_mode = 0;
+		uint8_t req_mode = 0;
 		uint8_t req_expected_rsp = 0xFF;
 
 //		if(strlen(cmd) == 4 || strlen(cmd) == 5)
@@ -426,7 +429,7 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
             txframe.data[2] = pidnum;
 			txframe.data_length_code = 8;
 			req_pid = pidnum;
-//			req_mode = mode;
+			req_mode = mode;
 		}
 		else if(strlen(cmd) == 6)
 		{
@@ -453,13 +456,21 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 				if((rx_frame.identifier >= 0x7E8 && rx_frame.identifier <= 0x7EF) || (rx_frame.identifier >= 0x18DAF100 && rx_frame.identifier <= 0x18DAF1FF ))
 				{
 					//reset timeout after response is received
-					if(rx_frame.data[2] == req_pid)
+					if((rx_frame.data[2] == req_pid) || (rx_frame.data[1] == 0x7F && rx_frame.data[2] == req_mode))
 					{
 						rsp_found = 1;
 						number_of_rsp++;
 						if(elm327_config.header)
 						{
-							sprintf((char*)rsp, "%03X%02X", rx_frame.identifier&0xFFF,rx_frame.data[0]);
+							if(rx_frame.extd == 0)
+							{
+								sprintf((char*)rsp, "%03X%02X", rx_frame.identifier&0xFFF,rx_frame.data[0]);
+							}
+							else
+							{
+								sprintf((char*)rsp, "%08X%02X", rx_frame.identifier&TWAI_EXTD_ID_MASK,rx_frame.data[0]);
+							}
+
 						}
 
 //									ESP_LOGI(TAG, "ELM327 send 1: %s", rsp);
