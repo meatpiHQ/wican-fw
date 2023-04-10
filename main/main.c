@@ -132,6 +132,7 @@ static void can_tx_task(void *pvParameters)
 	{
 		twai_message_t tx_msg;
 
+		memset(ucTCP_RX_Buffer.ucElement,0, DEV_BUFFER_LENGTH);
 		xQueueReceive(xMsg_Rx_Queue, &ucTCP_RX_Buffer, portMAX_DELAY);
 
 		ESP_LOG_BUFFER_HEX(TAG, ucTCP_RX_Buffer.ucElement, ucTCP_RX_Buffer.usLen);
@@ -163,7 +164,13 @@ static void can_tx_task(void *pvParameters)
 		}
 		else if(protocol == REALDASH)
 		{
-			real_dash_parse_66(&tx_msg, ucTCP_RX_Buffer.ucElement);
+			ESP_LOG_BUFFER_HEX(TAG, ucTCP_RX_Buffer.ucElement, ucTCP_RX_Buffer.usLen);
+
+			if(real_dash_parse_66(&tx_msg, ucTCP_RX_Buffer.ucElement) == 0)
+			{
+				real_dash_parse_44(&tx_msg, ucTCP_RX_Buffer.ucElement, ucTCP_RX_Buffer.usLen);
+			}
+
 			tx_msg.self = 0;
 			can_send(&tx_msg, portMAX_DELAY);
 		}
@@ -179,7 +186,6 @@ static void can_tx_task(void *pvParameters)
 			}
 			else if(ucTCP_RX_Buffer.dev_channel == DEV_BLE)
 			{
-				ESP_LOGI(TAG, "HERE");
 				elm327_process_cmd(msg_ptr, temp_len, &tx_msg, &xmsg_ble_tx_queue);
 			}
 		}

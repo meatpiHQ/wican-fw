@@ -18,7 +18,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
+#include <string.h>
 #include "esp_log.h"
 #include "driver/twai.h"
 
@@ -69,6 +69,15 @@ static uint32_t Crc32(const uint8_t* data, size_t numBytes)
     }
     return (crc32 ^ 0xFFFFFFFF);
 }
+
+uint8_t chksum8(uint8_t *buff, size_t len)
+{
+    unsigned int sum;       // nothing gained in using smaller types!
+    for ( sum = 0 ; len != 0 ; len-- )
+        sum += *(buff++);   // parenthesis not required!
+    return (uint8_t)sum;
+}
+
 uint8_t real_dash_set_66(twai_message_t *msg, uint8_t *buf)
 {
 	uint8_t i;
@@ -142,4 +151,36 @@ uint8_t real_dash_parse_66(twai_message_t *msg, uint8_t *buf)
 	}
 	return 0;
 }
+
+uint8_t real_dash_parse_44(twai_message_t *msg, uint8_t *buf, uint32_t len)
+{
+	uint8_t i;
+	uint32_t crc = 0;
+
+	memset(msg->data, 0, 8);
+	if((buf[0] == 0x44) && (buf[1] == 0x33) && (buf[2] == 0x22) && (buf[3] == 0x11))
+	{
+		if(chksum8(buf, len-1) == buf[len-1])
+		{
+			msg->identifier = (buf[4] & 0xFF) | ((buf[5] << 8) & 0x0000FF00) | ((buf[6] << 16) & 0x00FF0000) | ((buf[7] << 24) & 0xFF000000);
+			if(msg->identifier & 0x1FFFF800)
+			{
+				msg->extd = 1;
+			}
+			for(i = 0; i < (len-9); i++)
+			{
+				msg->data[i] = buf[i+8];
+			}
+			msg->data_length_code = 8;
+
+			return 1;
+		}
+		else
+		{
+			return 0;
+		}
+	}
+	return 0;
+}
+
 
