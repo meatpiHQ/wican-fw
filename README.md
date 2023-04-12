@@ -23,6 +23,8 @@
 <img src="https://user-images.githubusercontent.com/94690098/218081136-fc3da520-1851-497e-90dc-ccc5d6543f1f.png" >
 </p>
 
+### *** To activate the 120R termination resistor, simply connect the TR pin the CANH. The other end of the termination resistor is connected to CANL internally.
+
 
 ## WiCAN-OBD2 Pinout
 
@@ -83,13 +85,23 @@
 
 # **Description**:
 
-WiCAN is a **OBD-II WiFi/BLE** to **CAN** adapter based on **ESP32-C3**, it is the great tool for car hacking. The original firmware can interface directly with RealDash over WiFI or BLE. [**Realdash**](http://realdash.net/) allows you to create your own custom dashboard with stunning graphics, it's available on ANDROID, IOS AND WINDOWS 10.It can connect to your existing WiFi network or any device can connect to it's **WiFi access point**.
+WiCAN is a powerful ESP32-C3-based CAN adapter for car hacking and general CAN-bus development. It is available in two form factors, OBD-II and standard USB-CAN. The original firmware can use Wi-Fi or BLE to interface directly with RealDash, which allows you to create your own custom dashboards with stunning graphics. It is available for Android, iOS, and Windows 10. WiCAN connects to your existing Wi-Fi network and any device on that network, where it allows you to configure Wi-Fi and CAN settings through a built-in web interface. Both versions have a power-saving mode that detects when the voltage drops under 13 V or some other preset value. When this power-saving mode is engaged, WiCAN is capable of entering sleep mode, which drops current consumption below 1 mA.
 
-WiCAN also works with **BUSMaster**, for monitoring and logging CAN bus traffic.
+WiCAN is a simple, ready-to-use solution for CAN-bus development and hacking. It accelerates development by providing vehicle-diagnostic APIs and libraries in various languages and for various operating systems. WiCAN works with a large array of pre-existing vehicle-diagnostic libraries, including RealDash, SavvyCAN, BUSmaster, python-can/SocketCA, and more. APIs are also available for LabView, C#, VB.Net, Delphi, and Python in case you’re writing your own software.
 
-**Also available API for LabView, C#, VB.Net, Delphi, Python** - In case you're writing your own software.
+# WiCAN-OBD
+![image](https://user-images.githubusercontent.com/94690098/231444160-08842087-55ad-4165-8291-b379da63aeeb.png)
 
-WiFi and CAN configuration can be set configuration web server.
+WiCAN-OBD will be of great interest to car enthusiasts and tinkers who want to modernize or customize the head-unit displays in their cars using RealDash. Check out some examples of the available graphic interfaces, which are supported by a robust collection of Manuals & Tutorials to get you started with RealDash.
+
+Another great feature of WiCAN-OBD is its MQTT battery alerts. It can monitor your battery voltage and send an alert if that voltage drops under a set threshold. This feature is especially important for users who own multiple cars they do not use regularly.
+
+# WiCAN-USB
+![image](https://user-images.githubusercontent.com/94690098/231443956-fbf2de46-ef19-4ba5-83b1-6058ab123f56.png)
+
+WiCAN-USB can be powered through USB or through a screw-terminal connector. The hardware and firmware is almost identical to WiCAN-OBD, but with an extended voltage range up to 36 V. Many of the projects we work on involve 12 V or 24 V trucks, and WiCAN-USB comes in handy when we need to monitor those trucks remotely, from the comfort of our desks, by configuring them to connect to Wi-Fi. And, thanks to its low cost, we don’t need to worry about breaking or losing it the WiCAN-USB device itself.
+
+WiCAN-USB can also be used as a USB-to-CAN adapter when Wi-Fi connectivity is not available or when a hardwired connection is needed.
 
 
 ## [**Programming Examples**](https://github.com/meatpiHQ/programming_examples/tree/master/CAN)
