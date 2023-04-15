@@ -5,9 +5,7 @@
 
 ## Please update to the [latest firmware version](https://github.com/meatpiHQ/wican-fw/releases/)
 
-## [**Order on Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics/wican) 
-
-## [webCAN](http://webcan.meatpi.com/) Comming soon!
+## Order on [**Mouser**](https://www.mouser.com/c/?m=MeatPi) or [**Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics/wican)
 
 <br/><br/>
 
@@ -33,6 +31,7 @@
 </p>
 
 ---
+## [webCAN](http://webcan.meatpi.com/) Comming soon!
 
 - [Features Wishlist](#features-wishlist)
 - [Important Notes](#important-notes)
