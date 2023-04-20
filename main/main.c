@@ -349,7 +349,7 @@ void app_main(void)
 
 	if(protocol == REALDASH)
 	{
-		int can_datarate = config_server_get_can_rate();
+//		int can_datarate = config_server_get_can_rate();
 		if(can_datarate != -1)
 		{
 			can_set_bitrate(can_datarate);
@@ -378,10 +378,9 @@ void app_main(void)
 
 	if(config_server_mqtt_en_config())
 	{
+		can_set_bitrate(can_datarate);
 		xmsg_mqtt_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
-//		can_init(CAN_500K);
 		can_enable();
-
 		mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM, &xmsg_mqtt_rx_queue);
 	}
 //	else if(protocol == MQTT)
