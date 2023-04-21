@@ -335,6 +335,16 @@ void app_main(void)
 	int8_t can_datarate = config_server_get_can_rate();
 	(can_datarate != -1) ? can_init(can_datarate):can_init(CAN_500K);
 
+	if(can_datarate != -1)
+	{
+		can_set_bitrate(can_datarate);
+	}
+	else
+	{
+		ESP_LOGE(TAG, "error going to default CAN_500K");
+		can_set_bitrate(CAN_500K);
+	}
+
 	if(config_server_get_can_mode() == CAN_NORMAL)
 	{
 		can_set_silent(0);
