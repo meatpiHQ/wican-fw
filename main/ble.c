@@ -83,6 +83,7 @@ static uint8_t adv_config_done = 0;
 #define EXT_ADV_MAX_EVENTS                        0
 
 #define GATTS_DEMO_CHAR_VAL_LEN_MAX               0x40
+#define BLE_SEND_BUF_SIZE                         490
 
 static uint8_t dev_name[32] = {0};
 static uint8_t manufacturer[]="MeatPi";
@@ -208,8 +209,13 @@ static const uint8_t heart_measurement_ccc[2]      = {0x00, 0x00};
 static const uint8_t char_value[20]                 = {0x11, 0x22, 0x33, 0x44};
 #define CHAR_DECLARATION_SIZE       (sizeof(uint8_t))
 #define SVC_INST_ID                 0
+static uint16_t spp_mtu_size = 23;
 static uint16_t spp_conn_id = 0xffff;
 static esp_gatt_if_t spp_gatts_if = 0xff;
+// If the client sends a larger MTU size, the ble_max_data_size will be set to
+// the minium of BLE_SEND_BUF_SIZE and (spp_mtu_size - 3).
+// Since the default MTU size is 23 this is initially set to 20
+static uint16_t ble_max_data_size = 20;
 static bool is_connected = false;
 static uint8_t test1[] = {0x66 ,0x33 ,0x22 ,0x11 ,0xBB ,0x00 ,0x00 ,0x00 ,0x11 ,0x00 ,0x00 ,0x00 ,0x33 ,0x00 ,0x00 ,0x00 ,0xA4 ,0x3C ,0xD9 ,0x49};
 /* Full Database Description - Used to add attributes into the database */
@@ -225,6 +231,11 @@ static const esp_gatts_attr_db_t gatt_db[HRS_IDX_NB] =
 	    {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ,
 	      CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
 
+	    // NOTE: This is the notify characteristic used to send data to the client
+	    // It currently uses GATTS_DEMO_CHAR_VAL_LEN_MAX which is set to 64 (0x40).
+	    // However more bytes might be sent over this characteristic.
+	    // In the ESP SPP demo code the characteristic size is 512 which seems to
+	    // be the max MTU supported by BLE.
 	    /* Characteristic Value */
 	    [IDX_CHAR_VAL_A] =
 	    {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_TEST_A, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
@@ -514,6 +525,24 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
         case ESP_GATTS_EXEC_WRITE_EVT:
             break;
         case ESP_GATTS_MTU_EVT:
+            // NOTE: I don't fully understand how the MTU negotiation works.
+            // From the ESP demo, the characteristic is declared with a size of 512
+            // and then this event determines the actual MTU size.
+            // Since it is called a "negotiation", I'd think the server would have a
+            // a chance to tell the client: "Hey, I can't handle an MTU that big".
+            // But I can't find that server response in the demo code. Perhaps the
+            // ESP code sends it automatically based on characteristic size.
+            // Maybe the response is optional.
+            //
+            // Additionally, from what I can tell this ESP_GATTS_MTU_EVT is not sent by
+            // Car Scanner ELM OBD2 on Android. So it uses the default MTU of 23.
+            spp_mtu_size = param->mtu.mtu;
+            // Each BLE packet has 3 header bytes, so the actual amount of data that
+            // can be sent is (MTU - 3).
+            //
+            // set the max data size to the minimum of (spp_mtu_size - 3) and ble_send_buf size
+            ble_max_data_size = BLE_SEND_BUF_SIZE <= (spp_mtu_size - 3) ? BLE_SEND_BUF_SIZE : (spp_mtu_size -3);
+            ESP_LOGI(GATTS_TABLE_TAG, "ESP_GATTS_MTU_EVT: %d", spp_mtu_size);
             break;
         case ESP_GATTS_CONF_EVT:
             break;
@@ -623,7 +652,7 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
 static void ble_task(void *pvParameters)
 {
 	static xdev_buffer tx_buffer;
-	static uint8_t ble_send_buf[490];
+	static uint8_t ble_send_buf[BLE_SEND_BUF_SIZE];
 	static uint32_t ble_send_buf_len = 0;
 	static uint32_t num_msg = 0;
 	static int64_t time_old = 0;
@@ -660,40 +689,66 @@ static void ble_task(void *pvParameters)
 				{
 					while((xQueuePeek(*xBle_TX_Queue, ( void * ) &tx_buffer, 0) == pdTRUE))
 					{
-						if(ble_send_buf_len + tx_buffer.usLen < sizeof(ble_send_buf))
-						{
-							xQueueReceive(*xBle_TX_Queue, ( void * ) &tx_buffer, 0);
-
-							memcpy(ble_send_buf+ble_send_buf_len, tx_buffer.ucElement, tx_buffer.usLen);
-							num_msg++;
-							ble_send_buf_len += tx_buffer.usLen;
-							if(esp_timer_get_time() - time_old > 1000*1000)
-							{
-								time_old = esp_timer_get_time();
-
-		//						ESP_LOGI(GATTS_TABLE_TAG, "msg %u/sec", num_msg);
-								num_msg = 0;
-							}
+						// figure out how many packets are needed to send this tx_buffer
+						int num_req_packets = ((ble_send_buf_len + tx_buffer.usLen) / ble_max_data_size);
+						// Round up. Only part of a packet might be needed and integer math rounds down.
+						if((ble_send_buf_len + tx_buffer.usLen) % ble_max_data_size) {
+							num_req_packets++;
 						}
-						else
+
+						if(free_packet < num_req_packets)
 						{
-			//				xEventGroupWaitBits(s_ble_event_group,
-			//									BLE_CONNECTED_BIT,
-			//									pdFALSE,
-			//									pdFALSE,
-			//									portMAX_DELAY);
-		//					ESP_LOG_BUFFER_HEXDUMP(GATTS_TABLE_TAG, ble_send_buf, ble_send_buf_len, ESP_LOG_INFO);
-		//					vTaskDelay(pdMS_TO_TICKS(30000));
-							ble_send(ble_send_buf, ble_send_buf_len);
-							ble_send_buf_len = 0;
-							if(--free_packet == 0)
+							// We don't have enough free_packets to send this item
+							break;
+						}
+
+						xQueueReceive(*xBle_TX_Queue, ( void * ) &tx_buffer, 0);
+						num_msg++;
+						if(esp_timer_get_time() - time_old > 1000*1000)
+						{
+							time_old = esp_timer_get_time();
+
+		//					ESP_LOGI(GATTS_TABLE_TAG, "msg %u/sec", num_msg);
+							num_msg = 0;
+						}
+						int tx_buffer_copied = 0;
+						while(tx_buffer_copied < tx_buffer.usLen)
+						{
+							int ble_send_buf_remaining = ble_max_data_size - ble_send_buf_len;
+							int tx_buffer_remaining = tx_buffer.usLen - tx_buffer_copied;
+							// only copy bytes that will fit in the ble_send_buf
+							int copy_len = tx_buffer_remaining >= ble_send_buf_remaining ? ble_send_buf_remaining : tx_buffer_remaining;
+							memcpy(ble_send_buf+ble_send_buf_len, tx_buffer.ucElement+tx_buffer_copied, copy_len);
+							ble_send_buf_len += copy_len;
+							tx_buffer_copied += copy_len;
+
+							// If we have a full ble_send_buf, send it. Otherwise wait to fill it with more bytes,
+							// If there are no more bytes to fill it with, then it will be sent at the end.
+							if(ble_send_buf_len == ble_max_data_size)
 							{
-								break;
+			//					xEventGroupWaitBits(s_ble_event_group,
+			//										BLE_CONNECTED_BIT,
+			//										pdFALSE,
+			//										pdFALSE,
+			//										portMAX_DELAY);
+			//					ESP_LOG_BUFFER_HEXDUMP(GATTS_TABLE_TAG, ble_send_buf, ble_send_buf_len, ESP_LOG_INFO);
+			//					vTaskDelay(pdMS_TO_TICKS(30000));
+								ble_send(ble_send_buf, ble_send_buf_len);
+								ble_send_buf_len = 0;
+								if(--free_packet == 0 && tx_buffer_remaining > 0)
+								{
+									// We did a computation above to make sure we had a enough
+									// free_packets. If we are down to zero and there are still
+									// bytes to send, then something went wrong
+									ESP_LOGE(GATTS_TABLE_TAG, "Ran out of free_packets too soon");
+									break;
+								}
 							}
 						}
 					}
 					if(free_packet != 0 && ble_send_buf_len != 0)
 					{
+			//			ESP_LOG_BUFFER_HEXDUMP(GATTS_TABLE_TAG, ble_send_buf, ble_send_buf_len, ESP_LOG_INFO);
 						ble_send(ble_send_buf, ble_send_buf_len);
 						ble_send_buf_len = 0;
 					}
@@ -743,6 +798,9 @@ void ble_send(uint8_t* buf, uint8_t buf_len)
 	if(ble_tx_ready())
 	{
 		esp_ble_gatts_send_indicate(spp_gatts_if, spp_conn_id, profile_handle_table[IDX_CHAR_VAL_A],buf_len, buf, false);
+		// The ESP SPP server demo adds a 20ms delay after each send.
+		// It doesn't seem like it is needed in the WiCAN case.
+		// vTaskDelay(20 / portTICK_PERIOD_MS);
 	}
 }
 static uint32_t ble_pass_key = 0;
@@ -816,6 +874,9 @@ void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t conn
 		return;
 	}
 
+    // TODO: This should probably be removed. It is not supposed to have
+    // an effect on the server. It is only used when the ESP32 is acting
+    // as an BLE client.
     esp_err_t local_mtu_ret = esp_ble_gatt_set_local_mtu(517);
     if (local_mtu_ret){
         ESP_LOGE(GATTS_TABLE_TAG, "set local  MTU failed, error code = %x", local_mtu_ret);
