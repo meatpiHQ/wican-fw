@@ -35,6 +35,7 @@
 
 - [Features Wishlist](#features-wishlist)
 - [Important Notes](#important-notes)
+- [API](#api)
 - [Build](#build)
 - [Description](#description)
 - [Features](#features)
@@ -64,17 +65,22 @@
 
 - ~~CAN Auto baudrate~~ **DONE**
 - ~~Support ELM327 OBD2 protocol~~ **DONE** (Basic support) 
-- Home Assistant Integrations
+- ~~Home Assistant Integrations~~ **DONE**
 - Extended ELM327 support 
 - Support ELM327 protocol and Realdash protocol simultaneously on WiFi and BLE 
 - Add option to send an Email on battery alert 
 - Expand alerts to include other CAN parameters parsed from DBC files.
-
+- Support for extra wifi settings
 # **Important Notes**:
 
 - The OBD2 adapter is not designed to powered of the USB connecter. The USB connector can power the adapter to flash custom firmware or hardreset the deivce and can also be used for debuging.
 - It is highly recommanded to turn OFF the BLE if not used. Otherwise it might affect the preformance.
 - When the BLE is connected, the device configuration access point will be disabled i.e you won't be able to configure the device unless you disconnect the BLE, by turning off the BLE on your phone or device.
+
+# **API**
+[API Documentation](https://drive.google.com/drive/folders/1qJelUAHGrn_YbNIP0Jk_KmNENG-hKbtl?usp=sharing)
+
+[Programing examples](https://github.com/meatpiHQ/programming_examples/tree/master/CAN)
 
 # **Build**:
 
@@ -149,7 +155,7 @@ This is an important feature for most car enthusiast who own multiple cars that 
 ![Configuration page](https://github.com/meatpiHQ/WiCAN/blob/main/images/settings40.png?raw=true "Config page")
 
 ## 2. BUSMaster
-You need to download the right version of BUSMaster provided in this [**Link**](https://bit.ly/3yGgGTm). Here is how to setup the hardware. 
+You need to download the right version of BUSMaster provided in this [**Link**](https://drive.google.com/drive/folders/1qJelUAHGrn_YbNIP0Jk_KmNENG-hKbtl?usp=sharing). Here is how to setup the hardware. 
 
 ### **Device Configuration:**
 
