@@ -525,22 +525,21 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
         case ESP_GATTS_EXEC_WRITE_EVT:
             break;
         case ESP_GATTS_MTU_EVT:
-            // NOTE: I don't fully understand how the MTU negotiation works.
-            // From the ESP demo, the characteristic is declared with a size of 512
+            // NOTE: The ESP32 documentation doesn't explain how MTU negotiation works.
+            // From the ESP SPP server demo, the characteristic is declared with a size of 512
             // and then this event determines the actual MTU size.
-            // Since it is called a "negotiation", I'd think the server would have a
-            // a chance to tell the client: "Hey, I can't handle an MTU that big".
-            // But I can't find that server response in the demo code. Perhaps the
-            // ESP code sends it automatically based on characteristic size.
-            // Maybe the response is optional.
+			// From experimentation the esp_ble_gatt_set_local_mtu function is related to this.
+			// It seems the value set by esp_ble_gatt_set_local_mtu is sent to the client during
+			// the connection. Then if the client supports it, it will send this ESP_GATTS_MTU_EVT
+			// with the MTU value the client can support.
             //
-            // Additionally, from what I can tell this ESP_GATTS_MTU_EVT is not sent by
+            // As noted in above the call to esp_ble_gatt_set_local_mtu is not sent by
             // Car Scanner ELM OBD2 on Android. So it uses the default MTU of 23.
             spp_mtu_size = param->mtu.mtu;
             // Each BLE packet has 3 header bytes, so the actual amount of data that
             // can be sent is (MTU - 3).
             //
-            // set the max data size to the minimum of (spp_mtu_size - 3) and ble_send_buf size
+            // set the max data size to the minimum of (spp_mtu_size - 3) and BLE_SEND_BUF_SIZE
             ble_max_data_size = BLE_SEND_BUF_SIZE <= (spp_mtu_size - 3) ? BLE_SEND_BUF_SIZE : (spp_mtu_size -3);
             ESP_LOGI(GATTS_TABLE_TAG, "ESP_GATTS_MTU_EVT: %d", spp_mtu_size);
             break;
@@ -874,9 +873,18 @@ void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t conn
 		return;
 	}
 
-    // TODO: This should probably be removed. It is not supposed to have
-    // an effect on the server. It is only used when the ESP32 is acting
-    // as an BLE client.
+    // The documentation on how this works is not clear. It is used in the ESP
+	// SPP server demo. From experimentation, the value set here is sometimes
+	// sent back to us via the ESP_GATTS_MTU_EVT. Only when it is sent back,
+	// does it mean the MTU has been increased from the default of 23. From
+	// looking at the ESP code its max value is 517.
+	//
+	// Tested configurations:
+	// - Realdash on Android: this value is sent back
+	// - ble-serial on MacOS: this value is sent back
+	// - Carscanner on Android: this value is not sent back. And based on
+	//   experimentation the message length is capped at 20 bytes which is
+	//   consistent with the default MTU setting of 23.
     esp_err_t local_mtu_ret = esp_ble_gatt_set_local_mtu(517);
     if (local_mtu_ret){
         ESP_LOGE(GATTS_TABLE_TAG, "set local  MTU failed, error code = %x", local_mtu_ret);
