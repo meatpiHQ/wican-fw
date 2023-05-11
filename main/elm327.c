@@ -562,6 +562,9 @@ const xelm327_cmd_t elm327_commands[] = {
 
 int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t *q)
 {
+	// Because the cmd_buffer and cmd_len are static they keep their value
+	// across multiple calls. So if a buf is an incomplete command the next
+	// call will keep add to the cmd_buffer until the ending CR is found.
 	static char cmd_buffer[128];
 	static uint8_t cmd_len = 0;
 	static char cmd_response[128];
@@ -571,6 +574,7 @@ int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, twai_message_t *frame, Queu
 	{
 		if(buf[i] == '\r' || cmd_len > 126)
 		{
+	//		ESP_LOGI(TAG, "end of command i: %d, cmd_len: %u", i, cmd_len);
 			cmd_buffer[cmd_len] = 0;
 			cmd_response[0] = 0;
 			cmd_found_flag = 0;
@@ -615,6 +619,25 @@ int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, twai_message_t *frame, Queu
 				strcat(cmd_response, "\r>");
 
 				elm327_response((char*)cmd_response, 0, q);
+
+				if(cmd_buffer[2] == 'z')
+				{
+					// When the command is a reset ignore any other commands in the buffer.
+					// This approach fixes an issue seen in the Carscanner Android app.
+					// It might actually match a real ELM327 chip since the documentation
+					// for the chip say an ATZ is like a full reset of the chip. So it
+					// would make sense that fully reset would imply anything in the
+					// incoming serial buffer would be cleared.
+					//
+					// In the Carscanner app a reset (ATZ) and a echo off (ATE0) are sent
+					// in a single BLE message. Without the code below elm327_process_cmd
+					// would respond to the ATZ and the ATE0. When it does this
+					// Carscanner gets out of sync. The Carscanner log shows all following
+					// commands with a response from the previous command.
+					cmd_len = 0;
+					memset(cmd_response, 0, sizeof(cmd_response));
+					return 0;
+				}
 			}
 			else if(!strncmp(cmd_buffer, "vti", 3) || !strncmp(cmd_buffer, "sti", 3))
 			{
