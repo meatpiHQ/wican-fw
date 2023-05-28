@@ -135,7 +135,7 @@ static void can_tx_task(void *pvParameters)
 		memset(ucTCP_RX_Buffer.ucElement,0, DEV_BUFFER_LENGTH);
 		xQueueReceive(xMsg_Rx_Queue, &ucTCP_RX_Buffer, portMAX_DELAY);
 
-		ESP_LOG_BUFFER_HEX(TAG, ucTCP_RX_Buffer.ucElement, ucTCP_RX_Buffer.usLen);
+		ESP_LOG_BUFFER_HEXDUMP(TAG, ucTCP_RX_Buffer.ucElement, ucTCP_RX_Buffer.usLen, ESP_LOG_INFO);
 
 		uint8_t* msg_ptr = ucTCP_RX_Buffer.ucElement;
 		int temp_len = ucTCP_RX_Buffer.usLen;
@@ -254,10 +254,8 @@ static void can_rx_task(void *pvParameters)
 				}
 				else if(protocol == OBD_ELM327)
 				{
-					if((rx_msg.identifier >= 0x7E8 && rx_msg.identifier <= 0x7EF) || (rx_msg.identifier >= 0x18DAF100 && rx_msg.identifier <= 0x18DAF1FF))
-					{
-						xQueueSend( xmsg_obd_rx_queue, ( void * ) &rx_msg, pdMS_TO_TICKS(0) );
-					}
+					// Let elm327.c decide which messages to process
+					xQueueSend( xmsg_obd_rx_queue, ( void * ) &rx_msg, pdMS_TO_TICKS(0) );
 				}
 
 

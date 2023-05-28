@@ -43,15 +43,6 @@
 #define SERVICE_05			0x05
 #define SERVICE_09			0x09
 #define SERVICE_UNKNOWN		0xFF
-const static uint8_t service_01_rsp_len[] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-											1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-											1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-											1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-											1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-											1, 1, 1, 1, 1, 2, 1, 1, 1, 3, 2, 1, 2, 2, 1, 1, 1, 2, 2, 1,
-											2, 2, 2, 2, 2, 1, 1, 3, 1, 9, 9, 2, 1, 2, 1, 1, 3, 9, 9, 2,
-											4, 1, 1, 2, 1, 1, 1, 1, 3, 2, 2, 2, 1, 4, 1, 1, 2, 1, 2, 1,
-											2, 1, 1, 1, 1, 1, 1, 1};
 
 uint8_t service_09_rsp_len[] = {1, 1, 4, 1, 255, 1, 255, 1, 1, 1, 4, 1}; //255 unknow
 
@@ -71,13 +62,18 @@ void (*elm327_response)(char*, uint32_t, QueueHandle_t *q);
 
 typedef struct __xelm327_config
 {
-	uint32_t ecu_address;
+	uint8_t priority_bits;
+	uint32_t header;
+	uint32_t rx_address;
 	uint8_t protocol;
 	uint32_t req_timeout;
 	uint8_t linefeed:1;
 	uint8_t echo:1;
 	uint8_t space_print:1;
-	uint8_t header:1;
+	uint8_t show_header:1;
+	uint8_t header_is_set:1;
+	uint8_t rx_address_is_set:1;
+	uint8_t display_dlc:1;
 
 }_xelm327_config_t;
 
@@ -87,10 +83,14 @@ static _xelm327_config_t elm327_config = {
 	.protocol = '6',
 	.linefeed = 1,
 	.echo = 1,
-//	.ecu_address = 0x7E0,
-	.ecu_address = 0x7DF,
-	.space_print = 1,
+	.priority_bits = 0x18,
 	.header = 0,
+	.rx_address = 0,
+	.space_print = 1,
+	.show_header = 0,
+	.header_is_set = 0,
+	.rx_address_is_set = 0,
+	.display_dlc = 0,
 
 };
 typedef char* (*elm327_command_callback)(const char* command_str);
@@ -118,6 +118,14 @@ static unsigned int elm327_parse_hex_str(const char *str, int len)
     return result;
 }
 
+static uint8_t elm327_fill_data_from_hex_str(const char *str, uint8_t *data, int data_length)
+{
+	for (int i = 0; i < data_length; i++) {
+		uint8_t byte = (elm327_parse_hex_char(str[i*2]) << 4) + (elm327_parse_hex_char(str[i*2 + 1]));
+		data[i] = byte;
+	}
+	return 0;
+}
 
 static char* elm327_return_ok(const char* command_str)
 {
@@ -162,11 +170,11 @@ static char* elm327_header_on_off(const char* command_str)
 {
 	if(command_str[1] == '1')
 	{
-		elm327_config.header = 1;
+		elm327_config.show_header = 1;
 	}
 	else if(command_str[1] == '0')
 	{
-		elm327_config.header = 0;
+		elm327_config.show_header = 0;
 	}
 	else
 	{
@@ -186,29 +194,148 @@ static char* elm327_identify(const char* command_str)
 	return (char*)identify;
 }
 
-static char* elm327_restore_defaults(const char* command_str)
+static void elm327_set_default_config()
 {
+	// TODO: This should set the active protocol to be
+	// the stored protocol. Currently there is no distinction
+	// between an active protocol and a stored protocol so
+	// for now we just don't change the protocol
 	elm327_config.req_timeout = 0x32;//50
-	elm327_config.protocol = '6';
 	elm327_config.linefeed = 1;
 	elm327_config.echo = 1;
-	elm327_config.ecu_address = 0x7E0;
-	elm327_config.space_print = 1;
+	elm327_config.priority_bits = 0x18;
 	elm327_config.header = 0;
+	elm327_config.rx_address = 0;
+	elm327_config.space_print = 1;
+	elm327_config.show_header = 0;
+	elm327_config.header_is_set = 0;
+	elm327_config.rx_address_is_set = 0;
+	elm327_config.display_dlc = 0;
+}
+
+static char* elm327_restore_defaults_or_display_dlc(const char* command_str)
+{
+	size_t arg_size = strlen(command_str+1);
+	if(arg_size == 0)
+	{
+		// ATD: restore defaults
+		elm327_set_default_config();
+	}
+	else
+	{
+		// TODO: currently we don't use this display_dlc property
+		if(command_str[1] == '1')
+		{
+			// ATD1: display DLC
+			elm327_config.display_dlc = 1;
+		}
+		else if(command_str[1] == '0')
+		{
+			// ATD0: don't display DLC
+			elm327_config.display_dlc = 0;
+		}
+		else
+		{
+			return 0;
+		}
+	}
 
 	return (char*)ok_str;
 }
 
 static char* elm327_reset_all(const char* command_str)
 {
+	elm327_set_default_config();
+
 	return (char*)device_description;
 }
 
+/*
+ * ELM327 supports 3 sizes of parameters to the set header (SH)
+ * command.
+ * - 3 hex digits (xyz) means to set the header field to 00 0x yz
+ * - 6 hex digits (xx yy zz)
+ * - 8 hex digits (ww xx yy zz)
+ *
+ * There is also the CP command for setting the priority bits of
+ * a 29bit header. Basically that is an alternative way to set the
+ * the ww in the 8 hex digit param.
+ *
+ * Because the CP command could be sent after set header
+ * And because the header could be used for either a 11bit or 29bit
+ * message. And because the TWAI spec doesn't indicate if the extra
+ * bytes of the 11bit identifier would be ignored or not.
+ * It seems easier and safer to store the header and priority bytes
+ * separately.
+ */
 static char* elm327_set_header(const char* command_str)
 {
 	size_t id_size = strlen(command_str+2);
 
-	elm327_config.ecu_address = elm327_parse_hex_str(command_str+2, id_size);
+	if(id_size == 3 || id_size == 6)
+	{
+		// SH xyz or SH xx yy zz
+		elm327_config.header = elm327_parse_hex_str(command_str+2, id_size);
+		elm327_config.header_is_set = 1;
+	}
+	else if(id_size == 8)
+	{
+		// SH ww xx yy zz
+		// The documentation isn't clear if priority bits should be stored separately.
+		// The key question is whether setting the header again with the SH xx yy zz
+		// form would keep the priority bits set here or not.
+		// Since it is ambiguous, storing them separately is the easiest to implement
+		elm327_config.priority_bits = elm327_parse_hex_str(command_str+2, 2) & 0x1F;
+		elm327_config.header = elm327_parse_hex_str(command_str+4, 6);
+		elm327_config.header_is_set = 1;
+	}
+	else
+	{
+		return 0;
+	}
+
+	return (char*)ok_str;
+}
+
+static char* elm327_set_priority_bits(const char* command_str)
+{
+	size_t arg_size = strlen(command_str+2);
+
+	if(arg_size != 2) return 0;
+
+	// Only save 5 bits
+	elm327_config.priority_bits = elm327_parse_hex_str(command_str+2, arg_size) & 0x1F;
+
+	return (char*)ok_str;
+}
+
+/*
+ * Could be
+ * - ATCRA
+ * - ATCRA xyz
+ * - ATCRA wwxxyyzz
+ *
+ * TODO: this should handle "X" characters. That would be best handled with a
+ * mask property in the config. This mask property would be the the same one
+ * that is set by the (not yet implemented) CM command.
+ */
+static char* elm327_set_receive_address(const char* command_str)
+{
+	size_t arg_size = strlen(command_str+3);
+
+	if(arg_size == 0)
+	{
+		elm327_config.rx_address_is_set = 0;
+	}
+	else if(arg_size == 3 || arg_size == 8)
+	{
+		elm327_config.rx_address_is_set = 1;
+		elm327_config.rx_address = elm327_parse_hex_str(command_str+3, arg_size);
+	}
+	else
+	{
+		return 0;
+	}
 
 	return (char*)ok_str;
 }
@@ -219,22 +346,19 @@ static char* elm327_set_protocol(const char* command_str)
 	elm327_config.protocol = command_str[2];
 	ESP_LOGI(TAG, "elm327_config.protocol: %c", elm327_config.protocol);
 
+	// The header should not be reset when the protocol is changed
+	// unless protocol autoscanning is being used. And even in that case
+	// the header bytes should revert to their set value after the
+	// autoscanning is complete. See the 2nd and 3rd paragraphs of the
+	// "SH xx yy zz" section of the ELM docs.
+	//
+	// In some cases Carscanner sends the header first and then changes
+	// the protocol.
 	if(elm327_config.protocol == '6' || elm327_config.protocol == '7')
 	{
 		can_disable();
 		vTaskDelay(pdMS_TO_TICKS(15));
 		can_set_bitrate(CAN_500K);
-
-		if(elm327_config.protocol == '7')
-		{
-			elm327_config.ecu_address = 0x18DB33F1;
-//			elm327_config.ecu_address = 0x18DAF10A;
-		}
-		else
-		{
-			elm327_config.ecu_address = 0x7DF;
-		}
-
 		can_enable();
 		vTaskDelay(pdMS_TO_TICKS(15));
 	}
@@ -243,16 +367,6 @@ static char* elm327_set_protocol(const char* command_str)
 		can_disable();
 		vTaskDelay(pdMS_TO_TICKS(15));
 		can_set_bitrate(CAN_250K);
-		if(elm327_config.protocol == '9')
-		{
-			elm327_config.ecu_address = 0x18DB33F1;
-//			elm327_config.ecu_address = 0x18DAF10A;
-
-		}
-		else
-		{
-			elm327_config.ecu_address = 0x7DF;
-		}
 		can_enable();
 		vTaskDelay(pdMS_TO_TICKS(15));
 	}
@@ -336,32 +450,77 @@ static char* elm327_input_voltage(const char* command_str)
 	return (char*)volt;
 }
 
+static uint32_t elm327_get_identifier()
+{
+	if(!elm327_config.header_is_set) {
+		switch(elm327_config.protocol) {
+			case '6':
+			case '8':
+				// return 0x7E0
+				return 0x7DF;
+			case '7':
+			case '9':
+				// return 0x18DAF10A;
+				return 0x18DB33F1;
+			default:
+				// In theory this line shouldn't be hit,
+				// but just in case return something reasonable
+				return 0x7DF;
+		}
+	} else {
+		switch(elm327_config.protocol) {
+			case '6':
+			case '8':
+				// The TWAI api isn't clear if it handles masking the header
+				// So to be safe we mask it ourselves
+				return elm327_config.header & TWAI_STD_ID_MASK;
+			case '7':
+			case '9':
+				return (elm327_config.priority_bits << 24) | elm327_config.header;
+			default:
+				// In theory this line shouldn't be hit,
+				// but just in case return something reasonable
+				return elm327_config.header;
+		}
+	}
+}
+
+/*
+ * TODO: this should support the CM and CF commands.
+ *
+ * It isn't clear if setting the priority bits with the CP should change the
+ * default filter. Based on the commands sent by Carscanner it seems like the CP
+ * priority bits do not change the default filter.
+ */
+static uint8_t elm327_should_receive(twai_message_t *rx_frame)
+{
+	uint32_t identifier = rx_frame->identifier;
+	if(elm327_config.rx_address_is_set)
+	{
+		return identifier == elm327_config.rx_address;
+	}
+	else
+	{
+		if(rx_frame->extd)
+		{
+			return identifier >= 0x18DAF100 && identifier <= 0x18DAF1FF;
+		}
+		else
+		{
+			return identifier >= 0x7E8 && identifier <= 0x7EF;
+		}
+	}
+}
 
 static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 {
 	twai_message_t txframe;
-	uint8_t service_num;
+	uint8_t cmd_data_length;
 
 	ESP_LOGI(TAG, "PID req, cmd_buffer: %s", cmd);
 	ESP_LOG_BUFFER_HEX(TAG, cmd, strlen(cmd));
 
-	if(!strncmp(cmd, "01",2))
-	{
-		service_num = SERVICE_01;
-	}
-	else if(!strncmp(cmd, "09",2))
-	{
-		service_num = SERVICE_09;
-	}
-	else
-	{
-		service_num = SERVICE_UNKNOWN;
-	}
-
-	//return if length > 4
-
-
-	if((service_num == SERVICE_01 || service_num == SERVICE_09) && (elm327_config.protocol != '6') && (elm327_config.protocol != '8') && (elm327_config.protocol != '7') && (elm327_config.protocol != '9'))
+	if((elm327_config.protocol != '6') && (elm327_config.protocol != '8') && (elm327_config.protocol != '7') && (elm327_config.protocol != '9'))
 	{
 		if(elm327_config.protocol == '1' || elm327_config.protocol == '2')
 		{
@@ -374,163 +533,176 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 			elm327_response((char*)rsp, 0, queue);
 		}
 
+		return 0;
 	}
-	else
+
+	twai_message_t rx_frame;
+
+	txframe.identifier = elm327_get_identifier();
+	txframe.extd = elm327_config.protocol == '7' || elm327_config.protocol == '9';
+
+	txframe.rtr = 0;
+	// Pad the data
+	txframe.data[0] = 0xAA;
+	txframe.data[1] = 0xAA;
+	txframe.data[2] = 0xAA;
+	txframe.data[3] = 0xAA;
+	txframe.data[4] = 0xAA;
+	txframe.data[5] = 0xAA;
+	txframe.data[6] = 0xAA;
+	txframe.data[7] = 0xAA;
+
+	uint8_t req_expected_rsp = 0xFF;
+
+	// If the command length is odd then the last digit is the number of frames
+	// to expect in response. This is an optimization supported by the ELM327
+	// protocol. It is so the OBD2 device doesn't have to wait to see if there
+	// are more frames. Once it gets the expected number it can stop waiting and
+	// return the result.
+	if(strlen(cmd) % 2 == 1)
 	{
-		twai_message_t rx_frame;
-
-		txframe.identifier = elm327_config.ecu_address;
-		if(elm327_config.ecu_address > TWAI_STD_ID_MASK)
+		// FIXME: this should use hex conversion since the expected response
+		// frames could be more than 9.
+		req_expected_rsp = cmd[strlen(cmd)-1] - 0x30;
+		cmd[strlen(cmd)-1] = 0;
+		if(req_expected_rsp == 0 || req_expected_rsp > 9)
 		{
-			txframe.extd = true;
+			req_expected_rsp = 0xFF;
 		}
-		else txframe.extd = false;
+		ESP_LOGW(TAG, "req_expected_rsp 1: %u", req_expected_rsp);
+	}
 
-		txframe.rtr = 0;
-		txframe.data[0] = 0xAA;
-		txframe.data[1] = 0xAA;
-		txframe.data[2] = 0xAA;
-		txframe.data[3] = 0xAA;
-		txframe.data[4] = 0xAA;
-		txframe.data[5] = 0xAA;
-		txframe.data[6] = 0xAA;
-		txframe.data[7] = 0xAA;
+	cmd_data_length = strlen(cmd)/2;
+	if(cmd_data_length > 7)
+	{
+		// commands can't be longer than 7 bytes unless flow control is used
+		// FIXME: this should use the linefeed setting and match the number of
+		// `\r`s that are normally sent.
+		strcat(rsp, "?\r>");
+		elm327_response((char*)rsp, 0, queue);
+		return 0;
+	}
 
-		uint16_t req_pid = 0;
-		uint8_t req_mode = 0;
-		uint8_t req_expected_rsp = 0xFF;
+	txframe.data[0] = cmd_data_length;
+	elm327_fill_data_from_hex_str(cmd, &txframe.data[1], cmd_data_length);
 
-//		if(strlen(cmd) == 4 || strlen(cmd) == 5)
-		if(service_num == SERVICE_01 || service_num == SERVICE_09)
+	// CAN frames always have a data length code of 8, this is different than the
+	// PCI byte (txframe.data[0])
+	txframe.data_length_code = 8;
+	txframe.self = 0;
+
+	// if(txframe.extd == 0)
+	// {
+	// 	ESP_LOGI(TAG, "sending %03X", txframe.identifier&0xFFF);
+	// }
+	// else
+	// {
+	// 	ESP_LOGI(TAG, "sending %08X", txframe.identifier&TWAI_EXTD_ID_MASK);
+	// }
+	// ESP_LOG_BUFFER_HEX(TAG, txframe.data, 8);
+
+	can_send(&txframe, 1);
+	TickType_t xtimeout = (elm327_config.req_timeout*4.096) / portTICK_PERIOD_MS;
+	TickType_t xwait_time;
+	int64_t txtime = esp_timer_get_time();
+	uint8_t timeout_flag = 0;
+	uint8_t rsp_found = 0;
+	uint8_t number_of_rsp = 0;
+	char tmp[10];
+	xwait_time = xtimeout;
+	memset(tmp, 0, sizeof(tmp));
+	ESP_LOGW(TAG, "req_expected_rsp: %u", req_expected_rsp);
+	while(timeout_flag == 0)
+	{
+		if( xQueueReceive(*can_rx_queue, ( void * ) &rx_frame, xwait_time) == pdPASS )
 		{
-			if(strlen(cmd) == 5)
+			xwait_time = xtimeout;
+			// if(rx_frame.extd == 0)
+			// {
+			// 	ESP_LOGI(TAG, "received %03X %02X", rx_frame.identifier&0xFFF,rx_frame.data[0]);
+			// }
+			// else
+			// {
+			// 	ESP_LOGI(TAG, "received %08X %02X", rx_frame.identifier&TWAI_EXTD_ID_MASK,rx_frame.data[0]);
+			// }
+
+			if(elm327_should_receive(&rx_frame))
 			{
-				req_expected_rsp = cmd[4] - 0x30;
-				cmd[4] = 0;
-				if(req_expected_rsp == 0 && req_expected_rsp > 9)
+				//reset timeout after response is received
+				rsp_found = 1;
+				number_of_rsp++;
+				// Based on the "CAF0 AND CAF1" section of the ELM doc, if headers are shown
+				// the PCI byte(s) (usually just data[0]) should be printed.
+				if(elm327_config.show_header)
 				{
-					req_expected_rsp = 0xFF;
-				}
-				ESP_LOGW(TAG, "req_expected_rsp 1: %u", req_expected_rsp);
-			}
-
-			uint32_t value = strtol((char *) cmd, NULL, 16);
-			uint8_t pidnum = (uint8_t)(value & 0xFF);
-			uint8_t mode = (uint8_t)((value >> 8) & 0xFF);
-
-//			if(req_expected_rsp == 0xFF && elm327_config.ecu_address != 0x7DF && elm327_config.ecu_address != 0x18DB33F1)
-			if(0)
-			{
-				req_expected_rsp = service_01_rsp_len[0];
-			}
-
-            txframe.data[0] = 2;
-            txframe.data[1] = mode;
-            txframe.data[2] = pidnum;
-			txframe.data_length_code = 8;
-			req_pid = pidnum;
-			req_mode = mode;
-		}
-		else if(strlen(cmd) == 6)
-		{
-
-//		        	req_pid = pidnum;
-		}
-		txframe.self = 0;
-		can_send(&txframe, 1);
-		TickType_t xtimeout = (elm327_config.req_timeout*4.096) / portTICK_PERIOD_MS;
-		TickType_t xwait_time;
-		int64_t txtime = esp_timer_get_time();
-		uint8_t timeout_flag = 0;
-		uint8_t rsp_found = 0;
-		uint8_t number_of_rsp = 0;
-		char tmp[10];
-		xwait_time = xtimeout;
-		memset(tmp, 0, sizeof(tmp));
-		ESP_LOGW(TAG, "req_expected_rsp: %u", req_expected_rsp);
-		while(timeout_flag == 0)
-		{
-			if( xQueueReceive(*can_rx_queue, ( void * ) &rx_frame, xwait_time) == pdPASS )
-			{
-				xwait_time = xtimeout;
-				if((rx_frame.identifier >= 0x7E8 && rx_frame.identifier <= 0x7EF) || (rx_frame.identifier >= 0x18DAF100 && rx_frame.identifier <= 0x18DAF1FF ))
-				{
-					//reset timeout after response is received
-					if((rx_frame.data[2] == req_pid) || (rx_frame.data[1] == 0x7F && rx_frame.data[2] == req_mode))
+					if(rx_frame.extd == 0)
 					{
-						rsp_found = 1;
-						number_of_rsp++;
-						if(elm327_config.header)
-						{
-							if(rx_frame.extd == 0)
-							{
-								sprintf((char*)rsp, "%03X%02X", rx_frame.identifier&0xFFF,rx_frame.data[0]);
-							}
-							else
-							{
-								sprintf((char*)rsp, "%08X%02X", rx_frame.identifier&TWAI_EXTD_ID_MASK,rx_frame.data[0]);
-							}
-
-						}
-
-//									ESP_LOGI(TAG, "ELM327 send 1: %s", rsp);
-						for (int i = 0; i < rx_frame.data[0]; i++)
-						{
-							sprintf((char*)tmp, "%02X", rx_frame.data[1+i]);
-							strcat((char*)rsp, (char*)tmp);
-						}
-
-						strcat((char*)rsp, "\r");
-						ESP_LOGW(TAG, "ELM327 send: %s", rsp);
-//						ESP_LOG_BUFFER_HEX(TAG, rsp, strlen(rsp));
-						elm327_response(rsp, 0, queue);
-						memset(rsp, 0, strlen(rsp));
-//						strcat((char*)rsp, "\r");
-						if(req_expected_rsp != 0xFF)
-						{
-							if(req_expected_rsp == number_of_rsp)
-							{
-								timeout_flag = 1;
-								break;
-							}
-						}
-
+						sprintf((char*)rsp, "%03X%02X", rx_frame.identifier&0xFFF,rx_frame.data[0]);
 					}
-					else// check if 16bit
+					else
 					{
-
+						sprintf((char*)rsp, "%08X%02X", rx_frame.identifier&TWAI_EXTD_ID_MASK,rx_frame.data[0]);
 					}
+
 				}
-				else
+
+//				ESP_LOGI(TAG, "ELM327 send 1: %s", rsp);
+
+				int rx_frame_data_length = rx_frame.data[0];
+
+				// If this is a first frame, consecutive frame, or flow control frame the PCI (rx_frame.data[0]) will
+				// not be a valid length without some processing, so just print all 7 bytes
+				if(rx_frame_data_length > 7) rx_frame_data_length = 7;
+
+				for (int i = 0; i < rx_frame_data_length; i++)
 				{
-					xwait_time -= (((esp_timer_get_time() - txtime)/1000)/portTICK_PERIOD_MS);
-					ESP_LOGI(TAG, "xwait_time: %d", xwait_time);
-					if(xwait_time > (elm327_config.req_timeout*4.096))
+					sprintf((char*)tmp, "%02X", rx_frame.data[1+i]);
+					strcat((char*)rsp, (char*)tmp);
+				}
+
+				strcat((char*)rsp, "\r");
+				ESP_LOGW(TAG, "ELM327 send: %s", rsp);
+//				ESP_LOG_BUFFER_HEX(TAG, rsp, strlen(rsp));
+				elm327_response(rsp, 0, queue);
+				memset(rsp, 0, strlen(rsp));
+//				strcat((char*)rsp, "\r");
+				if(req_expected_rsp != 0xFF)
+				{
+					if(req_expected_rsp == number_of_rsp)
 					{
-						xwait_time = 0;
 						timeout_flag = 1;
+						break;
 					}
 				}
 			}
 			else
 			{
-				timeout_flag = 1;
+				xwait_time -= (((esp_timer_get_time() - txtime)/1000)/portTICK_PERIOD_MS);
+				ESP_LOGI(TAG, "xwait_time: %d", xwait_time);
+				if(xwait_time > (elm327_config.req_timeout*4.096))
+				{
+					xwait_time = 0;
+					timeout_flag = 1;
+				}
 			}
-		}
-
-		ESP_LOGW(TAG, "Response time: %u", (uint32_t)((esp_timer_get_time() - txtime)/1000));
-
-		if(rsp_found == 0)
-		{
-			strcat((char*)rsp, "NO DATA\r\r>");
 		}
 		else
 		{
-			strcat((char*)rsp, "\r>");
+			timeout_flag = 1;
 		}
-		elm327_response(rsp, 0, queue);
-
 	}
+
+	ESP_LOGW(TAG, "Response time: %u", (uint32_t)((esp_timer_get_time() - txtime)/1000));
+
+	if(rsp_found == 0)
+	{
+		strcat((char*)rsp, "NO DATA\r\r>");
+	}
+	else
+	{
+		strcat((char*)rsp, "\r>");
+	}
+	elm327_response(rsp, 0, queue);
 
 	return 0;
 }
@@ -538,15 +710,17 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 
 const xelm327_cmd_t elm327_commands[] = {
 											{"dpn", elm327_describe_protocol_num},//describe protocol by number
+											{"cra", elm327_set_receive_address},
+											{"cp", elm327_set_priority_bits},// set five most significant bits of 29bit header
 											{"dp", elm327_describe_protocol},//describe current protocol
-											{"sh", elm327_set_header},// set header to xx yy zz
+											{"sh", elm327_set_header},// set header to xyz, xx yy zz, or ww xx yy zz
 											{"at", elm327_return_ok},//adaptive timing control
 											{"sp", elm327_set_protocol},//set protocol to h and save as new default, 6, 7, 8, 9
 																	 // or ah	set protocol to auto, h
 											{"rv", elm327_input_voltage},//read input voltage
 											{"pc", elm327_return_ok},//close protocol
 											{"st", elm327_set_timeout},//set timeout
-											{"d", elm327_return_ok},//set all to defaults
+											{"d", elm327_restore_defaults_or_display_dlc},//set all to defaults or change display DLC
 											{"z", elm327_reset_all},// reset all/software reset
 											{"s", elm327_return_ok},// printing of spaces off or on
 											{"e", elm327_set_echo},// echo off or on
@@ -682,7 +856,7 @@ int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, twai_message_t *frame, Queu
 //				{
 //					twai_message_t rx_frame;
 //
-//					frame->identifier = elm327_config.ecu_address;
+//					frame->identifier = elm327_config.header;
 //					frame->extd = false;
 //					frame->rtr = 0;
 //					frame->data[0] = 0xAA;
@@ -748,7 +922,7 @@ int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, twai_message_t *frame, Queu
 //								{
 //									rsp_found = 1;
 //									number_of_rsp++;
-//									if(elm327_config.header)
+//									if(elm327_config.show_header)
 //									{
 //										sprintf((char*)cmd_response, "%03X%02X", rx_frame.identifier&0xFFF,rx_frame.data[0]);
 //									}
