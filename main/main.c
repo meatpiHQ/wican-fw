@@ -159,7 +159,10 @@ static void can_tx_task(void *pvParameters)
 			}
 			else if(ucTCP_RX_Buffer.dev_channel == DEV_UART)
 			{
-				slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xmsg_uart_tx_queue);
+				if(!config_server_mqtt_en_config())
+				{
+					slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xmsg_uart_tx_queue);
+				}
 			}
 		}
 		else if(protocol == REALDASH)
@@ -259,11 +262,7 @@ static void can_rx_task(void *pvParameters)
 				}
 
 
-				if(mqtt_connected())
-				{
-//					mqtt_publish_can(&rx_msg);
-					xQueueSend( xmsg_mqtt_rx_queue, ( void * ) &rx_msg, pdMS_TO_TICKS(0) );
-				}
+
 
 				if(ucTCP_TX_Buffer.usLen != 0)
 				{
@@ -277,9 +276,17 @@ static void can_rx_task(void *pvParameters)
 					}
 					else if(project_hardware_rev == WICAN_USB_V100)
 					{
-						xQueueSend( xmsg_uart_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
+						if(!config_server_mqtt_en_config())
+						{
+							xQueueSend( xmsg_uart_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
+						}
 					}
 				}
+			}
+			if(mqtt_connected())
+			{
+//					mqtt_publish_can(&rx_msg);
+				xQueueSend( xmsg_mqtt_rx_queue, ( void * ) &rx_msg, pdMS_TO_TICKS(0) );
 			}
         }
         vTaskDelay(pdMS_TO_TICKS(1));
@@ -314,8 +321,8 @@ void app_main(void)
     xMsg_Rx_Queue = xQueueCreate(100, sizeof( xdev_buffer) );
     xMsg_Tx_Queue = xQueueCreate(100, sizeof( xdev_buffer) );
     xmsg_ws_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
-    xmsg_ble_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
-    xmsg_uart_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
+
+
 //    xmsg_obd_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
 	config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
 
@@ -420,12 +427,12 @@ void app_main(void)
     if(config_server_get_ble_config())
     {
     	int pass = config_server_ble_pass();
-
+    	xmsg_ble_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
     	ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, pass, &ble_uid[0]);
     }
 
-    xTaskCreate(can_rx_task, "can_rx_task", 4096, (void*)AF_INET, 5, NULL);
-    xTaskCreate(can_tx_task, "can_tx_task", 4096, (void*)AF_INET, 5, NULL);
+    xTaskCreate(can_rx_task, "can_rx_task", 2048, (void*)AF_INET, 5, NULL);
+    xTaskCreate(can_tx_task, "can_tx_task", 2048, (void*)AF_INET, 5, NULL);
 
     const esp_partition_t *running = esp_ota_get_running_partition();
     esp_app_desc_t running_app_info;
@@ -438,7 +445,12 @@ void app_main(void)
         {
         	project_hardware_rev = WICAN_USB_V100;
         	ESP_LOGI(TAG, "project_hardware_rev: USB");
-        	wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
+        	if(!config_server_mqtt_en_config())
+        	{
+        	    xmsg_uart_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
+        		wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
+        	}
+
         }
         else
         {
