@@ -237,11 +237,11 @@ int mqtt_connected(void)
 	else return 0;
 }
 
-
+#define JSON_BUF_SIZE		2048
 static void mqtt_task(void *pvParameters)
 {
 	static xdev_buffer tx_buffer;
-	static char json_buffer[1600] = {0};
+	static char json_buffer[JSON_BUF_SIZE] = {0};
 	static char tmp[150];
 	twai_message_t tx_frame;
 	static char mqtt_topic[128];
@@ -280,6 +280,11 @@ static void mqtt_task(void *pvParameters)
 																												tx_frame.extd?"true":"false",tx_frame.data[0], tx_frame.data[1], tx_frame.data[2], tx_frame.data[3],
 																												tx_frame.data[4], tx_frame.data[5], tx_frame.data[6], tx_frame.data[7]);
 					strcat((char*)json_buffer, (char*)tmp);
+
+					if(strlen(json_buffer) > (JSON_BUF_SIZE - 100))
+					{
+						break;
+					}
 				}
 				json_buffer[strlen(json_buffer)-1] = 0;
 			}
