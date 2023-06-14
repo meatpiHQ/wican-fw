@@ -37,6 +37,7 @@
 #include "can.h"
 #include "config_server.h"
 #include "gvret.h"
+#include "comm_server.h"
 
 #define TAG 		__func__
 
@@ -728,11 +729,15 @@ static void gvret_broadcast_task(void *pvParameters)
 	while(1)
 	{
 		vTaskDelay(pdMS_TO_TICKS(1000));
-        int err = sendto(sock, buff, 4, 0, (struct sockaddr *)&broadcastAddr, sizeof(broadcastAddr));
-        if (err < 0) {
-            ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
-            break;
-        }
+		if(!tcp_port_open())
+		{
+			int err = sendto(sock, buff, 4, 0, (struct sockaddr *)&broadcastAddr, sizeof(broadcastAddr));
+			if (err < 0)
+			{
+				ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
+//				break;
+			}
+		}
 	}
 
 }
