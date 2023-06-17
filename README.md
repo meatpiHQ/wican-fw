@@ -76,7 +76,8 @@
 - The OBD2 adapter is not designed to powered of the USB connecter. The USB connector can power the adapter to flash custom firmware or hardreset the deivce and can also be used for debuging.
 - It is highly recommanded to turn OFF the BLE if not used. Otherwise it might affect the preformance.
 - When the BLE is connected, the device configuration access point will be disabled i.e you won't be able to configure the device unless you disconnect the BLE, by turning off the BLE on your phone or device.
-
+- If AP+Station mode is enabled, only use station IP to communicate with the device and AP must be used for configuration only.
+  
 # **API**
 [API Documentation](https://drive.google.com/drive/folders/1qJelUAHGrn_YbNIP0Jk_KmNENG-hKbtl?usp=sharing)
 
