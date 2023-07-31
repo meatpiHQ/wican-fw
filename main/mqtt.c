@@ -202,7 +202,7 @@ static void mqtt_parse_data(void *handler_args, esp_event_base_t base, int32_t e
 				goto end;
 			}
 
-			can_frame.identifier = cJSON_IsTrue(frame_rtr) ? frame_id->valueint&TWAI_EXTD_ID_MASK:frame_id->valueint&TWAI_STD_ID_MASK;//(frame_id->valuedouble > 0x1FFFFFFF) ? 0x1FFFFFFF:frame_id->valuedouble;
+			can_frame.identifier = cJSON_IsTrue(frame_extd) ? frame_id->valueint&TWAI_EXTD_ID_MASK:frame_id->valueint&TWAI_STD_ID_MASK;//(frame_id->valuedouble > 0x1FFFFFFF) ? 0x1FFFFFFF:frame_id->valuedouble;
 			can_frame.data_length_code = (frame_dlc->valuedouble > 8) ? 8:frame_dlc->valuedouble;
 			can_frame.extd = cJSON_IsTrue(frame_extd)?1:0;
 			can_frame.rtr = cJSON_IsTrue(frame_rtr)?1:0;;
