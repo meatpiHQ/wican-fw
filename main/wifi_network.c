@@ -218,6 +218,15 @@ void wifi_network_init(char* sta_ssid, char* sta_pass)
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
+    if(config_server_get_ble_config())
+    {
+    	ESP_ERROR_CHECK( esp_wifi_set_ps(WIFI_PS_MIN_MODEM) );
+    }
+    else
+	{
+		ESP_ERROR_CHECK( esp_wifi_set_ps(WIFI_PS_NONE) );
+	}
+
     esp_event_handler_instance_t instance_any_id;
     esp_event_handler_instance_t instance_got_ip;
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
