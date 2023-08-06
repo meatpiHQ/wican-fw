@@ -377,7 +377,12 @@ Use the [**ESP flash tool**](https://www.espressif.com/en/support/download/other
 
 5. Short the pins as shown, then plug in the USB cable.
 
+### OBD 
 ![image](https://user-images.githubusercontent.com/94690098/182028671-18d523de-466d-4c28-998d-c4330dd33ae7.png)
+
+### USB
+![image](https://github.com/meatpiHQ/wican-fw/assets/94690098/b9c9fe35-6ec1-4a64-8753-134fabd43c0c)
+
 
 6. After you plug in the USB cable the Orange LED will light up. Now click START button on the flash tool.
 
@@ -386,4 +391,4 @@ Use the [**ESP flash tool**](https://www.espressif.com/en/support/download/other
 
 ---
 
-© 2022 meatPi Electronics | www.meatpi.com | PO Box 5005 Clayton, VIC 3168, Australia
+© 2023 meatPi Electronics | www.meatpi.com | PO Box 5005 Clayton, VIC 3168, Australia
