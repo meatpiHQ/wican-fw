@@ -194,11 +194,11 @@ static void can_tx_task(void *pvParameters)
 		}
 	}
 }
-
+#define HEAP_CAPS   (MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
 static void can_rx_task(void *pvParameters)
 {
 //	static uint32_t num_msg = 0;
-//	static int64_t time_old = 0;
+	static int64_t time_old = 0;
 //	float bvoltage = 0;
 //	time_old = esp_timer_get_time();
 	while(1)
@@ -216,17 +216,18 @@ static void can_rx_task(void *pvParameters)
 //    		ESP_LOGI(TAG, "bvoltage: %f", bvoltage);
 //    	}
         process_led(0);
-
+    	if(esp_timer_get_time() - time_old > 1000*1000)
+    	{
+    		uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
+    		time_old = esp_timer_get_time();
+    		ESP_LOGI(TAG, "free_heap: %u", free_heap);
+//        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
+//        		num_msg = 0;
+    	}
         while(can_receive(&rx_msg, 0) ==  ESP_OK)
         {
 //        	num_msg++;
-//        	if(esp_timer_get_time() - time_old > 1000*1000)
-//        	{
-//        		time_old = esp_timer_get_time();
-//
-//        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
-//        		num_msg = 0;
-//        	}
+
         	process_led(1);
 
         	if(config_server_ws_connected())
@@ -318,9 +319,9 @@ void app_main(void)
 	gpio_set_level(CONNECTED_LED_GPIO_NUM, 1);
 	gpio_set_level(ACTIVE_LED_GPIO_NUM, 1);
 
-    xMsg_Rx_Queue = xQueueCreate(100, sizeof( xdev_buffer) );
-    xMsg_Tx_Queue = xQueueCreate(100, sizeof( xdev_buffer) );
-    xmsg_ws_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
+    xMsg_Rx_Queue = xQueueCreate(32, sizeof( xdev_buffer) );
+    xMsg_Tx_Queue = xQueueCreate(32, sizeof( xdev_buffer) );
+    xmsg_ws_tx_queue = xQueueCreate(32, sizeof( xdev_buffer) );
 
 
 //    xmsg_obd_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
@@ -387,14 +388,14 @@ void app_main(void)
 //		can_init(CAN_500K);
 		can_set_bitrate(can_datarate);
 		can_enable();
-		xmsg_obd_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
+		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
 		elm327_init(&send_to_host, &xmsg_obd_rx_queue);
 	}
 
 	if(config_server_mqtt_en_config())
 	{
 		can_set_bitrate(can_datarate);
-		xmsg_mqtt_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
+		xmsg_mqtt_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
 		can_enable();
 		mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM, &xmsg_mqtt_rx_queue);
 	}
@@ -431,7 +432,8 @@ void app_main(void)
     	ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, pass, &ble_uid[0]);
     }
 
-
+    xTaskCreate(can_rx_task, "can_rx_task", 2048, (void*)AF_INET, 5, NULL);
+    xTaskCreate(can_tx_task, "can_tx_task", 2048, (void*)AF_INET, 5, NULL);
 
     const esp_partition_t *running = esp_ota_get_running_partition();
     esp_app_desc_t running_app_info;
@@ -446,7 +448,7 @@ void app_main(void)
         	ESP_LOGI(TAG, "project_hardware_rev: USB");
         	if(!config_server_mqtt_en_config())
         	{
-        	    xmsg_uart_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
+        	    xmsg_uart_tx_queue = xQueueCreate(32, sizeof( xdev_buffer) );
         		wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
         	}
 
@@ -464,10 +466,6 @@ void app_main(void)
             }
         }
     }
-
-
-    xTaskCreate(can_rx_task, "can_rx_task", 2048, (void*)AF_INET, 5, NULL);
-    xTaskCreate(can_tx_task, "can_tx_task", 2048, (void*)AF_INET, 5, NULL);
 
     if(project_hardware_rev != WICAN_V210)
     {
