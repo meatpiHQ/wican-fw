@@ -431,8 +431,7 @@ void app_main(void)
     	ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, pass, &ble_uid[0]);
     }
 
-    xTaskCreate(can_rx_task, "can_rx_task", 2048, (void*)AF_INET, 5, NULL);
-    xTaskCreate(can_tx_task, "can_tx_task", 2048, (void*)AF_INET, 5, NULL);
+
 
     const esp_partition_t *running = esp_ota_get_running_partition();
     esp_app_desc_t running_app_info;
@@ -465,6 +464,10 @@ void app_main(void)
             }
         }
     }
+
+
+    xTaskCreate(can_rx_task, "can_rx_task", 2048, (void*)AF_INET, 5, NULL);
+    xTaskCreate(can_tx_task, "can_tx_task", 2048, (void*)AF_INET, 5, NULL);
 
     if(project_hardware_rev != WICAN_V210)
     {
