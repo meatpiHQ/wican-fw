@@ -57,6 +57,7 @@
   - [Receive Frames](#3-receive-frames)
   - [Transmit Frames](#4-transmit-frames)
   - [OBDII PID Request Over MQTT](#5-obdii-pid-request-over-mqtt)
+  - [Request Battery SoC MQTT Example](#6-request-battery-soc-mqtt-example)
 - [Home Assistant](#home-assistant)
 
 - [Firmware Update](#firmware-update)
@@ -314,7 +315,7 @@ To receive CAN frames simply subscribe to the receive topic. Each MQTT message m
 ### - Transmit Message JSON Schema:
 ![image](https://user-images.githubusercontent.com/94690098/196187228-3923204e-1b87-4ece-bb72-406e338a5831.png)
 
-## 4. OBDII PID Request Over MQTT
+## 5. OBDII PID Request Over MQTT
 
 bus: Is always 0. Reserved for future application
 dlc: Always 8
@@ -332,7 +333,7 @@ id: 29 bit OBD2 request ECU ID should be 417018865 (that's 0x18DB33F1 in HEX)
 
 ### [List of Standard PIDs](https://en.wikipedia.org/wiki/OBD-II_PIDs) 
 
-## 5. Request Battery SoC MQTT Example
+## 6. Request Battery SoC MQTT Example
 
 This PID request should work on most EVs, **however it's not possible to know it will work on certain EV model unless it's tested on that specific car model**.
 
