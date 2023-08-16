@@ -53,8 +53,10 @@
 - [ELM327 OBD2 Protocol](#elm327-obd2-protocol)
 - [MQTT](#mqtt)
   - [Status](#1-status)
-  - [Receive Frames](#2-receive-frames)
-  - [Transmit Frames](#3-transmit-frames)
+  - [MQTT TX RX Frame](#2-mqtt-tx-rx-frame)
+  - [Receive Frames](#3-receive-frames)
+  - [Transmit Frames](#4-transmit-frames)
+  - [OBDII PID Request Over MQTT](#5-obdii-pid-request-over-mqtt)
 - [Home Assistant](#home-assistant)
 
 - [Firmware Update](#firmware-update)
@@ -280,7 +282,19 @@ When the device connects to the MQTT broker it will publish a status message to 
 
 {"status": "offline"} or {"status": "online"}
 
-## 2. Receive Frames:
+## 2. MQTT TX RX Frame:
+
+```
+bus: Is always 0. Thats reserved for future application
+type: tx or rx 
+dlc: 0 to 8
+rtr: true or false
+extd: true or false
+id: 11 or 29 bit ID
+```
+**Example:** { "bus": "0", "type": "tx", "frame": [{ "id": 2015, "dlc": 8, "rtr": false, "extd": false, "data": [2, 1, 70, 170, 170, 170, 170, 170] }] };
+
+## 3. Receive Frames:
 
 To receive CAN frames simply subscribe to the receive topic. Each MQTT message might contain more than 1 frame.
 
@@ -291,13 +305,46 @@ To receive CAN frames simply subscribe to the receive topic. Each MQTT message m
 ### - Received Message JSON Schema:
 ![image](https://user-images.githubusercontent.com/94690098/196184692-40c84504-580c-449f-9876-3d373dd11560.png)
 
-## 3. Transmit Frames:
+## 4. Transmit Frames:
 
 ### - Transmit Topic: wican/xxxxxxxxxxxx/can/tx
 ### - Transmit Message JSON: 
 {"bus":0,"type":"tx","frame":[{"id":123,"dlc":8,"rtr":false,"extd":true,"data":[1,2,3,4,5,6,7,8]},{"id":124,"dlc":8,"rtr":false,"extd":true,"data":[1,2,3,4,5,6,7,8]}]}
+
 ### - Transmit Message JSON Schema:
 ![image](https://user-images.githubusercontent.com/94690098/196187228-3923204e-1b87-4ece-bb72-406e338a5831.png)
+
+## 4. OBDII PID Request Over MQTT
+
+bus: Is always 0. Reserved for future application
+dlc: Always 8
+rtr: false
+extd: false, if the car obd2 protocol is 11bit ID, 500 kbaud or 250 kbaud
+extd: true, if the car obd2 protocol is 29bit ID, 500 kbaud or 250 kbaud
+id: 11 bit OBD2 request ECU ID should be 2015 (that's 0x7DF in HEX)
+id: 29 bit OBD2 request ECU ID should be 417018865 (that's 0x18DB33F1 in HEX)
+
+![image](https://github.com/meatpiHQ/wican-fw/assets/94690098/7726d4fe-1d6f-4b1e-be93-ea4304a47942)
+
+### Example: Get ambient temp request, PID is 70
+
+{ "bus": "0", "type": "tx", "frame": [{ "id": 2015, "dlc": 8, "rtr": false, "extd": false, "data": [2, 1, 70, 170, 170, 170, 170, 170] }] };
+
+### [List of Standard PIDs](https://en.wikipedia.org/wiki/OBD-II_PIDs) 
+
+## 5. Request Battery SoC MQTT Example
+
+This PID request should work on most EVs, **however it's not possible to know it will work on certain EV model unless it's tested on that specific car model**.
+
+### Request 
+
+{"bus":"0","type":"tx","frame":[{"id":2015,"dlc":8,"rtr":false,"extd":false,"data":[2,1,91,170,170,170,170,170]}]}
+
+### Response
+
+{"bus":"0","type":"rx","ts":51561,"frame":[{"id":2024,"dlc":8,"rtr":false,"extd":false,"data":[3,65,91,**170**,0,0,0,0]}]}
+
+The SoC = (170 x 100)/255 = **66.67%**
 
 # Home Assistant
 WiCAN is able to send CAN bus messages to Home Assistant using MQTT protocol. I found that using Node-RED is the simplest way to create automation based on the CAN messages received. This short video highlights some of the steps https://youtu.be/oR5HQIUPR9I
