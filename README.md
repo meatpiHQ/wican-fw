@@ -317,6 +317,7 @@ To receive CAN frames simply subscribe to the receive topic. Each MQTT message m
 
 ## 5. OBDII PID Request Over MQTT
 
+```
 bus: Is always 0. Reserved for future application
 dlc: Always 8
 rtr: false
@@ -324,7 +325,7 @@ extd: false, if the car obd2 protocol is 11bit ID, 500 kbaud or 250 kbaud
 extd: true, if the car obd2 protocol is 29bit ID, 500 kbaud or 250 kbaud
 id: 11 bit OBD2 request ECU ID should be 2015 (that's 0x7DF in HEX)
 id: 29 bit OBD2 request ECU ID should be 417018865 (that's 0x18DB33F1 in HEX)
-
+```
 ![image](https://github.com/meatpiHQ/wican-fw/assets/94690098/7726d4fe-1d6f-4b1e-be93-ea4304a47942)
 
 ### Example: Get ambient temp request, PID is 70
