@@ -289,7 +289,7 @@ static void tcp_server_task(void *pvParameters)
         ESP_LOGE(TAG, "IPPROTO: %d", addr_family);
         goto CLEAN_UP;
     }
-    ESP_LOGI(TAG, "Socket bound, port %d", server_port);
+    ESP_LOGI(TAG, "Socket bound, port %lu", server_port);
 
     if(!udp_enable)
     {

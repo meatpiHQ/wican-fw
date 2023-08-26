@@ -17,13 +17,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-
+#include <ctype.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include  "freertos/queue.h"
 #include "freertos/event_groups.h"
 #include "esp_wifi.h"
 #include "esp_system.h"
+#include "esp_timer.h"
 #include "esp_event.h"
 #include "nvs_flash.h"
 #include "driver/gpio.h"
@@ -461,7 +462,7 @@ static char* elm327_set_timeout(const char* command_str)
 		elm327_config.req_timeout = 0x32;
 	}
 
-	ESP_LOGI(TAG, "elm327_config.req_timeout: %d", elm327_config.req_timeout);
+	ESP_LOGI(TAG, "elm327_config.req_timeout: %lu", elm327_config.req_timeout);
 
 	return (char*)ok_str;
 }
@@ -522,7 +523,7 @@ static char* elm327_input_voltage(const char* command_str)
 	}
 	else
 	{
-		sprintf(volt, "%.1f",0);
+		sprintf(volt, "%.1f",0.0f);
 	}
 	return (char*)volt;
 }
@@ -852,11 +853,11 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 				{
 					if(rx_frame.extd == 0)
 					{
-						sprintf((char*)rsp, "%03X%02X", rx_frame.identifier&0xFFF,rx_frame.data[0]);
+						sprintf((char*)rsp, "%03lX%02X", rx_frame.identifier&0xFFF,rx_frame.data[0]);
 					}
 					else
 					{
-						sprintf((char*)rsp, "%08X%02X", rx_frame.identifier&TWAI_EXTD_ID_MASK,rx_frame.data[0]);
+						sprintf((char*)rsp, "%08lX%02X", rx_frame.identifier&TWAI_EXTD_ID_MASK,rx_frame.data[0]);
 					}
 
 				}
@@ -891,7 +892,7 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 			else
 			{
 				xwait_time -= (((esp_timer_get_time() - txtime)/1000)/portTICK_PERIOD_MS);
-				ESP_LOGI(TAG, "xwait_time: %d", xwait_time);
+				ESP_LOGI(TAG, "xwait_time: %lu" , xwait_time);
 				if(xwait_time > (elm327_config.req_timeout*4.096))
 				{
 					xwait_time = 0;
@@ -905,7 +906,7 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 		}
 	}
 
-	ESP_LOGW(TAG, "Response time: %u", (uint32_t)((esp_timer_get_time() - txtime)/1000));
+	ESP_LOGW(TAG, "Response time: %" PRIu32, (uint32_t)((esp_timer_get_time() - txtime)/1000));
 
 	if(rsp_found == 0)
 	{

@@ -18,13 +18,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
+#include <inttypes.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include  "freertos/queue.h"
 #include "freertos/event_groups.h"
 #include "esp_system.h"
-#include "esp_log.h"
+//#include "esp_log.h"
 #include "driver/uart.h"
 #include "string.h"
 #include "driver/gpio.h"
@@ -49,7 +49,7 @@ static void uart_rx_task(void *arg)
         if(xQueueReceive(uart0_queue, (void * )&event, (portTickType)portMAX_DELAY))
         {
             bzero(rx_buffer.ucElement, sizeof(rx_buffer.ucElement));
-//            ESP_LOGI(TAG, "uart[%d] event:", UART_NUM_0);
+//            //ESP_LOGI(TAG, "uart[%d] event:", UART_NUM_0);
             switch(event.type)
             {
                 //Event of UART receving data
@@ -57,9 +57,9 @@ static void uart_rx_task(void *arg)
                 other types of events. If we take too much time on data event, the queue might
                 be full.*/
                 case UART_DATA:
-//                    ESP_LOGI(TAG, "[UART DATA]: %d", event.size);
+//                    //ESP_LOGI(TAG, "[UART DATA]: %d", event.size);
 //                    uart_read_bytes(UART_NUM_0, dtmp, event.size, portMAX_DELAY);
-//                    ESP_LOGI(TAG, "[DATA EVT]:");
+//                    //ESP_LOGI(TAG, "[DATA EVT]:");
 //                    uart_write_bytes(UART_NUM_0, (const char*) dtmp, event.size);
 						rx_buffer.usLen = uart_read_bytes(UART_NUM_0, rx_buffer.ucElement, RX_BUF_SIZE, 1 / portTICK_PERIOD_MS);
 						rx_buffer.dev_channel = DEV_UART;
@@ -72,7 +72,7 @@ static void uart_rx_task(void *arg)
 
                 //Others
                 default:
-//                    ESP_LOGI(__func__, "uart event type: %d", event.type);
+//                    //ESP_LOGI(__func__, "uart event type: %d", event.type);
 //                		sprintf((char*)dtmp,"uart event type: %d", event.type);
 //                		uart_write_bytes(UART_NUM_0, (const char*) dtmp, strlen((char*)dtmp));
                     break;

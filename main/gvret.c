@@ -63,14 +63,14 @@ void gvert_tmr_set_start(void)
 	xSemaphoreGive(xgvert_tmr_semaphore);
 }
 
-uint32_t gvert_tmr_get()
+int64_t gvert_tmr_get()
 {
 	int64_t ret = 0;
 	xSemaphoreTake(xgvert_tmr_semaphore, portMAX_DELAY);
 	ret = esp_timer_get_time() - gvert_tmr_start_time;
 	xSemaphoreGive(xgvert_tmr_semaphore);
 
-	return (uint32_t)ret;
+	return (int64_t)ret;
 }
 
 static void periodic_timer_callback(void* arg)
@@ -93,7 +93,7 @@ uint8_t checksumCalc(uint8_t *buffer, int length)
 void gvert_setup(EEPROMSettings *settings)
 {
 	can_disable();
-	ESP_LOGI(__func__, "settings->CAN0Speed: %u", settings->CAN0Speed);
+	ESP_LOGI(__func__, "settings->CAN0Speed: %lu", settings->CAN0Speed);
 	for(uint8_t i = 0; i < sizeof(can_speed)/sizeof(uint32_t); i++)
 	{
 		if(can_speed[i] == settings->CAN0Speed)

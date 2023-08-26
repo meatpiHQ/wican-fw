@@ -657,16 +657,16 @@ static esp_err_t upload_post_handler(httpd_req_t *req)
     const esp_partition_t *running = esp_ota_get_running_partition();
 
     if (configured != running) {
-        ESP_LOGW(TAG, "Configured OTA boot partition at offset 0x%08x, but running from offset 0x%08x",
+        ESP_LOGW(TAG, "Configured OTA boot partition at offset 0x%08lx, but running from offset 0x%08lx",
                  configured->address, running->address);
         ESP_LOGW(TAG, "(This can happen if either the OTA boot data or preferred boot image become corrupted somehow.)");
     }
-    ESP_LOGI(TAG, "Running partition type %d subtype %d (offset 0x%08x)",
+    ESP_LOGI(TAG, "Running partition type %d subtype %d (offset 0x%08lx)",
              running->type, running->subtype, running->address);
 
     update_partition = esp_ota_get_next_update_partition(NULL);
     assert(update_partition != NULL);
-    ESP_LOGI(TAG, "Writing to partition subtype %d at offset 0x%x",
+    ESP_LOGI(TAG, "Writing to partition subtype %d at offset 0x%lx",
              update_partition->subtype, update_partition->address);
     err = esp_ota_begin(update_partition, OTA_SIZE_UNKNOWN, &update_handle);
     if (err != ESP_OK)
@@ -720,7 +720,7 @@ static esp_err_t upload_post_handler(httpd_req_t *req)
     		buf = ret + 3;
     		remaining -= (buf - boundary_start);
     		ESP_LOGI(TAG, "Real Remaining size : %d", remaining);
-    		ESP_LOGI(TAG, "Downloading file...", remaining);
+    		
     		received -= (buf - boundary_start);
         }
         total_size += received;
@@ -745,7 +745,7 @@ static esp_err_t upload_post_handler(httpd_req_t *req)
     }
 
     /* Close file upon upload completion */
-    ESP_LOGI(TAG, "File reception complete: %u", total_size);
+    ESP_LOGI(TAG, "File reception complete: %lu", total_size);
 
     if ((received = httpd_req_recv(req, buf, SCRATCH_BUFSIZE)) <= 0)
     {
@@ -1333,7 +1333,7 @@ static httpd_handle_t config_server_init(void)
 		fseek(f, 0, SEEK_SET);
 
 		device_config_file = malloc(filesize+1);
-		ESP_LOGI(__func__, "File size: %u", filesize);
+		ESP_LOGI(__func__, "File size: %d", filesize);
 		fseek(f, 0, SEEK_SET);
 		fread(device_config_file, sizeof(char), filesize, f);
 		device_config_file[filesize] = 0;

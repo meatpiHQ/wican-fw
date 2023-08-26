@@ -17,7 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-
+#include <inttypes.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include  "freertos/queue.h"
@@ -29,6 +29,7 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include <string.h>
+#include "esp_timer.h"
 #include "comm_server.h"
 #include "lwip/sockets.h"
 #include "driver/twai.h"
@@ -49,6 +50,7 @@
 #include "wc_uart.h"
 #include "elm327.h"
 #include "mqtt.h"
+#include "esp_mac.h"
 
 #define TAG 		__func__
 #define TX_GPIO_NUM             	0
@@ -220,7 +222,7 @@ static void can_rx_task(void *pvParameters)
     	{
     		uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
     		time_old = esp_timer_get_time();
-    		ESP_LOGI(TAG, "free_heap: %u", free_heap);
+    		ESP_LOGI(TAG, "free_heap: %lu", free_heap);
 //        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
 //        		num_msg = 0;
     	}

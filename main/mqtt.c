@@ -43,8 +43,6 @@
 #include "esp_ota_ops.h"
 #include "nvs.h"
 #include "nvs_flash.h"
-#include "driver/adc.h"
-#include "esp_adc_cal.h"
 #include "sleep_mode.h"
 #include "ble.h"
 #include "esp_sleep.h"
@@ -74,7 +72,7 @@ static QueueHandle_t *xmqtt_tx_queue;
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
-    ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%d", base, event_id);
+    ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%ld", base, event_id);
     esp_mqtt_event_handle_t event = event_data;
 //    esp_mqtt_client_handle_t client = event->client;
 
@@ -207,7 +205,7 @@ static void mqtt_parse_data(void *handler_args, esp_event_base_t base, int32_t e
 			can_frame.extd = cJSON_IsTrue(frame_extd)?1:0;
 			can_frame.rtr = cJSON_IsTrue(frame_rtr)?1:0;;
 
-			ESP_LOGI(TAG, " frame_id: %u, frame_dlc: %u ", (uint32_t)frame_id->valuedouble, (uint32_t)frame_dlc->valuedouble);
+			ESP_LOGI(TAG, " frame_id: %lu, frame_dlc: %lu ", (uint32_t)frame_id->valuedouble, (uint32_t)frame_dlc->valuedouble);
 
 			for (int i = 0 ; i < cJSON_GetArraySize(frame_data) ; i++)
 			{
@@ -268,7 +266,7 @@ static void mqtt_task(void *pvParameters)
 	//		sprintf(mqtt_data, "{\"bus\":\"0\",\"type\":\"rx\",\"frame\":{\"id\":%u,\"dlc\":%u,\"rtr\":%s,\"extd\":%s,\"data\":[%u,%u,%u,%u,%u,%u,%u,%u]}}",
 	//				message->identifier, message->data_length_code, message->rtr?"true":"false", message->extd?"true":"false",message->data[0], message->data[1], message->data[2], message->data[3],
 	//				message->data[4], message->data[5], message->data[6], message->data[7]);
-			sprintf(json_buffer, "{\"bus\":\"0\",\"type\":\"rx\",\"ts\":%u,\"frame\":[", (pdTICKS_TO_MS(xTaskGetTickCount())%60000));
+			sprintf(json_buffer, "{\"bus\":\"0\",\"type\":\"rx\",\"ts\":%lu,\"frame\":[", (pdTICKS_TO_MS(xTaskGetTickCount())%60000));
 	//pdTICKS_TO_MS(xTaskGetTickCount())%60000
 
 			if(strlen(json_buffer) < (sizeof(json_buffer) -128))
@@ -276,7 +274,7 @@ static void mqtt_task(void *pvParameters)
 				while(xQueuePeek(*xmqtt_tx_queue, ( void * ) &tx_buffer, 0) == pdTRUE)
 				{
 					xQueueReceive(*xmqtt_tx_queue, ( void * ) &tx_buffer, 0);
-					sprintf(tmp, "{\"id\":%u,\"dlc\":%u,\"rtr\":%s,\"extd\":%s,\"data\":[%u,%u,%u,%u,%u,%u,%u,%u]},",tx_frame.identifier, tx_frame.data_length_code, tx_frame.rtr?"true":"false",
+					sprintf(tmp, "{\"id\":%lu,\"dlc\":%u,\"rtr\":%s,\"extd\":%s,\"data\":[%u,%u,%u,%u,%u,%u,%u,%u]},",tx_frame.identifier, tx_frame.data_length_code, tx_frame.rtr?"true":"false",
 																												tx_frame.extd?"true":"false",tx_frame.data[0], tx_frame.data[1], tx_frame.data[2], tx_frame.data[3],
 																												tx_frame.data[4], tx_frame.data[5], tx_frame.data[6], tx_frame.data[7]);
 					strcat((char*)json_buffer, (char*)tmp);
@@ -302,17 +300,29 @@ static void mqtt_task(void *pvParameters)
 void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
 {
     esp_mqtt_client_config_t mqtt_cfg = {
-        .uri = config_server_get_mqtt_url(),
-		.port = config_server_get_mqtt_port(),
-		.username = config_server_get_mqtt_user(),
-		.password = config_server_get_mmqtt_pass(),
-		.disable_auto_reconnect = false,
-		.reconnect_timeout_ms = 5000,
-		.out_buffer_size = 1024*5,
-        .buffer_size = 1024*5,
-		.lwt_topic = mqtt_status_topic,
-		.lwt_msg = "{\"status\": \"offline\"}",
-		.keepalive = 30
+		// .session.protocol_ver = MQTT_PROTOCOL_V_5,
+		.broker.address.uri = config_server_get_mqtt_url(),
+		.broker.address.port = config_server_get_mqtt_port(),
+		.credentials.username = config_server_get_mqtt_user(),
+		.credentials.authentication.password = config_server_get_mmqtt_pass(),
+		.network.disable_auto_reconnect = false,
+		.session.keepalive = 30,
+		.session.last_will.topic = mqtt_status_topic,
+		.session.last_will.msg = "{\"status\": \"offline\"}",
+		.network.reconnect_timeout_ms = 5000,
+		.buffer.size = 1024*5,
+		.buffer.out_size = 1024*5,
+//        .uri = config_server_get_mqtt_url(),
+//		.port = config_server_get_mqtt_port(),
+//		.username = config_server_get_mqtt_user(),
+//		.password = config_server_get_mmqtt_pass(),
+//		.disable_auto_reconnect = false,
+//		.reconnect_timeout_ms = 5000,
+//		.out_buffer_size = 1024*5,
+//        .buffer_size = 1024*5,
+//		.lwt_topic = mqtt_status_topic,
+//		.lwt_msg = "{\"status\": \"offline\"}",
+//		.keepalive = 30
     };
     xmqtt_tx_queue = xtx_queue;
     mqtt_led = connected_led;
@@ -320,7 +330,7 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
     sprintf(mqtt_sub_topic, "wican/%s/can/tx", device_id);
     sprintf(mqtt_status_topic, "wican/%s/status", device_id);
 
-    ESP_LOGI(TAG, "device_id: %s, mqtt_cfg.uri: %s", device_id, mqtt_cfg.uri);
+    ESP_LOGI(TAG, "device_id: %s, mqtt_cfg.uri: %s", device_id, mqtt_cfg.broker.address.uri);
 
 
     s_mqtt_event_group = xEventGroupCreate();
