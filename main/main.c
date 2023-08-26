@@ -220,9 +220,9 @@ static void can_rx_task(void *pvParameters)
         process_led(0);
     	if(esp_timer_get_time() - time_old > 1000*1000)
     	{
-    		uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
-    		time_old = esp_timer_get_time();
-    		ESP_LOGI(TAG, "free_heap: %lu", free_heap);
+    		// uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
+    		// time_old = esp_timer_get_time();
+    		// ESP_LOGI(TAG, "free_heap: %lu", free_heap);
 //        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
 //        		num_msg = 0;
     	}
@@ -503,6 +503,6 @@ void app_main(void)
 //		ESP_LOGI(TAG, "free heap : %d", xPortGetFreeHeapSize());
 //		vTaskDelay(pdMS_TO_TICKS(2000));
 //    }
-    esp_log_level_set("*", ESP_LOG_NONE);
+    // esp_log_level_set("*", ESP_LOG_NONE);
 }
 
