@@ -10,10 +10,7 @@
 <br/><br/>
 
 ---
-
-<p align="center">
-<img src="https://user-images.githubusercontent.com/94690098/182027614-9d580e96-2a8e-4fe3-8672-bb6a6fd616f2.png" >
-</p>
+![65465](https://github.com/meatpiHQ/wican-fw/assets/94690098/537b5062-cb8a-485f-9354-6c351d08aa49)
 
 ## WiCAN-USB Pinout
 
