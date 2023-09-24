@@ -503,6 +503,6 @@ void app_main(void)
 //		ESP_LOGI(TAG, "free heap : %d", xPortGetFreeHeapSize());
 //		vTaskDelay(pdMS_TO_TICKS(2000));
 //    }
-    // esp_log_level_set("*", ESP_LOG_NONE);
+    esp_log_level_set("*", ESP_LOG_NONE);
 }
 
