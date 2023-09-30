@@ -349,7 +349,8 @@ The SoC = (170 x 100)/255 = **66.67%**
 
 ## 7. CAN to JSON interpreter - Filtring 
 
-This feature allows you to convert CAN messages into JSON format, apply calculations as specified by your expressions, and send the resulting data to an MQTT broker based on defined time cycles. Below, we delve into the details of how to use this powerful feature effectively.
+
+This feature enables you to convert CAN messages into JSON format, apply calculations as specified by your expressions, and send the resulting data to an MQTT broker at predefined intervals. Below, we provide a comprehensive guide on how to effectively utilize this powerful feature.
 
 **Note: When a filter is added, all other CAN messages will be ignored, ensuring that only the configured filtered messages are sent.**
 
