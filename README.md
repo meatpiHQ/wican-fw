@@ -358,28 +358,28 @@ This feature enables you to convert CAN messages into JSON format, apply calcula
 
 
 ### Configuration Parameters:
-```
-CAN ID: Frame ID in DEC
+
+**CAN ID: Frame ID in DEC**
 This parameter refers to the CAN message identifier in decimal format.
 
-Name
+**Name**
 Specify the JSON key under which the extracted value will be stored.
 
-PID: PID Number in DEC
+**PID: PID Number in DEC**
 If the frame is a response to a PID request, set this parameter to the relevant PID number. Otherwise, for non-PID frames, it should be set to -1.
 
-Start Bit
+**Start Bit**
 Indicate the bit from which you want to commence extracting the value. For instance, if Byte 0 is represented as 0xA0 in binary (b1010 0000), 'Bit 0' would correspond to 1, 'Bit 1' to 0, and so forth.
 
-Bit Length
+**Bit Length**
 This parameter denotes the number of bits comprising the value you intend to extract.
 
-Expression
+**Expression**
 Define the mathematical operations to apply to the extracted value. It's crucial to include the letter 'V' to represent the extracted value within your expression.
 
-Cycle
+**Cycle**
 Specify the time interval in milliseconds between JSON messages sent to MQTT. The cycle time should fall within the range of 100 to 10,000 milliseconds.
-```
+
 
 ### JSON Format 
 
