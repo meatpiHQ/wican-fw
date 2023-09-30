@@ -18,6 +18,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <inttypes.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include  "freertos/queue.h"
@@ -27,7 +28,8 @@
 #include "esp_event.h"
 #include "nvs_flash.h"
 #include "driver/gpio.h"
-#include "esp_log.h"
+#include "esp_timer.h"
+//#include "esp_log.h"
 #include <string.h>
 #include "driver/twai.h"
 #include "slcan.h"
@@ -352,7 +354,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 			{
 			    if (buf[i] == 'O')
 			    {
-//			    	ESP_LOGI(TAG, "open can!");
+//			    	//ESP_LOGI(TAG, "open can!");
 			        // Open channel command
 			    	can_set_silent(0);
 			    	can_set_loopback(0);
@@ -397,7 +399,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 			    }
 			    else if (buf[i] == 'S')
 			    {
-//			    	ESP_LOGI(TAG, "set datarate");
+//			    	//ESP_LOGI(TAG, "set datarate");
 			      // Set bitrate command
 			    	state = SL_BODY;
 			    	cmd = SL_SPEED;
@@ -511,7 +513,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 						case SL_SPEED:
 						{
 							uint8_t b = ascii_to_num(buf[i]);
-//							ESP_LOGI(TAG, "buf[i]: %x", buf[i]);
+//							//ESP_LOGI(TAG, "buf[i]: PRIxx", buf[i]);
 					    	// Check for valid bitrate
 							if(b > 8)
 							{
@@ -556,7 +558,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 											((((filter[2]<<4)+filter[3]) << 16) & 0x00FF0000) |
 											((((filter[0]<<4)+filter[1]) << 24) & 0xFF000000);
 								can_set_filter(flt);
-								ESP_LOGI(TAG, "flt: 0x%x", flt);
+								//ESP_LOGI(TAG, "flt: 0xPRIxx", flt);
 								msg_index = 0;
 								state = SL_END;
 							}
@@ -573,7 +575,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 											((((mask[2]<<4)+mask[3]) << 16) & 0x00FF0000) |
 											((((mask[0]<<4)+mask[1]) << 24) & 0xFF000000);
 								can_set_mask(msk);
-								ESP_LOGI(TAG, "msk: 0x%x", msk);
+								//ESP_LOGI(TAG, "msk: 0xPRIxx", msk);
 								msg_index = 0;
 								state = SL_END;
 							}
@@ -657,16 +659,16 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 
 						if (ESP_ERR_INVALID_STATE == can_send(frame, 1))
 						{
-							ESP_LOGE(TAG, "can_send error");
+							//ESP_LOGE(TAG, "can_send error");
 						}
 					}
 					cmd_ret = cmd;
 					msg_index = 0;
-//					ESP_LOGI(TAG, "end of command");
+//					//ESP_LOGI(TAG, "end of command");
 					state = SL_HEADER;
 					cmd = SL_NONE;
 //					*processed_index = i;
-//					ESP_LOGI(TAG, "cmd_ret: %d", cmd_ret);
+//					//ESP_LOGI(TAG, "cmd_ret: %d", cmd_ret);
 					switch(cmd_ret)
 					{
 						case SL_SERIAL:

@@ -127,3 +127,4 @@ char *config_server_get_mqtt_url(void);
 int32_t config_server_get_mqtt_port(void);
 char *config_server_get_mqtt_user(void);
 char *config_server_get_mmqtt_pass(void);
+char *config_server_get_mqtt_canflt(void);

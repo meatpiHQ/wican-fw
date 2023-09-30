@@ -33,6 +33,7 @@
 #include "lwip/sockets.h"
 #include "driver/twai.h"
 #include "types.h"
+#include "esp_timer.h"
 #include "config_server.h"
 #include "realdash.h"
 #include "slcan.h"
@@ -45,6 +46,7 @@
 #include "nvs_flash.h"
 #include "driver/adc.h"
 #include "esp_adc_cal.h"
+// #include "esp_adc/adc_cali.h"
 #include "sleep_mode.h"
 #include "ble.h"
 #include "esp_sleep.h"
@@ -117,7 +119,7 @@ static esp_adc_cal_characteristics_t adc1_chars;
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
-    ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%d", base, event_id);
+    ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%ld", base, event_id);
     esp_mqtt_event_handle_t event = event_data;
 //    esp_mqtt_client_handle_t client = event->client;
 
@@ -166,14 +168,20 @@ static esp_mqtt_client_handle_t client = NULL;
 static void mqtt_init(void)
 {
     esp_mqtt_client_config_t mqtt_cfg = {
-        .uri = config_server_get_alert_url(),
-		.port = config_server_get_alert_port(),
-		.username = config_server_get_alert_mqtt_user(),
-		.password = config_server_get_alert_mqtt_pass(),
-//		.disable_auto_reconnect = 1,
-		.reconnect_timeout_ms = 4000
+		.broker.address.uri = config_server_get_alert_url(),
+		.broker.address.port = config_server_get_alert_port(),
+		.credentials.username = config_server_get_alert_mqtt_user(),
+		.credentials.authentication.password = config_server_get_alert_mqtt_pass(),
+		.network.disable_auto_reconnect = true,
+		.network.reconnect_timeout_ms = 4000,
+//         .uri = config_server_get_alert_url(),
+// 		.port = config_server_get_alert_port(),
+// 		.username = config_server_get_alert_mqtt_user(),
+// 		.password = config_server_get_alert_mqtt_pass(),
+// //		.disable_auto_reconnect = 1,
+// 		.reconnect_timeout_ms = 4000
     };
-    ESP_LOGI(TAG, "mqtt_cfg.uri: %s", mqtt_cfg.uri);
+    ESP_LOGI(TAG, "mqtt_cfg.uri: %s", mqtt_cfg.broker.address.uri);
     if(client == NULL)
     {
     	client = esp_mqtt_client_init(&mqtt_cfg);
@@ -415,7 +423,7 @@ static void adc_task(void *pvParameters)
 				{
 					if(battery_voltage < sleep_voltage)
 					{
-						ESP_LOGI(TAG, "low voltage, value: %u, voltage: %f",adc_val, battery_voltage);
+						ESP_LOGI(TAG, "low voltage, value: %lu, voltage: %f",adc_val, battery_voltage);
 						sleep_detect_time = esp_timer_get_time();
 						sleep_state++;
 					}
@@ -425,7 +433,7 @@ static void adc_task(void *pvParameters)
 				{
 					if(battery_voltage > sleep_voltage)
 					{
-						ESP_LOGI(TAG, "low voltage, value: %u, voltage: %f",adc_val, battery_voltage);
+						ESP_LOGI(TAG, "low voltage, value: %lu, voltage: %f",adc_val, battery_voltage);
 						sleep_state = RUN_STATE;
 					}
 
@@ -444,7 +452,7 @@ static void adc_task(void *pvParameters)
 					if(battery_voltage > sleep_voltage)
 					{
 						wakeup_detect_time = esp_timer_get_time();
-						ESP_LOGI(TAG, "low voltage, value: %u, voltage: %f",adc_val, battery_voltage);
+						ESP_LOGI(TAG, "low voltage, value: %lu, voltage: %f",adc_val, battery_voltage);
 						sleep_state = WAKEUP_STATE;
 					}
 
