@@ -150,7 +150,7 @@ static int8_t mqtt_canflt_find_id(uint32_t id, uint8_t start_index)
 
 	return -1;
 }
-static bool evaluate_expression(uint8_t *expression, double V, double *result) 
+static bool evaluate_expression(uint8_t *expression,  uint8_t *data, double V, double *result) 
 {
     Stack operandStack;
     Stack operatorStack;
@@ -182,6 +182,20 @@ static bool evaluate_expression(uint8_t *expression, double V, double *result)
             push(&operandStack, V); // Substitute the value of V
             i++;
         } 
+        else if (expression[i] == 'B' && isdigit(expression[i+1])) 
+        {
+            int byteIndex = expression[i+1] - '0'; // Get the byte index (B0, B1, B2, ...)
+            if (byteIndex >= 0 && byteIndex < 8) // Ensure the byte index is valid (0-7)
+            {
+                push(&operandStack, (double)data[byteIndex]);
+                i += 2; // Skip 'B' and the digit
+            }
+            else
+            {
+                ESP_LOGE(TAG, "Invalid byte index\n");
+                return false; // Return failure
+            }
+        }
 		else if (expression[i] == '(') 
 		{
             push(&operatorStack, expression[i]);
@@ -234,7 +248,7 @@ static bool evaluate_expression(uint8_t *expression, double V, double *result)
             while (!isEmpty(&operatorStack) &&
                    (operatorStack.items[operatorStack.top] == '*' || operatorStack.items[operatorStack.top] == '/') &&
                    (expression[i] == '+' || expression[i] == '-')) 
-				   {
+			{
                 char operator = pop(&operatorStack);
                 double operand2 = pop(&operandStack);
                 double operand1 = pop(&operandStack);
@@ -560,7 +574,7 @@ static void mqtt_task(void *pvParameters)
 					ESP_LOGI(TAG, "-----------");
 					ESP_LOGI(TAG, "can_data: %llx, mask: %llx, value: %llx\r\n", can_data, mask, value);
 
-					if(evaluate_expression((uint8_t *)mqtt_canflt_values[found_index].expression, (double)value, &expression_result) )
+					if(evaluate_expression((uint8_t *)mqtt_canflt_values[found_index].expression, (uint8_t *)tx_frame.data, (double)value, &expression_result) )
 					{
 						ESP_LOGI(TAG, "Expression result: %lf", expression_result);
 

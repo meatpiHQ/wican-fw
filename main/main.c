@@ -71,6 +71,8 @@ static xdev_buffer ucTCP_TX_Buffer;
 static uint8_t protocol = SLCAN;
 
 uint8_t project_hardware_rev;
+int FTP_TASK_FINISH_BIT = BIT2;
+EventGroupHandle_t xEventTask;
 
 static void process_led(bool state)
 {
@@ -219,14 +221,14 @@ static void can_rx_task(void *pvParameters)
 //    		ESP_LOGI(TAG, "bvoltage: %f", bvoltage);
 //    	}
         process_led(0);
-    	if(esp_timer_get_time() - time_old > 1000*1000)
-    	{
-    		// uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
-    		// time_old = esp_timer_get_time();
-    		// ESP_LOGI(TAG, "free_heap: %lu", free_heap);
-//        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
-//        		num_msg = 0;
-    	}
+//     	if(esp_timer_get_time() - time_old > 1000*1000)
+//     	{
+//     		uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
+//     		time_old = esp_timer_get_time();
+//     		ESP_LOGI(TAG, "free_heap: %lu", free_heap);
+// //        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
+// //        		num_msg = 0;
+//     	}
         while(can_receive(&rx_msg, 0) ==  ESP_OK)
         {
 //        	num_msg++;
@@ -499,7 +501,15 @@ void app_main(void)
 
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
     esp_ota_mark_app_valid_cancel_rollback();
-	
-    esp_log_level_set("*", ESP_LOG_NONE);
+	// ftpserver_start("test", "test", "/spiffs");
+
+	xEventTask = xEventGroupCreate();
+	xTaskCreate(ftp_task, "FTP", 1024*6, NULL, 2, NULL);
+	esp_log_level_set("*", ESP_LOG_NONE);
+	xEventGroupWaitBits( xEventTask,
+	FTP_TASK_FINISH_BIT, /* The bits within the event group to wait for. */
+	pdTRUE, /* BIT_0 should be cleared before returning. */
+	pdFALSE, /* Don't wait for both bits, either bit will do. */
+	portMAX_DELAY);/* Wait forever. */  
 }
 

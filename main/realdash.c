@@ -22,7 +22,7 @@
 //#include "esp_log.h"
 #include "driver/twai.h"
 
-static uint32_t Crc32(const uint8_t* data, size_t numBytes)
+static const uint32_t Crc32(const uint8_t* data, size_t numBytes)
 {
     static const uint32_t table[256] = {
         0x00000000,0x77073096,0xEE0E612C,0x990951BA,0x076DC419,0x706AF48F,0xE963A535,

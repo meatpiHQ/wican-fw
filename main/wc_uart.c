@@ -41,7 +41,7 @@ static void uart_rx_task(void *arg)
 //    static xdev_buffer tx_buffer;
 	static xdev_buffer rx_buffer;
     uart_event_t event;
-    static uint8_t dtmp[128];
+    // static uint8_t dtmp[128];
     while (1)
     {
 //    	xQueueReceive(*xuart_tx_queue, ( void * ) &tx_buffer, portMAX_DELAY);
