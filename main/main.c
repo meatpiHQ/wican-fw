@@ -221,14 +221,14 @@ static void can_rx_task(void *pvParameters)
 //    		ESP_LOGI(TAG, "bvoltage: %f", bvoltage);
 //    	}
         process_led(0);
-//     	if(esp_timer_get_time() - time_old > 1000*1000)
-//     	{
-//     		uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
-//     		time_old = esp_timer_get_time();
-//     		ESP_LOGI(TAG, "free_heap: %lu", free_heap);
+    	if(esp_timer_get_time() - time_old > 1000*1000)
+    	{
+    		uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
+    		time_old = esp_timer_get_time();
+    		ESP_LOGI(TAG, "free_heap: %lu", free_heap);
 // //        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
 // //        		num_msg = 0;
-//     	}
+    	}
         while(can_receive(&rx_msg, 0) ==  ESP_OK)
         {
 //        	num_msg++;
@@ -240,7 +240,7 @@ static void can_rx_task(void *pvParameters)
         		ucTCP_TX_Buffer.usLen = slcan_parse_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
 				if(config_server_ws_connected())
 				{
-					xQueueSend( xmsg_ws_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(2000) );
+					xQueueSend( xmsg_ws_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
 				}
         	}
         	//TODO: optimize, useless ifs
@@ -274,11 +274,11 @@ static void can_rx_task(void *pvParameters)
 				{
 					if(tcp_port_open())
 					{
-						xQueueSend( xMsg_Tx_Queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(2000) );
+						xQueueSend( xMsg_Tx_Queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
 					}
 					if(ble_connected())
 					{
-						xQueueSend( xmsg_ble_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(2000) );
+						xQueueSend( xmsg_ble_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
 					}
 					else if(project_hardware_rev == WICAN_USB_V100)
 					{
@@ -503,13 +503,13 @@ void app_main(void)
     esp_ota_mark_app_valid_cancel_rollback();
 	// ftpserver_start("test", "test", "/spiffs");
 
-	xEventTask = xEventGroupCreate();
-	xTaskCreate(ftp_task, "FTP", 1024*6, NULL, 2, NULL);
+	// xEventTask = xEventGroupCreate();
+	// xTaskCreate(ftp_task, "FTP", 1024*6, NULL, 2, NULL);
+	// xEventGroupWaitBits( xEventTask,
+	// FTP_TASK_FINISH_BIT, /* The bits within the event group to wait for. */
+	// pdTRUE, /* BIT_0 should be cleared before returning. */
+	// pdFALSE, /* Don't wait for both bits, either bit will do. */
+	// portMAX_DELAY);/* Wait forever. */  
 	esp_log_level_set("*", ESP_LOG_NONE);
-	xEventGroupWaitBits( xEventTask,
-	FTP_TASK_FINISH_BIT, /* The bits within the event group to wait for. */
-	pdTRUE, /* BIT_0 should be cleared before returning. */
-	pdFALSE, /* Don't wait for both bits, either bit will do. */
-	portMAX_DELAY);/* Wait forever. */  
 }
 

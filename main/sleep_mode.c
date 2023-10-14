@@ -334,9 +334,9 @@ static void adc_task(void *pvParameters)
 
     while(1)
     {
-    	uint32_t count;
-    	uint64_t avg;
-    	uint32_t adc_val;
+    	uint32_t count = 0;
+    	uint64_t avg = 0;
+    	uint32_t adc_val = 0;
     	for(int j = 0; j < 10; j++)
     	{
 			ret = adc_digi_read_bytes(result, TIMES, &ret_num, ADC_MAX_DELAY);
