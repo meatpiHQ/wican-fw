@@ -101,13 +101,13 @@ static void uart_tx_task(void *arg)
 void wc_uart_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t connected_led)
 {
     const uart_config_t uart_config = {
-        .baud_rate = 4000000,
+        .baud_rate = 3000000,
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
         .source_clk = UART_SCLK_APB,
-    };
+    }; //Baudrate is limited by usb to uart bridge on dev kit
     xuart_tx_queue = xTXp_Queue;
 	xuart_rx_queue = xRXp_Queue;
     // We won't use a buffer for sending data.
