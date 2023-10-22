@@ -73,7 +73,32 @@ static uint8_t protocol = SLCAN;
 uint8_t project_hardware_rev;
 int FTP_TASK_FINISH_BIT = BIT2;
 EventGroupHandle_t xEventTask;
+static uint8_t mqtt_elm327_log_en = 0;
 
+static void log_can_to_mqtt(twai_message_t *frame, uint8_t type)
+{
+	static mqtt_can_message_t mqtt_msg;
+
+	mqtt_msg.frame.extd = frame->extd;
+	mqtt_msg.frame.rtr = frame->rtr;
+	mqtt_msg.frame.ss = frame->ss;
+	mqtt_msg.frame.self = frame->self;
+	mqtt_msg.frame.dlc_non_comp = frame->dlc_non_comp;
+	mqtt_msg.frame.identifier = frame->identifier;
+	mqtt_msg.frame.data_length_code = frame->data_length_code;
+
+	mqtt_msg.frame.data[0] = frame->data[0];
+	mqtt_msg.frame.data[1] = frame->data[1];
+	mqtt_msg.frame.data[2] = frame->data[2];
+	mqtt_msg.frame.data[3] = frame->data[3];
+	mqtt_msg.frame.data[4] = frame->data[4];
+	mqtt_msg.frame.data[5] = frame->data[5];
+	mqtt_msg.frame.data[6] = frame->data[6];
+	mqtt_msg.frame.data[7] = frame->data[7];
+
+	mqtt_msg.type = type;
+	xQueueSend( xmsg_mqtt_rx_queue, ( void * ) &mqtt_msg, pdMS_TO_TICKS(0) );
+}
 static void process_led(bool state)
 {
 	static bool current_state;
@@ -208,7 +233,7 @@ static void can_rx_task(void *pvParameters)
 //	time_old = esp_timer_get_time();
 	while(1)
 	{
-        twai_message_t rx_msg;
+        static twai_message_t rx_msg;
 //        esp_err_t ret = 0xFF;
 
 
@@ -223,9 +248,9 @@ static void can_rx_task(void *pvParameters)
         process_led(0);
     	if(esp_timer_get_time() - time_old > 1000*1000)
     	{
-    		uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
-    		time_old = esp_timer_get_time();
-    		ESP_LOGI(TAG, "free_heap: %lu", free_heap);
+    		// uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
+    		// time_old = esp_timer_get_time();
+    		// ESP_LOGI(TAG, "free_heap: %lu", free_heap);
 // //        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
 // //        		num_msg = 0;
     	}
@@ -291,8 +316,29 @@ static void can_rx_task(void *pvParameters)
 			}
 			if(mqtt_connected())
 			{
-//					mqtt_publish_can(&rx_msg);
-				xQueueSend( xmsg_mqtt_rx_queue, ( void * ) &rx_msg, pdMS_TO_TICKS(0) );
+				static mqtt_can_message_t mqtt_rx_msg;
+				if(mqtt_elm327_log_en == 0)
+				{
+					mqtt_rx_msg.frame.extd = rx_msg.extd;
+					mqtt_rx_msg.frame.rtr = rx_msg.rtr;
+					mqtt_rx_msg.frame.ss = rx_msg.ss;
+					mqtt_rx_msg.frame.self = rx_msg.self;
+					mqtt_rx_msg.frame.dlc_non_comp = rx_msg.dlc_non_comp;
+					mqtt_rx_msg.frame.identifier = rx_msg.identifier;
+					mqtt_rx_msg.frame.data_length_code = rx_msg.data_length_code;
+
+					mqtt_rx_msg.frame.data[0] = rx_msg.data[0];
+					mqtt_rx_msg.frame.data[1] = rx_msg.data[1];
+					mqtt_rx_msg.frame.data[2] = rx_msg.data[2];
+					mqtt_rx_msg.frame.data[3] = rx_msg.data[3];
+					mqtt_rx_msg.frame.data[4] = rx_msg.data[4];
+					mqtt_rx_msg.frame.data[5] = rx_msg.data[5];
+					mqtt_rx_msg.frame.data[6] = rx_msg.data[6];
+					mqtt_rx_msg.frame.data[7] = rx_msg.data[7];
+
+					mqtt_rx_msg.type = MQTT_CAN;
+					xQueueSend( xmsg_mqtt_rx_queue, ( void * ) &mqtt_rx_msg, pdMS_TO_TICKS(0) );
+				}
 			}
         }
         vTaskDelay(pdMS_TO_TICKS(1));
@@ -394,13 +440,21 @@ void app_main(void)
 		can_set_bitrate(can_datarate);
 		can_enable();
 		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
-		elm327_init(&send_to_host, &xmsg_obd_rx_queue);
+		if(config_server_mqtt_en_config() && config_server_mqtt_elm327_log())
+		{
+			mqtt_elm327_log_en = config_server_mqtt_elm327_log();
+			elm327_init(&send_to_host, &xmsg_obd_rx_queue, log_can_to_mqtt);
+		}
+		else
+		{
+			elm327_init(&send_to_host, &xmsg_obd_rx_queue, NULL);
+		}
 	}
 
 	if(config_server_mqtt_en_config())
 	{
 		can_set_bitrate(can_datarate);
-		xmsg_mqtt_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
+		xmsg_mqtt_rx_queue = xQueueCreate(32, sizeof(mqtt_can_message_t) );
 		can_enable();
 		mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM, &xmsg_mqtt_rx_queue);
 	}
@@ -471,8 +525,8 @@ void app_main(void)
         }
     }
 
-    xTaskCreate(can_rx_task, "can_rx_task", 2048, (void*)AF_INET, 5, NULL);
-    xTaskCreate(can_tx_task, "can_tx_task", 2048, (void*)AF_INET, 5, NULL);
+    xTaskCreate(can_rx_task, "can_rx_task", 1024*3, (void*)AF_INET, 5, NULL);
+    xTaskCreate(can_tx_task, "can_tx_task", 1024*3, (void*)AF_INET, 5, NULL);
 
     if(project_hardware_rev != WICAN_V210)
     {
@@ -501,7 +555,6 @@ void app_main(void)
 
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
     esp_ota_mark_app_valid_cancel_rollback();
-	// ftpserver_start("test", "test", "/spiffs");
 
 	// xEventTask = xEventGroupCreate();
 	// xTaskCreate(ftp_task, "FTP", 1024*6, NULL, 2, NULL);

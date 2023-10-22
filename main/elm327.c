@@ -35,6 +35,8 @@
 #include "can.h"
 #include "std_pid.h"
 #include "sleep_mode.h"
+#include "elm327.h"
+
 #define TAG 		__func__
 
 #define SERVICE_01			0x01
@@ -58,7 +60,7 @@ const char *identify = "OBDLink MX";
 
 
 void (*elm327_response)(char*, uint32_t, QueueHandle_t *q);
-
+void (*elm327_can_log)(twai_message_t* frame, uint8_t type);
 // The fields are ordered this way so the data can be tightly packed.
 // See elm327_set_default_config for a more readable ordering.
 typedef struct __xelm327_config
@@ -673,6 +675,11 @@ static void elm327_send_flow_control_frame(twai_message_t *first_frame)
 	txframe.data_length_code = 8;
 	txframe.self = 0;
 
+	if( elm327_can_log != NULL)
+	{
+		elm327_can_log(&txframe, ELM327_CAN_TX);
+	}
+	
 	can_send(&txframe, 1);
 }
 
@@ -764,7 +771,10 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 	// 	ESP_LOGI(TAG, "sending %08X", txframe.identifier&TWAI_EXTD_ID_MASK);
 	// }
 	// ESP_LOG_BUFFER_HEX(TAG, txframe.data, 8);
-
+	if( elm327_can_log != NULL)
+	{
+		elm327_can_log(&txframe, ELM327_CAN_TX);
+	}
 	can_send(&txframe, 1);
 	TickType_t xtimeout = (elm327_config.req_timeout*4.096) / portTICK_PERIOD_MS;
 	TickType_t xwait_time;
@@ -792,6 +802,10 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 
 			if(elm327_should_receive(&rx_frame))
 			{
+				if( elm327_can_log != NULL)
+				{
+					elm327_can_log(&rx_frame, ELM327_CAN_RX);
+				}
 				//reset timeout after response is received
 				rsp_found = 1;
 				number_of_rsp++;
@@ -1216,9 +1230,10 @@ int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, twai_message_t *frame, Queu
 	return 0;
 }
 
-void elm327_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q), QueueHandle_t *rx_queue)
+void elm327_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q), QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame, uint8_t type))
 {
 	elm327_set_default_config(true);
 	elm327_response = send_to_host;
 	can_rx_queue = rx_queue;
+	elm327_can_log = can_log;
 }
