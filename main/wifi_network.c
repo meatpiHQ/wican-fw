@@ -249,6 +249,11 @@ void wifi_network_init(char* sta_ssid, char* sta_pass)
              * However these modes are deprecated and not advisable to be used. Incase your Access point
              * doesn't support WPA2, these mode can be enabled by commenting below line */
 			.threshold.authmode = WIFI_AUTH_WPA2_PSK,
+			.rm_enabled = 1,
+			.btm_enabled = 1,
+			.scan_method = WIFI_ALL_CHANNEL_SCAN,
+			.sort_method = WIFI_CONNECT_AP_BY_SIGNAL,
+			.bssid_set = false,
 
             .pmf_cfg = {
                 .capable = true,
