@@ -18,7 +18,7 @@
 <img src="https://user-images.githubusercontent.com/94690098/218081136-fc3da520-1851-497e-90dc-ccc5d6543f1f.png" >
 </p>
 
-### *** To activate the 120R termination resistor, simply connect the TR pin the CANH. The other end of the termination resistor is connected to CANL internally.
+### *** To activate the 120R termination resistor, simply connect the TR pin to CANH. The other end of the termination resistor is connected to CANL internally.
 
 
 ## WiCAN-OBD2 Pinout
