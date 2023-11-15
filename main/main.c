@@ -374,7 +374,7 @@ void app_main(void)
     xMsg_Tx_Queue = xQueueCreate(32, sizeof( xdev_buffer) );
     xmsg_ws_tx_queue = xQueueCreate(32, sizeof( xdev_buffer) );
 
-
+	esp_ota_mark_app_valid_cancel_rollback();
 //    xmsg_obd_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
 	config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
 
@@ -554,7 +554,7 @@ void app_main(void)
     }
 
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
-    esp_ota_mark_app_valid_cancel_rollback();
+    
 
 	// xEventTask = xEventGroupCreate();
 	// xTaskCreate(ftp_task, "FTP", 1024*6, NULL, 2, NULL);
