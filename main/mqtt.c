@@ -72,6 +72,7 @@ static char mqtt_status_topic[128];
 static uint8_t mqtt_led = 0;
 
 static QueueHandle_t *xmqtt_tx_queue;
+static uint8_t mqtt_elm327_log = 0;
 
 typedef struct 
 {
@@ -401,7 +402,7 @@ static void mqtt_parse_data(void *handler_args, esp_event_base_t base, int32_t e
     cJSON *frame = NULL;
     esp_mqtt_event_handle_t event = event_data;
 
-    if (strncmp(event->topic, mqtt_sub_topic, strlen(mqtt_sub_topic)) == 0)
+    if ((mqtt_elm327_log == 0) && strncmp(event->topic, mqtt_sub_topic, strlen(mqtt_sub_topic)) == 0)
     {
         root = cJSON_Parse(event->data);
 
@@ -504,14 +505,15 @@ int mqtt_connected(void)
 #define JSON_BUF_SIZE		2048
 static void mqtt_task(void *pvParameters)
 {
-	static xdev_buffer tx_buffer;
 	static char json_buffer[JSON_BUF_SIZE] = {0};
 	static char tmp[150];
-	twai_message_t tx_frame;
-	static char mqtt_topic[128];
+	mqtt_can_message_t tx_frame;
+	static char mqtt_topic[64];
+    static char mqtt_elm327_topic[64];
 	static uint64_t can_data = 0;
 
 	sprintf(mqtt_topic, "wican/%s/can/rx", device_id);
+    sprintf(mqtt_elm327_topic, "wican/%s/elm327", device_id);
 
 	while(!wifi_network_is_connected())
 	{
@@ -528,98 +530,124 @@ static void mqtt_task(void *pvParameters)
 		if(mqtt_connected())
 		{
 			json_buffer[0] = 0;
+            
+            if(tx_frame.type == MQTT_CAN)
+            {
+                if(mqtt_canflt_size != 0)
+                {
+                    uint8_t start_index = 0;
+                    int8_t found_index = -1;
+                    static uint64_t value = 0;
+                    static double expression_result = 0;
+                    
+                    xQueueReceive(*xmqtt_tx_queue, ( void * ) &tx_frame, 0);
 
-			if(mqtt_canflt_size != 0)
-			{
-				uint8_t start_index = 0;
-				int8_t found_index = -1;
-				static uint64_t value = 0;
-				static double expression_result = 0;
-				
-				xQueueReceive(*xmqtt_tx_queue, ( void * ) &tx_buffer, 0);
+                    while ((found_index = mqtt_canflt_find_id(tx_frame.frame.identifier, start_index)) != -1)
+                    {
+                        
 
-				while ((found_index = mqtt_canflt_find_id(tx_frame.identifier, start_index)) != -1)
-				{
-					
+                        // Check if expecting PID
+                        if(mqtt_canflt_values[found_index].pid != -1)
+                        {
+                            if(mqtt_canflt_values[found_index].pid != tx_frame.frame.data[2])
+                            {
+                                start_index = found_index + 1;
+                                continue;
+                            }
+                        }
 
-					// Check if expecting PID
-					if(mqtt_canflt_values[found_index].pid != -1)
-					{
-						if(mqtt_canflt_values[found_index].pid != tx_frame.data[2])
-						{
-							start_index = found_index + 1;
-							continue;
-						}
-					}
+                        if(esp_timer_get_time() - mqtt_canflt_values[found_index].logtime < (mqtt_canflt_values[found_index].cycle*1000))
+                        {
+                            break;
+                        }
+                        mqtt_canflt_values[found_index].logtime = esp_timer_get_time();
+                        for (uint8_t i = 0; i < 8; i++) 
+                        {
+                            can_data = (can_data << 8) | tx_frame.frame.data[i];
+                        }
 
-					if(esp_timer_get_time() - mqtt_canflt_values[found_index].logtime < (mqtt_canflt_values[found_index].cycle*1000))
-					{
-						break;
-					}
-					mqtt_canflt_values[found_index].logtime = esp_timer_get_time();
-					for (uint8_t i = 0; i < 8; i++) 
-					{
-						can_data = (can_data << 8) | tx_frame.data[i];
-					}
+                        uint64_t start_bit = 64 - mqtt_canflt_values[found_index].start_bit - mqtt_canflt_values[found_index].bit_length;
+                        uint64_t bit_length = mqtt_canflt_values[found_index].bit_length;
 
-					uint64_t start_bit = 64 - mqtt_canflt_values[found_index].start_bit - mqtt_canflt_values[found_index].bit_length;
-					uint64_t bit_length = mqtt_canflt_values[found_index].bit_length;
+                        uint64_t mask = ((1ULL << bit_length) - 1ULL) << start_bit;
 
-					uint64_t mask = ((1ULL << bit_length) - 1ULL) << start_bit;
-
-					value = (can_data & mask) >> start_bit;
+                        value = (can_data & mask) >> start_bit;
 
 
 
-					ESP_LOGI(TAG, "-----------");
-					ESP_LOGI(TAG, "can_data: %llx, mask: %llx, value: %llx\r\n", can_data, mask, value);
+                        ESP_LOGI(TAG, "-----------");
+                        ESP_LOGI(TAG, "can_data: %llx, mask: %llx, value: %llx\r\n", can_data, mask, value);
 
-					if(evaluate_expression((uint8_t *)mqtt_canflt_values[found_index].expression, (uint8_t *)tx_frame.data, (double)value, &expression_result) )
-					{
-						ESP_LOGI(TAG, "Expression result: %lf", expression_result);
+                        if(evaluate_expression((uint8_t *)mqtt_canflt_values[found_index].expression, (uint8_t *)tx_frame.frame.data, (double)value, &expression_result) )
+                        {
+                            ESP_LOGI(TAG, "Expression result: %lf", expression_result);
 
-						sprintf(json_buffer, "{\"%s\": %lf}", mqtt_canflt_values[found_index].name, expression_result);
+                            sprintf(json_buffer, "{\"%s\": %lf}", mqtt_canflt_values[found_index].name, expression_result);
 
-						esp_mqtt_client_publish(client, mqtt_topic, json_buffer, 0, 0, 0);
-					}
-					else
-					{
-						ESP_LOGE(TAG, "evaluate_expression error");
-					}
+                            esp_mqtt_client_publish(client, mqtt_topic, json_buffer, 0, 0, 0);
+                        }
+                        else
+                        {
+                            ESP_LOGE(TAG, "evaluate_expression error");
+                        }
 
-					start_index = found_index + 1;
-				}
-			}
-			else
-			{
-				sprintf(json_buffer, "{\"bus\":\"0\",\"type\":\"rx\",\"ts\":%lu,\"frame\":[", (pdTICKS_TO_MS(xTaskGetTickCount())%60000));
+                        start_index = found_index + 1;
+                    }
+                }
+                else
+                {
+                    sprintf(json_buffer, "{\"bus\":\"0\",\"type\":\"rx\",\"ts\":%lu,\"frame\":[", (pdTICKS_TO_MS(xTaskGetTickCount())%60000));
 
-				if(strlen(json_buffer) < (sizeof(json_buffer) -128))
-				{
-					while(xQueuePeek(*xmqtt_tx_queue, ( void * ) &tx_buffer, 0) == pdTRUE)
-					{
-						xQueueReceive(*xmqtt_tx_queue, ( void * ) &tx_buffer, 0);
-						sprintf(tmp, "{\"id\":%lu,\"dlc\":%u,\"rtr\":%s,\"extd\":%s,\"data\":[%u,%u,%u,%u,%u,%u,%u,%u]},",tx_frame.identifier, tx_frame.data_length_code, tx_frame.rtr?"true":"false",
-																													tx_frame.extd?"true":"false",tx_frame.data[0], tx_frame.data[1], tx_frame.data[2], tx_frame.data[3],
-																													tx_frame.data[4], tx_frame.data[5], tx_frame.data[6], tx_frame.data[7]);
-						strcat((char*)json_buffer, (char*)tmp);
+                    if(strlen(json_buffer) < (sizeof(json_buffer) -128))
+                    {
+                        while(xQueuePeek(*xmqtt_tx_queue, ( void * ) &tx_frame, 0) == pdTRUE)
+                        {
+                            xQueueReceive(*xmqtt_tx_queue, ( void * ) &tx_frame, 0);
+                            sprintf(tmp, "{\"id\":%lu,\"dlc\":%u,\"rtr\":%s,\"extd\":%s,\"data\":[%u,%u,%u,%u,%u,%u,%u,%u]},",tx_frame.frame.identifier, tx_frame.frame.data_length_code, tx_frame.frame.rtr?"true":"false",
+                                                                                                                        tx_frame.frame.extd?"true":"false",tx_frame.frame.data[0], tx_frame.frame.data[1], tx_frame.frame.data[2], tx_frame.frame.data[3],
+                                                                                                                        tx_frame.frame.data[4], tx_frame.frame.data[5], tx_frame.frame.data[6], tx_frame.frame.data[7]);
+                            strcat((char*)json_buffer, (char*)tmp);
 
-						if(strlen(json_buffer) > (JSON_BUF_SIZE - 100))
-						{
-							break;
-						}
-					}
-					json_buffer[strlen(json_buffer)-1] = 0;
-				}
-				strcat((char*)json_buffer, "]}");
+                            if(strlen(json_buffer) > (JSON_BUF_SIZE - 100))
+                            {
+                                break;
+                            }
+                        }
+                        json_buffer[strlen(json_buffer)-1] = 0;
+                    }
+                    strcat((char*)json_buffer, "]}");
 
-				esp_mqtt_client_publish(client, mqtt_topic, json_buffer, 0, 0, 0);
-			}
+                    esp_mqtt_client_publish(client, mqtt_topic, json_buffer, 0, 0, 0);
+                }
+            }
+            else
+            {
+                xQueueReceive(*xmqtt_tx_queue, ( void * ) &tx_frame, 0);
+                if(tx_frame.type == MQTT_RX)
+                {
+                    sprintf(json_buffer, "{\"bus\":\"0\",\"type\":\"rx\",\"ts\":%lu,\"frame\":[", (pdTICKS_TO_MS(xTaskGetTickCount())%60000));
+                    ESP_LOGI(TAG, "tx_frame.type: MQTT_RX");
+                }
+                else if(tx_frame.type == MQTT_TX)
+                {
+                    sprintf(json_buffer, "{\"bus\":\"0\",\"type\":\"tx\",\"ts\":%lu,\"frame\":[", (pdTICKS_TO_MS(xTaskGetTickCount())%60000));
+                    ESP_LOGI(TAG, "tx_frame.type: MQTT_TX");
+                }
+                
+                sprintf(tmp, "{\"id\":%lu,\"dlc\":%u,\"rtr\":%s,\"extd\":%s,\"data\":[%u,%u,%u,%u,%u,%u,%u,%u]},",tx_frame.frame.identifier, tx_frame.frame.data_length_code, tx_frame.frame.rtr?"true":"false",
+                                                                                                            tx_frame.frame.extd?"true":"false",tx_frame.frame.data[0], tx_frame.frame.data[1], tx_frame.frame.data[2], tx_frame.frame.data[3],
+                                                                                                            tx_frame.frame.data[4], tx_frame.frame.data[5], tx_frame.frame.data[6], tx_frame.frame.data[7]);
+                strcat((char*)json_buffer, (char*)tmp);
+                json_buffer[strlen(json_buffer)-1] = 0;
+                strcat((char*)json_buffer, "]}");
+
+                esp_mqtt_client_publish(client, mqtt_elm327_topic, json_buffer, 0, 0, 0);
+            }
 
 		}
 		else
 		{
-			xQueueReceive(*xmqtt_tx_queue, ( void * ) &tx_buffer, 0);
+			xQueueReceive(*xmqtt_tx_queue, ( void * ) &tx_frame, 0);
 		}
 		vTaskDelay(pdMS_TO_TICKS(1));
 	}
@@ -654,6 +682,7 @@ static void mqtt_load_filter(void)
     {
         cJSON_Delete(root);
         ESP_LOGE(TAG, "(mqtt_canflt_values == NULL)");
+        mqtt_canflt_size = 0;
         return;
     }
 
@@ -665,6 +694,7 @@ static void mqtt_load_filter(void)
             free(mqtt_canflt_values);
             cJSON_Delete(root);
             ESP_LOGE(TAG, "(uint32_t i = 0; i < mqtt_canflt_size; i++)");
+            mqtt_canflt_size = 0;
             return;
         }
 
@@ -699,6 +729,7 @@ static void mqtt_load_filter(void)
             free(mqtt_canflt_values);
             cJSON_Delete(root);
             ESP_LOGE(TAG, "cJSON_IsNumber(can_id)");
+            mqtt_canflt_size = 0;
             return;
         }
     }
@@ -729,11 +760,11 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
     sprintf(mqtt_status_topic, "wican/%s/status", device_id);
 
     ESP_LOGI(TAG, "device_id: %s, mqtt_cfg.uri: %s", device_id, mqtt_cfg.broker.address.uri);
-
+    mqtt_elm327_log = config_server_mqtt_elm327_log();
 	mqtt_load_filter();
     s_mqtt_event_group = xEventGroupCreate();
     client = esp_mqtt_client_init(&mqtt_cfg);
 
-    xTaskCreate(mqtt_task, "mqtt_task", 4096, (void*)AF_INET, 5, NULL);
+    xTaskCreate(mqtt_task, "mqtt_task", 1024*5, (void*)AF_INET, 5, NULL);
 }
 

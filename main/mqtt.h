@@ -18,6 +18,22 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifndef MQTT_h
+#define MQTT_h
+
+#include "driver/twai.h"
+#include "elm327.h"
+
+#define MQTT_CAN        0x00
+#define MQTT_RX         ELM327_CAN_RX
+#define MQTT_TX         ELM327_CAN_TX
+
+typedef struct
+{
+    uint8_t type;
+    twai_message_t frame;
+}mqtt_can_message_t;
 
 void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue);
 int mqtt_connected(void);
+#endif

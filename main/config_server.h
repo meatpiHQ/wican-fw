@@ -82,7 +82,7 @@ typedef struct _device_config
 	char mqtt_port[32];
 	char mqtt_user[64];
 	char mqtt_pass[64];
-
+	char mqtt_elm327_log[10];
 }device_config_t;
 
 
@@ -128,3 +128,4 @@ int32_t config_server_get_mqtt_port(void);
 char *config_server_get_mqtt_user(void);
 char *config_server_get_mmqtt_pass(void);
 char *config_server_get_mqtt_canflt(void);
+int8_t config_server_mqtt_elm327_log(void);
