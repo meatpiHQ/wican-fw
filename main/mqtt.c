@@ -79,6 +79,7 @@ typedef struct
     uint32_t can_id;
     char name[16];
 	int32_t pid;
+    int32_t pidi;
     uint32_t start_bit;
     uint32_t bit_length;
     char expression[32];
@@ -549,7 +550,7 @@ static void mqtt_task(void *pvParameters)
                         // Check if expecting PID
                         if(mqtt_canflt_values[found_index].pid != -1)
                         {
-                            if(mqtt_canflt_values[found_index].pid != tx_frame.frame.data[2])
+                            if(mqtt_canflt_values[found_index].pid != tx_frame.frame.data[mqtt_canflt_values[found_index].pidi])
                             {
                                 start_index = found_index + 1;
                                 continue;
@@ -702,25 +703,27 @@ static void mqtt_load_filter(void)
         cJSON *can_id = cJSON_GetObjectItem(item, "CANID");
         cJSON *name = cJSON_GetObjectItem(item, "Name");
         cJSON *pid = cJSON_GetObjectItem(item, "PID");  // Added 'PID' field
+        cJSON *pidi = cJSON_GetObjectItem(item, "PIDIndex");  // Added 'PID' field
         cJSON *start_bit = cJSON_GetObjectItem(item, "StartBit");
         cJSON *bit_length = cJSON_GetObjectItem(item, "BitLength");
         cJSON *expression = cJSON_GetObjectItem(item, "Expression");
         cJSON *cycle = cJSON_GetObjectItem(item, "Cycle");
 
-        if (cJSON_IsNumber(can_id) && cJSON_IsString(name) && cJSON_IsNumber(pid) &&
+        if (cJSON_IsNumber(can_id) && cJSON_IsString(name) && cJSON_IsNumber(pid) && cJSON_IsNumber(pidi) &&
             cJSON_IsNumber(start_bit) && cJSON_IsNumber(bit_length) && cJSON_IsString(expression) && cJSON_IsNumber(cycle)) 
         {
             mqtt_canflt_values[i].can_id = (uint32_t)can_id->valuedouble;
             strncpy(mqtt_canflt_values[i].name, name->valuestring, sizeof(mqtt_canflt_values[i].name));
             mqtt_canflt_values[i].pid = (int32_t)pid->valuedouble;  // Set 'pid' field
+            mqtt_canflt_values[i].pidi = (int32_t)pidi->valuedouble;
             mqtt_canflt_values[i].start_bit = (uint32_t)start_bit->valuedouble;
             mqtt_canflt_values[i].bit_length = (uint32_t)bit_length->valuedouble;
             strncpy(mqtt_canflt_values[i].expression, expression->valuestring, sizeof(mqtt_canflt_values[i].expression));
             mqtt_canflt_values[i].cycle = (uint32_t)cycle->valuedouble;
             mqtt_canflt_values[i].logtime = 0;
 
-            ESP_LOGI(TAG, "Loaded CAN Filter %lu: CAN ID=%lu, PID=%ld, Name=%s, Start Bit=%lu, Bit Length=%lu, Expression=%s, Cycle=%lu",
-                     i, mqtt_canflt_values[i].can_id, mqtt_canflt_values[i].pid, mqtt_canflt_values[i].name,
+            ESP_LOGI(TAG, "Loaded CAN Filter %lu: CAN ID=%lu, PID=%ld, PIDIndex=%ld, Name=%s, Start Bit=%lu, Bit Length=%lu, Expression=%s, Cycle=%lu",
+                     i, mqtt_canflt_values[i].can_id, mqtt_canflt_values[i].pid, mqtt_canflt_values[i].pidi, mqtt_canflt_values[i].name,
                      mqtt_canflt_values[i].start_bit, mqtt_canflt_values[i].bit_length,
                      mqtt_canflt_values[i].expression, mqtt_canflt_values[i].cycle);
         }
