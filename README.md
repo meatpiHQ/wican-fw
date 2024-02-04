@@ -417,6 +417,12 @@ The PID in the configuration needs to set to -1. The value we need to extract is
 
 
 # Home Assistant
+
+### 1. EV Battery Examples [Wiki Page](https://github.com/meatpiHQ/wican-fw/wiki/EV-Battery-SoC-in-Home-Assistant-%E2%80%90-Example)
+In this example, we will learn how to set up Home Assistant to request the battery State of Charge (SoC) without using Node-RED. This example has been tested on an ORA Funky Cat vehicle and can also serve as a reference for requesting other Parameter IDs (PIDs) in addition to SoC. EV Battery Examples [Wiki Page](https://github.com/meatpiHQ/wican-fw/wiki/EV-Battery-SoC-in-Home-Assistant-%E2%80%90-Example)
+
+### 2. Node-RED Example 
+
 WiCAN is able to send CAN bus messages to Home Assistant using MQTT protocol. I found that using Node-RED is the simplest way to create automation based on the CAN messages received. This short video highlights some of the steps https://youtu.be/oR5HQIUPR9I
 
 1. Install Home Assistant [Mosquitto broker add-on](https://github.com/home-assistant/addons/blob/master/mosquitto/DOCS.md)
