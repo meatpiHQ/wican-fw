@@ -83,10 +83,12 @@ typedef struct _device_config
 	char mqtt_user[64];
 	char mqtt_pass[64];
 	char mqtt_elm327_log[10];
+	char mqtt_tx_topic[64];
+	char mqtt_rx_topic[64];
 }device_config_t;
 
 
-void config_server_start(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t connected_led);
+void config_server_start(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t connected_led, char * did);
 void config_server_stop(void);
 int8_t config_server_get_wifi_mode(void);
 int8_t config_server_get_ap_ch(void);
@@ -129,3 +131,5 @@ char *config_server_get_mqtt_user(void);
 char *config_server_get_mmqtt_pass(void);
 char *config_server_get_mqtt_canflt(void);
 int8_t config_server_mqtt_elm327_log(void);
+char *config_server_get_mqtt_tx_topic(void);
+char *config_server_get_mqtt_rx_topic(void);

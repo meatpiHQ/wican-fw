@@ -513,7 +513,8 @@ static void mqtt_task(void *pvParameters)
     static char mqtt_elm327_topic[64];
 	static uint64_t can_data = 0;
 
-	sprintf(mqtt_topic, "wican/%s/can/rx", device_id);
+	// sprintf(mqtt_topic, "wican/%s/can/rx", device_id);
+    strcpy(mqtt_topic, config_server_get_mqtt_rx_topic());
     sprintf(mqtt_elm327_topic, "wican/%s/elm327", device_id);
 
 	while(!wifi_network_is_connected())
@@ -759,7 +760,8 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
     xmqtt_tx_queue = xtx_queue;
     mqtt_led = connected_led;
     device_id = id;
-    sprintf(mqtt_sub_topic, "wican/%s/can/tx", device_id);
+    // sprintf(mqtt_sub_topic, "wican/%s/can/tx", device_id);
+    strcpy(mqtt_sub_topic, config_server_get_mqtt_tx_topic());
     sprintf(mqtt_status_topic, "wican/%s/status", device_id);
 
     ESP_LOGI(TAG, "device_id: %s, mqtt_cfg.uri: %s", device_id, mqtt_cfg.broker.address.uri);

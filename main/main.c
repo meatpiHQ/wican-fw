@@ -376,9 +376,6 @@ void app_main(void)
 
 	esp_ota_mark_app_valid_cancel_rollback();
 //    xmsg_obd_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
-	config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
-
-
 
     ESP_ERROR_CHECK(esp_read_mac(derived_mac_addr, ESP_MAC_WIFI_SOFTAP));
     sprintf((char *)ble_uid,"WiC_%02x%02x%02x%02x%02x%02x",
@@ -387,6 +384,8 @@ void app_main(void)
     sprintf((char *)uid,"%02x%02x%02x%02x%02x%02x",
             derived_mac_addr[0], derived_mac_addr[1], derived_mac_addr[2],
             derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
+	
+	config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, (char*)&uid[0]);
 	slcan_init(&send_to_host);
 
 	int8_t can_datarate = config_server_get_can_rate();
@@ -563,6 +562,6 @@ void app_main(void)
 	// pdTRUE, /* BIT_0 should be cleared before returning. */
 	// pdFALSE, /* Don't wait for both bits, either bit will do. */
 	// portMAX_DELAY);/* Wait forever. */  
-	esp_log_level_set("*", ESP_LOG_NONE);
+	// esp_log_level_set("*", ESP_LOG_NONE);
 }
 
