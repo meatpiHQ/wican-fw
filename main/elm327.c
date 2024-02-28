@@ -422,8 +422,25 @@ static char* elm327_set_fc_data(const char* command_str)
 
 static char* elm327_set_protocol(const char* command_str)
 {
-
-	elm327_config.protocol = command_str[2];
+	//Handle SPAx, and set it as x. 
+	//TODO: add support for auto sp
+	if(command_str[2] == 'a' || command_str[2] == 'A')
+	{
+		if(command_str[3] == '6' || command_str[3] == '7' || 
+			command_str[3] == '8' || command_str[3] == '9')
+		{
+			elm327_config.protocol = command_str[3];
+		}
+		else
+		{
+			elm327_config.protocol = '4';
+		}
+	}
+	else
+	{
+		elm327_config.protocol = command_str[2];
+	}
+	
 	ESP_LOGI(TAG, "elm327_config.protocol: %c", elm327_config.protocol);
 
 	// The header should not be reset when the protocol is changed
