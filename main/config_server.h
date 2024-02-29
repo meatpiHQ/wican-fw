@@ -85,6 +85,7 @@ typedef struct _device_config
 	char mqtt_elm327_log[10];
 	char mqtt_tx_topic[64];
 	char mqtt_rx_topic[64];
+	char mqtt_status_topic[64];
 }device_config_t;
 
 
@@ -133,3 +134,4 @@ char *config_server_get_mqtt_canflt(void);
 int8_t config_server_mqtt_elm327_log(void);
 char *config_server_get_mqtt_tx_topic(void);
 char *config_server_get_mqtt_rx_topic(void);
+char *config_server_get_mqtt_status_topic(void);

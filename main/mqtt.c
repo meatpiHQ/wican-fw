@@ -347,7 +347,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
 			esp_mqtt_client_subscribe(client, mqtt_sub_topic, 0);
 			gpio_set_level(mqtt_led, 0);
-			esp_mqtt_client_publish(client, mqtt_status_topic, "{\"status\": \"online\"}", 0, 0, 0);
+			esp_mqtt_client_publish(client, mqtt_status_topic, "{\"status\": \"online\"}", 0, 0, 1);
 			break;
 		case MQTT_EVENT_DISCONNECTED:
 			ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
@@ -752,6 +752,7 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
 		.network.disable_auto_reconnect = false,
 		.session.keepalive = 30,
 		.session.last_will.topic = mqtt_status_topic,
+        .session.last_will.retain = 1,
 		.session.last_will.msg = "{\"status\": \"offline\"}",
 		.network.reconnect_timeout_ms = 5000,
 		.buffer.size = 1024*5,
@@ -762,8 +763,8 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
     device_id = id;
     // sprintf(mqtt_sub_topic, "wican/%s/can/tx", device_id);
     strcpy(mqtt_sub_topic, config_server_get_mqtt_tx_topic());
-    sprintf(mqtt_status_topic, "wican/%s/status", device_id);
-
+    // sprintf(mqtt_status_topic, "wican/%s/status", device_id);
+    strcpy(mqtt_status_topic, config_server_get_mqtt_status_topic());
     ESP_LOGI(TAG, "device_id: %s, mqtt_cfg.uri: %s", device_id, mqtt_cfg.broker.address.uri);
     mqtt_elm327_log = config_server_mqtt_elm327_log();
 	mqtt_load_filter();
