@@ -180,7 +180,7 @@ You need to download the right version of BUSMaster provided in this [**Link**](
 <img src="https://user-images.githubusercontent.com/94690098/158798541-0317aa4f-ebf5-4e57-83b0-ea3fefeaf4e9.png" width="350" height="500" >
 
 ## 3. RealDash
-WiCAN can connect with RealDash using WiFi or BLE. The Protocol and CAN bitrate must be set using the configuration page. BLE is only support on Android and IOS. Windows 10 only supports WiFi connection.
+WiCAN can connect with RealDash using WiFi or BLE or USB. The Protocol and CAN bitrate must be set using the configuration page. BLE is only support on Android and IOS. Windows 10 only supports WiFi connection.
 
 ## **WiFi Device Configuration:**
 
