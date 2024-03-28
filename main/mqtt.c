@@ -347,7 +347,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
 			esp_mqtt_client_subscribe(client, mqtt_sub_topic, 0);
 			gpio_set_level(mqtt_led, 0);
-			esp_mqtt_client_publish(client, mqtt_status_topic, "{\"status\": \"online\"}", 0, 0, 0);
+			esp_mqtt_client_publish(client, mqtt_status_topic, "{\"status\": \"online\"}", 0, 0, 1);
 			break;
 		case MQTT_EVENT_DISCONNECTED:
 			ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
@@ -513,7 +513,8 @@ static void mqtt_task(void *pvParameters)
     static char mqtt_elm327_topic[64];
 	static uint64_t can_data = 0;
 
-	sprintf(mqtt_topic, "wican/%s/can/rx", device_id);
+	// sprintf(mqtt_topic, "wican/%s/can/rx", device_id);
+    strcpy(mqtt_topic, config_server_get_mqtt_rx_topic());
     sprintf(mqtt_elm327_topic, "wican/%s/elm327", device_id);
 
 	while(!wifi_network_is_connected())
@@ -694,7 +695,7 @@ static void mqtt_load_filter(void)
         {
             free(mqtt_canflt_values);
             cJSON_Delete(root);
-            ESP_LOGE(TAG, "(uint32_t i = 0; i < mqtt_canflt_size; i++)");
+            ESP_LOGE(TAG, "Failed to get json array can_flt");
             mqtt_canflt_size = 0;
             return;
         }
@@ -708,6 +709,12 @@ static void mqtt_load_filter(void)
         cJSON *bit_length = cJSON_GetObjectItem(item, "BitLength");
         cJSON *expression = cJSON_GetObjectItem(item, "Expression");
         cJSON *cycle = cJSON_GetObjectItem(item, "Cycle");
+
+        //if pidi is null set it to default 2
+        if(pidi == NULL)
+        {
+            pidi = cJSON_CreateNumber(2);
+        }
 
         if (cJSON_IsNumber(can_id) && cJSON_IsString(name) && cJSON_IsNumber(pid) && cJSON_IsNumber(pidi) &&
             cJSON_IsNumber(start_bit) && cJSON_IsNumber(bit_length) && cJSON_IsString(expression) && cJSON_IsNumber(cycle)) 
@@ -751,6 +758,7 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
 		.network.disable_auto_reconnect = false,
 		.session.keepalive = 30,
 		.session.last_will.topic = mqtt_status_topic,
+        .session.last_will.retain = 1,
 		.session.last_will.msg = "{\"status\": \"offline\"}",
 		.network.reconnect_timeout_ms = 5000,
 		.buffer.size = 1024*5,
@@ -759,9 +767,10 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
     xmqtt_tx_queue = xtx_queue;
     mqtt_led = connected_led;
     device_id = id;
-    sprintf(mqtt_sub_topic, "wican/%s/can/tx", device_id);
-    sprintf(mqtt_status_topic, "wican/%s/status", device_id);
-
+    // sprintf(mqtt_sub_topic, "wican/%s/can/tx", device_id);
+    strcpy(mqtt_sub_topic, config_server_get_mqtt_tx_topic());
+    // sprintf(mqtt_status_topic, "wican/%s/status", device_id);
+    strcpy(mqtt_status_topic, config_server_get_mqtt_status_topic());
     ESP_LOGI(TAG, "device_id: %s, mqtt_cfg.uri: %s", device_id, mqtt_cfg.broker.address.uri);
     mqtt_elm327_log = config_server_mqtt_elm327_log();
 	mqtt_load_filter();
