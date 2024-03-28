@@ -695,7 +695,7 @@ static void mqtt_load_filter(void)
         {
             free(mqtt_canflt_values);
             cJSON_Delete(root);
-            ESP_LOGE(TAG, "(uint32_t i = 0; i < mqtt_canflt_size; i++)");
+            ESP_LOGE(TAG, "Failed to get json array can_flt");
             mqtt_canflt_size = 0;
             return;
         }
@@ -709,6 +709,12 @@ static void mqtt_load_filter(void)
         cJSON *bit_length = cJSON_GetObjectItem(item, "BitLength");
         cJSON *expression = cJSON_GetObjectItem(item, "Expression");
         cJSON *cycle = cJSON_GetObjectItem(item, "Cycle");
+
+        //if pidi is null set it to default 2
+        if(pidi == NULL)
+        {
+            pidi = cJSON_CreateNumber(2);
+        }
 
         if (cJSON_IsNumber(can_id) && cJSON_IsString(name) && cJSON_IsNumber(pid) && cJSON_IsNumber(pidi) &&
             cJSON_IsNumber(start_bit) && cJSON_IsNumber(bit_length) && cJSON_IsString(expression) && cJSON_IsNumber(cycle)) 
