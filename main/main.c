@@ -52,6 +52,7 @@
 #include "mqtt.h"
 #include "esp_mac.h"
 #include "ftp.h"
+#include "autopid.h"
 
 #define TAG 		__func__
 #define TX_GPIO_NUM             	0
@@ -439,6 +440,9 @@ void app_main(void)
 		can_set_bitrate(can_datarate);
 		can_enable();
 		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
+		
+		// elm327_init(&autopid_mqtt_pub, &xmsg_obd_rx_queue, NULL);
+		// autopid_init();
 		if(config_server_mqtt_en_config() && config_server_mqtt_elm327_log())
 		{
 			mqtt_elm327_log_en = config_server_mqtt_elm327_log();
@@ -562,6 +566,6 @@ void app_main(void)
 	// pdTRUE, /* BIT_0 should be cleared before returning. */
 	// pdFALSE, /* Don't wait for both bits, either bit will do. */
 	// portMAX_DELAY);/* Wait forever. */  
-	esp_log_level_set("*", ESP_LOG_NONE);
+	// esp_log_level_set("*", ESP_LOG_NONE);
 }
 

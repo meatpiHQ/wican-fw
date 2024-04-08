@@ -4,6 +4,8 @@
     "idf.flashType": "UART",
     "files.associations": {
         "ftp.h": "c",
-        "config_server.h": "c"
+        "config_server.h": "c",
+        "wifi_network.h": "c",
+        "elm327.h": "c"
     }
 }
