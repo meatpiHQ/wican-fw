@@ -33,7 +33,7 @@
 #include "lwip/sockets.h"
 #include "driver/twai.h"
 #include "can.h"
-
+#include "hw_config.h"
 
 static EventGroupHandle_t s_can_event_group = NULL;
 #define CAN_ENABLE_BIT 		BIT0

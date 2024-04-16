@@ -1,5 +1,4 @@
-/*
- * This file is part of the WiCAN project.
+ /* This file is part of the WiCAN project.
  *
  * Copyright (C) 2022  Meatpi Electronics.
  * Written by Ali Slim <ali@meatpi.com>
@@ -17,27 +16,31 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#ifndef GW_CONFIG_h
+#define GW_CONFIG_h
+
+#if HARDWARE_VER == WICAN_PRO
+
+#define TX_GPIO_NUM             	2
+#define RX_GPIO_NUM             	1
+#define CAN_STDBY_GPIO_NUM			38
+
+#define CONNECTED_LED_GPIO_NUM		41  //NC pin
+#define ACTIVE_LED_GPIO_NUM			41  //NC pin
+#define BLE_EN_PIN_NUM				42  //NC pin
+#define PWR_LED_GPIO_NUM			41  //NC pin
 
 
-#ifndef __TYPES_H__
-#define __TYPES_H__
+#else
 
-#define DEV_BUFFER_LENGTH	128
+#define TX_GPIO_NUM             	0
+#define RX_GPIO_NUM             	3
+#define CONNECTED_LED_GPIO_NUM		8
+#define ACTIVE_LED_GPIO_NUM			9
+#define BLE_EN_PIN_NUM				5
+#define PWR_LED_GPIO_NUM			7
+#define CAN_STDBY_GPIO_NUM			6
 
-typedef enum
-{
-	DEV_WIFI = 0,
-	DEV_WIFI_WS,
-	DEV_BLE,
-	DEV_UART
-}dev_channel_t;
-
-
-typedef struct __xdev_buffer
-{
-	int usLen;
-	uint8_t ucElement[DEV_BUFFER_LENGTH];
-	dev_channel_t dev_channel;
-}xdev_buffer;
+#endif
 
 #endif

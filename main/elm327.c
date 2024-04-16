@@ -36,6 +36,7 @@
 #include "std_pid.h"
 #include "sleep_mode.h"
 #include "elm327.h"
+#include "driver/uart.h"
 
 #define TAG 		__func__
 
@@ -47,20 +48,20 @@
 #define SERVICE_09			0x09
 #define SERVICE_UNKNOWN		0xFF
 
-uint8_t service_09_rsp_len[] = {1, 1, 4, 1, 255, 1, 255, 1, 1, 1, 4, 1}; //255 unknow
-
-
-
 static QueueHandle_t *can_rx_queue = NULL;
+void (*elm327_response)(char*, uint32_t, QueueHandle_t *q);
+void (*elm327_can_log)(twai_message_t* frame, uint8_t type);
 
+#if HARDWARE_VER != WICAN_PRO
+
+uint8_t service_09_rsp_len[] = {1, 1, 4, 1, 255, 1, 255, 1, 1, 1, 4, 1}; //255 unknow
 const char *ok_str = "OK";
 const char *question_mark_str = "?";
 const char *device_description = "ELM327 v1.3a";
 const char *identify = "OBDLink MX";
 
 
-void (*elm327_response)(char*, uint32_t, QueueHandle_t *q);
-void (*elm327_can_log)(twai_message_t* frame, uint8_t type);
+
 // The fields are ordered this way so the data can be tightly packed.
 // See elm327_set_default_config for a more readable ordering.
 typedef struct __xelm327_config
@@ -1254,3 +1255,110 @@ void elm327_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q), QueueH
 	can_rx_queue = rx_queue;
 	elm327_can_log = can_log;
 }
+#else
+#include <stdbool.h>
+#include <string.h>
+
+#define BUF_SIZE (1024)
+static QueueHandle_t uart1_queue;
+QueueHandle_t *tx_q;
+int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t *q)
+{
+    static uint8_t uart_read_buf[BUF_SIZE];
+    uart_event_t event;
+    bool continueReading = true;
+
+    ESP_LOGI(TAG, "Cmd: %s", (char*)buf);
+
+    uart_write_bytes(UART_NUM_1, (const char*) buf, len);
+	tx_q = q;
+    // while(continueReading)
+    // {
+    //     if (xQueueReceive(uart1_queue, (void *)&event, (TickType_t)portMAX_DELAY))
+    //     {
+    //         bzero(uart_read_buf, BUF_SIZE);
+    //         // ESP_LOGI(TAG, "uart[%d] event:", UART_NUM_1);
+    //         switch (event.type) 
+    //         {
+    //             case UART_DATA:
+    //                 // ESP_LOGI(TAG, "[UART DATA]: %d", event.size);
+    //                 uart_read_bytes(UART_NUM_1, uart_read_buf, event.size, portMAX_DELAY);
+    //                 // ESP_LOGI(TAG, "[DATA EVT]:");
+                    
+	// 				ESP_LOG_BUFFER_HEXDUMP(TAG, uart_read_buf, event.size, ESP_LOG_INFO);
+	// 				uart_read_buf[event.size] = 0;
+	// 				elm327_response((char*)uart_read_buf, 0, q);
+    //                 // ESP_LOGI(TAG, "Data: %s", (char*)uart_read_buf);
+
+    //                 // Check if the '>' character is in the buffer
+    //                 if (strchr((char *)uart_read_buf, '>') != NULL) {
+    //                     continueReading = false; // Stop reading if '>' found
+    //                 }
+    //                 break;
+    //             default:
+    //                 ESP_LOGI(TAG, "uart event type: %d", event.type);
+    //                 break;
+    //         }
+    //     }
+    // }
+
+    return 0;
+}
+static void uart1_event_task(void *pvParameters)
+{
+    static uint8_t uart_read_buf[BUF_SIZE];
+    uart_event_t event;
+
+    while (1) {
+        if (xQueueReceive(uart1_queue, (void*)&event, portMAX_DELAY)) {
+            bzero(uart_read_buf, BUF_SIZE);
+            switch (event.type) {
+                case UART_DATA:
+                    uart_read_bytes(UART_NUM_1, uart_read_buf, event.size, portMAX_DELAY);
+                    uart_read_buf[event.size] = '\0'; // Null-terminate the data
+                    ESP_LOG_BUFFER_HEXDUMP(TAG, uart_read_buf, event.size, ESP_LOG_INFO);
+                    elm327_response((char*)uart_read_buf, 0, tx_q); // Assuming no specific queue is used here
+                    break;
+                case UART_FIFO_OVF:
+                    ESP_LOGE(TAG, "HW FIFO Overflow");
+                    uart_flush(UART_NUM_1);
+                    break;
+                case UART_BUFFER_FULL:
+                    ESP_LOGE(TAG, "Ring Buffer Full");
+                    uart_flush(UART_NUM_1);
+                    break;
+                default:
+                    ESP_LOGI(TAG, "Unhandled event type: %d", event.type);
+                    break;
+            }
+        }
+    }
+}
+void elm327_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q), QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame, uint8_t type))
+{
+	// elm327_set_default_config(true);
+	elm327_response = send_to_host;
+	can_rx_queue = rx_queue;
+	elm327_can_log = can_log;
+
+    uart_config_t uart1_config = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_DEFAULT,
+    };
+    //Install UART driver, and get the queue.
+    esp_err_t ret =uart_driver_install(UART_NUM_1, BUF_SIZE * 2, BUF_SIZE * 2, 20, &uart1_queue, 0);
+	if (ret != ESP_OK) {
+		ESP_LOGE(TAG, "Failed to install UART driver: %s", esp_err_to_name(ret));
+	}
+    uart_param_config(UART_NUM_1, &uart1_config);
+
+	// uart_set_pin(UART_NUM_1, GPIO_NUM_17, GPIO_NUM_18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+	uart_set_pin(UART_NUM_1, GPIO_NUM_16, GPIO_NUM_15, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+	xTaskCreate(uart1_event_task, "uart1_event_task", 2048*2, NULL, 12, NULL);
+}
+
+#endif

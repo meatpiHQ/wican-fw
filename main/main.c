@@ -52,14 +52,9 @@
 #include "mqtt.h"
 #include "esp_mac.h"
 #include "ftp.h"
+#include "hw_config.h"
 
 #define TAG 		__func__
-#define TX_GPIO_NUM             	0
-#define RX_GPIO_NUM             	3
-#define CONNECTED_LED_GPIO_NUM		8
-#define ACTIVE_LED_GPIO_NUM			9
-#define BLE_EN_PIN_NUM				5
-#define PWR_LED_GPIO_NUM			7
 #define GPIO_OUTPUT_PIN_SEL  ((1ULL<<CONNECTED_LED_GPIO_NUM) | (1ULL<<ACTIVE_LED_GPIO_NUM) | (1ULL<<PWR_LED_GPIO_NUM) | (1ULL<<CAN_STDBY_GPIO_NUM))
 #define BLE_EN_PIN_SEL		(1ULL<<BLE_EN_PIN_NUM)
 #define BLE_Enabled()		(!gpio_get_level(BLE_EN_PIN_NUM))
@@ -148,9 +143,11 @@ void send_to_host(char* str, uint32_t len, QueueHandle_t *q)
 		xsend_buffer.usLen = len;
 	}
 	memcpy(xsend_buffer.ucElement, str, xsend_buffer.usLen);
-	xQueueSend( *q, ( void * ) &xsend_buffer, portMAX_DELAY );
+	
 
-//	ESP_LOG_BUFFER_HEX(TAG, ucTCP_TX_Buffer.ucElement, xsend_buffer.usLen);
+	ESP_LOG_BUFFER_HEX(TAG, ucTCP_TX_Buffer.ucElement, xsend_buffer.usLen);
+
+	xQueueSend( *q, ( void * ) &xsend_buffer, portMAX_DELAY );
 	memset(xsend_buffer.ucElement, 0, sizeof(xsend_buffer.ucElement));
 	xsend_buffer.usLen = 0;
 //	ESP_LOGI(TAG, "%s", str);
@@ -352,7 +349,7 @@ void app_main(void)
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-
+	printf("Project Version: %d\n", HARDWARE_VER);
     gpio_config_t io_conf = {};
     //disable interrupt
     io_conf.intr_type = GPIO_INTR_DISABLE;
