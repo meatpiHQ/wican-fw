@@ -364,7 +364,7 @@ This feature enables you to convert CAN messages into JSON format, apply calcula
 
 **Note: When a filter is added, all other CAN messages will be ignored, ensuring that only the configured filtered messages are sent.**
 
-![image](https://github.com/meatpiHQ/wican-fw/assets/94690098/a6588895-504e-48ef-9d3b-c595ced52ebd)
+<img width="1496" alt="image" src="https://github.com/meatpiHQ/wican-fw/assets/94690098/18e87820-2b5f-4823-947d-0d1c412a6e3d">
 
 
 ### Configuration Parameters:
@@ -377,6 +377,9 @@ Specify the JSON key under which the extracted value will be stored.
 
 **PID: PID Number in DEC**
 If the frame is a response to a PID request, set this parameter to the relevant PID number. Otherwise, for non-PID frames, it should be set to -1.
+
+**Index: PID index**
+For all standard PID requests, this should be set to 2, referring to byte 2 in the response. In certain special cases, this value may differ from 2. If the PID is set to -1, the interpreter will disregard this value.
 
 **Start Bit**
 Indicate the bit from which you want to commence extracting the value. For instance, if Byte 0 is represented as 0xA0 in binary (b1010 0000), 'Bit 0' would correspond to 1, 'Bit 1' to 0, and so forth.
@@ -408,7 +411,7 @@ Name|CAN ID| Byte 0 | Byte 1 | Byte 2 | Byte 3 | Byte 4 | Byte 5 | Byte 6 | Byte
 Engine Speed|2024| 4| 65| **12**| _18_| _52_| 170| 170| 170
 | |  |  | | PID| Value 1| Value 2  |  |  
 
-The Engine Speed is PID response so "PID" must be set 12. The value we need to extract is 16bit in Byte 3 and Byte 4. So we set the "Start Bit" to 24 and "Bit Length" to 16. The extracted value will be (11*256)+68 = 4660. Now to get the engine speed in rpm we must multiple by 0.25. So the "Expression" will be V*0.25= 1165
+The Engine Speed is PID response so "PID" must be set 12. The value we need to extract is 16bit in Byte 3 and Byte 4. So we set the "Start Bit" to 24 and "Bit Length" to 16. The extracted value will be (11 * 256)+68 = 4660. Now to get the engine speed in rpm we must multiple by 0.25. So the "Expression" will be V * 0.25= 1165
 
 Name|CAN ID| Byte 0 | Byte 1 | Byte 2 | Byte 3 | Byte 4 | Byte 5 | Byte 6 | Byte 7 
 ---|--- | --- | --- | --- |--- |--- |--- |--- |---
@@ -425,6 +428,11 @@ Custom ID|356| 170| 170| _35_| _16_|170| 170| 170| 170
 
 The PID in the configuration needs to set to -1. The value we need to extract is 16bit in Byte 2 and Byte 3. So we set the "Start Bit" to 16 and "Bit Length" to 16. The extracted value will be (35*256)+16 = 8976. Now to get the value we must add 10 to the Value and divide by 2.5. So the "Expression" will be (V+10)/2.5 = 3594.4
 
+Name|CAN ID| Byte 0 | Byte 1 | Byte 2 | Byte 3 | Byte 4 | Byte 5 | Byte 6 | Byte 7 
+---|--- | --- | --- | --- |--- |--- |--- |--- |---
+Custom ID|355| 170| 170| 170| 170|_5_| _34_| 170| 170
+
+The PID in the configuration should be set to -1. The values to extract are from Byte 4 and Byte 5. The formula used here is (5 + 34)/2, so the expression to set is (B4 + B5)/2.
 
 # Home Assistant
 
