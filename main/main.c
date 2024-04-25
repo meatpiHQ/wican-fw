@@ -55,7 +55,11 @@
 #include "hw_config.h"
 
 #define TAG 		__func__
-#define GPIO_OUTPUT_PIN_SEL  ((1ULL<<CONNECTED_LED_GPIO_NUM) | (1ULL<<ACTIVE_LED_GPIO_NUM) | (1ULL<<PWR_LED_GPIO_NUM) | (1ULL<<CAN_STDBY_GPIO_NUM))
+#define USB_ID_PIN					39
+#define USB_OTG_PWR_EN				10
+#define USB_ESP_MODE_EN				11
+#define GPIO_OUTPUT_PIN_SEL  ((1ULL<<CONNECTED_LED_GPIO_NUM) | (1ULL<<ACTIVE_LED_GPIO_NUM) | (1ULL<<PWR_LED_GPIO_NUM) | (1ULL<<CAN_STDBY_GPIO_NUM) | (1ULL<<USB_OTG_PWR_EN) | (1ULL<<USB_ESP_MODE_EN))
+
 #define BLE_EN_PIN_SEL		(1ULL<<BLE_EN_PIN_NUM)
 #define BLE_Enabled()		(!gpio_get_level(BLE_EN_PIN_NUM))
 
@@ -251,6 +255,17 @@ static void can_rx_task(void *pvParameters)
 // //        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
 // //        		num_msg = 0;
     	}
+
+		if(gpio_get_level(USB_ID_PIN) == 0)
+		{
+			gpio_set_level(USB_OTG_PWR_EN, 1);
+			gpio_set_level(USB_ESP_MODE_EN, 1);
+		}
+		else
+		{
+			gpio_set_level(USB_OTG_PWR_EN, 0);
+			gpio_set_level(USB_ESP_MODE_EN, 0);
+		}
         while(can_receive(&rx_msg, 0) ==  ESP_OK)
         {
 //        	num_msg++;
@@ -366,6 +381,32 @@ void app_main(void)
 
 	gpio_set_level(CONNECTED_LED_GPIO_NUM, 1);
 	gpio_set_level(ACTIVE_LED_GPIO_NUM, 1);
+
+	gpio_set_level(CONNECTED_LED_GPIO_NUM, 1);
+	gpio_set_level(ACTIVE_LED_GPIO_NUM, 1);
+
+	gpio_reset_pin(USB_ID_PIN);
+	gpio_set_direction(USB_ID_PIN, GPIO_MODE_INPUT);
+
+	// gpio_reset_pin(USB_ESP_MODE_EN);
+	// gpio_set_direction(USB_ESP_MODE_EN, GPIO_MODE_OUTPUT);
+	// gpio_set_level(USB_ESP_MODE_EN, 1);
+
+	// while(1)
+	// {
+	// 	printf("Project Version: %d\n", HARDWARE_VER);
+	// 	vTaskDelay(pdMS_TO_TICKS(1000));
+	// 	if(gpio_get_level(USB_ID_PIN) == 0)
+	// 	{
+	// 		gpio_set_level(USB_OTG_PWR_EN, 1);
+	// 		gpio_set_level(USB_ESP_MODE_EN, 1);
+	// 	}
+	// 	else
+	// 	{
+	// 		gpio_set_level(USB_OTG_PWR_EN, 0);
+	// 		gpio_set_level(USB_ESP_MODE_EN, 0);
+	// 	}
+	// }
 
     xMsg_Rx_Queue = xQueueCreate(32, sizeof( xdev_buffer) );
     xMsg_Tx_Queue = xQueueCreate(32, sizeof( xdev_buffer) );
