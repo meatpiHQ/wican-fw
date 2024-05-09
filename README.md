@@ -5,11 +5,20 @@
 ## MeatPi [Discord server](https://discord.com/invite/2hpHVDmyfw)
 ## Please update to the [latest firmware version](https://github.com/meatpiHQ/wican-fw/releases/)
 
-## Order on [**Mouser**](https://www.mouser.com/c/?m=MeatPi) or [**Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics/wican)
+## Order on [**Mouser**](https://www.mouser.com/c/?m=MeatPi) or [**Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics)
 
 <br/><br/>
 
 ---
+# WiCAN PRO
+
+launching soon on [**Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics/wican-pro)
+
+![image](https://github.com/meatpiHQ/wican-fw/assets/94690098/1648a50f-d5a4-40fc-9794-78b8b57ccc0d)
+
+
+# WiCAN
+
 ![65465](https://github.com/meatpiHQ/wican-fw/assets/94690098/537b5062-cb8a-485f-9354-6c351d08aa49)
 
 ## WiCAN-USB Pinout
