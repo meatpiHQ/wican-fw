@@ -95,7 +95,7 @@
 
 # **Build**:
 
-1. Install ESP-IDF v4.4.
+1. Install ESP-IDF >= v5.1.
 2. Clone porject.
 3. Open project and build.
 
