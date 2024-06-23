@@ -6,6 +6,8 @@
         "ftp.h": "c",
         "config_server.h": "c",
         "wifi_network.h": "c",
-        "elm327.h": "c"
+        "elm327.h": "c",
+        "realdash.h": "c",
+        "expression_parser.h": "c"
     }
 }

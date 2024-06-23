@@ -59,6 +59,7 @@
 #include <stdbool.h>
 #include <ctype.h>
 #include "esp_timer.h"
+#include "expression_parser.h"
 
 #define TAG 		__func__
 
@@ -89,248 +90,6 @@ typedef struct
 
 static CANFilter *mqtt_canflt_values = NULL;
 static uint32_t mqtt_canflt_size = 0;
-
-
-
-#define MAX_STACK_SIZE 100
-
-typedef struct 
-{
-    double items[MAX_STACK_SIZE];
-    int top;
-} Stack;
-
-static void initialize(Stack *stack) 
-{
-    stack->top = -1;
-}
-
-static bool isEmpty(Stack *stack) 
-{
-    return stack->top == -1;
-}
-
-static void push(Stack *stack, double item) 
-{
-    if (stack->top == MAX_STACK_SIZE - 1) 
-	{
-        ESP_LOGE(TAG, "Stack overflow\n");
-    } 
-	else 
-	{
-        stack->items[++stack->top] = item;
-    }
-}
-
-// Function to pop a double value from the stack
-static double pop(Stack *stack) 
-{
-    if (isEmpty(stack)) 
-	{
-        ESP_LOGE(TAG, "Stack underflow\n");
-        return 0.0; // Return a default value
-    } 
-	else 
-	{
-        return stack->items[stack->top--];
-    }
-}
-
-static int8_t mqtt_canflt_find_id(uint32_t id, uint8_t start_index)
-{
-	if(mqtt_canflt_size == 0)
-	{
-		return -1;
-	}
-	for(uint32_t i = start_index; i < mqtt_canflt_size; i++)
-	{
-		if(mqtt_canflt_values[i].can_id == id)
-		{
-			return i;
-		}
-	}
-
-	return -1;
-}
-static bool evaluate_expression(uint8_t *expression,  uint8_t *data, double V, double *result) 
-{
-    Stack operandStack;
-    Stack operatorStack;
-    initialize(&operandStack);
-    initialize(&operatorStack);
-
-    uint8_t i = 0;
-    while (expression[i] != '\0') 
-	{
-        if (isspace(expression[i])) 
-		{
-            i++;
-            continue; // Skip whitespace
-        }
-        if (isdigit(expression[i]) || (expression[i] == '.' && isdigit(expression[i + 1]))) 
-		{
-            char numBuffer[20];
-            int j = 0;
-            while (isdigit(expression[i]) || expression[i] == '.') 
-			{
-                numBuffer[j++] = expression[i++];
-            }
-            numBuffer[j] = '\0';
-            double num = atof(numBuffer);
-            push(&operandStack, num);
-        } 
-		else if (expression[i] == 'V') 
-		{
-            push(&operandStack, V); // Substitute the value of V
-            i++;
-        } 
-        else if (expression[i] == 'B' && isdigit(expression[i+1])) 
-        {
-            int byteIndex = expression[i+1] - '0'; // Get the byte index (B0, B1, B2, ...)
-            if (byteIndex >= 0 && byteIndex < 8) // Ensure the byte index is valid (0-7)
-            {
-                push(&operandStack, (double)data[byteIndex]);
-                i += 2; // Skip 'B' and the digit
-            }
-            else
-            {
-                ESP_LOGE(TAG, "Invalid byte index\n");
-                return false; // Return failure
-            }
-        }
-		else if (expression[i] == '(') 
-		{
-            push(&operatorStack, expression[i]);
-            i++;
-        } 
-		else if (expression[i] == ')') 
-		{
-            while (!isEmpty(&operatorStack) && operatorStack.items[operatorStack.top] != '(') 
-			{
-                char operator = pop(&operatorStack);
-                double operand2 = pop(&operandStack);
-                double operand1 = pop(&operandStack);
-
-                if (operator == '+') 
-				{
-                    push(&operandStack, operand1 + operand2);
-                } 
-				else if (operator == '-') 
-				{
-                    push(&operandStack, operand1 - operand2);
-                } 
-				else if (operator == '*') 
-				{
-                    push(&operandStack, operand1 * operand2);
-                } 
-				else if (operator == '/') 
-				{
-                    if (operand2 == 0) 
-					{
-                        ESP_LOGE(TAG, "Division by zero\n");
-                        return false; // Return failure
-                    }
-                    push(&operandStack, operand1 / operand2);
-                }
-            }
-            // Pop '(' from the operator stack
-            if (!isEmpty(&operatorStack) && operatorStack.items[operatorStack.top] == '(') 
-			{
-                pop(&operatorStack);
-            } 
-			else 
-			{
-                ESP_LOGE(TAG, "Mismatched parentheses\n");
-                return false; // Return failure
-            }
-            i++;
-        } 
-		else if (expression[i] == '+' || expression[i] == '-' || expression[i] == '*' || expression[i] == '/') 
-		{
-            while (!isEmpty(&operatorStack) &&
-                   (operatorStack.items[operatorStack.top] == '*' || operatorStack.items[operatorStack.top] == '/') &&
-                   (expression[i] == '+' || expression[i] == '-')) 
-			{
-                char operator = pop(&operatorStack);
-                double operand2 = pop(&operandStack);
-                double operand1 = pop(&operandStack);
-
-                if (operator == '+') 
-				{
-                    push(&operandStack, operand1 + operand2);
-                } 
-				else if (operator == '-') 
-				{
-                    push(&operandStack, operand1 - operand2);
-                } 
-				else if (operator == '*') 
-				{
-                    push(&operandStack, operand1 * operand2);
-                } 
-				else if (operator == '/') 
-				{
-                    if (operand2 == 0) 
-					{
-                        ESP_LOGE(TAG, "Division by zero\n");
-                        return false; // Return failure
-                    }
-                    push(&operandStack, operand1 / operand2);
-                }
-            }
-            push(&operatorStack, expression[i]);
-            i++;
-        } 
-		else 
-		{
-            ESP_LOGE(TAG, "Invalid character");
-            return false; // Return failure
-        }
-    }
-
-    // Check for remaining '(' in operator stack
-    while (!isEmpty(&operatorStack)) 
-	{
-        char operator = pop(&operatorStack);
-        if (operator == '(') 
-		{
-            ESP_LOGE(TAG, "Mismatched parentheses\n");
-            return false; // Return failure
-        }
-        double operand2 = pop(&operandStack);
-        double operand1 = pop(&operandStack);
-
-        if (operator == '+') 
-		{
-            push(&operandStack, operand1 + operand2);
-        } 
-		else if (operator == '-') 
-		{
-            push(&operandStack, operand1 - operand2);
-        } 
-		else if (operator == '*') 
-		{
-            push(&operandStack, operand1 * operand2);
-        } 
-		else if (operator == '/') 
-		{
-            if (operand2 == 0) 
-			{
-                ESP_LOGE(TAG, "Division by zero\n");
-                return false; // Return failure
-            }
-            push(&operandStack, operand1 / operand2);
-        }
-    }
-
-    if (isEmpty(&operandStack) || operandStack.top != 0) 
-	{
-        ESP_LOGE(TAG, "Invalid expression\n");
-        return false; // Return failure
-    }
-
-    *result = operandStack.items[0];
-    return true; // Return success
-}
 
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
@@ -501,6 +260,23 @@ int mqtt_connected(void)
 		return (uxBits & MQTT_CONNECTED_BIT)?1:0;
 	}
 	else return 0;
+}
+
+static int8_t mqtt_canflt_find_id(uint32_t id, uint8_t start_index)
+{
+	if(mqtt_canflt_size == 0)
+	{
+		return -1;
+	}
+	for(uint32_t i = start_index; i < mqtt_canflt_size; i++)
+	{
+		if(mqtt_canflt_values[i].can_id == id)
+		{
+			return i;
+		}
+	}
+
+	return -1;
 }
 
 #define JSON_BUF_SIZE		2048

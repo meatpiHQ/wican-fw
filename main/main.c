@@ -441,17 +441,17 @@ void app_main(void)
 		can_enable();
 		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
 		
-		// elm327_init(&autopid_mqtt_pub, &xmsg_obd_rx_queue, NULL);
-		// autopid_init();
-		if(config_server_mqtt_en_config() && config_server_mqtt_elm327_log())
-		{
-			mqtt_elm327_log_en = config_server_mqtt_elm327_log();
-			elm327_init(&send_to_host, &xmsg_obd_rx_queue, log_can_to_mqtt);
-		}
-		else
-		{
-			elm327_init(&send_to_host, &xmsg_obd_rx_queue, NULL);
-		}
+		elm327_init(&autopid_mqtt_pub, &xmsg_obd_rx_queue, NULL);
+		autopid_init();
+		// if(config_server_mqtt_en_config() && config_server_mqtt_elm327_log())
+		// {
+		// 	mqtt_elm327_log_en = config_server_mqtt_elm327_log();
+		// 	elm327_init(&send_to_host, &xmsg_obd_rx_queue, log_can_to_mqtt);
+		// }
+		// else
+		// {
+		// 	elm327_init(&send_to_host, &xmsg_obd_rx_queue, NULL);
+		// }
 	}
 
 	if(config_server_mqtt_en_config())
