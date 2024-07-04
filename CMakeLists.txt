@@ -2,6 +2,8 @@
 # CMakeLists in this exact order for cmake to work correctly
 cmake_minimum_required(VERSION 3.5)
 
+include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+
 set(WICAN_V210 1)
 set(WICAN_V300 2)
 set(WICAN_USB_V100 3)
@@ -12,22 +14,35 @@ add_definitions(-DWICAN_V300=${WICAN_V300})
 add_definitions(-DWICAN_USB_V100=${WICAN_USB_V100})
 add_definitions(-DWICAN_PRO=${WICAN_PRO})
 
+execute_process(
+    COMMAND git describe --tags --always --dirty
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE GIT_SHA
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+string(REPLACE "." "" GIT_SHA "${GIT_SHA}")
+
 # Uncomment and use one of the following as needed
-# set(HARDWARE_VER WICAN_V210)
-# set(HARDWARE_VER WICAN_V300)
-# set(HARDWARE_VER WICAN_USB_V100)
-set(HARDWARE_VER WICAN_PRO)
+# set(HARDWARE_VER ${WICAN_V210})
+# set(HARDWARE_VER ${WICAN_V300})
+# set(HARDWARE_VER ${WICAN_USB_V100})
+set(HARDWARE_VER ${WICAN_PRO})
 
 add_definitions(-DHARDWARE_VER=${HARDWARE_VER})
 
 set(PROJECT_PREF "wican-fw")
-set(PROJECT_VER "v298_hv300")
-#set(PROJECT_VER "v155_hv210")
 
-# set(PROJECT_PREF "wican-fw-usb")
-# set(PROJECT_VER "v298_hv150")
-set(PROJECT_VERU ${PROJECT_VER})
-set(PROJECT_BIN "${PROJECT_PREF}_${PROJECT_VERU}")
-include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project("${PROJECT_BIN}")
+# Set HW_PREF based on HARDWARE_VER
+if (HARDWARE_VER EQUAL ${WICAN_PRO})
+    set(HW_PREF "obd_pro")
+elseif (HARDWARE_VER EQUAL ${WICAN_USB_V100})
+    set(HW_PREF "usb")
+else()
+    set(HW_PREF "obd")
+endif()
+
+# Form the project binary name
+set(PRJ_BIN "${PROJECT_PREF}_${HW_PREF}_${GIT_SHA}")
+project("${PRJ_BIN}")
 
