@@ -1,78 +1,61 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include  "freertos/queue.h"
-#include "freertos/event_groups.h"
-#include "esp_wifi.h"
-#include "esp_system.h"
-#include "esp_event.h"
-#include "nvs_flash.h"
-#include "driver/gpio.h"
-#include "driver/twai.h"
+#include "freertos/queue.h"
 #include "esp_log.h"
 #include <string.h>
-#include "esp_log.h"
-#include "mqtt_client.h"
-#include "ver.h"
-#include "cJSON.h"
-#include "wifi_network.h"
-#include "mqtt.h"
-#include <stdbool.h>
-#include <ctype.h>
+#include "driver/twai.h"
 #include "esp_timer.h"
 #include "lwip/sockets.h"
 #include "elm327.h"
+#include "autopid.h"
 #include "expression_parser.h"
+#include "mqtt.h"
+#include "cJSON.h"
 
-#define  TAG            __func__
-
-static void autopid_task(void *pvParameters)
-{
-    static uint8_t buf_sp[] = "atsp6\r\nath1\r\nati\r\nati\r\nats1\r\n";
-    static uint8_t buf_sh[] = "ath1\r\n";
-    static uint8_t buf_i[] = "ati\r\n";
-    static uint8_t buf[] = "0902\r\n";
-    static uint8_t buf1[] = "010C\r\n";
-    static uint8_t buf2[] = "2335\r\n";
-    twai_message_t tx_msg;
-    static QueueHandle_t autopid_Queue;
-
-    vTaskDelay(pdMS_TO_TICKS(15000));
-    elm327_process_cmd(buf_i, strlen((char*)buf_i), &tx_msg, &autopid_Queue);
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    elm327_process_cmd(buf_sp, strlen((char*)buf_sp), &tx_msg, &autopid_Queue);
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    // elm327_process_cmd(buf_sh, strlen((char*)buf_sh), &tx_msg, &autopid_Queue);
-    // vTaskDelay(pdMS_TO_TICKS(1000));
-	while(1)
-	{
-        elm327_process_cmd(buf, strlen((char*)buf), &tx_msg, &autopid_Queue);
-        vTaskDelay(pdMS_TO_TICKS(2000));
-        elm327_process_cmd(buf1, strlen((char*)buf1), &tx_msg, &autopid_Queue);
-        vTaskDelay(pdMS_TO_TICKS(2000));
-        elm327_process_cmd(buf2, strlen((char*)buf2), &tx_msg, &autopid_Queue);
-        vTaskDelay(pdMS_TO_TICKS(2000));
-    }
-}
-
-#include <stdio.h>
-#include <string.h>
-#include <ctype.h>
-
+#define TAG __func__
 #define BUFFER_SIZE 256
+#define QUEUE_SIZE 10
 
-typedef enum {
+typedef enum
+{
     WAITING_FOR_START = 0,
     READING_LINES
 } autopid_state_t;
+
+typedef struct {
+    uint8_t data[BUFFER_SIZE];
+    size_t length;
+} response_t;
+
+
 static uint32_t auto_pid_header;
-static uint8_t  auto_pid_buf[BUFFER_SIZE];
+static uint8_t auto_pid_buf[BUFFER_SIZE];
 static uint8_t auto_pid_data_len = 0;
 static int buf_index = 0;
 static autopid_state_t state = WAITING_FOR_START;
+static QueueHandle_t autopidQueue;
+// typedef struct __attribute__((packed)){
+//     char name[32];              // Name
+//     char pid_init[32];          // PID init string
+//     char pid_command[10];       // PID command string
+//     char expression[32];        // Expression string
+//     char destination[64];       // Example: file name or mqtt topic
+//     int64_t timer;              // Timer for managing periodic actions
+//     uint32_t period;            // Period in ms, frequency of data collection or action
+//     uint8_t expression_type;    // Expression type (evaluates data from sensors, etc.)
+//     uint8_t type;               // Log type, could be MQTT or file-based
+// } pid_req_t ;
+pid_req_t pid_req[] = {
+    {"speed",     "", "010D", "B3", "mqtt_speed", 0, 2000, 0, 0},
+    {"vin",     "", "0902", "[B5:B8]*0.25", "mqtt_vin", 0, 2000, 0, 0},
+};
 
-void append_data(const char* token) {
-    if (isxdigit((int)token[0]) && isxdigit((int)token[1]) && strlen((int)token) == 2) {
-        if (buf_index < BUFFER_SIZE - 3) { // Ensure room for 2 hex chars and a space/null
+void append_data(const char *token)
+{
+    if (isxdigit((int)token[0]) && isxdigit((int)token[1]) && strlen(token) == 2)
+    {
+        if (buf_index < BUFFER_SIZE - 3) // Ensure room for 2 hex chars and a space/null
+        {
             memcpy(&auto_pid_buf[buf_index], token, 2);
             buf_index += 2;
             auto_pid_buf[buf_index++] = ' '; // Space for readability
@@ -80,39 +63,54 @@ void append_data(const char* token) {
     }
 }
 
-void strip_line_endings(char* buffer) {
-    char* pos;
-    if ((pos = strchr(buffer, '\r')) != NULL) *pos = '\0';
-    if ((pos = strchr(buffer, '\n')) != NULL) *pos = '\0';
-}
-void autopid_parse_rsp(char* str) 
+void strip_line_endings(char *buffer)
 {
-    if(strchr(str, '>') == NULL)
+    char *pos;
+    if ((pos = strchr(buffer, '\r')) != NULL)
+        *pos = '\0';
+    if ((pos = strchr(buffer, '\n')) != NULL)
+        *pos = '\0';
+}
+
+void autopid_parse_rsp(char *str)
+{
+    response_t response;
+    
+    if (strchr(str, '>') == NULL)
     {
         strip_line_endings(str);
     }
-    // else
-    // {
-    //     state = READING_LINES;
-    // }
 
-    switch(state)
+    switch (state)
     {
         case WAITING_FOR_START:
         {
+            if (strchr(str, '>') != NULL)
+            {
+                ESP_LOGI(__func__, "Found end");
+                ESP_LOG_BUFFER_HEXDUMP(TAG, str, strlen(str), ESP_LOG_INFO);
+                
+                strncpy((char *)response.data, str, BUFFER_SIZE);
+                response.length = strlen(str);
+                
+                if (xQueueSend(autopidQueue, &response, pdMS_TO_TICKS(1000)) != pdPASS)
+                {
+                    ESP_LOGE(TAG, "Failed to send to queue");
+                }
+            }
             int8_t count = sscanf(str, "%lX %X %X %X %X %X %X %X %X", &auto_pid_header, (unsigned int *)&auto_pid_buf[0], (unsigned int *)&auto_pid_buf[1], (unsigned int *)&auto_pid_buf[2],
                                 (unsigned int *)&auto_pid_buf[3], (unsigned int *)&auto_pid_buf[4], (unsigned int *)&auto_pid_buf[5],
                                 (unsigned int *)&auto_pid_buf[6], (unsigned int *)&auto_pid_buf[7]);
-            if(count >= 2 && count <= 9)
+            if (count >= 2 && count <= 9)
             {
-                if(auto_pid_buf[0] == 0x10) //indicates multi frame response 
+                if (auto_pid_buf[0] == 0x10) // Indicates multi-frame response
                 {
-                    buf_index = count-1;
+                    buf_index = count - 1;
                     auto_pid_data_len = auto_pid_buf[1];
                 }
                 else
                 {
-                    buf_index = count-1;
+                    buf_index = count - 1;
                 }
                 state = READING_LINES;
             }
@@ -120,44 +118,36 @@ void autopid_parse_rsp(char* str)
             {
                 buf_index = 0;
             }
-            ESP_LOGI(TAG, "count: %u", count);
             break;
         }
         case READING_LINES:
         {
-            if(strchr(str, '>') != NULL)
+            if (strchr(str, '>') != NULL)
             {
+                ESP_LOGI(__func__, "Found response end, response: %s", str);
                 state = WAITING_FOR_START;
-                if(buf_index != 0)
+                if (buf_index != 0)
                 {
-                    ESP_LOGI(TAG, "buf_index: %u", buf_index);
                     ESP_LOG_BUFFER_HEXDUMP(TAG, auto_pid_buf, buf_index, ESP_LOG_INFO);
-                    // bool evaluate_expression(uint8_t *expression,  uint8_t *data, double V, double *result);
-                    static uint8_t exp[] = "B10-B17";
-                    static double value = 0;
-                    static double expression_result = 0;
-                    if(auto_pid_buf[2] == 0x49 && auto_pid_buf[3] == 2)
+                    
+                    memcpy(response.data, auto_pid_buf, buf_index);
+                    response.length = buf_index;
+                    
+                    if (xQueueSend(autopidQueue, &response, pdMS_TO_TICKS(1000)) != pdPASS)
                     {
-                        if(evaluate_expression(exp, auto_pid_buf, value, &expression_result))
-                        {
-                            ESP_LOGW(TAG, "Expression result: %lf", expression_result);
-                        }
-                        else
-                        {
-                            ESP_LOGE(TAG, "Error evaluate_expression");
-                        }
+                        ESP_LOGE(TAG, "Failed to send to queue");
                     }
                 }
                 break;
             }
             else
             {
-                int8_t count = sscanf(str, "%lX %X %X %X %X %X %X %X %X", &auto_pid_header, (unsigned int *)&auto_pid_buf[buf_index], (unsigned int *)&auto_pid_buf[buf_index+1], (unsigned int *)&auto_pid_buf[buf_index+2],
-                                (unsigned int *)&auto_pid_buf[buf_index+3], (unsigned int *)&auto_pid_buf[buf_index+4], (unsigned int *)&auto_pid_buf[buf_index+5],
-                                (unsigned int *)&auto_pid_buf[buf_index+6], (unsigned int *)&auto_pid_buf[buf_index+7]);
-                if(count == 9)
+                int8_t count = sscanf(str, "%lX %X %X %X %X %X %X %X %X", &auto_pid_header, (unsigned int *)&auto_pid_buf[buf_index], (unsigned int *)&auto_pid_buf[buf_index + 1], (unsigned int *)&auto_pid_buf[buf_index + 2],
+                                    (unsigned int *)&auto_pid_buf[buf_index + 3], (unsigned int *)&auto_pid_buf[buf_index + 4], (unsigned int *)&auto_pid_buf[buf_index + 5],
+                                    (unsigned int *)&auto_pid_buf[buf_index + 6], (unsigned int *)&auto_pid_buf[buf_index + 7]);
+                if (count == 9)
                 {
-                    buf_index+=8;
+                    buf_index += 8;
                 }
                 else
                 {
@@ -165,113 +155,117 @@ void autopid_parse_rsp(char* str)
                 }
                 break;
             }
-            
         }
     }
 }
-// void autopid_parse_rsp(char* str) {
-//     static char* current_pos;
-//     static char buffer[BUFFER_SIZE];
-//     current_pos = str;
-//     strncpy(buffer, str, BUFFER_SIZE - 1);
-//     buffer[BUFFER_SIZE - 1] = '\0';
-//     if(strchr(str, '>') == NULL)
-//     {
-//         strip_line_endings(buffer);
-//     }
-//     printf("Processing: %s\n", buffer);
-//     printf("Current state: %d\n", state);
 
-//     // if (buffer[0] == '>') 
-//     if(strchr(str, '>') != NULL)
-//     {
-//         state = DATA_READY;
-//     } else {
-//         if (state == WAITING_FOR_START) {
-//             state = READING_LINES;
-//         }
-
-//         // Skip the '7E8' address and continuation byte if present
-//         current_pos = buffer;
-//         for (int i = 0; i < 2; i++) {
-//             current_pos = strchr(current_pos, ' ');
-//             if (current_pos) current_pos++;
-//         }
-
-//         while (current_pos) {
-//             char* next_space = strchr(current_pos, ' ');
-//             if (next_space) {
-//                 *next_space = '\0'; // Terminate the current token
-//             }
-//             append_data(current_pos);
-//             if (!next_space) break;
-//             current_pos = next_space + 1;
-//         }
-//     }
-
-//     if (state == DATA_READY) {
-//         if (buf_index > 0) auto_pid_buf[buf_index - 1] = '\0'; // Remove last space
-//         printf("Received Data: %s\n", auto_pid_buf);
-//         memset(auto_pid_buf, 0, sizeof(auto_pid_buf));
-//         buf_index = 0;
-//         current_pos = 0;
-//         buffer[0] = 0;
-//         state = WAITING_FOR_START;
-//     }
-// }
-
-
-void autopid_mqtt_pub(char* str, uint32_t len, QueueHandle_t *q)
+void autopid_mqtt_pub(char *str, uint32_t len, QueueHandle_t *q)
 {
-    // static autopid_state_t state = WAITING_FOR_START;
-    static uint8_t auto_pid_buf[128];
-    static uint8_t expected_lines;
-    uint8_t expected_bytes = 0;
-    static uint8_t received_bytes;
-    char* space = strchr(str, ' '); 
-
-	if(strlen(str) != 0)
-	{
+    if (strlen(str) != 0)
+    {
+        // ESP_LOGI(__func__, "%s", str);
         // ESP_LOG_BUFFER_HEXDUMP(TAG, str, strlen(str), ESP_LOG_INFO);
-        ESP_LOGI(__func__, "%s", str);
         autopid_parse_rsp(str);
-        //if byte after the first space is 0x10 then its a multi line response otherwise, this is the only line
-        // if its a multi line response then the byte after 0x10 is the total number of bytes, 
-        // wait for '>' to indicate the response ended, this line will contain 6 bytes and the rest are in the other lines, each line after that will contain 7 bytes 
-        // switch(state)
-        // {
-        //     case WAITING_FOR_START:
-        //     {
-        //         if (*(space + 1) == '1' && *(space + 2) == '0') 
-        //         {
-        //             expected_bytes = hexToInt(space + 3);
-        //             if (expected_bytes == 0) {
-        //                 printf("Invalid hexadecimal value.\n");
-        //                 return;
-        //             }
-        //             received_bytes = 0; // Reset received_bytes for each new message start
-        //             state = READING_LINES;
-        //             int header_size = space - str + 9; // Calculate actual header size
-        //             int initial_data_length = strlen(str) - header_size;
-        //             strncpy(auto_pid_buf, str + header_size, initial_data_length);
-        //             received_bytes += initial_data_length;
-        //         }
-        //     }
+    }
+}
 
+static void autopid_task(void *pvParameters)
+{
+    static uint8_t buf_sp[] = "atsp6\rath1\rati\rati\rats1\r";
+    static uint8_t buf_i[] = "ati\r";
+    twai_message_t tx_msg;
+    static response_t response;
+    // static char response_str[100];
+    
+    autopidQueue = xQueueCreate(QUEUE_SIZE, sizeof(response_t));
+    if (autopidQueue == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to create queue");
+        vTaskDelete(NULL);
+        return;
+    }
 
-        // }
+    vTaskDelay(pdMS_TO_TICKS(15000));
+    elm327_process_cmd(buf_i, strlen((char *)buf_i), &tx_msg, &autopidQueue);
+    
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    elm327_process_cmd(buf_sp, strlen((char *)buf_sp), &tx_msg, &autopidQueue);
+    vTaskDelay(pdMS_TO_TICKS(1000));
 
+    while ((xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS))
+    {
+        /* code */
+    }
+    
+    uint32_t num_of_pid = sizeof(pid_req) / sizeof(pid_req_t);
+    
+    for(uint32_t i = 0; i < num_of_pid; i++)
+    {
+        strcat(pid_req[i].pid_command, "\r");
+    }
 
+    while (1)
+    {
+        for(uint32_t i = 0; i < num_of_pid; i++)
+        {
+            if( esp_timer_get_time() > pid_req[i].timer )
+            {
+                pid_req[i].timer = esp_timer_get_time() + pid_req[i].period*1000;
 
-	}
-	else
-	{
+                elm327_process_cmd((uint8_t*)pid_req[i].pid_command , strlen(pid_req[i].pid_command), &tx_msg, &autopidQueue);
+                ESP_LOGI(TAG, "Sending command: %s", pid_req[i].pid_command);
+                if (xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS)
+                {
+                    double result;
 
-        
-	}
+                    ESP_LOGI(TAG, "Received response for: %s", pid_req[i].pid_command);
+                    ESP_LOGI(TAG, "Response length: %d", response.length);
+                    ESP_LOG_BUFFER_HEXDUMP(TAG, response.data, response.length, ESP_LOG_INFO);
+                    if(evaluate_expression((uint8_t*)pid_req[i].expression, response.data, 0, &result))
+                    {
+                        cJSON *rsp_json = cJSON_CreateObject();
+                        if (rsp_json == NULL) 
+                        {
+                            ESP_LOGI(TAG, "Failed to create cJSON object");
+                            break;
+                        }
+
+                        // Add the name and result to the JSON object
+                        cJSON_AddNumberToObject(rsp_json, pid_req[i].name, result);
+                        
+                        // Convert the cJSON object to a string
+                        char *response_str = cJSON_PrintUnformatted(rsp_json);
+                        if (response_str == NULL) 
+                        {
+                            ESP_LOGI(TAG, "Failed to print cJSON object");
+                            cJSON_Delete(rsp_json); // Clean up cJSON object
+                            break;
+                        }
+
+                        ESP_LOGI(TAG, "Expression result, Name: %s: %lf", pid_req[i].name, result);
+                        mqtt_publish(pid_req[i].destination, response_str, 0, 0, 0);
+
+                        // Free the JSON string and cJSON object
+                        free(response_str);
+                        cJSON_Delete(rsp_json);
+                        vTaskDelay(pdMS_TO_TICKS(10));
+                    }
+                    else
+                    {
+                        ESP_LOGE(TAG, "Failed Expression: %s", pid_req[i].expression);
+                    }
+                }
+                else
+                {
+                    ESP_LOGE(TAG, "Timeout waiting for response for: %s", pid_req[i].pid_command);
+                }
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(2000));
+    }
 }
 
 void autopid_init(void)
 {
-    xTaskCreate(autopid_task, "autopid_task", 1024*5, (void*)AF_INET, 5, NULL);
+    xTaskCreate(autopid_task, "autopid_task", 1024 * 5, (void *)AF_INET, 5, NULL);
 }
