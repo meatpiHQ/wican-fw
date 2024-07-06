@@ -22,6 +22,7 @@
 #include "freertos/task.h"
 #include  "freertos/queue.h"
 #include "freertos/event_groups.h"
+#include "freertos/semphr.h"
 #include "esp_wifi.h"
 #include "esp_system.h"
 #include "esp_event.h"
@@ -74,6 +75,8 @@ static uint8_t mqtt_led = 0;
 
 static QueueHandle_t *xmqtt_tx_queue;
 static uint8_t mqtt_elm327_log = 0;
+static SemaphoreHandle_t xmqtt_semaphore;
+
 
 typedef struct 
 {
@@ -102,11 +105,12 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     {
 		case MQTT_EVENT_CONNECTED:
 			ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-			xEventGroupSetBits(s_mqtt_event_group, MQTT_CONNECTED_BIT);
 
 			esp_mqtt_client_subscribe(client, mqtt_sub_topic, 0);
 			gpio_set_level(mqtt_led, 0);
 			esp_mqtt_client_publish(client, mqtt_status_topic, "{\"status\": \"online\"}", 0, 0, 1);
+
+            xEventGroupSetBits(s_mqtt_event_group, MQTT_CONNECTED_BIT);
 			break;
 		case MQTT_EVENT_DISCONNECTED:
 			ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
@@ -362,7 +366,7 @@ static void mqtt_task(void *pvParameters)
 
                             sprintf(json_buffer, "{\"%s\": %lf}", mqtt_canflt_values[found_index].name, expression_result);
 
-                            esp_mqtt_client_publish(client, mqtt_topic, json_buffer, 0, 0, 0);
+                            mqtt_publish(mqtt_topic, json_buffer, 0, 0, 0);
                         }
                         else
                         {
@@ -395,7 +399,7 @@ static void mqtt_task(void *pvParameters)
                     }
                     strcat((char*)json_buffer, "]}");
 
-                    esp_mqtt_client_publish(client, mqtt_topic, json_buffer, 0, 0, 0);
+                    mqtt_publish(mqtt_topic, json_buffer, 0, 0, 0);
                 }
             }
             else
@@ -419,7 +423,7 @@ static void mqtt_task(void *pvParameters)
                 json_buffer[strlen(json_buffer)-1] = 0;
                 strcat((char*)json_buffer, "]}");
 
-                esp_mqtt_client_publish(client, mqtt_elm327_topic, json_buffer, 0, 0, 0);
+                mqtt_publish(mqtt_elm327_topic, json_buffer, 0, 0, 0);
             }
 
 		}
@@ -523,8 +527,18 @@ static void mqtt_load_filter(void)
     cJSON_Delete(root);
 }
 
+void mqtt_publish(char *topic, char *data, int len, int qos, int retain)
+{
+    if( mqtt_connected() && (xSemaphoreTake( xmqtt_semaphore, pdMS_TO_TICKS(2000) ) == pdTRUE) )
+    {
+        esp_mqtt_client_publish(client, topic, data, len, qos, retain);
+        xSemaphoreGive( xmqtt_semaphore );
+    }
+}
+
 void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
 {
+    xmqtt_semaphore = xSemaphoreCreateMutex();
     esp_mqtt_client_config_t mqtt_cfg = {
 		// .session.protocol_ver = MQTT_PROTOCOL_V_5,
 		.broker.address.uri = config_server_get_mqtt_url(),
