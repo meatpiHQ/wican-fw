@@ -249,11 +249,11 @@ static void can_rx_task(void *pvParameters)
         process_led(0);
     	if(esp_timer_get_time() - time_old > 1000*1000)
     	{
-    		// uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
-    		// time_old = esp_timer_get_time();
-    		// ESP_LOGI(TAG, "free_heap: %lu", free_heap);
-// //        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
-// //        		num_msg = 0;
+    		uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
+    		time_old = esp_timer_get_time();
+    		ESP_LOGI(TAG, "free_heap: %lu", free_heap);
+//        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
+//        		num_msg = 0;
     	}
         while(can_receive(&rx_msg, 0) ==  ESP_OK)
         {
@@ -287,14 +287,11 @@ static void can_rx_task(void *pvParameters)
 				{
 					ucTCP_TX_Buffer.usLen = gvret_parse_can_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
 				}
-				else if(protocol == OBD_ELM327)
+				else if(protocol == OBD_ELM327 || protocol == AUTO_PID)
 				{
 					// Let elm327.c decide which messages to process
 					xQueueSend( xmsg_obd_rx_queue, ( void * ) &rx_msg, pdMS_TO_TICKS(0) );
 				}
-
-
-
 
 				if(ucTCP_TX_Buffer.usLen != 0)
 				{
@@ -441,17 +438,24 @@ void app_main(void)
 		can_enable();
 		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
 		
+		if(config_server_mqtt_en_config() && config_server_mqtt_elm327_log())
+		{
+			mqtt_elm327_log_en = config_server_mqtt_elm327_log();
+			elm327_init(&send_to_host, &xmsg_obd_rx_queue, log_can_to_mqtt);
+		}
+		else
+		{
+			elm327_init(&send_to_host, &xmsg_obd_rx_queue, NULL);
+		}
+	}
+	else if(protocol == AUTO_PID)
+	{
+		can_set_bitrate(can_datarate);
+		can_enable();
+		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
+		
 		elm327_init(&autopid_mqtt_pub, &xmsg_obd_rx_queue, NULL);
-		autopid_init();
-		// if(config_server_mqtt_en_config() && config_server_mqtt_elm327_log())
-		// {
-		// 	mqtt_elm327_log_en = config_server_mqtt_elm327_log();
-		// 	elm327_init(&send_to_host, &xmsg_obd_rx_queue, log_can_to_mqtt);
-		// }
-		// else
-		// {
-		// 	elm327_init(&send_to_host, &xmsg_obd_rx_queue, NULL);
-		// }
+		autopid_init(config_server_get_auto_pid());
 	}
 
 	if(config_server_mqtt_en_config())
@@ -566,6 +570,6 @@ void app_main(void)
 	// pdTRUE, /* BIT_0 should be cleared before returning. */
 	// pdFALSE, /* Don't wait for both bits, either bit will do. */
 	// portMAX_DELAY);/* Wait forever. */  
-	// esp_log_level_set("*", ESP_LOG_NONE);
+	esp_log_level_set("*", ESP_LOG_NONE);
 }
 
