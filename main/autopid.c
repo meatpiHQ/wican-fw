@@ -1,3 +1,23 @@
+/*
+ * This file is part of the WiCAN project.
+ *
+ * Copyright (C) 2022  Meatpi Electronics.
+ * Written by Ali Slim <ali@meatpi.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -5,28 +25,19 @@
 #include <string.h>
 #include "driver/twai.h"
 #include "esp_timer.h"
+#include "esp_system.h" 
 #include "lwip/sockets.h"
 #include "elm327.h"
 #include "autopid.h"
 #include "expression_parser.h"
 #include "mqtt.h"
 #include "cJSON.h"
+#include "config_server.h"
 
 #define TAG __func__
-#define BUFFER_SIZE 256
-#define QUEUE_SIZE 10
 
-typedef enum
-{
-    WAITING_FOR_START = 0,
-    READING_LINES
-} autopid_state_t;
-
-typedef struct {
-    uint8_t data[BUFFER_SIZE];
-    size_t length;
-} response_t;
-
+#define RANDOM_MIN  5
+#define RANDOM_MAX  50
 
 static uint32_t auto_pid_header;
 static uint8_t auto_pid_buf[BUFFER_SIZE];
@@ -34,22 +45,11 @@ static uint8_t auto_pid_data_len = 0;
 static int buf_index = 0;
 static autopid_state_t state = WAITING_FOR_START;
 static QueueHandle_t autopidQueue;
-// typedef struct __attribute__((packed)){
-//     char name[32];              // Name
-//     char pid_init[32];          // PID init string
-//     char pid_command[10];       // PID command string
-//     char expression[32];        // Expression string
-//     char destination[64];       // Example: file name or mqtt topic
-//     int64_t timer;              // Timer for managing periodic actions
-//     uint32_t period;            // Period in ms, frequency of data collection or action
-//     uint8_t expression_type;    // Expression type (evaluates data from sensors, etc.)
-//     uint8_t type;               // Log type, could be MQTT or file-based
-// } pid_req_t ;
-pid_req_t pid_req[] = {
-    {"speed",     "", "010D", "B3", "mqtt_speed", 0, 2000, 0, 0},
-    {"vin",     "", "0902", "[B5:B8]*0.25", "mqtt_vin", 0, 2000, 0, 0},
-};
+static pid_req_t *pid_req;
+static size_t num_of_pids = 0;
+static char* initialisation = NULL;       // Initialisation string
 
+								 															
 void append_data(const char *token)
 {
     if (isxdigit((int)token[0]) && isxdigit((int)token[1]) && strlen(token) == 2)
@@ -163,20 +163,38 @@ void autopid_mqtt_pub(char *str, uint32_t len, QueueHandle_t *q)
 {
     if (strlen(str) != 0)
     {
-        // ESP_LOGI(__func__, "%s", str);
+        ESP_LOGI(__func__, "%s", str);
         // ESP_LOG_BUFFER_HEXDUMP(TAG, str, strlen(str), ESP_LOG_INFO);
         autopid_parse_rsp(str);
     }
 }
 
+static void send_commands(char *commands, uint32_t delay_ms)
+{
+    char *cmd_start = commands;
+    char *cmd_end;
+    twai_message_t tx_msg;
+    
+    while ((cmd_end = strchr(cmd_start, '\r')) != NULL) 
+    {
+        size_t cmd_len = cmd_end - cmd_start + 1; // +1 to include '\r'
+        char str_send[cmd_len + 1]; // +1 for null terminator
+        strncpy(str_send, cmd_start, cmd_len);
+        str_send[cmd_len] = '\0'; // Null-terminate the command string
+
+        elm327_process_cmd((uint8_t *)str_send, cmd_len, &tx_msg, &autopidQueue);
+
+        cmd_start = cmd_end + 1; // Move to the start of the next command
+        vTaskDelay(pdMS_TO_TICKS(delay_ms));
+    }
+}
+
 static void autopid_task(void *pvParameters)
 {
-    static uint8_t buf_sp[] = "atsp6\rath1\rati\rati\rats1\r";
-    static uint8_t buf_i[] = "ati\r";
-    twai_message_t tx_msg;
+    static char default_init[] = "ati\rath1\rats1\ratsp6\r";
     static response_t response;
-    // static char response_str[100];
-    
+    twai_message_t tx_msg;
+
     autopidQueue = xQueueCreate(QUEUE_SIZE, sizeof(response_t));
     if (autopidQueue == NULL)
     {
@@ -185,87 +203,187 @@ static void autopid_task(void *pvParameters)
         return;
     }
 
-    vTaskDelay(pdMS_TO_TICKS(15000));
-    elm327_process_cmd(buf_i, strlen((char *)buf_i), &tx_msg, &autopidQueue);
-    
     vTaskDelay(pdMS_TO_TICKS(1000));
-    elm327_process_cmd(buf_sp, strlen((char *)buf_sp), &tx_msg, &autopidQueue);
+    send_commands(default_init, 50);
+    send_commands(initialisation, 50);
     vTaskDelay(pdMS_TO_TICKS(1000));
 
-    while ((xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS))
-    {
-        /* code */
-    }
+    while ((xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS));
     
-    uint32_t num_of_pid = sizeof(pid_req) / sizeof(pid_req_t);
-    
-    for(uint32_t i = 0; i < num_of_pid; i++)
+    for(uint32_t i = 0; i < num_of_pids; i++)
     {
         strcat(pid_req[i].pid_command, "\r");
     }
 
     while (1)
     {
-        for(uint32_t i = 0; i < num_of_pid; i++)
+        if(num_of_pids && mqtt_connected())
         {
-            if( esp_timer_get_time() > pid_req[i].timer )
+            for(uint32_t i = 0; i < num_of_pids; i++)
             {
-                pid_req[i].timer = esp_timer_get_time() + pid_req[i].period*1000;
-
-                elm327_process_cmd((uint8_t*)pid_req[i].pid_command , strlen(pid_req[i].pid_command), &tx_msg, &autopidQueue);
-                ESP_LOGI(TAG, "Sending command: %s", pid_req[i].pid_command);
-                if (xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS)
+                if( esp_timer_get_time() > pid_req[i].timer )
                 {
-                    double result;
+                    pid_req[i].timer = esp_timer_get_time() + pid_req[i].period*1000;
+                    pid_req[i].timer = RANDOM_MIN + (esp_random() % (RANDOM_MAX - RANDOM_MIN + 1));
 
-                    ESP_LOGI(TAG, "Received response for: %s", pid_req[i].pid_command);
-                    ESP_LOGI(TAG, "Response length: %d", response.length);
-                    ESP_LOG_BUFFER_HEXDUMP(TAG, response.data, response.length, ESP_LOG_INFO);
-                    if(evaluate_expression((uint8_t*)pid_req[i].expression, response.data, 0, &result))
+                    elm327_process_cmd((uint8_t*)pid_req[i].pid_command , strlen(pid_req[i].pid_command), &tx_msg, &autopidQueue);
+                    ESP_LOGI(TAG, "Sending command: %s", pid_req[i].pid_command);
+                    if (xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS)
                     {
-                        cJSON *rsp_json = cJSON_CreateObject();
-                        if (rsp_json == NULL) 
+                        double result;
+
+                        ESP_LOGI(TAG, "Received response for: %s", pid_req[i].pid_command);
+                        ESP_LOGI(TAG, "Response length: %d", response.length);
+                        ESP_LOG_BUFFER_HEXDUMP(TAG, response.data, response.length, ESP_LOG_INFO);
+                        if(evaluate_expression((uint8_t*)pid_req[i].expression, response.data, 0, &result))
                         {
-                            ESP_LOGI(TAG, "Failed to create cJSON object");
-                            break;
-                        }
+                            cJSON *rsp_json = cJSON_CreateObject();
+                            if (rsp_json == NULL) 
+                            {
+                                ESP_LOGI(TAG, "Failed to create cJSON object");
+                                break;
+                            }
 
-                        // Add the name and result to the JSON object
-                        cJSON_AddNumberToObject(rsp_json, pid_req[i].name, result);
-                        
-                        // Convert the cJSON object to a string
-                        char *response_str = cJSON_PrintUnformatted(rsp_json);
-                        if (response_str == NULL) 
+                            // Add the name and result to the JSON object
+                            cJSON_AddNumberToObject(rsp_json, pid_req[i].name, result);
+                            
+                            // Convert the cJSON object to a string
+                            char *response_str = cJSON_PrintUnformatted(rsp_json);
+                            if (response_str == NULL) 
+                            {
+                                ESP_LOGI(TAG, "Failed to print cJSON object");
+                                cJSON_Delete(rsp_json); // Clean up cJSON object
+                                break;
+                            }
+
+                            ESP_LOGI(TAG, "Expression result, Name: %s: %lf", pid_req[i].name, result);
+                            if(strlen(pid_req[i].destination) != 0)
+                            {
+                                mqtt_publish(pid_req[i].destination, response_str, 0, 0, 0);
+                            }
+                            else
+                            {
+                                //if destination is empty send to default
+                                mqtt_publish(config_server_get_mqtt_rx_topic(), response_str, 0, 0, 0);
+                            }
+                            
+                            // Free the JSON string and cJSON object
+                            free(response_str);
+                            cJSON_Delete(rsp_json);
+                            vTaskDelay(pdMS_TO_TICKS(10));
+                        }
+                        else
                         {
-                            ESP_LOGI(TAG, "Failed to print cJSON object");
-                            cJSON_Delete(rsp_json); // Clean up cJSON object
-                            break;
+                            ESP_LOGE(TAG, "Failed Expression: %s", pid_req[i].expression);
                         }
-
-                        ESP_LOGI(TAG, "Expression result, Name: %s: %lf", pid_req[i].name, result);
-                        mqtt_publish(pid_req[i].destination, response_str, 0, 0, 0);
-
-                        // Free the JSON string and cJSON object
-                        free(response_str);
-                        cJSON_Delete(rsp_json);
-                        vTaskDelay(pdMS_TO_TICKS(10));
                     }
                     else
                     {
-                        ESP_LOGE(TAG, "Failed Expression: %s", pid_req[i].expression);
+                        ESP_LOGE(TAG, "Timeout waiting for response for: %s", pid_req[i].pid_command);
                     }
                 }
-                else
-                {
-                    ESP_LOGE(TAG, "Timeout waiting for response for: %s", pid_req[i].pid_command);
-                }
             }
+        }
+        else
+        {
+            vTaskDelay(pdMS_TO_TICKS(2000));
         }
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
 }
 
-void autopid_init(void)
+static void autopid_load(char *config_str)
 {
+    cJSON *json = cJSON_Parse(config_str);
+    if (json == NULL) 
+    {
+        ESP_LOGE(TAG, "Failed to parse config string");
+        return;
+    }
+
+    cJSON *init = cJSON_GetObjectItem(json, "initialisation");
+    if (cJSON_IsString(init) && (init->valuestring != NULL)) 
+    {
+        size_t len = strlen(init->valuestring) + 1; // +1 for the null terminator
+        initialisation = (char*)malloc(len);
+        if (initialisation == NULL) 
+        {
+            ESP_LOGE(TAG, "Failed to allocate memory for initialisation string");
+            cJSON_Delete(json);
+            return;
+        }
+        strncpy(initialisation, init->valuestring, len);
+        //replace ';' with carriage return
+        for (size_t i = 0; i < len; ++i) 
+        {
+            if (initialisation[i] == ';') 
+            {
+                initialisation[i] = '\r';
+            }
+        }
+    } 
+    else 
+    {
+        ESP_LOGE(TAG, "Invalid initialisation string in config");
+        cJSON_Delete(json);
+        return;
+    }
+
+    cJSON *pids = cJSON_GetObjectItem(json, "pids");
+    if (!cJSON_IsArray(pids)) 
+    {
+        ESP_LOGE(TAG, "Invalid pids array in config");
+        cJSON_Delete(json);
+        return;
+    }
+
+    num_of_pids = cJSON_GetArraySize(pids);
+    if(num_of_pids == 0)
+    {
+        return;
+    }
+
+    pid_req = (pid_req_t *)malloc(sizeof(pid_req_t) * num_of_pids);
+    if (pid_req == NULL) 
+    {
+        ESP_LOGE(TAG, "Failed to allocate memory for pid_req");
+        cJSON_Delete(json);
+        return;
+    }
+
+    for (size_t i = 0; i < num_of_pids; ++i) 
+    {
+        cJSON *pid_item = cJSON_GetArrayItem(pids, i);
+        if (!cJSON_IsObject(pid_item)) 
+        {
+            ESP_LOGE(TAG, "Invalid PID item in config");
+            continue;
+        }
+
+        cJSON *name = cJSON_GetObjectItem(pid_item, "Name");
+        cJSON *pid_init = cJSON_GetObjectItem(pid_item, "Init");
+        cJSON *pid_command = cJSON_GetObjectItem(pid_item, "PID");
+        cJSON *expression = cJSON_GetObjectItem(pid_item, "Expression");
+        cJSON *period = cJSON_GetObjectItem(pid_item, "Period");
+        cJSON *send_to = cJSON_GetObjectItem(pid_item, "Send_to");
+        cJSON *type = cJSON_GetObjectItem(pid_item, "Type");
+
+        strncpy(pid_req[i].name, name->valuestring, sizeof(pid_req[i].name) - 1);
+        strncpy(pid_req[i].pid_init, pid_init->valuestring, sizeof(pid_req[i].pid_init) - 1);
+        strncpy(pid_req[i].pid_command, pid_command->valuestring, sizeof(pid_req[i].pid_command) - 1);
+        strncpy(pid_req[i].expression, expression->valuestring, sizeof(pid_req[i].expression) - 1);
+        strncpy(pid_req[i].destination, send_to->valuestring, sizeof(pid_req[i].destination) - 1);
+        pid_req[i].period = (uint32_t)strtoul(period->valuestring, NULL, 10);
+        pid_req[i].type = (strcmp(type->valuestring, "MQTT_Topic") == 0) ? 0 : 1;  // Example: 0 for MQTT, 1 for file
+        pid_req[i].timer = 0; 
+    }
+
+    cJSON_Delete(json);
+}
+
+void autopid_init(char *config_str)
+{
+    autopid_load(config_str);
+    
     xTaskCreate(autopid_task, "autopid_task", 1024 * 5, (void *)AF_INET, 5, NULL);
 }
