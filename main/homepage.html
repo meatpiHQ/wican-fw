@@ -618,7 +618,7 @@
                     <th>Init</th>
                     <th>PID</th>
                     <th>Expression</th>
-                    <th>Period</th>
+                    <th>Period(ms)</th>
                     <th>Type</th>
                     <th>Send_to</th>
                     <th><button class="add" onclick="addRowAutoTable()">New</button></th>
@@ -861,7 +861,7 @@
                         alert("Expression must be less than 32 characters");
                         isValid = false;
                         break;
-                    } else if (name === "Period" && (!/^\d+$/.test(value) || (parseInt(value) < 100 && parseInt(value) != 0))) {
+                    } else if (name === "Period" && (!/^\d+$/.test(value))) {
                         alert("Period must be a number greater than 100");
                         isValid = false;
                         break;
