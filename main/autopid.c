@@ -205,7 +205,10 @@ static void autopid_task(void *pvParameters)
 
     vTaskDelay(pdMS_TO_TICKS(1000));
     send_commands(default_init, 50);
-    send_commands(initialisation, 50);
+    if(initialisation != NULL) 
+    {
+        send_commands(initialisation, 50);
+    }
     vTaskDelay(pdMS_TO_TICKS(1000));
 
     while ((xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS));
