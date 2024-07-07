@@ -53,6 +53,7 @@
 #include "esp_mac.h"
 #include "ftp.h"
 #include "hw_config.h"
+#include "autopid.h"
 
 #define TAG 		__func__
 #define USB_ID_PIN					39
@@ -149,7 +150,7 @@ void send_to_host(char* str, uint32_t len, QueueHandle_t *q)
 	memcpy(xsend_buffer.ucElement, str, xsend_buffer.usLen);
 	
 
-	ESP_LOG_BUFFER_HEX(TAG, ucTCP_TX_Buffer.ucElement, xsend_buffer.usLen);
+	// ESP_LOG_BUFFER_HEX(TAG, ucTCP_TX_Buffer.ucElement, xsend_buffer.usLen);
 
 	xQueueSend( *q, ( void * ) &xsend_buffer, portMAX_DELAY );
 	memset(xsend_buffer.ucElement, 0, sizeof(xsend_buffer.ucElement));
@@ -256,16 +257,16 @@ static void can_rx_task(void *pvParameters)
 // //        		num_msg = 0;
     	}
 
-		if(gpio_get_level(USB_ID_PIN) == 0)
-		{
-			gpio_set_level(USB_OTG_PWR_EN, 1);
-			gpio_set_level(USB_ESP_MODE_EN, 1);
-		}
-		else
-		{
-			gpio_set_level(USB_OTG_PWR_EN, 0);
-			gpio_set_level(USB_ESP_MODE_EN, 0);
-		}
+		// if(gpio_get_level(USB_ID_PIN) == 0)
+		// {
+		// 	gpio_set_level(USB_OTG_PWR_EN, 1);
+		// 	gpio_set_level(USB_ESP_MODE_EN, 1);
+		// }
+		// else
+		// {
+		// 	gpio_set_level(USB_OTG_PWR_EN, 0);
+		// 	gpio_set_level(USB_ESP_MODE_EN, 0);
+		// }
         while(can_receive(&rx_msg, 0) ==  ESP_OK)
         {
 //        	num_msg++;
@@ -298,7 +299,7 @@ static void can_rx_task(void *pvParameters)
 				{
 					ucTCP_TX_Buffer.usLen = gvret_parse_can_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
 				}
-				else if(protocol == OBD_ELM327)
+				else if(protocol == OBD_ELM327 || protocol == AUTO_PID)
 				{
 					// Let elm327.c decide which messages to process
 					xQueueSend( xmsg_obd_rx_queue, ( void * ) &rx_msg, pdMS_TO_TICKS(0) );
@@ -361,6 +362,7 @@ static uint8_t uid[33];
 static uint8_t ble_uid[33];
 void app_main(void)
 {
+	vTaskDelay(pdMS_TO_TICKS(1000));
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -487,6 +489,15 @@ void app_main(void)
 			elm327_init(&send_to_host, &xmsg_obd_rx_queue, NULL);
 		}
 	}
+	else if(protocol == AUTO_PID)
+	{
+		can_set_bitrate(can_datarate);
+		can_enable();
+		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
+		
+		elm327_init(&autopid_mqtt_pub, &xmsg_obd_rx_queue, NULL);
+		autopid_init(config_server_get_auto_pid());
+	}
 
 	if(config_server_mqtt_en_config())
 	{
@@ -565,30 +576,30 @@ void app_main(void)
     xTaskCreate(can_rx_task, "can_rx_task", 1024*3, (void*)AF_INET, 5, NULL);
     xTaskCreate(can_tx_task, "can_tx_task", 1024*3, (void*)AF_INET, 5, NULL);
 
-    if(project_hardware_rev != WICAN_V210)
-    {
-		if(config_server_get_sleep_config())
-		{
-			float sleep_voltage = 0;
+    // if(project_hardware_rev != WICAN_V210)
+    // {
+	// 	if(config_server_get_sleep_config())
+	// 	{
+	// 		float sleep_voltage = 0;
 
-			if(config_server_get_sleep_volt(&sleep_voltage) != -1)
-			{
-				sleep_mode_init(1, sleep_voltage);
-			}
-			else
-			{
-				sleep_mode_init(0, 13.1f);
-			}
-		}
-		else
-		{
-			sleep_mode_init(0, 13.1f);
-		}
-    }
-    else
-    {
-    	sleep_mode_init(0, 13.1f);
-    }
+	// 		if(config_server_get_sleep_volt(&sleep_voltage) != -1)
+	// 		{
+	// 			sleep_mode_init(1, sleep_voltage);
+	// 		}
+	// 		else
+	// 		{
+	// 			sleep_mode_init(0, 13.1f);
+	// 		}
+	// 	}
+	// 	else
+	// 	{
+	// 		sleep_mode_init(0, 13.1f);
+	// 	}
+    // }
+    // else
+    // {
+    // 	sleep_mode_init(0, 13.1f);
+    // }
 
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
     

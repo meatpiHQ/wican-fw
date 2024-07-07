@@ -191,7 +191,7 @@ static void send_commands(char *commands, uint32_t delay_ms)
 
 static void autopid_task(void *pvParameters)
 {
-    static char default_init[] = "ati\rath1\rats1\ratsp6\r";
+    static char default_init[] = "ati\rate0\rath1\rats1\ratsp6\r";
     static response_t response;
     twai_message_t tx_msg;
 
@@ -205,7 +205,11 @@ static void autopid_task(void *pvParameters)
 
     vTaskDelay(pdMS_TO_TICKS(1000));
     send_commands(default_init, 50);
-    send_commands(initialisation, 50);
+    if(initialisation != NULL) 
+    {
+        send_commands(initialisation, 50);
+    }
+    
     vTaskDelay(pdMS_TO_TICKS(1000));
 
     while ((xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS));
@@ -288,7 +292,7 @@ static void autopid_task(void *pvParameters)
         {
             vTaskDelay(pdMS_TO_TICKS(2000));
         }
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        // vTaskDelay(pdMS_TO_TICKS(2000));
     }
 }
 
