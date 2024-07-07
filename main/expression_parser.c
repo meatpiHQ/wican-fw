@@ -122,7 +122,6 @@ bool evaluate_expression(uint8_t *expression, uint8_t *data, double V, double *r
                     sum_64 |= ((uint64_t)data[j] << shift_amount);  // Left shift the byte and merge it into sum_64
                 }
 
-                ESP_LOGI(TAG, "sum_64: %llu", sum_64);
                 push(&operandStack, (double)sum_64);
             } else {
                 ESP_LOGE(TAG, "Invalid array syntax, couldn't parse indices correctly.");
