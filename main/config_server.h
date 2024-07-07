@@ -49,6 +49,7 @@
 #define REALDASH			1
 #define SAVVYCAN			2
 #define OBD_ELM327			3
+#define AUTO_PID			4
 
 typedef struct _device_config
 {
@@ -135,3 +136,4 @@ int8_t config_server_mqtt_elm327_log(void);
 char *config_server_get_mqtt_tx_topic(void);
 char *config_server_get_mqtt_rx_topic(void);
 char *config_server_get_mqtt_status_topic(void);
+char *config_server_get_auto_pid(void);

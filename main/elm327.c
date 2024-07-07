@@ -213,6 +213,22 @@ static char* elm327_header_on_off(const char* command_str)
 	return (char*)ok_str;
 }
 
+static char* elm327_space_on_off(const char* command_str)
+{
+	if(command_str[1] == '1')
+	{
+		elm327_config.space_print = 1;
+	}
+	else if(command_str[1] == '0')
+	{
+		elm327_config.space_print = 0;
+	}
+	else
+	{
+		return 0;
+	}
+	return (char*)ok_str;
+}
 
 static char* elm327_device_description(const char* command_str)
 {
@@ -885,13 +901,18 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 				{
 					if(rx_frame.extd == 0)
 					{
-						sprintf((char*)rsp, "%03lX%02X", rx_frame.identifier&0xFFF,rx_frame.data[0]);
+						sprintf((char*)rsp, "%03lX", rx_frame.identifier&0xFFF);
 					}
 					else
 					{
-						sprintf((char*)rsp, "%08lX%02X", rx_frame.identifier&TWAI_EXTD_ID_MASK,rx_frame.data[0]);
+						sprintf((char*)rsp, "%08lX", rx_frame.identifier&TWAI_EXTD_ID_MASK);
 					}
-
+					if(elm327_config.space_print)
+					{
+						strcat((char*)rsp, (char*)" ");
+					}
+					sprintf((char*)tmp, "%02X", rx_frame.data[0]);
+					strcat((char*)rsp, (char*)tmp);
 				}
 
 //				ESP_LOGI(TAG, "ELM327 send 1: %s", rsp);
@@ -902,7 +923,15 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 
 				for (int i = 0; i < rx_frame_data_length; i++)
 				{
-					sprintf((char*)tmp, "%02X", rx_frame.data[1+i]);
+					if(elm327_config.space_print)
+					{
+						sprintf((char*)tmp, " %02X", rx_frame.data[1+i]);
+					}
+					else
+					{
+						sprintf((char*)tmp, "%02X", rx_frame.data[1+i]);
+					}
+					
 					strcat((char*)rsp, (char*)tmp);
 				}
 
@@ -971,7 +1000,7 @@ const xelm327_cmd_t elm327_commands[] = {
 											{"st", elm327_set_timeout},//set timeout
 											{"d", elm327_restore_defaults_or_display_dlc},//set all to defaults or change display DLC
 											{"z", elm327_reset_all},// reset all/software reset
-											{"s", elm327_return_ok},// printing of spaces off or on
+											{"s", elm327_space_on_off},// printing of spaces off or on
 											{"e", elm327_set_echo},// echo off or on
 											{"h", elm327_header_on_off},//headers off or on
 											{"l", elm327_set_linefeed},//linefeeds off or on
