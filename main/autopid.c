@@ -131,7 +131,7 @@ static void send_commands(char *commands, uint32_t delay_ms)
 
 static void autopid_task(void *pvParameters)
 {
-    static char default_init[] = "ati\rate0\rath1\rats1\ratsp6\r";
+    static char default_init[] = "ati\ratd\rate0\rath1\rats1\ratsp6\r";
     static response_t response;
     twai_message_t tx_msg;
 
