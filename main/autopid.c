@@ -40,7 +40,7 @@
 #define RANDOM_MAX  50
 
 static uint32_t auto_pid_header;
-static uint8_t auto_pid_buf[BUFFER_SIZE];
+static char auto_pid_buf[BUFFER_SIZE];
 static uint8_t auto_pid_data_len = 0;
 static int buf_index = 0;
 static autopid_state_t state = WAITING_FOR_START;
@@ -50,122 +50,62 @@ static size_t num_of_pids = 0;
 static char* initialisation = NULL;       // Initialisation string
 
 								 															
-void append_data(const char *token)
+static void parse_elm327_response(char *buffer, unsigned char *data, uint32_t *data_length) 
 {
-    if (isxdigit((int)token[0]) && isxdigit((int)token[1]) && strlen(token) == 2)
+    int i = 0, k = 0;
+    char *frame;
+
+    // Split the frames by '\r'
+    frame = strtok(buffer, "\r");
+    while (frame != NULL) 
     {
-        if (buf_index < BUFFER_SIZE - 3) // Ensure room for 2 hex chars and a space/null
+        if (frame[strlen(frame) - 1] == '>') 
         {
-            memcpy(&auto_pid_buf[buf_index], token, 2);
-            buf_index += 2;
-            auto_pid_buf[buf_index++] = ' '; // Space for readability
+            frame[strlen(frame) - 1] = '\0';  // Remove the '>' from the last frame
         }
-    }
-}
 
-void strip_line_endings(char *buffer)
-{
-    char *pos;
-    if ((pos = strchr(buffer, '\r')) != NULL)
-        *pos = '\0';
-    if ((pos = strchr(buffer, '\n')) != NULL)
-        *pos = '\0';
-}
+        // Skip the header (first 3 bytes) and frame length byte (next byte)
+        for (i = 4; i < strlen(frame); i += 3) 
+        {
+            // Convert hex string to byte and store in data array
+            char hex_byte[3] = {frame[i], frame[i+1], '\0'};
+            data[k++] = (unsigned char) strtol(hex_byte, NULL, 16);
+        }
 
-void autopid_parse_rsp(char *str)
-{
-    response_t response;
-    
-    if (strchr(str, '>') == NULL)
-    {
-        strip_line_endings(str);
+        frame = strtok(NULL, "\r");
     }
 
-    switch (state)
+    *data_length = k;
+}
+
+static void append_to_buffer(char *buffer, const char *new_data) 
+{
+    if (strlen(buffer) + strlen(new_data) < BUFFER_SIZE) 
     {
-        case WAITING_FOR_START:
-        {
-            if (strchr(str, '>') != NULL)
-            {
-                ESP_LOGI(__func__, "Found end");
-                ESP_LOG_BUFFER_HEXDUMP(TAG, str, strlen(str), ESP_LOG_INFO);
-                
-                strncpy((char *)response.data, str, BUFFER_SIZE);
-                response.length = strlen(str);
-                
-                if (xQueueSend(autopidQueue, &response, pdMS_TO_TICKS(1000)) != pdPASS)
-                {
-                    ESP_LOGE(TAG, "Failed to send to queue");
-                }
-            }
-            int8_t count = sscanf(str, "%lX %X %X %X %X %X %X %X %X", &auto_pid_header, (unsigned int *)&auto_pid_buf[0], (unsigned int *)&auto_pid_buf[1], (unsigned int *)&auto_pid_buf[2],
-                                (unsigned int *)&auto_pid_buf[3], (unsigned int *)&auto_pid_buf[4], (unsigned int *)&auto_pid_buf[5],
-                                (unsigned int *)&auto_pid_buf[6], (unsigned int *)&auto_pid_buf[7]);
-            if (count >= 2 && count <= 9)
-            {
-                if (auto_pid_buf[0] == 0x10) // Indicates multi-frame response
-                {
-                    buf_index = count - 1;
-                    auto_pid_data_len = auto_pid_buf[1];
-                }
-                else
-                {
-                    buf_index = count - 1;
-                }
-                state = READING_LINES;
-            }
-            else
-            {
-                buf_index = 0;
-            }
-            break;
-        }
-        case READING_LINES:
-        {
-            if (strchr(str, '>') != NULL)
-            {
-                ESP_LOGI(__func__, "Found response end, response: %s", str);
-                state = WAITING_FOR_START;
-                if (buf_index != 0)
-                {
-                    ESP_LOG_BUFFER_HEXDUMP(TAG, auto_pid_buf, buf_index, ESP_LOG_INFO);
-                    
-                    memcpy(response.data, auto_pid_buf, buf_index);
-                    response.length = buf_index;
-                    
-                    if (xQueueSend(autopidQueue, &response, pdMS_TO_TICKS(1000)) != pdPASS)
-                    {
-                        ESP_LOGE(TAG, "Failed to send to queue");
-                    }
-                }
-                break;
-            }
-            else
-            {
-                int8_t count = sscanf(str, "%lX %X %X %X %X %X %X %X %X", &auto_pid_header, (unsigned int *)&auto_pid_buf[buf_index], (unsigned int *)&auto_pid_buf[buf_index + 1], (unsigned int *)&auto_pid_buf[buf_index + 2],
-                                    (unsigned int *)&auto_pid_buf[buf_index + 3], (unsigned int *)&auto_pid_buf[buf_index + 4], (unsigned int *)&auto_pid_buf[buf_index + 5],
-                                    (unsigned int *)&auto_pid_buf[buf_index + 6], (unsigned int *)&auto_pid_buf[buf_index + 7]);
-                if (count == 9)
-                {
-                    buf_index += 8;
-                }
-                else
-                {
-                    state = WAITING_FOR_START;
-                }
-                break;
-            }
-        }
+        strcat(buffer, new_data);
     }
 }
 
 void autopid_mqtt_pub(char *str, uint32_t len, QueueHandle_t *q)
 {
+    static response_t response;
     if (strlen(str) != 0)
     {
         ESP_LOGI(__func__, "%s", str);
-        // ESP_LOG_BUFFER_HEXDUMP(TAG, str, strlen(str), ESP_LOG_INFO);
-        autopid_parse_rsp(str);
+
+        append_to_buffer(auto_pid_buf, str);
+
+        if (strchr(str, '>') != NULL) 
+        {
+            // Parse the accumulated buffer
+            parse_elm327_response(auto_pid_buf,  response.data, &response.length);
+            if (xQueueSend(autopidQueue, &response, pdMS_TO_TICKS(1000)) != pdPASS)
+            {
+                ESP_LOGE(TAG, "Failed to send to queue");
+            }
+            // Clear the buffer after parsing
+            auto_pid_buf[0] = '\0';
+        }
     }
 }
 
@@ -228,16 +168,17 @@ static void autopid_task(void *pvParameters)
                 if( esp_timer_get_time() > pid_req[i].timer )
                 {
                     pid_req[i].timer = esp_timer_get_time() + pid_req[i].period*1000;
-                    pid_req[i].timer = RANDOM_MIN + (esp_random() % (RANDOM_MAX - RANDOM_MIN + 1));
+                    pid_req[i].timer += RANDOM_MIN + (esp_random() % (RANDOM_MAX - RANDOM_MIN + 1));
 
                     elm327_process_cmd((uint8_t*)pid_req[i].pid_command , strlen(pid_req[i].pid_command), &tx_msg, &autopidQueue);
                     ESP_LOGI(TAG, "Sending command: %s", pid_req[i].pid_command);
                     if (xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS)
                     {
                         double result;
+                        static char hex_rsponse[256];
 
                         ESP_LOGI(TAG, "Received response for: %s", pid_req[i].pid_command);
-                        ESP_LOGI(TAG, "Response length: %d", response.length);
+                        ESP_LOGI(TAG, "Response length: %lu", response.length);
                         ESP_LOG_BUFFER_HEXDUMP(TAG, response.data, response.length, ESP_LOG_INFO);
                         if(evaluate_expression((uint8_t*)pid_req[i].expression, response.data, 0, &result))
                         {
@@ -247,9 +188,17 @@ static void autopid_task(void *pvParameters)
                                 ESP_LOGI(TAG, "Failed to create cJSON object");
                                 break;
                             }
+                            
+                            for (size_t j = 0; j < response.length; ++j) 
+                            {
+                                sprintf(hex_rsponse + (j * 2), "%02X", response.data[j]);
+                            }
+                            hex_rsponse[response.length * 2] = '\0'; 
 
                             // Add the name and result to the JSON object
                             cJSON_AddNumberToObject(rsp_json, pid_req[i].name, result);
+
+                            cJSON_AddStringToObject( rsp_json, "raw", hex_rsponse);
                             
                             // Convert the cJSON object to a string
                             char *response_str = cJSON_PrintUnformatted(rsp_json);

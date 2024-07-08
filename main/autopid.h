@@ -21,7 +21,7 @@
 #ifndef __AUTO_PID_H__
 #define __AUTO_PID_H__
 
-#define BUFFER_SIZE 256
+#define BUFFER_SIZE 512
 #define QUEUE_SIZE 10
 
 typedef enum
@@ -32,7 +32,7 @@ typedef enum
 
 typedef struct {
     uint8_t data[BUFFER_SIZE];
-    size_t length;
+    uint32_t length;
 } response_t;
 
 typedef struct {
