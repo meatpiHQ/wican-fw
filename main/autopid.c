@@ -36,14 +36,12 @@
 
 #define TAG __func__
 
-#define RANDOM_MIN  5
-#define RANDOM_MAX  50
+#define RANDOM_MIN          5
+#define RANDOM_MAX          50
+#define ECU_INIT_CMD        "0100\r"
 
-static uint32_t auto_pid_header;
 static char auto_pid_buf[BUFFER_SIZE];
-static uint8_t auto_pid_data_len = 0;
-static int buf_index = 0;
-static autopid_state_t state = WAITING_FOR_START;
+static autopid_state_t  autopid_state = CONNECT_CHECK;
 static QueueHandle_t autopidQueue;
 static pid_req_t *pid_req;
 static size_t num_of_pids = 0;
@@ -86,7 +84,7 @@ static void append_to_buffer(char *buffer, const char *new_data)
     }
 }
 
-void autopid_mqtt_pub(char *str, uint32_t len, QueueHandle_t *q)
+void autopid_parser(char *str, uint32_t len, QueueHandle_t *q)
 {
     static response_t response;
     if (strlen(str) != 0)
@@ -97,11 +95,18 @@ void autopid_mqtt_pub(char *str, uint32_t len, QueueHandle_t *q)
 
         if (strchr(str, '>') != NULL) 
         {
-            // Parse the accumulated buffer
-            parse_elm327_response(auto_pid_buf,  response.data, &response.length);
-            if (xQueueSend(autopidQueue, &response, pdMS_TO_TICKS(1000)) != pdPASS)
+            if(strstr(str, "NO DATA") == NULL && strstr(str, "ERROR") == NULL)
             {
-                ESP_LOGE(TAG, "Failed to send to queue");
+                // Parse the accumulated buffer
+                parse_elm327_response(auto_pid_buf,  response.data, &response.length);
+                if (xQueueSend(autopidQueue, &response, pdMS_TO_TICKS(1000)) != pdPASS)
+                {
+                    ESP_LOGE(TAG, "Failed to send to queue");
+                }
+            }
+            else
+            {
+                ESP_LOGE(__func__, "Error response: %s", auto_pid_buf);
             }
             // Clear the buffer after parsing
             auto_pid_buf[0] = '\0';
@@ -145,12 +150,12 @@ static void autopid_task(void *pvParameters)
 
     vTaskDelay(pdMS_TO_TICKS(1000));
     send_commands(default_init, 50);
-    if(initialisation != NULL) 
-    {
-        send_commands(initialisation, 50);
-    }
+    // if(initialisation != NULL) 
+    // {
+    //     send_commands(initialisation, 50);
+    // }
     
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    // vTaskDelay(pdMS_TO_TICKS(1000));
 
     while ((xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS));
     
@@ -163,86 +168,170 @@ static void autopid_task(void *pvParameters)
     {
         if(num_of_pids && mqtt_connected())
         {
-            for(uint32_t i = 0; i < num_of_pids; i++)
+            switch(autopid_state)
             {
-                if( esp_timer_get_time() > pid_req[i].timer )
+                case CONNECT_CHECK:
                 {
-                    pid_req[i].timer = esp_timer_get_time() + pid_req[i].period*1000;
-                    pid_req[i].timer += RANDOM_MIN + (esp_random() % (RANDOM_MAX - RANDOM_MIN + 1));
-
-                    elm327_process_cmd((uint8_t*)pid_req[i].pid_command , strlen(pid_req[i].pid_command), &tx_msg, &autopidQueue);
-                    ESP_LOGI(TAG, "Sending command: %s", pid_req[i].pid_command);
-                    if (xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS)
+                    if(initialisation != NULL) 
                     {
-                        double result;
-                        static char hex_rsponse[256];
-
-                        ESP_LOGI(TAG, "Received response for: %s", pid_req[i].pid_command);
-                        ESP_LOGI(TAG, "Response length: %lu", response.length);
-                        ESP_LOG_BUFFER_HEXDUMP(TAG, response.data, response.length, ESP_LOG_INFO);
-                        if(evaluate_expression((uint8_t*)pid_req[i].expression, response.data, 0, &result))
-                        {
-                            cJSON *rsp_json = cJSON_CreateObject();
-                            if (rsp_json == NULL) 
-                            {
-                                ESP_LOGI(TAG, "Failed to create cJSON object");
-                                break;
-                            }
-                            
-                            for (size_t j = 0; j < response.length; ++j) 
-                            {
-                                sprintf(hex_rsponse + (j * 2), "%02X", response.data[j]);
-                            }
-                            hex_rsponse[response.length * 2] = '\0'; 
-
-                            // Add the name and result to the JSON object
-                            cJSON_AddNumberToObject(rsp_json, pid_req[i].name, result);
-
-                            cJSON_AddStringToObject( rsp_json, "raw", hex_rsponse);
-                            
-                            // Convert the cJSON object to a string
-                            char *response_str = cJSON_PrintUnformatted(rsp_json);
-                            if (response_str == NULL) 
-                            {
-                                ESP_LOGI(TAG, "Failed to print cJSON object");
-                                cJSON_Delete(rsp_json); // Clean up cJSON object
-                                break;
-                            }
-
-                            ESP_LOGI(TAG, "Expression result, Name: %s: %lf", pid_req[i].name, result);
-                            if(strlen(pid_req[i].destination) != 0)
-                            {
-                                mqtt_publish(pid_req[i].destination, response_str, 0, 0, 0);
-                            }
-                            else
-                            {
-                                //if destination is empty send to default
-                                mqtt_publish(config_server_get_mqtt_rx_topic(), response_str, 0, 0, 0);
-                            }
-                            
-                            // Free the JSON string and cJSON object
-                            free(response_str);
-                            cJSON_Delete(rsp_json);
-                            vTaskDelay(pdMS_TO_TICKS(10));
-                        }
-                        else
-                        {
-                            ESP_LOGE(TAG, "Failed Expression: %s", pid_req[i].expression);
-                        }
+                        send_commands(initialisation, 100);
+                    }
+                    while ((xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS));
+                    send_commands(ECU_INIT_CMD, 1000);
+                    if(((xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS)))
+                    {
+                        autopid_state = CONNECT_NOTIFY;
+                        ESP_LOGI(TAG, "State change --> CONNECT_NOTIFY");
                     }
                     else
                     {
-                        ESP_LOGE(TAG, "Timeout waiting for response for: %s", pid_req[i].pid_command);
+                        vTaskDelay(pdMS_TO_TICKS(3000));
                     }
+                    break;
                 }
+                case CONNECT_NOTIFY:
+                {
+                    cJSON *rsp_json = cJSON_CreateObject();
+                    if (rsp_json == NULL) 
+                    {
+                        ESP_LOGI(TAG, "Failed to create cJSON object");
+                        break;
+                    }
+
+                    cJSON_AddStringToObject( rsp_json, "ecu_status", "online");
+                    char *response_str = cJSON_PrintUnformatted(rsp_json);
+
+                    mqtt_publish(config_server_get_mqtt_status_topic(), response_str, 0, 0, 0);
+                    free(response_str);
+                    cJSON_Delete(rsp_json);
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                    autopid_state = READ_PID;
+                    ESP_LOGI(TAG, "State change --> READ_PID");
+                    break;
+                }
+                case DISCONNECT_NOTIFY:
+                {
+                    cJSON *rsp_json = cJSON_CreateObject();
+                    if (rsp_json == NULL) 
+                    {
+                        ESP_LOGI(TAG, "Failed to create cJSON object");
+                        break;
+                    }
+
+                    cJSON_AddStringToObject( rsp_json, "ecu_status", "offline");
+                    char *response_str = cJSON_PrintUnformatted(rsp_json);
+
+                    mqtt_publish(config_server_get_mqtt_status_topic(), response_str, 0, 0, 0);
+                    free(response_str);
+                    cJSON_Delete(rsp_json);
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                    autopid_state = CONNECT_CHECK;
+                    ESP_LOGI(TAG, "State change --> CONNECT_CHECK");
+                    break;
+                }
+
+                case READ_PID:
+                {
+                    uint8_t pid_no_response = 0;
+
+                    for(uint32_t i = 0; i < num_of_pids; i++)
+                    {
+                        if( esp_timer_get_time() > pid_req[i].timer )
+                        {
+                            pid_req[i].timer = esp_timer_get_time() + pid_req[i].period*1000;
+                            pid_req[i].timer += RANDOM_MIN + (esp_random() % (RANDOM_MAX - RANDOM_MIN + 1));
+
+                            elm327_process_cmd((uint8_t*)pid_req[i].pid_command , strlen(pid_req[i].pid_command), &tx_msg, &autopidQueue);
+                            ESP_LOGI(TAG, "Sending command: %s", pid_req[i].pid_command);
+                            if (xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS)
+                            {
+                                double result;
+                                static char hex_rsponse[256];
+
+                                ESP_LOGI(TAG, "Received response for: %s", pid_req[i].pid_command);
+                                ESP_LOGI(TAG, "Response length: %lu", response.length);
+                                ESP_LOG_BUFFER_HEXDUMP(TAG, response.data, response.length, ESP_LOG_INFO);
+                                if(evaluate_expression((uint8_t*)pid_req[i].expression, response.data, 0, &result))
+                                {
+                                    cJSON *rsp_json = cJSON_CreateObject();
+                                    if (rsp_json == NULL) 
+                                    {
+                                        ESP_LOGI(TAG, "Failed to create cJSON object");
+                                        break;
+                                    }
+                                    
+                                    for (size_t j = 0; j < response.length; ++j) 
+                                    {
+                                        sprintf(hex_rsponse + (j * 2), "%02X", response.data[j]);
+                                    }
+                                    hex_rsponse[response.length * 2] = '\0'; 
+
+                                    // Add the name and result to the JSON object
+                                    cJSON_AddNumberToObject(rsp_json, pid_req[i].name, result);
+
+                                    cJSON_AddStringToObject( rsp_json, "raw", hex_rsponse);
+                                    
+                                    // Convert the cJSON object to a string
+                                    char *response_str = cJSON_PrintUnformatted(rsp_json);
+                                    if (response_str == NULL) 
+                                    {
+                                        ESP_LOGI(TAG, "Failed to print cJSON object");
+                                        cJSON_Delete(rsp_json); // Clean up cJSON object
+                                        break;
+                                    }
+
+                                    ESP_LOGI(TAG, "Expression result, Name: %s: %lf", pid_req[i].name, result);
+                                    if(strlen(pid_req[i].destination) != 0)
+                                    {
+                                        mqtt_publish(pid_req[i].destination, response_str, 0, 0, 0);
+                                    }
+                                    else
+                                    {
+                                        //if destination is empty send to default
+                                        mqtt_publish(config_server_get_mqtt_rx_topic(), response_str, 0, 0, 0);
+                                    }
+                                    
+                                    // Free the JSON string and cJSON object
+                                    free(response_str);
+                                    cJSON_Delete(rsp_json);
+                                    vTaskDelay(pdMS_TO_TICKS(10));
+                                }
+                                else
+                                {
+                                    ESP_LOGE(TAG, "Failed Expression: %s", pid_req[i].expression);
+                                }
+                            }
+                            else
+                            {
+                                ESP_LOGE(TAG, "Timeout waiting for response for: %s", pid_req[i].pid_command);
+                                pid_no_response = 1;
+                            }
+                        }
+                    }
+
+                    if(pid_no_response)
+                    {
+                        autopid_state = DISCONNECT_NOTIFY;
+                        ESP_LOGI(TAG, "State change --> DISCONNECT_NOTIFY");
+                    }
+
+                    break;
+                }
+
             }
         }
         else
         {
+            autopid_state = CONNECT_CHECK;
             vTaskDelay(pdMS_TO_TICKS(2000));
         }
-        // vTaskDelay(pdMS_TO_TICKS(2000));
     }
+    while (1)
+    {
+        ESP_LOGE(TAG, "autopid_task ended");
+        vTaskDelay(pdMS_TO_TICKS(5000));
+    }
+    
 }
 
 static void autopid_load(char *config_str)

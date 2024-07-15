@@ -454,7 +454,7 @@ void app_main(void)
 		can_enable();
 		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
 		
-		elm327_init(&autopid_mqtt_pub, &xmsg_obd_rx_queue, NULL);
+		elm327_init(&autopid_parser, &xmsg_obd_rx_queue, NULL);
 		autopid_init(config_server_get_auto_pid());
 	}
 

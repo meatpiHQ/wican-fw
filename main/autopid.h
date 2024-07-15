@@ -26,8 +26,10 @@
 
 typedef enum
 {
-    WAITING_FOR_START = 0,
-    READING_LINES
+    CONNECT_CHECK = 0,
+    CONNECT_NOTIFY,
+    DISCONNECT_NOTIFY,
+    READ_PID
 } autopid_state_t;
 
 typedef struct {
@@ -47,6 +49,6 @@ typedef struct {
     uint8_t type;               // Log type, could be MQTT or file-based
 }__attribute__((aligned(1),packed)) pid_req_t ;
 
-void autopid_mqtt_pub(char* str, uint32_t len, QueueHandle_t *q);
+void autopid_parser(char* str, uint32_t len, QueueHandle_t *q);
 void autopid_init(char *config_str);
 #endif
