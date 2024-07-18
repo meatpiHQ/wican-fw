@@ -744,7 +744,9 @@ static esp_err_t ws_handler(httpd_req_t *req)
         rsp_arg.fd = httpd_req_to_sockfd(req);
 //        tcp_server_suspend();
 //        vTaskResume(xwebsocket_handle);
+		#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
         gpio_set_level(ws_led, 0);
+		#endif
         xEventGroupSetBits( xServerEventGroup, WS_CONNECTED_BIT );
         return ESP_OK;
     }
@@ -1769,7 +1771,9 @@ static void websocket_task(void *pvParameters)
 	    if (ret != ESP_OK)
 	    {
 //	    	tcp_server_resume();
+			#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 	    	gpio_set_level(ws_led, 1);
+			#endif
 	    	xEventGroupClearBits( xServerEventGroup, WS_CONNECTED_BIT );
 //	    	vTaskSuspend( NULL );
 

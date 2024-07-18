@@ -59,8 +59,11 @@
 #define USB_ID_PIN					39
 #define USB_OTG_PWR_EN				10
 #define USB_ESP_MODE_EN				11
+#if HARDWARE_VER != WICAN_PRO
 #define GPIO_OUTPUT_PIN_SEL  ((1ULL<<CONNECTED_LED_GPIO_NUM) | (1ULL<<ACTIVE_LED_GPIO_NUM) | (1ULL<<PWR_LED_GPIO_NUM) | (1ULL<<CAN_STDBY_GPIO_NUM) | (1ULL<<USB_OTG_PWR_EN) | (1ULL<<USB_ESP_MODE_EN))
-
+#else
+#define GPIO_OUTPUT_PIN_SEL  ((1ULL<<CAN_STDBY_GPIO_NUM) | (1ULL<<USB_OTG_PWR_EN) | (1ULL<<USB_ESP_MODE_EN))
+#endif
 #define BLE_EN_PIN_SEL		(1ULL<<BLE_EN_PIN_NUM)
 #define BLE_Enabled()		(!gpio_get_level(BLE_EN_PIN_NUM))
 
@@ -106,7 +109,9 @@ static void process_led(bool state)
 
 	if(!can_is_enabled())
 	{
+		#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 		gpio_set_level(ACTIVE_LED_GPIO_NUM, 1);
+		#endif
 		current_state = 0;
 		last_change = esp_timer_get_time();
 	}
@@ -126,11 +131,15 @@ static void process_led(bool state)
 	}
 	if(state == 1)
 	{
-		gpio_set_level(ACTIVE_LED_GPIO_NUM, 0);
+		#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
+			gpio_set_level(ACTIVE_LED_GPIO_NUM, 0);
+		#endif
 	}
 	else
 	{
-		gpio_set_level(ACTIVE_LED_GPIO_NUM, 1);
+		#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
+			gpio_set_level(ACTIVE_LED_GPIO_NUM, 1);
+		#endif
 	}
 }
 
@@ -381,11 +390,10 @@ void app_main(void)
     //configure GPIO with the given settings
     gpio_config(&io_conf);
 
+	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 	gpio_set_level(CONNECTED_LED_GPIO_NUM, 1);
 	gpio_set_level(ACTIVE_LED_GPIO_NUM, 1);
-
-	gpio_set_level(CONNECTED_LED_GPIO_NUM, 1);
-	gpio_set_level(ACTIVE_LED_GPIO_NUM, 1);
+	#endif
 
 	gpio_reset_pin(USB_ID_PIN);
 	gpio_set_direction(USB_ID_PIN, GPIO_MODE_INPUT);
@@ -424,8 +432,11 @@ void app_main(void)
     sprintf((char *)uid,"%02x%02x%02x%02x%02x%02x",
             derived_mac_addr[0], derived_mac_addr[1], derived_mac_addr[2],
             derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
-	
-	config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, (char*)&uid[0]);
+	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
+		config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, (char*)&uid[0]);
+	#else
+		config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, 0, (char*)&uid[0]);
+	#endif
 	slcan_init(&send_to_host);
 
 	int8_t can_datarate = config_server_get_can_rate();
@@ -504,7 +515,12 @@ void app_main(void)
 		can_set_bitrate(can_datarate);
 		xmsg_mqtt_rx_queue = xQueueCreate(32, sizeof(mqtt_can_message_t) );
 		can_enable();
-		mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM, &xmsg_mqtt_rx_queue);
+		#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
+			mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM, &xmsg_mqtt_rx_queue);
+		#else
+			mqtt_init((char*)&uid[0], 0, &xmsg_mqtt_rx_queue);
+		#endif
+		
 	}
 //	else if(protocol == MQTT)
 //	{
@@ -524,19 +540,31 @@ void app_main(void)
 		port = 3333;
 	}
 	if(config_server_get_port_type() == UDP_PORT)
-	{
+	{	
+		#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 		tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, 1);
+		#elif HARDWARE_VER == WICAN_PRO
+		tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, 0, 1);
+		#endif
 	}
 	else
 	{
+		#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 		tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, 0);
+		#elif HARDWARE_VER == WICAN_PRO
+		tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, 0, 0);
+		#endif
 	}
 
     if(config_server_get_ble_config())
     {
     	int pass = config_server_ble_pass();
     	xmsg_ble_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
-    	ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, pass, &ble_uid[0]);
+		#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
+		ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, pass, &ble_uid[0]);
+		#elif HARDWARE_VER == WICAN_PRO
+    	ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, 0, pass, &ble_uid[0]);
+		#endif
     }
 
 
@@ -555,7 +583,11 @@ void app_main(void)
         	if(!config_server_mqtt_en_config())
         	{
         	    xmsg_uart_tx_queue = xQueueCreate(32, sizeof( xdev_buffer) );
-        		wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
+				#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
+				wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
+				#elif HARDWARE_VER == WICAN_PRO
+        		wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, 0);
+				#endif
         	}
 
         }
@@ -600,9 +632,9 @@ void app_main(void)
     // {
     // 	sleep_mode_init(0, 13.1f);
     // }
-
+	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
-    
+    #endif
 
 	// xEventTask = xEventGroupCreate();
 	// xTaskCreate(ftp_task, "FTP", 1024*6, NULL, 2, NULL);

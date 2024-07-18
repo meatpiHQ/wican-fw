@@ -562,7 +562,9 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
     	    spp_gatts_if = gatts_if;
     	    is_connected = true;
     	    xEventGroupSetBits(s_ble_event_group, BLE_CONNECTED_BIT);
+			#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
     	    gpio_set_level(conn_led, 0);
+			#endif
             /* start security connect with peer device when receive the connect event sent by the master */
             esp_ble_set_encryption(param->connect.remote_bda, ESP_BLE_SEC_ENCRYPT_MITM);
             break;
@@ -571,7 +573,9 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
 //            wifi_network_restart();
 //        	config_server_restart();
             is_connected = false;
+			#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
             gpio_set_level(conn_led, 1);
+			#endif
             /* start advertising again when missing the connect */
             esp_ble_gap_start_advertising(&heart_rate_adv_params);
             break;

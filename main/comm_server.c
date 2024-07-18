@@ -327,7 +327,9 @@ accept_socket:
 			}
 			ESP_LOGI(TAG, "Socket accepted ip address: %s", addr_str);
 			xEventGroupSetBits( xSocketEventGroup, PORT_OPEN_BIT );
+			#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 			gpio_set_level(conn_led, 0);
+			#endif
 			xEventGroupWaitBits(
 					  xSocketEventGroup,   /* The event group being tested. */
 					  PORT_CLOSED_BIT, /* The bits within the event group to wait for. */
@@ -336,8 +338,10 @@ accept_socket:
 					  portMAX_DELAY );/* Wait a maximum of 100ms for either bit to be set. */
 			xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
 			ESP_LOGI(TAG, "Socket disconnected...");
+			#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 			gpio_set_level(conn_led, 1);
 			shutdown(sock, 0);
+			#endif
 			close(sock);
 		}
 		else
@@ -345,7 +349,9 @@ accept_socket:
 			ESP_LOGI(TAG, "UDP socket ready");
 			xEventGroupClearBits(xSocketEventGroup, PORT_CLOSED_BIT);
 			xEventGroupSetBits( xSocketEventGroup, PORT_OPEN_BIT );
+			#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 			gpio_set_level(conn_led, 0);
+			#endif
             ESP_LOGI(TAG, "Waiting for data");
 
 			xEventGroupWaitBits(
@@ -358,7 +364,9 @@ accept_socket:
 			xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
 			ESP_LOGI(TAG, "UDP socket error");
 
+			#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 			gpio_set_level(conn_led, 1);
+			#endif
 			shutdown(sock, 0);
 			close(sock);
 			goto CLEAN_UP;

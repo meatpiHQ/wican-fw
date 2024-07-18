@@ -107,7 +107,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 			ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
 
 			esp_mqtt_client_subscribe(client, mqtt_sub_topic, 0);
-			gpio_set_level(mqtt_led, 0);
+            #if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
+			// gpio_set_level(mqtt_led, 0);
+            #endif
 			esp_mqtt_client_publish(client, mqtt_status_topic, "{\"status\": \"online\"}", 0, 0, 1);
 
             xEventGroupSetBits(s_mqtt_event_group, MQTT_CONNECTED_BIT);
@@ -115,7 +117,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 		case MQTT_EVENT_DISCONNECTED:
 			ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
 			xEventGroupClearBits(s_mqtt_event_group, MQTT_CONNECTED_BIT);
+            #if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 			gpio_set_level(mqtt_led, 1);
+            #endif
 	//        esp_mqtt_client_stop(client);
 			break;
 

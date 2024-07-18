@@ -25,10 +25,10 @@
 #define RX_GPIO_NUM             	1
 #define CAN_STDBY_GPIO_NUM			38
 
-#define CONNECTED_LED_GPIO_NUM		41  //NC pin
-#define ACTIVE_LED_GPIO_NUM			41  //NC pin
-#define BLE_EN_PIN_NUM				42  //NC pin
-#define PWR_LED_GPIO_NUM			41  //NC pin
+// #define CONNECTED_LED_GPIO_NUM		41  //NC pin
+// #define ACTIVE_LED_GPIO_NUM			41  //NC pin
+// #define BLE_EN_PIN_NUM				42  //NC pin
+// #define PWR_LED_GPIO_NUM			41  //NC pin
 
 
 #else
