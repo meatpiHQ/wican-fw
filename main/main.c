@@ -54,16 +54,26 @@
 #include "ftp.h"
 #include "hw_config.h"
 #include "autopid.h"
+#include "driver/i2c.h"
+#include "led.h"
 
 #define TAG 		__func__
 #define USB_ID_PIN					39
 #define USB_OTG_PWR_EN				10
 #define USB_ESP_MODE_EN				11
-#if HARDWARE_VER != WICAN_PRO
-#define GPIO_OUTPUT_PIN_SEL  ((1ULL<<CONNECTED_LED_GPIO_NUM) | (1ULL<<ACTIVE_LED_GPIO_NUM) | (1ULL<<PWR_LED_GPIO_NUM) | (1ULL<<CAN_STDBY_GPIO_NUM) | (1ULL<<USB_OTG_PWR_EN) | (1ULL<<USB_ESP_MODE_EN))
-#else
-#define GPIO_OUTPUT_PIN_SEL  ((1ULL<<CAN_STDBY_GPIO_NUM) | (1ULL<<USB_OTG_PWR_EN) | (1ULL<<USB_ESP_MODE_EN))
+#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
+#define GPIO_OUTPUT_PIN_SEL  		((1ULL<<CONNECTED_LED_GPIO_NUM) | (1ULL<<ACTIVE_LED_GPIO_NUM) | (1ULL<<PWR_LED_GPIO_NUM) | (1ULL<<CAN_STDBY_GPIO_NUM) | (1ULL<<USB_OTG_PWR_EN) | (1ULL<<USB_ESP_MODE_EN))
+#elif HARDWARE_VER == WICAN_PRO
+#define GPIO_OUTPUT_PIN_SEL  		((1ULL<<CAN_STDBY_GPIO_NUM) | (1ULL<<USB_OTG_PWR_EN) | (1ULL<<USB_ESP_MODE_EN))
+#define I2C_MASTER_SCL_IO           6     
+#define I2C_MASTER_SDA_IO           5      
+#define I2C_MASTER_NUM              0
+#define I2C_MASTER_FREQ_HZ          200000
+#define I2C_MASTER_TX_BUF_DISABLE   0
+#define I2C_MASTER_RX_BUF_DISABLE   0
+#define I2C_MASTER_TIMEOUT_MS       1000
 #endif
+
 #define BLE_EN_PIN_SEL		(1ULL<<BLE_EN_PIN_NUM)
 #define BLE_Enabled()		(!gpio_get_level(BLE_EN_PIN_NUM))
 
@@ -73,7 +83,6 @@ static xdev_buffer ucTCP_TX_Buffer;
 
 static uint8_t protocol = SLCAN;
 
-uint8_t project_hardware_rev;
 int FTP_TASK_FINISH_BIT = BIT2;
 EventGroupHandle_t xEventTask;
 static uint8_t mqtt_elm327_log_en = 0;
@@ -143,6 +152,25 @@ static void process_led(bool state)
 	}
 }
 
+#if HARDWARE_VER == WICAN_PRO
+static esp_err_t i2c_master_init(void)
+{
+    int i2c_master_port = I2C_MASTER_NUM;
+
+    i2c_config_t conf = {
+        .mode = I2C_MODE_MASTER,
+        .sda_io_num = I2C_MASTER_SDA_IO,
+        .scl_io_num = I2C_MASTER_SCL_IO,
+        .sda_pullup_en = GPIO_PULLUP_DISABLE,
+        .scl_pullup_en = GPIO_PULLUP_DISABLE,
+        .master.clk_speed = I2C_MASTER_FREQ_HZ,
+    };
+
+    i2c_param_config(i2c_master_port, &conf);
+    
+    return i2c_driver_install(i2c_master_port, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
+}
+#endif
 //TODO: make this pretty?
 void send_to_host(char* str, uint32_t len, QueueHandle_t *q)
 {
@@ -291,7 +319,7 @@ static void can_rx_task(void *pvParameters)
 				}
         	}
         	//TODO: optimize, useless ifs
-			if(tcp_port_open() || ble_connected() || project_hardware_rev == WICAN_USB_V100 || mqtt_connected())
+			if(tcp_port_open() || ble_connected() || HARDWARE_VER == WICAN_USB_V100 || mqtt_connected())
 			{
 				memset(ucTCP_TX_Buffer.ucElement, 0, sizeof(ucTCP_TX_Buffer.ucElement));
 				ucTCP_TX_Buffer.usLen = 0;
@@ -327,7 +355,7 @@ static void can_rx_task(void *pvParameters)
 					{
 						xQueueSend( xmsg_ble_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
 					}
-					else if(project_hardware_rev == WICAN_USB_V100)
+					else if(HARDWARE_VER == WICAN_USB_V100)
 					{
 						if(!config_server_mqtt_en_config())
 						{
@@ -398,6 +426,10 @@ void app_main(void)
 	gpio_reset_pin(USB_ID_PIN);
 	gpio_set_direction(USB_ID_PIN, GPIO_MODE_INPUT);
 
+	#if HARDWARE_VER == WICAN_PRO
+	i2c_master_init();
+	led_init(I2C_MASTER_NUM);
+	#endif
 	// gpio_reset_pin(USB_ESP_MODE_EN);
 	// gpio_set_direction(USB_ESP_MODE_EN, GPIO_MODE_OUTPUT);
 	// gpio_set_level(USB_ESP_MODE_EN, 1);
@@ -576,33 +608,33 @@ void app_main(void)
         ESP_LOGI(TAG, "Running firmware version: %s", running_app_info.version);
         ESP_LOGI(TAG, "Project Name: %s", running_app_info.project_name);
 
-        if(strstr(running_app_info.project_name, "usb") != 0)
+        if(HARDWARE_VER == WICAN_USB_V100)
         {
-        	project_hardware_rev = WICAN_USB_V100;
-        	ESP_LOGI(TAG, "project_hardware_rev: USB");
+        	// project_hardware_rev = WICAN_USB_V100;
+        	// ESP_LOGI(TAG, "project_hardware_rev: USB");
         	if(!config_server_mqtt_en_config())
         	{
         	    xmsg_uart_tx_queue = xQueueCreate(32, sizeof( xdev_buffer) );
 				#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 				wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
 				#elif HARDWARE_VER == WICAN_PRO
-        		wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, 0);
+        		// wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, 0);
 				#endif
         	}
 
         }
-        else
-        {
-        	ESP_LOGI(TAG, "project_hardware_rev: OBD");
-            if(strstr(running_app_info.project_name, "hv210") != 0)
-            {
-            	project_hardware_rev = WICAN_V210;
-            }
-            else
-            {
-            	project_hardware_rev = WICAN_V300;
-            }
-        }
+        // else
+        // {
+        // 	ESP_LOGI(TAG, "project_hardware_rev: OBD");
+        //     if(strstr(running_app_info.project_name, "hv210") != 0)
+        //     {
+        //     	project_hardware_rev = WICAN_V210;
+        //     }
+        //     else
+        //     {
+        //     	project_hardware_rev = WICAN_V300;
+        //     }
+        // }
     }
 
     xTaskCreate(can_rx_task, "can_rx_task", 1024*3, (void*)AF_INET, 5, NULL);
@@ -634,6 +666,8 @@ void app_main(void)
     // }
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
+	#elif HARDWARE_VER == WICAN_PRO
+	led_set_level(0,0,200);
     #endif
 
 	// xEventTask = xEventGroupCreate();

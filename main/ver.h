@@ -22,11 +22,5 @@
 #ifndef __VER_H__
 #define __VER_H__
 
-#define RESERVED_VER			0
-#define WICAN_V210				1
-#define WICAN_V300				2
-#define WICAN_USB_V100			3
-
-extern uint8_t project_hardware_rev;
 
 #endif

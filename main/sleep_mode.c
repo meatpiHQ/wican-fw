@@ -400,19 +400,19 @@ static void adc_task(void *pvParameters)
     	adc_val = (uint32_t)(avg/count);
     	float battery_voltage;
 
-    	if(project_hardware_rev == WICAN_V300)
+    	if(HARDWARE_VER == WICAN_V300)
     	{
     		battery_voltage = (adc_val*116)/(16*1000.0f);
     	}
-    	else if(project_hardware_rev == WICAN_USB_V100)
+    	else if(HARDWARE_VER == WICAN_USB_V100)
     	{
     		battery_voltage = (adc_val*106.49f)/(6.49f*1000.0f);
     	}
     	battery_voltage += 0.2;
-    	if(project_hardware_rev == WICAN_V210)
-    	{
-    		battery_voltage = -1;
-    	}
+    	// if(project_hardware_rev == WICAN_V210)
+    	// {
+    	// 	battery_voltage = -1;
+    	// }
 
     	xQueueOverwrite( voltage_queue, &battery_voltage );
     	if(enable_sleep == 1)

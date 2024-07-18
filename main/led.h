@@ -20,7 +20,12 @@
 
 #ifndef LED_h
 #define LED_h
+#define LED_I2C_TIMEOUT_MS          100
+#define AW2023_PWM0_LEVEL           0x34
+#define AW2023_PWM1_LEVEL           0x35
+#define AW2023_PWM2_LEVEL           0x36
 
-
+void led_init(i2c_port_t i2c_num);
+esp_err_t led_set_level(uint8_t red, uint8_t green, uint8_t blue);
 
 #endif
