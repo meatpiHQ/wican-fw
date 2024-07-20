@@ -366,7 +366,7 @@ This PID request should work on most EVs, **however it's not possible to know it
 
 The SoC = (170 x 100)/255 = **66.67%**
 
-## 7. CAN to JSON interpreter - Filtring 
+## 7. CAN to JSON interpreter - Filtering 
 
 
 This feature enables you to convert CAN messages into JSON format, apply calculations as specified by your expressions, and send the resulting data to an MQTT broker at predefined intervals. Below, we provide a comprehensive guide on how to effectively utilize this powerful feature.
