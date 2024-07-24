@@ -56,6 +56,7 @@
 #include "autopid.h"
 #include "driver/i2c.h"
 #include "led.h"
+#include "obd.h"
 
 #define TAG 		__func__
 #define USB_ID_PIN					39
@@ -174,26 +175,45 @@ static esp_err_t i2c_master_init(void)
 //TODO: make this pretty?
 void send_to_host(char* str, uint32_t len, QueueHandle_t *q)
 {
-	static xdev_buffer xsend_buffer;
+    static xdev_buffer xsend_buffer;
+    uint32_t bytes_sent = 0;
+    uint32_t bytes_to_send;
 
-	if(len == 0)
+	if(*q == NULL)
 	{
-		xsend_buffer.usLen = strlen(str);
+		return;
 	}
-	else
-	{
-		xsend_buffer.usLen = len;
-	}
-	memcpy(xsend_buffer.ucElement, str, xsend_buffer.usLen);
 	
+    if(len == 0)
+    {
+        len = strlen(str);
+    }
 
-	// ESP_LOG_BUFFER_HEX(TAG, ucTCP_TX_Buffer.ucElement, xsend_buffer.usLen);
+    while (bytes_sent < len)
+    {
+        // Determine the number of bytes to send in this iteration
+        bytes_to_send = len - bytes_sent;
+        if (bytes_to_send > DEV_BUFFER_LENGTH)
+        {
+            bytes_to_send = DEV_BUFFER_LENGTH;
+        }
 
-	xQueueSend( *q, ( void * ) &xsend_buffer, portMAX_DELAY );
-	memset(xsend_buffer.ucElement, 0, sizeof(xsend_buffer.ucElement));
-	xsend_buffer.usLen = 0;
-//	ESP_LOGI(TAG, "%s", str);
+        // Copy the data to the buffer
+        memcpy(xsend_buffer.ucElement, str + bytes_sent, bytes_to_send);
+        xsend_buffer.usLen = bytes_to_send;
+
+        // Send the buffer to the queue
+        xQueueSend(*q, (void*)&xsend_buffer, portMAX_DELAY);
+
+        // Clear the buffer for the next iteration
+        memset(xsend_buffer.ucElement, 0, DEV_BUFFER_LENGTH);
+        xsend_buffer.usLen = 0;
+
+        // Update the number of bytes sent
+        bytes_sent += bytes_to_send;
+    }
 }
+
 
 static void can_tx_task(void *pvParameters)
 {
@@ -450,9 +470,44 @@ void app_main(void)
 	// 	}
 	// }
 
-    xMsg_Rx_Queue = xQueueCreate(32, sizeof( xdev_buffer) );
+	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
+	xMsg_Rx_Queue = xQueueCreate(32, sizeof( xdev_buffer) );
     xMsg_Tx_Queue = xQueueCreate(32, sizeof( xdev_buffer) );
     xmsg_ws_tx_queue = xQueueCreate(32, sizeof( xdev_buffer) );
+	#elif HARDWARE_VER == WICAN_PRO
+	static xdev_buffer* xMsg_Rx_Queue_Storage;
+	static xdev_buffer* xMsg_Tx_Queue_Storage;
+	static xdev_buffer* xmsg_ws_tx_queue_Storage;
+	static StaticQueue_t xMsg_Rx_Queue_Buffer;
+	static StaticQueue_t xMsg_Tx_Queue_Buffer;
+	static StaticQueue_t xmsg_ws_tx_queue_Buffer;
+
+	size_t xdev_buffer_size = sizeof( xdev_buffer);
+	
+    xMsg_Rx_Queue_Storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
+    xMsg_Tx_Queue_Storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
+    xmsg_ws_tx_queue_Storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
+
+    // Check if memory allocation was successful
+    if (xMsg_Rx_Queue_Storage == NULL || xMsg_Tx_Queue_Storage == NULL || xmsg_ws_tx_queue_Storage == NULL) {
+        // Handle memory allocation failure
+        ESP_LOGE(TAG, "Failed to allocate memory for queues in external RAM");
+        return;
+    }
+
+    // Create the static queues
+    xMsg_Rx_Queue = xQueueCreateStatic(32, xdev_buffer_size, (uint8_t *)xMsg_Rx_Queue_Storage, &xMsg_Rx_Queue_Buffer);
+    xMsg_Tx_Queue = xQueueCreateStatic(32, xdev_buffer_size, (uint8_t *)xMsg_Tx_Queue_Storage, &xMsg_Tx_Queue_Buffer);
+    xmsg_ws_tx_queue = xQueueCreateStatic(32, xdev_buffer_size, (uint8_t *)xmsg_ws_tx_queue_Storage, &xmsg_ws_tx_queue_Buffer);
+
+    // Check if queues were created successfully
+    if (xMsg_Rx_Queue == NULL || xMsg_Tx_Queue == NULL || xmsg_ws_tx_queue == NULL) {
+        // Handle queue creation failure
+        ESP_LOGE(TAG, "Failed to create queues");
+        return;
+    }
+	#endif
+
 
 	esp_ota_mark_app_valid_cancel_rollback();
 //    xmsg_obd_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
@@ -640,36 +695,36 @@ void app_main(void)
     xTaskCreate(can_rx_task, "can_rx_task", 1024*3, (void*)AF_INET, 5, NULL);
     xTaskCreate(can_tx_task, "can_tx_task", 1024*3, (void*)AF_INET, 5, NULL);
 
-    // if(project_hardware_rev != WICAN_V210)
-    // {
-	// 	if(config_server_get_sleep_config())
-	// 	{
-	// 		float sleep_voltage = 0;
 
-	// 		if(config_server_get_sleep_volt(&sleep_voltage) != -1)
-	// 		{
-	// 			sleep_mode_init(1, sleep_voltage);
-	// 		}
-	// 		else
-	// 		{
-	// 			sleep_mode_init(0, 13.1f);
-	// 		}
-	// 	}
-	// 	else
-	// 	{
-	// 		sleep_mode_init(0, 13.1f);
-	// 	}
-    // }
-    // else
-    // {
-    // 	sleep_mode_init(0, 13.1f);
-    // }
+	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
+	if(config_server_get_sleep_config())
+	{
+		float sleep_voltage = 0;
+
+		if(config_server_get_sleep_volt(&sleep_voltage) != -1)
+		{
+			sleep_mode_init(1, sleep_voltage);
+		}
+		else
+		{
+			sleep_mode_init(0, 13.1f);
+		}
+	}
+	else
+	{
+		sleep_mode_init(0, 13.1f);
+	}
+	#elif HARDWARE_VER == WICAN_PRO
+	sleep_mode_init();
+	#endif
+
+
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
 	#elif HARDWARE_VER == WICAN_PRO
 	led_set_level(0,0,200);
     #endif
-
+	
 	// xEventTask = xEventGroupCreate();
 	// xTaskCreate(ftp_task, "FTP", 1024*6, NULL, 2, NULL);
 	// xEventGroupWaitBits( xEventTask,

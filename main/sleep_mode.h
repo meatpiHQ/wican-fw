@@ -22,7 +22,15 @@
 #ifndef SLEEP_MODE_h
 #define SLEEP_MODE_h
 
+#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 int8_t sleep_mode_init(uint8_t enable, float sleep_volt);
 int8_t sleep_mode_get_voltage(float *val);
+#elif HARDWARE_VER == WICAN_PRO
+#define SLEEP_INPUT     GPIO_NUM_7
+
+void sleep_mode_init(void);
+int8_t sleep_mode_get_voltage(float *val);
+#endif
+
 
 #endif

@@ -22,7 +22,12 @@
 #ifndef __TYPES_H__
 #define __TYPES_H__
 
-#define DEV_BUFFER_LENGTH	128
+// #if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
+// #define DEV_BUFFER_LENGTH	128
+// #elif HARDWARE_VER == WICAN_PRO
+// #define DEV_BUFFER_LENGTH	1024
+// #endif
+#define DEV_BUFFER_LENGTH	1024
 
 typedef enum
 {

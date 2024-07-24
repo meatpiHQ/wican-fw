@@ -57,10 +57,17 @@
 #include "esp_log.h"
 #include "mqtt_client.h"
 #include "ver.h"
+#include "esp_sleep.h"
+#include "driver/rtc_io.h"
+#include "led.h"
+#include "obd.h"
+
+#define TAG 		__func__
+
+#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 
 #define TIMES              256
 #define GET_UNIT(x)        ((x>>3) & 0x1)
-#define TAG 		__func__
 #if CONFIG_IDF_TARGET_ESP32
 #define ADC_RESULT_BYTE     2
 #define ADC_CONV_LIMIT_EN   1                       //For ESP32, this should always be set to 1
@@ -568,3 +575,41 @@ int8_t sleep_mode_init(uint8_t enable, float sleep_volt)
 
 	return 1;
 }
+#elif HARDWARE_VER == WICAN_PRO
+
+int8_t sleep_mode_get_voltage(float *val)
+{
+	return obd_get_voltage(val);
+}
+
+static void sleep_task(void *pvParameters)
+{
+	while (1)
+	{
+		if(gpio_get_level(SLEEP_INPUT) == 1)
+		{
+			vTaskDelay(pdMS_TO_TICKS(20000));
+			if(gpio_get_level(SLEEP_INPUT) == 1)
+			{
+				ESP_LOGI(TAG, "Enabling EXT0 wakeup on pin GPIO%d\n", (int)SLEEP_INPUT);
+				ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(SLEEP_INPUT, 0));
+				rtc_gpio_pullup_dis(SLEEP_INPUT);
+				ESP_LOGI(TAG, "Going to sleep now");
+				led_set_level(0,0,0);
+				vTaskDelay(pdMS_TO_TICKS(1000));
+				esp_deep_sleep_start();
+			}
+		}
+		vTaskDelay(pdMS_TO_TICKS(1000));
+	}
+	
+}
+
+void sleep_mode_init(void)
+{
+	gpio_reset_pin(SLEEP_INPUT);
+	gpio_set_direction(SLEEP_INPUT, GPIO_MODE_INPUT);
+
+	xTaskCreate(sleep_task, "sleep_task", 2048, (void*)AF_INET, 5, NULL);
+}
+#endif

@@ -20,6 +20,8 @@
 
 #ifndef LED_h
 #define LED_h
+#include "driver/i2c.h"
+
 #define LED_I2C_TIMEOUT_MS          100
 #define AW2023_PWM0_LEVEL           0x34
 #define AW2023_PWM1_LEVEL           0x35
