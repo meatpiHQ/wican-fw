@@ -191,7 +191,7 @@ You need to download the right version of BUSMaster provided in this [**Link**](
 ## 3. RealDash
 WiCAN-OBD and WiCAN-USB can connect with RealDash using either WiFi or BLE. **The protocol and CAN bitrate must be set using the configuration page**. BLE is supported only on Android and iOS. Windows 10 supports only WiFi connections. Additionally, _WiCAN-USB can connect using the USB interface_.
 
-## **USB Device Configuration (WiCAN-USB only):**
+### USB Device Configuration (WiCAN-USB only):
 1. Go to garage then click on the dashboard.
 2. Click Add connection.
 3. Select Adapter (CAN/LIN)
@@ -201,7 +201,7 @@ WiCAN-OBD and WiCAN-USB can connect with RealDash using either WiFi or BLE. **Th
 7. Set Baud RATE: 4000000 (This is the usb/serial buadrate not the CAN bitrate)
 8. Click next then Done
    
-## **WiFi Device Configuration:**
+### WiFi Device Configuration:
 
 1. Go to configuration webpage.
 2. Select the baudrate
@@ -209,7 +209,7 @@ WiCAN-OBD and WiCAN-USB can connect with RealDash using either WiFi or BLE. **Th
 4. Set "Protocol" = reladash 66
 5. Click submit changes.
 
-## **RealDash Configuration**
+### RealDash Configuration:
 1. Go to garage then click on the dashboard.
 2. Click Add connection.
 3. Select Adapter (CAN/LIN)
@@ -218,7 +218,7 @@ WiCAN-OBD and WiCAN-USB can connect with RealDash using either WiFi or BLE. **Th
 6. Enter IP and Port
 7. Click Done
 
-## **BLE Device Configuration:**
+### BLE Device Configuration:
 
 **If you're using firmware verion v1.64 or below please update to the [latest version](https://github.com/meatpiHQ/wican-fw/releases/) before enabling BLE**
 
