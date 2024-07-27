@@ -380,6 +380,10 @@ static void mqtt_task(void *pvParameters)
                         start_index = found_index + 1;
                     }
                 }
+                else if(config_server_protocol() == AUTO_PID)
+                {
+
+                }
                 else
                 {
                     sprintf(json_buffer, "{\"bus\":\"0\",\"type\":\"rx\",\"ts\":%lu,\"frame\":[", (pdTICKS_TO_MS(xTaskGetTickCount())%60000));

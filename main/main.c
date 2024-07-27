@@ -307,9 +307,9 @@ static void can_rx_task(void *pvParameters)
         process_led(0);
     	if(esp_timer_get_time() - time_old > 1000*1000)
     	{
-    		// uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
-    		// time_old = esp_timer_get_time();
-    		// ESP_LOGI(TAG, "free_heap: %lu", free_heap);
+    		uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
+    		time_old = esp_timer_get_time();
+    		ESP_LOGI(TAG, "free_heap: %lu", free_heap);
 // //        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
 // //        		num_msg = 0;
     	}
@@ -593,7 +593,7 @@ void app_main(void)
 		can_enable();
 		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
 		
-		elm327_init(&autopid_mqtt_pub, &xmsg_obd_rx_queue, NULL);
+		elm327_init(&autopid_parser, &xmsg_obd_rx_queue, NULL);
 		autopid_init(config_server_get_auto_pid());
 	}
 

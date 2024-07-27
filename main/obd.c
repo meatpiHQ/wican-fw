@@ -57,7 +57,7 @@ static void obd_task(void *pvParameters)
 {
     ESP_LOGI(TAG, "OBD Task started");
     obd_cmd_t obd_cmd;
-    // size_t buf_index = 0;
+    size_t buf_index = 0;
     uart_event_t event;
     // bool cmd_complete = false;
 
@@ -70,46 +70,58 @@ static void obd_task(void *pvParameters)
             int write_len = uart_write_bytes(UART_NUM_1, (const char*)obd_cmd.cmd, strlen(obd_cmd.cmd));
             ESP_LOGI(TAG, "Wrote %d bytes to UART", write_len);
             obd_cmd.obd_rsp->rsp_end_flag = 0;
-            while (!obd_cmd.obd_rsp->rsp_end_flag)
+            if (xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(obd_cmd.timeout_ms)) == pdTRUE)
             {
-                ESP_LOGI(TAG, "Waiting for UART event");
-                if (xQueueReceive(uart1_queue, (void*)&event, pdMS_TO_TICKS(obd_cmd.timeout_ms)))
+                while (!obd_cmd.obd_rsp->rsp_end_flag)
                 {
-                    ESP_LOGI(TAG, "UART event received: %d", event.type);
-                    if (event.type == UART_DATA)
+                    ESP_LOGI(TAG, "Waiting for UART event");
+                    if (xQueueReceive(uart1_queue, (void*)&event, pdMS_TO_TICKS(obd_cmd.timeout_ms)))
                     {
-                        int len = uart_read_bytes(UART_NUM_1, obd_cmd.obd_rsp->rsp_data, event.size, pdMS_TO_TICKS(obd_cmd.timeout_ms));
-                        ESP_LOGI(TAG, "Read %d bytes from UART", len);
-
-                        if (len >= 2 && obd_cmd.obd_rsp->rsp_data[len - 2] == '\r' && obd_cmd.obd_rsp->rsp_data[len - 1] == '>')
+                        ESP_LOGI(TAG, "UART event received: %d", event.type);
+                        if (event.type == UART_DATA)
                         {
-                            ESP_LOGI(TAG, "Command complete indicator '\\r>' found");
-                            obd_cmd.obd_rsp->rsp_end_flag = true;
+                            int len = uart_read_bytes(UART_NUM_1, obd_cmd.obd_rsp->rsp_data + buf_index, event.size, pdMS_TO_TICKS(obd_cmd.timeout_ms));
+                            ESP_LOGI(TAG, "Read %d bytes from UART", len);
+                            buf_index += len;
+
+                            if (buf_index >= 2 && obd_cmd.obd_rsp->rsp_data[buf_index - 2] == '\r' && obd_cmd.obd_rsp->rsp_data[buf_index - 1] == '>')
+                            {
+                                ESP_LOGI(TAG, "Command complete indicator '\\r>' found");
+                                obd_cmd.obd_rsp->size = buf_index;
+                                obd_cmd.obd_rsp->rsp_data[buf_index] = '\0';
+                                xQueueSend(*(obd_cmd.rsp_queue), obd_cmd.obd_rsp, portMAX_DELAY); // Dereference rsp_queue
+                                buf_index = 0;
+                                obd_cmd.obd_rsp->rsp_end_flag = true;
+                            }
                         }
-                        obd_cmd.obd_rsp->size = len;
-                        obd_cmd.obd_rsp->rsp_data[len] = '\0';
-                        xQueueSend(*(obd_cmd.rsp_queue), obd_cmd.obd_rsp, portMAX_DELAY); // Dereference rsp_queue
-                    }
-                    else if (event.type == UART_FIFO_OVF)
-                    {
-                        ESP_LOGE(TAG, "HW FIFO Overflow");
-                        uart_flush(UART_NUM_1);
-                    }
-                    else if (event.type == UART_BUFFER_FULL)
-                    {
-                        ESP_LOGE(TAG, "Ring Buffer Full");
-                        uart_flush(UART_NUM_1);
+                        else if (event.type == UART_FIFO_OVF)
+                        {
+                            ESP_LOGE(TAG, "HW FIFO Overflow");
+                            uart_flush(UART_NUM_1);
+                        }
+                        else if (event.type == UART_BUFFER_FULL)
+                        {
+                            ESP_LOGE(TAG, "Ring Buffer Full");
+                            uart_flush(UART_NUM_1);
+                        }
+                        else
+                        {
+                            ESP_LOGI(TAG, "Unhandled event type: %d", event.type);
+                        }
+
+                        // if (obd_cmd.obd_rsp->rsp_end_flag)
+                        // {
+                        //     ESP_LOGI(TAG, "Clearing UART buffer");
+                        //     bzero(obd_cmd.obd_rsp->rsp_data, OBD_DATA_BUF_SIZE);
+                        // }
                     }
                     else
                     {
-                        ESP_LOGI(TAG, "Unhandled event type: %d", event.type);
+                        ESP_LOGI(TAG, "UART receive timeout");
+                        break; // Exit inner loop on timeout
                     }
                 }
-                else
-                {
-                    ESP_LOGI(TAG, "UART receive timeout");
-                    break; // Exit inner loop on timeout
-                }
+                xSemaphoreGive(xuart1_semaphore);
             }
         }
     }
@@ -268,7 +280,6 @@ void obd_init(void)
     gpio_reset_pin(OBD_RESET_PIN);
     gpio_set_direction(OBD_RESET_PIN, GPIO_MODE_OUTPUT_OD);
 
-    
     // gpio_set_level(41, 0);
     // vTaskDelay(pdMS_TO_TICKS(10));
     // gpio_set_level(41, 1);
@@ -283,7 +294,7 @@ void obd_init(void)
         .source_clk = UART_SCLK_DEFAULT,
     };
 
-    esp_err_t ret = uart_driver_install(UART_NUM_1, UART_BUF_SIZE * 2, UART_BUF_SIZE * 2, 20, &uart1_queue, 0);
+    esp_err_t ret = uart_driver_install(UART_NUM_1, UART_BUF_SIZE, UART_BUF_SIZE, 20, &uart1_queue, 0);
     if (ret != ESP_OK) 
     {
         ESP_LOGE(TAG, "Failed to install UART driver: %s", esp_err_to_name(ret));
@@ -298,14 +309,12 @@ void obd_init(void)
         return;
     }
 
-    // xTaskCreate(obd_task, "obd_task", 1024*8, NULL, 5, NULL);
-
-    // QueueHandle_t response_queue = xQueueCreate(OBD_QUEUE_SIZE, sizeof(obd_rsp_t));
-    // if (response_queue == NULL)
-    // {
-    //     ESP_LOGE(TAG, "Failed to create response queue");
-    //     return;
-    // }
+    QueueHandle_t response_queue = xQueueCreate(OBD_QUEUE_SIZE, sizeof(obd_rsp_t));
+    if (response_queue == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to create response queue");
+        return;
+    }
     xuart1_semaphore = xSemaphoreCreateMutex();
     obd_hardreset_chip();
     
@@ -313,14 +322,31 @@ void obd_init(void)
 
     obd_get_voltage(&obd_voltage);
     ESP_LOGI(TAG, "obd_voltage: %0.1f", obd_voltage);
-    // static obd_rsp_t response; // Static to persist the data
-    // obd_send_cmd("ATI\r", &response_queue, &response, 2000); // Pass address of response_queue
-    // if (xQueueReceive(response_queue, (void*)&response, portMAX_DELAY) == pdPASS)
+
+
+    xTaskCreate(obd_task, "obd_task", 1024*8, NULL, 5, NULL);
+
+    static obd_rsp_t response; // Static to persist the data
+    obd_send_cmd("ATI\r", &response_queue, &response, 2000); // Pass address of response_queue
+    if (xQueueReceive(response_queue, (void*)&response, pdMS_TO_TICKS(2000)) == pdPASS)
+    {
+        obd_log_response(response.rsp_data, response.size);
+    }
+    // obd_send_cmd("STSLCS\r", &response_queue, &response, 2000); // Pass address of response_queue
+    // if (xQueueReceive(response_queue, (void*)&response, pdMS_TO_TICKS(2000)) == pdPASS)
     // {
     //     obd_log_response(response.rsp_data, response.size);
     // }
-    // obd_send_cmd("STSLCS\r", &response_queue, &response, 2000); // Pass address of response_queue
-    // if (xQueueReceive(response_queue, (void*)&response, portMAX_DELAY) == pdPASS)
+
+    // obd_send_cmd("stsbr2000000\r", &response_queue, &response, 100); // Pass address of response_queue
+    // if (xQueueReceive(response_queue, (void*)&response, pdMS_TO_TICKS(100)) == pdPASS)
+    // {
+    //     obd_log_response(response.rsp_data, response.size);
+    // }
+    // vTaskDelay(pdMS_TO_TICKS(100));
+    // uart_set_baudrate(UART_NUM_1, 2000000);
+    // obd_send_cmd("ATI\r", &response_queue, &response, 2000); // Pass address of response_queue
+    // if (xQueueReceive(response_queue, (void*)&response, pdMS_TO_TICKS(2000)) == pdPASS)
     // {
     //     obd_log_response(response.rsp_data, response.size);
     // }

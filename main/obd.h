@@ -18,7 +18,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define UART_BUF_SIZE           (512)
+#define UART_BUF_SIZE           (8*1024)
 #define OBD_UART_QUEUE_SIZE     (5)
 #define OBD_QUEUE_SIZE          (5)
 #define OBD_DATA_BUF_SIZE       (512)

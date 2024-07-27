@@ -1344,26 +1344,29 @@ static void uart1_event_task(void *pvParameters)
         if (xQueuePeek(uart1_queue, (void*)&event, portMAX_DELAY)) {
 			if( xSemaphoreTake( xuart1_semaphore, pdMS_TO_TICKS(1) ) == pdTRUE )
 			{
-				xQueueReceive(uart1_queue, (void*)&event, portMAX_DELAY);
-				bzero(uart_read_buf, BUF_SIZE);
-				switch (event.type) {
-					case UART_DATA:
-						uart_read_bytes(UART_NUM_1, uart_read_buf, event.size, portMAX_DELAY);
-						uart_read_buf[event.size] = '\0'; // Null-terminate the data
-						ESP_LOG_BUFFER_HEXDUMP(TAG, uart_read_buf, event.size, ESP_LOG_INFO);
-						elm327_response((char*)uart_read_buf, 0, tx_q); // Assuming no specific queue is used here
-						break;
-					case UART_FIFO_OVF:
-						ESP_LOGE(TAG, "HW FIFO Overflow");
-						uart_flush(UART_NUM_1);
-						break;
-					case UART_BUFFER_FULL:
-						ESP_LOGE(TAG, "Ring Buffer Full");
-						uart_flush(UART_NUM_1);
-						break;
-					default:
-						ESP_LOGI(TAG, "Unhandled event type: %d", event.type);
-						break;
+				// vTaskDelay(pdMS_TO_TICKS(2));
+				if(xQueueReceive(uart1_queue, (void*)&event, pdMS_TO_TICKS(10)) == pdTRUE)
+				{
+					bzero(uart_read_buf, BUF_SIZE);
+					switch (event.type) {
+						case UART_DATA:
+							uart_read_bytes(UART_NUM_1, uart_read_buf, event.size, portMAX_DELAY);
+							uart_read_buf[event.size] = '\0'; // Null-terminate the data
+							ESP_LOG_BUFFER_HEXDUMP(TAG, uart_read_buf, event.size, ESP_LOG_INFO);
+							elm327_response((char*)uart_read_buf, 0, tx_q); // Assuming no specific queue is used here
+							break;
+						case UART_FIFO_OVF:
+							ESP_LOGE(TAG, "HW FIFO Overflow");
+							uart_flush(UART_NUM_1);
+							break;
+						case UART_BUFFER_FULL:
+							ESP_LOGE(TAG, "Ring Buffer Full");
+							uart_flush(UART_NUM_1);
+							break;
+						default:
+							ESP_LOGI(TAG, "Unhandled event type: %d", event.type);
+							break;
+					}
 				}
 				xSemaphoreGive(xuart1_semaphore);
 			}
