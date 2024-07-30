@@ -110,13 +110,13 @@ WiCAN-USB can be powered through USB or through a screw-terminal connector. The 
 
 WiCAN-USB can also be used as a USB-to-CAN adapter when Wi-Fi connectivity is not available or when a hardwired connection is needed.
 
-# WiCAN Implementation
+# WiCAN-USB as a USB-to-CAN adapter
 
 Traditional USB-to-CAN connectors are often expensive and do not always offer optimal efficiency. In contrast, the ESP32-based WiCAN presents a readily available and cost-effective solution, making it an excellent choice for low-frequency CAN bus applications and providing great value for its cost.
 
 Although WiCAN performs well for low-frequency data transmission, it may not be suitable for all frequency ranges. Nonetheless, it excels in many applications, particularly those with less demanding data rates.
 
-Integrating WiCAN into your setup is straightforward and economical, requiring only basic cables and jumpers. With minimal expense, you can significantly enhance your system's capabilities.
+Integrating WiCAN into your setup is straightforward and economical, requiring either customised shields for your ESP-32 module or merely jumper wires. With minimal expense, you can significantly enhance your system's capabilities.
 
 ## Code Customization
 ## Setup Guide
