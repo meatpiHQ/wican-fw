@@ -1,9 +1,16 @@
-# MeatPi and WiCAN Overview
+<img src="https://github.com/slimelec/ollie-hw/blob/master/images/mpi_logo.png" width=300>
 
-![MeatPi Logo](https://github.com/slimelec/ollie-hw/blob/master/images/mpi_logo.png)
-[MeatPi Website](https://www.meatpi.com) | [Discord Server](https://discord.gg/WXy8KQCE7V) | [Latest Firmware](https://github.com/meatpiHQ/wican-fw/releases/)
+[www.meatpi.com](https://www.meatpi.com)
+---
+## MeatPi [Discord server](https://discord.gg/WXy8KQCE7V)
+## Please update to the [latest firmware version](https://github.com/meatpiHQ/wican-fw/releases/)
 
-**Order from**: [Mouser](https://www.mouser.com/c/?m=MeatPi) | [Crowd Supply](https://www.crowdsupply.com/meatpi-electronics/wican)
+## Order on [**Mouser**](https://www.mouser.com/c/?m=MeatPi) or [**Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics/wican)
+
+<br/><br/>
+
+---
+![65465](https://github.com/meatpiHQ/wican-fw/assets/94690098/537b5062-cb8a-485f-9354-6c351d08aa49)
 
 ## WiCAN-USB and WiCAN-OBD2 Pinouts
 
