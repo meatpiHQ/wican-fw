@@ -52,6 +52,7 @@ static void parse_elm327_response(char *buffer, unsigned char *data, uint32_t *d
 {
     int i = 0, k = 0;
     char *frame;
+    char temp_buffer[32];
 
     // Split the frames by '\r' or '\r\n'
     frame = strtok(buffer, "\r\n");
@@ -62,9 +63,16 @@ static void parse_elm327_response(char *buffer, unsigned char *data, uint32_t *d
             frame[strlen(frame) - 1] = '\0';  // Remove the '>' from the last frame
         }
 
-        // Skip the header (first 3 bytes) and frame length byte (next byte)
-        for (i = 4; i < strlen(frame); i += 3) 
+        // Extract and print the data before the first space (ID)
+        sscanf(frame, "%s", temp_buffer);
+
+        // Determine the start index based on ID length (standard ID vs. extended ID)
+        int start_index = (strchr(frame, ' ') - frame) + 1;
+
+        // Skip the header and frame length byte
+        for (i = start_index + 3; i < strlen(frame); i += 3) 
         {
+            if (frame[i] == '\0') break;
             // Convert hex string to byte and store in data array
             char hex_byte[3] = {frame[i], frame[i+1], '\0'};
             data[k++] = (unsigned char) strtol(hex_byte, NULL, 16);
@@ -81,6 +89,10 @@ static void append_to_buffer(char *buffer, const char *new_data)
     if (strlen(buffer) + strlen(new_data) < BUFFER_SIZE) 
     {
         strcat(buffer, new_data);
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Failed add data to buffer");
     }
 }
 
