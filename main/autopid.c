@@ -53,8 +53,8 @@ static void parse_elm327_response(char *buffer, unsigned char *data, uint32_t *d
     int i = 0, k = 0;
     char *frame;
 
-    // Split the frames by '\r'
-    frame = strtok(buffer, "\r");
+    // Split the frames by '\r' or '\r\n'
+    frame = strtok(buffer, "\r\n");
     while (frame != NULL) 
     {
         if (frame[strlen(frame) - 1] == '>') 
@@ -70,7 +70,7 @@ static void parse_elm327_response(char *buffer, unsigned char *data, uint32_t *d
             data[k++] = (unsigned char) strtol(hex_byte, NULL, 16);
         }
 
-        frame = strtok(NULL, "\r");
+        frame = strtok(NULL, "\r\n");
     }
 
     *data_length = k;
@@ -136,7 +136,7 @@ static void send_commands(char *commands, uint32_t delay_ms)
 
 static void autopid_task(void *pvParameters)
 {
-    static char default_init[] = "ati\ratd\rate0\rath1\rats1\ratsp6\r";
+    static char default_init[] = "ati\ratd\rate0\rath1\ratl0\rats1\ratsp6\r";
     static response_t response;
     twai_message_t tx_msg;
 
