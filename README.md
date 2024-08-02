@@ -58,16 +58,25 @@ WiCAN, based on ESP32-C3, is a versatile CAN adapter for car hacking and CAN-bus
 - Supports RealDash for custom graphics interfaces.
 - Sends battery alerts when voltage drops below a set threshold.
 
-### WiCAN-USB
+# WiCAN-USB
+![image](https://user-images.githubusercontent.com/94690098/231443956-fbf2de46-ef19-4ba5-83b1-6058ab123f56.png)
 
-![WiCAN-USB](https://user-images.githubusercontent.com/94690098/231443956-fbf2de46-ef19-4ba5-83b1-6058ab123f56.png)
+WiCAN-USB can be powered through USB or through a screw-terminal connector. The hardware and firmware is almost identical to WiCAN-OBD, but with an extended voltage range up to 36 V. Many of the projects we work on involve 12 V or 24 V trucks, and WiCAN-USB comes in handy when we need to monitor those trucks remotely, from the comfort of our desks, by configuring them to connect to Wi-Fi. And, thanks to its low cost, we don’t need to worry about breaking or losing it the WiCAN-USB device itself.
 
-- Can be powered by USB or a screw-terminal connector.
-- Supports voltages up to 36 V, useful for 12 V or 24 V trucks.
-- Works as a USB-to-CAN adapter for low-frequency CAN bus applications.
+WiCAN-USB can also be used as a USB-to-CAN adapter when Wi-Fi connectivity is not available or when a hardwired connection is needed.
+
+# WiCAN-USB as a USB-to-CAN adapter
+
+Traditional USB-to-CAN connectors are often expensive and do not always offer optimal efficiency. In contrast, the ESP32-based WiCAN presents a readily available and cost-effective solution, making it an excellent choice for low-frequency CAN bus applications and providing great value for its cost.
+
+Although WiCAN performs well for low-frequency data transmission, it may not be suitable for all frequency ranges. Nonetheless, it excels in many applications, particularly those with less demanding data rates.
+
+Integrating WiCAN into your setup is straightforward and economical, requiring either customised shields for your ESP-32 module or merely jumper wires. With minimal expense, you can significantly enhance your system's capabilities.
+
+## Code Customization
+## Setup Guide
 
 ## Configuration
-
 ### WiFi/CAN Configuration
 
 1. Power the device using USB or OBD-II.
