@@ -112,7 +112,7 @@ TimerHandle_t xrestartTimer;
 /* Max length a file path can have on storage */
 #define FILE_PATH_MAX (ESP_VFS_PATH_MAX + CONFIG_SPIFFS_OBJ_NAME_LEN)
 /* Scratch buffer size */
-#define SCRATCH_BUFSIZE  8192
+#define SCRATCH_BUFSIZE  4096
 
 #define MAX_FILE_SIZE   (2000*1024) // 200 KB
 #define MAX_FILE_SIZE_STR "200KB"
@@ -492,6 +492,124 @@ static esp_err_t load_pid_auto_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+static esp_err_t load_pid_auto_config_handler(httpd_req_t *req)
+{
+    const char *filepath = "/spiffs/car_data.json";
+    ESP_LOGI(TAG, "Opening file: %s", filepath);
+    FILE *fd = fopen(filepath, "r");
+
+    if (fd == NULL)
+    {
+        ESP_LOGE(TAG, "File does not exist: %s", filepath);
+        httpd_resp_send(req, "NONE", HTTPD_RESP_USE_STRLEN);
+        return ESP_OK;
+    }
+
+    // Seek to the end of the file to determine its size
+    fseek(fd, 0, SEEK_END);
+    long file_size = ftell(fd);
+    rewind(fd);
+
+    if (file_size <= 0)
+    {
+        ESP_LOGE(TAG, "File is empty or invalid: %s", filepath);
+        fclose(fd);
+        httpd_resp_send(req, "NONE", HTTPD_RESP_USE_STRLEN);
+        return ESP_OK;
+    }
+
+    ESP_LOGI(TAG, "File size: %ld bytes", file_size);
+
+    // Allocate memory on the heap to hold the file content
+    char *buf = (char *)malloc(file_size + 1);
+    if (buf == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to allocate memory for file content");
+        fclose(fd);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
+        return ESP_FAIL;
+    }
+
+    // Read the file into the buffer
+    size_t read_len = fread(buf, 1, file_size, fd);
+    fclose(fd);
+
+    if (read_len != file_size)
+    {
+        ESP_LOGE(TAG, "Failed to read the entire file. Read %zu bytes out of %ld", read_len, file_size);
+        free(buf);
+        httpd_resp_send(req, "NONE", HTTPD_RESP_USE_STRLEN);
+        return ESP_OK;
+    }
+
+    ESP_LOGI(TAG, "File read successfully. Parsing JSON...");
+
+    // Null-terminate the read buffer
+    buf[read_len] = '\0';
+
+    // Parse JSON content
+    cJSON *json = cJSON_Parse(buf);
+    free(buf);  // Free the buffer as it's no longer needed
+
+    if (json == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to parse JSON content from file: %s", filepath);
+        ESP_LOGE(TAG, "cJSON_GetErrorPtr: %s", cJSON_GetErrorPtr());
+        httpd_resp_send(req, "NONE", HTTPD_RESP_USE_STRLEN);
+        return ESP_OK;
+    }
+
+    // Extract the "cars" array from the JSON object
+    cJSON *cars_array = cJSON_GetObjectItem(json, "cars");
+    if (cars_array == NULL || !cJSON_IsArray(cars_array))
+    {
+        ESP_LOGE(TAG, "\"cars\" array not found or is not an array");
+        cJSON_Delete(json);
+        httpd_resp_send(req, "NONE", HTTPD_RESP_USE_STRLEN);
+        return ESP_OK;
+    }
+
+    ESP_LOGI(TAG, "JSON parsed successfully. Extracting car models...");
+
+    // Create a response JSON object
+    cJSON *response_json = cJSON_CreateObject();
+    cJSON *supported_array = cJSON_CreateArray();
+    cJSON_AddItemToObject(response_json, "supported", supported_array);
+
+    // Loop through the "cars" array and extract car models
+    cJSON *car;
+    cJSON_ArrayForEach(car, cars_array)
+    {
+        cJSON *car_model = cJSON_GetObjectItem(car, "car_model");
+        if (cJSON_IsString(car_model) && car_model->valuestring != NULL)
+        {
+            ESP_LOGI(TAG, "Found car model: %s", car_model->valuestring);
+            cJSON_AddItemToArray(supported_array, cJSON_CreateString(car_model->valuestring));
+        }
+    }
+
+    // Convert response JSON object to string
+    char *response_str = cJSON_PrintUnformatted(response_json);
+    if (response_str != NULL)
+    {
+        ESP_LOGI(TAG, "Sending response: %s", response_str);
+        httpd_resp_send(req, response_str, HTTPD_RESP_USE_STRLEN);
+        cJSON_free(response_str);
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Failed to convert response JSON to string");
+        httpd_resp_send(req, "NONE", HTTPD_RESP_USE_STRLEN);
+    }
+
+    // Clean up
+    cJSON_Delete(json);
+    cJSON_Delete(response_json);
+
+    ESP_LOGI(TAG, "Handler completed successfully");
+    return ESP_OK;
+}
+
 static esp_err_t load_config_handler(httpd_req_t *req)
 {
     const char* resp_str = (const char*)device_config_file;
@@ -528,9 +646,10 @@ static esp_err_t store_auto_data_handler(httpd_req_t *req)
         return ESP_FAIL; // Invalid content length
     }
 
-    buf = (char *)malloc(buf_size);
+    buf = (char *)malloc(buf_size+1);
     if (!buf)
     {
+		ESP_LOGE(__func__, "Memory allocation failure");
         return ESP_ERR_NO_MEM; // Memory allocation failure
     }
 
@@ -541,6 +660,7 @@ static esp_err_t store_auto_data_handler(httpd_req_t *req)
         if (ret == HTTPD_SOCK_ERR_TIMEOUT)
         {
             // Retry receiving if timeout occurred
+			ESP_LOGE(__func__, "timeout occurred");
             free(buf);
             return ESP_FAIL;
         }
@@ -548,6 +668,7 @@ static esp_err_t store_auto_data_handler(httpd_req_t *req)
         free(buf);
         return ESP_FAIL;
     }
+	buf[ret] = 0;
 	ESP_LOGI(__func__, "Auto Table json: %s", buf);
 
 	// change this into a function
@@ -1003,6 +1124,139 @@ static esp_err_t upload_post_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+static esp_err_t upload_car_data_handler(httpd_req_t *req)
+{
+    char filepath[FILE_PATH_MAX];
+    uint32_t total_size = 0;
+
+    /* Skip leading "/upload" from URI to get filename */
+    /* Note sizeof() counts NULL termination hence the -1 */
+    const char *filename = get_path_from_uri(filepath, ((struct file_server_data *)req->user_ctx)->base_path,
+                                             req->uri + sizeof("/upload") - 1, sizeof(filepath));
+    if (!filename) {
+        /* Respond with 500 Internal Server Error */
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Filename too long");
+        return ESP_FAIL;
+    }
+
+    /* Filename cannot have a trailing '/' */
+    if (filename[strlen(filename) - 1] == '/') {
+        ESP_LOGE(TAG, "Invalid filename : %s", filename);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Invalid filename");
+        return ESP_FAIL;
+    }
+
+    /* File cannot be larger than a limit */
+    if (req->content_len > MAX_FILE_SIZE)
+    {
+        ESP_LOGE(TAG, "File too large : %d bytes", req->content_len);
+        /* Respond with 400 Bad Request */
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                            "File size must be less than "
+                            MAX_FILE_SIZE_STR "!");
+        /* Return failure to close underlying connection else the
+         * incoming file content will keep the socket busy */
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "Receiving file : %s...", filename);
+
+    /* Retrieve the pointer to scratch buffer for temporary storage */
+    char *buf = ((struct file_server_data *)req->user_ctx)->scratch;
+    int received = 0;
+
+    /* Content length of the request gives
+     * the size of the file being uploaded */
+    int remaining = req->content_len;
+	char *ret = 0;
+	char *boundary_start = 0;
+	char *boundary_end = 0;
+	uint8_t count = 0;
+
+
+	FILE *fd = fopen(filepath, "w");
+    if (fd == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to create file : %s", filepath);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to create file");
+        return ESP_FAIL;
+    }
+	// remaining
+    while (remaining > 0)
+    {
+//        ESP_LOGI(TAG, "Remaining size : %d", remaining);
+        /* Receive the file part by part into a buffer */
+        if ((received = httpd_req_recv(req, buf, MIN(remaining, SCRATCH_BUFSIZE))) <= 0)
+        {
+            if (received == HTTPD_SOCK_ERR_TIMEOUT)
+            {
+                /* Retry if timeout occurred */
+                continue;
+            }
+
+
+            ESP_LOGE(TAG, "File reception failed!");
+            fclose(fd);
+            unlink(filepath);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive file");
+            return ESP_FAIL;
+        }
+
+        if(boundary_start == 0)
+        {
+        	boundary_start = buf;
+        	ret = memchr(boundary_start, '\n', 200);
+        	boundary_end = ret + 1;
+        	remaining -= ((boundary_end - boundary_start) + 1 + 2 + 1);//ignore boundary at end of file
+        	//TODO: Better way to do this ??
+        	while(1)
+        	{
+        		if(((ret[0] == 'T') && (ret[1] == 'y') && (ret[2] == 'p') && (ret[3] == 'e') &&
+        		        			(ret[4] == ':')))
+        		{
+        			break;
+        		}
+        		ret++;
+        	}
+    		ret = memchr(ret, '\n', 200);
+    		buf = ret + 3;
+    		remaining -= (buf - boundary_start);
+    		ESP_LOGI(TAG, "Real Remaining size : %d", remaining);
+    		
+    		received -= (buf - boundary_start);
+        }
+        total_size += received;
+        /* Write buffer content to file on storage */
+        if (received > 0)
+        {
+            if (fwrite(buf, 1, received, fd) != received)
+            {
+                ESP_LOGE(TAG, "File write failed!");
+                fclose(fd);
+                unlink(filepath);
+                httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to write file to storage");
+                return ESP_FAIL;
+            }
+        }
+
+        if(count < 3)
+        {
+        	count++;
+        }
+        /* Keep track of remaining size of
+         * the file left to be uploaded */
+        remaining -= received;
+        vTaskDelay(5 / portTICK_PERIOD_MS);
+    }
+
+
+    fclose(fd);
+
+    ESP_LOGI(TAG, "File reception complete: %lu", total_size);
+    httpd_resp_sendstr(req, "File uploaded successfully");
+    return ESP_OK;
+}
+
 
 static const httpd_uri_t index_uri = {
     .uri       = "/",
@@ -1040,6 +1294,14 @@ static const httpd_uri_t load_pid_auto_uri = {
     .uri       = "/load_auto_pid",
     .method    = HTTP_GET,
     .handler   = load_pid_auto_handler,
+    /* Let's pass response string in user
+     * context to demonstrate it's usage */
+    .user_ctx  = NULL
+};
+static const httpd_uri_t load_pid_auto_conf_uri = {
+    .uri       = "/load_auto_pid_config",
+    .method    = HTTP_GET,
+    .handler   = load_pid_auto_config_handler,
     /* Let's pass response string in user
      * context to demonstrate it's usage */
     .user_ctx  = NULL
@@ -1098,7 +1360,12 @@ static const httpd_uri_t store_auto_data_uri = {
      * context to demonstrate it's usage */
     .user_ctx  = NULL
 };
-
+static const httpd_uri_t upload_car_data = {
+    .uri       = "/upload/car_data.json",   // Match all URIs of type /upload/path/to/file
+    .method    = HTTP_POST,
+    .handler   = upload_car_data_handler,
+    .user_ctx  = &server_data    // Pass server data as context
+};
 static void config_server_load_cfg(char *cfg)
 {
 	cJSON * root, *key = 0;
@@ -1691,7 +1958,7 @@ static httpd_handle_t config_server_init(void)
                        );
 
     // Start the httpd server
-	config.max_uri_handlers = 12;
+	config.max_uri_handlers = 14;
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK)
     {
@@ -1709,6 +1976,8 @@ static httpd_handle_t config_server_init(void)
 		httpd_register_uri_handler(server, &load_canflt_uri);
 		httpd_register_uri_handler(server, &store_auto_data_uri);
 		httpd_register_uri_handler(server, &load_pid_auto_uri);
+		httpd_register_uri_handler(server, &load_pid_auto_conf_uri);
+		httpd_register_uri_handler(server, &upload_car_data);
 		
         #if CONFIG_EXAMPLE_BASIC_AUTH
         httpd_register_basic_auth(server);
