@@ -1,6 +1,6 @@
 {
     "idf.adapterTargetName": "esp32c3",
-    "idf.portWin": "COM111",
+    "idf.portWin": "COM14",
     "idf.flashType": "UART",
     "files.associations": {
         "ftp.h": "c",
@@ -8,6 +8,16 @@
         "wifi_network.h": "c",
         "elm327.h": "c",
         "realdash.h": "c",
-        "expression_parser.h": "c"
+        "expression_parser.h": "c",
+        "esp_timer.h": "c",
+        "twai.h": "c",
+        "queue.h": "c",
+        "event_groups.h": "c",
+        "semphr.h": "c",
+        "typeinfo": "c",
+        "mqtt_client.h": "c",
+        "cjson.h": "c",
+        "mqtt.h": "c",
+        "autopid.h": "c"
     }
 }
