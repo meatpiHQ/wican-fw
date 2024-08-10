@@ -63,6 +63,8 @@
 #include "expression_parser.h"
 
 #define TAG 		__func__
+#define MQTT_TX_RX_BUF_SIZE         (1024*5)
+#define MQTT_OUT_BUF_SIZE           (1024*5)
 
 static EventGroupHandle_t s_mqtt_event_group = NULL;
 #define MQTT_CONNECTED_BIT 			BIT0
@@ -529,9 +531,25 @@ static void mqtt_load_filter(void)
 
 void mqtt_publish(char *topic, char *data, int len, int qos, int retain)
 {
+    int data_len = len;
+
     if( mqtt_connected() && (xSemaphoreTake( xmqtt_semaphore, pdMS_TO_TICKS(2000) ) == pdTRUE) )
     {
-        esp_mqtt_client_publish(client, topic, data, len, qos, retain);
+        if(len == 0)
+        {
+            data_len = strlen(data);
+        }
+
+        if(data_len < MQTT_TX_RX_BUF_SIZE)
+        {
+            esp_mqtt_client_publish(client, topic, data, len, qos, retain);
+        }
+        else
+        {
+            static const char* error_msg = "{\"error\": \"Data length exceeds the data size\"}";
+            esp_mqtt_client_publish(client, topic, error_msg, strlen(error_msg), qos, 0);
+        }
+        
         xSemaphoreGive( xmqtt_semaphore );
     }
 }
@@ -551,8 +569,8 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
         .session.last_will.retain = 1,
 		.session.last_will.msg = "{\"status\": \"offline\"}",
 		.network.reconnect_timeout_ms = 5000,
-		.buffer.size = 1024*5,
-		.buffer.out_size = 1024*5,
+		.buffer.size = MQTT_TX_RX_BUF_SIZE,
+		.buffer.out_size = MQTT_OUT_BUF_SIZE,
     };
     xmqtt_tx_queue = xtx_queue;
     mqtt_led = connected_led;
