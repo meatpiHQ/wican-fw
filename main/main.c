@@ -251,7 +251,7 @@ static void can_rx_task(void *pvParameters)
     	{
     		uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
     		time_old = esp_timer_get_time();
-    		ESP_LOGI(TAG, "free_heap: %lu", free_heap);
+    		// ESP_LOGI(TAG, "free_heap: %lu", free_heap)
 //        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
 //        		num_msg = 0;
     	}
