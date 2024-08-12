@@ -429,10 +429,8 @@ static void autopid_task(void *pvParameters)
                             }
                             cJSON_Delete(rsp_json);
                         }
-
-                        vTaskDelay(pdMS_TO_TICKS(10));
                     }
-
+                    vTaskDelay(pdMS_TO_TICKS(10));
                     if(pid_no_response)
                     {
                         autopid_state = DISCONNECT_NOTIFY;
@@ -441,8 +439,8 @@ static void autopid_task(void *pvParameters)
 
                     break;
                 }
-
             }
+            vTaskDelay(pdMS_TO_TICKS(1));
         }
         else
         {
