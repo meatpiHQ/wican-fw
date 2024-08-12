@@ -79,6 +79,7 @@ typedef struct _device_config
 	char batt_mqtt_user[64];
 	char batt_mqtt_pass[64];
 	char mqtt_en[10];
+	char mqtt_tx_en[10];
 	char mqtt_url[256];
 	char mqtt_port[32];
 	char mqtt_user[64];
@@ -137,3 +138,4 @@ char *config_server_get_mqtt_tx_topic(void);
 char *config_server_get_mqtt_rx_topic(void);
 char *config_server_get_mqtt_status_topic(void);
 char *config_server_get_auto_pid(void);
+int8_t config_server_mqtt_tx_en_config(void);

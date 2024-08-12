@@ -420,6 +420,7 @@
 						<td>
 							<input type="text" id="mqtt_tx_topic" name="mqtt_tx_topic" value="" />
 						</td>
+						<td><input type="checkbox" id="mqtt_tx_en_checkbox" name="mqtt_tx_en_checkbox" onchange="txCheckBoxChanged()"></td>
 					</tr>
 					<tr>
 						<td>
@@ -827,6 +828,14 @@
 			}
         }
 		
+        function txCheckBoxChanged() {
+            if (document.getElementById("mqtt_tx_en_checkbox").checked) {
+                document.getElementById("mqtt_tx_topic").disabled = false;
+            } else {
+                document.getElementById("mqtt_tx_topic").disabled = true;
+            }
+        }
+		
 		function sendCARDataFile() {
 
 			if(document.getElementById("car_data_file").files.length == 0) {
@@ -868,7 +877,6 @@
 			
 			// Set values for the fields
 			document.getElementById("initialisation").value = initialisation;
-			document.getElementById("protocol").value = protocol;
 			document.getElementById("grouping").value = grouping;
 			document.getElementById("destination").value = destination;
 			document.getElementById("pid_cycle").value = cycle;
@@ -1377,6 +1385,7 @@
 			if(this.responseText != "NONE") {
 				var obj = JSON.parse(this.responseText);
 				loadCarModels(obj);
+				loadautoPID();
 			}
 		};
 		xhttp.open("GET", "/load_auto_pid_config");
@@ -1446,6 +1455,11 @@
 		obj["mqtt_user"] = document.getElementById("mqtt_user").value;
 		obj["mqtt_pass"] = document.getElementById("mqtt_pass").value;
 		obj["mqtt_tx_topic"] = document.getElementById("mqtt_tx_topic").value;
+		if(document.getElementById("mqtt_tx_en_checkbox").checked){
+			obj["mqtt_tx_en"] = "enable";
+		}else{
+			obj["mqtt_tx_en"] = "disable";
+		}
 		obj["mqtt_rx_topic"] = document.getElementById("mqtt_rx_topic").value;
 		obj["mqtt_status_topic"] = document.getElementById("mqtt_status_topic").value;
 		obj["mqtt_elm327_log"] = document.getElementById("mqtt_elm327_log").value;
@@ -1546,6 +1560,18 @@
 			} else if(obj.sleep_status == "disable") {
 				document.getElementById("sleep_status").selectedIndex = "1";
 			}
+
+			if ("mqtt_tx_en" in obj) {
+				if (obj.mqtt_tx_en === "enable") {
+					document.getElementById("mqtt_tx_en_checkbox").checked = true;
+				} else {
+					document.getElementById("mqtt_tx_en_checkbox").checked = false;
+				}
+			} else {
+				document.getElementById("mqtt_tx_en_checkbox").checked = false; 
+			}
+			
+			txCheckBoxChanged();
 			document.getElementById("protocol").value = obj.protocol;
 			document.getElementById("tcp_port_value").value = obj.port;
 			document.getElementById("ap_pass_value").value = obj.ap_pass;
@@ -1597,7 +1623,6 @@
 			}
 			document.getElementById("ret_msg").innerHTML = " ";
 			loadCANFLT();
-            loadautoPID();
 			loadautoPIDConfig();
 			document.getElementById("store_canflt_button").disabled = true;
 			document.querySelector(".store").disabled = true;

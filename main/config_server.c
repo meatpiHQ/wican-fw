@@ -1716,6 +1716,20 @@ static void config_server_load_cfg(char *cfg)
 	//*****
 
 	//*****
+	key = cJSON_GetObjectItem(root,"mqtt_tx_en");
+	if(key == 0 || (strlen(key->valuestring) > sizeof(device_config.mqtt_tx_en)))
+	{
+		strcpy(device_config.mqtt_tx_en,"disable");
+	}
+	else
+	{
+		strcpy(device_config.mqtt_tx_en, key->valuestring);
+	}
+	
+	ESP_LOGE(TAG, "device_config.mqtt_tx_en: %s", device_config.mqtt_tx_en);
+	//*****
+
+	//*****
 	key = cJSON_GetObjectItem(root,"mqtt_rx_topic");
 	if(key == 0 || (strlen(key->valuestring) > sizeof(device_config.mqtt_rx_topic)) || strlen(key->valuestring) == 0)
 	{
@@ -2233,6 +2247,20 @@ int8_t config_server_mqtt_en_config(void)
 	}
 	return -1;
 }
+
+int8_t config_server_mqtt_tx_en_config(void)
+{
+	if(strcmp(device_config.mqtt_tx_en, "enable") == 0)
+	{
+		return 1;
+	}
+	else if(strcmp(device_config.mqtt_tx_en, "disable") == 0)
+	{
+		return 0;
+	}
+	return -1;
+}
+
 int8_t config_server_mqtt_elm327_log(void)
 {
 	if(strcmp(device_config.mqtt_elm327_log, "enable") == 0)
