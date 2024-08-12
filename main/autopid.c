@@ -146,9 +146,13 @@ static void send_commands(char *commands, uint32_t delay_ms)
         char str_send[cmd_len + 1]; // +1 for null terminator
         strncpy(str_send, cmd_start, cmd_len);
         str_send[cmd_len] = '\0'; // Null-terminate the command string
-
-        elm327_process_cmd((uint8_t *)str_send, cmd_len, &tx_msg, &autopidQueue);
-
+        if ((strstr(str_send, "ath0") == NULL && strstr(str_send, "ATH0") == NULL && strstr(str_send, "at h0") == NULL && strstr(str_send, "AT H0") == NULL) &&
+            (strstr(str_send, "ats0") == NULL && strstr(str_send, "ATS0") == NULL && strstr(str_send, "at s0") == NULL && strstr(str_send, "AT s0") == NULL) &&
+            (strstr(str_send, "ate1") == NULL && strstr(str_send, "ATE1") == NULL && strstr(str_send, "at e1") == NULL && strstr(str_send, "AT E1") == NULL))
+        {
+            elm327_process_cmd((uint8_t *)str_send, cmd_len, &tx_msg, &autopidQueue);
+        }
+        
         cmd_start = cmd_end + 1; // Move to the start of the next command
         vTaskDelay(pdMS_TO_TICKS(delay_ms));
     }

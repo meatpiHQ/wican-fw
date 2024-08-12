@@ -18,6 +18,7 @@
         "mqtt_client.h": "c",
         "cjson.h": "c",
         "mqtt.h": "c",
-        "autopid.h": "c"
+        "autopid.h": "c",
+        "cstring": "c"
     }
 }
