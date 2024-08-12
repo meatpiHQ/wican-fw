@@ -39,7 +39,7 @@ typedef struct {
 
 typedef struct {
     char name[32];              // Name
-    char pid_init[32];          // PID init string
+    char pid_init[128];          // PID init string
     char pid_command[10];       // PID command string
     char expression[32];        // Expression string
     char destination[64];       // Example: file name or mqtt topic
