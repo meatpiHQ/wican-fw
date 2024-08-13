@@ -101,7 +101,7 @@ bool evaluate_expression(uint8_t *expression, uint8_t *data, double V, double *r
             push(&operandStack, V);
             i++;
         } 
-        //TODO: add support for little-endian (BYD)
+        
         else if (expression[i] == '[') {
             int start_index = 0, end_index = 0;
             int chars_read = 0;

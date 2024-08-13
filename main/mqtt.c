@@ -63,6 +63,8 @@
 #include "expression_parser.h"
 
 #define TAG 		__func__
+#define MQTT_TX_RX_BUF_SIZE         (1024*5)
+#define MQTT_OUT_BUF_SIZE           (1024*5)
 
 static EventGroupHandle_t s_mqtt_event_group = NULL;
 #define MQTT_CONNECTED_BIT 			BIT0
@@ -105,11 +107,12 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     {
 		case MQTT_EVENT_CONNECTED:
 			ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-
-			esp_mqtt_client_subscribe(client, mqtt_sub_topic, 0);
-            #if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
-			// gpio_set_level(mqtt_led, 0);
-            #endif
+            if(config_server_mqtt_tx_en_config())
+            {
+                esp_mqtt_client_subscribe(client, mqtt_sub_topic, 0);
+            }
+			
+			gpio_set_level(mqtt_led, 0);
 			esp_mqtt_client_publish(client, mqtt_status_topic, "{\"status\": \"online\"}", 0, 0, 1);
 
             xEventGroupSetBits(s_mqtt_event_group, MQTT_CONNECTED_BIT);
@@ -117,9 +120,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 		case MQTT_EVENT_DISCONNECTED:
 			ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
 			xEventGroupClearBits(s_mqtt_event_group, MQTT_CONNECTED_BIT);
-            #if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 			gpio_set_level(mqtt_led, 1);
-            #endif
 	//        esp_mqtt_client_stop(client);
 			break;
 
@@ -380,10 +381,6 @@ static void mqtt_task(void *pvParameters)
                         start_index = found_index + 1;
                     }
                 }
-                else if(config_server_protocol() == AUTO_PID)
-                {
-
-                }
                 else
                 {
                     sprintf(json_buffer, "{\"bus\":\"0\",\"type\":\"rx\",\"ts\":%lu,\"frame\":[", (pdTICKS_TO_MS(xTaskGetTickCount())%60000));
@@ -537,9 +534,25 @@ static void mqtt_load_filter(void)
 
 void mqtt_publish(char *topic, char *data, int len, int qos, int retain)
 {
+    int data_len = len;
+
     if( mqtt_connected() && (xSemaphoreTake( xmqtt_semaphore, pdMS_TO_TICKS(2000) ) == pdTRUE) )
     {
-        esp_mqtt_client_publish(client, topic, data, len, qos, retain);
+        if(len == 0)
+        {
+            data_len = strlen(data);
+        }
+
+        if(data_len < MQTT_TX_RX_BUF_SIZE)
+        {
+            esp_mqtt_client_publish(client, topic, data, len, qos, retain);
+        }
+        else
+        {
+            static const char* error_msg = "{\"error\": \"Data length exceeds the data size\"}";
+            esp_mqtt_client_publish(client, topic, error_msg, strlen(error_msg), qos, 0);
+        }
+        
         xSemaphoreGive( xmqtt_semaphore );
     }
 }
@@ -559,15 +572,15 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
         .session.last_will.retain = 1,
 		.session.last_will.msg = "{\"status\": \"offline\"}",
 		.network.reconnect_timeout_ms = 5000,
-		.buffer.size = 1024*5,
-		.buffer.out_size = 1024*5,
+		.buffer.size = MQTT_TX_RX_BUF_SIZE,
+		.buffer.out_size = MQTT_OUT_BUF_SIZE,
     };
     xmqtt_tx_queue = xtx_queue;
     mqtt_led = connected_led;
     device_id = id;
-    // sprintf(mqtt_sub_topic, "wican/%s/can/tx", device_id);
+    
     strcpy(mqtt_sub_topic, config_server_get_mqtt_tx_topic());
-    // sprintf(mqtt_status_topic, "wican/%s/status", device_id);
+    
     strcpy(mqtt_status_topic, config_server_get_mqtt_status_topic());
     ESP_LOGI(TAG, "device_id: %s, mqtt_cfg.uri: %s", device_id, mqtt_cfg.broker.address.uri);
     mqtt_elm327_log = config_server_mqtt_elm327_log();

@@ -39,7 +39,7 @@ typedef struct {
 
 typedef struct {
     char name[32];              // Name
-    char pid_init[32];          // PID init string
+    char pid_init[128];          // PID init string
     char pid_command[10];       // PID command string
     char expression[32];        // Expression string
     char destination[64];       // Example: file name or mqtt topic
@@ -48,6 +48,35 @@ typedef struct {
     uint8_t expression_type;    // Expression type evaluates data from sensors etc
     uint8_t type;               // Log type, could be MQTT or file-based
 }__attribute__((aligned(1),packed)) pid_req_t ;
+
+typedef struct
+{
+    char name[50];
+    char expression[100];
+    char unit[10];
+} parameter_data_t;
+
+typedef struct
+{
+    char pid[16];
+    parameter_data_t *parameters;  
+    int parameter_count;    
+} pid_data_t;
+
+typedef struct
+{
+    char car_model[50];
+    char init[32];
+    pid_data_t *pids;              
+    int pid_count;
+    int64_t cycle_timer;  
+    char* selected_car_model;
+    char* destination;
+    char* grouping;
+    uint32_t cycle;
+    uint8_t car_specific_en;
+} car_model_data_t;
+
 
 void autopid_parser(char* str, uint32_t len, QueueHandle_t *q);
 void autopid_init(char *config_str);
