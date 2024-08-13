@@ -247,7 +247,7 @@ static void mqtt_parse_data(void *handler_args, esp_event_base_t base, int32_t e
                 can_frame.data[j] = cJSON_GetArrayItem(frame_data, j)->valueint;
             }
             can_frame.self = 0;
-            can_enable();
+            // can_enable();
             can_send(&can_frame, 1);
         }
     }

@@ -575,6 +575,7 @@ void app_main(void)
 	{
 //		can_init(CAN_500K);
 		can_set_bitrate(can_datarate);
+		can_set_silent(1);
 		can_enable();
 		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
 		if(config_server_mqtt_en_config() && config_server_mqtt_elm327_log())
@@ -590,7 +591,9 @@ void app_main(void)
 	else if(protocol == AUTO_PID)
 	{
 		can_set_bitrate(can_datarate);
+		#if HARDWARE_VER != WICAN_PRO
 		can_enable();
+		#endif
 		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
 		
 		elm327_init(&autopid_parser, &xmsg_obd_rx_queue, NULL);
@@ -599,9 +602,22 @@ void app_main(void)
 
 	if(config_server_mqtt_en_config())
 	{
-		can_set_bitrate(can_datarate);
 		xmsg_mqtt_rx_queue = xQueueCreate(32, sizeof(mqtt_can_message_t) );
+		#if HARDWARE_VER == WICAN_PRO
+		if(protocol != AUTO_PID)
+		{
+			can_set_bitrate(can_datarate);
+			can_enable();
+		}
+		else
+		{
+			can_disable();
+		}
+		#else
+		can_set_bitrate(can_datarate);
 		can_enable();
+		#endif
+		
 		#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 			mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM, &xmsg_mqtt_rx_queue);
 		#else
