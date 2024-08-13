@@ -874,13 +874,29 @@
 			const carModel = data.car_model;
 			const pids = data.pids;
 			const table = document.getElementById("automate_table").getElementsByTagName('tbody')[0];
-			
+
+			if(carSpecific != "enable"){
+				document.getElementById("car_specific").value = "disable";
+			}else{
+				document.getElementById("car_specific").value = carSpecific;
+			}
+			if(grouping != "enable"){
+				document.getElementById("grouping").value = "disable";
+			}else{
+				document.getElementById("grouping").value = grouping;
+			}
+			if(cycle === undefined){
+				document.getElementById("pid_cycle").value = 5000;
+			}else{
+				document.getElementById("pid_cycle").value = cycle;
+			}
+			if(destination === undefined){
+				document.getElementById("destination").value = "";
+			}else{
+				document.getElementById("destination").value = destination;
+			}
 			// Set values for the fields
 			document.getElementById("initialisation").value = initialisation;
-			document.getElementById("grouping").value = grouping;
-			document.getElementById("destination").value = destination;
-			document.getElementById("pid_cycle").value = cycle;
-			document.getElementById("car_specific").value = carSpecific;
 			document.getElementById("car_model").value = carModel;
 
 			// Trigger change events to apply any dependent changes
@@ -1386,6 +1402,10 @@
 				var obj = JSON.parse(this.responseText);
 				loadCarModels(obj);
 				loadautoPID();
+			}else{
+				toggleCarModel();
+				toggleDestinationAndCycle();
+				toggleSendToFields();
 			}
 		};
 		xhttp.open("GET", "/load_auto_pid_config");
