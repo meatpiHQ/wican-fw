@@ -31,7 +31,7 @@
 
  QueueHandle_t uart1_queue = NULL;
 static QueueHandle_t xobd_cmd_queue = NULL;
-SemaphoreHandle_t xuart1_semaphore;
+SemaphoreHandle_t xuart1_semaphore = NULL;
 
 void obd_log_response(char *buf, uint32_t size)
 {
@@ -173,13 +173,16 @@ void obd_read_rsp(char** rsp_buf, uint32_t *rsp_len, uint32_t timeout_ms)
 // Function to write command to OBD and read response
 void obd_write_cmd(char* cmd, char** rsp_buf, uint32_t *rsp_len, uint32_t timeout_ms)
 {
-    if (xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(timeout_ms)) == pdTRUE)
+    if(xuart1_semaphore != NULL)
     {
-        ESP_LOG_BUFFER_HEXDUMP(TAG, cmd, strlen(cmd), ESP_LOG_INFO);
-        uart_write_bytes(UART_NUM_1, (const char*)cmd, strlen(cmd));
-        obd_read_rsp(rsp_buf, rsp_len, timeout_ms);
-        obd_log_response(*rsp_buf, *rsp_len);
-        xSemaphoreGive(xuart1_semaphore);
+        if (xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(timeout_ms)) == pdTRUE)
+        {
+            ESP_LOG_BUFFER_HEXDUMP(TAG, cmd, strlen(cmd), ESP_LOG_INFO);
+            uart_write_bytes(UART_NUM_1, (const char*)cmd, strlen(cmd));
+            obd_read_rsp(rsp_buf, rsp_len, timeout_ms);
+            obd_log_response(*rsp_buf, *rsp_len);
+            xSemaphoreGive(xuart1_semaphore);
+        }
     }
 }
 
