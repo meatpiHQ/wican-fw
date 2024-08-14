@@ -1,0 +1,41 @@
+{
+    "car_model": "AAA: Generic",
+    "init": "ATSP6;",
+    "pids": [
+        {
+            "pid": "010C",
+            "parameters": [
+                {
+                    "name": "Engine RPM",
+                    "expression": "[B3:B4]*0.25",
+                    "unit": "RPM"
+                }
+            ]
+        },
+        {
+            "pid": "010D",
+            "parameters": [
+                {
+                    "name": "Vehicle Speed",
+                    "expression": "B3",
+                    "unit": "KM"
+                }
+            ]
+        },
+        {
+            "pid": "0902",
+            "parameters": [
+                {
+                    "name": "value1",
+                    "expression": "B10/10",
+                    "unit": "%"
+                },
+                {
+                    "name": "value2",
+                    "expression": "(B19+B20)/2",
+                    "unit": "%"
+                }
+            ]
+        }
+    ]
+}
