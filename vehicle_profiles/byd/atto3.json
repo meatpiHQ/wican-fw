@@ -1,0 +1,16 @@
+{
+    "car_model": "BYD: Atto 3",
+    "init": "ATAT1;ATST96;ATSH7E7;ATFCSH7E7;ATFCSD300000;ATFCSM1",
+    "pids": [
+        {
+            "pid": "221FFC1",
+            "parameters": [
+                {
+                    "name": "SOC",
+                    "expression": "(B5*256)+B4)/100",
+                    "unit": "%"
+                }
+            ]
+        }
+    ]
+}
