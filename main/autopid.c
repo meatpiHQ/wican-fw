@@ -160,7 +160,7 @@ static void send_commands(char *commands, uint32_t delay_ms)
 
 static void autopid_task(void *pvParameters)
 {
-    static char default_init[] = "ati\ratd\rate0\rath1\ratl0\rats1\ratsp6\r";
+    static char default_init[] = "ati\rate0\rath1\ratl0\rats1\ratsp6\r";
     static response_t response;
     twai_message_t tx_msg;
 
@@ -174,22 +174,11 @@ static void autopid_task(void *pvParameters)
 
     vTaskDelay(pdMS_TO_TICKS(1000));
     send_commands(default_init, 50);
-    // if(initialisation != NULL) 
-    // {
-    //     send_commands(initialisation, 50);
-    // }
-    
-    // vTaskDelay(pdMS_TO_TICKS(1000));
 
     while ((xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS));
     
-    for(uint32_t i = 0; i < num_of_pids; i++)
-    {
-        strcat(pid_req[i].pid_command, "\r");
-    }
-    
     car.cycle_timer = 0;
-
+    ESP_LOGI(TAG, "num_of_pids: %d", num_of_pids);
     while (1)
     {
         if((num_of_pids > 0 || car.pid_count > 0)  && mqtt_connected())
@@ -375,8 +364,13 @@ static void autopid_task(void *pvParameters)
 
                         for(uint32_t i = 0; i < car.pid_count; i++)
                         {
+                            if(car.pids[i].pid_init[0] != 0)
+                            {
+                                elm327_process_cmd((uint8_t*)car.pids[i].pid_init , strlen(car.pids[i].pid_init), &tx_msg, &autopidQueue);
+                                ESP_LOGI(TAG, "Sending car.pids[%lu].pid_init: %s", i, car.pids[i].pid_init);
+                            }
                             elm327_process_cmd((uint8_t*)car.pids[i].pid , strlen(car.pids[i].pid), &tx_msg, &autopidQueue);
-                            ESP_LOGI(TAG, "Sending command: %s", car.pids[i].pid);
+                            ESP_LOGI(TAG, "Sending car.pids[%lu].pid: %s", i, car.pids[i].pid);
                             if (xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS)
                             {
                                 double result;
@@ -465,7 +459,7 @@ static void autopid_load_config(char *config_str)
         ESP_LOGE(TAG, "Failed to parse config string");
         return;
     }
-
+    ESP_LOGE(TAG, "Successfully parsed json config string");
     cJSON *init = cJSON_GetObjectItem(config_str_json, "initialisation");
     if (cJSON_IsString(init) && (init->valuestring != NULL)) 
     {
@@ -591,7 +585,7 @@ static void autopid_load_config(char *config_str)
         return;
     }
 
-    int num_of_pids = cJSON_GetArraySize(pids);
+    num_of_pids = cJSON_GetArraySize(pids);
     if (num_of_pids == 0)
     {
         ESP_LOGW(TAG, "No PIDs found in config");
@@ -599,7 +593,7 @@ static void autopid_load_config(char *config_str)
         return;
     }
 
-    pid_req_t *pid_req = (pid_req_t *)malloc(sizeof(pid_req_t) * num_of_pids);
+    pid_req = (pid_req_t *)malloc(sizeof(pid_req_t) * num_of_pids);
     if (pid_req == NULL) 
     {
         ESP_LOGE(TAG, "Failed to allocate memory for pid_req");
@@ -626,32 +620,52 @@ static void autopid_load_config(char *config_str)
 
         if (cJSON_IsString(name) && name->valuestring)
         {
-            strncpy(pid_req[i].name, name->valuestring, sizeof(pid_req[i].name) - 1);
-            pid_req[i].name[sizeof(pid_req[i].name) - 1] = '\0';
+            pid_req[i].name = strdup(name->valuestring);
+        }
+        else
+        {
+            pid_req[i].name = strdup("");  // Assign an empty string if not available
         }
 
         if (cJSON_IsString(pid_init) && pid_init->valuestring)
         {
-            strncpy(pid_req[i].pid_init, pid_init->valuestring, sizeof(pid_req[i].pid_init) - 1);
-            pid_req[i].pid_init[sizeof(pid_req[i].pid_init) - 1] = '\0';
+            pid_req[i].pid_init = strdup(pid_init->valuestring);
+        }
+        else
+        {
+            pid_req[i].pid_init = strdup("");  // Assign an empty string if not available
         }
 
         if (cJSON_IsString(pid_command) && pid_command->valuestring)
         {
-            strncpy(pid_req[i].pid_command, pid_command->valuestring, sizeof(pid_req[i].pid_command) - 1);
-            pid_req[i].pid_command[sizeof(pid_req[i].pid_command) - 1] = '\0';
+            pid_req[i].pid_command = malloc(strlen(pid_command->valuestring) + 2); // +2 for "\r\0"
+            if (pid_req[i].pid_command != NULL)
+            {
+                strcpy(pid_req[i].pid_command, pid_command->valuestring);
+                strcat(pid_req[i].pid_command, "\r");
+            }
+        }
+        else
+        {
+            pid_req[i].pid_command = strdup("");  // Assign an empty string if not available
         }
 
         if (cJSON_IsString(expression) && expression->valuestring)
         {
-            strncpy(pid_req[i].expression, expression->valuestring, sizeof(pid_req[i].expression) - 1);
-            pid_req[i].expression[sizeof(pid_req[i].expression) - 1] = '\0';
+            pid_req[i].expression = strdup(expression->valuestring);
+        }
+        else
+        {
+            pid_req[i].expression = strdup("");  // Assign an empty string if not available
         }
 
         if (cJSON_IsString(send_to) && send_to->valuestring)
         {
-            strncpy(pid_req[i].destination, send_to->valuestring, sizeof(pid_req[i].destination) - 1);
-            pid_req[i].destination[sizeof(pid_req[i].destination) - 1] = '\0';
+            pid_req[i].destination = strdup(send_to->valuestring);
+        }
+        else
+        {
+            pid_req[i].destination = strdup("");  // Assign an empty string if not available
         }
 
         if (cJSON_IsString(period) && period->valuestring)
@@ -667,10 +681,8 @@ static void autopid_load_config(char *config_str)
         pid_req[i].timer = 0;
     }
 
-    free(pid_req);
     cJSON_Delete(config_str_json);
 }
-
 
 static void autopid_load_car_specific(char* car_mod)
 {
@@ -730,13 +742,13 @@ static void autopid_load_car_specific(char* car_mod)
         if (cJSON_IsString(car_model) && (car_model->valuestring != NULL) && strcmp(car_model->valuestring, car_mod) == 0)
         {
             // Found the matching car model, populate the global car structure
-            strcpy(car.car_model, car_model->valuestring);
+            car.car_model = strdup(car_model->valuestring);
 
             cJSON *init = cJSON_GetObjectItemCaseSensitive(car_item, "init");
             if (cJSON_IsString(init) && (init->valuestring != NULL))
             {
-                strcpy(car.init, init->valuestring);
-                        //replace ';' with carriage return
+                car.init = strdup(init->valuestring);
+                // Replace ';' with carriage return
                 for (size_t i = 0; i < strlen(car.init); ++i) 
                 {
                     if (car.init[i] == ';') 
@@ -744,6 +756,10 @@ static void autopid_load_car_specific(char* car_mod)
                         car.init[i] = '\r';
                     }
                 }
+            }
+            else
+            {
+                car.init = strdup("");  // Assign an empty string if not available
             }
 
             // Parse PIDs
@@ -759,10 +775,30 @@ static void autopid_load_car_specific(char* car_mod)
                 {
                     // Parse pid
                     cJSON *pid = cJSON_GetObjectItemCaseSensitive(pid_item, "pid");
-                    if ( cJSON_IsString(pid) && (pid->valuestring != NULL) && (strlen(pid->valuestring) < sizeof(car.pids[i].pid)-1) )
+                    if (cJSON_IsString(pid) && (pid->valuestring != NULL))
                     {
-                        strcpy(car.pids[i].pid, pid->valuestring);
+                        car.pids[i].pid = strdup(pid->valuestring);
                         strcat(car.pids[i].pid, "\r");
+                    }
+                    else
+                    {
+                        car.pids[i].pid = strdup("");  // Assign an empty string if not available
+                    }
+
+                    // Parse pid_init
+                    cJSON *pid_init = cJSON_GetObjectItemCaseSensitive(pid_item, "pid_init");
+                    if (cJSON_IsString(pid_init) && (pid_init->valuestring != NULL))
+                    {
+                        car.pids[i].pid_init = malloc(strlen(pid_init->valuestring) + 2); // +2 for "\r\0" strdup(param_init->valuestring);
+                        if(car.pids[i].pid_init != NULL)
+                        {
+                            strcpy(car.pids[i].pid_init, pid_init->valuestring);
+                            strcat(car.pids[i].pid_init, "\r");
+                        }
+                    }
+                    else
+                    {
+                        car.pids[i].pid_init = strdup("");  // Assign an empty string if not available
                     }
 
                     // Parse parameters
@@ -780,27 +816,38 @@ static void autopid_load_car_specific(char* car_mod)
                             cJSON *name = cJSON_GetObjectItemCaseSensitive(parameter_item, "name");
                             if (cJSON_IsString(name) && (name->valuestring != NULL))
                             {
-                                strcpy(car.pids[i].parameters[j].name, name->valuestring);
+                                car.pids[i].parameters[j].name = strdup(name->valuestring);
+                            }
+                            else
+                            {
+                                car.pids[i].parameters[j].name = strdup("");  // Assign an empty string if not available
                             }
 
                             // Parse expression
                             cJSON *expression = cJSON_GetObjectItemCaseSensitive(parameter_item, "expression");
                             if (cJSON_IsString(expression) && (expression->valuestring != NULL))
                             {
-                                strcpy(car.pids[i].parameters[j].expression, expression->valuestring);
+                                car.pids[i].parameters[j].expression = strdup(expression->valuestring);
+                            }
+                            else
+                            {
+                                car.pids[i].parameters[j].expression = strdup("");  // Assign an empty string if not available
                             }
 
                             // Parse unit
                             cJSON *unit = cJSON_GetObjectItemCaseSensitive(parameter_item, "unit");
                             if (cJSON_IsString(unit) && (unit->valuestring != NULL))
                             {
-                                strcpy(car.pids[i].parameters[j].unit, unit->valuestring);
+                                car.pids[i].parameters[j].unit = strdup(unit->valuestring);
                             }
-
+                            else
+                            {
+                                car.pids[i].parameters[j].unit = strdup("");  // Assign an empty string if not available
+                            }
+                            
                             j++;
                         }
                     }
-
                     i++;
                 }
             }
