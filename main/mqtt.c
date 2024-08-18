@@ -73,6 +73,8 @@ static esp_mqtt_client_handle_t client = NULL;
 static char *device_id;
 static char mqtt_sub_topic[128];
 static char mqtt_status_topic[128];
+static char mqtt_cmd_topic[24];
+static char mqtt_rsp_topic[24];
 static uint8_t mqtt_led = 0;
 
 static QueueHandle_t *xmqtt_tx_queue;
@@ -112,6 +114,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 esp_mqtt_client_subscribe(client, mqtt_sub_topic, 0);
             }
 			
+            esp_mqtt_client_subscribe(client, mqtt_cmd_topic, 0);
 			gpio_set_level(mqtt_led, 0);
 			esp_mqtt_client_publish(client, mqtt_status_topic, "{\"status\": \"online\"}", 0, 0, 1);
 
@@ -170,7 +173,7 @@ static void mqtt_parse_data(void *handler_args, esp_event_base_t base, int32_t e
     cJSON *root = NULL;
     cJSON *frame = NULL;
     esp_mqtt_event_handle_t event = event_data;
-
+    
     if ((mqtt_elm327_log == 0) && strncmp(event->topic, mqtt_sub_topic, strlen(mqtt_sub_topic)) == 0)
     {
         root = cJSON_Parse(event->data);
@@ -249,6 +252,47 @@ static void mqtt_parse_data(void *handler_args, esp_event_base_t base, int32_t e
             can_frame.self = 0;
             can_enable();
             can_send(&can_frame, 1);
+        }
+    }
+    else if (strncmp(event->topic, mqtt_cmd_topic, strlen(mqtt_cmd_topic)) == 0)
+    {
+        static char cmd_response[32] = {0};
+
+        root = cJSON_Parse(event->data);
+
+        if (root == NULL)
+        {
+            ESP_LOGE(TAG, "Failed to parse JSON data");
+            goto end;
+        }
+
+        cJSON *cmd = cJSON_GetObjectItem(root, "cmd");
+
+        if (cmd == NULL || !cJSON_IsString(cmd))
+        {
+            ESP_LOGE(TAG, "Missing or invalid 'cmd' value in JSON");
+            goto end;
+        }
+
+        if (strcmp(cmd->valuestring, "reboot") == 0)
+        {
+            ESP_LOGI(TAG, "Reboot command received");
+            sprintf(cmd_response, "{\"rsp\": \"ok\"}");
+            mqtt_publish(mqtt_rsp_topic, cmd_response, strlen(cmd_response), 0, 0);
+            // Perform the reboot operation here
+            vTaskDelay(pdMS_TO_TICKS(2000));
+            esp_restart();
+        }
+        else if(strcmp(cmd->valuestring, "get_vbatt") == 0)
+        {
+            float vbatt = 0;
+            sleep_mode_get_voltage(&vbatt);
+            sprintf(cmd_response, "{\"battery_voltage\": %f}", vbatt);
+            mqtt_publish(mqtt_rsp_topic, cmd_response, strlen(cmd_response), 0, 0);
+        }
+        else
+        {
+            ESP_LOGW(TAG, "Unknown command received: %s", cmd->valuestring);
         }
     }
 
@@ -582,6 +626,8 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
     strcpy(mqtt_sub_topic, config_server_get_mqtt_tx_topic());
     
     strcpy(mqtt_status_topic, config_server_get_mqtt_status_topic());
+    sprintf(mqtt_cmd_topic, "wican/%s/cmd",device_id);
+    sprintf(mqtt_rsp_topic, "wican/%s/cmd",device_id);
     ESP_LOGI(TAG, "device_id: %s, mqtt_cfg.uri: %s", device_id, mqtt_cfg.broker.address.uri);
     mqtt_elm327_log = config_server_mqtt_elm327_log();
 	mqtt_load_filter();
