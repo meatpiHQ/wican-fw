@@ -38,11 +38,11 @@ typedef struct {
 } response_t;
 
 typedef struct {
-    char name[32];              // Name
-    char pid_init[128];          // PID init string
-    char pid_command[10];       // PID command string
-    char expression[32];        // Expression string
-    char destination[64];       // Example: file name or mqtt topic
+    char *name;              // Name
+    char *pid_init;          // PID init string
+    char *pid_command;       // PID command string
+    char *expression;        // Expression string
+    char *destination;       // Example: file name or mqtt topic
     int64_t timer;              // Timer for managing periodic actions
     uint32_t period;            // Period in ms frequency of data collection or action
     uint8_t expression_type;    // Expression type evaluates data from sensors etc
@@ -51,22 +51,23 @@ typedef struct {
 
 typedef struct
 {
-    char name[50];
-    char expression[100];
-    char unit[10];
+    char *name;
+    char *expression;
+    char *unit;
 } parameter_data_t;
 
 typedef struct
 {
-    char pid[16];
+    char *pid;
     parameter_data_t *parameters;  
-    int parameter_count;    
+    int parameter_count;
+    char *pid_init;
 } pid_data_t;
 
 typedef struct
 {
-    char car_model[50];
-    char init[32];
+    char *car_model;
+    char *init;
     pid_data_t *pids;              
     int pid_count;
     int64_t cycle_timer;  
