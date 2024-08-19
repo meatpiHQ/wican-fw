@@ -54,6 +54,7 @@ typedef struct
     char *name;
     char *expression;
     char *unit;
+    char *class;
 } parameter_data_t;
 
 typedef struct
@@ -76,6 +77,7 @@ typedef struct
     char* grouping;
     uint32_t cycle;
     uint8_t car_specific_en;
+    uint8_t ha_discovery_en;
 } car_model_data_t;
 
 

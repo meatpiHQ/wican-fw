@@ -538,6 +538,17 @@ static void autopid_load_config(char *config_str)
         car.car_specific_en = 0;
     }
 
+    cJSON *ha_discovery = cJSON_GetObjectItem(config_str_json, "ha_discovery");
+    if (cJSON_IsString(ha_discovery) && (ha_discovery->valuestring != NULL)) 
+    {
+        car.ha_discovery_en = (strcmp(ha_discovery->valuestring, "enable") == 0) ? 1 : 0;
+        ESP_LOGI(TAG, "car.ha_discovery_en: %u", car.ha_discovery_en);
+    }
+    else
+    {
+        car.ha_discovery_en = 0;
+    }
+
     cJSON *grouping = cJSON_GetObjectItem(config_str_json, "grouping");
     if (cJSON_IsString(grouping) && (grouping->valuestring != NULL)) 
     {
