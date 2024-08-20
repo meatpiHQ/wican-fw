@@ -55,6 +55,7 @@ typedef struct
     char *expression;
     char *unit;
     char *class;
+    char *discovery_msg;
 } parameter_data_t;
 
 typedef struct
@@ -82,5 +83,5 @@ typedef struct
 
 
 void autopid_parser(char* str, uint32_t len, QueueHandle_t *q);
-void autopid_init(char *config_str);
+void autopid_init(char* id, char *config_str);
 #endif

@@ -40,6 +40,7 @@
 #define RANDOM_MIN          5
 #define RANDOM_MAX          50
 #define ECU_INIT_CMD        "0100\r"
+#define TEMP_BUFFER_LENGTH 32
 
 static char auto_pid_buf[BUFFER_SIZE];
 static autopid_state_t  autopid_state = CONNECT_CHECK;
@@ -48,8 +49,21 @@ static pid_req_t *pid_req;
 static size_t num_of_pids = 0;
 static char* initialisation = NULL;     
 static car_model_data_t car;
-								 															
-#define TEMP_BUFFER_LENGTH 32
+static char* device_id;
+
+// discovery_msg JSON string template
+static const char *discovery_msg_template = 
+    "{"
+    "\"name\": \"%s\","
+    "\"state_topic\": \"wican/%s/%s/state\","
+    "\"unit_of_measurement\": \"%s\","
+    "\"value_template\": \"{{ value_json.%s }}\","
+    "\"device_class\": \"%s\","
+    "\"unique_id\": \"%s_%s\","
+    "\"availability_topic\": \"wican/%s/%s/availability\","
+    "\"payload_available\": \"online\","
+    "\"payload_not_available\": \"offline\""
+    "}";
 
 void parse_elm327_response(char *buffer, unsigned char *data, uint32_t *data_length)
 {
@@ -856,7 +870,37 @@ static void autopid_load_car_specific(char* car_mod)
                                 car.pids[i].parameters[j].unit = strdup("");  // Assign an empty string if not available
                             }
                             
+                            // Parse class
+                            cJSON *class = cJSON_GetObjectItemCaseSensitive(parameter_item, "class");
+                            if (cJSON_IsString(class) && (class->valuestring != NULL))
+                            {
+                                car.pids[i].parameters[j].class = strdup(class->valuestring);
+                            }
+                            else
+                            {
+                                car.pids[i].parameters[j].class = strdup("");  // Assign an empty string if not available
+                            }
                             j++;
+
+                            
+                            size_t msg_size = strlen(discovery_msg_template) + strlen(car.pids[i].parameters[j].name) * 5 + strlen(device_id) * 3 + strlen(car.pids[i].parameters[j].unit) + strlen(car.pids[i].parameters[j].class) + 1;
+                            
+                            car.pids[i].parameters[j].discovery_msg = malloc(msg_size);
+                            
+                            if (car.pids[i].parameters[j].discovery_msg != NULL)
+                            {
+                                snprintf(car.pids[i].parameters[j].discovery_msg, msg_size, discovery_msg_template,
+                                            car.pids[i].parameters[j].name, 
+                                            device_id, 
+                                            car.pids[i].parameters[j].name, 
+                                            car.pids[i].parameters[j].unit, 
+                                            car.pids[i].parameters[j].name, 
+                                            car.pids[i].parameters[j].class,
+                                            device_id, 
+                                            car.pids[i].parameters[j].name, 
+                                            device_id, 
+                                            car.pids[i].parameters[j].name);
+                            }
                         }
                     }
                     i++;
@@ -873,8 +917,9 @@ static void autopid_load_car_specific(char* car_mod)
     cJSON_Delete(json);
 }
 
-void autopid_init(char *config_str)
+void autopid_init(char* id, char *config_str)
 {
+    device_id = id;
     autopid_load_config(config_str);
     // char *desired_car_model = "Toyota Camry";
     if(car.selected_car_model != NULL)
