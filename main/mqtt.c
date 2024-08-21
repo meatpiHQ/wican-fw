@@ -22,6 +22,7 @@
 #include "freertos/task.h"
 #include  "freertos/queue.h"
 #include "freertos/event_groups.h"
+#include "freertos/semphr.h"
 #include "esp_wifi.h"
 #include "esp_system.h"
 #include "esp_event.h"
@@ -59,8 +60,11 @@
 #include <stdbool.h>
 #include <ctype.h>
 #include "esp_timer.h"
+#include "expression_parser.h"
 
 #define TAG 		__func__
+#define MQTT_TX_RX_BUF_SIZE         (1024*5)
+#define MQTT_OUT_BUF_SIZE           (1024*5)
 
 static EventGroupHandle_t s_mqtt_event_group = NULL;
 #define MQTT_CONNECTED_BIT 			BIT0
@@ -69,10 +73,14 @@ static esp_mqtt_client_handle_t client = NULL;
 static char *device_id;
 static char mqtt_sub_topic[128];
 static char mqtt_status_topic[128];
+static char mqtt_cmd_topic[24];
+static char mqtt_rsp_topic[24];
 static uint8_t mqtt_led = 0;
 
 static QueueHandle_t *xmqtt_tx_queue;
 static uint8_t mqtt_elm327_log = 0;
+static SemaphoreHandle_t xmqtt_semaphore;
+
 
 typedef struct 
 {
@@ -91,248 +99,6 @@ static CANFilter *mqtt_canflt_values = NULL;
 static uint32_t mqtt_canflt_size = 0;
 
 
-
-#define MAX_STACK_SIZE 100
-
-typedef struct 
-{
-    double items[MAX_STACK_SIZE];
-    int top;
-} Stack;
-
-static void initialize(Stack *stack) 
-{
-    stack->top = -1;
-}
-
-static bool isEmpty(Stack *stack) 
-{
-    return stack->top == -1;
-}
-
-static void push(Stack *stack, double item) 
-{
-    if (stack->top == MAX_STACK_SIZE - 1) 
-	{
-        ESP_LOGE(TAG, "Stack overflow\n");
-    } 
-	else 
-	{
-        stack->items[++stack->top] = item;
-    }
-}
-
-// Function to pop a double value from the stack
-static double pop(Stack *stack) 
-{
-    if (isEmpty(stack)) 
-	{
-        ESP_LOGE(TAG, "Stack underflow\n");
-        return 0.0; // Return a default value
-    } 
-	else 
-	{
-        return stack->items[stack->top--];
-    }
-}
-
-static int8_t mqtt_canflt_find_id(uint32_t id, uint8_t start_index)
-{
-	if(mqtt_canflt_size == 0)
-	{
-		return -1;
-	}
-	for(uint32_t i = start_index; i < mqtt_canflt_size; i++)
-	{
-		if(mqtt_canflt_values[i].can_id == id)
-		{
-			return i;
-		}
-	}
-
-	return -1;
-}
-static bool evaluate_expression(uint8_t *expression,  uint8_t *data, double V, double *result) 
-{
-    Stack operandStack;
-    Stack operatorStack;
-    initialize(&operandStack);
-    initialize(&operatorStack);
-
-    uint8_t i = 0;
-    while (expression[i] != '\0') 
-	{
-        if (isspace(expression[i])) 
-		{
-            i++;
-            continue; // Skip whitespace
-        }
-        if (isdigit(expression[i]) || (expression[i] == '.' && isdigit(expression[i + 1]))) 
-		{
-            char numBuffer[20];
-            int j = 0;
-            while (isdigit(expression[i]) || expression[i] == '.') 
-			{
-                numBuffer[j++] = expression[i++];
-            }
-            numBuffer[j] = '\0';
-            double num = atof(numBuffer);
-            push(&operandStack, num);
-        } 
-		else if (expression[i] == 'V') 
-		{
-            push(&operandStack, V); // Substitute the value of V
-            i++;
-        } 
-        else if (expression[i] == 'B' && isdigit(expression[i+1])) 
-        {
-            int byteIndex = expression[i+1] - '0'; // Get the byte index (B0, B1, B2, ...)
-            if (byteIndex >= 0 && byteIndex < 8) // Ensure the byte index is valid (0-7)
-            {
-                push(&operandStack, (double)data[byteIndex]);
-                i += 2; // Skip 'B' and the digit
-            }
-            else
-            {
-                ESP_LOGE(TAG, "Invalid byte index\n");
-                return false; // Return failure
-            }
-        }
-		else if (expression[i] == '(') 
-		{
-            push(&operatorStack, expression[i]);
-            i++;
-        } 
-		else if (expression[i] == ')') 
-		{
-            while (!isEmpty(&operatorStack) && operatorStack.items[operatorStack.top] != '(') 
-			{
-                char operator = pop(&operatorStack);
-                double operand2 = pop(&operandStack);
-                double operand1 = pop(&operandStack);
-
-                if (operator == '+') 
-				{
-                    push(&operandStack, operand1 + operand2);
-                } 
-				else if (operator == '-') 
-				{
-                    push(&operandStack, operand1 - operand2);
-                } 
-				else if (operator == '*') 
-				{
-                    push(&operandStack, operand1 * operand2);
-                } 
-				else if (operator == '/') 
-				{
-                    if (operand2 == 0) 
-					{
-                        ESP_LOGE(TAG, "Division by zero\n");
-                        return false; // Return failure
-                    }
-                    push(&operandStack, operand1 / operand2);
-                }
-            }
-            // Pop '(' from the operator stack
-            if (!isEmpty(&operatorStack) && operatorStack.items[operatorStack.top] == '(') 
-			{
-                pop(&operatorStack);
-            } 
-			else 
-			{
-                ESP_LOGE(TAG, "Mismatched parentheses\n");
-                return false; // Return failure
-            }
-            i++;
-        } 
-		else if (expression[i] == '+' || expression[i] == '-' || expression[i] == '*' || expression[i] == '/') 
-		{
-            while (!isEmpty(&operatorStack) &&
-                   (operatorStack.items[operatorStack.top] == '*' || operatorStack.items[operatorStack.top] == '/') &&
-                   (expression[i] == '+' || expression[i] == '-')) 
-			{
-                char operator = pop(&operatorStack);
-                double operand2 = pop(&operandStack);
-                double operand1 = pop(&operandStack);
-
-                if (operator == '+') 
-				{
-                    push(&operandStack, operand1 + operand2);
-                } 
-				else if (operator == '-') 
-				{
-                    push(&operandStack, operand1 - operand2);
-                } 
-				else if (operator == '*') 
-				{
-                    push(&operandStack, operand1 * operand2);
-                } 
-				else if (operator == '/') 
-				{
-                    if (operand2 == 0) 
-					{
-                        ESP_LOGE(TAG, "Division by zero\n");
-                        return false; // Return failure
-                    }
-                    push(&operandStack, operand1 / operand2);
-                }
-            }
-            push(&operatorStack, expression[i]);
-            i++;
-        } 
-		else 
-		{
-            ESP_LOGE(TAG, "Invalid character");
-            return false; // Return failure
-        }
-    }
-
-    // Check for remaining '(' in operator stack
-    while (!isEmpty(&operatorStack)) 
-	{
-        char operator = pop(&operatorStack);
-        if (operator == '(') 
-		{
-            ESP_LOGE(TAG, "Mismatched parentheses\n");
-            return false; // Return failure
-        }
-        double operand2 = pop(&operandStack);
-        double operand1 = pop(&operandStack);
-
-        if (operator == '+') 
-		{
-            push(&operandStack, operand1 + operand2);
-        } 
-		else if (operator == '-') 
-		{
-            push(&operandStack, operand1 - operand2);
-        } 
-		else if (operator == '*') 
-		{
-            push(&operandStack, operand1 * operand2);
-        } 
-		else if (operator == '/') 
-		{
-            if (operand2 == 0) 
-			{
-                ESP_LOGE(TAG, "Division by zero\n");
-                return false; // Return failure
-            }
-            push(&operandStack, operand1 / operand2);
-        }
-    }
-
-    if (isEmpty(&operandStack) || operandStack.top != 0) 
-	{
-        ESP_LOGE(TAG, "Invalid expression\n");
-        return false; // Return failure
-    }
-
-    *result = operandStack.items[0];
-    return true; // Return success
-}
-
-
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
     ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%ld", base, event_id);
@@ -343,11 +109,16 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     {
 		case MQTT_EVENT_CONNECTED:
 			ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-			xEventGroupSetBits(s_mqtt_event_group, MQTT_CONNECTED_BIT);
-
-			esp_mqtt_client_subscribe(client, mqtt_sub_topic, 0);
+            if(config_server_mqtt_tx_en_config())
+            {
+                esp_mqtt_client_subscribe(client, mqtt_sub_topic, 0);
+            }
+			
+            esp_mqtt_client_subscribe(client, mqtt_cmd_topic, 0);
 			gpio_set_level(mqtt_led, 0);
 			esp_mqtt_client_publish(client, mqtt_status_topic, "{\"status\": \"online\"}", 0, 0, 1);
+
+            xEventGroupSetBits(s_mqtt_event_group, MQTT_CONNECTED_BIT);
 			break;
 		case MQTT_EVENT_DISCONNECTED:
 			ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
@@ -402,7 +173,7 @@ static void mqtt_parse_data(void *handler_args, esp_event_base_t base, int32_t e
     cJSON *root = NULL;
     cJSON *frame = NULL;
     esp_mqtt_event_handle_t event = event_data;
-
+    
     if ((mqtt_elm327_log == 0) && strncmp(event->topic, mqtt_sub_topic, strlen(mqtt_sub_topic)) == 0)
     {
         root = cJSON_Parse(event->data);
@@ -483,6 +254,47 @@ static void mqtt_parse_data(void *handler_args, esp_event_base_t base, int32_t e
             can_send(&can_frame, 1);
         }
     }
+    else if (strncmp(event->topic, mqtt_cmd_topic, strlen(mqtt_cmd_topic)) == 0)
+    {
+        static char cmd_response[32] = {0};
+
+        root = cJSON_Parse(event->data);
+
+        if (root == NULL)
+        {
+            ESP_LOGE(TAG, "Failed to parse JSON data");
+            goto end;
+        }
+
+        cJSON *cmd = cJSON_GetObjectItem(root, "cmd");
+
+        if (cmd == NULL || !cJSON_IsString(cmd))
+        {
+            ESP_LOGE(TAG, "Missing or invalid 'cmd' value in JSON");
+            goto end;
+        }
+
+        if (strcmp(cmd->valuestring, "reboot") == 0)
+        {
+            ESP_LOGI(TAG, "Reboot command received");
+            sprintf(cmd_response, "{\"rsp\": \"ok\"}");
+            mqtt_publish(mqtt_rsp_topic, cmd_response, strlen(cmd_response), 0, 0);
+            // Perform the reboot operation here
+            vTaskDelay(pdMS_TO_TICKS(2000));
+            esp_restart();
+        }
+        else if(strcmp(cmd->valuestring, "get_vbatt") == 0)
+        {
+            float vbatt = 0;
+            sleep_mode_get_voltage(&vbatt);
+            sprintf(cmd_response, "{\"battery_voltage\": %f}", vbatt);
+            mqtt_publish(mqtt_rsp_topic, cmd_response, strlen(cmd_response), 0, 0);
+        }
+        else
+        {
+            ESP_LOGW(TAG, "Unknown command received: %s", cmd->valuestring);
+        }
+    }
 
 end:
     if (root != NULL)
@@ -501,6 +313,23 @@ int mqtt_connected(void)
 		return (uxBits & MQTT_CONNECTED_BIT)?1:0;
 	}
 	else return 0;
+}
+
+static int8_t mqtt_canflt_find_id(uint32_t id, uint8_t start_index)
+{
+	if(mqtt_canflt_size == 0)
+	{
+		return -1;
+	}
+	for(uint32_t i = start_index; i < mqtt_canflt_size; i++)
+	{
+		if(mqtt_canflt_values[i].can_id == id)
+		{
+			return i;
+		}
+	}
+
+	return -1;
 }
 
 #define JSON_BUF_SIZE		2048
@@ -586,7 +415,7 @@ static void mqtt_task(void *pvParameters)
 
                             sprintf(json_buffer, "{\"%s\": %lf}", mqtt_canflt_values[found_index].name, expression_result);
 
-                            esp_mqtt_client_publish(client, mqtt_topic, json_buffer, 0, 0, 0);
+                            mqtt_publish(mqtt_topic, json_buffer, 0, 0, 0);
                         }
                         else
                         {
@@ -619,7 +448,7 @@ static void mqtt_task(void *pvParameters)
                     }
                     strcat((char*)json_buffer, "]}");
 
-                    esp_mqtt_client_publish(client, mqtt_topic, json_buffer, 0, 0, 0);
+                    mqtt_publish(mqtt_topic, json_buffer, 0, 0, 0);
                 }
             }
             else
@@ -643,7 +472,7 @@ static void mqtt_task(void *pvParameters)
                 json_buffer[strlen(json_buffer)-1] = 0;
                 strcat((char*)json_buffer, "]}");
 
-                esp_mqtt_client_publish(client, mqtt_elm327_topic, json_buffer, 0, 0, 0);
+                mqtt_publish(mqtt_elm327_topic, json_buffer, 0, 0, 0);
             }
 
 		}
@@ -747,8 +576,34 @@ static void mqtt_load_filter(void)
     cJSON_Delete(root);
 }
 
+void mqtt_publish(char *topic, char *data, int len, int qos, int retain)
+{
+    int data_len = len;
+
+    if( mqtt_connected() && (xSemaphoreTake( xmqtt_semaphore, pdMS_TO_TICKS(2000) ) == pdTRUE) )
+    {
+        if(len == 0)
+        {
+            data_len = strlen(data);
+        }
+
+        if(data_len < MQTT_TX_RX_BUF_SIZE)
+        {
+            esp_mqtt_client_publish(client, topic, data, len, qos, retain);
+        }
+        else
+        {
+            static const char* error_msg = "{\"error\": \"Data length exceeds the data size\"}";
+            esp_mqtt_client_publish(client, topic, error_msg, strlen(error_msg), qos, 0);
+        }
+        
+        xSemaphoreGive( xmqtt_semaphore );
+    }
+}
+
 void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
 {
+    xmqtt_semaphore = xSemaphoreCreateMutex();
     esp_mqtt_client_config_t mqtt_cfg = {
 		// .session.protocol_ver = MQTT_PROTOCOL_V_5,
 		.broker.address.uri = config_server_get_mqtt_url(),
@@ -761,16 +616,18 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
         .session.last_will.retain = 1,
 		.session.last_will.msg = "{\"status\": \"offline\"}",
 		.network.reconnect_timeout_ms = 5000,
-		.buffer.size = 1024*5,
-		.buffer.out_size = 1024*5,
+		.buffer.size = MQTT_TX_RX_BUF_SIZE,
+		.buffer.out_size = MQTT_OUT_BUF_SIZE,
     };
     xmqtt_tx_queue = xtx_queue;
     mqtt_led = connected_led;
     device_id = id;
-    // sprintf(mqtt_sub_topic, "wican/%s/can/tx", device_id);
+    
     strcpy(mqtt_sub_topic, config_server_get_mqtt_tx_topic());
-    // sprintf(mqtt_status_topic, "wican/%s/status", device_id);
+    
     strcpy(mqtt_status_topic, config_server_get_mqtt_status_topic());
+    sprintf(mqtt_cmd_topic, "wican/%s/cmd",device_id);
+    sprintf(mqtt_rsp_topic, "wican/%s/cmd",device_id);
     ESP_LOGI(TAG, "device_id: %s, mqtt_cfg.uri: %s", device_id, mqtt_cfg.broker.address.uri);
     mqtt_elm327_log = config_server_mqtt_elm327_log();
 	mqtt_load_filter();

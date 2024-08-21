@@ -52,6 +52,7 @@
 #include "mqtt.h"
 #include "esp_mac.h"
 #include "ftp.h"
+#include "autopid.h"
 
 #define TAG 		__func__
 #define TX_GPIO_NUM             	0
@@ -74,6 +75,9 @@ uint8_t project_hardware_rev;
 int FTP_TASK_FINISH_BIT = BIT2;
 EventGroupHandle_t xEventTask;
 static uint8_t mqtt_elm327_log_en = 0;
+static uint8_t derived_mac_addr[6] = {0};
+static uint8_t uid[33];
+static uint8_t ble_uid[33];
 
 static void log_can_to_mqtt(twai_message_t *frame, uint8_t type)
 {
@@ -248,11 +252,11 @@ static void can_rx_task(void *pvParameters)
         process_led(0);
     	if(esp_timer_get_time() - time_old > 1000*1000)
     	{
-    		// uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
-    		// time_old = esp_timer_get_time();
-    		// ESP_LOGI(TAG, "free_heap: %lu", free_heap);
-// //        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
-// //        		num_msg = 0;
+    		uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
+    		time_old = esp_timer_get_time();
+    		// ESP_LOGI(TAG, "free_heap: %lu", free_heap)
+//        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
+//        		num_msg = 0;
     	}
         while(can_receive(&rx_msg, 0) ==  ESP_OK)
         {
@@ -286,14 +290,11 @@ static void can_rx_task(void *pvParameters)
 				{
 					ucTCP_TX_Buffer.usLen = gvret_parse_can_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
 				}
-				else if(protocol == OBD_ELM327)
+				else if(protocol == OBD_ELM327 || protocol == AUTO_PID)
 				{
 					// Let elm327.c decide which messages to process
 					xQueueSend( xmsg_obd_rx_queue, ( void * ) &rx_msg, pdMS_TO_TICKS(0) );
 				}
-
-
-
 
 				if(ucTCP_TX_Buffer.usLen != 0)
 				{
@@ -344,9 +345,7 @@ static void can_rx_task(void *pvParameters)
         vTaskDelay(pdMS_TO_TICKS(1));
 	}
 }
-static uint8_t derived_mac_addr[6] = {0};
-static uint8_t uid[33];
-static uint8_t ble_uid[33];
+
 void app_main(void)
 {
     ESP_ERROR_CHECK(nvs_flash_init());
@@ -439,6 +438,7 @@ void app_main(void)
 		can_set_bitrate(can_datarate);
 		can_enable();
 		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
+		
 		if(config_server_mqtt_en_config() && config_server_mqtt_elm327_log())
 		{
 			mqtt_elm327_log_en = config_server_mqtt_elm327_log();
@@ -448,6 +448,15 @@ void app_main(void)
 		{
 			elm327_init(&send_to_host, &xmsg_obd_rx_queue, NULL);
 		}
+	}
+	else if(protocol == AUTO_PID)
+	{
+		can_set_bitrate(can_datarate);
+		can_enable();
+		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
+		
+		elm327_init(&autopid_parser, &xmsg_obd_rx_queue, NULL);
+		autopid_init((char*)&uid[0], config_server_get_auto_pid());
 	}
 
 	if(config_server_mqtt_en_config())
