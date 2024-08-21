@@ -51,19 +51,119 @@ static char* initialisation = NULL;
 static car_model_data_t car;
 static char* device_id;
 
-// discovery_msg JSON string template
-static const char *discovery_msg_template = 
-    "{"
-    "\"name\": \"%s\","
-    "\"state_topic\": \"wican/%s/%s/state\","
-    "\"unit_of_measurement\": \"%s\","
-    "\"value_template\": \"{{ value_json.%s }}\","
-    "\"device_class\": \"%s\","
-    "\"unique_id\": \"%s_%s\","
-    "\"availability_topic\": \"wican/%s/%s/availability\","
-    "\"payload_available\": \"online\","
-    "\"payload_not_available\": \"offline\""
-    "}";
+
+void autopid_pub_discovery(void)
+{
+    char *discovery_str = NULL;
+    char *discovery_topic = NULL;
+    char *availability_topic = NULL;
+
+    for (int i = 0; i < car.pid_count; i++)
+    {
+        for (int j = 0; j < car.pids[i].parameter_count; j++)
+        {
+            // Check if the class is NULL or "none"
+            if (car.pids[i].parameters[j].class == NULL || strcasecmp(car.pids[i].parameters[j].class, "none") == 0)
+            {
+                // Format discovery message without device_class
+                if (asprintf(&discovery_str, 
+                             "{"
+                             "\"name\": \"%s\","
+                             "\"state_topic\": \"wican/%s/%s/state\","
+                             "\"unit_of_measurement\": \"%s\","
+                             "\"value_template\": \"{{ value_json.%s }}\","
+                             "\"unique_id\": \"%s_%s\","
+                             "\"availability_topic\": \"wican/%s/%s/availability\","
+                             "\"payload_available\": \"online\","
+                             "\"payload_not_available\": \"offline\""
+                             "}",
+                             car.pids[i].parameters[j].name,
+                             device_id,
+                             car.pids[i].parameters[j].name,
+                             car.pids[i].parameters[j].unit,
+                             car.pids[i].parameters[j].name,
+                             device_id,
+                             car.pids[i].parameters[j].name,
+                             device_id,
+                             car.pids[i].parameters[j].name) == -1)
+                {
+                    // Handle error
+                    ESP_LOGE(TAG, "Error: Failed to allocate memory for discovery_str\n");
+                    return;
+                }
+            }
+            else
+            {
+                // Format discovery message with device_class
+                if (asprintf(&discovery_str, 
+                             "{"
+                             "\"name\": \"%s\","
+                             "\"state_topic\": \"wican/%s/%s/state\","
+                             "\"unit_of_measurement\": \"%s\","
+                             "\"value_template\": \"{{ value_json.%s }}\","
+                             "\"device_class\": \"%s\","
+                             "\"unique_id\": \"%s_%s\","
+                             "\"availability_topic\": \"wican/%s/%s/availability\","
+                             "\"payload_available\": \"online\","
+                             "\"payload_not_available\": \"offline\""
+                             "}",
+                             car.pids[i].parameters[j].name,
+                             device_id,
+                             car.pids[i].parameters[j].name,
+                             car.pids[i].parameters[j].unit,
+                             car.pids[i].parameters[j].name,
+                             car.pids[i].parameters[j].class,
+                             device_id,
+                             car.pids[i].parameters[j].name,
+                             device_id,
+                             car.pids[i].parameters[j].name) == -1)
+                {
+                    // Handle error
+                    ESP_LOGE(TAG, "Error: Failed to allocate memory for discovery_str\n");
+                    return;
+                }
+            }
+
+            // Format discovery topic
+            if (asprintf(&discovery_topic, "homeassistant/sensor/%s/%s/config",
+                         device_id, car.pids[i].parameters[j].name) == -1)
+            {
+                // Handle error
+                ESP_LOGE(TAG, "Error: Failed to allocate memory for discovery_topic\n");
+                free(discovery_str);
+                return;
+            }
+
+            // Format availability topic
+            if (asprintf(&availability_topic, "wican/%s/%s/availability",
+                         device_id, car.pids[i].parameters[j].name) == -1)
+            {
+                // Handle error
+                ESP_LOGE(TAG, "Error: Failed to allocate memory for availability_topic\n");
+                free(discovery_str);
+                free(discovery_topic);
+                return;
+            }
+
+            // Publish discovery message
+            mqtt_publish(discovery_topic, discovery_str, 0, 1, 1);
+
+            // Publish availability message
+            mqtt_publish(availability_topic, "online", 0, 1, 1);
+
+            // Clean up allocated memory
+            free(discovery_str);
+            free(discovery_topic);
+            free(availability_topic);
+
+            // Delay to avoid overwhelming the broker
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+    }
+}
+
+
+
 
 void parse_elm327_response(char *buffer, unsigned char *data, uint32_t *data_length)
 {
@@ -193,6 +293,17 @@ static void autopid_task(void *pvParameters)
     
     car.cycle_timer = 0;
     ESP_LOGI(TAG, "num_of_pids: %d", num_of_pids);
+
+    while(!mqtt_connected())
+    {
+        vTaskDelay(pdMS_TO_TICKS(2000));
+    }
+    
+    if(car.ha_discovery_en)
+    {
+        autopid_pub_discovery();
+    }
+    
     while (1)
     {
         if((num_of_pids > 0 || car.pid_count > 0)  && mqtt_connected())
@@ -881,26 +992,6 @@ static void autopid_load_car_specific(char* car_mod)
                                 car.pids[i].parameters[j].class = strdup("");  // Assign an empty string if not available
                             }
                             j++;
-
-                            
-                            size_t msg_size = strlen(discovery_msg_template) + strlen(car.pids[i].parameters[j].name) * 5 + strlen(device_id) * 3 + strlen(car.pids[i].parameters[j].unit) + strlen(car.pids[i].parameters[j].class) + 1;
-                            
-                            car.pids[i].parameters[j].discovery_msg = malloc(msg_size);
-                            
-                            if (car.pids[i].parameters[j].discovery_msg != NULL)
-                            {
-                                snprintf(car.pids[i].parameters[j].discovery_msg, msg_size, discovery_msg_template,
-                                            car.pids[i].parameters[j].name, 
-                                            device_id, 
-                                            car.pids[i].parameters[j].name, 
-                                            car.pids[i].parameters[j].unit, 
-                                            car.pids[i].parameters[j].name, 
-                                            car.pids[i].parameters[j].class,
-                                            device_id, 
-                                            car.pids[i].parameters[j].name, 
-                                            device_id, 
-                                            car.pids[i].parameters[j].name);
-                            }
                         }
                     }
                     i++;

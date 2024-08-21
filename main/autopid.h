@@ -55,7 +55,6 @@ typedef struct
     char *expression;
     char *unit;
     char *class;
-    char *discovery_msg;
 } parameter_data_t;
 
 typedef struct
