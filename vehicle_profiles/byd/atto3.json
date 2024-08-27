@@ -8,7 +8,8 @@
                 {
                     "name": "SOC",
                     "expression": "(B5*256)+B4)/100",
-                    "unit": "%"
+                    "unit": "%",
+                    "class": "battery"
                 }
             ]
         }

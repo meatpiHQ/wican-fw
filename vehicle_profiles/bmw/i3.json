@@ -8,7 +8,8 @@
                 {
                     "name": "SoC",
                     "expression": "[B11:B12]/10",
-                    "unit": "%"
+                    "unit": "%",
+                    "class": "battery"
                 }
             ]
         }
