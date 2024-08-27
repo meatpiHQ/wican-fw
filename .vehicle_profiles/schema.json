@@ -17,6 +17,7 @@
             "minItems": 1,
             "items": {
                 "type": "object",
+                "required": ["pid"],
                 "properties": {
                     "pid": {
                         "description": "The PID for this group of parameters",
@@ -28,6 +29,7 @@
                         "minItems": 1,
                         "items": {
                             "type": "object",
+                            "required": ["name", "expression", "unit", "class"],
                             "properties": {
                                 "name": {
                                     "description": "Used in MQTT JSON, no spaces",
@@ -39,6 +41,10 @@
                                 },
                                 "unit": {
                                     "description": "Unit for this  parameter",
+                                    "type": "string"
+                                },
+                                "class": {
+                                    "description": "Class of sensor, See Home Assistant sensor classes",
                                     "type": "string"
                                 }
                             }

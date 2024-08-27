@@ -17,7 +17,9 @@ If you would like to add/update a car please make sure it is formatted properly,
 
 **expression**: The expression used to calculate the parameter value
 
-**unit**: The unit of the parameter, e.g., %, °C, or others
+**unit**: The unit of the parameter, e.g., %, °C, or others, see [Home Assistant List](https://www.home-assistant.io/integrations/sensor/#device-class)
+
+**class**: The class of the sensor, see [Home Assistant List](https://www.home-assistant.io/integrations/sensor/#device-class)
 
 **Example:**
 ```
