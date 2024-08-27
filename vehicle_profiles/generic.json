@@ -8,7 +8,8 @@
                 {
                     "name": "Engine RPM",
                     "expression": "[B3:B4]*0.25",
-                    "unit": "RPM"
+                    "unit": "RPM",
+                    "class": "frequency"
                 }
             ]
         },
@@ -18,7 +19,8 @@
                 {
                     "name": "Vehicle Speed",
                     "expression": "B3",
-                    "unit": "KM"
+                    "unit": "km/h",
+                    "class": "speed"
                 }
             ]
         },
@@ -28,12 +30,14 @@
                 {
                     "name": "value1",
                     "expression": "B10/10",
-                    "unit": "%"
+                    "unit": "%",
+                    "class": "battery"
                 },
                 {
                     "name": "value2",
                     "expression": "(B19+B20)/2",
-                    "unit": "%"
+                    "unit": "%",
+                    "class": "battery"
                 }
             ]
         }

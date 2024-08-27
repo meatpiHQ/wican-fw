@@ -8,12 +8,14 @@
                 {
                     "name": "SOC_BMS",
                     "expression": "B10/2",
-                    "unit": "%"
+                    "unit": "%",
+                    "class": "battery"
                 },
                 {
                     "name": "Aux_Batt_Volts",
                     "expression": "B38*0.1",
-                    "unit": "V"
+                    "unit": "V",
+                    "class": "voltage"
                 }
             ]
         },
@@ -23,7 +25,8 @@
                 {
                     "name": "SOH",
                     "expression": "[B34:B35]/10",
-                    "unit": "%"
+                    "unit": "%",
+                    "class": "battery"
                 }
             ]
         }
