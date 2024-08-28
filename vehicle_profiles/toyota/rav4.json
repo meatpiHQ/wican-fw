@@ -1,0 +1,17 @@
+{
+	"car_model": "Toyota: Rav4",
+	"init": "ATSP6;ATST96;",
+	"pids": [
+		{
+			"pid": "015B2",
+			"parameters": [
+				{
+					"name": "SoC",
+					"expression": "(B3*20)/51",
+					"unit": "%",
+					"class": "battery"
+				}
+			]
+		}
+	]
+}
