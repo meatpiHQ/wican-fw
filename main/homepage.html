@@ -893,8 +893,10 @@
 							console.log('Success:', data);
 							document.getElementById("ret_msg").style.color = "red";
 							document.getElementById("ret_msg").innerHTML = data;
-							// Update car models based on the response if needed
-							// loadCarModels(data);
+							// Delay the page refresh by 2 seconds
+							setTimeout(() => {
+								window.location.reload();
+							}, 2000); // 2000 milliseconds = 2 seconds
 						})
 						.catch(error => {
 							console.error('Error:', error);
@@ -910,8 +912,6 @@
 				reader.readAsText(file);
 			}
 		}
-
-
 
         function loadAutoTable(jsonData) {
             const data = JSON.parse(jsonData);
