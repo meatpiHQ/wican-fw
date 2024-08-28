@@ -49,7 +49,6 @@
 	td {
 		border-collapse: collapse;
 		border-spacing: 0;
-		width: 350px;
 		text-align: left;
 		padding: 8px;
 	}
@@ -609,7 +608,7 @@
 
 		<table>
 			<tr>
-				<td><label for="car_specific"><strong>Car Specific:</strong></label></td>
+				<td><label for="car_specific"><strong>Vehicle Specific:</strong></label></td>
 				<td>		<select id="car_specific" name="car_specific" onchange="toggleCarModel(); toggleDestinationAndCycle(); enableAutoStoreButton();">
 					<option value="enable">Enable</option>
 					<option value="disable">Disable</option>
@@ -617,7 +616,7 @@
 				</select></td>
 			</tr>
 			<tr>
-				<td><label for="car_model"><strong>Car Model:</strong></label></td>
+				<td><label for="car_model"><strong>Vehicle Model:</strong></label></td>
 				
 				<td><select id="car_model" name="car_model" onchange="enableAutoStoreButton()">
 				</select></td>
@@ -647,10 +646,12 @@
 				<td><input type="text" id="pid_cycle" name="pid_cycle" disabled oninput="enableAutoStoreButton()"></td>
 			</tr>
 			<tr>
-				<td>        <form id="car_data_form" enctype="multipart/form-data">
-					<input id="car_data_file" name="car_data_file" type="file" />
-				</form></td>
-				<td><input id="car_data_submit_button" type="button" value="Update Car Data" onclick="sendCARDataFile()" /></td>
+				<td><label for="vehicle_profiles"><strong>Vehicle Profiles:</strong> </label></td>
+				<td>
+					<form id="car_data_form" enctype="multipart/form-data">
+						<input id="car_data_file" name="car_data_file" type="file" onchange="sendCARDataFile()" />
+					</form>
+				</td>
 			</tr>
 			<tr>
 				<td><button class="store" onclick="storeAutoTableData()" disabled>Store</button></td> 
@@ -857,30 +858,59 @@
         }
 		
 		function sendCARDataFile() {
+			const fileInput = document.getElementById("car_data_file");
+			const maxFileSize = 200 * 1024; // 200KB in bytes
 
-			if(document.getElementById("car_data_file").files.length == 0) {
+			if (fileInput.files.length == 0) {
 				document.getElementById("ret_msg").style.color = "red";
 				document.getElementById("ret_msg").innerHTML = "No files selected!";
 				alert("No files selected!");
-			}else{
-				const form = document.getElementById('car_data_form');
-				const formData = new FormData(form);
-				document.getElementById("ret_msg").innerHTML = "";
-				document.getElementById("car_data_submit_button").disabled = true;
-				fetch('/upload/car_data.json', {
-					method: 'POST',
-					body: formData
-				})
-				.then(response => response.text())
-				.then(data => {
-					console.log('Success:', data);
+			} else {
+				const file = fileInput.files[0];
+
+				if (file.size > maxFileSize) {
 					document.getElementById("ret_msg").style.color = "red";
-					document.getElementById("ret_msg").innerHTML = data;
-					// Update car models based on the response if needed
-					// loadCarModels(data);
-				})
+					document.getElementById("ret_msg").innerHTML = "File size exceeds 200KB!";
+					alert("File size exceeds 200KB!");
+					return;
+				}
+
+				const reader = new FileReader();
+				reader.onload = function(event) {
+					try {
+						JSON.parse(event.target.result);
+						// If parsing is successful, proceed with the upload
+						const form = document.getElementById('car_data_form');
+						const formData = new FormData(form);
+						document.getElementById("ret_msg").innerHTML = "";
+
+						fetch('/upload/car_data.json', {
+							method: 'POST',
+							body: formData
+						})
+						.then(response => response.text())
+						.then(data => {
+							console.log('Success:', data);
+							document.getElementById("ret_msg").style.color = "red";
+							document.getElementById("ret_msg").innerHTML = data;
+							// Update car models based on the response if needed
+							// loadCarModels(data);
+						})
+						.catch(error => {
+							console.error('Error:', error);
+						});
+					} catch (e) {
+						document.getElementById("ret_msg").style.color = "red";
+						document.getElementById("ret_msg").innerHTML = "Invalid JSON file!";
+						alert("The selected file is not a valid JSON file!");
+					}
+				};
+
+				// Read the file as text
+				reader.readAsText(file);
 			}
 		}
+
 
 
         function loadAutoTable(jsonData) {
