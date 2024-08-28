@@ -84,31 +84,70 @@ Integrating WiCAN into your setup is straightforward and economical, requiring j
 To make the baud rate compatible with the dev-kit we changed it from 3000000 to 4000000.
 Refer the file: []
 ## Setup Guide
-Steps:
-1. To make your own Wi-CAN module setup, start by making these two shields for future convenience attached below.
-2. Mount the shields and your ESP32 board on this shield according to the correct pin configuration.
-3. Flash the correct firmware code on your ESP32 board by following the below-mentioned steps:
-   - Clone the repo wican-fw from meatpi []
-   - Open this project in vscode.
-   - Install the latest version of "ESP-IDF" extension.
-   - Once installed, click on "Configure Extension".
-   - Out of the three available option, choose "Express".
-   - Here, enable the "Show all ESP-IDF tags" option and select "v5.1 (release version)" from the drop-down menu and click "Install".
-   - Once installed, click on the "ESP-IDF: Explorer" in the left-most pane.
-   - From the left sub-section, select the "Full Clean" option to clear out any pre-built files or projects.
-   - From the same menu, select the "Build" option to build your project.
-   - From the same menu, select the correct Serial Port by clicking on the "Select Serial Port" option.
-   - Next we erase any pre-flashed content from the board by clicking on the "Erase Flash" option.
-   - Once the required project is built, click on the "Flash" option from the same menu to flash the firmware.
-   - Your module is now ready for use!
-     
- 4. Connect the setup module to your laptop via a USB to micro-USB cable and further connect the CAN connector to one of your shields.
-     The other end of the CAN cable is connected to the board which gives you the required CAN data.
- 5. Run the following commands in your terminal to receive the CAN data:
-    sudo slcand -o -s8 -t sw -S 3000000 /dev/ttyUSB0 can0                              Press tab after ..ttyUSB[tab] to select the correct port
-    sudo ifconfig can0 txqueuelen 1000                                                 Configures the transmit queue length for the can0 interface.
-    sudo ifconfig can0 up                                                              Activates the can0 network interface
-    candump -c -ta -x can0                                                             To receive a message
+
+Follow these steps to set up your Wi-CAN module:
+
+1. **Prepare the Hardware:**
+   - Begin by creating two custom shields for your Wi-CAN module setup to facilitate future modifications. Details for these shields are provided in the attachments below.
+   - Mount the ESP32 board onto the shields, ensuring correct pin configuration and secure connections.
+
+2. **Flash the Firmware onto the ESP32 Board:**
+   - Clone the `wican-fw` repository from `meatpi`:
+
+     ```bash
+     git clone [repository URL]
+     ```
+
+   - Open the cloned project in Visual Studio Code (VSCode).
+   - Install the latest version of the **ESP-IDF** extension:
+     - Open the Extensions view (`Ctrl+Shift+X`), search for **ESP-IDF**, and install it.
+     - After installation, click **Configure Extension**.
+     - Select the **Express** installation option.
+     - Enable the **Show all ESP-IDF tags** option, choose **v5.1 (release version)** from the dropdown menu, and click **Install**.
+   - Navigate to the **ESP-IDF: Explorer** on the left-hand side.
+     - Choose **Full Clean** to remove any pre-existing build files.
+     - Click **Build** to compile the firmware.
+     - Select the appropriate serial port by clicking **Select Serial Port**.
+     - Erase any existing firmware on the board by selecting **Erase Flash**.
+     - Once the project is built, click **Flash** to upload the firmware to your ESP32 board.
+
+   Your module is now ready for use!
+
+3. **Connect the Module to Your Laptop:**
+   - Connect the setup module to your laptop using a USB to micro-USB cable.
+   - Attach the CAN connector to one of the custom shields. The other end of the CAN cable should connect to the device that will provide the required CAN data.
+
+4. **Configure the CAN Interface:**
+   - Run the following commands in your terminal to configure the CAN interface and receive data:
+
+     ```bash
+     sudo slcand -o -s8 -t sw -S 3000000 /dev/ttyUSB0 can0
+     ```
+
+     > **Tip:** Press `Tab` after typing `/dev/ttyUSB` to automatically select the correct port.
+
+     ```bash
+     sudo ifconfig can0 txqueuelen 1000
+     ```
+
+     Configures the transmit queue length for the `can0` interface.
+
+     ```bash
+     sudo ifconfig can0 up
+     ```
+
+     Activates the `can0` network interface.
+
+     ```bash
+     candump -c -ta -x can0
+     ```
+
+     Use this command to receive CAN messages.
+
+5. **Troubleshooting Common Issues:**
+   If you encounter any problems while running these commands, follow the instructions below to resolve them:
+   - [Include specific troubleshooting steps here, if available.]
+
 
     You might encounter the following problems when running these commands. To overcome them, follow these commands:
     
