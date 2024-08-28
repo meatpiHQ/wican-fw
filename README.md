@@ -95,7 +95,7 @@ Follow these steps to set up your Wi-CAN module:
    - Clone the `wican-fw` repository from `meatpi`:
 
      ```bash
-     git clone [repository URL]](https://github.com/meatpiHQ/wican-fw.git)]
+     git clone https://github.com/meatpiHQ/wican-fw.git
      ```
 
    - Open the cloned project in Visual Studio Code (VSCode).
