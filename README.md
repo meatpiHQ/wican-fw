@@ -146,13 +146,9 @@ Follow these steps to set up your Wi-CAN module:
 
 5. **Troubleshooting Common Issues:**
    If you encounter any problems while running these commands, follow the instructions below to resolve them:
-   - [Include specific troubleshooting steps here, if available.]
-
-
-    You might encounter the following problems when running these commands. To overcome them, follow these commands:
+   - sudo apt install can-utils
+   - sudo apt install net-tools
     
-
-  
 ## Configuration
 ### WiFi/CAN Configuration
 1. Power the device using USB or OBD-II.
