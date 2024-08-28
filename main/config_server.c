@@ -554,7 +554,7 @@ static esp_err_t load_pid_auto_config_handler(httpd_req_t *req)
     if (json == NULL)
     {
         ESP_LOGE(TAG, "Failed to parse JSON content from file: %s", filepath);
-        ESP_LOGE(TAG, "cJSON_GetErrorPtr: %s", cJSON_GetErrorPtr());
+        // ESP_LOGE(TAG, "cJSON_GetErrorPtr: %s", cJSON_GetErrorPtr());
         httpd_resp_send(req, "NONE", HTTPD_RESP_USE_STRLEN);
         return ESP_OK;
     }
