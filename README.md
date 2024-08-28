@@ -445,6 +445,47 @@ The PID in the configuration should be set to -1. The values to extract are from
 
 # Home Assistant
 
+WiCAN seamlessly integrates with Home Assistant via the MQTT protocol, automatically retrieving vehicle data and publishing it. Sensors are created in Home Assistant without any manual intervention, making setup effortless.
+
+**Note:** The [WiCAN PRO](https://www.crowdsupply.com/meatpi-electronics/wican-pro) model supports more car models.
+
+<img width="394" alt="image" src="https://github.com/user-attachments/assets/75460d61-3656-4458-aeca-0f8a3657d6ad">
+
+### Getting Started Guide
+
+1. **Install the Home Assistant [Mosquitto broker add-on](https://github.com/home-assistant/addons/blob/master/mosquitto/DOCS.md).**
+
+2. **Create a new Home Assistant user account for WiCAN.**  
+   The credentials for this account will be used to configure the MQTT settings in WiCAN.
+
+3. **Connect to the WiCAN access point** (WiCAN_xxxxxxxxxxxx).  
+   Open a web browser and navigate to [http://192.168.80.1/](http://192.168.80.1/).
+
+4. **Set the "Mode" to AP+Station.**
+
+5. **Enter your home WiFi network SSID and password.**
+
+6. **Enable [MQTT](#mqtt)** and enter the Home Assistant credentials created in step 2.
+
+7. **Go to the "Automate" tab and enable "Vehicle Specific".**
+
+8. **Select your vehicle model from the dropdown list.**  
+   If the list is empty, download the latest [vehicle profiles file](https://github.com/meatpiHQ/wican-fw/blob/main/vehicle_profiles.json) and upload it using the "Choose File" button.
+
+9. **If your vehicle isn't supported,** open an issue on GitHub, and I’ll assist you in creating a new vehicle profile if possible.
+
+10. **Enable "Home Assistant Discovery".**  
+    This will automatically create sensors in Home Assistant.
+
+11. **Fill in the "Destination Topic" and "Cycle Time".**  
+    - **Destination Topic:** The MQTT topic where WiCAN will publish the vehicle data.  
+    - **Cycle Time:** Defines how frequently WiCAN will pull and publish the vehicle parameters to Home Assistant.
+
+12. **Press the "Store" button and reboot the device** for the changes to take effect.
+
+--- 
+
+### ---Deprecated method---
 ### 1. EV Battery Examples [Wiki Page](https://github.com/meatpiHQ/wican-fw/wiki/EV-Battery-SoC-in-Home-Assistant-%E2%80%90-Example)
 In this example, we will learn how to set up Home Assistant to request the battery State of Charge (SoC) without using Node-RED. This example has been tested on an ORA Funky Cat vehicle and can also serve as a reference for requesting other Parameter IDs (PIDs) in addition to SoC. EV Battery Examples [Wiki Page](https://github.com/meatpiHQ/wican-fw/wiki/EV-Battery-SoC-in-Home-Assistant-%E2%80%90-Example)
 
