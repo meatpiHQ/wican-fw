@@ -78,17 +78,44 @@ Traditional USB-to-CAN connectors are often expensive and do not always offer op
 
 Although WiCAN performs well for low-frequency data transmission, it may not be suitable for all frequency ranges. Nonetheless, it excels in many applications, particularly those with less demanding data rates.
 
-Integrating WiCAN into your setup is straightforward and economical, requiring either customised shields for your ESP-32 module or merely jumper wires. With minimal expense, you can significantly enhance your system's capabilities.
+Integrating WiCAN into your setup is straightforward and economical, requiring just a couple of customised shields for your ESP-32 module. With minimal expense, you can significantly enhance your system's capabilities.
 
 ## Code Customization
 To make the baud rate compatible with the dev-kit we changed it from 3000000 to 4000000.
 Refer the file: []
 ## Setup Guide
+Steps:
+1. To make your own Wi-CAN module setup, start by making these two shields for future convenience attached below.
+2. Mount the shields and your ESP32 board on this shield according to the correct pin configuration.
+3. Flash the correct firmware code on your ESP32 board by following the below-mentioned steps:
+   - Clone the repo wican-fw from meatpi []
+   - Open this project in vscode.
+   - Install the latest version of "ESP-IDF" extension.
+   - Once installed, click on "Configure Extension".
+   - Out of the three available option, choose "Express".
+   - Here, enable the "Show all ESP-IDF tags" option and select "v5.1 (release version)" from the drop-down menu and click "Install".
+   - Once installed, click on the "ESP-IDF: Explorer" in the left-most pane.
+   - From the left sub-section, select the "Full Clean" option to clear out any pre-built files or projects.
+   - From the same menu, select the "Build" option to build your project.
+   - From the same menu, select the correct Serial Port by clicking on the "Select Serial Port" option.
+   - Next we erase any pre-flashed content from the board by clicking on the "Erase Flash" option.
+   - Once the required project is built, click on the "Flash" option from the same menu to flash the firmware.
+   - Your module is now ready for use!
+     
+ 4. Connect the setup module to your laptop via a USB to micro-USB cable and further connect the CAN connector to one of your shields.
+     The other end of the CAN cable is connected to the board which gives you the required CAN data.
+ 5. Run the following commands in your terminal to receive the CAN data:
+    sudo slcand -o -s8 -t sw -S 3000000 /dev/ttyUSB0 can0                              Press tab after ..ttyUSB[tab] to select the correct port
+    sudo ifconfig can0 txqueuelen 1000                                                 Configures the transmit queue length for the can0 interface.
+    sudo ifconfig can0 up                                                              Activates the can0 network interface
+    candump -c -ta -x can0                                                             To receive a message
 
+    You might encounter the following problems when running these commands. To overcome them, follow these commands:
+    
 
+  
 ## Configuration
 ### WiFi/CAN Configuration
-
 1. Power the device using USB or OBD-II.
 2. Connect to the WiFi AP with SSID WiCAN_xxxxxxxxxxxx using password: @meatpi#.
 3. Open http://192.168.80.1/ in a web browser for configuration.
