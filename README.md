@@ -81,7 +81,10 @@ Although WiCAN performs well for low-frequency data transmission, it may not be 
 Integrating WiCAN into your setup is straightforward and economical, requiring either customised shields for your ESP-32 module or merely jumper wires. With minimal expense, you can significantly enhance your system's capabilities.
 
 ## Code Customization
+To make the baud rate compatible with the dev-kit we changed it from 3000000 to 4000000.
+Refer the file: []
 ## Setup Guide
+
 
 ## Configuration
 ### WiFi/CAN Configuration
