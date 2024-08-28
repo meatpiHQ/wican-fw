@@ -333,7 +333,7 @@ static void autopid_task(void *pvParameters)
                         }
                     }
 
-                    if( strlen(car.init) > 0 && car.pid_count > 0)
+                    if( car.pid_count > 0 && car.init != NULL && strlen(car.init) > 0 )
                     {
                         send_commands(car.init, 100);
                         while ((xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS));
@@ -451,7 +451,7 @@ static void autopid_task(void *pvParameters)
                                         if (response_str != NULL) 
                                         {
                                             ESP_LOGI(TAG, "Expression result, Name: %s: %lf", pid_req[i].name, result);
-                                            if(strlen(pid_req[i].destination) != 0)
+                                            if(pid_req[i].destination != NULL && strlen(pid_req[i].destination) != 0)
                                             {
                                                 mqtt_publish(pid_req[i].destination, response_str, 0, 0, 0);
                                             }
@@ -606,7 +606,7 @@ static void autopid_load_config(char *config_str)
         ESP_LOGE(TAG, "Failed to parse config string");
         return;
     }
-    ESP_LOGE(TAG, "Successfully parsed json config string");
+    ESP_LOGI(TAG, "Successfully parsed json config string");
     cJSON *init = cJSON_GetObjectItem(config_str_json, "initialisation");
     if (cJSON_IsString(init) && (init->valuestring != NULL)) 
     {
@@ -1028,6 +1028,19 @@ static void autopid_load_car_specific(char* car_mod)
     // Free JSON string buffer and cJSON object
     free(json_string);
     cJSON_Delete(json);
+    
+    ESP_LOGI(TAG, "Car Model: %s", car.car_model);
+    ESP_LOGI(TAG, "Init Command: %s", car.init);
+    for (int i = 0; i < car.pid_count; i++)
+    {
+        ESP_LOGI(TAG, "PID: %s", car.pids[i].pid);
+        for (int j = 0; j < car.pids[i].parameter_count; j++)
+        {
+            ESP_LOGI(TAG, "  Parameter Name: %s", car.pids[i].parameters[j].name);
+            ESP_LOGI(TAG, "  Expression: %s", car.pids[i].parameters[j].expression);
+            ESP_LOGI(TAG, "  Unit: %s", car.pids[i].parameters[j].unit);
+        }
+    }
 }
 
 void autopid_init(char* id, char *config_str)
@@ -1038,19 +1051,6 @@ void autopid_init(char* id, char *config_str)
     if(car.selected_car_model != NULL)
     {
         autopid_load_car_specific(car.selected_car_model);
-
-        ESP_LOGI(TAG, "Car Model: %s", car.car_model);
-        ESP_LOGI(TAG, "Init Command: %s", car.init);
-        for (int i = 0; i < car.pid_count; i++)
-        {
-            ESP_LOGI(TAG, "PID: %s", car.pids[i].pid);
-            for (int j = 0; j < car.pids[i].parameter_count; j++)
-            {
-                ESP_LOGI(TAG, "  Parameter Name: %s", car.pids[i].parameters[j].name);
-                ESP_LOGI(TAG, "  Expression: %s", car.pids[i].parameters[j].expression);
-                ESP_LOGI(TAG, "  Unit: %s", car.pids[i].parameters[j].unit);
-            }
-        }
     }
     else
     {
