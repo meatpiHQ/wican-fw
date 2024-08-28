@@ -102,8 +102,14 @@ Follow these steps to set up your Wi-CAN module:
    - Install the latest version of the **ESP-IDF** extension:
      - Open the Extensions view (`Ctrl+Shift+X`), search for **ESP-IDF**, and install it.
      - After installation, click **Configure Extension**.
+        ![esp-idf1](https://github.com/user-attachments/assets/34e827e9-0991-418e-8ab7-96eecda7a1d2)
+       
      - Select the **Express** installation option.
+        ![esp-idf2](https://github.com/user-attachments/assets/31df3fa8-c21d-4de2-90e4-3f728e8c3095)
+       
      - Enable the **Show all ESP-IDF tags** option, choose **v5.1 (release version)** from the dropdown menu, and click **Install**.
+        ![esp-idf3](https://github.com/user-attachments/assets/cbc6f50c-2575-4ef4-b49a-6cea8814b340)
+       
    - Navigate to the **ESP-IDF: Explorer** on the left-hand side.
      - Choose **Full Clean** to remove any pre-existing build files.
      - Click **Build** to compile the firmware.
@@ -144,10 +150,19 @@ Follow these steps to set up your Wi-CAN module:
 
      Use this command to receive CAN messages.
 
+     **Result**
+      ![candss3](https://github.com/user-attachments/assets/c02e70c2-da89-46b1-ac8e-135100d76aac)
+
+     
 5. **Troubleshooting Common Issues:**
    If you encounter any problems while running these commands, follow the instructions below to resolve them:
    - sudo apt install can-utils
    - sudo apt install net-tools
+  
+     ![candss](https://github.com/user-attachments/assets/611a4577-ca55-4452-87d8-9ae6668efff9)
+
+     ![candss2](https://github.com/user-attachments/assets/ce695524-6c41-456f-976b-1228c4e95861)
+
     
 ## Configuration
 ### WiFi/CAN Configuration
