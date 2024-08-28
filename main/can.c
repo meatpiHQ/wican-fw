@@ -41,8 +41,9 @@ static EventGroupHandle_t s_can_event_group = NULL;
 #define TAG 		__func__
 enum bus_state
 {
-    OFF_BUS,
-    ON_BUS
+    OFF_BUS = 0,
+    ON_BUS = 1,
+	END_BUS
 };
 static const twai_timing_config_t twai_timing_config[] = {
 	{.brp = 800, .tseg_1 = 15, .tseg_2 = 4, .sjw = 3, .triple_sampling = false},
@@ -67,7 +68,7 @@ static uint8_t datarate = CAN_500K;
 //static uint8_t bus_state = OFF_BUS;
 //static uint32_t mask = 0xFFFFFFFF;
 //static uint32_t filter = 0;
-static can_cfg_t can_cfg;
+static can_cfg_t can_cfg = {.bus_state = END_BUS, .auto_bitrate = 0};
 
 #define TWAI_CONFIG(tx_io_num, rx_io_num, op_mode) {.mode = op_mode, .tx_io = tx_io_num, .rx_io = rx_io_num,        \
                                                                     .clkout_io = TWAI_IO_UNUSED, .bus_off_io = TWAI_IO_UNUSED,      \
@@ -152,11 +153,14 @@ void can_disable(void)
 	{
 		return;
 	}
-	gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
-	can_block();
-	ESP_ERROR_CHECK(twai_stop());
-	ESP_ERROR_CHECK(twai_driver_uninstall());
-	can_cfg.bus_state = OFF_BUS;
+	else if(can_cfg.bus_state == ON_BUS)
+	{
+		gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
+		can_block();
+		ESP_ERROR_CHECK(twai_stop());
+		ESP_ERROR_CHECK(twai_driver_uninstall());
+		can_cfg.bus_state = OFF_BUS;
+	}
 }
 
 void can_set_silent(uint8_t flag)
