@@ -40,6 +40,7 @@
 #define RANDOM_MIN          5
 #define RANDOM_MAX          50
 #define ECU_INIT_CMD        "0100\r"
+#define TEMP_BUFFER_LENGTH 32
 
 static char auto_pid_buf[BUFFER_SIZE];
 static autopid_state_t  autopid_state = CONNECT_CHECK;
@@ -48,8 +49,119 @@ static pid_req_t *pid_req;
 static size_t num_of_pids = 0;
 static char* initialisation = NULL;     
 static car_model_data_t car;
-								 															
-#define TEMP_BUFFER_LENGTH 32
+static char* device_id;
+
+
+void autopid_pub_discovery(void)
+{
+    char *discovery_str = NULL;
+    char *discovery_topic = NULL;
+    char *availability_topic = NULL;
+
+    for (int i = 0; i < car.pid_count; i++)
+    {
+        for (int j = 0; j < car.pids[i].parameter_count; j++)
+        {
+            // Check if the class is NULL or "none"
+            if (car.pids[i].parameters[j].class == NULL || strcasecmp(car.pids[i].parameters[j].class, "none") == 0)
+            {
+                // Format discovery message without device_class
+                if (asprintf(&discovery_str, 
+                             "{"
+                             "\"name\": \"%s\","
+                             "\"state_topic\": \"%s\","
+                             "\"unit_of_measurement\": \"%s\","
+                             "\"value_template\": \"{{ value_json.%s }}\","
+                             "\"unique_id\": \"%s_%s\","
+                             "\"availability_topic\": \"wican/%s/%s/availability\","
+                             "\"payload_available\": \"online\","
+                             "\"payload_not_available\": \"offline\""
+                             "}",
+                             car.pids[i].parameters[j].name,
+                             car.destination,
+                             car.pids[i].parameters[j].unit,
+                             car.pids[i].parameters[j].name,
+                             device_id,
+                             car.pids[i].parameters[j].name,
+                             device_id,
+                             car.pids[i].parameters[j].name) == -1)
+                {
+                    // Handle error
+                    ESP_LOGE(TAG, "Error: Failed to allocate memory for discovery_str\n");
+                    return;
+                }
+            }
+            else
+            {
+                // Format discovery message with device_class
+                if (asprintf(&discovery_str, 
+                             "{"
+                             "\"name\": \"%s\","
+                             "\"state_topic\": \"%s\","
+                             "\"unit_of_measurement\": \"%s\","
+                             "\"value_template\": \"{{ value_json.%s }}\","
+                             "\"device_class\": \"%s\","
+                             "\"unique_id\": \"%s_%s\","
+                             "\"availability_topic\": \"wican/%s/%s/availability\","
+                             "\"payload_available\": \"online\","
+                             "\"payload_not_available\": \"offline\""
+                             "}",
+                             car.pids[i].parameters[j].name,
+                             car.destination,
+                             car.pids[i].parameters[j].unit,
+                             car.pids[i].parameters[j].name,
+                             car.pids[i].parameters[j].class,
+                             device_id,
+                             car.pids[i].parameters[j].name,
+                             device_id,
+                             car.pids[i].parameters[j].name) == -1)
+                {
+                    // Handle error
+                    ESP_LOGE(TAG, "Error: Failed to allocate memory for discovery_str\n");
+                    return;
+                }
+            }
+
+            // Format discovery topic
+            if (asprintf(&discovery_topic, "homeassistant/sensor/%s/%s/config",
+                         device_id, car.pids[i].parameters[j].name) == -1)
+            {
+                // Handle error
+                ESP_LOGE(TAG, "Error: Failed to allocate memory for discovery_topic\n");
+                free(discovery_str);
+                return;
+            }
+
+            // Format availability topic
+            if (asprintf(&availability_topic, "wican/%s/%s/availability",
+                         device_id, car.pids[i].parameters[j].name) == -1)
+            {
+                // Handle error
+                ESP_LOGE(TAG, "Error: Failed to allocate memory for availability_topic\n");
+                free(discovery_str);
+                free(discovery_topic);
+                return;
+            }
+
+            // Publish discovery message
+            mqtt_publish(discovery_topic, discovery_str, 0, 1, 1);
+
+            // Publish availability message
+            mqtt_publish(availability_topic, "online", 0, 1, 1);
+
+            // Clean up allocated memory
+            free(discovery_str);
+            free(discovery_topic);
+            free(availability_topic);
+
+            // Delay to avoid overwhelming the broker
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+    }
+}
+
+
+
 
 void parse_elm327_response(char *buffer, unsigned char *data, uint32_t *data_length)
 {
@@ -107,7 +219,7 @@ static void append_to_buffer(char *buffer, const char *new_data)
 void autopid_parser(char *str, uint32_t len, QueueHandle_t *q)
 {
     static response_t response;
-    if (strlen(str) != 0)
+    if (str != NULL && strlen(str) != 0)
     {
         ESP_LOGI(__func__, "%s", str);
 
@@ -160,16 +272,23 @@ static void send_commands(char *commands, uint32_t delay_ms)
 
 static void autopid_task(void *pvParameters)
 {
-    static char default_init[] = "ati\rate0\rath1\ratl0\rats1\ratsp6\r";
+    static char default_init[] = "ati\rate0\rath1\ratl0\rats1\ratsp6\ratst96\r";
     static response_t response;
     twai_message_t tx_msg;
-
+    static char* error_rsp = NULL;
+    static char* error_topic = NULL;
+    
     autopidQueue = xQueueCreate(QUEUE_SIZE, sizeof(response_t));
     if (autopidQueue == NULL)
     {
         ESP_LOGE(TAG, "Failed to create queue");
         vTaskDelete(NULL);
         return;
+    }
+
+    if(asprintf(&error_topic, "%s/error", car.destination) == -1)
+    {
+        error_topic = car.destination;
     }
 
     vTaskDelay(pdMS_TO_TICKS(1000));
@@ -179,9 +298,20 @@ static void autopid_task(void *pvParameters)
     
     car.cycle_timer = 0;
     ESP_LOGI(TAG, "num_of_pids: %d", num_of_pids);
+
+    while(!mqtt_connected())
+    {
+        vTaskDelay(pdMS_TO_TICKS(2000));
+    }
+    
+    if(car.ha_discovery_en)
+    {
+        autopid_pub_discovery();
+    }
+    
     while (1)
     {
-        if((num_of_pids > 0 || car.pid_count > 0)  && mqtt_connected())
+        if((num_of_pids > 0 || (car.pid_count > 0 && car.car_specific_en))  && mqtt_connected())
         {
             switch(autopid_state)
             {
@@ -203,7 +333,7 @@ static void autopid_task(void *pvParameters)
                         }
                     }
 
-                    if( strlen(car.init) > 0 && car.pid_count > 0)
+                    if( (car.pid_count > 0 && car.car_specific_en) && car.init != NULL && strlen(car.init) > 0 )
                     {
                         send_commands(car.init, 100);
                         while ((xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS));
@@ -231,7 +361,7 @@ static void autopid_task(void *pvParameters)
                         response_str = cJSON_PrintUnformatted(rsp_json);
                     }
 
-                    if (response_str != NULL) 
+                    if (response_str != NULL && strlen(response_str) > 0) 
                     {
                         mqtt_publish(config_server_get_mqtt_status_topic(), response_str, 0, 0, 0);
                         free(response_str);
@@ -258,7 +388,7 @@ static void autopid_task(void *pvParameters)
                         response_str = cJSON_PrintUnformatted(rsp_json);
                     }
 
-                    if (response_str != NULL) 
+                    if (response_str != NULL && strlen(response_str) > 0) 
                     {
                         mqtt_publish(config_server_get_mqtt_status_topic(), response_str, 0, 0, 0);
                         free(response_str);
@@ -321,7 +451,7 @@ static void autopid_task(void *pvParameters)
                                         if (response_str != NULL) 
                                         {
                                             ESP_LOGI(TAG, "Expression result, Name: %s: %lf", pid_req[i].name, result);
-                                            if(strlen(pid_req[i].destination) != 0)
+                                            if(pid_req[i].destination != NULL && strlen(pid_req[i].destination) != 0)
                                             {
                                                 mqtt_publish(pid_req[i].destination, response_str, 0, 0, 0);
                                             }
@@ -343,11 +473,23 @@ static void autopid_task(void *pvParameters)
                                     else
                                     {
                                         ESP_LOGE(TAG, "Failed Expression: %s", pid_req[i].expression);
+                                        if(asprintf(&error_rsp, "{\"error\": \"Failed Expression: %s\"}", pid_req[i].expression) != -1)
+                                        {
+                                            mqtt_publish(error_topic, error_rsp, 0, 0, 0);
+                                            vTaskDelay(pdMS_TO_TICKS(10));
+                                            free(error_rsp);
+                                        }
                                     }
                                 }
                                 else
                                 {
                                     ESP_LOGE(TAG, "Timeout waiting for response for: %s", pid_req[i].pid_command);
+                                    if(asprintf(&error_rsp, "{\"error\": \"Timeout, pid: %s\"}", pid_req[i].pid_command) != -1)
+                                    {
+                                        mqtt_publish(error_topic, error_rsp, 0, 0, 0);
+                                        vTaskDelay(pdMS_TO_TICKS(10));
+                                        free(error_rsp);
+                                    }
                                     pid_no_response = 1;
                                 }
                             }
@@ -364,48 +506,87 @@ static void autopid_task(void *pvParameters)
 
                         for(uint32_t i = 0; i < car.pid_count; i++)
                         {
-                            if(car.pids[i].pid_init[0] != 0)
+                            if(car.pids[i].pid_init != NULL && strlen(car.pids[i].pid_init) > 0)
                             {
                                 elm327_process_cmd((uint8_t*)car.pids[i].pid_init , strlen(car.pids[i].pid_init), &tx_msg, &autopidQueue);
                                 ESP_LOGI(TAG, "Sending car.pids[%lu].pid_init: %s", i, car.pids[i].pid_init);
                             }
-                            elm327_process_cmd((uint8_t*)car.pids[i].pid , strlen(car.pids[i].pid), &tx_msg, &autopidQueue);
-                            ESP_LOGI(TAG, "Sending car.pids[%lu].pid: %s", i, car.pids[i].pid);
-                            if (xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS)
+                            if(car.pids[i].pid != NULL && strlen(car.pids[i].pid) > 0)
                             {
-                                double result;
-                                static char hex_rsponse[256];
-                                
-                                ESP_LOGI(TAG, "Received response for: %s", car.pids[i].pid);
-                                ESP_LOGI(TAG, "Response length: %lu", response.length);
-                                ESP_LOG_BUFFER_HEXDUMP(TAG, response.data, response.length, ESP_LOG_INFO);
-
-                                for (uint32_t j = 0; j < car.pids[i].parameter_count; j++)
+                                elm327_process_cmd((uint8_t*)car.pids[i].pid , strlen(car.pids[i].pid), &tx_msg, &autopidQueue);
+                                ESP_LOGI(TAG, "Sending car.pids[%lu].pid: %s", i, car.pids[i].pid);
+                                if (xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS)
                                 {
-                                    if(evaluate_expression((uint8_t*)car.pids[i].parameters[j].expression, response.data, 0, &result))
-                                    {
-                                        if (rsp_json != NULL) 
-                                        {
-                                            for (size_t j = 0; j < response.length; ++j) 
-                                            {
-                                                sprintf(hex_rsponse + (j * 2), "%02X", response.data[j]);
-                                            }
-                                            hex_rsponse[response.length * 2] = '\0'; 
+                                    double result;
+                                    static char hex_rsponse[256];
+                                    
+                                    ESP_LOGI(TAG, "Received response for: %s", car.pids[i].pid);
+                                    ESP_LOGI(TAG, "Response length: %lu", response.length);
+                                    ESP_LOG_BUFFER_HEXDUMP(TAG, response.data, response.length, ESP_LOG_INFO);
 
-                                            // Add the name and result to the JSON object
-                                            cJSON_AddNumberToObject(rsp_json, car.pids[i].parameters[j].name, result);
-                                            ESP_LOGI(TAG, "Expression result, Name: %s: %lf", car.pids[i].parameters[j].name, result);
+                                    for (uint32_t j = 0; j < car.pids[i].parameter_count; j++)
+                                    {
+                                        if(car.pids[i].parameters[j].expression != NULL && strlen(car.pids[i].parameters[j].expression) > 0)
+                                        {
+                                            if(evaluate_expression((uint8_t*)car.pids[i].parameters[j].expression, response.data, 0, &result))
+                                            {
+                                                if (rsp_json != NULL) 
+                                                {
+                                                    for (size_t j = 0; j < response.length; ++j) 
+                                                    {
+                                                        sprintf(hex_rsponse + (j * 2), "%02X", response.data[j]);
+                                                    }
+                                                    hex_rsponse[response.length * 2] = '\0'; 
+
+                                                    // Add the name and result to the JSON object
+                                                    cJSON_AddNumberToObject(rsp_json, car.pids[i].parameters[j].name, result);
+                                                    ESP_LOGI(TAG, "Expression result, Name: %s: %lf", car.pids[i].parameters[j].name, result);
+                                                }
+                                            }
+                                            else
+                                            {
+                                                ESP_LOGE(TAG, "Failed Expression: %s", car.pids[i].parameters[j].expression);
+                                                if(asprintf(&error_rsp, "{\"error\": \"Failed Expression: %s\"}", car.pids[i].parameters[j].expression) != -1)
+                                                {
+                                                    mqtt_publish(error_topic, error_rsp, 0, 0, 0);
+                                                    vTaskDelay(pdMS_TO_TICKS(10));
+                                                    free(error_rsp);
+                                                }
+                                            }
+                                        }
+                                        else
+                                        {
+                                            ESP_LOGE(TAG, "Failed Expression: %s", car.pids[i].parameters[j].expression);
+                                            if(asprintf(&error_rsp, "{\"error\": \"Failed Expression: %s\"}", car.pids[i].parameters[j].expression) != -1)
+                                            {
+                                                mqtt_publish(error_topic, error_rsp, 0, 0, 0);
+                                                vTaskDelay(pdMS_TO_TICKS(10));
+                                                free(error_rsp);
+                                            }
                                         }
                                     }
-                                    else
+                                }
+                                else
+                                {
+                                    ESP_LOGE(TAG, "Timeout waiting for response for: %s", car.pids[i].pid);
+                                    if(asprintf(&error_rsp, "{\"error\": \"Timeout, pid: %s\"}", car.pids[i].pid) != -1)
                                     {
-                                        ESP_LOGE(TAG, "Failed Expression: %s", car.pids[i].parameters[j].expression);
+                                        mqtt_publish(error_topic, error_rsp, 0, 0, 0);
+                                        vTaskDelay(pdMS_TO_TICKS(10));
+                                        free(error_rsp);
                                     }
+                                    pid_no_response = 1;
                                 }
                             }
                             else
                             {
-                                ESP_LOGE(TAG, "Timeout waiting for response for: %s", car.pids[i].pid);
+                                ESP_LOGE(TAG, "PID Error");
+                                if(asprintf(&error_rsp, "{\"error\": \"PID Error\"}") != -1)
+                                {
+                                    mqtt_publish(error_topic, error_rsp, 0, 0, 0);
+                                    vTaskDelay(pdMS_TO_TICKS(10));
+                                    free(error_rsp);
+                                }
                                 pid_no_response = 1;
                             }
                         }
@@ -415,14 +596,7 @@ static void autopid_task(void *pvParameters)
                             response_str = cJSON_PrintUnformatted(rsp_json);
                             if (response_str != NULL) 
                             {
-                                if(car.destination == NULL)
-                                {
-                                    mqtt_publish(config_server_get_mqtt_rx_topic(), response_str, 0, 0, 0);
-                                }
-                                else
-                                {
-                                    mqtt_publish(car.destination, response_str, 0, 0, 0);
-                                }
+                                mqtt_publish(car.destination, response_str, 0, 0, 0);
                                 free(response_str);
                             }
                             cJSON_Delete(rsp_json);
@@ -438,7 +612,7 @@ static void autopid_task(void *pvParameters)
                     break;
                 }
             }
-            vTaskDelay(pdMS_TO_TICKS(1));
+            vTaskDelay(pdMS_TO_TICKS(10));
         }
         else
         {
@@ -459,9 +633,9 @@ static void autopid_load_config(char *config_str)
         ESP_LOGE(TAG, "Failed to parse config string");
         return;
     }
-    ESP_LOGE(TAG, "Successfully parsed json config string");
+    ESP_LOGI(TAG, "Successfully parsed json config string");
     cJSON *init = cJSON_GetObjectItem(config_str_json, "initialisation");
-    if (cJSON_IsString(init) && (init->valuestring != NULL)) 
+    if (cJSON_IsString(init) && (init->valuestring != NULL) && strlen(init->valuestring)) 
     {
         size_t len = strlen(init->valuestring) + 1; // +1 for the null terminator
         initialisation = (char*)malloc(len);
@@ -490,7 +664,7 @@ static void autopid_load_config(char *config_str)
     }
 
     cJSON *car_model = cJSON_GetObjectItem(config_str_json, "car_model");
-    if (cJSON_IsString(car_model) && (car_model->valuestring != NULL)) 
+    if (cJSON_IsString(car_model) && (car_model->valuestring != NULL) && strlen(car_model->valuestring) > 0) 
     {
         size_t len = strlen(car_model->valuestring) + 1; // +1 for the null terminator
         car.selected_car_model = (char*)malloc(len);
@@ -501,7 +675,7 @@ static void autopid_load_config(char *config_str)
             return;
         }
         strncpy(car.selected_car_model, car_model->valuestring, len);
-        ESP_LOGI(TAG, "car.selected_car_model: %s", car.selected_car_model);
+        ESP_LOGI(TAG, "car.selected_car_model: %s, %u", car.selected_car_model, len);
     }
     else
     {
@@ -509,7 +683,7 @@ static void autopid_load_config(char *config_str)
     }
     
     cJSON *destination = cJSON_GetObjectItem(config_str_json, "destination");
-    if (cJSON_IsString(destination) && (destination->valuestring != NULL)) 
+    if (cJSON_IsString(destination) && (destination->valuestring != NULL) && strlen(destination->valuestring)) 
     {
         size_t len = strlen(destination->valuestring) + 1; // +1 for the null terminator
         car.destination = (char*)malloc(len);
@@ -524,7 +698,7 @@ static void autopid_load_config(char *config_str)
     }
     else
     {
-        car.destination = NULL;
+        car.destination = config_server_get_mqtt_rx_topic();
     }
 
     cJSON *car_specific = cJSON_GetObjectItem(config_str_json, "car_specific");
@@ -538,8 +712,19 @@ static void autopid_load_config(char *config_str)
         car.car_specific_en = 0;
     }
 
+    cJSON *ha_discovery = cJSON_GetObjectItem(config_str_json, "ha_discovery");
+    if (cJSON_IsString(ha_discovery) && (ha_discovery->valuestring != NULL)) 
+    {
+        car.ha_discovery_en = (strcmp(ha_discovery->valuestring, "enable") == 0) ? 1 : 0;
+        ESP_LOGI(TAG, "car.ha_discovery_en: %u", car.ha_discovery_en);
+    }
+    else
+    {
+        car.ha_discovery_en = 0;
+    }
+
     cJSON *grouping = cJSON_GetObjectItem(config_str_json, "grouping");
-    if (cJSON_IsString(grouping) && (grouping->valuestring != NULL)) 
+    if (cJSON_IsString(grouping) && (grouping->valuestring != NULL) && strlen(grouping->valuestring) > 0) 
     {
         size_t len = strlen(grouping->valuestring) + 1; // +1 for the null terminator
         car.grouping = (char*)malloc(len);
@@ -558,7 +743,7 @@ static void autopid_load_config(char *config_str)
     }
 
     cJSON *cycle = cJSON_GetObjectItem(config_str_json, "cycle");
-    if (cJSON_IsString(cycle) && (cycle->valuestring != NULL)) 
+    if (cJSON_IsString(cycle) && (cycle->valuestring != NULL) && strlen(cycle->valuestring) > 0) 
     {
         int cycle_val = atoi(cycle->valuestring);
         if (cycle_val >= 0) 
@@ -570,6 +755,10 @@ static void autopid_load_config(char *config_str)
         {
             car.cycle = 5000;
             ESP_LOGW(TAG, "Invalid cycle value, defaulting to 5000");
+        }
+        if(car.cycle < 1000)
+        {
+            car.cycle = 1000;
         }
     }
     else
@@ -618,25 +807,25 @@ static void autopid_load_config(char *config_str)
         cJSON *send_to = cJSON_GetObjectItem(pid_item, "Send_to");
         cJSON *type = cJSON_GetObjectItem(pid_item, "Type");
 
-        if (cJSON_IsString(name) && name->valuestring)
+        if (cJSON_IsString(name) && name->valuestring && strlen(name->valuestring) > 0)
         {
             pid_req[i].name = strdup(name->valuestring);
         }
         else
         {
-            pid_req[i].name = strdup("");  // Assign an empty string if not available
+            pid_req[i].name = NULL;  // Assign an empty string if not available
         }
 
-        if (cJSON_IsString(pid_init) && pid_init->valuestring)
+        if (cJSON_IsString(pid_init) && pid_init->valuestring && strlen(pid_init->valuestring))
         {
             pid_req[i].pid_init = strdup(pid_init->valuestring);
         }
         else
         {
-            pid_req[i].pid_init = strdup("");  // Assign an empty string if not available
+            pid_req[i].pid_init = NULL;  // Assign an empty string if not available
         }
 
-        if (cJSON_IsString(pid_command) && pid_command->valuestring)
+        if (cJSON_IsString(pid_command) && pid_command->valuestring && strlen(pid_command->valuestring))
         {
             pid_req[i].pid_command = malloc(strlen(pid_command->valuestring) + 2); // +2 for "\r\0"
             if (pid_req[i].pid_command != NULL)
@@ -647,33 +836,37 @@ static void autopid_load_config(char *config_str)
         }
         else
         {
-            pid_req[i].pid_command = strdup("");  // Assign an empty string if not available
+            pid_req[i].pid_command = NULL;  // Assign an empty string if not available
         }
 
-        if (cJSON_IsString(expression) && expression->valuestring)
+        if (cJSON_IsString(expression) && expression->valuestring && strlen(expression->valuestring) > 0)
         {
             pid_req[i].expression = strdup(expression->valuestring);
         }
         else
         {
-            pid_req[i].expression = strdup("");  // Assign an empty string if not available
+            pid_req[i].expression = NULL;  // Assign an empty string if not available
         }
 
-        if (cJSON_IsString(send_to) && send_to->valuestring)
+        if (cJSON_IsString(send_to) && send_to->valuestring && strlen(send_to->valuestring) > 0)
         {
             pid_req[i].destination = strdup(send_to->valuestring);
         }
         else
         {
-            pid_req[i].destination = strdup("");  // Assign an empty string if not available
+            pid_req[i].destination = NULL;  // Assign an empty string if not available
         }
 
-        if (cJSON_IsString(period) && period->valuestring)
+        if (cJSON_IsString(period) && period->valuestring && strlen(period->valuestring) > 0)
         {
             pid_req[i].period = (uint32_t)strtoul(period->valuestring, NULL, 10);
         }
+        else
+        {
+            pid_req[i].period = 5000;
+        }
 
-        if (cJSON_IsString(type) && type->valuestring)
+        if (cJSON_IsString(type) && type->valuestring && strlen(type->valuestring) > 0)
         {
             pid_req[i].type = (strcmp(type->valuestring, "MQTT_Topic") == 0) ? 0 : 1;  // 0 for MQTT, 1 for file
         }
@@ -845,6 +1038,16 @@ static void autopid_load_car_specific(char* car_mod)
                                 car.pids[i].parameters[j].unit = strdup("");  // Assign an empty string if not available
                             }
                             
+                            // Parse class
+                            cJSON *class = cJSON_GetObjectItemCaseSensitive(parameter_item, "class");
+                            if (cJSON_IsString(class) && (class->valuestring != NULL))
+                            {
+                                car.pids[i].parameters[j].class = strdup(class->valuestring);
+                            }
+                            else
+                            {
+                                car.pids[i].parameters[j].class = strdup("");  // Assign an empty string if not available
+                            }
                             j++;
                         }
                     }
@@ -860,28 +1063,29 @@ static void autopid_load_car_specific(char* car_mod)
     // Free JSON string buffer and cJSON object
     free(json_string);
     cJSON_Delete(json);
+
+    ESP_LOGI(TAG, "Car Model: %s", car.car_model);
+    ESP_LOGI(TAG, "Init Command: %s", car.init);
+    for (int i = 0; i < car.pid_count; i++)
+    {
+        ESP_LOGI(TAG, "PID: %s", car.pids[i].pid);
+        for (int j = 0; j < car.pids[i].parameter_count; j++)
+        {
+            ESP_LOGI(TAG, "  Parameter Name: %s", car.pids[i].parameters[j].name);
+            ESP_LOGI(TAG, "  Expression: %s", car.pids[i].parameters[j].expression);
+            ESP_LOGI(TAG, "  Unit: %s", car.pids[i].parameters[j].unit);
+        }
+    }
 }
 
-void autopid_init(char *config_str)
+void autopid_init(char* id, char *config_str)
 {
+    device_id = id;
     autopid_load_config(config_str);
     // char *desired_car_model = "Toyota Camry";
-    if(car.selected_car_model != NULL)
+    if(car.car_specific_en && car.selected_car_model != NULL)
     {
         autopid_load_car_specific(car.selected_car_model);
-
-        ESP_LOGI(TAG, "Car Model: %s", car.car_model);
-        ESP_LOGI(TAG, "Init Command: %s", car.init);
-        for (int i = 0; i < car.pid_count; i++)
-        {
-            ESP_LOGI(TAG, "PID: %s", car.pids[i].pid);
-            for (int j = 0; j < car.pids[i].parameter_count; j++)
-            {
-                ESP_LOGI(TAG, "  Parameter Name: %s", car.pids[i].parameters[j].name);
-                ESP_LOGI(TAG, "  Expression: %s", car.pids[i].parameters[j].expression);
-                ESP_LOGI(TAG, "  Unit: %s", car.pids[i].parameters[j].unit);
-            }
-        }
     }
     else
     {

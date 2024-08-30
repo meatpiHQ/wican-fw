@@ -1,0 +1,17 @@
+{
+    "car_model": "BMW: i3",
+    "init": "ATAT0;ATCEA07;ATTAF1;ATFCSH6F1;ATSH6F1;ATFCSD07300000;ATFCSM1;ATCRA607;",
+    "pids": [
+        {
+            "pid": "22DDBC3",
+            "parameters": [
+                {
+                    "name": "SoC",
+                    "expression": "[B11:B12]/10",
+                    "unit": "%",
+                    "class": "battery"
+                }
+            ]
+        }
+    ]
+}

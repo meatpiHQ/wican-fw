@@ -54,6 +54,7 @@ typedef struct
     char *name;
     char *expression;
     char *unit;
+    char *class;
 } parameter_data_t;
 
 typedef struct
@@ -76,9 +77,10 @@ typedef struct
     char* grouping;
     uint32_t cycle;
     uint8_t car_specific_en;
+    uint8_t ha_discovery_en;
 } car_model_data_t;
 
 
 void autopid_parser(char* str, uint32_t len, QueueHandle_t *q);
-void autopid_init(char *config_str);
+void autopid_init(char* id, char *config_str);
 #endif

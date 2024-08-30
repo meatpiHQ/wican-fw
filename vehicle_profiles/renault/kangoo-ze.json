@@ -1,0 +1,17 @@
+{
+    "car_model": "Renault: Kangoo Z.E",
+    "init": "ATSP6;",
+    "pids": [
+        {
+            "pid": "222002",
+            "parameters": [
+                {
+                    "name": "SoC",
+                    "expression": "((B4*256)+B5)/50",
+                    "unit": "%",
+                    "class": "battery"
+                }
+            ]
+        }
+    ]
+}

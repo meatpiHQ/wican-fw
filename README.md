@@ -5,11 +5,20 @@
 ## MeatPi [Discord server](https://discord.com/invite/2hpHVDmyfw)
 ## Please update to the [latest firmware version](https://github.com/meatpiHQ/wican-fw/releases/)
 
-## Order on [**Mouser**](https://www.mouser.com/c/?m=MeatPi) or [**Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics/wican)
+## Order on [**Mouser**](https://www.mouser.com/c/?m=MeatPi) or [**Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics)
 
 <br/><br/>
 
 ---
+# WiCAN PRO
+
+### Launching soon! If you would like to support this project, please subscribe for updates on [**Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics/wican-pro)
+
+![image](https://github.com/meatpiHQ/wican-fw/assets/94690098/1648a50f-d5a4-40fc-9794-78b8b57ccc0d)
+
+
+# WiCAN
+
 ![65465](https://github.com/meatpiHQ/wican-fw/assets/94690098/537b5062-cb8a-485f-9354-6c351d08aa49)
 
 ## WiCAN-USB Pinout
@@ -86,8 +95,8 @@
 
 # **Build**:
 
-1. Install ESP-IDF v4.4.
-2. Clone porject.
+1. Install ESP-IDF >= v5.1.
+2. Clone project.
 3. Open project and build.
 
 # **Description**:
@@ -180,9 +189,19 @@ You need to download the right version of BUSMaster provided in this [**Link**](
 <img src="https://user-images.githubusercontent.com/94690098/158798541-0317aa4f-ebf5-4e57-83b0-ea3fefeaf4e9.png" width="350" height="500" >
 
 ## 3. RealDash
-WiCAN can connect with RealDash using WiFi or BLE or USB. The Protocol and CAN bitrate must be set using the configuration page. BLE is only support on Android and IOS. Windows 10 only supports WiFi connection.
+WiCAN-OBD and WiCAN-USB can connect with RealDash using either WiFi or BLE. **The protocol and CAN bitrate must be set using the configuration page**. BLE is supported only on Android and iOS. Windows 10 supports only WiFi connections. Additionally, _WiCAN-USB can connect using the USB interface_.
 
-## **WiFi Device Configuration:**
+### USB Device Configuration (WiCAN-USB only):
+1. Go to garage then click on the dashboard.
+2. Click Add connection.
+3. Select Adapter (CAN/LIN)
+4. Select RealDash CAN
+5. Select SERIAL/USB
+6. Select device
+7. Set Baud RATE: 4000000 (This is the usb/serial buadrate not the CAN bitrate)
+8. Click next then Done
+   
+### WiFi Device Configuration:
 
 1. Go to configuration webpage.
 2. Select the baudrate
@@ -190,7 +209,7 @@ WiCAN can connect with RealDash using WiFi or BLE or USB. The Protocol and CAN b
 4. Set "Protocol" = reladash 66
 5. Click submit changes.
 
-## **RealDash Configuration**
+### RealDash Configuration:
 1. Go to garage then click on the dashboard.
 2. Click Add connection.
 3. Select Adapter (CAN/LIN)
@@ -199,7 +218,7 @@ WiCAN can connect with RealDash using WiFi or BLE or USB. The Protocol and CAN b
 6. Enter IP and Port
 7. Click Done
 
-## **BLE Device Configuration:**
+### BLE Device Configuration:
 
 **If you're using firmware verion v1.64 or below please update to the [latest version](https://github.com/meatpiHQ/wican-fw/releases/) before enabling BLE**
 
@@ -354,7 +373,7 @@ This feature enables you to convert CAN messages into JSON format, apply calcula
 
 **Note: When a filter is added, all other CAN messages will be ignored, ensuring that only the configured filtered messages are sent.**
 
-![image](https://github.com/meatpiHQ/wican-fw/assets/94690098/a6588895-504e-48ef-9d3b-c595ced52ebd)
+<img width="1496" alt="image" src="https://github.com/meatpiHQ/wican-fw/assets/94690098/18e87820-2b5f-4823-947d-0d1c412a6e3d">
 
 
 ### Configuration Parameters:
@@ -367,6 +386,9 @@ Specify the JSON key under which the extracted value will be stored.
 
 **PID: PID Number in DEC**
 If the frame is a response to a PID request, set this parameter to the relevant PID number. Otherwise, for non-PID frames, it should be set to -1.
+
+**Index: PID index**
+For all standard PID requests, this should be set to 2, referring to byte 2 in the response. In certain special cases, this value may differ from 2. If the PID is set to -1, the interpreter will disregard this value.
 
 **Start Bit**
 Indicate the bit from which you want to commence extracting the value. For instance, if Byte 0 is represented as 0xA0 in binary (b1010 0000), 'Bit 0' would correspond to 1, 'Bit 1' to 0, and so forth.
@@ -398,7 +420,7 @@ Name|CAN ID| Byte 0 | Byte 1 | Byte 2 | Byte 3 | Byte 4 | Byte 5 | Byte 6 | Byte
 Engine Speed|2024| 4| 65| **12**| _18_| _52_| 170| 170| 170
 | |  |  | | PID| Value 1| Value 2  |  |  
 
-The Engine Speed is PID response so "PID" must be set 12. The value we need to extract is 16bit in Byte 3 and Byte 4. So we set the "Start Bit" to 24 and "Bit Length" to 16. The extracted value will be (11*256)+68 = 4660. Now to get the engine speed in rpm we must multiple by 0.25. So the "Expression" will be V*0.25= 1165
+The Engine Speed is PID response so "PID" must be set 12. The value we need to extract is 16bit in Byte 3 and Byte 4. So we set the "Start Bit" to 24 and "Bit Length" to 16. The extracted value will be (11 * 256)+68 = 4660. Now to get the engine speed in rpm we must multiple by 0.25. So the "Expression" will be V * 0.25= 1165
 
 Name|CAN ID| Byte 0 | Byte 1 | Byte 2 | Byte 3 | Byte 4 | Byte 5 | Byte 6 | Byte 7 
 ---|--- | --- | --- | --- |--- |--- |--- |--- |---
@@ -415,9 +437,55 @@ Custom ID|356| 170| 170| _35_| _16_|170| 170| 170| 170
 
 The PID in the configuration needs to set to -1. The value we need to extract is 16bit in Byte 2 and Byte 3. So we set the "Start Bit" to 16 and "Bit Length" to 16. The extracted value will be (35*256)+16 = 8976. Now to get the value we must add 10 to the Value and divide by 2.5. So the "Expression" will be (V+10)/2.5 = 3594.4
 
+Name|CAN ID| Byte 0 | Byte 1 | Byte 2 | Byte 3 | Byte 4 | Byte 5 | Byte 6 | Byte 7 
+---|--- | --- | --- | --- |--- |--- |--- |--- |---
+Custom ID|355| 170| 170| 170| 170|_5_| _34_| 170| 170
+
+The PID in the configuration should be set to -1. The values to extract are from Byte 4 and Byte 5. The formula used here is (5 + 34)/2, so the expression to set is (B4 + B5)/2.
 
 # Home Assistant
 
+WiCAN seamlessly integrates with Home Assistant via the MQTT protocol, automatically retrieving vehicle data and publishing it. Sensors are created in Home Assistant without any manual intervention, making setup effortless.
+
+**Note:** The [WiCAN PRO](https://www.crowdsupply.com/meatpi-electronics/wican-pro) model supports more car models.
+
+<img width="394" alt="image" src="https://github.com/user-attachments/assets/75460d61-3656-4458-aeca-0f8a3657d6ad">
+
+### Getting Started Guide
+
+1. **Install the Home Assistant [Mosquitto broker add-on](https://github.com/home-assistant/addons/blob/master/mosquitto/DOCS.md).**
+
+2. **Create a new Home Assistant user account for WiCAN.**  
+   The credentials for this account will be used to configure the MQTT settings in WiCAN.
+
+3. **Connect to the WiCAN access point** (WiCAN_xxxxxxxxxxxx).  
+   Open a web browser and navigate to [http://192.168.80.1/](http://192.168.80.1/).
+
+4. **Set the "Mode" to AP+Station.**
+
+5. **Enter your home WiFi network SSID and password.**
+
+6. **Enable [MQTT](#mqtt)** and enter the Home Assistant credentials created in step 2.
+
+7. **Go to the "Automate" tab and enable "Vehicle Specific".**
+
+8. **Select your vehicle model from the dropdown list.**  
+   If the list is empty, download the latest [vehicle profiles file](https://github.com/meatpiHQ/wican-fw/blob/main/vehicle_profiles.json) and upload it using the "Choose File" button.
+
+9. **If your vehicle isn't supported,** open an issue on GitHub, and I’ll assist you in creating a new vehicle profile if possible.
+
+10. **Enable "Home Assistant Discovery".**  
+    This will automatically create sensors in Home Assistant.
+
+11. **Fill in the "Destination Topic" and "Cycle Time".**  
+    - **Destination Topic:** The MQTT topic where WiCAN will publish the vehicle data.  
+    - **Cycle Time:** Defines how frequently WiCAN will pull and publish the vehicle parameters to Home Assistant.
+
+12. **Press the "Store" button and reboot the device** for the changes to take effect.
+
+--- 
+
+### ---Deprecated method---
 ### 1. EV Battery Examples [Wiki Page](https://github.com/meatpiHQ/wican-fw/wiki/EV-Battery-SoC-in-Home-Assistant-%E2%80%90-Example)
 In this example, we will learn how to set up Home Assistant to request the battery State of Charge (SoC) without using Node-RED. This example has been tested on an ORA Funky Cat vehicle and can also serve as a reference for requesting other Parameter IDs (PIDs) in addition to SoC. EV Battery Examples [Wiki Page](https://github.com/meatpiHQ/wican-fw/wiki/EV-Battery-SoC-in-Home-Assistant-%E2%80%90-Example)
 

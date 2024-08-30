@@ -1,0 +1,59 @@
+{
+    "title": "WiCan Vehicle Profile",
+    "description": "Data about various models of cars and their settings",
+    "type": "object",
+    "properties": {
+        "car_model": {
+            "description": "Name of car model, should include Make and Model(s)",
+            "type": "string"
+        },
+        "init": {
+            "description": "Init String, don't forget the final ;",
+            "type": "string"
+        },
+        "pids": {
+            "description": "Array of PID's and their parameters",
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "type": "object",
+                "required": ["pid"],
+                "properties": {
+                    "pid": {
+                        "description": "The PID for this group of parameters",
+                        "type": "string"
+                    },
+                    "parameters": {
+                        "description": "Array of Parameters for this PID",
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                            "type": "object",
+                            "required": ["name", "expression", "unit", "class"],
+                            "properties": {
+                                "name": {
+                                    "description": "Used in MQTT JSON, no spaces",
+                                    "type": "string"
+                                },
+                                "expression": {
+                                    "description": "Expression to calculate value",
+                                    "type": "string"
+                                },
+                                "unit": {
+                                    "description": "Unit for this  parameter",
+                                    "type": "string"
+                                },
+                                "class": {
+                                    "description": "Class of sensor, See Home Assistant sensor classes",
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "additionalProperties": false,
+    "required": [ "car_model", "init", "pids"]
+}

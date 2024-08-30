@@ -87,6 +87,9 @@ static uint8_t protocol = SLCAN;
 int FTP_TASK_FINISH_BIT = BIT2;
 EventGroupHandle_t xEventTask;
 static uint8_t mqtt_elm327_log_en = 0;
+static uint8_t derived_mac_addr[6] = {0};
+static uint8_t uid[33];
+static uint8_t ble_uid[33];
 
 static void log_can_to_mqtt(twai_message_t *frame, uint8_t type)
 {
@@ -414,9 +417,7 @@ static void can_rx_task(void *pvParameters)
         vTaskDelay(pdMS_TO_TICKS(1));
 	}
 }
-static uint8_t derived_mac_addr[6] = {0};
-static uint8_t uid[33];
-static uint8_t ble_uid[33];
+
 void app_main(void)
 {
 	vTaskDelay(pdMS_TO_TICKS(1000));
@@ -597,7 +598,7 @@ void app_main(void)
 		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
 		
 		elm327_init(&autopid_parser, &xmsg_obd_rx_queue, NULL);
-		autopid_init(config_server_get_auto_pid());
+		autopid_init((char*)&uid[0], config_server_get_auto_pid());
 	}
 
 	if(config_server_mqtt_en_config())

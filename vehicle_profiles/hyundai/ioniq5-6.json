@@ -1,0 +1,136 @@
+{
+  "car_model": "Hyundai: Ioniq5/Ioniq6/Kona",
+  "init": "ATSH7E4;ATST96;",
+  "pids": [
+    {
+      "pid": "2201019",
+      "parameters": [
+        {
+          "name": "SOC_BMS",
+          "expression": "B10/2",
+          "unit": "%",
+          "class": "battery"
+        },
+        {
+          "name": "Max_REGEN",
+          "expression": "[B11:B12]/100",
+          "unit": "kW",
+          "class": "power"
+        },
+        {
+          "name": "Max_Power",
+          "expression": "[B13:B14]/100",
+          "unit": "kW",
+          "class": "power"
+        },
+        {
+          "name": "Batt_Current",
+          "expression": "(65536-([B17:B18]))/10",
+          "unit": "A",
+          "class": "current"
+        },
+        {
+          "name": "HV_Volts",
+          "expression": "[B19:B20]/10",
+          "unit": "V",
+          "class": "voltage"
+        },
+        {
+          "name": "Batt_MaxT",
+          "expression": "B21",
+          "unit": "°C",
+          "class": "temperature"
+        },
+        {
+          "name": "Batt_MinT",
+          "expression": "B22",
+          "unit": "°C",
+          "class": "temperature"
+        },
+        {
+          "name": "Batt_Temp_1",
+          "expression": "B23",
+          "unit": "°C",
+          "class": "temperature"
+        },
+        {
+          "name": "Batt_Temp_2",
+          "expression": "B25",
+          "unit": "°C",
+          "class": "temperature"
+        },
+        {
+          "name": "Batt_Temp_3",
+          "expression": "B26",
+          "unit": "°C",
+          "class": "temperature"
+        },
+        {
+          "name": "Batt_Temp_4",
+          "expression": "B27",
+          "unit": "°C",
+          "class": "temperature"
+        },
+        {
+          "name": "Batt_Temp_5",
+          "expression": "B28",
+          "unit": "°C",
+          "class": "temperature"
+        },
+        {
+          "name": "Batt_InletT",
+          "expression": "B30",
+          "unit": "°C",
+          "class": "temperature"
+        },
+        {
+          "name": "Max_Cell_V",
+          "expression": "B31/50",
+          "unit": "V",
+          "class": "voltage"
+        },
+        {
+          "name": "Max_Cell_V_No",
+          "expression": "B33",
+          "unit": "none",
+          "class": "none"
+        },
+        {
+          "name": "Min_Cell_V",
+          "expression": "B34/50",
+          "unit": "V",
+          "class": "voltage"
+        },
+        {
+          "name": "Min_Cell_V_No",
+          "expression": "B35",
+          "unit": "none",
+          "class": "none"
+        },
+        {
+          "name": "Aux_Batt_Volts",
+          "expression": "B38*0.1",
+          "unit": "V",
+          "class": "voltage"
+        }
+      ]
+    },
+    {
+      "pid": "2201057",
+      "parameters": [
+        {
+          "name": "SOH",
+          "expression": "[B34:B35]/10",
+          "unit": "%",
+          "class": "battery"
+        },
+        {
+          "name": "SOC_D",
+          "expression": "B41/2",
+          "unit": "%",
+          "class": "battery"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "wican-fw-vehicle_profiles",
+  "version": "0.1.0",
+  "description": "merge all the different json files",
+  "main": "merge.js",
+  "scripts": {
+    "build": "node merge.js",
+    "validate": "node validate.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "jay-oswald",
+  "type": "module",
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "glob": "^11.0.0"
+  }
+}

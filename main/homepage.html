@@ -49,7 +49,6 @@
 	td {
 		border-collapse: collapse;
 		border-spacing: 0;
-		width: 350px;
 		text-align: left;
 		padding: 8px;
 	}
@@ -609,7 +608,7 @@
 
 		<table>
 			<tr>
-				<td><label for="car_specific"><strong>Car Specific:</strong></label></td>
+				<td><label for="car_specific"><strong>Vehicle Specific:</strong></label></td>
 				<td>		<select id="car_specific" name="car_specific" onchange="toggleCarModel(); toggleDestinationAndCycle(); enableAutoStoreButton();">
 					<option value="enable">Enable</option>
 					<option value="disable">Disable</option>
@@ -617,9 +616,16 @@
 				</select></td>
 			</tr>
 			<tr>
-				<td><label for="car_model"><strong>Car Model:</strong></label></td>
+				<td><label for="car_model"><strong>Vehicle Model:</strong></label></td>
 				
 				<td><select id="car_model" name="car_model" onchange="enableAutoStoreButton()">
+				</select></td>
+			</tr>
+			<tr>
+				<td><label for="ha_discovery"><strong>Home Assistant Discovery:</strong></label></td>
+				<td>		<select id="ha_discovery" name="ha_discovery" onchange="checkForDuplicates(); toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();">
+					<option value="disable">Disable</option>
+					<option value="enable">Enable</option>
 				</select></td>
 			</tr>
 			<tr>
@@ -640,10 +646,12 @@
 				<td><input type="text" id="pid_cycle" name="pid_cycle" disabled oninput="enableAutoStoreButton()"></td>
 			</tr>
 			<tr>
-				<td>        <form id="car_data_form" enctype="multipart/form-data">
-					<input id="car_data_file" name="car_data_file" type="file" />
-				</form></td>
-				<td><input id="car_data_submit_button" type="button" value="Update Car Data" onclick="sendCARDataFile()" /></td>
+				<td><label for="vehicle_profiles"><strong>Vehicle Profiles:</strong> </label></td>
+				<td>
+					<form id="car_data_form" enctype="multipart/form-data">
+						<input id="car_data_file" name="car_data_file" type="file" onchange="sendCARDataFile()" />
+					</form>
+				</td>
 			</tr>
 			<tr>
 				<td><button class="store" onclick="storeAutoTableData()" disabled>Store</button></td> 
@@ -811,6 +819,7 @@
             } else {
                 carModelSelect.disabled = false;
             }
+			toggleDiscovery();
         }
 
         function toggleDestinationAndCycle() {
@@ -818,7 +827,7 @@
 			const grouping = document.getElementById("grouping").value;
 			const destinationField = document.getElementById("destination");
 			const cycleField = document.getElementById("pid_cycle");
-
+			
 			if (carSpecific === "enable" || grouping === "Group ALL") {
 				destinationField.disabled = false;
 				cycleField.disabled = false;
@@ -827,6 +836,18 @@
 				cycleField.disabled = true;
 			}
         }
+		
+		function toggleDiscovery() {
+			const carSpecific = document.getElementById("car_specific").value;
+			const discovery = document.getElementById("ha_discovery");
+
+			if (carSpecific === "enable"){
+				discovery.disabled = false;
+			}else{
+				discovery.disabled = true;
+				discovery.value = "disable";
+			}
+		}
 		
         function txCheckBoxChanged() {
             if (document.getElementById("mqtt_tx_en_checkbox").checked) {
@@ -837,31 +858,60 @@
         }
 		
 		function sendCARDataFile() {
+			const fileInput = document.getElementById("car_data_file");
+			const maxFileSize = 200 * 1024; // 200KB in bytes
 
-			if(document.getElementById("car_data_file").files.length == 0) {
+			if (fileInput.files.length == 0) {
 				document.getElementById("ret_msg").style.color = "red";
 				document.getElementById("ret_msg").innerHTML = "No files selected!";
 				alert("No files selected!");
-			}else{
-				const form = document.getElementById('car_data_form');
-				const formData = new FormData(form);
-				document.getElementById("ret_msg").innerHTML = "";
-				document.getElementById("car_data_submit_button").disabled = true;
-				fetch('/upload/car_data.json', {
-					method: 'POST',
-					body: formData
-				})
-				.then(response => response.text())
-				.then(data => {
-					console.log('Success:', data);
+			} else {
+				const file = fileInput.files[0];
+
+				if (file.size > maxFileSize) {
 					document.getElementById("ret_msg").style.color = "red";
-					document.getElementById("ret_msg").innerHTML = data;
-					// Update car models based on the response if needed
-					// loadCarModels(data);
-				})
+					document.getElementById("ret_msg").innerHTML = "File size exceeds 200KB!";
+					alert("File size exceeds 200KB!");
+					return;
+				}
+
+				const reader = new FileReader();
+				reader.onload = function(event) {
+					try {
+						JSON.parse(event.target.result);
+						// If parsing is successful, proceed with the upload
+						const form = document.getElementById('car_data_form');
+						const formData = new FormData(form);
+						document.getElementById("ret_msg").innerHTML = "";
+
+						fetch('/upload/car_data.json', {
+							method: 'POST',
+							body: formData
+						})
+						.then(response => response.text())
+						.then(data => {
+							console.log('Success:', data);
+							document.getElementById("ret_msg").style.color = "red";
+							document.getElementById("ret_msg").innerHTML = data;
+							// Delay the page refresh by 2 seconds
+							setTimeout(() => {
+								window.location.reload();
+							}, 2000); // 2000 milliseconds = 2 seconds
+						})
+						.catch(error => {
+							console.error('Error:', error);
+						});
+					} catch (e) {
+						document.getElementById("ret_msg").style.color = "red";
+						document.getElementById("ret_msg").innerHTML = "Invalid JSON file!";
+						alert("The selected file is not a valid JSON file!");
+					}
+				};
+
+				// Read the file as text
+				reader.readAsText(file);
 			}
 		}
-
 
         function loadAutoTable(jsonData) {
             const data = JSON.parse(jsonData);
@@ -871,6 +921,7 @@
 			const destination = data.destination;
 			const cycle = data.cycle;
 			const carSpecific = data.car_specific;
+			const ha_discovery = data.ha_discovery;
 			const carModel = data.car_model;
 			const pids = data.pids;
 			const table = document.getElementById("automate_table").getElementsByTagName('tbody')[0];
@@ -879,6 +930,11 @@
 				document.getElementById("car_specific").value = "disable";
 			}else{
 				document.getElementById("car_specific").value = carSpecific;
+			}
+			if(ha_discovery != "enable"){
+				document.getElementById("ha_discovery").value = "disable";
+			}else{
+				document.getElementById("ha_discovery").value = ha_discovery;
 			}
 			if(grouping != "enable"){
 				document.getElementById("grouping").value = "disable";
@@ -999,6 +1055,7 @@
         function storeAutoTableData() {
             const initialisationValue = document.getElementById("initialisation").value;
             const groupingValue = document.getElementById("grouping").value;
+			const ha_discoveryValue = document.getElementById("ha_discovery").value;
             const destinationValue = document.getElementById("destination").value;
 			const cycleField = document.getElementById("pid_cycle");
             const cycleValue = document.getElementById("pid_cycle").value;
@@ -1089,6 +1146,7 @@
                 destination: destinationValue,
                 cycle: cycleValue,
                 car_specific: carSpecificValue,
+				ha_discovery: ha_discoveryValue,
                 car_model: carModelValue,
                 pids: data
             });

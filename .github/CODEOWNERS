@@ -1,0 +1,7 @@
+# @meatpiHQ Ownes everything by default
+* @meatpiHQ
+
+# @jay-oswald owns the vehicle_profiles JS + Action
+.vehicle_profiles/ @jay-oswald
+.github/workflows/vehicle_profiles.yml @jay-oswald
+.github/workflows/vehicle_profiles_validate.yml @jay-oswald
