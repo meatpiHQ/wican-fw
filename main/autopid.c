@@ -880,6 +880,7 @@ static void autopid_load_config(char *config_str)
 static void autopid_load_car_specific(char* car_mod)
 {
     const char *filepath = "/spiffs/car_data.json";
+    uint8_t car_found_flag = 0;
     
     FILE *fd = fopen(filepath, "r");
     if (fd == NULL)
@@ -1054,7 +1055,7 @@ static void autopid_load_car_specific(char* car_mod)
                     i++;
                 }
             }
-
+            car_found_flag = 1;
             // Once we find and populate the matching car model, we can break out of the loop
             break;
         }
@@ -1064,17 +1065,25 @@ static void autopid_load_car_specific(char* car_mod)
     free(json_string);
     cJSON_Delete(json);
 
-    ESP_LOGI(TAG, "Car Model: %s", car.car_model);
-    ESP_LOGI(TAG, "Init Command: %s", car.init);
-    for (int i = 0; i < car.pid_count; i++)
+    if(car_found_flag == 1)
     {
-        ESP_LOGI(TAG, "PID: %s", car.pids[i].pid);
-        for (int j = 0; j < car.pids[i].parameter_count; j++)
+        ESP_LOGI(TAG, "Car Model: %s", car.car_model);
+        ESP_LOGI(TAG, "Init Command: %s", car.init);
+        for (int i = 0; i < car.pid_count; i++)
         {
-            ESP_LOGI(TAG, "  Parameter Name: %s", car.pids[i].parameters[j].name);
-            ESP_LOGI(TAG, "  Expression: %s", car.pids[i].parameters[j].expression);
-            ESP_LOGI(TAG, "  Unit: %s", car.pids[i].parameters[j].unit);
+            ESP_LOGI(TAG, "PID: %s", car.pids[i].pid);
+            for (int j = 0; j < car.pids[i].parameter_count; j++)
+            {
+                ESP_LOGI(TAG, "  Parameter Name: %s", car.pids[i].parameters[j].name);
+                ESP_LOGI(TAG, "  Expression: %s", car.pids[i].parameters[j].expression);
+                ESP_LOGI(TAG, "  Unit: %s", car.pids[i].parameters[j].unit);
+            }
         }
+    }
+    else
+    {
+        car.selected_car_model = NULL;
+        car.car_specific_en = 0;
     }
 }
 
