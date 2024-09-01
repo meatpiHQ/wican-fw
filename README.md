@@ -80,9 +80,9 @@ Although WiCAN performs well for low-frequency data transmission, it may not be 
 
 Integrating WiCAN into your setup is straightforward and economical, requiring just a couple of customised shields for your ESP-32 module. With minimal expense, you can significantly enhance your system's capabilities.
 
-## Code Customization
-To make the baud rate compatible with the dev-kit we changed it from 3000000 to 4000000.
-Refer the file: []
+## Code 
+This updated code can be referred to make your WiCAN module compatible with dev-kit.
+[main/wc_uart.c](https://github.com/mittechteam/wican-fw/blob/WiCAN_opensource/main/wc_uart.c)
 ## Setup Guide
 
 Follow these steps to set up your Wi-CAN module:
