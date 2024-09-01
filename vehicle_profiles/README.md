@@ -1,6 +1,6 @@
-# Vehicle Profiles
+# Vehicle Profiles - DO NOT DOWNLOAD THESE DIRECTLY
 
-This folder contains various vehicle profiles to enable people to easily get their car working with WiCAN adapters.
+This folder contains various vehicle profiles to enable people to easily get their car working with WiCAN adapters. To use them please download the main [vehicle profiles](../vehicle_profiles.json) file
 
 The Names of files/folders do not matter to the end result, they are just there to help organize the various files.
 
