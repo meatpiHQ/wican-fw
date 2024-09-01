@@ -286,7 +286,7 @@ static void autopid_task(void *pvParameters)
         return;
     }
 
-    if(asprintf(&error_topic, "%s/error", car.destination) == -1)
+    if(car.destination != NULL && asprintf(&error_topic, "%s/error", car.destination) == -1)
     {
         error_topic = car.destination;
     }
@@ -635,7 +635,7 @@ static void autopid_load_config(char *config_str)
     }
     ESP_LOGI(TAG, "Successfully parsed json config string");
     cJSON *init = cJSON_GetObjectItem(config_str_json, "initialisation");
-    if (cJSON_IsString(init) && (init->valuestring != NULL) && strlen(init->valuestring)) 
+    if (cJSON_IsString(init) && (init->valuestring != NULL) && strlen(init->valuestring) > 0) 
     {
         size_t len = strlen(init->valuestring) + 1; // +1 for the null terminator
         initialisation = (char*)malloc(len);
@@ -659,8 +659,7 @@ static void autopid_load_config(char *config_str)
     else 
     {
         ESP_LOGE(TAG, "Invalid initialisation string in config");
-        cJSON_Delete(config_str_json);
-        return;
+        initialisation = NULL;
     }
 
     cJSON *car_model = cJSON_GetObjectItem(config_str_json, "car_model");
