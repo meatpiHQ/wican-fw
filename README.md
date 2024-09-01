@@ -82,6 +82,7 @@ Integrating WiCAN into your setup is straightforward and economical, requiring j
 
 ## Code 
 This updated code can be referred to make your WiCAN module compatible with dev-kit.
+
 [main/wc_uart.c](https://github.com/mittechteam/wican-fw/blob/WiCAN_opensource/main/wc_uart.c)
 ## Setup Guide
 
