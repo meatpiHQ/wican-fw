@@ -88,7 +88,7 @@ Refer the file: []
 Follow these steps to set up your Wi-CAN module:
 
 1. **Prepare the Hardware:**
-   - Begin by creating two custom shields for your Wi-CAN module setup to facilitate future modifications. Details for these shields are provided in the attachments below.
+   - Begin by creating relevant shield for your Wi-CAN module setup. 
    - Mount the ESP32 board onto the shields, ensuring correct pin configuration and secure connections.
 
 2. **Flash the Firmware onto the ESP32 Board:**
