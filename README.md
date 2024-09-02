@@ -465,23 +465,25 @@ WiCAN seamlessly integrates with Home Assistant via the MQTT protocol, automatic
 
 5. **Enter your home WiFi network SSID and password.**
 
-6. **Enable [MQTT](#mqtt)** and enter the Home Assistant credentials created in step 2.
+6. **Set the Protocol** to Autopid 
 
-7. **Go to the "Automate" tab and enable "Vehicle Specific".**
+7. **Enable [MQTT](#mqtt)** and enter the Home Assistant credentials created in step 2.
 
-8. **Select your vehicle model from the dropdown list.**  
+8. **Go to the "Automate" tab and enable "Vehicle Specific".**
+
+9. **Select your vehicle model from the dropdown list.**  
    If the list is empty, download the latest [vehicle profiles file](https://github.com/meatpiHQ/wican-fw/blob/main/vehicle_profiles.json) and upload it using the "Choose File" button.
 
-9. **If your vehicle isn't supported,** open an issue on GitHub, and I’ll assist you in creating a new vehicle profile if possible.
+10. **If your vehicle isn't supported,** open an issue on GitHub, and I’ll assist you in creating a new vehicle profile if possible.
 
-10. **Enable "Home Assistant Discovery".**  
+11. **Enable "Home Assistant Discovery".**  
     This will automatically create sensors in Home Assistant.
 
-11. **Fill in the "Destination Topic" and "Cycle Time".**  
+12. **Fill in the "Destination Topic" and "Cycle Time".**  
     - **Destination Topic:** The MQTT topic where WiCAN will publish the vehicle data.  
     - **Cycle Time:** Defines how frequently WiCAN will pull and publish the vehicle parameters to Home Assistant.
 
-12. **Press the "Store" button and reboot the device** for the changes to take effect.
+13. **Press the "Store" button and reboot the device** for the changes to take effect.
 
 --- 
 
