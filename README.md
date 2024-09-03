@@ -12,7 +12,7 @@
 ---
 # WiCAN PRO
 
-### Launching soon! If you would like to support this project, please subscribe for updates on [**Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics/wican-pro)
+### Ongoing crowdfunding campaign for a new product in development! If you would like to support this project, please subscribe for updates on [**Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics/wican-pro)
 
 ![image](https://github.com/meatpiHQ/wican-fw/assets/94690098/1648a50f-d5a4-40fc-9794-78b8b57ccc0d)
 
@@ -37,7 +37,7 @@
 </p>
 
 ---
-## [webCAN](http://webcan.meatpi.com/) Comming soon!
+## [webCAN](http://webcan.meatpi.com/) Coming soon!
 
 - [Features Wishlist](#features-wishlist)
 - [Important Notes](#important-notes)
