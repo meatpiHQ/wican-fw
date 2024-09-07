@@ -4,6 +4,8 @@
 ---
 ## MeatPi [Discord server](https://discord.com/invite/2hpHVDmyfw)
 ## Please update to the [latest firmware version](https://github.com/meatpiHQ/wican-fw/releases/)
+---
+# [Official Docs](https://meatpihq.github.io/wican-fw/)
 
 ## Order on [**Mouser**](https://www.mouser.com/c/?m=MeatPi) or [**Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics)
 
