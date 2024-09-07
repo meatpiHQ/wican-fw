@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - 'docs/**'
+      - '.github/workflows/deploy-docs.yml'
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -19,13 +20,14 @@ jobs:
         with:
           node-version: "20"
       # Pick your own package manager and build script
-      - run: cd docs
-      - run: npm install
-      - run: npx nuxt build --preset github_pages
+      - run: |
+          cd docs
+          npm install
+          npx nuxt build --preset github_pages
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./.output/public
+          path: ./docs/.output/public
   # Deployment job
   deploy:
     # Add a dependency to the build job
