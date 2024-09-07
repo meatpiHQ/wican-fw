@@ -11,8 +11,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      NUXT_APP_BASE_URL: https://meatpiHQ.github.io/wican-fw/
     steps:
       - uses: actions/checkout@v3
       - run: corepack enable
@@ -23,7 +21,7 @@ jobs:
       - run: |
           cd docs
           npm install
-          npx nuxt build --preset github_pages
+          NUXT_APP_BASE_URL=/wican-fw/ npx nuxt build --preset github_pages
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
