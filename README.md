@@ -4,6 +4,8 @@
 ---
 ## MeatPi [Discord server](https://discord.com/invite/2hpHVDmyfw)
 ## Please update to the [latest firmware version](https://github.com/meatpiHQ/wican-fw/releases/)
+---
+# [Official Docs](https://meatpihq.github.io/wican-fw/)
 
 ## Order on [**Mouser**](https://www.mouser.com/c/?m=MeatPi) or [**Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics)
 
@@ -65,8 +67,6 @@
   - [OBDII PID Request Over MQTT](#5-obdii-pid-request-over-mqtt)
   - [Request Battery SoC MQTT Example](#6-request-battery-soc-mqtt-example)
   - [CAN to JSON interpreter - Filtring](#7-can-to-json-interpreter---filtring)
-- [Home Assistant](#home-assistant)
-
 - [Firmware Update](#firmware-update)
   - [OTA](#1-ota)
   - [USB Flash](#2-usb-flash)
@@ -442,102 +442,6 @@ Name|CAN ID| Byte 0 | Byte 1 | Byte 2 | Byte 3 | Byte 4 | Byte 5 | Byte 6 | Byte
 Custom ID|355| 170| 170| 170| 170|_5_| _34_| 170| 170
 
 The PID in the configuration should be set to -1. The values to extract are from Byte 4 and Byte 5. The formula used here is (5 + 34)/2, so the expression to set is (B4 + B5)/2.
-
-# Home Assistant
-
-WiCAN seamlessly integrates with Home Assistant via the MQTT protocol, automatically retrieving vehicle data and publishing it. Sensors are created in Home Assistant without any manual intervention, making setup effortless.
-
-**Note:** The [WiCAN PRO](https://www.crowdsupply.com/meatpi-electronics/wican-pro) model supports more car models.
-
-<img width="394" alt="image" src="https://github.com/user-attachments/assets/75460d61-3656-4458-aeca-0f8a3657d6ad">
-
-### Getting Started Guide
-
-1. **Install the Home Assistant [Mosquitto broker add-on](https://github.com/home-assistant/addons/blob/master/mosquitto/DOCS.md).**
-
-2. **Create a new Home Assistant user account for WiCAN.**  
-   The credentials for this account will be used to configure the MQTT settings in WiCAN.
-
-3. **Connect to the WiCAN access point** (WiCAN_xxxxxxxxxxxx).  
-   Open a web browser and navigate to [http://192.168.80.1/](http://192.168.80.1/).
-
-4. **Set the "Mode" to AP+Station.**
-
-5. **Enter your home WiFi network SSID and password.**
-
-6. **Set the Protocol** to Autopid 
-
-7. **Enable [MQTT](#mqtt)** and enter the Home Assistant credentials created in step 2.
-
-8. **Go to the "Automate" tab and enable "Vehicle Specific".**
-
-9. **Select your vehicle model from the dropdown list.**  
-   If the list is empty, download the latest [vehicle profiles file](https://github.com/meatpiHQ/wican-fw/blob/main/vehicle_profiles.json) and upload it using the "Choose File" button.
-
-10. **If your vehicle isn't supported,** open an issue on GitHub, and I’ll assist you in creating a new vehicle profile if possible.
-
-11. **Enable "Home Assistant Discovery".**  
-    This will automatically create sensors in Home Assistant.
-
-12. **Fill in the "Destination Topic" and "Cycle Time".**  
-    - **Destination Topic:** The MQTT topic where WiCAN will publish the vehicle data.  
-    - **Cycle Time:** Defines how frequently WiCAN will pull and publish the vehicle parameters to Home Assistant.
-
-13. **Press the "Store" button and reboot the device** for the changes to take effect.
-
---- 
-
-### ---Deprecated method---
-### 1. EV Battery Examples [Wiki Page](https://github.com/meatpiHQ/wican-fw/wiki/EV-Battery-SoC-in-Home-Assistant-%E2%80%90-Example)
-In this example, we will learn how to set up Home Assistant to request the battery State of Charge (SoC) without using Node-RED. This example has been tested on an ORA Funky Cat vehicle and can also serve as a reference for requesting other Parameter IDs (PIDs) in addition to SoC. EV Battery Examples [Wiki Page](https://github.com/meatpiHQ/wican-fw/wiki/EV-Battery-SoC-in-Home-Assistant-%E2%80%90-Example)
-
-### 2. Node-RED Example 
-
-WiCAN is able to send CAN bus messages to Home Assistant using MQTT protocol. I found that using Node-RED is the simplest way to create automation based on the CAN messages received. This short video highlights some of the steps https://youtu.be/oR5HQIUPR9I
-
-1. Install Home Assistant [Mosquitto broker add-on](https://github.com/home-assistant/addons/blob/master/mosquitto/DOCS.md)
-2. Create Home Assistant new user account for WiCAN. These user credentials will be used to set up the MQTT setting for WiCAN.
-3. Connect to WiCAN access point WiCAN_xxxxxxxxxxxx then, using a web browser, go to http://192.168.80.1/
-4. Set the "Mode" to Ap+Station
-5. Fill in your Home WiFi network SSID and Password.
-6. Enable [MQTT](#mqtt) and fill in the Home Assistant credentials created in step 2
-7. Install Home Assistant [Node-RED Add-on](https://github.com/hassio-addons/addon-node-red)
-8. Download [wican_example_flow.json](https://github.com/meatpiHQ/wican-fw/blob/main/ha/wican_example_flow.json) and replace **device_id** with your WiCAN ID.
-9. Open Node-RED Add-on and import the edited "wican_example_flow.json"
-10. Double click on the subsction Node and edit the server fill in MQTT broker IP address and credentials created in step 2
-11. Click deploy.
-12. To create a new MQTT sensor, you’ll need to edit the configuration.yaml file by adding the following lines:
-
-```
-mqtt:
-  sensor:
-    - name: "Amb Temp"
-      state_topic: "CAR1/Amb_Temp"
-      unit_of_measurement: "C"
-      value_template: "{{ value_json.amb_temp }}"
-    - name: "Fuel Level"
-      state_topic: "CAR1/Fuel_Level"
-      unit_of_measurement: "%"
-      value_template: "{{ value_json.fuel_level }}"
-```
-11. Restart Home assistant
-12. After restart go to dashboard and Add new Card entity.
-
-## Workflow summery
-
-In this example we've got one Node subscribed to topic ``` wican/device_id/status ```, when WiCAN connects to the local network it will publish ``` {"status": "online"}  ```. Once the Node function ``` Send Get  Amb Temp req ``` receives online status it will send a OBD2 request to get the ambient temperature. The OBD2 request message looks like this:
-
-``` { "bus": "0", "type": "tx", "frame": [{ "id": 2015, "dlc": 8, "rtr": false, "extd": false, "data": [2, 1, 70, 170, 170, 170, 170, 170] }] } ```
-
-Frame ID : 2015 or 0x7DF
-PID: 70 or 0x46
-
-Here is a good [reference](https://www.csselectronics.com/pages/obd2-pid-table-on-board-diagnostics-j1979) on how to construct a PID request. Note select DEC from drop down list.
-
-We have another Node subscribed to topic ``` wican/device_id/can/rx ```, once the car ECU responds to the request the function ``` Parse Amb Temp RSP ``` will parse the message and publish a message to topic ``` CAR1/Amb_Temp ```. Notice that when you edited ``` configuration.yaml ``` file create an MQTT Entity that subscribes to ``` CAR1/Amb_Temp ``` and expects a message ``` { value_json.amb_temp } ``` with unit_of_measurement C.
-
-![image](https://user-images.githubusercontent.com/94690098/204269457-32f6e6b5-c9be-44d0-b41c-36fa61b82258.png)
-
 
 # Firmware Update
 
