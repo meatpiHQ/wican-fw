@@ -42,14 +42,10 @@ We are currently in the process of migrating from this large README.md into the 
 ---
 ## [webCAN](http://webcan.meatpi.com/) Coming soon!
 
-- [Features Wishlist](#features-wishlist)
 - [Important Notes](#important-notes)
 - [API](#api)
 - [Build](#build)
 - [Description](#description)
-- [Features](#features)
-  - [Sleep mode](#1-sleep-mode)
-  - [Battery Alert](#2-battery-alert)
 - [Configuration](#configuration)
   - [WiFi/CAN Configuration](#1-wifican-configuration)
   - [BUSMaster](#2-busmaster)
@@ -64,16 +60,6 @@ We are currently in the process of migrating from this large README.md into the 
   - [OTA](#1-ota)
   - [USB Flash](#2-usb-flash)
 
-# **Features Wishlist**:
-
-- ~~CAN Auto baudrate~~ **DONE**
-- ~~Support ELM327 OBD2 protocol~~ **DONE** (Basic support) 
-- ~~Home Assistant Integrations~~ **DONE**
-- Extended ELM327 support 
-- Support ELM327 protocol and Realdash protocol simultaneously on WiFi and BLE 
-- Add option to send an Email on battery alert 
-- Expand alerts to include other CAN parameters parsed from DBC files.
-- Support for extra wifi settings
 # **Important Notes**:
 
 - The OBD2 adapter is not designed to powered of the USB connecter. The USB connector can power the adapter to flash custom firmware or hardreset the deivce and can also be used for debuging.
@@ -126,20 +112,6 @@ WiCAN-USB can also be used as a USB-to-CAN adapter when Wi-Fi connectivity is no
 - Diode protection for the USB port
 
 ![Modes](https://user-images.githubusercontent.com/94690098/222961571-bd137341-808a-4f0a-9528-789fe24d640e.png "Connection Mode")
-
-# Features:
---------
-
-## 1. Sleep Mode:
-
-WiCAN can be permanently attached to the car without worrying about draining the battery. It monitors the battery voltage and can detect when the alternator is ON. When the engine is ON the battery continuously charging and the voltage will be about 13.5V(can vary with different car models). When the engine is OFF the battery voltage drops to about 12.8V(full battery) -  WiCAN can detect this drop, and if the voltage remains under the threshold for **3 min** it will go to sleep and the current consumption will drop below **1mA**. If the engine is turned ON it will immediately wake up and enable the WiFi/BLE. 
-The threshold voltage is configurable and can be set in the configuration page, the default value is 13V. 
-
-## 2. Battery Alert:
-
-This is an important feature for most car enthusiast who own multiple cars that are only driven few times a year.  Basically if a car is not used in few month the battery will go flat and needs to be jumped. WiCAN can be configured to send an alert when the battery voltage drops under a certain level. Sleep mode has to be enabled for this feature to be useful. **For now alerts can be sent on MQTT, more protocols are coming soon. If there is a specific protocol you want to be supported let me know.**
-
-![image](https://user-images.githubusercontent.com/94690098/182034543-8025c5ab-5e38-43a0-9ec8-014d4301fcf0.png)
 
 # Configuration:
 --------
