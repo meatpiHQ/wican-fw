@@ -244,49 +244,6 @@ sudo ifconfig can0 up
 7. Activate ``` Request Only First Reply ```
 8. Click Done.
 
-# Firmware Update
-
-## 1. OTA:
-1. Download the latest release version, or compile your own.
-1. Go the device [configuration page](#device-configuration).
-2. Click on the "About" tab.
-3. Click on "Choose File".
-4. Select the binary file. Eample: wican-fw_v130.bin
-5. Click update, update should take about 30sec.
-
-**NOTE: After flashing, the device configuration might be erased.**
-
-**Note: for firmware version v1.00 use USB cable to flash the unit.**
-
-<img src="https://user-images.githubusercontent.com/94690098/163678507-f9822f57-bbe1-42a4-82c4-501cd7834ba0.png" width="350" height="300" >
-
-## 2. USB Flash:
-
-Use the [**ESP flash tool**](https://www.espressif.com/en/support/download/other-tools) to update the firmware, just follow the same setting in the picture below. Make sure to select ESP32-C3 and USB mode. **esptool.py** also can also be used to flash a new firmware.
-1. Download [**ESP flash tool**](https://www.espressif.com/en/support/download/other-tools)
-2. Download the latest firmware zip file from the [**releases**](https://github.com/meatpiHQ/wican-fw/releases) page. 
-3. Select ESP32C3, develop and USB then click ok
-
-![image](https://user-images.githubusercontent.com/94690098/182028074-7cd55122-a129-4fd3-bad9-e66f1f8d3ca3.png)
-
-4. Set the configuration as the picture below, select and fill in the address for each binary.
-
-<img src="https://user-images.githubusercontent.com/94690098/182028212-e8e90e71-7758-4d2d-88dc-aebf95a2e4a8.png" width="350" height="600" >
-
-5. Short the pins as shown, then plug in the USB cable.
-
-### OBD 
-![image](https://user-images.githubusercontent.com/94690098/182028671-18d523de-466d-4c28-998d-c4330dd33ae7.png)
-
-### USB
-![image](https://github.com/meatpiHQ/wican-fw/assets/94690098/b9c9fe35-6ec1-4a64-8753-134fabd43c0c)
-
-
-6. After you plug in the USB cable the Orange LED will light up. Now click START button on the flash tool.
-
-**NOTE: After flashing, the device configuration might be erased.**
-
-
 ---
 
 © 2023 meatPi Electronics | www.meatpi.com | PO Box 5005 Clayton, VIC 3168, Australia
