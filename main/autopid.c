@@ -525,12 +525,12 @@ static void autopid_task(void *pvParameters)
                                             ESP_LOGI(TAG, "Expression result, Name: %s: %lf", pid_req[i].name, result);
                                             if(pid_req[i].destination != NULL && strlen(pid_req[i].destination) != 0)
                                             {
-                                                mqtt_publish(pid_req[i].destination, response_str, 0, 0, 0);
+                                                mqtt_publish(pid_req[i].destination, response_str, 0, 0, 1);
                                             }
                                             else
                                             {
                                                 //if destination is empty send to default
-                                                mqtt_publish(config_server_get_mqtt_rx_topic(), response_str, 0, 0, 0);
+                                                mqtt_publish(config_server_get_mqtt_rx_topic(), response_str, 0, 0, 1);
                                             }
                                             free(response_str);
                                         }
@@ -672,7 +672,7 @@ static void autopid_task(void *pvParameters)
                             response_str = cJSON_PrintUnformatted(rsp_json);
                             if (response_str != NULL) 
                             {
-                                mqtt_publish(car.destination, response_str, 0, 0, 0);
+                                mqtt_publish(car.destination, response_str, 0, 0, 1);
                                 autopid_data_write(response_str);
                                 free(response_str);
                             }
