@@ -6,7 +6,7 @@
             "pid": "010C",
             "parameters": [
                 {
-                    "name": "Engine RPM",
+                    "name": "EngineRPM",
                     "expression": "[B3:B4]*0.25",
                     "unit": "RPM",
                     "class": "frequency"
@@ -17,7 +17,7 @@
             "pid": "010D",
             "parameters": [
                 {
-                    "name": "Vehicle Speed",
+                    "name": "VehicleSpeed",
                     "expression": "B3",
                     "unit": "km/h",
                     "class": "speed"
