@@ -317,7 +317,7 @@ static void autopid_task(void *pvParameters)
             {
                 case CONNECT_CHECK:
                 {
-                    if(initialisation != NULL && num_of_pids > 0) 
+                    if(initialisation != NULL && num_of_pids > 0 && strlen(initialisation) > 0) 
                     {
                         send_commands(initialisation, 100);
                         while ((xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS));
