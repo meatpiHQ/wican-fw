@@ -21,6 +21,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include "freertos/event_groups.h"
 #include "esp_log.h"
 #include <string.h>
 #include "driver/twai.h"
@@ -40,7 +41,8 @@
 #define RANDOM_MIN          5
 #define RANDOM_MAX          50
 #define ECU_INIT_CMD        "0100\r"
-#define TEMP_BUFFER_LENGTH 32
+#define TEMP_BUFFER_LENGTH  32
+#define ECU_CONNECTED_BIT			BIT0
 
 static char auto_pid_buf[BUFFER_SIZE];
 static autopid_state_t  autopid_state = CONNECT_CHECK;
@@ -50,7 +52,75 @@ static size_t num_of_pids = 0;
 static char* initialisation = NULL;     
 static car_model_data_t car;
 static char* device_id;
+static autopid_data_t autopid_data = {
+    .data = NULL,
+    .mutex = NULL
+};
+static EventGroupHandle_t xautopid_event_group = NULL;
 
+static void autopid_data_write(const char *new_data)
+{
+    if (autopid_data.mutex != NULL && xSemaphoreTake(autopid_data.mutex, portMAX_DELAY) == pdTRUE)
+    {
+        if (autopid_data.data != NULL)
+        {
+            free(autopid_data.data);
+            autopid_data.data = NULL;
+        }
+
+        autopid_data.data = (char *)malloc(strlen(new_data) + 1);
+        if (autopid_data.data == NULL)
+        {
+            ESP_LOGE("autopid_data_write", "Memory allocation failed");
+        }
+        else
+        {
+            strcpy(autopid_data.data, new_data);
+        }
+
+        xSemaphoreGive(autopid_data.mutex);
+    }
+}
+
+char *autopid_data_read(void)
+{
+    char *data_copy = NULL;
+
+    if(autopid_data.mutex != NULL)
+    {
+        if (xSemaphoreTake(autopid_data.mutex, portMAX_DELAY) == pdTRUE)
+        {
+            if (autopid_data.data != NULL)
+            {
+                data_copy = (char *)malloc(strlen(autopid_data.data) + 1);
+                if (data_copy != NULL)
+                {
+                    strcpy(data_copy, autopid_data.data);
+                }
+            }
+
+            xSemaphoreGive(autopid_data.mutex); 
+        }
+
+        return data_copy;
+    }
+    else
+    {
+        return NULL;
+    }
+}
+
+bool autopid_get_ecu_status(void)
+{
+	EventBits_t uxBits;
+	if(xautopid_event_group != NULL)
+	{
+		uxBits = xEventGroupGetBits(xautopid_event_group);
+
+		return (uxBits & ECU_CONNECTED_BIT);
+	}
+	else return false;
+}
 
 void autopid_pub_discovery(void)
 {
@@ -299,12 +369,12 @@ static void autopid_task(void *pvParameters)
     car.cycle_timer = 0;
     ESP_LOGI(TAG, "num_of_pids: %d", num_of_pids);
 
-    while(!mqtt_connected())
+    while(config_server_mqtt_en_config() == 1 && !mqtt_connected())
     {
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
     
-    if(car.ha_discovery_en)
+    if(config_server_mqtt_en_config() == 1 && car.ha_discovery_en)
     {
         autopid_pub_discovery();
     }
@@ -358,6 +428,7 @@ static void autopid_task(void *pvParameters)
                     if (rsp_json != NULL) 
                     {
                         cJSON_AddStringToObject(rsp_json, "ecu_status", "online");
+                        xEventGroupSetBits( xautopid_event_group, ECU_CONNECTED_BIT );
                         response_str = cJSON_PrintUnformatted(rsp_json);
                     }
 
@@ -385,6 +456,7 @@ static void autopid_task(void *pvParameters)
                     if (rsp_json != NULL) 
                     {
                         cJSON_AddStringToObject(rsp_json, "ecu_status", "offline");
+                        xEventGroupClearBits( xautopid_event_group, ECU_CONNECTED_BIT );
                         response_str = cJSON_PrintUnformatted(rsp_json);
                     }
 
@@ -549,6 +621,7 @@ static void autopid_task(void *pvParameters)
                                                 if(asprintf(&error_rsp, "{\"error\": \"Failed Expression: %s\"}", car.pids[i].parameters[j].expression) != -1)
                                                 {
                                                     mqtt_publish(error_topic, error_rsp, 0, 0, 0);
+                                                    autopid_data_write(error_rsp);
                                                     vTaskDelay(pdMS_TO_TICKS(10));
                                                     free(error_rsp);
                                                 }
@@ -560,6 +633,7 @@ static void autopid_task(void *pvParameters)
                                             if(asprintf(&error_rsp, "{\"error\": \"Failed Expression: %s\"}", car.pids[i].parameters[j].expression) != -1)
                                             {
                                                 mqtt_publish(error_topic, error_rsp, 0, 0, 0);
+                                                autopid_data_write(error_rsp);
                                                 vTaskDelay(pdMS_TO_TICKS(10));
                                                 free(error_rsp);
                                             }
@@ -572,6 +646,7 @@ static void autopid_task(void *pvParameters)
                                     if(asprintf(&error_rsp, "{\"error\": \"Timeout, pid: %s\"}", car.pids[i].pid) != -1)
                                     {
                                         mqtt_publish(error_topic, error_rsp, 0, 0, 0);
+                                        autopid_data_write(error_rsp);
                                         vTaskDelay(pdMS_TO_TICKS(10));
                                         free(error_rsp);
                                     }
@@ -584,6 +659,7 @@ static void autopid_task(void *pvParameters)
                                 if(asprintf(&error_rsp, "{\"error\": \"PID Error\"}") != -1)
                                 {
                                     mqtt_publish(error_topic, error_rsp, 0, 0, 0);
+                                    autopid_data_write(error_rsp);
                                     vTaskDelay(pdMS_TO_TICKS(10));
                                     free(error_rsp);
                                 }
@@ -597,6 +673,7 @@ static void autopid_task(void *pvParameters)
                             if (response_str != NULL) 
                             {
                                 mqtt_publish(car.destination, response_str, 0, 0, 0);
+                                autopid_data_write(response_str);
                                 free(response_str);
                             }
                             cJSON_Delete(rsp_json);
@@ -1089,6 +1166,16 @@ static void autopid_load_car_specific(char* car_mod)
 void autopid_init(char* id, char *config_str)
 {
     device_id = id;
+    if(autopid_data.mutex == NULL)
+    {
+        autopid_data.mutex = xSemaphoreCreateMutex();
+    }
+    
+    if(xautopid_event_group == NULL)
+    {
+        xautopid_event_group = xEventGroupCreate();
+    }
+    
     autopid_load_config(config_str);
     // char *desired_car_model = "Toyota Camry";
     if(car.car_specific_en && car.selected_car_model != NULL)

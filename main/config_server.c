@@ -70,6 +70,8 @@
 #include "can.h"
 #include "ble.h"
 #include "sleep_mode.h"
+#include "autopid.h"
+
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
 TaskHandle_t xwebsocket_handle = NULL;
@@ -1257,6 +1259,48 @@ static esp_err_t upload_car_data_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+esp_err_t autopid_data_handler(httpd_req_t *req)
+{
+    char *data = autopid_data_read();
+    
+    if (data == NULL)
+    {
+        ESP_LOGE(TAG, "No data available");
+        const char *response = "{\"error\":\"No data available\"}";
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, response, strlen(response));
+        return ESP_OK;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+
+    httpd_resp_send(req, data, strlen(data));
+
+    free(data);
+
+    return ESP_OK;
+}
+
+esp_err_t device_status_handler(httpd_req_t *req)
+{
+    const char *status_ecu_online_rsp = "{\"wican_status\":\"online\",\"ecu_status\":\"online\"}";
+    const char *status_ecu_offline_rsp = "{\"wican_status\":\"online\",\"ecu_status\":\"offline\"}";
+
+    httpd_resp_set_type(req, "application/json");
+
+    if (autopid_get_ecu_status())
+    {
+        httpd_resp_send(req, status_ecu_online_rsp, strlen(status_ecu_online_rsp));
+        ESP_LOGI(TAG, "Device status sent: %s", status_ecu_online_rsp);
+    }
+    else
+    {
+        httpd_resp_send(req, status_ecu_offline_rsp, strlen(status_ecu_offline_rsp));
+        ESP_LOGI(TAG, "Device status sent: %s", status_ecu_offline_rsp);
+    }
+
+    return ESP_OK;
+}
 
 static const httpd_uri_t index_uri = {
     .uri       = "/",
@@ -1366,6 +1410,19 @@ static const httpd_uri_t upload_car_data = {
     .handler   = upload_car_data_handler,
     .user_ctx  = &server_data    // Pass server data as context
 };
+static const httpd_uri_t autopid_data = {
+    .uri       = "/autopid_data",   // Match all URIs of type /upload/path/to/file
+    .method    = HTTP_GET,
+    .handler   = autopid_data_handler,
+    .user_ctx  = &server_data    // Pass server data as context
+};
+static const httpd_uri_t device_status_data = {
+    .uri       = "/status",   // Match all URIs of type /upload/path/to/file
+    .method    = HTTP_GET,
+    .handler   = device_status_handler,
+    .user_ctx  = &server_data    // Pass server data as context
+};
+
 static void config_server_load_cfg(char *cfg)
 {
 	cJSON * root, *key = 0;
@@ -1972,7 +2029,7 @@ static httpd_handle_t config_server_init(void)
                        );
 
     // Start the httpd server
-	config.max_uri_handlers = 14;
+	config.max_uri_handlers = 16;
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK)
     {
@@ -1992,7 +2049,8 @@ static httpd_handle_t config_server_init(void)
 		httpd_register_uri_handler(server, &load_pid_auto_uri);
 		httpd_register_uri_handler(server, &load_pid_auto_conf_uri);
 		httpd_register_uri_handler(server, &upload_car_data);
-		
+		httpd_register_uri_handler(server, &autopid_data);
+		httpd_register_uri_handler(server, &device_status_data);
         #if CONFIG_EXAMPLE_BASIC_AUTH
         httpd_register_basic_auth(server);
         #endif
