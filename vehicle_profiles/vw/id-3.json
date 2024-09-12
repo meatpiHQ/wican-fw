@@ -1,0 +1,42 @@
+{
+  "car_model": "VW: id-3",
+  "init": "ATSP6;ATST96;ATFCSD300000;ATFCSM1;",
+  "pids": [
+    {
+      "pid": "22028C1",
+      "parameters": [
+        {
+          "name": "SOC",
+          "pid_init": "ATSHFC007B;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;",
+          "expression": "((B4*51)/115)-6.4",
+          "unit": "%",
+          "class": "battery"
+        }
+      ]
+    },
+    {
+      "pid": "222AB62",
+      "parameters": [
+        {
+          "name": "Range",
+          "pid_init": "ATSH710;ATCP18;ATCRA77A;ATFCSH710;",
+          "expression": "(B5*256)+B6",
+          "unit": "km",
+          "class": "none"
+        }
+      ]
+    },
+    {
+      "pid": "22295A",
+      "parameters": [
+        {
+          "name": "Odometer",
+          "pid_init": "ATSHFC0076;ATCP17;ATCRA17FE0076;ATFCSH17FC0076;",
+          "expression": "[B4:B6]",
+          "unit": "km",
+          "class": "none"
+        }
+      ]
+    }
+  ]
+}

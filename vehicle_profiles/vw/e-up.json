@@ -1,0 +1,17 @@
+{
+  "car_model": "VW: e-Up",
+  "init": "ATSP6;ATST96;",
+  "pids": [
+    {
+      "pid": "22028C1",
+      "parameters": [
+        {
+          "name": "SOC",
+          "expression": "B4/2.5",
+          "unit": "%",
+          "class": "battery"
+        }
+      ]
+    }
+  ]
+}
