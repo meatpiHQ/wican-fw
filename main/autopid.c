@@ -35,6 +35,7 @@
 #include "cJSON.h"
 #include "config_server.h"
 #include "autopid.h"
+#include <math.h>
 
 #define TAG __func__
 
@@ -511,7 +512,7 @@ static void autopid_task(void *pvParameters)
                                                 sprintf(hex_rsponse + (j * 2), "%02X", response.data[j]);
                                             }
                                             hex_rsponse[response.length * 2] = '\0'; 
-
+                                            result = round(result * 100.0) / 100.0;
                                             // Add the name and result to the JSON object
                                             cJSON_AddNumberToObject(rsp_json, pid_req[i].name, result);
                                             cJSON_AddStringToObject(rsp_json, "raw", hex_rsponse);
@@ -610,6 +611,7 @@ static void autopid_task(void *pvParameters)
                                                     }
                                                     hex_rsponse[response.length * 2] = '\0'; 
 
+                                                    result = round(result * 100.0) / 100.0;
                                                     // Add the name and result to the JSON object
                                                     cJSON_AddNumberToObject(rsp_json, car.pids[i].parameters[j].name, result);
                                                     ESP_LOGI(TAG, "Expression result, Name: %s: %lf", car.pids[i].parameters[j].name, result);

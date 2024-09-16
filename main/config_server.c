@@ -803,8 +803,19 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	cJSON_AddStringToObject(root, "mqtt_tx_topic", device_config.mqtt_tx_topic);
 	cJSON_AddStringToObject(root, "mqtt_rx_topic", device_config.mqtt_rx_topic);
 	cJSON_AddStringToObject(root, "mqtt_status_topic", device_config.mqtt_status_topic);
-    const char *resp_str = cJSON_Print(root);
+	cJSON_AddStringToObject(root, "device_id", device_id);
+	
+	if(autopid_get_ecu_status())
+	{
+		cJSON_AddStringToObject(root, "ecu_status", "online");
+	}
+	else
+	{
+		cJSON_AddStringToObject(root, "ecu_status", "offline");
+	}
+    const char *resp_str = cJSON_PrintUnformatted(root);
 
+	httpd_resp_set_type(req, "application/json");
 	httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
 
     free((void *)resp_str);
@@ -1281,27 +1292,6 @@ esp_err_t autopid_data_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-esp_err_t device_status_handler(httpd_req_t *req)
-{
-    const char *status_ecu_online_rsp = "{\"wican_status\":\"online\",\"ecu_status\":\"online\"}";
-    const char *status_ecu_offline_rsp = "{\"wican_status\":\"online\",\"ecu_status\":\"offline\"}";
-
-    httpd_resp_set_type(req, "application/json");
-
-    if (autopid_get_ecu_status())
-    {
-        httpd_resp_send(req, status_ecu_online_rsp, strlen(status_ecu_online_rsp));
-        ESP_LOGI(TAG, "Device status sent: %s", status_ecu_online_rsp);
-    }
-    else
-    {
-        httpd_resp_send(req, status_ecu_offline_rsp, strlen(status_ecu_offline_rsp));
-        ESP_LOGI(TAG, "Device status sent: %s", status_ecu_offline_rsp);
-    }
-
-    return ESP_OK;
-}
-
 static const httpd_uri_t index_uri = {
     .uri       = "/",
     .method    = HTTP_GET,
@@ -1414,12 +1404,6 @@ static const httpd_uri_t autopid_data = {
     .uri       = "/autopid_data",   // Match all URIs of type /upload/path/to/file
     .method    = HTTP_GET,
     .handler   = autopid_data_handler,
-    .user_ctx  = &server_data    // Pass server data as context
-};
-static const httpd_uri_t device_status_data = {
-    .uri       = "/status",   // Match all URIs of type /upload/path/to/file
-    .method    = HTTP_GET,
-    .handler   = device_status_handler,
     .user_ctx  = &server_data    // Pass server data as context
 };
 
@@ -2029,7 +2013,7 @@ static httpd_handle_t config_server_init(void)
                        );
 
     // Start the httpd server
-	config.max_uri_handlers = 16;
+	config.max_uri_handlers = 15;
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK)
     {
@@ -2050,7 +2034,6 @@ static httpd_handle_t config_server_init(void)
 		httpd_register_uri_handler(server, &load_pid_auto_conf_uri);
 		httpd_register_uri_handler(server, &upload_car_data);
 		httpd_register_uri_handler(server, &autopid_data);
-		httpd_register_uri_handler(server, &device_status_data);
         #if CONFIG_EXAMPLE_BASIC_AUTH
         httpd_register_basic_auth(server);
         #endif

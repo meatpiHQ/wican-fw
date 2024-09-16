@@ -8,5 +8,5 @@ idf_component_register(
     PRIV_INCLUDE_DIRS   # optional, add here private include directories
     REQUIRES   "${requires}"         # optional, list the public requirements (component names)
     PRIV_REQUIRES       # optional, list the private requirements
-    EMBED_FILES "homepage.html" "../vehicle_profiles.json"
+    EMBED_FILES "homepage.html"
 )
