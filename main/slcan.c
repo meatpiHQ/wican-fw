@@ -29,37 +29,37 @@
 #include "nvs_flash.h"
 #include "driver/gpio.h"
 #include "esp_timer.h"
-//#include "esp_log.h"
+#include "esp_log.h"
 #include <string.h>
 #include "driver/twai.h"
 #include "slcan.h"
 #include "can.h"
 
 
-#define TAG 		__func__
+#define TAG 				__func__
+#define SLCAN_BUFFER_SIZE 	(2*1024)
+#define SL_FRAME_ID			0x00
+#define SL_FRAME_DLC		0x01
+#define SL_FRAME_DATA		0x02
+#define SL_HEADER			0x00
+#define SL_BODY				0x01
+#define SL_END				0x02
 
-#define GIT_VERSION			"v1.30"
-#define GIT_REMOTE			"R1.30"
+static const char serial[] = "N43010123\r";
+static const char version[] = "V2011\r";
+static const char ack[] = "\r";
+static const char status[] = "F00\r";
 
 static uint8_t timestamp_flag = 0;
-
-uint8_t sl_bitrate[] = {CAN_10K, CAN_20K, CAN_50K, CAN_100K,
-						CAN_125K, CAN_250K, CAN_500K,
-						CAN_800K, CAN_1000K};
-
-
-TimerHandle_t xSlTimer = NULL;
+static uint8_t sl_bitrate[] = {CAN_10K, CAN_20K, CAN_50K, CAN_100K,
+								CAN_125K, CAN_250K, CAN_500K,
+								CAN_800K, CAN_1000K};
 void (*slcan_response)(char*, uint32_t, QueueHandle_t *q);
 
 static uint16_t slcan_get_time(void)
 {
-//	TickType_t xRemainingTime;
-//	xRemainingTime = xTimerGetExpiryTime( xSlTimer ) - xTaskGetTickCount();
-
-//	return 60000 - pdTICKS_TO_MS(xRemainingTime);
 	return pdTICKS_TO_MS(xTaskGetTickCount())%60000;
 }
-
 
 int8_t slcan_parse_frame(uint8_t *buf, twai_message_t *frame)
 {
@@ -134,7 +134,7 @@ int8_t slcan_parse_frame(uint8_t *buf, twai_message_t *frame)
     return i;
 }
 
-uint8_t ascii_to_num(uint8_t a)
+static uint8_t ascii_to_num(uint8_t a)
 {
 	uint8_t x = a;
 	if(x >= 'a')
@@ -149,89 +149,12 @@ uint8_t ascii_to_num(uint8_t a)
 	return x;
 }
 
-#define SL_FRAME_ID			0x00
-#define SL_FRAME_DLC		0x01
-#define SL_FRAME_DATA		0x02
-
-static uint8_t frame_state = SL_FRAME_ID;
-
-uint8_t slcan_set_frame1(uint8_t byte, twai_message_t *frame, uint8_t ext)
-{
-	static uint8_t index = 0;
-	static uint8_t id[8] = {0,0,0,0,0,0,0,0};
-	static uint8_t data = 0;
-
-	switch(frame_state)
-	{
-		case SL_FRAME_ID:
-		{
-			if(ext)
-			{
-				id[index++] = ascii_to_num(byte);
-
-				if(index == 8)
-				{
-					frame->identifier = (((id[7]<<4)+id[6]) & 0xFF) |
-							((((id[5]<<4)+id[4]) << 8) & 0x0000FF00) |
-							((((id[3]<<4)+id[2]) << 16) & 0x00FF0000) |
-							((((id[1]<<4)+id[0]) << 24) & 0xFF000000);
-					frame_state = SL_FRAME_DLC;
-					index = 0;
-				}
-			}
-			else
-			{
-				id[index++] = ascii_to_num(byte);
-
-				if(index == 3)
-				{
-					frame->identifier = (((id[2]<<4)+id[1]) & 0xFF) |
-							((id[0]<<8) & 0x00000F00) ;
-					frame_state = SL_FRAME_DLC;
-					index = 0;
-				}
-			}
-			return 0;
-		}
-		case SL_FRAME_DLC:
-		{
-			frame->data_length_code = ascii_to_num(byte);
-			frame_state = SL_FRAME_DATA;
-			return 0;
-		}
-		case SL_FRAME_DATA:
-		{
-
-			if((index+1)%2)
-			{
-				data = ascii_to_num(byte);
-			}
-			else
-			{
-				frame->data[index/2] = (data<<4)+ascii_to_num(byte);
-			}
-
-			index++;
-
-			if(index == frame->data_length_code*2)
-			{
-				frame_state = SL_FRAME_ID;
-				index = 0;
-				data = 0;
-				memset(id, 0,sizeof(id));
-				return 1;
-			}
-
-			return 0;
-		}
-	}
-	return 0;
-}
 static uint8_t slcan_set_frame(uint8_t byte, twai_message_t *frame, uint8_t msg_type)
 {
 	static uint8_t index = 0;
 	static uint8_t id[8] = {0,0,0,0,0,0,0,0};
 	static uint8_t data = 0;
+	static uint8_t frame_state = SL_FRAME_ID;
 
 	switch(frame_state)
 	{
@@ -312,16 +235,6 @@ static uint8_t slcan_set_frame(uint8_t byte, twai_message_t *frame, uint8_t msg_
 	return 0;
 }
 
-
-#define SL_HEADER		0
-#define SL_BODY			1
-#define SL_END			2
-
-static const char serial[] = "N43010123\r";
-static const char version[] = "V2011\r";
-static const char ack[] = "\r";
-static const char status[] = "F00\r";
-
 char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t *q)
 {
 //	twai_message_t frame;
@@ -335,9 +248,13 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 	static uint32_t filter[8];
 	static uint32_t mask[8];
 	static uint8_t loopback = 0;
+	static char slcan_buffer[SLCAN_BUFFER_SIZE];
+	static uint32_t buffer_index = 0;
 
 	time_now = esp_timer_get_time();
-
+    memcpy(&slcan_buffer[buffer_index], buf, len);
+    buffer_index += len;
+	
 	if(time_now - time_old > 100*1000)
 	{
 		state = SL_HEADER;
@@ -345,6 +262,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 //		ext_flag = 0;
 		cmd_ret = SL_NONE;
 		msg_index = 0;
+		buffer_index = 0;
 	}
 	for(i = 0; i < len; i++)
 	{
@@ -352,9 +270,9 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 		{
 			case SL_HEADER:
 			{
-			    if (buf[i] == 'O')
+			    if (slcan_buffer[i] == 'O')
 			    {
-//			    	//ESP_LOGI(TAG, "open can!");
+			    	ESP_LOGI(TAG, "open can!");
 			        // Open channel command
 			    	can_set_silent(0);
 			    	can_set_loopback(0);
@@ -365,7 +283,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 			    	break;
 
 			    }
-			    else if (buf[i] == 'Y')
+			    else if (slcan_buffer[i] == 'Y')
 			    {
 			      // Open loop back mode
 					can_set_silent(0);
@@ -377,16 +295,17 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 			    	break;
 
 			    }
-			    else if (buf[i] == 'C')
+			    else if (slcan_buffer[i] == 'C')
 			    {
 			        // Close channel command
+					ESP_LOGI(TAG, "open close!");
 			    	can_disable();
 			    	state = SL_END;
 			    	cmd = SL_CLOSE;
 			    	break;
 
 			    }
-			    else if (buf[i] == 'L')
+			    else if (slcan_buffer[i] == 'L')
 			    {
 					can_set_silent(1);
 					can_set_loopback(0);
@@ -397,16 +316,16 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 			    	break;
 
 			    }
-			    else if (buf[i] == 'S')
+			    else if (slcan_buffer[i] == 'S')
 			    {
-//			    	//ESP_LOGI(TAG, "set datarate");
+			    	ESP_LOGI(TAG, "set datarate");
 			      // Set bitrate command
 			    	state = SL_BODY;
 			    	cmd = SL_SPEED;
 			    	break;
 
 			    }
-			    else if (buf[i] == 's')
+			    else if (slcan_buffer[i] == 's')
 			    {
 			      // Set bitrate command
 			    	state = SL_BODY;
@@ -414,7 +333,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 			    	break;
 
 			    }
-			    else if (buf[i] == 'a' || buf[i] == 'A')
+			    else if (slcan_buffer[i] == 'a' || slcan_buffer[i] == 'A')
 			    {
 			      // Set autoretry command
 			    	state = SL_BODY;
@@ -422,7 +341,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 			    	break;
 
 			    }
-				else if (buf[i] == 'v' || buf[i] == 'V')
+				else if (slcan_buffer[i] == 'v' || slcan_buffer[i] == 'V')
 				{
 			      // Report firmware version and remote
 			    	state = SL_END;
@@ -430,11 +349,11 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 			    	break;
 
 			    }
-				else if (buf[i] == 't' || buf[i] == 'T')
+				else if (slcan_buffer[i] == 't' || slcan_buffer[i] == 'T')
 				{
 //						rtr_flag = 0;
 					state = SL_BODY;
-					if(buf[i] == 't')
+					if(slcan_buffer[i] == 't')
 					{
 						cmd = SL_DATA_STD;
 					}
@@ -445,11 +364,11 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 					break;
 
 			    }
-				else if (buf[i] == 'r' || buf[i] == 'R')
+				else if (slcan_buffer[i] == 'r' || slcan_buffer[i] == 'R')
 				{
 //						rtr_flag = 1;
 					state = SL_BODY;
-					if(buf[i] == 'r')
+					if(slcan_buffer[i] == 'r')
 					{
 						cmd = SL_REMOTE_STD;
 					}
@@ -459,37 +378,37 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 					}
 					break;
 			    }
-				else if(buf[i] == 'N')
+				else if(slcan_buffer[i] == 'N')
 				{
 					cmd = SL_SERIAL;
 					state = SL_END;
 					break;
 				}
-				else if(buf[i] == 'Z')
+				else if(slcan_buffer[i] == 'Z')
 				{
 					cmd = SL_TSTAMP;
 					state = SL_BODY;
 					break;
 				}
-				else if(buf[i] == 'D')
+				else if(slcan_buffer[i] == 'D')
 				{
 					cmd = SL_AUTO;
 					state = SL_BODY;
 					break;
 				}
-				else if(buf[i] == 'm')
+				else if(slcan_buffer[i] == 'm')
 				{
 					cmd = SL_MASK_REG;
 					state = SL_BODY;
 					break;
 				}
-				else if(buf[i] == 'M')
+				else if(slcan_buffer[i] == 'M')
 				{
 					cmd = SL_ACP_CODE;
 					state = SL_BODY;
 					break;
 				}
-				else if(buf[i] == 'F')
+				else if(slcan_buffer[i] == 'F')
 				{
 			    	state = SL_END;
 			    	cmd = SL_STATUS;
@@ -512,8 +431,8 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 					{
 						case SL_SPEED:
 						{
-							uint8_t b = ascii_to_num(buf[i]);
-//							//ESP_LOGI(TAG, "buf[i]: PRIxx", buf[i]);
+							uint8_t b = ascii_to_num(slcan_buffer[i]);
+//							//ESP_LOGI(TAG, "slcan_buffer[i]: PRIxx", slcan_buffer[i]);
 					    	// Check for valid bitrate
 							if(b > 8)
 							{
@@ -533,12 +452,12 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 						}
 						case SL_TSTAMP:
 						{
-							if(buf[i] == 0x30)
+							if(slcan_buffer[i] == 0x30)
 							{
 								timestamp_flag = 0;
 //								set_time_stamp_flag(0);
 							}
-							else if(buf[i] == 0x31)
+							else if(slcan_buffer[i] == 0x31)
 							{
 //								set_time_stamp_flag(1);
 								timestamp_flag = 1;
@@ -548,7 +467,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 						}
 						case SL_ACP_CODE:
 						{
-							filter[msg_index++] = ascii_to_num(buf[i]);
+							filter[msg_index++] = ascii_to_num(slcan_buffer[i]);
 
 							if(msg_index == 8)
 							{
@@ -566,7 +485,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 						}
 						case SL_MASK_REG:
 						{
-							mask[msg_index++] = ascii_to_num(buf[i]);
+							mask[msg_index++] = ascii_to_num(slcan_buffer[i]);
 							if(msg_index == 8)
 							{
 								static uint32_t msk = 0;
@@ -595,7 +514,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 				}
 				else
 				{
-					if(slcan_set_frame(buf[i], frame, cmd) == 0)
+					if(slcan_set_frame(slcan_buffer[i], frame, cmd) == 0)
 					{
 //						state = SL_END;
 						break;
@@ -643,8 +562,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 			}
 			case SL_END:
 			{
-
-				if(buf[i] == '\r')
+				if(slcan_buffer[i] == '\r')
 				{
 					if(cmd == SL_REMOTE_STD || cmd == SL_DATA_STD || cmd == SL_REMOTE_EXT || cmd == SL_DATA_EXT)
 					{
@@ -661,6 +579,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 						{
 							//ESP_LOGE(TAG, "can_send error");
 						}
+						ESP_LOGI(TAG, "can_send");
 					}
 					cmd_ret = cmd;
 					msg_index = 0;
@@ -702,177 +621,20 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 			}
 		}
 	}
+    // Clear the processed bytes from the buffer
+    if (i < buffer_index)
+    {
+        memmove(slcan_buffer, &slcan_buffer[i], buffer_index - i);
+        buffer_index -= i;
+    }
+    else
+    {
+        buffer_index = 0;
+    }
 
 	return 0;
 }
 
-int8_t slcan_parse_str1(uint8_t *buf, uint8_t len, twai_message_t *frame)
-{
-//	twai_message_t frame;
-	uint8_t i, j;
-
-    // Convert from ASCII (2nd character to end)
-    for (i = 1; i < len; i++)
-    {
-        // Lowercase letters
-        if(buf[i] >= 'a')
-            buf[i] = buf[i] - 'a' + 10;
-        // Uppercase letters
-        else if(buf[i] >= 'A')
-            buf[i] = buf[i] - 'A' + 10;
-        // Numbers
-        else
-            buf[i] = buf[i] - '0';
-    }
-
-    if (buf[0] == 'O')
-    {
-        // Open channel command
-//        can_enable();
-        return 0;
-
-    } else if (buf[0] == 'C') {
-        // Close channel command
-//        can_disable();
-        return 0;
-
-    } else if (buf[0] == 'S') {
-        // Set bitrate command
-
-    	// Check for valid bitrate
-    	if(buf[1] >= CAN_BITRATE_INVALID)
-    	{
-    		return -1;
-    	}
-
-//		can_set_bitrate((enum can_bitrate) buf[1]);
-        return 0;
-
-    } else if (buf[0] == 'm' || buf[0] == 'M') {
-        // Set mode command
-        if (buf[1] == 1)
-        {
-            // Mode 1: silent
-//            can_set_silent(1);
-        } else {
-            // Default to normal mode
-//            can_set_silent(0);
-        }
-        return 0;
-
-    } else if (buf[0] == 'a' || buf[0] == 'A') {
-        // Set autoretry command
-        if (buf[1] == 1)
-        {
-            // Mode 1: autoretry enabled (default)
-//            can_set_autoretransmit(1);
-        } else {
-            // Mode 0: autoretry disabled
-//            can_set_autoretransmit(0);
-        }
-        return 0;
-
-    }
-	else if (buf[0] == 'v' || buf[0] == 'V')
-	{
-        // Report firmware version and remote
-//        char* fw_id = GIT_VERSION " " GIT_REMOTE "\r";
-//        CDC_Transmit_FS((uint8_t*)fw_id, strlen(fw_id));
-        return 0;
-
-    }
-		else if (buf[0] == 't' || buf[0] == 'T')
-		{
-        // Transmit data frame command
-//        frame_header.RTR = CAN_RTR_DATA;
-//			frame.Control_f.RTR = 0;
-			frame->rtr = 0;
-
-    }
-		else if (buf[0] == 'r' || buf[0] == 'R') {
-        // Transmit remote frame command
-//    	frame_header.RTR = CAN_RTR_REMOTE;
-//			frame.Control_f.RTR = 1;
-			frame->rtr = 1;
-
-    }
-		else
-		{
-        // Error, unknown command
-        return -1;
-    }
-
-    // Check for extended or standard frame (set by case)
-    if (buf[0] == 't' || buf[0] == 'r')
-		{
-//    	frame_header.IDE = CAN_ID_STD;
-//			frame.Control_f.IDE = 0;
-    	frame->extd = 0;
-    }
-		else if (buf[0] == 'T' || buf[0] == 'R')
-		{
-//    	frame_header.IDE = CAN_ID_EXT;
-//			frame.Control_f.IDE = 1;
-			frame->extd = 1;
-    }
-		else
-		{
-        // error
-        return -1;
-    }
-
-//    frame.StdID = 0;
-//    frame.ExtID = 0;
-//    if (frame.Control_f.IDE)
-		if(frame->extd)
-		{
-        uint8_t id_len = SLCAN_EXT_ID_LEN;
-        i = 1;
-        while (i <= id_len)
-				{
-//        	frame.ExtID *= 16;
-//        	frame.ExtID += buf[i++];
-        	frame->identifier *= 16;
-        	frame->identifier += buf[i++];
-        }
-    }
-    else
-		{
-        uint8_t id_len = SLCAN_STD_ID_LEN;
-        i = 1;
-        while (i <= id_len) {
-//        	frame.StdID *= 16;
-//        	frame.StdID += buf[i++];
-        	frame->identifier *= 16;
-        	frame->identifier += buf[i++];
-        }
-    }
-
-
-    // Attempt to parse DLC and check sanity
-//    frame.Control_f.DLC = buf[i++];
-    frame->data_length_code = buf[i++];
-
-//    if (frame.Control_f.DLC > 8)
-	if(frame->data_length_code > 8)
-    {
-        return -1;
-    }
-
-
-//    for (j = 0; j < frame.Control_f.DLC; j++)
-	for (j = 0; j < frame->data_length_code; j++)
-	{
-//        frame.Data[j] = (buf[i] << 4) + buf[i+1];
-		frame->data[j] = (buf[i] << 4) + buf[i+1];
-        i += 2;
-    }
-
-    // Transmit the message
-//    can_tx(&frame);
-
-    return 0;
-}
 
 void slcan_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q))
 {
