@@ -70,14 +70,7 @@ static uint8_t datarate = CAN_500K;
 //static uint32_t filter = 0;
 static can_cfg_t can_cfg = {.bus_state = END_BUS, .auto_bitrate = 0};
 
-#define TWAI_CONFIG(tx_io_num, rx_io_num, op_mode) {.mode = op_mode, .tx_io = tx_io_num, .rx_io = rx_io_num,        \
-                                                                    .clkout_io = TWAI_IO_UNUSED, .bus_off_io = TWAI_IO_UNUSED,      \
-                                                                    .tx_queue_len = 100, .rx_queue_len = 100,                           \
-                                                                    .alerts_enabled = TWAI_ALERT_NONE,  .clkout_divider = 0,        \
-                                                                    .intr_flags = ESP_INTR_FLAG_LEVEL1}
-
-
-static const twai_general_config_t g_config_normal = TWAI_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, TWAI_MODE_NORMAL);
+static twai_general_config_t g_config_normal = TWAI_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, TWAI_MODE_NORMAL);
 static const twai_general_config_t g_config_silent = TWAI_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, TWAI_MODE_LISTEN_ONLY);
 //static const twai_general_config_t g_config_no_ack = TWAI_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, TWAI_MODE_NO_ACK);
 
@@ -133,11 +126,14 @@ void can_enable(void)
 
 	if(can_cfg.silent)
 	{
+		ESP_LOGI(TAG, "start silent mode");
 		ESP_ERROR_CHECK(twai_driver_install(&g_config_silent, (const twai_timing_config_t *)t_config, &f_config));
 	}
 	else
 	{
-//		ESP_LOGW(TAG, "start normal mode");
+		ESP_LOGI(TAG, "start normal mode");
+		g_config_normal.rx_queue_len = 50;
+		g_config_normal.tx_queue_len = 50;
 		ESP_ERROR_CHECK(twai_driver_install(&g_config_normal, (const twai_timing_config_t *)t_config, &f_config));
 	}
 
