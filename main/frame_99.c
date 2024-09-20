@@ -63,7 +63,18 @@ static void send_can_message(uint32_t identifier, uint8_t *data, size_t len, boo
     message.rtr = 0;
     message.data_length_code = len; 
     message.self = 0;
-    memcpy(message.data, data, len);
+    
+    if (len < 8)
+    {
+        message.data_length_code = 8;
+        memcpy(message.data, data, len);
+        memset(message.data + len, 0xAA, 8 - len);
+    }
+    else
+    {
+        message.data_length_code = len;
+        memcpy(message.data, data, len);
+    }
     
     if (can_send(&message, pdMS_TO_TICKS(100)) != ESP_OK)
     {
