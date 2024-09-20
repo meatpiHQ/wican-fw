@@ -50,6 +50,7 @@
 #define SAVVYCAN			2
 #define OBD_ELM327			3
 #define AUTO_PID			4
+#define FRAME_99			5
 
 typedef struct _device_config
 {

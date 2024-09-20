@@ -228,6 +228,11 @@ int8_t config_server_protocol(void)
 	{
 		return AUTO_PID;
 	}
+	else if(strcmp(device_config.protocol, "frame_99") == 0)
+	{
+		return FRAME_99;
+	}
+	
 	return SLCAN;
 }
 

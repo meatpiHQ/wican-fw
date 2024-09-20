@@ -53,6 +53,7 @@
 #include "esp_mac.h"
 #include "ftp.h"
 #include "autopid.h"
+#include "frame_99.h"
 
 #define TAG 		__func__
 #define TX_GPIO_NUM             	0
@@ -226,6 +227,10 @@ static void can_tx_task(void *pvParameters)
 				elm327_process_cmd(msg_ptr, temp_len, &tx_msg, &xmsg_ble_tx_queue);
 			}
 		}
+		else if(protocol == FRAME_99)
+		{
+			frame_99_parse_data(msg_ptr, temp_len);
+		}
 	}
 }
 #define HEAP_CAPS   (MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
@@ -252,9 +257,9 @@ static void can_rx_task(void *pvParameters)
         process_led(0);
     	if(esp_timer_get_time() - time_old > 1000*1000)
     	{
-    		uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
-    		time_old = esp_timer_get_time();
-    		// ESP_LOGI(TAG, "free_heap: %lu", free_heap)
+    		// uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS)
+    		// time_old = esp_timer_get_time();
+    		// ESP_LOGW(TAG, "free_heap: %lu", free_heap);
 //        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
 //        		num_msg = 0;
     	}
@@ -294,6 +299,10 @@ static void can_rx_task(void *pvParameters)
 				{
 					// Let elm327.c decide which messages to process
 					xQueueSend( xmsg_obd_rx_queue, ( void * ) &rx_msg, pdMS_TO_TICKS(0) );
+				}
+				if(protocol == FRAME_99)
+				{
+					ucTCP_TX_Buffer.usLen = frame_99_parse_can(ucTCP_TX_Buffer.ucElement, &rx_msg);
 				}
 
 				if(ucTCP_TX_Buffer.usLen != 0)
@@ -369,9 +378,18 @@ void app_main(void)
 	gpio_set_level(CONNECTED_LED_GPIO_NUM, 1);
 	gpio_set_level(ACTIVE_LED_GPIO_NUM, 1);
 
-    xMsg_Rx_Queue = xQueueCreate(32, sizeof( xdev_buffer) );
-    xMsg_Tx_Queue = xQueueCreate(32, sizeof( xdev_buffer) );
-    xmsg_ws_tx_queue = xQueueCreate(32, sizeof( xdev_buffer) );
+	if(protocol == FRAME_99)
+	{
+		xMsg_Rx_Queue = xQueueCreate(64, sizeof( xdev_buffer) );
+		xMsg_Tx_Queue = xQueueCreate(16, sizeof( xdev_buffer) );
+		xmsg_ws_tx_queue = xQueueCreate(16, sizeof( xdev_buffer) );
+	}
+	else
+	{
+		xMsg_Rx_Queue = xQueueCreate(32, sizeof( xdev_buffer) );
+		xMsg_Tx_Queue = xQueueCreate(32, sizeof( xdev_buffer) );
+		xmsg_ws_tx_queue = xQueueCreate(32, sizeof( xdev_buffer) );
+	}
 
 	esp_ota_mark_app_valid_cancel_rollback();
 //    xmsg_obd_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
@@ -457,6 +475,12 @@ void app_main(void)
 		
 		elm327_init(&autopid_parser, &xmsg_obd_rx_queue, NULL);
 		autopid_init((char*)&uid[0], config_server_get_auto_pid());
+	}
+	else if(protocol == FRAME_99)
+	{
+		frame_99_init();
+		can_set_bitrate(can_datarate);
+		can_enable();
 	}
 
 	if(config_server_mqtt_en_config())
