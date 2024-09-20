@@ -657,7 +657,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 							frame->self = 0;
 						}
 
-						if (ESP_ERR_INVALID_STATE == can_send(frame, 1))
+						if (ESP_ERR_INVALID_STATE == can_send(frame, pdMS_TO_TICKS(100)))
 						{
 							//ESP_LOGE(TAG, "can_send error");
 						}
