@@ -61,24 +61,57 @@ static void send_can_message(uint32_t identifier, uint8_t *data, size_t len, boo
     message.identifier = identifier;
     message.extd = is_extended ? 1 : 0;
     message.rtr = 0;
-    message.data_length_code = len; 
     message.self = 0;
-    
-    if (len < 8)
+
+    if (len <= 7)
     {
-        message.data_length_code = 8;
-        memcpy(message.data, data, len);
-        memset(message.data + len, 0xAA, 8 - len);
+        // Single Frame (SF)
+        message.data[0] = (uint8_t)len;  // Single frame, data length in the first nibble
+        memcpy(&message.data[1], data, len);  // Copy data
+        message.data_length_code = 8;  // DLC is always 8 for ISO-TP frames
     }
     else
     {
-        message.data_length_code = len;
-        memcpy(message.data, data, len);
-    }
-    
-    if (can_send(&message, pdMS_TO_TICKS(100)) != ESP_OK)
-    {
-        ESP_LOGE(TAG, "Error sending CAN message");
+        // Multi-frame message
+        // First Frame (FF)
+        message.data[0] = 0x10 | ((len >> 8) & 0x0F);  // First nibble: '1' for FF, next 3 bits: length high nibble
+        message.data[1] = len & 0xFF;  // Lower byte of length
+        memcpy(&message.data[2], data, 6);  // First 6 bytes of data in the first frame
+        message.data_length_code = 8;
+
+        // Send the first frame
+        if (can_send(&message, pdMS_TO_TICKS(100)) != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Error sending First Frame CAN message");
+            return;
+        }
+
+        size_t bytes_sent = 6;  // We already sent the first 6 bytes
+        uint8_t sequence_number = 1;
+
+        // Send Consecutive Frames (CF)
+        while (bytes_sent < len)
+        {
+            size_t bytes_to_send = (len - bytes_sent > 7) ? 7 : (len - bytes_sent);  // Max 7 bytes in a CF
+            message.data[0] = 0x20 | (sequence_number & 0x0F);  // '2' for CF, sequence number in the last 4 bits
+            memcpy(&message.data[1], data + bytes_sent, bytes_to_send);  // Copy data
+            if (bytes_to_send < 7)
+            {
+                // Pad the remaining bytes with 0xAA if less than 7 bytes
+                memset(&message.data[1 + bytes_to_send], 0xAA, 7 - bytes_to_send);
+            }
+            message.data_length_code = 8;
+
+            // Send the consecutive frame
+            if (can_send(&message, pdMS_TO_TICKS(100)) != ESP_OK)
+            {
+                ESP_LOGE(TAG, "Error sending Consecutive Frame CAN message");
+                return;
+            }
+
+            bytes_sent += bytes_to_send;
+            sequence_number = (sequence_number + 1) & 0x0F;  // Keep sequence number within 4 bits (0-15)
+        }
     }
 }
 
