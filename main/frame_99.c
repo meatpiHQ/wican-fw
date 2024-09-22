@@ -422,7 +422,7 @@ void frame_99_parse_data(const uint8_t *frame, size_t frame_len, QueueHandle_t *
                     reset_buffer();
                     return;
                 }
-
+                vTaskDelay(pdMS_TO_TICKS(100));
                 send_cmd_response(command, FRAME_99_ACK, frame_99_rsp_q); // Acknowledge success
                 reset_buffer();  // Reset for the next frame
                 break;
