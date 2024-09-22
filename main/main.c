@@ -229,7 +229,7 @@ static void can_tx_task(void *pvParameters)
 		}
 		else if(protocol == FRAME_99)
 		{
-			frame_99_parse_data(msg_ptr, temp_len);
+			frame_99_parse_data(msg_ptr, temp_len, &xMsg_Tx_Queue);
 		}
 	}
 }
@@ -478,7 +478,7 @@ void app_main(void)
 	}
 	else if(protocol == FRAME_99)
 	{
-		frame_99_init();
+		frame_99_init(&send_to_host);
 		can_set_bitrate(can_datarate);
 		can_enable();
 	}
@@ -596,5 +596,6 @@ void app_main(void)
 	// pdFALSE, /* Don't wait for both bits, either bit will do. */
 	// portMAX_DELAY);/* Wait forever. */  
 	esp_log_level_set("*", ESP_LOG_NONE);
+	esp_log_level_set("frame_99", ESP_LOG_ERROR);
 }
 

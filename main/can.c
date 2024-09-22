@@ -132,8 +132,8 @@ void can_enable(void)
 	else
 	{
 		ESP_LOGI(TAG, "start normal mode");
-		g_config_normal.rx_queue_len = 50;
-		g_config_normal.tx_queue_len = 50;
+		g_config_normal.rx_queue_len = CAN_TX_QUEUE_LEN;
+		g_config_normal.tx_queue_len = CAN_RX_QUEUE_LEN;
 		ESP_ERROR_CHECK(twai_driver_install(&g_config_normal, (const twai_timing_config_t *)t_config, &f_config));
 	}
 

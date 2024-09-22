@@ -39,6 +39,10 @@
 #define CAN_800K			9
 #define CAN_1000K			10
 #define CAN_AUTO			11
+
+#define CAN_TX_QUEUE_LEN	50
+#define CAN_RX_QUEUE_LEN	50
+
 typedef struct {
 	uint8_t bus_state;
 	uint8_t silent;
