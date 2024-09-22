@@ -480,7 +480,7 @@ void app_main(void)
 	{
 		frame_99_init(&send_to_host);
 		can_set_bitrate(can_datarate);
-		can_enable();
+		// can_enable();
 	}
 
 	if(config_server_mqtt_en_config())
