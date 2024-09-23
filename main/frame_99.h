@@ -46,6 +46,7 @@
 #define DEFAULT_SEPARATION_TIME     0       // Default Separation Time (STmin) in ms
 #define DEFAULT_PADDING_BYTE        0xAA
 
+#define CMD_ISO_TP_RX_FRAME         0x10
 #define CMD_ISO_TP_FRAME            0x11
 #define CMD_RECEIVE_RAW_CAN_FRAME   0x20
 #define CMD_SEND_RAW_CAN_FRAME      0x21
@@ -54,6 +55,9 @@
 #define CMD_SET_CAN_BITRATE         0x03
 #define CMD_SET_ECU_TX_RX_ID        0x04
 #define CMD_SET_PADDING_BYTE        0x05
+
+#define RX_BLOCK_SIZE               256
+#define RX_ST_MIN                   1
 
 typedef struct {
     uint8_t block_size;
@@ -74,7 +78,7 @@ typedef enum
 } frame_99_err_t;
 
 void frame_99_parse_data(const uint8_t *frame, size_t frame_len, QueueHandle_t *frame_99_rsp_q);
-int8_t frame_99_parse_can(uint8_t *buf, twai_message_t *frame);
+int8_t frame_99_parse_can(uint8_t *buf, twai_message_t *frame, QueueHandle_t *send_queue);
 void frame_99_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q));
 
 #endif

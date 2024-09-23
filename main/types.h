@@ -22,7 +22,7 @@
 #ifndef __TYPES_H__
 #define __TYPES_H__
 
-#define DEV_BUFFER_LENGTH	64
+#define DEV_BUFFER_LENGTH	65
 
 typedef enum
 {

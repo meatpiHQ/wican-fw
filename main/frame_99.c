@@ -248,9 +248,9 @@ static frame_99_err_t send_can_message(uint8_t *data, size_t len, bool is_extend
             // Send CF to the ECU's Rx ID
             message.identifier = ecu_rx_id;  // Use the Rx ID for sending consecutive frames
 
-            // ESP_LOGI(TAG, "Sending Consecutive Frame (CF), ID: %lX DLC: %u Data: %02X %02X %02X %02X %02X %02X %02X %02X", 
-            //                         message.identifier, message.data_length_code, message.data[0],message.data[1],message.data[2],
-            //                         message.data[3],message.data[4],message.data[5],message.data[6],message.data[7]);
+            ESP_LOGI(TAG, "Sending Consecutive Frame (CF), ID: %lX DLC: %u Data: %02X %02X %02X %02X %02X %02X %02X %02X", 
+                                    message.identifier, message.data_length_code, message.data[0],message.data[1],message.data[2],
+                                    message.data[3],message.data[4],message.data[5],message.data[6],message.data[7]);
 
             //expect FC frame after frames_sent_in_block+1
             if (block_size != 0 && frames_sent_in_block+1 >= block_size)
@@ -540,7 +540,161 @@ void frame_99_parse_data(const uint8_t *frame, size_t frame_len, QueueHandle_t *
     }
 }
 
-int8_t frame_99_parse_can(uint8_t *buf, twai_message_t *message)
+static void send_flow_control_frame(uint8_t flow_status, uint8_t block_size, uint8_t st_min, bool is_extended)
+{
+    twai_message_t fc_message = {0};
+    fc_message.identifier = ecu_rx_id;  // Use the ECU's Tx ID for flow control response
+    fc_message.extd = is_extended ? 1 : 0;
+    fc_message.rtr = 0;
+    fc_message.data_length_code = 8;  // DLC for Flow Control is always 8
+
+    // Prepare Flow Control frame
+    fc_message.data[0] = 0x30 | (flow_status & 0x0F);  // FC frame with flow status (CTS, WT, OVFLW)
+    fc_message.data[1] = block_size;  // Block size (number of CFs allowed before next FC)
+    fc_message.data[2] = st_min;  // Separation time minimum
+    memset(&fc_message.data[3], frame_99_padding_byte, 5);  // Padding
+
+    // Send the Flow Control frame
+    if (can_send(&fc_message, pdMS_TO_TICKS(1000)) != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to send Flow Control frame");
+    }
+    else
+    {
+        ESP_LOGI(TAG, "Flow Control frame sent (Status: %u, Block Size: %u, STmin: %u)", flow_status, block_size, st_min);
+    }
+}
+
+static void parse_iso_tp_frame(twai_message_t *message, QueueHandle_t *send_queue)
+{
+    static size_t offset = 0;
+    uint8_t pci_type = message->data[0] & 0xF0;
+    static uint8_t *payload_buffer = NULL;
+    static size_t expected_payload_length = 0;
+    static size_t bytes_received = 0;
+    static uint8_t sequence_number = 1;
+
+    // Initialize the payload buffer on first frame
+    if (!payload_buffer)
+    {
+        payload_buffer = malloc(MAX_PAYLOAD_LENGTH);
+        if (!payload_buffer)
+        {
+            ESP_LOGE(TAG, "Failed to allocate memory for payload buffer");
+            return;
+        }
+        offset = 0;
+        payload_buffer[offset++] = FRAME_HEADER_0;
+        payload_buffer[offset++] = FRAME_HEADER_1;
+        payload_buffer[offset++] = FRAME_HEADER_2;
+        payload_buffer[offset++] = CMD_ISO_TP_RX_FRAME;
+    }
+
+    switch (pci_type)
+    {
+        case 0x00: // Single Frame (SF)
+            expected_payload_length = message->data[0] & 0x0F;
+
+            payload_buffer[offset++] = expected_payload_length >> 8;
+            payload_buffer[offset++] = expected_payload_length & 0xFF;
+
+            if (expected_payload_length > MAX_CAN_DATA_LENGTH - 1)
+            {
+                ESP_LOGE(TAG, "Invalid single frame length: %u", expected_payload_length);
+                free(payload_buffer);
+                payload_buffer = NULL;
+                return;
+            }
+
+            // Copy the payload into the buffer
+            memcpy(payload_buffer + offset, &message->data[1], expected_payload_length);
+            ESP_LOGI(TAG, "Received Single Frame, payload length: %u", expected_payload_length);
+
+            frame_99_send_response((char*)payload_buffer, expected_payload_length + offset, send_queue);
+
+            // Dump the payload data
+            ESP_LOG_BUFFER_HEXDUMP(TAG, payload_buffer, expected_payload_length + offset, ESP_LOG_WARN);
+
+            // Reset state after handling single frame
+            free(payload_buffer);
+            payload_buffer = NULL;
+            expected_payload_length = 0;
+            bytes_received = 0;
+            break;
+
+        case 0x10: // First Frame (FF)
+            expected_payload_length = ((message->data[0] & 0x0F) << 8) | message->data[1];
+
+            payload_buffer[offset++] = expected_payload_length >> 8;
+            payload_buffer[offset++] = expected_payload_length & 0xFF;
+            
+            if (expected_payload_length > MAX_PAYLOAD_LENGTH)
+            {
+                ESP_LOGE(TAG, "Invalid multi-frame payload length: %u", expected_payload_length);
+                free(payload_buffer);
+                payload_buffer = NULL;
+                return;
+            }
+
+            // Copy the first 6 bytes of data from the First Frame
+            memcpy(payload_buffer + offset, &message->data[2], 6);
+            bytes_received = 6;
+            ESP_LOGI(TAG, "Received First Frame, expected payload length: %u", expected_payload_length);
+            sequence_number = 1; // Set sequence number for consecutive frames
+
+            // Send Flow Control (FC) frame with CTS (Clear to Send)
+            send_flow_control_frame(FLOW_STATUS_CTS, RX_BLOCK_SIZE, RX_ST_MIN, is_extended_id(message->identifier));
+            break;
+
+        case 0x20: // Consecutive Frame (CF)
+            if ((message->data[0] & 0x0F) != sequence_number)
+            {
+                ESP_LOGE(TAG, "Sequence number mismatch: expected %u, received %u", sequence_number, message->data[0] & 0x0F);
+                free(payload_buffer);
+                payload_buffer = NULL;
+                return;
+            }
+
+            size_t bytes_to_copy = (expected_payload_length - bytes_received > 7) ? 7 : (expected_payload_length - bytes_received);
+            memcpy(payload_buffer + offset + bytes_received, &message->data[1], bytes_to_copy);
+            bytes_received += bytes_to_copy;
+
+            ESP_LOGI(TAG, "Received Consecutive Frame, sequence number: %u, bytes received: %u/%u", sequence_number, bytes_received, expected_payload_length);
+
+            if (bytes_received >= expected_payload_length)
+            {
+                frame_99_send_response((char*)payload_buffer, expected_payload_length + offset, send_queue);
+
+                // Dump the payload data
+                ESP_LOG_BUFFER_HEXDUMP(TAG, payload_buffer, expected_payload_length + offset, ESP_LOG_WARN);
+
+                // Reset state after handling all frames
+                free(payload_buffer);
+                payload_buffer = NULL;
+                expected_payload_length = 0;
+                bytes_received = 0;
+                sequence_number = 1;
+            }
+            else
+            {
+                sequence_number = (sequence_number + 1) & 0x0F; // Increment sequence number
+            }
+
+            // Handle block size if necessary
+            if (RX_BLOCK_SIZE > 0 && sequence_number % RX_BLOCK_SIZE == 0)
+            {
+                // Send Flow Control (FC) frame after receiving the specified number of CFs
+                send_flow_control_frame(FLOW_STATUS_CTS, RX_BLOCK_SIZE, RX_ST_MIN, is_extended_id(message->identifier));
+            }
+            break;
+
+        default:
+            ESP_LOGE(TAG, "Unsupported PCI type: 0x%02X", pci_type);
+            break;
+    }
+}
+
+int8_t frame_99_parse_can(uint8_t *buf, twai_message_t *message, QueueHandle_t *send_queue)
 {
     if (buf == NULL || message == NULL)
     {
@@ -567,6 +721,12 @@ int8_t frame_99_parse_can(uint8_t *buf, twai_message_t *message)
         return 0;
     }
 
+    if(message->identifier == ecu_tx_id)
+    {
+        parse_iso_tp_frame(message, send_queue);
+
+        return 0;
+    }
     size_t offset = 0;
 
     // Add the FRAME 99 Protocol header
@@ -596,7 +756,7 @@ int8_t frame_99_parse_can(uint8_t *buf, twai_message_t *message)
         memcpy(&buf[offset], message->data, message->data_length_code);
         offset += message->data_length_code;
     }
-
+    ESP_LOG_BUFFER_HEXDUMP(TAG, buf, offset, ESP_LOG_WARN);
     return (int8_t)offset;
 }
 

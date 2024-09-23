@@ -142,23 +142,49 @@ static void process_led(bool state)
 //TODO: make this pretty?
 void send_to_host(char* str, uint32_t len, QueueHandle_t *q)
 {
-	static xdev_buffer xsend_buffer;
+    if (q == NULL || *q == NULL)
+    {
+        ESP_LOGE(TAG, "Null queue");
+        return;
+    }
 
-	if(len == 0)
-	{
-		xsend_buffer.usLen = strlen(str);
-	}
-	else
-	{
-		xsend_buffer.usLen = len;
-	}
-	memcpy(xsend_buffer.ucElement, str, xsend_buffer.usLen);
-	xQueueSend( *q, ( void * ) &xsend_buffer, portMAX_DELAY );
+    static xdev_buffer xsend_buffer;  // Consider non-static for multithreading
+    uint32_t bytes_sent = 0;
+    uint32_t bytes_to_send;
 
-//	ESP_LOG_BUFFER_HEX(TAG, ucTCP_TX_Buffer.ucElement, xsend_buffer.usLen);
-	memset(xsend_buffer.ucElement, 0, sizeof(xsend_buffer.ucElement));
-	xsend_buffer.usLen = 0;
-//	ESP_LOGI(TAG, "%s", str);
+    if (len == 0)
+    {
+		if(str == NULL || strlen(str) == 0)
+		{
+			ESP_LOGE(TAG, "Empty string");
+			return;
+		}
+        len = strlen(str);  // Cache the string length
+    }
+
+    while (bytes_sent < len)
+    {
+        // Determine the number of bytes to send in this iteration
+        bytes_to_send = len - bytes_sent;
+        if (bytes_to_send > DEV_BUFFER_LENGTH)
+        {
+            bytes_to_send = DEV_BUFFER_LENGTH;
+        }
+
+        // Copy the data to the buffer
+        memcpy(xsend_buffer.ucElement, str + bytes_sent, bytes_to_send);
+        xsend_buffer.usLen = bytes_to_send;
+
+        // Send the buffer to the queue with a timeout
+        if (xQueueSend(*q, (void*)&xsend_buffer, pdMS_TO_TICKS(100)) != pdPASS)
+        {
+            ESP_LOGE(TAG, "Failed to send data to queue");
+            return;
+        }
+
+        // Update the number of bytes sent
+        bytes_sent += bytes_to_send;
+    }
 }
 
 static void can_tx_task(void *pvParameters)
@@ -302,7 +328,7 @@ static void can_rx_task(void *pvParameters)
 				}
 				if(protocol == FRAME_99)
 				{
-					ucTCP_TX_Buffer.usLen = frame_99_parse_can(ucTCP_TX_Buffer.ucElement, &rx_msg);
+					ucTCP_TX_Buffer.usLen = frame_99_parse_can(ucTCP_TX_Buffer.ucElement, &rx_msg, &xMsg_Tx_Queue);
 				}
 
 				if(ucTCP_TX_Buffer.usLen != 0)
@@ -380,9 +406,9 @@ void app_main(void)
 
 	if(protocol == FRAME_99)
 	{
-		xMsg_Rx_Queue = xQueueCreate(64, sizeof( xdev_buffer) );
-		xMsg_Tx_Queue = xQueueCreate(16, sizeof( xdev_buffer) );
-		xmsg_ws_tx_queue = xQueueCreate(16, sizeof( xdev_buffer) );
+		xMsg_Rx_Queue = xQueueCreate(68, sizeof( xdev_buffer) );
+		xMsg_Tx_Queue = xQueueCreate(68, sizeof( xdev_buffer) );
+		xmsg_ws_tx_queue = xQueueCreate(8, sizeof( xdev_buffer) );
 	}
 	else
 	{
@@ -596,6 +622,6 @@ void app_main(void)
 	// pdFALSE, /* Don't wait for both bits, either bit will do. */
 	// portMAX_DELAY);/* Wait forever. */  
 	esp_log_level_set("*", ESP_LOG_NONE);
-	// esp_log_level_set("frame_99", ESP_LOG_INFO);
+	esp_log_level_set("frame_99", ESP_LOG_ERROR);
 }
 
