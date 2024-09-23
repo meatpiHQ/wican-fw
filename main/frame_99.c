@@ -149,7 +149,7 @@ static frame_99_err_t send_can_message(uint8_t *data, size_t len, bool is_extend
         message.data[0] = 0x00 | len;  // PCI with Single Frame type and length
         memcpy(&message.data[1], data, len); 
 
-        message.data_length_code = len + 1;  // DLC = data + PCI
+        message.data_length_code = 8;  // DLC = data + PCI
         if(len < 7)
         {
             // Pad the remaining bytes with 0xAA if less than 7 bytes
