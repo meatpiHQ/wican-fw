@@ -138,6 +138,11 @@ static frame_99_err_t send_can_message(uint8_t *data, size_t len, bool is_extend
     message.rtr = 0;
     message.self = 0;
     
+    if(len == 0)
+    {
+        return FRAME_99_NAK;
+    }
+    
     if (len <= 7)
     {
         // Single Frame (SF)
@@ -145,6 +150,12 @@ static frame_99_err_t send_can_message(uint8_t *data, size_t len, bool is_extend
         memcpy(&message.data[1], data, len); 
 
         message.data_length_code = len + 1;  // DLC = data + PCI
+        if(len < 7)
+        {
+            // Pad the remaining bytes with 0xAA if less than 7 bytes
+            memset(&message.data[1 + len], frame_99_padding_byte, 7 - len);
+        }
+        
         ESP_LOGI(TAG, "Sending Single Frame (SF),       ID: %lX DLC: %u Data: %02X %02X %02X %02X %02X %02X %02X %02X", 
                                 message.identifier, message.data_length_code, message.data[0],message.data[1],message.data[2],
                                 message.data[3],message.data[4],message.data[5],message.data[6],message.data[7]);

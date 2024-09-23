@@ -596,6 +596,6 @@ void app_main(void)
 	// pdFALSE, /* Don't wait for both bits, either bit will do. */
 	// portMAX_DELAY);/* Wait forever. */  
 	esp_log_level_set("*", ESP_LOG_NONE);
-	esp_log_level_set("frame_99", ESP_LOG_ERROR);
+	// esp_log_level_set("frame_99", ESP_LOG_INFO);
 }
 
