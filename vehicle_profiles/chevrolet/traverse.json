@@ -1,41 +1,41 @@
 {
-    "car_model": "Chevrolet: Traverse",
-    "init": "",
-    "pids": [
+  "car_model": "Chevrolet: Traverse",
+  "init": "",
+  "pids": [
+    {
+      "pid": "12A",
+      "parameters": [
         {
-            "pid": "12A",
-            "parameters": [
-                {
-                  "name": "Trunk State",
-                  "expression": "[B10:B11]",
-                  "unit": "",
-                  "class": "none"
-                },
-                {
-                  "name": "Right Rear Door State",
-                  "expression": "[B16:B17]",
-                  "unit": "",
-                  "class": "none"
-                },
-                {
-                  "name": "Left Rear Door State",
-                  "expression": "[B18:B19]",
-                  "unit": "",
-                  "class": "none"
-                },
-                {
-                  "name": "Right Front Door State",
-                  "expression": "[B20:B21]",
-                  "unit": "",
-                  "class": "none"
-                },
-                {
-                  "name": "Left Front Door State",
-                  "expression": "[B22:B23]",
-                  "unit": "",
-                  "class": "none"
-                }
-            ]
+          "name": "Trunk State",
+          "expression": "[B10:B11]",
+          "unit": "",
+          "class": "none"
+        },
+        {
+          "name": "Right Rear Door State",
+          "expression": "[B16:B17]",
+          "unit": "",
+          "class": "none"
+        },
+        {
+          "name": "Left Rear Door State",
+          "expression": "[B18:B19]",
+          "unit": "",
+          "class": "none"
+        },
+        {
+          "name": "Right Front Door State",
+          "expression": "[B20:B21]",
+          "unit": "",
+          "class": "none"
+        },
+        {
+          "name": "Left Front Door State",
+          "expression": "[B22:B23]",
+          "unit": "",
+          "class": "none"
         }
-    ]
+      ]
+    }
+  ]
 }
