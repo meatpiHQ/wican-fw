@@ -56,9 +56,9 @@ We are currently in the process of migrating from this large README.md into the 
   - [WiFi](#1-wifi)
   - [USB](#2-usb)
 - [ELM327 OBD2 Protocol](#elm327-obd2-protocol)
-- [Firmware Update](#firmware-update)
-  - [OTA](#1-ota)
-  - [USB Flash](#2-usb-flash)
+- [Firmware Update](https://meatpihq.github.io/wican-fw/config/firmware-update)
+  - [OTA](https://meatpihq.github.io/wican-fw/config/firmware-update)
+  - [USB Flash](https://meatpihq.github.io/wican-fw/config/firmware-update)
 
 # **Important Notes**:
 
