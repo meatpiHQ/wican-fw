@@ -620,6 +620,46 @@ static esp_err_t load_config_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+static esp_err_t load_car_config_handler(httpd_req_t *req)
+{
+    car_model_data_t *car = autopid_get_config();
+
+    cJSON *parameters_object = cJSON_CreateObject();
+
+    for (int i = 0; i < car->pid_count; i++) 
+    {
+        for (int j = 0; j < car->pids[i].parameter_count; j++) 
+        {
+            cJSON *parameter_details = cJSON_CreateObject();
+
+            cJSON_AddStringToObject(parameter_details, "class", car->pids[i].parameters[j].class);
+            cJSON_AddStringToObject(parameter_details, "unit", car->pids[i].parameters[j].unit);
+            cJSON_AddItemToObject(parameters_object, car->pids[i].parameters[j].name, parameter_details);
+        }
+    }
+
+    char *response_str = cJSON_PrintUnformatted(parameters_object);
+    if (response_str != NULL)
+    {
+        ESP_LOGI(TAG, "Sending response: %s", response_str);
+
+        httpd_resp_set_type(req, "application/json");
+
+        httpd_resp_send(req, response_str, HTTPD_RESP_USE_STRLEN);
+
+        cJSON_free(response_str);
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Failed to convert response JSON to string");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to generate JSON");
+    }
+	
+    cJSON_Delete(parameters_object);
+
+    return ESP_OK;
+}
+
 static esp_err_t system_reboot_handler(httpd_req_t *req)
 {
 	const char *resp_str = "Configuration saved! Rebooting...";
@@ -1340,6 +1380,14 @@ static const httpd_uri_t load_pid_auto_conf_uri = {
      * context to demonstrate it's usage */
     .user_ctx  = NULL
 };
+static const httpd_uri_t load_car_config_uri = {
+    .uri       = "/load_car_config",
+    .method    = HTTP_GET,
+    .handler   = load_car_config_handler,
+    /* Let's pass response string in user
+     * context to demonstrate it's usage */
+    .user_ctx  = NULL
+};
 static const httpd_uri_t check_status_uri = {
     .uri       = "/check_status",
     .method    = HTTP_GET,
@@ -2013,7 +2061,7 @@ static httpd_handle_t config_server_init(void)
                        );
 
     // Start the httpd server
-	config.max_uri_handlers = 15;
+	config.max_uri_handlers = 16;
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK)
     {
@@ -2034,6 +2082,7 @@ static httpd_handle_t config_server_init(void)
 		httpd_register_uri_handler(server, &load_pid_auto_conf_uri);
 		httpd_register_uri_handler(server, &upload_car_data);
 		httpd_register_uri_handler(server, &autopid_data);
+		httpd_register_uri_handler(server, &load_car_config_uri);
         #if CONFIG_EXAMPLE_BASIC_AUTH
         httpd_register_basic_auth(server);
         #endif

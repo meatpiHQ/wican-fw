@@ -123,6 +123,11 @@ bool autopid_get_ecu_status(void)
 	else return false;
 }
 
+car_model_data_t *autopid_get_config(void)
+{
+    return &car;
+}
+
 void autopid_pub_discovery(void)
 {
     char *discovery_str = NULL;
