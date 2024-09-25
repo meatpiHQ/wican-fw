@@ -254,7 +254,7 @@ static void can_rx_task(void *pvParameters)
     	{
     		uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
     		time_old = esp_timer_get_time();
-    		// ESP_LOGI(TAG, "free_heap: %lu", free_heap)
+    		ESP_LOGI(TAG, "free_heap: %lu", free_heap);
 //        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
 //        		num_msg = 0;
     	}
@@ -369,9 +369,9 @@ void app_main(void)
 	gpio_set_level(CONNECTED_LED_GPIO_NUM, 1);
 	gpio_set_level(ACTIVE_LED_GPIO_NUM, 1);
 
-    xMsg_Rx_Queue = xQueueCreate(32, sizeof( xdev_buffer) );
-    xMsg_Tx_Queue = xQueueCreate(32, sizeof( xdev_buffer) );
-    xmsg_ws_tx_queue = xQueueCreate(16, sizeof( xdev_buffer) );
+    xMsg_Rx_Queue = xQueueCreate(16, sizeof( xdev_buffer) );
+    xMsg_Tx_Queue = xQueueCreate(16, sizeof( xdev_buffer) );
+    xmsg_ws_tx_queue = xQueueCreate(8, sizeof( xdev_buffer) );
 
 	esp_ota_mark_app_valid_cancel_rollback();
 //    xmsg_obd_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
