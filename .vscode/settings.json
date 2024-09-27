@@ -1,6 +1,6 @@
 {
     "idf.adapterTargetName": "esp32s3",
-    "idf.portWin": "COM99",
+    "idf.portWin": "COM101",
     "idf.flashType": "UART",
     "files.associations": {
         "ftp.h": "c",
@@ -15,7 +15,15 @@
         "stdio.h": "c",
         "stdlib.h": "c",
         "ctype.h": "c",
-        "obd.h": "c"
+        "obd.h": "c",
+        "wusb3801.h": "c",
+        "chrono": "c",
+        "functional": "c",
+        "cstdint": "c",
+        "twai.h": "c",
+        "event_groups.h": "c",
+        "freertos.h": "c",
+        "elm327.h": "c"
     },
     "idf.openOcdConfigs": [
         "board/esp32s3-bridge.cfg"

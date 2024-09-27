@@ -55,3 +55,6 @@ dkms.conf
 
 #Vehicle Profiles
 .vehicle_profiles/node_modules/
+
+#managed components
+managed_components/

@@ -57,6 +57,8 @@
 #include "driver/i2c.h"
 #include "led.h"
 #include "obd.h"
+#include "wusb3801.h"
+#include "usb_host.h"
 
 #define TAG 		__func__
 #define USB_ID_PIN					39
@@ -66,6 +68,7 @@
 #define GPIO_OUTPUT_PIN_SEL  		((1ULL<<CONNECTED_LED_GPIO_NUM) | (1ULL<<ACTIVE_LED_GPIO_NUM) | (1ULL<<PWR_LED_GPIO_NUM) | (1ULL<<CAN_STDBY_GPIO_NUM) | (1ULL<<USB_OTG_PWR_EN) | (1ULL<<USB_ESP_MODE_EN))
 #elif HARDWARE_VER == WICAN_PRO
 #define GPIO_OUTPUT_PIN_SEL  		((1ULL<<CAN_STDBY_GPIO_NUM) | (1ULL<<USB_OTG_PWR_EN) | (1ULL<<USB_ESP_MODE_EN))
+// #define GPIO_OUTPUT_PIN_SEL  		((1ULL<<CAN_STDBY_GPIO_NUM)  | (1ULL<<USB_ESP_MODE_EN))
 #define I2C_MASTER_SCL_IO           6     
 #define I2C_MASTER_SDA_IO           5      
 #define I2C_MASTER_NUM              0
@@ -178,18 +181,24 @@ static esp_err_t i2c_master_init(void)
 //TODO: make this pretty?
 void send_to_host(char* str, uint32_t len, QueueHandle_t *q)
 {
-    static xdev_buffer xsend_buffer;
+    if (q == NULL || *q == NULL)
+    {
+        ESP_LOGE(TAG, "Null queue");
+        return;
+    }
+
+    static xdev_buffer xsend_buffer;  // Consider non-static for multithreading
     uint32_t bytes_sent = 0;
     uint32_t bytes_to_send;
 
-	if(*q == NULL)
-	{
-		return;
-	}
-	
-    if(len == 0)
+    if (len == 0)
     {
-        len = strlen(str);
+		if(str == NULL || strlen(str) == 0)
+		{
+			ESP_LOGE(TAG, "Empty string");
+			return;
+		}
+        len = strlen(str);  // Cache the string length
     }
 
     while (bytes_sent < len)
@@ -205,12 +214,12 @@ void send_to_host(char* str, uint32_t len, QueueHandle_t *q)
         memcpy(xsend_buffer.ucElement, str + bytes_sent, bytes_to_send);
         xsend_buffer.usLen = bytes_to_send;
 
-        // Send the buffer to the queue
-        xQueueSend(*q, (void*)&xsend_buffer, portMAX_DELAY);
-
-        // Clear the buffer for the next iteration
-        memset(xsend_buffer.ucElement, 0, DEV_BUFFER_LENGTH);
-        xsend_buffer.usLen = 0;
+        // Send the buffer to the queue with a timeout
+        if (xQueueSend(*q, (void*)&xsend_buffer, pdMS_TO_TICKS(100)) != pdPASS)
+        {
+            ESP_LOGE(TAG, "Failed to send data to queue");
+            return;
+        }
 
         // Update the number of bytes sent
         bytes_sent += bytes_to_send;
@@ -275,6 +284,20 @@ static void can_tx_task(void *pvParameters)
 		}
 		else if(protocol == OBD_ELM327)
 		{
+			#if HARDWARE_VER == WICAN_PRO
+			static char elm327_cmd_buffer[2048];
+			static uint32_t cmd_buffer_len = 0;
+			static int64_t last_cmd_time = 0;
+
+			if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI)
+			{
+				elm327_process_cmd(msg_ptr, temp_len, &xMsg_Tx_Queue, elm327_cmd_buffer, &cmd_buffer_len, &last_cmd_time, &send_to_host);
+			}
+			else if(ucTCP_RX_Buffer.dev_channel == DEV_BLE)
+			{
+				elm327_process_cmd(msg_ptr, temp_len, &xmsg_ble_tx_queue, elm327_cmd_buffer, &cmd_buffer_len, &last_cmd_time, &send_to_host);
+			}
+			#else
 			if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI)
 			{
 				elm327_process_cmd(msg_ptr, temp_len, &tx_msg, &xMsg_Tx_Queue);
@@ -283,6 +306,7 @@ static void can_tx_task(void *pvParameters)
 			{
 				elm327_process_cmd(msg_ptr, temp_len, &tx_msg, &xmsg_ble_tx_queue);
 			}
+			#endif
 		}
 	}
 }
@@ -319,12 +343,12 @@ static void can_rx_task(void *pvParameters)
 
 		// if(gpio_get_level(USB_ID_PIN) == 0)
 		// {
-		// 	gpio_set_level(USB_OTG_PWR_EN, 1);
+		// 	// gpio_set_level(USB_OTG_PWR_EN, 1);
 		// 	gpio_set_level(USB_ESP_MODE_EN, 1);
 		// }
 		// else
 		// {
-		// 	gpio_set_level(USB_OTG_PWR_EN, 0);
+		// 	// gpio_set_level(USB_OTG_PWR_EN, 0);
 		// 	gpio_set_level(USB_ESP_MODE_EN, 0);
 		// }
         while(can_receive(&rx_msg, 0) ==  ESP_OK)
@@ -451,6 +475,7 @@ void app_main(void)
 	i2c_master_init();
 	led_init(I2C_MASTER_NUM);
 	#endif
+	gpio_set_level(USB_OTG_PWR_EN, 1);
 	// gpio_reset_pin(USB_ESP_MODE_EN);
 	// gpio_set_direction(USB_ESP_MODE_EN, GPIO_MODE_OUTPUT);
 	// gpio_set_level(USB_ESP_MODE_EN, 1);
@@ -470,7 +495,9 @@ void app_main(void)
 	// 		gpio_set_level(USB_ESP_MODE_EN, 0);
 	// 	}
 	// }
-
+	#if HARDWARE_VER == WICAN_PRO
+	wc_uart_init();
+	#endif
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 	xMsg_Rx_Queue = xQueueCreate(32, sizeof( xdev_buffer) );
     xMsg_Tx_Queue = xQueueCreate(32, sizeof( xdev_buffer) );
@@ -575,18 +602,20 @@ void app_main(void)
 	else if(protocol == OBD_ELM327)
 	{
 //		can_init(CAN_500K);
+		#if HARDWARE_VER != WICAN_PRO
 		can_set_bitrate(can_datarate);
 		can_set_silent(1);
 		can_enable();
+		#endif
 		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
 		if(config_server_mqtt_en_config() && config_server_mqtt_elm327_log())
 		{
 			mqtt_elm327_log_en = config_server_mqtt_elm327_log();
-			elm327_init(&send_to_host, &xmsg_obd_rx_queue, log_can_to_mqtt);
+			elm327_init(&xmsg_obd_rx_queue, log_can_to_mqtt);
 		}
 		else
 		{
-			elm327_init(&send_to_host, &xmsg_obd_rx_queue, NULL);
+			elm327_init(&xmsg_obd_rx_queue, NULL);
 		}
 	}
 	else if(protocol == AUTO_PID)
@@ -597,7 +626,7 @@ void app_main(void)
 		#endif
 		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
 		
-		elm327_init(&autopid_parser, &xmsg_obd_rx_queue, NULL);
+		elm327_init(&xmsg_obd_rx_queue, NULL);
 		autopid_init((char*)&uid[0], config_server_get_auto_pid());
 	}
 
@@ -686,11 +715,9 @@ void app_main(void)
         	// ESP_LOGI(TAG, "project_hardware_rev: USB");
         	if(!config_server_mqtt_en_config())
         	{
-        	    xmsg_uart_tx_queue = xQueueCreate(32, sizeof( xdev_buffer) );
-				#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
+				#if HARDWARE_VER == WICAN_USB_V100
+				xmsg_uart_tx_queue = xQueueCreate(32, sizeof( xdev_buffer) );
 				wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
-				#elif HARDWARE_VER == WICAN_PRO
-        		// wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, 0);
 				#endif
         	}
 
@@ -732,7 +759,7 @@ void app_main(void)
 		sleep_mode_init(0, 13.1f);
 	}
 	#elif HARDWARE_VER == WICAN_PRO
-	sleep_mode_init();
+	// sleep_mode_init();
 	#endif
 
 
@@ -740,10 +767,15 @@ void app_main(void)
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
 	#elif HARDWARE_VER == WICAN_PRO
 	led_set_level(0,0,200);
+	if(gpio_get_level(USB_ID_PIN) == 0)
+	{
+		// usb_host_init();
+	}
     #endif
 	
-	// xEventTask = xEventGroupCreate();
-	// xTaskCreate(ftp_task, "FTP", 1024*6, NULL, 2, NULL);
+	// wusb3801_init(I2C_MASTER_NUM);
+	xEventTask = xEventGroupCreate();
+	xTaskCreate(ftp_task, "FTP", 1024*6, NULL, 2, NULL);
 	// xEventGroupWaitBits( xEventTask,
 	// FTP_TASK_FINISH_BIT, /* The bits within the event group to wait for. */
 	// pdTRUE, /* BIT_0 should be cleared before returning. */

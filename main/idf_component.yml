@@ -1,0 +1,20 @@
+## IDF Component Manager Manifest File
+dependencies:
+  espressif/usb_host_cp210x_vcp: "^2.0.0"
+  espressif/usb_host_ftdi_vcp: "^2.0.0"
+  espressif/usb_host_ch34x_vcp: "^2.0.0"
+  espressif/usb_host_vcp: "^1.0.0~5"
+  ## Required IDF version
+  idf:
+    version: ">=4.1.0"
+  # # Put list of dependencies here
+  # # For components maintained by Espressif:
+  # component: "~1.0.0"
+  # # For 3rd party components:
+  # username/component: ">=1.0.0,<2.0.0"
+  # username2/component2:
+  #   version: "~1.0.0"
+  #   # For transient dependencies `public` flag can be set.
+  #   # `public` flag doesn't have an effect dependencies of the `main` component.
+  #   # All dependencies of `main` are public by default.
+  #   public: true
