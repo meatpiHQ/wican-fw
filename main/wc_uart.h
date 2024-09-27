@@ -20,8 +20,11 @@
 
 #ifndef __WC_UART_H__
 #define __WC_UART_H__
-
+#if HARDWARE_VER == WICAN_USB_V100
 void wc_uart_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t connected_led);
 bool wc_uart_enabled(void);
+#elif HARDWARE_VER == WICAN_PRO
+void wc_uart_init(void);
+#endif
 
 #endif

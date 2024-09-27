@@ -1286,123 +1286,170 @@ void elm327_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q), QueueH
 	elm327_can_log = can_log;
 }
 #else
-#include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/semphr.h"
+#include "driver/uart.h"
+#include "esp_log.h"
+#include "esp_timer.h"  // For esp_timer_get_time()
 
 #define BUF_SIZE (1024)
+#define ELM327_CMD_QUEUE_SIZE 20
+#define ELM327_MAX_CMD_LEN 4096
+#define ELM327_CMD_TIMEOUT_MS	10000
+#define ELM327_CMD_TIMEOUT_US 	(ELM327_CMD_TIMEOUT_MS*1000)  // 10 seconds in microseconds
+typedef struct {
+    char* command;
+    uint32_t command_len;
+    QueueHandle_t *response_queue;
+    response_callback_t response_callback; // Add the response callback
+} elm327_commands_t;
+
+static QueueHandle_t elm327_cmd_queue;
 extern QueueHandle_t uart1_queue;
-QueueHandle_t *tx_q;
-int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t *q)
+
+extern SemaphoreHandle_t xuart1_semaphore;
+int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, QueueHandle_t *q, char *cmd_buffer, uint32_t *cmd_buffer_len, int64_t *last_cmd_time, response_callback_t response_callback)
 {
-    static uint8_t uart_read_buf[BUF_SIZE];
-    uart_event_t event;
-    bool continueReading = true;
+    int64_t current_time = esp_timer_get_time();  // Get the current time
 
-    ESP_LOGI(TAG, "Cmd: %s", (char*)buf);
-	tx_q = q;
-    uart_write_bytes(UART_NUM_1, (const char*) buf, len);
-	
-    // while(continueReading)
-    // {
-    //     if (xQueueReceive(uart1_queue, (void *)&event, (TickType_t)portMAX_DELAY))
-    //     {
-    //         bzero(uart_read_buf, BUF_SIZE);
-    //         // ESP_LOGI(TAG, "uart[%d] event:", UART_NUM_1);
-    //         switch (event.type) 
-    //         {
-    //             case UART_DATA:
-    //                 // ESP_LOGI(TAG, "[UART DATA]: %d", event.size);
-    //                 uart_read_bytes(UART_NUM_1, uart_read_buf, event.size, portMAX_DELAY);
-    //                 // ESP_LOGI(TAG, "[DATA EVT]:");
-                    
-	// 				ESP_LOG_BUFFER_HEXDUMP(TAG, uart_read_buf, event.size, ESP_LOG_INFO);
-	// 				uart_read_buf[event.size] = 0;
-	// 				elm327_response((char*)uart_read_buf, 0, q);
-    //                 // ESP_LOGI(TAG, "Data: %s", (char*)uart_read_buf);
+    // Check for timeout
+    if (current_time - *last_cmd_time > ELM327_CMD_TIMEOUT_US)
+    {
+        ESP_LOGW(TAG, "Timeout occurred, resetting command buffer.");
+        *cmd_buffer_len = 0;
+    }
 
-    //                 // Check if the '>' character is in the buffer
-    //                 if (strchr((char *)uart_read_buf, '>') != NULL) {
-    //                     continueReading = false; // Stop reading if '>' found
-    //                 }
-    //                 break;
-    //             default:
-    //                 ESP_LOGI(TAG, "uart event type: %d", event.type);
-    //                 break;
-    //         }
-    //     }
-    // }
+    *last_cmd_time = current_time;
+
+    // Accumulate data until carriage return
+    for (int i = 0; i < len; i++)
+    {
+        if (*cmd_buffer_len < ELM327_MAX_CMD_LEN - 1)
+        {
+            cmd_buffer[(*cmd_buffer_len)++] = buf[i];
+        }
+
+        if (buf[i] == '\r')
+        {
+            // Null-terminate the accumulated command
+            cmd_buffer[*cmd_buffer_len] = '\0';
+
+            // Allocate memory for the command data
+            elm327_commands_t command_data;
+            command_data.command = (char*) malloc(*cmd_buffer_len + 1);
+            if (command_data.command == NULL)
+            {
+                ESP_LOGE(TAG, "Failed to allocate memory for command");
+                *cmd_buffer_len = 0;
+                return -1;
+            }
+
+            // Copy the accumulated command and set other parameters
+            memcpy(command_data.command, cmd_buffer, *cmd_buffer_len + 1);
+            command_data.command_len = *cmd_buffer_len;
+            command_data.response_queue = q;
+            command_data.response_callback = response_callback;  // Assign the response callback
+
+            // Send the command to the queue
+            if (xQueueSend(elm327_cmd_queue, (void*)&command_data, portMAX_DELAY) != pdPASS)
+            {
+                ESP_LOGE(TAG, "Failed to send command to the queue");
+                free(command_data.command);
+                *cmd_buffer_len = 0;
+                return -1;
+            }
+
+            *cmd_buffer_len = 0;
+        }
+    }
 
     return 0;
 }
-extern SemaphoreHandle_t xuart1_semaphore;
+
+
+// UART event task to handle UART commands and response queue
 static void uart1_event_task(void *pvParameters)
 {
     static uint8_t uart_read_buf[BUF_SIZE];
+    size_t response_len = 0;
     uart_event_t event;
+    static elm327_commands_t elm327_command;
 
-    while (1) {
-        if (xQueuePeek(uart1_queue, (void*)&event, portMAX_DELAY)) {
-			if( xSemaphoreTake( xuart1_semaphore, pdMS_TO_TICKS(1) ) == pdTRUE )
-			{
-				// vTaskDelay(pdMS_TO_TICKS(2));
-				if(xQueueReceive(uart1_queue, (void*)&event, pdMS_TO_TICKS(10)) == pdTRUE)
-				{
-					bzero(uart_read_buf, BUF_SIZE);
-					switch (event.type) {
-						case UART_DATA:
-							uart_read_bytes(UART_NUM_1, uart_read_buf, event.size, portMAX_DELAY);
-							uart_read_buf[event.size] = '\0'; // Null-terminate the data
-							ESP_LOG_BUFFER_HEXDUMP(TAG, uart_read_buf, event.size, ESP_LOG_INFO);
-							elm327_response((char*)uart_read_buf, 0, tx_q); // Assuming no specific queue is used here
-							break;
-						case UART_FIFO_OVF:
-							ESP_LOGE(TAG, "HW FIFO Overflow");
-							uart_flush(UART_NUM_1);
-							break;
-						case UART_BUFFER_FULL:
-							ESP_LOGE(TAG, "Ring Buffer Full");
-							uart_flush(UART_NUM_1);
-							break;
-						default:
-							ESP_LOGI(TAG, "Unhandled event type: %d", event.type);
-							break;
-					}
-				}
-				xSemaphoreGive(xuart1_semaphore);
-			}
-			else
-			{
-				vTaskDelay(pdMS_TO_TICKS(10));
-			}
+    while (1) 
+    {
+        if (xQueueReceive(elm327_cmd_queue, (void*)&elm327_command, portMAX_DELAY) == pdTRUE)
+        {
+            if (xSemaphoreTake(xuart1_semaphore, portMAX_DELAY) == pdTRUE)
+            {
+                uart_flush(UART_NUM_1);
+                uart_write_bytes(UART_NUM_1, elm327_command.command, elm327_command.command_len);
+                ESP_LOG_BUFFER_HEXDUMP(TAG, elm327_command.command, elm327_command.command_len, ESP_LOG_INFO);
+
+                bool terminator_received = false;
+                response_len = 0;
+
+                while (!terminator_received)
+                {
+                    if (xQueueReceive(uart1_queue, (void*)&event, pdMS_TO_TICKS(ELM327_CMD_TIMEOUT_MS)) == pdTRUE)
+                    {
+                        if (event.type == UART_DATA)
+                        {
+                            int read_bytes = uart_read_bytes(UART_NUM_1, uart_read_buf + response_len, event.size, portMAX_DELAY);
+                            if (read_bytes > 0)
+                            {
+                                ESP_LOG_BUFFER_HEXDUMP(TAG, uart_read_buf + response_len, read_bytes, ESP_LOG_INFO);
+                                response_len += read_bytes;
+
+                                for (int i = 0; i < response_len; i++)
+                                {
+                                    if (uart_read_buf[i] == '>')
+                                    {
+                                        terminator_received = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        ESP_LOGE(TAG, "UART read timeout");
+                        break;
+                    }
+                }
+
+                if (terminator_received && response_len > 0)
+                {
+                    uart_read_buf[response_len] = '\0';
+
+                    // if (elm327_command.response_queue != NULL)
+                    {
+                        elm327_command.response_callback((char*)uart_read_buf, response_len, elm327_command.response_queue);  // Use the callback
+                    }
+                }
+
+                xSemaphoreGive(xuart1_semaphore);
+            }
+
+            free(elm327_command.command);
         }
     }
 }
-void elm327_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q), QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame, uint8_t type))
+
+// Initialization function for ELM327 and UART
+void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame, uint8_t type))
 {
-	// elm327_set_default_config(true);
-	elm327_response = send_to_host;
-	can_rx_queue = rx_queue;
-	elm327_can_log = can_log;
+    can_rx_queue = rx_queue;
+    elm327_can_log = can_log;
 
-    // uart_config_t uart1_config = {
-    //     .baud_rate = 115200,
-    //     .data_bits = UART_DATA_8_BITS,
-    //     .parity = UART_PARITY_DISABLE,
-    //     .stop_bits = UART_STOP_BITS_1,
-    //     .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-    //     .source_clk = UART_SCLK_DEFAULT,
-    // };
-    // //Install UART driver, and get the queue.
-    // esp_err_t ret =uart_driver_install(UART_NUM_1, BUF_SIZE * 2, BUF_SIZE * 2, 20, &uart1_queue, 0);
-	// if (ret != ESP_OK) {
-	// 	ESP_LOGE(TAG, "Failed to install UART driver: %s", esp_err_to_name(ret));
-	// }
-    // uart_param_config(UART_NUM_1, &uart1_config);
-
-	// // uart_set_pin(UART_NUM_1, GPIO_NUM_17, GPIO_NUM_18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-	// uart_set_pin(UART_NUM_1, GPIO_NUM_16, GPIO_NUM_15, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-	obd_init();
-	xTaskCreate(uart1_event_task, "uart1_event_task", 2048*2, NULL, 12, NULL);
+    elm327_cmd_queue = xQueueCreate(ELM327_CMD_QUEUE_SIZE, sizeof(elm327_commands_t));
+    obd_init();
+    
+    xTaskCreate(uart1_event_task, "uart1_event_task", 2048*2, NULL, 12, NULL);
 }
 
 #endif

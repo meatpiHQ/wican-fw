@@ -341,12 +341,12 @@ void obd_init(void)
     //     obd_log_response(response.rsp_data, response.size);
     // }
 
-    // obd_send_cmd("stsbr2000000\r", &response_queue, &response, 100); // Pass address of response_queue
-    // if (xQueueReceive(response_queue, (void*)&response, pdMS_TO_TICKS(100)) == pdPASS)
-    // {
-    //     obd_log_response(response.rsp_data, response.size);
-    // }
-    // vTaskDelay(pdMS_TO_TICKS(100));
+    obd_send_cmd("stsbr2000000\r", &response_queue, &response, 100); // Pass address of response_queue
+    if (xQueueReceive(response_queue, (void*)&response, pdMS_TO_TICKS(100)) == pdPASS)
+    {
+        obd_log_response(response.rsp_data, response.size);
+    }
+    vTaskDelay(pdMS_TO_TICKS(100));
     // uart_set_baudrate(UART_NUM_1, 2000000);
     // obd_send_cmd("ATI\r", &response_queue, &response, 2000); // Pass address of response_queue
     // if (xQueueReceive(response_queue, (void*)&response, pdMS_TO_TICKS(2000)) == pdPASS)

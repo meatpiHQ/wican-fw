@@ -22,9 +22,18 @@
 #ifndef __ELM327__
 #define __ELM327__
 
+#include "driver/twai.h"
+
+typedef void (*response_callback_t)(char*, uint32_t, QueueHandle_t *q);
+
 #define ELM327_CAN_RX   0x01
 #define ELM327_CAN_TX   0x02
 
-void elm327_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q), QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame, uint8_t type));
+void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame, uint8_t type));
+
+#if HARDWARE_VER == WICAN_PRO
+int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, QueueHandle_t *q, char *cmd_buffer, uint32_t *cmd_buffer_len, int64_t *last_cmd_time, response_callback_t response_callback);
+#else
 int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t *q);
+#endif
 #endif

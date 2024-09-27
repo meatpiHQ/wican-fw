@@ -24,13 +24,18 @@
 #include  "freertos/queue.h"
 #include "freertos/event_groups.h"
 #include "esp_system.h"
-//#include "esp_log.h"
+#include "esp_log.h"
 #include "driver/uart.h"
 #include "string.h"
 #include "driver/gpio.h"
 #include "types.h"
 #include "lwip/sockets.h"
+#include "esp_log.h"
+#include "elm327.h"
 
+#define TAG         __func__
+
+#if HARDWARE_VER == WICAN_USB_V100
 static const int RX_BUF_SIZE = 1024;
 
 static QueueHandle_t *xuart_tx_queue, *xuart_rx_queue;
@@ -122,4 +127,88 @@ void wc_uart_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t 
     xTaskCreate(uart_rx_task, "uart_rx_task", 1024*2, (void*)AF_INET, 5, NULL);
 }
 
+#elif HARDWARE_VER == WICAN_PRO
+#define BUF_SIZE (2048)
+#define RD_BUF_SIZE (2048)
+static QueueHandle_t uart2_queue;
 
+static void uart2_response(char *str, uint32_t len, QueueHandle_t *q)
+{
+    ESP_LOGI(TAG, "Response");
+    if (str != NULL && len > 0)
+    {
+        ESP_LOGI(TAG, "Responding on UART2 with: %s", str);
+        uart_write_bytes(UART_NUM_2, str, len);  // Send response to UART2
+    }
+}
+
+static void uart2_event_task(void *pvParameters)
+{
+    uart_event_t event;
+    uint8_t* uart2_read_buffer = (uint8_t*) malloc(RD_BUF_SIZE);
+    static char uart2_cmd_buffer[RD_BUF_SIZE];
+    static uint32_t uart2_cmd_buffer_len = 0;
+    static int64_t uart2_last_cmd_time = 0;
+
+    if (uart2_read_buffer == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to allocate UART2 buffer.");
+        vTaskDelete(NULL);
+    }
+
+    ESP_LOGW(TAG, "Start UART2 event task!");
+    for (;;)
+    {
+        // Waiting for UART event.
+        if (xQueueReceive(uart2_queue, (void *)&event, (TickType_t)portMAX_DELAY))
+        {
+            bzero(uart2_read_buffer, RD_BUF_SIZE);  // Clear the buffer
+            ESP_LOGI(TAG, "uart[%d] event:", UART_NUM_2);
+
+            switch (event.type)
+            {
+                case UART_DATA:
+                    ESP_LOGI(TAG, "[UART DATA]: %d bytes", event.size);
+                    
+                    // Read UART2 data into buffer
+                    uint32_t data_len = uart_read_bytes(UART_NUM_2, uart2_read_buffer, event.size, portMAX_DELAY);
+                    ESP_LOGI(TAG, "[DATA EVT] Data Length: %lu", data_len);
+
+                    uart2_read_buffer[data_len] = '\0';  // Null-terminate the data
+                    ESP_LOGI(TAG, "Data: %s", (char *)uart2_read_buffer);
+
+                    // Call elm327_process_cmd with required parameters
+                    elm327_process_cmd(uart2_read_buffer, data_len, NULL, uart2_cmd_buffer, &uart2_cmd_buffer_len, &uart2_last_cmd_time, uart2_response);
+
+                    break;
+
+                default:
+                    ESP_LOGI(TAG, "Unhandled UART event type: %d", event.type);
+                    break;
+            }
+        }
+    }
+    free(uart2_read_buffer);
+    uart2_read_buffer = NULL;
+    vTaskDelete(NULL);
+}
+
+void wc_uart_init(void)
+{
+        uart_config_t uart2_config = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_DEFAULT,
+    };
+    
+    uart_driver_install(UART_NUM_2, BUF_SIZE * 2, BUF_SIZE * 2, 20, &uart2_queue, 0);
+    uart_param_config(UART_NUM_2, &uart2_config);
+
+    uart_set_pin(UART_NUM_2, GPIO_NUM_17, GPIO_NUM_18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+
+    xTaskCreate(uart2_event_task, "uart1_event_task", 2048*2, NULL, 5, NULL);
+}
+#endif
