@@ -1,6 +1,6 @@
 {
   "car_model": "Chevrolet: Traverse",
-  "init": "",
+  "init": "ATSP6;ATST96;",
   "pids": [
     {
       "pid": "12A",
