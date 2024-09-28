@@ -1,6 +1,6 @@
 {
   "car_model": "Ford: Escape",
-  "init": "",
+  "init": "ATSP6;ATST96;",
   "pids": [
     {
       "pid": "360",
