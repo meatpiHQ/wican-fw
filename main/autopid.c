@@ -387,7 +387,7 @@ static void autopid_task(void *pvParameters)
     
     while (1)
     {
-        if((num_of_pids > 0 || (car.pid_count > 0 && car.car_specific_en))  && mqtt_connected())
+        if((num_of_pids > 0 || (car.pid_count > 0 && car.car_specific_en)))
         {
             switch(autopid_state)
             {
@@ -1196,5 +1196,5 @@ void autopid_init(char* id, char *config_str)
     
 
     
-    xTaskCreate(autopid_task, "autopid_task", 1024 * 5, (void *)AF_INET, 5, NULL);
+    xTaskCreate(autopid_task, "autopid_task", 3584, (void *)AF_INET, 5, NULL);
 }
