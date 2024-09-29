@@ -53,6 +53,7 @@
 #include "esp_mac.h"
 #include "ftp.h"
 #include "autopid.h"
+#include "mdns.h"
 
 #define TAG 		__func__
 #define TX_GPIO_NUM             	0
@@ -76,7 +77,7 @@ int FTP_TASK_FINISH_BIT = BIT2;
 EventGroupHandle_t xEventTask;
 static uint8_t mqtt_elm327_log_en = 0;
 static uint8_t derived_mac_addr[6] = {0};
-static uint8_t uid[33];
+static uint8_t uid[16];
 static uint8_t ble_uid[33];
 
 static void log_can_to_mqtt(twai_message_t *frame, uint8_t type)
@@ -273,7 +274,7 @@ static void can_rx_task(void *pvParameters)
 				}
         	}
         	//TODO: optimize, useless ifs
-			if(tcp_port_open() || ble_connected() || project_hardware_rev == WICAN_USB_V100 || mqtt_connected())
+			if(tcp_port_open() || ble_connected() || project_hardware_rev == WICAN_USB_V100 || mqtt_connected() || protocol == AUTO_PID )
 			{
 				memset(ucTCP_TX_Buffer.ucElement, 0, sizeof(ucTCP_TX_Buffer.ucElement));
 				ucTCP_TX_Buffer.usLen = 0;
@@ -346,6 +347,26 @@ static void can_rx_task(void *pvParameters)
 	}
 }
 
+static void initialise_mdns(char *id)
+{
+	static char mdns_host_name[24] = {0}; 
+
+	sprintf(mdns_host_name, "wican_%s", id);
+
+    mdns_init();
+    mdns_hostname_set(mdns_host_name);
+    mdns_instance_name_set("wican web server");
+
+    mdns_txt_item_t serviceTxtData[] = {
+		{"fimrware", "3.44"},
+		{"hardware", "wican"},
+        {"path", "/"}
+    };
+
+    ESP_ERROR_CHECK(mdns_service_add("WiCAN-WebServer", "_http", "_tcp", 80, serviceTxtData,
+                                     sizeof(serviceTxtData) / sizeof(serviceTxtData[0])));
+}
+
 void app_main(void)
 {
     ESP_ERROR_CHECK(nvs_flash_init());
@@ -409,6 +430,7 @@ void app_main(void)
 		can_set_silent(1);
 	}
 
+	initialise_mdns((char*)uid);
 	protocol = config_server_protocol();
 //	protocol = OBD_ELM327;
 
@@ -483,15 +505,19 @@ void app_main(void)
 	{
 		port = 3333;
 	}
-	if(config_server_get_port_type() == UDP_PORT)
-	{
-		tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, 1);
-	}
-	else
-	{
-		tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, 0);
-	}
 
+	if(protocol != AUTO_PID)
+	{
+		if(config_server_get_port_type() == UDP_PORT)
+		{
+			tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, 1);
+		}
+		else
+		{
+			tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, 0);
+		}
+	}
+	
     if(config_server_get_ble_config())
     {
     	int pass = config_server_ble_pass();
