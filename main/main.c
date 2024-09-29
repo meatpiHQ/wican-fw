@@ -529,10 +529,22 @@ void app_main(void)
 
     const esp_partition_t *running = esp_ota_get_running_partition();
     esp_app_desc_t running_app_info;
+	uint32_t firmware_ver_minor, firmware_ver_major;
+
     if (esp_ota_get_partition_description(running, &running_app_info) == ESP_OK)
     {
         ESP_LOGI(TAG, "Running firmware version: %s", running_app_info.version);
         ESP_LOGI(TAG, "Project Name: %s", running_app_info.project_name);
+
+		if (sscanf(running_app_info.version, "v%ld.%ld", &firmware_ver_major, &firmware_ver_minor) == 2) 
+		{
+			ESP_LOGI(TAG, "Firmware version: %ld.%ld", firmware_ver_major, firmware_ver_minor);
+		} 
+		else 
+		{
+			ESP_LOGI(TAG, "Failed to extract firmware version");
+		}
+		ESP_LOGI(TAG, "Hardware version: %s", HARDWARE_VERSION);
 
         if(strstr(running_app_info.project_name, "usb") != 0)
         {

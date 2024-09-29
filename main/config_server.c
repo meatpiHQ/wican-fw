@@ -772,6 +772,8 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	static char hver[32];
     const esp_partition_t *running = esp_ota_get_running_partition();
     static esp_app_desc_t running_app_info;
+	uint32_t firmware_ver_minor = 0, firmware_ver_major = 0;
+
     if (esp_ota_get_partition_description(running, &running_app_info) != ESP_OK)
     {
     	running_app_info.version[0] = '1';
@@ -780,26 +782,13 @@ static esp_err_t check_status_handler(httpd_req_t *req)
     }
 
 
+	if (sscanf(running_app_info.version, "v%ld.%ld", &firmware_ver_major, &firmware_ver_minor) == 2) 
+	{
+		ESP_LOGI(TAG, "Firmware version: %ld.%ld", firmware_ver_major, firmware_ver_minor);
+	} 
 
-    sprintf(fver, "%c%c.%c%c", running_app_info.version[0]\
-							, running_app_info.version[1]\
-							, running_app_info.version[2]\
-							, running_app_info.version[3]);
-
-    if(strstr(running_app_info.project_name, "usb") != 0)
-    {
-        sprintf(hver, "%c%c.%c%c_usb", running_app_info.version[6]\
-    							, running_app_info.version[7]\
-    							, running_app_info.version[8]\
-    							, running_app_info.version[9]);
-    }
-    else
-    {
-        sprintf(hver, "%c%c.%c%c_obd", running_app_info.version[6]\
-    							, running_app_info.version[7]\
-    							, running_app_info.version[8]\
-    							, running_app_info.version[9]);
-    }
+    sprintf(fver, "%ld.%ld", firmware_ver_major, firmware_ver_minor);
+    sprintf(hver, "WiCAN-%s", HARDWARE_VERSION);
 
 	cJSON_AddStringToObject(root, "wifi_mode", device_config.wifi_mode);
 	cJSON_AddStringToObject(root, "ap_ch", device_config.ap_ch);
@@ -813,6 +802,7 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	cJSON_AddStringToObject(root, "port", device_config.port);
 	cJSON_AddStringToObject(root, "fw_version", fver);
 	cJSON_AddStringToObject(root, "hw_version", hver);
+	cJSON_AddStringToObject(root, "git_version", GIT_SHA);
 	cJSON_AddStringToObject(root, "protocol", device_config.protocol);
 	cJSON_AddStringToObject(root, "sleep_status", device_config.sleep_status);
 	cJSON_AddStringToObject(root, "sleep_volt", device_config.sleep_volt);
