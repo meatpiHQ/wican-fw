@@ -1,6 +1,6 @@
 {
   "car_model": "VW: e-Golf",
-  "init": "ATSP6;ATST96;",
+  "init": "ATSP6;ATST96;ATSH7E5;",
   "pids": [
     {
       "pid": "22028C1",
