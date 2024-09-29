@@ -485,7 +485,7 @@ static void autopid_task(void *pvParameters)
 
                 case READ_PID:
                 {
-                    uint8_t pid_no_response = 0;
+                    uint8_t pid_response = 0;
                     if(num_of_pids > 0)
                     {
                         for(uint32_t i = 0; i < num_of_pids; i++)
@@ -524,6 +524,7 @@ static void autopid_task(void *pvParameters)
 
                                             // Convert the cJSON object to a string
                                             response_str = cJSON_PrintUnformatted(rsp_json);
+                                            pid_response = 1;
                                         }
 
                                         if (response_str != NULL) 
@@ -568,7 +569,6 @@ static void autopid_task(void *pvParameters)
                                         vTaskDelay(pdMS_TO_TICKS(10));
                                         free(error_rsp);
                                     }
-                                    pid_no_response = 1;
                                 }
                             }
                             vTaskDelay(pdMS_TO_TICKS(2));
@@ -620,6 +620,7 @@ static void autopid_task(void *pvParameters)
                                                     // Add the name and result to the JSON object
                                                     cJSON_AddNumberToObject(rsp_json, car.pids[i].parameters[j].name, result);
                                                     ESP_LOGI(TAG, "Expression result, Name: %s: %lf", car.pids[i].parameters[j].name, result);
+                                                    pid_response = 1;
                                                 }
                                             }
                                             else
@@ -628,7 +629,7 @@ static void autopid_task(void *pvParameters)
                                                 if(asprintf(&error_rsp, "{\"error\": \"Failed Expression: %s\"}", car.pids[i].parameters[j].expression) != -1)
                                                 {
                                                     mqtt_publish(error_topic, error_rsp, 0, 0, 0);
-                                                    autopid_data_write(error_rsp);
+                                                    // autopid_data_write(error_rsp);
                                                     vTaskDelay(pdMS_TO_TICKS(10));
                                                     free(error_rsp);
                                                 }
@@ -640,7 +641,7 @@ static void autopid_task(void *pvParameters)
                                             if(asprintf(&error_rsp, "{\"error\": \"Failed Expression: %s\"}", car.pids[i].parameters[j].expression) != -1)
                                             {
                                                 mqtt_publish(error_topic, error_rsp, 0, 0, 0);
-                                                autopid_data_write(error_rsp);
+                                                // autopid_data_write(error_rsp);
                                                 vTaskDelay(pdMS_TO_TICKS(10));
                                                 free(error_rsp);
                                             }
@@ -653,11 +654,10 @@ static void autopid_task(void *pvParameters)
                                     if(asprintf(&error_rsp, "{\"error\": \"Timeout, pid: %s\"}", car.pids[i].pid) != -1)
                                     {
                                         mqtt_publish(error_topic, error_rsp, 0, 0, 0);
-                                        autopid_data_write(error_rsp);
+                                        // autopid_data_write(error_rsp);
                                         vTaskDelay(pdMS_TO_TICKS(10));
                                         free(error_rsp);
                                     }
-                                    pid_no_response = 1;
                                 }
                             }
                             else
@@ -666,11 +666,10 @@ static void autopid_task(void *pvParameters)
                                 if(asprintf(&error_rsp, "{\"error\": \"PID Error\"}") != -1)
                                 {
                                     mqtt_publish(error_topic, error_rsp, 0, 0, 0);
-                                    autopid_data_write(error_rsp);
+                                    // autopid_data_write(error_rsp);
                                     vTaskDelay(pdMS_TO_TICKS(10));
                                     free(error_rsp);
                                 }
-                                pid_no_response = 1;
                             }
                         }
 
@@ -687,7 +686,7 @@ static void autopid_task(void *pvParameters)
                         }
                     }
                     vTaskDelay(pdMS_TO_TICKS(10));
-                    if(pid_no_response)
+                    if(pid_response == 0)
                     {
                         autopid_state = DISCONNECT_NOTIFY;
                         ESP_LOGI(TAG, "State change --> DISCONNECT_NOTIFY");
