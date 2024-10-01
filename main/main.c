@@ -65,10 +65,10 @@
 #define USB_OTG_PWR_EN				10
 #define USB_ESP_MODE_EN				11
 #if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
-#define GPIO_OUTPUT_PIN_SEL  		((1ULL<<CONNECTED_LED_GPIO_NUM) | (1ULL<<ACTIVE_LED_GPIO_NUM) | (1ULL<<PWR_LED_GPIO_NUM) | (1ULL<<CAN_STDBY_GPIO_NUM) | (1ULL<<USB_OTG_PWR_EN) | (1ULL<<USB_ESP_MODE_EN))
+#define GPIO_OUTPUT_PIN_SEL  		((1ULL<<CONNECTED_LED_GPIO_NUM) | (1ULL<<ACTIVE_LED_GPIO_NUM) | (1ULL<<PWR_LED_GPIO_NUM) | (1ULL<<CAN_STDBY_GPIO_NUM) | (1ULL<<USB_ESP_MODE_EN))
 #elif HARDWARE_VER == WICAN_PRO
-#define GPIO_OUTPUT_PIN_SEL  		((1ULL<<CAN_STDBY_GPIO_NUM) | (1ULL<<USB_OTG_PWR_EN) | (1ULL<<USB_ESP_MODE_EN))
-// #define GPIO_OUTPUT_PIN_SEL  		((1ULL<<CAN_STDBY_GPIO_NUM)  | (1ULL<<USB_ESP_MODE_EN))
+// #define GPIO_OUTPUT_PIN_SEL  		((1ULL<<CAN_STDBY_GPIO_NUM) | (1ULL<<USB_OTG_PWR_EN) | (1ULL<<USB_ESP_MODE_EN))
+#define GPIO_OUTPUT_PIN_SEL  		((1ULL<<CAN_STDBY_GPIO_NUM)  | (1ULL<<USB_ESP_MODE_EN))
 #define I2C_MASTER_SCL_IO           6     
 #define I2C_MASTER_SDA_IO           5      
 #define I2C_MASTER_NUM              0
@@ -475,7 +475,11 @@ void app_main(void)
 	i2c_master_init();
 	led_init(I2C_MASTER_NUM);
 	#endif
-	gpio_set_level(USB_OTG_PWR_EN, 1);
+
+	gpio_reset_pin(0);
+	gpio_set_direction(0, GPIO_MODE_INPUT);
+	gpio_reset_pin(USB_OTG_PWR_EN);
+	gpio_set_direction(USB_OTG_PWR_EN, GPIO_MODE_INPUT);
 	// gpio_reset_pin(USB_ESP_MODE_EN);
 	// gpio_set_direction(USB_ESP_MODE_EN, GPIO_MODE_OUTPUT);
 	// gpio_set_level(USB_ESP_MODE_EN, 1);
