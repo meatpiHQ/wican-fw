@@ -80,7 +80,15 @@ typedef struct
     uint8_t ha_discovery_en;
 } car_model_data_t;
 
+typedef struct 
+{
+    char *data;              // Pointer to a dynamically allocated string
+    SemaphoreHandle_t mutex; // Mutex to protect access to the data
+} autopid_data_t;
 
 void autopid_parser(char* str, uint32_t len, QueueHandle_t *q);
 void autopid_init(char* id, char *config_str);
+char *autopid_data_read(void);
+bool autopid_get_ecu_status(void);
+car_model_data_t *autopid_get_config(void);
 #endif

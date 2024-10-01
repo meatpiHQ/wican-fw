@@ -70,6 +70,8 @@
 #include "can.h"
 #include "ble.h"
 #include "sleep_mode.h"
+#include "autopid.h"
+
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
 TaskHandle_t xwebsocket_handle = NULL;
@@ -618,6 +620,46 @@ static esp_err_t load_config_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+static esp_err_t load_car_config_handler(httpd_req_t *req)
+{
+    car_model_data_t *car = autopid_get_config();
+
+    cJSON *parameters_object = cJSON_CreateObject();
+
+    for (int i = 0; i < car->pid_count; i++) 
+    {
+        for (int j = 0; j < car->pids[i].parameter_count; j++) 
+        {
+            cJSON *parameter_details = cJSON_CreateObject();
+
+            cJSON_AddStringToObject(parameter_details, "class", car->pids[i].parameters[j].class);
+            cJSON_AddStringToObject(parameter_details, "unit", car->pids[i].parameters[j].unit);
+            cJSON_AddItemToObject(parameters_object, car->pids[i].parameters[j].name, parameter_details);
+        }
+    }
+
+    char *response_str = cJSON_PrintUnformatted(parameters_object);
+    if (response_str != NULL)
+    {
+        ESP_LOGI(TAG, "Sending response: %s", response_str);
+
+        httpd_resp_set_type(req, "application/json");
+
+        httpd_resp_send(req, response_str, HTTPD_RESP_USE_STRLEN);
+
+        cJSON_free(response_str);
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Failed to convert response JSON to string");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to generate JSON");
+    }
+	
+    cJSON_Delete(parameters_object);
+
+    return ESP_OK;
+}
+
 static esp_err_t system_reboot_handler(httpd_req_t *req)
 {
 	const char *resp_str = "Configuration saved! Rebooting...";
@@ -730,6 +772,8 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	static char hver[32];
     const esp_partition_t *running = esp_ota_get_running_partition();
     static esp_app_desc_t running_app_info;
+	uint32_t firmware_ver_minor = 0, firmware_ver_major = 0;
+
     if (esp_ota_get_partition_description(running, &running_app_info) != ESP_OK)
     {
     	running_app_info.version[0] = '1';
@@ -738,26 +782,13 @@ static esp_err_t check_status_handler(httpd_req_t *req)
     }
 
 
+	if (sscanf(running_app_info.version, "v%ld.%ld", &firmware_ver_major, &firmware_ver_minor) == 2) 
+	{
+		ESP_LOGI(TAG, "Firmware version: %ld.%ld", firmware_ver_major, firmware_ver_minor);
+	} 
 
-    sprintf(fver, "%c%c.%c%c", running_app_info.version[0]\
-							, running_app_info.version[1]\
-							, running_app_info.version[2]\
-							, running_app_info.version[3]);
-
-    if(strstr(running_app_info.project_name, "usb") != 0)
-    {
-        sprintf(hver, "%c%c.%c%c_usb", running_app_info.version[6]\
-    							, running_app_info.version[7]\
-    							, running_app_info.version[8]\
-    							, running_app_info.version[9]);
-    }
-    else
-    {
-        sprintf(hver, "%c%c.%c%c_obd", running_app_info.version[6]\
-    							, running_app_info.version[7]\
-    							, running_app_info.version[8]\
-    							, running_app_info.version[9]);
-    }
+    sprintf(fver, "%ld.%ld", firmware_ver_major, firmware_ver_minor);
+    sprintf(hver, "WiCAN-%s", HARDWARE_VERSION);
 
 	cJSON_AddStringToObject(root, "wifi_mode", device_config.wifi_mode);
 	cJSON_AddStringToObject(root, "ap_ch", device_config.ap_ch);
@@ -771,6 +802,7 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	cJSON_AddStringToObject(root, "port", device_config.port);
 	cJSON_AddStringToObject(root, "fw_version", fver);
 	cJSON_AddStringToObject(root, "hw_version", hver);
+	cJSON_AddStringToObject(root, "git_version", GIT_SHA);
 	cJSON_AddStringToObject(root, "protocol", device_config.protocol);
 	cJSON_AddStringToObject(root, "sleep_status", device_config.sleep_status);
 	cJSON_AddStringToObject(root, "sleep_volt", device_config.sleep_volt);
@@ -801,8 +833,19 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	cJSON_AddStringToObject(root, "mqtt_tx_topic", device_config.mqtt_tx_topic);
 	cJSON_AddStringToObject(root, "mqtt_rx_topic", device_config.mqtt_rx_topic);
 	cJSON_AddStringToObject(root, "mqtt_status_topic", device_config.mqtt_status_topic);
-    const char *resp_str = cJSON_Print(root);
+	cJSON_AddStringToObject(root, "device_id", device_id);
+	
+	if(autopid_get_ecu_status())
+	{
+		cJSON_AddStringToObject(root, "ecu_status", "online");
+	}
+	else
+	{
+		cJSON_AddStringToObject(root, "ecu_status", "offline");
+	}
+    const char *resp_str = cJSON_PrintUnformatted(root);
 
+	httpd_resp_set_type(req, "application/json");
 	httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
 
     free((void *)resp_str);
@@ -1257,6 +1300,27 @@ static esp_err_t upload_car_data_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+esp_err_t autopid_data_handler(httpd_req_t *req)
+{
+    char *data = autopid_data_read();
+    
+    if (data == NULL)
+    {
+        ESP_LOGE(TAG, "No data available");
+        const char *response = "{\"error\":\"No data available\"}";
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, response, strlen(response));
+        return ESP_OK;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+
+    httpd_resp_send(req, data, strlen(data));
+
+    free(data);
+
+    return ESP_OK;
+}
 
 static const httpd_uri_t index_uri = {
     .uri       = "/",
@@ -1302,6 +1366,14 @@ static const httpd_uri_t load_pid_auto_conf_uri = {
     .uri       = "/load_auto_pid_config",
     .method    = HTTP_GET,
     .handler   = load_pid_auto_config_handler,
+    /* Let's pass response string in user
+     * context to demonstrate it's usage */
+    .user_ctx  = NULL
+};
+static const httpd_uri_t load_car_config_uri = {
+    .uri       = "/load_car_config",
+    .method    = HTTP_GET,
+    .handler   = load_car_config_handler,
     /* Let's pass response string in user
      * context to demonstrate it's usage */
     .user_ctx  = NULL
@@ -1366,6 +1438,13 @@ static const httpd_uri_t upload_car_data = {
     .handler   = upload_car_data_handler,
     .user_ctx  = &server_data    // Pass server data as context
 };
+static const httpd_uri_t autopid_data = {
+    .uri       = "/autopid_data",   // Match all URIs of type /upload/path/to/file
+    .method    = HTTP_GET,
+    .handler   = autopid_data_handler,
+    .user_ctx  = &server_data    // Pass server data as context
+};
+
 static void config_server_load_cfg(char *cfg)
 {
 	cJSON * root, *key = 0;
@@ -1972,7 +2051,7 @@ static httpd_handle_t config_server_init(void)
                        );
 
     // Start the httpd server
-	config.max_uri_handlers = 14;
+	config.max_uri_handlers = 16;
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK)
     {
@@ -1992,7 +2071,8 @@ static httpd_handle_t config_server_init(void)
 		httpd_register_uri_handler(server, &load_pid_auto_uri);
 		httpd_register_uri_handler(server, &load_pid_auto_conf_uri);
 		httpd_register_uri_handler(server, &upload_car_data);
-		
+		httpd_register_uri_handler(server, &autopid_data);
+		httpd_register_uri_handler(server, &load_car_config_uri);
         #if CONFIG_EXAMPLE_BASIC_AUTH
         httpd_register_basic_auth(server);
         #endif

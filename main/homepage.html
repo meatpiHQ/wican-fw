@@ -738,13 +738,19 @@
 				<tr>
 					<td><b>Firmware ver:</b></td>
 					<td>
-						<div id="fw_version">v1.00</div>
+						<div id="fw_version">1.00</div>
 					</td>
 				</tr>
 				<tr>
 					<td><b>Hardware ver:</b></td>
 					<td>
 						<div id="hw_version">v2.10</div>
+					</td>
+				</tr>
+				<tr>
+					<td><b>Git ver:</b></td>
+					<td>
+						<div id="git_version">v2.10</div>
 					</td>
 				</tr>
 				<tr>
@@ -1418,6 +1424,7 @@
 			document.getElementById("port_status").innerHTML = obj.port;
 			document.getElementById("fw_version").innerHTML = obj.fw_version;
 			document.getElementById("hw_version").innerHTML = obj.hw_version;
+			document.getElementById("git_version").innerHTML = obj.git_version;
 			document.getElementById("protocol").value = obj.protocol;
 			document.getElementById("batt_voltage").innerHTML = obj.batt_voltage;
 			document.getElementById("ret_msg").innerHTML = " ";

@@ -21,6 +21,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include "freertos/event_groups.h"
 #include "esp_log.h"
 #include <string.h>
 #include "driver/twai.h"
@@ -34,13 +35,15 @@
 #include "cJSON.h"
 #include "config_server.h"
 #include "autopid.h"
+#include <math.h>
 
 #define TAG __func__
 
 #define RANDOM_MIN          5
 #define RANDOM_MAX          50
 #define ECU_INIT_CMD        "0100\r"
-#define TEMP_BUFFER_LENGTH 32
+#define TEMP_BUFFER_LENGTH  32
+#define ECU_CONNECTED_BIT			BIT0
 
 static char auto_pid_buf[BUFFER_SIZE];
 static autopid_state_t  autopid_state = CONNECT_CHECK;
@@ -50,11 +53,80 @@ static size_t num_of_pids = 0;
 static char* initialisation = NULL;     
 static car_model_data_t car;
 static char* device_id;
-#if HARDWARE_VER == WICAN_PRO
-static char elm327_autopid_cmd_buffer[BUFFER_SIZE];
-static uint32_t elm327_autopid_cmd_buffer_len = 0;
-static int64_t elm327_autopid_last_cmd_time = 0;
-#endif
+static autopid_data_t autopid_data = {
+    .data = NULL,
+    .mutex = NULL
+};
+static EventGroupHandle_t xautopid_event_group = NULL;
+
+static void autopid_data_write(const char *new_data)
+{
+    if (autopid_data.mutex != NULL && xSemaphoreTake(autopid_data.mutex, portMAX_DELAY) == pdTRUE)
+    {
+        if (autopid_data.data != NULL)
+        {
+            free(autopid_data.data);
+            autopid_data.data = NULL;
+        }
+
+        autopid_data.data = (char *)malloc(strlen(new_data) + 1);
+        if (autopid_data.data == NULL)
+        {
+            ESP_LOGE("autopid_data_write", "Memory allocation failed");
+        }
+        else
+        {
+            strcpy(autopid_data.data, new_data);
+        }
+
+        xSemaphoreGive(autopid_data.mutex);
+    }
+}
+
+char *autopid_data_read(void)
+{
+    char *data_copy = NULL;
+
+    if(autopid_data.mutex != NULL)
+    {
+        if (xSemaphoreTake(autopid_data.mutex, portMAX_DELAY) == pdTRUE)
+        {
+            if (autopid_data.data != NULL)
+            {
+                data_copy = (char *)malloc(strlen(autopid_data.data) + 1);
+                if (data_copy != NULL)
+                {
+                    strcpy(data_copy, autopid_data.data);
+                }
+            }
+
+            xSemaphoreGive(autopid_data.mutex); 
+        }
+
+        return data_copy;
+    }
+    else
+    {
+        return NULL;
+    }
+}
+
+bool autopid_get_ecu_status(void)
+{
+	EventBits_t uxBits;
+	if(xautopid_event_group != NULL)
+	{
+		uxBits = xEventGroupGetBits(xautopid_event_group);
+
+		return (uxBits & ECU_CONNECTED_BIT);
+	}
+	else return false;
+}
+
+car_model_data_t *autopid_get_config(void)
+{
+    return &car;
+}
 
 void autopid_pub_discovery(void)
 {
@@ -254,6 +326,7 @@ static void send_commands(char *commands, uint32_t delay_ms)
 {
     char *cmd_start = commands;
     char *cmd_end;
+    twai_message_t tx_msg;
     
     while ((cmd_end = strchr(cmd_start, '\r')) != NULL) 
     {
@@ -265,12 +338,7 @@ static void send_commands(char *commands, uint32_t delay_ms)
             (strstr(str_send, "ats0") == NULL && strstr(str_send, "ATS0") == NULL && strstr(str_send, "at s0") == NULL && strstr(str_send, "AT s0") == NULL) &&
             (strstr(str_send, "ate1") == NULL && strstr(str_send, "ATE1") == NULL && strstr(str_send, "at e1") == NULL && strstr(str_send, "AT E1") == NULL))
         {
-            #if HARDWARE_VER == WICAN_PRO
-            elm327_process_cmd((uint8_t *)str_send, cmd_len, &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, &autopid_parser);
-            #else
-            twai_message_t tx_msg;
             elm327_process_cmd((uint8_t *)str_send, cmd_len, &tx_msg, &autopidQueue);
-            #endif
         }
         
         cmd_start = cmd_end + 1; // Move to the start of the next command
@@ -282,12 +350,10 @@ static void autopid_task(void *pvParameters)
 {
     static char default_init[] = "ati\rate0\rath1\ratl0\rats1\ratsp6\ratst96\r";
     static response_t response;
+    twai_message_t tx_msg;
     static char* error_rsp = NULL;
     static char* error_topic = NULL;
-    #if HARDWARE_VER != WICAN_PRO
-    twai_message_t tx_msg;
-    #endif
-
+    
     autopidQueue = xQueueCreate(QUEUE_SIZE, sizeof(response_t));
     if (autopidQueue == NULL)
     {
@@ -309,19 +375,19 @@ static void autopid_task(void *pvParameters)
     car.cycle_timer = 0;
     ESP_LOGI(TAG, "num_of_pids: %d", num_of_pids);
 
-    while(!mqtt_connected())
+    while(config_server_mqtt_en_config() == 1 && !mqtt_connected())
     {
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
     
-    if(car.ha_discovery_en)
+    if(config_server_mqtt_en_config() == 1 && car.ha_discovery_en)
     {
         autopid_pub_discovery();
     }
     
     while (1)
     {
-        if((num_of_pids > 0 || (car.pid_count > 0 && car.car_specific_en))  && mqtt_connected())
+        if((num_of_pids > 0 || (car.pid_count > 0 && car.car_specific_en)))
         {
             switch(autopid_state)
             {
@@ -368,6 +434,7 @@ static void autopid_task(void *pvParameters)
                     if (rsp_json != NULL) 
                     {
                         cJSON_AddStringToObject(rsp_json, "ecu_status", "online");
+                        xEventGroupSetBits( xautopid_event_group, ECU_CONNECTED_BIT );
                         response_str = cJSON_PrintUnformatted(rsp_json);
                     }
 
@@ -395,6 +462,7 @@ static void autopid_task(void *pvParameters)
                     if (rsp_json != NULL) 
                     {
                         cJSON_AddStringToObject(rsp_json, "ecu_status", "offline");
+                        xEventGroupClearBits( xautopid_event_group, ECU_CONNECTED_BIT );
                         response_str = cJSON_PrintUnformatted(rsp_json);
                     }
 
@@ -417,7 +485,7 @@ static void autopid_task(void *pvParameters)
 
                 case READ_PID:
                 {
-                    uint8_t pid_no_response = 0;
+                    uint8_t pid_response = 0;
                     if(num_of_pids > 0)
                     {
                         for(uint32_t i = 0; i < num_of_pids; i++)
@@ -427,12 +495,7 @@ static void autopid_task(void *pvParameters)
                                 pid_req[i].timer = esp_timer_get_time() + pid_req[i].period*1000;
                                 pid_req[i].timer += RANDOM_MIN + (esp_random() % (RANDOM_MAX - RANDOM_MIN + 1));
 
-                                #if HARDWARE_VER == WICAN_PRO
-                                elm327_process_cmd((uint8_t*)pid_req[i].pid_command , strlen(pid_req[i].pid_command), &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, &autopid_parser);
-                                #else
                                 elm327_process_cmd((uint8_t*)pid_req[i].pid_command , strlen(pid_req[i].pid_command), &tx_msg, &autopidQueue);
-                                #endif
-
                                 ESP_LOGI(TAG, "Sending command: %s", pid_req[i].pid_command);
                                 if (xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS)
                                 {
@@ -454,13 +517,14 @@ static void autopid_task(void *pvParameters)
                                                 sprintf(hex_rsponse + (j * 2), "%02X", response.data[j]);
                                             }
                                             hex_rsponse[response.length * 2] = '\0'; 
-
+                                            result = round(result * 100.0) / 100.0;
                                             // Add the name and result to the JSON object
                                             cJSON_AddNumberToObject(rsp_json, pid_req[i].name, result);
                                             cJSON_AddStringToObject(rsp_json, "raw", hex_rsponse);
 
                                             // Convert the cJSON object to a string
                                             response_str = cJSON_PrintUnformatted(rsp_json);
+                                            pid_response = 1;
                                         }
 
                                         if (response_str != NULL) 
@@ -468,12 +532,12 @@ static void autopid_task(void *pvParameters)
                                             ESP_LOGI(TAG, "Expression result, Name: %s: %lf", pid_req[i].name, result);
                                             if(pid_req[i].destination != NULL && strlen(pid_req[i].destination) != 0)
                                             {
-                                                mqtt_publish(pid_req[i].destination, response_str, 0, 0, 0);
+                                                mqtt_publish(pid_req[i].destination, response_str, 0, 0, 1);
                                             }
                                             else
                                             {
                                                 //if destination is empty send to default
-                                                mqtt_publish(config_server_get_mqtt_rx_topic(), response_str, 0, 0, 0);
+                                                mqtt_publish(config_server_get_mqtt_rx_topic(), response_str, 0, 0, 1);
                                             }
                                             free(response_str);
                                         }
@@ -505,7 +569,6 @@ static void autopid_task(void *pvParameters)
                                         vTaskDelay(pdMS_TO_TICKS(10));
                                         free(error_rsp);
                                     }
-                                    pid_no_response = 1;
                                 }
                             }
                             vTaskDelay(pdMS_TO_TICKS(2));
@@ -523,20 +586,12 @@ static void autopid_task(void *pvParameters)
                         {
                             if(car.pids[i].pid_init != NULL && strlen(car.pids[i].pid_init) > 0)
                             {
-                                #if HARDWARE_VER == WICAN_PRO
-                                elm327_process_cmd((uint8_t*)car.pids[i].pid_init , strlen(car.pids[i].pid_init), &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, &autopid_parser);
-                                #else
                                 elm327_process_cmd((uint8_t*)car.pids[i].pid_init , strlen(car.pids[i].pid_init), &tx_msg, &autopidQueue);
-                                #endif
                                 ESP_LOGI(TAG, "Sending car.pids[%lu].pid_init: %s", i, car.pids[i].pid_init);
                             }
                             if(car.pids[i].pid != NULL && strlen(car.pids[i].pid) > 0)
                             {
-                                #if HARDWARE_VER == WICAN_PRO
-                                elm327_process_cmd((uint8_t*)car.pids[i].pid , strlen(car.pids[i].pid), &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, &autopid_parser);
-                                #else
                                 elm327_process_cmd((uint8_t*)car.pids[i].pid , strlen(car.pids[i].pid), &tx_msg, &autopidQueue);
-                                #endif
                                 ESP_LOGI(TAG, "Sending car.pids[%lu].pid: %s", i, car.pids[i].pid);
                                 if (xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS)
                                 {
@@ -561,9 +616,11 @@ static void autopid_task(void *pvParameters)
                                                     }
                                                     hex_rsponse[response.length * 2] = '\0'; 
 
+                                                    result = round(result * 100.0) / 100.0;
                                                     // Add the name and result to the JSON object
                                                     cJSON_AddNumberToObject(rsp_json, car.pids[i].parameters[j].name, result);
                                                     ESP_LOGI(TAG, "Expression result, Name: %s: %lf", car.pids[i].parameters[j].name, result);
+                                                    pid_response = 1;
                                                 }
                                             }
                                             else
@@ -572,6 +629,7 @@ static void autopid_task(void *pvParameters)
                                                 if(asprintf(&error_rsp, "{\"error\": \"Failed Expression: %s\"}", car.pids[i].parameters[j].expression) != -1)
                                                 {
                                                     mqtt_publish(error_topic, error_rsp, 0, 0, 0);
+                                                    // autopid_data_write(error_rsp);
                                                     vTaskDelay(pdMS_TO_TICKS(10));
                                                     free(error_rsp);
                                                 }
@@ -583,6 +641,7 @@ static void autopid_task(void *pvParameters)
                                             if(asprintf(&error_rsp, "{\"error\": \"Failed Expression: %s\"}", car.pids[i].parameters[j].expression) != -1)
                                             {
                                                 mqtt_publish(error_topic, error_rsp, 0, 0, 0);
+                                                // autopid_data_write(error_rsp);
                                                 vTaskDelay(pdMS_TO_TICKS(10));
                                                 free(error_rsp);
                                             }
@@ -595,10 +654,10 @@ static void autopid_task(void *pvParameters)
                                     if(asprintf(&error_rsp, "{\"error\": \"Timeout, pid: %s\"}", car.pids[i].pid) != -1)
                                     {
                                         mqtt_publish(error_topic, error_rsp, 0, 0, 0);
+                                        // autopid_data_write(error_rsp);
                                         vTaskDelay(pdMS_TO_TICKS(10));
                                         free(error_rsp);
                                     }
-                                    pid_no_response = 1;
                                 }
                             }
                             else
@@ -607,10 +666,10 @@ static void autopid_task(void *pvParameters)
                                 if(asprintf(&error_rsp, "{\"error\": \"PID Error\"}") != -1)
                                 {
                                     mqtt_publish(error_topic, error_rsp, 0, 0, 0);
+                                    // autopid_data_write(error_rsp);
                                     vTaskDelay(pdMS_TO_TICKS(10));
                                     free(error_rsp);
                                 }
-                                pid_no_response = 1;
                             }
                         }
 
@@ -619,14 +678,15 @@ static void autopid_task(void *pvParameters)
                             response_str = cJSON_PrintUnformatted(rsp_json);
                             if (response_str != NULL) 
                             {
-                                mqtt_publish(car.destination, response_str, 0, 0, 0);
+                                mqtt_publish(car.destination, response_str, 0, 0, 1);
+                                autopid_data_write(response_str);
                                 free(response_str);
                             }
                             cJSON_Delete(rsp_json);
                         }
                     }
                     vTaskDelay(pdMS_TO_TICKS(10));
-                    if(pid_no_response)
+                    if(pid_response == 0)
                     {
                         autopid_state = DISCONNECT_NOTIFY;
                         ESP_LOGI(TAG, "State change --> DISCONNECT_NOTIFY");
@@ -1112,6 +1172,16 @@ static void autopid_load_car_specific(char* car_mod)
 void autopid_init(char* id, char *config_str)
 {
     device_id = id;
+    if(autopid_data.mutex == NULL)
+    {
+        autopid_data.mutex = xSemaphoreCreateMutex();
+    }
+    
+    if(xautopid_event_group == NULL)
+    {
+        xautopid_event_group = xEventGroupCreate();
+    }
+    
     autopid_load_config(config_str);
     // char *desired_car_model = "Toyota Camry";
     if(car.car_specific_en && car.selected_car_model != NULL)
@@ -1125,5 +1195,5 @@ void autopid_init(char* id, char *config_str)
     
 
     
-    xTaskCreate(autopid_task, "autopid_task", 1024 * 5, (void *)AF_INET, 5, NULL);
+    xTaskCreate(autopid_task, "autopid_task", 3584, (void *)AF_INET, 5, NULL);
 }

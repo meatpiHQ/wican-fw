@@ -59,6 +59,7 @@
 #include "obd.h"
 #include "wusb3801.h"
 #include "usb_host.h"
+#include "mdns.h"
 
 #define TAG 		__func__
 #define USB_ID_PIN					39
@@ -91,7 +92,7 @@ int FTP_TASK_FINISH_BIT = BIT2;
 EventGroupHandle_t xEventTask;
 static uint8_t mqtt_elm327_log_en = 0;
 static uint8_t derived_mac_addr[6] = {0};
-static uint8_t uid[33];
+static uint8_t uid[16];
 static uint8_t ble_uid[33];
 
 static void log_can_to_mqtt(twai_message_t *frame, uint8_t type)
@@ -235,9 +236,9 @@ static void can_tx_task(void *pvParameters)
 
 		memset(ucTCP_RX_Buffer.ucElement,0, DEV_BUFFER_LENGTH);
 		xQueueReceive(xMsg_Rx_Queue, &ucTCP_RX_Buffer, portMAX_DELAY);
-
+		ESP_LOGI(TAG, "----------");
 		ESP_LOG_BUFFER_HEXDUMP(TAG, ucTCP_RX_Buffer.ucElement, ucTCP_RX_Buffer.usLen, ESP_LOG_INFO);
-
+		ESP_LOGI(TAG, "----------");
 		uint8_t* msg_ptr = ucTCP_RX_Buffer.ucElement;
 		int temp_len = ucTCP_RX_Buffer.usLen;
 
@@ -337,8 +338,8 @@ static void can_rx_task(void *pvParameters)
     		uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
     		time_old = esp_timer_get_time();
     		ESP_LOGI(TAG, "free_heap: %lu", free_heap);
-// //        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
-// //        		num_msg = 0;
+//        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
+//        		num_msg = 0;
     	}
 
 		// if(gpio_get_level(USB_ID_PIN) == 0)
@@ -366,7 +367,7 @@ static void can_rx_task(void *pvParameters)
 				}
         	}
         	//TODO: optimize, useless ifs
-			if(tcp_port_open() || ble_connected() || HARDWARE_VER == WICAN_USB_V100 || mqtt_connected())
+			if(tcp_port_open() || ble_connected() || project_hardware_rev == WICAN_USB_V100 || mqtt_connected() || protocol == AUTO_PID )
 			{
 				memset(ucTCP_TX_Buffer.ucElement, 0, sizeof(ucTCP_TX_Buffer.ucElement));
 				ucTCP_TX_Buffer.usLen = 0;
@@ -440,6 +441,26 @@ static void can_rx_task(void *pvParameters)
         }
         vTaskDelay(pdMS_TO_TICKS(1));
 	}
+}
+
+static void initialise_mdns(char *id)
+{
+	static char mdns_host_name[24] = {0}; 
+
+	sprintf(mdns_host_name, "wican_%s", id);
+
+    mdns_init();
+    mdns_hostname_set(mdns_host_name);
+    mdns_instance_name_set("wican web server");
+
+    mdns_txt_item_t serviceTxtData[] = {
+		{"fimrware", "3.44"},
+		{"hardware", "wican"},
+        {"path", "/"}
+    };
+
+    ESP_ERROR_CHECK(mdns_service_add("WiCAN-WebServer", "_http", "_tcp", 80, serviceTxtData,
+                                     sizeof(serviceTxtData) / sizeof(serviceTxtData[0])));
 }
 
 void app_main(void)
@@ -580,6 +601,7 @@ void app_main(void)
 		can_set_silent(1);
 	}
 
+	initialise_mdns((char*)uid);
 	protocol = config_server_protocol();
 //	protocol = OBD_ELM327;
 
@@ -693,6 +715,18 @@ void app_main(void)
 		#endif
 	}
 
+	if(protocol != AUTO_PID)
+	{
+		if(config_server_get_port_type() == UDP_PORT)
+		{
+			tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, 1);
+		}
+		else
+		{
+			tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, 0);
+		}
+	}
+	
     if(config_server_get_ble_config())
     {
     	int pass = config_server_ble_pass();
@@ -708,6 +742,8 @@ void app_main(void)
 
     const esp_partition_t *running = esp_ota_get_running_partition();
     esp_app_desc_t running_app_info;
+	uint32_t firmware_ver_minor, firmware_ver_major;
+
     if (esp_ota_get_partition_description(running, &running_app_info) == ESP_OK)
     {
         ESP_LOGI(TAG, "Running firmware version: %s", running_app_info.version);

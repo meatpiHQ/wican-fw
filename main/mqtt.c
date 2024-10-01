@@ -580,7 +580,7 @@ void mqtt_publish(char *topic, char *data, int len, int qos, int retain)
 {
     int data_len = len;
 
-    if( mqtt_connected() && (xSemaphoreTake( xmqtt_semaphore, pdMS_TO_TICKS(2000) ) == pdTRUE) )
+    if( (config_server_mqtt_en_config() == 1) && mqtt_connected() && (xSemaphoreTake( xmqtt_semaphore, pdMS_TO_TICKS(2000) ) == pdTRUE) )
     {
         if(len == 0)
         {

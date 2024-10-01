@@ -3,10 +3,10 @@
     "init": "ATSP6;",
     "pids": [
         {
-            "pid": "010C",
+            "pid": "010C1",
             "parameters": [
                 {
-                    "name": "Engine RPM",
+                    "name": "EngineRPM",
                     "expression": "[B3:B4]*0.25",
                     "unit": "RPM",
                     "class": "frequency"
@@ -14,10 +14,10 @@
             ]
         },
         {
-            "pid": "010D",
+            "pid": "010D1",
             "parameters": [
                 {
-                    "name": "Vehicle Speed",
+                    "name": "VehicleSpeed",
                     "expression": "B3",
                     "unit": "km/h",
                     "class": "speed"
@@ -25,19 +25,90 @@
             ]
         },
         {
-            "pid": "0902",
+            "pid": "01051",
             "parameters": [
                 {
-                    "name": "value1",
-                    "expression": "B10/10",
-                    "unit": "%",
-                    "class": "battery"
-                },
+                    "name": "Coolant",
+                    "expression": "B3-40",
+                    "unit": "°C",
+                    "class": "temperature"
+                }
+            ]
+        },
+        {
+            "pid": "012F1",
+            "parameters": [
                 {
-                    "name": "value2",
-                    "expression": "(B19+B20)/2",
+                    "name": "FuelLevel",
+                    "expression": "B3/2.55",
                     "unit": "%",
-                    "class": "battery"
+                    "class": "none"
+                }
+            ]
+        },
+        {
+            "pid": "010F1",
+            "parameters": [
+                {
+                    "name": "IntakeAirTemp",
+                    "expression": "B3-40",
+                    "unit": "%",
+                    "class": "none"
+                }
+            ]
+        },
+        {
+            "pid": "01111",
+            "parameters": [
+                {
+                    "name": "Throttle",
+                    "expression": "B3/2.55",
+                    "unit": "%",
+                    "class": "none"
+                }
+            ]
+        },
+        {
+            "pid": "01101",
+            "parameters": [
+                {
+                    "name": "MAF",
+                    "expression": "[B3:B4]*0.01",
+                    "unit": "%",
+                    "class": "none"
+                }
+            ]
+        },
+        {
+            "pid": "010A1",
+            "parameters": [
+                {
+                    "name": "FuelPressure",
+                    "expression": "B3*3",
+                    "unit": "kPa",
+                    "class": "pressure"
+                }
+            ]
+        },
+        {
+            "pid": "01061",
+            "parameters": [
+                {
+                    "name": "ShortTermFuelTrim",
+                    "expression": "(B3/1.28)-100",
+                    "unit": "none",
+                    "class": "%"
+                }
+            ]
+        },
+        {
+            "pid": "01A61",
+            "parameters": [
+                {
+                    "name": "Odometer",
+                    "expression": "[B3:B6]",
+                    "unit": "km",
+                    "class": "none"
                 }
             ]
         }
