@@ -6,7 +6,7 @@
       "pid": "12A",
       "parameters": [
         {
-          "name": "Trunk State",
+          "name": "Lift Gate State",
           "expression": "[B10:B11]",
           "unit": "",
           "class": "none"
