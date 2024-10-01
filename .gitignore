@@ -58,3 +58,4 @@ dkms.conf
 
 #managed components
 managed_components/
+.vscode/
