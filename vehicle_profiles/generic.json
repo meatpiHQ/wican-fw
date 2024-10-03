@@ -52,8 +52,8 @@
                 {
                     "name": "IntakeAirTemp",
                     "expression": "B3-40",
-                    "unit": "%",
-                    "class": "none"
+                    "unit": "°C",
+                    "class": "temperature"
                 }
             ]
         },
@@ -74,7 +74,7 @@
                 {
                     "name": "MAF",
                     "expression": "[B3:B4]*0.01",
-                    "unit": "%",
+                    "unit": "g/s",
                     "class": "none"
                 }
             ]
@@ -96,8 +96,8 @@
                 {
                     "name": "ShortTermFuelTrim",
                     "expression": "(B3/1.28)-100",
-                    "unit": "none",
-                    "class": "%"
+                    "unit": "%",
+                    "class": "none"
                 }
             ]
         },
@@ -108,7 +108,7 @@
                     "name": "Odometer",
                     "expression": "[B3:B6]",
                     "unit": "km",
-                    "class": "none"
+                    "class": "distance"
                 }
             ]
         }
