@@ -1,5 +1,6 @@
 ## IDF Component Manager Manifest File
 dependencies:
+  espressif/mdns: "^1.4.0"
   espressif/usb_host_cp210x_vcp: "^2.0.0"
   espressif/usb_host_ftdi_vcp: "^2.0.0"
   espressif/usb_host_ch34x_vcp: "^2.0.0"

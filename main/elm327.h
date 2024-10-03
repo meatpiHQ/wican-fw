@@ -24,7 +24,7 @@
 
 #include "driver/twai.h"
 
-typedef void (*response_callback_t)(char*, uint32_t, QueueHandle_t *q);
+typedef void (*response_callback_t)(char*, uint32_t, QueueHandle_t *q, char* cmd_str);
 
 #define ELM327_CAN_RX   0x01
 #define ELM327_CAN_TX   0x02

@@ -741,7 +741,12 @@ static void gvret_broadcast_task(void *pvParameters)
 	}
 
 }
+
+#if HARDWARE_VER == WICAN_PRO
+void gvret_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q, char* cmd_str))
+#else
 void gvret_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q))
+#endif
 {
 	gvret_response = send_to_host;
 

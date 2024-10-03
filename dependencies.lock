@@ -1,4 +1,14 @@
 dependencies:
+  espressif/mdns:
+    component_hash: af6306fe65d637a3683d1cf671508fcedd6b05f9ca029a8815abeab64001fb8d
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.4.0
   espressif/usb_host_cdc_acm:
     component_hash: 7e13d20138931efa74bc43618a9e0c5094039e0125727403ffd8f7c87feb6b73
     dependencies:
@@ -74,11 +84,12 @@ dependencies:
       type: idf
     version: 5.3.1
 direct_dependencies:
+- espressif/mdns
 - espressif/usb_host_ch34x_vcp
 - espressif/usb_host_cp210x_vcp
 - espressif/usb_host_ftdi_vcp
 - espressif/usb_host_vcp
 - idf
-manifest_hash: bb0bfd08c2ecc34227d8d62742e5d4b08a5ff123ded38c2abb79e7a1d438d910
+manifest_hash: 8c761f83689d11c17ff4f7f4b5770927d1b457e1cedaa9dbfdff918851f34acd
 target: esp32s3
 version: 2.0.0

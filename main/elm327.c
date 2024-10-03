@@ -1426,9 +1426,9 @@ static void uart1_event_task(void *pvParameters)
                 {
                     uart_read_buf[response_len] = '\0';
 
-                    // if (elm327_command.response_queue != NULL)
+                    if (elm327_command.response_callback != NULL)
                     {
-                        elm327_command.response_callback((char*)uart_read_buf, response_len, elm327_command.response_queue);  // Use the callback
+                        elm327_command.response_callback((char*)uart_read_buf, response_len, elm327_command.response_queue, elm327_command.command);  // Use the callback
                     }
                 }
 

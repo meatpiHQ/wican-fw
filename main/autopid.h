@@ -86,7 +86,7 @@ typedef struct
     SemaphoreHandle_t mutex; // Mutex to protect access to the data
 } autopid_data_t;
 
-void autopid_parser(char* str, uint32_t len, QueueHandle_t *q);
+void autopid_parser(char* str, uint32_t len, QueueHandle_t *q, char* cmd_str);
 void autopid_init(char* id, char *config_str);
 char *autopid_data_read(void);
 bool autopid_get_ecu_status(void);

@@ -132,7 +132,7 @@ void wc_uart_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t 
 #define RD_BUF_SIZE (2048)
 static QueueHandle_t uart2_queue;
 
-static void uart2_response(char *str, uint32_t len, QueueHandle_t *q)
+static void uart2_response(char *str, uint32_t len, QueueHandle_t *q, char* cmd_str)
 {
     ESP_LOGI(TAG, "Response");
     if (str != NULL && len > 0)

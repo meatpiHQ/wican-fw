@@ -112,7 +112,11 @@ typedef struct  {
 
 
 void gvret_parse(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t *q);
+#if HARDWARE_VER == WICAN_PRO
+void gvret_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q, char* cmd_str));
+#else
 void gvret_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q));
+#endif
 int8_t gvret_parse_can_frame(uint8_t *buf, twai_message_t *frame);
 
 #endif

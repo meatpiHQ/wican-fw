@@ -635,8 +635,11 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 	return 0;
 }
 
-
+#if HARDWARE_VER == WICAN_PRO
+void slcan_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q, char* cmd_str))
+#else
 void slcan_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q))
+#endif
 {
 	slcan_response = send_to_host;
 }

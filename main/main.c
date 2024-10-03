@@ -179,8 +179,11 @@ static esp_err_t i2c_master_init(void)
     return i2c_driver_install(i2c_master_port, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
 }
 #endif
-//TODO: make this pretty?
+#if HARDWARE_VER == WICAN_PRO
+void send_to_host(char* str, uint32_t len, QueueHandle_t *q, char* cmd_str)
+#else
 void send_to_host(char* str, uint32_t len, QueueHandle_t *q)
+#endif
 {
     if (q == NULL || *q == NULL)
     {
@@ -367,7 +370,7 @@ static void can_rx_task(void *pvParameters)
 				}
         	}
         	//TODO: optimize, useless ifs
-			if(tcp_port_open() || ble_connected() || project_hardware_rev == WICAN_USB_V100 || mqtt_connected() || protocol == AUTO_PID )
+			if(tcp_port_open() || ble_connected() || HARDWARE_VER == WICAN_USB_V100 || mqtt_connected() || protocol == AUTO_PID )
 			{
 				memset(ucTCP_TX_Buffer.ucElement, 0, sizeof(ucTCP_TX_Buffer.ucElement));
 				ucTCP_TX_Buffer.usLen = 0;
@@ -698,47 +701,37 @@ void app_main(void)
 	{
 		port = 3333;
 	}
-	if(config_server_get_port_type() == UDP_PORT)
-	{	
-		#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
-		tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, 1);
-		#elif HARDWARE_VER == WICAN_PRO
-		tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, 0, 1);
-		#endif
-	}
-	else
-	{
-		#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
-		tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, 0);
-		#elif HARDWARE_VER == WICAN_PRO
-		tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, 0, 0);
-		#endif
-	}
 
 	if(protocol != AUTO_PID)
 	{
 		if(config_server_get_port_type() == UDP_PORT)
-		{
+		{	
+			#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 			tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, 1);
+			#elif HARDWARE_VER == WICAN_PRO
+			tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, 0, 1);
+			#endif
 		}
 		else
 		{
+			#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 			tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, 0);
+			#elif HARDWARE_VER == WICAN_PRO
+			tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, 0, 0);
+			#endif
+		}
+		
+		if(config_server_get_ble_config())
+		{
+			int pass = config_server_ble_pass();
+			xmsg_ble_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
+			#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
+			ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, pass, &ble_uid[0]);
+			#elif HARDWARE_VER == WICAN_PRO
+			ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, 0, pass, &ble_uid[0]);
+			#endif
 		}
 	}
-	
-    if(config_server_get_ble_config())
-    {
-    	int pass = config_server_ble_pass();
-    	xmsg_ble_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
-		#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
-		ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, pass, &ble_uid[0]);
-		#elif HARDWARE_VER == WICAN_PRO
-    	ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, 0, pass, &ble_uid[0]);
-		#endif
-    }
-
-
 
     const esp_partition_t *running = esp_ota_get_running_partition();
     esp_app_desc_t running_app_info;
@@ -821,6 +814,6 @@ void app_main(void)
 	// pdTRUE, /* BIT_0 should be cleared before returning. */
 	// pdFALSE, /* Don't wait for both bits, either bit will do. */
 	// portMAX_DELAY);/* Wait forever. */  
-	esp_log_level_set("*", ESP_LOG_NONE);
+	// esp_log_level_set("*", ESP_LOG_NONE);
 }
 
