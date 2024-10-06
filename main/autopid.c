@@ -498,6 +498,7 @@ static void autopid_task(void *pvParameters)
                                 if(pid_req[i].pid_init != NULL && strlen(pid_req[i].pid_init) > 0)
                                 {
                                     send_commands(pid_req[i].pid_init, 100);
+                                    ESP_LOGI(TAG, "pid_req[%ld].pid_init: %s", i, pid_req[i].pid_init);
                                     while ((xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(50)) == pdPASS));
                                 }
 
@@ -592,7 +593,8 @@ static void autopid_task(void *pvParameters)
                         {
                             if(car.pids[i].pid_init != NULL && strlen(car.pids[i].pid_init) > 0)
                             {
-                                elm327_process_cmd((uint8_t*)car.pids[i].pid_init , strlen(car.pids[i].pid_init), &tx_msg, &autopidQueue);
+                                send_commands(car.pids[i].pid_init, 100);
+                                while ((xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(10)) == pdPASS));
                                 ESP_LOGI(TAG, "Sending car.pids[%lu].pid_init: %s", i, car.pids[i].pid_init);
                             }
                             if(car.pids[i].pid != NULL && strlen(car.pids[i].pid) > 0)
@@ -737,11 +739,11 @@ static void autopid_load_config(char *config_str)
         strncpy(initialisation, init->valuestring, len);
         ESP_LOGI(TAG, "initialisation: %s", initialisation);
         // Replace ';' with carriage return
-        for (size_t i = 0; i < len; ++i) 
+        for (size_t j = 0; j < len; j++) 
         {
-            if (initialisation[i] == ';') 
+            if (initialisation[j] == ';') 
             {
-                initialisation[i] = '\r';
+                initialisation[j] = '\r';
             }
         }
     } 
@@ -878,7 +880,7 @@ static void autopid_load_config(char *config_str)
         return;
     }
 
-    for (int i = 0; i < num_of_pids; ++i) 
+    for (int i = 0; i < num_of_pids; i++) 
     {
         cJSON *pid_item = cJSON_GetArrayItem(pids, i);
         if (!cJSON_IsObject(pid_item)) 
@@ -911,6 +913,15 @@ static void autopid_load_config(char *config_str)
             {
                 strcpy(pid_req[i].pid_init, pid_init->valuestring);
                 strcat(pid_req[i].pid_init, "\r");
+                ESP_LOGI(TAG, "pid_req[%d].pid_init: %s", i, pid_req[i].pid_init);
+                // Replace ';' with carriage return
+                for (size_t j = 0; j < strlen(pid_req[i].pid_init); j++) 
+                {
+                    if (pid_req[i].pid_init[j] == ';') 
+                    {
+                        pid_req[i].pid_init[j] = '\r';
+                    }
+                }
             }
         }
         else
@@ -1036,11 +1047,11 @@ static void autopid_load_car_specific(char* car_mod)
             {
                 car.init = strdup(init->valuestring);
                 // Replace ';' with carriage return
-                for (size_t i = 0; i < strlen(car.init); ++i) 
+                for (size_t j = 0; j < strlen(car.init); j++) 
                 {
-                    if (car.init[i] == ';') 
+                    if (car.init[j] == ';') 
                     {
-                        car.init[i] = '\r';
+                        car.init[j] = '\r';
                     }
                 }
             }
@@ -1081,6 +1092,15 @@ static void autopid_load_car_specific(char* car_mod)
                         {
                             strcpy(car.pids[i].pid_init, pid_init->valuestring);
                             strcat(car.pids[i].pid_init, "\r");
+                        }
+                        ESP_LOGI(TAG, "car.pids[%d].pid_init: %s", i, car.pids[i].pid_init);
+                        // Replace ';' with carriage return
+                        for (size_t j = 0; j < strlen(car.pids[i].pid_init); j++) 
+                        {
+                            if (car.pids[i].pid_init[j] == ';') 
+                            {
+                                car.pids[i].pid_init[j] = '\r';
+                            }
                         }
                     }
                     else
