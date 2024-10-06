@@ -495,6 +495,12 @@ static void autopid_task(void *pvParameters)
                                 pid_req[i].timer = esp_timer_get_time() + pid_req[i].period*1000;
                                 pid_req[i].timer += RANDOM_MIN + (esp_random() % (RANDOM_MAX - RANDOM_MIN + 1));
 
+                                if(pid_req[i].pid_init != NULL && strlen(pid_req[i].pid_init) > 0)
+                                {
+                                    send_commands(pid_req[i].pid_init, 100);
+                                    while ((xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(50)) == pdPASS));
+                                }
+
                                 elm327_process_cmd((uint8_t*)pid_req[i].pid_command , strlen(pid_req[i].pid_command), &tx_msg, &autopidQueue);
                                 ESP_LOGI(TAG, "Sending command: %s", pid_req[i].pid_command);
                                 if (xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS)
