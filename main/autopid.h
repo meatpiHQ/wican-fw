@@ -26,7 +26,7 @@
 
 typedef enum
 {
-    CONNECT_CHECK = 0,
+    INIT_ELM327 = 0,
     CONNECT_NOTIFY,
     DISCONNECT_NOTIFY,
     READ_PID

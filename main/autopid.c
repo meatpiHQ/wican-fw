@@ -46,7 +46,7 @@
 #define ECU_CONNECTED_BIT			BIT0
 
 static char auto_pid_buf[BUFFER_SIZE];
-static autopid_state_t  autopid_state = CONNECT_CHECK;
+static autopid_state_t  autopid_state = INIT_ELM327;
 static QueueHandle_t autopidQueue;
 static pid_req_t *pid_req;
 static size_t num_of_pids = 0;
@@ -389,67 +389,57 @@ static void autopid_task(void *pvParameters)
     {
         if((num_of_pids > 0 || (car.pid_count > 0 && car.car_specific_en)))
         {
+            static bool is_connected = false;
+
             switch(autopid_state)
             {
-                case CONNECT_CHECK:
+                case INIT_ELM327:
                 {
-                    if(initialisation != NULL && num_of_pids > 0 && strlen(initialisation) > 0) 
+                    if(initialisation != NULL && num_of_pids > 0 && strlen(initialisation) > 0)
                     {
                         send_commands(initialisation, 100);
                         while ((xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS));
-                        send_commands(ECU_INIT_CMD, 1000);
-                        if(((xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS)))
-                        {
-                            autopid_state = CONNECT_NOTIFY;
-                            ESP_LOGI(TAG, "State change --> CONNECT_NOTIFY");
-                        }
-                        else
-                        {
-                            vTaskDelay(pdMS_TO_TICKS(3000));
-                        }
+                        autopid_state = READ_PID;
+                        ESP_LOGI(TAG, "State change --> READ_PID");
                     }
 
-                    if( (car.pid_count > 0 && car.car_specific_en) && car.init != NULL && strlen(car.init) > 0 )
+                    if((car.pid_count > 0 && car.car_specific_en) && car.init != NULL && strlen(car.init) > 0)
                     {
                         send_commands(car.init, 100);
                         while ((xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS));
-                        send_commands(ECU_INIT_CMD, 1000);
-                        if(((xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS)))
-                        {
-                            autopid_state = CONNECT_NOTIFY;
-                            ESP_LOGI(TAG, "State change --> CONNECT_NOTIFY");
-                        }
-                        else
-                        {
-                            vTaskDelay(pdMS_TO_TICKS(3000));
-                        }
+                        autopid_state = READ_PID;
+                        ESP_LOGI(TAG, "State change --> READ_PID");
                     }
                     break;
                 }
                 case CONNECT_NOTIFY:
                 {
-                    cJSON *rsp_json = cJSON_CreateObject();
-                    char *response_str = NULL;
-
-                    if (rsp_json != NULL) 
+                    if (!is_connected)
                     {
-                        cJSON_AddStringToObject(rsp_json, "ecu_status", "online");
-                        xEventGroupSetBits( xautopid_event_group, ECU_CONNECTED_BIT );
-                        response_str = cJSON_PrintUnformatted(rsp_json);
-                    }
+                        cJSON *rsp_json = cJSON_CreateObject();
+                        char *response_str = NULL;
 
-                    if (response_str != NULL && strlen(response_str) > 0) 
-                    {
-                        mqtt_publish(config_server_get_mqtt_status_topic(), response_str, 0, 0, 0);
-                        free(response_str);
-                    }
+                        if (rsp_json != NULL)
+                        {
+                            cJSON_AddStringToObject(rsp_json, "ecu_status", "online");
+                            xEventGroupSetBits( xautopid_event_group, ECU_CONNECTED_BIT );
+                            response_str = cJSON_PrintUnformatted(rsp_json);
+                        }
 
-                    if (rsp_json != NULL)
-                    {
-                        cJSON_Delete(rsp_json);
-                    }
+                        if (response_str != NULL && strlen(response_str) > 0)
+                        {
+                            mqtt_publish(config_server_get_mqtt_status_topic(), response_str, 0, 0, 0);
+                            free(response_str);
+                        }
 
-                    vTaskDelay(pdMS_TO_TICKS(1000));
+                        if (rsp_json != NULL)
+                        {
+                            cJSON_Delete(rsp_json);
+                        }
+
+                        is_connected = true;
+                        vTaskDelay(pdMS_TO_TICKS(1000));
+                    }
                     autopid_state = READ_PID;
                     ESP_LOGI(TAG, "State change --> READ_PID");
                     break;
@@ -459,14 +449,14 @@ static void autopid_task(void *pvParameters)
                     cJSON *rsp_json = cJSON_CreateObject();
                     char *response_str = NULL;
 
-                    if (rsp_json != NULL) 
+                    if (rsp_json != NULL)
                     {
                         cJSON_AddStringToObject(rsp_json, "ecu_status", "offline");
                         xEventGroupClearBits( xautopid_event_group, ECU_CONNECTED_BIT );
                         response_str = cJSON_PrintUnformatted(rsp_json);
                     }
 
-                    if (response_str != NULL && strlen(response_str) > 0) 
+                    if (response_str != NULL && strlen(response_str) > 0)
                     {
                         mqtt_publish(config_server_get_mqtt_status_topic(), response_str, 0, 0, 0);
                         free(response_str);
@@ -477,21 +467,23 @@ static void autopid_task(void *pvParameters)
                         cJSON_Delete(rsp_json);
                     }
 
+                    is_connected = false;
                     vTaskDelay(pdMS_TO_TICKS(1000));
-                    autopid_state = CONNECT_CHECK;
-                    ESP_LOGI(TAG, "State change --> CONNECT_CHECK");
+                    autopid_state = INIT_ELM327;
+                    ESP_LOGI(TAG, "State change --> INIT_ELM327");
                     break;
                 }
 
                 case READ_PID:
                 {
-                    uint8_t pid_response = 0;
+                    static uint8_t custom_pid_response = 1, specific_pid_response = 1;
                     if(num_of_pids > 0)
                     {
                         for(uint32_t i = 0; i < num_of_pids; i++)
                         {
                             if( esp_timer_get_time() > pid_req[i].timer )
                             {
+                                custom_pid_response = 0;
                                 pid_req[i].timer = esp_timer_get_time() + pid_req[i].period*1000;
                                 pid_req[i].timer += RANDOM_MIN + (esp_random() % (RANDOM_MAX - RANDOM_MIN + 1));
 
@@ -517,13 +509,13 @@ static void autopid_task(void *pvParameters)
                                         cJSON *rsp_json = cJSON_CreateObject();
                                         char *response_str = NULL;
 
-                                        if (rsp_json != NULL) 
+                                        if (rsp_json != NULL)
                                         {
-                                            for (size_t j = 0; j < response.length; ++j) 
+                                            for (size_t j = 0; j < response.length; ++j)
                                             {
                                                 sprintf(hex_rsponse + (j * 2), "%02X", response.data[j]);
                                             }
-                                            hex_rsponse[response.length * 2] = '\0'; 
+                                            hex_rsponse[response.length * 2] = '\0';
                                             result = round(result * 100.0) / 100.0;
                                             // Add the name and result to the JSON object
                                             cJSON_AddNumberToObject(rsp_json, pid_req[i].name, result);
@@ -531,10 +523,10 @@ static void autopid_task(void *pvParameters)
 
                                             // Convert the cJSON object to a string
                                             response_str = cJSON_PrintUnformatted(rsp_json);
-                                            pid_response = 1;
+                                            custom_pid_response = 1;
                                         }
 
-                                        if (response_str != NULL) 
+                                        if (response_str != NULL)
                                         {
                                             ESP_LOGI(TAG, "Expression result, Name: %s: %lf", pid_req[i].name, result);
                                             if(pid_req[i].destination != NULL && strlen(pid_req[i].destination) != 0)
@@ -584,6 +576,7 @@ static void autopid_task(void *pvParameters)
 
                     if((car.car_specific_en) && ( car.pid_count > 0 ) && ( esp_timer_get_time() > car.cycle_timer ))
                     {
+                        specific_pid_response = 0;
                         car.cycle_timer = esp_timer_get_time() + car.cycle*1000; //in ms
 
                         cJSON *rsp_json = cJSON_CreateObject();
@@ -616,19 +609,19 @@ static void autopid_task(void *pvParameters)
                                         {
                                             if(evaluate_expression((uint8_t*)car.pids[i].parameters[j].expression, response.data, 0, &result))
                                             {
-                                                if (rsp_json != NULL) 
+                                                if (rsp_json != NULL)
                                                 {
-                                                    for (size_t j = 0; j < response.length; ++j) 
+                                                    for (size_t j = 0; j < response.length; ++j)
                                                     {
                                                         sprintf(hex_rsponse + (j * 2), "%02X", response.data[j]);
                                                     }
-                                                    hex_rsponse[response.length * 2] = '\0'; 
+                                                    hex_rsponse[response.length * 2] = '\0';
 
                                                     result = round(result * 100.0) / 100.0;
                                                     // Add the name and result to the JSON object
                                                     cJSON_AddNumberToObject(rsp_json, car.pids[i].parameters[j].name, result);
                                                     ESP_LOGI(TAG, "Expression result, Name: %s: %lf", car.pids[i].parameters[j].name, result);
-                                                    pid_response = 1;
+                                                    specific_pid_response = 1;
                                                 }
                                             }
                                             else
@@ -681,10 +674,10 @@ static void autopid_task(void *pvParameters)
                             }
                         }
 
-                        if (rsp_json != NULL) 
+                        if (rsp_json != NULL)
                         {
                             response_str = cJSON_PrintUnformatted(rsp_json);
-                            if (response_str != NULL) 
+                            if (response_str != NULL)
                             {
                                 mqtt_publish(car.destination, response_str, 0, 0, 1);
                                 autopid_data_write(response_str);
@@ -694,10 +687,21 @@ static void autopid_task(void *pvParameters)
                         }
                     }
                     vTaskDelay(pdMS_TO_TICKS(10));
-                    if(pid_response == 0)
+                    if(specific_pid_response == 0 && custom_pid_response == 0)
                     {
-                        autopid_state = DISCONNECT_NOTIFY;
-                        ESP_LOGI(TAG, "State change --> DISCONNECT_NOTIFY");
+                        if (is_connected)
+                        {
+                            autopid_state = DISCONNECT_NOTIFY;
+                            ESP_LOGI(TAG, "State change --> DISCONNECT_NOTIFY");
+                        }
+                    }
+                    else
+                    {
+                        if (!is_connected)
+                        {
+                            autopid_state = CONNECT_NOTIFY;
+                            ESP_LOGI(TAG, "State change --> CONNECT_NOTIFY");
+                        }
                     }
 
                     break;
@@ -707,7 +711,7 @@ static void autopid_task(void *pvParameters)
         }
         else
         {
-            autopid_state = CONNECT_CHECK;
+            autopid_state = INIT_ELM327;
             vTaskDelay(pdMS_TO_TICKS(2000));
         }
     }
