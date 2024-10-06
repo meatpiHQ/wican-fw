@@ -900,7 +900,12 @@ static void autopid_load_config(char *config_str)
 
         if (cJSON_IsString(pid_init) && pid_init->valuestring && strlen(pid_init->valuestring))
         {
-            pid_req[i].pid_init = strdup(pid_init->valuestring);
+            pid_req[i].pid_init = malloc(strlen(pid_init->valuestring) + 2); // +2 for "\r\0"
+            if (pid_req[i].pid_init != NULL)
+            {
+                strcpy(pid_req[i].pid_init, pid_init->valuestring);
+                strcat(pid_req[i].pid_init, "\r");
+            }
         }
         else
         {
