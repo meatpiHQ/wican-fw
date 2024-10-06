@@ -8,7 +8,7 @@
           {
             "name": "batterySoC",
             "pid_init": "ATSH7E4;",
-            "expression": "((B4*256)+B5)/100",
+            "expression": "[B4:B5]/100",
             "unit": "%",
             "class": "battery"
           }
@@ -20,7 +20,7 @@
           {
             "name": "batterySoCMin",
             "pid_init": "ATSH7E4;",
-            "expression": "((B4*256)+B5)/100",
+            "expression": "[B4:B5]/100",
             "unit": "%",
             "class": "battery"
           }
@@ -32,7 +32,7 @@
           {
             "name": "batterySoCMax",
             "pid_init": "ATSH7E4;",
-            "expression": "((B4*256)+B5)/100",
+            "expression": "[B4:B5]/100",
             "unit": "%",
             "class": "battery"
           }
@@ -116,7 +116,7 @@
           {
             "name": "batteryCellMinVolt",
             "pid_init": "ATSH7E4;",
-            "expression": "((B4*256)+B5)/1000",
+            "expression": "[B4:B5]/1000",
             "unit": "V",
             "class": "voltage"
           }
@@ -128,7 +128,7 @@
           {
             "name": "batteryCellMaxVolt",
             "pid_init": "ATSH7E4;",
-            "expression": "((B4*256)+B5)/1000",
+            "expression": "[B4:B5]/1000",
             "unit": "V",
             "class": "voltage"
           }
@@ -140,7 +140,7 @@
           {
             "name": "batteryVolt",
             "pid_init": "ATSH7E4;",
-            "expression": "((B4*256)+B5)/100",
+            "expression": "[B4:B5]/100",
             "unit": "V",
             "class": "voltage"
           }
@@ -152,7 +152,7 @@
           {
             "name": "batteryCurrent",
             "pid_init": "ATSH7E4;",
-            "expression": "(((B4*256)+B5)-32768)/40",
+            "expression": "([B4:B5]-32768)/40",
             "unit": "A",
             "class": "current"
           }
@@ -200,7 +200,7 @@
           {
             "name": "batteryMaxRegen",
             "pid_init": "ATSH7E4;",
-            "expression": "((B4*256)+B5)/100",
+            "expression": "[B4:B5]/100",
             "unit": "%",
             "class": "battery"
           }
@@ -212,7 +212,7 @@
           {
             "name": "odometer",
             "pid_init": "ATSH7E4;",
-            "expression": "B4*65536+B5*256+B6",
+            "expression": "[B4:B6]",
             "unit": "km",
             "class": "distance"
           }
