@@ -56,5 +56,4 @@ dkms.conf
 #Vehicle Profiles
 .vehicle_profiles/node_modules/
 .vscode/
-vehicle_profiles.json
 managed_components/
