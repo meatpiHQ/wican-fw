@@ -625,7 +625,7 @@
 				<td><label for="ha_discovery"><strong>Home Assistant Discovery:</strong></label></td>
 				<td>		<select id="ha_discovery" name="ha_discovery" onchange="checkForDuplicates(); toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();">
 					<option value="disable">Disable</option>
-					<option value="enable">Enable</option>
+					<!-- <option value="enable">Enable</option> -->
 				</select></td>
 			</tr>
 			<tr>
@@ -847,12 +847,8 @@
 			const carSpecific = document.getElementById("car_specific").value;
 			const discovery = document.getElementById("ha_discovery");
 
-			if (carSpecific === "enable"){
-				discovery.disabled = false;
-			}else{
-				discovery.disabled = true;
-				discovery.value = "disable";
-			}
+			discovery.disabled = true;
+			discovery.value = "disable";
 		}
 		
         function txCheckBoxChanged() {
@@ -937,11 +933,7 @@
 			}else{
 				document.getElementById("car_specific").value = carSpecific;
 			}
-			if(ha_discovery != "enable"){
-				document.getElementById("ha_discovery").value = "disable";
-			}else{
-				document.getElementById("ha_discovery").value = ha_discovery;
-			}
+			document.getElementById("ha_discovery").value = "disable";
 			if(grouping != "enable"){
 				document.getElementById("grouping").value = "disable";
 			}else{
@@ -1009,11 +1001,16 @@
                 if (column === "Type") {
                     const select = document.createElement("select");
                     select.name = column;
-                    select.style.width = "100px";
-                    const option = document.createElement("option");
-                    option.value = "MQTT_Topic";
-                    option.text = "MQTT_Topic";
-                    select.appendChild(option);
+                    select.style.width = "120px";
+                    const options = ["MQTT_Topic", "MQTT_WallBox"];
+    
+					options.forEach(optionValue => {
+						const option = document.createElement("option");
+						option.value = optionValue;
+						option.text = optionValue;
+						select.appendChild(option);
+					});
+					
                     if (rowData[column]) {
                         select.value = rowData[column];
                     }
