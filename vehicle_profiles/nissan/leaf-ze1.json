@@ -15,7 +15,7 @@
 				},
                 {
 					"name": "SoC",
-					"expression": "((B39*65536)+[B41:42])/10000",
+					"expression": "((B39*65536)+[B41:B42])/10000",
 					"unit": "%",
 					"class": "battery"
 				}
