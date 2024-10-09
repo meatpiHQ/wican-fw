@@ -1,0 +1,235 @@
+{
+    "car_model": "Jaguar: I-PACE",
+    "init": "ATSP6;ATST96;",
+    "pids": [
+      {
+        "pid": "224910",
+        "parameters": [
+          {
+            "name": "batterySoC",
+            "pid_init": "ATSH7E4;",
+            "expression": "[B4:B5]/100",
+            "unit": "%",
+            "class": "battery"
+          }
+        ]
+      },
+      {
+        "pid": "224911",
+        "parameters": [
+          {
+            "name": "batterySoCMin",
+            "pid_init": "ATSH7E4;",
+            "expression": "[B4:B5]/100",
+            "unit": "%",
+            "class": "battery"
+          }
+        ]
+      },
+      {
+        "pid": "224914",
+        "parameters": [
+          {
+            "name": "batterySoCMax",
+            "pid_init": "ATSH7E4;",
+            "expression": "[B4:B5]/100",
+            "unit": "%",
+            "class": "battery"
+          }
+        ]
+      },
+      {
+        "pid": "224918",
+        "parameters": [
+          {
+            "name": "batterySoHCapacity",
+            "pid_init": "ATSH7E4;",
+            "expression": "B4/2",
+            "unit": "%",
+            "class": "battery"
+          }
+        ]
+      },
+      {
+        "pid": "224919",
+        "parameters": [
+          {
+            "name": "batterySoHCapacityMin",
+            "pid_init": "ATSH7E4;",
+            "expression": "B4/2",
+            "unit": "%",
+            "class": "battery"
+          }
+        ]
+      },
+      {
+        "pid": "22491a",
+        "parameters": [
+          {
+            "name": "batterySoHCapacityMax",
+            "pid_init": "ATSH7E4;",
+            "expression": "B4/2",
+            "unit": "%",
+            "class": "battery"
+          }
+        ]
+      },
+      {
+        "pid": "224915",
+        "parameters": [
+          {
+            "name": "batterySoHPower",
+            "pid_init": "ATSH7E4;",
+            "expression": "B4/2",
+            "unit": "%",
+            "class": "battery"
+          }
+        ]
+      },
+      {
+        "pid": "224916",
+        "parameters": [
+          {
+            "name": "batterySoHPowerMin",
+            "pid_init": "ATSH7E4;",
+            "expression": "B4/2",
+            "unit": "%",
+            "class": "battery"
+          }
+        ]
+      },
+      {
+        "pid": "224917",
+        "parameters": [
+          {
+            "name": "batterySoHPowerMax",
+            "pid_init": "ATSH7E4;",
+            "expression": "B4/2",
+            "unit": "%",
+            "class": "battery"
+          }
+        ]
+      },
+      {
+        "pid": "224904",
+        "parameters": [
+          {
+            "name": "batteryCellMinVolt",
+            "pid_init": "ATSH7E4;",
+            "expression": "[B4:B5]/1000",
+            "unit": "V",
+            "class": "voltage"
+          }
+        ]
+      },
+      {
+        "pid": "224903",
+        "parameters": [
+          {
+            "name": "batteryCellMaxVolt",
+            "pid_init": "ATSH7E4;",
+            "expression": "[B4:B5]/1000",
+            "unit": "V",
+            "class": "voltage"
+          }
+        ]
+      },
+      {
+        "pid": "22490F",
+        "parameters": [
+          {
+            "name": "batteryVolt",
+            "pid_init": "ATSH7E4;",
+            "expression": "[B4:B5]/100",
+            "unit": "V",
+            "class": "voltage"
+          }
+        ]
+      },
+      {
+        "pid": "22490C",
+        "parameters": [
+          {
+            "name": "batteryCurrent",
+            "pid_init": "ATSH7E4;",
+            "expression": "([B4:B5]-32768)/40",
+            "unit": "A",
+            "class": "current"
+          }
+        ]
+      },
+      {
+        "pid": "224906",
+        "parameters": [
+          {
+            "name": "batteryTempMin",
+            "pid_init": "ATSH7E4;",
+            "expression": "(B4/2)-40",
+            "unit": "°C",
+            "class": "temperature"
+          }
+        ]
+      },
+      {
+        "pid": "224905",
+        "parameters": [
+          {
+            "name": "batteryTempMax",
+            "pid_init": "ATSH7E4;",
+            "expression": "(B4/2)-40",
+            "unit": "°C",
+            "class": "temperature"
+          }
+        ]
+      },
+      {
+        "pid": "224907",
+        "parameters": [
+          {
+            "name": "batteryTempAvg",
+            "pid_init": "ATSH7E4;",
+            "expression": "(B4/2)-40",
+            "unit": "°C",
+            "class": "temperature"
+          }
+        ]
+      },
+      {
+        "pid": "224913",
+        "parameters": [
+          {
+            "name": "batteryMaxRegen",
+            "pid_init": "ATSH7E4;",
+            "expression": "[B4:B5]/100",
+            "unit": "%",
+            "class": "battery"
+          }
+        ]
+      },
+      {
+        "pid": "22dd01",
+        "parameters": [
+          {
+            "name": "odometer",
+            "pid_init": "ATSH7E4;",
+            "expression": "[B4:B6]",
+            "unit": "km",
+            "class": "distance"
+          }
+        ]
+      },
+      {
+        "pid": "22dd04",
+        "parameters": [
+          {
+            "name": "cabinTemp",
+            "pid_init": "ATSH7E4;",
+            "expression": "B4-40",
+            "unit": "°C",
+            "class": "temperature"
+          }
+        ]
+      }
+    ]
+  }
+  
