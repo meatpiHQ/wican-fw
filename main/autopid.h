@@ -37,6 +37,12 @@ typedef struct {
     uint32_t length;
 } response_t;
 
+typedef enum
+{
+    MQTT_TOPIC = 0,
+    MQTT_WALLBOX
+} send_to_type_t;
+
 typedef struct {
     char *name;              // Name
     char *pid_init;          // PID init string

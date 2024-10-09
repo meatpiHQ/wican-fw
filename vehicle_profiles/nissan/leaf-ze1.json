@@ -4,18 +4,18 @@
 	"pids": [
 		{
 			"pid": "21018",
+			"pid_init": "ATSH79B;ATFCSH79B;ATCRA7BB;",
 			"parameters": [
 				{
 					"name": "Hx",
-                    "pid_init": "ATSH79B;ATFCSH79B;ATCRA7BB;",
+                    
 					"expression": "[B36:B37]/102.4",
 					"unit": "%",
 					"class": "battery"
 				},
                 {
 					"name": "SoC",
-                    "pid_init": "ATSH79B;ATFCSH79B;ATCRA7BB;",
-					"expression": "((B39*65536)+[B41:42])/10000",
+					"expression": "((B39*65536)+[B41:B42])/10000",
 					"unit": "%",
 					"class": "battery"
 				}

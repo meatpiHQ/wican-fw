@@ -517,12 +517,20 @@ static void autopid_task(void *pvParameters)
                                             }
                                             hex_rsponse[response.length * 2] = '\0';
                                             result = round(result * 100.0) / 100.0;
-                                            // Add the name and result to the JSON object
-                                            cJSON_AddNumberToObject(rsp_json, pid_req[i].name, result);
-                                            cJSON_AddStringToObject(rsp_json, "raw", hex_rsponse);
 
-                                            // Convert the cJSON object to a string
-                                            response_str = cJSON_PrintUnformatted(rsp_json);
+                                            if(pid_req[i].type == MQTT_TOPIC)
+                                            {
+                                                // Add the name and result to the JSON object
+                                                cJSON_AddNumberToObject(rsp_json, pid_req[i].name, result);
+                                                cJSON_AddStringToObject(rsp_json, "raw", hex_rsponse);
+                                                // Convert the cJSON object to a string
+                                                response_str = cJSON_PrintUnformatted(rsp_json);
+                                            }
+                                            else if(pid_req[i].type == MQTT_WALLBOX)
+                                            {
+                                                asprintf(&response_str, "%.2f", result);
+                                            }
+
                                             custom_pid_response = 1;
                                         }
 
@@ -976,7 +984,15 @@ static void autopid_load_config(char *config_str)
 
         if (cJSON_IsString(type) && type->valuestring && strlen(type->valuestring) > 0)
         {
-            pid_req[i].type = (strcmp(type->valuestring, "MQTT_Topic") == 0) ? 0 : 1;  // 0 for MQTT, 1 for file
+            // pid_req[i].type = (strcmp(type->valuestring, "MQTT_Topic") == 0) ? 0 : 1;  // 0 for MQTT, 1 for file
+            if(strcmp(type->valuestring, "MQTT_Topic") == 0)
+            {
+                pid_req[i].type = MQTT_TOPIC;
+            }
+            else if(strcmp(type->valuestring, "MQTT_WallBox") == 0)
+            {
+                pid_req[i].type = MQTT_WALLBOX;
+            }
         }
 
         pid_req[i].timer = 0;
