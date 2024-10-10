@@ -1,6 +1,6 @@
 {
 	"car_model": "Nissan : leaf-ze1",
-	"init": "ATSP6;ATST96;ATFCSD300000;ATFCSM1;",
+	"init": "ATSP6;ATFCSH79B;ATST96;ATFCSD300000;ATFCSM1;",
 	"pids": [
 		{
 			"pid": "21018",
