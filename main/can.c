@@ -260,11 +260,14 @@ void can_init(uint8_t bitrate)
 		xTimerStop( xCAN_EN_Timer, 0 );
 	}
 
+	can_cfg.auto_bitrate = 0;
+
 	if(bitrate == CAN_AUTO)
 	{
-		can_cfg.auto_bitrate = 1;
-		can_cfg.bus_state = OFF_BUS;
-		can_set_bitrate(CAN_100K);
+		bitrate = CAN_500K;
+		// can_cfg.auto_bitrate = 1;
+		// can_cfg.bus_state = OFF_BUS;
+		// can_set_bitrate(CAN_100K);
 	}
 }
 
@@ -282,49 +285,49 @@ esp_err_t can_receive(twai_message_t *message, TickType_t ticks_to_wait)
 							pdFALSE,
 							portMAX_DELAY);
 
-	if(can_cfg.auto_bitrate)
-	{
-		ret = twai_receive(message, 0);
+	// if(can_cfg.auto_bitrate)
+	// {
+	// 	ret = twai_receive(message, 0);
 
-		if(ret == ESP_OK)
-		{
-			rx_error = 0;
-			bitrate_found = 1;
-			if(bitrate_found == 0)
-			{
-				bitrate_found = 1;
-				if(store_silent_flag != can_cfg.silent)
-				{
-					can_cfg.silent = store_silent_flag;
-					can_disable();
-					can_enable();
-				}
-			}
-		}
-		else
-		{
-			rx_error++;
-			if(bitrate_found == 1)
-			{
-				bitrate_found = 0;
-				store_silent_flag = can_cfg.silent;
-			}
+	// 	if(ret == ESP_OK)
+	// 	{
+	// 		rx_error = 0;
+	// 		bitrate_found = 1;
+	// 		if(bitrate_found == 0)
+	// 		{
+	// 			bitrate_found = 1;
+	// 			if(store_silent_flag != can_cfg.silent)
+	// 			{
+	// 				can_cfg.silent = store_silent_flag;
+	// 				can_disable();
+	// 				can_enable();
+	// 			}
+	// 		}
+	// 	}
+	// 	else
+	// 	{
+	// 		rx_error++;
+	// 		if(bitrate_found == 1)
+	// 		{
+	// 			bitrate_found = 0;
+	// 			store_silent_flag = can_cfg.silent;
+	// 		}
 
-			if(rx_error >=120)
-			{
-				ESP_LOGW(TAG, "try differnt baudrate");
-				rx_error = 0;
+	// 		if(rx_error >=120)
+	// 		{
+	// 			ESP_LOGW(TAG, "try differnt baudrate");
+	// 			rx_error = 0;
 
-				can_disable();
-				can_cfg.silent = 1;
-				datarate++;
-				datarate %= (CAN_1000K+1);
-				can_enable();
-			}
-		}
-		return ret;
-	}
-	else
+	// 			can_disable();
+	// 			can_cfg.silent = 1;
+	// 			datarate++;
+	// 			datarate %= (CAN_1000K+1);
+	// 			can_enable();
+	// 		}
+	// 	}
+	// 	return ret;
+	// }
+	// else
 	{
 		return twai_receive(message, ticks_to_wait);
 	}
