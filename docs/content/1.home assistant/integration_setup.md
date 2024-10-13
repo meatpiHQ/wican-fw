@@ -16,7 +16,7 @@ WiCAN can be integrated with Home Assistant using the official integration. This
 To connect WiCAN to Home Assistant, you first need to connect it to the same WiFi network as Home Assistant.
 
 1. **Connect to WiCAN Access Point**:  
-   Connect to the device's access point named **WiCAN\_xxxxxxx**. The default password is `@meatpi#`. It is recommended **not to change the password** for safety reasons.
+   Connect to the device's access point named **WiCAN\_xxxxxxx**. The default password is `@meatpi#`. It is recommended **to change the password** for safety reasons.
 
 2. **Note the mDNS Name**:  
    In the **Status** tab, take note of the mDNS name. It should look something like `wican_xxxxxxxxxxxx.local`. `xxxxxxxxxxxx` is the device unique ID.
