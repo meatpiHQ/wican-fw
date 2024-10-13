@@ -53,7 +53,7 @@
 #include "esp_mac.h"
 #include "ftp.h"
 #include "autopid.h"
-#include "mdns.h"
+#include "wc_mdns.h"
 
 #define TAG 		__func__
 #define TX_GPIO_NUM             	0
@@ -79,6 +79,8 @@ static uint8_t mqtt_elm327_log_en = 0;
 static uint8_t derived_mac_addr[6] = {0};
 static uint8_t uid[16];
 static uint8_t ble_uid[33];
+static char hardware_version[16];
+static char firmware_version[10];
 
 static void log_can_to_mqtt(twai_message_t *frame, uint8_t type)
 {
@@ -347,26 +349,6 @@ static void can_rx_task(void *pvParameters)
 	}
 }
 
-static void initialise_mdns(char *id)
-{
-	static char mdns_host_name[24] = {0}; 
-
-	sprintf(mdns_host_name, "wican_%s", id);
-
-    mdns_init();
-    mdns_hostname_set(mdns_host_name);
-    mdns_instance_name_set("wican web server");
-
-    mdns_txt_item_t serviceTxtData[] = {
-		{"fimrware", "3.44"},
-		{"hardware", "wican"},
-        {"path", "/"}
-    };
-
-    ESP_ERROR_CHECK(mdns_service_add("WiCAN-WebServer", "_http", "_tcp", 80, serviceTxtData,
-                                     sizeof(serviceTxtData) / sizeof(serviceTxtData[0])));
-}
-
 void app_main(void)
 {
     ESP_ERROR_CHECK(nvs_flash_init());
@@ -430,7 +412,6 @@ void app_main(void)
 		can_set_silent(1);
 	}
 
-	initialise_mdns((char*)uid);
 	protocol = config_server_protocol();
 //	protocol = OBD_ELM327;
 
@@ -538,13 +519,15 @@ void app_main(void)
 
 		if (sscanf(running_app_info.version, "v%ld.%ld", &firmware_ver_major, &firmware_ver_minor) == 2) 
 		{
-			ESP_LOGI(TAG, "Firmware version: %ld.%ld", firmware_ver_major, firmware_ver_minor);
+			sprintf(firmware_version, "%ld.%ld", firmware_ver_major, firmware_ver_minor);
+			ESP_LOGI(TAG, "Firmware version: %s", firmware_version);
 		} 
 		else 
 		{
 			ESP_LOGI(TAG, "Failed to extract firmware version");
 		}
-		ESP_LOGI(TAG, "Hardware version: %s", HARDWARE_VERSION);
+		sprintf(hardware_version, "WiCAN-%s", HARDWARE_VERSION);
+		ESP_LOGI(TAG, "Hardware version: %s", hardware_version);
 
         if(strstr(running_app_info.project_name, "usb") != 0)
         {
@@ -570,7 +553,7 @@ void app_main(void)
             }
         }
     }
-
+	wc_mdns_init((char*)uid, hardware_version, firmware_version);
     xTaskCreate(can_rx_task, "can_rx_task", 1024*3, (void*)AF_INET, 5, NULL);
     xTaskCreate(can_tx_task, "can_tx_task", 1024*3, (void*)AF_INET, 5, NULL);
 

@@ -71,6 +71,7 @@
 #include "ble.h"
 #include "sleep_mode.h"
 #include "autopid.h"
+#include "wc_mdns.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
@@ -835,6 +836,7 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	cJSON_AddStringToObject(root, "ap_ch", device_config.ap_ch);
 	cJSON_AddStringToObject(root, "sta_status", (wifi_network_is_connected()?"Connected":"Not Connected"));
 	cJSON_AddStringToObject(root, "sta_ip", ip_str);
+	cJSON_AddStringToObject(root, "mdns", wc_mdns_get_hostname());
 	cJSON_AddStringToObject(root, "ble_status", device_config.ble_status);
 //	cJSON_AddStringToObject(root, "can_datarate", device_config.can_datarate);
 	cJSON_AddStringToObject(root, "can_datarate", can_datarate_str[can_get_bitrate()]);
