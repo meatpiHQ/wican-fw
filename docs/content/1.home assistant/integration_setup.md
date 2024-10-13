@@ -8,9 +8,10 @@ WiCAN can be integrated with Home Assistant using the official integration. This
 
 ## Integration Device Setup
 
-<div align="center">
-    <img width="373" alt="image" src="https://github.com/user-attachments/assets/3febdd0f-5013-4f70-aadd-dba9fdebf2ec">
-</div>
+
+<img width="373" alt="image" src="https://github.com/user-attachments/assets/3febdd0f-5013-4f70-aadd-dba9fdebf2ec">
+
+
 
 To connect WiCAN to Home Assistant, you first need to connect it to the same WiFi network as Home Assistant.
 
