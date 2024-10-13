@@ -67,3 +67,9 @@ The WiCAN integration is available through HACS. You can find the integration re
    Enter the mDNS name that you noted earlier (`wican_xxxxxxxxxxxx.local`) to connect the WiCAN device.
 
 After completing these steps, WiCAN will be connected to Home Assistant, and you will be able to monitor the available car parameters directly from the Home Assistant interface.
+
+
+<img width="899" alt="image" src="https://github.com/user-attachments/assets/c778fc1c-2929-4b4c-b661-f6a788200f32">
+
+
+
