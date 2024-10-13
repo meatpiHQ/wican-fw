@@ -24,29 +24,32 @@ To connect WiCAN to Home Assistant, you first need to connect it to the same WiF
 3. **Connect WiCAN to Home WiFi**:  
    Connect WiCAN to the same WiFi network as Home Assistant. In the WiCAN settings, change the **Mode** to **AP+Station**, and fill in your WiFi SSID and password.
 
-4. **Submit and Reboot**:  
+4. **Change the Protocol**:
+   Set the **Protocol** to AutoPid.
+
+5. **Submit and Reboot**:  
    Click on the **Submit** button. The device will reboot on its own.
 
-5. **Access WiCAN via mDNS**:  
+6. **Access WiCAN via mDNS**:  
    Disconnect from the WiCAN access point, and using your web browser, go to the mDNS name you noted earlier, e.g., `wican_xxxxxxxxxxxx.local`.
 
-6. **Enable Vehicle Specific Settings**:  
+7. **Enable Vehicle Specific Settings**:  
    On the webpage, go to the **Automate** tab and enable **Vehicle Specific** settings.
 
-7. **Sync Vehicle Model**:  
+8. **Sync Vehicle Model**:  
    Press the <img width="17" alt="image" src="https://github.com/user-attachments/assets/6988becc-fb6a-467a-8a5e-6ea83ae3e00c"> button next to **Vehicle Model** to fetch supported vehicle models. 
 
-8. **Select Vehicle Model**:  
+9. **Select Vehicle Model**:  
    Select your vehicle model from the dropdown list.  
    If your vehicle model is not yet supported, please open an issue on GitHub, and we will walk you through adding support.
 
-9. **Set Cycle Time**:  
+10. **Set Cycle Time**:  
    Set the **Cycle Time** in milliseconds. This defines how often WiCAN will request parameters from the ECU.
 
-10. **Destination Topic** (optional):  
+11. **Destination Topic** (optional):  
    This field is only used for MQTT communication.
 
-11. **Store and Reboot**:  
+12. **Store and Reboot**:  
     Click on the **Store** button, then go to the **About** tab to reboot the device.
 
 
