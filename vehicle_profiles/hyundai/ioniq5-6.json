@@ -135,6 +135,24 @@
           "expression": "B41/2",
           "unit": "%",
           "class": "battery"
+        },
+        {
+          "name": "Min_Cell_Det_No",
+          "expression": "B39",
+          "unit": "none",
+          "class": "none"
+        },
+        {
+          "name": "Max_Cell_Det_No",
+          "expression": "B36",
+          "unit": "none",
+          "class": "none"
+        },
+        {
+          "name": "Min_Cell_Det",
+          "expression": "[B37:B38]/10",
+          "unit": "%",
+          "class": "battery"
         }
       ]
     }
