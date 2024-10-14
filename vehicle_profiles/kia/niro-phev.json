@@ -1,0 +1,38 @@
+{
+    "car_model": "Kia: Niro PHEV",
+    "init": "ATSP6;ATSH7E4;ATST96;",
+    "pids": [
+      {
+        "pid": "2105",
+        "parameters": [
+          {
+            "name": "soc_display",
+            "expression": "B47/2",
+            "unit": "%",
+            "class": "battery"
+          },
+          {
+            "name": "soh",
+            "expression": "[B44:B45]/10",
+            "unit": "%"
+          }
+        ]
+      },
+      {
+        "pid": "2101",
+        "parameters": [
+          {
+            "name": "soc_bms",
+            "expression": "B09/2",
+            "unit": "%",
+            "class": "battery"
+          },
+          {
+            "name": "port_status",
+            "expression": "B14:7"
+          }
+        ]
+      }
+    ]
+  }
+  
