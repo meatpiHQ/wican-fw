@@ -36,6 +36,12 @@
           "class": "voltage"
         },
         {
+          "name": "HV_Power",
+          "expression": "([B19:B20]/10)*((65536-([B17:B18]))/10)",
+          "unit": "W",
+          "class": "power"
+        },
+        {
           "name": "Batt_MaxT",
           "expression": "B21",
           "unit": "°C",
