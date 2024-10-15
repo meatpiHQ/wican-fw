@@ -53,11 +53,6 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
-# docs
-docs/.nuxt
-docs/node_modules
-docs/package-lock.json
-
 #Vehicle Profiles
 .vehicle_profiles/node_modules/
 .vscode/
