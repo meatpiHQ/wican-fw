@@ -3,16 +3,16 @@
   "init": "ATSP6;ATSH7E4;ATST96;",
   "pids": [
     {
-      "pid": "2105",
+      "pid": "21057",
       "parameters": [
         {
-          "name": "soc_display",
+          "name": "SOC_DISPLAY",
           "expression": "B39/2",
           "unit": "%",
           "class": "battery"
         },
         {
-          "name": "soh",
+          "name": "SOH",
           "expression": "[B33:B34]/10",
           "unit": "%"
         }
@@ -22,14 +22,22 @@
       "pid": "2101",
       "parameters": [
         {
-          "name": "soc_bms",
+          "name": "SOC_BMS",
           "expression": "B09/2",
           "unit": "%",
           "class": "battery"
         },
         {
-          "name": "port_status",
+          "name": "Charger_Connected",
           "expression": "B14:5"
+        },
+        {
+          "name": "Charging",
+          "expression": "B14:7"
+        },
+        {
+          "name": "HV_Charger_Connected",
+          "expression": "B14:6"
         }
       ]
     }

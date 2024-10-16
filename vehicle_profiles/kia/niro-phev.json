@@ -6,13 +6,13 @@
         "pid": "2105",
         "parameters": [
           {
-            "name": "soc_display",
+            "name": "SOC_DISPLAY",
             "expression": "B47/2",
             "unit": "%",
             "class": "battery"
           },
           {
-            "name": "soh",
+            "name": "SOH",
             "expression": "[B44:B45]/10",
             "unit": "%"
           }
@@ -22,13 +22,13 @@
         "pid": "2101",
         "parameters": [
           {
-            "name": "soc_bms",
+            "name": "SOC_BMS",
             "expression": "B09/2",
             "unit": "%",
             "class": "battery"
           },
           {
-            "name": "port_status",
+            "name": "Charger_Connected",
             "expression": "B14:7"
           }
         ]
