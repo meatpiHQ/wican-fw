@@ -138,7 +138,15 @@ bool evaluate_expression(uint8_t *expression, uint8_t *data, double V, double *r
                 index = index * 10 + (expression[i] - '0');
                 i++;
             }
-            push(&operandStack, data[index]);
+            uint8_t value = data[index];
+            if (expression[i] == ':') {
+                i++;
+                uint8_t bit = expression[i] - '0';
+                value = (value >> bit) & 1;
+                i++;
+            }
+
+            push(&operandStack, value);
         } else if (expression[i] == '(') {
             push(&operatorStack, expression[i]);
             i++;
