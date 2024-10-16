@@ -56,7 +56,7 @@ The WiCAN integration is available through HACS. You can find the integration re
 
 1. **Install the Integration via HACS**:  
    Add the integration repository link to HACS and install the **WiCAN** integration.
-   1. Follow the official guide to [add a custom repository](https://www.hacs.xyz/docs/faq/custom_repositories/)
+   1. Follow the official guide to [add a custom repository](https://www.hacs.xyz/docs/faq/custom_repositories/). The Repository URL is `https://github.com/jay-oswald/ha-wican` and it is an `Integration`
    1. Follow the official guide to [download a repository](https://www.hacs.xyz/docs/use/repositories/dashboard/#downloading-a-repository)
 
 
