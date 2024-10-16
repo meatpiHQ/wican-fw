@@ -14,7 +14,8 @@
         {
           "name": "SOH",
           "expression": "[B33:B34]/10",
-          "unit": "%"
+          "unit": "%",
+          "class": ""
         }
       ]
     },
@@ -29,15 +30,21 @@
         },
         {
           "name": "Charger_Connected",
-          "expression": "B14:5"
+          "expression": "B14:5",
+          "unit": "",
+          "class": ""
         },
         {
           "name": "Charging",
-          "expression": "B14:7"
+          "expression": "B14:7",
+          "unit": "",
+          "class": ""
         },
         {
           "name": "HV_Charger_Connected",
-          "expression": "B14:6"
+          "expression": "B14:6",
+          "unit": "",
+          "class": ""
         }
       ]
     }

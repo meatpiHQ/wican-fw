@@ -14,7 +14,8 @@
           {
             "name": "SOH",
             "expression": "[B44:B45]/10",
-            "unit": "%"
+            "unit": "%",
+            "class": ""
           }
         ]
       },
@@ -29,7 +30,9 @@
           },
           {
             "name": "Charger_Connected",
-            "expression": "B14:7"
+            "expression": "B14:7",
+            "unit": "",
+            "class": ""
           }
         ]
       }
