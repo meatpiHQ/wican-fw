@@ -2,17 +2,12 @@
 
 [www.meatpi.com](https://www.meatpi.com)
 ---
-## MeatPi [Discord server](https://discord.com/invite/2hpHVDmyfw)
-## Please update to the [latest firmware version](https://github.com/meatpiHQ/wican-fw/releases/)
+# [Documentation](https://meatpihq.github.io/wican-fw/) | [Firmware updates](https://github.com/meatpiHQ/wican-fw/releases/) | [Discord server](https://discord.com/invite/2hpHVDmyfw)
+
 ---
-# [Official Docs](https://meatpihq.github.io/wican-fw/)
-We are currently in the process of migrating from this large README.md into the proper docs.
 
 ## Order on [**Mouser**](https://www.mouser.com/c/?m=MeatPi) or [**Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics)
 
-<br/><br/>
-
----
 # WiCAN PRO
 
 ### Ongoing crowdfunding campaign for a new product in development! If you would like to support this project, please subscribe for updates on [**Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics/wican-pro)
@@ -46,15 +41,6 @@ We are currently in the process of migrating from this large README.md into the 
 - [API](#api)
 - [Build](#build)
 - [Description](#description)
-- [Configuration](#configuration)
-  - [WiFi/CAN Configuration](#1-wifican-configuration)
-  - [BUSMaster](#2-busmaster)
-  - [Realdash](#3-realdash)
-  - [SavvyCAN](#4-savvycan)
-  - [webCAN](http://webcan.meatpi.com)
-- [SocketCAN](#socketcan)
-  - [WiFi](#1-wifi)
-  - [USB](#2-usb)
 - [ELM327 OBD2 Protocol](#elm327-obd2-protocol)
 - [Firmware Update](https://meatpihq.github.io/wican-fw/config/firmware-update)
   - [OTA](https://meatpihq.github.io/wican-fw/config/firmware-update)
@@ -113,137 +99,6 @@ WiCAN-USB can also be used as a USB-to-CAN adapter when Wi-Fi connectivity is no
 
 ![Modes](https://user-images.githubusercontent.com/94690098/222961571-bd137341-808a-4f0a-9528-789fe24d640e.png "Connection Mode")
 
-# Configuration:
---------
-
-## 1. WiFi/CAN Configuration:
-1. Power up the device using the USB cable, or by plugging into the OBD-II connector. 
-2. The blue LED will light ON, and a WiFi device access point will start. The SSID will look like: WiCAN_xxxxxxxxxxxx
-3. Connect to the SSID using the default password: @meatpi#
-4. Using a web browser, go to http://192.168.80.1/ 
-5. The status menu shows the device current configuration, if in Ap+Station mode it will show the device IP on your local network if connected successfully.
-6. The WiFi menu lets you configure the WiFi parameters. It is recommended that you change the AP access point.
-7. The CAN menu allows to choose the protocol set the bitrate and TCP/UPD port number.
-8. When ready click submit Changes button and the device will store the configuration reboot immediately.
-
-**Note: If you intend to use the device in AP mode it is recommand that you disable the BLE function**
-
-![Configuration page](https://github.com/meatpiHQ/WiCAN/blob/main/images/settings40.png?raw=true "Config page")
-
-## 2. BUSMaster
-You need to download the right version of BUSMaster provided in this [**Link**](https://drive.google.com/drive/folders/1qJelUAHGrn_YbNIP0Jk_KmNENG-hKbtl?usp=sharing). Here is how to setup the hardware. 
-
-### **Device Configuration:**
-
-1. Go to configuration webpage.
-2. Baudrate can be set in BUSMaster configuration
-3. Set "Port Type" = TCP
-4. Set "Protocol" = slcan
-5. Click submit changes.
-
-### **BUSMaster Configuration:**
-
-1. Select VSCom CAN-API by clicking on 'Driver Selection -> VSCom CAN-API"
-2. Then Click on 'Channel Configuration -> Advanced' 
-3. Fill in the IP and port. **Example: 192.168.80.1:3333**
-4. Check the 'Hardware Timestamps' check box.
-5. Choose the Baudrate.
-6. Click 'OK', then Click the Connect button on the top left corner.
-  
-
-<img src="https://user-images.githubusercontent.com/94690098/158798541-0317aa4f-ebf5-4e57-83b0-ea3fefeaf4e9.png" width="350" height="500" >
-
-## 3. RealDash
-WiCAN-OBD and WiCAN-USB can connect with RealDash using either WiFi or BLE. **The protocol and CAN bitrate must be set using the configuration page**. BLE is supported only on Android and iOS. Windows 10 supports only WiFi connections. Additionally, _WiCAN-USB can connect using the USB interface_.
-
-### USB Device Configuration (WiCAN-USB only):
-1. Go to garage then click on the dashboard.
-2. Click Add connection.
-3. Select Adapter (CAN/LIN)
-4. Select RealDash CAN
-5. Select SERIAL/USB
-6. Select device
-7. Set Baud RATE: 4000000 (This is the usb/serial buadrate not the CAN bitrate)
-8. Click next then Done
-   
-### WiFi Device Configuration:
-
-1. Go to configuration webpage.
-2. Select the baudrate
-3. Set "Port Type" = TCP
-4. Set "Protocol" = reladash 66
-5. Click submit changes.
-
-### RealDash Configuration:
-1. Go to garage then click on the dashboard.
-2. Click Add connection.
-3. Select Adapter (CAN/LIN)
-4. Select RealDash CAN
-5. Select WIFI/LAN
-6. Enter IP and Port
-7. Click Done
-
-### BLE Device Configuration:
-
-**If you're using firmware verion v1.64 or below please update to the [latest version](https://github.com/meatpiHQ/wican-fw/releases/) before enabling BLE**
-
-1. Go to configuration webpage.
-2. Select the baudrate
-3. Set the "BLE Status" to enable
-
-**Note: When the BLE is connected, the device will automatically turn off the WiFi configuration access point. Once BLE is disconnected the configuration access point will turn back on.**  
-
-## 4. SavvyCAN
-
-1. Download [SavvyCAN](https://www.savvycan.com/)
-2. Connect to the device AP.
-3. Open SavvyCAN and Click Connection->Open Connection Window->Add New Device
-4. Select "Network Connection", if you're on the same network it auto detect the IP.
-5. Click Create New Connection.
-6. Then select "Enable Bus" checkbox.
-
-# SocketCAN
-
-## 1. WIFi:
-
-Change to protocol in the device configuration page to "slcan", then create a virtual serial port over TCP on your Linux machine. If WiCAN is connected to your home network replace "192.168.80.1" with device IP.
-
-```
-sudo socat pty,link=/dev/netcan0,raw tcp:192.168.80.1:3333 &
-sudo slcand -o -c -s8 /dev/netcan0 can0
-sudo ifconfig can0 txqueuelen 1000
-sudo ifconfig can0 up
-```
-
-## 2. USB
-
-```
-sudo slcand -o -s6 -t sw -S 4000000 /dev/ttyACM0 can0
-sudo ifconfig can0 txqueuelen 1000
-sudo ifconfig can0 up
-```
-# ELM327 OBD2 Protocol
-
-**If you're using firmware verion v1.64 or below please update to the [latest version](https://github.com/meatpiHQ/wican-fw/releases/) before enabling BLE**
-
-1. Go to configuration webpage.
-2. Select the baudrate
-3. Set "Port Type" = TCP
-4. Set "Protocol" = elm327
-5. Enable BLE if needed. [Note](https://github.com/meatpiHQ/wican-fw#important-notes)
-6. Click submit changes.
-
-### OBD2 in RealDash 
-
-1. Go to garage then click on the dashboard.
-2. Click Add connection.
-3. Select Adapter ``` OBD2 ```
-4. Select Bluetooth or WiFi
-5. If WiFi fill in the IP 192.168.80.1 and port 3333. 
-6. Click on ``` OBD2 PROTOCOL ``` and select your car protocol, (11 bit ID, 500Kbit) or (11 bit ID, 250Kbit)
-7. Activate ``` Request Only First Reply ```
-8. Click Done.
-
 ---
 
-© 2023 meatPi Electronics | www.meatpi.com | PO Box 5005 Clayton, VIC 3168, Australia
+© 2024 meatPi Electronics | www.meatpi.com | PO Box 5005 Clayton, VIC 3168, Australia
