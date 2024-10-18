@@ -10,6 +10,41 @@
           "expression": "B39/2",
           "unit": "%",
           "class": "battery"
+        },
+        {
+          "name": "SOH",
+          "expression": "[B33:B34]/10",
+          "unit": "%",
+          "class": ""
+        }
+      ]
+    },
+    {
+      "pid": "2101",
+      "parameters": [
+        {
+          "name": "SOC_BMS",
+          "expression": "B09/2",
+          "unit": "%",
+          "class": "battery"
+        },
+        {
+          "name": "Charger_Connected",
+          "expression": "B14:5",
+          "unit": "",
+          "class": ""
+        },
+        {
+          "name": "Charging",
+          "expression": "B14:7",
+          "unit": "",
+          "class": ""
+        },
+        {
+          "name": "HV_Charger_Connected",
+          "expression": "B14:6",
+          "unit": "",
+          "class": ""
         }
       ]
     }
