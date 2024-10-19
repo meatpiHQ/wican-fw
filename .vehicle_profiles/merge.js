@@ -44,9 +44,8 @@ supportedVehiclesListContent += '# Supported Vehicles\n';
 supportedVehiclesListContent += 'For vehicles listed below a WiCAN vehicle profiles exists:\n';
 models.forEach(model => supportedVehiclesListContent += `- ${model}\n`);
 
-const automateDirectory = await glob('../docs/content/*.Config/*.Automate')
-if(automateDirectory.length == 0 || automateDirectory.length != 1) {
+const supportedVehiclesListFilepath = await glob('../docs/content/*.Config/*.Automate/*.Supported_Vehicles.md')
+if(supportedVehiclesListFilepath.length == 0 || supportedVehiclesListFilepath.length != 1) {
     throw new Error('Unable to determine automateDirectory');
 }
-const supportedVehiclesListFilepath = `${automateDirectory[0]}/2.Supported_Vehicles.md`
-await writeFile(supportedVehiclesListFilepath, supportedVehiclesListContent);
+await writeFile(supportedVehiclesListFilepath[0], supportedVehiclesListContent);
