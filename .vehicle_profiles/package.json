@@ -4,7 +4,7 @@
   "description": "merge all the different json files",
   "main": "merge.js",
   "scripts": {
-    "build": "node merge.js",
+    "build": "node merge.js; node buildSupportedVehiclesList.js",
     "validate": "node validate.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
