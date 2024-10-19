@@ -28,7 +28,25 @@ result.cars.sort((a,b) => {
     return (first < second) ? -1 : (first > second ) ? 1 : 0;
 });
 
-result = JSON.stringify(result);
+const resultString = JSON.stringify(result);
 //Use below line instead for generating pretty json
 // result = JSON.stringify(result, null, 2);
-await writeFile(target, result)
+await writeFile(target, resultString)
+
+const models = result.cars.map(car => car.car_model).filter(model => model !== 'AAA: Generic');
+let supportedVehiclesListContent = '';
+supportedVehiclesListContent += '<!--\n';
+supportedVehiclesListContent += '================================================================\n'
+supportedVehiclesListContent += 'THIS FILE WAS GENERATED! DO NOT UPDATE OR YOUR CHANGES ARE LOST!\n'
+supportedVehiclesListContent += '================================================================\n'
+supportedVehiclesListContent += '-->\n';
+supportedVehiclesListContent += '# Supported Vehicles\n';
+supportedVehiclesListContent += 'For vehicles listed below a WiCAN vehicle profiles exists:\n';
+models.forEach(model => supportedVehiclesListContent += `- ${model}\n`);
+
+const automateDirectory = await glob('../docs/content/*.Config/*.Automate')
+if(automateDirectory.length == 0 || automateDirectory.length != 1) {
+    throw new Error('Unable to determine automateDirectory');
+}
+const supportedVehiclesListFilepath = `${automateDirectory[0]}/2.Supported_Vehicles.md`
+await writeFile(supportedVehiclesListFilepath, supportedVehiclesListContent);
