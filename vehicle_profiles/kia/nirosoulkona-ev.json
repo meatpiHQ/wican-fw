@@ -1,0 +1,186 @@
+{
+  "car_model": "Kia/Hyundai: Niro/Soul/Kona",
+  "init": "ATST96;",
+  "pids": [
+    {
+      "pid_init": "ATSH7E4;",
+      "pid": "2201019",
+      "parameters": [
+        {
+          "name": "SOC_BMS",
+          "expression": "B10/2",
+          "unit": "%",
+          "class": "battery"
+        },
+        {
+          "name": "Max_REGEN",
+          "expression": "[B11:B12]/100",
+          "unit": "kW",
+          "class": "power"
+        },
+        {
+          "name": "Max_Power",
+          "expression": "[B13:B14]/100",
+          "unit": "kW",
+          "class": "power"
+        },
+        {
+          "name": "Batt_Current",
+          "expression": "(65536-([B17:B18]))/10",
+          "unit": "A",
+          "class": "current"
+        },
+        {
+          "name": "HV_Volts",
+          "expression": "[B19:B20]/10",
+          "unit": "V",
+          "class": "voltage"
+        },
+        {
+          "name": "HV_Power",
+          "expression": "([B19:B20]/10)*((65536-([B17:B18]))/10)",
+          "unit": "W",
+          "class": "power"
+        },
+        {
+          "name": "Batt_MaxT",
+          "expression": "B21",
+          "unit": "°C",
+          "class": "temperature"
+        },
+        {
+          "name": "Batt_MinT",
+          "expression": "B22",
+          "unit": "°C",
+          "class": "temperature"
+        },
+        {
+          "name": "Batt_Temp_1",
+          "expression": "B23",
+          "unit": "°C",
+          "class": "temperature"
+        },
+        {
+          "name": "Batt_Temp_2",
+          "expression": "B25",
+          "unit": "°C",
+          "class": "temperature"
+        },
+        {
+          "name": "Batt_Temp_3",
+          "expression": "B26",
+          "unit": "°C",
+          "class": "temperature"
+        },
+        {
+          "name": "Batt_Temp_4",
+          "expression": "B27",
+          "unit": "°C",
+          "class": "temperature"
+        },
+        {
+          "name": "Batt_InletT",
+          "expression": "B30",
+          "unit": "°C",
+          "class": "temperature"
+        },
+        {
+          "name": "Max_Cell_V",
+          "expression": "B31/50",
+          "unit": "V",
+          "class": "voltage"
+        },
+        {
+          "name": "Max_Cell_V_No",
+          "expression": "B33",
+          "unit": "none",
+          "class": "none"
+        },
+        {
+          "name": "Min_Cell_V",
+          "expression": "B34/50",
+          "unit": "V",
+          "class": "voltage"
+        },
+        {
+          "name": "Min_Cell_V_No",
+          "expression": "B35",
+          "unit": "none",
+          "class": "none"
+        },
+        {
+          "name": "Aux_Batt_Volts",
+          "expression": "B38*0.1",
+          "unit": "V",
+          "class": "voltage"
+        }
+      ]
+    },
+    {
+      "pid_init": "ATSH7E4;",
+      "pid": "2201057",
+      "parameters": [
+        {
+          "name": "SOH",
+          "expression": "[B34:B35]/10",
+          "unit": "%",
+          "class": "battery"
+        },
+        {
+          "name": "SOC_D",
+          "expression": "B41/2",
+          "unit": "%",
+          "class": "battery"
+        },
+        {
+          "name": "Min_Cell_Det_No",
+          "expression": "B39",
+          "unit": "none",
+          "class": "none"
+        },
+        {
+          "name": "Max_Cell_Det_No",
+          "expression": "B36",
+          "unit": "none",
+          "class": "none"
+        },
+        {
+          "name": "Min_Cell_Det",
+          "expression": "[B37:B38]/10",
+          "unit": "%",
+          "class": "battery"
+        }
+      ]
+    },
+    {
+      "pid_init": "ATSH7E2;",
+      "pid": "21014",
+      "parameters": [
+        {
+          "name": "GearSelector_Raw",
+          "expression": "B10",
+          "unit": "none",
+          "class": "none"
+        },
+        {
+          "name": "Speed_Vehicle",
+          "expression": "[B19:B20]/100",
+          "unit": "%",
+          "class": "battery"
+        },
+        {
+          "name": "Car_Ready",
+          "expression": "B26:3",
+          "unit": "none",
+          "class": "none"
+        },
+        {
+          "name": "Car_ParkBreak",
+          "expression": "B26:5",
+          "unit": "none",
+          "class": "none"
+        }
+      ]
+    }
+  ]
+}
