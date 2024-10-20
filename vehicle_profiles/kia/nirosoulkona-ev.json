@@ -79,12 +79,6 @@
           "class": "temperature"
         },
         {
-          "name": "Batt_Temp_5",
-          "expression": "B28",
-          "unit": "°C",
-          "class": "temperature"
-        },
-        {
           "name": "Batt_InletT",
           "expression": "B30",
           "unit": "°C",
@@ -181,7 +175,7 @@
           "class": "none"
         },
         {
-          "name": "Car_Break",
+          "name": "Car_ParkBreak",
           "expression": "B26:5",
           "unit": "none",
           "class": "none"
