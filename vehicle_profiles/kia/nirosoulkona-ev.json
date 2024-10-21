@@ -243,8 +243,8 @@
         {
           "name": "NOK_OBC_Temp",
           "expression": "B53/2-40", 
-          "unit": "%",
-          "class": "charger"
+          "unit": "°C",
+          "class": "temperature"
         }
       ]
     },
