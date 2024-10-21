@@ -1,3 +1,0 @@
-# Automate
-
-Not yet documented ...
