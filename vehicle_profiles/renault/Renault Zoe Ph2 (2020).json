@@ -1,0 +1,150 @@
+{
+			"car_model": "Renault Zoe Ph2 (2020-)",
+			"init": "ATE0;ATH1;ATSP7;ATS0;ATM0;ATAT1;ATFCSM1;ATCP18;",
+			"pids": [
+				{
+					"pid": "222006",
+					"parameters": [
+						{
+							"name": "Odometer",
+							"pid_init": "",
+							"expression": "[B4:B6]",
+							"unit": "km",
+							"class": "none"
+						}
+					]
+				},
+				{
+					"pid": "222B85",
+					"parameters": [
+						{
+							"name": "Plugged",
+							"pid_init": "",
+							"expression": "B4",
+							"unit": "",
+							"class": "battery"
+						}
+					]
+				},
+				{
+					"pid": "229002",
+					"parameters": [
+						{
+							"name": "SOC",
+							"pid_init": "",
+							"expression": "[B4:B5] * 0.01",
+							"unit": "%",
+							"class": "battery"
+						}
+					]
+				},
+				{
+					"pid": "22300F",
+					"parameters": [
+						{
+							"name": "PowerAvail",
+							"pid_init": "",
+							"expression": "[B4:B5] * 0.025",
+							"unit": "kW",
+							"class": "battery"
+						}
+					]
+				},
+				{
+					"pid": "22300B",
+					"parameters": [
+						{
+							"name": "AcPhases",
+							"pid_init": "",
+							"expression": "B4",
+							"unit": "",
+							"class": "battery"
+						}
+					]
+				},
+				{
+					"pid": "222218",
+					"parameters": [
+						{
+							"name": "TempAmb",
+							"pid_init": "",
+							"expression": "([B4:B5] * 0.1) - 273",
+							"unit": "°C",
+							"class": "none"
+						}
+					]
+				},
+				{
+					"pid": "222005",
+					"parameters": [
+						{
+							"name": "12vBat",
+							"pid_init": "",
+							"expression": "[B4:B5] * 0.01",
+							"unit": "V",
+							"class": "battery"
+						}
+					]
+				},
+				{
+					"pid": "229003",
+					"parameters": [
+						{
+							"name": "SOH",
+							"pid_init": "",
+							"expression": "[B4:B5] * 0.01",
+							"unit": "%",
+							"class": "battery"
+						}
+					]
+				},
+				{
+					"pid": "2291C8",
+					"parameters": [
+						{
+							"name": "KwhAvail",
+							"pid_init": "",
+							"expression": "[B4:B6] * 0.001",
+							"unit": "kwh",
+							"class": "battery"
+						}
+					]
+				},
+				{
+					"pid": "229243",
+					"parameters": [
+						{
+							"name": "KwhCharged",
+							"pid_init": "",
+							"expression": "[B5:B8] * 0.001",
+							"unit": "kwh",
+							"class": "battery"
+						}
+					]
+				},				
+				{
+					"pid": "22300D",
+					"parameters": [
+						{
+							"name": "AcCurrent",
+							"pid_init": "",
+							"expression": "[B4:B5] * 0.1",
+							"unit": "A",
+							"class": "battery"
+						}
+					]
+				},
+				{
+					"pid": "222B8A",
+					"parameters": [
+						{
+							"name": "AcVoltage",
+							"pid_init": "",
+							"expression": "[B4:B5] * 0.5",
+							"unit": "V",
+							"class": "battery"
+						}
+					]
+				}
+			]
+		}
