@@ -157,28 +157,184 @@
       "pid": "21014",
       "parameters": [
         {
-          "name": "GearSelector_Raw",
-          "expression": "B10",
+          "name": "VMCU_Gear_Park",
+          "expression": "B10:0",
           "unit": "none",
           "class": "none"
         },
         {
-          "name": "Speed_Vehicle",
-          "expression": "[B19:B20]/100",
-          "unit": "%",
-          "class": "battery"
+          "name": "VMCU_Gear_Reverse",
+          "expression": "B10:1",
+          "unit": "none",
+          "class": "none"
         },
         {
-          "name": "Car_Ready",
+          "name": "VMCU_Gear_Neutral",
+          "expression": "B10:2",
+          "unit": "none",
+          "class": "none"
+        },
+        {
+          "name": "VMCU_Gear_Drive",
+          "expression": "B10:3",
+          "unit": "none",
+          "class": "none"
+        },
+        {
+          "name": "VMCU_Speed",
+          "expression": "[B19:B20]/100",
+          "unit": "km/h",
+          "class": "speed"
+        },
+        {
+          "name": "VMCU_Car_Ready",
           "expression": "B26:3",
           "unit": "none",
           "class": "none"
         },
         {
-          "name": "Car_ParkBreak",
+          "name": "VMCU_Car_ParkBreak",
           "expression": "B26:5",
           "unit": "none",
           "class": "none"
+        }
+      ]
+    },
+    {
+      "pid_init": "ATSH7E2;",
+      "pid": "21026",
+      "parameters": [
+        {
+          "name": "NOK_VMCU_Aux12v_Voltage",
+          "expression": "[B26:B27]/1000",
+          "unit": "V",
+          "class": "voltage"
+        },
+        {
+          "name": "VMCU_Aux12v_SoC",
+          "expression": "B30",
+          "unit": "%",
+          "class": "battery"
+        }
+      ]
+    },
+    {
+      "pid_init": "ATSH7E5;",
+      "pid": "21019",
+      "parameters": [
+        {
+          "name": "OBC_Aux12v_Voltage",
+          "expression": "[B25:B26]/100",
+          "unit": "V",
+          "class": "voltage"
+        },
+        {
+          "name": "OBC_Pilot_Cycle_Duty",
+          "expression": "[B35:B36]/10",
+          "unit": "%",
+          "class": "charger"
+        },
+        {
+          "name": "NOK_OBC_AC_Voltage",
+          "expression": "B56",
+          "unit": "V",
+          "class": "voltage"
+        },
+        {
+          "name": "NOK_OBC_Temp",
+          "expression": "B53/2-40", 
+          "unit": "%",
+          "class": "charger"
+        }
+      ]
+    },
+    {
+      "pid_init": "ATSH7E5;",
+      "pid": "21038",
+      "parameters": [
+        {
+          "name": "OBC_AC_Current",
+          "expression": "[B9:B10]/100",
+          "unit": "A",
+          "class": "current"
+        }
+      ]
+    },
+    {
+      "pid_init": "ATSH7A0;",
+      "pid": "22C00B4",
+      "parameters": [
+        {
+          "name": "TPMS_FL_PSI",
+          "expression": "[B10]/5",
+          "unit": "psi",
+          "class": "pressure"
+        },
+        {
+          "name": "TPMS_FL_Bar",
+          "expression": "[B10]/72.52",
+          "unit": "bar",
+          "class": "pressure"
+        },
+        {
+          "name": "TPMS_FL_Temp",
+          "expression": "[B11]-50",
+          "unit": "°C",
+          "class": "temperature"
+        },
+        {
+          "name": "TPMS_FR_PSI",
+          "expression": "[B14]/5",
+          "unit": "psi",
+          "class": "pressure"
+        },
+        {
+          "name": "TPMS_FR_Bar",
+          "expression": "[B14]/72.52",
+          "unit": "bar",
+          "class": "pressure"
+        },
+        {
+          "name": "TPMS_FR_Temp",
+          "expression": "[B15]-50",
+          "unit": "°C",
+          "class": "temperature"
+        },
+        {
+          "name": "TPMS_RR_PSI",
+          "expression": "[B19]/5",
+          "unit": "psi",
+          "class": "pressure"
+        },
+        {
+          "name": "TPMS_RR_Bar",
+          "expression": "[B19]/72.52",
+          "unit": "bar",
+          "class": "pressure"
+        },
+        {
+          "name": "TPMS_RR_Temp",
+          "expression": "[B20]-50",
+          "unit": "°C",
+          "class": "temperature"
+        },
+        {
+          "name": "TPMS_RL_PSI",
+          "expression": "[B23]/5",
+          "unit": "psi",
+          "class": "pressure"
+        },
+        {
+          "name": "TPMS_RL_Bar",
+          "expression": "[B23]/72.52",
+          "unit": "bar",
+          "class": "pressure"
+        },
+        {
+          "name": "TPMS_RL_Temp",
+          "expression": "[B25]-50",
+          "unit": "°C",
+          "class": "temperature"
         }
       ]
     }
