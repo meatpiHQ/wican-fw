@@ -199,7 +199,8 @@ void autopid_pub_discovery(void)
             }
 
             // Format discovery topic
-            if (asprintf(&discovery_topic, "homeassistant/sensor/%s/%s/config",
+            if (asprintf(&discovery_topic, "homeassistant/%s/%s/%s/config",
+                         car.pids[i].parameters[j].sensor_type == BINARY_SENSOR ? "binary_sensor" : "sensor",
                          device_id, car.pids[i].parameters[j].name) == -1)
             {
                 // Handle error
@@ -235,9 +236,6 @@ void autopid_pub_discovery(void)
         }
     }
 }
-
-
-
 
 void parse_elm327_response(char *buffer, unsigned char *data, uint32_t *data_length)
 {
@@ -627,7 +625,15 @@ static void autopid_task(void *pvParameters)
 
                                                     result = round(result * 100.0) / 100.0;
                                                     // Add the name and result to the JSON object
-                                                    cJSON_AddNumberToObject(rsp_json, car.pids[i].parameters[j].name, result);
+                                                    if (car.pids[i].parameters[j].sensor_type == SENSOR)
+                                                    {
+                                                        cJSON_AddNumberToObject(rsp_json, car.pids[i].parameters[j].name, result);
+                                                    }
+                                                    else if (car.pids[i].parameters[j].sensor_type == BINARY_SENSOR)
+                                                    {
+                                                        cJSON_AddStringToObject(rsp_json, car.pids[i].parameters[j].name, result > 0 ? "ON" : "OFF");
+                                                    }
+                                                    
                                                     ESP_LOGI(TAG, "Expression result, Name: %s: %lf", car.pids[i].parameters[j].name, result);
                                                     specific_pid_response = 1;
                                                 }
@@ -1182,6 +1188,18 @@ static void autopid_load_car_specific(char* car_mod)
                             {
                                 car.pids[i].parameters[j].class = strdup("");  // Assign an empty string if not available
                             }
+
+                            // Parse sensor type
+                            cJSON *sensor_type = cJSON_GetObjectItemCaseSensitive(parameter_item, "type");
+                            if (sensor_type != NULL && cJSON_IsString(sensor_type) && strcmp(sensor_type->valuestring, "binary_sensor") == 0)
+                            {
+                                car.pids[i].parameters[j].sensor_type = BINARY_SENSOR;
+                            }
+                            else
+                            {
+                                car.pids[i].parameters[j].sensor_type = SENSOR;
+                            }
+
                             j++;
                         }
                     }
