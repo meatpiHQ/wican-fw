@@ -32,7 +32,8 @@
             "name": "Charger_Connected",
             "expression": "B14:7",
             "unit": "",
-            "class": ""
+            "class": "plug",
+            "type": "binary_sensor"
           }
         ]
       }
