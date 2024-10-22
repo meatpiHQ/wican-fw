@@ -1,0 +1,28 @@
+{
+    "car_model": "Opel: Ampere-E",
+    "init": "ATSP6;ATST96;",
+    "pids": [
+        {
+            "pid": "2283341",
+            "parameters": [
+                {
+                    "name": "SOC",
+                    "expression": "(B4*100)/255",
+                    "unit": "%",
+                    "class": "battery"
+                }
+            ]
+        },
+        {
+            "pid": "2241A31",
+            "parameters": [
+                {
+                    "name": "SOC",
+                    "expression": "[B4:B5]/10",
+                    "unit": "Ah",
+                    "class": "battery"
+                }
+            ]
+        }
+    ]
+}
