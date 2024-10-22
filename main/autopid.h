@@ -55,12 +55,19 @@ typedef struct {
     uint8_t type;               // Log type, could be MQTT or file-based
 }__attribute__((aligned(1),packed)) pid_req_t ;
 
+typedef enum
+{
+    SENSOR = 0,
+    BINARY_SENSOR = 1,
+} sensor_type_t;
+
 typedef struct
 {
     char *name;
     char *expression;
     char *unit;
     char *class;
+    sensor_type_t sensor_type;
 } parameter_data_t;
 
 typedef struct

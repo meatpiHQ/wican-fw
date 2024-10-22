@@ -172,13 +172,15 @@
           "name": "Car_Ready",
           "expression": "B26:3",
           "unit": "none",
-          "class": "none"
+          "class": "none",
+          "type": "binary_sensor"
         },
         {
           "name": "Car_ParkBreak",
           "expression": "B26:5",
           "unit": "none",
-          "class": "none"
+          "class": "none",
+          "type": "binary_sensor"
         }
       ]
     }

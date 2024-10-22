@@ -44,8 +44,13 @@
                                     "type": "string"
                                 },
                                 "class": {
-                                    "description": "Class of sensor, See Home Assistant sensor classes",
+                                    "description": "Class of sensor, See Home Assistant sensor classes https://www.home-assistant.io/integrations/sensor/#device-class or https://www.home-assistant.io/integrations/binary_sensor/#device-class",
                                     "type": "string"
+                                },
+                                "type": {
+                                    "description": "Type of sensor",
+                                    "type": "string",
+                                    "enum": ["sensor", "binary_sensor"]
                                 }
                             }
                         }

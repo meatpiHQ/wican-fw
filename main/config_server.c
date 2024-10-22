@@ -635,6 +635,7 @@ static esp_err_t load_car_config_handler(httpd_req_t *req)
 
             cJSON_AddStringToObject(parameter_details, "class", car->pids[i].parameters[j].class);
             cJSON_AddStringToObject(parameter_details, "unit", car->pids[i].parameters[j].unit);
+            cJSON_AddStringToObject(parameter_details, "sensor_type", car->pids[i].parameters[j].sensor_type == BINARY_SENSOR ? "binary_sensor" : "sensor");
             cJSON_AddItemToObject(parameters_object, car->pids[i].parameters[j].name, parameter_details);
         }
     }
