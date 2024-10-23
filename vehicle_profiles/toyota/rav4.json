@@ -12,6 +12,18 @@
 					"class": "battery"
 				}
 			]
+		},
+		{
+			"pid":"01311",
+			"parameters": [
+				{
+					"name": "OILCH_DIS",
+					"pid_init": "ATSH7DF;",
+					"expression": "((256*B3)+B4)/1.609",
+					"unit": "mi",
+					"class": "distance"
+				}
+			]
 		}
 	]
 }
