@@ -632,6 +632,20 @@ void app_main(void)
 		gvret_init(&send_to_host);
 		can_enable();
 	}
+	#if HARDWARE_VER == WICAN_PRO
+	xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
+	elm327_init(&xmsg_obd_rx_queue, NULL);
+	if(protocol == AUTO_PID)
+	{
+		// can_set_bitrate(can_datarate);
+		// #if HARDWARE_VER != WICAN_PRO
+		// can_enable();
+		// #endif
+		
+		autopid_init((char*)&uid[0], config_server_get_auto_pid());
+	}
+
+	#else
 	else if(protocol == OBD_ELM327)
 	{
 //		can_init(CAN_500K);
@@ -662,6 +676,8 @@ void app_main(void)
 		elm327_init(&xmsg_obd_rx_queue, NULL);
 		autopid_init((char*)&uid[0], config_server_get_auto_pid());
 	}
+	#endif
+	
 
 	if(config_server_mqtt_en_config())
 	{
@@ -818,6 +834,6 @@ void app_main(void)
 	// pdTRUE, /* BIT_0 should be cleared before returning. */
 	// pdFALSE, /* Don't wait for both bits, either bit will do. */
 	// portMAX_DELAY);/* Wait forever. */  
-	esp_log_level_set("*", ESP_LOG_NONE);
+	// esp_log_level_set("*", ESP_LOG_NONE);
 }
 
