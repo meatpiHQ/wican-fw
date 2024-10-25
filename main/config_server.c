@@ -71,6 +71,7 @@
 #include "ble.h"
 #include "sleep_mode.h"
 #include "autopid.h"
+#include "wc_mdns.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
@@ -761,6 +762,47 @@ static esp_err_t store_auto_data_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+static esp_err_t store_car_data_handler(httpd_req_t *req)
+{
+    int total_len = req->content_len;
+    int received = 0;
+	const char *filepath = "/spiffs/car_data.json";
+
+    FILE *file = fopen(filepath, "w");
+    if (!file)
+    {
+        ESP_LOGE(TAG, "Failed to open file for writing");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open file for writing");
+        return ESP_FAIL;
+    }
+
+    static char buffer[16];
+    while (received < total_len)
+    {
+        int ret = httpd_req_recv(req, buffer, sizeof(buffer));
+        if (ret <= 0)
+        {
+            ESP_LOGE(TAG, "Failed to receive JSON data");
+            fclose(file);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive JSON data");
+            return ESP_FAIL;
+        }
+        if (fwrite(buffer, 1, ret, file) != ret)
+        {
+            ESP_LOGE(TAG, "Failed to write data to file");
+            fclose(file);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to write data to file");
+            return ESP_FAIL;
+        }
+        received += ret;
+    }
+
+    fclose(file);
+    ESP_LOGI(TAG, "JSON data successfully stored");
+
+    httpd_resp_send(req, "Data stored successfully", HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+}
 
 static esp_err_t check_status_handler(httpd_req_t *req)
 {
@@ -794,6 +836,7 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	cJSON_AddStringToObject(root, "ap_ch", device_config.ap_ch);
 	cJSON_AddStringToObject(root, "sta_status", (wifi_network_is_connected()?"Connected":"Not Connected"));
 	cJSON_AddStringToObject(root, "sta_ip", ip_str);
+	cJSON_AddStringToObject(root, "mdns", wc_mdns_get_hostname());
 	cJSON_AddStringToObject(root, "ble_status", device_config.ble_status);
 //	cJSON_AddStringToObject(root, "can_datarate", device_config.can_datarate);
 	cJSON_AddStringToObject(root, "can_datarate", can_datarate_str[can_get_bitrate()]);
@@ -1444,7 +1487,14 @@ static const httpd_uri_t autopid_data = {
     .handler   = autopid_data_handler,
     .user_ctx  = &server_data    // Pass server data as context
 };
-
+static const httpd_uri_t store_car_data_uri = {
+    .uri       = "/store_car_data",
+    .method    = HTTP_POST,
+    .handler   = store_car_data_handler,
+    /* Let's pass response string in user
+     * context to demonstrate it's usage */
+    .user_ctx  = NULL
+};
 static void config_server_load_cfg(char *cfg)
 {
 	cJSON * root, *key = 0;
@@ -2051,7 +2101,7 @@ static httpd_handle_t config_server_init(void)
                        );
 
     // Start the httpd server
-	config.max_uri_handlers = 16;
+	config.max_uri_handlers = 17;
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK)
     {
@@ -2073,6 +2123,7 @@ static httpd_handle_t config_server_init(void)
 		httpd_register_uri_handler(server, &upload_car_data);
 		httpd_register_uri_handler(server, &autopid_data);
 		httpd_register_uri_handler(server, &load_car_config_uri);
+		httpd_register_uri_handler(server, &store_car_data_uri);
         #if CONFIG_EXAMPLE_BASIC_AUTH
         httpd_register_basic_auth(server);
         #endif

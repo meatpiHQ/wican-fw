@@ -1,8 +1,8 @@
 // https://github.com/nuxt-themes/docus/blob/main/nuxt.schema.ts
 export default defineAppConfig({
   docus: {
-    title: 'WiCan Docs',
-    description: 'Docs and guides around WiCan',
+    title: 'WiCAN Docs',
+    description: 'Docs and guides around WiCAN',
     socials: {
       github: 'meatpiHQ/wican-fw',
     },

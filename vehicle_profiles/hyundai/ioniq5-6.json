@@ -36,6 +36,12 @@
           "class": "voltage"
         },
         {
+          "name": "HV_Power",
+          "expression": "([B19:B20]/10)*((65536-([B17:B18]))/10)",
+          "unit": "W",
+          "class": "power"
+        },
+        {
           "name": "Batt_MaxT",
           "expression": "B21",
           "unit": "°C",
@@ -127,6 +133,24 @@
         {
           "name": "SOC_D",
           "expression": "B41/2",
+          "unit": "%",
+          "class": "battery"
+        },
+        {
+          "name": "Min_Cell_Det_No",
+          "expression": "B39",
+          "unit": "none",
+          "class": "none"
+        },
+        {
+          "name": "Max_Cell_Det_No",
+          "expression": "B36",
+          "unit": "none",
+          "class": "none"
+        },
+        {
+          "name": "Min_Cell_Det",
+          "expression": "[B37:B38]/10",
           "unit": "%",
           "class": "battery"
         }

@@ -1,0 +1,25 @@
+{
+	"car_model": "Nissan : leaf-ze1",
+	"init": "ATSP6;ATFCSH79B;ATST96;ATFCSD300000;ATFCSM1;",
+	"pids": [
+		{
+			"pid": "21018",
+			"pid_init": "ATSH79B;ATFCSH79B;ATCRA7BB;",
+			"parameters": [
+				{
+					"name": "Hx",
+                    
+					"expression": "[B36:B37]/102.4",
+					"unit": "%",
+					"class": "battery"
+				},
+                {
+					"name": "SoC",
+					"expression": "((B39*65536)+[B41:B42])/10000",
+					"unit": "%",
+					"class": "battery"
+				}
+			]
+		}
+	]
+}

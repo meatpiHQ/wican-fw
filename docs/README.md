@@ -1,4 +1,4 @@
-# WiCan Docs
+# WiCAN Docs
 
 
 These docs are generated using [docus](https://docus.dev/). To update any of them, just update the markdown file in the content folder.
