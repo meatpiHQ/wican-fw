@@ -1312,9 +1312,14 @@ static QueueHandle_t elm327_cmd_queue;
 extern QueueHandle_t uart1_queue;
 
 extern SemaphoreHandle_t xuart1_semaphore;
-int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, QueueHandle_t *q, char *cmd_buffer, uint32_t *cmd_buffer_len, int64_t *last_cmd_time, response_callback_t response_callback)
+int8_t elm327_process_cmd(uint8_t *cmd, uint8_t len, QueueHandle_t *q, char *cmd_buffer, uint32_t *cmd_buffer_len, int64_t *last_cmd_time, response_callback_t response_callback)
 {
     int64_t current_time = esp_timer_get_time();  // Get the current time
+
+	if(len == 0)
+	{
+		len = strlen((char*)cmd);
+	}
 
     // Check for timeout
     if (current_time - *last_cmd_time > ELM327_CMD_TIMEOUT_US)
@@ -1330,10 +1335,10 @@ int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, QueueHandle_t *q, char *cmd
     {
         if (*cmd_buffer_len < ELM327_MAX_CMD_LEN - 1)
         {
-            cmd_buffer[(*cmd_buffer_len)++] = buf[i];
+            cmd_buffer[(*cmd_buffer_len)++] = cmd[i];
         }
 
-        if (buf[i] == '\r')
+        if (cmd[i] == '\r')
         {
             // Null-terminate the accumulated command
             cmd_buffer[*cmd_buffer_len] = '\0';
@@ -1374,7 +1379,7 @@ int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, QueueHandle_t *q, char *cmd
 // UART event task to handle UART commands and response queue
 static void uart1_event_task(void *pvParameters)
 {
-    static uint8_t uart_read_buf[BUF_SIZE];
+    static uint8_t uart_read_buf[2048];
     size_t response_len = 0;
     uart_event_t event;
     static elm327_commands_t elm327_command;
@@ -1386,6 +1391,7 @@ static void uart1_event_task(void *pvParameters)
             if (xSemaphoreTake(xuart1_semaphore, portMAX_DELAY) == pdTRUE)
             {
                 uart_flush(UART_NUM_1);
+				uart_read_bytes(UART_NUM_1, uart_read_buf, sizeof(uart_read_buf), 0);
                 uart_write_bytes(UART_NUM_1, elm327_command.command, elm327_command.command_len);
                 ESP_LOG_BUFFER_HEXDUMP(TAG, elm327_command.command, elm327_command.command_len, ESP_LOG_INFO);
 
@@ -1398,7 +1404,7 @@ static void uart1_event_task(void *pvParameters)
                     {
                         if (event.type == UART_DATA)
                         {
-                            int read_bytes = uart_read_bytes(UART_NUM_1, uart_read_buf + response_len, event.size, portMAX_DELAY);
+                            int read_bytes = uart_read_bytes(UART_NUM_1, uart_read_buf + response_len, event.size, pdMS_TO_TICKS(2000));
                             if (read_bytes > 0)
                             {
                                 ESP_LOG_BUFFER_HEXDUMP(TAG, uart_read_buf + response_len, read_bytes, ESP_LOG_INFO);
@@ -1406,8 +1412,14 @@ static void uart1_event_task(void *pvParameters)
 
                                 for (int i = 0; i < response_len; i++)
                                 {
-                                    if (uart_read_buf[i] == '>')
+                                    if ((i > 1 && uart_read_buf[i-1] == '\r' && uart_read_buf[i] == '>') || (i > 2 && uart_read_buf[i-2] == 'O' && uart_read_buf[i-1] == 'K' && uart_read_buf[i] == '\r'))
                                     {
+										if(strstr((char*)uart_read_buf, "STSBR2000000\rOK"))
+										{
+											// printf("found baudrate change\r\n");
+											uart_write_bytes(UART_NUM_1, "\r\r", 2);
+											uart_write_bytes(UART_NUM_1, "STWBR\r", strlen("STWBR\r"));
+										}
                                         terminator_received = true;
                                         break;
                                     }
