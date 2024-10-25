@@ -53,6 +53,11 @@ static size_t num_of_pids = 0;
 static char* initialisation = NULL;     
 static car_model_data_t car;
 static char* device_id;
+#if HARDWARE_VER == WICAN_PRO
+static char elm327_autopid_cmd_buffer[BUFFER_SIZE];
+static uint32_t elm327_autopid_cmd_buffer_len = 0;
+static int64_t elm327_autopid_last_cmd_time = 0;
+#endif
 static autopid_data_t autopid_data = {
     .data = NULL,
     .mutex = NULL
@@ -292,7 +297,7 @@ static void append_to_buffer(char *buffer, const char *new_data)
     }
 }
 
-void autopid_parser(char *str, uint32_t len, QueueHandle_t *q)
+void autopid_parser(char *str, uint32_t len, QueueHandle_t *q, char* cmd_str)
 {
     static response_t response;
     if (str != NULL && strlen(str) != 0)
@@ -326,7 +331,6 @@ static void send_commands(char *commands, uint32_t delay_ms)
 {
     char *cmd_start = commands;
     char *cmd_end;
-    twai_message_t tx_msg;
     
     while ((cmd_end = strchr(cmd_start, '\r')) != NULL) 
     {
@@ -338,7 +342,12 @@ static void send_commands(char *commands, uint32_t delay_ms)
             (strstr(str_send, "ats0") == NULL && strstr(str_send, "ATS0") == NULL && strstr(str_send, "at s0") == NULL && strstr(str_send, "AT s0") == NULL) &&
             (strstr(str_send, "ate1") == NULL && strstr(str_send, "ATE1") == NULL && strstr(str_send, "at e1") == NULL && strstr(str_send, "AT E1") == NULL))
         {
+            #if HARDWARE_VER == WICAN_PRO
+            elm327_process_cmd((uint8_t *)str_send, cmd_len, &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, &autopid_parser);
+            #else
+            twai_message_t tx_msg;
             elm327_process_cmd((uint8_t *)str_send, cmd_len, &tx_msg, &autopidQueue);
+            #endif
         }
         
         cmd_start = cmd_end + 1; // Move to the start of the next command
@@ -494,7 +503,12 @@ static void autopid_task(void *pvParameters)
                                     while ((xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(50)) == pdPASS));
                                 }
 
+                                #if HARDWARE_VER == WICAN_PRO
+                                elm327_process_cmd((uint8_t*)pid_req[i].pid_command , strlen(pid_req[i].pid_command), &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, &autopid_parser);
+                                #else
                                 elm327_process_cmd((uint8_t*)pid_req[i].pid_command , strlen(pid_req[i].pid_command), &tx_msg, &autopidQueue);
+                                #endif
+                                
                                 ESP_LOGI(TAG, "Sending command: %s", pid_req[i].pid_command);
                                 if (xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS)
                                 {
@@ -600,7 +614,11 @@ static void autopid_task(void *pvParameters)
                             }
                             if(car.pids[i].pid != NULL && strlen(car.pids[i].pid) > 0)
                             {
-                                elm327_process_cmd((uint8_t*)car.pids[i].pid , strlen(car.pids[i].pid), &tx_msg, &autopidQueue);
+                                #if HARDWARE_VER == WICAN_PRO
+                                elm327_process_cmd((uint8_t*)car.pids[i].pid_init , strlen(car.pids[i].pid_init), &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, &autopid_parser);
+                                #else
+                                elm327_process_cmd((uint8_t*)car.pids[i].pid_init , strlen(car.pids[i].pid_init), &tx_msg, &autopidQueue);
+                                #endif
                                 ESP_LOGI(TAG, "Sending car.pids[%lu].pid: %s", i, car.pids[i].pid);
                                 if (xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS)
                                 {
