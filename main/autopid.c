@@ -494,13 +494,15 @@ static void autopid_task(void *pvParameters)
 
                 case READ_PID:
                 {
-                    uint8_t pid_response = 0;
+                    uint8_t pid_response = 1;
+                    
                     if(num_of_pids > 0)
                     {
                         for(uint32_t i = 0; i < num_of_pids; i++)
                         {
                             if( esp_timer_get_time() > pid_req[i].timer )
                             {
+                                pid_response = 0;
                                 pid_req[i].timer = esp_timer_get_time() + pid_req[i].period*1000;
                                 pid_req[i].timer += RANDOM_MIN + (esp_random() % (RANDOM_MAX - RANDOM_MIN + 1));
 
@@ -591,6 +593,7 @@ static void autopid_task(void *pvParameters)
 
                     if((car.car_specific_en) && ( car.pid_count > 0 ) && ( esp_timer_get_time() > car.cycle_timer ))
                     {
+                        pid_response = 0;
                         car.cycle_timer = esp_timer_get_time() + car.cycle*1000; //in ms
 
                         cJSON *rsp_json = cJSON_CreateObject();
@@ -711,7 +714,7 @@ static void autopid_task(void *pvParameters)
                     if(pid_response == 0)
                     {
                         autopid_state = DISCONNECT_NOTIFY;
-                        ESP_LOGI(TAG, "State change --> DISCONNECT_NOTIFY");
+                        ESP_LOGI(TAG, "State change --> DISCONNECT_NOTIFY, pid_response: %u", pid_response);
                     }
 
                     break;
@@ -1217,5 +1220,5 @@ void autopid_init(char* id, char *config_str)
     
 
     
-    xTaskCreate(autopid_task, "autopid_task", 3584, (void *)AF_INET, 5, NULL);
+    xTaskCreate(autopid_task, "autopid_task", 1024*5, (void *)AF_INET, 5, NULL);
 }
