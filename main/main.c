@@ -494,7 +494,11 @@ void app_main(void)
 
 	gpio_reset_pin(USB_ID_PIN);
 	gpio_set_direction(USB_ID_PIN, GPIO_MODE_INPUT);
-
+	gpio_reset_pin(4);
+	gpio_set_direction(4, GPIO_MODE_INPUT);
+	gpio_pullup_dis(4);
+	gpio_pulldown_dis(4);
+	
 	#if HARDWARE_VER == WICAN_PRO
 	i2c_master_init();
 	led_init(I2C_MASTER_NUM);
@@ -606,7 +610,7 @@ void app_main(void)
 
 	initialise_mdns((char*)uid);
 	protocol = config_server_protocol();
-//	protocol = OBD_ELM327;
+	// protocol = OBD_ELM327;
 
 	if(protocol == REALDASH)
 	{
@@ -792,7 +796,7 @@ void app_main(void)
 		sleep_mode_init(0, 13.1f);
 	}
 	#elif HARDWARE_VER == WICAN_PRO
-	// sleep_mode_init();
+	sleep_mode_init();
 	#endif
 
 
@@ -807,13 +811,13 @@ void app_main(void)
     #endif
 	
 	// wusb3801_init(I2C_MASTER_NUM);
-	xEventTask = xEventGroupCreate();
-	xTaskCreate(ftp_task, "FTP", 1024*6, NULL, 2, NULL);
+	// xEventTask = xEventGroupCreate();
+	// xTaskCreate(ftp_task, "FTP", 1024*6, NULL, 2, NULL);
 	// xEventGroupWaitBits( xEventTask,
 	// FTP_TASK_FINISH_BIT, /* The bits within the event group to wait for. */
 	// pdTRUE, /* BIT_0 should be cleared before returning. */
 	// pdFALSE, /* Don't wait for both bits, either bit will do. */
 	// portMAX_DELAY);/* Wait forever. */  
-	// esp_log_level_set("*", ESP_LOG_NONE);
+	esp_log_level_set("*", ESP_LOG_NONE);
 }
 
