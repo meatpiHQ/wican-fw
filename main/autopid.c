@@ -343,7 +343,7 @@ static void send_commands(char *commands, uint32_t delay_ms)
             (strstr(str_send, "ate1") == NULL && strstr(str_send, "ATE1") == NULL && strstr(str_send, "at e1") == NULL && strstr(str_send, "AT E1") == NULL))
         {
             #if HARDWARE_VER == WICAN_PRO
-            elm327_process_cmd((uint8_t *)str_send, cmd_len, &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, &autopid_parser);
+            elm327_process_cmd((uint8_t *)str_send, cmd_len, &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, autopid_parser);
             #else
             twai_message_t tx_msg;
             elm327_process_cmd((uint8_t *)str_send, cmd_len, &tx_msg, &autopidQueue);
@@ -504,7 +504,7 @@ static void autopid_task(void *pvParameters)
                                 }
 
                                 #if HARDWARE_VER == WICAN_PRO
-                                elm327_process_cmd((uint8_t*)pid_req[i].pid_command , strlen(pid_req[i].pid_command), &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, &autopid_parser);
+                                elm327_process_cmd((uint8_t*)pid_req[i].pid_command , strlen(pid_req[i].pid_command), &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, autopid_parser);
                                 #else
                                 elm327_process_cmd((uint8_t*)pid_req[i].pid_command , strlen(pid_req[i].pid_command), &tx_msg, &autopidQueue);
                                 #endif
@@ -615,9 +615,9 @@ static void autopid_task(void *pvParameters)
                             if(car.pids[i].pid != NULL && strlen(car.pids[i].pid) > 0)
                             {
                                 #if HARDWARE_VER == WICAN_PRO
-                                elm327_process_cmd((uint8_t*)car.pids[i].pid_init , strlen(car.pids[i].pid_init), &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, &autopid_parser);
+                                elm327_process_cmd((uint8_t*)car.pids[i].pid , strlen(car.pids[i].pid), &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, &autopid_parser);
                                 #else
-                                elm327_process_cmd((uint8_t*)car.pids[i].pid_init , strlen(car.pids[i].pid_init), &tx_msg, &autopidQueue);
+                                elm327_process_cmd((uint8_t*)car.pids[i].pid , strlen(car.pids[i].pid), &tx_msg, &autopidQueue);
                                 #endif
                                 ESP_LOGI(TAG, "Sending car.pids[%lu].pid: %s", i, car.pids[i].pid);
                                 if (xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS)
