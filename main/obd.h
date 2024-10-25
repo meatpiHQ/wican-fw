@@ -38,6 +38,59 @@ typedef struct {
     obd_rsp_t *obd_rsp;
 } obd_cmd_t;
 
+
+typedef struct
+{
+    char ctrl_mode[10]; // ELM327 or NATIVE
+    int pwr_ctrl;       // 1 for LOW, 0 for HIGH
+    struct
+    {
+        int en;         // 1 for ON, 0 for OFF
+        uint32_t time;  // Sleep time in milliseconds
+    } uart_sleep;
+    struct
+    {
+        int en;         // 1 for ON, 0 for OFF
+        uint32_t min_time; // min wake time in microseconds
+        uint32_t max_time; // max wake time in microseconds
+    } uart_wake;
+    struct
+    {
+        int level;      // 0 for LOW, 1 for HIGH
+    } ext_input;
+    struct
+    {
+        int en;         // 1 for ON, 0 for OFF
+        int level;      // 0 for LOW, 1 for HIGH
+        uint32_t time;  // Sleep time in milliseconds
+    } ext_sleep;
+    struct
+    {
+        int en;         // 1 for ON, 0 for OFF
+        int level;      // 0 for LOW, 1 for HIGH
+        uint32_t time;  // Wake time in milliseconds
+    } ext_wake;
+    struct
+    {
+        int en;         // 1 for ON, 0 for OFF
+        float voltage;  // Voltage level threshold
+        uint32_t time;  // Time in milliseconds
+    } vl_sleep;
+    struct
+    {
+        int en;         // 1 for ON, 0 for OFF
+        float voltage;  // Voltage wake threshold
+        uint32_t time;  // Time in milliseconds
+    } vl_wake;
+    struct
+    {
+        int en;         // 1 for ON, 0 for OFF
+        float voltage_change; // Voltage change in volts
+        uint32_t time;        // Time in milliseconds
+    } vchg_wake;
+} stslcs_config_t;
+
+
 void obd_init(void);
 void obd_log_response(char *buf, uint32_t size);
 void obd_send_cmd(char *cmd, QueueHandle_t *rsp_queue, obd_rsp_t *obd_rsp, uint32_t timeout_ms);

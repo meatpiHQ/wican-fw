@@ -586,7 +586,7 @@ static void sleep_task(void *pvParameters)
 {
 	while (1)
 	{
-		if(gpio_get_level(SLEEP_INPUT) == 1)
+		if(gpio_get_level(SLEEP_INPUT) == 1 && config_server_get_sleep_config() == 1)
 		{
 			vTaskDelay(pdMS_TO_TICKS(20000));
 			if(gpio_get_level(SLEEP_INPUT) == 1)

@@ -26,200 +26,289 @@
 #include "driver/uart.h"
 #include "driver/gpio.h"
 #include "obd.h"
+#include "elm327.h"
+#include "config_server.h"
 
 #define TAG                     __func__
+#define check_command(a,b)      (strcmp(a, b) == 0)
+#define GET_VOLTAGE_CMD         "ATRV\r"
+#define GET_SLEEP_CONFIG_CMD    "STSLCS\r"
+#define BUF_SIZE    1024
 
- QueueHandle_t uart1_queue = NULL;
+QueueHandle_t uart1_queue = NULL;
 static QueueHandle_t xobd_cmd_queue = NULL;
 SemaphoreHandle_t xuart1_semaphore = NULL;
+static QueueHandle_t battery_voltage_queue;
 
-void obd_log_response(char *buf, uint32_t size)
+// Helper function to parse ON/OFF to int
+static int parse_on_off(const char* str)
 {
-    for(int i = 0; i < size; i++)
+    return (strcmp(str, "ON") == 0) ? 1 : 0;
+}
+
+// Helper function to parse HIGH/LOW to int
+static int parse_high_low(const char* str)
+{
+    return (strcmp(str, "HIGH") == 0) ? 1 : 0;
+}
+
+// Helper function to parse time, stripping the "ms" or "s" from the numeric value
+static uint32_t parse_time(const char* time_str)
+{
+    uint32_t time_value = 0;
+    char unit[5];  // To hold the unit (e.g., "ms" or "s")
+
+    // Use sscanf to extract the numeric value and the unit
+    if (sscanf(time_str, "%lu %4s", &time_value, unit) == 2)
     {
-        if(buf[i] == '\r')
+        ESP_LOGI(TAG, "Parsed time: %lu %s\n", time_value, unit);  // Debugging output
+
+        // Return the time value in milliseconds if the unit is "ms", otherwise convert seconds to milliseconds
+        if (strcmp(unit, "ms") == 0)
         {
-            buf[i] = '\n';
+            return time_value;  // Already in milliseconds
+        }
+        else if (strcmp(unit, "s") == 0)
+        {
+            return time_value * 1000;  // Convert seconds to milliseconds
         }
     }
-    buf[size] = '\0';
-    ESP_LOGI(TAG, "OBD response: %s", buf);
-    for(int i = 0; i < size; i++)
+
+    // If the unit isn't recognized or parsing fails, return 0 as a default
+    ESP_LOGI(TAG, "Time parsing failed for: %s\n", time_str);  // Debugging failed case
+    return 0;
+}
+
+// Helper function to parse a single line of the response
+static void parse_line(const char* line, stslcs_config_t* config)
+{
+    char buffer[256];
+    char enable_buffer[10];
+    char level_buffer[10];
+    char time_buffer[50];
+    float voltage = 0;
+
+    ESP_LOGI(TAG, "Parsing line: %s", line);  // Debugging each line
+
+    // Parse CTRL MODE
+    if (strstr(line, "CTRL MODE"))
     {
-        if(buf[i] == '\n')
+        sscanf(line, "CTRL MODE: %s", config->ctrl_mode);
+        ESP_LOGI(TAG, "CTRL MODE: %s", config->ctrl_mode);
+    }
+    // Parse PWR_CTRL
+    else if (strstr(line, "PWR_CTRL"))
+    {
+        sscanf(line, "PWR_CTRL: %*[^=]= %s", buffer);
+        config->pwr_ctrl = parse_high_low(buffer);
+        ESP_LOGI(TAG, "PWR_CTRL: %d", config->pwr_ctrl);
+    }
+    // Parse UART_SLEEP
+    else if (strstr(line, "UART_SLEEP"))
+    {
+        sscanf(line, "UART_SLEEP: %[^,], %49[^\n]", enable_buffer, time_buffer);
+        config->uart_sleep.en = parse_on_off(enable_buffer);
+        config->uart_sleep.time = parse_time(time_buffer);
+        ESP_LOGI(TAG, "UART_SLEEP: en=%d, time=%lu ms", config->uart_sleep.en, config->uart_sleep.time);
+    }
+    // Parse UART_WAKE
+    else if (strstr(line, "UART_WAKE"))
+    {
+        sscanf(line, "UART_WAKE: %[^,], %lu-%lu", enable_buffer, &config->uart_wake.min_time, &config->uart_wake.max_time);
+        config->uart_wake.en = parse_on_off(enable_buffer);
+        ESP_LOGI(TAG, "UART_WAKE: en=%d, min_time=%lu us, max_time=%lu us", config->uart_wake.en, config->uart_wake.min_time, config->uart_wake.max_time);
+    }
+    // Parse EXT_INPUT
+    else if (strstr(line, "EXT_INPUT"))
+    {
+        sscanf(line, "EXT_INPUT: %s", level_buffer);
+        config->ext_input.level = parse_high_low(level_buffer);
+        ESP_LOGI(TAG, "EXT_INPUT: level=%d", config->ext_input.level);
+    }
+    // Parse EXT_SLEEP
+    else if (strstr(line, "EXT_SLEEP"))
+    {
+        sscanf(line, "EXT_SLEEP: %[^,], %[^,], FOR %49[^\n]", enable_buffer, level_buffer, time_buffer);
+        config->ext_sleep.en = parse_on_off(enable_buffer);
+        config->ext_sleep.level = parse_high_low(level_buffer);
+        config->ext_sleep.time = parse_time(time_buffer);
+        ESP_LOGI(TAG, "EXT_SLEEP: en=%d, level=%d, time=%lu ms", config->ext_sleep.en, config->ext_sleep.level, config->ext_sleep.time);
+    }
+    // Parse EXT_WAKE
+    else if (strstr(line, "EXT_WAKE"))
+    {
+        sscanf(line, "EXT_WAKE: %[^,], %[^,], FOR %49[^\n]", enable_buffer, level_buffer, time_buffer);
+        config->ext_wake.en = parse_on_off(enable_buffer);
+        config->ext_wake.level = parse_high_low(level_buffer);
+        config->ext_wake.time = parse_time(time_buffer);
+        ESP_LOGI(TAG, "EXT_WAKE: en=%d, level=%d, time=%lu ms", config->ext_wake.en, config->ext_wake.level, config->ext_wake.time);
+    }
+    // Parse VL_SLEEP
+    else if (strstr(line, "VL_SLEEP"))
+    {
+        sscanf(line, "VL_SLEEP: %[^,], <%fV FOR %49[^\n]", enable_buffer, &voltage, time_buffer);
+        config->vl_sleep.en = parse_on_off(enable_buffer);
+        config->vl_sleep.voltage = voltage;
+        config->vl_sleep.time = parse_time(time_buffer);
+        ESP_LOGI(TAG, "VL_SLEEP: en=%d, voltage=%.2f V, time=%lu ms", config->vl_sleep.en, config->vl_sleep.voltage, config->vl_sleep.time);
+    }
+    // Parse VL_WAKE
+    else if (strstr(line, "VL_WAKE"))
+    {
+        if (sscanf(line, "VL_WAKE: %[^,], >!%fV FOR %49[^\n]", enable_buffer, &voltage, time_buffer) != 3)
         {
-            buf[i] = '\r';
+            sscanf(line, "VL_WAKE: %[^,], >%fV FOR %49[^\n]", enable_buffer, &voltage, time_buffer);
         }
+        config->vl_wake.en = parse_on_off(enable_buffer);
+        config->vl_wake.voltage = voltage;
+        config->vl_wake.time = parse_time(time_buffer);
+        ESP_LOGI(TAG, "VL_WAKE: en=%d, voltage=%.2f V, time=%lu ms", config->vl_wake.en, config->vl_wake.voltage, config->vl_wake.time);
+    }
+    // Parse VCHG WAKE
+    else if (strstr(line, "VCHG WAKE"))
+    {
+        sscanf(line, "VCHG WAKE: %[^,], %fV IN %49[^\n]", enable_buffer, &voltage, time_buffer);
+        config->vchg_wake.en = parse_on_off(enable_buffer);
+        config->vchg_wake.voltage_change = voltage;
+        config->vchg_wake.time = parse_time(time_buffer);
+        ESP_LOGI(TAG, "VCHG_WAKE: en=%d, voltage_change=%.2f V, time=%lu ms", config->vchg_wake.en, config->vchg_wake.voltage_change, config->vchg_wake.time);
     }
 }
 
-static void obd_task(void *pvParameters)
+// Main parsing function
+static void parse_stslcs_response(const char* response, stslcs_config_t* config)
 {
-    ESP_LOGI(TAG, "OBD Task started");
-    obd_cmd_t obd_cmd;
-    size_t buf_index = 0;
-    uart_event_t event;
-    // bool cmd_complete = false;
-
-    while (true)
+    ESP_LOGI(TAG, "Starting parsing of response...");
+    
+    // Split the response into lines and process each one
+    char* response_copy = strdup(response);
+    char* line = strtok(response_copy, "\r\n");
+    while (line != NULL)
     {
-        ESP_LOGI(TAG, "Waiting for command in xobd_queue");
-        if (xQueueReceive(xobd_cmd_queue, (void*)&obd_cmd, portMAX_DELAY) == pdPASS)
+        parse_line(line, config);
+        line = strtok(NULL, "\r\n");
+    }
+
+    free(response_copy);  // Free the copied response
+    ESP_LOGI(TAG, "Parsing complete.");
+}
+
+static void obd_parse_response(char *str, uint32_t len, QueueHandle_t *q, char* cmd_str)
+{
+    if(strcmp(cmd_str, GET_VOLTAGE_CMD) == 0)
+    {
+        const unsigned char *ptr;
+        float val;
+        int buffer_index = 0;
+        ESP_LOGI(TAG, "Response");
+        if (str != NULL && len > 0)
         {
-            ESP_LOGI(TAG, "Command received: %s", obd_cmd.cmd);
-            int write_len = uart_write_bytes(UART_NUM_1, (const char*)obd_cmd.cmd, strlen(obd_cmd.cmd));
-            ESP_LOGI(TAG, "Wrote %d bytes to UART", write_len);
-            obd_cmd.obd_rsp->rsp_end_flag = 0;
-            if (xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(obd_cmd.timeout_ms)) == pdTRUE)
+            ESP_LOG_BUFFER_HEXDUMP(TAG, str, len, ESP_LOG_WARN);   
+            ptr = (unsigned char *)str;
+
+            while (*ptr) 
             {
-                while (!obd_cmd.obd_rsp->rsp_end_flag)
+                if (isdigit(*ptr) || *ptr == '.' || (*ptr == '-' && isdigit(*(ptr + 1)))) 
                 {
-                    ESP_LOGI(TAG, "Waiting for UART event");
-                    if (xQueueReceive(uart1_queue, (void*)&event, pdMS_TO_TICKS(obd_cmd.timeout_ms)))
+                    while (isdigit(*ptr) || *ptr == '.') 
                     {
-                        ESP_LOGI(TAG, "UART event received: %d", event.type);
-                        if (event.type == UART_DATA)
-                        {
-                            int len = uart_read_bytes(UART_NUM_1, obd_cmd.obd_rsp->rsp_data + buf_index, event.size, pdMS_TO_TICKS(obd_cmd.timeout_ms));
-                            ESP_LOGI(TAG, "Read %d bytes from UART", len);
-                            buf_index += len;
-
-                            if (buf_index >= 2 && obd_cmd.obd_rsp->rsp_data[buf_index - 2] == '\r' && obd_cmd.obd_rsp->rsp_data[buf_index - 1] == '>')
-                            {
-                                ESP_LOGI(TAG, "Command complete indicator '\\r>' found");
-                                obd_cmd.obd_rsp->size = buf_index;
-                                obd_cmd.obd_rsp->rsp_data[buf_index] = '\0';
-                                xQueueSend(*(obd_cmd.rsp_queue), obd_cmd.obd_rsp, portMAX_DELAY); // Dereference rsp_queue
-                                buf_index = 0;
-                                obd_cmd.obd_rsp->rsp_end_flag = true;
-                            }
-                        }
-                        else if (event.type == UART_FIFO_OVF)
-                        {
-                            ESP_LOGE(TAG, "HW FIFO Overflow");
-                            uart_flush(UART_NUM_1);
-                        }
-                        else if (event.type == UART_BUFFER_FULL)
-                        {
-                            ESP_LOGE(TAG, "Ring Buffer Full");
-                            uart_flush(UART_NUM_1);
-                        }
-                        else
-                        {
-                            ESP_LOGI(TAG, "Unhandled event type: %d", event.type);
-                        }
-
-                        // if (obd_cmd.obd_rsp->rsp_end_flag)
-                        // {
-                        //     ESP_LOGI(TAG, "Clearing UART buffer");
-                        //     bzero(obd_cmd.obd_rsp->rsp_data, OBD_DATA_BUF_SIZE);
-                        // }
+                        str[buffer_index++] = *ptr++;
                     }
-                    else
-                    {
-                        ESP_LOGI(TAG, "UART receive timeout");
-                        break; // Exit inner loop on timeout
-                    }
+                    str[buffer_index] = '\0';
+                    
+                    val = atof((char*)str);
+                    xQueueSend(battery_voltage_queue, &val, pdMS_TO_TICKS(500));
+                    ESP_LOGW(TAG, "cmd: %s, val: %f", cmd_str, val);
+                    return;
                 }
-                xSemaphoreGive(xuart1_semaphore);
+                ptr++;
+            }
+            return;
+        }
+    }
+    else if(check_command(cmd_str, GET_SLEEP_CONFIG_CMD))
+    {
+        // ESP_LOG_BUFFER_HEXDUMP(TAG, str, len, ESP_LOG_WARN);
+        static stslcs_config_t config;
+        parse_stslcs_response(str, &config);
+        static char response_buffer[32];
+        static uint32_t response_len = 0;
+        static int64_t response_cmd_time = 0;
+        
+        if(config_server_get_sleep_config() == 1)
+        {
+            static char sleep_cmd[32] = {0};
+            static char wake_cmd[32] = {0};
+            float sleep_voltage = 0;
+            ESP_LOGW(TAG, "Sleep mode enabled");
+
+            if(config_server_get_sleep_volt(&sleep_voltage) != -1)
+            {
+                float tmp = 0.2;    //Temporary value
+
+                if(config.uart_wake.en == 1 || config.vl_wake.en == 0 || config.vl_wake.voltage != sleep_voltage|| config.vl_sleep.en == 0 || config.vl_sleep.voltage != (sleep_voltage - tmp))
+                {
+                    if(strcmp(config.ctrl_mode, "ELM327") == 0)
+                    {
+                        elm327_process_cmd((uint8_t *)"ATPP 0E SV 7A\r", 0, NULL, response_buffer, &response_len, &response_cmd_time, NULL);
+                        elm327_process_cmd((uint8_t *)"ATPP 0E ON\r", 0, NULL, response_buffer, &response_len, &response_cmd_time, NULL);
+                        elm327_process_cmd((uint8_t *)"ATZ\r", 0, NULL, response_buffer, &response_len, &response_cmd_time, NULL);
+                        vTaskDelay(pdMS_TO_TICKS(100));
+                        ESP_LOGW(TAG, "Setting sleep mode to Native");
+                    }
+                    
+                    sprintf(sleep_cmd, "STSLVLW >%.2f, 1\r", sleep_voltage);
+                    sprintf(wake_cmd, "STSLVLS <%.2f, 120\r", sleep_voltage-tmp);
+                    elm327_process_cmd((uint8_t *)sleep_cmd, 0, NULL, response_buffer, &response_len, &response_cmd_time, NULL);
+                    elm327_process_cmd((uint8_t *)wake_cmd, 0, NULL, response_buffer, &response_len, &response_cmd_time, NULL);
+                    elm327_process_cmd((uint8_t *)"STSLVl on,on\r", 0, NULL, response_buffer, &response_len, &response_cmd_time, NULL);
+                    elm327_process_cmd((uint8_t *)"STSLU off, off\r", 0, NULL, response_buffer, &response_len, &response_cmd_time, NULL);
+                    vTaskDelay(pdMS_TO_TICKS(10));
+                    ESP_LOGW(TAG, "Setting sleep paramters");
+                }   
+            }             
+            else
+            {
+                ESP_LOGE(TAG, "Failed to set sleep paramters");
+            }
+        }
+        else
+        {
+            ESP_LOGW(TAG, "Sleep mode disabled");
+            if(config.vl_wake.en == 1 || config.vl_sleep.en == 1)
+            {
+                elm327_process_cmd((uint8_t *)"STSLVl off,off\r", 0, NULL, response_buffer, &response_len, &response_cmd_time, NULL);
+                elm327_process_cmd((uint8_t *)"ATZ\r", 0, NULL, response_buffer, &response_len, &response_cmd_time, NULL);
+                vTaskDelay(pdMS_TO_TICKS(100));
             }
         }
     }
-}
-
-#define BUF_SIZE    1024
-
-// Function to read response from OBD
-void obd_read_rsp(char** rsp_buf, uint32_t *rsp_len, uint32_t timeout_ms)
-{
-    uart_event_t event;
-    static uint8_t uart_read_buf[BUF_SIZE];
-    uart_read_buf[0] = '\0';
-    
-    if (xQueueReceive(uart1_queue, (void*)&event, pdMS_TO_TICKS(timeout_ms)))
+    else if(check_command(cmd_str, "STSBR2000000\r"))
     {
-        bzero(uart_read_buf, BUF_SIZE);
-        
-        switch (event.type) 
-        {
-            case UART_DATA:
-                uart_read_bytes(UART_NUM_1, uart_read_buf, event.size, pdMS_TO_TICKS(timeout_ms));
-                ESP_LOGI(TAG, "event.size: %u", event.size);
-                ESP_LOG_BUFFER_HEXDUMP(TAG, uart_read_buf, event.size, ESP_LOG_INFO);
-
-                (event.size) < (BUF_SIZE - 1) ? (uart_read_buf[event.size] = '\0') : (uart_read_buf[BUF_SIZE-1] = '\0');
-
-                *rsp_buf = (char*)uart_read_buf;
-                *rsp_len = event.size;
-                break;
-
-            case UART_FIFO_OVF:
-                ESP_LOGE(TAG, "HW FIFO Overflow");
-                uart_flush(UART_NUM_1);
-                break;
-
-            case UART_BUFFER_FULL:
-                ESP_LOGE(TAG, "Ring Buffer Full");
-                uart_flush(UART_NUM_1);
-                break;
-
-            default:
-                ESP_LOGI(TAG, "Unhandled event type: %d", event.type);
-                break;
-        }
-    }
-}
-
-// Function to write command to OBD and read response
-void obd_write_cmd(char* cmd, char** rsp_buf, uint32_t *rsp_len, uint32_t timeout_ms)
-{
-    if(xuart1_semaphore != NULL)
-    {
-        if (xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(timeout_ms)) == pdTRUE)
-        {
-            ESP_LOG_BUFFER_HEXDUMP(TAG, cmd, strlen(cmd), ESP_LOG_INFO);
-            uart_write_bytes(UART_NUM_1, (const char*)cmd, strlen(cmd));
-            obd_read_rsp(rsp_buf, rsp_len, timeout_ms);
-            obd_log_response(*rsp_buf, *rsp_len);
-            xSemaphoreGive(xuart1_semaphore);
-        }
+        uart_set_baudrate(UART_NUM_1, 2000000);
+        printf("here\r\n");
     }
 }
 
 // Function to get voltage from OBD
 int8_t obd_get_voltage(float *val)
 {
-    char* rsp_buffer = NULL;
-    uint32_t rsp_len;
-    const unsigned char *ptr;
-    char buffer[20];
-    int buffer_index = 0;
+    static char response_buffer[32];
+    static uint32_t response_len = 0;
+    static int64_t response_cmd_time = 0;
 
-    obd_write_cmd("ATRV\r", &rsp_buffer, &rsp_len, 2000);
-    
-    if (rsp_buffer == NULL) 
+    elm327_process_cmd((uint8_t *)GET_VOLTAGE_CMD, strlen(GET_VOLTAGE_CMD), NULL, response_buffer, &response_len, &response_cmd_time, obd_parse_response);
+
+    if (xQueueReceive(battery_voltage_queue, val, pdMS_TO_TICKS(500)) == pdPASS)
     {
+        printf("Value received: %.2f\n", *val);
+        return 1;
+    }
+    else
+    {
+        *val = 0;
         return -1;
     }
-    
-    ptr = (unsigned char *)rsp_buffer;
-
-    while (*ptr) 
-    {
-        if (isdigit(*ptr) || *ptr == '.' || (*ptr == '-' && isdigit(*(ptr + 1)))) 
-        {
-            while (isdigit(*ptr) || *ptr == '.') 
-            {
-                buffer[buffer_index++] = *ptr++;
-            }
-            buffer[buffer_index] = '\0';
-            
-                *val = atof((char*)buffer);
-            return 1;
-        }
-        ptr++;
-    }
-    return -1;
 }
 
 void obd_hardreset_chip(void)
@@ -231,7 +320,6 @@ void obd_hardreset_chip(void)
     vTaskDelay(pdMS_TO_TICKS(5));
     gpio_set_level(OBD_RESET_PIN, 1);
 
-    obd_read_rsp(&rsp_buffer, &rsp_len, 2000);
     // vTaskDelay(pdMS_TO_TICKS(1000));
     // uart_set_baudrate(UART_NUM_1, 115200);
     // vTaskDelay(pdMS_TO_TICKS(100));
@@ -278,7 +366,9 @@ void obd_init(void)
     gpio_reset_pin(42);
     gpio_set_direction(42, GPIO_MODE_OUTPUT);
     gpio_set_level(42, 1);
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    battery_voltage_queue = xQueueCreate(1, sizeof(float));
 
     gpio_reset_pin(OBD_RESET_PIN);
     gpio_set_direction(OBD_RESET_PIN, GPIO_MODE_OUTPUT_OD);
@@ -289,7 +379,7 @@ void obd_init(void)
     // vTaskDelay(pdMS_TO_TICKS(1000));
     
     uart_config_t uart1_config = {
-        .baud_rate = 115200,
+        .baud_rate = 2000000,
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
@@ -325,28 +415,39 @@ void obd_init(void)
 
     obd_get_voltage(&obd_voltage);
     ESP_LOGI(TAG, "obd_voltage: %0.1f", obd_voltage);
+    vTaskDelay(pdMS_TO_TICKS(100));
+// GET_SLEEP_CONFIG_CMD
+    static char cmd_buffer[16];
+    static uint32_t cmd_buffer_len = 0;
+    static int64_t response_cmd_time = 0;
 
+    elm327_process_cmd((uint8_t *)GET_SLEEP_CONFIG_CMD, strlen(GET_SLEEP_CONFIG_CMD), NULL, cmd_buffer, &cmd_buffer_len, &response_cmd_time, obd_parse_response);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    // elm327_process_cmd((uint8_t *)"STSBR2000000\r", strlen("STSBR2000000\r"), NULL, cmd_buffer, &cmd_buffer_len, &response_cmd_time, obd_parse_response);
+    // vTaskDelay(pdMS_TO_TICKS(10));
+    // uart_set_baudrate(UART_NUM_1, 1000000);
+    // vTaskDelay(pdMS_TO_TICKS(10));
+    // elm327_process_cmd((uint8_t *)"ATI\r", strlen("ATI\r"), NULL, cmd_buffer, &cmd_buffer_len, &response_cmd_time, obd_parse_response);
+    // xTaskCreate(obd_task, "obd_task", 1024*8, NULL, 5, NULL);
 
-    xTaskCreate(obd_task, "obd_task", 1024*8, NULL, 5, NULL);
-
-    static obd_rsp_t response; // Static to persist the data
-    obd_send_cmd("ATI\r", &response_queue, &response, 2000); // Pass address of response_queue
-    if (xQueueReceive(response_queue, (void*)&response, pdMS_TO_TICKS(2000)) == pdPASS)
-    {
-        obd_log_response(response.rsp_data, response.size);
-    }
+    // static obd_rsp_t response; // Static to persist the data
+    // obd_send_cmd("ATI\r", &response_queue, &response, 2000); // Pass address of response_queue
+    // if (xQueueReceive(response_queue, (void*)&response, pdMS_TO_TICKS(2000)) == pdPASS)
+    // {
+    //     obd_log_response(response.rsp_data, response.size);
+    // }
     // obd_send_cmd("STSLCS\r", &response_queue, &response, 2000); // Pass address of response_queue
     // if (xQueueReceive(response_queue, (void*)&response, pdMS_TO_TICKS(2000)) == pdPASS)
     // {
     //     obd_log_response(response.rsp_data, response.size);
     // }
 
-    obd_send_cmd("stsbr2000000\r", &response_queue, &response, 100); // Pass address of response_queue
-    if (xQueueReceive(response_queue, (void*)&response, pdMS_TO_TICKS(100)) == pdPASS)
-    {
-        obd_log_response(response.rsp_data, response.size);
-    }
-    vTaskDelay(pdMS_TO_TICKS(100));
+    // obd_send_cmd("stsbr2000000\r", &response_queue, &response, 100); // Pass address of response_queue
+    // if (xQueueReceive(response_queue, (void*)&response, pdMS_TO_TICKS(100)) == pdPASS)
+    // {
+    //     obd_log_response(response.rsp_data, response.size);
+    // }
+    // vTaskDelay(pdMS_TO_TICKS(100));
     // uart_set_baudrate(UART_NUM_1, 2000000);
     // obd_send_cmd("ATI\r", &response_queue, &response, 2000); // Pass address of response_queue
     // if (xQueueReceive(response_queue, (void*)&response, pdMS_TO_TICKS(2000)) == pdPASS)
