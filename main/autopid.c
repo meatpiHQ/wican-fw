@@ -631,7 +631,7 @@ static void autopid_task(void *pvParameters)
                                                     }
                                                     else if (car.pids[i].parameters[j].sensor_type == BINARY_SENSOR)
                                                     {
-                                                        cJSON_AddStringToObject(rsp_json, car.pids[i].parameters[j].name, result > 0 ? "ON" : "OFF");
+                                                        cJSON_AddStringToObject(rsp_json, car.pids[i].parameters[j].name, result > 0 ? "on" : "off");
                                                     }
                                                     
                                                     ESP_LOGI(TAG, "Expression result, Name: %s: %lf", car.pids[i].parameters[j].name, result);
