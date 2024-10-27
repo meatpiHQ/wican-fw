@@ -320,6 +320,12 @@ void autopid_parser(char *str, uint32_t len, QueueHandle_t *q, char* cmd_str)
             else
             {
                 ESP_LOGE(__func__, "Error response: %s", auto_pid_buf);
+                sprintf((char*)response.data, auto_pid_buf);
+                response.length = strlen((char*)response.data);
+                if (xQueueSend(autopidQueue, &response, pdMS_TO_TICKS(1000)) != pdPASS)
+                {
+                    ESP_LOGE(TAG, "Failed to send to queue");
+                }
             }
             // Clear the buffer after parsing
             auto_pid_buf[0] = '\0';
@@ -510,70 +516,84 @@ static void autopid_task(void *pvParameters)
                                 #endif
                                 
                                 ESP_LOGI(TAG, "Sending command: %s", pid_req[i].pid_command);
-                                if (xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS)
+
+                                if((xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS))// && (strstr((char*)response.data, "NO DATA") == NULL) && (strstr((char*)response.data, "ERROR") == NULL))
                                 {
-                                    double result;
-                                    static char hex_rsponse[256];
-
-                                    ESP_LOGI(TAG, "Received response for: %s", pid_req[i].pid_command);
-                                    ESP_LOGI(TAG, "Response length: %lu", response.length);
-                                    ESP_LOG_BUFFER_HEXDUMP(TAG, response.data, response.length, ESP_LOG_INFO);
-                                    if(evaluate_expression((uint8_t*)pid_req[i].expression, response.data, 0, &result))
+                                    if((strstr((char*)response.data, "NO DATA") == NULL) && (strstr((char*)response.data, "ERROR") == NULL))
                                     {
-                                        cJSON *rsp_json = cJSON_CreateObject();
-                                        char *response_str = NULL;
+                                        double result;
+                                        static char hex_rsponse[256];
 
-                                        if (rsp_json != NULL)
+                                        ESP_LOGI(TAG, "Received response for: %s", pid_req[i].pid_command);
+                                        ESP_LOGI(TAG, "Response length: %lu", response.length);
+                                        ESP_LOG_BUFFER_HEXDUMP(TAG, response.data, response.length, ESP_LOG_INFO);
+                                        if(evaluate_expression((uint8_t*)pid_req[i].expression, response.data, 0, &result))
                                         {
-                                            for (size_t j = 0; j < response.length; ++j)
-                                            {
-                                                sprintf(hex_rsponse + (j * 2), "%02X", response.data[j]);
-                                            }
-                                            hex_rsponse[response.length * 2] = '\0';
-                                            result = round(result * 100.0) / 100.0;
+                                            cJSON *rsp_json = cJSON_CreateObject();
+                                            char *response_str = NULL;
 
-                                            if(pid_req[i].type == MQTT_TOPIC)
+                                            if (rsp_json != NULL)
                                             {
-                                                // Add the name and result to the JSON object
-                                                cJSON_AddNumberToObject(rsp_json, pid_req[i].name, result);
-                                                cJSON_AddStringToObject(rsp_json, "raw", hex_rsponse);
-                                                // Convert the cJSON object to a string
-                                                response_str = cJSON_PrintUnformatted(rsp_json);
-                                            }
-                                            else if(pid_req[i].type == MQTT_WALLBOX)
-                                            {
-                                                asprintf(&response_str, "%.2f", result);
+                                                for (size_t j = 0; j < response.length; ++j)
+                                                {
+                                                    sprintf(hex_rsponse + (j * 2), "%02X", response.data[j]);
+                                                }
+                                                hex_rsponse[response.length * 2] = '\0';
+                                                result = round(result * 100.0) / 100.0;
+
+                                                if(pid_req[i].type == MQTT_TOPIC)
+                                                {
+                                                    // Add the name and result to the JSON object
+                                                    cJSON_AddNumberToObject(rsp_json, pid_req[i].name, result);
+                                                    cJSON_AddStringToObject(rsp_json, "raw", hex_rsponse);
+                                                    // Convert the cJSON object to a string
+                                                    response_str = cJSON_PrintUnformatted(rsp_json);
+                                                }
+                                                else if(pid_req[i].type == MQTT_WALLBOX)
+                                                {
+                                                    asprintf(&response_str, "%.2f", result);
+                                                }
+
+                                                custom_pid_response = 1;
                                             }
 
-                                            custom_pid_response = 1;
+                                            if (response_str != NULL)
+                                            {
+                                                ESP_LOGI(TAG, "Expression result, Name: %s: %lf", pid_req[i].name, result);
+                                                if(pid_req[i].destination != NULL && strlen(pid_req[i].destination) != 0)
+                                                {
+                                                    mqtt_publish(pid_req[i].destination, response_str, 0, 0, 1);
+                                                }
+                                                else
+                                                {
+                                                    //if destination is empty send to default
+                                                    mqtt_publish(config_server_get_mqtt_rx_topic(), response_str, 0, 0, 1);
+                                                }
+                                                free(response_str);
+                                            }
+
+                                            if (rsp_json != NULL)
+                                            {
+                                                cJSON_Delete(rsp_json);
+                                            }
+
+                                            vTaskDelay(pdMS_TO_TICKS(10));
                                         }
-
-                                        if (response_str != NULL)
+                                        else
                                         {
-                                            ESP_LOGI(TAG, "Expression result, Name: %s: %lf", pid_req[i].name, result);
-                                            if(pid_req[i].destination != NULL && strlen(pid_req[i].destination) != 0)
+                                            ESP_LOGE(TAG, "Failed Expression: %s", pid_req[i].expression);
+                                            if(asprintf(&error_rsp, "{\"error\": \"Failed Expression: %s\"}", pid_req[i].expression) != -1)
                                             {
-                                                mqtt_publish(pid_req[i].destination, response_str, 0, 0, 1);
+                                                mqtt_publish(error_topic, error_rsp, 0, 0, 0);
+                                                vTaskDelay(pdMS_TO_TICKS(10));
+                                                free(error_rsp);
                                             }
-                                            else
-                                            {
-                                                //if destination is empty send to default
-                                                mqtt_publish(config_server_get_mqtt_rx_topic(), response_str, 0, 0, 1);
-                                            }
-                                            free(response_str);
                                         }
-
-                                        if (rsp_json != NULL)
-                                        {
-                                            cJSON_Delete(rsp_json);
-                                        }
-
-                                        vTaskDelay(pdMS_TO_TICKS(10));
                                     }
                                     else
                                     {
-                                        ESP_LOGE(TAG, "Failed Expression: %s", pid_req[i].expression);
-                                        if(asprintf(&error_rsp, "{\"error\": \"Failed Expression: %s\"}", pid_req[i].expression) != -1)
+                                        ESP_LOGE(TAG, "NO DATA or ERROR response for pid: %s", pid_req[i].pid_command);
+                                        if(asprintf(&error_rsp, "{\"error\": \"NO DATA, pid: %s\"}", pid_req[i].pid_command) != -1)
                                         {
                                             mqtt_publish(error_topic, error_rsp, 0, 0, 0);
                                             vTaskDelay(pdMS_TO_TICKS(10));
@@ -622,32 +642,46 @@ static void autopid_task(void *pvParameters)
                                 ESP_LOGI(TAG, "Sending car.pids[%lu].pid: %s", i, car.pids[i].pid);
                                 if (xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS)
                                 {
-                                    double result;
-                                    static char hex_rsponse[256];
-                                    
-                                    ESP_LOGI(TAG, "Received response for: %s", car.pids[i].pid);
-                                    ESP_LOGI(TAG, "Response length: %lu", response.length);
-                                    ESP_LOG_BUFFER_HEXDUMP(TAG, response.data, response.length, ESP_LOG_INFO);
-
-                                    for (uint32_t j = 0; j < car.pids[i].parameter_count; j++)
+                                    if((strstr((char*)response.data, "NO DATA") == NULL) && (strstr((char*)response.data, "ERROR") == NULL))
                                     {
-                                        if(car.pids[i].parameters[j].expression != NULL && strlen(car.pids[i].parameters[j].expression) > 0)
-                                        {
-                                            if(evaluate_expression((uint8_t*)car.pids[i].parameters[j].expression, response.data, 0, &result))
-                                            {
-                                                if (rsp_json != NULL)
-                                                {
-                                                    for (size_t j = 0; j < response.length; ++j)
-                                                    {
-                                                        sprintf(hex_rsponse + (j * 2), "%02X", response.data[j]);
-                                                    }
-                                                    hex_rsponse[response.length * 2] = '\0';
+                                        double result;
+                                        static char hex_rsponse[256];
+                                        
+                                        ESP_LOGI(TAG, "Received response for: %s", car.pids[i].pid);
+                                        ESP_LOGI(TAG, "Response length: %lu", response.length);
+                                        ESP_LOG_BUFFER_HEXDUMP(TAG, response.data, response.length, ESP_LOG_INFO);
 
-                                                    result = round(result * 100.0) / 100.0;
-                                                    // Add the name and result to the JSON object
-                                                    cJSON_AddNumberToObject(rsp_json, car.pids[i].parameters[j].name, result);
-                                                    ESP_LOGI(TAG, "Expression result, Name: %s: %lf", car.pids[i].parameters[j].name, result);
-                                                    specific_pid_response = 1;
+                                        for (uint32_t j = 0; j < car.pids[i].parameter_count; j++)
+                                        {
+                                            if(car.pids[i].parameters[j].expression != NULL && strlen(car.pids[i].parameters[j].expression) > 0)
+                                            {
+                                                if(evaluate_expression((uint8_t*)car.pids[i].parameters[j].expression, response.data, 0, &result))
+                                                {
+                                                    if (rsp_json != NULL)
+                                                    {
+                                                        for (size_t j = 0; j < response.length; ++j)
+                                                        {
+                                                            sprintf(hex_rsponse + (j * 2), "%02X", response.data[j]);
+                                                        }
+                                                        hex_rsponse[response.length * 2] = '\0';
+
+                                                        result = round(result * 100.0) / 100.0;
+                                                        // Add the name and result to the JSON object
+                                                        cJSON_AddNumberToObject(rsp_json, car.pids[i].parameters[j].name, result);
+                                                        ESP_LOGI(TAG, "Expression result, Name: %s: %lf", car.pids[i].parameters[j].name, result);
+                                                        specific_pid_response = 1;
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    ESP_LOGE(TAG, "Failed Expression: %s", car.pids[i].parameters[j].expression);
+                                                    if(asprintf(&error_rsp, "{\"error\": \"Failed Expression: %s\"}", car.pids[i].parameters[j].expression) != -1)
+                                                    {
+                                                        mqtt_publish(error_topic, error_rsp, 0, 0, 0);
+                                                        // autopid_data_write(error_rsp);
+                                                        vTaskDelay(pdMS_TO_TICKS(10));
+                                                        free(error_rsp);
+                                                    }
                                                 }
                                             }
                                             else
@@ -662,16 +696,16 @@ static void autopid_task(void *pvParameters)
                                                 }
                                             }
                                         }
-                                        else
+                                    }
+                                    else
+                                    {
+                                        ESP_LOGE(TAG, "NO DATA or ERROR response for: %s", car.pids[i].pid);
+                                        if(asprintf(&error_rsp, "{\"error\": \"NO DATA, pid: %s\"}", car.pids[i].pid) != -1)
                                         {
-                                            ESP_LOGE(TAG, "Failed Expression: %s", car.pids[i].parameters[j].expression);
-                                            if(asprintf(&error_rsp, "{\"error\": \"Failed Expression: %s\"}", car.pids[i].parameters[j].expression) != -1)
-                                            {
-                                                mqtt_publish(error_topic, error_rsp, 0, 0, 0);
-                                                // autopid_data_write(error_rsp);
-                                                vTaskDelay(pdMS_TO_TICKS(10));
-                                                free(error_rsp);
-                                            }
+                                            mqtt_publish(error_topic, error_rsp, 0, 0, 0);
+                                            // autopid_data_write(error_rsp);
+                                            vTaskDelay(pdMS_TO_TICKS(10));
+                                            free(error_rsp);
                                         }
                                     }
                                 }
