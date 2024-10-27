@@ -17,7 +17,7 @@
             "pid": "2241A31",
             "parameters": [
                 {
-                    "name": "SOC",
+                    "name": "Capacity",
                     "expression": "[B4:B5]/10",
                     "unit": "Ah",
                     "class": "battery"
