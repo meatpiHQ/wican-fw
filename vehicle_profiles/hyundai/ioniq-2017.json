@@ -32,19 +32,22 @@
           "name": "Charger_Connected",
           "expression": "B14:5",
           "unit": "",
-          "class": ""
+          "class": "plug",
+          "type": "binary_sensor"
         },
         {
           "name": "Charging",
           "expression": "B14:7",
           "unit": "",
-          "class": ""
+          "class": "battery_charging",
+          "type": "binary_sensor"
         },
         {
           "name": "HV_Charger_Connected",
           "expression": "B14:6",
           "unit": "",
-          "class": ""
+          "class": "plug",
+          "type": "binary_sensor"
         }
       ]
     }
