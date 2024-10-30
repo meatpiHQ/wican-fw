@@ -301,7 +301,7 @@ int8_t obd_get_voltage(float *val)
 
     if (xQueueReceive(battery_voltage_queue, val, pdMS_TO_TICKS(500)) == pdPASS)
     {
-        printf("Value received: %.2f\n", *val);
+        // printf("Value received: %.2f\n", *val);
         return 1;
     }
     else
