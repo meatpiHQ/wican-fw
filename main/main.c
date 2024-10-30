@@ -59,7 +59,7 @@
 #include "obd.h"
 #include "wusb3801.h"
 #include "usb_host.h"
-#include "mdns.h"
+#include "wc_mdns.h"
 
 #define TAG 		__func__
 #define USB_ID_PIN					39
@@ -94,6 +94,8 @@ static uint8_t mqtt_elm327_log_en = 0;
 static uint8_t derived_mac_addr[6] = {0};
 static uint8_t uid[16];
 static uint8_t ble_uid[33];
+static char hardware_version[16];
+static char firmware_version[10];
 
 static void log_can_to_mqtt(twai_message_t *frame, uint8_t type)
 {
@@ -446,26 +448,6 @@ static void can_rx_task(void *pvParameters)
 	}
 }
 
-static void initialise_mdns(char *id)
-{
-	static char mdns_host_name[24] = {0}; 
-
-	sprintf(mdns_host_name, "wican_%s", id);
-
-    mdns_init();
-    mdns_hostname_set(mdns_host_name);
-    mdns_instance_name_set("wican web server");
-
-    mdns_txt_item_t serviceTxtData[] = {
-		{"fimrware", "3.44"},
-		{"hardware", "wican"},
-        {"path", "/"}
-    };
-
-    ESP_ERROR_CHECK(mdns_service_add("WiCAN-WebServer", "_http", "_tcp", 80, serviceTxtData,
-                                     sizeof(serviceTxtData) / sizeof(serviceTxtData[0])));
-}
-
 void app_main(void)
 {
 	vTaskDelay(pdMS_TO_TICKS(1000));
@@ -608,7 +590,6 @@ void app_main(void)
 		can_set_silent(1);
 	}
 
-	initialise_mdns((char*)uid);
 	protocol = config_server_protocol();
 	// protocol = OBD_ELM327;
 
@@ -788,7 +769,7 @@ void app_main(void)
         //     }
         // }
     }
-
+	wc_mdns_init((char*)uid, hardware_version, firmware_version);
     xTaskCreate(can_rx_task, "can_rx_task", 1024*3, (void*)AF_INET, 5, NULL);
     xTaskCreate(can_tx_task, "can_tx_task", 1024*3, (void*)AF_INET, 5, NULL);
 
@@ -834,6 +815,6 @@ void app_main(void)
 	// pdTRUE, /* BIT_0 should be cleared before returning. */
 	// pdFALSE, /* Don't wait for both bits, either bit will do. */
 	// portMAX_DELAY);/* Wait forever. */  
-	// esp_log_level_set("*", ESP_LOG_NONE);
+	esp_log_level_set("*", ESP_LOG_NONE);
 }
 
