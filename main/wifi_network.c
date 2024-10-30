@@ -310,7 +310,7 @@ void wifi_network_init(char* sta_ssid, char* sta_pass)
 	esp_netif_dhcps_stop(ap_netif);
 	esp_netif_set_ip_info(ap_netif, &ipInfo);
 	esp_netif_dhcps_start(ap_netif);
-
+    esp_netif_set_hostname(sta_netif, "WiCAN");
 	ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config_ap));
 	ESP_ERROR_CHECK(esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20));
     ESP_ERROR_CHECK(esp_wifi_start());
