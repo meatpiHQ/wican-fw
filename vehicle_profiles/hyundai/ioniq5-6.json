@@ -121,7 +121,7 @@
         },
         {
           "name": "Cum_Energy_Charged",
-          "expression": "(B49*256*256*256 + B50*256*256 + B51*256 + B52)/10",
+          "expression": "([B49:B50]*65536 + [B51:B52])/10",
           "unit": "kWh",
           "class": "energy"
         }
