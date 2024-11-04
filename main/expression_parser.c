@@ -36,20 +36,20 @@ typedef struct {
     double items[STACK_MAX];
 } Stack;
 
-bool initStack(Stack* stack) {
+static bool initStack(Stack* stack) {
     stack->top = -1;
     return true;
 }
 
-void freeStack(Stack* stack) {
+static void freeStack(Stack* stack) {
     // No dynamic allocation, nothing to free
 }
 
-bool isEmpty(Stack* stack) {
+static bool isEmpty(Stack* stack) {
     return stack->top == -1;
 }
 
-bool push(Stack* stack, double value) {
+static bool push(Stack* stack, double value) {
     if (stack->top == STACK_MAX - 1) {
         ESP_LOGE(TAG, "Stack overflow");
         return false;
@@ -58,7 +58,7 @@ bool push(Stack* stack, double value) {
     return true;
 }
 
-double pop(Stack* stack) {
+static double pop(Stack* stack) {
     if (isEmpty(stack)) {
         ESP_LOGE(TAG, "Attempted to pop from empty stack");
         return 0;
@@ -66,7 +66,7 @@ double pop(Stack* stack) {
     return stack->items[stack->top--];
 }
 
-int precedence(char operator) {
+static int precedence(char operator) {
     if (operator == '|' || operator == '^') return 1;
     if (operator == '&') return 2;
     if (operator == '<' || operator == '>') return 3;  // For << and >>
@@ -211,7 +211,8 @@ bool evaluate_expression(uint8_t *expression, uint8_t *data, double V, double *r
                     case '/': 
                         if (operand2 == 0) {
                             ESP_LOGE(TAG, "Division by zero");
-                            push(&operandStack, NAN); // Use NaN to signal division by zero
+                            freeStack(&operandStack);
+                            freeStack(&operatorStack);
                             return false;
                         }
                         result = operand1 / operand2;
@@ -258,7 +259,8 @@ bool evaluate_expression(uint8_t *expression, uint8_t *data, double V, double *r
                     case '/': 
                         if (operand2 == 0) {
                             ESP_LOGE(TAG, "Division by zero");
-                            push(&operandStack, NAN); // Use NaN to signal division by zero
+                            freeStack(&operandStack);
+                            freeStack(&operatorStack);
                             return false;
                         }
                         result = operand1 / operand2;
@@ -300,7 +302,8 @@ bool evaluate_expression(uint8_t *expression, uint8_t *data, double V, double *r
             case '/':
                 if (operand2 == 0) {
                     ESP_LOGE(TAG, "Division by zero");
-                    push(&operandStack, NAN); // Use NaN to signal division by zero
+                    freeStack(&operandStack);
+                    freeStack(&operatorStack);
                     return false;
                 }
                 result = operand1 / operand2;
