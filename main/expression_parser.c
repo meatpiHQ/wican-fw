@@ -24,11 +24,9 @@
 #include <stdbool.h>
 #include <ctype.h>
 #include <stdio.h>
-#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <ctype.h>
-#include <string.h>
+#include <math.h>
 
 #define TAG 		__func__
 #define STACK_MAX 100
@@ -69,12 +67,11 @@ double pop(Stack* stack) {
 }
 
 int precedence(char operator) {
-    if (operator == '+' || operator == '-') {
-        return 1;
-    }
-    if (operator == '*' || operator == '/') {
-        return 2;
-    }
+    if (operator == '|' || operator == '^') return 1;
+    if (operator == '&') return 2;
+    if (operator == '<' || operator == '>') return 3;  // For << and >>
+    if (operator == '+' || operator == '-') return 4;
+    if (operator == '*' || operator == '/') return 5;
     return 0;
 }
 
@@ -93,45 +90,82 @@ bool evaluate_expression(uint8_t *expression, uint8_t *data, double V, double *r
         if (isdigit(expression[i]) || expression[i] == '.') {
             double value = strtod((char *)&expression[i], NULL);
             push(&operandStack, value);
-            // Advance the index past the number
             while (isdigit(expression[i]) || expression[i] == '.') {
                 i++;
             }
         } else if (expression[i] == 'V') {
             push(&operandStack, V);
             i++;
-        } 
-        
-        else if (expression[i] == '[') {
+        } else if (expression[i] == '[') {
             int start_index = 0, end_index = 0;
             int chars_read = 0;
             uint64_t sum_64 = 0;
             int result = sscanf((char *)expression + i, "[B%d:B%d]%n", &start_index, &end_index, &chars_read);
             if (result == 2) {
-                i += chars_read; // Update i to move past the entire [B5:B7] segment
-        
-                if (end_index - start_index > 7) {  // Check if the number of indices exceeds what can be stored in uint64_t
+                i += chars_read;
+                if (end_index - start_index > 7) {
                     ESP_LOGE(TAG, "Range too large for 64-bit storage.");
                     freeStack(&operandStack);
                     freeStack(&operatorStack);
                     return false;
                 }
-        
                 for (int j = start_index; j <= end_index; j++) {
-                    int shift_amount = (end_index - j) * 8;  // Calculate shift amount based on distance from end_index
-                    sum_64 |= ((uint64_t)data[j] << shift_amount);  // Left shift the byte and merge it into sum_64
+                    int shift_amount = (end_index - j) * 8;
+                    sum_64 |= ((uint64_t)data[j] << shift_amount);
                 }
-
                 push(&operandStack, (double)sum_64);
             } else {
-                ESP_LOGE(TAG, "Invalid array syntax, couldn't parse indices correctly.");
-                freeStack(&operandStack);
-                freeStack(&operatorStack);
-                return false;
+                result = sscanf((char *)expression + i, "[S%d:S%d]%n", &start_index, &end_index, &chars_read);
+                if (result == 2) {
+                    i += chars_read;
+                    if (end_index - start_index > 7) {
+                        ESP_LOGE(TAG, "Range too large for 64-bit storage.");
+                        freeStack(&operandStack);
+                        freeStack(&operatorStack);
+                        return false;
+                    }
+
+                    int64_t sum_64_signed = 0;
+                    int32_t sum_32_signed = 0;
+                    int16_t sum_16_signed = 0;
+                    int8_t sum_8_signed = 0;
+
+                    for (int j = start_index; j <= end_index; j++) {
+                        int shift_amount = (end_index - j) * 8;
+                        sum_64_signed |= (data[j] << shift_amount);
+                        
+                        if (end_index - start_index <= 3) {
+                            sum_32_signed |= (data[j] << shift_amount);
+                        }
+                        if (end_index - start_index <= 1) {
+                            sum_16_signed |= (data[j] << shift_amount);
+                        }
+                        if (end_index - start_index == 0) {
+                            sum_8_signed = data[j];
+                        }
+                    }
+
+                    if (end_index - start_index == 0) {
+                        printf("sum_8_signed\r\n");
+                        push(&operandStack, (double)sum_8_signed);
+                    } else if (end_index - start_index == 1) {
+                        printf("sum_16_signed\r\n");
+                        push(&operandStack, (double)sum_16_signed);
+                    } else if (end_index - start_index <= 3) {
+                        printf("sum_32_signed: %ld\r\n", sum_32_signed);
+                        push(&operandStack, (double)sum_32_signed);
+                    } else {
+                        printf("sum_64_signed\r\n");
+                        push(&operandStack, (double)sum_64_signed);
+                    }
+                } else {
+                    ESP_LOGE(TAG, "Invalid array syntax, couldn't parse indices correctly.");
+                    freeStack(&operandStack);
+                    freeStack(&operatorStack);
+                    return false;
+                }
             }
-        }   
-        
-        else if (expression[i] == 'B') {
+        } else if (expression[i] == 'B') {
             i++;
             int index = 0;
             while (isdigit(expression[i])) {
@@ -145,7 +179,15 @@ bool evaluate_expression(uint8_t *expression, uint8_t *data, double V, double *r
                 value = (value >> bit) & 1;
                 i++;
             }
-
+            push(&operandStack, value);
+        } else if (expression[i] == 'S') {
+            i++;
+            int index = 0;
+            while (isdigit(expression[i])) {
+                index = index * 10 + (expression[i] - '0');
+                i++;
+            }
+            int8_t value = (int8_t)data[index];
             push(&operandStack, value);
         } else if (expression[i] == '(') {
             push(&operatorStack, expression[i]);
@@ -153,28 +195,32 @@ bool evaluate_expression(uint8_t *expression, uint8_t *data, double V, double *r
         } else if (expression[i] == ')') {
             while (!isEmpty(&operatorStack) && operatorStack.items[operatorStack.top] != '(') {
                 char operator = pop(&operatorStack);
+                if (isEmpty(&operandStack)) {
+                    ESP_LOGE(TAG, "Operand stack underflow");
+                    freeStack(&operandStack);
+                    freeStack(&operatorStack);
+                    return false;
+                }
                 double operand2 = pop(&operandStack);
                 double operand1 = pop(&operandStack);
                 double result = 0;
                 switch (operator) {
-                    case '+':
-                        result = operand1 + operand2;
-                        break;
-                    case '-':
-                        result = operand1 - operand2;
-                        break;
-                    case '*':
-                        result = operand1 * operand2;
-                        break;
-                    case '/':
+                    case '+': result = operand1 + operand2; break;
+                    case '-': result = operand1 - operand2; break;
+                    case '*': result = operand1 * operand2; break;
+                    case '/': 
                         if (operand2 == 0) {
                             ESP_LOGE(TAG, "Division by zero");
-                            freeStack(&operandStack);
-                            freeStack(&operatorStack);
+                            push(&operandStack, NAN); // Use NaN to signal division by zero
                             return false;
                         }
                         result = operand1 / operand2;
                         break;
+                    case '&': result = (int)operand1 & (int)operand2; break;
+                    case '|': result = (int)operand1 | (int)operand2; break;
+                    case '^': result = (int)operand1 ^ (int)operand2; break;
+                    case '<': result = (int)operand1 << (int)operand2; break;
+                    case '>': result = (int)operand1 >> (int)operand2; break;
                 }
                 push(&operandStack, result);
             }
@@ -187,35 +233,45 @@ bool evaluate_expression(uint8_t *expression, uint8_t *data, double V, double *r
                 return false;
             }
             i++;
-        } else if (expression[i] == '+' || expression[i] == '-' || expression[i] == '*' || expression[i] == '/') {
-            while (!isEmpty(&operatorStack) && precedence(operatorStack.items[operatorStack.top]) >= precedence(expression[i])) {
-                char operator = pop(&operatorStack);
+        } else if (expression[i] == '+' || expression[i] == '-' || expression[i] == '*' || expression[i] == '/' || 
+                   expression[i] == '&' || expression[i] == '|' || expression[i] == '^' ||
+                   (expression[i] == '<' && expression[i+1] == '<') || (expression[i] == '>' && expression[i+1] == '>')) {
+            char operator = expression[i];
+            if ((operator == '<' || operator == '>') && expression[i+1] == operator) {
+                i++; // Recognize << and >> as a single operator
+            }
+            while (!isEmpty(&operatorStack) && precedence(operatorStack.items[operatorStack.top]) >= precedence(operator)) {
+                char op = pop(&operatorStack);
+                if (isEmpty(&operandStack)) {
+                    ESP_LOGE(TAG, "Operand stack underflow");
+                    freeStack(&operandStack);
+                    freeStack(&operatorStack);
+                    return false;
+                }
                 double operand2 = pop(&operandStack);
                 double operand1 = pop(&operandStack);
                 double result = 0;
-                switch (operator) {
-                    case '+':
-                        result = operand1 + operand2;
-                        break;
-                    case '-':
-                        result = operand1 - operand2;
-                        break;
-                    case '*':
-                        result = operand1 * operand2;
-                        break;
-                    case '/':
+                switch (op) {
+                    case '+': result = operand1 + operand2; break;
+                    case '-': result = operand1 - operand2; break;
+                    case '*': result = operand1 * operand2; break;
+                    case '/': 
                         if (operand2 == 0) {
                             ESP_LOGE(TAG, "Division by zero");
-                            freeStack(&operandStack);
-                            freeStack(&operatorStack);
+                            push(&operandStack, NAN); // Use NaN to signal division by zero
                             return false;
                         }
                         result = operand1 / operand2;
                         break;
+                    case '&': result = (int)operand1 & (int)operand2; break;
+                    case '|': result = (int)operand1 | (int)operand2; break;
+                    case '^': result = (int)operand1 ^ (int)operand2; break;
+                    case '<': result = (int)operand1 << (int)operand2; break;
+                    case '>': result = (int)operand1 >> (int)operand2; break;
                 }
                 push(&operandStack, result);
             }
-            push(&operatorStack, expression[i]);
+            push(&operatorStack, operator);
             i++;
         } else {
             ESP_LOGE(TAG, "Invalid character: %c", expression[i]);
@@ -225,34 +281,40 @@ bool evaluate_expression(uint8_t *expression, uint8_t *data, double V, double *r
         }
     }
 
+    // Final evaluation of remaining operators in the operator stack
     while (!isEmpty(&operatorStack)) {
         char operator = pop(&operatorStack);
+        if (isEmpty(&operandStack)) {
+            ESP_LOGE(TAG, "Operand stack underflow");
+            freeStack(&operandStack);
+            freeStack(&operatorStack);
+            return false;
+        }
         double operand2 = pop(&operandStack);
         double operand1 = pop(&operandStack);
         double result = 0;
         switch (operator) {
-            case '+':
-                result = operand1 + operand2;
-                break;
-            case '-':
-                result = operand1 - operand2;
-                break;
-            case '*':
-                result = operand1 * operand2;
-                break;
+            case '+': result = operand1 + operand2; break;
+            case '-': result = operand1 - operand2; break;
+            case '*': result = operand1 * operand2; break;
             case '/':
                 if (operand2 == 0) {
                     ESP_LOGE(TAG, "Division by zero");
-                    freeStack(&operandStack);
-                    freeStack(&operatorStack);
+                    push(&operandStack, NAN); // Use NaN to signal division by zero
                     return false;
                 }
                 result = operand1 / operand2;
                 break;
+            case '&': result = (int)operand1 & (int)operand2; break;
+            case '|': result = (int)operand1 | (int)operand2; break;
+            case '^': result = (int)operand1 ^ (int)operand2; break;
+            case '<': result = (int)operand1 << (int)operand2; break;
+            case '>': result = (int)operand1 >> (int)operand2; break;
         }
         push(&operandStack, result);
     }
 
+    // Ensure there's exactly one result in the operand stack
     if (isEmpty(&operandStack) || operandStack.top != 0) {
         ESP_LOGE(TAG, "Invalid expression");
         freeStack(&operandStack);
