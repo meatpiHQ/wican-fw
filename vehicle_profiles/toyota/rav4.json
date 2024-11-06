@@ -20,8 +20,8 @@
 				{
 					"name": "Odometer",
 					"pid_init": "ATST96;",
-					"expression": "(([B3:B6])/10)/1.609",
-					"unit": "mi",
+					"expression": "([B3:B6])/10",
+					"unit": "km",
 					"class": "distance"
 				}
 			]
@@ -32,8 +32,8 @@
 				{
 					"name": "OILCH_DIS",
 					"pid_init": "ATSH7DF;",
-					"expression": "((256*B3)+B4)/1.609",
-					"unit": "mi",
+					"expression": "(256*B3)+B4",
+					"unit": "km",
 					"class": "distance"
 				}
 			]
