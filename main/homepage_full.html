@@ -1160,13 +1160,13 @@ function insertRowCells(newRow, rowData) {
 
     // Column width configurations
     const columnWidths = {
-        Name: "15%",
+        Name: "8%",
         Init: "10%",
-        PID: "6%",
+        PID: "10%",
         Expression: "20%",
-        Period: "5%",
+        Period: "10%",
         Type: "15%",
-        Send_to: "20%"
+        Send_to: "15%"
     };
 
     columns.forEach(column => {
@@ -1203,7 +1203,7 @@ function insertRowCells(newRow, rowData) {
             switch (column) {
                 case "PID":
                     input.addEventListener('input', checkForDuplicates);
-                    input.placeholder = "PID";
+                    input.placeholder = "Enter PID";
                     break;
                 case "Period":
                     input.placeholder = "ms";
@@ -1212,7 +1212,7 @@ function insertRowCells(newRow, rowData) {
                     input.step = "100";
                     break;
                 case "Name":
-                    input.placeholder = "Parameter Name";
+                    input.placeholder = "Enter name";
                     input.maxLength = "32";
                     break;
                 case "Expression":
@@ -1222,10 +1222,6 @@ function insertRowCells(newRow, rowData) {
                 case "Send_to":
                     input.placeholder = "Enter destination";
                     input.maxLength = "64";
-                    break;
-                case "Init":
-                    input.placeholder = "PID Init";
-                    input.maxLength = "32";
                     break;
             }
 

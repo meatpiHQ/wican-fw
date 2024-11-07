@@ -675,6 +675,7 @@ static esp_err_t system_reboot_handler(httpd_req_t *req)
 static esp_err_t logo_handler(httpd_req_t *req)
 {
     const char* resp_str = (const char*)logo;
+	httpd_resp_set_type(req, "image/svg+xml");
     httpd_resp_send(req, (const char*)resp_str, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
