@@ -201,8 +201,8 @@
             "name": "batteryMaxRegen",
             "pid_init": "ATSH7E4;",
             "expression": "[B4:B5]/100",
-            "unit": "%",
-            "class": "battery"
+            "unit": "kW",
+            "class": "power"
           }
         ]
       },
@@ -227,6 +227,18 @@
             "expression": "B4-40",
             "unit": "°C",
             "class": "temperature"
+          }
+        ]
+      },
+      {
+        "pid": "22dd09",
+        "parameters": [
+          {
+            "name": "vehicleSpeed",
+            "pid_init": "ATSH7E4;",
+            "expression": "B4",
+            "unit": "km/h",
+            "class": "speed"
           }
         ]
       }

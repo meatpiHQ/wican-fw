@@ -31,4 +31,5 @@ These are confirmed working on a model year 2019 I-PACE.
 |✅|batteryMaxRegen|4913|BECM (7E4)|Maximum allowed regen rate (kW)||
 |✅|odometer|DD01|BECM (7E4)|||
 |✅|cabinTemp|DD04|BECM (7E4)|||
+|✅|vehicleSpeed|DD09|BECM (7E4)|Current speed in km/h||
 |❌|vin|F190|BECM (7E4)|Vehicle Idenification Number|Multi frame message|
