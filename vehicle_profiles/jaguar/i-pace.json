@@ -241,6 +241,102 @@
             "class": "speed"
           }
         ]
+      },
+      {
+        "pid": "222076",
+        "parameters": [
+          {
+            "name": "frontLeftTirePressure",
+            "pid_init": "ATSH751;",
+            "expression": "B4",
+            "unit": "kPa",
+            "class": "pressure"
+          }
+        ]
+      },
+      {
+        "pid": "222077",
+        "parameters": [
+          {
+            "name": "frontRightTirePressure",
+            "pid_init": "ATSH751;",
+            "expression": "B4",
+            "unit": "kPa",
+            "class": "pressure"
+          }
+        ]
+      },
+      {
+        "pid": "222078",
+        "parameters": [
+          {
+            "name": "rearLeftTirePressure",
+            "pid_init": "ATSH751;",
+            "expression": "B4",
+            "unit": "kPa",
+            "class": "pressure"
+          }
+        ]
+      },
+      {
+        "pid": "222079",
+        "parameters": [
+          {
+            "name": "rearRightTirePressure",
+            "pid_init": "ATSH751;",
+            "expression": "B4",
+            "unit": "kPa",
+            "class": "pressure"
+          }
+        ]
+      },
+      {
+        "pid": "222a0a",
+        "parameters": [
+          {
+            "name": "frontLeftTireTemp",
+            "pid_init": "ATSH751;",
+            "expression": "B4-50",
+            "unit": "°C",
+            "class": "temperature"
+          }
+        ]
+      },
+      {
+        "pid": "222a0b",
+        "parameters": [
+          {
+            "name": "frontRightTireTemp",
+            "pid_init": "ATSH751;",
+            "expression": "B4-50",
+            "unit": "°C",
+            "class": "temperature"
+          }
+        ]
+      },
+      {
+        "pid": "222a0c",
+        "parameters": [
+          {
+            "name": "rearLeftTireTemp",
+            "pid_init": "ATSH751;",
+            "expression": "B4-50",
+            "unit": "°C",
+            "class": "temperature"
+          }
+        ]
+      },
+      {
+        "pid": "222a0d",
+        "parameters": [
+          {
+            "name": "readRightTireTemp",
+            "pid_init": "ATSH751;",
+            "expression": "B4-50",
+            "unit": "°C",
+            "class": "temperature"
+          }
+        ]
       }
     ]
   }
