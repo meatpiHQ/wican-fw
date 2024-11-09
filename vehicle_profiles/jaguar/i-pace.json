@@ -248,7 +248,7 @@
           {
             "name": "frontLeftTirePressure",
             "pid_init": "ATSH751;",
-            "expression": "B4",
+            "expression": "[B4:B5]",
             "unit": "kPa",
             "class": "pressure"
           }
@@ -260,7 +260,7 @@
           {
             "name": "frontRightTirePressure",
             "pid_init": "ATSH751;",
-            "expression": "B4",
+            "expression": "[B4:B5]",
             "unit": "kPa",
             "class": "pressure"
           }
@@ -272,7 +272,7 @@
           {
             "name": "rearLeftTirePressure",
             "pid_init": "ATSH751;",
-            "expression": "B4",
+            "expression": "[B4:B5]",
             "unit": "kPa",
             "class": "pressure"
           }
@@ -284,7 +284,7 @@
           {
             "name": "rearRightTirePressure",
             "pid_init": "ATSH751;",
-            "expression": "B4",
+            "expression": "[B4:B5]",
             "unit": "kPa",
             "class": "pressure"
           }
