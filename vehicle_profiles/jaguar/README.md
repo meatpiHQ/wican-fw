@@ -43,4 +43,11 @@ These are confirmed working on a model year 2019 I-PACE.
 |✅|rearLeftTireTemp|2A0C|TPMS (751)|Rear Left Tire Temperature (°C)||
 |✅|rearRighttTireTemp|2A0D|TPMS (751)|Rear Right Tire Temperature (°C)||
 |✅|ambientTemp|9924|HVAC (733)|Ambient Temperature (°C)||
+|✅|mainsACVoltage|498F|BCCM (7E5)|Voltage provided by EVSE (V)||
+|✅|mainsACCurrent|498F|BCCM (7E5)|Current drawn from EVSE (A)||
+|✅|controlPilotPWMDutyCycle|49A8|BCCM (7E5)|EVSE Control Pilot Duty Cycle (%)||
+|✅|controlPilotFrequency|49A8|BCCM (7E5)|EVSE Control Pilot Frequency (Hz)||
+|✅|controlPilotStatusCode|49A8|BCCM (7E5)|EVSE Control Pilot Status Code||
+|✅|controlPilotVoltage|49A8|BCCM (7E5)|EVSE Control Pilot Voltage (V)||
+|✅|evseMaxCurrent|49A8|BCCM (7E5)|EVSE Maximum Current (A)||
 |❌|vin|F190|BECM (7E4)|Vehicle Idenification Number|Multi frame message|

@@ -373,6 +373,65 @@
             "class": "temperature"
           }
         ]
+      },
+      {
+        "pid": "22498f",
+        "parameters": [
+          {
+            "name": "mainsACVoltage",
+            "pid_init": "ATSH7E5;",
+            "expression": "B4*2",
+            "unit": "V",
+            "class": "voltage"
+          },
+          {
+            "name": "mainsACCurrent",
+            "pid_init": "ATSH7E5;",
+            "expression": "B5/5",
+            "unit": "A",
+            "class": "current"
+          }
+        ]
+      },
+      {
+        "pid": "2249a8",
+        "parameters": [
+          {
+            "name": "controlPilotPWMDutyCycle",
+            "pid_init": "ATSH7E5;",
+            "expression": "[B4:B5]/10",
+            "unit": "%",
+            "class": ""
+          },
+          {
+            "name": "controlPilotFrequency",
+            "pid_init": "ATSH7E5;",
+            "expression": "[B6:B7]",
+            "unit": "Hz",
+            "class": "frequency"
+          },
+          {
+            "name": "controlPilotStatusCode",
+            "pid_init": "ATSH7E5;",
+            "expression": "B8",
+            "unit": "",
+            "class": ""
+          },
+          {
+            "name": "controlPilotVoltage",
+            "pid_init": "ATSH7E5;",
+            "expression": "[B9:B10]/1000",
+            "unit": "V",
+            "class": "voltage"
+          },
+          {
+            "name": "evseMaxCurrent",
+            "pid_init": "ATSH7E5;",
+            "expression": "[B1:B12]/10",
+            "unit": "A",
+            "class": "current"
+          }
+        ]
       }
     ]
   }
