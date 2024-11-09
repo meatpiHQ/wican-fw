@@ -207,6 +207,30 @@
         ]
       },
       {
+        "pid": "22491b",
+        "parameters": [
+          {
+            "name": "batteryCoolantOutletTemp",
+            "pid_init": "ATSH7E4;",
+            "expression": "B4-40",
+            "unit": "°C",
+            "class": "temperature"
+          }
+        ]
+      },
+      {
+        "pid": "22491c",
+        "parameters": [
+          {
+            "name": "batteryCoolantInletTemp",
+            "pid_init": "ATSH7E4;",
+            "expression": "B4-40",
+            "unit": "°C",
+            "class": "temperature"
+          }
+        ]
+      },
+      {
         "pid": "22dd01",
         "parameters": [
           {

@@ -29,6 +29,8 @@ These are confirmed working on a model year 2019 I-PACE.
 |✅|batteryTempMax|4905|BECM (7E4)|Maximum temperature of any of the 108 HV battery cells||
 |✅|batteryTempAvg|4907|BECM (7E4)|Average temperature of any of the 108 HV battery cells||
 |✅|batteryMaxRegen|4913|BECM (7E4)|Maximum allowed regen rate (kW)||
+|✅|batteryCoolantOutletTemp|491B|BECM (7E4)|Battery Coolant Outlet Temperature (°C)||
+|✅|batteryCoolantInletTemp|491C|BECM (7E4)|Battery Coolant Inlet Temperature (°C)||
 |✅|odometer|DD01|BECM (7E4)|||
 |✅|cabinTemp|DD04|BECM (7E4)|||
 |✅|vehicleSpeed|DD09|BECM (7E4)|Current speed in km/h||
