@@ -432,6 +432,30 @@
             "class": "current"
           }
         ]
+      },
+      {
+        "pid": "224208",
+        "parameters": [
+          {
+            "name": "DCDCOutputCurrent",
+            "pid_init": "ATSH753;",
+            "expression": "[B4:B5]/100",
+            "unit": "A",
+            "class": "current"
+          }
+        ]
+      },
+      {
+        "pid": "22420a",
+        "parameters": [
+          {
+            "name": "DCDCOutputVoltage",
+            "pid_init": "ATSH753;",
+            "expression": "B4/10",
+            "unit": "V",
+            "class": "voltage"
+          }
+        ]
       }
     ]
   }

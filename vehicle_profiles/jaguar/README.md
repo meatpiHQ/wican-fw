@@ -49,5 +49,6 @@ These are confirmed working on a model year 2019 I-PACE.
 |✅|controlPilotFrequency|49A8|BCCM (7E5)|EVSE Control Pilot Frequency (Hz)||
 |✅|controlPilotStatusCode|49A8|BCCM (7E5)|EVSE Control Pilot Status Code||
 |✅|controlPilotVoltage|49A8|BCCM (7E5)|EVSE Control Pilot Voltage (V)||
-|✅|evseMaxCurrent|49A8|BCCM (7E5)|EVSE Maximum Current (A)||
+|✅|DCDCOutputCurrent|4208|DCDC (753)|DCDC 12V Supply Output Current (A)||
+|✅|DCDCOutputVoltage|420A|DCDC (753)|DCDC 12V Supply Output Voltage (A)||
 |❌|vin|F190|BECM (7E4)|Vehicle Idenification Number|Multi frame message|
