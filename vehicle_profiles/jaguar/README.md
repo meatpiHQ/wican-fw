@@ -40,4 +40,5 @@ These are confirmed working on a model year 2019 I-PACE.
 |✅|frontRightTireTemp|2A0B|TPMS (751)|Front Right Tire Temperature (°C)||
 |✅|rearLeftTireTemp|2A0C|TPMS (751)|Rear Left Tire Temperature (°C)||
 |✅|rearRighttTireTemp|2A0D|TPMS (751)|Rear Right Tire Temperature (°C)||
+|✅|ambientTemp|9924|HVAC (733)|Ambient Temperature (°C)||
 |❌|vin|F190|BECM (7E4)|Vehicle Idenification Number|Multi frame message|
