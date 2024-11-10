@@ -1,18 +1,18 @@
 {
-  "car_model": "VW: id-3",
+  "car_model":"VW: id-3",
   "init":"ATST96;",
   "pids":[
-    {
-       "parameters":[
-          {
-             "class":"battery",
-             "expression":"((B4*51)/115)-6.4",
-             "name":"SOC",
-             "pid_init":"ATSP7;ATAR;ATCP18;ATSHFC007B;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
-             "unit":"%"
-          }
-       ],
-       "pid":"22028C1"
-    }
- ]
+     {
+        "pid":"22028C1",
+        "pid_init":"ATSP7;ATAR;ATCP18;ATSHFC007B;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+        "parameters":[
+           {
+              "name":"SoC",
+              "expression":"((B4*51)/115)-6.4",
+              "unit":"%",
+              "class":"battery"
+           }
+        ]
+     }
+  ]
 }
