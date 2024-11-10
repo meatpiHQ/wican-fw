@@ -1,0 +1,18 @@
+{
+	"car_model": "Honda: clarity-2018",
+	"init": "ATSP7;ATST96;",
+	"pids": [
+		{
+			"pid": "22202A8",
+			"pid_init": "ATSHDA01F1;",
+			"parameters": [
+                {
+					"name": "SoC",
+					"expression": "B62",
+					"unit": "%",
+					"class": "battery"
+				}
+			]
+		}
+	]
+}
