@@ -1,5 +1,5 @@
 {
-    "car_model": "Opel: Ampere-E",
+    "car_model": "Chevrolet: Bolt",
     "init": "ATSP6;ATST96;",
     "pids": [
         {
