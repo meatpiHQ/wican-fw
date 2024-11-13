@@ -30,7 +30,6 @@ jobs:
       - name: Commit
         uses: EndBug/add-and-commit@v9
         with:
-          add: 'vehicle_profiles.json'
+          add: 'vehicle_profiles.json docs/content/0.Config/6.Automate/2.Supported_Vehicles.md'
           author_name: Jay Oswald
           author_email: jay@oswald.net.au
-          
