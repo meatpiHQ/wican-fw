@@ -52,3 +52,4 @@ These are confirmed working on a model year 2019 I-PACE.
 |❌|DCDCOutputCurrent|4208|DCDC (753)|DCDC 12V Supply Output Current (A)||
 |❌|DCDCOutputVoltage|420A|DCDC (753)|DCDC 12V Supply Output Voltage (A)||
 |❌|vin|F190|BECM (7E4)|Vehicle Idenification Number|Multi frame message|
+|❌|location|A0A6|TCU (754)|GPS Location|Multi frame message|
