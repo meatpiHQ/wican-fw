@@ -427,7 +427,7 @@
           {
             "name": "evseMaxCurrent",
             "pid_init": "ATSH7E5;",
-            "expression": "[B1:B12]/10",
+            "expression": "[B11:B12]/10",
             "unit": "A",
             "class": "current"
           }
