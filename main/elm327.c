@@ -1621,7 +1621,7 @@ bool elm327_set_baudrate(void)
         
         // uart_set_baudrate(UART_NUM_1, DESIRED_BAUD_RATE);
         ESP_LOGI(TAG, "Trying %d baud", DESIRED_BAUD_RATE);
-        
+
         uart_write_bytes(UART_NUM_1, "STI\r", 4);
         
         len = uart_read_until_pattern(UART_NUM_1, rx_buffer, BUFFER_SIZE - 1, ">\r", UART_TIMEOUT_MS);
@@ -1686,17 +1686,22 @@ bool elm327_set_baudrate(void)
 
 void elm327_hardreset_chip(void)
 {
-    char* rsp_buffer = NULL;
+    static char rsp_buffer[100];
     uint32_t rsp_len;
 	if (xSemaphoreTake(xuart1_semaphore, portMAX_DELAY) == pdTRUE)
 	{
-		gpio_set_level(OBD_RESET_PIN, 0);
-		vTaskDelay(pdMS_TO_TICKS(5));
-		gpio_set_level(OBD_RESET_PIN, 1);
-
-		vTaskDelay(pdMS_TO_TICKS(300));
+		// gpio_set_level(OBD_RESET_PIN, 0);
+		// vTaskDelay(pdMS_TO_TICKS(10));
+		// gpio_set_level(OBD_RESET_PIN, 1);
+        uart_write_bytes(UART_NUM_1, "ATZ\r", 4);
+        int len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, BUFFER_SIZE - 1, ">\r", UART_TIMEOUT_MS+300);
+		if(len > 0)
+		{
+			ESP_LOGW(TAG, "Hardreset OK");
+		}
+		xSemaphoreGive(xuart1_semaphore);
 	}
-	xSemaphoreGive(xuart1_semaphore);
+	
 }
 
 void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, QueueHandle_t *response_q, response_callback_t response_callback)
@@ -1811,7 +1816,7 @@ void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame,
         return;
     }
 
-    // elm327_hardreset_chip();
+    elm327_hardreset_chip();
     if (elm327_set_baudrate())
     {
         ESP_LOGI(TAG, "UART configuration completed successfully");
