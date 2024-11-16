@@ -1707,6 +1707,75 @@ void elm327_hardreset_chip(void)
     }
 }
 
+void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, QueueHandle_t *response_q, response_callback_t response_callback)
+{
+	if (xSemaphoreTake(xuart1_semaphore, portMAX_DELAY) == pdTRUE)
+    {
+		uint32_t len;
+		bool terminator_received = false;
+		uart_event_t event;
+		static uint8_t uart_read_buf[2048];
+		
+		if(command_len == 0)
+		{
+			len = strlen(command);
+		}
+		else
+		{
+			len = command_len;
+		}
+		uart_flush_input(UART_NUM_1);
+		xQueueReset(uart1_queue);
+
+
+		if(strstr(command, "ATZ\r") != NULL || 
+		strstr(command, "atz\r") != NULL ||
+		strstr(command, "AT Z\r") != NULL ||
+		strstr(command, "at z\r") != NULL)
+		{
+			// if(strlen(elm327_command.command) < sizeof(last_command))
+			// {
+			// 	strcpy(last_command, elm327_command.command);
+			// }
+			uart_write_bytes(UART_NUM_1, "ATWS\r", strlen("ATWS\r"));
+			uart_wait_tx_done(UART_NUM_1, pdMS_TO_TICKS(100));
+		}
+		else
+		{
+			uart_write_bytes(UART_NUM_1, command, len);
+		}
+		
+		while (!terminator_received)
+		{
+			if (xQueueReceive(uart1_queue, (void*)&event, pdMS_TO_TICKS(ELM327_CMD_TIMEOUT_MS)) == pdTRUE)
+			{
+				if (event.type == UART_DATA)
+				{
+					int read_bytes = uart_read_bytes(UART_NUM_1, 
+													uart_read_buf, 
+													event.size, 
+													pdMS_TO_TICKS(1));
+					if (read_bytes > 0)
+					{
+						response_callback((char*)uart_read_buf, 
+													read_bytes, 
+													response_q,
+													command);
+						if(strstr((char*) uart_read_buf, "\r>"))
+						{
+							terminator_received = true;
+							break;
+						}
+					}
+
+				}
+
+			}
+		}
+		xSemaphoreGive(xuart1_semaphore);
+	}
+}
+
 void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame, uint8_t type))
 {
     can_rx_queue = rx_queue;
@@ -1720,7 +1789,7 @@ void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame,
 
     gpio_reset_pin(OBD_RESET_PIN);
     gpio_set_direction(OBD_RESET_PIN, GPIO_MODE_OUTPUT_OD);
-    
+    gpio_set_level(OBD_RESET_PIN, 1);
 	xuart1_semaphore = xSemaphoreCreateMutex();
 	
     uart_config_t uart1_config = 
@@ -1750,7 +1819,7 @@ void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame,
         return;
     }
 
-    elm327_hardreset_chip();
+    // elm327_hardreset_chip();
 
     uart_flush(UART_NUM_1);
 

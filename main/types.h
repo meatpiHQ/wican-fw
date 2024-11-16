@@ -34,7 +34,8 @@ typedef enum
 	DEV_WIFI = 0,
 	DEV_WIFI_WS,
 	DEV_BLE,
-	DEV_UART
+	DEV_UART,
+	DEV_MAX
 }dev_channel_t;
 
 

@@ -207,6 +207,8 @@
             background-color: var(--gray-50);
         }
 
+
+        
         .status-indicator {
             display: inline-flex;
             align-items: center;
@@ -260,6 +262,15 @@
         .notification-container.show {
             display: block;
         }
+        .form-input::placeholder {
+            font-size: 14px; /* Adjust the size as needed */
+            color: #888; /* Optional: Customize the color */
+        }
+
+        input.form-input {
+            font-size: 14px; /* Set the desired font size here */
+        }
+
 
         @media (max-width: 768px) {
             .notification-container {
@@ -1160,7 +1171,7 @@ function insertRowCells(newRow, rowData) {
 
     // Column width configurations
     const columnWidths = {
-        Name: "15%",
+        Name: "10%",
         Init: "10%",
         PID: "6%",
         Expression: "20%",
@@ -1212,7 +1223,7 @@ function insertRowCells(newRow, rowData) {
                     input.step = "100";
                     break;
                 case "Name":
-                    input.placeholder = "Parameter Name";
+                    input.placeholder = "Name";
                     input.maxLength = "32";
                     break;
                 case "Expression":
@@ -1624,6 +1635,7 @@ function insertRowCells(newRow, rowData) {
 			document.getElementById("sta_status").innerHTML = obj.sta_status;
 			document.getElementById("ap_channel_status").innerHTML = obj.ap_ch;
 			document.getElementById("sta_ip").innerHTML = obj.sta_ip;
+            document.getElementById("mdns").innerHTML = obj.mdns;
 			document.getElementById("can_bitrate_status").innerHTML = obj.can_datarate;
 			if(obj.can_mode == "normal") {
 				document.getElementById("can_mode_status").innerHTML = "Normal";

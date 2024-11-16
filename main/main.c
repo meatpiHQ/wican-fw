@@ -196,7 +196,7 @@ void send_to_host(char* str, uint32_t len, QueueHandle_t *q)
     static xdev_buffer xsend_buffer;  // Consider non-static for multithreading
     uint32_t bytes_sent = 0;
     uint32_t bytes_to_send;
-
+	ESP_LOGW(TAG, "Herer");
     if (len == 0)
     {
 		if(str == NULL || strlen(str) == 0)
@@ -215,11 +215,11 @@ void send_to_host(char* str, uint32_t len, QueueHandle_t *q)
         {
             bytes_to_send = DEV_BUFFER_LENGTH;
         }
-
+		
         // Copy the data to the buffer
         memcpy(xsend_buffer.ucElement, str + bytes_sent, bytes_to_send);
         xsend_buffer.usLen = bytes_to_send;
-
+		ESP_LOG_BUFFER_HEXDUMP(TAG, xsend_buffer.ucElement, bytes_to_send, ESP_LOG_INFO);
         // Send the buffer to the queue with a timeout
         if (xQueueSend(*q, (void*)&xsend_buffer, pdMS_TO_TICKS(100)) != pdPASS)
         {
@@ -230,6 +230,7 @@ void send_to_host(char* str, uint32_t len, QueueHandle_t *q)
         // Update the number of bytes sent
         bytes_sent += bytes_to_send;
     }
+	ESP_LOGI(TAG, "bytes_sent: %lu", bytes_sent);
 }
 
 
@@ -294,14 +295,15 @@ static void can_tx_task(void *pvParameters)
 			static char elm327_cmd_buffer[2048];
 			static uint32_t cmd_buffer_len = 0;
 			static int64_t last_cmd_time = 0;
-
+			memset(elm327_cmd_buffer, 0, sizeof(elm327_cmd_buffer));
 			if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI)
 			{
 				elm327_process_cmd(msg_ptr, temp_len, &xMsg_Tx_Queue, elm327_cmd_buffer, &cmd_buffer_len, &last_cmd_time, &send_to_host);
 			}
 			else if(ucTCP_RX_Buffer.dev_channel == DEV_BLE)
 			{
-				elm327_process_cmd(msg_ptr, temp_len, &xmsg_ble_tx_queue, elm327_cmd_buffer, &cmd_buffer_len, &last_cmd_time, &send_to_host);
+				// elm327_process_cmd(msg_ptr, temp_len, &xmsg_ble_tx_queue, elm327_cmd_buffer, &cmd_buffer_len, &last_cmd_time, &send_to_host);
+				elm327_run_command((char*)msg_ptr, temp_len, 1000, &xmsg_ble_tx_queue, &send_to_host);
 			}
 			#else
 			if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI)
@@ -450,8 +452,12 @@ static void can_rx_task(void *pvParameters)
 
 void app_main(void)
 {
-	vTaskDelay(pdMS_TO_TICKS(1000));
-    ESP_ERROR_CHECK(nvs_flash_init());
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 	printf("Project Version: %d\n", HARDWARE_VER);
@@ -555,9 +561,10 @@ void app_main(void)
 //    xmsg_obd_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
 
     ESP_ERROR_CHECK(esp_read_mac(derived_mac_addr, ESP_MAC_WIFI_SOFTAP));
-    sprintf((char *)ble_uid,"WiC_%02x%02x%02x%02x%02x%02x",
-            derived_mac_addr[0], derived_mac_addr[1], derived_mac_addr[2],
-            derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
+    // sprintf((char *)ble_uid,"WiC_%02x%02x%02x%02x%02x%02x",
+    //         derived_mac_addr[0], derived_mac_addr[1], derived_mac_addr[2],
+    //         derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
+	sprintf((char *)ble_uid,"WiCAN");
     sprintf((char *)uid,"%02x%02x%02x%02x%02x%02x",
             derived_mac_addr[0], derived_mac_addr[1], derived_mac_addr[2],
             derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
@@ -725,7 +732,12 @@ void app_main(void)
 		if(config_server_get_ble_config())
 		{
 			int pass = config_server_ble_pass();
-			xmsg_ble_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
+			static xdev_buffer* xmsg_ble_tx_queue_Storage;
+			static StaticQueue_t xmsg_ble_tx_queue_Buffer;
+			// xMsg_Rx_Queue_Storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
+			// xmsg_ble_tx_queue = xQueueCreate(20, sizeof( xdev_buffer) );
+			xmsg_ble_tx_queue_Storage = (xdev_buffer *)heap_caps_malloc(100 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
+			xmsg_ble_tx_queue = xQueueCreateStatic(100, xdev_buffer_size, (uint8_t *)xmsg_ble_tx_queue_Storage, &xmsg_ble_tx_queue_Buffer);
 			#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 			ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, pass, &ble_uid[0]);
 			#elif HARDWARE_VER == WICAN_PRO
@@ -815,6 +827,6 @@ void app_main(void)
 	// pdTRUE, /* BIT_0 should be cleared before returning. */
 	// pdFALSE, /* Don't wait for both bits, either bit will do. */
 	// portMAX_DELAY);/* Wait forever. */  
-	esp_log_level_set("*", ESP_LOG_NONE);
+	esp_log_level_set("*", ESP_LOG_ERROR);
 }
 

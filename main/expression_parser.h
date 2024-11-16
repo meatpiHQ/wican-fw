@@ -23,5 +23,5 @@
 #define __EXP_PAR__
 
 bool evaluate_expression(uint8_t *expression,  uint8_t *data, double V, double *result);
-
+void test_evaluate_expression(void);
 #endif
