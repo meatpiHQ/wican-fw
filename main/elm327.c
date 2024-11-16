@@ -1508,14 +1508,14 @@ static void uart1_event_task(void *pvParameters)
                                         terminator_received = true;
                                         break;
                                     }
-									else if(uart_read_buf[response_len-1] == '\r')
-									{
-										elm327_command.response_callback((char*)uart_read_buf, 
-																			response_len, 
-																			elm327_command.response_queue, 
-																			elm327_command.command);
-										response_len = 0;
-									}
+									// else if(uart_read_buf[response_len-1] == '\r')
+									// {
+									// 	elm327_command.response_callback((char*)uart_read_buf, 
+									// 										response_len, 
+									// 										elm327_command.response_queue, 
+									// 										elm327_command.command);
+									// 	response_len = 0;
+									// }
                                 }
                             }
                         }
@@ -1697,14 +1697,6 @@ void elm327_hardreset_chip(void)
 		vTaskDelay(pdMS_TO_TICKS(300));
 	}
 	xSemaphoreGive(xuart1_semaphore);
-    if (elm327_set_baudrate())
-    {
-        ESP_LOGI(TAG, "UART configuration completed successfully");
-    }
-    else
-    {
-        ESP_LOGE(TAG, "UART configuration failed");
-    }
 }
 
 void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, QueueHandle_t *response_q, response_callback_t response_callback)
@@ -1820,7 +1812,15 @@ void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame,
     }
 
     // elm327_hardreset_chip();
-
+    if (elm327_set_baudrate())
+    {
+        ESP_LOGI(TAG, "UART configuration completed successfully");
+    }
+    else
+    {
+        ESP_LOGE(TAG, "UART configuration failed");
+    }
+	
     uart_flush(UART_NUM_1);
 
     obd_init();
