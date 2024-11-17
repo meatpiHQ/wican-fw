@@ -38,6 +38,7 @@
 #include "elm327.h"
 #include "driver/uart.h"
 #include "obd.h"
+#include "sleep_mode.h"
 
 #define TAG 		__func__
 
@@ -1394,8 +1395,10 @@ static void uart1_event_task(void *pvParameters)
     {
         if (xQueueReceive(elm327_cmd_queue, (void*)&elm327_command, portMAX_DELAY) == pdTRUE)
         {
+			sleep_state_info_t sleep_state;
+			sleep_mode_get_state(&sleep_state);
 			memset(uart_read_buf, 0, sizeof(uart_read_buf));
-            if (xSemaphoreTake(xuart1_semaphore, portMAX_DELAY) == pdTRUE)
+            if ((sleep_state.state != STATE_SLEEPING) && xSemaphoreTake(xuart1_semaphore, portMAX_DELAY) == pdTRUE)
             {
                 // uart_flush(UART_NUM_1);
                 uart_event_t event;
@@ -1702,6 +1705,30 @@ void elm327_hardreset_chip(void)
 		xSemaphoreGive(xuart1_semaphore);
 	}
 	
+}
+
+esp_err_t elm327_sleep(void)
+{
+    static char rsp_buffer[100];
+    uint32_t rsp_len;
+	esp_err_t ret = ESP_FAIL;
+
+	if (xSemaphoreTake(xuart1_semaphore, portMAX_DELAY) == pdTRUE)
+	{
+        uart_write_bytes(UART_NUM_1, "STSLEEP1\r", 10);
+        int len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, BUFFER_SIZE - 1, ">\r", UART_TIMEOUT_MS+300);
+		if(len > 0 && strstr(rsp_buffer, "OK\r>"))
+		{
+			ESP_LOGW(TAG, "Sleep OK");
+			ret = ESP_OK;
+		}
+		else
+		{
+			ret = ESP_FAIL;
+		}
+		xSemaphoreGive(xuart1_semaphore);
+	}
+	return ret;
 }
 
 void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, QueueHandle_t *response_q, response_callback_t response_callback)

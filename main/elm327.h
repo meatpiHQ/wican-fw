@@ -38,4 +38,5 @@ int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, twai_message_t *frame, Queu
 #endif
 
 void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, QueueHandle_t *response_q, response_callback_t response_callback);
+esp_err_t elm327_sleep(void);
 #endif
