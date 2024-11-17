@@ -854,8 +854,9 @@ void sleep_task(void *pvParameters)
     system_state_t current_state = STATE_NORMAL;
     uint32_t state_timer = 0;
     sleep_state_info_t state_info = {0};
+    static uint8_t sleep_en = -1;
     
-    // Create queues
+	sleep_en = config_server_get_sleep_config();
     voltage_queue = xQueueCreate(1, sizeof(float));
     sleep_state_queue = xQueueCreate(1, sizeof(sleep_state_info_t));
 
@@ -875,52 +876,65 @@ void sleep_task(void *pvParameters)
             // Send voltage to queue
             xQueueOverwrite(voltage_queue, &battery_voltage);
             
-            // State machine logic
-            switch (current_state) {
-                case STATE_NORMAL:
-                    if (battery_voltage < BATTERY_LOW_THRESHOLD) {
-                        ESP_LOGW(TAG, "Battery voltage low (%.2fV), starting low voltage timer", battery_voltage);
-                        current_state = STATE_LOW_VOLTAGE;
-                        state_timer = 0;
-                    }
-                    break;
+			
+			if(sleep_en == 1)
+			{
+				switch (current_state) 
+				{
+					case STATE_NORMAL:
+						if (battery_voltage < BATTERY_LOW_THRESHOLD) 
+						{
+							ESP_LOGW(TAG, "Battery voltage low (%.2fV), starting low voltage timer", battery_voltage);
+							current_state = STATE_LOW_VOLTAGE;
+							state_timer = 0;
+						}
+						break;
 
-                case STATE_LOW_VOLTAGE:
-                    if (battery_voltage >= BATTERY_LOW_THRESHOLD) {
-                        ESP_LOGI(TAG, "Battery voltage recovered (%.2fV)", battery_voltage);
-                        current_state = STATE_NORMAL;
-                    } else {
-                        state_timer++;
-                        if (state_timer >= LOW_VOLTAGE_TIME_SEC) {
-                            ESP_LOGW(TAG, "Battery voltage low for %d seconds, preparing to sleep", LOW_VOLTAGE_TIME_SEC);
-                            current_state = STATE_SLEEPING;
-                            
-                        }
-                    }
-                    break;
+					case STATE_LOW_VOLTAGE:
+						if (battery_voltage >= BATTERY_LOW_THRESHOLD) 
+						{
+							ESP_LOGI(TAG, "Battery voltage recovered (%.2fV)", battery_voltage);
+							current_state = STATE_NORMAL;
+						} 
+						else 
+						{
+							state_timer++;
+							if (state_timer >= LOW_VOLTAGE_TIME_SEC) 
+							{
+								ESP_LOGW(TAG, "Battery voltage low for %d seconds, preparing to sleep", LOW_VOLTAGE_TIME_SEC);
+								current_state = STATE_SLEEPING;
+								
+							}
+						}
+						break;
 
-                case STATE_SLEEPING:
-                    if (battery_voltage >= BATTERY_HIGH_THRESHOLD) {
-                        ESP_LOGI(TAG, "Battery voltage good (%.2fV), starting wake timer", battery_voltage);
-                        current_state = STATE_WAKE_PENDING;
-                        state_timer = 0;
-                    }
-                    break;
+					case STATE_SLEEPING:
+						if (battery_voltage >= BATTERY_HIGH_THRESHOLD) 
+						{
+							ESP_LOGI(TAG, "Battery voltage good (%.2fV), starting wake timer", battery_voltage);
+							current_state = STATE_WAKE_PENDING;
+							state_timer = 0;
+						}
+						break;
 
-                case STATE_WAKE_PENDING:
-                    if (battery_voltage < BATTERY_HIGH_THRESHOLD) {
-                        ESP_LOGW(TAG, "Battery voltage dropped (%.2fV), staying in sleep", battery_voltage);
-                        current_state = STATE_SLEEPING;
-                    } else {
-                        state_timer++;
-                        if (state_timer >= HIGH_VOLTAGE_TIME_SEC) {
-                            ESP_LOGI(TAG, "Battery voltage good for %d seconds, waking up", HIGH_VOLTAGE_TIME_SEC);
-                            current_state = STATE_NORMAL;
-                        }
-                    }
-                    break;
-            }
-
+					case STATE_WAKE_PENDING:
+						if (battery_voltage < BATTERY_HIGH_THRESHOLD) 
+						{
+							ESP_LOGW(TAG, "Battery voltage dropped (%.2fV), staying in sleep", battery_voltage);
+							current_state = STATE_SLEEPING;
+						} 
+						else 
+						{
+							state_timer++;
+							if (state_timer >= HIGH_VOLTAGE_TIME_SEC) 
+							{
+								ESP_LOGI(TAG, "Battery voltage good for %d seconds, waking up", HIGH_VOLTAGE_TIME_SEC);
+								current_state = STATE_NORMAL;
+							}
+						}
+						break;
+				}
+			}
             // Update state info structure
             state_info.state = current_state;
             state_info.voltage = battery_voltage;
@@ -938,8 +952,9 @@ void sleep_task(void *pvParameters)
 				enter_deep_sleep();
 				vTaskDelay(pdMS_TO_TICKS(2000));
 			}
-            
-        } else {
+        } 
+		else 
+		{
             ESP_LOGW(TAG, "Failed to read ADC: %d", ret);
         }
         
@@ -949,15 +964,18 @@ void sleep_task(void *pvParameters)
 
 esp_err_t sleep_mode_get_state(sleep_state_info_t *state_info)
 {
-    if (state_info == NULL) {
+    if (state_info == NULL) 
+	{
         return ESP_ERR_INVALID_ARG;
     }
     
-    if (sleep_state_queue == NULL) {
+    if (sleep_state_queue == NULL) 
+	{
         return ESP_ERR_INVALID_STATE;
     }
     
-    if (xQueuePeek(sleep_state_queue, state_info, 0) != pdTRUE) {
+    if (xQueuePeek(sleep_state_queue, state_info, 0) != pdTRUE) 
+	{
         return ESP_ERR_NOT_FOUND;
     }
     
@@ -989,10 +1007,13 @@ void sleep_mode_print_wakeup_reason(void)
         case ESP_SLEEP_WAKEUP_EXT1:
             {
                 uint64_t wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
-                if (wakeup_pin_mask != 0) {
+                if (wakeup_pin_mask != 0) 
+				{
                     int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
                     ESP_LOGI(TAG, "Wake up from GPIO %d", pin);
-                } else {
+                } 
+				else 
+				{
                     ESP_LOGI(TAG, "Wake up from GPIO (pin not identified)");
                 }
             }
