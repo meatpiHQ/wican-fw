@@ -263,17 +263,17 @@ static void continuous_adc_init(uint16_t adc1_chan_mask, uint16_t adc2_chan_mask
 }
 
 //ADC Attenuation
-#define ADC_EXAMPLE_ATTEN           ADC_ATTEN_DB_11
+#define ADC_ATTEN           ADC_ATTEN_DB_11
 
 //ADC Calibration
 #if CONFIG_IDF_TARGET_ESP32
-#define ADC_EXAMPLE_CALI_SCHEME     ESP_ADC_CAL_VAL_EFUSE_VREF
+#define ADC_CALI_SCHEME     ESP_ADC_CAL_VAL_EFUSE_VREF
 #elif CONFIG_IDF_TARGET_ESP32S2
-#define ADC_EXAMPLE_CALI_SCHEME     ESP_ADC_CAL_VAL_EFUSE_TP
+#define ADC_CALI_SCHEME     ESP_ADC_CAL_VAL_EFUSE_TP
 #elif CONFIG_IDF_TARGET_ESP32C3
-#define ADC_EXAMPLE_CALI_SCHEME     ESP_ADC_CAL_VAL_EFUSE_TP
+#define ADC_CALI_SCHEME     ESP_ADC_CAL_VAL_EFUSE_TP
 #elif CONFIG_IDF_TARGET_ESP32S3
-#define ADC_EXAMPLE_CALI_SCHEME     ESP_ADC_CAL_VAL_EFUSE_TP_FIT
+#define ADC_CALI_SCHEME     ESP_ADC_CAL_VAL_EFUSE_TP_FIT
 #endif
 static esp_adc_cal_characteristics_t adc1_chars;
 static bool adc_calibration_init(void)
@@ -281,14 +281,14 @@ static bool adc_calibration_init(void)
     esp_err_t ret;
     bool cali_enable = false;
 
-    ret = esp_adc_cal_check_efuse(ADC_EXAMPLE_CALI_SCHEME);
+    ret = esp_adc_cal_check_efuse(ADC_CALI_SCHEME);
     if (ret == ESP_ERR_NOT_SUPPORTED) {
         ESP_LOGW(TAG, "Calibration scheme not supported, skip software calibration");
     } else if (ret == ESP_ERR_INVALID_VERSION) {
         ESP_LOGW(TAG, "eFuse not burnt, skip software calibration");
     } else if (ret == ESP_OK) {
         cali_enable = true;
-        esp_adc_cal_characterize(ADC_UNIT_1, ADC_EXAMPLE_ATTEN, ADC_WIDTH_BIT_DEFAULT, 0, &adc1_chars);
+        esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN, ADC_WIDTH_BIT_DEFAULT, 0, &adc1_chars);
     } else {
         ESP_LOGE(TAG, "Invalid arg");
     }
@@ -576,40 +576,453 @@ int8_t sleep_mode_init(uint8_t enable, float sleep_volt)
 	return 1;
 }
 #elif HARDWARE_VER == WICAN_PRO
+#include <string.h>
+#include <stdio.h>
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_adc/adc_continuous.h"
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
+#include "elm327.h"
+#include "math.h"
 
-int8_t sleep_mode_get_voltage(float *val)
+#define ADC_UNIT          ADC_UNIT_1
+#define ADC_CONV_MODE     ADC_CONV_SINGLE_UNIT_1
+#define ADC_ATTEN         ADC_ATTEN_DB_12  // 0-3.3V
+#define ADC_BIT_WIDTH     SOC_ADC_DIGI_MAX_BITWIDTH
+#define ADC_READ_LEN      256
+
+#define ADC_OUTPUT_TYPE   ADC_DIGI_OUTPUT_FORMAT_TYPE2
+#define ADC_GET_CHANNEL(p_data)   ((p_data)->type2.channel)
+#define ADC_GET_DATA(p_data)      ((p_data)->type2.data)
+
+#define TAG			 __func__
+
+static uint8_t result[ADC_READ_LEN] = {0};
+static adc_continuous_handle_t handle = NULL;
+static adc_cali_handle_t cali_handle = NULL;
+static bool do_calibration = false;
+static QueueHandle_t voltage_queue = NULL;
+static QueueHandle_t sleep_state_queue = NULL;
+
+// int8_t sleep_mode_get_voltage(float *val)
+// {
+// 	return obd_get_voltage(val);
+// }
+
+// static void sleep_task(void *pvParameters)
+// {
+// 	while (1)
+// 	{
+// 		if(gpio_get_level(SLEEP_INPUT) == 1 && config_server_get_sleep_config() == 1)
+// 		{
+// 			vTaskDelay(pdMS_TO_TICKS(20000));
+// 			if(gpio_get_level(SLEEP_INPUT) == 1)
+// 			{
+// 				ESP_LOGI(TAG, "Enabling EXT0 wakeup on pin GPIO%d\n", (int)SLEEP_INPUT);
+// 				ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(SLEEP_INPUT, 0));
+// 				rtc_gpio_pullup_dis(SLEEP_INPUT);
+// 				ESP_LOGI(TAG, "Going to sleep now");
+// 				led_set_level(0,0,0);
+// 				vTaskDelay(pdMS_TO_TICKS(1000));
+// 				esp_deep_sleep_start();
+// 			}
+// 		}
+// 		vTaskDelay(pdMS_TO_TICKS(1000));
+// 	}
+	
+// }
+
+// void sleep_mode_init(void)
+// {
+// 	gpio_reset_pin(SLEEP_INPUT);
+// 	gpio_set_direction(SLEEP_INPUT, GPIO_MODE_INPUT);
+
+// 	xTaskCreate(sleep_task, "sleep_task", 2048, (void*)AF_INET, 5, NULL);
+// }
+
+static void calibration_init(void)
 {
-	return obd_get_voltage(val);
+    esp_err_t ret = ESP_FAIL;
+    bool calibrated = false;
+
+#if ADC_CALI_SCHEME_CURVE_FITTING_SUPPORTED
+    ESP_LOGI(TAG, "calibration scheme version is %s", "Curve Fitting");
+    adc_cali_curve_fitting_config_t cali_config = {
+        .unit_id = ADC_UNIT,
+        .atten = ADC_ATTEN,
+        .bitwidth = ADC_BIT_WIDTH,
+    };
+    ret = adc_cali_create_scheme_curve_fitting(&cali_config, &cali_handle);
+    if (ret == ESP_OK) {
+        calibrated = true;
+    }
+#endif
+
+#if ADC_CALI_SCHEME_LINE_FITTING_SUPPORTED
+    if (!calibrated) 
+	{
+        ESP_LOGI(TAG, "calibration scheme version is %s", "Line Fitting");
+        adc_cali_line_fitting_config_t cali_config = 
+		{
+            .unit_id = ADC_UNIT,
+            .atten = ADC_ATTEN,
+            .bitwidth = ADC_BIT_WIDTH,
+        };
+        ret = adc_cali_create_scheme_line_fitting(&cali_config, &cali_handle);
+        if (ret == ESP_OK) 
+		{
+            calibrated = true;
+        }
+    }
+#endif
+
+    do_calibration = calibrated;
+    if (do_calibration) 
+	{
+        ESP_LOGI(TAG, "Calibration Success");
+    } else {
+        ESP_LOGW(TAG, "Calibration Failed");
+    }
 }
 
-static void sleep_task(void *pvParameters)
+static void continuous_adc_init(void)
 {
-	while (1)
+    adc_continuous_handle_cfg_t adc_config = {
+        .max_store_buf_size = 256,
+        .conv_frame_size = 64,
+    };
+    ESP_ERROR_CHECK(adc_continuous_new_handle(&adc_config, &handle));
+
+    adc_continuous_config_t dig_cfg = {
+        .sample_freq_hz = 833,
+        .conv_mode = ADC_CONV_MODE,
+        .format = ADC_OUTPUT_TYPE,
+    };
+
+    adc_digi_pattern_config_t adc_pattern[1] = {0};
+    dig_cfg.pattern_num = 1;
+    
+    adc_pattern[0].atten = ADC_ATTEN;
+    adc_pattern[0].channel = ADC_CHANNEL_3;  // GPIO4
+    adc_pattern[0].unit = ADC_UNIT;
+    adc_pattern[0].bit_width = ADC_BIT_WIDTH;
+    
+    ESP_LOGI(TAG, "ADC channel: %d, Attenuation: %d", adc_pattern[0].channel, adc_pattern[0].atten);
+    
+    dig_cfg.adc_pattern = adc_pattern;
+    ESP_ERROR_CHECK(adc_continuous_config(handle, &dig_cfg));
+}
+
+static esp_err_t read_adc_voltage(float *voltage_out)
+{
+    esp_err_t ret;
+    uint32_t ret_num = 0;
+    
+    if (voltage_out == NULL) 
 	{
-		if(gpio_get_level(SLEEP_INPUT) == 1 && config_server_get_sleep_config() == 1)
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    // Read ADC values
+    ret = adc_continuous_read(handle, result, ADC_READ_LEN, &ret_num, 0);
+    
+    if (ret == ESP_OK) 
+    {
+        uint32_t sum_raw = 0;
+        uint32_t valid_samples = 0;
+        uint32_t min_raw = UINT32_MAX;
+        uint32_t max_raw = 0;
+        int sum_voltage = 0;
+        
+        // Process all samples
+        for (int i = 0; i < ret_num; i += SOC_ADC_DIGI_RESULT_BYTES) 
+        {
+            adc_digi_output_data_t *p = (adc_digi_output_data_t*)&result[i];
+            uint32_t chan_num = ADC_GET_CHANNEL(p);
+            uint32_t data = ADC_GET_DATA(p);
+            
+            if (chan_num == ADC_CHANNEL_3 && data < 4096)
+            {
+                int voltage = 0;
+                
+                // Convert raw to voltage using calibration
+                if (do_calibration) 
+				{
+                    ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle, data, &voltage));
+                } 
+				else
+				{
+                    voltage = (data * 3300) / 4095;
+                }
+                
+                sum_raw += data;
+                sum_voltage += voltage;
+                valid_samples++;
+                
+                if (data < min_raw) min_raw = data;
+                if (data > max_raw) max_raw = data;
+                
+                // Print first few samples for debugging
+                if (valid_samples <= 5) 
+				{
+                    ESP_LOGI(TAG, "Sample[%d]: Chan=%lu, Raw=%lu, Voltage=%dmV", 
+                            (int)valid_samples, chan_num, data, voltage);
+                }
+            }
+        }
+        
+        // Calculate averages
+        if (valid_samples > 0) 
+        {
+            int avg_raw = sum_raw / valid_samples;
+            int avg_voltage = sum_voltage / valid_samples;
+
+            float volt_rounded = ((float)avg_voltage * 11) / 1000;
+            volt_rounded = roundf(volt_rounded * 100.0f) / 100.0f;
+			*voltage_out = volt_rounded;
+            ESP_LOGI(TAG, "Summary: Raw=%d (min=%lu, max=%lu, avg of %lu), Voltage=%.2f V [%s]", 
+                     avg_raw, min_raw, max_raw, valid_samples, *voltage_out,
+                     do_calibration ? "CALIBRATED" : "UNCALIBRATED");
+                     
+            return ESP_OK;
+        }
+        else 
 		{
-			vTaskDelay(pdMS_TO_TICKS(20000));
-			if(gpio_get_level(SLEEP_INPUT) == 1)
-			{
-				ESP_LOGI(TAG, "Enabling EXT0 wakeup on pin GPIO%d\n", (int)SLEEP_INPUT);
-				ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(SLEEP_INPUT, 0));
-				rtc_gpio_pullup_dis(SLEEP_INPUT);
-				ESP_LOGI(TAG, "Going to sleep now");
-				led_set_level(0,0,0);
-				vTaskDelay(pdMS_TO_TICKS(1000));
-				esp_deep_sleep_start();
-			}
-		}
-		vTaskDelay(pdMS_TO_TICKS(1000));
+            return ESP_ERR_INVALID_STATE;  // No valid samples
+        }
+    }
+    else if (ret == ESP_ERR_TIMEOUT)
+    {
+        ESP_LOGW(TAG, "Timeout on ADC continuous read");
+    }
+    
+    return ret;
+}
+
+// Battery voltage thresholds and timing
+#define BATTERY_LOW_THRESHOLD    12.5f
+#define BATTERY_HIGH_THRESHOLD   13.5f
+#define LOW_VOLTAGE_TIME_SEC     60
+#define HIGH_VOLTAGE_TIME_SEC    5
+
+
+// Function to configure wake-up sources (call before entering sleep)
+void configure_wakeup_sources(void)
+{
+    // Configure GPIO wake-up source (optional)
+    esp_sleep_enable_ext0_wakeup(SLEEP_INPUT, 0);
+    rtc_gpio_pullup_dis(SLEEP_INPUT);
+}
+
+// Function to enter deep sleep
+void enter_deep_sleep(void)
+{
+	static char response_buffer[32];
+	static uint32_t response_len = 0;
+	static int64_t response_cmd_time = 0;
+	esp_err_t sleep_ret;
+    ESP_LOGI(TAG, "Entering deep sleep");
+    configure_wakeup_sources();
+    
+    // Perform any necessary cleanup
+    adc_continuous_stop(handle);
+    
+
+	sleep_ret = elm327_sleep();
+
+	vTaskDelay(pdMS_TO_TICKS(3000));
+
+	if(sleep_ret == ESP_OK && gpio_get_level(SLEEP_INPUT) == 1)
+	{
+		printf("MIC chip is sleeping...\r\n");
 	}
+	
+	ESP_LOGI(TAG, "Going to sleep now");
+	led_set_level(0,0,0);
+	vTaskDelay(pdMS_TO_TICKS(1000));
+    // Enter deep sleep
+    esp_deep_sleep_start();
 	
 }
 
+void sleep_task(void *pvParameters)
+{
+    static float battery_voltage = 0.0;
+    esp_err_t ret;
+    system_state_t current_state = STATE_NORMAL;
+    uint32_t state_timer = 0;
+    sleep_state_info_t state_info = {0};
+    
+    // Create queues
+    voltage_queue = xQueueCreate(1, sizeof(float));
+    sleep_state_queue = xQueueCreate(1, sizeof(sleep_state_info_t));
+
+    // Initialize ADC and calibration
+    calibration_init();
+    continuous_adc_init();
+    ESP_ERROR_CHECK(adc_continuous_start(handle));
+
+    ESP_LOGI(TAG, "Reading ADC...");
+    
+    while (1) 
+    {
+        // Read and process ADC values
+        ret = read_adc_voltage(&battery_voltage);
+        
+        if (ret == ESP_OK) {
+            // Send voltage to queue
+            xQueueOverwrite(voltage_queue, &battery_voltage);
+            
+            // State machine logic
+            switch (current_state) {
+                case STATE_NORMAL:
+                    if (battery_voltage < BATTERY_LOW_THRESHOLD) {
+                        ESP_LOGW(TAG, "Battery voltage low (%.2fV), starting low voltage timer", battery_voltage);
+                        current_state = STATE_LOW_VOLTAGE;
+                        state_timer = 0;
+                    }
+                    break;
+
+                case STATE_LOW_VOLTAGE:
+                    if (battery_voltage >= BATTERY_LOW_THRESHOLD) {
+                        ESP_LOGI(TAG, "Battery voltage recovered (%.2fV)", battery_voltage);
+                        current_state = STATE_NORMAL;
+                    } else {
+                        state_timer++;
+                        if (state_timer >= LOW_VOLTAGE_TIME_SEC) {
+                            ESP_LOGW(TAG, "Battery voltage low for %d seconds, preparing to sleep", LOW_VOLTAGE_TIME_SEC);
+                            current_state = STATE_SLEEPING;
+                            
+                        }
+                    }
+                    break;
+
+                case STATE_SLEEPING:
+                    if (battery_voltage >= BATTERY_HIGH_THRESHOLD) {
+                        ESP_LOGI(TAG, "Battery voltage good (%.2fV), starting wake timer", battery_voltage);
+                        current_state = STATE_WAKE_PENDING;
+                        state_timer = 0;
+                    }
+                    break;
+
+                case STATE_WAKE_PENDING:
+                    if (battery_voltage < BATTERY_HIGH_THRESHOLD) {
+                        ESP_LOGW(TAG, "Battery voltage dropped (%.2fV), staying in sleep", battery_voltage);
+                        current_state = STATE_SLEEPING;
+                    } else {
+                        state_timer++;
+                        if (state_timer >= HIGH_VOLTAGE_TIME_SEC) {
+                            ESP_LOGI(TAG, "Battery voltage good for %d seconds, waking up", HIGH_VOLTAGE_TIME_SEC);
+                            current_state = STATE_NORMAL;
+                        }
+                    }
+                    break;
+            }
+
+            // Update state info structure
+            state_info.state = current_state;
+            state_info.voltage = battery_voltage;
+            state_info.timer = state_timer;
+            
+            // Send state info to queue
+            xQueueOverwrite(sleep_state_queue, &state_info);
+
+            ESP_LOGI(TAG, "State: %d, Battery: %.2fV, Timer: %lu", 
+                     current_state, battery_voltage, state_timer);
+
+			// Add your sleep preparation code here
+			if(current_state == STATE_SLEEPING)
+			{
+				enter_deep_sleep();
+				vTaskDelay(pdMS_TO_TICKS(2000));
+			}
+            
+        } else {
+            ESP_LOGW(TAG, "Failed to read ADC: %d", ret);
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
+
+esp_err_t sleep_mode_get_state(sleep_state_info_t *state_info)
+{
+    if (state_info == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    if (sleep_state_queue == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    if (xQueuePeek(sleep_state_queue, state_info, 0) != pdTRUE) {
+        return ESP_ERR_NOT_FOUND;
+    }
+    
+    return ESP_OK;
+}
+
+int8_t sleep_mode_get_voltage(float *val)
+{
+	if(voltage_queue != NULL)
+	{
+		if(xQueuePeek( voltage_queue, val, 0 ))
+		{
+			return 1;
+		}
+		else return -1;
+	}
+	return -1;
+}
+
+void sleep_mode_print_wakeup_reason(void)
+{
+    esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+
+    switch(wakeup_reason)
+    {
+        case ESP_SLEEP_WAKEUP_EXT0:
+            ESP_LOGI(TAG, "Wake up from ext0");
+            break;
+        case ESP_SLEEP_WAKEUP_EXT1:
+            {
+                uint64_t wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
+                if (wakeup_pin_mask != 0) {
+                    int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
+                    ESP_LOGI(TAG, "Wake up from GPIO %d", pin);
+                } else {
+                    ESP_LOGI(TAG, "Wake up from GPIO (pin not identified)");
+                }
+            }
+            break;
+        case ESP_SLEEP_WAKEUP_TIMER:
+            ESP_LOGI(TAG, "Wake up from timer");
+            break;
+        case ESP_SLEEP_WAKEUP_TOUCHPAD:
+            ESP_LOGI(TAG, "Wake up from touchpad");
+            break;
+        case ESP_SLEEP_WAKEUP_ULP:
+            ESP_LOGI(TAG, "Wake up from ULP");
+            break;
+        case ESP_SLEEP_WAKEUP_GPIO:
+            ESP_LOGI(TAG, "Wake up from GPIO");
+            break;
+        case ESP_SLEEP_WAKEUP_UART:
+            ESP_LOGI(TAG, "Wake up from UART");
+            break;
+        default:
+            ESP_LOGI(TAG, "Wake up not caused by deep sleep: %d", wakeup_reason);
+            break;
+    }
+}
 void sleep_mode_init(void)
 {
 	gpio_reset_pin(SLEEP_INPUT);
 	gpio_set_direction(SLEEP_INPUT, GPIO_MODE_INPUT);
 
-	xTaskCreate(sleep_task, "sleep_task", 2048, (void*)AF_INET, 5, NULL);
+	xTaskCreate(sleep_task, "sleep_task", 4096, (void*)AF_INET, 5, NULL);
 }
+
 #endif
