@@ -840,16 +840,17 @@ void enter_deep_sleep(void)
 	if(sleep_ret == ESP_OK && gpio_get_level(SLEEP_INPUT) == 1)
 	{
 		printf("MIC chip is sleeping...\r\n");
-		ESP_LOGI(TAG, "Going to sleep now");
-		led_set_level(0,0,0);
-		vTaskDelay(pdMS_TO_TICKS(1000));
-		// Enter deep sleep
-		esp_deep_sleep_start();
 	}
 	else
 	{
 		printf("MIC sleep failed...\r\n");
 	}
+
+	ESP_LOGI(TAG, "Going to sleep now");
+	led_set_level(0,0,0);
+	vTaskDelay(pdMS_TO_TICKS(1000));
+	// Enter deep sleep
+	esp_deep_sleep_start();
 }
 
 void sleep_task(void *pvParameters)

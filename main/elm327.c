@@ -1715,6 +1715,8 @@ esp_err_t elm327_sleep(void)
 
 	if (xSemaphoreTake(xuart1_semaphore, portMAX_DELAY) == pdTRUE)
 	{
+		uart_flush_input(UART_NUM_1);
+		xQueueReset(uart1_queue);
         uart_write_bytes(UART_NUM_1, "STSLEEP1\r", 10);
         int len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, sizeof(rsp_buffer), "\r>", UART_TIMEOUT_MS+300);
 		if(len > 0 && strstr(rsp_buffer, "OK\r\r>"))
@@ -1726,6 +1728,8 @@ esp_err_t elm327_sleep(void)
 		{
 			ret = ESP_FAIL;
 		}
+		uart_flush_input(UART_NUM_1);
+		xQueueReset(uart1_queue);
 		xSemaphoreGive(xuart1_semaphore);
 	}
 	return ret;
