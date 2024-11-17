@@ -778,8 +778,11 @@ static esp_err_t read_adc_voltage(float *voltage_out)
         {
             int avg_raw = sum_raw / valid_samples;
             int avg_voltage = sum_voltage / valid_samples;
-
-            float volt_rounded = ((float)avg_voltage * 11) / 1000;
+			#ifdef HV_PRO_V140
+            float volt_rounded = ((float)avg_voltage * 7.25f) / 1000;
+			#else
+			float volt_rounded = ((float)avg_voltage * 11) / 1000;
+			#endif
             volt_rounded = roundf(volt_rounded * 100.0f) / 100.0f;
 			*voltage_out = volt_rounded;
             ESP_LOGI(TAG, "Summary: Raw=%d (min=%lu, max=%lu, avg of %lu), Voltage=%.2f V [%s]", 
@@ -804,7 +807,7 @@ static esp_err_t read_adc_voltage(float *voltage_out)
 // Battery voltage thresholds and timing
 #define BATTERY_LOW_THRESHOLD    12.5f
 #define BATTERY_HIGH_THRESHOLD   13.5f
-#define LOW_VOLTAGE_TIME_SEC     60
+#define LOW_VOLTAGE_TIME_SEC     120
 #define HIGH_VOLTAGE_TIME_SEC    5
 
 
@@ -832,19 +835,21 @@ void enter_deep_sleep(void)
 
 	sleep_ret = elm327_sleep();
 
-	vTaskDelay(pdMS_TO_TICKS(3000));
+	vTaskDelay(pdMS_TO_TICKS(5000));
 
 	if(sleep_ret == ESP_OK && gpio_get_level(SLEEP_INPUT) == 1)
 	{
 		printf("MIC chip is sleeping...\r\n");
+		ESP_LOGI(TAG, "Going to sleep now");
+		led_set_level(0,0,0);
+		vTaskDelay(pdMS_TO_TICKS(1000));
+		// Enter deep sleep
+		esp_deep_sleep_start();
 	}
-	
-	ESP_LOGI(TAG, "Going to sleep now");
-	led_set_level(0,0,0);
-	vTaskDelay(pdMS_TO_TICKS(1000));
-    // Enter deep sleep
-    esp_deep_sleep_start();
-	
+	else
+	{
+		printf("MIC sleep failed...\r\n");
+	}
 }
 
 void sleep_task(void *pvParameters)
