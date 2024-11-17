@@ -1627,7 +1627,7 @@ bool elm327_set_baudrate(void)
 
         uart_write_bytes(UART_NUM_1, "STI\r", 4);
         
-        len = uart_read_until_pattern(UART_NUM_1, rx_buffer, BUFFER_SIZE - 1, ">\r", UART_TIMEOUT_MS);
+        len = uart_read_until_pattern(UART_NUM_1, rx_buffer, BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
         
         if (len > 2 && rx_buffer[len-2] == '\r' && rx_buffer[len-1] == '>')
         {
@@ -1640,7 +1640,7 @@ bool elm327_set_baudrate(void)
             ESP_LOGI(TAG, "Trying %d baud", DEFAULT_BAUD_RATE);
             
             uart_write_bytes(UART_NUM_1, "STI\r", 4);
-            len = uart_read_until_pattern(UART_NUM_1, rx_buffer, BUFFER_SIZE - 1, ">\r", UART_TIMEOUT_MS);
+            len = uart_read_until_pattern(UART_NUM_1, rx_buffer, BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
             
             if (len > 2 && rx_buffer[len-2] == '\r' && rx_buffer[len-1] == '>')
             {
@@ -1657,7 +1657,7 @@ bool elm327_set_baudrate(void)
                     uart_set_baudrate(UART_NUM_1, DESIRED_BAUD_RATE);
                     
                     uart_write_bytes(UART_NUM_1, "STI\r", 4);
-                    len = uart_read_until_pattern(UART_NUM_1, rx_buffer, BUFFER_SIZE - 1, ">\r", UART_TIMEOUT_MS);
+                    len = uart_read_until_pattern(UART_NUM_1, rx_buffer, BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
                     
                     if (len > 2 && rx_buffer[len-2] == '\r' && rx_buffer[len-1] == '>')
                     {
@@ -1665,7 +1665,7 @@ bool elm327_set_baudrate(void)
                         success = true;
                         
                         uart_write_bytes(UART_NUM_1, "STWBR\r", 6);
-                        uart_read_until_pattern(UART_NUM_1, rx_buffer, BUFFER_SIZE - 1, ">\r", UART_TIMEOUT_MS);
+                        uart_read_until_pattern(UART_NUM_1, rx_buffer, BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
                     }
                     else
                     {
@@ -1697,7 +1697,7 @@ void elm327_hardreset_chip(void)
 		// vTaskDelay(pdMS_TO_TICKS(10));
 		// gpio_set_level(OBD_RESET_PIN, 1);
         uart_write_bytes(UART_NUM_1, "ATZ\r", 4);
-        int len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, BUFFER_SIZE - 1, ">\r", UART_TIMEOUT_MS+300);
+        int len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS+300);
 		if(len > 0)
 		{
 			ESP_LOGW(TAG, "Hardreset OK");
@@ -1716,8 +1716,8 @@ esp_err_t elm327_sleep(void)
 	if (xSemaphoreTake(xuart1_semaphore, portMAX_DELAY) == pdTRUE)
 	{
         uart_write_bytes(UART_NUM_1, "STSLEEP1\r", 10);
-        int len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, BUFFER_SIZE - 1, ">\r", UART_TIMEOUT_MS+300);
-		if(len > 0 && strstr(rsp_buffer, "OK\r>"))
+        int len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, sizeof(rsp_buffer), "\r>", UART_TIMEOUT_MS+300);
+		if(len > 0 && strstr(rsp_buffer, "OK\r\r>"))
 		{
 			ESP_LOGW(TAG, "Sleep OK");
 			ret = ESP_OK;
