@@ -207,6 +207,8 @@
             background-color: var(--gray-50);
         }
 
+
+        
         .status-indicator {
             display: inline-flex;
             align-items: center;
@@ -260,6 +262,74 @@
         .notification-container.show {
             display: block;
         }
+        .form-input::placeholder {
+            font-size: 14px; /* Adjust the size as needed */
+            color: #888; /* Optional: Customize the color */
+        }
+/*********************************/
+/* Add only these new styles */
+.custom-init-group {
+    margin-bottom: 1.5rem;
+}
+
+.custom-init-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--gray-700);
+}
+
+.pid-entry {
+    border: none;
+    border-radius: 8px;
+    padding: 0rem;
+    margin-bottom: 0.2rem;
+    background: var(--white);
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--gray-600);
+}
+
+.pid-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.pid-title {
+    color: var(--gray-700);
+}
+
+.pid-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.pid-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.pid-field label {
+    color: var(--gray-700);
+}
+
+.pid-field input,
+.pid-field select {
+    width: 50%;
+    padding: 0.75rem;
+    border: 1px solid var(--gray-300);
+    border-radius: 6px;
+}
+
+.button-group {
+    margin-top: 1rem;
+    display: flex;
+    gap: 1rem;
+}
+/*********************************/
 
         @media (max-width: 768px) {
             .notification-container {
@@ -712,7 +782,7 @@
                 <tr>
                     <td>Vehicle Specific:</td>
                     <td>
-                        <select id="car_specific" name="car_specific" onchange="toggleCarModel(); toggleDestinationAndCycle(); enableAutoStoreButton();">
+                        <select id="car_specific" name="car_specific" onchange="toggleCarModel(); toggleDestinationAndCycle(); enableAutoStoreButton();submit_enable();">
                             <option value="enable">Enable</option>
                             <option value="disable">Disable</option>
                         </select>
@@ -721,7 +791,7 @@
                 <tr>
                     <td>Vehicle Model:</td>
                     <td style="display: flex; align-items: center; gap: 5px;">
-                        <select id="car_model" name="car_model" onchange="enableAutoStoreButton()" style="flex: 1;"></select>
+                        <select id="car_model" name="car_model" onchange="enableAutoStoreButton();submit_enable();" style="flex: 1;"></select>
                         <div onclick="fetchVehicleProfiles()" style="cursor: pointer; display: flex; align-items: center;">
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-refresh-cw">
                                 <polyline points="23 4 23 10 17 10"></polyline>
@@ -735,7 +805,7 @@
                 <tr>
                     <td>Home Assistant Discovery:</td>
                     <td>
-                        <select id="ha_discovery" name="ha_discovery" onchange="checkForDuplicates(); toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();">
+                        <select id="ha_discovery" name="ha_discovery" onchange="checkForDuplicates(); toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
                             <option value="disable">Disable</option>
                         </select>
                     </td>
@@ -743,7 +813,7 @@
                 <tr>
                     <td>Grouping:</td>
                     <td>
-                        <select id="grouping" name="grouping" onchange="checkForDuplicates(); toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();">
+                        <select id="grouping" name="grouping" onchange="checkForDuplicates(); toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
                             <option value="disable">Disable</option>
                         </select>
                     </td>
@@ -751,49 +821,42 @@
                 <tr>
                     <td>Destination Topic:</td>
                     <td>
-                        <input type="text" id="destination" name="destination" disabled oninput="enableAutoStoreButton()">
+                        <input type="text" id="destination" name="destination" disabled oninput="enableAutoStoreButton();submit_enable();">
                     </td>
                 </tr>
                 <tr>
                     <td>Cycle Time(ms):</td>
                     <td>
-                        <input type="text" id="pid_cycle" name="pid_cycle" value="5000" disabled oninput="enableAutoStoreButton()">
+                        <input type="text" id="pid_cycle" name="pid_cycle" value="5000" disabled oninput="enableAutoStoreButton();submit_enable();">
                     </td>
                 </tr>
                 <tr>
                     <td>Vehicle Profiles:</td>
                     <td>
                         <form id="car_data_form" enctype="multipart/form-data">
-                            <input id="car_data_file" name="car_data_file" type="file" onchange="sendCARDataFile()" />
+                            <input id="car_data_file" name="car_data_file" type="file" onchange="sendCARDataFile();submit_enable();" />
                         </form>
                     </td>
                 </tr>
+            </table>
+            <div class="section-title">Custom PIDs</div>
+            <table class="form-table">
                 <tr>
+                    <td>Custom Initialisation:</td>
                     <td>
-                        <button class="store" onclick="storeAutoTableData()" disabled>Store</button>
+                        <input type="text" id="initialisation" name="initialisation" oninput="enableAutoStoreButton()">
                     </td>
                 </tr>
             </table>
-            <div class="divider"></div>
-            <div class="section-title">Custom PIDs</div>
-            <label for="initialisation"><strong>Custom Initialisation:</strong></label>
-            <input type="text" style="width: 100%;" id="initialisation" name="initialisation" oninput="enableAutoStoreButton()">
-            <br><br>
-            <table id="automate_table" class="form-table">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Init</th>
-                        <th>PID</th>
-                        <th>Expression</th>
-                        <th>Period(ms)</th>
-                        <th>Type</th>
-                        <th>Send_to</th>
-                        <th><button class="add" style="width: 80px;" onclick="addRowAutoTable()">New</button></th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
+            
+            <div id="automate_table">
+                <div class="pid-entries"></div>
+            </div>
+            
+            <div class="button-group">
+                <button onclick="addRowAutoTable()" class="primary-button">New</button>
+                <button id="custom_pid_store" onclick="storeAutoTableData()" class="store" disabled>Store</button>
+            </div>
         </div>
 
         <div id="monitor" class="tabcontent">
@@ -1077,354 +1140,360 @@
 			}
 		}
 
-        function loadAutoTable(jsonData) {
-            const data = JSON.parse(jsonData);
-			const initialisation = data.initialisation;
-			const protocol = data.protocol;
-			const grouping = data.grouping;
-			const destination = data.destination;
-			const cycle = data.cycle;
-			const carSpecific = data.car_specific;
-			const ha_discovery = data.ha_discovery;
-			const carModel = data.car_model;
-			const pids = data.pids;
-			const table = document.getElementById("automate_table").getElementsByTagName('tbody')[0];
-
-			if(carSpecific != "enable"){
-				document.getElementById("car_specific").value = "disable";
-			}else{
-				document.getElementById("car_specific").value = carSpecific;
-			}
-			document.getElementById("ha_discovery").value = "disable";
-			if(grouping != "enable"){
-				document.getElementById("grouping").value = "disable";
-			}else{
-				document.getElementById("grouping").value = grouping;
-			}
-			if(cycle === undefined){
-				document.getElementById("pid_cycle").value = 5000;
-			}else{
-				document.getElementById("pid_cycle").value = cycle;
-			}
-			if(destination === undefined){
-				document.getElementById("destination").value = "";
-			}else{
-				document.getElementById("destination").value = destination;
-			}
-			// Set values for the fields
-			document.getElementById("initialisation").value = initialisation;
-			document.getElementById("car_model").value = carModel;
-
-			// Trigger change events to apply any dependent changes
-			document.getElementById("car_specific").dispatchEvent(new Event('change'));
-			document.getElementById("grouping").dispatchEvent(new Event('change'));
-
-			// Insert rows into the table
-			pids.forEach(rowData => {
-				const newRow = table.insertRow();
-				insertRowCells(newRow, rowData);
-			});
-
-			// Debugging: Log the values to ensure they are set correctly
-			console.log("Initialisation:", initialisation);
-			console.log("Protocol:", protocol);
-			console.log("Grouping:", grouping);
-			console.log("Destination:", destination);
-			console.log("Cycle:", cycle);
-			console.log("Car Specific:", carSpecific);
-			console.log("Car Model:", carModel);
-
-			// Ensure the correct state
-			toggleCarModel();
-			toggleDestinationAndCycle();
-			toggleSendToFields();
-        }
-
         function addRowAutoTable() {
-            const table = document.getElementById("automate_table").getElementsByTagName('tbody')[0];
-            const newRow = table.insertRow();
-            insertRowCells(newRow, {});
-            enableAutoStoreButton();
-        }
-
-function insertRowCells(newRow, rowData) {
-    const columns = [
-        "Name",
-        "Init",
-        "PID",
-        "Expression",
-        "Period",
-        "Type",
-        "Send_to"
-    ];
-
-    // Column width configurations
-    const columnWidths = {
-        Name: "8%",
-        Init: "10%",
-        PID: "10%",
-        Expression: "20%",
-        Period: "10%",
-        Type: "15%",
-        Send_to: "15%"
-    };
-
-    columns.forEach(column => {
-        const newCell = newRow.insertCell();
-        newCell.style.width = columnWidths[column];
-
-        if (column === "Type") {
-            const select = document.createElement("select");
-            select.name = column;
-            select.className = "form-select";
-            const options = ["MQTT_Topic", "MQTT_WallBox"];
-
-            options.forEach(optionValue => {
-                const option = document.createElement("option");
-                option.value = optionValue;
-                option.text = optionValue;
-                select.appendChild(option);
-            });
-
-            if (rowData[column]) {
-                select.value = rowData[column];
-            }
-            
-            select.addEventListener('change', enableAutoStoreButton);
-            newCell.appendChild(select);
-        } else {
-            const input = document.createElement("input");
-            input.type = "text";
-            input.name = column;
-            input.value = rowData[column] || "";
-            input.className = "form-input";
-
-            // Set specific attributes based on column
-            switch (column) {
-                case "PID":
-                    input.addEventListener('input', checkForDuplicates);
-                    input.placeholder = "Enter PID";
-                    break;
-                case "Period":
-                    input.placeholder = "ms";
-                    input.type = "number";
-                    input.min = "100";
-                    input.step = "100";
-                    break;
-                case "Name":
-                    input.placeholder = "Enter name";
-                    input.maxLength = "32";
-                    break;
-                case "Expression":
-                    input.placeholder = "Enter expression";
-                    input.maxLength = "32";
-                    break;
-                case "Send_to":
-                    input.placeholder = "Enter destination";
-                    input.maxLength = "64";
-                    break;
-            }
-
-            input.addEventListener('input', enableAutoStoreButton);
-            newCell.appendChild(input);
-        }
-    });
-
-    // Add delete button cell
-    const deleteCell = newRow.insertCell();
-    deleteCell.style.width = "5%";
-    const deleteButton = document.createElement("button");
-    deleteButton.className = "delete";
-    deleteButton.innerText = "Delete";
-    deleteButton.onclick = function() {
-        const row = this.parentNode.parentNode;
-        row.parentNode.removeChild(row);
-        checkForDuplicates();
-        enableAutoStoreButton();
-    };
-    deleteCell.appendChild(deleteButton);
+    addCollapsibleRow();
+    enableAutoStoreButton();
 }
 
+function addCollapsibleRow(rowData = {}) {
+    const container = document.querySelector('.pid-entries');
+    const entry = document.createElement('div');
+    entry.className = 'pid-entry';
+
+    entry.innerHTML = `
+        <div class="pid-header">
+            <div class="header-left">
+                <button type="button" class="collapse-btn">▼</button>
+                <span class="pid-title">New PID</span>
+            </div>
+            <div class="header-right">
+                <button type="button" class="delete-btn">Delete</button>
+            </div>
+        </div>
+        <div class="pid-content hidden">
+            <div class="pid-field">
+                <label>Name</label>
+                <input type="text" class="name-input" value="${rowData.Name || ''}" placeholder="Parameter Name">
+            </div>
+            <div class="pid-field">
+                <label>Init</label>
+                <input type="text" class="init-input" value="${rowData.Init || ''}" placeholder="PID Init">
+            </div>
+            <div class="pid-field">
+                <label>PID</label>
+                <input type="text" class="pid-input" value="${rowData.PID || ''}" placeholder="PID">
+            </div>
+            <div class="pid-field">
+                <label>Expression</label>
+                <input type="text" class="expression-input" value="${rowData.Expression || ''}" placeholder="Enter expression">
+            </div>
+            <div class="pid-field">
+                <label>Period(ms)</label>
+                <input type="number" class="period-input" value="${rowData.Period || ''}" placeholder="ms">
+            </div>
+            <div class="pid-field">
+                <label>Type</label>
+                <select class="type-select">
+                    <option value="MQTT_Topic" ${rowData.Type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
+                    <option value="MQTT_WallBox" ${rowData.Type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
+                </select>
+            </div>
+            <div class="pid-field">
+                <label>Send_to</label>
+                <input type="text" class="send-to-input" value="${rowData.Send_to || ''}" placeholder="Enter destination">
+            </div>
+        </div>
+    `;
+
+    // Add these CSS styles
+    const style = document.createElement('style');
+    style.textContent = `
+        .pid-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+            margin-top: 0.5rem;
+            border: 2px solid var(--gray-300);
+            border-radius: 8px;
+        }
+        
+        .header-right {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .collapse-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 0.25rem 0.5rem;
+            color: var(--gray-700);
+        }
+        
+        .pid-content {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            transition: height 0.3s ease;
+        }
+        
+        .pid-content.hidden {
+            display: none;
+        }
+    `;
+    document.head.appendChild(style);
+    const header = entry.querySelector('.pid-header');
+    const deleteBtn = entry.querySelector('.delete-btn');
+    const collapseBtn = entry.querySelector('.collapse-btn');
+    const content = entry.querySelector('.pid-content');
+    const parameterTitle = entry.querySelector('.pid-title');
+    const nameInput = entry.querySelector('.name-input');
+    const pidInput = entry.querySelector('.pid-input');
+
+    deleteBtn.addEventListener('click', () => {
+        entry.remove();
+        enableAutoStoreButton();
+    });
+
+    const toggleCollapse = (e) => {
+        e.stopPropagation();
+        const isHidden = content.style.display === 'none';
+        content.style.display = isHidden ? 'block' : 'none';
+        collapseBtn.textContent = isHidden ? '▲' : '▼';
+    };
+
+    header.addEventListener('click', toggleCollapse);
+    collapseBtn.addEventListener('click', toggleCollapse);
+
+    parameterTitle.textContent = rowData.Name ? rowData.Name : 'New PID';
+    const updateTitle = () => {
+        parameterTitle.textContent = `${nameInput.value || 'New Parameter'}`;
+    };
+
+    nameInput.addEventListener('input', updateTitle);
+    pidInput.addEventListener('input', updateTitle);
+
+    entry.querySelectorAll('input, select').forEach(input => {
+        input.addEventListener('input', enableAutoStoreButton);
+    });
+
+    container.appendChild(entry);
+}
+
+// Update the loadAutoTable function to work with the new structure
+function loadAutoTable(jsonData) {
+        try {
+            console.log("Raw jsonData:", jsonData);
+            const data = JSON.parse(jsonData);
+            console.log("Parsed data:", data);
+
+            // First set the initialisation value
+            const initialisationElement = document.getElementById("initialisation");
+            if (initialisationElement) {
+                initialisationElement.value = data.initialisation || '';
+            }
+
+            // Clear existing content
+            const automateTable = document.getElementById("automate_table");
+            if (!automateTable) {
+                console.error("Automate table not found");
+                return;
+            }
+
+            // Set form values safely
+            const setElementValue = (id, value, defaultValue = '') => {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.value = value || defaultValue;
+                }
+            };
+
+            setElementValue("car_specific", data.car_specific, 'disable');
+            setElementValue("ha_discovery", 'disable');
+            setElementValue("grouping", data.grouping, 'disable');
+            setElementValue("pid_cycle", data.cycle, '5000');
+            setElementValue("destination", data.destination, '');
+            setElementValue("car_model", data.car_model, '');
+
+            // Load PIDs data
+            if (data.pids && Array.isArray(data.pids)) {
+                data.pids.forEach((pidData, index) => {
+                    console.log(`Loading PID ${index}:`, pidData);
+                    addCollapsibleRow({
+                        Name: pidData.Name || '',
+                        Init: pidData.Init || '',
+                        PID: pidData.PID || '',
+                        Expression: pidData.Expression || '',
+                        Period: pidData.Period || '',
+                        Type: pidData.Type || 'MQTT_Topic',
+                        Send_to: pidData.Send_to || ''
+                    });
+                });
+            }
+
+            // Update UI states after elements are created
+            requestAnimationFrame(() => {
+                try {
+                    const carSpecificElement = document.getElementById("car_specific");
+                    if (carSpecificElement) {
+                        carSpecificElement.dispatchEvent(new Event('change'));
+                    }
+
+                    const groupingElement = document.getElementById("grouping");
+                    if (groupingElement) {
+                        groupingElement.dispatchEvent(new Event('change'));
+                    }
+
+                    if (typeof toggleCarModel === 'function') toggleCarModel();
+                    if (typeof toggleDestinationAndCycle === 'function') toggleDestinationAndCycle();
+                    if (typeof toggleSendToFields === 'function') toggleSendToFields();
+                } catch (error) {
+                    console.error('Error in UI updates:', error);
+                }
+            });
+
+            console.log("loadAutoTable completed successfully");
+
+        } catch (error) {
+            console.error('Error in loadAutoTable:', error);
+            showNotification("Error loading table data: " + error.message, "red");
+        }
+    }
+
+
         function enableAutoStoreButton() {
-            document.querySelector(".store").disabled = false;
+            const storeButton = document.querySelector('button.store');
+            if (storeButton) {
+                storeButton.disabled = false;
+            }
+            document.getElementById("custom_pid_store").disabled = false;
         }
 		
-        function storeAutoTableData() {
+        async function storeAutoTableData() {
+        try {
+            // Get all PID entries
+            const entries = document.querySelectorAll('.pid-entry');
+            const data = [];
+
+            // Get form values
             const initialisationValue = document.getElementById("initialisation").value;
             const groupingValue = document.getElementById("grouping").value;
-			const ha_discoveryValue = document.getElementById("ha_discovery").value;
+            const ha_discoveryValue = document.getElementById("ha_discovery").value;
             const destinationValue = document.getElementById("destination").value;
-			const cycleField = document.getElementById("pid_cycle");
-            const cycleValue = document.getElementById("pid_cycle").value;
+            const cycleField = document.getElementById("pid_cycle");
+            const cycleValue = cycleField.value;
             const carSpecificValue = document.getElementById("car_specific").value;
-			const carModelField = document.getElementById("car_model");
-            const carModelValue = document.getElementById("car_model").value;
-            const table = document.getElementById("automate_table").getElementsByTagName('tbody')[0];
-            const rows = table.getElementsByTagName('tr');
-            const data = [];
-            const namesSet = new Set();
+            const carModelField = document.getElementById("car_model");
+            const carModelValue = carModelField.value;
 
-			if (latest_car_models != null) {
-				console.log("latest_car_models:", latest_car_models);
-				
-				if (latest_car_models && Array.isArray(latest_car_models.cars)) {
-					// Iterate over each car object in the 'cars' array
-					latest_car_models.cars.forEach((car, index) => {
-						// Check if 'car_model' exists and add it to the carModels array
-						if (car.car_model == carModelValue) {
-							console.log("Matched car at index", index, ":", car);
-							var cars_file = { "cars": [car] };
-							console.log("cars_file", cars_file);
-							fetch('/store_car_data', {
-								method: 'POST',
-								headers: {
-									'Content-Type': 'application/json'
-								},
-								body: JSON.stringify(cars_file)
-							})
-							.then(response => response.text())
-							.then(data => console.log('Success:', data))
-							.catch(error => console.error('Error:', error));
-						}
-					});
-				}
-
-				latest_car_models = null;
-			}
-
+            // Validate cycle time
             if (!cycleField.disabled && (!/^\d+$/.test(cycleValue) || parseInt(cycleValue) < 1000)) {
-                alert("Cycle must be a number greater than 1000");
-                return;
+                showNotification("Cycle must be a number greater than 1000", "red");
+                return false;
             }
 
-			if (!carModelField.disabled && carModelValue.length === 0){
-                alert("Car Model must be selected");
-                return;
-			}
-
-            for (let i = 0; i < rows.length; i++) {
-                const cells = rows[i].getElementsByTagName('input');
-                const selectCells = rows[i].getElementsByTagName('select');
-                const rowData = {};
-                let isValid = true;
-
-                for (let j = 0; j < cells.length; j++) {
-                    const name = cells[j].name;
-                    const value = cells[j].value;
-
-                    if (name === "Name") {
-                        if (value.length === 0 || value.length >= 32) {
-                            alert("Name must not be empty and must be less than 32 characters");
-                            isValid = false;
-                            break;
-                        } else if (namesSet.has(value)) {
-                            alert("Name must be unique in the table");
-                            isValid = false;
-                            break;
-                        } else {
-                            namesSet.add(value);
-                        }
-                    } else if (name === "PID" && value.length === 0) {
-                        alert("PID cannot be empty");
-                        isValid = false;
-                        break;
-                    } else if (name === "PID" && value.length >= 10) {
-                        alert("PID must be less than 10 characters");
-                        isValid = false;
-                        break;
-                    } else if (name === "Expression" && value.length === 0) {
-                        alert("Expression cannot be empty");
-                        isValid = false;
-                        break;
-                    } else if (name === "Expression" && value.length >= 32) {
-                        alert("Expression must be less than 32 characters");
-                        isValid = false;
-                        break;
-                    } else if (name === "Period" && (!/^\d+$/.test(value) || (parseInt(value) < 100 && parseInt(value) != 0))) {
-                        alert("Period must be a number greater than 100");
-                        isValid = false;
-                        break;
-                    } else if (name === "Send_to" && value.length >= 64) {
-                        alert("Send_to must be less than 64 characters");
-                        isValid = false;
-                        break;
-                    }
-                    rowData[name] = value;
-                }
-
-                for (let k = 0; k < selectCells.length; k++) {
-                    const name = selectCells[k].name;
-                    const value = selectCells[k].value;
-                    rowData[name] = value;
-                }
-
-                if (!isValid) {
-                    return;
-                }
-
-                data.push(rowData);
+            // Validate car model
+            if (!carModelField.disabled && carModelValue.length === 0) {
+                showNotification("Car Model must be selected", "red");
+                return false;
             }
 
-            const jsonData = JSON.stringify({
+            // Process each PID entry
+            entries.forEach(entry => {
+                const pidData = {
+                    Name: entry.querySelector('.name-input').value,
+                    Init: entry.querySelector('.init-input').value,
+                    PID: entry.querySelector('.pid-input').value,
+                    Expression: entry.querySelector('.expression-input').value,
+                    Period: entry.querySelector('.period-input').value,
+                    Type: entry.querySelector('.type-select').value,
+                    Send_to: entry.querySelector('.send-to-input').value
+                };
+
+                // Validate fields
+                if (pidData.Name.length === 0 || pidData.Name.length >= 32) {
+                    throw new Error("Name must not be empty and must be less than 32 characters");
+                }
+                if (pidData.PID.length === 0 || pidData.PID.length >= 10) {
+                    throw new Error("PID must not be empty and must be less than 10 characters");
+                }
+                if (pidData.Expression.length === 0 || pidData.Expression.length >= 32) {
+                    throw new Error("Expression must not be empty and must be less than 32 characters");
+                }
+                if (!/^\d+$/.test(pidData.Period) || (parseInt(pidData.Period) < 100 && parseInt(pidData.Period) != 0)) {
+                    throw new Error("Period must be a number greater than 100");
+                }
+                if (pidData.Send_to.length >= 64) {
+                    throw new Error("Send_to must be less than 64 characters");
+                }
+
+                data.push(pidData);
+            });
+
+            // Prepare data object for sending
+            const jsonData = {
                 initialisation: initialisationValue,
                 grouping: groupingValue,
                 destination: destinationValue,
                 cycle: cycleValue,
                 car_specific: carSpecificValue,
-				ha_discovery: ha_discoveryValue,
+                ha_discovery: ha_discoveryValue,
                 car_model: carModelValue,
                 pids: data
-            });
+            };
 
-            // Make an HTTP POST request with the jsonData
-            fetch('store_auto_data', {
+            // Send to server
+            await fetch('store_auto_data', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: jsonData
+                body: JSON.stringify(jsonData)
             })
-            // .then(response => response.json())
-            // .then(data => {
-            //     console.log('Success:', data);
-            // })
-            // .catch((error) => {
-            //     console.error('Error:', error);
-            // });
+            .then(response => response.text())
+            .then(result => {
+                showNotification("Settings saved successfully", "green");
+                document.querySelector(".store").disabled = true;
+                document.getElementById("custom_pid_store").disabled = true;
+            })
+            .catch(error => {
+                showNotification("Error saving settings: " + error.message, "red");
+                return false;
+            });
 
-            document.querySelector(".store").disabled = true;
+            return true;
+
+        } catch (error) {
+            showNotification(error.message, "red");
+            return false;
         }
+    }
 
 
-        function checkForDuplicates() {
-            const groupingValue = document.getElementById("grouping").value;
-            if (groupingValue === "Group PID") {
-                const table = document.getElementById("automate_table").getElementsByTagName('tbody')[0];
-                const rows = table.getElementsByTagName('tr');
-                const pidSet = new Set();
-                for (let i = 0; i < rows.length; i++) {
-                    const pidInput = rows[i].querySelector('input[name="PID"]');
-                    const sendToInput = rows[i].querySelector('input[name="Send_to"]');
-                    if (pidInput) {
-                        const pidValue = pidInput.value;
-                        if (pidSet.has(pidValue)) {
-                            sendToInput.disabled = true;
-                            sendToInput.value = '';
-                        } else {
-                            pidSet.add(pidValue);
-                            sendToInput.disabled = false;
-                        }
-                    }
-                }
-            } else {
-                const table = document.getElementById("automate_table").getElementsByTagName('tbody')[0];
-                const rows = table.getElementsByTagName('tr');
-                for (let i = 0; i < rows.length; i++) {
-                    const sendToInput = rows[i].querySelector('input[name="Send_to"]');
-                    sendToInput.disabled = false;
+    function checkForDuplicates() {
+        const rows = document.querySelectorAll('.pid-entry');
+        const pidMap = new Map();
+
+        rows.forEach(row => {
+            const pidInput = row.querySelector('.pid-input');
+            const sendToInput = row.querySelector('.send-to-input');
+            
+            if (pidInput && pidInput.value) {
+                const pidValue = pidInput.value;
+
+                // Check if the PID already exists
+                if (pidMap.has(pidValue)) {
+                    pidMap.get(pidValue).push(sendToInput);
+                } else {
+                    pidMap.set(pidValue, [sendToInput]);
                 }
             }
-        }
+        });
+
+        // Disable `sendToInput` for duplicate PIDs
+        pidMap.forEach((inputs, pid) => {
+            if (inputs.length > 1) {
+                inputs.forEach(input => {
+                    input.disabled = true;
+                    input.value = '';
+                });
+            } else {
+                inputs[0].disabled = false; // Enable input if it's not a duplicate
+            }
+        });
+    }
 
         function toggleDestinationField() {
 			const groupingValue = document.getElementById("grouping").value;
@@ -1432,17 +1501,19 @@ function insertRowCells(newRow, rowData) {
         }
 
         function toggleSendToFields() {
-            const groupingValue = document.getElementById("grouping").value;
-            const table = document.getElementById("automate_table").getElementsByTagName('tbody')[0];
-            const rows = table.getElementsByTagName('tr');
-            for (let i = 0; i < rows.length; i++) {
-                const sendToInput = rows[i].querySelector('input[name="Send_to"]');
-                if (groupingValue === "Group ALL") {
-                    sendToInput.disabled = true;
-                } else {
-                    sendToInput.disabled = false;
+            const groupingValue = document.getElementById("grouping")?.value || 'disable';
+            const table = document.getElementById("automate_table");
+            if (!table) return;
+
+            const rows = table.getElementsByClassName('pid-entry');
+            if (!rows.length) return;
+
+            Array.from(rows).forEach(row => {
+                const sendToInput = row.querySelector('.send-to-input');
+                if (sendToInput) {
+                    sendToInput.disabled = (groupingValue === "Group ALL");
                 }
-            }
+            });
         }
 
 	var canData = [];
@@ -1518,7 +1589,7 @@ function insertRowCells(newRow, rowData) {
 	function sta_enable() {}
 
 	function submit_enable() {
-        console.log("Here");
+        console.log("sumbit_enable");
 		if(document.getElementById("wifi_mode").value == "AP") {
 			document.getElementById("ssid_value").disabled = true;
 			document.getElementById("pass_value").disabled = true;
@@ -1620,6 +1691,7 @@ function insertRowCells(newRow, rowData) {
 			document.getElementById("sta_status").innerHTML = obj.sta_status;
 			document.getElementById("ap_channel_status").innerHTML = obj.ap_ch;
 			document.getElementById("sta_ip").innerHTML = obj.sta_ip;
+            document.getElementById("mdns").innerHTML = obj.mdns;
 			document.getElementById("can_bitrate_status").innerHTML = obj.can_datarate;
 			if(obj.can_mode == "normal") {
 				document.getElementById("can_mode_status").innerHTML = "Normal";
@@ -1686,17 +1758,24 @@ function insertRowCells(newRow, rowData) {
 		xhttp.send();
 	}
 
-	function loadautoPID() {
-		const xhttp = new XMLHttpRequest();
-		xhttp.onload = function() {
-			
-			if(this.responseText != "NONE") {
+    function loadautoPID() {
+        console.log("Loading auto PID data..."); // Debug log
+        const xhttp = new XMLHttpRequest();
+        xhttp.onload = function() {
+            console.log("Server response:", this.responseText); // Debug log
+            if(this.responseText !== "NONE") {
                 loadAutoTable(this.responseText);
-			}
-		};
-		xhttp.open("GET", "/load_auto_pid");
-		xhttp.send();
-	}
+                document.getElementById("custom_pid_store").disabled = true;
+            } else {
+                console.log("No PID data found on server");
+            }
+        };
+        xhttp.onerror = function(error) {
+            console.error("Error loading auto PID:", error);
+        };
+        xhttp.open("GET", "/load_auto_pid");
+        xhttp.send();
+    }
 
 	function postCANFLT() {
 		var obj = {};
@@ -1711,8 +1790,12 @@ function insertRowCells(newRow, rowData) {
 		xhttp.send(canfltJSON);
 	}
 
-	function postConfig() {
+	async function postConfig() {
 		var obj = {};
+        const storeResult = await storeAutoTableData();
+        if (!storeResult) {
+            return;
+        }
 		obj["wifi_mode"] = document.getElementById("wifi_mode").value;
 		obj["ap_ch"] = document.getElementById("ap_ch_value").value;
 		obj["sta_ssid"] = document.getElementById("ssid_value").value;
@@ -1760,7 +1843,12 @@ function insertRowCells(newRow, rowData) {
 		const xhttp = new XMLHttpRequest();
 		xhttp.onload = function() {
             showNotification(this.responseText, "green");
+            document.getElementById("submit_button").disabled = true;
 		};
+        xhttp.onerror = function() {
+            showNotification("Failed to save configuration", "red");
+        };
+
 		xhttp.open("POST", "/store_config");
 		xhttp.send(configJSON);
 	}
@@ -1914,6 +2002,7 @@ function insertRowCells(newRow, rowData) {
 			loadautoPIDConfig();
 			document.getElementById("store_canflt_button").disabled = true;
 			document.querySelector(".store").disabled = true;
+            document.getElementById("submit_button").disabled = true;
 		};
 		checkStatus();
 		xhttp.open("GET", "/load_config");
