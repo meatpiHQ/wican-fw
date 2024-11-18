@@ -1315,12 +1315,17 @@ typedef struct
     uint32_t command_len;
     QueueHandle_t *response_queue;
     response_callback_t response_callback;
+	void *temp;
 } elm327_commands_t;
 
 /* Global Variables */
 static QueueHandle_t elm327_cmd_queue;
 QueueHandle_t uart1_queue = NULL;
 SemaphoreHandle_t xuart1_semaphore = NULL;
+
+
+static int uart_read_until_pattern(uart_port_t uart_num, char* buffer, size_t buffer_size, 
+                                 const char* end_pattern, int total_timeout_ms) ;
 
 /* Function Implementations */
 int8_t elm327_process_cmd(uint8_t *cmd, uint8_t len, QueueHandle_t *q, 
@@ -1351,26 +1356,28 @@ int8_t elm327_process_cmd(uint8_t *cmd, uint8_t len, QueueHandle_t *q,
 
         if (cmd[i] == '\r')
         {
-            cmd_buffer[*cmd_buffer_len] = '\0';
+            // cmd_buffer[*cmd_buffer_len] = '\0';
 
-            elm327_commands_t command_data;
-            command_data.command = (char*) malloc(*cmd_buffer_len + 1);
-            if (command_data.command == NULL)
+            elm327_commands_t *command_data;
+			command_data = (elm327_commands_t*) malloc(sizeof(elm327_commands_t));
+            command_data->command = (char*) malloc(*cmd_buffer_len + 1);
+            if (command_data->command == NULL)
             {
                 ESP_LOGE(TAG, "Failed to allocate memory for command");
                 *cmd_buffer_len = 0;
                 return -1;
             }
-			memset(command_data.command,0,*cmd_buffer_len + 1);
-            memcpy(command_data.command, cmd_buffer, *cmd_buffer_len + 1);
-            command_data.command_len = *cmd_buffer_len;
-            command_data.response_queue = q;
-            command_data.response_callback = response_callback;
-
-            if (xQueueSend(elm327_cmd_queue, (void*)&command_data, portMAX_DELAY) != pdPASS)
+			memset(command_data->command,0,*cmd_buffer_len + 1);
+            memcpy(command_data->command, cmd_buffer, *cmd_buffer_len + 1);
+            command_data->command_len = *cmd_buffer_len;
+            command_data->response_queue = q;
+            command_data->response_callback = response_callback;
+			command_data->temp = command_data;
+            if (xQueueSend(elm327_cmd_queue, (void*)command_data, portMAX_DELAY) != pdPASS)
             {
                 ESP_LOGE(TAG, "Failed to send command to the queue");
-                free(command_data.command);
+                free(command_data->command);
+				free(command_data);
                 *cmd_buffer_len = 0;
                 return -1;
             }
@@ -1566,6 +1573,7 @@ static void uart1_event_task(void *pvParameters)
             }
 
             free(elm327_command.command);
+			free(elm327_command.temp);
         }
     }
 }

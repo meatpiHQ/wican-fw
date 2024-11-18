@@ -26,7 +26,7 @@
 int8_t sleep_mode_init(uint8_t enable, float sleep_volt);
 int8_t sleep_mode_get_voltage(float *val);
 #elif HARDWARE_VER == WICAN_PRO
-#define HV_PRO_V140     1
+// #define HV_PRO_V140     1
 
 // State machine states
 typedef enum {

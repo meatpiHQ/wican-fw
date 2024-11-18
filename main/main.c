@@ -295,7 +295,7 @@ static void can_tx_task(void *pvParameters)
 			static char elm327_cmd_buffer[2048];
 			static uint32_t cmd_buffer_len = 0;
 			static int64_t last_cmd_time = 0;
-			memset(elm327_cmd_buffer, 0, sizeof(elm327_cmd_buffer));
+			// memset(elm327_cmd_buffer, 0, sizeof(elm327_cmd_buffer));
 			if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI)
 			{
 				elm327_process_cmd(msg_ptr, temp_len, &xMsg_Tx_Queue, elm327_cmd_buffer, &cmd_buffer_len, &last_cmd_time, &send_to_host);
