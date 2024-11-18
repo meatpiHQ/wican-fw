@@ -34,22 +34,23 @@ These are confirmed working on a model year 2019 I-PACE.
 |✅|odometer|DD01|BECM (7E4)|||
 |✅|cabinTemp|DD04|BECM (7E4)|||
 |✅|vehicleSpeed|DD09|BECM (7E4)|Current speed in km/h||
-|❌|frontLeftTirePressure|2076|TPMS (751)|Front Left Tire Pressure (kPa)||
-|❌|frontRightTirePressure|2077|TPMS (751)|Front Right Tire Pressure (kPa)||
-|❌|rearLeftTirePressure|2078|TPMS (751)|Rear Left Tire Pressure (kPa)||
-|❌|rearRightTirePressure|2079|TPMS (751)|Rear Right Tire Pressure (kPa)||
-|❌|frontLeftTireTemp|2A0A|TPMS (751)|Front Left Tire Temperature (°C)||
-|❌|frontRightTireTemp|2A0B|TPMS (751)|Front Right Tire Temperature (°C)||
-|❌|rearLeftTireTemp|2A0C|TPMS (751)|Rear Left Tire Temperature (°C)||
-|❌|rearRighttTireTemp|2A0D|TPMS (751)|Rear Right Tire Temperature (°C)||
-|❌|ambientTemp|9924|HVAC (733)|Ambient Temperature (°C)||
+|❌|frontLeftTirePressure|2076|TPMS (751)|Front Left Tire Pressure (kPa)|pid timeout|
+|❌|frontRightTirePressure|2077|TPMS (751)|Front Right Tire Pressure (kPa)|pid timeout|
+|❌|rearLeftTirePressure|2078|TPMS (751)|Rear Left Tire Pressure (kPa)|pid timeout|
+|❌|rearRightTirePressure|2079|TPMS (751)|Rear Right Tire Pressure (kPa)|pid timeout|
+|❌|frontLeftTireTemp|2A0A|TPMS (751)|Front Left Tire Temperature (°C)|pid timeout|
+|❌|frontRightTireTemp|2A0B|TPMS (751)|Front Right Tire Temperature (°C)|pid timeout|
+|❌|rearLeftTireTemp|2A0C|TPMS (751)|Rear Left Tire Temperature (°C)|pid timeout|
+|❌|rearRighttTireTemp|2A0D|TPMS (751)|Rear Right Tire Temperature (°C)|pid timeout|
+|❌|ambientTemp|9924|HVAC (733)|Ambient Temperature (°C)|pid timeout|
 |✅|mainsACVoltage|498F|BCCM (7E5)|Voltage provided by EVSE (V)||
 |✅|mainsACCurrent|498F|BCCM (7E5)|Current drawn from EVSE (A)||
-|✅|controlPilotPWMDutyCycle|49A8|BCCM (7E5)|EVSE Control Pilot Duty Cycle (%)||
-|✅|controlPilotFrequency|49A8|BCCM (7E5)|EVSE Control Pilot Frequency (Hz)||
-|✅|controlPilotStatusCode|49A8|BCCM (7E5)|EVSE Control Pilot Status Code||
-|✅|controlPilotVoltage|49A8|BCCM (7E5)|EVSE Control Pilot Voltage (V)||
-|❌|DCDCOutputCurrent|4208|DCDC (753)|DCDC 12V Supply Output Current (A)||
-|❌|DCDCOutputVoltage|420A|DCDC (753)|DCDC 12V Supply Output Voltage (A)||
+|❌|controlPilotPWMDutyCycle|49A8|BCCM (7E5)|EVSE Control Pilot Duty Cycle (%)|formula issue|
+|❌|controlPilotFrequency|49A8|BCCM (7E5)|EVSE Control Pilot Frequency (Hz)|formula issue|
+|❌|controlPilotStatusCode|49A8|BCCM (7E5)|EVSE Control Pilot Status Code|formula issue|
+|❌|controlPilotVoltage|49A8|BCCM (7E5)|EVSE Control Pilot Voltage (V)|formula issue|
+|❌|evseMaxCurrent|49A8|BCCM (7E5)|Calculated EVSE Max Current (A)|formula issue|
+|❌|DCDCOutputCurrent|4208|DCDC (753)|DCDC 12V Supply Output Current (A)|pid timeout|
+|❌|DCDCOutputVoltage|420A|DCDC (753)|DCDC 12V Supply Output Voltage (A)|pid timeout|
 |❌|vin|F190|BECM (7E4)|Vehicle Idenification Number|Multi frame message|
 |❌|location|A0A6|TCU (754)|GPS Location|Multi frame message|
