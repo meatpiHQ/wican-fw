@@ -118,6 +118,12 @@
           "expression": "B38*0.1",
           "unit": "V",
           "class": "voltage"
+        },
+        {
+          "name": "Cum_Energy_Charged",
+          "expression": "([B49:B50]*65536 + [B51:B52])/10",
+          "unit": "kWh",
+          "class": "energy"
         }
       ]
     },
@@ -155,6 +161,17 @@
           "class": "battery"
         }
       ]
-    }
+    },
+		{
+			"pid":"22B0023",
+			"parameters": [
+				{
+					"name": "odometer",
+					"expression": "[B13:B14]",
+					"unit": "km",
+					"class": "distance"
+				}
+			]
+		}
   ]
 }
