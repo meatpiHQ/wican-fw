@@ -586,6 +586,7 @@ int8_t sleep_mode_init(uint8_t enable, float sleep_volt)
 #include "esp_adc/adc_cali_scheme.h"
 #include "elm327.h"
 #include "math.h"
+#include "wc_timer.h"
 
 #define ADC_UNIT          ADC_UNIT_1
 #define ADC_CONV_MODE     ADC_CONV_SINGLE_UNIT_1
@@ -615,14 +616,14 @@ static QueueHandle_t sleep_state_queue = NULL;
 // {
 // 	while (1)
 // 	{
-// 		if(gpio_get_level(SLEEP_INPUT) == 1 && config_server_get_sleep_config() == 1)
+// 		if(gpio_get_level(OBD_READY_PIN) == 1 && config_server_get_sleep_config() == 1)
 // 		{
 // 			vTaskDelay(pdMS_TO_TICKS(20000));
-// 			if(gpio_get_level(SLEEP_INPUT) == 1)
+// 			if(gpio_get_level(OBD_READY_PIN) == 1)
 // 			{
-// 				ESP_LOGI(TAG, "Enabling EXT0 wakeup on pin GPIO%d\n", (int)SLEEP_INPUT);
-// 				ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(SLEEP_INPUT, 0));
-// 				rtc_gpio_pullup_dis(SLEEP_INPUT);
+// 				ESP_LOGI(TAG, "Enabling EXT0 wakeup on pin GPIO%d\n", (int)OBD_READY_PIN);
+// 				ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(OBD_READY_PIN, 0));
+// 				rtc_gpio_pullup_dis(OBD_READY_PIN);
 // 				ESP_LOGI(TAG, "Going to sleep now");
 // 				led_set_level(0,0,0);
 // 				vTaskDelay(pdMS_TO_TICKS(1000));
@@ -636,8 +637,8 @@ static QueueHandle_t sleep_state_queue = NULL;
 
 // void sleep_mode_init(void)
 // {
-// 	gpio_reset_pin(SLEEP_INPUT);
-// 	gpio_set_direction(SLEEP_INPUT, GPIO_MODE_INPUT);
+// 	gpio_reset_pin(OBD_READY_PIN);
+// 	gpio_set_direction(OBD_READY_PIN, GPIO_MODE_INPUT);
 
 // 	xTaskCreate(sleep_task, "sleep_task", 2048, (void*)AF_INET, 5, NULL);
 // }
@@ -805,8 +806,9 @@ static esp_err_t read_adc_voltage(float *voltage_out)
 }
 
 // Battery voltage thresholds and timing
-#define BATTERY_LOW_THRESHOLD    12.5f
-#define BATTERY_HIGH_THRESHOLD   13.5f
+// #define BATTERY_LOW_THRESHOLD    12.5f
+// #define BATTERY_HIGH_THRESHOLD   13.5f
+#define SLEEP_VOLTAGE_HYSTERESIS 0.2f
 #define LOW_VOLTAGE_TIME_SEC     120
 #define HIGH_VOLTAGE_TIME_SEC    5
 
@@ -815,8 +817,8 @@ static esp_err_t read_adc_voltage(float *voltage_out)
 void configure_wakeup_sources(void)
 {
     // Configure GPIO wake-up source (optional)
-    esp_sleep_enable_ext0_wakeup(SLEEP_INPUT, 0);
-    rtc_gpio_pullup_dis(SLEEP_INPUT);
+    esp_sleep_enable_ext0_wakeup(OBD_READY_PIN, 0);
+    rtc_gpio_pullup_dis(OBD_READY_PIN);
 }
 
 // Function to enter deep sleep
@@ -837,7 +839,7 @@ void enter_deep_sleep(void)
 
 	vTaskDelay(pdMS_TO_TICKS(5000));
 
-	if(sleep_ret == ESP_OK && gpio_get_level(SLEEP_INPUT) == 1)
+	if(sleep_ret == ESP_OK && gpio_get_level(OBD_READY_PIN) == 1)
 	{
 		printf("MIC chip is sleeping...\r\n");
 	}
@@ -856,110 +858,116 @@ void enter_deep_sleep(void)
 void sleep_task(void *pvParameters)
 {
     static float battery_voltage = 0.0;
-    esp_err_t ret;
+    esp_err_t ret = ESP_FAIL;
     system_state_t current_state = STATE_NORMAL;
-    uint32_t state_timer = 0;
     sleep_state_info_t state_info = {0};
     static uint8_t sleep_en = -1;
+    float sleep_voltage;
+    float wakeup_voltage;
+    static wc_timer_t voltage_read_timer;
+    static wc_timer_t sleep_timer;
+    static wc_timer_t wakeup_timer;
+
+    // Initialize configuration
+    sleep_en = config_server_get_sleep_config();
+    if(config_server_get_sleep_volt(&sleep_voltage) == -1) {
+        sleep_voltage = 13.1f;
+    }
+
+    if(config_server_get_wakeup_volt(&wakeup_voltage) == -1) {
+        wakeup_voltage = 13.4f;
+    }
     
-	sleep_en = config_server_get_sleep_config();
+    // Create queues
     voltage_queue = xQueueCreate(1, sizeof(float));
     sleep_state_queue = xQueueCreate(1, sizeof(sleep_state_info_t));
 
-    // Initialize ADC and calibration
+    // Initialize ADC
     calibration_init();
     continuous_adc_init();
     ESP_ERROR_CHECK(adc_continuous_start(handle));
 
-    ESP_LOGI(TAG, "Reading ADC...");
+    // Log initial configuration
+    ESP_LOGI(TAG, "Sleep task started. Sleep enabled: %d, Sleep voltage: %.2f, Wakeup voltage: %.2f", 
+             sleep_en, sleep_voltage, wakeup_voltage);
+
+    // Initialize voltage read timer
+    wc_timer_set(&voltage_read_timer, 3000);
     
     while (1) 
-    {
-        // Read and process ADC values
-        ret = read_adc_voltage(&battery_voltage);
-        
-        if (ret == ESP_OK) {
-            // Send voltage to queue
-            xQueueOverwrite(voltage_queue, &battery_voltage);
-            
-			
-			if(sleep_en == 1)
+	{
+        // Read voltage every 3 seconds
+        if(wc_timer_is_expired(&voltage_read_timer)) 
+		{
+            ret = sleep_mode_get_voltage(&battery_voltage);
+            wc_timer_set(&voltage_read_timer, 3000);
+        }
+
+        if (ret == ESP_OK && sleep_en == 1) 
+		{
+            // State machine logic
+            switch (current_state) 
 			{
-				switch (current_state) 
-				{
-					case STATE_NORMAL:
-						if (battery_voltage < BATTERY_LOW_THRESHOLD) 
-						{
-							ESP_LOGW(TAG, "Battery voltage low (%.2fV), starting low voltage timer", battery_voltage);
-							current_state = STATE_LOW_VOLTAGE;
-							state_timer = 0;
-						}
-						break;
+                case STATE_NORMAL:
+                    if (battery_voltage < sleep_voltage) 
+					{
+                        ESP_LOGW(TAG, "Battery voltage low (%.2fV), starting low voltage timer", battery_voltage);
+                        current_state = STATE_LOW_VOLTAGE;
+                        wc_timer_set(&sleep_timer, LOW_VOLTAGE_TIME_SEC * 1000);
+                    }
+                    break;
 
-					case STATE_LOW_VOLTAGE:
-						if (battery_voltage >= BATTERY_LOW_THRESHOLD) 
-						{
-							ESP_LOGI(TAG, "Battery voltage recovered (%.2fV)", battery_voltage);
-							current_state = STATE_NORMAL;
-						} 
-						else 
-						{
-							state_timer++;
-							if (state_timer >= LOW_VOLTAGE_TIME_SEC) 
-							{
-								ESP_LOGW(TAG, "Battery voltage low for %d seconds, preparing to sleep", LOW_VOLTAGE_TIME_SEC);
-								current_state = STATE_SLEEPING;
-								
-							}
-						}
-						break;
+                case STATE_LOW_VOLTAGE:
+                    if (battery_voltage >= wakeup_voltage) 
+					{
+                        ESP_LOGI(TAG, "Battery voltage recovered (%.2fV)", battery_voltage);
+                        current_state = STATE_NORMAL;
+                    } 
+                    else if (wc_timer_is_expired(&sleep_timer)) 
+					{
+                        ESP_LOGI(TAG, "Low voltage timeout expired, entering sleep mode");
+                        current_state = STATE_SLEEPING;
+                    }
+                    break;
 
-					case STATE_SLEEPING:
-						if (battery_voltage >= BATTERY_HIGH_THRESHOLD) 
-						{
-							ESP_LOGI(TAG, "Battery voltage good (%.2fV), starting wake timer", battery_voltage);
-							current_state = STATE_WAKE_PENDING;
-							state_timer = 0;
-						}
-						break;
+                case STATE_SLEEPING:
+                    if (battery_voltage >= wakeup_voltage) 
+					{
+                        ESP_LOGI(TAG, "Voltage above wakeup threshold, starting wakeup timer");
+                        current_state = STATE_WAKE_PENDING;
+                        wc_timer_set(&wakeup_timer, 2000); // 2 second timer for stable voltage
+                    }
+                    break;
 
-					case STATE_WAKE_PENDING:
-						if (battery_voltage < BATTERY_HIGH_THRESHOLD) 
-						{
-							ESP_LOGW(TAG, "Battery voltage dropped (%.2fV), staying in sleep", battery_voltage);
-							current_state = STATE_SLEEPING;
-						} 
-						else 
-						{
-							state_timer++;
-							if (state_timer >= HIGH_VOLTAGE_TIME_SEC) 
-							{
-								ESP_LOGI(TAG, "Battery voltage good for %d seconds, waking up", HIGH_VOLTAGE_TIME_SEC);
-								current_state = STATE_NORMAL;
-							}
-						}
-						break;
-				}
-			}
-            // Update state info structure
+                case STATE_WAKE_PENDING:
+                    if (battery_voltage < wakeup_voltage) 
+					{
+                        // Voltage dropped again, go back to sleep
+                        current_state = STATE_SLEEPING;
+                    }
+                    else if (wc_timer_is_expired(&wakeup_timer)) 
+					{
+                        ESP_LOGI(TAG, "Voltage stable above threshold, returning to normal mode");
+                        current_state = STATE_NORMAL;
+                    }
+                    break;
+            }
+
+            // Update state info and send to queue
             state_info.state = current_state;
             state_info.voltage = battery_voltage;
-            state_info.timer = state_timer;
-            
-            // Send state info to queue
             xQueueOverwrite(sleep_state_queue, &state_info);
 
-            ESP_LOGI(TAG, "State: %d, Battery: %.2fV, Timer: %lu", 
-                     current_state, battery_voltage, state_timer);
+            // Log current status
+            ESP_LOGI(TAG, "State: %d, Battery: %.2fV", current_state, battery_voltage);
 
-			// Add your sleep preparation code here
-			if(current_state == STATE_SLEEPING)
+            // Handle sleep entry
+            if(current_state == STATE_SLEEPING) 
 			{
-				enter_deep_sleep();
-				vTaskDelay(pdMS_TO_TICKS(2000));
-			}
+                enter_deep_sleep();
+            }
         } 
-		else 
+        else if (ret != ESP_OK) 
 		{
             ESP_LOGW(TAG, "Failed to read ADC: %d", ret);
         }
@@ -988,17 +996,22 @@ esp_err_t sleep_mode_get_state(sleep_state_info_t *state_info)
     return ESP_OK;
 }
 
-int8_t sleep_mode_get_voltage(float *val)
+// int8_t sleep_mode_get_voltage(float *val)
+// {
+// 	if(voltage_queue != NULL)
+// 	{
+// 		if(xQueuePeek( voltage_queue, val, 0 ))
+// 		{
+// 			return 1;
+// 		}
+// 		else return -1;
+// 	}
+// 	return -1;
+// }
+
+esp_err_t sleep_mode_get_voltage(float *val)
 {
-	if(voltage_queue != NULL)
-	{
-		if(xQueuePeek( voltage_queue, val, 0 ))
-		{
-			return 1;
-		}
-		else return -1;
-	}
-	return -1;
+	return obd_get_voltage(val);
 }
 
 void sleep_mode_print_wakeup_reason(void)
@@ -1044,12 +1057,13 @@ void sleep_mode_print_wakeup_reason(void)
             break;
     }
 }
+
 void sleep_mode_init(void)
 {
-	gpio_reset_pin(SLEEP_INPUT);
-	gpio_set_direction(SLEEP_INPUT, GPIO_MODE_INPUT);
-
-	xTaskCreate(sleep_task, "sleep_task", 4096, (void*)AF_INET, 5, NULL);
+	if(config_server_get_sleep_config())
+	{
+		xTaskCreate(sleep_task, "sleep_task", 4096, (void*)AF_INET, 5, NULL);
+	}
 }
 
 #endif

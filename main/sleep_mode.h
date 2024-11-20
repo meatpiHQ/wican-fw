@@ -26,7 +26,7 @@
 int8_t sleep_mode_init(uint8_t enable, float sleep_volt);
 int8_t sleep_mode_get_voltage(float *val);
 #elif HARDWARE_VER == WICAN_PRO
-// #define HV_PRO_V140     1
+#define HV_PRO_V140     1
 
 // State machine states
 typedef enum {
@@ -42,10 +42,8 @@ typedef struct {
     uint32_t timer;
 } sleep_state_info_t;
 
-#define SLEEP_INPUT     GPIO_NUM_7
-
 void sleep_mode_init(void);
-int8_t sleep_mode_get_voltage(float *val);
+esp_err_t sleep_mode_get_voltage(float *val);
 esp_err_t sleep_mode_get_state(sleep_state_info_t *state_info);
 void sleep_mode_print_wakeup_reason(void);
 
