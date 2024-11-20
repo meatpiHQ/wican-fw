@@ -230,51 +230,53 @@ static void obd_parse_response(char *str, uint32_t len, QueueHandle_t *q, char* 
             static char sleep_cmd[32] = {0};
             static char wake_cmd[32] = {0};
             float sleep_voltage = 0;
+            float wakeup_voltage = 0;
             ESP_LOGW(TAG, "Sleep mode enabled");
-
-            if(config_server_get_sleep_volt(&sleep_voltage) != -1)
+            if(config_server_get_wakeup_volt(&wakeup_voltage) == -1)
             {
-                float tmp = 0.2;    //Temporary value
-
-                if(strcmp(config.ctrl_mode, "ELM327") == 0)
-                {
-                    elm327_process_cmd((uint8_t *)"ATPP 0E SV 7A\r", 0, NULL, response_buffer, 
-                                    &response_len, &response_cmd_time, NULL);
-                    elm327_process_cmd((uint8_t *)"ATPP 0E ON\r", 0, NULL, response_buffer, 
-                                    &response_len, &response_cmd_time, NULL);
-                    elm327_process_cmd((uint8_t *)"ATZ\r", 0, NULL, response_buffer, 
-                                    &response_len, &response_cmd_time, NULL);
-                    vTaskDelay(pdMS_TO_TICKS(100));
-                    ESP_LOGW(TAG, "Setting sleep mode to Native");
-                }
-
-                // if(config.uart_wake.en == 1 || config.vl_wake.en == 0 || 
-                //    config.vl_wake.voltage != sleep_voltage || 
-                //    config.vl_sleep.en == 0 || 
-                //    config.vl_sleep.voltage != (sleep_voltage - tmp))
-                if(config.uart_wake.en == 0 || config.vl_wake.en == 0 || 
-                   config.vl_wake.voltage != sleep_voltage || 
-                   config.vl_sleep.en == 1 || 
-                   config.vl_sleep.voltage != (sleep_voltage - tmp))
-                {
-                    sprintf(sleep_cmd, "STSLVLW >%.2f, 1\r", sleep_voltage);
-                    sprintf(wake_cmd, "STSLVLS <%.2f, 120\r", sleep_voltage-tmp);
-                    elm327_process_cmd((uint8_t *)sleep_cmd, 0, NULL, response_buffer, 
-                                    &response_len, &response_cmd_time, NULL);
-                    elm327_process_cmd((uint8_t *)wake_cmd, 0, NULL, response_buffer, 
-                                    &response_len, &response_cmd_time, NULL);
-                    elm327_process_cmd((uint8_t *)"STSLVl off,on\r", 0, NULL, response_buffer, 
-                                    &response_len, &response_cmd_time, NULL);
-                    elm327_process_cmd((uint8_t *)"STSLU on, on\r", 0, NULL, response_buffer, 
-                                    &response_len, &response_cmd_time, NULL);
-                    vTaskDelay(pdMS_TO_TICKS(10));
-                    ESP_LOGW(TAG, "Setting sleep parameters");
-                }   
-            }             
-            else
-            {
-                ESP_LOGE(TAG, "Failed to set sleep parameters");
+                wakeup_voltage = 13.5f;
+                ESP_LOGE(TAG, "Failed to get sleep voltage");
             }
+            if(config_server_get_sleep_volt(&sleep_voltage) == -1)
+            {
+                sleep_voltage = 13.2f;
+                ESP_LOGE(TAG, "Failed to get wakeup voltage");
+            }
+            
+            if(strcmp(config.ctrl_mode, "ELM327") == 0)
+            {
+                elm327_process_cmd((uint8_t *)"ATPP 0E SV 7A\r", 0, NULL, response_buffer, 
+                                &response_len, &response_cmd_time, NULL);
+                elm327_process_cmd((uint8_t *)"ATPP 0E ON\r", 0, NULL, response_buffer, 
+                                &response_len, &response_cmd_time, NULL);
+                elm327_process_cmd((uint8_t *)"ATZ\r", 0, NULL, response_buffer, 
+                                &response_len, &response_cmd_time, NULL);
+                vTaskDelay(pdMS_TO_TICKS(100));
+                ESP_LOGW(TAG, "Setting sleep mode to Native");
+            }
+
+            // if(config.uart_wake.en == 1 || config.vl_wake.en == 0 || 
+            //    config.vl_wake.voltage != sleep_voltage || 
+            //    config.vl_sleep.en == 0 || 
+            //    config.vl_sleep.voltage != (sleep_voltage - tmp))
+            if(config.uart_wake.en == 0 || config.vl_wake.en == 0 || 
+                config.vl_wake.voltage != wakeup_voltage || 
+                config.vl_sleep.en == 1 || 
+                config.vl_sleep.voltage != sleep_voltage)
+            {
+                sprintf(sleep_cmd, "STSLVLW >%.2f, 1\r", wakeup_voltage);
+                sprintf(wake_cmd, "STSLVLS <%.2f, 120\r", sleep_voltage);
+                elm327_process_cmd((uint8_t *)sleep_cmd, 0, NULL, response_buffer, 
+                                &response_len, &response_cmd_time, NULL);
+                elm327_process_cmd((uint8_t *)wake_cmd, 0, NULL, response_buffer, 
+                                &response_len, &response_cmd_time, NULL);
+                elm327_process_cmd((uint8_t *)"STSLVl off,on\r", 0, NULL, response_buffer, 
+                                &response_len, &response_cmd_time, NULL);
+                elm327_process_cmd((uint8_t *)"STSLU on, on\r", 0, NULL, response_buffer, 
+                                &response_len, &response_cmd_time, NULL);
+                vTaskDelay(pdMS_TO_TICKS(10));
+                ESP_LOGW(TAG, "Setting sleep parameters");
+            }               
         }
         else
         {
@@ -296,7 +298,7 @@ static void obd_parse_response(char *str, uint32_t len, QueueHandle_t *q, char* 
     }
 }
 
-int8_t obd_get_voltage(float *val)
+esp_err_t obd_get_voltage(float *val)
 {
     static char response_buffer[32];
     static uint32_t response_len = 0;
@@ -305,14 +307,14 @@ int8_t obd_get_voltage(float *val)
     elm327_process_cmd((uint8_t *)GET_VOLTAGE_CMD, strlen(GET_VOLTAGE_CMD), NULL,
                       response_buffer, &response_len, &response_cmd_time, obd_parse_response);
 
-    if (xQueueReceive(battery_voltage_queue, val, pdMS_TO_TICKS(500)) == pdPASS)
+    if (xQueueReceive(battery_voltage_queue, val, pdMS_TO_TICKS(1500)) == pdPASS)
     {
-        return 1;
+        return ESP_OK;
     }
     else
     {
         *val = 0;
-        return -1;
+        return ESP_FAIL;
     }
 }
 

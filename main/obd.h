@@ -25,6 +25,7 @@
 #define OBD_CMD_BUF_SIZE        (512)
 #define OBD_RESET_PIN           (GPIO_NUM_41)
 #define OBD_LED_EN_PIN          (GPIO_NUM_42)
+#define OBD_READY_PIN           (GPIO_NUM_7)    // High = Active, Low = Sleep
 
 typedef struct {
     char rsp_data[OBD_DATA_BUF_SIZE];  // Adjust the size of the buffer as needed
@@ -96,4 +97,4 @@ void obd_init(void);
 void obd_log_response(char *buf, uint32_t size);
 void obd_send_cmd(char *cmd, QueueHandle_t *rsp_queue, obd_rsp_t *obd_rsp, uint32_t timeout_ms);
 void obd_write_cmd(char* cmd, char** rsp_buf, uint32_t *rsp_len, uint32_t timeout_ms);
-int8_t obd_get_voltage(float *val);
+esp_err_t obd_get_voltage(float *val);
