@@ -22,7 +22,9 @@
 #include "esp_ota_ops.h"
 #include "esp_mac.h"
 #include "mdns.h"
+#include "esp_log.h"
 
+#define TAG         __func__
 static char mdns_host_name[24]; 
 static char wican_hostname[36];
 
@@ -35,6 +37,7 @@ void wc_mdns_init(char *id, char* hv, char* fv)
 {
 	sprintf(mdns_host_name, "wican_%s", id);
     sprintf(wican_hostname, "wican_%s.local", id);
+    ESP_LOGI(TAG, "Host Name: %s", wican_hostname);
     mdns_init();
     mdns_hostname_set(mdns_host_name);
     mdns_instance_name_set("wican web server");
