@@ -1812,6 +1812,13 @@ void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, Q
 	}
 }
 
+elm327_chip_status_t elm327_chip_get_status(void)
+{
+	elm327_chip_status_t status = gpio_get_level(OBD_READY_PIN);
+
+	return status;
+}
+
 void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame, uint8_t type))
 {
     can_rx_queue = rx_queue;
@@ -1826,6 +1833,10 @@ void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame,
     gpio_reset_pin(OBD_RESET_PIN);
     gpio_set_direction(OBD_RESET_PIN, GPIO_MODE_OUTPUT_OD);
     gpio_set_level(OBD_RESET_PIN, 1);
+
+	gpio_reset_pin(OBD_READY_PIN);
+	gpio_set_direction(OBD_READY_PIN, GPIO_MODE_INPUT);
+	
 	xuart1_semaphore = xSemaphoreCreateMutex();
 	
     uart_config_t uart1_config = 
@@ -1855,6 +1866,11 @@ void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame,
         return;
     }
 
+	while(elm327_chip_get_status() != ELM327_READY)
+	{
+		ESP_LOGW(TAG, "ELM327 not ready...");
+		vTaskDelay(pdMS_TO_TICKS(200));
+	}
     elm327_hardreset_chip();
     if (elm327_set_baudrate())
     {

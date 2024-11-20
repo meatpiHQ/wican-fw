@@ -29,10 +29,17 @@ typedef void (*response_callback_t)(char*, uint32_t, QueueHandle_t *q, char* cmd
 #define ELM327_CAN_RX   0x01
 #define ELM327_CAN_TX   0x02
 
+typedef enum{
+	ELM327_READY,
+    ELM327_SLEEP
+}elm327_chip_status_t;
+
 void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame, uint8_t type));
 
 #if HARDWARE_VER == WICAN_PRO
 int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, QueueHandle_t *q, char *cmd_buffer, uint32_t *cmd_buffer_len, int64_t *last_cmd_time, response_callback_t response_callback);
+elm327_chip_status_t elm327_chip_get_status(void);
+
 #else
 int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t *q);
 #endif
