@@ -104,6 +104,7 @@
             width: 100%;
             border-collapse: separate;
             border-spacing: 0 0.5rem;
+            font-weight: 600;
         }
 
         .form-table td {
@@ -124,7 +125,7 @@
         }
 
         input[type="range"] {
-            width: 200px;
+            width: 100%;
         }
 
         input[type="text"],
@@ -390,6 +391,7 @@
         <button class="tablinks" onclick="openTab(event, 'wifi_settings')"><b>Settings</b></button>
         <button class="tablinks" onclick="openTab(event, 'automate')"><b>Automate</b></button>
         <button class="tablinks" onclick="openTab(event, 'monitor')"><b>Monitor</b></button>
+        <button class="tablinks" onclick="openTab(event, 'power_saving_tab')"><b>Power Saving</b></button>
         <button class="tablinks" onclick="openTab(event, 'about_tab')"><b>About</b></button>
     </div>
 
@@ -617,57 +619,6 @@
                     </tr>
                 </table>
 
-                <div class="divider"></div>
-
-                <div class="section-title">Sleep Mode</div>
-                <table class="form-table">
-                    <tr>
-                        <td>Sleep:</td>
-                        <td>
-                            <select name="sleep_status" id="sleep_status">
-                                <option value="enable">Enable</option>
-                                <option value="disable">Disable</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>Sleep Voltage:</td>
-                        <td class="slider-container">
-                            <input type="range" 
-                                   id="sleep_volt" 
-                                   name="sleep_volt" 
-                                   value="13.2" 
-                                   min="12.0" 
-                                   max="15.0" 
-                                   step="0.1"
-                                   oninput="document.getElementById('sleep_volt_value').textContent = this.value;submit_enable();">
-                            <span id="sleep_volt_value">13.2</span>V
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>Wake-up Voltage:</td>
-                        <td class="slider-container">
-                            <input type="range" 
-                                   id="wakeup_volt" 
-                                   name="wakeup_volt" 
-                                   value="13.2" 
-                                   min="12.0" 
-                                   max="15.0" 
-                                   step="0.1"
-                                   oninput="document.getElementById('wakeup_volt_value').textContent = this.value;submit_enable();">
-                            <span id="wakeup_volt_value">13.2</span>V
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>Battery Alert:</td>
-                        <td>
-                            <select name="batt_alert" id="batt_alert">
-                                <option value="enable">Enable</option>
-                                <option value="disable">Disable</option>
-                            </select>
-                        </td>
-                    </tr>
-                </table>
                 <div id="mqtt_en_div">
                     <div class="divider"></div>
                     <div class="section-title">MQTT</div>
@@ -744,66 +695,6 @@
                             </tr>
                         </table>
                     </div>
-                </div>
-                <div id="batt_alert_div">
-                    <div class="divider"></div>
-                    <div class="section-title">Battery Alert</div>
-                    <table class="form-table">
-                        <tr>
-                            <td><label for="batt_alert_ssid"><b>SSID:</b></label></td>
-                            <td><input type="text" id="batt_alert_ssid" name="batt_alert_ssid" value="MeatPi" /></td>
-                        </tr>
-                        <tr>
-                            <td><label for="batt_alert_pass"><b>Password:</b></label></td>
-                            <td><input type="text" id="batt_alert_pass" name="batt_alert_pass" value="TomatoSauce" /></td>
-                        </tr>
-                        <tr>
-                            <td><label for="batt_alert_volt"><b>Alert Voltage:</b></label></td>
-                            <td><input type="number" step="0.1" id="batt_alert_volt" name="batt_alert_volt" value="11.0"
-                                    min="9.0" max="15.0" /></td>
-                        </tr>
-                        <tr>
-                            <td><label for="batt_alert_protocol"><b>Alert Protocol:</b></label></td>
-                            <td><select name="batt_alert_protocol" style="width: 93px;" id="batt_alert_protocol">
-                                    <option value="mqtt">MQTT</option>
-                                </select></td>
-                        </tr>
-                        <tr>
-                            <td><label for="batt_alert_url"><b>Alert URL:</b></label></td>
-                            <td><input type="text" id="batt_alert_url" name="batt_alert_url" value="127.0.0.1" /></td>
-                        </tr>
-                        <tr>
-                            <td><label for="batt_alert_port"><b>Alert Port:</b></label></td>
-                            <td><input type="number" id="batt_alert_port" name="batt_alert_port" value="1883" min="1"
-                                    max="65535" /></td>
-                        </tr>
-                        <tr>
-                            <td><label for="batt_mqttusername"><b>Alert MQTT User:</b></label></td>
-                            <td><input type="text" id="batt_mqtt_user" name="batt_mqtt_user" value="meatpi" /></td>
-                        </tr>
-                        <tr>
-                            <td><label for="batt_mqttpass"><b>Alert MQTT Pass:</b></label></td>
-                            <td><input type="text" id="batt_mqtt_pass" name="batt_mqtt_pass" value="meatpi" /></td>
-                        </tr>
-                        <tr>
-                            <td><label for="batt_alert_topic"><b>Alert Topic:</b></label></td>
-                            <td><input type="text" id="batt_alert_topic" name="batt_alert_topic" value="CAR1/voltage" />
-                            </td>
-                        </tr>
-                        <tr>
-                            <td><b>Alert every:</b></td>
-                            <td><select name="batt_alert_time" style="width: 93px;" id="batt_alert_time">
-                                    <option value="1">1hr</option>
-                                    <option value="6">6hr</option>
-                                    <option value="12">12hr</option>
-                                    <option value="24">1day</option>
-                                </select></td>
-                        </tr>
-                        <tr>
-                            <td>&nbsp;</td>
-                            <td>&nbsp;</td>
-                        </tr>
-                    </table>
                 </div>
             </form>
         </div>
@@ -937,6 +828,132 @@
                 </thead>
                 <tbody></tbody>
             </table>
+        </div>
+        <div id="power_saving_tab" class="tabcontent">
+            <div class="section-title">Sleep Mode</div>
+            <table class="form-table">
+                <tr>
+                    <td>Sleep Mode:</td>
+                    <td>
+                        <select name="sleep_status" id="sleep_status">
+                            <option value="enable">Enable</option>
+                            <option value="disable">Disable</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Sleep Voltage:</td>
+                    <td class="slider-container">
+                        <input type="range" 
+                               id="sleep_volt" 
+                               name="sleep_volt" 
+                               value="13.2" 
+                               min="12.0" 
+                               max="15.0" 
+                               step="0.1"
+                               oninput="document.getElementById('sleep_volt_value').textContent = this.value;submit_enable();">
+                        <span id="sleep_volt_value">13.2</span>V
+                    </td>
+                </tr>
+                <tr>
+                    <td>Sleep After:</td>
+                    <td class="slider-container">
+                        <input type="range" 
+                               id="sleep_time" 
+                               name="sleep_time" 
+                               value="2" 
+                               min="1" 
+                               max="30" 
+                               step="1"
+                               oninput="document.getElementById('sleep_time_value').textContent = this.value;submit_enable();">
+                        <span id="sleep_time_value">2</span>min
+                    </td>
+                </tr>
+                <tr>
+                    <td>Wake-up Voltage:</td>
+                    <td class="slider-container">
+                        <input type="range" 
+                               id="wakeup_volt" 
+                               name="wakeup_volt" 
+                               value="13.2" 
+                               min="12.0" 
+                               max="15.0" 
+                               step="0.1"
+                               oninput="document.getElementById('wakeup_volt_value').textContent = this.value;submit_enable();">
+                        <span id="wakeup_volt_value">13.2</span>V
+                    </td>
+                </tr>
+                <tr>
+                    <td>Battery Alert:</td>
+                    <td>
+                        <select name="batt_alert" id="batt_alert" onchange="submit_enable();">
+                            <option value="enable">Enable</option>
+                            <option value="disable">Disable</option>
+                        </select>
+                    </td>
+                </tr>
+            </table>
+            <div id="batt_alert_div">
+                <div class="divider"></div>
+                <div class="section-title">Battery Alert</div>
+                <table class="form-table">
+                    <tr>
+                        <td><label for="batt_alert_ssid"><b>SSID:</b></label></td>
+                        <td><input type="text" id="batt_alert_ssid" name="batt_alert_ssid" value="MeatPi" /></td>
+                    </tr>
+                    <tr>
+                        <td><label for="batt_alert_pass"><b>Password:</b></label></td>
+                        <td><input type="text" id="batt_alert_pass" name="batt_alert_pass" value="TomatoSauce" /></td>
+                    </tr>
+                    <tr>
+                        <td><label for="batt_alert_volt"><b>Alert Voltage:</b></label></td>
+                        <td><input type="number" step="0.1" id="batt_alert_volt" name="batt_alert_volt" value="11.0"
+                                min="9.0" max="15.0" /></td>
+                    </tr>
+                    <tr>
+                        <td><label for="batt_alert_protocol"><b>Alert Protocol:</b></label></td>
+                        <td><select name="batt_alert_protocol" style="width: 93px;" id="batt_alert_protocol">
+                                <option value="mqtt">MQTT</option>
+                            </select></td>
+                    </tr>
+                    <tr>
+                        <td><label for="batt_alert_url"><b>Alert URL:</b></label></td>
+                        <td><input type="text" id="batt_alert_url" name="batt_alert_url" value="127.0.0.1" /></td>
+                    </tr>
+                    <tr>
+                        <td><label for="batt_alert_port"><b>Alert Port:</b></label></td>
+                        <td><input type="number" id="batt_alert_port" name="batt_alert_port" value="1883" min="1"
+                                max="65535" /></td>
+                    </tr>
+                    <tr>
+                        <td><label for="batt_mqttusername"><b>Alert MQTT User:</b></label></td>
+                        <td><input type="text" id="batt_mqtt_user" name="batt_mqtt_user" value="meatpi" /></td>
+                    </tr>
+                    <tr>
+                        <td><label for="batt_mqttpass"><b>Alert MQTT Pass:</b></label></td>
+                        <td><input type="text" id="batt_mqtt_pass" name="batt_mqtt_pass" value="meatpi" /></td>
+                    </tr>
+                    <tr>
+                        <td><label for="batt_alert_topic"><b>Alert Topic:</b></label></td>
+                        <td><input type="text" id="batt_alert_topic" name="batt_alert_topic" value="CAR1/voltage" />
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><b>Alert every:</b></td>
+                        <td><select name="batt_alert_time" style="width: 93px;" id="batt_alert_time">
+                                <option value="1">1hr</option>
+                                <option value="6">6hr</option>
+                                <option value="12">12hr</option>
+                                <option value="24">1day</option>
+                            </select></td>
+                    </tr>
+                    <tr>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                    </tr>
+                </table>
+            </div>
+
         </div>
 
         <div id="about_tab" class="tabcontent">
@@ -2088,6 +2105,7 @@ function loadAutoTable(jsonData) {
 			cell4.innerHTML = data;
 			cell5.innerHTML = 0;
 			cell6.innerHTML = 1;
+            cell1.style.width = "10%"
 			monitor_add_line.msg_time.push(Date.now());
 		}
 	}
