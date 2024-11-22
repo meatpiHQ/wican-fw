@@ -1304,8 +1304,10 @@ void elm327_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q), QueueH
 #define ELM327_CMD_TIMEOUT_MS   10000
 #define ELM327_CMD_TIMEOUT_US   (ELM327_CMD_TIMEOUT_MS*1000)  // 10 seconds in microseconds
 #define UART_TIMEOUT_MS 1000
-#define DESIRED_BAUD_RATE 2000000
-#define DEFAULT_BAUD_RATE 115200
+// #define DESIRED_BAUD_RATE 2000000
+// #define DEFAULT_BAUD_RATE 115200
+#define DESIRED_BAUD_RATE 115200
+#define DEFAULT_BAUD_RATE 2000000
 #define BUFFER_SIZE 128
 
 /* Type Definitions */
