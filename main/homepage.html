@@ -31,7 +31,7 @@ function sendCARDataFile(){const fileInput=document.getElementById("car_data_fil
 const reader=new FileReader();reader.onload=function(event) {try{JSON.parse(event.target.result);const form=document.getElementById('car_data_form');const formData=new FormData(form);latest_car_models=null;fetch('/upload/car_data.json', {method: 'POST',
 body: formData})
 .then(response => response.text())
-.then(data => {console.log('Success:', data);showNotification(data, "red");setTimeout(() => {window.location.reload();}, 1000);})
+.then(data => {console.log('Success:', data);showNotification(data, "green");setTimeout(() => {window.location.reload();}, 1000);})
 .catch(error => {console.error('Error:', error);});} catch (e){showNotification("Invalid JSON file!", "red");alert("The selected file is not a valid JSON file!");}};reader.readAsText(file);}}
 function addRowAutoTable(){addCollapsibleRow();enableAutoStoreButton();}
 function addCollapsibleRow(rowData = {}){const container=document.querySelector('.pid-entries');const entry=document.createElement('div');entry.className = 'pid-entry';entry.innerHTML = `

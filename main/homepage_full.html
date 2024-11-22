@@ -1153,7 +1153,7 @@
 						.then(response => response.text())
 						.then(data => {
 							console.log('Success:', data);
-                            showNotification(data, "red");
+                            showNotification(data, "green");
 							setTimeout(() => {
 								window.location.reload();
 							}, 1000);
