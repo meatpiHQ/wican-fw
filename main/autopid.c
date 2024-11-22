@@ -36,6 +36,7 @@
 #include "config_server.h"
 #include "autopid.h"
 #include <math.h>
+#include <float.h>
 
 #define TAG __func__
 
@@ -259,11 +260,33 @@ void parse_elm327_response(char *buffer, unsigned char *data, uint32_t *data_len
             frame[strlen(frame) - 1] = '\0';  // Remove the '>' from the last frame
         }
 
-        // Find the first space, then take everything after it
+        // Find the first space
         data_start = strchr(frame, ' ');
         if (data_start != NULL)
         {
+            int header_length = data_start - frame;
             data_start++;  // Move past the space
+
+            // Handle different frame types based on header length
+            switch (header_length) 
+            {
+                case 2:  // Type 3: 2 chars then space, skip 9 chars after space
+                    data_start += 9;  // Skip the specified 9 characters
+                    break;
+                    
+                case 3:  // Type 1: 3 chars then space
+                    // No additional skipping needed
+                    break;
+                    
+                case 8:  // Type 2: 8 chars then space
+                    // No additional skipping needed
+                    break;
+                    
+                default:
+                    // Unknown header type, skip this frame
+                    frame = strtok(NULL, "\r\n");
+                    continue;
+            }
 
             // Parse and store the data
             while (*data_start != '\0')
@@ -272,6 +295,11 @@ void parse_elm327_response(char *buffer, unsigned char *data, uint32_t *data_len
                 {
                     data_start++;
                     continue;
+                }
+                // Ensure we have at least 2 characters remaining
+                if (strlen(data_start) < 2) 
+                {
+                    break;
                 }
                 char hex_byte[3] = {data_start[0], data_start[1], '\0'};
                 data[k++] = (unsigned char) strtol(hex_byte, NULL, 16);
@@ -640,6 +668,7 @@ static void autopid_task(void *pvParameters)
                                 #else
                                 elm327_process_cmd((uint8_t*)car.pids[i].pid , strlen(car.pids[i].pid), &tx_msg, &autopidQueue);
                                 #endif
+                                
                                 ESP_LOGI(TAG, "Sending car.pids[%lu].pid: %s", i, car.pids[i].pid);
                                 if (xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS)
                                 {
@@ -667,10 +696,20 @@ static void autopid_task(void *pvParameters)
                                                         hex_rsponse[response.length * 2] = '\0';
 
                                                         result = round(result * 100.0) / 100.0;
-                                                        // Add the name and result to the JSON object
-                                                        cJSON_AddNumberToObject(rsp_json, car.pids[i].parameters[j].name, result);
-                                                        ESP_LOGI(TAG, "Expression result, Name: %s: %lf", car.pids[i].parameters[j].name, result);
-                                                        specific_pid_response = 1;
+
+                                                        //check result within min and max
+                                                        if((car.pids[i].parameters[j].max != FLT_MAX) && (car.pids[i].parameters[j].min != FLT_MAX) && (result > car.pids[i].parameters[j].max+2 || result < car.pids[i].parameters[j].min-2))
+                                                        {
+                                                            car.cycle_timer = esp_timer_get_time() + 2000; //try again in 1 sec
+                                                            ESP_LOGE(TAG, "Expression result out of range");
+                                                        }
+                                                        else
+                                                        {
+                                                            // Add the name and result to the JSON object
+                                                            cJSON_AddNumberToObject(rsp_json, car.pids[i].parameters[j].name, result);
+                                                            ESP_LOGI(TAG, "Expression result, Name: %s: %lf", car.pids[i].parameters[j].name, result);
+                                                            specific_pid_response = 1;
+                                                        }
                                                     }
                                                 }
                                                 else
@@ -1234,6 +1273,43 @@ static void autopid_load_car_specific(char* car_mod)
                             else
                             {
                                 car.pids[i].parameters[j].class = strdup("");  // Assign an empty string if not available
+                            }
+
+                            // Parse min
+                            cJSON *min = cJSON_GetObjectItem(parameter_item, "min");
+                            if (cJSON_IsString(min) && (min->valuestring != NULL) && strlen(min->valuestring) > 0) 
+                            {
+                                float min_val = atof(min->valuestring);  // Changed from atoi to atof
+                                if (min_val >= 0) 
+                                {
+                                    car.pids[i].parameters[j].min = (uint32_t)min_val;
+                                }
+                                else
+                                {
+                                    car.pids[i].parameters[j].min = FLT_MAX;
+                                }
+                            }
+                            else
+                            {
+                                car.pids[i].parameters[j].min = FLT_MAX;
+                            }
+
+                            cJSON *max = cJSON_GetObjectItem(parameter_item, "max");
+                            if (cJSON_IsString(max) && (max->valuestring != NULL) && strlen(max->valuestring) > 0) 
+                            {
+                                float max_val = atof(max->valuestring);  // Using atof to parse float
+                                if (max_val >= 0) 
+                                {
+                                    car.pids[i].parameters[j].max = (uint32_t)max_val;
+                                }
+                                else
+                                {
+                                    car.pids[i].parameters[j].max = FLT_MAX;
+                                }
+                            }
+                            else
+                            {
+                                car.pids[i].parameters[j].max = FLT_MAX;
                             }
                             j++;
                         }

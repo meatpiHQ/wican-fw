@@ -61,6 +61,8 @@ typedef struct
     char *expression;
     char *unit;
     char *class;
+    float min;
+    float max;
 } parameter_data_t;
 
 typedef struct
