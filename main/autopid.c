@@ -1375,5 +1375,5 @@ void autopid_init(char* id, char *config_str)
     
 
     
-    xTaskCreate(autopid_task, "autopid_task", 3584, (void *)AF_INET, 5, NULL);
+    xTaskCreate(autopid_task, "autopid_task", 1024*6, (void *)AF_INET, 5, NULL);
 }
