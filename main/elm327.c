@@ -1871,7 +1871,7 @@ void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame,
 		ESP_LOGW(TAG, "ELM327 not ready...");
 		vTaskDelay(pdMS_TO_TICKS(200));
 	}
-    elm327_hardreset_chip();
+    // elm327_hardreset_chip();
     if (elm327_set_baudrate())
     {
         ESP_LOGI(TAG, "UART configuration completed successfully");
