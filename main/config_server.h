@@ -68,6 +68,8 @@ typedef struct _device_config
 	char sleep_status[32];
 	char sleep_volt[10];
 	char wakeup_volt[10];
+	char sleep_time[32];
+	char wakeup_time[32];
 	char batt_alert[32];
 	char batt_alert_ssid[65];
 	char batt_alert_pass[65];
@@ -141,3 +143,5 @@ char *config_server_get_mqtt_status_topic(void);
 char *config_server_get_auto_pid(void);
 int8_t config_server_mqtt_tx_en_config(void);
 int8_t config_server_get_wakeup_volt(float *wakeup_volt);
+int8_t config_server_get_sleep_time(uint32_t *sleep_time);
+int8_t config_server_get_wakeup_time(uint32_t *wakeup_time);

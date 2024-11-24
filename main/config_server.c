@@ -1883,7 +1883,6 @@ static void config_server_load_cfg(char *cfg)
 	
 	ESP_LOGE(TAG, "device_config.mqtt_status_topic: %s", device_config.mqtt_status_topic);
 	//*****
-	return;
 
 	//*****
 	key = cJSON_GetObjectItem(root,"wakeup_volt");
@@ -1898,7 +1897,29 @@ static void config_server_load_cfg(char *cfg)
 
 	ESP_LOGE(TAG, "device_config.wakeup_volt: %s", device_config.wakeup_volt);
 	//*****
+	
+	//*****
+	key = cJSON_GetObjectItem(root,"sleep_time");
+	if(key == 0)
+	{
+		strcpy(device_config.sleep_time, "2");
+	}
+	else
+	{
+		uint32_t sleep_time = atoi(device_config.sleep_time);
 
+		if(sleep_time > 30 && sleep_time < 1)
+		{
+			strcpy(device_config.sleep_time, "2");
+		}
+
+		strcpy(device_config.sleep_time, key->valuestring);
+	}
+
+	ESP_LOGE(TAG, "device_config.sleep_time: %s", device_config.sleep_time);
+	//*****
+
+	return;
 
 
 config_error:
@@ -2284,6 +2305,27 @@ int8_t config_server_get_wakeup_volt(float *wakeup_volt)
 		return 1;
 	}
 	return -1;
+}
+
+int8_t config_server_get_sleep_time(uint32_t *sleep_time)
+{
+    char *endptr;
+    long slp_t = strtol(device_config.sleep_time, &endptr, 10);
+    
+    // Check for conversion errors
+    if (*endptr != '\0' || endptr == device_config.sleep_time)
+	{
+        return -1;
+    }
+    
+    // Validate range
+    if (slp_t < 1 || slp_t > 30)
+	{
+        return -1;
+    }
+    
+    *sleep_time = (uint32_t)slp_t;
+    return 1;
 }
 
 int8_t config_server_get_battery_alert_config(void)
