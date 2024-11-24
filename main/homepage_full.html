@@ -1869,6 +1869,7 @@ function loadAutoTable(jsonData) {
 		obj["sleep_status"] = document.getElementById("sleep_status").value;
 		obj["sleep_volt"] = document.getElementById("sleep_volt").value;
         obj["wakeup_volt"] = document.getElementById("wakeup_volt").value;
+        obj["sleep_time"] = document.getElementById("sleep_time").value;
 		obj["batt_alert"] = document.getElementById("batt_alert").value;
 		obj["batt_alert_ssid"] = document.getElementById("batt_alert_ssid").value;
 		obj["batt_alert_pass"] = document.getElementById("batt_alert_pass").value;
@@ -2016,6 +2017,8 @@ function loadAutoTable(jsonData) {
             document.getElementById("sleep_volt_value").textContent = obj.sleep_volt;
             document.getElementById("wakeup_volt").value = obj.wakeup_volt;
             document.getElementById('wakeup_volt_value').textContent = obj.wakeup_volt;
+            document.getElementById("sleep_time").value = obj.sleep_time;
+            document.getElementById('sleep_time_value').textContent = obj.sleep_time;
 			document.getElementById("batt_alert").value = obj.batt_alert;
 			document.getElementById("batt_alert_ssid").value = obj.batt_alert_ssid;
 			document.getElementById("batt_alert_pass").value = obj.batt_alert_pass;
