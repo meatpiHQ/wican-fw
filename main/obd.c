@@ -66,7 +66,7 @@ static uint32_t parse_time(const char* time_str)
         }
         else if (strcmp(unit, "s") == 0)
         {
-            return time_value * 1000;
+            return time_value;
         }
     }
 
@@ -140,7 +140,7 @@ static void parse_line(const char* line, stslcs_config_t* config)
         config->vl_sleep.en = parse_on_off(enable_buffer);
         config->vl_sleep.voltage = voltage;
         config->vl_sleep.time = parse_time(time_buffer);
-        ESP_LOGI(TAG, "VL_SLEEP: en=%d, voltage=%.2f V, time=%lu ms", 
+        ESP_LOGI(TAG, "VL_SLEEP: en=%d, voltage=%.2f V, time=%lu s", 
                 config->vl_sleep.en, config->vl_sleep.voltage, config->vl_sleep.time);
     }
     else if (strstr(line, "VL_WAKE"))
@@ -229,8 +229,10 @@ static void obd_parse_response(char *str, uint32_t len, QueueHandle_t *q, char* 
         {
             static char sleep_cmd[32] = {0};
             static char wake_cmd[32] = {0};
-            float sleep_voltage = 0;
-            float wakeup_voltage = 0;
+            float sleep_voltage;
+            float wakeup_voltage;
+            uint32_t sleep_time;
+
             ESP_LOGW(TAG, "Sleep mode enabled");
             if(config_server_get_wakeup_volt(&wakeup_voltage) == -1)
             {
@@ -241,6 +243,16 @@ static void obd_parse_response(char *str, uint32_t len, QueueHandle_t *q, char* 
             {
                 sleep_voltage = 13.2f;
                 ESP_LOGE(TAG, "Failed to get wakeup voltage");
+            }
+            if(config_server_get_sleep_time(&sleep_time) == -1)
+            {
+                sleep_time = 120;
+                ESP_LOGE(TAG, "Failed to get sleep time");
+            }
+            else
+            {
+                sleep_time *= 60; //change to sec
+                sleep_time += 30;
             }
             
             if(strcmp(config.ctrl_mode, "ELM327") == 0)
@@ -261,20 +273,24 @@ static void obd_parse_response(char *str, uint32_t len, QueueHandle_t *q, char* 
             //    config.vl_sleep.voltage != (sleep_voltage - tmp))
             if(config.uart_wake.en == 0 || config.vl_wake.en == 0 || 
                 config.vl_wake.voltage != wakeup_voltage || 
-                config.vl_sleep.en == 1 || 
-                config.vl_sleep.voltage != sleep_voltage)
+                config.vl_sleep.en == 0 || 
+                config.vl_sleep.voltage != sleep_voltage ||
+                config.vl_sleep.time != sleep_time)
             {
                 sprintf(sleep_cmd, "STSLVLW >%.2f, 1\r", wakeup_voltage);
-                sprintf(wake_cmd, "STSLVLS <%.2f, 120\r", sleep_voltage);
+                sprintf(wake_cmd, "STSLVLS <%.2f, %lu\r", sleep_voltage, sleep_time);
                 elm327_process_cmd((uint8_t *)sleep_cmd, 0, NULL, response_buffer, 
                                 &response_len, &response_cmd_time, NULL);
                 elm327_process_cmd((uint8_t *)wake_cmd, 0, NULL, response_buffer, 
                                 &response_len, &response_cmd_time, NULL);
-                elm327_process_cmd((uint8_t *)"STSLVl off,on\r", 0, NULL, response_buffer, 
+                elm327_process_cmd((uint8_t *)"STSLVl on,on\r", 0, NULL, response_buffer, 
                                 &response_len, &response_cmd_time, NULL);
-                elm327_process_cmd((uint8_t *)"STSLU on, on\r", 0, NULL, response_buffer, 
+                elm327_process_cmd((uint8_t *)"STSLU off, on\r", 0, NULL, response_buffer, 
                                 &response_len, &response_cmd_time, NULL);
                 vTaskDelay(pdMS_TO_TICKS(10));
+                elm327_process_cmd((uint8_t *)"ATZ\r", 0, NULL, response_buffer, 
+                                &response_len, &response_cmd_time, NULL);
+                vTaskDelay(pdMS_TO_TICKS(100));
                 ESP_LOGW(TAG, "Setting sleep parameters");
             }               
         }
