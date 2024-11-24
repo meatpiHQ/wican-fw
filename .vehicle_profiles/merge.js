@@ -10,8 +10,18 @@ let result = {
     'cars': []
 };
 
+function removeComments(obj) {
+  for (const [key, value] of Object.entries(obj)) {
+    if (key==='$comments')
+      delete obj[key];
+    else if (typeof obj[key] === 'object')
+      removeComments(obj[key])
+  }
+}
+
 async function add_json(path){
     let data = JSON.parse(await readFile(path));
+    removeComments(data);
     result.cars.push(data)
 }
 
