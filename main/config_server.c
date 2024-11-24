@@ -108,7 +108,7 @@ static char can_datarate_str[11][7] = {
 								"1000K",
 };
 
-const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"3333\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"slcan\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
+const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"3333\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"slcan\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
 static device_config_t device_config;
 TimerHandle_t xrestartTimer;
 
@@ -635,7 +635,6 @@ static esp_err_t load_car_config_handler(httpd_req_t *req)
 
             cJSON_AddStringToObject(parameter_details, "class", car->pids[i].parameters[j].class);
             cJSON_AddStringToObject(parameter_details, "unit", car->pids[i].parameters[j].unit);
-            cJSON_AddStringToObject(parameter_details, "sensor_type", car->pids[i].parameters[j].sensor_type == BINARY_SENSOR ? "binary_sensor" : "sensor");
             cJSON_AddItemToObject(parameters_object, car->pids[i].parameters[j].name, parameter_details);
         }
     }
@@ -676,6 +675,7 @@ static esp_err_t system_reboot_handler(httpd_req_t *req)
 static esp_err_t logo_handler(httpd_req_t *req)
 {
     const char* resp_str = (const char*)logo;
+	httpd_resp_set_type(req, "image/svg+xml");
     httpd_resp_send(req, (const char*)resp_str, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
@@ -850,6 +850,7 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	cJSON_AddStringToObject(root, "protocol", device_config.protocol);
 	cJSON_AddStringToObject(root, "sleep_status", device_config.sleep_status);
 	cJSON_AddStringToObject(root, "sleep_volt", device_config.sleep_volt);
+	cJSON_AddStringToObject(root, "wakeup_volt", device_config.wakeup_volt);
 
 	cJSON_AddStringToObject(root, "batt_alert", device_config.batt_alert);
 	cJSON_AddStringToObject(root, "batt_alert_ssid", device_config.batt_alert_ssid);
@@ -1882,7 +1883,44 @@ static void config_server_load_cfg(char *cfg)
 	
 	ESP_LOGE(TAG, "device_config.mqtt_status_topic: %s", device_config.mqtt_status_topic);
 	//*****
+
+	//*****
+	key = cJSON_GetObjectItem(root,"wakeup_volt");
+	if(key == 0)
+	{
+		strcpy(device_config.wakeup_volt, "13.5");
+	}
+	else
+	{
+		strcpy(device_config.wakeup_volt, key->valuestring);
+	}
+
+	ESP_LOGE(TAG, "device_config.wakeup_volt: %s", device_config.wakeup_volt);
+	//*****
+	
+	//*****
+	key = cJSON_GetObjectItem(root,"sleep_time");
+	if(key == 0)
+	{
+		strcpy(device_config.sleep_time, "2");
+	}
+	else
+	{
+		uint32_t sleep_time = atoi(device_config.sleep_time);
+
+		if(sleep_time > 30 && sleep_time < 1)
+		{
+			strcpy(device_config.sleep_time, "2");
+		}
+
+		strcpy(device_config.sleep_time, key->valuestring);
+	}
+
+	ESP_LOGE(TAG, "device_config.sleep_time: %s", device_config.sleep_time);
+	//*****
+
 	return;
+
 
 config_error:
     // Check if destination file exists before renaming
@@ -2251,16 +2289,43 @@ int8_t config_server_get_sleep_volt(float *sleep_volt)
 {
 	*sleep_volt = atof(device_config.sleep_volt);
 
-	if(device_config.sleep_volt[2] != '.')
-	{
-		return -1;
-	}
-
-	if(*sleep_volt > 12.0f && *sleep_volt <= 15.0f)
+	if(*sleep_volt >= 12.0f && *sleep_volt <= 15.0f)
 	{
 		return 1;
 	}
 	return -1;
+}
+
+int8_t config_server_get_wakeup_volt(float *wakeup_volt)
+{
+	*wakeup_volt = atof(device_config.wakeup_volt);
+
+	if(*wakeup_volt >= 12.0f && *wakeup_volt <= 15.0f)
+	{
+		return 1;
+	}
+	return -1;
+}
+
+int8_t config_server_get_sleep_time(uint32_t *sleep_time)
+{
+    char *endptr;
+    long slp_t = strtol(device_config.sleep_time, &endptr, 10);
+    
+    // Check for conversion errors
+    if (*endptr != '\0' || endptr == device_config.sleep_time)
+	{
+        return -1;
+    }
+    
+    // Validate range
+    if (slp_t < 1 || slp_t > 30)
+	{
+        return -1;
+    }
+    
+    *sleep_time = (uint32_t)slp_t;
+    return 1;
 }
 
 int8_t config_server_get_battery_alert_config(void)
