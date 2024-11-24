@@ -1731,6 +1731,7 @@ esp_err_t elm327_sleep(void)
         int len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, sizeof(rsp_buffer), "\r>", UART_TIMEOUT_MS+300);
 		if(len > 0 && strstr(rsp_buffer, "OK\r\r>"))
 		{
+			printf("Sleep OK\r\n");
 			ESP_LOGW(TAG, "Sleep OK");
 			ret = ESP_OK;
 		}
@@ -1867,13 +1868,13 @@ void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame,
         ESP_LOGE(TAG, "Failed to create response queue");
         return;
     }
-
+	elm327_hardreset_chip();
 	while(elm327_chip_get_status() != ELM327_READY)
 	{
 		ESP_LOGW(TAG, "ELM327 not ready...");
 		vTaskDelay(pdMS_TO_TICKS(200));
 	}
-    // elm327_hardreset_chip();
+    
     if (elm327_set_baudrate())
     {
         ESP_LOGI(TAG, "UART configuration completed successfully");
