@@ -10,6 +10,50 @@ let result = {
     'cars': []
 };
 
+function removeSubObjectsWithKey(obj, keyToRemove) { // Thanks to Mistral.AI
+    // Check if the object is an array
+    if (Array.isArray(obj)) {
+        // Iterate over each element in the array
+        for (let i = 0; i < obj.length; i++) {
+            // Recursively call the function on each element
+            obj[i] = removeSubObjectsWithKey(obj[i], keyToRemove);
+            // Remove null entries from the array
+            if (obj[i] === null) {
+                obj.splice(i, 1);
+                i--; // Adjust the index after removing an element
+            }
+        }
+    } else if (obj !== null && typeof obj === 'object') {
+        // Check if any child contains the key to remove
+        let shouldRemoveParent = false;
+        for (let key in obj) {
+            if (obj.hasOwnProperty(key)) {
+                if (key === keyToRemove) {
+                    shouldRemoveParent = true;
+                } else {
+                    // Recursively call the function on each value
+                    obj[key] = removeSubObjectsWithKey(obj[key], keyToRemove);
+                    if (obj[key] === null) {
+                        shouldRemoveParent = true;
+                    }
+                }
+            }
+        }
+        // If any child contains the key to remove, return null to remove the parent object
+        if (shouldRemoveParent) {
+            return null;
+        }
+        // Remove null entries from the object
+        for (let key in obj) {
+            if (obj.hasOwnProperty(key) && obj[key] === null) {
+                delete obj[key];
+            }
+        }
+    }
+    // Return the modified object
+    return obj;
+}
+
 function removeComments(obj) {
   for (const [key, value] of Object.entries(obj)) {
     if (key==='$comments')
@@ -21,6 +65,7 @@ function removeComments(obj) {
 
 async function add_json(path){
     let data = JSON.parse(await readFile(path));
+    data = removeSubObjectsWithKey(data, '$ignore');
     removeComments(data);
     result.cars.push(data)
 }
