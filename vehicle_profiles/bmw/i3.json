@@ -9,7 +9,9 @@
                     "name": "SoC",
                     "expression": "[B11:B12]/10",
                     "unit": "%",
-                    "class": "battery"
+                    "class": "battery",
+                    "min": "0",
+                    "max": "100"
                 }
             ]
         }
