@@ -805,23 +805,12 @@ static esp_err_t read_adc_voltage(float *voltage_out)
     return ret;
 }
 
-// Battery voltage thresholds and timing
-// #define BATTERY_LOW_THRESHOLD    12.5f
-// #define BATTERY_HIGH_THRESHOLD   13.5f
-#define SLEEP_VOLTAGE_HYSTERESIS 0.2f
-#define LOW_VOLTAGE_TIME_SEC     120
-#define HIGH_VOLTAGE_TIME_SEC    5
-
-
-// Function to configure wake-up sources (call before entering sleep)
 void configure_wakeup_sources(void)
 {
-    // Configure GPIO wake-up source (optional)
     esp_sleep_enable_ext0_wakeup(OBD_READY_PIN, 0);
     rtc_gpio_pullup_dis(OBD_READY_PIN);
 }
 
-// Function to enter deep sleep
 void enter_deep_sleep(void)
 {
 	static char response_buffer[32];
@@ -831,10 +820,12 @@ void enter_deep_sleep(void)
     ESP_LOGI(TAG, "Entering deep sleep");
     configure_wakeup_sources();
     
-    // Perform any necessary cleanup
     adc_continuous_stop(handle);
     
-
+	if(gpio_get_level(OBD_READY_PIN) == 1)
+	{
+		printf("MIC is already sleeping!!!!!!!\r\n");
+	}
 	sleep_ret = elm327_sleep();
 
 	vTaskDelay(pdMS_TO_TICKS(5000));
@@ -867,17 +858,30 @@ void sleep_task(void *pvParameters)
     static wc_timer_t voltage_read_timer;
     static wc_timer_t sleep_timer;
     static wc_timer_t wakeup_timer;
-
+	static uint32_t sleep_time;
+	
     // Initialize configuration
     sleep_en = config_server_get_sleep_config();
-    if(config_server_get_sleep_volt(&sleep_voltage) == -1) {
+    if(config_server_get_sleep_volt(&sleep_voltage) == -1)
+	{
         sleep_voltage = 13.1f;
     }
 
-    if(config_server_get_wakeup_volt(&wakeup_voltage) == -1) {
+    if(config_server_get_wakeup_volt(&wakeup_voltage) == -1) 
+	{
         wakeup_voltage = 13.4f;
     }
     
+	if(config_server_get_sleep_time(&sleep_time) == -1)
+	{
+		sleep_time = 2;
+		ESP_LOGE(TAG, "Failed to get sleep time");
+	}
+	else
+	{
+		sleep_time *= 60000; //change min to ms
+	}
+	
     // Create queues
     voltage_queue = xQueueCreate(1, sizeof(float));
     sleep_state_queue = xQueueCreate(1, sizeof(sleep_state_info_t));
@@ -913,7 +917,7 @@ void sleep_task(void *pvParameters)
 					{
                         ESP_LOGW(TAG, "Battery voltage low (%.2fV), starting low voltage timer", battery_voltage);
                         current_state = STATE_LOW_VOLTAGE;
-                        wc_timer_set(&sleep_timer, LOW_VOLTAGE_TIME_SEC * 1000);
+                        wc_timer_set(&sleep_timer, sleep_time);
                     }
                     break;
 
