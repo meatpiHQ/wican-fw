@@ -4,7 +4,12 @@ import { readFile, writeFile } from 'fs/promises';
 const source_folder = '../vehicle_profiles';
 const target = '../vehicle_profiles.json'
 
-const files = await glob(source_folder + '/**/*.json');
+var args = process.argv.slice(2);
+if (args.length == 1)
+  var files = await glob(source_folder + '/' + args[0])
+else
+  var files = await glob(source_folder + '/**/*.json')
+
 
 let result = {
     'cars': []
