@@ -17,49 +17,53 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <inttypes.h>
+// FreeRTOS includes
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include  "freertos/queue.h"
+#include "freertos/queue.h"
 #include "freertos/event_groups.h"
-#include "esp_wifi.h"
+
+// ESP system and core includes
 #include "esp_system.h"
 #include "esp_event.h"
-#include "nvs_flash.h"
-#include "driver/gpio.h"
 #include "esp_log.h"
-#include <string.h>
 #include "esp_timer.h"
-#include "comm_server.h"
-#include "lwip/sockets.h"
+#include "esp_mac.h"
+#include "esp_ota_ops.h"
+
+// Drivers
+#include "driver/gpio.h"
 #include "driver/twai.h"
-#include "ver.h"
+#include "driver/i2c.h"
+#include "esp_wifi.h"
+#include "lwip/sockets.h"
+#include "wifi_network.h"
+#include "nvs.h"
+#include "nvs_flash.h"
+#include <inttypes.h>
+#include <string.h>
 #include "types.h"
+#include "ver.h"
+#include "hw_config.h"
+#include "comm_server.h"
 #include "config_server.h"
 #include "realdash.h"
 #include "slcan.h"
 #include "can.h"
 #include "ble.h"
-#include "wifi_network.h"
-#include "esp_mac.h"
-#include "esp_ota_ops.h"
-#include "nvs.h"
-#include "nvs_flash.h"
 #include "gvret.h"
 #include "sleep_mode.h"
 #include "wc_uart.h"
 #include "elm327.h"
 #include "mqtt.h"
-#include "esp_mac.h"
 #include "ftp.h"
-#include "hw_config.h"
 #include "autopid.h"
-#include "driver/i2c.h"
 #include "led.h"
 #include "obd.h"
 #include "wusb3801.h"
 #include "usb_host.h"
 #include "wc_mdns.h"
+#include "sdcard.h"
 
 #define TAG 		__func__
 #define USB_ID_PIN					39
@@ -834,6 +838,7 @@ void app_main(void)
 	// pdTRUE, /* BIT_0 should be cleared before returning. */
 	// pdFALSE, /* Don't wait for both bits, either bit will do. */
 	// portMAX_DELAY);/* Wait forever. */  
+	sd_card_init();
 	esp_log_level_set("*", ESP_LOG_NONE);
 }
 

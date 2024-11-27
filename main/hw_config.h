@@ -25,6 +25,13 @@
 #define RX_GPIO_NUM             	1
 #define CAN_STDBY_GPIO_NUM			38
 
+#define SDCARD_CLK                  21                 
+#define SDCARD_CMD                  47
+#define SDCARD_D0                   14
+#define SDCARD_D1                   13
+#define SDCARD_D2                   12
+#define SDCARD_D3                   48
+
 // #define CONNECTED_LED_GPIO_NUM		41  //NC pin
 // #define ACTIVE_LED_GPIO_NUM			41  //NC pin
 // #define BLE_EN_PIN_NUM				42  //NC pin
