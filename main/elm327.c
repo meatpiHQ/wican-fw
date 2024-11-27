@@ -1290,6 +1290,7 @@ void elm327_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q), QueueH
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
@@ -1821,6 +1822,173 @@ elm327_chip_status_t elm327_chip_get_status(void)
 
 	return status;
 }
+
+
+
+/////////////////////ota
+
+
+
+// #define UART_PORT UART_NUM_1
+#define MAX_LINE_LENGTH 256
+#define RESPONSE_TIMEOUT_MS 1000
+
+// Send command and get response
+esp_err_t elm327_send_command(const char* cmd, char* response, size_t response_size)
+{
+    ESP_LOGI(TAG, "Sending command: %s", cmd);
+    
+    // Clear any pending data
+    uart_flush(UART_NUM_1);
+    
+    // Send command with \r
+    char cmd_buf[BUF_SIZE];
+    snprintf(cmd_buf, sizeof(cmd_buf), "%s\r", cmd);
+    int written = uart_write_bytes(UART_NUM_1, cmd_buf, strlen(cmd_buf));
+    if (written < 0)
+	{
+        ESP_LOGE(TAG, "Failed to write command");
+        return ESP_FAIL;
+    }
+    
+    // Wait for response
+    int len = uart_read_bytes(UART_NUM_1, response, response_size - 1, 
+                            pdMS_TO_TICKS(RESPONSE_TIMEOUT_MS));
+    if (len < 0)
+	{
+        ESP_LOGE(TAG, "Failed to receive response");
+        return ESP_FAIL;
+    }
+    
+    response[len] = '\0';
+    ESP_LOGI(TAG, "Received response: %s", response);
+    
+    // Check for OK or error
+    if (strstr(response, "OK") != NULL)
+	{
+        return ESP_OK;
+    }
+	else if (strstr(response, "?") != NULL)
+	{
+        // Special case for '?' response
+        return ESP_ERR_NOT_FOUND;
+    }
+	else
+	{
+        ESP_LOGW(TAG, "Unexpected response");
+        return ESP_FAIL;
+    }
+}
+
+// Function to read firmware file and perform update
+esp_err_t elm327_update_from_file(const char* filename)
+{
+    FILE* file = fopen(filename, "r");
+    if (!file)
+	{
+        ESP_LOGE(TAG, "Failed to open firmware file: %s", filename);
+        return ESP_FAIL;
+    }
+
+    char line[MAX_LINE_LENGTH];
+    char response[BUF_SIZE];
+    esp_err_t ret = ESP_OK;
+    size_t line_count = 0;
+
+    // Start update process
+    ret = elm327_send_command("VTVERS", response, sizeof(response));
+    if (ret != ESP_OK)
+	{
+        if (ret == ESP_ERR_NOT_FOUND)
+		{
+            ESP_LOGI(TAG, "Received '?', continuing with update");
+        }
+		else
+		{
+            ESP_LOGE(TAG, "Failed to start update");
+            fclose(file);
+            return ret;
+        }
+    }
+
+    // Initialize update
+    ret = elm327_send_command("VTDLMIC3422", response, sizeof(response));
+    if (ret != ESP_OK) 
+	{
+        ESP_LOGE(TAG, "Failed to initialize update");
+        fclose(file);
+        return ret;
+    }
+
+    // Process each line of the firmware file
+    while (fgets(line, sizeof(line), file)) 
+	{
+        size_t len = strlen(line);
+        line_count++;
+        
+        // Remove trailing \r\n or \n
+        while (len > 0 && (line[len-1] == '\n' || line[len-1] == '\r')) 
+		{
+            line[--len] = '\0';
+        }
+
+        // Skip empty lines
+        if (len == 0) 
+		{
+            continue;
+        }
+
+        // Prepare and send VTDLDT command
+        char cmd[MAX_LINE_LENGTH + 7];  // 6 for "VTDLDT" + 1 for null terminator
+        snprintf(cmd, sizeof(cmd), "VTDLDT%s", line);
+
+        ret = elm327_send_command(cmd, response, sizeof(response));
+        if (ret != ESP_OK) 
+		{
+            ESP_LOGE(TAG, "Failed to send data block at line %d", line_count);
+            break;
+        }
+
+        // Optional: Add a small delay between blocks
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+    fclose(file);
+
+    if (ret == ESP_OK)
+	{
+        // End update
+        ret = elm327_send_command("VTDLE", response, sizeof(response));
+        if (ret != ESP_OK)
+		{
+            ESP_LOGE(TAG, "Failed to end update, power cycle may be required");
+        }
+    }
+
+    return ret;
+}
+
+// Main update function
+void update_elm327_firmware(const char* firmware_file)
+{
+    ESP_LOGI(TAG, "Starting elm327 firmware update from file: %s", firmware_file);
+    
+    // Perform update
+    esp_err_t ret = elm327_update_from_file(firmware_file);
+    
+    if (ret == ESP_OK)
+	{
+        ESP_LOGI(TAG, "Firmware update completed successfully");
+    }
+	else
+	{
+        ESP_LOGE(TAG, "Firmware update failed, status: %d", ret);
+    }
+}
+
+/////////////////////ota
+
+
 
 void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame, uint8_t type))
 {
