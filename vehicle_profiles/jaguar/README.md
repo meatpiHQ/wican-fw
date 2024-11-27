@@ -2,13 +2,17 @@
 
 ## I-PACE
 
-This profile is based off the work of [dernotte](https://github.com/dernotte) for the [I-PACE component of OVMS3](https://github.com/openvehicles/Open-Vehicle-Monitoring-System-3/tree/master/vehicle/OVMS.V3/components/vehicle_jaguaripace). See [here](https://github.com/openvehicles/Open-Vehicle-Monitoring-System-3/blob/master/vehicle/OVMS.V3/components/vehicle_jaguaripace/src/ipace_obd_pids.h) for the list of indentified PIDs. This [OVMS forum thread](https://www.openvehicles.com/node/2423) shows some of the preliminary work prior to the OVMS component along with some other contributors.
+This profile is based off the work of [dernotte](https://github.com/dernotte) for the [I-PACE component of OVMS3](https://github.com/openvehicles/Open-Vehicle-Monitoring-System-3/tree/master/vehicle/OVMS.V3/components/vehicle_jaguaripace). See [here](https://github.com/openvehicles/Open-Vehicle-Monitoring-System-3/blob/master/vehicle/OVMS.V3/components/vehicle_jaguaripace/src/ipace_obd_pids.h) for the list of indentified PIDs. This [OVMS forum thread](https://www.openvehicles.com/node/2423) shows some of the preliminary work prior to the OVMS component along with some other contributors. 
 
-Only the PIDs associated with the Battery Energy Control Module (BECM - header 7E4) are currently supported. Attempts to reach the other modules (e.g. HVAC, TPMS) results in a timeout error. The VIN PID on the BECM is also not supported - it is a multi frame message.
+Additional resources:
+- I-PACE PID [spreadsheet](https://docs.google.com/spreadsheets/d/1wNMtpPqMAejNeOZGsPCcgau8HODROzceFcUSfk2lVz8/) maintained by [dernotte](https://github.com/dernotte).
+- I-PACE forum [thread](https://www.i-paceforum.com/threads/hv-battery-reports-autel-scanner-tool-can-do-it.8773/) for idenditfying PIDs for HV battery reports.
 
-These are confirmed working on a model year 2019 I-PACE.
+Not all of the PIDs are currently supported. Attempts to reach some modules (e.g. HVAC, TPMS) results in a timeout error. The VIN and location PIDs are also not supported - they are a multi frame message.
 
 ### PID Listing
+
+These are confirmed working on a model year 2019 I-PACE.
 
 |Supported|Name|PID|Module|Description|Notes|
 |:-------:|----|---|------|-----------|-----|
