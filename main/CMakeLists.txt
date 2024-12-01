@@ -2,12 +2,12 @@
 # for more information about component CMakeLists.txt files.
 
 set(srcs "main.c" "comm_server.c" "config_server.c" "realdash.c" "slcan.c" "can.c" "ble.c" "wifi_network.c" "gvret.c" "wc_uart.c" "mqtt.c" "sleep_mode.c" "autopid.c" "expression_parser.c" "led.c" "obd.c" "wusb3801.c" "wc_mdns.c" "wc_timer.c" "sdcard.c")
-set(requires   esp_timer esp_wifi nvs_flash fatfs vfs driver esp-tls esp_adc esp_eth log app_update esp_http_server bt spiffs freertos mqtt json)
+set(requires   esp_timer esp_wifi nvs_flash fatfs vfs driver esp-tls esp_adc esp_eth log app_update esp_http_server bt spiffs freertos mqtt json wear_levelling)
 idf_component_register(
     SRCS "usb_host.cpp" "ftp.c" "elm327.c" "obd.c" "autopid.c" "" "${srcs}"        # list the source files of this component
     INCLUDE_DIRS        # optional, add here public include directories
     PRIV_INCLUDE_DIRS   # optional, add here private include directories
     REQUIRES   "${requires}"         # optional, list the public requirements (component names)
     PRIV_REQUIRES       # optional, list the private requirements
-    EMBED_FILES "homepage.html"
+    EMBED_FILES "homepage.html" "obd_fw/V2.3.18.txt"
 )
