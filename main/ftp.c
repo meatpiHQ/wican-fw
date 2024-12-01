@@ -68,7 +68,7 @@ extern EventGroupHandle_t xEventTask;
 int ftp_buff_size = CONFIG_MICROPY_FTPSERVER_BUFFER_SIZE;
 int ftp_timeout = FTP_CMD_TIMEOUT_MS;
 const char *FTP_TAG = "[Ftp]";
-const char *MOUNT_POINT = "/spiffs";
+const char *MOUNT_POINT = "/fatfs";
 
 static uint8_t ftp_stop = 0;
 char ftp_user[FTP_USER_PASS_LEN_MAX + 1];
