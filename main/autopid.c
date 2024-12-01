@@ -1095,7 +1095,7 @@ static void autopid_load_config(char *config_str)
 
 static void autopid_load_car_specific(char* car_mod)
 {
-    const char *filepath = "/spiffs/car_data.json";
+    const char *filepath = "/fatfs/car_data.json";
     uint8_t car_found_flag = 0;
     
     FILE *fd = fopen(filepath, "r");
