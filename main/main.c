@@ -343,7 +343,7 @@ static void can_rx_task(void *pvParameters)
 //
 //    		ESP_LOGI(TAG, "bvoltage: %f", bvoltage);
 //    	}
-        process_led(0);
+        // process_led(0);
     	if(esp_timer_get_time() - time_old > 1000*1000)
     	{
     		uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
@@ -463,6 +463,9 @@ void app_main(void)
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+
+	sd_card_init();
+
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 	printf("Project Version: %d\n", HARDWARE_VER);
@@ -837,8 +840,7 @@ void app_main(void)
 	// FTP_TASK_FINISH_BIT, /* The bits within the event group to wait for. */
 	// pdTRUE, /* BIT_0 should be cleared before returning. */
 	// pdFALSE, /* Don't wait for both bits, either bit will do. */
-	// portMAX_DELAY);/* Wait forever. */  
-	sd_card_init();
+	// portMAX_DELAY);/* Wait forever. */ 
 	esp_log_level_set("*", ESP_LOG_NONE);
 }
 
