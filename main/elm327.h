@@ -24,6 +24,8 @@
 
 #include "driver/twai.h"
 
+#define OBD_FW_VER		"V2.3.18"
+
 typedef void (*response_callback_t)(char*, uint32_t, QueueHandle_t *q, char* cmd_str);
 
 #define ELM327_CAN_RX   0x01
