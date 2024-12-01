@@ -41,7 +41,8 @@
 #include <string.h>
 #include <sys/unistd.h>
 #include <sys/stat.h>
-#include "esp_spiffs.h"
+#include "ff.h"
+#include "esp_vfs_fat.h"
 
 #include "config_server.h"
 #include "cJSON.h"
@@ -365,7 +366,7 @@ static esp_err_t store_config_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
 
-    FILE *f = fopen("/spiffs/config.json", "w");
+    FILE *f = fopen("/fatfs/config.json", "w");
     if (f)
     {
         // Write the received data into the file
@@ -420,7 +421,7 @@ static esp_err_t store_canflt_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
 
-    FILE *f = fopen("/spiffs/mqtt_canfilt.json", "w");
+    FILE *f = fopen("/fatfs/mqtt_canfilt.json", "w");
     if (f)
     {
         // Write the received data into the file
@@ -439,7 +440,7 @@ static esp_err_t store_canflt_handler(httpd_req_t *req)
 
 	free(mqtt_canflt_file);
 	mqtt_canflt_file = NULL;
-	FILE* f1 = fopen("/spiffs/mqtt_canfilt.json", "r");
+	FILE* f1 = fopen("/fatfs/mqtt_canfilt.json", "r");
 	if (f1 != NULL)
 	{
 		fseek(f1, 0, SEEK_END);
@@ -497,7 +498,7 @@ static esp_err_t load_pid_auto_handler(httpd_req_t *req)
 
 static esp_err_t load_pid_auto_config_handler(httpd_req_t *req)
 {
-    const char *filepath = "/spiffs/car_data.json";
+    const char *filepath = "/fatfs/car_data.json";
     ESP_LOGI(TAG, "Opening file: %s", filepath);
     FILE *fd = fopen(filepath, "r");
 
@@ -716,7 +717,7 @@ static esp_err_t store_auto_data_handler(httpd_req_t *req)
 	ESP_LOGI(__func__, "Auto Table json: %s", buf);
 
 	// change this into a function
-    FILE *f = fopen("/spiffs/auto_pid.json", "w");
+    FILE *f = fopen("/fatfs/auto_pid.json", "w");
     if (f)
     {
         // Write the received data into the file
@@ -742,7 +743,7 @@ static esp_err_t store_auto_data_handler(httpd_req_t *req)
 	vTaskDelay(5 / portTICK_PERIOD_MS);
 
 	// config_server_get_auto_pid();
-	FILE* f1 = fopen("/spiffs/auto_pid.json", "r");
+	FILE* f1 = fopen("/fatfs/auto_pid.json", "r");
 	if (f1 != NULL)
 	{
 		fseek(f1, 0, SEEK_END);
@@ -767,7 +768,7 @@ static esp_err_t store_car_data_handler(httpd_req_t *req)
 {
     int total_len = req->content_len;
     int received = 0;
-	const char *filepath = "/spiffs/car_data.json";
+	const char *filepath = "/fatfs/car_data.json";
 
     FILE *file = fopen(filepath, "w");
     if (!file)
@@ -1454,7 +1455,7 @@ static const httpd_uri_t ws = {
         .user_ctx   = NULL,
         .is_websocket = true
 };
-static struct file_server_data server_data = {.base_path = "/spiffs"};
+static struct file_server_data server_data = {.base_path = "/fatfs"};
 //static struct file_server_data *server_data = NULL;
 /* URI handler for uploading files to server */
 static const httpd_uri_t file_upload = {
@@ -1925,12 +1926,12 @@ static void config_server_load_cfg(char *cfg)
 config_error:
     // Check if destination file exists before renaming
 
-    if (stat("/spiffs/config.json", &st) == 0)
+    if (stat("/fatfs/config.json", &st) == 0)
     {
     	ESP_LOGE(TAG, "config.json file error, restoring default");
         // Delete it if it exists
-        unlink("/spiffs/config.json");
-		FILE* f = fopen("/spiffs/config.json", "w");
+        unlink("/fatfs/config.json");
+		FILE* f = fopen("/fatfs/config.json", "w");
 		// sprintf(device_config_default, device_id, device_id);
 		fprintf(f, device_config_default, (char*)device_id, (char*)device_id, (char*)device_id);
 		fclose(f);
@@ -1981,7 +1982,7 @@ void vrestartTimerCallback( TimerHandle_t xTimer )
 
 
 //static char* device_config = NULL;
-static uint8_t esp_spiffs_flag = 0;
+static uint8_t esp_fatfs_flag = 0;
 static httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 static httpd_handle_t config_server_init(void)
 {
@@ -2017,108 +2018,96 @@ static httpd_handle_t config_server_init(void)
     	xip_Queue = xQueueCreate(1, 20);
     }
 
-    if(esp_spiffs_flag == 0)
-    {
-		ESP_LOGI(TAG, "Initializing SPIFFS");
+	static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
 
-		esp_vfs_spiffs_conf_t conf = {
-		  .base_path = "/spiffs",
-		  .partition_label = NULL,
-		  .max_files = 5,
-		  .format_if_mount_failed = true
+	if(esp_fatfs_flag == 0) 
+	{
+		ESP_LOGI(TAG, "Initializing FAT filesystem");
+
+		const esp_vfs_fat_mount_config_t mount_config = {
+			.max_files = 4,
+			.format_if_mount_failed = true,
+			.allocation_unit_size = CONFIG_WL_SECTOR_SIZE,
+			.use_one_fat = false,
 		};
 
-		// Use settings defined above to initialize and mount SPIFFS filesystem.
-		// Note: esp_vfs_spiffs_register is an all-in-one convenience function.
-		esp_err_t ret = esp_vfs_spiffs_register(&conf);
-
-		if (ret != ESP_OK)
+		esp_err_t ret = esp_vfs_fat_spiflash_mount_rw_wl("/fatfs", "storage", &mount_config, &s_wl_handle);
+		if (ret != ESP_OK) 
 		{
-			if (ret == ESP_FAIL)
-			{
-				ESP_LOGE(TAG, "Failed to mount or format filesystem");
-			}
-			else if (ret == ESP_ERR_NOT_FOUND)
-			{
-				ESP_LOGE(TAG, "Failed to find SPIFFS partition");
-			}
-			else
-			{
-				ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", esp_err_to_name(ret));
-			}
-//			return;
+			ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(ret));
+			return NULL;
 		}
+		
+		ESP_LOGI(TAG, "FAT filesystem mounted successfully");
 
-		size_t total = 0, used = 0;
-		ret = esp_spiffs_info(conf.partition_label, &total, &used);
-		if (ret != ESP_OK)
-		{
-			ESP_LOGE(TAG, "Failed to get SPIFFS partition information (%s)", esp_err_to_name(ret));
-		}
-		else
-		{
-			ESP_LOGI(TAG, "Partition size: total: %d, used: %d", total, used);
-		}
-
-		// Use POSIX and C standard library functions to work with files.
-		// First create a file.
-		ESP_LOGI(TAG, "Opening file");
-		FILE* f = fopen("/spiffs/config.json", "r");
+		// Handle config.json
+		FILE* f = fopen("/fatfs/config.json", "r");
 		if (f == NULL)
 		{
-			ESP_LOGI(TAG, "Config file does not exist, load default");
-			f = fopen("/spiffs/config.json", "w");
-//			fwrite(device_config_default , 1 , sizeof(device_config_default) , f );
-			fprintf(f, device_config_default, (char*)device_id, (char*)device_id, (char*)device_id);
+			ESP_LOGI(TAG, "Config file does not exist, loading default");
+			f = fopen("/fatfs/config.json", "w");
+			if (f != NULL)
+			{
+				fprintf(f, device_config_default, (char*)device_id, (char*)device_id, (char*)device_id);
+				fclose(f);
+				f = fopen("/fatfs/config.json", "r");
+				ESP_LOGW(TAG, "Config file trying to load again");
+			}
+		}
+
+		if (f != NULL)
+		{
+			fseek(f, 0, SEEK_END);
+			long filesize = ftell(f);
+			fseek(f, 0, SEEK_SET);
+
+			device_config_file = malloc(filesize + 1);
+			if (device_config_file != NULL)
+			{
+				fread(device_config_file, sizeof(char), filesize, f);
+				device_config_file[filesize] = 0;
+				ESP_LOGI(TAG, "config.json: %s", device_config_file);
+				config_server_load_cfg(device_config_file);
+			}
 			fclose(f);
-			f = fopen("/spiffs/config.json", "r");
 		}
-		fseek(f, 0, SEEK_END);
-		int filesize = ftell(f);
-		fseek(f, 0, SEEK_SET);
 
+		// Handle mqtt_canfilt.json
+		f = fopen("/fatfs/mqtt_canfilt.json", "r");
+		if (f != NULL)
+		{
+			fseek(f, 0, SEEK_END);
+			long filesize = ftell(f);
+			fseek(f, 0, SEEK_SET);
 
-		device_config_file = malloc(filesize+1);
-		ESP_LOGI(__func__, "File size: %d", filesize);
-		fseek(f, 0, SEEK_SET);
-		fread(device_config_file, sizeof(char), filesize, f);
-		device_config_file[filesize] = 0;
-		fseek(f, 0, SEEK_SET);
-		ESP_LOGI(TAG, "config.json: %s", device_config_file);
-		config_server_load_cfg(device_config_file);
-		
-		FILE* f1 = fopen("/spiffs/mqtt_canfilt.json", "r");
-		if (f1 != NULL)
-		{
-			fseek(f1, 0, SEEK_END);
-			filesize = ftell(f1);
-			fseek(f1, 0, SEEK_SET);
-			mqtt_canflt_file = malloc(filesize+1);
-			ESP_LOGI(__func__, "mqtt_canflt_file File size: %d", filesize);
-			fseek(f1, 0, SEEK_SET);
-			fread(mqtt_canflt_file, sizeof(char), filesize, f1);
-			mqtt_canflt_file[filesize] = 0;
-			fseek(f1, 0, SEEK_SET);
-			fclose(f1);
-			ESP_LOGI(TAG, "mqtt_canfilt.json: %s", mqtt_canflt_file);
+			mqtt_canflt_file = malloc(filesize + 1);
+			if (mqtt_canflt_file != NULL)
+			{
+				fread(mqtt_canflt_file, sizeof(char), filesize, f);
+				mqtt_canflt_file[filesize] = 0;
+				ESP_LOGI(TAG, "mqtt_canfilt.json: %s", mqtt_canflt_file);
+			}
+			fclose(f);
 		}
-		f1 = fopen("/spiffs/auto_pid.json", "r");
-		if (f1 != NULL)
+
+		// Handle auto_pid.json
+		f = fopen("/fatfs/auto_pid.json", "r");
+		if (f != NULL)
 		{
-			fseek(f1, 0, SEEK_END);
-			int32_t filesize = ftell(f1);
-			fseek(f1, 0, SEEK_SET);
-			auto_pid_file = malloc(filesize+1);
-			ESP_LOGI(__func__, "auto_pid File size: %ld", filesize);
-			fseek(f1, 0, SEEK_SET);
-			fread(auto_pid_file, sizeof(char), filesize, f1);
-			auto_pid_file[filesize] = 0;
-			fseek(f1, 0, SEEK_SET);
-			fclose(f1);
-			ESP_LOGI(TAG, "auto_pid.json: %s", auto_pid_file);
+			fseek(f, 0, SEEK_END);
+			long filesize = ftell(f);
+			fseek(f, 0, SEEK_SET);
+
+			auto_pid_file = malloc(filesize + 1);
+			if (auto_pid_file != NULL)
+			{
+				fread(auto_pid_file, sizeof(char), filesize, f);
+				auto_pid_file[filesize] = 0;
+				ESP_LOGI(TAG, "auto_pid.json: %s", auto_pid_file);
+			}
+			fclose(f);
 		}
-//		fclose(f);
-    }
+	}
 
     xrestartTimer= xTimerCreate
                        ( /* Just a text name, not used by the RTOS
@@ -2535,7 +2524,7 @@ void config_server_set_ble_config(uint8_t b)
 	}
 	const char *resp_str = cJSON_Print(root);
 	ESP_LOGI(TAG, "resp_str:%s", resp_str);
-	FILE* f = fopen("/spiffs/config.json", "w");
+	FILE* f = fopen("/fatfs/config.json", "w");
 	if (f != NULL)
 	{
 		fprintf(f, resp_str);
