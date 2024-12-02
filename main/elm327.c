@@ -2036,6 +2036,20 @@ esp_err_t elm327_check_obd_device()
     return ret;
 }
 
+static void elm327_disable_wake_commands(void)
+{
+	char* rx_buffer = malloc(256);
+	//make sure chip goes to sleep
+	uart_write_bytes(UART_NUM_1, "ATPP 0F SV 95\r", strlen("ATPP 0F SV 95\r"));
+    uart_read_until_pattern(UART_NUM_1, rx_buffer, BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
+	bzero(rx_buffer, 256);
+	vTaskDelay(pdMS_TO_TICKS(100));
+	uart_write_bytes(UART_NUM_1, "ATPP 0F ON\r", strlen("ATPP 0F ON\r"));
+    uart_read_until_pattern(UART_NUM_1, rx_buffer, BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
+	vTaskDelay(pdMS_TO_TICKS(100));
+	elm327_hardreset_chip();
+}
+
 esp_err_t elm327_update_obd(void)
 {
     const char* current_ptr = (const char*)obd_fw_start;
@@ -2142,7 +2156,9 @@ esp_err_t elm327_update_obd(void)
 	
 	ESP_LOGW(TAG, "ELM327 chip update DONE!");
     elm327_hardreset_chip();
+	elm327_disable_wake_commands();
 	led_fast_blink(LED_RED, 0, false);
+
 	return ret;
 }
 
@@ -2249,6 +2265,7 @@ esp_err_t elm327_update_obd_from_file(const char* filename)
 
 	ESP_LOGW(TAG, "ELM327 chip update DONE!");
 	elm327_hardreset_chip();
+	elm327_disable_wake_commands();
 	led_fast_blink(LED_RED, 0, false);
 	
     return ret;
