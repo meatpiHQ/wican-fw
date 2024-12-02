@@ -835,7 +835,7 @@
                 <tr>
                     <td>Sleep Mode:</td>
                     <td>
-                        <select name="sleep_status" id="sleep_status">
+                        <select name="sleep_status" id="sleep_status" onChange="submit_enable();">
                             <option value="enable">Enable</option>
                             <option value="disable">Disable</option>
                         </select>
@@ -1402,15 +1402,15 @@ function loadAutoTable(jsonData) {
     }
 
 
-        function enableAutoStoreButton() {
-            const storeButton = document.querySelector('button.store');
-            if (storeButton) {
-                storeButton.disabled = false;
-            }
-            document.getElementById("custom_pid_store").disabled = false;
+    function enableAutoStoreButton() {
+        const storeButton = document.querySelector('button.store');
+        if (storeButton) {
+            storeButton.disabled = false;
         }
+        document.getElementById("custom_pid_store").disabled = false;
+    }
 		
-        async function storeAutoTableData() {
+    async function storeAutoTableData() {
         try {
             // Get all PID entries
             const entries = document.querySelectorAll('.pid-entry');
@@ -1426,6 +1426,29 @@ function loadAutoTable(jsonData) {
             const carSpecificValue = document.getElementById("car_specific").value;
             const carModelField = document.getElementById("car_model");
             const carModelValue = carModelField.value;
+
+            if (latest_car_models != null) {
+            console.log("latest_car_models:", latest_car_models);
+            if (latest_car_models && Array.isArray(latest_car_models.cars)) {
+                latest_car_models.cars.forEach((car, index) => {
+                if (car.car_model == carModelValue) {
+                    console.log("Matched car at index", index, ":", car);
+                    var cars_file = {
+                    "cars": [car]
+                    };
+                    console.log("cars_file", cars_file);
+                    fetch('/store_car_data', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(cars_file)
+                    }).then(response => response.text()).then(data => console.log('Success:', data)).catch(error => console.error('Error:', error));
+                }
+                });
+            }
+            latest_car_models = null;
+            }
 
             // Validate cycle time
             if (!cycleField.disabled && (!/^\d+$/.test(cycleValue) || parseInt(cycleValue) < 1000)) {
