@@ -4,7 +4,7 @@
 nvs,      data, nvs,      0x9000,  0x4000,
 otadata,  data, ota,      0xd000,  0x2000,
 phy_init, data, phy,      0xf000,  0x1000,
-ota_0,    app,  ota_0,    0x10000, 4000K,
-ota_1,    app,  ota_1,           , 4000K,
-storage,  data, fat,             , 8M,
+ota_0,    app,  ota_0,    0x10000, 5048K,
+ota_1,    app,  ota_1,           , 5048K,
+storage,  data, fat,             , 6M,
 
