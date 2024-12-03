@@ -991,6 +991,9 @@
                     <tr>
                         <td><input id="reboot_button" name="reboot_button" type="button" onclick="reboot()" value="Reboot" /></td>
                     </tr>
+                    <tr>
+                        <td><input id="force_update" name="force_update" type="button" onclick="send_system_command('force_update_obd')" value="Update OBD" /></td>
+                    </tr>
                 </table>
             </form>
         </div>
@@ -1951,12 +1954,21 @@ function loadAutoTable(jsonData) {
 
 	function reboot() {
 		const xhttp = new XMLHttpRequest();
-		document.getElementById("reboot_button").disabled = true;
-        showNotification("Rebooting please reconnect...", "yellow");
+		document.getElementById("force_update").disabled = true;
+        showNotification("Update OBD chip please...", "yellow");
 		xhttp.open("POST", "/system_reboot");
 		xhttp.send("reboot");
 	}
-
+    
+    function send_system_command(command) {
+        const xhttp = new XMLHttpRequest();
+        const data = {
+            "command": command
+        };
+        xhttp.open("POST", "/system_commands");
+        xhttp.send(JSON.stringify(data));
+    }
+    
 	function Load() {
 		const xhttp = new XMLHttpRequest();
 		xhttp.onload = function() {

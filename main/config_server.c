@@ -73,6 +73,7 @@
 #include "sleep_mode.h"
 #include "autopid.h"
 #include "wc_mdns.h"
+#include "elm327.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
@@ -670,6 +671,80 @@ static esp_err_t system_reboot_handler(httpd_req_t *req)
 	ESP_LOGI(TAG, "reboot");
 	xTimerStart( xrestartTimer, 0 );
     // esp_restart();
+    return ESP_OK;
+}
+
+static esp_err_t system_commands_handler(httpd_req_t *req)
+{
+    char *buf = NULL;
+    size_t buf_size = req->content_len;
+
+    if (buf_size <= 0)
+    {
+        return ESP_FAIL;
+    }
+
+    buf = (char *)malloc(buf_size + 1);
+    if (!buf)
+    {
+        ESP_LOGE(TAG, "Memory allocation failure");
+        return ESP_ERR_NO_MEM;
+    }
+
+    int ret = httpd_req_recv(req, buf, buf_size);
+    if (ret <= 0)
+    {
+        free(buf);
+        return ESP_FAIL;
+    }
+    buf[ret] = 0;
+
+    cJSON *root = cJSON_Parse(buf);
+    if (root == NULL)
+    {
+        free(buf);
+        return ESP_FAIL;
+    }
+
+    cJSON *command = cJSON_GetObjectItem(root, "command");
+    if (command != NULL && cJSON_IsString(command) && command->valuestring != NULL)
+    {
+        const char *cmd = command->valuestring;
+		ESP_LOGI(TAG, "Received command: %s", cmd);
+  
+        if (cmd != NULL && strlen(cmd) > 0)
+        {
+            if (strcmp(cmd, "reboot") == 0)
+            {
+                if (xrestartTimer != NULL)
+                {
+                    xTimerStart(xrestartTimer, 0);
+                }
+                else
+                {
+                    ESP_LOGE(TAG, "Restart timer is NULL");
+                }
+            }
+			else if (strcmp(cmd, "force_update_obd") == 0)
+			{
+				elm327_update_obd(true);
+			}
+        }
+        else
+        {
+            ESP_LOGE(TAG, "Empty command received");
+        }
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Invalid or missing command");
+    }
+    cJSON_Delete(root);
+    free(buf);
+
+    const char *resp_str = "Command executed";
+    httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
+
     return ESP_OK;
 }
 
@@ -1498,6 +1573,13 @@ static const httpd_uri_t store_car_data_uri = {
      * context to demonstrate it's usage */
     .user_ctx  = NULL
 };
+static const httpd_uri_t system_commands = {
+    .uri       = "/system_commands",   // Match all URIs of type /upload/path/to/file
+    .method    = HTTP_POST,
+    .handler   = system_commands_handler,
+    .user_ctx  = NULL    // Pass server data as context
+};
+
 static void config_server_load_cfg(char *cfg)
 {
 	cJSON * root, *key = 0;
@@ -2129,7 +2211,7 @@ static httpd_handle_t config_server_init(void)
                        );
 
     // Start the httpd server
-	config.max_uri_handlers = 17;
+	config.max_uri_handlers = 18;
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK)
     {
@@ -2152,6 +2234,7 @@ static httpd_handle_t config_server_init(void)
 		httpd_register_uri_handler(server, &autopid_data);
 		httpd_register_uri_handler(server, &load_car_config_uri);
 		httpd_register_uri_handler(server, &store_car_data_uri);
+		httpd_register_uri_handler(server, &system_commands);
         #if CONFIG_EXAMPLE_BASIC_AUTH
         httpd_register_basic_auth(server);
         #endif
