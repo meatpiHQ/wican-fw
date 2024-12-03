@@ -2039,6 +2039,7 @@ esp_err_t elm327_check_obd_device()
 static void elm327_disable_wake_commands(void)
 {
 	char* rx_buffer = malloc(256);
+	xSemaphoreTake(xuart1_semaphore, portMAX_DELAY);
 	//make sure chip goes to sleep
 	uart_write_bytes(UART_NUM_1, "ATPP 0F SV 95\r", strlen("ATPP 0F SV 95\r"));
     uart_read_until_pattern(UART_NUM_1, rx_buffer, BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
@@ -2047,22 +2048,25 @@ static void elm327_disable_wake_commands(void)
 	uart_write_bytes(UART_NUM_1, "ATPP 0F ON\r", strlen("ATPP 0F ON\r"));
     uart_read_until_pattern(UART_NUM_1, rx_buffer, BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
 	vTaskDelay(pdMS_TO_TICKS(100));
+	xSemaphoreGive(xuart1_semaphore);
 	elm327_hardreset_chip();
 }
 
-esp_err_t elm327_update_obd(void)
+esp_err_t elm327_update_obd(bool force_update)
 {
     const char* current_ptr = (const char*)obd_fw_start;
     const char* end_ptr = (const char*)obd_fw_end;
-
+	xSemaphoreTake(xuart1_semaphore, portMAX_DELAY);
     esp_err_t ret = elm327_check_obd_device();
     if (ret != ESP_OK)
 	{
+		xSemaphoreGive(xuart1_semaphore);
         return ret;
     }
 
-	if(device_status.need_update == false)
+	if(device_status.need_update == false && force_update == false)
 	{
+		xSemaphoreGive(xuart1_semaphore);
 		return ret;
 	}
 
@@ -2075,6 +2079,7 @@ esp_err_t elm327_update_obd(void)
     ret = elm327_send_update_command("VTDLMIC3422\r", &response, &response_size, ELM327_UPDATE_TIMEOUT_MS);
     if (ret != ESP_OK)
 	{
+		xSemaphoreGive(xuart1_semaphore);
         return ret;
     }
     free(response);
@@ -2155,10 +2160,12 @@ esp_err_t elm327_update_obd(void)
     }
 	
 	ESP_LOGW(TAG, "ELM327 chip update DONE!");
+	xSemaphoreGive(xuart1_semaphore);
     elm327_hardreset_chip();
+
 	elm327_disable_wake_commands();
 	led_fast_blink(LED_RED, 0, false);
-
+	
 	return ret;
 }
 
@@ -2323,7 +2330,7 @@ void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame,
 	// elm327_update_obd_from_file("/sdcard/MIC3624_v2.3.07.beta4.txt");
 	// elm327_update_obd_from_file("/sdcard/MIC3624_v2.3.10.txt");
 	// elm327_update_obd_from_file("/sdcard/MIC3624_v2.3.18.txt");
-	elm327_update_obd();
+	elm327_update_obd(false);
 
 	while(elm327_chip_get_status() != ELM327_READY)
 	{
