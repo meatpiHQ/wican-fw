@@ -59,6 +59,120 @@ static autopid_data_t autopid_data = {
 };
 static EventGroupHandle_t xautopid_event_group = NULL;
 
+// typedef struct {
+//     const char *name;           
+//     const char *description;    
+//     uint8_t bit_start;         
+//     uint8_t bit_length;        
+//     float scale;               
+//     float offset;              
+//     float min;                 
+//     float max;                 
+//     const char *unit;          
+//     uint8_t is_encoded;        
+// } pid_info_t;
+
+// static const pid_info_t standard_pids[] = {
+//     // First few PIDs as example
+//     {
+//         .name = "PIDsSupported_01_20",
+//         .description = "PIDs supported [01 - 20]",
+//         .bit_start = 31,
+//         .bit_length = 32,
+//         .scale = 1,
+//         .offset = 0,
+//         .min = 0,
+//         .max = 0,
+//         .unit = "Encoded",
+//         .is_encoded = 1
+//     },
+//     // Add remaining PIDs...
+// };
+#include "obd2_standard_pids.h"
+
+static const pid_info_t* get_pid_info(uint8_t pid) {
+    if(pid < sizeof(standard_pids)/sizeof(standard_pids[0])) {
+        return &standard_pids[pid];
+    }
+    return NULL;
+}
+
+esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint32_t available_pids_size) {
+    twai_message_t frame;
+    response_t response;
+    uint32_t supported_pids = 0;
+    cJSON *root = cJSON_CreateObject();
+    cJSON *pid_array = cJSON_CreateArray();
+    
+    char protocol_cmd[16];
+    sprintf(protocol_cmd, "ATSP%d\r", protocol);
+    if (elm327_process_cmd((uint8_t*)protocol_cmd, strlen(protocol_cmd), &frame, &autopidQueue) != 0) {
+        return ESP_FAIL;
+    }
+    
+    xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000));
+
+    const char *pid_support_cmds[] = {
+        "0100\r",  // PIDs 0x01-0x20
+        "0120\r",  // PIDs 0x21-0x40
+        "0140\r",  // PIDs 0x41-0x60
+        "0160\r",  // PIDs 0x61-0x80
+        "0180\r",  // PIDs 0x81-0xA0
+        "01A0\r",  // PIDs 0xA1-0xC0
+        "01C0\r"   // PIDs 0xC1-0xE0
+    };
+
+    for (int i = 0; i < sizeof(pid_support_cmds)/sizeof(pid_support_cmds[0]); i++) {
+        if (elm327_process_cmd((uint8_t*)pid_support_cmds[i], strlen(pid_support_cmds[i]), &frame, &autopidQueue) != 0) {
+            continue;
+        }
+
+        if (xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS) {
+            ESP_LOGI(TAG, "Raw response length: %lu", response.length);
+            ESP_LOG_BUFFER_HEX(TAG, response.data, response.length);
+
+            // Skip mode byte (0x41) and PID byte
+            if (response.length >= 7) { // Check for minimum length including header
+                // Extract just the bitmap bytes (last 4 bytes)
+                supported_pids = (response.data[3] << 24) | 
+                               (response.data[4] << 16) | 
+                               (response.data[5] << 8) | 
+                               response.data[6];
+                
+                ESP_LOGI(TAG, "Supported PIDs bitmap: 0x%08lx", supported_pids);
+
+                for (int bit = 0; bit < 32; bit++) {
+                    if (supported_pids & (1 << (31 - bit))) {
+                        uint8_t pid = (i * 32) + bit + 1;
+                        const pid_info_t *pid_info = get_pid_info(pid);
+                        if (pid_info && pid_info->name) {
+                            ESP_LOGI(TAG, "PID %d (0x%02X) supported: %s", 
+                                    pid, pid, pid_info->name);
+                            cJSON_AddItemToArray(pid_array, cJSON_CreateString(pid_info->name));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    cJSON_AddItemToObject(root, "std_pids", pid_array);
+
+    // Convert to string and cleanup
+    char *json_str = cJSON_PrintUnformatted(root);
+    if (json_str) {
+        if (strlen(json_str) < available_pids_size) {
+            strcpy(available_pids, json_str);
+            free(json_str);
+            cJSON_Delete(root);
+            return ESP_OK;
+        }
+        free(json_str);
+    }
+
+    cJSON_Delete(root);
+    return ESP_FAIL;
+}
 static void autopid_data_write(const char *new_data)
 {
     if (autopid_data.mutex != NULL && xSemaphoreTake(autopid_data.mutex, portMAX_DELAY) == pdTRUE)
@@ -373,6 +487,19 @@ static void autopid_task(void *pvParameters)
     car.cycle_timer = 0;
     ESP_LOGI(TAG, "num_of_pids: %d", num_of_pids);
 
+    ///////////////////
+    // ESP_LOGI(TAG, "Available PIDs:");
+    // char *available_pids = malloc(5*1024); // Allocate space for JSON string
+    // if (autopid_find_standard_pid(6, available_pids, 5*1024) == ESP_OK) {
+    //     ESP_LOGI(TAG, "Found PIDs: %s", available_pids);
+    // }
+    // free(available_pids);
+    // esp_log_level_set("*", ESP_LOG_NONE);
+
+    vTaskDelay(pdMS_TO_TICKS(100000));
+
+    //////////////////
+
     while(config_server_mqtt_en_config() == 1 && !mqtt_connected())
     {
         vTaskDelay(pdMS_TO_TICKS(2000));
@@ -383,6 +510,7 @@ static void autopid_task(void *pvParameters)
         autopid_pub_discovery();
     }
     
+
     while (1)
     {
         if((num_of_pids > 0 || (car.pid_count > 0 && car.car_specific_en)))

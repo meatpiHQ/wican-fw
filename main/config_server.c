@@ -1367,6 +1367,35 @@ esp_err_t autopid_data_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+static esp_err_t scan_available_pids_handler(httpd_req_t *req)
+{
+    char protocol[8];
+    char param[32];
+    uint8_t protocol_num = 6; // Default protocol
+
+    if (httpd_req_get_url_query_str(req, param, sizeof(param)) == ESP_OK) {
+        if (httpd_query_key_value(param, "protocol", protocol, sizeof(protocol)) == ESP_OK) {
+            protocol_num = atoi(protocol);
+            ESP_LOGI(TAG, "Scanning PIDs with protocol: %d", protocol_num);
+        }
+    }
+
+    char *available_pids = malloc(5120);
+    if (available_pids == NULL) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+    memset(available_pids, 0, 5120);
+    
+    if (autopid_find_standard_pid(protocol_num, available_pids, 5120) == ESP_OK) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, available_pids, strlen(available_pids));
+    }
+
+    free(available_pids);
+    return ESP_OK;
+}
+
 static const httpd_uri_t index_uri = {
     .uri       = "/",
     .method    = HTTP_GET,
@@ -1493,8 +1522,12 @@ static const httpd_uri_t store_car_data_uri = {
     .uri       = "/store_car_data",
     .method    = HTTP_POST,
     .handler   = store_car_data_handler,
-    /* Let's pass response string in user
-     * context to demonstrate it's usage */
+    .user_ctx  = NULL
+};
+static const httpd_uri_t scan_available_pids_uri = {
+    .uri       = "/scan_available_pids",
+    .method    = HTTP_GET,
+    .handler   = scan_available_pids_handler,
     .user_ctx  = NULL
 };
 static void config_server_load_cfg(char *cfg)
@@ -2140,7 +2173,7 @@ static httpd_handle_t config_server_init(void)
                        );
 
     // Start the httpd server
-	config.max_uri_handlers = 17;
+	config.max_uri_handlers = 18;
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK)
     {
@@ -2163,6 +2196,7 @@ static httpd_handle_t config_server_init(void)
 		httpd_register_uri_handler(server, &autopid_data);
 		httpd_register_uri_handler(server, &load_car_config_uri);
 		httpd_register_uri_handler(server, &store_car_data_uri);
+		httpd_register_uri_handler(server, &scan_available_pids_uri);
         #if CONFIG_EXAMPLE_BASIC_AUTH
         httpd_register_basic_auth(server);
         #endif

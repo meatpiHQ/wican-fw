@@ -384,7 +384,7 @@
     </style>
 </head>
 
-<body onload="Load()">
+<body onload="Load();">
     <div class="sidebar">
         <embed src="/logo.svg" class="logo" />
         <button class="tablinks" onclick="openTab(event, 'status_view')" id="defaultOpen"><b>Status</b></button>
@@ -700,7 +700,44 @@
         </div>
 
         <div id="automate" class="tabcontent">
-            <div class="section-title">Automate Settings</div>
+            <div class="section-title">Standard PIDs:</div>
+            <table class="form-table">
+                <tr>
+                    <td>Standard PIDs:</td>
+                    <td>
+                        <select id="standard_pids" name="standard_pids" onchange="toggleStandardPIDOptions();enableAutoStoreButton();submit_enable();">
+                            <option value="disable">Disable</option>
+                            <option value="enable">Enable</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td>ECU Protocol:</td>
+                    <td>
+                        <select id="ecu_protocol" name="ecu_protocol" onchange="enableAutoStoreButton();submit_enable();">
+                            <option value="6">6- ISO 15765-4 (CAN 11bit/500K)</option>
+                            <option value="7">7- ISO 15765-4 (CAN 29bit/500K)</option>
+                            <option value="8">8- ISO 15765-4 (CAN 11bit/250K)</option>
+                            <option value="9">9- ISO 15765-4 (CAN 29bit/250K)</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Available PIDs:</td>
+                    <td style="display: flex; align-items: center; gap: 5px;">
+                        <select id="available_pids" name="available_pids" disabled 
+                                onchange="enableAutoStoreButton();submit_enable();" style="flex: 1;">
+                        </select>
+                        <button id="add_pid_button" onclick="addSelectedPID()" disabled style="margin-left: 5px;">Add PID</button>
+                        <button id="scan_pids_button" onclick="scanAvailablePIDs()" style="margin-left: 5px;">Scan PIDs</button>
+                    </td>
+                </tr>
+                
+            </table>
+            <div id="standard_pids_table">
+                <div class="std-pid-entries"></div>
+            </div>
+            <div class="section-title">Vehicle Specific:</div>
             <table class="form-table">
                 <tr>
                     <td>Vehicle Specific:</td>
@@ -715,14 +752,7 @@
                     <td>Vehicle Model:</td>
                     <td style="display: flex; align-items: center; gap: 5px;">
                         <select id="car_model" name="car_model" onchange="enableAutoStoreButton();submit_enable();" style="flex: 1;"></select>
-                        <div onclick="fetchVehicleProfiles()" style="cursor: pointer; display: flex; align-items: center;">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-refresh-cw">
-                                <polyline points="23 4 23 10 17 10"></polyline>
-                                <polyline points="1 20 1 14 7 14"></polyline>
-                                <path d="M3.51 9a9 9 0 0114.35-3.36L23 10"></path>
-                                <path d="M20.49 15a9 9 0 01-14.35 3.36L1 14"></path>
-                            </svg>
-                        </div>
+                        <button onclick="fetchVehicleProfiles()" style="margin-left: 5px;">Get Latest</button>
                     </td>
                 </tr>
                 <tr>
@@ -986,8 +1016,7 @@
     
     <script>
         document.addEventListener('DOMContentLoaded', (event) => {
-            // loadAutoTable(initialData);
-			// loadCarModels(carModelsData);
+            document.getElementById("submit_button").disabled = true;
         });
 		let latest_car_models = null;
         function loadCarModels(data) {
@@ -1006,6 +1035,7 @@
 			toggleCarModel();
 			toggleDestinationAndCycle();
 			toggleSendToFields();
+            toggleStandardPIDOptions();
         }
 
         function showNotification(message, color = "red", duration = 5000) {
@@ -1093,6 +1123,17 @@
             }
 			toggleDiscovery();
         }
+        function toggleStandardPIDOptions() {
+            const standardPidsSelect = document.getElementById("standard_pids");
+            const ecuProtocolSelect = document.getElementById("ecu_protocol");
+            const availablePidsSelect = document.getElementById("available_pids");
+            const scanPidButton = document.getElementById("scan_pids_button");
+            
+            const isEnabled = standardPidsSelect.value === "enable";
+            ecuProtocolSelect.disabled = !isEnabled;
+            availablePidsSelect.disabled = !isEnabled;
+            scanPidButton.disabled = !isEnabled;
+        }
 
         function toggleDestinationAndCycle() {
 			const carSpecific = document.getElementById("car_specific").value;
@@ -1176,10 +1217,87 @@
 		}
 
         function addRowAutoTable() {
-    addCollapsibleRow();
-    enableAutoStoreButton();
-}
+            addCollapsibleRow();
+            enableAutoStoreButton();
+        }
+async function scanAvailablePIDs() {
+    const scanButton = document.querySelector('#scan_pids_button');
+    const addButton = document.querySelector('#add_pid_button');
+    
+    try {
+        // Reset states at start
+        scanButton.disabled = true;
+        scanButton.textContent = "Scanning...";
+        addButton.disabled = true;
 
+        const ecuProtocol = document.getElementById('ecu_protocol').value;
+        const response = await fetch(`/scan_available_pids?protocol=${ecuProtocol}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const pidSelect = document.getElementById('available_pids');
+        pidSelect.innerHTML = '';
+        
+        if (data.std_pids && Array.isArray(data.std_pids) && data.std_pids.length > 0) {
+            data.std_pids.forEach(pid => {
+                const option = document.createElement('option');
+                option.value = pid;
+                option.textContent = pid;
+                pidSelect.appendChild(option);
+            });
+            addButton.disabled = false;
+            showNotification("PID scan complete", "green");
+        } else {
+            showNotification("No PIDs found. Try a different protocol or check if ignition is ON", "orange");
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showNotification("PID scan failed: " + error.message, "red");
+    } finally {
+        // Always reset button state
+        scanButton.disabled = false;
+        scanButton.textContent = "Scan PIDs";
+    }
+}
+const pidEntryStyles = `
+    .pid-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+        margin-top: 0.5rem;
+        border: 2px solid var(--gray-300);
+        border-radius: 8px;
+    }
+    
+    .header-right {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .collapse-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 1.2rem;
+        padding: 0.25rem 0.5rem;
+        color: var(--gray-700);
+    }
+    
+    .pid-content {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+        transition: height 0.3s ease;
+    }
+    
+    .pid-content.hidden {
+        display: none;
+    }
+`;
 function addCollapsibleRow(rowData = {}) {
     const container = document.querySelector('.pid-entries');
     const entry = document.createElement('div');
@@ -1219,6 +1337,7 @@ function addCollapsibleRow(rowData = {}) {
             <div class="pid-field">
                 <label>Type</label>
                 <select class="type-select">
+                    <option value="Default" ${rowData.Type === 'Default' ? 'selected' : ''}>Default</option>
                     <option value="MQTT_Topic" ${rowData.Type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
                     <option value="MQTT_WallBox" ${rowData.Type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
                 </select>
@@ -1232,42 +1351,7 @@ function addCollapsibleRow(rowData = {}) {
 
     // Add these CSS styles
     const style = document.createElement('style');
-    style.textContent = `
-        .pid-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 0.5rem;
-            margin-top: 0.5rem;
-            border: 2px solid var(--gray-300);
-            border-radius: 8px;
-        }
-        
-        .header-right {
-            display: flex;
-            gap: 0.5rem;
-        }
-        
-        .collapse-btn {
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-size: 1.2rem;
-            padding: 0.25rem 0.5rem;
-            color: var(--gray-700);
-        }
-        
-        .pid-content {
-            display: flex;
-            flex-direction: column;
-            gap: 1.5rem;
-            transition: height 0.3s ease;
-        }
-        
-        .pid-content.hidden {
-            display: none;
-        }
-    `;
+    style.textContent = pidEntryStyles;
     document.head.appendChild(style);
     const header = entry.querySelector('.pid-header');
     const deleteBtn = entry.querySelector('.delete-btn');
@@ -1307,6 +1391,81 @@ function addCollapsibleRow(rowData = {}) {
     container.appendChild(entry);
 }
 
+function addSelectedPID(rowData = {}) {
+    const pidSelect = document.getElementById('available_pids');
+    const selectedPID = rowData.Name || pidSelect.value;
+    
+    if (selectedPID) {
+        const container = document.querySelector('.std-pid-entries');
+        const entry = document.createElement('div');
+        entry.className = 'std-pid-entry';
+
+        entry.innerHTML = `
+            <div class="pid-header">
+                <div class="header-left">
+                    <button type="button" class="collapse-btn">▼</button>
+                    <span class="pid-title">${selectedPID}</span>
+                </div>
+                <div class="header-right">
+                    <button type="button" class="delete-btn">Delete</button>
+                </div>
+            </div>
+            <div class="pid-content" style="display: none;">
+                <div class="pid-field">
+                    <label>Name</label>
+                    <input type="text" class="name-input" value="${selectedPID}" readonly>
+                </div>
+                <div class="pid-field">
+                    <label>Period(ms)</label>
+                    <input type="number" class="period-input" value="${rowData.Period || '1000'}" min="100" max="60000">
+                </div>
+                <div class="pid-field">
+                    <label>Type</label>
+                    <select class="type-select">
+                        <option value="Default" ${rowData.Type === 'Default' ? 'selected' : ''}>Default</option>
+                        <option value="MQTT_Topic" ${rowData.Type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
+                        <option value="MQTT_WallBox" ${rowData.Type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
+                    </select>
+                </div>
+                <div class="pid-field">
+                    <label>Send_to</label>
+                    <input type="text" class="send-to-input" value="${rowData.Send_to || ''}" placeholder="Enter destination">
+                </div>
+            </div>
+        `;
+
+        const style = document.createElement('style');
+        style.textContent = pidEntryStyles;
+        document.head.appendChild(style);
+        const header = entry.querySelector('.pid-header');
+        const deleteBtn = entry.querySelector('.delete-btn');
+        const collapseBtn = entry.querySelector('.collapse-btn');
+        const content = entry.querySelector('.pid-content');
+
+        deleteBtn.addEventListener('click', () => {
+            entry.remove();
+            enableAutoStoreButton();
+        });
+
+        const toggleCollapse = (e) => {
+            e.stopPropagation();
+            const isHidden = content.style.display === 'none';
+            content.style.display = isHidden ? 'block' : 'none';
+            collapseBtn.textContent = isHidden ? '▲' : '▼';
+        };
+
+        header.addEventListener('click', toggleCollapse);
+        collapseBtn.addEventListener('click', toggleCollapse);
+
+        entry.querySelectorAll('input, select').forEach(input => {
+            input.addEventListener('input', enableAutoStoreButton);
+        });
+
+        container.appendChild(entry);
+        enableAutoStoreButton();
+    }
+}
+
 // Update the loadAutoTable function to work with the new structure
 function loadAutoTable(jsonData) {
         try {
@@ -1341,7 +1500,8 @@ function loadAutoTable(jsonData) {
             setElementValue("pid_cycle", data.cycle, '5000');
             setElementValue("destination", data.destination, '');
             setElementValue("car_model", data.car_model, '');
-
+            setElementValue("standard_pids", data.standard_pids, 'disable');
+            setElementValue("ecu_protocol", data.ecu_protocol, '6');
             // Load PIDs data
             if (data.pids && Array.isArray(data.pids)) {
                 data.pids.forEach((pidData, index) => {
@@ -1353,6 +1513,18 @@ function loadAutoTable(jsonData) {
                         Expression: pidData.Expression || '',
                         Period: pidData.Period || '',
                         Type: pidData.Type || 'MQTT_Topic',
+                        Send_to: pidData.Send_to || ''
+                    });
+                });
+            }
+
+            if (data.std_pids && Array.isArray(data.std_pids)) {
+                data.std_pids.forEach((pidData, index) => {
+                    console.log(`Loading Standard PID ${index}:`, pidData);
+                    addSelectedPID({
+                        Name: pidData.Name || '',
+                        Period: pidData.Period || '',
+                        Type: pidData.Type || 'Default',
                         Send_to: pidData.Send_to || ''
                     });
                 });
@@ -1371,14 +1543,24 @@ function loadAutoTable(jsonData) {
                         groupingElement.dispatchEvent(new Event('change'));
                     }
 
+                    const ecuProtocolElement = document.getElementById("ecu_protocol");
+                    if (ecuProtocolElement) {
+                        ecuProtocolElement.dispatchEvent(new Event('change'));
+                    }
+
+                    const standardPidsElement = document.getElementById("standard_pids");
+                    if (standardPidsElement) {
+                        standardPidsElement.dispatchEvent(new Event('change'));
+                    }
+
                     if (typeof toggleCarModel === 'function') toggleCarModel();
                     if (typeof toggleDestinationAndCycle === 'function') toggleDestinationAndCycle();
                     if (typeof toggleSendToFields === 'function') toggleSendToFields();
+                    if (typeof toggleStandardPIDOptions === 'function') toggleStandardPIDOptions();
                 } catch (error) {
                     console.error('Error in UI updates:', error);
                 }
             });
-
             console.log("loadAutoTable completed successfully");
 
         } catch (error) {
@@ -1398,20 +1580,26 @@ function loadAutoTable(jsonData) {
 		
     async function storeAutoTableData() {
         try {
-            // Get all PID entries
-            const entries = document.querySelectorAll('.pid-entry');
-            const data = [];
+            // Get all PID entries with null checks
+            const custom_pid_data = [];
+            const std_pid_data = [];
 
-            // Get form values
-            const initialisationValue = document.getElementById("initialisation").value;
-            const groupingValue = document.getElementById("grouping").value;
-            const ha_discoveryValue = document.getElementById("ha_discovery").value;
-            const destinationValue = document.getElementById("destination").value;
+            // Get entries with null checks
+            const entries = document.querySelectorAll('.pid-entry');
+            const standardEntries = document.querySelectorAll('.std-pid-entry');
+
+            // Get form values with null checks
+            const initialisationValue = document.getElementById("initialisation")?.value || '';
+            const groupingValue = document.getElementById("grouping")?.value || 'disable';
+            const ha_discoveryValue = document.getElementById("ha_discovery")?.value || 'disable';
+            const destinationValue = document.getElementById("destination")?.value || '';
             const cycleField = document.getElementById("pid_cycle");
-            const cycleValue = cycleField.value;
-            const carSpecificValue = document.getElementById("car_specific").value;
+            const cycleValue = cycleField?.value || '5000';
+            const carSpecificValue = document.getElementById("car_specific")?.value || 'disable';
             const carModelField = document.getElementById("car_model");
-            const carModelValue = carModelField.value;
+            const standard_pidsValue = document.getElementById("standard_pids")?.value || 'disable';
+            const ecu_protocolValue = document.getElementById("ecu_protocol")?.value || '6';
+            const carModelValue = carModelField?.value || '';
 
             if (latest_car_models != null) {
             console.log("latest_car_models:", latest_car_models);
@@ -1442,44 +1630,60 @@ function loadAutoTable(jsonData) {
                 return false;
             }
 
-            // Validate car model
-            if (!carModelField.disabled && carModelValue.length === 0) {
-                showNotification("Car Model must be selected", "red");
-                return false;
+            // Process each PID entry
+            if(entries?.length) {
+                entries.forEach((entry, index) => {
+                    const pidData = {
+                        Name: entry.querySelector('.name-input')?.value || '',
+                        Init: entry.querySelector('.init-input')?.value || '',
+                        PID: entry.querySelector('.pid-input')?.value || '',
+                        Expression: entry.querySelector('.expression-input')?.value || '',
+                        Period: entry.querySelector('.period-input')?.value || '',
+                        Type: entry.querySelector('.type-select')?.value || 'Default',
+                        Send_to: entry.querySelector('.send-to-input')?.value || ''
+                    };
+
+                    if (pidData.Name.length === 0 || pidData.Name.length >= 32) {
+                        throw new Error("Name must not be empty and must be less than 32 characters");
+                    }
+                    if (pidData.PID.length === 0 || pidData.PID.length >= 10) {
+                        throw new Error("PID must not be empty and must be less than 10 characters");
+                    }
+                    if (pidData.Expression.length === 0 || pidData.Expression.length >= 32) {
+                        throw new Error("Expression must not be empty and must be less than 32 characters");
+                    }
+                    if (!/^\d+$/.test(pidData.Period) || (parseInt(pidData.Period) < 100 && parseInt(pidData.Period) != 0)) {
+                        throw new Error("Period must be a number greater than 100");
+                    }
+                    if (pidData.Send_to.length >= 64) {
+                        throw new Error("Send_to must be less than 64 characters");
+                    }
+                    custom_pid_data.push(pidData);
+                });
             }
 
-            // Process each PID entry
-            entries.forEach(entry => {
-                const pidData = {
-                    Name: entry.querySelector('.name-input').value,
-                    Init: entry.querySelector('.init-input').value,
-                    PID: entry.querySelector('.pid-input').value,
-                    Expression: entry.querySelector('.expression-input').value,
-                    Period: entry.querySelector('.period-input').value,
-                    Type: entry.querySelector('.type-select').value,
-                    Send_to: entry.querySelector('.send-to-input').value
-                };
+            if(standardEntries?.length) {
+                standardEntries.forEach((entry, index) => {
+                    const stdPIDData = {
+                        Name: entry.querySelector('.name-input')?.value || '',
+                        Period: entry.querySelector('.period-input')?.value || '',
+                        Type: entry.querySelector('.type-select')?.value || 'Default',
+                        Send_to: entry.querySelector('.send-to-input')?.value || ''
+                    };
 
-                // Validate fields
-                if (pidData.Name.length === 0 || pidData.Name.length >= 32) {
-                    throw new Error("Name must not be empty and must be less than 32 characters");
-                }
-                if (pidData.PID.length === 0 || pidData.PID.length >= 10) {
-                    throw new Error("PID must not be empty and must be less than 10 characters");
-                }
-                if (pidData.Expression.length === 0 || pidData.Expression.length >= 32) {
-                    throw new Error("Expression must not be empty and must be less than 32 characters");
-                }
-                if (!/^\d+$/.test(pidData.Period) || (parseInt(pidData.Period) < 100 && parseInt(pidData.Period) != 0)) {
-                    throw new Error("Period must be a number greater than 100");
-                }
-                if (pidData.Send_to.length >= 64) {
-                    throw new Error("Send_to must be less than 64 characters");
-                }
-
-                data.push(pidData);
-            });
-
+                    if (stdPIDData.Name.length === 0 || stdPIDData.Name.length >= 32) {
+                        throw new Error("Name must not be empty and must be less than 32 characters");
+                    }
+                    if (!/^\d+$/.test(stdPIDData.Period) || (parseInt(stdPIDData.Period) < 1000 && parseInt(stdPIDData.Period) != 0)) {
+                        throw new Error("Period must be a number greater than 1000");
+                    }
+                    if (stdPIDData.Send_to.length >= 64) {
+                        throw new Error("Send_to must be less than 64 characters");
+                    }
+                    std_pid_data.push(stdPIDData);
+                });
+            }            
+            
             // Prepare data object for sending
             const jsonData = {
                 initialisation: initialisationValue,
@@ -1489,7 +1693,10 @@ function loadAutoTable(jsonData) {
                 car_specific: carSpecificValue,
                 ha_discovery: ha_discoveryValue,
                 car_model: carModelValue,
-                pids: data
+                pids: custom_pid_data,
+                std_pids: std_pid_data,
+                standard_pids: standard_pidsValue,
+                ecu_protocol: ecu_protocolValue
             };
 
             // Send to server
@@ -1697,15 +1904,7 @@ function loadAutoTable(jsonData) {
 		} else if(document.getElementById("sleep_volt").value < 12 || document.getElementById("sleep_volt").value > 15) {
             showNotification("Sleep Voltage Value, min=12.0 max=15.0", "red");
 			document.getElementById("submit_button").disabled = true;
-		} 
-        else if(document.getElementById("wakeup_volt").value < 12 || document.getElementById("wakeup_volt").value > 15) {
-            showNotification("Wake-up Voltage Value, min=12.0 max=15.0", "red");
-			document.getElementById("submit_button").disabled = true;
 		}
-        else if(parseFloat(document.getElementById("wakeup_volt").value) < parseFloat(document.getElementById("sleep_volt").value) + 0.2) {
-            showNotification("Wake-up Voltage cannot be lower than Sleep Voltage + 0.2V", "red");
-            document.getElementById("submit_button").disabled = true;
-        }
         else {
 			document.getElementById("submit_button").disabled = false;
 		}
@@ -1794,7 +1993,10 @@ function loadAutoTable(jsonData) {
 	function loadCANFLT() {
 		const xhttp = new XMLHttpRequest();
 		xhttp.onload = function() {
-			var obj = JSON.parse(this.responseText);
+            if (this.responseText === "NONE") {
+                return;
+            }
+            var obj = JSON.parse(this.responseText);
 			if(this.responseText != "NONE") {
 				if(Array.isArray(obj.can_flt)) {
 					obj.can_flt.forEach((item) => {
@@ -1819,6 +2021,7 @@ function loadAutoTable(jsonData) {
 				toggleCarModel();
 				toggleDestinationAndCycle();
 				toggleSendToFields();
+                toggleStandardPIDOptions();
 			}
 		};
 		xhttp.open("GET", "/load_auto_pid_config");
@@ -1877,7 +2080,6 @@ function loadAutoTable(jsonData) {
 		obj["ble_status"] = document.getElementById("ble_status").value;
 		obj["sleep_status"] = document.getElementById("sleep_status").value;
 		obj["sleep_volt"] = document.getElementById("sleep_volt").value;
-        obj["wakeup_volt"] = document.getElementById("wakeup_volt").value;
         obj["sleep_time"] = document.getElementById("sleep_time").value;
 		obj["batt_alert"] = document.getElementById("batt_alert").value;
 		obj["batt_alert_ssid"] = document.getElementById("batt_alert_ssid").value;
@@ -2033,8 +2235,6 @@ function loadAutoTable(jsonData) {
 			document.getElementById("ble_pass_value").value = obj.ble_pass;
 			document.getElementById("sleep_volt").value = obj.sleep_volt;
             document.getElementById("sleep_volt_value").textContent = obj.sleep_volt;
-            document.getElementById("wakeup_volt").value = obj.wakeup_volt;
-            // document.getElementById('wakeup_volt_value').textContent = obj.wakeup_volt;
             document.getElementById("sleep_time").value = obj.sleep_time;
             document.getElementById('sleep_time_value').textContent = obj.sleep_time;
 			document.getElementById("batt_alert").value = obj.batt_alert;
