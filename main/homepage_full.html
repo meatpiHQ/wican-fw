@@ -669,6 +669,8 @@
                         <tr>
                             <td><label for="mqtt_rx_topic"><b>RX Topic:</b></label></td>
                             <td><input type="text" id="mqtt_rx_topic" name="mqtt_rx_topic" value="" /></td>
+                            <td><input type="checkbox" id="mqtt_rx_en_checkbox" name="mqtt_rx_en_checkbox" 
+                                    onchange="rxCheckBoxChanged()"></td>
                         </tr>
                         <tr>
                             <td><label for="mqtt_status_topic"><b>Status Topic:</b></label></td>
@@ -735,11 +737,20 @@
                     <td>
                         <select id="grouping" name="grouping" onchange="checkForDuplicates(); toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
                             <option value="disable">Disable</option>
+                            <option value="enable">Enable</option>
                         </select>
                     </td>
                 </tr>
                 <tr>
-                    <td>Destination Topic:</td>
+                    <td>Destination Type:</td>
+                    <td><select id="group_dest_type" name="group_dest_type" onchange="enableAutoStoreButton();submit_enable();">
+                        <option value="Default">Default</option>
+                        <option value="MQTT_Topic">MQTT Topic</option>
+                    </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Destination:</td>
                     <td>
                         <input type="text" id="destination" name="destination" disabled oninput="enableAutoStoreButton();submit_enable();">
                     </td>
@@ -747,7 +758,7 @@
                 <tr>
                     <td>Cycle Time(ms):</td>
                     <td>
-                        <input type="text" id="pid_cycle" name="pid_cycle" value="5000" disabled oninput="enableAutoStoreButton();submit_enable();">
+                        <input type="text" id="group_cycle" name="group_cycle" value="5000" disabled oninput="enableAutoStoreButton();submit_enable();">
                     </td>
                 </tr>
             </table>
@@ -1174,17 +1185,19 @@
         }
 
         function toggleDestinationAndCycle() {
-			const carSpecific = document.getElementById("car_specific").value;
 			const grouping = document.getElementById("grouping").value;
 			const destinationField = document.getElementById("destination");
-			const cycleField = document.getElementById("pid_cycle");
+			const cycleField = document.getElementById("group_cycle");
+            const groupDestTypeFeild = document.getElementById("group_dest_type");
 			
-			if (carSpecific === "enable" || grouping === "Group ALL") {
+			if (grouping === "enable") {
 				destinationField.disabled = false;
 				cycleField.disabled = false;
+                groupDestTypeFeild.disabled = false;
 			} else {
 				destinationField.disabled = true;
 				cycleField.disabled = true;
+                groupDestTypeFeild.disabled = true;
 			}
         }
 		
@@ -1203,7 +1216,15 @@
                 document.getElementById("mqtt_tx_topic").disabled = true;
             }
         }
-		
+
+        function rxCheckBoxChanged() {
+            if (document.getElementById("mqtt_rx_en_checkbox").checked) {
+                document.getElementById("mqtt_rx_topic").disabled = false;
+            } else {
+                document.getElementById("mqtt_rx_topic").disabled = true;
+            }
+        }
+
 		function sendCARDataFile() {
 			const fileInput = document.getElementById("car_data_file");
 			const maxFileSize = 200 * 1024; // 200KB in bytes
@@ -1389,7 +1410,7 @@ function addCollapsibleRow(rowData = {}) {
                         placeholder="ms"></td>
                 </tr>
                 <tr>
-                    <td>Type:</td>
+                    <td>Destination Type:</td>
                     <td><select class="type-select">
                         <option value="Default" ${rowData.Type === 'Default' ? 'selected' : ''}>Default</option>
                         <option value="MQTT_Topic" ${rowData.Type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
@@ -1480,10 +1501,10 @@ function addSelectedPID(rowData = {}) {
                     <tr>
                         <td>Period(ms):</td>
                         <td><input type="number" class="period-input" value="${rowData.Period || '1000'}" 
-                            min="100" max="60000"></td>
+                            min="100" max="120000"></td>
                     </tr>
                     <tr>
-                        <td>Type:</td>
+                        <td>Destination Type:</td>
                         <td><select class="type-select">
                             <option value="Default" ${rowData.Type === 'Default' ? 'selected' : ''}>Default</option>
                             <option value="MQTT_Topic" ${rowData.Type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
@@ -1491,7 +1512,7 @@ function addSelectedPID(rowData = {}) {
                         </select></td>
                     </tr>
                     <tr>
-                        <td>Send_to:</td>
+                        <td>Destination:</td>
                         <td><input type="text" class="send-to-input" value="${rowData.Send_to || ''}" 
                             placeholder="Enter destination"></td>
                     </tr>
@@ -1574,18 +1595,7 @@ function addCarParameter(rowData = {}) {
                         <td>Class:</td>
                         <td><input type="text" class="class-input" value="${rowData.class || ''}" placeholder="Class"></td>
                     </tr>
-                    <tr>
-                        <td>Period(ms):</td>
-                        <td><input type="number" class="period-input" value="${rowData.period || '5000'}" min="100" max="60000"></td>
-                    </tr>
-                    <tr>
-                        <td>Type:</td>
-                        <td><select class="type-select">
-                            <option value="Default" ${rowData.type === 'Default' ? 'selected' : ''}>Default</option>
-                            <option value="MQTT_Topic" ${rowData.type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
-                            <option value="MQTT_WallBox" ${rowData.type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
-                        </select></td>
-                    </tr>
+
                     <tr>
                         <td>Min Value:</td>
                         <td><input type="number" class="min-input" value="${rowData.min || ''}" step="0.01" placeholder="Min"></td>
@@ -1595,8 +1605,21 @@ function addCarParameter(rowData = {}) {
                         <td><input type="number" class="max-input" value="${rowData.max || ''}" step="0.01" placeholder="Max"></td>
                     </tr>
                     <tr>
-                        <td>Send_to:</td>
-                        <td><input type="text" class="send-to-input" placeholder="Destination"></td>
+                        <td>Period(ms):</td>
+                        <td><input type="number" class="period-input" value="${rowData.period || '5000'}" min="100" max="60000"></td>
+                    </tr>
+                    <tr>
+                        <td>Destination Type:</td>
+                        <td><select class="type-select">
+                            <option value="Default" ${rowData.type === 'Default' ? 'selected' : ''}>Default</option>
+                            <option value="MQTT_Topic" ${rowData.type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
+                            <option value="MQTT_WallBox" ${rowData.type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
+                        </select></td>
+                    </tr>
+                    <tr>
+                        <td>Destination:</td>
+                        <td><input type="text" class="send-to-input" value="${rowData.send_to || ''}" 
+                            placeholder="Destination"></td>
                     </tr>
                 </table>
             </div>
@@ -1665,12 +1688,13 @@ function loadAutoTable(jsonData) {
             setElementValue("car_specific", data.car_specific, 'disable');
             setElementValue("ha_discovery", 'disable');
             setElementValue("grouping", data.grouping, 'disable');
-            setElementValue("pid_cycle", data.cycle, '5000');
+            setElementValue("group_cycle", data.cycle, '5000');
             setElementValue("destination", data.destination, '');
             setElementValue("car_model", data.car_model, '');
             setElementValue("standard_pids", data.standard_pids, 'disable');
             setElementValue("ecu_protocol", data.ecu_protocol, '6');
-            // Load PIDs data
+            setElementValue("group_dest_type", data.group_dest_type, 'Default');
+            
             if (data.pids && Array.isArray(data.pids)) {
                 data.pids.forEach((pidData, index) => {
                     console.log(`Loading PID ${index}:`, pidData);
@@ -1682,7 +1706,7 @@ function loadAutoTable(jsonData) {
                         MinValue: pidData.MinValue || '',
                         MaxValue: pidData.MaxValue || '',
                         Period: pidData.Period || '',
-                        Type: pidData.Type || 'MQTT_Topic',
+                        Type: pidData.Type || 'Default',
                         Send_to: pidData.Send_to || ''
                     });
                 });
@@ -1712,6 +1736,11 @@ function loadAutoTable(jsonData) {
                     const groupingElement = document.getElementById("grouping");
                     if (groupingElement) {
                         groupingElement.dispatchEvent(new Event('change'));
+                    }
+
+                    const groupDestTypeElement = document.getElementById("group_dest_type");
+                    if (groupDestTypeElement) {
+                        groupDestTypeElement.dispatchEvent(new Event('change'));
                     }
 
                     const ecuProtocolElement = document.getElementById("ecu_protocol");
@@ -1762,9 +1791,10 @@ function loadAutoTable(jsonData) {
             // Get form values with null checks
             const initialisationValue = document.getElementById("initialisation")?.value || '';
             const groupingValue = document.getElementById("grouping")?.value || 'disable';
+            const groupDestTypeValue = document.getElementById("group_dest_type")?.value || 'Default';
             const ha_discoveryValue = document.getElementById("ha_discovery")?.value || 'disable';
             const destinationValue = document.getElementById("destination")?.value || '';
-            const cycleField = document.getElementById("pid_cycle");
+            const cycleField = document.getElementById("group_cycle");
             const cycleValue = cycleField?.value || '5000';
             const carSpecificValue = document.getElementById("car_specific")?.value || 'disable';
             const carModelField = document.getElementById("car_model");
@@ -1792,6 +1822,7 @@ function loadAutoTable(jsonData) {
                                 min: entry.querySelector('.min-input').value,
                                 max: entry.querySelector('.max-input').value,
                                 type: entry.querySelector('.type-select').value,
+                                send_to: entry.querySelector('.send-to-input').value
                             }]
                         };
                     })
@@ -1875,6 +1906,7 @@ function loadAutoTable(jsonData) {
             const jsonData = {
                 initialisation: initialisationValue,
                 grouping: groupingValue,
+                group_dest_type: groupDestTypeValue,
                 destination: destinationValue,
                 cycle: cycleValue,
                 car_specific: carSpecificValue,
@@ -2226,6 +2258,7 @@ function loadAutoTable(jsonData) {
                                             type: param.type,
                                             min: param.min,
                                             max: param.max,
+                                            send_to: param.send_to,
                                             pid: pid.pid,
                                             pid_init: pid.pid_init
                                         });
@@ -2333,6 +2366,11 @@ function loadAutoTable(jsonData) {
 			obj["mqtt_tx_en"] = "disable";
 		}
 		obj["mqtt_rx_topic"] = document.getElementById("mqtt_rx_topic").value;
+        if(document.getElementById("mqtt_rx_en_checkbox").checked){
+            obj["mqtt_rx_en"] = "enable";
+        }else{
+            obj["mqtt_rx_en"] = "disable";
+        }
 		obj["mqtt_status_topic"] = document.getElementById("mqtt_status_topic").value;
 		obj["mqtt_elm327_log"] = document.getElementById("mqtt_elm327_log").value;
 		var configJSON = JSON.stringify(obj);
@@ -2451,9 +2489,22 @@ function loadAutoTable(jsonData) {
 				}
 			} else {
 				document.getElementById("mqtt_tx_en_checkbox").checked = false; 
+                document.getElementById("mqtt_tx_topic").disabled = true;
 			}
 			
+            if ("mqtt_rx_en" in obj) {
+                if (obj.mqtt_rx_en === "enable") {
+                    document.getElementById("mqtt_rx_en_checkbox").checked = true;
+                } else {
+                    document.getElementById("mqtt_rx_en_checkbox").checked = false;
+                }
+            } else {
+                document.getElementById("mqtt_rx_en_checkbox").checked = false;
+                document.getElementById("mqtt_rx_topic").disabled = true;
+            }
+            
 			txCheckBoxChanged();
+            rxCheckBoxChanged();
 			document.getElementById("protocol").value = obj.protocol;
 			document.getElementById("tcp_port_value").value = obj.port;
 			document.getElementById("ap_pass_value").value = obj.ap_pass;
