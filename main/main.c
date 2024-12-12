@@ -257,7 +257,7 @@ static void can_rx_task(void *pvParameters)
     	{
     		uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
     		time_old = esp_timer_get_time();
-    		ESP_LOGI(TAG, "free_heap: %lu", free_heap);
+    		// ESP_LOGI(TAG, "free_heap: %lu", free_heap);
 //        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
 //        		num_msg = 0;
     	}
@@ -459,7 +459,7 @@ void app_main(void)
 		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
 		
 		elm327_init(&autopid_parser, &xmsg_obd_rx_queue, NULL);
-		autopid_init((char*)&uid[0], config_server_get_auto_pid());
+		autopid_init((char*)&uid[0]);
 	}
 
 	if(config_server_mqtt_en_config())
@@ -593,5 +593,8 @@ void app_main(void)
 	// pdFALSE, /* Don't wait for both bits, either bit will do. */
 	// portMAX_DELAY);/* Wait forever. */  
 	esp_log_level_set("*", ESP_LOG_NONE);
+	// esp_log_level_set("autopid_parser", ESP_LOG_ERROR);
+	// esp_log_level_set("autopid_task", ESP_LOG_ERROR);
+	// esp_log_level_set("elm327_process_cmd", ESP_LOG_ERROR);
 }
 
