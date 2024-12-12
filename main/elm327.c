@@ -87,6 +87,7 @@ typedef struct __xelm327_config
 
 
 static _xelm327_config_t elm327_config;
+static SemaphoreHandle_t elm327_mutex = NULL;
 
 static void elm327_set_default_config(bool reset_protocol)
 {
@@ -375,6 +376,18 @@ static char* elm327_set_receive_address(const char* command_str)
 	return (char*)ok_str;
 }
 
+uint32_t elm327_get_rx_address(void)
+{
+    if (elm327_config.rx_address_is_set)
+	{
+        return elm327_config.rx_address;
+    }
+	else
+	{
+        return 0;
+    }
+}
+
 static char* elm327_set_fc_mode(const char* command_str)
 {
 	size_t arg_size = strlen(command_str+4);
@@ -438,6 +451,7 @@ static char* elm327_set_fc_data(const char* command_str)
 
 static char* elm327_set_protocol(const char* command_str)
 {
+	char new_protocol;
 	//Handle SPAx, and set it as x. 
 	//TODO: add support for auto sp
 	if(command_str[2] == 'a' || command_str[2] == 'A')
@@ -445,17 +459,24 @@ static char* elm327_set_protocol(const char* command_str)
 		if(command_str[3] == '6' || command_str[3] == '7' || 
 			command_str[3] == '8' || command_str[3] == '9')
 		{
-			elm327_config.protocol = command_str[3];
+			new_protocol = command_str[3];
 		}
 		else
 		{
-			elm327_config.protocol = '4';
+			new_protocol = '4';
 		}
 	}
 	else
 	{
-		elm327_config.protocol = command_str[2];
+		new_protocol = command_str[2];
 	}
+
+	if(new_protocol == elm327_config.protocol)
+	{
+		return (char*)ok_str;
+	}
+
+	elm327_config.protocol = new_protocol;
 	
 	ESP_LOGI(TAG, "elm327_config.protocol: %c", elm327_config.protocol);
 
@@ -487,6 +508,10 @@ static char* elm327_set_protocol(const char* command_str)
 	return (char*)ok_str;
 }
 
+char elm327_get_current_protocol(void)
+{
+	return elm327_config.protocol;
+}
 
 static char* elm327_set_timeout(const char* command_str)
 {
@@ -563,7 +588,7 @@ static char* elm327_input_voltage(const char* command_str)
 	return (char*)volt;
 }
 
-static uint32_t elm327_get_identifier()
+uint32_t elm327_get_identifier(void)
 {
 	if(!elm327_config.header_is_set) {
 		switch(elm327_config.protocol) {
@@ -1010,6 +1035,14 @@ const xelm327_cmd_t elm327_commands[] = {
 											{NULL, NULL},
 									};
 
+void elm327_lock(void)
+{
+	xSemaphoreTake(elm327_mutex, pdMS_TO_TICKS(portMAX_DELAY));
+}
+void elm327_unlock(void)
+{
+	xSemaphoreGive(elm327_mutex);
+}
 
 int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t *q)
 {
@@ -1114,151 +1147,6 @@ int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, twai_message_t *frame, Queu
 				{
 					elm327_request(cmd_buffer, cmd_response,q);
 				}
-//				ESP_LOGI(TAG, "PID req, cmd_buffer: %s", cmd_buffer);
-//				if((!strncmp(cmd_buffer, "0100",4) || !strncmp(cmd_buffer, "0900",4)) && (elm327_config.protocol != '6'))
-//				{
-//					if(elm327_config.protocol == '1' || elm327_config.protocol == '2')
-//					{
-//						strcat(cmd_response, "NO DATA\r\r>");
-//						elm327_response((char*)cmd_response, 0, q);
-//					}
-//					else
-//					{
-//						strcat(cmd_response, "BUS INIT: ...ERROR\r\r>");
-//						elm327_response((char*)cmd_response, 0, q);
-//					}
-//
-//				}
-//				else
-//				{
-//					twai_message_t rx_frame;
-//
-//					frame->identifier = elm327_config.header;
-//					frame->extd = false;
-//					frame->rtr = 0;
-//					frame->data[0] = 0xAA;
-//					frame->data[1] = 0xAA;
-//					frame->data[2] = 0xAA;
-//					frame->data[3] = 0xAA;
-//					frame->data[4] = 0xAA;
-//					frame->data[5] = 0xAA;
-//					frame->data[6] = 0xAA;
-//					frame->data[7] = 0xAA;
-//
-//					uint16_t req_pid = 0;
-//					uint8_t req_mode = 0;
-//					uint8_t req_expected_rsp = 0xFF;
-//
-//					if(strlen(cmd_buffer) == 4 || strlen(cmd_buffer) == 5)
-//					{
-//						if(strlen(cmd_buffer) == 5)
-//						{
-//							req_expected_rsp = cmd_buffer[4] - 0x30;
-//							cmd_buffer[4] = 0;
-//							if(req_expected_rsp == 0 && req_expected_rsp > 9)
-//							{
-//								req_expected_rsp = 0xFF;
-//							}
-//						}
-//
-//						uint32_t value = strtol((char *) cmd_buffer, NULL, 16); //the pid format is always in hex
-//						uint8_t pidnum = (uint8_t)(value & 0xFF);
-//						uint8_t mode = (uint8_t)((value >> 8) & 0xFF);
-//
-//			            frame->data[0] = 2;
-//			            frame->data[1] = mode;
-//			            frame->data[2] = pidnum;
-//						frame->data_length_code = 8;
-//						req_pid = pidnum;
-//						req_mode = mode;
-//					}
-//					else if(strlen(cmd_buffer) == 6)
-//					{
-//
-//	//		        	req_pid = pidnum;
-//					}
-//
-//					can_send(frame, 1);
-//
-//					TickType_t xwait_time = (elm327_config.req_timeout*4.096) / portTICK_PERIOD_MS;
-//					int64_t txtime = esp_timer_get_time();
-//					uint8_t timeout_flag = 0;
-//					uint8_t rsp_found = 0;
-//					uint8_t number_of_rsp = 0;
-//					char tmp[10];
-//
-//
-//
-//					while(timeout_flag == 0)
-//					{
-//						if( xQueueReceive(*can_rx_queue, ( void * ) &rx_frame, xwait_time) == pdPASS )
-//						{
-//							if(rx_frame.identifier >= 0x7E8 && rx_frame.identifier <= 0x7EF)
-//							{
-//								if(rx_frame.data[2] == req_pid)
-//								{
-//									rsp_found = 1;
-//									number_of_rsp++;
-//									if(elm327_config.show_header)
-//									{
-//										sprintf((char*)cmd_response, "%03X%02X", rx_frame.identifier&0xFFF,rx_frame.data[0]);
-//									}
-//
-////									ESP_LOGI(TAG, "ELM327 send 1: %s", cmd_response);
-//									for (int i = 0; i < rx_frame.data[0]; i++)
-//									{
-//										sprintf((char*)tmp, "%02X", rx_frame.data[1+i]);
-//										strcat((char*)cmd_response, (char*)tmp);
-//									}
-//
-//									strcat((char*)cmd_response, "\r");
-//									ESP_LOGI(TAG, "ELM327 send: %s", cmd_response);
-//
-//									elm327_response(cmd_response, 0, q);
-//									memset(cmd_response, 0, sizeof(cmd_response));
-//
-//									if(req_expected_rsp != 0xFF)
-//									{
-//										if(req_expected_rsp == number_of_rsp)
-//										{
-//											timeout_flag = 1;
-//											break;
-//										}
-//									}
-//
-//								}
-//								else// check if 16bit
-//								{
-//
-//								}
-//							}
-//
-//							xwait_time -= (((esp_timer_get_time() - txtime)/1000)/portTICK_PERIOD_MS);
-//							ESP_LOGI(TAG, "xwait_time: %d", xwait_time);
-//							if(xwait_time > (elm327_config.req_timeout*4.096))
-//							{
-//								xwait_time = 0;
-//								timeout_flag = 1;
-//							}
-//
-//						}
-//						else
-//						{
-//							timeout_flag = 1;
-//						}
-//					}
-//					if(rsp_found == 0)
-//					{
-//						strcat((char*)cmd_response, "NO DATA\r\r>");
-//					}
-//					else
-//					{
-//						strcat((char*)cmd_response, "\r>");
-//					}
-//					elm327_response(cmd_response, 0, q);
-//
-//					ESP_LOGW(TAG, "Response time: %u", (uint32_t)((esp_timer_get_time() - txtime)/1000));
-//				}
 			}
 
 			cmd_len = 0;
@@ -1278,6 +1166,12 @@ int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, twai_message_t *frame, Queu
 
 void elm327_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q), QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame, uint8_t type))
 {
+	elm327_mutex = xSemaphoreCreateMutex();
+    if (elm327_mutex == NULL)
+	{
+        ESP_LOGE(TAG, "Failed to create elm327 mutex");
+        return;
+    }
 	elm327_set_default_config(true);
 	elm327_response = send_to_host;
 	can_rx_queue = rx_queue;
