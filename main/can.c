@@ -157,8 +157,8 @@ void can_disable(void)
 	{
 		gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
 		can_block();
-		ESP_ERROR_CHECK(twai_stop());
-		ESP_ERROR_CHECK(twai_driver_uninstall());
+		twai_stop();
+		twai_driver_uninstall();
 		can_cfg.bus_state = OFF_BUS;
 	}
 }
