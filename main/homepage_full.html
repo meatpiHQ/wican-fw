@@ -380,6 +380,26 @@
             .form-table td:first-child {
                 padding-bottom: 0.25rem;
             }
+            .compact-form-table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+
+            .compact-form-table td {
+                padding: 3px;
+                vertical-align: middle;
+                font-size: 0.85rem;
+            }
+
+            .compact-form-table input,
+            .compact-form-table select {
+                width: 95%;
+                padding: 2px 5px;
+                height: 24px;
+                font-size: 0.85rem;
+                border: 1px solid var(--gray-300);
+                border-radius: 4px;
+            }
         }
     </style>
 </head>
@@ -792,6 +812,12 @@
                         <form id="car_data_form" enctype="multipart/form-data">
                             <input id="car_data_file" name="car_data_file" type="file" onchange="sendCARDataFile();submit_enable();" />
                         </form>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Specific Initialisation:</td>
+                    <td>
+                        <input type="text" id="specific_init" name="specific_init" oninput="enableAutoStoreButton()">
                     </td>
                 </tr>
             </table>
@@ -1326,55 +1352,56 @@ function addCollapsibleRow(rowData = {}) {
             </div>
         </div>
         <div class="pid-content hidden">
-            <div class="pid-field">
-                <label>Name</label>
-                <input type="text" class="name-input" value="${rowData.Name || ''}" placeholder="Parameter Name">
-            </div>
-            <div class="pid-field">
-                <label>Init</label>
-                <input type="text" class="init-input" value="${rowData.Init || ''}" placeholder="PID Init">
-            </div>
-            <div class="pid-field">
-                <label>PID</label>
-                <input type="text" class="pid-input" value="${rowData.PID || ''}" placeholder="PID">
-            </div>
-            <div class="pid-field">
-                <label>Expression</label>
-                <input type="text" class="expression-input" value="${rowData.Expression || ''}" placeholder="Enter expression">
-            </div>
-            <div class="pid-field">
-                <label>Min Value</label>
-                <input type="number" 
-                    class="min-value-input" 
-                    value="${rowData.MinValue || ''}"
-                    step="0.01"
-                    placeholder="Minimum value">
-            </div>
-            
-            <div class="pid-field">
-                <label>Max Value</label>
-                <input type="number" 
-                    class="max-value-input"
-                    value="${rowData.MaxValue || ''}" 
-                    step="0.01"
-                    placeholder="Maximum value">
-            </div>
-            <div class="pid-field">
-                <label>Period(ms)</label>
-                <input type="number" class="period-input" value="${rowData.Period || ''}" placeholder="ms">
-            </div>
-            <div class="pid-field">
-                <label>Type</label>
-                <select class="type-select">
-                    <option value="Default" ${rowData.Type === 'Default' ? 'selected' : ''}>Default</option>
-                    <option value="MQTT_Topic" ${rowData.Type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
-                    <option value="MQTT_WallBox" ${rowData.Type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
-                </select>
-            </div>
-            <div class="pid-field">
-                <label>Send_to</label>
-                <input type="text" class="send-to-input" value="${rowData.Send_to || ''}" placeholder="Enter destination">
-            </div>
+            <table class="compact-form-table">
+                <tr>
+                    <td>Name:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td>
+                    <td><input type="text" class="name-input" value="${rowData.Name || ''}" 
+                        placeholder="Parameter Name"></td>
+                </tr>
+                <tr>
+                    <td>Init:</td>
+                    <td><input type="text" class="init-input" value="${rowData.Init || ''}" 
+                        placeholder="PID Init"></td>
+                </tr>
+                <tr>
+                    <td>PID:</td>
+                    <td><input type="text" class="pid-input" value="${rowData.PID || ''}" 
+                        placeholder="PID"></td>
+                </tr>
+                <tr>
+                    <td>Expression:</td>
+                    <td><input type="text" class="expression-input" value="${rowData.Expression || ''}" 
+                        placeholder="Enter expression"></td>
+                </tr>
+                <tr>
+                    <td>Min Value:</td>
+                    <td><input type="number" class="min-value-input" value="${rowData.MinValue || ''}" 
+                        step="0.01" placeholder="Minimum value"></td>
+                </tr>
+                <tr>
+                    <td>Max Value:</td>
+                    <td><input type="number" class="max-value-input" value="${rowData.MaxValue || ''}" 
+                        step="0.01" placeholder="Maximum value"></td>
+                </tr>
+                <tr>
+                    <td>Period(ms):</td>
+                    <td><input type="number" class="period-input" value="${rowData.Period || ''}" 
+                        placeholder="ms"></td>
+                </tr>
+                <tr>
+                    <td>Type:</td>
+                    <td><select class="type-select">
+                        <option value="Default" ${rowData.Type === 'Default' ? 'selected' : ''}>Default</option>
+                        <option value="MQTT_Topic" ${rowData.Type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
+                        <option value="MQTT_WallBox" ${rowData.Type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
+                    </select></td>
+                </tr>
+                <tr>
+                    <td>Send_to:</td>
+                    <td><input type="text" class="send-to-input" value="${rowData.Send_to || ''}" 
+                        placeholder="Enter destination"></td>
+                </tr>
+            </table>
         </div>
     `;
 
@@ -1440,32 +1467,38 @@ function addSelectedPID(rowData = {}) {
                 </div>
             </div>
             <div class="pid-content" style="display: none;">
-                <div class="pid-field">
-                    <label>Name</label>
-                    <input type="text" class="name-input" value="${selectedPID}" readonly>
-                </div>
-                <div class="pid-field">
-                    <label>Receive Header</label>
-                    <input type="text" class="receive-header-input" value="${rowData.ReceiveHeader || ''}" placeholder="Optional Receive Header" maxlength="8">
-                </div>
-                <div class="pid-field">
-                    <label>Period(ms)</label>
-                    <input type="number" class="period-input" value="${rowData.Period || '1000'}" min="100" max="60000">
-                </div>
-                <div class="pid-field">
-                    <label>Type</label>
-                    <select class="type-select">
-                        <option value="Default" ${rowData.Type === 'Default' ? 'selected' : ''}>Default</option>
-                        <option value="MQTT_Topic" ${rowData.Type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
-                        <option value="MQTT_WallBox" ${rowData.Type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
-                    </select>
-                </div>
-                <div class="pid-field">
-                    <label>Send_to</label>
-                    <input type="text" class="send-to-input" value="${rowData.Send_to || ''}" placeholder="Enter destination">
-                </div>
+                <table class="compact-form-table">
+                    <tr>
+                        <td>Name:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td>
+                        <td><input type="text" class="name-input" value="${selectedPID}" readonly></td>
+                    </tr>
+                    <tr>
+                        <td>Receive Header:</td>
+                        <td><input type="text" class="receive-header-input" value="${rowData.ReceiveHeader || ''}" 
+                            placeholder="Optional Receive Header" maxlength="8"></td>
+                    </tr>
+                    <tr>
+                        <td>Period(ms):</td>
+                        <td><input type="number" class="period-input" value="${rowData.Period || '1000'}" 
+                            min="100" max="60000"></td>
+                    </tr>
+                    <tr>
+                        <td>Type:</td>
+                        <td><select class="type-select">
+                            <option value="Default" ${rowData.Type === 'Default' ? 'selected' : ''}>Default</option>
+                            <option value="MQTT_Topic" ${rowData.Type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
+                            <option value="MQTT_WallBox" ${rowData.Type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
+                        </select></td>
+                    </tr>
+                    <tr>
+                        <td>Send_to:</td>
+                        <td><input type="text" class="send-to-input" value="${rowData.Send_to || ''}" 
+                            placeholder="Enter destination"></td>
+                    </tr>
+                </table>
             </div>
         `;
+
 
         const style = document.createElement('style');
         style.textContent = pidEntryStyles;
@@ -1516,76 +1549,72 @@ function addCarParameter(rowData = {}) {
                 </div>
             </div>
             <div class="pid-content" style="display: none;">
-                <div class="pid-field">
-                    <label>Name</label>
-                    <input type="text" class="name-input" value="${rowData.name}">
-                </div>
-                <div class="pid-field">
-                    <label>PID</label>
-                    <input type="text" class="pid-input" value="${rowData.pid || ''}" placeholder="Enter PID value">
-                </div>
-                <div class="pid-field">
-                    <label>PID Init</label>
-                    <input type="text" class="pid-init-input" value="${rowData.pid_init || ''}" placeholder="Enter PID Init value;">
-                </div>
-                <div class="pid-field">
-                    <label>Expression</label>
-                    <input type="text" class="expression-input" value="${rowData.expression || ''}">
-                </div>
-                <div class="pid-field">
-                    <label>Unit</label>
-                    <input type="text" class="unit-input" value="${rowData.unit || ''}">
-                </div>
-                <div class="pid-field">
-                    <label>Class</label>
-                    <input type="text" class="class-input" value="${rowData.class || ''}">
-                </div>
-                <div class="pid-field">
-                    <label>Period(ms)</label>
-                    <input type="number" class="period-input" value="${rowData.period || '5000'}" min="100" max="60000">
-                </div>
-                <div class="pid-field">
-                    <label>Min Value</label>
-                    <input type="number" class="min-input" value="${rowData.min || ''}"step="0.01"placeholder="Minimum value">
-                </div>
-                
-                <div class="pid-field">
-                    <label>Max Value</label>
-                    <input type="number" 
-                        class="max-input" value="${rowData.max || ''}" step="0.01" placeholder="Maximum value">
-                </div>
-                <div class="pid-field">
-                    <label>Type</label>
-                    <select class="type-select">
-                        <option value="Default">Default</option>
-                        <option value="MQTT_Topic">MQTT_Topic</option>
-                        <option value="MQTT_WallBox">MQTT_WallBox</option>
-                    </select>
-                </div>
-                <div class="pid-field">
-                    <label>Send_to</label>
-                    <input type="text" class="send-to-input" placeholder="Enter destination">
-                </div>
+                <table class="compact-form-table">
+                    <tr>
+                        <td>Name:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td>
+                        <td><input type="text" class="name-input" value="${rowData.name}"></td>
+                    </tr>
+                    <tr>
+                        <td>PID:</td>
+                        <td><input type="text" class="pid-input" value="${rowData.pid || ''}" placeholder="PID"></td>
+                    </tr>
+                    <tr>
+                        <td>PID Init:</td>
+                        <td><input type="text" class="pid-init-input" value="${rowData.pid_init || ''}" placeholder="Init"></td>
+                    </tr>
+                    <tr>
+                        <td>Expression:</td>
+                        <td><input type="text" class="expression-input" value="${rowData.expression || ''}" placeholder="Expression"></td>
+                    </tr>
+                    <tr>
+                        <td>Unit:</td>
+                        <td><input type="text" class="unit-input" value="${rowData.unit || ''}" placeholder="Unit"></td>
+                    </tr>
+                    <tr>
+                        <td>Class:</td>
+                        <td><input type="text" class="class-input" value="${rowData.class || ''}" placeholder="Class"></td>
+                    </tr>
+                    <tr>
+                        <td>Period(ms):</td>
+                        <td><input type="number" class="period-input" value="${rowData.period || '5000'}" min="100" max="60000"></td>
+                    </tr>
+                    <tr>
+                        <td>Type:</td>
+                        <td><select class="type-select">
+                            <option value="Default" ${rowData.type === 'Default' ? 'selected' : ''}>Default</option>
+                            <option value="MQTT_Topic" ${rowData.type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
+                            <option value="MQTT_WallBox" ${rowData.type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
+                        </select></td>
+                    </tr>
+                    <tr>
+                        <td>Min Value:</td>
+                        <td><input type="number" class="min-input" value="${rowData.min || ''}" step="0.01" placeholder="Min"></td>
+                    </tr>
+                    <tr>
+                        <td>Max Value:</td>
+                        <td><input type="number" class="max-input" value="${rowData.max || ''}" step="0.01" placeholder="Max"></td>
+                    </tr>
+                    <tr>
+                        <td>Send_to:</td>
+                        <td><input type="text" class="send-to-input" placeholder="Destination"></td>
+                    </tr>
+                </table>
             </div>
         `;
 
-        // Add styles and event listeners
-        const style = document.createElement('style');
-        style.textContent = pidEntryStyles;
-        document.head.appendChild(style);
 
+
+        // Add event listeners
         const header = entry.querySelector('.pid-header');
         const deleteBtn = entry.querySelector('.delete-btn');
         const collapseBtn = entry.querySelector('.collapse-btn');
         const content = entry.querySelector('.pid-content');
 
-        // Delete button handler
         deleteBtn.addEventListener('click', () => {
             entry.remove();
             enableAutoStoreButton();
         });
 
-        // Collapse button handler
         const toggleCollapse = (e) => {
             e.stopPropagation();
             const isHidden = content.style.display === 'none';
@@ -1596,7 +1625,6 @@ function addCarParameter(rowData = {}) {
         header.addEventListener('click', toggleCollapse);
         collapseBtn.addEventListener('click', toggleCollapse);
 
-        // Enable auto store button on input changes
         entry.querySelectorAll('input, select').forEach(input => {
             input.addEventListener('input', enableAutoStoreButton);
         });
@@ -1605,7 +1633,6 @@ function addCarParameter(rowData = {}) {
         enableAutoStoreButton();
     }
 }
-
 
 // Update the loadAutoTable function to work with the new structure
 function loadAutoTable(jsonData) {
@@ -1744,13 +1771,14 @@ function loadAutoTable(jsonData) {
             const standard_pidsValue = document.getElementById("standard_pids")?.value || 'disable';
             const ecu_protocolValue = document.getElementById("ecu_protocol")?.value || '6';
             const carModelValue = carModelField?.value || '';
-            if (!carModelValue || carModelValue.length === 0 || carModelValue === "Not Selected") {
+            if (carSpecificValue== "enable" && (!carModelValue || carModelValue.length === 0 || carModelValue === "Not Selected")) {
                 throw new Error("Car model must be selected");
             }
             const specificPidEntries = document.querySelectorAll('.specific-pid-entry');
             if (specificPidEntries.length > 0) {
                 const carData = {
                     car_model: carModelValue,
+                    init: document.getElementById("specific_init").value,
                     pids: Array.from(specificPidEntries).map(entry => {
                         return {
                             pid: entry.querySelector('.pid-input').value, 
@@ -1762,7 +1790,8 @@ function loadAutoTable(jsonData) {
                                 class: entry.querySelector('.class-input').value,
                                 period: entry.querySelector('.period-input').value,
                                 min: entry.querySelector('.min-input').value,
-                                max: entry.querySelector('.max-input').value
+                                max: entry.querySelector('.max-input').value,
+                                type: entry.querySelector('.type-select').value,
                             }]
                         };
                     })
@@ -2183,6 +2212,7 @@ function loadAutoTable(jsonData) {
                         
                         // Load parameters for each PID
                         if (car.pids) {
+                            document.getElementById("specific_init").value = car.init;
                             car.pids.forEach(pid => {
 
                                 if (pid.parameters) {
@@ -2193,6 +2223,7 @@ function loadAutoTable(jsonData) {
                                             unit: param.unit,
                                             class: param.class, 
                                             period: param.period,
+                                            type: param.type,
                                             min: param.min,
                                             max: param.max,
                                             pid: pid.pid,
@@ -2254,6 +2285,8 @@ function loadAutoTable(jsonData) {
 
 	async function postConfig() {
 		var obj = {};
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Add 1 second delay
+        
         const storeResult = await storeAutoTableData();
         if (!storeResult) {
             return;
@@ -2483,6 +2516,8 @@ function loadAutoTable(jsonData) {
                 const selectedModel = this.value;
                 if (latest_car_models && Array.isArray(latest_car_models.cars)) {
                     const selectedCar = latest_car_models.cars.find(car => car.car_model === selectedModel);
+                    const specificInitElement = document.getElementById("specific_init");
+                    specificInitElement.value = selectedCar.init;
                     if (selectedCar && selectedCar.pids) {
                         selectedCar.pids.forEach(pid => {
                             if (pid.parameters) {
