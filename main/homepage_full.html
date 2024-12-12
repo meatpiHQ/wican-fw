@@ -700,7 +700,38 @@
         </div>
 
         <div id="automate" class="tabcontent">
-            <div class="section-title">Standard PIDs:</div>
+            <div class="section-title">Automate</div>
+            <table class="form-table">
+                <tr>
+                    <td>MQTT HA Discovery:</td>
+                    <td>
+                        <select id="ha_discovery" name="ha_discovery" onchange="checkForDuplicates(); toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
+                            <option value="disable">Disable</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Grouping:</td>
+                    <td>
+                        <select id="grouping" name="grouping" onchange="checkForDuplicates(); toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
+                            <option value="disable">Disable</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Destination Topic:</td>
+                    <td>
+                        <input type="text" id="destination" name="destination" disabled oninput="enableAutoStoreButton();submit_enable();">
+                    </td>
+                </tr>
+                <tr>
+                    <td>Cycle Time(ms):</td>
+                    <td>
+                        <input type="text" id="pid_cycle" name="pid_cycle" value="5000" disabled oninput="enableAutoStoreButton();submit_enable();">
+                    </td>
+                </tr>
+            </table>
+            <div class="section-title">Standard PIDs</div>
             <table class="form-table">
                 <tr>
                     <td>Standard PIDs:</td>
@@ -737,7 +768,7 @@
             <div id="standard_pids_table">
                 <div class="std-pid-entries"></div>
             </div>
-            <div class="section-title">Vehicle Specific:</div>
+            <div class="section-title">Vehicle Specific</div>
             <table class="form-table">
                 <tr>
                     <td>Vehicle Specific:</td>
@@ -756,34 +787,6 @@
                     </td>
                 </tr>
                 <tr>
-                    <td>Home Assistant Discovery:</td>
-                    <td>
-                        <select id="ha_discovery" name="ha_discovery" onchange="checkForDuplicates(); toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
-                            <option value="disable">Disable</option>
-                        </select>
-                    </td>
-                </tr>
-                <tr>
-                    <td>Grouping:</td>
-                    <td>
-                        <select id="grouping" name="grouping" onchange="checkForDuplicates(); toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
-                            <option value="disable">Disable</option>
-                        </select>
-                    </td>
-                </tr>
-                <tr>
-                    <td>Destination Topic:</td>
-                    <td>
-                        <input type="text" id="destination" name="destination" disabled oninput="enableAutoStoreButton();submit_enable();">
-                    </td>
-                </tr>
-                <tr>
-                    <td>Cycle Time(ms):</td>
-                    <td>
-                        <input type="text" id="pid_cycle" name="pid_cycle" value="5000" disabled oninput="enableAutoStoreButton();submit_enable();">
-                    </td>
-                </tr>
-                <tr>
                     <td>Vehicle Profiles:</td>
                     <td>
                         <form id="car_data_form" enctype="multipart/form-data">
@@ -792,6 +795,12 @@
                     </td>
                 </tr>
             </table>
+
+            <div id="specific_pids_table">
+                <div class="specific-pid-entries"></div>
+            </div>
+
+
             <div class="section-title">Custom PIDs</div>
             <table class="form-table">
                 <tr>
@@ -1087,6 +1096,7 @@
 				if (!navigator.onLine) {
 					throw new Error('No internet connection');
 				}
+                
 				const response = await fetch('https://raw.githubusercontent.com/meatpiHQ/wican-fw/main/vehicle_profiles.json');
 				if (!response.ok) {
 					throw new Error('Network response was not ok');
@@ -1095,6 +1105,7 @@
 				console.log(data);
 				latest_car_models = data;
 				const carModels = [];
+                carModels.push("Not Selected");
 				if (data && Array.isArray(data.cars)) {
 					data.cars.forEach(car => {
 						if (car.car_model) {
@@ -1106,6 +1117,7 @@
 				var mod = { "supported": carModels };
 				loadCarModels(mod);
 				enableAutoStoreButton();
+                
 			} catch (error) {
 				console.error('There was a problem with the fetch operation:', error);
                 showNotification("Unable to fetch vehicle_profiles.json. " + error.message, "red");
@@ -1331,6 +1343,23 @@ function addCollapsibleRow(rowData = {}) {
                 <input type="text" class="expression-input" value="${rowData.Expression || ''}" placeholder="Enter expression">
             </div>
             <div class="pid-field">
+                <label>Min Value</label>
+                <input type="number" 
+                    class="min-value-input" 
+                    value="${rowData.MinValue || ''}"
+                    step="0.01"
+                    placeholder="Minimum value">
+            </div>
+            
+            <div class="pid-field">
+                <label>Max Value</label>
+                <input type="number" 
+                    class="max-value-input"
+                    value="${rowData.MaxValue || ''}" 
+                    step="0.01"
+                    placeholder="Maximum value">
+            </div>
+            <div class="pid-field">
                 <label>Period(ms)</label>
                 <input type="number" class="period-input" value="${rowData.Period || ''}" placeholder="ms">
             </div>
@@ -1416,6 +1445,10 @@ function addSelectedPID(rowData = {}) {
                     <input type="text" class="name-input" value="${selectedPID}" readonly>
                 </div>
                 <div class="pid-field">
+                    <label>Receive Header</label>
+                    <input type="text" class="receive-header-input" value="${rowData.ReceiveHeader || ''}" placeholder="Optional Receive Header" maxlength="8">
+                </div>
+                <div class="pid-field">
                     <label>Period(ms)</label>
                     <input type="number" class="period-input" value="${rowData.Period || '1000'}" min="100" max="60000">
                 </div>
@@ -1466,6 +1499,114 @@ function addSelectedPID(rowData = {}) {
     }
 }
 
+function addCarParameter(rowData = {}) {
+    if (rowData.name) {
+        const container = document.querySelector('.specific-pid-entries');
+        const entry = document.createElement('div');
+        entry.className = 'specific-pid-entry';
+
+        entry.innerHTML = `
+            <div class="pid-header">
+                <div class="header-left">
+                    <button type="button" class="collapse-btn">▼</button>
+                    <span class="pid-title">${rowData.name}</span>
+                </div>
+                <div class="header-right">
+                    <button type="button" class="delete-btn">Delete</button>
+                </div>
+            </div>
+            <div class="pid-content" style="display: none;">
+                <div class="pid-field">
+                    <label>Name</label>
+                    <input type="text" class="name-input" value="${rowData.name}">
+                </div>
+                <div class="pid-field">
+                    <label>PID</label>
+                    <input type="text" class="pid-input" value="${rowData.pid || ''}" placeholder="Enter PID value">
+                </div>
+                <div class="pid-field">
+                    <label>PID Init</label>
+                    <input type="text" class="pid-init-input" value="${rowData.pid_init || ''}" placeholder="Enter PID Init value;">
+                </div>
+                <div class="pid-field">
+                    <label>Expression</label>
+                    <input type="text" class="expression-input" value="${rowData.expression || ''}">
+                </div>
+                <div class="pid-field">
+                    <label>Unit</label>
+                    <input type="text" class="unit-input" value="${rowData.unit || ''}">
+                </div>
+                <div class="pid-field">
+                    <label>Class</label>
+                    <input type="text" class="class-input" value="${rowData.class || ''}">
+                </div>
+                <div class="pid-field">
+                    <label>Period(ms)</label>
+                    <input type="number" class="period-input" value="${rowData.period || '5000'}" min="100" max="60000">
+                </div>
+                <div class="pid-field">
+                    <label>Min Value</label>
+                    <input type="number" class="min-input" value="${rowData.min || ''}"step="0.01"placeholder="Minimum value">
+                </div>
+                
+                <div class="pid-field">
+                    <label>Max Value</label>
+                    <input type="number" 
+                        class="max-input" value="${rowData.max || ''}" step="0.01" placeholder="Maximum value">
+                </div>
+                <div class="pid-field">
+                    <label>Type</label>
+                    <select class="type-select">
+                        <option value="Default">Default</option>
+                        <option value="MQTT_Topic">MQTT_Topic</option>
+                        <option value="MQTT_WallBox">MQTT_WallBox</option>
+                    </select>
+                </div>
+                <div class="pid-field">
+                    <label>Send_to</label>
+                    <input type="text" class="send-to-input" placeholder="Enter destination">
+                </div>
+            </div>
+        `;
+
+        // Add styles and event listeners
+        const style = document.createElement('style');
+        style.textContent = pidEntryStyles;
+        document.head.appendChild(style);
+
+        const header = entry.querySelector('.pid-header');
+        const deleteBtn = entry.querySelector('.delete-btn');
+        const collapseBtn = entry.querySelector('.collapse-btn');
+        const content = entry.querySelector('.pid-content');
+
+        // Delete button handler
+        deleteBtn.addEventListener('click', () => {
+            entry.remove();
+            enableAutoStoreButton();
+        });
+
+        // Collapse button handler
+        const toggleCollapse = (e) => {
+            e.stopPropagation();
+            const isHidden = content.style.display === 'none';
+            content.style.display = isHidden ? 'block' : 'none';
+            collapseBtn.textContent = isHidden ? '▲' : '▼';
+        };
+
+        header.addEventListener('click', toggleCollapse);
+        collapseBtn.addEventListener('click', toggleCollapse);
+
+        // Enable auto store button on input changes
+        entry.querySelectorAll('input, select').forEach(input => {
+            input.addEventListener('input', enableAutoStoreButton);
+        });
+
+        container.appendChild(entry);
+        enableAutoStoreButton();
+    }
+}
+
+
 // Update the loadAutoTable function to work with the new structure
 function loadAutoTable(jsonData) {
         try {
@@ -1511,6 +1652,8 @@ function loadAutoTable(jsonData) {
                         Init: pidData.Init || '',
                         PID: pidData.PID || '',
                         Expression: pidData.Expression || '',
+                        MinValue: pidData.MinValue || '',
+                        MaxValue: pidData.MaxValue || '',
                         Period: pidData.Period || '',
                         Type: pidData.Type || 'MQTT_Topic',
                         Send_to: pidData.Send_to || ''
@@ -1523,6 +1666,7 @@ function loadAutoTable(jsonData) {
                     console.log(`Loading Standard PID ${index}:`, pidData);
                     addSelectedPID({
                         Name: pidData.Name || '',
+                        ReceiveHeader: pidData.ReceiveHeader || '',
                         Period: pidData.Period || '',
                         Type: pidData.Type || 'Default',
                         Send_to: pidData.Send_to || ''
@@ -1600,31 +1744,42 @@ function loadAutoTable(jsonData) {
             const standard_pidsValue = document.getElementById("standard_pids")?.value || 'disable';
             const ecu_protocolValue = document.getElementById("ecu_protocol")?.value || '6';
             const carModelValue = carModelField?.value || '';
-
-            if (latest_car_models != null) {
-            console.log("latest_car_models:", latest_car_models);
-            if (latest_car_models && Array.isArray(latest_car_models.cars)) {
-                latest_car_models.cars.forEach((car, index) => {
-                if (car.car_model == carModelValue) {
-                    console.log("Matched car at index", index, ":", car);
-                    var cars_file = {
-                    "cars": [car]
-                    };
-                    console.log("cars_file", cars_file);
-                    fetch('/store_car_data', {
+            if (!carModelValue || carModelValue.length === 0 || carModelValue === "Not Selected") {
+                throw new Error("Car model must be selected");
+            }
+            const specificPidEntries = document.querySelectorAll('.specific-pid-entry');
+            if (specificPidEntries.length > 0) {
+                const carData = {
+                    car_model: carModelValue,
+                    pids: Array.from(specificPidEntries).map(entry => {
+                        return {
+                            pid: entry.querySelector('.pid-input').value, 
+                            pid_init: entry.querySelector('.pid-init-input').value, 
+                            parameters: [{
+                                name: entry.querySelector('.name-input').value,
+                                expression: entry.querySelector('.expression-input').value,
+                                unit: entry.querySelector('.unit-input').value,
+                                class: entry.querySelector('.class-input').value,
+                                period: entry.querySelector('.period-input').value,
+                                min: entry.querySelector('.min-input').value,
+                                max: entry.querySelector('.max-input').value
+                            }]
+                        };
+                    })
+                };
+                
+                fetch('/store_car_data', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(cars_file)
-                    }).then(response => response.text()).then(data => console.log('Success:', data)).catch(error => console.error('Error:', error));
-                }
-                });
-            }
-            latest_car_models = null;
+                    body: JSON.stringify({ cars: [carData] })
+                }).then(response => response.text())
+                .then(data => console.log('Success:', data))
+                .catch(error => console.error('Error:', error));
             }
 
-            // Validate cycle time
+
             if (!cycleField.disabled && (!/^\d+$/.test(cycleValue) || parseInt(cycleValue) < 1000)) {
                 showNotification("Cycle must be a number greater than 1000", "red");
                 return false;
@@ -1638,6 +1793,8 @@ function loadAutoTable(jsonData) {
                         Init: entry.querySelector('.init-input')?.value || '',
                         PID: entry.querySelector('.pid-input')?.value || '',
                         Expression: entry.querySelector('.expression-input')?.value || '',
+                        MinValue: entry.querySelector('.min-value-input')?.value || '',
+                        MaxValue: entry.querySelector('.max-value-input')?.value || '',
                         Period: entry.querySelector('.period-input')?.value || '',
                         Type: entry.querySelector('.type-select')?.value || 'Default',
                         Send_to: entry.querySelector('.send-to-input')?.value || ''
@@ -1666,6 +1823,7 @@ function loadAutoTable(jsonData) {
                 standardEntries.forEach((entry, index) => {
                     const stdPIDData = {
                         Name: entry.querySelector('.name-input')?.value || '',
+                        ReceiveHeader: entry.querySelector('.receive-header-input')?.value || '',
                         Period: entry.querySelector('.period-input')?.value || '',
                         Type: entry.querySelector('.type-select')?.value || 'Default',
                         Send_to: entry.querySelector('.send-to-input')?.value || ''
@@ -2009,24 +2167,58 @@ function loadAutoTable(jsonData) {
 		xhttp.send();
 	}
 
-	function loadautoPIDConfig() {
-		const xhttp = new XMLHttpRequest();
-		xhttp.onload = function() {
-			console.log("Car models:", this.responseText);
-			if(this.responseText != "NONE") {
-				var obj = JSON.parse(this.responseText);
-				loadCarModels(obj);
-				loadautoPID();
-			}else{
-				toggleCarModel();
-				toggleDestinationAndCycle();
-				toggleSendToFields();
+    function loadautoPIDConfig() {
+        const xhttp = new XMLHttpRequest();
+        xhttp.onload = function() {
+            console.log("Car models:", this.responseText);
+            if(this.responseText != "NONE") {
+                var obj = JSON.parse(this.responseText);
+                // Create array of car models
+                const carModels = [];
+                if (obj && Array.isArray(obj.cars)) {
+                    obj.cars.forEach(car => {
+                        if (car.car_model) {
+                            carModels.push(car.car_model);
+                        }
+                        
+                        // Load parameters for each PID
+                        if (car.pids) {
+                            car.pids.forEach(pid => {
+
+                                if (pid.parameters) {
+                                    pid.parameters.forEach(param => {
+                                        addCarParameter({
+                                            name: param.name,
+                                            expression: param.expression,
+                                            unit: param.unit,
+                                            class: param.class, 
+                                            period: param.period,
+                                            min: param.min,
+                                            max: param.max,
+                                            pid: pid.pid,
+                                            pid_init: pid.pid_init
+                                        });
+                                    });
+                                }
+                            });
+                        }
+                    });
+                }
+                // Load car models dropdown
+                var modifiedObj = { "supported": carModels };
+                loadCarModels(modifiedObj);
+                loadautoPID();
+            } else {
+                toggleCarModel();
+                toggleDestinationAndCycle();
+                toggleSendToFields();
                 toggleStandardPIDOptions();
-			}
-		};
-		xhttp.open("GET", "/load_auto_pid_config");
-		xhttp.send();
-	}
+            }
+        };
+        xhttp.open("GET", "/load_auto_pid_config");
+        xhttp.send();
+    }
+
 
     function loadautoPID() {
         console.log("Loading auto PID data..."); // Debug log
@@ -2283,6 +2475,29 @@ function loadAutoTable(jsonData) {
 			}
 			loadCANFLT();
 			loadautoPIDConfig();
+
+            document.getElementById("car_model").addEventListener('change', function() {
+                // Clear existing entries
+                document.querySelector('.specific-pid-entries').innerHTML = '';
+                
+                const selectedModel = this.value;
+                if (latest_car_models && Array.isArray(latest_car_models.cars)) {
+                    const selectedCar = latest_car_models.cars.find(car => car.car_model === selectedModel);
+                    if (selectedCar && selectedCar.pids) {
+                        selectedCar.pids.forEach(pid => {
+                            if (pid.parameters) {
+                                pid.parameters.forEach(param => {
+                                    addCarParameter({
+                                        ...param,
+                                        pid: pid.pid,
+                                        pid_init: pid.pid_init
+                                    });
+                                });
+                            }
+                        });
+                    }
+                }
+            });
 			document.getElementById("store_canflt_button").disabled = true;
 			document.querySelector(".store").disabled = true;
             document.getElementById("submit_button").disabled = true;
