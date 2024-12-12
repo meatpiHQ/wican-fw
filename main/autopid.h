@@ -93,6 +93,74 @@ typedef struct
     uint8_t ha_discovery_en;
 } car_model_data_t;
 
+
+////////////////
+
+typedef enum
+{
+    PID_STD = 0,
+    PID_CUSTOM = 1,
+    PID_SPECIFIC = 2,
+    PID_MAX
+}pid_type_t;
+
+typedef enum
+{
+    DEST_DEFAULT,
+    DEST_MQTT_TOPIC,
+    DEST_MQTT_WALLBOX,
+    DEST_MAX
+}destination_type_t;
+
+typedef struct 
+{
+    char *name;
+    char *expression;
+    char *unit;
+    char *class;
+    uint32_t period; 
+    float min;
+    float max;
+    sensor_type_t sensor_type;
+    char* destination;
+    destination_type_t destination_type;
+    int64_t timer;
+    float value;
+    bool failed;
+}parameter_t;
+
+typedef struct 
+{
+    char* cmd;
+    char* init;
+    uint32_t period; 
+    parameter_t *parameters;
+    uint32_t parameters_count;
+    pid_type_t pid_type;
+    char* rxheader;
+}pid_data2_t;
+
+typedef struct 
+{
+    pid_data2_t *pids;
+    uint32_t pid_count;
+    char* custom_init;
+    char* standard_init;
+    char* specific_init;
+    char* selected_car_model;
+    char* grouping;
+    bool pid_std_en;
+    bool pid_custom_en;
+    bool pid_specific_en;
+    char* std_ecu_protocol;
+    char* vehicle_model;
+    bool ha_discovery_en;
+    uint32_t cycle;     //To be removed when std pid gets its own period
+    SemaphoreHandle_t mutex;
+}all_pids_t;
+
+////////////////
+
 typedef struct 
 {
     char *data;              // Pointer to a dynamically allocated string
@@ -103,7 +171,6 @@ void autopid_parser(char* str, uint32_t len, QueueHandle_t *q);
 void autopid_init(char* id, char *config_str);
 char *autopid_data_read(void);
 bool autopid_get_ecu_status(void);
-car_model_data_t *autopid_get_config(void);
-esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint32_t available_pids_size);
+char* autopid_get_config(void);
+esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint32_t available_pids_size) ;
 #endif
-
