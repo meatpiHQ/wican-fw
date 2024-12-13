@@ -49,8 +49,9 @@
 
 uint8_t service_09_rsp_len[] = {1, 1, 4, 1, 255, 1, 255, 1, 1, 1, 4, 1}; //255 unknow
 
+#define ELM327_READY_TO_RECEIVE_CAN			BIT0
 
-
+static EventGroupHandle_t elm327_event_group = NULL;
 static QueueHandle_t *can_rx_queue = NULL;
 
 const char *ok_str = "OK";
@@ -833,7 +834,11 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 	{
 		elm327_can_log(&txframe, ELM327_CAN_TX);
 	}
+	while( xQueueReceive(*can_rx_queue, ( void * ) &rx_frame, pdMS_TO_TICKS(1)) == pdPASS );
+	can_flush_rx();
 	can_send(&txframe, 1);
+	xEventGroupSetBits(elm327_event_group, ELM327_READY_TO_RECEIVE_CAN);
+
 	TickType_t xtimeout = (elm327_config.req_timeout*4.096) / portTICK_PERIOD_MS;
 	TickType_t xwait_time;
 	int64_t txtime = esp_timer_get_time();
@@ -990,7 +995,7 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 			timeout_flag = 1;
 		}
 	}
-
+	xEventGroupClearBits(elm327_event_group, ELM327_READY_TO_RECEIVE_CAN);
 	ESP_LOGW(TAG, "Response time: %" PRIu32, (uint32_t)((esp_timer_get_time() - txtime)/1000));
 
 	if(rsp_found == 0)
@@ -1164,14 +1169,26 @@ int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, twai_message_t *frame, Queu
 	return 0;
 }
 
+uint8_t elm327_ready_to_receive(void)
+{
+    if (elm327_event_group == NULL)
+	{
+        return 0;
+    }
+    return (xEventGroupGetBits(elm327_event_group) & ELM327_READY_TO_RECEIVE_CAN) ? 1 : 0;
+}
+
+
 void elm327_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q), QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame, uint8_t type))
 {
 	elm327_mutex = xSemaphoreCreateMutex();
-    if (elm327_mutex == NULL)
+	elm327_event_group = xEventGroupCreate();
+    if (elm327_mutex == NULL || elm327_event_group == NULL)
 	{
         ESP_LOGE(TAG, "Failed to create elm327 mutex");
         return;
     }
+	
 	elm327_set_default_config(true);
 	elm327_response = send_to_host;
 	can_rx_queue = rx_queue;
