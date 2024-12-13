@@ -360,6 +360,15 @@ bool can_is_enabled(void)
 //	return (uxBits & CAN_ENABLE_BIT);
 }
 
+void can_flush_rx(void)
+{
+    if (can_cfg.bus_state == ON_BUS) 
+	{
+        twai_clear_receive_queue();
+    }
+}
+
+
 uint32_t can_msgs_to_rx(void)
 {
 	twai_status_info_t status_info;
