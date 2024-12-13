@@ -327,12 +327,15 @@ int32_t config_server_get_port(void)
 
 static esp_err_t index_handler(httpd_req_t *req)
 {
-    // const char* resp_str = (const char*) webpage;
-	size_t homepage_size = homepage_end - homepage_start;
-
-    httpd_resp_send(req, (const char*)homepage_start, homepage_size);
-    return ESP_OK;
+    httpd_resp_set_type(req, "text/html");
+    
+    const size_t homepage_size = homepage_end - homepage_start;
+    
+    esp_err_t ret = httpd_resp_send(req, (const char*)homepage_start, homepage_size);
+    
+    return (ret == ESP_OK) ? ESP_OK : ESP_FAIL;
 }
+
 
 static esp_err_t store_config_handler(httpd_req_t *req)
 {
@@ -1871,7 +1874,7 @@ static void config_server_load_cfg(char *cfg)
 
 	ESP_LOGE(TAG, "device_config.sleep_time: %s", device_config.sleep_time);
 	//*****
-
+	cJSON_Delete(root);
 	return;
 
 
@@ -1890,7 +1893,7 @@ config_error:
 		vTaskDelay(3000 / portTICK_PERIOD_MS);
 		esp_restart();
     }
-
+	cJSON_Delete(root);
 }
 
 void config_server_wifi_connected(bool flag)
@@ -2488,5 +2491,7 @@ void config_server_set_ble_config(uint8_t b)
 		fclose(f);
 	}
 	xTimerStart( xrestartTimer, 0 );
+	free((void *)resp_str);
+    cJSON_Delete(root);
 }
 
