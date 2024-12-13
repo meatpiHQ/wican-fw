@@ -52,7 +52,55 @@ static EventGroupHandle_t xautopid_event_group = NULL;
 static all_pids_t* all_pids = NULL;
 static response_t elm327_response;
 
-const std_pid_t* get_pid_from_string(const char* pid_string) {
+//Helper functions
+// Custom printer function to format numbers with 2 decimal places
+char* formatNumberPrecision(double num) 
+{
+    static char buf[32];
+    snprintf(buf, sizeof(buf), "%.2f", num);
+    
+    // Remove trailing zeros after decimal point
+    size_t len = strlen(buf);
+    if (strchr(buf, '.')) 
+    {
+        while (len > 0 && buf[len-1] == '0') 
+        {
+            buf[--len] = '\0';
+        }
+        if (len > 0 && buf[len-1] == '.') 
+        {
+            buf[--len] = '\0';
+        }
+    }
+    return buf;
+}
+
+// Recursively limit decimal precision in the JSON structure
+void limitJsonDecimalPrecision(cJSON* item) 
+{
+    if (!item) return;
+    
+    // If current item is a number, modify its value
+    if (cJSON_IsNumber(item))
+    {
+        char* formatted = formatNumberPrecision(item->valuedouble);
+        item->valuedouble = atof(formatted);
+        item->valuestring = NULL;  // Force cJSON to use valuedouble
+    }
+    
+    // Process all children
+    cJSON* child = item->child;
+    while (child)
+    {
+        limitJsonDecimalPrecision(child);
+        child = child->next;
+    }
+}
+
+
+
+const std_pid_t* get_pid_from_string(const char* pid_string)
+{
     char pid_hex[3];
     uint8_t pid_value;
     
@@ -65,23 +113,28 @@ const std_pid_t* get_pid_from_string(const char* pid_string) {
     
     // Get the base PID info
     const std_pid_t* pid_info = get_pid(pid_value);
-    if (!pid_info) {
+    if (!pid_info)
+    {
         return NULL;
     }
     
     // If there's a parameter name specified after the dash
-    if (strchr(pid_string, '-')) {
+    if (strchr(pid_string, '-'))
+    {
         const char* param_name = strchr(pid_string, '-') + 1;
         
         // For all PIDs, verify the parameter exists
         bool param_found = false;
-        for (int i = 0; i < pid_info->num_params; i++) {
-            if (strcmp(pid_info->params[i].name, param_name) == 0) {
+        for (int i = 0; i < pid_info->num_params; i++)
+        {
+            if (strcmp(pid_info->params[i].name, param_name) == 0)
+            {
                 param_found = true;
                 break;
             }
         }
-        if (!param_found) {
+        if (!param_found)
+        {
             return NULL;
         }
     }
@@ -383,6 +436,7 @@ char *autopid_data_read(void)
                     }
                 }
             }
+            limitJsonDecimalPrecision(root);
             json_str = cJSON_PrintUnformatted(root);
             cJSON_Delete(root);
         }
@@ -413,6 +467,7 @@ void autopid_data_publish(void) {
                     }
                 }
             }
+            limitJsonDecimalPrecision(root);
             char *json_str = cJSON_PrintUnformatted(root);
             if (json_str) {
                 if(all_pids->group_destination && strlen(all_pids->group_destination) > 0)
@@ -773,6 +828,7 @@ static void publish_parameter_mqtt(parameter_t *param) {
                 } else {
                     cJSON_AddNumberToObject(param_json, param->name, param->value);
                 }
+                limitJsonDecimalPrecision(param_json);
                 payload = cJSON_PrintUnformatted(param_json);
                 cJSON_Delete(param_json);
             }
@@ -989,12 +1045,12 @@ static void autopid_task(void *pvParameters)
                                                             ESP_LOGE(TAG, "Failed to extract signal: %s", esp_err_to_name(err));
                                                             break;
                                                         }
-                                                        param->value = round(param->value * 100.0) / 100.0;
+                                                        param->value = roundf(param->value * 100.0) / 100.0;
                                                         ESP_LOGI(TAG, "Parameter %s result: %.2f %s", 
                                                                         param->name, 
                                                                         param->value, 
                                                                         pid_info->params[p].unit);
-                                                            
+                                                        param->value = roundf(param->value * 100.0) / 100.0;
                                                         publish_parameter_mqtt(param);
                                                         break;
                                                     }
