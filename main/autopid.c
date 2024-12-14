@@ -251,6 +251,11 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
     if(protocol >= 6 && protocol <= 9) 
     {
         ESP_LOGI(TAG, "Setting protocol %d", protocol);
+
+        static const char *elm327_config = "ate0\rath1\ratl0\rats1\ratst96\r";
+        elm327_process_cmd((uint8_t*)elm327_config, strlen(elm327_config), &frame, &autopidQueue);
+        while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS);
+
         const char* protocol_cmds = supported_protocols[protocol-6];
         ESP_LOGI(TAG, "Sending protocol commands: %s", protocol_cmds);
         elm327_process_cmd((uint8_t*)protocol_cmds, strlen(protocol_cmds), &frame, &autopidQueue);
@@ -1251,6 +1256,11 @@ all_pids_t* load_all_pids(void) {
                     cJSON* min_value_item = cJSON_GetObjectItem(pid, "MinValue");
                     cJSON* max_value_item = cJSON_GetObjectItem(pid, "MaxValue");
 
+                    if(cJSON_GetArraySize(pids) > 0)
+                    {
+                        all_pids->pid_custom_en = true;
+                    }
+                    
                     curr_pid->cmd = pid_item ? (char*)malloc(strlen(pid_item->valuestring) + 2) : NULL;
                     if (curr_pid->cmd && pid_item && strlen(pid_item->valuestring) > 1)
                     {
@@ -1429,11 +1439,6 @@ all_pids_t* load_all_pids(void) {
                     if (pids) 
                     {
                         cJSON* pid;
-
-                        if(cJSON_GetArraySize(pids) > 0)
-                        {
-                            all_pids->pid_custom_en = true;
-                        }
                         
                         cJSON_ArrayForEach(pid, pids) 
                         {
@@ -1595,6 +1600,13 @@ void autopid_init(char* id)
         xautopid_event_group = xEventGroupCreate();
     }
 
+    autopidQueue = xQueueCreate(QUEUE_SIZE, sizeof(response_t));
+    if (autopidQueue == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to create queue");
+        return;
+    }
+
     all_pids = load_all_pids();
     
     if (all_pids)
@@ -1604,7 +1616,13 @@ void autopid_init(char* id)
         if (!all_pids->mutex)
         {
             ESP_LOGE(TAG, "Failed to create all_pids mutex");
+            return;
         }
+    }
+    else
+    {
+        ESP_LOGE(TAG, "all_pids is NULL");
+        return;
     }
 
     // autopid_load_config(config_str);
@@ -1617,13 +1635,6 @@ void autopid_init(char* id)
     // {
     //     car.pid_count = 0;
     // }
-    
-    autopidQueue = xQueueCreate(QUEUE_SIZE, sizeof(response_t));
-    if (autopidQueue == NULL)
-    {
-        ESP_LOGE(TAG, "Failed to create queue");
-        return;
-    }
 
     xTaskCreate(autopid_task, "autopid_task", 5000, (void *)AF_INET, 5, NULL);
 
