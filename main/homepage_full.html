@@ -2227,7 +2227,7 @@ function loadAutoTable(jsonData) {
 		xhttp.send();
 	}
 
-    function loadautoPIDConfig() {
+    function loadautoPIDCarData() {
         const xhttp = new XMLHttpRequest();
         xhttp.onload = function() {
             console.log("Car models:", this.responseText);
@@ -2270,7 +2270,6 @@ function loadAutoTable(jsonData) {
                 // Load car models dropdown
                 var modifiedObj = { "supported": carModels };
                 loadCarModels(modifiedObj);
-                loadautoPID();
             } else {
                 toggleCarModel();
                 toggleDestinationAndCycle();
@@ -2278,7 +2277,7 @@ function loadAutoTable(jsonData) {
                 toggleStandardPIDOptions();
             }
         };
-        xhttp.open("GET", "/load_auto_pid_config");
+        xhttp.open("GET", "/load_auto_pid_car_data");
         xhttp.send();
     }
 
@@ -2557,8 +2556,8 @@ function loadAutoTable(jsonData) {
 				document.getElementById("mqtt_en_div").style.display = "none";
 			}
 			loadCANFLT();
-			loadautoPIDConfig();
-
+			loadautoPIDCarData();
+            loadautoPID();
             document.getElementById("car_model").addEventListener('change', function() {
                 // Clear existing entries
                 document.querySelector('.specific-pid-entries').innerHTML = '';
