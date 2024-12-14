@@ -573,12 +573,16 @@ static esp_err_t load_pid_auto_config_handler(httpd_req_t *req)
         return ESP_OK;
     }
 
-    // Null-terminate the read buffer
-    buf[read_len] = '\0';
+    // Find the last closing brace and terminate the string there
+    char *last_brace = strrchr(buf, '}');
+    if (last_brace != NULL) {
+        *(last_brace + 1) = '\0';  // Terminate string right after the last }
+        read_len = last_brace - buf + 1;  // Update length to new size
+    }
 
     ESP_LOGI(TAG, "Sending response: %s", buf);
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, buf, HTTPD_RESP_USE_STRLEN);
+    httpd_resp_send(req, buf, read_len);  // Use actual content length instead of HTTPD_RESP_USE_STRLEN
     
     free(buf);
     return ESP_OK;
@@ -589,6 +593,8 @@ static esp_err_t load_config_handler(httpd_req_t *req)
     const char* resp_str = (const char*)device_config_file;
     httpd_resp_send(req, (const char*)resp_str, HTTPD_RESP_USE_STRLEN);
     ESP_LOGI(TAG, "device_config_file: %s", device_config_file);
+	UBaseType_t stack_high_watermark = uxTaskGetStackHighWaterMark(NULL);
+	ESP_LOGI(TAG, "Task stack high watermark: %u words", stack_high_watermark);
     return ESP_OK;
 }
 
@@ -1338,6 +1344,14 @@ static esp_err_t scan_available_pids_handler(httpd_req_t *req)
     char param[32];
     uint8_t protocol_num = 6; // Default protocol
 
+    if(config_server_protocol() != AUTO_PID)
+    {
+        httpd_resp_set_type(req, "application/json");
+        const char *resp_str = "{\"text\":\"Set protocol to AutoPid and reboot to be able to scan\"}";
+        httpd_resp_send(req, resp_str, strlen(resp_str));
+        return ESP_OK;
+    }
+	
     if (httpd_req_get_url_query_str(req, param, sizeof(param)) == ESP_OK) {
         if (httpd_query_key_value(param, "protocol", protocol, sizeof(protocol)) == ESP_OK) {
             protocol_num = atoi(protocol);
@@ -2137,6 +2151,7 @@ static httpd_handle_t config_server_init(void)
 
     // Start the httpd server
 	config.max_uri_handlers = 18;
+	config.stack_size = 5120;
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK)
     {
