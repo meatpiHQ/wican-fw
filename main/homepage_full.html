@@ -1243,15 +1243,21 @@
 				const reader = new FileReader();
 				reader.onload = function(event) {
 					try {
-						JSON.parse(event.target.result);
-						// If parsing is successful, proceed with the upload
-						const form = document.getElementById('car_data_form');
-						const formData = new FormData(form);
-						latest_car_models = null;
-						fetch('/upload/car_data.json', {
-							method: 'POST',
-							body: formData
-						})
+                        const jsonData = JSON.parse(event.target.result);
+                        // If single car format, wrap it in cars array
+                        const formattedData = jsonData.car_model ? { cars: [jsonData] } : jsonData;
+                        // Remove all whitespace and formatting
+                        const unformattedJson = JSON.stringify(formattedData).replace(/\s+/g, '');
+                        
+                        const form = document.getElementById('car_data_form');
+                        const formData = new FormData(form);
+                        formData.set('car_data_file', new Blob([unformattedJson], {type: 'application/json'}));
+                        latest_car_models = null;
+                        
+                        fetch('/upload/car_data.json', {
+                            method: 'POST',
+                            body: formData
+                        })
 						.then(response => response.text())
 						.then(data => {
 							console.log('Success:', data);
@@ -1298,8 +1304,9 @@ async function scanAvailablePIDs() {
         const data = await response.json();
         const pidSelect = document.getElementById('available_pids');
         pidSelect.innerHTML = '';
-        
-        if (data.std_pids && Array.isArray(data.std_pids) && data.std_pids.length > 0) {
+        if (data.text) {
+            showNotification(data.text, "red");
+        } else if (data.std_pids && Array.isArray(data.std_pids) && data.std_pids.length > 0) {
             data.std_pids.forEach(pid => {
                 const option = document.createElement('option');
                 option.value = pid;
@@ -1626,7 +1633,9 @@ function addCarParameter(rowData = {}) {
 
 
 
-        // Add event listeners
+        const style = document.createElement('style');
+        style.textContent = pidEntryStyles;
+        document.head.appendChild(style);
         const header = entry.querySelector('.pid-header');
         const deleteBtn = entry.querySelector('.delete-btn');
         const collapseBtn = entry.querySelector('.collapse-btn');
