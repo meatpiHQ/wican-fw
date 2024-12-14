@@ -631,46 +631,102 @@ static esp_err_t logo_handler(httpd_req_t *req)
 
 static esp_err_t store_auto_data_handler(httpd_req_t *req)
 {
+    if (!req)
+	{
+        return ESP_ERR_INVALID_ARG;
+    }
+
     char *buf = NULL;
     size_t buf_size = req->content_len;
+    esp_err_t ret = ESP_OK;
 
-    if (buf_size <= 0) {
+    // Validate content length
+    if (buf_size <= 0 || buf_size > MAX_FILE_SIZE)
+	{
+        ESP_LOGE(TAG, "Invalid content length: %d", buf_size);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid content length");
         return ESP_FAIL;
     }
 
-    buf = (char *)malloc(buf_size + 1);
-    if (!buf) {
-        ESP_LOGE(__func__, "Memory allocation failure");
+    // Allocate buffer with extra byte for null termination
+    buf = (char *)calloc(1, buf_size + 1);
+    if (!buf)
+	{
+        ESP_LOGE(TAG, "Memory allocation failed for size %d", buf_size + 1);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
         return ESP_ERR_NO_MEM;
     }
 
-    int ret = httpd_req_recv(req, buf, buf_size);
-    if (ret <= 0) {
-        free(buf);
-        if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
-            ESP_LOGE(__func__, "timeout occurred");
-        }
-        return ESP_FAIL;
+    // Receive data with timeout handling
+    int received = httpd_req_recv(req, buf, buf_size);
+    if (received <= 0)
+	{
+        ESP_LOGE(TAG, "Failed to receive data: %d", received);
+        ret = ESP_FAIL;
+        goto cleanup;
     }
 
-    buf[ret] = 0;
-    ESP_LOGI(__func__, "Auto Table json: %s", buf);
+    // Validate received data length
+    if (received != buf_size)
+	{
+        ESP_LOGE(TAG, "Incomplete data received: %d/%d", received, buf_size);
+        ret = ESP_FAIL;
+        goto cleanup;
+    }
 
+    buf[received] = '\0';
+    
+    // Validate JSON format
+    cJSON *json = cJSON_Parse(buf);
+    if (!json)
+	{
+        ESP_LOGE(TAG, "Invalid JSON format");
+        ret = ESP_FAIL;
+        goto cleanup;
+    }
+    cJSON_Delete(json);
+
+    ESP_LOGI(TAG, "Auto Table json: %s", buf);
+
+    // Open file with error handling
     FILE *f = fopen("/spiffs/auto_pid.json", "w");
-    if (!f) {
-        free(buf);
-        return ESP_FAIL;
+    if (!f)
+	{
+        ESP_LOGE(TAG, "Failed to open file for writing");
+        ret = ESP_FAIL;
+        goto cleanup;
     }
 
-    fwrite(buf, 1, buf_size, f);
-    fclose(f);
-    free(buf);
+    // Write data with size verification
+    size_t written = fwrite(buf, 1, received, f);
+    if (written != received) 
+	{
+        ESP_LOGE(TAG, "File write failed: %d/%d bytes", written, received);
+        fclose(f);
+        ret = ESP_FAIL;
+        goto cleanup;
+    }
 
+    fclose(f);
+
+    // Send success response
     const char *resp_str = "Auto PID table will take effect after submit.";
     httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
 
-    return ESP_OK;
+cleanup:
+    if (buf)
+	{
+        free(buf);
+    }
+    
+    if (ret != ESP_OK)
+	{
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to store data");
+    }
+
+    return ret;
 }
+
 
 static esp_err_t store_car_data_handler(httpd_req_t *req)
 {
@@ -1346,7 +1402,7 @@ static const httpd_uri_t load_pid_auto_uri = {
     .user_ctx  = NULL
 };
 static const httpd_uri_t load_pid_auto_conf_uri = {
-    .uri       = "/load_auto_pid_config",
+    .uri       = "/load_auto_pid_car_data",
     .method    = HTTP_GET,
     .handler   = load_pid_auto_config_handler,
     /* Let's pass response string in user
