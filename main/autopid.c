@@ -185,6 +185,20 @@ static esp_err_t extract_signal_value(const uint8_t* data,
     return ESP_OK;
 }
 
+static void merge_response_frames(uint8_t* data, uint32_t length, uint8_t* merged_frame) {
+    // Initialize merged frame with first 7 bytes
+    for(int i = 0; i < 7; i++) {
+        merged_frame[i] = data[i];
+    }
+    
+    // Process subsequent frames
+    for(int frame = 7; frame < length; frame += 7) {
+        // Perform bitwise OR for each byte position
+        for(int byte = 0; byte < 7 && (frame + byte) < length; byte++) {
+            merged_frame[byte] |= data[frame + byte];
+        }
+    }
+}
 
 esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint32_t available_pids_size) 
 {
@@ -270,19 +284,22 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
             continue;
         }
 
-        if (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS) {
-            ESP_LOGI(TAG, "Raw response length: %lu", response->length);
-            ESP_LOG_BUFFER_HEX(TAG, response->data, response->length);
+    if (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS) {
+        ESP_LOGI(TAG, "Raw response length: %lu", response->length);
+        ESP_LOG_BUFFER_HEX(TAG, response->data, response->length);
 
-            // Skip mode byte (0x41) and PID byte
-            if (response->length >= 7) { // Check for minimum length including header
-                // Extract just the bitmap bytes (last 4 bytes)
-                supported_pids = (response->data[3] << 24) | 
-                               (response->data[4] << 16) | 
-                               (response->data[5] << 8) | 
-                               response->data[6];
-                
-                ESP_LOGI(TAG, "Supported PIDs bitmap: 0x%08lx", supported_pids);
+        // Skip mode byte (0x41) and PID byte
+        if (response->length >= 7) {
+            uint8_t merged_frame[7] = {0};
+            merge_response_frames(response->data, response->length, merged_frame);
+            
+            // Extract bitmap from merged frame
+            supported_pids = (merged_frame[3] << 24) | 
+                            (merged_frame[4] << 16) | 
+                            (merged_frame[5] << 8) | 
+                            merged_frame[6];
+            
+            ESP_LOGI(TAG, "Merged frame bitmap: 0x%08lx", supported_pids);
 
                 for (int bit = 0; bit < 32; bit++) {
                     if (supported_pids & (1 << (31 - bit))) {
