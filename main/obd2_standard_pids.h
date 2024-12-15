@@ -2573,13 +2573,13 @@ static const std_parameter_t pid_154_params[] = {
 static const std_parameter_t pid_155_params[] = {
     {
         .name = "DieselExhaustFluidSensorData",
-        .unit = "none",
-        .scale = 1.0f,
+        .unit = "%",
+        .scale = 0.3921f,
         .offset = 0.0f,
         .min = 0.0f,
-        .max = 0.0f,
-        .bit_start = 0,
-        .bit_length = 0,
+        .max = 100.0f,
+        .bit_start = 55,
+        .bit_length = 8,
         .class = "none"
     },
 };
