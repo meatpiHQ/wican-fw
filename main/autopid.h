@@ -28,6 +28,8 @@
 typedef struct {
     uint8_t data[BUFFER_SIZE];
     uint32_t length;
+    uint8_t* priority_data;
+    uint8_t  priority_data_len;
 } response_t;
 
 typedef enum
