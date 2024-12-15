@@ -87,10 +87,10 @@ const standardPidsElement=document.getElementById("standard_pids");if(standardPi
 function enableAutoStoreButton(){const storeButton=document.querySelector('button.store');if(storeButton){storeButton.disabled=false;}
 document.getElementById("custom_pid_store").disabled=false;}
 async function storeAutoTableData(){try{const custom_pid_data = [];const std_pid_data = [];const entries=document.querySelectorAll('.pid-entry');const standardEntries=document.querySelectorAll('.std-pid-entry');const initialisationValue=document.getElementById("initialisation")?.value || '';const groupingValue=document.getElementById("grouping")?.value || 'disable';const groupDestTypeValue=document.getElementById("group_dest_type")?.value || 'Default';const ha_discoveryValue=document.getElementById("ha_discovery")?.value || 'disable';const destinationValue=document.getElementById("destination")?.value || '';const cycleField=document.getElementById("group_cycle");const cycleValue=cycleField?.value || '5000';const carSpecificValue=document.getElementById("car_specific")?.value || 'disable';const carModelField=document.getElementById("car_model");const standard_pidsValue=document.getElementById("standard_pids")?.value || 'disable';const ecu_protocolValue=document.getElementById("ecu_protocol")?.value || '6';const carModelValue=carModelField?.value || '';if(carSpecificValue== "enable" && (!carModelValue || carModelValue.length === 0 || carModelValue === "Not Selected")){throw new Error("Car model must be selected");}
-const specificPidEntries=document.querySelectorAll('.specific-pid-entry');if(specificPidEntries.length > 0){const carData = {car_model: carModelValue,
+let carData = {car_model: carModelValue,
 init: document.getElementById("specific_init").value,
-pids: Array.from(specificPidEntries).map(entry => {return {pid: entry.querySelector('.pid-input').value, 
-pid_init: entry.querySelector('.pid-init-input').value, 
+pids: []};const specificPidEntries=document.querySelectorAll('.specific-pid-entry');if(specificPidEntries.length > 0){carData.pids=Array.from(specificPidEntries).map(entry => {return {pid: entry.querySelector('.pid-input').value,
+pid_init: entry.querySelector('.pid-init-input').value,
 parameters: [{name: entry.querySelector('.name-input').value,
 expression: entry.querySelector('.expression-input').value,
 unit: entry.querySelector('.unit-input').value,
@@ -99,11 +99,12 @@ period: entry.querySelector('.period-input').value,
 min: entry.querySelector('.min-input').value,
 max: entry.querySelector('.max-input').value,
 type: entry.querySelector('.type-select').value,
-send_to: entry.querySelector('.send-to-input').value}]};})};fetch('/store_car_data', {method: 'POST',
+send_to: entry.querySelector('.send-to-input').value}]};});}
+fetch('/store_car_data', {method: 'POST',
 headers: {'Content-Type': 'application/json'},
 body: JSON.stringify({cars: [carData]})}).then(response => response.text())
 .then(data => console.log('Success:', data))
-.catch(error => console.error('Error:', error));}if(!cycleField.disabled && (!/^\d+$/.test(cycleValue) || parseInt(cycleValue) < 1000)){showNotification("Cycle must be a number greater than 1000", "red");return false;}if(entries?.length){entries.forEach((entry,index) => {const pidData = {Name: entry.querySelector('.name-input')?.value || '',
+.catch(error => console.error('Error:', error));if(!cycleField.disabled && (!/^\d+$/.test(cycleValue) || parseInt(cycleValue) < 1000)){showNotification("Cycle must be a number greater than 1000", "red");return false;}if(entries?.length){entries.forEach((entry,index) => {const pidData = {Name: entry.querySelector('.name-input')?.value || '',
 Init: entry.querySelector('.init-input')?.value || '',
 PID: entry.querySelector('.pid-input')?.value || '',
 Expression: entry.querySelector('.expression-input')?.value || '',

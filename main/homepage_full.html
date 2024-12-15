@@ -1812,40 +1812,44 @@ function loadAutoTable(jsonData) {
             if (carSpecificValue== "enable" && (!carModelValue || carModelValue.length === 0 || carModelValue === "Not Selected")) {
                 throw new Error("Car model must be selected");
             }
+
+            let carData = {
+                car_model: carModelValue,
+                init: document.getElementById("specific_init").value,
+                pids: []
+            };
+
             const specificPidEntries = document.querySelectorAll('.specific-pid-entry');
             if (specificPidEntries.length > 0) {
-                const carData = {
-                    car_model: carModelValue,
-                    init: document.getElementById("specific_init").value,
-                    pids: Array.from(specificPidEntries).map(entry => {
-                        return {
-                            pid: entry.querySelector('.pid-input').value, 
-                            pid_init: entry.querySelector('.pid-init-input').value, 
-                            parameters: [{
-                                name: entry.querySelector('.name-input').value,
-                                expression: entry.querySelector('.expression-input').value,
-                                unit: entry.querySelector('.unit-input').value,
-                                class: entry.querySelector('.class-input').value,
-                                period: entry.querySelector('.period-input').value,
-                                min: entry.querySelector('.min-input').value,
-                                max: entry.querySelector('.max-input').value,
-                                type: entry.querySelector('.type-select').value,
-                                send_to: entry.querySelector('.send-to-input').value
-                            }]
-                        };
-                    })
-                };
-                
-                fetch('/store_car_data', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ cars: [carData] })
-                }).then(response => response.text())
-                .then(data => console.log('Success:', data))
-                .catch(error => console.error('Error:', error));
+                carData.pids = Array.from(specificPidEntries).map(entry => {
+                    return {
+                        pid: entry.querySelector('.pid-input').value,
+                        pid_init: entry.querySelector('.pid-init-input').value,
+                        parameters: [{
+                            name: entry.querySelector('.name-input').value,
+                            expression: entry.querySelector('.expression-input').value,
+                            unit: entry.querySelector('.unit-input').value,
+                            class: entry.querySelector('.class-input').value,
+                            period: entry.querySelector('.period-input').value,
+                            min: entry.querySelector('.min-input').value,
+                            max: entry.querySelector('.max-input').value,
+                            type: entry.querySelector('.type-select').value,
+                            send_to: entry.querySelector('.send-to-input').value
+                        }]
+                    };
+                });
             }
+            
+            fetch('/store_car_data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ cars: [carData] })
+            }).then(response => response.text())
+            .then(data => console.log('Success:', data))
+            .catch(error => console.error('Error:', error));
+
 
 
             if (!cycleField.disabled && (!/^\d+$/.test(cycleValue) || parseInt(cycleValue) < 1000)) {
