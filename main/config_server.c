@@ -467,6 +467,7 @@ static esp_err_t load_canflt_handler(httpd_req_t *req)
 	if(mqtt_canflt_file != NULL)
 	{
 		const char* resp_str = (const char*)mqtt_canflt_file;
+		httpd_resp_set_type(req, "application/json");
 		httpd_resp_send(req, (const char*)resp_str, HTTPD_RESP_USE_STRLEN);
 		ESP_LOGI(TAG, "mqtt_canflt_file: %s", mqtt_canflt_file);
 	}
@@ -516,6 +517,7 @@ static esp_err_t load_pid_auto_handler(httpd_req_t *req)
     buf[filesize] = 0;
     ESP_LOGI(TAG, "auto_pid.json: %s", buf);
     
+	httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, buf, HTTPD_RESP_USE_STRLEN);
     free(buf);
 
@@ -591,6 +593,7 @@ static esp_err_t load_pid_auto_config_handler(httpd_req_t *req)
 static esp_err_t load_config_handler(httpd_req_t *req)
 {
     const char* resp_str = (const char*)device_config_file;
+	httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, (const char*)resp_str, HTTPD_RESP_USE_STRLEN);
     ESP_LOGI(TAG, "device_config_file: %s", device_config_file);
 	UBaseType_t stack_high_watermark = uxTaskGetStackHighWaterMark(NULL);

@@ -1032,15 +1032,27 @@
             <table class="form-table">
                 <tr>
                     <td>Reboot WiCAN:</td>
-                    <td><input id="reboot_button" name="reboot_button" type="button" onclick="reboot()" value="Reboot" /></td>
+                    <td><input id="reboot_button" name="reboot_button" type="button" onclick="reboot()" value="Reboot" style="width: 15%;" /></td>
                 </tr>
+                <tr>
+                    <td>Download Configuration:</td>
+                    <td><input id="download_cfg_butt" name="download_cfg_butt" type="button" onclick="downloadCfg()" value="Download" style="width: 15%;" /></td>
+                </tr>
+                <tr>
+                    <td>Upload Configuration:</td>
+                    <td>
+                        <input type="button" onclick="document.getElementById('fileInput').click()" value="Upload" style="width: 15%;" />
+                        <input type="file" id="fileInput" accept=".json" onchange="uploadCfg()" style="display: none;" />
+                    </td>
+                </tr>
+                
             </table>
 
             <div class="section-title">Firmware Update</div>
             <table class="form-table">
                 <tr>
-                    <td><input id="ota_file" name="ota_file" type="file" /></td>
-                    <td><input id="ota_submit_button" type="button" value="Update" onclick="otaClick()" /></td>
+                    <td><input id="ota_file" name="ota_file" type="file" accept=".bin" /></td>
+                    <td><input id="ota_submit_button" type="button" value="Update" onclick="otaClick()" style="width: 15%;" /></td>
                 </tr>
             </table>
         </div>
@@ -2449,6 +2461,139 @@ function loadAutoTable(jsonData) {
         };
         xhttp.open("POST", "/system_commands");
         xhttp.send(JSON.stringify(data));
+    }
+
+    async function downloadCfg() {
+        const endpoints = [
+            '/load_config',
+            '/load_auto_pid_car_data',
+            '/load_auto_pid',
+            '/load_canflt'
+        ];
+        
+        const delay = 500; // 500ms delay between requests
+        let combinedData = {};
+        let hasErrors = false;
+        
+        try {
+            for (let i = 0; i < endpoints.length; i++) {
+                const endpoint = endpoints[i];
+                
+                try {
+                    const response = await fetch(endpoint);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    const key = endpoint.replace('/load_', '');
+                    combinedData[key] = data;
+                } catch (fetchError) {
+                    hasErrors = true;
+                }
+                
+                if (i < endpoints.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+            
+            if (Object.keys(combinedData).length === 0) {
+                throw new Error('No data was successfully fetched from any endpoint');
+            }
+            
+            const dataStr = JSON.stringify(combinedData, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = window.URL.createObjectURL(blob);
+            
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `config_${new Date().toISOString().split('T')[0]}.json`;
+            
+            document.body.appendChild(link);
+            link.click();
+            
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            
+            return true;
+            
+        } catch (error) {
+            alert('Failed to download configuration');
+            return false;
+        }
+    }
+
+    async function uploadCfg() {
+        const fileInput = document.getElementById('fileInput');
+        const file = fileInput.files[0];
+        if (!file) return;
+
+        const endpointMap = {
+            'config': '/store_config',
+            'auto_pid': '/store_auto_data',
+            'auto_pid_car_data': '/store_car_data',
+            'canflt': '/store_canflt'
+        };
+
+        const delay = 200;
+
+        try {
+            const reader = new FileReader();
+            
+            reader.onload = async function(e) {
+                try {
+                    const jsonData = JSON.parse(e.target.result);
+                    let hasErrors = false;
+
+                    for (const [key, endpoint] of Object.entries(endpointMap)) {
+                        if (jsonData[key]) {
+                            try {
+                                const response = await fetch(endpoint, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                    },
+                                    body: JSON.stringify(jsonData[key])
+                                });
+
+                                if (!response.ok) {
+                                    hasErrors = true;
+                                    throw new Error(`HTTP error! status: ${response.status}`);
+                                }
+
+                                // Add delay before next request
+                                await new Promise(resolve => setTimeout(resolve, delay));
+
+                            } catch (fetchError) {
+                                hasErrors = true;
+                            }
+                        }
+                    }
+
+                    if (hasErrors) {
+                        alert('Some configurations failed to upload');
+                    } else {
+                        alert('Configuration uploaded successfully, Rebooting...');
+                    }
+                    
+                    // Clear the file input after upload
+                    fileInput.value = '';
+
+                } catch (parseError) {
+                    alert('Failed to parse configuration file');
+                }
+            };
+
+            reader.onerror = function() {
+                alert('Error reading file');
+            };
+
+            reader.readAsText(file);
+
+        } catch (error) {
+            alert('Upload failed');
+        }
     }
 
 	function Load() {
