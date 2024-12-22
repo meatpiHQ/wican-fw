@@ -248,7 +248,7 @@ void wifi_network_init(char* sta_ssid, char* sta_pass)
             /* Setting a password implies station will connect to all security modes including WEP/WPA.
              * However these modes are deprecated and not advisable to be used. Incase your Access point
              * doesn't support WPA2, these mode can be enabled by commenting below line */
-			.threshold.authmode = WIFI_AUTH_WPA2_WPA3_PSK,
+			.threshold.authmode = WIFI_AUTH_WPA3_PSK,
 			.rm_enabled = 1,
 			.btm_enabled = 1,
 			.scan_method = WIFI_ALL_CHANNEL_SCAN,
@@ -261,6 +261,16 @@ void wifi_network_init(char* sta_ssid, char* sta_pass)
             },
         },
     };
+
+    if(config_server_get_sta_security() == WIFI_WPA3_PSK)
+    {
+        wifi_config_sta.sta.threshold.authmode = WIFI_AUTH_WPA3_PSK;
+    }
+    else
+    {
+        wifi_config_sta.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+    }
+    
     static wifi_config_t wifi_config_ap =
     {
         .ap = {

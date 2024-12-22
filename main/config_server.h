@@ -51,12 +51,21 @@
 #define OBD_ELM327			3
 #define AUTO_PID			4
 
+typedef enum
+{
+	WIFI_OPEN,
+	WIFI_WPA2_PSK,
+	WIFI_WPA3_PSK,
+	WIFI_MAX
+}wifi_security_t;
+
 typedef struct _device_config
 {
 	char wifi_mode[65];
 	char ap_ch[65];
 	char sta_ssid[65];
 	char sta_pass[65];
+	char sta_security[8];
 	char can_datarate[65];
 	char can_mode[65];
 	char port_type[65];
@@ -146,3 +155,4 @@ int8_t config_server_mqtt_rx_en_config(void);
 int8_t config_server_get_wakeup_volt(float *wakeup_volt);
 int8_t config_server_get_sleep_time(uint32_t *sleep_time);
 int8_t config_server_get_wakeup_time(uint32_t *wakeup_time);
+wifi_security_t config_server_get_sta_security(void);
