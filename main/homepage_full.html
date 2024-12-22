@@ -412,6 +412,7 @@
         <button class="tablinks" onclick="openTab(event, 'automate')"><b>Automate</b></button>
         <button class="tablinks" onclick="openTab(event, 'monitor')"><b>Monitor</b></button>
         <button class="tablinks" onclick="openTab(event, 'power_saving_tab')"><b>Power Saving</b></button>
+        <button class="tablinks" onclick="openTab(event, 'system_tab')"><b>System</b></button>
         <button class="tablinks" onclick="openTab(event, 'about_tab')"><b>About</b></button>
     </div>
 
@@ -1026,7 +1027,24 @@
             </div>
 
         </div>
+        <div id="system_tab" class="tabcontent">
+            <div class="section-title">System</div>
+            <table class="form-table">
+                <tr>
+                    <td>Reboot WiCAN:</td>
+                    <td><input id="reboot_button" name="reboot_button" type="button" onclick="reboot()" value="Reboot" /></td>
+                </tr>
+            </table>
 
+            <div class="section-title">Firmware Update</div>
+            <table class="form-table">
+                <tr>
+                    <td><input id="ota_file" name="ota_file" type="file" /></td>
+                    <td><input id="ota_submit_button" type="button" value="Update" onclick="otaClick()" /></td>
+                </tr>
+            </table>
+        </div>
+        
         <div id="about_tab" class="tabcontent">
             <div class="section-title">About</div>
             <form id="ota_form" action="/upload/ota.bin" method="post" enctype="multipart/form-data">
@@ -1054,13 +1072,6 @@
                         <td>
                             <div id="made_by"><a href="https://www.meatpi.com/"><b>meatpi.com</b></a></div>
                         </td>
-                    </tr>
-                    <tr>
-                        <td><input id="ota_file" name="ota_file" type="file" /></td>
-                        <td><input id="ota_submit_button" type="button" value="Update" onclick="otaClick()" /></td>
-                    </tr>
-                    <tr>
-                        <td><input id="reboot_button" name="reboot_button" type="button" onclick="reboot()" value="Reboot" /></td>
                     </tr>
                 </table>
             </form>
