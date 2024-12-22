@@ -639,9 +639,9 @@ void app_main(void)
 	elm327_init(&xmsg_obd_rx_queue, NULL);
 	if(protocol == AUTO_PID)
 	{
-		// can_set_bitrate(can_datarate);
+		can_set_bitrate(can_datarate);
 		// #if HARDWARE_VER != WICAN_PRO
-		// can_enable();
+		can_enable();
 		// #endif
 		
 		autopid_init((char*)&uid[0], config_server_get_auto_pid());
@@ -690,10 +690,10 @@ void app_main(void)
 			can_set_bitrate(can_datarate);
 			can_enable();
 		}
-		else
-		{
-			can_disable();
-		}
+		// else
+		// {
+		// 	can_disable();
+		// }
 		#else
 		can_set_bitrate(can_datarate);
 		can_enable();
