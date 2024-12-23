@@ -116,7 +116,7 @@ void can_unblock(void)
 
 void can_enable(void)
 {
-	if(can_cfg.bus_state == ON_BUS)
+	// if(can_cfg.bus_state == ON_BUS)
 	{
 		return;
 	}
