@@ -104,7 +104,7 @@ static uint16_t adc2_chan_mask = 0;
 static adc_channel_t channel[1] = {ADC1_CHANNEL_7};
 #endif
 //#define THRESHOLD_VOLTAGE		13.0f
-#define SLEEP_TIME_DELAY		(180*1000*1000)
+// #define SLEEP_TIME_DELAY		(180*1000*1000)
 #define WAKEUP_TIME_DELAY		(200*1000)
 
 static EventGroupHandle_t s_mqtt_event_group = NULL;
@@ -316,7 +316,7 @@ static void adc_task(void *pvParameters)
     static int64_t pub_time = 0;
     static float alert_voltage = 0;
     static uint64_t alert_time;
-
+	uint64_t sleep_time = 0;
     alert_time = config_server_get_alert_time();
     alert_time *= (3600000000);
 //    alert_time = 10000000;
@@ -331,6 +331,12 @@ static void adc_task(void *pvParameters)
     adc_calibration_init();
     continuous_adc_init(adc1_chan_mask, adc1_chan_mask, channel, sizeof(channel) / sizeof(adc_channel_t));
     adc_digi_start();
+
+	if(config_server_get_sleep_time((uint32_t*)&sleep_time) == -1)
+	{
+		sleep_time = 3;
+	}
+	sleep_time *= (60*1000000); //convert to microseconds
 
     while(1)
     {
@@ -437,7 +443,7 @@ static void adc_task(void *pvParameters)
 						sleep_state = RUN_STATE;
 					}
 
-					if((esp_timer_get_time() - sleep_detect_time) > SLEEP_TIME_DELAY)
+					if((esp_timer_get_time() - sleep_detect_time) > sleep_time)
 					{
 						sleep_state = SLEEP_STATE;
 	//    	    		wifi_network_deinit();
