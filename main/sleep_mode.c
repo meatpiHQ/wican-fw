@@ -64,7 +64,7 @@
 
 #define TAG 		__func__
 
-#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
+#if HARDWARE_VER != WICAN_PRO
 
 #define TIMES              256
 #define GET_UNIT(x)        ((x>>3) & 0x1)
@@ -587,6 +587,7 @@ int8_t sleep_mode_init(uint8_t enable, float sleep_volt)
 #include "elm327.h"
 #include "math.h"
 #include "wc_timer.h"
+#include "hw_config.h"
 
 #define ADC_UNIT          ADC_UNIT_1
 #define ADC_CONV_MODE     ADC_CONV_SINGLE_UNIT_1
@@ -826,6 +827,7 @@ void enter_deep_sleep(void)
 	{
 		printf("MIC is already sleeping!!!!!!!\r\n");
 	}
+    gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
 	sleep_ret = elm327_sleep();
 
 	vTaskDelay(pdMS_TO_TICKS(5000));
@@ -897,7 +899,7 @@ void sleep_task(void *pvParameters)
 
     // Initialize voltage read timer
     wc_timer_set(&voltage_read_timer, 3000);
-    
+    vTaskDelay(pdMS_TO_TICKS(5000));
     while (1) 
 	{
         // Read voltage every 3 seconds

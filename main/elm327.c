@@ -1434,7 +1434,7 @@ static void uart1_event_task(void *pvParameters)
 			sleep_state_info_t sleep_state;
 			sleep_mode_get_state(&sleep_state);
 			memset(uart_read_buf, 0, sizeof(uart_read_buf));
-            if ((sleep_state.state != STATE_SLEEPING) && xSemaphoreTake(xuart1_semaphore, portMAX_DELAY) == pdTRUE)
+            if ((elm327_chip_get_status() == ELM327_READY) && (sleep_state.state != STATE_SLEEPING) && xSemaphoreTake(xuart1_semaphore, portMAX_DELAY) == pdTRUE)
             {
                 // uart_flush(UART_NUM_1);
                 uart_event_t event;
@@ -2289,9 +2289,9 @@ void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame,
     gpio_set_direction(OBD_LED_EN_PIN, GPIO_MODE_OUTPUT);
     gpio_set_level(OBD_LED_EN_PIN, 1);
 
-    gpio_reset_pin(OBD_RESET_PIN);
-    gpio_set_direction(OBD_RESET_PIN, GPIO_MODE_OUTPUT_OD);
-    gpio_set_level(OBD_RESET_PIN, 1);
+    // gpio_reset_pin(OBD_RESET_PIN);
+    // gpio_set_direction(OBD_RESET_PIN, GPIO_MODE_OUTPUT_OD);
+    // gpio_set_level(OBD_RESET_PIN, 1);
 
 	gpio_reset_pin(OBD_READY_PIN);
 	gpio_set_direction(OBD_READY_PIN, GPIO_MODE_INPUT);

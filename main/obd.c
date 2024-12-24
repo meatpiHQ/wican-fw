@@ -29,6 +29,7 @@
 #include "obd.h"
 #include "elm327.h"
 #include "config_server.h"
+#include "hw_config.h"
 
 /* Defines and Constants */
 #define TAG                     __func__
@@ -271,9 +272,9 @@ static void obd_parse_response(char *str, uint32_t len, QueueHandle_t *q, char* 
             //    config.vl_wake.voltage != sleep_voltage || 
             //    config.vl_sleep.en == 0 || 
             //    config.vl_sleep.voltage != (sleep_voltage - tmp))
-            if(config.uart_wake.en == 0 || config.vl_wake.en == 0 || 
+            if(config.uart_wake.en == 0 || config.uart_sleep.en == 1 || config.vl_wake.en == 0 || 
                 config.vl_wake.voltage != wakeup_voltage || 
-                config.vl_sleep.en == 0 || 
+                config.vl_sleep.en == 1 || 
                 config.vl_sleep.voltage != sleep_voltage ||
                 config.vl_sleep.time != sleep_time)
             {
@@ -283,15 +284,27 @@ static void obd_parse_response(char *str, uint32_t len, QueueHandle_t *q, char* 
                                 &response_len, &response_cmd_time, NULL);
                 elm327_process_cmd((uint8_t *)wake_cmd, 0, NULL, response_buffer, 
                                 &response_len, &response_cmd_time, NULL);
-                elm327_process_cmd((uint8_t *)"STSLVl on,on\r", 0, NULL, response_buffer, 
+                elm327_process_cmd((uint8_t *)"STSLVl off,on\r", 0, NULL, response_buffer, 
                                 &response_len, &response_cmd_time, NULL);
                 elm327_process_cmd((uint8_t *)"STSLU off, on\r", 0, NULL, response_buffer, 
                                 &response_len, &response_cmd_time, NULL);
                 vTaskDelay(pdMS_TO_TICKS(10));
+
+                elm327_process_cmd((uint8_t *)"ATPP 0F SV 95\r", 0, NULL, response_buffer, 
+                                &response_len, &response_cmd_time, NULL);
+                vTaskDelay(pdMS_TO_TICKS(10));
+                elm327_process_cmd((uint8_t *)"ATPP 0F ON\r", 0, NULL, response_buffer, 
+                                &response_len, &response_cmd_time, NULL);
+                vTaskDelay(pdMS_TO_TICKS(10));
+                elm327_process_cmd((uint8_t *)"STSLUIT 1200\r", 0, NULL, response_buffer, 
+                                &response_len, &response_cmd_time, NULL);
+                vTaskDelay(pdMS_TO_TICKS(10));
+
                 elm327_process_cmd((uint8_t *)"ATZ\r", 0, NULL, response_buffer, 
                                 &response_len, &response_cmd_time, NULL);
                 vTaskDelay(pdMS_TO_TICKS(100));
                 ESP_LOGW(TAG, "Setting sleep parameters");
+                // elm327_disable_wake_commands();
             }               
         }
         else
@@ -342,14 +355,14 @@ void obd_init(void)
 
     float obd_voltage = 0;
 
-    obd_get_voltage(&obd_voltage);
-    ESP_LOGI(TAG, "obd_voltage: %0.1f", obd_voltage);
+    // obd_get_voltage(&obd_voltage);
+    // ESP_LOGI(TAG, "obd_voltage: %0.1f", obd_voltage);
     vTaskDelay(pdMS_TO_TICKS(100));
 
     static char cmd_buffer[16];
     static uint32_t cmd_buffer_len = 0;
     static int64_t response_cmd_time = 0;
-
+    ESP_LOGI(TAG, "Sending Sleep command");
     elm327_process_cmd((uint8_t *)GET_SLEEP_CONFIG_CMD, 
                       strlen(GET_SLEEP_CONFIG_CMD), 
                       NULL, 
@@ -357,6 +370,6 @@ void obd_init(void)
                       &cmd_buffer_len, 
                       &response_cmd_time, 
                       obd_parse_response);
-                      
-    vTaskDelay(pdMS_TO_TICKS(100));
+    ESP_LOGI(TAG, "Waiting for Sleep command response");                  
+    vTaskDelay(pdMS_TO_TICKS(500));
 }
