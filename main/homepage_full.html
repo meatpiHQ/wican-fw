@@ -128,7 +128,7 @@
             width: 100%;
         }
 
-        input[type="text"],
+        input,
         input[type="number"],
         select {
             width: 100%;
@@ -140,7 +140,7 @@
             background-color: var(--white);
         }
 
-        input[type="text"]:focus,
+        input:focus,
         input[type="number"]:focus,
         select:focus {
             border-color: var(--primary-color);
@@ -148,7 +148,7 @@
             outline: none;
         }
 
-        input[type="text"]:disabled,
+        input:disabled,
         input[type="number"]:disabled,
         select:disabled {
             background-color: var(--gray-100);
@@ -166,6 +166,7 @@
             font-weight: 500;
             cursor: pointer;
             transition: var(--transition);
+            width: auto;
         }
 
         button:hover,
@@ -1032,16 +1033,16 @@
             <table class="form-table">
                 <tr>
                     <td>Reboot WiCAN:</td>
-                    <td><input id="reboot_button" name="reboot_button" type="button" onclick="reboot()" value="Reboot" style="width: 15%;" /></td>
+                    <td><input id="reboot_button" name="reboot_button" type="button" onclick="reboot()" value="Reboot" /></td>
                 </tr>
                 <tr>
                     <td>Download Configuration:</td>
-                    <td><input id="download_cfg_butt" name="download_cfg_butt" type="button" onclick="downloadCfg()" value="Download" style="width: 15%;" /></td>
+                    <td><input id="download_cfg_butt" name="download_cfg_butt" type="button" onclick="downloadCfg()" value="Download" /></td>
                 </tr>
                 <tr>
                     <td>Upload Configuration:</td>
                     <td>
-                        <input type="button" onclick="document.getElementById('fileInput').click()" value="Upload" style="width: 15%;" />
+                        <input type="button" onclick="document.getElementById('fileInput').click()" value="Upload" />
                         <input type="file" id="fileInput" accept=".json" onchange="uploadCfg()" style="display: none;" />
                     </td>
                 </tr>
@@ -1049,44 +1050,44 @@
             </table>
 
             <div class="section-title">Firmware Update</div>
-            <table class="form-table">
-                <tr>
-                    <td><input id="ota_file" name="ota_file" type="file" accept=".bin" /></td>
-                    <td><input id="ota_submit_button" type="button" value="Update" onclick="otaClick()" style="width: 15%;" /></td>
-                </tr>
-            </table>
+            <form id="ota_form" action="/upload/ota.bin" method="post" enctype="multipart/form-data">
+                <table class="form-table">
+                    <tr>
+                        <td><input id="ota_file" name="ota_file" type="file" accept=".bin" /></td>
+                        <td><input id="ota_submit_button" type="button" value="Update" onclick="otaClick()" /></td>
+                    </tr>
+                </table>
+            </form>
         </div>
         
         <div id="about_tab" class="tabcontent">
             <div class="section-title">About</div>
-            <form id="ota_form" action="/upload/ota.bin" method="post" enctype="multipart/form-data">
-                <table class="form-table">
-                    <tr>
-                        <td>Firmware ver:</td>
-                        <td>
-                            <div id="fw_version">1.00</div>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>Hardware ver:</td>
-                        <td>
-                            <div id="hw_version">v2.10</div>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>Git ver:</td>
-                        <td>
-                            <div id="git_version">v2.10</div>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>Designed By:</td>
-                        <td>
-                            <div id="made_by"><a href="https://www.meatpi.com/"><b>meatpi.com</b></a></div>
-                        </td>
-                    </tr>
-                </table>
-            </form>
+            <table class="form-table">
+                <tr>
+                    <td>Firmware ver:</td>
+                    <td>
+                        <div id="fw_version">1.00</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Hardware ver:</td>
+                    <td>
+                        <div id="hw_version">v2.10</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Git ver:</td>
+                    <td>
+                        <div id="git_version">v2.10</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Designed By:</td>
+                    <td>
+                        <div id="made_by"><a href="https://www.meatpi.com/"><b>meatpi.com</b></a></div>
+                    </td>
+                </tr>
+            </table>
         </div>
         <input id="submit_button" name="submit_button" type="button" onclick="postConfig()" value="Submit Changes" disabled />
     </div>
