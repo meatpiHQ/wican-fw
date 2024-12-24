@@ -157,8 +157,8 @@ void can_disable(void)
 	{
 		gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
 		can_block();
-		ESP_ERROR_CHECK(twai_stop());
-		ESP_ERROR_CHECK(twai_driver_uninstall());
+		twai_stop();
+		twai_driver_uninstall();
 		can_cfg.bus_state = OFF_BUS;
 	}
 }
@@ -359,6 +359,15 @@ bool can_is_enabled(void)
 //	EventBits_t uxBits = xEventGroupGetBits(s_can_event_group);
 //	return (uxBits & CAN_ENABLE_BIT);
 }
+
+void can_flush_rx(void)
+{
+    if (can_cfg.bus_state == ON_BUS) 
+	{
+        twai_clear_receive_queue();
+    }
+}
+
 
 uint32_t can_msgs_to_rx(void)
 {

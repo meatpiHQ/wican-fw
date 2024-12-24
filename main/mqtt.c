@@ -425,7 +425,7 @@ static void mqtt_task(void *pvParameters)
                         start_index = found_index + 1;
                     }
                 }
-                else
+                else if(config_server_mqtt_rx_en_config())
                 {
                     sprintf(json_buffer, "{\"bus\":\"0\",\"type\":\"rx\",\"ts\":%lu,\"frame\":[", (pdTICKS_TO_MS(xTaskGetTickCount())%60000));
 
@@ -447,7 +447,7 @@ static void mqtt_task(void *pvParameters)
                         json_buffer[strlen(json_buffer)-1] = 0;
                     }
                     strcat((char*)json_buffer, "]}");
-
+                    
                     mqtt_publish(mqtt_topic, json_buffer, 0, 0, 0);
                 }
             }

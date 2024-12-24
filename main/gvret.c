@@ -44,7 +44,7 @@
 static SystemSettings SysSettings;
 static EEPROMSettings settings;
 
-static uint8_t transmitBuffer[WIFI_BUFF_SIZE];
+static uint8_t *transmitBuffer = NULL;
 static uint16_t transmitBufferLength = 0;
 
 static SemaphoreHandle_t xgvert_tmr_semaphore;
@@ -744,6 +744,13 @@ static void gvret_broadcast_task(void *pvParameters)
 void gvret_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q))
 {
 	gvret_response = send_to_host;
+
+    transmitBuffer = (uint8_t*)malloc(WIFI_BUFF_SIZE);
+    if (!transmitBuffer)
+	{
+        ESP_LOGE(TAG, "Failed to allocate transmit buffer");
+        return;
+    }
 
     const esp_timer_create_args_t periodic_timer_args =
     {

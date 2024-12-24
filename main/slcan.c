@@ -50,6 +50,7 @@ static const char version[] = "V2011\r";
 static const char ack[] = "\r";
 static const char status[] = "F00\r";
 
+static char *slcan_buffer = NULL;
 static uint8_t timestamp_flag = 0;
 static uint8_t sl_bitrate[] = {CAN_10K, CAN_20K, CAN_50K, CAN_100K,
 								CAN_125K, CAN_250K, CAN_500K,
@@ -248,7 +249,6 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 	static uint32_t filter[8];
 	static uint32_t mask[8];
 	static uint8_t loopback = 0;
-	static char slcan_buffer[SLCAN_BUFFER_SIZE];
 	static uint32_t buffer_index = 0;
 
 	time_now = esp_timer_get_time();
@@ -638,5 +638,11 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 
 void slcan_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q))
 {
+	slcan_buffer = malloc(SLCAN_BUFFER_SIZE);
+	if (slcan_buffer == NULL)
+	{
+		ESP_LOGE(TAG, "Failed to allocate SLCAN buffer");
+		return;
+	}
 	slcan_response = send_to_host;
 }
