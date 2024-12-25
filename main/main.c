@@ -521,7 +521,8 @@ void app_main(void)
     const esp_partition_t *running = esp_ota_get_running_partition();
     esp_app_desc_t running_app_info;
 	uint32_t firmware_ver_minor, firmware_ver_major;
-
+    ESP_LOGI(TAG, "Running partition type %d subtype %d (offset 0x%08lx)",
+             running->type, running->subtype, running->address);
     if (esp_ota_get_partition_description(running, &running_app_info) == ESP_OK)
     {
         ESP_LOGI(TAG, "Running firmware version: %s", running_app_info.version);
