@@ -1033,16 +1033,16 @@
             <table class="form-table">
                 <tr>
                     <td>Reboot WiCAN:</td>
-                    <td><input id="reboot_button" name="reboot_button" type="button" onclick="reboot()" value="Reboot" /></td>
+                    <td><input id="reboot_button" name="reboot_button" type="button" onclick="reboot()" value="Reboot" style="width: 15%;" /></td>
                 </tr>
                 <tr>
                     <td>Download Configuration:</td>
-                    <td><input id="download_cfg_butt" name="download_cfg_butt" type="button" onclick="downloadCfg()" value="Download" /></td>
+                    <td><input id="download_cfg_butt" name="download_cfg_butt" type="button" onclick="downloadCfg()" value="Download" style="width: 15%;" /></td>
                 </tr>
                 <tr>
                     <td>Upload Configuration:</td>
                     <td>
-                        <input type="button" onclick="document.getElementById('fileInput').click()" value="Upload" />
+                        <input type="button" onclick="document.getElementById('fileInput').click()" value="Upload" style="width: 15%;" />
                         <input type="file" id="fileInput" accept=".json" onchange="uploadCfg()" style="display: none;" />
                     </td>
                 </tr>
@@ -1054,12 +1054,11 @@
                 <table class="form-table">
                     <tr>
                         <td><input id="ota_file" name="ota_file" type="file" accept=".bin" /></td>
-                        <td><input id="ota_submit_button" type="button" value="Update" onclick="otaClick()" /></td>
+                        <td><input id="ota_submit_button" type="button" value="Update" onclick="otaClick()" style="width: 15%;" /></td>
                     </tr>
                 </table>
             </form>
-        </div>
-        
+        </div>        
         <div id="about_tab" class="tabcontent">
             <div class="section-title">About</div>
             <table class="form-table">
