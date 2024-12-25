@@ -1,0 +1,50 @@
+{
+    "car_model": "Renault Zoe R110/R90",
+    "init": "ATSP6;",
+    "pids": [
+        {
+            "pid": "222002",
+            "parameters": [
+                {
+                    "name": "SoC",
+                    "expression": "[B4:B5]*0.02",
+                    "unit": "%",
+                    "class": "battery"
+                }
+            ]
+        },
+        {
+            "pid": "223206",
+            "parameters": [
+                {
+                    "name": "SoH",
+                    "expression": "B4",
+                    "unit": "%",
+                    "class": "battery"
+                }
+            ]
+        },
+        {
+            "pid": "223451",
+            "parameters": [
+                {
+                    "name": "GoM",
+                    "expression": "[B4:B5]",
+                    "unit": "km",
+                    "class": "none"
+                }
+            ]
+        },
+        {
+            "pid": "222006",
+            "parameters": [
+                {
+                    "name": "Odometer",
+                    "expression": "[B4:B6]",
+                    "unit": "km",
+                    "class": "none"
+                }
+            ]
+        }
+    ]
+}
