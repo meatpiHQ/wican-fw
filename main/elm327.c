@@ -1725,20 +1725,36 @@ bool elm327_set_baudrate(void)
     return success;
 }
 
+void elm327_lock(void)
+{
+	xSemaphoreTake(xuart1_semaphore, portMAX_DELAY);
+}
+
 void elm327_hardreset_chip(void)
 {
     static char rsp_buffer[100];
     uint32_t rsp_len;
 	if (xSemaphoreTake(xuart1_semaphore, portMAX_DELAY) == pdTRUE)
 	{
-		// gpio_set_level(OBD_RESET_PIN, 0);
-		// vTaskDelay(pdMS_TO_TICKS(10));
-		// gpio_set_level(OBD_RESET_PIN, 1);
-        uart_write_bytes(UART_NUM_1, "ATZ\r", 4);
+		if(gpio_get_level(OBD_READY_PIN) == 1)
+		{
+			gpio_set_level(OBD_RESET_PIN, 0);
+			vTaskDelay(pdMS_TO_TICKS(1));
+			gpio_set_level(OBD_RESET_PIN, 1);
+		}
+		else
+		{
+			uart_write_bytes(UART_NUM_1, "ATZ\r", strlen("ATZ\r"));
+		}
+
         int len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS+300);
 		if(len > 0)
 		{
 			ESP_LOGW(TAG, "Hardreset OK");
+		}
+		else
+		{
+			ESP_LOGE(TAG, "Hardreset failed");
 		}
 		xSemaphoreGive(xuart1_semaphore);
 	}
@@ -1763,7 +1779,7 @@ esp_err_t elm327_sleep(void)
 	{
 		uart_flush_input(UART_NUM_1);
 		xQueueReset(uart1_queue);
-        uart_write_bytes(UART_NUM_1, "STSLEEP1\r", 10);
+        uart_write_bytes(UART_NUM_1, "STSLEEP0\r", strlen("STSLEEP0\r"));
         int len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, sizeof(rsp_buffer), "\r>", UART_TIMEOUT_MS+300);
 		if(len > 0 && strstr(rsp_buffer, "OK\r\r>"))
 		{
@@ -2289,9 +2305,9 @@ void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame,
     gpio_set_direction(OBD_LED_EN_PIN, GPIO_MODE_OUTPUT);
     gpio_set_level(OBD_LED_EN_PIN, 1);
 
-    // gpio_reset_pin(OBD_RESET_PIN);
-    // gpio_set_direction(OBD_RESET_PIN, GPIO_MODE_OUTPUT_OD);
-    // gpio_set_level(OBD_RESET_PIN, 1);
+    gpio_reset_pin(OBD_RESET_PIN);
+    gpio_set_direction(OBD_RESET_PIN, GPIO_MODE_OUTPUT_OD);
+    gpio_set_level(OBD_RESET_PIN, 1);
 
 	gpio_reset_pin(OBD_READY_PIN);
 	gpio_set_direction(OBD_READY_PIN, GPIO_MODE_INPUT);

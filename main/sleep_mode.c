@@ -817,7 +817,7 @@ void enter_deep_sleep(void)
 	static char response_buffer[32];
 	static uint32_t response_len = 0;
 	static int64_t response_cmd_time = 0;
-	esp_err_t sleep_ret;
+	esp_err_t sleep_ret = ESP_OK;
     ESP_LOGI(TAG, "Entering deep sleep");
     configure_wakeup_sources();
     
@@ -828,8 +828,8 @@ void enter_deep_sleep(void)
 		printf("MIC is already sleeping!!!!!!!\r\n");
 	}
     gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
-	sleep_ret = elm327_sleep();
-
+	// sleep_ret = elm327_sleep();
+    
 	vTaskDelay(pdMS_TO_TICKS(5000));
 
 	if(sleep_ret == ESP_OK && gpio_get_level(OBD_READY_PIN) == 1)
@@ -905,7 +905,8 @@ void sleep_task(void *pvParameters)
         // Read voltage every 3 seconds
         if(wc_timer_is_expired(&voltage_read_timer)) 
 		{
-            ret = sleep_mode_get_voltage(&battery_voltage);
+            // ret = sleep_mode_get_voltage(&battery_voltage);
+            ret = read_adc_voltage(&battery_voltage);
             wc_timer_set(&voltage_read_timer, 3000);
         }
 
@@ -968,7 +969,7 @@ void sleep_task(void *pvParameters)
             ESP_LOGI(TAG, "State: %d, Battery: %.2fV", current_state, battery_voltage);
 
             // Handle sleep entry
-            if(current_state == STATE_SLEEPING) 
+            if(current_state == STATE_SLEEPING && gpio_get_level(OBD_READY_PIN) == 1) 
 			{
                 enter_deep_sleep();
             }
@@ -1017,7 +1018,8 @@ esp_err_t sleep_mode_get_state(sleep_state_info_t *state_info)
 
 esp_err_t sleep_mode_get_voltage(float *val)
 {
-	return obd_get_voltage(val);
+	// return obd_get_voltage(val);
+    return read_adc_voltage(val);
 }
 
 void sleep_mode_print_wakeup_reason(void)
