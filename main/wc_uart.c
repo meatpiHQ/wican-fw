@@ -172,7 +172,7 @@ static void uart2_event_task(void *pvParameters)
 
                     uart2_read_buffer[data_len] = '\0';  // Null-terminate the data
                     ESP_LOGI(TAG, "Data: %s", (char *)uart2_read_buffer);
-                    printf("Data: %s\r\n", (char *)uart2_read_buffer);
+                    // printf("Data: %s\r\n", (char *)uart2_read_buffer);
 
                     // Call elm327_process_cmd with required parameters
                     elm327_process_cmd(uart2_read_buffer, data_len, NULL, uart2_cmd_buffer, &uart2_cmd_buffer_len, &uart2_last_cmd_time, uart2_response);
