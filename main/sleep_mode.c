@@ -1068,7 +1068,7 @@ void sleep_mode_print_wakeup_reason(void)
 
 void sleep_mode_init(void)
 {
-	if(config_server_get_sleep_config())
+	// if(config_server_get_sleep_config())
 	{
 		xTaskCreate(sleep_task, "sleep_task", 4096, (void*)AF_INET, 5, NULL);
 	}
