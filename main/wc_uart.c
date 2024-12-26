@@ -141,21 +141,17 @@ static void uart2_response(char *str, uint32_t len, QueueHandle_t *q, char* cmd_
         uart_write_bytes(UART_NUM_2, str, len);  // Send response to UART2
     }
 }
-
+static uint8_t uart2_read_buffer[RD_BUF_SIZE] __attribute__((aligned(4)));
+static char uart2_cmd_buffer[RD_BUF_SIZE] __attribute__((aligned(4)));
 static void uart2_event_task(void *pvParameters)
 {
     uart_event_t event;
-    uint8_t* uart2_read_buffer = (uint8_t*) malloc(RD_BUF_SIZE);
-    static char uart2_cmd_buffer[RD_BUF_SIZE];
+    // uint8_t* uart2_read_buffer = (uint8_t*) malloc(RD_BUF_SIZE);
+    // static char uart2_cmd_buffer[RD_BUF_SIZE];
     static uint32_t uart2_cmd_buffer_len = 0;
     static int64_t uart2_last_cmd_time = 0;
 
-    if (uart2_read_buffer == NULL)
-    {
-        ESP_LOGE(TAG, "Failed to allocate UART2 buffer.");
-        vTaskDelete(NULL);
-    }
-
+    memset(uart2_read_buffer, 0, RD_BUF_SIZE);
     ESP_LOGW(TAG, "Start UART2 event task!");
     for (;;)
     {
@@ -188,8 +184,6 @@ static void uart2_event_task(void *pvParameters)
             }
         }
     }
-    free(uart2_read_buffer);
-    uart2_read_buffer = NULL;
     vTaskDelete(NULL);
 }
 
