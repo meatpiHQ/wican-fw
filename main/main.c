@@ -454,9 +454,54 @@ static void can_rx_task(void *pvParameters)
 	}
 }
 
+static void print_heap_task(void *pvParameters)
+{
+    while(1) 
+	{
+        uint32_t free_internal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        uint32_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+        
+        // Largest free blocks
+        uint32_t largest_internal = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        uint32_t largest_psram = heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM);
+        
+        // Minimum free heap size seen
+        uint32_t min_free_internal = heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        uint32_t min_free_psram = heap_caps_get_minimum_free_size(MALLOC_CAP_SPIRAM);
+
+        // Total heap size
+        multi_heap_info_t info;
+        heap_caps_get_info(&info, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        uint32_t total_internal = info.total_free_bytes + info.total_allocated_bytes;
+		ESP_LOGI("HEAP", "********************************");
+        ESP_LOGI("HEAP", "Internal RAM - Free: %lu, Largest: %lu, Total: %lu, Min Free Ever: %lu", 
+                 free_internal, largest_internal, total_internal, min_free_internal);
+        ESP_LOGI("HEAP", "PSRAM      - Free: %lu, Largest: %lu, Min Free Ever: %lu", 
+                 free_psram, largest_psram, min_free_psram);
+		ESP_LOGI("HEAP", "********************************\r\n");
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
+
 void app_main(void)
 {
+	static StackType_t *heap_task_stack;
+	static StaticTask_t heap_task_buffer;
+
+	heap_task_stack = heap_caps_malloc(1024*3 * sizeof(StackType_t), MALLOC_CAP_SPIRAM);
+
+	if (heap_task_stack != NULL) {
+		xTaskCreateStatic(print_heap_task, 
+						"heap_task", 
+						(1024*3),
+						NULL,
+						1, 
+						heap_task_stack,
+						&heap_task_buffer);
+	}
+
 	sleep_mode_print_wakeup_reason();
+
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
@@ -639,9 +684,9 @@ void app_main(void)
 	elm327_init(&xmsg_obd_rx_queue, NULL);
 	if(protocol == AUTO_PID)
 	{
-		can_set_bitrate(can_datarate);
+		// can_set_bitrate(can_datarate);
 		// #if HARDWARE_VER != WICAN_PRO
-		can_enable();
+		// can_enable();
 		// #endif
 		
 		autopid_init((char*)&uid[0], config_server_get_auto_pid());
@@ -685,7 +730,7 @@ void app_main(void)
 	{
 		xmsg_mqtt_rx_queue = xQueueCreate(32, sizeof(mqtt_can_message_t) );
 		#if HARDWARE_VER == WICAN_PRO
-		if(protocol != AUTO_PID)
+		if(protocol != AUTO_PID && protocol != OBD_ELM327)
 		{
 			can_set_bitrate(can_datarate);
 			can_enable();
@@ -841,6 +886,7 @@ void app_main(void)
 	// pdTRUE, /* BIT_0 should be cleared before returning. */
 	// pdFALSE, /* Don't wait for both bits, either bit will do. */
 	// portMAX_DELAY);/* Wait forever. */ 
-	esp_log_level_set("*", ESP_LOG_NONE);
+	esp_log_level_set("*", ESP_LOG_ERROR);
+	esp_log_level_set("HEAP", ESP_LOG_INFO);
 }
 

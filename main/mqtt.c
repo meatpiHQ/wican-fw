@@ -63,8 +63,8 @@
 #include "expression_parser.h"
 
 #define TAG 		__func__
-#define MQTT_TX_RX_BUF_SIZE         (1024*5)
-#define MQTT_OUT_BUF_SIZE           (1024*5)
+#define MQTT_TX_RX_BUF_SIZE         (1024*20)
+#define MQTT_OUT_BUF_SIZE           (1024*20)
 
 static EventGroupHandle_t s_mqtt_event_group = NULL;
 #define MQTT_CONNECTED_BIT 			BIT0
