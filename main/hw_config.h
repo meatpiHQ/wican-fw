@@ -37,6 +37,7 @@
 // #define BLE_EN_PIN_NUM				42  //NC pin
 // #define PWR_LED_GPIO_NUM			41  //NC pin
 
+#define IMU_INT_GPIO_NUM			3
 
 #else
 

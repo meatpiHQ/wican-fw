@@ -1,13 +1,13 @@
 ## IDF Component Manager Manifest File
 dependencies:
-  espressif/mdns: "^1.4.0"
-  espressif/usb_host_cp210x_vcp: "^2.0.0"
-  espressif/usb_host_ftdi_vcp: "^2.0.0"
-  espressif/usb_host_ch34x_vcp: "^2.0.0"
-  espressif/usb_host_vcp: "^1.0.0~5"
+  espressif/mdns: ^1.4.0
+  espressif/usb_host_cp210x_vcp: ^2.0.0
+  espressif/usb_host_ftdi_vcp: ^2.0.0
+  espressif/usb_host_ch34x_vcp: ^2.0.0
+  espressif/usb_host_vcp: ^1.0.0~5
   ## Required IDF version
   idf:
-    version: ">=4.1.0"
+    version: '>=4.1.0'
   # # Put list of dependencies here
   # # For components maintained by Espressif:
   # component: "~1.0.0"
@@ -19,3 +19,4 @@ dependencies:
   #   # `public` flag doesn't have an effect dependencies of the `main` component.
   #   # All dependencies of `main` are public by default.
   #   public: true
+  eil/i2cdev: ^1.5.1

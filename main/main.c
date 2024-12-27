@@ -64,6 +64,7 @@
 #include "usb_host.h"
 #include "wc_mdns.h"
 #include "sdcard.h"
+#include "imu.h"
 
 #define TAG 		__func__
 #define USB_ID_PIN					39
@@ -483,6 +484,7 @@ static void print_heap_task(void *pvParameters)
     }
 }
 
+
 void app_main(void)
 {
 	static StackType_t *heap_task_stack;
@@ -543,6 +545,8 @@ void app_main(void)
 	#if HARDWARE_VER == WICAN_PRO
 	i2c_master_init();
 	led_init(I2C_MASTER_NUM);
+	imu_init(I2C_NUM_0, I2C_MASTER_SDA_IO, I2C_MASTER_SCL_IO, IMU_INT_GPIO_NUM);
+
 	#endif
 
 	gpio_reset_pin(0);
@@ -887,6 +891,7 @@ void app_main(void)
 	// pdFALSE, /* Don't wait for both bits, either bit will do. */
 	// portMAX_DELAY);/* Wait forever. */ 
 	esp_log_level_set("*", ESP_LOG_ERROR);
-	esp_log_level_set("HEAP", ESP_LOG_INFO);
+	// esp_log_level_set("HEAP", ESP_LOG_INFO);
+	esp_log_level_set("imu", ESP_LOG_INFO);
 }
 
