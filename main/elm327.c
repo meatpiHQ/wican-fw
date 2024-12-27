@@ -1428,7 +1428,7 @@ static void uart1_event_task(void *pvParameters)
     size_t response_len = 0;
     uart_event_t event;
 
-	uart_read_buf = (uint8_t *)heap_caps_aligned_alloc(4, 1024*10, MALLOC_CAP_SPIRAM);
+	uart_read_buf = (uint8_t *)heap_caps_aligned_alloc(4, ELM327_MAX_CMD_LEN, MALLOC_CAP_SPIRAM);
 
     while (1) 
     {
@@ -2336,13 +2336,6 @@ void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame,
 
     uart_param_config(UART_NUM_1, &uart1_config);
     uart_set_pin(UART_NUM_1, GPIO_NUM_16, GPIO_NUM_15, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-
-    QueueHandle_t response_queue = xQueueCreate(OBD_QUEUE_SIZE, sizeof(obd_rsp_t));
-    if (response_queue == NULL)
-    {
-        ESP_LOGE(TAG, "Failed to create response queue");
-        return;
-    }
 
 	elm327_hardreset_chip();
 
