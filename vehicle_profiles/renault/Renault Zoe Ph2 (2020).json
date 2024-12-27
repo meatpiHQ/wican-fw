@@ -78,7 +78,7 @@
 					"pid": "222005",
 					"parameters": [
 						{
-							"name": "12vBat",
+							"name": "Batt12v",
 							"pid_init": "",
 							"expression": "[B4:B5] * 0.01",
 							"unit": "V",
