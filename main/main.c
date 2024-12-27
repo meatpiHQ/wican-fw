@@ -65,6 +65,7 @@
 #include "wc_mdns.h"
 #include "sdcard.h"
 #include "imu.h"
+#include "rtcm.h"
 
 #define TAG 		__func__
 #define USB_ID_PIN					39
@@ -484,6 +485,26 @@ static void print_heap_task(void *pvParameters)
     }
 }
 
+static esp_err_t rx8130_register_read(uint8_t reg_addr, uint8_t *data, size_t len)
+{
+    // i2c_master_write_to_device(I2C_MASTER_NUM, 0x45, &reg_addr, 1, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+    // return i2c_master_read_from_device(I2C_MASTER_NUM, 0x45, data, len, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+    return i2c_master_write_read_device(I2C_MASTER_NUM, 0x32, &reg_addr, 1, data, len, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+}
+
+static esp_err_t rx8130_register_write_byte(uint8_t reg_addr, uint8_t data)
+{
+    int ret;
+    uint8_t write_buf[2];
+
+    write_buf[0] = reg_addr;
+    write_buf[1] = data;
+
+    ret = i2c_master_write_to_device(I2C_MASTER_NUM, 0x32, write_buf, 2, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+
+    return ret;
+}
+
 
 void app_main(void)
 {
@@ -545,7 +566,7 @@ void app_main(void)
 	#if HARDWARE_VER == WICAN_PRO
 	i2c_master_init();
 	led_init(I2C_MASTER_NUM);
-	imu_init(I2C_NUM_0, I2C_MASTER_SDA_IO, I2C_MASTER_SCL_IO, IMU_INT_GPIO_NUM);
+	imu_init(I2C_MASTER_NUM, I2C_MASTER_SDA_IO, I2C_MASTER_SCL_IO, IMU_INT_GPIO_NUM);
 
 	#endif
 
@@ -893,5 +914,32 @@ void app_main(void)
 	esp_log_level_set("*", ESP_LOG_ERROR);
 	// esp_log_level_set("HEAP", ESP_LOG_INFO);
 	esp_log_level_set("imu", ESP_LOG_INFO);
+	esp_log_level_set("time", ESP_LOG_INFO);
+    
+	rtcm_init(I2C_MASTER_NUM);
+	// rtcm_set_time(0x23, 0x32, 0x00);  // 12:30:00 in BCD
+	// rtcm_set_date(0x24, 0x12, 0x27, 0x06);  // 2024-01-20 Saturday(6) in BCD
+	uint8_t device_id;
+	if (rtcm_get_device_id(&device_id) == ESP_OK) {
+		ESP_LOGI("time", "RTC Device ID: 0x%02X", device_id);
+	}
+
+	while (1)
+	{
+		uint8_t hour, min, sec;
+		uint8_t year, month, day, weekday;
+		
+		esp_err_t ret_time = rtcm_get_time(&hour, &min, &sec);
+		esp_err_t ret_date = rtcm_get_date(&year, &month, &day, &weekday);
+
+		if (ret_time == ESP_OK && ret_date == ESP_OK) {
+			ESP_LOGI("time", "20%02X-%02X-%02X %02X:%02X:%02X (Day %d)", 
+					year, month, day, hour, min, sec, weekday);
+		} else {
+			ESP_LOGE("time", "Failed to get RTC time/date");
+		}
+        vTaskDelay(pdMS_TO_TICKS(999));
+	}
+	
 }
 

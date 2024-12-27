@@ -110,6 +110,7 @@ activity_state_t imu_get_activity_state(void)
 
     return state;
 }
+#include "rtc.h"
 //TODO: scl_gpio, scl_gpio amd int_gpio are not used
 esp_err_t imu_init(i2c_port_t i2c_num, gpio_num_t sda_gpio, gpio_num_t scl_gpio, gpio_num_t int_gpio)
 {
