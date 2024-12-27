@@ -32,6 +32,7 @@
 #include "lwip/sockets.h"
 #include "esp_log.h"
 #include "elm327.h"
+#include "obd.h"
 
 #define TAG         __func__
 
@@ -128,8 +129,7 @@ void wc_uart_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t 
 }
 
 #elif HARDWARE_VER == WICAN_PRO
-#define BUF_SIZE (9000)
-#define RD_BUF_SIZE (9000)
+
 static QueueHandle_t uart2_queue;
 
 static void uart2_response(char *str, uint32_t len, QueueHandle_t *q, char* cmd_str)
@@ -141,24 +141,25 @@ static void uart2_response(char *str, uint32_t len, QueueHandle_t *q, char* cmd_
         uart_write_bytes(UART_NUM_2, str, len);  // Send response to UART2
     }
 }
-static uint8_t uart2_read_buffer[RD_BUF_SIZE] __attribute__((aligned(4)));
-static char uart2_cmd_buffer[RD_BUF_SIZE] __attribute__((aligned(4)));
+static uint8_t* uart2_read_buffer __attribute__((aligned(4)));
+static char* uart2_cmd_buffer __attribute__((aligned(4)));
 static void uart2_event_task(void *pvParameters)
 {
     uart_event_t event;
-    // uint8_t* uart2_read_buffer = (uint8_t*) malloc(RD_BUF_SIZE);
-    // static char uart2_cmd_buffer[RD_BUF_SIZE];
     static uint32_t uart2_cmd_buffer_len = 0;
     static int64_t uart2_last_cmd_time = 0;
-    
-    memset(uart2_read_buffer, 0, RD_BUF_SIZE);
+    uart2_read_buffer = (uint8_t*) heap_caps_aligned_alloc(16,UART_BUF_SIZE, MALLOC_CAP_SPIRAM);
+    uart2_cmd_buffer = (char*) heap_caps_aligned_alloc(16,UART_BUF_SIZE, MALLOC_CAP_SPIRAM);
+
+    memset(uart2_read_buffer, 0, UART_BUF_SIZE);
+    memset(uart2_cmd_buffer, 0, UART_BUF_SIZE);
     ESP_LOGW(TAG, "Start UART2 event task!");
     for (;;)
     {
         // Waiting for UART event.
         if (xQueueReceive(uart2_queue, (void *)&event, (TickType_t)portMAX_DELAY))
         {
-            bzero(uart2_read_buffer, RD_BUF_SIZE);  // Clear the buffer
+            bzero(uart2_read_buffer, UART_BUF_SIZE);  // Clear the buffer
             ESP_LOGI(TAG, "uart[%d] event:", UART_NUM_2);
 
             switch (event.type)
@@ -199,7 +200,7 @@ void wc_uart_init(void)
         .source_clk = UART_SCLK_DEFAULT,
     };
     
-    uart_driver_install(UART_NUM_2, BUF_SIZE, BUF_SIZE, 4, &uart2_queue, 0);
+    uart_driver_install(UART_NUM_2, UART_BUF_SIZE, UART_BUF_SIZE, 4, &uart2_queue, 0);
     uart_param_config(UART_NUM_2, &uart2_config);
 
     uart_set_pin(UART_NUM_2, GPIO_NUM_17, GPIO_NUM_18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
