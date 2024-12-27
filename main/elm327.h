@@ -39,7 +39,7 @@ typedef enum{
 void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame, uint8_t type));
 
 #if HARDWARE_VER == WICAN_PRO
-int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, QueueHandle_t *q, char *cmd_buffer, uint32_t *cmd_buffer_len, int64_t *last_cmd_time, response_callback_t response_callback);
+int8_t elm327_process_cmd(uint8_t *buf, uint32_t len, QueueHandle_t *q, char *cmd_buffer, uint32_t *cmd_buffer_len, int64_t *last_cmd_time, response_callback_t response_callback);
 elm327_chip_status_t elm327_chip_get_status(void);
 esp_err_t elm327_update_obd(bool force_update);
 #else

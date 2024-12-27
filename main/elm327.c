@@ -1302,7 +1302,7 @@ void elm327_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q), QueueH
 /* Defines and Constants */
 #define BUF_SIZE (1024)
 #define ELM327_CMD_QUEUE_SIZE 100
-#define ELM327_MAX_CMD_LEN 4096
+#define ELM327_MAX_CMD_LEN (UART_BUF_SIZE)
 #define ELM327_CMD_TIMEOUT_MS   10000
 #define ELM327_CMD_TIMEOUT_US   (ELM327_CMD_TIMEOUT_MS*1000)  // 10 seconds in microseconds
 #define UART_TIMEOUT_MS 1200
@@ -1357,7 +1357,7 @@ static int uart_read_until_pattern(uart_port_t uart_num, char* buffer, size_t bu
                                  const char* end_pattern, int total_timeout_ms) ;
 
 /* Function Implementations */
-int8_t elm327_process_cmd(uint8_t *cmd, uint8_t len, QueueHandle_t *q, 
+int8_t elm327_process_cmd(uint8_t *cmd, uint32_t len, QueueHandle_t *q, 
                          char *cmd_buffer, uint32_t *cmd_buffer_len, 
                          int64_t *last_cmd_time, response_callback_t response_callback)
 {
@@ -1388,8 +1388,10 @@ int8_t elm327_process_cmd(uint8_t *cmd, uint8_t len, QueueHandle_t *q,
             // cmd_buffer[*cmd_buffer_len] = '\0';
 
             elm327_commands_t *command_data;
-			command_data = (elm327_commands_t*) malloc(sizeof(elm327_commands_t));
-            command_data->command = (char*) malloc(*cmd_buffer_len + 1);
+			// command_data = (elm327_commands_t*) malloc(sizeof(elm327_commands_t));
+			command_data = (elm327_commands_t*) heap_caps_aligned_alloc(16,sizeof(elm327_commands_t), MALLOC_CAP_SPIRAM);
+            // command_data->command = (char*) malloc(*cmd_buffer_len + 1);
+			command_data->command = (char*) heap_caps_aligned_alloc(16,*cmd_buffer_len + 1, MALLOC_CAP_SPIRAM);
             if (command_data->command == NULL)
             {
                 ESP_LOGE(TAG, "Failed to allocate memory for command");
@@ -1421,12 +1423,13 @@ int8_t elm327_process_cmd(uint8_t *cmd, uint8_t len, QueueHandle_t *q,
 
 static void uart1_event_task(void *pvParameters)
 {
-    static uint8_t uart_read_buf[2048];
-	// static char last_command[128];
+    static uint8_t *uart_read_buf __attribute__((aligned(4))) DRAM_ATTR;
+    static DRAM_ATTR elm327_commands_t elm327_command;
     size_t response_len = 0;
     uart_event_t event;
-    static elm327_commands_t elm327_command;
-	esp_log_level_set(TAG, ESP_LOG_INFO);
+
+	uart_read_buf = (uint8_t *)heap_caps_aligned_alloc(4, 1024*10, MALLOC_CAP_SPIRAM);
+
     while (1) 
     {
         if (xQueueReceive(elm327_cmd_queue, (void*)&elm327_command, portMAX_DELAY) == pdTRUE)
