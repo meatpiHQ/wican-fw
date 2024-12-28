@@ -19,6 +19,8 @@
 #ifndef GW_CONFIG_h
 #define GW_CONFIG_h
 
+#include "esp_err.h"
+
 #if HARDWARE_VER == WICAN_PRO
 
 #define TX_GPIO_NUM             	2
@@ -50,5 +52,7 @@
 #define CAN_STDBY_GPIO_NUM			6
 
 #endif
+
+esp_err_t hw_config_get_device_id(char *uid);
 
 #endif

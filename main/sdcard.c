@@ -119,3 +119,81 @@ bool sdcard_is_mounted(void)
 {
     return s_card_mounted;
 }
+
+esp_err_t sdcard_get_info(sdmmc_card_info_t *info) 
+{
+    if (!s_card_mounted || !sdcard_is_available() || s_card == NULL) 
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    info->capacity = (((uint64_t) s_card->csd.capacity) * s_card->csd.sector_size) / (1024 * 1024);
+    info->sector_size = s_card->csd.sector_size;
+    info->speed = s_card->max_freq_khz;
+    info->bus_width = s_card->host.slot;
+    
+    // Add card name
+    strncpy(info->name, s_card->cid.name, sizeof(info->name) - 1);
+    info->name[sizeof(info->name) - 1] = '\0';
+    
+    // Add card type
+    if (s_card->is_sdio) {
+        info->type = CARD_TYPE_SDIO;
+    } else if (s_card->is_mmc) {
+        info->type = CARD_TYPE_MMC;
+    } else {
+        info->type = (s_card->ocr & (1 << 30)) ? CARD_TYPE_SDHC : CARD_TYPE_SDSC;
+    }
+
+    return ESP_OK;
+}
+
+
+esp_err_t sdcard_test_rw(void)
+{
+    if (!sdcard_is_available())
+    {
+        ESP_LOGE(TAG, "SD card not available for testing");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    const char *test_path = MOUNT_POINT "/test.txt";
+    const char *test_content = "WiCAN SD Card Test";
+    char read_buffer[32] = {0};
+    
+    // Test write
+    FILE *f = fopen(test_path, "w");
+    if (f == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to open file for writing");
+        return ESP_FAIL;
+    }
+    
+    fprintf(f, "%s", test_content);
+    fclose(f);
+    
+    // Test read
+    f = fopen(test_path, "r");
+    if (f == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to open file for reading");
+        return ESP_FAIL;
+    }
+    
+    size_t bytes_read = fread(read_buffer, 1, strlen(test_content), f);
+    fclose(f);
+    
+    // Verify content
+    if (bytes_read != strlen(test_content) || 
+        strcmp(read_buffer, test_content) != 0)
+    {
+        ESP_LOGE(TAG, "Read/write verification failed");
+        return ESP_FAIL;
+    }
+    
+    // Clean up test file
+    unlink(test_path);
+    
+    ESP_LOGI(TAG, "SD card read/write test passed");
+    return ESP_OK;
+}

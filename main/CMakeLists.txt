@@ -27,6 +27,7 @@ set(srcs
     "imu.c"
     "rtcm.c"
     "console.c"
+    "hw_config.c"
 )
 
 # Define required components

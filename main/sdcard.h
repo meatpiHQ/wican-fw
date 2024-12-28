@@ -9,6 +9,22 @@ extern "C" {
 
 #define MOUNT_POINT "/sdcard"
 
+typedef enum {
+    CARD_TYPE_SDSC = 0,
+    CARD_TYPE_SDHC,
+    CARD_TYPE_MMC,
+    CARD_TYPE_SDIO
+} card_type_t;
+
+typedef struct {
+    uint64_t capacity;     // Card capacity in bytes
+    uint16_t sector_size;  // Sector size in bytes
+    uint8_t type;         // Card type (SD/SDHC/SDXC)
+    uint32_t speed;       // Maximum frequency in kHz
+    uint8_t bus_width;    // Bus width (1 or 4 bit mode)
+    char name[64];         // Card name from CID
+} sdmmc_card_info_t;
+
 /**
  * @brief Initialize and mount the SD card
  * 
@@ -58,8 +74,28 @@ const char* sdcard_get_mount_point(void);
  */
 bool sdcard_is_mounted(void);
 
+/**
+ * @brief Get SD card information
+ *
+ * @param[out] info Pointer to store card information including capacity, sector size, type, speed and bus width
+ * @return ESP_OK if successful
+ * @return ESP_ERR_INVALID_STATE if card is not mounted
+ */
+esp_err_t sdcard_get_info(sdmmc_card_info_t *info);
+
+/**
+ * @brief Test SD card read/write functionality by creating and verifying a test file
+ * 
+ * @return ESP_OK if test file was successfully written and verified
+ * @return ESP_ERR_INVALID_STATE if card is not mounted or available
+ * @return ESP_FAIL if file operations or data verification fails
+ */
+esp_err_t sdcard_test_rw(void);
+
+
 #ifdef __cplusplus
 }
 #endif
 
 #endif 
+

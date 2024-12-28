@@ -10,6 +10,10 @@
 #include "imu.h"
 #include "rtcm.h"
 #include "led.h"
+#include "sleep_mode.h"
+#include "hw_config.h"
+#include "sdcard.h"
+#include "esp_heap_caps.h"
 
 static const char* TAG = "console";
 
@@ -30,6 +34,25 @@ static struct {
     struct arg_lit *id;
     struct arg_end *end;
 } imu_args;
+
+static struct {
+    struct arg_lit *id;
+    struct arg_end *end;
+} led_args;
+
+struct {
+    struct arg_lit *voltage;
+    struct arg_lit *reboot;
+    struct arg_lit *id;
+    struct arg_lit *memory;
+    struct arg_end *end;
+} system_args;
+
+static struct {
+    struct arg_lit *info;
+    struct arg_lit *test;
+    struct arg_end *end;
+} sdcard_args;
 
 static int cmd_version(int argc, char **argv)
 {
@@ -120,12 +143,6 @@ static int cmd_rtcm(int argc, char **argv)
     return 1;
 }
 
-static struct {
-    struct arg_lit *id;
-    struct arg_end *end;
-} led_args;
-
-// Add this command handler function
 static int cmd_led(int argc, char **argv)
 {
     int nerrors = arg_parse(argc, argv, (void **)&led_args);
@@ -141,6 +158,125 @@ static int cmd_led(int argc, char **argv)
             return 1;
         }
         printf("LED Driver ID: 0x%02X\n", id);
+        printf("OK\n");
+        return 0;
+    }
+
+    printf("Error: No valid subcommand\n");
+    return 1;
+}
+
+static int cmd_system(int argc, char **argv)
+{
+    int nerrors = arg_parse(argc, argv, (void **)&system_args);
+    if (nerrors != 0) 
+    {
+        arg_print_errors(stderr, system_args.end, argv[0]);
+        return 1;
+    }
+
+    if (system_args.voltage->count > 0) 
+    {
+        float voltage;
+        if (sleep_mode_get_voltage(&voltage) != ESP_OK) 
+        {
+            printf("Error: Failed to read voltage\n");
+            return 1;
+        }
+        printf("System Voltage: %.2f V\n", voltage);
+        printf("OK\n");
+        return 0;
+    }
+
+    if (system_args.reboot->count > 0)
+    {
+        printf("System will reboot now...\n");
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        
+        esp_restart();
+        return 0;
+    }
+
+    if (system_args.id->count > 0)
+    {
+        char device_id[13];
+        if (hw_config_get_device_id(device_id) != ESP_OK)
+        {
+            printf("Error: Failed to read device ID\n");
+            return 1;
+        }
+        printf("Device ID: %s\n", device_id);
+        printf("OK\n");
+        return 0;
+    }
+
+    if (system_args.memory->count > 0)
+    {
+        // Get memory stats
+        uint32_t free_internal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        uint32_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+        uint32_t largest_internal = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        uint32_t largest_psram = heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM);
+        uint32_t min_free_internal = heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        uint32_t min_free_psram = heap_caps_get_minimum_free_size(MALLOC_CAP_SPIRAM);
+
+        // Get total heap size
+        multi_heap_info_t info;
+        heap_caps_get_info(&info, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        uint32_t total_internal = info.total_free_bytes + info.total_allocated_bytes;
+
+        printf("RAM Free: %lu bytes\n", free_internal);
+        printf("RAM Largest block: %lu bytes\n", largest_internal);
+        printf("RAM Total: %lu bytes\n", total_internal);
+        printf("RAM Min free ever: %lu bytes\n", min_free_internal);
+        printf("PSRAM Free: %lu bytes\n", free_psram);
+        printf("PSRAM Largest block: %lu bytes\n", largest_psram);
+        printf("PSRAM Min free ever: %lu bytes\n", min_free_psram);
+        printf("OK\n");
+        return 0;
+    }
+
+    printf("Error: No valid subcommand\n");
+    return 1;
+}
+
+static int cmd_sdcard(int argc, char **argv)
+{
+    int nerrors = arg_parse(argc, argv, (void **)&sdcard_args);
+    if (nerrors != 0) 
+    {
+        arg_print_errors(stderr, sdcard_args.end, argv[0]);
+        return 1;
+    }
+
+    if (sdcard_args.info->count > 0)
+    {
+        sdmmc_card_info_t card_info;
+        if (sdcard_get_info(&card_info) != ESP_OK)
+        {
+            printf("Error: Failed to read SD card info\n");
+            return 1;
+        }
+        printf("SD Card Info:\n");
+        printf("Name: %s\n", card_info.name);
+        printf("Type: %s\n", card_info.type == CARD_TYPE_SDHC ? "SDHC/SDXC" : 
+                            card_info.type == CARD_TYPE_MMC ? "MMC" : 
+                            card_info.type == CARD_TYPE_SDIO ? "SDIO" : "SDSC");
+        printf("Capacity: %.2f GB\n", ((float)card_info.capacity/1024));
+        printf("Sector Size: %d bytes\n", card_info.sector_size);
+        printf("Speed: %lu KHz\n", card_info.speed);
+        printf("OK\n");
+        return 0;
+    }
+
+    if (sdcard_args.test->count > 0)
+    {
+        if (sdcard_test_rw() != ESP_OK)
+        {
+            printf("Error: SD card test failed\n");
+            return 1;
+        }
+        printf("SD card test passed successfully\n");
         printf("OK\n");
         return 0;
     }
@@ -166,13 +302,24 @@ void console_register_commands(void)
     led_args.id = arg_lit0("i", "id", "Get LED driver device ID");
     led_args.end = arg_end(2);
     
-    // Add RTCM command to command table
+    system_args.voltage = arg_lit0("v", "voltage", "Get system voltage");
+    system_args.reboot = arg_lit0("r", "reboot", "Reboot system");
+    system_args.id = arg_lit0("i", "id", "Get device ID");
+    system_args.memory = arg_lit0("m", "memory", "Get heap memory info");
+    system_args.end = arg_end(5);
+
+    sdcard_args.info = arg_lit0("i", "info", "Get SD card information");
+    sdcard_args.test = arg_lit0("t", "test", "Test SD card read/write");
+    sdcard_args.end = arg_end(3);
+
     const console_cmd_t cmd_table[] = {
         {"version", "Get firmware version", NULL, &cmd_version},
         {"status", "Get system status", NULL, &cmd_status},
         {"imu", "IMU control and status", NULL, &cmd_imu},
         {"rtc", "RTC module control", NULL, &cmd_rtcm},
         {"led", "LED driver control", NULL, &cmd_led},
+        {"system", "System control and status", NULL, &cmd_system},
+        {"sdcard", "SD card control and status", NULL, &cmd_sdcard},
         {NULL, NULL, NULL, NULL}
     };
     
@@ -210,3 +357,5 @@ esp_err_t console_init(void)
     
     return esp_console_start_repl(repl);
 }
+
+
