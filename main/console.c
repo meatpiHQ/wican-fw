@@ -9,6 +9,8 @@
 #include "esp_app_desc.h"
 #include "imu.h"
 #include "rtcm.h"
+#include "led.h"
+
 static const char* TAG = "console";
 
 typedef struct {
@@ -118,6 +120,35 @@ static int cmd_rtcm(int argc, char **argv)
     return 1;
 }
 
+static struct {
+    struct arg_lit *id;
+    struct arg_end *end;
+} led_args;
+
+// Add this command handler function
+static int cmd_led(int argc, char **argv)
+{
+    int nerrors = arg_parse(argc, argv, (void **)&led_args);
+    if (nerrors != 0) {
+        arg_print_errors(stderr, led_args.end, argv[0]);
+        return 1;
+    }
+
+    if (led_args.id->count > 0) {
+        uint8_t id;
+        if (led_get_device_id(&id) != ESP_OK) {
+            printf("Error: Failed to read LED driver ID\n");
+            return 1;
+        }
+        printf("LED Driver ID: 0x%02X\n", id);
+        printf("OK\n");
+        return 0;
+    }
+
+    printf("Error: No valid subcommand\n");
+    return 1;
+}
+
 void console_register_commands(void)
 {
     esp_console_register_help_command();
@@ -130,13 +161,18 @@ void console_register_commands(void)
     rtcm_args.sync = arg_lit0("s", "sync", "Sync time from internet");
     rtcm_args.read = arg_lit0("r", "read", "Read current time and date");
     rtcm_args.end = arg_end(2);
+
+    // Initialize LED command arguments with other arg initializations
+    led_args.id = arg_lit0("i", "id", "Get LED driver device ID");
+    led_args.end = arg_end(2);
     
     // Add RTCM command to command table
     const console_cmd_t cmd_table[] = {
         {"version", "Get firmware version", NULL, &cmd_version},
         {"status", "Get system status", NULL, &cmd_status},
         {"imu", "IMU control and status", NULL, &cmd_imu},
-        {"rtc", "RTC module control", NULL, &cmd_rtcm},  // Add this line
+        {"rtc", "RTC module control", NULL, &cmd_rtcm},
+        {"led", "LED driver control", NULL, &cmd_led},
         {NULL, NULL, NULL, NULL}
     };
     

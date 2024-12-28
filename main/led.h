@@ -67,4 +67,6 @@ esp_err_t led_set_pwm_freq(bool use_125hz);
 // Utility function
 uint32_t led_get_actual_time_ms(uint32_t requested_ms);
 
+esp_err_t led_get_device_id(uint8_t *id);
+
 #endif

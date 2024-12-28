@@ -115,6 +115,15 @@ static uint8_t ms_to_time_value(uint32_t ms)
     return best_idx;
 }
 
+esp_err_t led_get_device_id(uint8_t *id)
+{
+    if (id == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    return AW2023_register_read(AW2023_RSTR, id, 1);
+}
+
 void led_init(i2c_port_t i2c_num)
 {
     led_i2c = i2c_num;
