@@ -897,6 +897,7 @@ void app_main(void)
 	// esp_log_level_set("HEAP", ESP_LOG_INFO);
 	// esp_log_level_set("imu", ESP_LOG_INFO);
 	// esp_log_level_set("rtcm", ESP_LOG_INFO);
+	// esp_log_level_set("console", ESP_LOG_INFO);
 	console_init();
 }
 
