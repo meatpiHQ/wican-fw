@@ -4,7 +4,7 @@
 #include "driver/gpio.h"
 #include "hw_config.h"
 #include "wc_timer.h"
-
+#include "rtc.h"
 #define TAG "imu"
 #define STATIONARY_TIME_MS      3000
 
@@ -20,7 +20,6 @@ void IRAM_ATTR imu_isr_handler(void* arg)
 
 static void imu_motion_task(void *pvParameters)
 {
-    float ax, ay, az;
     uint32_t gpio_num;
     activity_state_t current_state = ACTIVITY_STATE_STATIONARY;
     activity_state_t last_reported_state = ACTIVITY_STATE_STATIONARY;
@@ -110,7 +109,7 @@ activity_state_t imu_get_activity_state(void)
 
     return state;
 }
-#include "rtc.h"
+
 //TODO: scl_gpio, scl_gpio amd int_gpio are not used
 esp_err_t imu_init(i2c_port_t i2c_num, gpio_num_t sda_gpio, gpio_num_t scl_gpio, gpio_num_t int_gpio)
 {
@@ -300,10 +299,11 @@ esp_err_t imu_read_temp(float *temp)
 
 esp_err_t imu_get_device_id(uint8_t *id)
 {
-    uint8_t value;
+    uint16_t value;
     esp_err_t ret = icm42670_read_raw_data(&dev, ICM42670_REG_WHO_AM_I, (int16_t*)&value);
+    
     if (ret == ESP_OK) {
-        *id = value;
+        *id = (value>>8) & 0xFF;
     }
     return ret;
 }

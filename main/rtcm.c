@@ -1,27 +1,38 @@
 #include "rtcm.h"
 #include "driver/i2c.h"
 #include "esp_log.h"
+#include "esp_http_client.h"
+#include "cJSON.h"
+#include <string.h>
+#include <sys/param.h>
+#include <stdlib.h>
+#include "esp_netif_sntp.h"
+#include "lwip/ip_addr.h"
+#include "esp_sntp.h"
+#include "esp_heap_caps.h"
 
 #define TAG "rtcm"
 
 #define RTCM_I2C_TIMEOUT_MS 1000
 
-#define RX8130_ADDR        0x32
+#define RX8130_ADDR             0x32
 
-#define RX8130_REG_SEC     0x10
-#define RX8130_REG_MIN     0x11 
-#define RX8130_REG_HOUR    0x12
-#define RX8130_REG_CTRL1   0x30
-#define RX8130_REG_CTRL2   0x32
-#define RX8130_REG_EVT_CTRL 0x1C
-#define RX8130_REG_EVT1    0x1D
-#define RX8130_REG_EVT2    0x1E
-#define RX8130_REG_EVT3    0x1F
-#define RX8130_REG_WEEK    0x13
-#define RX8130_REG_DAY     0x14
-#define RX8130_REG_MONTH   0x15
-#define RX8130_REG_YEAR    0x16
-#define RX8130_REG_ID      0x17
+#define RX8130_REG_SEC          0x10
+#define RX8130_REG_MIN          0x11 
+#define RX8130_REG_HOUR         0x12
+#define RX8130_REG_CTRL1        0x30
+#define RX8130_REG_CTRL2        0x32
+#define RX8130_REG_EVT_CTRL     0x1C
+#define RX8130_REG_EVT1         0x1D
+#define RX8130_REG_EVT2         0x1E
+#define RX8130_REG_EVT3         0x1F
+#define RX8130_REG_WEEK         0x13
+#define RX8130_REG_DAY          0x14
+#define RX8130_REG_MONTH        0x15
+#define RX8130_REG_YEAR         0x16
+#define RX8130_REG_ID           0x17
+
+#define MAX_HTTP_OUTPUT_BUFFER 4096
 
 static i2c_port_t rtcm_i2c = I2C_NUM_MAX;
 
@@ -34,34 +45,6 @@ static esp_err_t rx8130_register_write(uint8_t reg_addr, uint8_t data)
 {
     uint8_t write_buf[2] = {reg_addr, data};
     return i2c_master_write_to_device(rtcm_i2c, RX8130_ADDR, write_buf, 2, pdMS_TO_TICKS(RTCM_I2C_TIMEOUT_MS));
-}
-
-esp_err_t rtcm_init(i2c_port_t i2c_num)
-{
-    esp_err_t ret;
-
-    rtcm_i2c = i2c_num;
-    // Initialize RX8130 registers
-    ret = rx8130_register_write(RX8130_REG_CTRL1, 0x00);
-    if (ret != ESP_OK) return ret;
-
-    ret = rx8130_register_write(RX8130_REG_CTRL2, 0xC7);
-    if (ret != ESP_OK) return ret;
-
-    ret = rx8130_register_write(RX8130_REG_EVT_CTRL, 0x04);
-    if (ret != ESP_OK) return ret;
-
-    ret = rx8130_register_write(RX8130_REG_EVT1, 0x00);
-    if (ret != ESP_OK) return ret;
-
-    ret = rx8130_register_write(RX8130_REG_EVT2, 0x40);
-    if (ret != ESP_OK) return ret;
-
-    ret = rx8130_register_write(RX8130_REG_EVT3, 0x10);
-    if (ret != ESP_OK) return ret;
-
-    ESP_LOGI(TAG, "RTC module initialized");
-    return ESP_OK;
 }
 
 esp_err_t rtcm_get_time(uint8_t *hour, uint8_t *min, uint8_t *sec)
@@ -129,4 +112,232 @@ esp_err_t rtcm_set_date(uint8_t year, uint8_t month, uint8_t day, uint8_t weekda
 esp_err_t rtcm_get_device_id(uint8_t *id)
 {
     return rx8130_register_read(RX8130_REG_ID, id, 1);
+}
+
+esp_err_t _http_event_handler(esp_http_client_event_t *evt)
+{
+    static int output_len;
+
+    switch(evt->event_id)
+    {
+        case HTTP_EVENT_ERROR:
+            ESP_LOGE(TAG, "HTTP_EVENT_ERROR");
+            break;
+        case HTTP_EVENT_ON_CONNECTED:
+            ESP_LOGI(TAG, "HTTP_EVENT_ON_CONNECTED");
+            break;
+        case HTTP_EVENT_HEADER_SENT:
+            ESP_LOGI(TAG, "HTTP_EVENT_HEADER_SENT");
+            break;
+        case HTTP_EVENT_ON_HEADER:
+            ESP_LOGI(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
+            break;
+        case HTTP_EVENT_REDIRECT:
+            ESP_LOGD(TAG, "HTTP_EVENT_REDIRECT");
+            esp_http_client_set_header(evt->client, "From", "user@example.com");
+            esp_http_client_set_header(evt->client, "Accept", "text/html");
+            esp_http_client_set_redirection(evt->client);
+            break;
+        case HTTP_EVENT_ON_DATA:
+            ESP_LOGI(TAG, "HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
+            if (output_len == 0 && evt->user_data)
+            {
+                memset(evt->user_data, 0, MAX_HTTP_OUTPUT_BUFFER);
+            }
+
+            if (!esp_http_client_is_chunked_response(evt->client))
+            {
+                int copy_len = 0;
+                if (evt->user_data)
+                {
+                    copy_len = MIN(evt->data_len, (MAX_HTTP_OUTPUT_BUFFER - output_len));
+                    if (copy_len)
+                    {
+                        memcpy(evt->user_data + output_len, evt->data, copy_len);
+                    }
+                }
+                output_len += copy_len;
+            }
+            break;
+
+        case HTTP_EVENT_ON_FINISH:
+            ESP_LOGI(TAG, "HTTP_EVENT_ON_FINISH");
+            output_len = 0;
+            break;
+
+        case HTTP_EVENT_DISCONNECTED:
+            ESP_LOGI(TAG, "HTTP_EVENT_DISCONNECTED");
+            output_len = 0;
+            break;
+    }
+    return ESP_OK;
+}
+
+static esp_err_t rtcm_set_time_zone(void) 
+{
+    ESP_LOGI(TAG, "Getting timezone from worldtimeapi.org");
+
+    char *local_response_buffer = heap_caps_malloc(MAX_HTTP_OUTPUT_BUFFER + 1, MALLOC_CAP_SPIRAM);
+    if (local_response_buffer == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to allocate response buffer in PSRAM");
+        return ESP_ERR_NO_MEM;
+    }
+
+    memset(local_response_buffer, 0, MAX_HTTP_OUTPUT_BUFFER + 1);
+    
+    esp_http_client_config_t config = {
+        .url = "http://worldtimeapi.org/api/ip",
+        .event_handler = _http_event_handler,
+        .user_data = local_response_buffer,
+    };
+    
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    ESP_LOGI(TAG, "Performing HTTP request");
+    esp_err_t err = esp_http_client_perform(client);
+    
+    if (err == ESP_OK)
+    {
+        ESP_LOGI(TAG, "HTTP request successful");
+        ESP_LOG_BUFFER_HEXDUMP(TAG, local_response_buffer, strlen(local_response_buffer), ESP_LOG_INFO);
+        cJSON *root = cJSON_Parse(local_response_buffer);
+        if (root)
+        {
+            ESP_LOGI(TAG, "JSON parsed successfully");
+            
+            // Get raw_offset and dst_offset from worldtimeapi
+            cJSON *raw_offset = cJSON_GetObjectItem(root, "raw_offset");
+            cJSON *dst_offset = cJSON_GetObjectItem(root, "dst_offset");
+            
+            if (raw_offset && dst_offset)
+            {
+                int total_offset = (raw_offset->valueint + dst_offset->valueint) / 3600; // Convert to hours
+                char tz_buf[32];
+                snprintf(tz_buf, sizeof(tz_buf), "UTC%+d", -total_offset);
+                ESP_LOGI(TAG, "Setting timezone offset: %s", tz_buf);
+                setenv("TZ", tz_buf, 1);
+                tzset();
+            }
+            else
+            {
+                ESP_LOGE(TAG, "No offset found in JSON response");
+            }
+            cJSON_Delete(root);
+        }
+        else
+        {
+            ESP_LOGE(TAG, "Failed to parse JSON response");
+        }
+    }
+    else
+    {
+        ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
+    }
+    
+    esp_http_client_cleanup(client);
+    heap_caps_free(local_response_buffer);
+    return err;
+}
+
+static void time_sync_notification_cb(struct timeval *tv)
+{
+    ESP_LOGI(TAG, "Time synchronized from SNTP");
+}
+
+static esp_err_t update_rtc_from_system_time(void)
+{
+    time_t now;
+    struct tm timeinfo;
+    
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    
+    // Convert to BCD format for RX8130
+    uint8_t hour = ((timeinfo.tm_hour / 10) << 4) | (timeinfo.tm_hour % 10);
+    uint8_t min = ((timeinfo.tm_min / 10) << 4) | (timeinfo.tm_min % 10);
+    uint8_t sec = ((timeinfo.tm_sec / 10) << 4) | (timeinfo.tm_sec % 10);
+    uint8_t year = (((timeinfo.tm_year % 100) / 10) << 4) | ((timeinfo.tm_year % 100) % 10);
+    uint8_t month = (((timeinfo.tm_mon + 1) / 10) << 4) | ((timeinfo.tm_mon + 1) % 10);
+    uint8_t day = ((timeinfo.tm_mday / 10) << 4) | (timeinfo.tm_mday % 10);
+    uint8_t weekday = timeinfo.tm_wday;
+    
+    esp_err_t ret;
+    
+    // Update RTC time
+    ret = rtcm_set_time(hour, min, sec);
+    if (ret != ESP_OK) return ret;
+    
+    // Update RTC date
+    ret = rtcm_set_date(year, month, day, weekday);
+    return ret;
+}
+
+esp_err_t rtcm_sync_internet_time(void)
+{
+    // First get timezone from internet
+    esp_err_t ret = rtcm_set_time_zone();
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to get timezone");
+        return ret;
+    }
+
+    // Initialize SNTP
+    static esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG("pool.ntp.org");
+    config.sync_cb = time_sync_notification_cb;
+    config.smooth_sync = true;
+    esp_netif_sntp_init(&config);
+
+    // Wait for time to be set
+    int retry = 0;
+    const int retry_count = 15;
+    while (esp_netif_sntp_sync_wait(2000 / portTICK_PERIOD_MS) == ESP_ERR_TIMEOUT && ++retry < retry_count)
+    {
+        ESP_LOGI(TAG, "Waiting for SNTP sync... (%d/%d)", retry, retry_count);
+    }
+
+    if (retry == retry_count)
+    {
+        ESP_LOGE(TAG, "SNTP sync failed");
+        esp_netif_sntp_deinit();
+        return ESP_FAIL;
+    }
+
+    // Update RTC with synchronized time
+    ret = update_rtc_from_system_time();
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to update RTC with synchronized time");
+    }
+
+    esp_netif_sntp_deinit();
+    return ret;
+}
+
+esp_err_t rtcm_init(i2c_port_t i2c_num)
+{
+    esp_err_t ret;
+
+    rtcm_i2c = i2c_num;
+    // Initialize RX8130 registers
+    ret = rx8130_register_write(RX8130_REG_CTRL1, 0x00);
+    if (ret != ESP_OK) return ret;
+
+    ret = rx8130_register_write(RX8130_REG_CTRL2, 0xC7);
+    if (ret != ESP_OK) return ret;
+
+    ret = rx8130_register_write(RX8130_REG_EVT_CTRL, 0x04);
+    if (ret != ESP_OK) return ret;
+
+    ret = rx8130_register_write(RX8130_REG_EVT1, 0x00);
+    if (ret != ESP_OK) return ret;
+
+    ret = rx8130_register_write(RX8130_REG_EVT2, 0x40);
+    if (ret != ESP_OK) return ret;
+
+    ret = rx8130_register_write(RX8130_REG_EVT3, 0x10);
+    if (ret != ESP_OK) return ret;
+
+    ESP_LOGI(TAG, "RTC module initialized");
+    return ESP_OK;
 }

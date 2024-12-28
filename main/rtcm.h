@@ -11,5 +11,6 @@ esp_err_t rtcm_set_time(uint8_t hour, uint8_t min, uint8_t sec);
 esp_err_t rtcm_get_date(uint8_t *year, uint8_t *month, uint8_t *day, uint8_t *weekday);
 esp_err_t rtcm_set_date(uint8_t year, uint8_t month, uint8_t day, uint8_t weekday);
 esp_err_t rtcm_get_device_id(uint8_t *id);
-
+esp_err_t rtcm_sync_internet_time(void);
+esp_err_t rtcm_get_timezone(int *timezone_offset);
 #endif /* _RTCM_H_ */
