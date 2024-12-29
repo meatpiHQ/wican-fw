@@ -31,6 +31,7 @@
 #define TCP_PORT 23
 #define MAX_CLIENTS 1
 #define RECV_BUF_SIZE (MAX_CMDLINE_LENGTH)
+#define MAX_HISTORY_LINES 50
 
 static TaskHandle_t tcp_console_task_handle = NULL;
 static int server_socket = -1;
@@ -398,7 +399,7 @@ static void process_command(char* cmd)
     // Skip empty commands
     if (cmd_len == 0)
     {
-        tcp_console_write(PROMPT, strlen(PROMPT));
+        // tcp_console_write(PROMPT, strlen(PROMPT));
         return;
     }
     int ret;
@@ -406,24 +407,24 @@ static void process_command(char* cmd)
     // Handle command execution results
     if (err == ESP_ERR_NOT_FOUND)
     {
-        tcp_console_write("Command not found\r\n", 20);
+        tcp_console_write("Command not found\n", 20);
     }
     else if (err == ESP_ERR_INVALID_ARG)
     {
         // command was empty or invalid
-        tcp_console_write("Invalid arguments\r\n", 20);
+        tcp_console_write("Invalid arguments\n", 20);
     }
     else if (err == ESP_OK && ret != ESP_OK)
     {
-        tcp_console_write("Command returned non-zero error code\r\n", 39);
+        tcp_console_write("Command returned non-zero error code\n", 39);
     }
     else if (err != ESP_OK)
     {
-        tcp_console_write("Internal error\r\n", 17);
+        tcp_console_write("Internal error\n", 17);
     }
 
     // Always print prompt after command execution
-    tcp_console_write(PROMPT, strlen(PROMPT));
+    // tcp_console_write(PROMPT, strlen(PROMPT));
 }
 
 // Main TCP console task
@@ -444,11 +445,20 @@ static void tcp_console_task(void* arg)
         return;
     }
 
-    // Enable address reuse
+    // Socket options setup
     int opt = 1;
     setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    
+    // TCP keepalive configuration
+    int keepalive = 1;
+    int keepidle = (60*5);
+    int keepintvl = 10;
+    int keepcnt = 3;
+    setsockopt(server_socket, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive));
+    setsockopt(server_socket, IPPROTO_TCP, TCP_KEEPIDLE, &keepidle, sizeof(keepidle));
+    setsockopt(server_socket, IPPROTO_TCP, TCP_KEEPINTVL, &keepintvl, sizeof(keepintvl));
+    setsockopt(server_socket, IPPROTO_TCP, TCP_KEEPCNT, &keepcnt, sizeof(keepcnt));
 
-    // Bind socket
     if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) != 0)
     {
         ESP_LOGE(TAG, "Socket bind failed");
@@ -457,7 +467,6 @@ static void tcp_console_task(void* arg)
         return;
     }
 
-    // Listen for connections
     if (listen(server_socket, 1) != 0)
     {
         ESP_LOGE(TAG, "Socket listen failed");
@@ -468,102 +477,269 @@ static void tcp_console_task(void* arg)
 
     ESP_LOGI(TAG, "TCP Console started on port %d", TCP_PORT);
 
+    // Allocate buffers including command history
     char *recv_buf = heap_caps_malloc(RECV_BUF_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     char *cmd_buf = heap_caps_malloc(MAX_CMDLINE_LENGTH, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    char **cmd_history = heap_caps_malloc(MAX_HISTORY_LINES * sizeof(char*), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    for (int i = 0; i < MAX_HISTORY_LINES; i++)
+    {
+        cmd_history[i] = heap_caps_malloc(MAX_CMDLINE_LENGTH, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!cmd_history[i])
+        {
+            ESP_LOGE(TAG, "Failed to allocate history buffer %d", i);
+            // Cleanup previously allocated buffers
+            for (int j = 0; j < i; j++)
+            {
+                heap_caps_free(cmd_history[j]);
+            }
+            heap_caps_free(cmd_history);
+            if (recv_buf) heap_caps_free(recv_buf);
+            if (cmd_buf) heap_caps_free(cmd_buf);
+            vTaskDelete(NULL);
+            return;
+        }
+        memset(cmd_history[i], 0, MAX_CMDLINE_LENGTH);
+    }
     
-    if (!recv_buf || !cmd_buf)
+    if (!recv_buf || !cmd_buf || !cmd_history)
     {
         ESP_LOGE(TAG, "Failed to allocate console buffers in PSRAM");
-        // Free any successful allocations
         if (recv_buf) heap_caps_free(recv_buf);
         if (cmd_buf) heap_caps_free(cmd_buf);
+        if (cmd_history)
+        {
+            for (int i = 0; i < MAX_HISTORY_LINES; i++)
+            {
+                if (cmd_history[i]) heap_caps_free(cmd_history[i]);
+            }
+            heap_caps_free(cmd_history);
+        }
         vTaskDelete(NULL);
         return;
     }
-    
+
     size_t cmd_pos = 0;
+    size_t history_count = 0;
+    int history_index = -1;
+    bool insertion_mode = false;  // Toggle between insert/overwrite mode
 
     while (1)
     {
         struct sockaddr_in client_addr;
         socklen_t client_addr_len = sizeof(client_addr);
 
-        // Accept client connection
         client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_addr_len);
         if (client_socket < 0)
         {
             ESP_LOGE(TAG, "Accept failed");
             continue;
         }
-
-        ESP_LOGI(TAG, "Client connected");
         
-        // Clear command buffer at start of new connection
-        memset(cmd_buf, 0, sizeof(cmd_buf));
+        ESP_LOGI(TAG, "Client connected from %s", inet_ntoa(client_addr.sin_addr));
+        
+        struct timeval timeout;
+        timeout.tv_sec = (60*5);
+        timeout.tv_usec = 0;
+        setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+
+        // Send welcome message
+        const char* welcome_msg = "\nWelcome to ESP32 Console\n"
+                                "Type 'help' for available commands\n";
+        tcp_console_write(welcome_msg, strlen(welcome_msg));
+
+        memset(cmd_buf, 0, MAX_CMDLINE_LENGTH);
         cmd_pos = 0;
+        history_index = -1;
 
         tcp_console_write(PROMPT, strlen(PROMPT));
 
-        // Handle client communication
         while (1)
         {
-            int len = recv(client_socket, recv_buf, sizeof(recv_buf) - 1, 0);
+            int len = recv(client_socket, recv_buf, RECV_BUF_SIZE - 1, 0);
             if (len <= 0)
             {
                 ESP_LOGI(TAG, "Client disconnected");
                 break;
             }
 
-            // Process received data character by character
             for (int i = 0; i < len; i++)
             {
                 char c = recv_buf[i];
+                
+                // Handle escape sequences
+                if (c == '\x1b')
+                {
+                    if (i + 2 < len && recv_buf[i + 1] == '[')
+                    {
+                        switch (recv_buf[i + 2])
+                        {
+                            case 'A': // Up arrow
+                                if (history_count > 0 && history_index < (int)(history_count - 1))
+                                {
+                                    // Clear current line
+                                    while (cmd_pos > 0)
+                                    {
+                                        tcp_console_write("\b \b", 3);
+                                        cmd_pos--;
+                                    }
+                                    history_index++;
+                                    strcpy(cmd_buf, cmd_history[history_index]);
+                                    cmd_pos = strlen(cmd_buf);
+                                    tcp_console_write(cmd_buf, cmd_pos);
+                                }
+                                i += 2;
+                                continue;
+
+                            case 'B': // Down arrow
+                                if (history_index >= 0)
+                                {
+                                    // Clear current line
+                                    while (cmd_pos > 0)
+                                    {
+                                        tcp_console_write("\b \b", 3);
+                                        cmd_pos--;
+                                    }
+                                    history_index--;
+                                    if (history_index >= 0)
+                                    {
+                                        strcpy(cmd_buf, cmd_history[history_index]);
+                                        cmd_pos = strlen(cmd_buf);
+                                        tcp_console_write(cmd_buf, cmd_pos);
+                                    }
+                                }
+                                i += 2;
+                                continue;
+
+                            case 'C': // Right arrow
+                                if (cmd_pos < strlen(cmd_buf))
+                                {
+                                    tcp_console_write("\x1b[C", 3);
+                                    cmd_pos++;
+                                }
+                                i += 2;
+                                continue;
+
+                            case 'D': // Left arrow
+                                if (cmd_pos > 0)
+                                {
+                                    tcp_console_write("\x1b[D", 3);
+                                    cmd_pos--;
+                                }
+                                i += 2;
+                                continue;
+
+                            case '2': // Insert key
+                                if (i + 3 < len && recv_buf[i + 3] == '~')
+                                {
+                                    insertion_mode = !insertion_mode;
+                                    i += 3;
+                                    continue;
+                                }
+                                break;
+
+                            case '3': // Delete key
+                                if (i + 3 < len && recv_buf[i + 3] == '~')
+                                {
+                                    if (cmd_pos < strlen(cmd_buf))
+                                    {
+                                        memmove(&cmd_buf[cmd_pos], &cmd_buf[cmd_pos + 1], strlen(cmd_buf) - cmd_pos);
+                                        tcp_console_write("\x1b[K", 3); // Clear to end of line
+                                        tcp_console_write(&cmd_buf[cmd_pos], strlen(&cmd_buf[cmd_pos]));
+                                        // Move cursor back to original position
+                                        char cursor_pos[16];
+                                        snprintf(cursor_pos, sizeof(cursor_pos), "\x1b[%zuD", strlen(&cmd_buf[cmd_pos]));
+                                        tcp_console_write(cursor_pos, strlen(cursor_pos));
+                                    }
+                                    i += 3;
+                                    continue;
+                                }
+                                break;
+                        }
+                    }
+                }
                 
                 // Handle backspace
                 if (c == 0x7f || c == 0x08)
                 {
                     if (cmd_pos > 0)
                     {
-                        cmd_pos--;
-                        tcp_console_write("\b \b", 3);
+                        if (cmd_pos < strlen(cmd_buf))
+                        {
+                            // Remove character and shift remaining text
+                            memmove(&cmd_buf[cmd_pos - 1], &cmd_buf[cmd_pos], strlen(cmd_buf) - cmd_pos + 1);
+                            tcp_console_write("\b", 1);
+                            tcp_console_write("\x1b[K", 3); // Clear to end of line
+                            tcp_console_write(&cmd_buf[cmd_pos - 1], strlen(&cmd_buf[cmd_pos - 1]));
+                            // Move cursor back
+                            char cursor_pos[16];
+                            snprintf(cursor_pos, sizeof(cursor_pos), "\x1b[%zuD", strlen(&cmd_buf[cmd_pos - 1]));
+                            tcp_console_write(cursor_pos, strlen(cursor_pos));
+                        }
+                        else
+                        {
+                            cmd_buf[--cmd_pos] = '\0';
+                            tcp_console_write("\b \b", 3);
+                        }
                     }
                     continue;
                 }
                 
                 // Handle newline
-                if (c == '\r' || c == '\n')
+                if (c == '\n')
                 {
-                    tcp_console_write("\r\n", 2);
+                    // tcp_console_write("\n", 1);
                     if (cmd_pos > 0)
                     {
                         cmd_buf[cmd_pos] = '\0';
+                        // Add to history if different from last command
+                        if (history_count == 0 || strcmp(cmd_buf, cmd_history[0]) != 0)
+                        {
+                            // Shift history up
+                            if (history_count < MAX_HISTORY_LINES)
+                                history_count++;
+                            for (int j = history_count - 1; j > 0; j--)
+                            {
+                                strcpy(cmd_history[j], cmd_history[j - 1]);
+                            }
+                            strcpy(cmd_history[0], cmd_buf);
+                        }
                         process_command(cmd_buf);
-                        // Clear command buffer after processing
-                        memset(cmd_buf, 0, sizeof(cmd_buf));
+                        memset(cmd_buf, 0, MAX_CMDLINE_LENGTH);
                         cmd_pos = 0;
+                        history_index = -1;
                     }
-                    else
-                    {
-                        tcp_console_write(PROMPT, strlen(PROMPT));
-                    }
+                    tcp_console_write(PROMPT, strlen(PROMPT));
                     continue;
                 }
                 
-                // Echo character if not control character
+                // Handle printable characters
                 if (c >= 32 && c < 127)
                 {
-                    tcp_console_write(&c, 1);
-                    
-                    // Add to command buffer if space available
-                    if (cmd_pos < sizeof(cmd_buf) - 1)
+                    if (cmd_pos < MAX_CMDLINE_LENGTH - 1)
                     {
-                        cmd_buf[cmd_pos++] = c;
+                        if (insertion_mode && cmd_pos < strlen(cmd_buf))
+                        {
+                            // Insert mode: shift characters right
+                            memmove(&cmd_buf[cmd_pos + 1], &cmd_buf[cmd_pos], strlen(cmd_buf) - cmd_pos);
+                            cmd_buf[cmd_pos] = c;
+                            // tcp_console_write(&cmd_buf[cmd_pos], strlen(&cmd_buf[cmd_pos]));
+                            cmd_pos++;
+                            // Move cursor back to position after inserted char
+                            char cursor_pos[16];
+                            snprintf(cursor_pos, sizeof(cursor_pos), "\x1b[%zuD", strlen(&cmd_buf[cmd_pos]) - 1);
+                            // tcp_console_write(cursor_pos, strlen(cursor_pos));
+                        }
+                        else
+                        {
+                            // Overwrite mode or at end of line
+                            cmd_buf[cmd_pos++] = c;
+                            // tcp_console_write(&c, 1);
+                        }
                     }
                 }
             }
         }
 
-        // Cleanup client connection
         close(client_socket);
         client_socket = -1;
     }
