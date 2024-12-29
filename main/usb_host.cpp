@@ -6,8 +6,11 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <inttypes.h>
 
 #include "esp_log.h"
+#include "esp_system.h"
+#include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -28,37 +31,24 @@ using namespace esp_usb;
 #define EXAMPLE_PARITY       (0)      // 0: None, 1: Odd, 2: Even, 3: Mark, 4: Space
 #define EXAMPLE_DATA_BITS    (8)
 
+// Additional definitions from second example
+#define EXAMPLE_USB_HOST_PRIORITY   (20)
+#define EXAMPLE_USB_DEVICE_VID      (0x1546)
+#define EXAMPLE_USB_DEVICE_PID      (0x01A7)
+#define EXAMPLE_USB_DEVICE_DUAL_PID (0x4002)
+#define EXAMPLE_TX_TIMEOUT_MS       (1000)
+
 namespace {
 static const char *TAG = "usb";
 static SemaphoreHandle_t device_disconnected_sem;
 
-/**
- * @brief Data received callback
- *
- * Just pass received data to stdout
- *
- * @param[in] data     Pointer to received data
- * @param[in] data_len Length of received data in bytes
- * @param[in] arg      Argument we passed to the device open function
- * @return
- *   true:  We have processed the received data
- *   false: We expect more data
- */
 static bool handle_rx(const uint8_t *data, size_t data_len, void *arg)
 {
     ESP_LOGI(TAG, "Received data: %.*s", data_len, data);
-    // printf("%.*s", data_len, data);
+    ESP_LOG_BUFFER_HEXDUMP(TAG, data, data_len, ESP_LOG_INFO);
     return true;
 }
 
-/**
- * @brief Device event callback
- *
- * Apart from handling device disconnection it doesn't do anything useful
- *
- * @param[in] event    Device event type and data
- * @param[in] user_ctx Argument we passed to the device open function
- */
 static void handle_event(const cdc_acm_host_dev_event_data_t *event, void *user_ctx)
 {
     switch (event->type) {
@@ -67,25 +57,24 @@ static void handle_event(const cdc_acm_host_dev_event_data_t *event, void *user_
         break;
     case CDC_ACM_HOST_DEVICE_DISCONNECTED:
         ESP_LOGI(TAG, "Device suddenly disconnected");
+        if (event->data.cdc_hdl) {
+            ESP_ERROR_CHECK(cdc_acm_host_close(event->data.cdc_hdl));
+        }
         xSemaphoreGive(device_disconnected_sem);
         break;
     case CDC_ACM_HOST_SERIAL_STATE:
         ESP_LOGI(TAG, "Serial state notif 0x%04X", event->data.serial_state.val);
         break;
     case CDC_ACM_HOST_NETWORK_CONNECTION:
-    default: break;
+    default: 
+        ESP_LOGW(TAG, "Unsupported CDC event: %i", event->type);
+        break;
     }
 }
 
-/**
- * @brief USB Host library handling task
- *
- * @param arg Unused
- */
 static void usb_lib_task(void *arg)
 {
     while (1) {
-        // Start handling system events
         uint32_t event_flags;
         usb_host_lib_handle_events(portMAX_DELAY, &event_flags);
         if (event_flags & USB_HOST_LIB_EVENT_FLAGS_NO_CLIENTS) {
@@ -93,37 +82,63 @@ static void usb_lib_task(void *arg)
         }
         if (event_flags & USB_HOST_LIB_EVENT_FLAGS_ALL_FREE) {
             ESP_LOGI(TAG, "USB: All devices freed");
-            // Continue handling USB events to allow device reconnection
         }
+    }
+}
+
+static void send_test_data(std::unique_ptr<CdcAcmDevice>& vcp, cdc_acm_dev_hdl_t cdc_dev)
+{
+    static const uint8_t data1[] = "set_led 22 0 0\r\n";
+    static const uint8_t data2[] = "set_led 22 22 22\r\n";
+
+    if (vcp != nullptr) {
+        ESP_LOGI(TAG, "Sending data through VCP interface");
+        ESP_ERROR_CHECK_WITHOUT_ABORT(vcp->tx_blocking((uint8_t *)data1, sizeof(data1)));
+        vTaskDelay(pdMS_TO_TICKS(5000));
+        ESP_ERROR_CHECK_WITHOUT_ABORT(vcp->tx_blocking((uint8_t *)data2, sizeof(data2)));
+    } else if (cdc_dev != NULL) {
+        ESP_LOGI(TAG, "Sending data through CDC-ACM interface");
+        ESP_ERROR_CHECK_WITHOUT_ABORT(cdc_acm_host_data_tx_blocking(cdc_dev, data1, sizeof(data1), EXAMPLE_TX_TIMEOUT_MS));
+        vTaskDelay(pdMS_TO_TICKS(5000));
+        ESP_ERROR_CHECK_WITHOUT_ABORT(cdc_acm_host_data_tx_blocking(cdc_dev, data2, sizeof(data2), EXAMPLE_TX_TIMEOUT_MS));
+    }
+}
+
+static void configure_line_coding(std::unique_ptr<CdcAcmDevice>& vcp, cdc_acm_dev_hdl_t cdc_dev)
+{
+    cdc_acm_line_coding_t line_coding = {
+        .dwDTERate = EXAMPLE_BAUDRATE,
+        .bCharFormat = EXAMPLE_STOP_BITS,
+        .bParityType = EXAMPLE_PARITY,
+        .bDataBits = EXAMPLE_DATA_BITS,
+    };
+
+    if (vcp != nullptr) {
+        ESP_ERROR_CHECK(vcp->line_coding_set(&line_coding));
+    } else if (cdc_dev != NULL) {
+        ESP_ERROR_CHECK(cdc_acm_host_line_coding_set(cdc_dev, &line_coding));
     }
 }
 }
 
-/**
- * @brief Main application
- *
- * This function shows how you can use Virtual COM Port drivers
- */
 extern "C" void usb_host_init(void)
 {
     device_disconnected_sem = xSemaphoreCreateBinary();
     assert(device_disconnected_sem);
-
 
     gpio_reset_pin(GPIO_NUM_11);
     gpio_set_direction(GPIO_NUM_11, GPIO_MODE_OUTPUT);
     gpio_set_level(GPIO_NUM_11, 1);
     vTaskDelay(pdMS_TO_TICKS(2000));
     
-    // Install USB Host driver. Should only be called once in entire application
     ESP_LOGI(TAG, "Installing USB Host");
-    usb_host_config_t host_config = {};
-    host_config.skip_phy_setup = false;
-    host_config.intr_flags = ESP_INTR_FLAG_LEVEL2|ESP_INTR_FLAG_SHARED;
+    usb_host_config_t host_config = {
+        .skip_phy_setup = false,
+        .intr_flags = ESP_INTR_FLAG_LEVEL2|ESP_INTR_FLAG_SHARED
+    };
     ESP_ERROR_CHECK(usb_host_install(&host_config));
 
-    // Create a task that will handle USB library events
-    BaseType_t task_created = xTaskCreate(usb_lib_task, "usb_lib", 4096, NULL, 5, NULL);
+    BaseType_t task_created = xTaskCreate(usb_lib_task, "usb_lib", 4096, NULL, EXAMPLE_USB_HOST_PRIORITY, NULL);
     assert(task_created == pdTRUE);
 
     ESP_LOGI(TAG, "Installing CDC-ACM driver");
@@ -134,10 +149,9 @@ extern "C" void usb_host_init(void)
     VCP::register_driver<CP210x>();
     VCP::register_driver<CH34x>();
 
-    // Do everything else in a loop, so we can demonstrate USB device reconnections
     while (true) {
         const cdc_acm_host_device_config_t dev_config = {
-            .connection_timeout_ms = 5000, // 5 seconds, enough time to plug the device in or experiment with timeout
+            .connection_timeout_ms = 1000,
             .out_buffer_size = 512,
             .in_buffer_size = 512,
             .event_cb = handle_event,
@@ -145,51 +159,34 @@ extern "C" void usb_host_init(void)
             .user_arg = NULL,
         };
 
-        // You don't need to know the device's VID and PID. Just plug in any device and the VCP service will load correct (already registered) driver for the device
-        ESP_LOGI(TAG, "Opening any VCP device...");
+        // Try generic VCP device first
+        ESP_LOGI(TAG, "Opening USB device as VCP...");
         auto vcp = std::unique_ptr<CdcAcmDevice>(VCP::open(&dev_config));
-
+        cdc_acm_dev_hdl_t cdc_dev = NULL;
+        
         if (vcp == nullptr) {
-            ESP_LOGI(TAG, "Failed to open VCP device");
-            continue;
+            ESP_LOGI(TAG, "Trying specific VID/PID device...");
+            esp_err_t err = cdc_acm_host_open(EXAMPLE_USB_DEVICE_VID, EXAMPLE_USB_DEVICE_PID, 0, &dev_config, &cdc_dev);
+            if (ESP_OK != err) {
+                ESP_LOGI(TAG, "Trying dual PID device...");
+                err = cdc_acm_host_open(EXAMPLE_USB_DEVICE_VID, EXAMPLE_USB_DEVICE_DUAL_PID, 0, &dev_config, &cdc_dev);
+                if (ESP_OK != err) {
+                    ESP_LOGI(TAG, "Failed to open any device");
+                    continue;
+                }
+            }
+            cdc_acm_host_desc_print(cdc_dev);
         }
-        vTaskDelay(10);
+
+        vTaskDelay(pdMS_TO_TICKS(10));
 
         ESP_LOGI(TAG, "Setting up line coding");
-        cdc_acm_line_coding_t line_coding = {
-            .dwDTERate = EXAMPLE_BAUDRATE,
-            .bCharFormat = EXAMPLE_STOP_BITS,
-            .bParityType = EXAMPLE_PARITY,
-            .bDataBits = EXAMPLE_DATA_BITS,
-        };
-        ESP_ERROR_CHECK(vcp->line_coding_set(&line_coding));
-        // ESP_ERROR_CHECK(vcp->set_control_line_state(true, true));  // Assert DTR
+        configure_line_coding(vcp, cdc_dev);
 
-        /*
-        Now the USB-to-UART converter is configured and receiving data.
-        You can use standard CDC-ACM API to interact with it. E.g.
+        // Send test data using appropriate method
+        send_test_data(vcp, cdc_dev);
 
-        ESP_ERROR_CHECK(vcp->set_control_line_state(false, true));
-        ESP_ERROR_CHECK(vcp->tx_blocking((uint8_t *)"Test string", 12));
-        */
-
-        // Send some dummy data
-        ESP_LOGI(TAG, "Sending data through CdcAcmDevice");
-
-        vTaskDelay(pdMS_TO_TICKS(5000));
-        static uint8_t data[] = "set_led 22 0 0\r\n";
-        ESP_ERROR_CHECK_WITHOUT_ABORT(vcp->tx_blocking(data, sizeof(data)));
-
-        vTaskDelay(pdMS_TO_TICKS(5000));
-        static uint8_t data2[] = "set_led 22 22 022\r\n";
-        ESP_ERROR_CHECK_WITHOUT_ABORT(vcp->tx_blocking(data2, sizeof(data2)));
-        // ESP_ERROR_CHECK(vcp->tx_blocking(data, sizeof(data)));
-        // ESP_ERROR_CHECK(vcp->tx_blocking(data, sizeof(data)));
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        // ESP_ERROR_CHECK(vcp->set_control_line_state(true, true));
-
-        // We are done. Wait for device disconnection and start over
-        ESP_LOGI(TAG, "Done. You can reconnect the VCP device to run again.");
+        ESP_LOGI(TAG, "Done. You can reconnect the USB device to run again.");
         xSemaphoreTake(device_disconnected_sem, portMAX_DELAY);
     }
 }
