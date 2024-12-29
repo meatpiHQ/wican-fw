@@ -77,8 +77,8 @@ static can_cfg_t can_cfg = {.bus_state = END_BUS, .auto_bitrate = 0};
                                                                     .intr_flags = ESP_INTR_FLAG_LEVEL1}
 
 
-static const twai_general_config_t g_config_normal = TWAI_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, TWAI_MODE_NORMAL);
-static const twai_general_config_t g_config_silent = TWAI_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, TWAI_MODE_LISTEN_ONLY);
+static twai_general_config_t g_config_normal = TWAI_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, TWAI_MODE_NORMAL);
+static twai_general_config_t g_config_silent = TWAI_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, TWAI_MODE_LISTEN_ONLY);
 //static const twai_general_config_t g_config_no_ack = TWAI_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, TWAI_MODE_NO_ACK);
 
 static twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
@@ -130,7 +130,8 @@ void can_enable(void)
 //	f_config.acceptance_code = can_cfg.filter;
 //	f_config.acceptance_mask = can_cfg.mask;
 	f_config.single_filter = 1;
-
+	g_config_silent.intr_flags = ESP_INTR_FLAG_LEVEL1 | ESP_INTR_FLAG_SHARED;
+	g_config_normal.intr_flags = ESP_INTR_FLAG_LEVEL1 | ESP_INTR_FLAG_SHARED;
 	if(can_cfg.silent)
 	{
 		ESP_ERROR_CHECK(twai_driver_install(&g_config_silent, (const twai_timing_config_t *)t_config, &f_config));

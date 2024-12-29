@@ -29,7 +29,7 @@ using namespace esp_usb;
 #define EXAMPLE_DATA_BITS    (8)
 
 namespace {
-static const char *TAG = "VCP example";
+static const char *TAG = "usb";
 static SemaphoreHandle_t device_disconnected_sem;
 
 /**
@@ -119,7 +119,7 @@ extern "C" void usb_host_init(void)
     ESP_LOGI(TAG, "Installing USB Host");
     usb_host_config_t host_config = {};
     host_config.skip_phy_setup = false;
-    host_config.intr_flags = ESP_INTR_FLAG_LEVEL1;
+    host_config.intr_flags = ESP_INTR_FLAG_LEVEL2|ESP_INTR_FLAG_SHARED;
     ESP_ERROR_CHECK(usb_host_install(&host_config));
 
     // Create a task that will handle USB library events

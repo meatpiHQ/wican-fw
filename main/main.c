@@ -875,15 +875,7 @@ void app_main(void)
 	#endif
 
 
-	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
-    gpio_set_level(PWR_LED_GPIO_NUM, 1);
-	#elif HARDWARE_VER == WICAN_PRO
-	led_set_level(0,0,200);
-	if(gpio_get_level(USB_ID_PIN) == 0)
-	{
-		// usb_host_init();
-	}
-    #endif
+
 	
 	// wusb3801_init(I2C_MASTER_NUM);
 	// xEventTask = xEventGroupCreate();
@@ -898,6 +890,17 @@ void app_main(void)
 	// esp_log_level_set("imu", ESP_LOG_INFO);
 	// esp_log_level_set("rtcm", ESP_LOG_INFO);
 	// esp_log_level_set("console", ESP_LOG_INFO);
+	esp_log_level_set("usb", ESP_LOG_INFO);
+
+	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
+    gpio_set_level(PWR_LED_GPIO_NUM, 1);
+	#elif HARDWARE_VER == WICAN_PRO
+	led_set_level(0,0,200);
+	if(gpio_get_level(USB_ID_PIN) == 0)
+	{
+		usb_host_init();
+	}
+    #endif
 	console_init();
 }
 
