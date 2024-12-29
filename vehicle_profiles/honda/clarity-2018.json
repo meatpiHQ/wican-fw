@@ -4,7 +4,7 @@
 	"pids": [
 		{
 			"pid": "22202A8",
-			"pid_init": "ATSHDA01F1;",
+			"pid_init": "ATSHDA16F1;",
 			"parameters": [
                 {
 					"name": "SoC",
