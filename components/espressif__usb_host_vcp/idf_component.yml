@@ -1,0 +1,12 @@
+dependencies:
+  espressif/usb_host_cdc_acm:
+    public: true
+    version: '>=1.0.4,<3.0.0'
+  idf: '>=4.4'
+description: USB Host Virtual COM Port Service
+repository: git://github.com/espressif/esp-usb.git
+repository_info:
+  commit_sha: e4817e2e9aa456e86c0037739ce087571a9242ec
+  path: host/class/cdc/usb_host_vcp
+url: https://github.com/espressif/esp-usb/tree/master/host/class/cdc/usb_host_vcp
+version: 1.0.0~5
