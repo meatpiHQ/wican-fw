@@ -1,9 +1,12 @@
 ## IDF Component Manager Manifest File
 dependencies:
-  espressif/mdns: ^1.4.0
+  espressif/mdns: ^1.0.0
   espressif/usb_host_cp210x_vcp: ^2.0.0
   espressif/usb_host_ftdi_vcp: ^2.0.0
-  espressif/usb_host_ch34x_vcp: ^2.0.0
+  meatpihq/usb_host_ch34x_vcp:
+    git: "https://github.com/meatpiHQ/esp-usb.git"
+    path: "host/class/cdc/usb_host_ch34x_vcp"
+    version: "ch343"
   espressif/usb_host_vcp: ^1.0.0~5
   ## Required IDF version
   idf:
