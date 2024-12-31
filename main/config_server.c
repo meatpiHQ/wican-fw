@@ -74,6 +74,7 @@
 #include "autopid.h"
 #include "wc_mdns.h"
 #include "elm327.h"
+#include "hw_config.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
@@ -667,7 +668,7 @@ static esp_err_t system_reboot_handler(httpd_req_t *req)
 {
 	const char *resp_str = "Configuration saved! Rebooting...";
     httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
-
+	gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
 	ESP_LOGI(TAG, "reboot");
 	xTimerStart( xrestartTimer, 0 );
     // esp_restart();
