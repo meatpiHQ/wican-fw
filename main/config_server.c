@@ -115,6 +115,15 @@ const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"st
 static device_config_t device_config;
 TimerHandle_t xrestartTimer;
 
+void config_server_reboot(void)
+{
+	gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
+	elm327_sleep();
+	ESP_LOGI(TAG, "reboot");
+	printf("reboot command\n");
+	xTimerStart( xrestartTimer, 0 );
+}
+
 /* Max length a file path can have on storage */
 #define FILE_PATH_MAX (ESP_VFS_PATH_MAX + CONFIG_SPIFFS_OBJ_NAME_LEN)
 /* Scratch buffer size */
@@ -388,7 +397,8 @@ static esp_err_t store_config_handler(httpd_req_t *req)
     const char *resp_str = "Configuration saved! Rebooting...";
     httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
 
-    xTimerStart( xrestartTimer, 0 );
+    // xTimerStart( xrestartTimer, 0 );
+	config_server_reboot();
     return ESP_OK;
 }
 
@@ -668,9 +678,10 @@ static esp_err_t system_reboot_handler(httpd_req_t *req)
 {
 	const char *resp_str = "Configuration saved! Rebooting...";
     httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
-	gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
-	ESP_LOGI(TAG, "reboot");
-	xTimerStart( xrestartTimer, 0 );
+	config_server_reboot();
+	// elm327_sleep();
+	// ESP_LOGI(TAG, "reboot");
+	// xTimerStart( xrestartTimer, 0 );
     // esp_restart();
     return ESP_OK;
 }
@@ -1277,7 +1288,8 @@ static esp_err_t upload_post_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
 
-    xTimerStart( xrestartTimer, 0 );
+	config_server_reboot();
+    // xTimerStart( xrestartTimer, 0 );
 
     /* Redirect onto root to see the updated file list */
     httpd_resp_set_status(req, "303 See Other");
@@ -2614,6 +2626,7 @@ void config_server_set_ble_config(uint8_t b)
 		fprintf(f, resp_str);
 		fclose(f);
 	}
-	xTimerStart( xrestartTimer, 0 );
+	// xTimerStart( xrestartTimer, 0 );
+	config_server_reboot();
 }
 
