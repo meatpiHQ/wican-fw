@@ -1791,9 +1791,9 @@ esp_err_t elm327_sleep(void)
 		{
 			ret = ESP_FAIL;
 		}
-		uart_flush_input(UART_NUM_1);
-		xQueueReset(uart1_queue);
-		xSemaphoreGive(xuart1_semaphore);
+		// uart_flush_input(UART_NUM_1);
+		// xQueueReset(uart1_queue);
+		// xSemaphoreGive(xuart1_semaphore);
 	}
 	return ret;
 }
