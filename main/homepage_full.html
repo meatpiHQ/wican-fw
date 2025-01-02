@@ -734,7 +734,7 @@
                                 <td><input type="number" id="pindex" style="width: 40px;" /></td>
                                 <td><input type="number" id="startBit" min="0" max="63" style="width: 40px;" /></td>
                                 <td><input type="number" id="bitLength" min="1" max="64" style="width: 40px;" /></td>
-                                <td><input type="text" id="expression" maxlength="32" style="width: 100px;" /></td>
+                                <td><input type="text" id="expression" maxlength="64" style="width: 100px;" /></td>
                                 <td><input type="number" id="cycle" min="100" max="1000" style="width: 50px;" /></td>
                                 <td><input id="add_row_button" name="add_row_button" type="button" onclick="addCANFLTRow()"
                                         value="Add ID" style="width: 70px;" /></td>
@@ -1923,8 +1923,8 @@ function loadAutoTable(jsonData) {
                     if (pidData.PID.length === 0 || pidData.PID.length >= 10) {
                         throw new Error("PID must not be empty and must be less than 10 characters");
                     }
-                    if (pidData.Expression.length === 0 || pidData.Expression.length >= 32) {
-                        throw new Error("Expression must not be empty and must be less than 32 characters");
+                    if (pidData.Expression.length === 0 || pidData.Expression.length >= 64) {
+                        throw new Error("Expression must not be empty and must be less than 64 characters");
                     }
                     if (!/^\d+$/.test(pidData.Period) || (parseInt(pidData.Period) < 100 && parseInt(pidData.Period) != 0)) {
                         throw new Error("Period must be a number greater than 100");
@@ -2932,8 +2932,8 @@ function loadAutoTable(jsonData) {
 			alert("Name must be between 1 and 16 characters in length.");
 			return;
 		}
-		if(expression.length < 1 || expression.length > 32) {
-			alert("Expression must be between 1 and 32 characters in length.");
+		if(expression.length < 1 || expression.length > 64) {
+			alert("Expression must be between 1 and 64 characters in length.");
 			return;
 		}
 		if(isNaN(pid) || pid < -1 || pid > 255) {
