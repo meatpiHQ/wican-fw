@@ -14,6 +14,18 @@
              }
           ]
        }
-    ]
+    ],
+      {
+            "pid":"22DD011",
+          "pid_init":"ATCP1D;ATCRA1EC6EE80;ATFCSH1DD01637;",
+          "parameters":[
+             {
+                "class":"distance",
+                "expression":"([B4:B7])/256",
+                "name":"Odometer",
+                "unit":"km"
+             }
+          ]
+      }
  }
  
