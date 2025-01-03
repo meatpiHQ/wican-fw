@@ -1,5 +1,5 @@
 {
-    "car_model":"Volvo: XC40",
+    "car_model":"Volvo: XC40 BEV",
     "init":"ATST96;ATSP7;",
     "pids":[
        {
@@ -9,7 +9,7 @@
              {
                 "class":"battery",
                 "expression":"(B4*0.6554)-0.08",
-                "name":"soc",
+                "name":"SoC",
                 "unit":"%"
              }
           ]
