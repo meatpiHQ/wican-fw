@@ -1,0 +1,20 @@
+{
+	"car_model": "Zeekr: 001",
+	"init": "ATST64;",
+	"pids": [
+		{
+			"pid": "2248011",
+			"pid_init": "ATSP7;ATSHD01635;ATCP1D;ATCRA1EC6AE80;ATFCSH1DD01635;ATFCSD300000;ATFCSM1;",
+			"parameters": [
+                {
+					"name": "SoC",
+					"expression": "([B4:B5]/470)-(150/47)",
+					"unit": "%",
+					"class": "battery",
+					"min": 0,
+					"max": 100
+				}
+			]
+		}
+	]
+}
