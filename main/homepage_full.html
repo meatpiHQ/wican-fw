@@ -1496,7 +1496,7 @@ function addCollapsibleRow(rowData = {}) {
 
     const toggleCollapse = (e) => {
         e.stopPropagation();
-        const isHidden = content.style.display === 'none';
+        const isHidden = content.style.display === 'none' || getComputedStyle(content).display === 'none';
         content.style.display = isHidden ? 'block' : 'none';
         collapseBtn.textContent = isHidden ? '▲' : '▼';
     };
