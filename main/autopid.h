@@ -21,8 +21,8 @@
 #ifndef __AUTO_PID_H__
 #define __AUTO_PID_H__
 
-#define BUFFER_SIZE 256
-#define QUEUE_SIZE 20
+#define BUFFER_SIZE 1024
+#define QUEUE_SIZE 10
 
 
 typedef struct {
