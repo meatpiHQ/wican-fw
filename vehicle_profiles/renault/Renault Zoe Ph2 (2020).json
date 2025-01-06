@@ -10,7 +10,7 @@
 							"pid_init": "",
 							"expression": "[B4:B6]",
 							"unit": "km",
-							"class": "none"
+							"class": "distance"
 						}
 					]
 				},

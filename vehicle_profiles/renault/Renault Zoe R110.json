@@ -28,10 +28,10 @@
             "pid": "223451",
             "parameters": [
                 {
-                    "name": "GoM",
+                    "name": "Range",
                     "expression": "[B4:B5]",
                     "unit": "km",
-                    "class": "none"
+                    "class": "distance"
                 }
             ]
         },
@@ -42,7 +42,7 @@
                     "name": "Odometer",
                     "expression": "[B4:B6]",
                     "unit": "km",
-                    "class": "none"
+                    "class": "distance"
                 }
             ]
         }
