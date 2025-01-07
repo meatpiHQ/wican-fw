@@ -1,0 +1,32 @@
+---
+title: Car Scanner Setup
+---
+
+## How to Export Car Scanner Logs
+
+Logs can be useful if you are looking for specific sensor data and plan to automate WiCAN to capture this data automatically.
+
+### Steps to Export Logs:
+1. **[Set up Car Scanner](https://meatpihq.github.io/wican-fw/car_scanner/usage)**:
+   - Ensure that Car Scanner is correctly configured and connected to WiCAN.
+
+2. **Connect to WiCAN**:
+   - Follow the standard connection procedure outlined earlier.
+
+3. **Access Sensor Data**:
+   - Once connected, press **All Sensors** to view the available sensors.
+
+4. **Select the Sensor of Interest**:
+   - Tap on the sensor you wish to log data from.
+
+5. **Log Data**:
+   - Let the app log data for a few seconds to capture sufficient readings.
+
+6. **Preserve the Last Reading**:
+   - Immediately remove WiCAN from the OBD-II port after logging.  
+     This ensures that the last recorded data corresponds to the required sensor.
+
+7. **Export Logs**:
+   - Navigate to **Settings -> Adapter OBDII ELM327**, scroll to the bottom, and press **Export Logs**.
+
+The exported logs will contain the recorded data for further analysis or automation with WiCAN.
