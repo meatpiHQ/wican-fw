@@ -32,7 +32,7 @@ You have two options to establish a connection:
 
 ### 4. Configure the Adapter in Car Scanner
 1. Open the Car Scanner app and navigate to:  
-   **Settings -> Adapter -> OBDII ELM327 -> WiFi**.
+   **Settings -> Adapter OBDII ELM327 -> WiFi**.
 2. Fill in the adapter's IP and port:
    - **If connected to your local Wi-Fi network:** Use the assigned IP address.
    - **If connected to the WiCAN Access Point:** Use the default IP `192.168.80.1`.
