@@ -30,3 +30,5 @@ Logs can be useful if you are looking for specific sensor data and plan to autom
    - Navigate to **Settings -> Adapter OBDII ELM327**, scroll to the bottom, and press **Export Logs**.
 
 The exported logs will contain the recorded data for further analysis or automation with WiCAN.
+
+![image](/car_scanner/car_scanner_export.png)
