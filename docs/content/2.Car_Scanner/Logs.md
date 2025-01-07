@@ -1,5 +1,5 @@
 ---
-title: Car Scanner Setup
+title: Car Scanner Logs
 ---
 
 ## How to Export Car Scanner Logs
