@@ -489,18 +489,24 @@ void autopid_data_publish(void) {
                     }
                 }
             }
-            limitJsonDecimalPrecision(root);
-            char *json_str = cJSON_PrintUnformatted(root);
-            if (json_str) {
-                if(all_pids->group_destination && strlen(all_pids->group_destination) > 0)
-                {
-                    mqtt_publish(all_pids->group_destination, json_str, 0, 0, 1);
-                    ESP_LOGI(TAG, "Published to %s", all_pids->group_destination);
-                }else{
-                    mqtt_publish(config_server_get_mqtt_rx_topic(), json_str, 0, 0, 1);
+
+            if (root->child) {
+                limitJsonDecimalPrecision(root);
+                char *json_str = cJSON_PrintUnformatted(root);
+                if (json_str) {
+                    if(all_pids->group_destination && strlen(all_pids->group_destination) > 0)
+                    {
+                        mqtt_publish(all_pids->group_destination, json_str, 0, 0, 1);
+                        ESP_LOGI(TAG, "Published to %s", all_pids->group_destination);
+                    }else{
+                        mqtt_publish(config_server_get_mqtt_rx_topic(), json_str, 0, 0, 1);
+                    }
+                    free(json_str);
                 }
-                free(json_str);
+            } else {
+                ESP_LOGW(TAG, "No valid parameters found to publish");
             }
+
             cJSON_Delete(root);
         }
         xSemaphoreGive(all_pids->mutex);
