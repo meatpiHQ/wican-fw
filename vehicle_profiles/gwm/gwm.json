@@ -1,0 +1,20 @@
+{
+  "car_model": "GWM: Ora Good Cat/Funky Cat/ES11/Haomao/Ora 03",
+  "init": "ATSP6;ATAT1;",
+  "pids": [
+    {
+      "pid": "22D0621",
+      "pid_init": "ATSH78A;ATFCSH78A;ATFCSD300000;ATFCSM1;ATCRA7CA;",
+      "parameters": [
+        {
+          "name": "SoC",
+          "class": "battery",
+          "expression": "[B4:B5]/10",
+          "unit": "%",
+          "min": "-5",
+          "max": "105"
+        }
+      ]
+    }
+  ]
+}
