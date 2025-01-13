@@ -44,78 +44,41 @@
 #include "esp_ota_ops.h"
 #include "nvs.h"
 #include "nvs_flash.h"
-#include "driver/adc.h"
-#include "esp_adc_cal.h"
-// #include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
+#include "esp_adc/adc_oneshot.h"
 #include "sleep_mode.h"
 #include "ble.h"
 #include "esp_sleep.h"
 #include "lwip/sockets.h"
 #include "lwip/dns.h"
 #include "lwip/netdb.h"
-
 #include "esp_log.h"
 #include "mqtt_client.h"
 #include "ver.h"
+#include "math.h"
+
+#define TAG 			  __func__
+
+#define ADC_UNIT          ADC_UNIT_1
+#define ADC_CONV_MODE     ADC_CONV_SINGLE_UNIT_1
+#define ADC_ATTEN         ADC_ATTEN_DB_12  // 0-3.3V
+#define ADC_BIT_WIDTH     SOC_ADC_DIGI_MAX_BITWIDTH
+#define ADC_READ_LEN      256
 
 #define TIMES              256
-#define GET_UNIT(x)        ((x>>3) & 0x1)
-#define TAG 		__func__
-#if CONFIG_IDF_TARGET_ESP32
-#define ADC_RESULT_BYTE     2
-#define ADC_CONV_LIMIT_EN   1                       //For ESP32, this should always be set to 1
-#define ADC_CONV_MODE       ADC_CONV_SINGLE_UNIT_1  //ESP32 only supports ADC1 DMA mode
-#define ADC_OUTPUT_TYPE     ADC_DIGI_OUTPUT_FORMAT_TYPE1
-#elif CONFIG_IDF_TARGET_ESP32S2
-#define ADC_RESULT_BYTE     2
-#define ADC_CONV_LIMIT_EN   0
-#define ADC_CONV_MODE       ADC_CONV_BOTH_UNIT
-#define ADC_OUTPUT_TYPE     ADC_DIGI_OUTPUT_FORMAT_TYPE2
-#elif CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32H2 || CONFIG_IDF_TARGET_ESP32C2
-#define ADC_RESULT_BYTE     4
-#define ADC_CONV_LIMIT_EN   0
-#define ADC_CONV_MODE       ADC_CONV_ALTER_UNIT     //ESP32C3 only supports alter mode
-#define ADC_OUTPUT_TYPE     ADC_DIGI_OUTPUT_FORMAT_TYPE2
-#elif CONFIG_IDF_TARGET_ESP32S3
-#define ADC_RESULT_BYTE     4
-#define ADC_CONV_LIMIT_EN   0
-#define ADC_CONV_MODE       ADC_CONV_SINGLE_UNIT_1
-#define ADC_OUTPUT_TYPE     ADC_DIGI_OUTPUT_FORMAT_TYPE2
-#endif
-
-#if CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32H2 || CONFIG_IDF_TARGET_ESP32C2
-#if CONFIG_IDF_TARGET_ESP32C3
-static uint16_t adc1_chan_mask = BIT(4);
-static adc_channel_t channel[1] = {ADC1_CHANNEL_4};
-#else
-static uint16_t adc1_chan_mask = BIT(6);
-//static uint16_t adc2_chan_mask = BIT(0);
-static adc_channel_t channel[1] = {ADC1_CHANNEL_6};
-#endif
-#endif
-#if CONFIG_IDF_TARGET_ESP32S2
-static uint16_t adc1_chan_mask = BIT(2) | BIT(3);
-static uint16_t adc2_chan_mask = BIT(0);
-static adc_channel_t channel[3] = {ADC1_CHANNEL_2, ADC1_CHANNEL_3, (ADC2_CHANNEL_0 | 1 << 3)};
-#endif
-#if CONFIG_IDF_TARGET_ESP32
-static uint16_t adc1_chan_mask = BIT(7);
-static uint16_t adc2_chan_mask = 0;
-static adc_channel_t channel[1] = {ADC1_CHANNEL_7};
-#endif
-//#define THRESHOLD_VOLTAGE		13.0f
-// #define SLEEP_TIME_DELAY		(180*1000*1000)
 #define WAKEUP_TIME_DELAY		(200*1000)
-
-static EventGroupHandle_t s_mqtt_event_group = NULL;
 #define MQTT_CONNECTED_BIT 			BIT0
 #define PUB_SUCCESS_BIT     		BIT1
 
+static adc_channel_t voltage_adc_ch = ADC_CHANNEL_4;
+static bool calibrated = false;
+static EventGroupHandle_t s_mqtt_event_group = NULL;
 static float sleep_voltage = 13.1f;
 static uint8_t enable_sleep = 0;
 static QueueHandle_t voltage_queue = NULL;
-static esp_adc_cal_characteristics_t adc1_chars;
-
+adc_oneshot_unit_handle_t adc_handle;
+static adc_cali_handle_t adc1_cali_chan0_handle = NULL;
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
@@ -215,90 +178,150 @@ static void mqtt_init(void)
     }
 }
 
-
-static void continuous_adc_init(uint16_t adc1_chan_mask, uint16_t adc2_chan_mask, adc_channel_t *channel, uint8_t channel_num)
+static void calibration_init(void)
 {
-    adc_digi_init_config_t adc_dma_config = {
-        .max_store_buf_size = 1024,
-        .conv_num_each_intr = TIMES,
-        .adc1_chan_mask = adc1_chan_mask,
-//        .adc2_chan_mask = adc2_chan_mask,
+    esp_err_t ret = ESP_FAIL;
+
+#if ADC_CALI_SCHEME_CURVE_FITTING_SUPPORTED
+    ESP_LOGI(TAG, "calibration scheme version is %s", "Curve Fitting");
+    adc_cali_curve_fitting_config_t cali_config = {
+        .unit_id = ADC_UNIT,
+		.chan = voltage_adc_ch,
+        .atten = ADC_ATTEN,
+        .bitwidth = ADC_BIT_WIDTH,
     };
-    ESP_ERROR_CHECK(adc_digi_initialize(&adc_dma_config));
-
-    adc_digi_configuration_t dig_cfg = {
-        .conv_limit_en = ADC_CONV_LIMIT_EN,
-        .conv_limit_num = 250,
-        .sample_freq_hz = 10 * 1000,
-        .conv_mode = ADC_CONV_MODE,
-        .format = ADC_OUTPUT_TYPE,
-    };
-
-    adc_digi_pattern_config_t adc_pattern[SOC_ADC_PATT_LEN_MAX] = {0};
-    dig_cfg.pattern_num = channel_num;
-    for (int i = 0; i < channel_num; i++) {
-        uint8_t unit = GET_UNIT(channel[i]);
-        uint8_t ch = channel[i] & 0x7;
-        adc_pattern[i].atten = ADC_ATTEN_DB_11;
-        adc_pattern[i].channel = ch;
-        adc_pattern[i].unit = unit;
-        adc_pattern[i].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
-
-        ESP_LOGI(TAG, "adc_pattern[%d].atten is :%x", i, adc_pattern[i].atten);
-        ESP_LOGI(TAG, "adc_pattern[%d].channel is :%x", i, adc_pattern[i].channel);
-        ESP_LOGI(TAG, "adc_pattern[%d].unit is :%x", i, adc_pattern[i].unit);
+    ret = adc_cali_create_scheme_curve_fitting(&cali_config, &adc1_cali_chan0_handle);
+    if (ret == ESP_OK) {
+        calibrated = true;
     }
-    dig_cfg.adc_pattern = adc_pattern;
-    ESP_ERROR_CHECK(adc_digi_controller_configure(&dig_cfg));
-    esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_DEFAULT, 0, &adc1_chars);
-
-
-}
-
-//ADC Attenuation
-#define ADC_EXAMPLE_ATTEN           ADC_ATTEN_DB_11
-
-//ADC Calibration
-#if CONFIG_IDF_TARGET_ESP32
-#define ADC_EXAMPLE_CALI_SCHEME     ESP_ADC_CAL_VAL_EFUSE_VREF
-#elif CONFIG_IDF_TARGET_ESP32S2
-#define ADC_EXAMPLE_CALI_SCHEME     ESP_ADC_CAL_VAL_EFUSE_TP
-#elif CONFIG_IDF_TARGET_ESP32C3
-#define ADC_EXAMPLE_CALI_SCHEME     ESP_ADC_CAL_VAL_EFUSE_TP
-#elif CONFIG_IDF_TARGET_ESP32S3
-#define ADC_EXAMPLE_CALI_SCHEME     ESP_ADC_CAL_VAL_EFUSE_TP_FIT
 #endif
-static esp_adc_cal_characteristics_t adc1_chars;
-static bool adc_calibration_init(void)
-{
-    esp_err_t ret;
-    bool cali_enable = false;
 
-    ret = esp_adc_cal_check_efuse(ADC_EXAMPLE_CALI_SCHEME);
-    if (ret == ESP_ERR_NOT_SUPPORTED) {
-        ESP_LOGW(TAG, "Calibration scheme not supported, skip software calibration");
-    } else if (ret == ESP_ERR_INVALID_VERSION) {
-        ESP_LOGW(TAG, "eFuse not burnt, skip software calibration");
-    } else if (ret == ESP_OK) {
-        cali_enable = true;
-        esp_adc_cal_characterize(ADC_UNIT_1, ADC_EXAMPLE_ATTEN, ADC_WIDTH_BIT_DEFAULT, 0, &adc1_chars);
+#if ADC_CALI_SCHEME_LINE_FITTING_SUPPORTED
+    if (!calibrated) 
+	{
+        ESP_LOGI(TAG, "calibration scheme version is %s", "Line Fitting");
+        adc_cali_line_fitting_config_t cali_config = 
+		{
+            .unit_id = ADC_UNIT,
+            .atten = ADC_ATTEN,
+            .bitwidth = ADC_BIT_WIDTH,
+        };
+        ret = adc_cali_create_scheme_line_fitting(&cali_config, &cali_handle);
+        if (ret == ESP_OK) 
+		{
+            calibrated = true;
+        }
+    }
+#endif
+
+    if (calibrated) 
+	{
+        ESP_LOGI(TAG, "Calibration Success");
     } else {
-        ESP_LOGE(TAG, "Invalid arg");
+        ESP_LOGW(TAG, "Calibration Failed");
+    }
+}
+
+void oneshot_adc_init(void)
+{
+    // Initialize ADC
+    adc_oneshot_unit_init_cfg_t init_config = {
+        .unit_id = ADC_UNIT,
+        .ulp_mode = ADC_ULP_MODE_DISABLE,
+    };
+    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config, &adc_handle));
+
+    // Configure ADC channel
+    adc_oneshot_chan_cfg_t config = {
+        .atten = ADC_ATTEN,
+        .bitwidth = ADC_BIT_WIDTH,
+    };
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, voltage_adc_ch, &config));
+
+    ESP_LOGI(TAG, "ADC channel: %d, Attenuation: %d", voltage_adc_ch, ADC_ATTEN);
+
+    calibration_init();
+}
+
+esp_err_t read_ss_adc_voltage(float *voltage_out)
+{
+    if (voltage_out == NULL) {
+        return ESP_ERR_INVALID_ARG;
     }
 
-    return cali_enable;
-}
+    const int NUM_SAMPLES = 8; // Similar to conv_frame_size in continuous version
+    uint32_t sum_raw = 0;
+    uint32_t valid_samples = 0;
+    uint32_t min_raw = UINT32_MAX;
+    uint32_t max_raw = 0;
+    int sum_voltage = 0;
 
-#if !CONFIG_IDF_TARGET_ESP32
-static bool check_valid_data(const adc_digi_output_data_t *data)
-{
-    const unsigned int unit = data->type2.unit;
-    if (unit > 2) return false;
-    if (data->type2.channel >= SOC_ADC_CHANNEL_NUM(unit)) return false;
+    // Take multiple readings
+    for (int i = 0; i < NUM_SAMPLES; i++)
+	{
+        int raw_value;
+        esp_err_t ret = adc_oneshot_read(adc_handle, voltage_adc_ch, &raw_value);
+        
+        if (ret == ESP_OK && raw_value < 4096) {
+            int voltage = 0;
+            
+            // Convert raw to voltage using calibration
+            if (calibrated)
+			{
+                ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_chan0_handle, raw_value, &voltage));
+            }
+			else
+			{
+                voltage = (raw_value * 3300) / 4095;
+            }
+            
+            sum_raw += raw_value;
+            sum_voltage += voltage;
+            valid_samples++;
+            
+            if (raw_value < min_raw) min_raw = raw_value;
+            if (raw_value > max_raw) max_raw = raw_value;
+            
+            // Print first few samples for debugging
+            if (valid_samples <= 5)
+			{
+                ESP_LOGI(TAG, "Sample[%d]: Chan=%d, Raw=%d, Voltage=%dmV", 
+                        (int)valid_samples, voltage_adc_ch, raw_value, voltage);
+            }
+            
+            // Small delay between readings
+            vTaskDelay(pdMS_TO_TICKS(1));
+        }
+    }
 
-    return true;
+    // Calculate averages
+    if (valid_samples > 0)
+	{
+        int avg_raw = sum_raw / valid_samples;
+        int avg_voltage = sum_voltage / valid_samples;
+        float volt_rounded = 0;
+        
+    	if(project_hardware_rev == WICAN_V300)
+    	{
+    		volt_rounded = (avg_voltage*116)/(16*1000.0f);
+    	}
+    	else if(project_hardware_rev == WICAN_USB_V100)
+    	{
+    		volt_rounded = (avg_voltage*106.49f)/(6.49f*1000.0f);
+    	}
+
+        volt_rounded = roundf(volt_rounded * 10.0f) / 10.0f;
+        *voltage_out = volt_rounded;
+        
+        ESP_LOGI(TAG, "Summary: Raw=%d (min=%lu, max=%lu, avg of %lu), Voltage=%.2f V [%s]", 
+                 avg_raw, min_raw, max_raw, valid_samples, *voltage_out,
+                 calibrated ? "CALIBRATED" : "UNCALIBRATED");
+                 
+        return ESP_OK;
+    }
+    
+    return ESP_ERR_INVALID_STATE;  // No valid samples
 }
-#endif
 
 #define RUN_STATE			0
 #define	SLEEP_DETECTED		1
@@ -308,8 +331,6 @@ static bool check_valid_data(const adc_digi_output_data_t *data)
 static void adc_task(void *pvParameters)
 {
     esp_err_t ret;
-    uint32_t ret_num = 0;
-    uint8_t result[TIMES] = {0};
     static uint8_t sleep_state = 0;
     static int64_t sleep_detect_time = 0;
     static int64_t wakeup_detect_time = 0;
@@ -319,7 +340,6 @@ static void adc_task(void *pvParameters)
 	uint64_t sleep_time = 0;
     alert_time = config_server_get_alert_time();
     alert_time *= (3600000000);
-//    alert_time = 10000000;
     ESP_LOGW(TAG, "%" PRIu64 "\n", alert_time);
 
     if(config_server_get_alert_volt(&alert_voltage) != -1)
@@ -327,10 +347,7 @@ static void adc_task(void *pvParameters)
     	alert_voltage = 16.0f;
     }
 
-    memset(result, 0xcc, TIMES);
-    adc_calibration_init();
-    continuous_adc_init(adc1_chan_mask, adc1_chan_mask, channel, sizeof(channel) / sizeof(adc_channel_t));
-    adc_digi_start();
+    oneshot_adc_init();
 
 	if(config_server_get_sleep_time((uint32_t*)&sleep_time) == -1)
 	{
@@ -340,80 +357,16 @@ static void adc_task(void *pvParameters)
 
     while(1)
     {
-    	uint32_t count = 0;
-    	uint64_t avg = 0;
-    	uint32_t adc_val = 0;
-    	for(int j = 0; j < 10; j++)
-    	{
-			ret = adc_digi_read_bytes(result, TIMES, &ret_num, ADC_MAX_DELAY);
-			if (ret == ESP_OK || ret == ESP_ERR_INVALID_STATE)
-			{
-				if (ret == ESP_ERR_INVALID_STATE)
-				{
-					/**
-					 * @note 1
-					 * Issue:
-					 * As an example, we simply print the result out, which is super slow. Therefore the conversion is too
-					 * fast for the task to handle. In this condition, some conversion results lost.
-					 *
-					 * Reason:
-					 * When this error occurs, you will usually see the task watchdog timeout issue also.
-					 * Because the conversion is too fast, whereas the task calling `adc_digi_read_bytes` is slow.
-					 * So `adc_digi_read_bytes` will hardly block. Therefore Idle Task hardly has chance to run. In this
-					 * example, we add a `vTaskDelay(1)` below, to prevent the task watchdog timeout.
-					 *
-					 * Solution:
-					 * Either decrease the conversion speed, or increase the frequency you call `adc_digi_read_bytes`
-					 */
-				}
+		float battery_voltage;
 
-	//            ESP_LOGI("TASK:", "ret is %x, ret_num is %d", ret, ret_num);
-				count = 0;
-				avg = 0;
-				for (int i = 0; i < ret_num; i += ADC_RESULT_BYTE)
-				{
-					adc_digi_output_data_t *p = (void*)&result[i];
-
-					if (ADC_CONV_MODE == ADC_CONV_SINGLE_UNIT_1 || ADC_CONV_MODE == ADC_CONV_ALTER_UNIT)
-					{
-						if (check_valid_data(p))
-						{
-							count++;
-							avg += (esp_adc_cal_raw_to_voltage(p->type2.data, &adc1_chars));
-	//                        ESP_LOGI(TAG, "Unit: %d,_Channel: %d, Value: %d", p->type2.unit+1, p->type2.channel, p->type2.data);
-						}
-						else
-						{
-							// abort();
-							ESP_LOGI(TAG, "Invalid data [%d_%d_%x]", p->type2.unit+1, p->type2.channel, p->type2.data);
-						}
-					}
-				}
-				//See `note 1`
-//				ESP_LOGI(TAG, "value: %u",(uint32_t)(avg/count));
-				vTaskDelay(10);
-			}
-			else if (ret == ESP_ERR_TIMEOUT)
-			{
-				/**
-				 * ``ESP_ERR_TIMEOUT``: If ADC conversion is not finished until Timeout, you'll get this return error.
-				 * Here we set Timeout ``portMAX_DELAY``, so you'll never reach this branch.
-				 */
-				ESP_LOGW(TAG, "No data, increase timeout or reduce conv_num_each_intr");
-				vTaskDelay(2000);
-			}
-    	}
-    	adc_val = (uint32_t)(avg/count);
-    	float battery_voltage;
-
-    	if(project_hardware_rev == WICAN_V300)
-    	{
-    		battery_voltage = (adc_val*116)/(16*1000.0f);
-    	}
-    	else if(project_hardware_rev == WICAN_USB_V100)
-    	{
-    		battery_voltage = (adc_val*106.49f)/(6.49f*1000.0f);
-    	}
+    	ret = read_ss_adc_voltage(&battery_voltage);
+		if(ret != ESP_OK)
+		{
+			ESP_LOGE(TAG, "read_ss_adc_voltage error");
+			vTaskDelay(pdMS_TO_TICKS(1000));
+			continue;
+		}
+    	
     	battery_voltage += 0.2;
     	if(project_hardware_rev == WICAN_V210)
     	{
@@ -429,7 +382,7 @@ static void adc_task(void *pvParameters)
 				{
 					if(battery_voltage < sleep_voltage)
 					{
-						ESP_LOGI(TAG, "low voltage, value: %lu, voltage: %f",adc_val, battery_voltage);
+						ESP_LOGI(TAG, "low voltage: %f", battery_voltage);
 						sleep_detect_time = esp_timer_get_time();
 						sleep_state++;
 					}
@@ -439,7 +392,7 @@ static void adc_task(void *pvParameters)
 				{
 					if(battery_voltage > sleep_voltage)
 					{
-						ESP_LOGI(TAG, "low voltage, value: %lu, voltage: %f",adc_val, battery_voltage);
+						ESP_LOGI(TAG, "high voltage: %f", battery_voltage);
 						sleep_state = RUN_STATE;
 					}
 
@@ -458,7 +411,7 @@ static void adc_task(void *pvParameters)
 					if(battery_voltage > sleep_voltage)
 					{
 						wakeup_detect_time = esp_timer_get_time();
-						ESP_LOGI(TAG, "low voltage, value: %lu, voltage: %f",adc_val, battery_voltage);
+						ESP_LOGI(TAG, "wake up, voltage: %f", battery_voltage);
 						sleep_state = WAKEUP_STATE;
 					}
 
@@ -544,10 +497,6 @@ static void adc_task(void *pvParameters)
     		vTaskDelay(pdMS_TO_TICKS(1000));
     	}
     }
-
-    adc_digi_stop();
-    ret = adc_digi_deinitialize();
-    assert(ret == ESP_OK);
 }
 
 int8_t sleep_mode_get_voltage(float *val)
