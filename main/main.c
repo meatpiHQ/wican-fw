@@ -510,6 +510,16 @@ void app_main(void)
 	gpio_set_direction(CAN_STDBY_GPIO_NUM, GPIO_MODE_OUTPUT);
 	gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
 
+    gpio_reset_pin(OBD_LED_EN_PIN);
+    gpio_set_direction(OBD_LED_EN_PIN, GPIO_MODE_OUTPUT);
+    gpio_set_level(OBD_LED_EN_PIN, 1);
+
+    gpio_reset_pin(OBD_RESET_PIN);
+    gpio_set_direction(OBD_RESET_PIN, GPIO_MODE_OUTPUT_OD);
+    gpio_set_level(OBD_RESET_PIN, 1);
+
+	gpio_reset_pin(OBD_READY_PIN);
+	gpio_set_direction(OBD_READY_PIN, GPIO_MODE_INPUT);
 	// gpio_reset_pin(USB_ESP_MODE_EN);
 	// gpio_set_direction(USB_ESP_MODE_EN, GPIO_MODE_OUTPUT);
 	// gpio_set_level(USB_ESP_MODE_EN, 1);
@@ -587,6 +597,30 @@ void app_main(void)
 	#else
 		config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, 0, (char*)&uid[0]);
 	#endif
+
+	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
+	if(config_server_get_sleep_config())
+	{
+		float sleep_voltage = 0;
+
+		if(config_server_get_sleep_volt(&sleep_voltage) != -1)
+		{
+			sleep_mode_init(1, sleep_voltage);
+		}
+		else
+		{
+			sleep_mode_init(0, 13.1f);
+		}
+	}
+	else
+	{
+		sleep_mode_init(0, 13.1f);
+	}
+	#elif HARDWARE_VER == WICAN_PRO
+	sleep_mode_init();
+	#endif
+
+
 	slcan_init(&send_to_host);
 
 	int8_t can_datarate = config_server_get_can_rate();
@@ -799,30 +833,6 @@ void app_main(void)
     xTaskCreate(can_rx_task, "can_rx_task", 1024*3, (void*)AF_INET, 5, NULL);
     xTaskCreate(can_tx_task, "can_tx_task", 1024*3, (void*)AF_INET, 5, NULL);
 
-
-	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
-	if(config_server_get_sleep_config())
-	{
-		float sleep_voltage = 0;
-
-		if(config_server_get_sleep_volt(&sleep_voltage) != -1)
-		{
-			sleep_mode_init(1, sleep_voltage);
-		}
-		else
-		{
-			sleep_mode_init(0, 13.1f);
-		}
-	}
-	else
-	{
-		sleep_mode_init(0, 13.1f);
-	}
-	#elif HARDWARE_VER == WICAN_PRO
-	sleep_mode_init();
-	#endif
-
-
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
 	#elif HARDWARE_VER == WICAN_PRO
@@ -842,5 +852,6 @@ void app_main(void)
 	// pdFALSE, /* Don't wait for both bits, either bit will do. */
 	// portMAX_DELAY);/* Wait forever. */ 
 	esp_log_level_set("*", ESP_LOG_NONE);
+	// esp_log_level_set("light_sleep_task", ESP_LOG_INFO);
 }
 
