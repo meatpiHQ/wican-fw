@@ -32,6 +32,9 @@
 #define SDCARD_D2                   12
 #define SDCARD_D3                   48
 
+#define OBD_RESET_PIN           (GPIO_NUM_41)
+#define OBD_LED_EN_PIN          (GPIO_NUM_42)
+#define OBD_READY_PIN           (GPIO_NUM_7)    // High = Active, Low = Sleep
 // #define CONNECTED_LED_GPIO_NUM		41  //NC pin
 // #define ACTIVE_LED_GPIO_NUM			41  //NC pin
 // #define BLE_EN_PIN_NUM				42  //NC pin
