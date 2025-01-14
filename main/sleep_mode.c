@@ -604,8 +604,7 @@ int8_t sleep_mode_init(uint8_t enable, float sleep_volt)
 
 #define TAG			 __func__
 
-static uint8_t result[ADC_READ_LEN] = {0};
-static adc_continuous_handle_t handle = NULL;
+static adc_oneshot_unit_handle_t adc_handle;
 static adc_cali_handle_t cali_handle = NULL;
 static bool do_calibration = false;
 static QueueHandle_t voltage_queue = NULL;
@@ -663,14 +662,14 @@ void oneshot_adc_init(void)
         .unit_id = ADC_UNIT,
         .ulp_mode = ADC_ULP_MODE_DISABLE,
     };
-    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config, &handle));
+    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config, &adc_handle));
 
     // Configure ADC channel
     adc_oneshot_chan_cfg_t config = {
         .atten = ADC_ATTEN,
         .bitwidth = ADC_BIT_WIDTH,
     };
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(handle, ADC_CHANNEL_3, &config));
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, ADC_CHANNEL_3, &config));
 
     ESP_LOGI(TAG, "ADC channel: %d, Attenuation: %d", ADC_CHANNEL_3, ADC_ATTEN);
 
@@ -694,7 +693,7 @@ esp_err_t read_ss_adc_voltage(float *voltage_out)
     // Take multiple readings
     for (int i = 0; i < NUM_SAMPLES; i++) {
         int raw_value;
-        esp_err_t ret = adc_oneshot_read(handle, ADC_CHANNEL_3, &raw_value);
+        esp_err_t ret = adc_oneshot_read(adc_handle, ADC_CHANNEL_3, &raw_value);
         
         if (ret == ESP_OK && raw_value < 4096) {
             int voltage = 0;
@@ -763,7 +762,7 @@ void enter_deep_sleep(void)
     ESP_LOGI(TAG, "Entering deep sleep");
     configure_wakeup_sources();
     
-    adc_continuous_stop(handle);
+    adc_continuous_stop(adc_handle);
     
 	if(gpio_get_level(OBD_READY_PIN) == 1)
 	{
@@ -886,6 +885,11 @@ void light_sleep_task(void *pvParameters)
                         wifi_network_deinit();
                         ble_disable();
                         led_set_level(0,0,0);
+                        // Update immediately to prevenet elm327 wakeup 
+                        state_info.state = current_state;
+                        state_info.voltage = battery_voltage;
+                        xQueueOverwrite(sleep_state_queue, &state_info);
+                        vTaskDelay(pdMS_TO_TICKS(1000));
                     }
                     break;
 
@@ -934,6 +938,10 @@ void light_sleep_task(void *pvParameters)
             esp_sleep_enable_timer_wakeup(2*1000000);
             esp_light_sleep_start();
             ESP_LOGW(TAG, "Wakeup...");
+            if(gpio_get_level(OBD_READY_PIN) == 0)
+            {
+                esp_restart();
+            }
             // adc_continuous_start(handle);
         }
         if(current_state != STATE_SLEEPING)
