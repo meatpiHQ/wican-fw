@@ -1298,6 +1298,7 @@ void elm327_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q), QueueH
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "led.h"
+#include "hw_config.h"
 
 /* Defines and Constants */
 #define BUF_SIZE (1024)
@@ -2301,17 +2302,6 @@ void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame,
 
     elm327_cmd_queue = xQueueCreate(ELM327_CMD_QUEUE_SIZE, sizeof(elm327_commands_t));
 
-    gpio_reset_pin(OBD_LED_EN_PIN);
-    gpio_set_direction(OBD_LED_EN_PIN, GPIO_MODE_OUTPUT);
-    gpio_set_level(OBD_LED_EN_PIN, 1);
-
-    gpio_reset_pin(OBD_RESET_PIN);
-    gpio_set_direction(OBD_RESET_PIN, GPIO_MODE_OUTPUT_OD);
-    gpio_set_level(OBD_RESET_PIN, 1);
-
-	gpio_reset_pin(OBD_READY_PIN);
-	gpio_set_direction(OBD_READY_PIN, GPIO_MODE_INPUT);
-	
 	xuart1_semaphore = xSemaphoreCreateMutex();
 	
     uart_config_t uart1_config = 
