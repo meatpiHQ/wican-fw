@@ -23,9 +23,7 @@
 #define OBD_QUEUE_SIZE          (5)
 #define OBD_DATA_BUF_SIZE       (512)
 #define OBD_CMD_BUF_SIZE        (512)
-#define OBD_RESET_PIN           (GPIO_NUM_41)
-#define OBD_LED_EN_PIN          (GPIO_NUM_42)
-#define OBD_READY_PIN           (GPIO_NUM_7)    // High = Active, Low = Sleep
+
 
 typedef struct {
     char rsp_data[OBD_DATA_BUF_SIZE];  // Adjust the size of the buffer as needed
