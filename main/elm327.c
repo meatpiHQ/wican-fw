@@ -1739,20 +1739,23 @@ void elm327_hardreset_chip(void)
     uint32_t rsp_len;
 	if (xSemaphoreTake(xuart1_semaphore, portMAX_DELAY) == pdTRUE)
 	{
+		uart_flush_input(UART_NUM_1);
+		xQueueReset(uart1_queue);
 		if(gpio_get_level(OBD_READY_PIN) == 1)
 		{
 			gpio_set_level(OBD_RESET_PIN, 0);
-			vTaskDelay(pdMS_TO_TICKS(1));
+			vTaskDelay(pdMS_TO_TICKS(5));
 			gpio_set_level(OBD_RESET_PIN, 1);
 		}
 		else
 		{
 			uart_write_bytes(UART_NUM_1, "ATZ\r", strlen("ATZ\r"));
 		}
-
+		memset(rsp_buffer, 0, sizeof(rsp_buffer));
         int len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS+300);
 		if(len > 0)
 		{
+			ESP_LOG_BUFFER_CHAR(TAG, rsp_buffer, len);
 			ESP_LOGW(TAG, "Hardreset OK");
 		}
 		else
