@@ -39,6 +39,7 @@
 #include "driver/uart.h"
 #include "obd.h"
 #include "sleep_mode.h"
+#include "types.h"
 
 #define TAG 		__func__
 
@@ -50,12 +51,12 @@
 #define SERVICE_09			0x09
 #define SERVICE_UNKNOWN		0xFF
 
-static QueueHandle_t *can_rx_queue = NULL;
-void (*elm327_response)(char*, uint32_t, QueueHandle_t *q);
+static QueueHandle_t *xqueue_elm327_uart_rx = NULL;
+
 void (*elm327_can_log)(twai_message_t* frame, uint8_t type);
 
 #if HARDWARE_VER != WICAN_PRO
-
+void (*elm327_response)(char*, uint32_t, QueueHandle_t *q);
 uint8_t service_09_rsp_len[] = {1, 1, 4, 1, 255, 1, 255, 1, 1, 1, 4, 1}; //255 unknow
 const char *ok_str = "OK";
 const char *question_mark_str = "?";
@@ -1334,7 +1335,7 @@ typedef struct {
 
 static device_status_t device_status = {0};
 static firmware_info_t fw_info = {0};
-
+response_callback_t elm327_response;
 
 /* Type Definitions */
 typedef struct 
@@ -1419,6 +1420,13 @@ int8_t elm327_process_cmd(uint8_t *cmd, uint8_t len, QueueHandle_t *q,
     return 0;
 }
 
+void elm327_send_cmd(uint8_t* cmd, uint32_t cmd_len)
+{
+	xSemaphoreTake(xuart1_semaphore, portMAX_DELAY);
+	ESP_LOG_BUFFER_HEXDUMP(TAG, (char*)cmd, strlen((char*)cmd), ESP_LOG_INFO);
+	uart_write_bytes(UART_NUM_1, cmd, cmd_len);
+	xSemaphoreGive(xuart1_semaphore);
+}
 
 static void uart1_event_task(void *pvParameters)
 {
@@ -2295,11 +2303,61 @@ esp_err_t elm327_update_obd_from_file(const char* filename)
     return ret;
 }
 
-void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame, uint8_t type))
+void elm327_read_task(void *pvParameters)
 {
-    can_rx_queue = rx_queue;
-    elm327_can_log = can_log;
+    uart_event_t event;
+	static xdev_buffer dtmp;
+    // uint8_t* dtmp = (uint8_t*) malloc(UART_BUF_SIZE);
+    
+    while(1) 
+    {
+        if(xQueuePeek(uart1_queue, (void *)&event, portMAX_DELAY)) 
+        {
+			xSemaphoreTake(xuart1_semaphore, portMAX_DELAY);
+            bzero(dtmp.ucElement, sizeof(dtmp.ucElement));
+			if(xQueueReceive(uart1_queue, (void *)&event, portMAX_DELAY) == pdTRUE) 
+			{
+				switch(event.type) 
+				{
+					case UART_DATA:
+						uart_read_bytes(UART_NUM_1, dtmp.ucElement, event.size, portMAX_DELAY);
+						
+						if(elm327_response != NULL)
+						{
+							ESP_LOG_BUFFER_HEXDUMP(TAG, (char*)dtmp.ucElement, event.size, ESP_LOG_INFO);
+							dtmp.usLen = event.size;
+							// ESP_LOG_BUFFER_CHAR(TAG, (char*)dtmp, event.size);
+							elm327_response((char*)dtmp.ucElement, 
+													event.size, 
+													xqueue_elm327_uart_rx, 
+													NULL);
+						}
+						break;
+					case UART_FIFO_OVF:
+						uart_flush_input(UART_NUM_1);
+						xQueueReset(uart1_queue);
+						break;
+					case UART_BUFFER_FULL:
+						uart_flush_input(UART_NUM_1);
+						xQueueReset(uart1_queue);
+						break;
+					default:
+						break;
+				}
+			}
+			xSemaphoreGive(xuart1_semaphore);
+        }
+    }
+    
+    vTaskDelete(NULL);
+}
 
+
+void elm327_init(response_callback_t rsp_callback, QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame, uint8_t type))
+{
+    xqueue_elm327_uart_rx = rx_queue;
+    elm327_can_log = can_log;
+	elm327_response = rsp_callback;
     elm327_cmd_queue = xQueueCreate(ELM327_CMD_QUEUE_SIZE, sizeof(elm327_commands_t));
 
 	xuart1_semaphore = xSemaphoreCreateMutex();
@@ -2349,6 +2407,8 @@ void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame,
     obd_init();
 
     xTaskCreate(uart1_event_task, "uart1_event_task", 2048*2, NULL, 12, NULL);
+	xTaskCreate(elm327_read_task, "elm327_read_task", 2048*2, NULL, 12, NULL);
+ 
 }
 
 #endif
