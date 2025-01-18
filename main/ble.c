@@ -50,6 +50,33 @@
 #include "config_server.h"
 #include "wifi_network.h"
 
+#define ADV_CONFIG_FLAG                           (1 << 0)
+#define SCAN_RSP_CONFIG_FLAG                      (1 << 1)
+#define GATTS_TABLE_TAG "BLE"
+
+#define SPP_PROFILE_NUM             1
+#define SPP_PROFILE_APP_IDX         0
+#define ESP_SPP_APP_ID              0x56
+// #define HEART_RATE_SVC_INST_ID                    0
+// #define EXT_ADV_HANDLE                            0
+// #define NUM_EXT_ADV_SET                           1
+// #define EXT_ADV_DURATION                          0
+// #define EXT_ADV_MAX_EVENTS                        0
+
+#define GATTS_DEMO_CHAR_VAL_LEN_MAX               0x40
+#define BLE_SEND_BUF_SIZE                         490
+
+#define BLE_CONNECTED_BIT 			BIT0
+#define BLE_CONGEST_BIT				BIT1
+
+#define CHAR_DECLARATION_SIZE       (sizeof(uint8_t))
+#define SVC_INST_ID         
+
+// Service Instance IDs
+#define DEV_INFO_SVC_INST_ID    0
+#define SSP_SVC_INST_ID         1
+#define FFF0_SVC_INST_ID        2
+
 enum {
     IDX_SVC_DEVICE_INFO,                     // 0
 
@@ -106,31 +133,27 @@ enum {
     FFF0_IDX_NB
 };
 
-#include <stdint.h>
-#include "esp_gatts_api.h"
-#include "esp_bt_defs.h"
-
 /* --- 1) Device Information Service UUIDs (0x180A) --- */
 static const uint16_t GATTS_SERVICE_UUID_DEVICE_INFO = 0x180A;
-static const uint16_t GATTS_CHAR_UUID_MANUFACTURER   = 0x2A29;  // "MCHP"
-static const uint16_t GATTS_CHAR_UUID_MODEL_NUMBER   = 0x2A24;  // "IS1678S152"
-static const uint16_t GATTS_CHAR_UUID_SERIAL_NUMBER  = 0x2A25;  // "000CBF3E0392"
-static const uint16_t GATTS_CHAR_UUID_HARDWARE_REV   = 0x2A27;  // "5056_SPP     "
-static const uint16_t GATTS_CHAR_UUID_FIRMWARE_REV   = 0x2A26;  // "0205012"
-static const uint16_t GATTS_CHAR_UUID_SOFTWARE_REV   = 0x2A28;  // "0000"
-static const uint16_t GATTS_CHAR_UUID_SYSTEM_ID      = 0x2A23;  // 8 bytes of 0
-static const uint16_t GATTS_CHAR_UUID_REG_CERT_DATA  = 0x2A2A;  // 8 bytes: 00 01 00 04 00 00 00 00
+static const uint16_t GATTS_CHAR_UUID_MANUFACTURER   = 0x2A29;  
+static const uint16_t GATTS_CHAR_UUID_MODEL_NUMBER   = 0x2A24; 
+static const uint16_t GATTS_CHAR_UUID_SERIAL_NUMBER  = 0x2A25;
+static const uint16_t GATTS_CHAR_UUID_HARDWARE_REV   = 0x2A27; 
+static const uint16_t GATTS_CHAR_UUID_FIRMWARE_REV   = 0x2A26; 
+static const uint16_t GATTS_CHAR_UUID_SOFTWARE_REV   = 0x2A28; 
+static const uint16_t GATTS_CHAR_UUID_SYSTEM_ID      = 0x2A23;  
+static const uint16_t GATTS_CHAR_UUID_REG_CERT_DATA  = 0x2A2A; 
 
-static const uint8_t manufacturer_name[]   = "MCHP";
-static const uint8_t model_number[]        = "IS1678S152";
-static const uint8_t serial_number[]       = "000CBF3E0392";
-static const uint8_t hardware_rev[]        = "5056_SPP     "; // with trailing spaces
-static const uint8_t firmware_rev[]        = "0205012";
-static const uint8_t software_rev[]        = "0000";
+static const uint8_t manufacturer_name[]   = "MEATPI.COM";
+static const uint8_t model_number[]        = "WiCAN-PRO";
+static uint8_t serial_number[32]       = "";
+static uint8_t hardware_rev[]        = "1_53         "; // with trailing spaces
+static uint8_t firmware_rev[]        = "400";
+static uint8_t software_rev[]        = "0000";
 
 // These two are typically 8-byte binary data (not human-readable strings)
 static const uint8_t system_id[8]          = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
-static const uint8_t reg_cert_data[8]      = {0x00,0x01,0x00,0x04,0x00,0x00,0x00,0x00};
+static const uint8_t reg_cert_data[8]      = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 
 
 /* --- 2) “SPP-like” Service UUIDs (49535343-fe7d-4ae5-8fa9-9fafd205e455) --- */
@@ -161,7 +184,6 @@ static const uint8_t spp_rw_char_value[9] = {
 // Typically we store CCCD as 2 bytes: {0x00, 0x00}
 static const uint8_t heart_measurement_ccc[2] = {0x00, 0x00};
 
-
 /* --- 3) Custom FFF0 Service (0000FFF0-0000-1000-8000-00805f9b34fb) --- */
 // 16-bit service: 0xFFF0
 static const uint16_t GATTS_SERVICE_UUID_FFF0 =             0xFFF0;
@@ -170,30 +192,6 @@ static const uint16_t GATTS_CHAR_UUID_FFF2 =                0xFFF2; // write + w
 
 static const uint8_t char_value_dummy[1] = {0x00};  // Just a placeholder value
 
-// Service UUIDs
-// static const uint16_t GATTS_SERVICE_UUID_CUSTOM = 0x18F0;
-// static const uint16_t GATTS_SERVICE_UUID_DEV_INFO = 0x180A;
-// static uint8_t GATTS_SERVICE_UUID_CUSTOM2[16] = {
-//     0xF2, 0xC3, 0xF0, 0xAE, 0xA9, 0xFA, 0x15, 0x8C,
-//     0x9D, 0x49, 0xAE, 0x73, 0x71, 0x0A, 0x81, 0xE7
-// };
-
-// // Characteristic UUIDs for Custom Service (18F0)
-// static const uint16_t GATTS_CHAR_UUID_NOTIFY = 0x2AF0;
-// static const uint16_t GATTS_CHAR_UUID_WRITE = 0x2AF1;
-
-// // Device Information Service Characteristic UUIDs
-// static const uint16_t GATTS_CHAR_UUID_MANUFACTURER = 0x2A29;
-// static const uint16_t GATTS_CHAR_UUID_MODEL = 0x2A24;
-// static const uint16_t GATTS_CHAR_UUID_SERIAL = 0x2A25;
-// static const uint16_t GATTS_CHAR_UUID_FW_REV = 0x2A26;
-// static const uint16_t GATTS_CHAR_UUID_HW_REV = 0x2A27;
-// static const uint16_t GATTS_CHAR_UUID_SW_REV = 0x2A28;
-// static const uint16_t GATTS_CHAR_UUID_SYSTEM_ID = 0x2A23;
-// static const uint16_t GATTS_CHAR_UUID_REG_CERT = 0x2A2A;
-// static const uint16_t GATTS_CHAR_UUID_PNP_ID = 0x2A50;
-
-// Custom Service 2 (E7810A71) Characteristic UUID
 static uint8_t GATTS_CHAR_UUID_CUSTOM2[16] = {
     0x9F, 0x9F, 0x00, 0xC1, 0x58, 0xBD, 0x32, 0xB6,
     0x9E, 0x4C, 0x21, 0x9C, 0xC9, 0xD6, 0xF8, 0xBE
@@ -205,9 +203,7 @@ static const uint16_t client_char_config_uuid      = ESP_GATT_UUID_CHAR_CLIENT_C
 
 static const uint8_t char_prop_read                = ESP_GATT_CHAR_PROP_BIT_READ;
 static const uint8_t char_prop_write               = ESP_GATT_CHAR_PROP_BIT_WRITE;
-// static const uint8_t char_prop_write_nr            = ESP_GATT_CHAR_PROP_BIT_WRITE_NR;
 static const uint8_t char_prop_notify              = ESP_GATT_CHAR_PROP_BIT_NOTIFY;
-// static const uint8_t char_prop_indicate            = ESP_GATT_CHAR_PROP_BIT_INDICATE;
 static const uint8_t char_prop_read_write          = ESP_GATT_CHAR_PROP_BIT_READ  |
                                                      ESP_GATT_CHAR_PROP_BIT_WRITE;
 static const uint8_t char_prop_notify_indicate     = ESP_GATT_CHAR_PROP_BIT_NOTIFY |
@@ -234,32 +230,16 @@ static esp_ble_adv_data_t adv_config = {
     .flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT),
 };
 
-#define ADV_CONFIG_FLAG                           (1 << 0)
-#define SCAN_RSP_CONFIG_FLAG                      (1 << 1)
 
 static uint8_t adv_config_done = 0;
-
-#define GATTS_TABLE_TAG "BLE"
-
-#define SPP_PROFILE_NUM             1
-#define SPP_PROFILE_APP_IDX         0
-#define ESP_SPP_APP_ID              0x56
-// #define HEART_RATE_SVC_INST_ID                    0
-// #define EXT_ADV_HANDLE                            0
-// #define NUM_EXT_ADV_SET                           1
-// #define EXT_ADV_DURATION                          0
-// #define EXT_ADV_MAX_EVENTS                        0
-
-#define GATTS_DEMO_CHAR_VAL_LEN_MAX               0x40
-#define BLE_SEND_BUF_SIZE                         490
-
 static uint8_t dev_name[32] = {0};
 static uint8_t manufacturer[]="MeatPi";
-
 static esp_bd_addr_t remote_bd_addr;
-
-// static uint16_t profile_handle_table[BLE_IDX_NB];
 TaskHandle_t xble_handle = NULL;
+static uint8_t conn_led = 0;
+static EventGroupHandle_t s_ble_event_group = NULL;
+
+
 //static uint8_t *ext_adv_raw_data;
 //static uint8_t ext_adv_raw_data[64] = {
 //        0x02, 0x01, 0x06,
@@ -287,21 +267,6 @@ static uint8_t sec_service_uuid[16] = {
 	0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0xe0, 0xfe, 0x00, 0x00,
 };
 
-// static esp_ble_adv_data_t heart_rate_adv_config = {
-//     .set_scan_rsp = false,
-//     .include_txpower = true,
-//     .min_interval = 0x0006, //slave connection min interval, Time = min_interval * 1.25 msec
-//     .max_interval = 0x0010, //slave connection max interval, Time = max_interval * 1.25 msec
-//     .appearance = 0x00,
-//     .manufacturer_len = 0, //TEST_MANUFACTURER_DATA_LEN,
-//     .p_manufacturer_data =  NULL, //&test_manufacturer[0],
-//     .service_data_len = 0,
-//     .p_service_data = NULL,
-//     .service_uuid_len = sizeof(sec_service_uuid),
-//     .p_service_uuid = sec_service_uuid,
-//     .flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT),
-// };
-
 // config scan response data
 static esp_ble_adv_data_t heart_rate_scan_rsp_config = {
     .set_scan_rsp = true,
@@ -310,10 +275,6 @@ static esp_ble_adv_data_t heart_rate_scan_rsp_config = {
     .p_manufacturer_data = manufacturer,
 };
 
-static uint8_t conn_led = 0;
-static EventGroupHandle_t s_ble_event_group = NULL;
-#define BLE_CONNECTED_BIT 			BIT0
-#define BLE_CONGEST_BIT				BIT1
 esp_ble_gap_ext_adv_params_t ext_adv_params_2M = {
     .type = ESP_BLE_GAP_SET_EXT_ADV_PROP_CONNECTABLE,
     .interval_min = 0x20,
@@ -355,29 +316,6 @@ static struct gatts_profile_inst spp_profile_tab[SPP_PROFILE_NUM] = {
 };
 
 static QueueHandle_t *xBle_TX_Queue = NULL, *xBle_RX_Queue = NULL;
-/* Service */
-//static const uint16_t GATTS_SERVICE_UUID_TEST      = 0x00FF;
-//static const uint16_t GATTS_CHAR_UUID_TEST_A       = 0xFF01;
-//static const uint16_t GATTS_CHAR_UUID_TEST_B       = 0xFF02;
-//static const uint16_t GATTS_CHAR_UUID_TEST_C       = 0xFF03;
-//66 33 22 11 BB 00 00 00 11 00 00 00 33 00 00 00 A4 3C D9 49
-// static const uint16_t GATTS_SERVICE_UUID_TEST      = 0xfee0;
-// static const uint16_t GATTS_CHAR_UUID_TEST_A       = 0xfee1;
-//static const uint16_t GATTS_CHAR_UUID_TEST_B       = 0xfee2;
-// static const uint16_t GATTS_CHAR_UUID_TEST_C       = 0xfee3;
-
-// static const uint16_t primary_service_uuid         = ESP_GATT_UUID_PRI_SERVICE;
-// static const uint16_t character_declaration_uuid   = ESP_GATT_UUID_CHAR_DECLARE;
-// static const uint16_t character_client_config_uuid = ESP_GATT_UUID_CHAR_CLIENT_CONFIG;
-//static const uint8_t char_prop_read                = ESP_GATT_CHAR_PROP_BIT_READ;
-//static const uint8_t char_prop_read_notify_ind         = ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_NOTIFY|ESP_GATT_CHAR_PROP_BIT_INDICATE;
-//static const uint8_t char_prop_write               = ESP_GATT_CHAR_PROP_BIT_WRITE;
-// static const uint8_t char_prop_read_write_notify   = ESP_GATT_CHAR_PROP_BIT_WRITE | ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_NOTIFY;
-//static const uint8_t char_prop_read_write   = ESP_GATT_CHAR_PROP_BIT_WRITE | ESP_GATT_CHAR_PROP_BIT_READ;
-// static const uint8_t heart_measurement_ccc[2]      = {0x00, 0x00};
-// static const uint8_t char_value[20]                 = {0x11, 0x22, 0x33, 0x44};
-#define CHAR_DECLARATION_SIZE       (sizeof(uint8_t))
-#define SVC_INST_ID                 0
 static uint16_t spp_mtu_size = 23;
 static uint16_t spp_conn_id = 0xffff;
 static esp_gatt_if_t spp_gatts_if = 0xff;
@@ -388,11 +326,7 @@ static uint16_t ble_max_data_size = 20;
 static bool is_connected = false;
 static uint8_t test1[] = {0x66 ,0x33 ,0x22 ,0x11 ,0xBB ,0x00 ,0x00 ,0x00 ,0x11 ,0x00 ,0x00 ,0x00 ,0x33 ,0x00 ,0x00 ,0x00 ,0xA4 ,0x3C ,0xD9 ,0x49};
 
-// Service Instance IDs
 
-#define DEV_INFO_SVC_INST_ID    0
-#define SSP_SVC_INST_ID         1
-#define FFF0_SVC_INST_ID        2
 
 // Handle tables for each service
 static uint16_t dev_info_profile_handle_table[DEVICE_INFO_IDX_NB];
@@ -580,10 +514,6 @@ static const esp_gatts_attr_db_t fff0_attr_db[FFF0_IDX_NB] = {
       ESP_GATT_PERM_WRITE,
       20, 0, NULL}},
 };
-
-
-
-
 
 static char *esp_key_type_to_str(esp_ble_key_type_t key_type)
 {
@@ -915,11 +845,11 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
 
             // const char *str = "\r\rELM327 v2.3\r\r>";
             // esp_ble_gatts_send_indicate(spp_gatts_if, param->write.conn_id, custom2_profile_handle_table[IDX_CHAR_VAL_CUSTOM2],strlen(str), (uint8_t *)str, false);
-            esp_ble_gap_set_prefer_conn_params(remote_bd_addr, 
-                                            0x0010,   // min_conn_int
-                                            0x0020,   // max_conn_int
-                                            0,        // conn_latency
-                                            600);     // supervision_timeout
+            // esp_ble_gap_set_prefer_conn_params(remote_bd_addr, 
+            //                                 0x0010,   // min_conn_int
+            //                                 0x0020,   // max_conn_int
+            //                                 0,        // conn_latency
+            //                                 600);     // supervision_timeout
                 break;
         case ESP_GATTS_DISCONNECT_EVT:
             ESP_LOGI(GATTS_TABLE_TAG, "ESP_GATTS_DISCONNECT_EVT, disconnect reason 0x%x", param->disconnect.reason);
@@ -1050,8 +980,6 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
         }
     } while (0);
 }
-
-
 
 static void ble_task(void *pvParameters)
 {
@@ -1219,6 +1147,8 @@ void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t conn
 		ble_pass_key = passkey;
 		ESP_LOGW(GATTS_TABLE_TAG, "ble passkey: %lu", ble_pass_key);
 	}
+    memset(serial_number, 0, sizeof(serial_number));
+    memcpy(serial_number, dev_name+7, strlen((char*)dev_name)-7);
 
 	if(xBle_TX_Queue == NULL)
 	{
