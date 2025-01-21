@@ -15,6 +15,44 @@
           "max": "105"
         }
       ]
+    },
+    {
+      "pid": "2202102",
+      "pid_init": "ATSH76C;ATFCSH76C;ATCRA7AC;",
+      "parameters": [
+        {
+          "name": "TirePressureFL",
+          "class": "pressure",
+          "expression": "B5*0.2-0.22",
+          "unit": "psi",
+          "min": "",
+          "max": ""
+        },
+        {
+          "name": "TirePressureFR",
+          "class": "pressure",
+          "expression": "B7*0.2-0.22",
+          "unit": "psi",
+          "min": "",
+          "max": ""
+        },
+        {
+          "name": "TirePressureRL",
+          "class": "pressure",
+          "expression": "B10*0.2-0.22",
+          "unit": "psi",
+          "min": "",
+          "max": ""
+        },
+        {
+          "name": "TirePressureRR",
+          "class": "pressure",
+          "expression": "B12*0.2-0.22",
+          "unit": "psi",
+          "min": "",
+          "max": ""
+        }
+      ]
     }
   ]
 }
