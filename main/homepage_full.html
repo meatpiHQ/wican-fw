@@ -714,30 +714,31 @@
                         </tr>
                     </table>
                     <div style="overflow-x:auto;">
-                        <table id="can_flt_table">
+                        <div class="section-title">MQTT CAN Filter</div>
+                        <table id="can_flt_table" >
                             <tr>
-                                <th>CAN ID (dec)</th>
-                                <th>Name</th>
-                                <th>PID</th>
-                                <th>Index</th>
-                                <th>Start Bit</th>
-                                <th>Bit Length</th>
-                                <th>Expression</th>
-                                <th>Cycle ms</th>
+                                <th style="text-align: left;">CAN ID (dec)</th>
+                                <th style="text-align: left;">Name</th>
+                                <th style="text-align: left;">PID</th>
+                                <th style="text-align: left;">Index</th>
+                                <th style="text-align: left;">Start Bit</th>
+                                <th style="text-align: left;">Bit Length</th>
+                                <th style="text-align: left;">Expression</th>
+                                <th style="text-align: left;">Cycle ms</th>
                                 <th><input id="store_canflt_button" name="store_canflt_button" type="button"
-                                        onclick="storeCANFLT()" value="Store" style="width: 70px;" /></th>
+                                        onclick="storeCANFLT()" value="Store" style="width: 100%;" /></th>
                             </tr>
                             <tr>
-                                <td><input type="number" id="canId" min="0" max="536870912" style="width: 100px;" /></td>
-                                <td><input type="text" id="name" maxlength="16" style="width: 70px;" /></td>
-                                <td><input type="number" id="pid" style="width: 40px;" /></td>
-                                <td><input type="number" id="pindex" style="width: 40px;" /></td>
-                                <td><input type="number" id="startBit" min="0" max="63" style="width: 40px;" /></td>
-                                <td><input type="number" id="bitLength" min="1" max="64" style="width: 40px;" /></td>
-                                <td><input type="text" id="expression" maxlength="64" style="width: 100px;" /></td>
-                                <td><input type="number" id="cycle" min="100" max="1000" style="width: 50px;" /></td>
+                                <td style="width: 10%;" ><input type="number" id="canId" min="0" max="536870912" style="width: 80%;"/></td>
+                                <td style="width: 20%;"><input type="text" id="name" maxlength="16" style="width: 90%;"/></td>
+                                <td style="width: 10%;"><input type="number" id="pid"  style="width: 80%;"/></td>
+                                <td style="width: 10%;"><input type="number" id="pindex"  style="width: 80%;"/></td>
+                                <td style="width: 10%;"><input type="number" id="startBit" min="0" max="63"  style="width: 80%;"/></td>
+                                <td style="width: 10%;"><input type="number" id="bitLength" min="1" max="64" style="width: 80%;"/></td>
+                                <td style="width: 20%;"><input type="text" id="expression" maxlength="64"  style="width: 90%;"/></td>
+                                <td style="width: 10%;"><input type="number" id="cycle" min="100" max="1000"  style="width: 80%;"/></td>
                                 <td><input id="add_row_button" name="add_row_button" type="button" onclick="addCANFLTRow()"
-                                        value="Add ID" style="width: 70px;" /></td>
+                                        value="Add ID" style="width: 100%;" /></td>
                             </tr>
                         </table>
                     </div>
