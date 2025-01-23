@@ -2321,7 +2321,8 @@ void elm327_read_task(void *pvParameters)
         {
 			xSemaphoreTake(xuart1_semaphore, portMAX_DELAY);
             bzero(dtmp.ucElement, sizeof(dtmp.ucElement));
-			if(xQueueReceive(uart1_queue, (void *)&event, portMAX_DELAY) == pdTRUE) 
+			// TODO: fix this. Here it's checking if queu is not empty, other task might have processed the queue while waiting for empty queue
+			if((xQueuePeek(uart1_queue, (void *)&event, 0)) == pdTRUE && xQueueReceive(uart1_queue, (void *)&event, portMAX_DELAY) == pdTRUE)
 			{
 				switch(event.type) 
 				{
