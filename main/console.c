@@ -806,7 +806,7 @@ esp_err_t console_init(void)
 {
     esp_console_repl_t *repl = NULL;
     esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
-    repl_config.task_stack_size = (10*1024);
+    repl_config.task_stack_size = (4*1024);
     repl_config.prompt = PROMPT;
     repl_config.max_cmdline_length = 256;
     
