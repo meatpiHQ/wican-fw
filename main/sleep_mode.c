@@ -61,6 +61,7 @@
 #include "driver/rtc_io.h"
 #include "led.h"
 #include "obd.h"
+#include "esp_adc/adc_oneshot.h"
 
 #define TAG 		__func__
 
@@ -588,6 +589,8 @@ int8_t sleep_mode_init(uint8_t enable, float sleep_volt)
 #include "math.h"
 #include "wc_timer.h"
 #include "hw_config.h"
+#include "sdcard.h"
+#include "ble.h"
 
 #define ADC_UNIT          ADC_UNIT_1
 #define ADC_CONV_MODE     ADC_CONV_SINGLE_UNIT_1
@@ -601,48 +604,11 @@ int8_t sleep_mode_init(uint8_t enable, float sleep_volt)
 
 #define TAG			 __func__
 
-static uint8_t result[ADC_READ_LEN] = {0};
-static adc_continuous_handle_t handle = NULL;
+static adc_oneshot_unit_handle_t adc_handle;
 static adc_cali_handle_t cali_handle = NULL;
 static bool do_calibration = false;
 static QueueHandle_t voltage_queue = NULL;
 static QueueHandle_t sleep_state_queue = NULL;
-
-// int8_t sleep_mode_get_voltage(float *val)
-// {
-// 	return obd_get_voltage(val);
-// }
-
-// static void sleep_task(void *pvParameters)
-// {
-// 	while (1)
-// 	{
-// 		if(gpio_get_level(OBD_READY_PIN) == 1 && config_server_get_sleep_config() == 1)
-// 		{
-// 			vTaskDelay(pdMS_TO_TICKS(20000));
-// 			if(gpio_get_level(OBD_READY_PIN) == 1)
-// 			{
-// 				ESP_LOGI(TAG, "Enabling EXT0 wakeup on pin GPIO%d\n", (int)OBD_READY_PIN);
-// 				ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(OBD_READY_PIN, 0));
-// 				rtc_gpio_pullup_dis(OBD_READY_PIN);
-// 				ESP_LOGI(TAG, "Going to sleep now");
-// 				led_set_level(0,0,0);
-// 				vTaskDelay(pdMS_TO_TICKS(1000));
-// 				esp_deep_sleep_start();
-// 			}
-// 		}
-// 		vTaskDelay(pdMS_TO_TICKS(1000));
-// 	}
-	
-// }
-
-// void sleep_mode_init(void)
-// {
-// 	gpio_reset_pin(OBD_READY_PIN);
-// 	gpio_set_direction(OBD_READY_PIN, GPIO_MODE_INPUT);
-
-// 	xTaskCreate(sleep_task, "sleep_task", 2048, (void*)AF_INET, 5, NULL);
-// }
 
 static void calibration_init(void)
 {
@@ -689,121 +655,96 @@ static void calibration_init(void)
     }
 }
 
-static void continuous_adc_init(void)
+void oneshot_adc_init(void)
 {
-    adc_continuous_handle_cfg_t adc_config = {
-        .max_store_buf_size = 256,
-        .conv_frame_size = 64,
+    // Initialize ADC
+    adc_oneshot_unit_init_cfg_t init_config = {
+        .unit_id = ADC_UNIT,
+        .ulp_mode = ADC_ULP_MODE_DISABLE,
     };
-    ESP_ERROR_CHECK(adc_continuous_new_handle(&adc_config, &handle));
+    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config, &adc_handle));
 
-    adc_continuous_config_t dig_cfg = {
-        .sample_freq_hz = 833,
-        .conv_mode = ADC_CONV_MODE,
-        .format = ADC_OUTPUT_TYPE,
+    // Configure ADC channel
+    adc_oneshot_chan_cfg_t config = {
+        .atten = ADC_ATTEN,
+        .bitwidth = ADC_BIT_WIDTH,
     };
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, ADC_CHANNEL_3, &config));
 
-    adc_digi_pattern_config_t adc_pattern[1] = {0};
-    dig_cfg.pattern_num = 1;
-    
-    adc_pattern[0].atten = ADC_ATTEN;
-    adc_pattern[0].channel = ADC_CHANNEL_3;  // GPIO4
-    adc_pattern[0].unit = ADC_UNIT;
-    adc_pattern[0].bit_width = ADC_BIT_WIDTH;
-    
-    ESP_LOGI(TAG, "ADC channel: %d, Attenuation: %d", adc_pattern[0].channel, adc_pattern[0].atten);
-    
-    dig_cfg.adc_pattern = adc_pattern;
-    ESP_ERROR_CHECK(adc_continuous_config(handle, &dig_cfg));
+    ESP_LOGI(TAG, "ADC channel: %d, Attenuation: %d", ADC_CHANNEL_3, ADC_ATTEN);
+
+    // Initialize calibration
+    // do_calibration = example_adc_calibration_init(ADC_UNIT, ADC_CHANNEL_3, ADC_ATTEN, &cali_handle);
 }
 
-static esp_err_t read_adc_voltage(float *voltage_out)
+esp_err_t read_ss_adc_voltage(float *voltage_out)
 {
-    esp_err_t ret;
-    uint32_t ret_num = 0;
-    
-    if (voltage_out == NULL) 
-	{
+    if (voltage_out == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
-    
-    // Read ADC values
-    ret = adc_continuous_read(handle, result, ADC_READ_LEN, &ret_num, 0);
-    
-    if (ret == ESP_OK) 
-    {
-        uint32_t sum_raw = 0;
-        uint32_t valid_samples = 0;
-        uint32_t min_raw = UINT32_MAX;
-        uint32_t max_raw = 0;
-        int sum_voltage = 0;
+
+    const int NUM_SAMPLES = 8; // Similar to conv_frame_size in continuous version
+    uint32_t sum_raw = 0;
+    uint32_t valid_samples = 0;
+    uint32_t min_raw = UINT32_MAX;
+    uint32_t max_raw = 0;
+    int sum_voltage = 0;
+
+    // Take multiple readings
+    for (int i = 0; i < NUM_SAMPLES; i++) {
+        int raw_value;
+        esp_err_t ret = adc_oneshot_read(adc_handle, ADC_CHANNEL_3, &raw_value);
         
-        // Process all samples
-        for (int i = 0; i < ret_num; i += SOC_ADC_DIGI_RESULT_BYTES) 
-        {
-            adc_digi_output_data_t *p = (adc_digi_output_data_t*)&result[i];
-            uint32_t chan_num = ADC_GET_CHANNEL(p);
-            uint32_t data = ADC_GET_DATA(p);
+        if (ret == ESP_OK && raw_value < 4096) {
+            int voltage = 0;
             
-            if (chan_num == ADC_CHANNEL_3 && data < 4096)
-            {
-                int voltage = 0;
-                
-                // Convert raw to voltage using calibration
-                if (do_calibration) 
-				{
-                    ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle, data, &voltage));
-                } 
-				else
-				{
-                    voltage = (data * 3300) / 4095;
-                }
-                
-                sum_raw += data;
-                sum_voltage += voltage;
-                valid_samples++;
-                
-                if (data < min_raw) min_raw = data;
-                if (data > max_raw) max_raw = data;
-                
-                // Print first few samples for debugging
-                if (valid_samples <= 5) 
-				{
-                    ESP_LOGI(TAG, "Sample[%d]: Chan=%lu, Raw=%lu, Voltage=%dmV", 
-                            (int)valid_samples, chan_num, data, voltage);
-                }
+            // Convert raw to voltage using calibration
+            if (do_calibration) {
+                ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle, raw_value, &voltage));
+            } else {
+                voltage = (raw_value * 3300) / 4095;
             }
-        }
-        
-        // Calculate averages
-        if (valid_samples > 0) 
-        {
-            int avg_raw = sum_raw / valid_samples;
-            int avg_voltage = sum_voltage / valid_samples;
-			#ifdef HV_PRO_V140
-            float volt_rounded = ((float)avg_voltage * 7.25f) / 1000;
-			#else
-			float volt_rounded = ((float)avg_voltage * 11) / 1000;
-			#endif
-            volt_rounded = roundf(volt_rounded * 100.0f) / 100.0f;
-			*voltage_out = volt_rounded;
-            ESP_LOGI(TAG, "Summary: Raw=%d (min=%lu, max=%lu, avg of %lu), Voltage=%.2f V [%s]", 
-                     avg_raw, min_raw, max_raw, valid_samples, *voltage_out,
-                     do_calibration ? "CALIBRATED" : "UNCALIBRATED");
-                     
-            return ESP_OK;
-        }
-        else 
-		{
-            return ESP_ERR_INVALID_STATE;  // No valid samples
+            
+            sum_raw += raw_value;
+            sum_voltage += voltage;
+            valid_samples++;
+            
+            if (raw_value < min_raw) min_raw = raw_value;
+            if (raw_value > max_raw) max_raw = raw_value;
+            
+            // Print first few samples for debugging
+            if (valid_samples <= 5) {
+                ESP_LOGI(TAG, "Sample[%d]: Chan=%d, Raw=%d, Voltage=%dmV", 
+                        (int)valid_samples, ADC_CHANNEL_3, raw_value, voltage);
+            }
+            
+            // Small delay between readings
+            vTaskDelay(pdMS_TO_TICKS(1));
         }
     }
-    else if (ret == ESP_ERR_TIMEOUT)
-    {
-        ESP_LOGW(TAG, "Timeout on ADC continuous read");
+
+    // Calculate averages
+    if (valid_samples > 0) {
+        int avg_raw = sum_raw / valid_samples;
+        int avg_voltage = sum_voltage / valid_samples;
+        
+        #ifdef HV_PRO_V140
+        float volt_rounded = ((float)avg_voltage * 7.25f) / 1000;
+        #else
+        float volt_rounded = ((float)avg_voltage * 11) / 1000;
+        #endif
+        
+        volt_rounded = roundf(volt_rounded * 10.0f) / 10.0f;
+        *voltage_out = volt_rounded;
+        
+        ESP_LOGI(TAG, "Summary: Raw=%d (min=%lu, max=%lu, avg of %lu), Voltage=%.2f V [%s]", 
+                 avg_raw, min_raw, max_raw, valid_samples, *voltage_out,
+                 do_calibration ? "CALIBRATED" : "UNCALIBRATED");
+                 
+        return ESP_OK;
     }
     
-    return ret;
+    return ESP_ERR_INVALID_STATE;  // No valid samples
 }
 
 void configure_wakeup_sources(void)
@@ -821,7 +762,7 @@ void enter_deep_sleep(void)
     ESP_LOGI(TAG, "Entering deep sleep");
     configure_wakeup_sources();
     
-    adc_continuous_stop(handle);
+    adc_continuous_stop(adc_handle);
     
 	if(gpio_get_level(OBD_READY_PIN) == 1)
 	{
@@ -840,15 +781,18 @@ void enter_deep_sleep(void)
 	{
 		printf("MIC sleep failed...\r\n");
 	}
-
+    gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
 	ESP_LOGI(TAG, "Going to sleep now");
 	led_set_level(0,0,0);
+    esp_wifi_stop();
+    ble_disable();
+    sd_card_deinit();
 	vTaskDelay(pdMS_TO_TICKS(1000));
 	// Enter deep sleep
 	esp_deep_sleep_start();
 }
 
-void sleep_task(void *pvParameters)
+void light_sleep_task(void *pvParameters)
 {
     static float battery_voltage = 0.0;
     esp_err_t ret = ESP_FAIL;
@@ -876,7 +820,7 @@ void sleep_task(void *pvParameters)
     
 	if(config_server_get_sleep_time(&sleep_time) == -1)
 	{
-		sleep_time = 2;
+		sleep_time = 120000;
 		ESP_LOGE(TAG, "Failed to get sleep time");
 	}
 	else
@@ -890,12 +834,13 @@ void sleep_task(void *pvParameters)
 
     // Initialize ADC
     calibration_init();
-    continuous_adc_init();
-    ESP_ERROR_CHECK(adc_continuous_start(handle));
+    // continuous_adc_init();
+    oneshot_adc_init();
+    // ESP_ERROR_CHECK(adc_continuous_start(handle));
 
     // Log initial configuration
-    ESP_LOGI(TAG, "Sleep task started. Sleep enabled: %d, Sleep voltage: %.2f, Wakeup voltage: %.2f", 
-             sleep_en, sleep_voltage, wakeup_voltage);
+    ESP_LOGI(TAG, "Sleep task started. Sleep enabled: %d, Sleep voltage: %.2f, Wakeup voltage: %.2f, Sleep time: %lu", 
+             sleep_en, sleep_voltage, wakeup_voltage, sleep_time);
 
     // Initialize voltage read timer
     wc_timer_set(&voltage_read_timer, 3000);
@@ -906,7 +851,8 @@ void sleep_task(void *pvParameters)
         if(wc_timer_is_expired(&voltage_read_timer)) 
 		{
             // ret = sleep_mode_get_voltage(&battery_voltage);
-            ret = read_adc_voltage(&battery_voltage);
+            // ret = read_adc_voltage(&battery_voltage);
+            ret = read_ss_adc_voltage(&battery_voltage);
             wc_timer_set(&voltage_read_timer, 3000);
         }
 
@@ -934,6 +880,16 @@ void sleep_task(void *pvParameters)
 					{
                         ESP_LOGI(TAG, "Low voltage timeout expired, entering sleep mode");
                         current_state = STATE_SLEEPING;
+                        elm327_sleep();
+                        can_disable();
+                        wifi_network_deinit();
+                        ble_disable();
+                        led_set_level(0,0,0);
+                        // Update immediately to prevenet elm327 wakeup 
+                        state_info.state = current_state;
+                        state_info.voltage = battery_voltage;
+                        xQueueOverwrite(sleep_state_queue, &state_info);
+                        vTaskDelay(pdMS_TO_TICKS(1000));
                     }
                     break;
 
@@ -956,6 +912,7 @@ void sleep_task(void *pvParameters)
 					{
                         ESP_LOGI(TAG, "Voltage stable above threshold, returning to normal mode");
                         current_state = STATE_NORMAL;
+                        esp_restart();
                     }
                     break;
             }
@@ -967,19 +924,32 @@ void sleep_task(void *pvParameters)
 
             // Log current status
             ESP_LOGI(TAG, "State: %d, Battery: %.2fV", current_state, battery_voltage);
-
-            // Handle sleep entry
-            if(current_state == STATE_SLEEPING && gpio_get_level(OBD_READY_PIN) == 1) 
-			{
-                enter_deep_sleep();
-            }
         } 
         else if (ret != ESP_OK) 
 		{
             ESP_LOGW(TAG, "Failed to read ADC: %d", ret);
         }
+
+        // Handle sleep entry
+        if(current_state == STATE_SLEEPING && gpio_get_level(OBD_READY_PIN) == 1) 
+        {
+            // adc_continuous_stop(handle);
+            ESP_LOGW(TAG, "Sleep...");
+            esp_sleep_enable_timer_wakeup(2*1000000);
+            esp_light_sleep_start();
+            ESP_LOGW(TAG, "Wakeup...");
+            if(gpio_get_level(OBD_READY_PIN) == 0)
+            {
+                esp_restart();
+            }
+            // adc_continuous_start(handle);
+        }
+        if(current_state != STATE_SLEEPING)
+        {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
         
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -1019,7 +989,7 @@ esp_err_t sleep_mode_get_state(sleep_state_info_t *state_info)
 esp_err_t sleep_mode_get_voltage(float *val)
 {
 	// return obd_get_voltage(val);
-    return read_adc_voltage(val);
+    return read_ss_adc_voltage(val);
 }
 
 void sleep_mode_print_wakeup_reason(void)
@@ -1070,7 +1040,8 @@ void sleep_mode_init(void)
 {
 	// if(config_server_get_sleep_config())
 	{
-		xTaskCreate(sleep_task, "sleep_task", 4096, (void*)AF_INET, 5, NULL);
+		// xTaskCreate(sleep_task, "sleep_task", 4096, (void*)AF_INET, 5, NULL);
+        xTaskCreate(light_sleep_task, "sleep_task", 4096, (void*)AF_INET, 5, NULL);
 	}
 }
 

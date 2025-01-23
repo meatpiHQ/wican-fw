@@ -89,9 +89,10 @@
 #define BLE_EN_PIN_SEL		(1ULL<<BLE_EN_PIN_NUM)
 #define BLE_Enabled()		(!gpio_get_level(BLE_EN_PIN_NUM))
 
-static QueueHandle_t xMsg_Tx_Queue, xMsg_Rx_Queue, xmsg_ws_tx_queue, xmsg_ble_tx_queue, xmsg_uart_tx_queue, xmsg_obd_rx_queue, xmsg_mqtt_rx_queue;
+static QueueHandle_t xMsg_Tx_Queue, xMsg_Rx_Queue, xmsg_ws_tx_queue, xmsg_ble_tx_queue, xmsg_uart_tx_queue, xmsg_obd_rx_queue, xmsg_mqtt_rx_queue, xmsg_elm327_rx_queue;
 static xdev_buffer ucTCP_RX_Buffer;
 static xdev_buffer ucTCP_TX_Buffer;
+static xdev_buffer ucBLE_TX_Buffer;
 
 static uint8_t protocol = SLCAN;
 
@@ -309,8 +310,9 @@ static void can_tx_task(void *pvParameters)
 			}
 			else if(ucTCP_RX_Buffer.dev_channel == DEV_BLE)
 			{
+				elm327_send_cmd(msg_ptr, temp_len);
 				// elm327_process_cmd(msg_ptr, temp_len, &xmsg_ble_tx_queue, elm327_cmd_buffer, &cmd_buffer_len, &last_cmd_time, &send_to_host);
-				elm327_run_command((char*)msg_ptr, temp_len, 1000, &xmsg_ble_tx_queue, &send_to_host);
+				// elm327_run_command((char*)msg_ptr, temp_len, 1000, &xmsg_ble_tx_queue, &send_to_host);
 			}
 			#else
 			if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI)
@@ -562,6 +564,16 @@ void app_main(void)
 	gpio_set_direction(CAN_STDBY_GPIO_NUM, GPIO_MODE_OUTPUT);
 	gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
 
+    gpio_reset_pin(OBD_LED_EN_PIN);
+    gpio_set_direction(OBD_LED_EN_PIN, GPIO_MODE_OUTPUT);
+    gpio_set_level(OBD_LED_EN_PIN, 1);
+
+    gpio_reset_pin(OBD_RESET_PIN);
+    gpio_set_direction(OBD_RESET_PIN, GPIO_MODE_OUTPUT_OD);
+    gpio_set_level(OBD_RESET_PIN, 1);
+
+	gpio_reset_pin(OBD_READY_PIN);
+	gpio_set_direction(OBD_READY_PIN, GPIO_MODE_INPUT);
 	// gpio_reset_pin(USB_ESP_MODE_EN);
 	// gpio_set_direction(USB_ESP_MODE_EN, GPIO_MODE_OUTPUT);
 	// gpio_set_level(USB_ESP_MODE_EN, 1);
@@ -627,10 +639,10 @@ void app_main(void)
 //    xmsg_obd_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
 
     ESP_ERROR_CHECK(esp_read_mac(derived_mac_addr, ESP_MAC_WIFI_SOFTAP));
-    // sprintf((char *)ble_uid,"WiC_%02x%02x%02x%02x%02x%02x",
-    //         derived_mac_addr[0], derived_mac_addr[1], derived_mac_addr[2],
-    //         derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
-	sprintf((char *)ble_uid,"WiCAN");
+    sprintf((char *)ble_uid,"WiC_%02x%02x%02x%02x%02x%02x",
+            derived_mac_addr[0], derived_mac_addr[1], derived_mac_addr[2],
+            derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
+
     sprintf((char *)uid,"%02x%02x%02x%02x%02x%02x",
             derived_mac_addr[0], derived_mac_addr[1], derived_mac_addr[2],
             derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
@@ -639,6 +651,30 @@ void app_main(void)
 	#else
 		config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, 0, (char*)&uid[0]);
 	#endif
+
+	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
+	if(config_server_get_sleep_config())
+	{
+		float sleep_voltage = 0;
+
+		if(config_server_get_sleep_volt(&sleep_voltage) != -1)
+		{
+			sleep_mode_init(1, sleep_voltage);
+		}
+		else
+		{
+			sleep_mode_init(0, 13.1f);
+		}
+	}
+	else
+	{
+		sleep_mode_init(0, 13.1f);
+	}
+	#elif HARDWARE_VER == WICAN_PRO
+	sleep_mode_init();
+	#endif
+
+
 	slcan_init(&send_to_host);
 
 	int8_t can_datarate = config_server_get_can_rate();
@@ -687,8 +723,22 @@ void app_main(void)
 		can_enable();
 	}
 	#if HARDWARE_VER == WICAN_PRO
-	xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
-	elm327_init(&xmsg_obd_rx_queue, NULL);
+	// xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
+	// static uint8_t* elm327_uart_rx_queue_storage;
+	// static StaticQueue_t xMsg_Rx_Queue_Buffer;
+
+
+	// size_t buffer_size = (1024*10);
+	
+    // elm327_uart_rx_queue_storage = (uint8_t *)heap_caps_malloc(32 * buffer_size, MALLOC_CAP_SPIRAM);
+	// xmsg_obd_rx_queue = xQueueCreateStatic(32, buffer_size, (uint8_t *)elm327_uart_rx_queue_storage, &xMsg_Rx_Queue_Buffer);
+	static xdev_buffer* elm327_uart_rx_queue_storage;
+	static StaticQueue_t elm327_uart_rx_queue_buffer;
+	
+    elm327_uart_rx_queue_storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
+	xmsg_obd_rx_queue = xQueueCreateStatic(32, xdev_buffer_size, (uint8_t *)elm327_uart_rx_queue_storage, &elm327_uart_rx_queue_buffer);
+
+	elm327_init( &send_to_host, &xmsg_obd_rx_queue, NULL);
 	if(protocol == AUTO_PID)
 	{
 		// can_set_bitrate(can_datarate);
@@ -850,30 +900,7 @@ void app_main(void)
 	wc_mdns_init((char*)uid, hardware_version, firmware_version);
     xTaskCreate(can_rx_task, "can_rx_task", 1024*3, (void*)AF_INET, 5, NULL);
     xTaskCreate(can_tx_task, "can_tx_task", 1024*3, (void*)AF_INET, 5, NULL);
-
-
-	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
-	if(config_server_get_sleep_config())
-	{
-		float sleep_voltage = 0;
-
-		if(config_server_get_sleep_volt(&sleep_voltage) != -1)
-		{
-			sleep_mode_init(1, sleep_voltage);
-		}
-		else
-		{
-			sleep_mode_init(0, 13.1f);
-		}
-	}
-	else
-	{
-		sleep_mode_init(0, 13.1f);
-	}
-	#elif HARDWARE_VER == WICAN_PRO
-	sleep_mode_init();
-	#endif
-
+	xTaskCreate(obd_rx_task, "obd_rx_task", 1024*3, (void*)AF_INET, 5, NULL);
 
 
 	

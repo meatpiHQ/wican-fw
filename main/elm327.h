@@ -36,7 +36,7 @@ typedef enum{
     ELM327_SLEEP
 }elm327_chip_status_t;
 
-void elm327_init(QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame, uint8_t type));
+void elm327_init(response_callback_t rsp_callback, QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame, uint8_t type));
 
 #if HARDWARE_VER == WICAN_PRO
 int8_t elm327_process_cmd(uint8_t *buf, uint32_t len, QueueHandle_t *q, char *cmd_buffer, uint32_t *cmd_buffer_len, int64_t *last_cmd_time, response_callback_t response_callback);
@@ -49,4 +49,5 @@ int8_t elm327_process_cmd(uint8_t *buf, uint8_t len, twai_message_t *frame, Queu
 void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, QueueHandle_t *response_q, response_callback_t response_callback);
 esp_err_t elm327_sleep(void);
 void elm327_lock(void);
+void elm327_send_cmd(uint8_t* cmd, uint32_t cmd_len);
 #endif

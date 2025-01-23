@@ -272,9 +272,9 @@ static void obd_parse_response(char *str, uint32_t len, QueueHandle_t *q, char* 
             //    config.vl_wake.voltage != sleep_voltage || 
             //    config.vl_sleep.en == 0 || 
             //    config.vl_sleep.voltage != (sleep_voltage - tmp))
-            if(config.uart_wake.en == 1 || config.uart_sleep.en == 1 || config.vl_wake.en == 0 || 
+            if(config.uart_wake.en == 1 || config.uart_sleep.en == 1 || config.vl_wake.en == 1 || 
                 config.vl_wake.voltage != wakeup_voltage || 
-                config.vl_sleep.en == 0 || 
+                config.vl_sleep.en == 1 || 
                 config.vl_sleep.voltage != sleep_voltage ||
                 config.vl_sleep.time != sleep_time)
             {
@@ -284,7 +284,7 @@ static void obd_parse_response(char *str, uint32_t len, QueueHandle_t *q, char* 
                                 &response_len, &response_cmd_time, NULL);
                 elm327_process_cmd((uint8_t *)wake_cmd, 0, NULL, response_buffer, 
                                 &response_len, &response_cmd_time, NULL);
-                elm327_process_cmd((uint8_t *)"STSLVl on,on\r", 0, NULL, response_buffer, 
+                elm327_process_cmd((uint8_t *)"STSLVl off,off\r", 0, NULL, response_buffer, 
                                 &response_len, &response_cmd_time, NULL);
                 elm327_process_cmd((uint8_t *)"STSLU off, off\r", 0, NULL, response_buffer, 
                                 &response_len, &response_cmd_time, NULL);

@@ -74,6 +74,7 @@
 #include "autopid.h"
 #include "wc_mdns.h"
 #include "elm327.h"
+#include "hw_config.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
@@ -113,6 +114,15 @@ static char can_datarate_str[11][7] = {
 const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"3333\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"slcan\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
 static device_config_t device_config;
 TimerHandle_t xrestartTimer;
+
+void config_server_reboot(void)
+{
+	gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
+	elm327_sleep();
+	ESP_LOGI(TAG, "reboot");
+	printf("reboot command\n");
+	xTimerStart( xrestartTimer, 0 );
+}
 
 /* Max length a file path can have on storage */
 #define FILE_PATH_MAX (ESP_VFS_PATH_MAX + CONFIG_SPIFFS_OBJ_NAME_LEN)
@@ -387,7 +397,8 @@ static esp_err_t store_config_handler(httpd_req_t *req)
     const char *resp_str = "Configuration saved! Rebooting...";
     httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
 
-    xTimerStart( xrestartTimer, 0 );
+    // xTimerStart( xrestartTimer, 0 );
+	config_server_reboot();
     return ESP_OK;
 }
 
@@ -667,9 +678,10 @@ static esp_err_t system_reboot_handler(httpd_req_t *req)
 {
 	const char *resp_str = "Configuration saved! Rebooting...";
     httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
-
-	ESP_LOGI(TAG, "reboot");
-	xTimerStart( xrestartTimer, 0 );
+	config_server_reboot();
+	// elm327_sleep();
+	// ESP_LOGI(TAG, "reboot");
+	// xTimerStart( xrestartTimer, 0 );
     // esp_restart();
     return ESP_OK;
 }
@@ -1276,7 +1288,8 @@ static esp_err_t upload_post_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
 
-    xTimerStart( xrestartTimer, 0 );
+	config_server_reboot();
+    // xTimerStart( xrestartTimer, 0 );
 
     /* Redirect onto root to see the updated file list */
     httpd_resp_set_status(req, "303 See Other");
@@ -2613,6 +2626,7 @@ void config_server_set_ble_config(uint8_t b)
 		fprintf(f, resp_str);
 		fclose(f);
 	}
-	xTimerStart( xrestartTimer, 0 );
+	// xTimerStart( xrestartTimer, 0 );
+	config_server_reboot();
 }
 
