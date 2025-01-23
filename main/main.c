@@ -900,7 +900,7 @@ void app_main(void)
 	wc_mdns_init((char*)uid, hardware_version, firmware_version);
     xTaskCreate(can_rx_task, "can_rx_task", 1024*3, (void*)AF_INET, 5, NULL);
     xTaskCreate(can_tx_task, "can_tx_task", 1024*3, (void*)AF_INET, 5, NULL);
-	xTaskCreate(obd_rx_task, "obd_rx_task", 1024*3, (void*)AF_INET, 5, NULL);
+	// xTaskCreate(obd_rx_task, "obd_rx_task", 1024*3, (void*)AF_INET, 5, NULL);
 
 
 	
@@ -912,12 +912,12 @@ void app_main(void)
 	// pdTRUE, /* BIT_0 should be cleared before returning. */
 	// pdFALSE, /* Don't wait for both bits, either bit will do. */
 	// portMAX_DELAY);/* Wait forever. */ 
-	esp_log_level_set("*", ESP_LOG_ERROR);
+	// esp_log_level_set("*", ESP_LOG_ERROR);
 	// esp_log_level_set("HEAP", ESP_LOG_INFO);
 	// esp_log_level_set("imu", ESP_LOG_INFO);
 	// esp_log_level_set("rtcm", ESP_LOG_INFO);
 	// esp_log_level_set("console", ESP_LOG_INFO);
-	esp_log_level_set("usb", ESP_LOG_INFO);
+	// esp_log_level_set("usb", ESP_LOG_INFO);
 
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
@@ -928,6 +928,6 @@ void app_main(void)
 		usb_host_init();
 	}
     #endif
-	console_init();
+	// console_init();
 }
 
