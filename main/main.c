@@ -488,6 +488,22 @@ static void print_heap_task(void *pvParameters)
     }
 }
 
+#if HARDWARE_VER == WICAN_PRO
+//This is a hack to get ble working 
+static void obd_rx_task(void *pvParameters)
+{
+	while (1)
+	{
+		memset(ucBLE_TX_Buffer.ucElement,0, DEV_BUFFER_LENGTH);
+		xQueueReceive(xmsg_obd_rx_queue, &ucBLE_TX_Buffer, portMAX_DELAY);
+		if(ble_connected())
+		{
+			xQueueSend( xmsg_ble_tx_queue, ( void * ) &ucBLE_TX_Buffer, pdMS_TO_TICKS(0) );
+		}
+	}
+}
+#endif 
+
 void app_main(void)
 {
 	static StackType_t *heap_task_stack;
@@ -900,7 +916,7 @@ void app_main(void)
 	wc_mdns_init((char*)uid, hardware_version, firmware_version);
     xTaskCreate(can_rx_task, "can_rx_task", 1024*3, (void*)AF_INET, 5, NULL);
     xTaskCreate(can_tx_task, "can_tx_task", 1024*3, (void*)AF_INET, 5, NULL);
-	// xTaskCreate(obd_rx_task, "obd_rx_task", 1024*3, (void*)AF_INET, 5, NULL);
+	xTaskCreate(obd_rx_task, "obd_rx_task", 1024*3, (void*)AF_INET, 5, NULL);
 
 
 	
@@ -912,7 +928,7 @@ void app_main(void)
 	// pdTRUE, /* BIT_0 should be cleared before returning. */
 	// pdFALSE, /* Don't wait for both bits, either bit will do. */
 	// portMAX_DELAY);/* Wait forever. */ 
-	// esp_log_level_set("*", ESP_LOG_ERROR);
+	esp_log_level_set("*", ESP_LOG_ERROR);
 	// esp_log_level_set("HEAP", ESP_LOG_INFO);
 	// esp_log_level_set("imu", ESP_LOG_INFO);
 	// esp_log_level_set("rtcm", ESP_LOG_INFO);
@@ -928,6 +944,6 @@ void app_main(void)
 		usb_host_init();
 	}
     #endif
-	// console_init();
+	console_init();
 }
 
