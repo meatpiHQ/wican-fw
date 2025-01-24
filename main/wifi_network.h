@@ -25,4 +25,6 @@ bool wifi_network_is_connected(void);
 void wifi_network_init(char* sta_ssid, char* sta_pass);
 void wifi_network_deinit(void);
 void wifi_network_restart(void);
+void wifi_network_stop(void);
+void wifi_network_start(void);
 #endif

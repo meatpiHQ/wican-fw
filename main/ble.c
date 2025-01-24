@@ -823,7 +823,8 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
         case ESP_GATTS_CONNECT_EVT:
             ESP_LOGI(GATTS_TABLE_TAG, "ESP_GATTS_CONNECT_EVT");
         	config_server_stop();
-        	wifi_network_deinit();
+        	// wifi_network_deinit();
+            wifi_network_stop();
             esp_ble_conn_update_params_t conn_params = {0};
             memcpy(conn_params.bda, param->connect.remote_bda, sizeof(esp_bd_addr_t));
             /* For the iOS system, please refer to Apple official documents about the BLE connection parameters restrictions. */
@@ -853,6 +854,8 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
                 break;
         case ESP_GATTS_DISCONNECT_EVT:
             ESP_LOGI(GATTS_TABLE_TAG, "ESP_GATTS_DISCONNECT_EVT, disconnect reason 0x%x", param->disconnect.reason);
+            wifi_network_start();
+            config_server_restart();
 //            wifi_network_restart();
 //        	config_server_restart();
             is_connected = false;

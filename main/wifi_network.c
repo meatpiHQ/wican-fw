@@ -158,6 +158,24 @@ void wifi_network_restart(void)
         return;
     }
 }
+
+void wifi_network_stop(void)
+{
+    xEventGroupClearBits(s_wifi_event_group, WIFI_INIT_BIT);
+    esp_wifi_stop();
+}
+
+void wifi_network_start(void)
+{
+    xEventGroupSetBits(s_wifi_event_group, WIFI_INIT_BIT);
+    esp_err_t err = esp_wifi_start();
+    if (err == ESP_ERR_WIFI_NOT_INIT)
+    {
+        ESP_LOGE(WIFI_TAG, "wifi failed to start");
+        return;
+    }
+}
+
 bool wifi_network_is_connected(void)
 {
 	EventBits_t ux_bits;
