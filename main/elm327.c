@@ -1863,10 +1863,14 @@ void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, Q
 													pdMS_TO_TICKS(1));
 					if (read_bytes > 0)
 					{
-						response_callback((char*)uart_read_buf, 
-													read_bytes, 
-													response_q,
-													command);
+						if(response_callback != NULL)
+						{
+							response_callback((char*)uart_read_buf, 
+														read_bytes, 
+														response_q,
+														command);
+						}
+						
 						if(strstr((char*) uart_read_buf, "\r>"))
 						{
 							terminator_received = true;
