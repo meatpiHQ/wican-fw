@@ -591,7 +591,6 @@
                                 <option value="500K">500K</option>
                                 <option value="800K">800K</option>
                                 <option value="1000K">1000K</option>
-                                <option value="auto">Auto</option>
                             </select>
                         </td>
                     </tr>
@@ -752,7 +751,7 @@
                 <tr>
                     <td>MQTT HA Discovery:</td>
                     <td>
-                        <select id="ha_discovery" name="ha_discovery" onchange="checkForDuplicates(); toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
+                        <select id="ha_discovery" name="ha_discovery" toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
                             <option value="disable">Disable</option>
                         </select>
                     </td>
@@ -760,7 +759,7 @@
                 <tr>
                     <td>Grouping:</td>
                     <td>
-                        <select id="grouping" name="grouping" onchange="checkForDuplicates(); toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
+                        <select id="grouping" name="grouping" toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
                             <option value="disable">Disable</option>
                             <option value="enable">Enable</option>
                         </select>
@@ -1471,13 +1470,14 @@ function addCollapsibleRow(rowData = {}) {
                 </tr>
                 <tr>
                     <td>Send_to:</td>
-                    <td><input type="text" class="send-to-input" value="${rowData.Send_to || ''}" 
+                    <td><input type="text" class="send-to-input" value="${rowData.Send_to || ''}"
                         placeholder="Enter destination"></td>
                 </tr>
             </table>
         </div>
     `;
-
+    console.log("addCollapsibleRow:", rowData);
+    console.log("Send_to value:", rowData.Send_to);
     // Add these CSS styles
     const style = document.createElement('style');
     style.textContent = pidEntryStyles;
@@ -1715,8 +1715,7 @@ function addCarParameter(rowData = {}) {
 function loadAutoTable(jsonData) {
         try {
             console.log("Raw jsonData:", jsonData);
-            const data = JSON.parse(jsonData);
-            console.log("Parsed data:", data);
+            const data = jsonData;
 
             // First set the initialisation value
             const initialisationElement = document.getElementById("initialisation");
@@ -2003,60 +2002,26 @@ function loadAutoTable(jsonData) {
         }
     }
 
+    function toggleDestinationField() {
+        const groupingValue = document.getElementById("grouping").value;
+        toggleDestinationAndCycle();  // Reuse the updated function
+    }
 
-    function checkForDuplicates() {
-        const rows = document.querySelectorAll('.pid-entry');
-        const pidMap = new Map();
+    function toggleSendToFields() {
+        const groupingValue = document.getElementById("grouping")?.value || 'disable';
+        const table = document.getElementById("automate_table");
+        if (!table) return;
 
-        rows.forEach(row => {
-            const pidInput = row.querySelector('.pid-input');
+        const rows = table.getElementsByClassName('pid-entry');
+        if (!rows.length) return;
+
+        Array.from(rows).forEach(row => {
             const sendToInput = row.querySelector('.send-to-input');
-            
-            if (pidInput && pidInput.value) {
-                const pidValue = pidInput.value;
-
-                // Check if the PID already exists
-                if (pidMap.has(pidValue)) {
-                    pidMap.get(pidValue).push(sendToInput);
-                } else {
-                    pidMap.set(pidValue, [sendToInput]);
-                }
-            }
-        });
-
-        // Disable `sendToInput` for duplicate PIDs
-        pidMap.forEach((inputs, pid) => {
-            if (inputs.length > 1) {
-                inputs.forEach(input => {
-                    input.disabled = true;
-                    input.value = '';
-                });
-            } else {
-                inputs[0].disabled = false; // Enable input if it's not a duplicate
+            if (sendToInput) {
+                sendToInput.disabled = (groupingValue === "Group ALL");
             }
         });
     }
-
-        function toggleDestinationField() {
-			const groupingValue = document.getElementById("grouping").value;
-			toggleDestinationAndCycle();  // Reuse the updated function
-        }
-
-        function toggleSendToFields() {
-            const groupingValue = document.getElementById("grouping")?.value || 'disable';
-            const table = document.getElementById("automate_table");
-            if (!table) return;
-
-            const rows = table.getElementsByClassName('pid-entry');
-            if (!rows.length) return;
-
-            Array.from(rows).forEach(row => {
-                const sendToInput = row.querySelector('.send-to-input');
-                if (sendToInput) {
-                    sendToInput.disabled = (groupingValue === "Group ALL");
-                }
-            });
-        }
 
 	var canData = [];
 
@@ -2349,7 +2314,8 @@ function loadAutoTable(jsonData) {
         xhttp.onload = function() {
             console.log("Server response:", this.responseText); // Debug log
             if(this.responseText !== "NONE") {
-                loadAutoTable(this.responseText);
+                const data = JSON.parse(this.responseText);
+                loadAutoTable(data);
                 document.getElementById("custom_pid_store").disabled = true;
             } else {
                 console.log("No PID data found on server");
