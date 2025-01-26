@@ -39,25 +39,14 @@
 #include "slcan.h"
 #include "can.h"
 #include "ble.h"
+#include "esp_sleep.h"
 #include "wifi_network.h"
 #include "esp_mac.h"
 #include "esp_ota_ops.h"
 #include "nvs.h"
-#include "nvs_flash.h"
-#include "driver/adc.h"
-#include "esp_adc_cal.h"
-// #include "esp_adc/adc_cali.h"
 #include "sleep_mode.h"
-#include "ble.h"
-#include "esp_sleep.h"
-#include "lwip/sockets.h"
-#include "lwip/dns.h"
-#include "lwip/netdb.h"
-
-#include "esp_log.h"
 #include "mqtt_client.h"
 #include "ver.h"
-#include "esp_sleep.h"
 #include "driver/rtc_io.h"
 #include "led.h"
 #include "obd.h"
@@ -762,7 +751,7 @@ void enter_deep_sleep(void)
     ESP_LOGI(TAG, "Entering deep sleep");
     configure_wakeup_sources();
     
-    adc_continuous_stop(adc_handle);
+    // adc_continuous_stop(adc_handle);
     
 	if(gpio_get_level(OBD_READY_PIN) == 1)
 	{
