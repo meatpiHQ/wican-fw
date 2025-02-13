@@ -1,9 +1,10 @@
 {
   "car_model": "Hyundai: Ioniq5/Ioniq6/Kona",
-  "init": "ATSH7E4;ATST96;",
+  "init": "ATSP6;ATST96;ATSH7E4;ATFCSH7E4;ATFCSD300000;ATFCSM1;",
   "pids": [
     {
       "pid": "2201019",
+      "pid_init": "ATSH7E4;ATFCSH7E4;",
       "parameters": [
         {
           "name": "SOC_BMS",
@@ -129,6 +130,7 @@
     },
     {
       "pid": "2201057",
+      "pid_init": "ATSH7E4;ATFCSH7E4;",
       "parameters": [
         {
           "name": "SOH",
@@ -162,16 +164,17 @@
         }
       ]
     },
-		{
-			"pid":"22B0023",
-			"parameters": [
-				{
-					"name": "odometer",
-					"expression": "[B13:B14]",
-					"unit": "km",
-					"class": "distance"
-				}
-			]
-		}
+    {
+      "pid": "22B0023",
+      "pid_init": "ATSH7C6;ATFCSH7C6;",
+      "parameters": [
+        {
+          "name": "odometer",
+          "expression": "[B12:B14]",
+          "unit": "km",
+          "class": "distance"
+        }
+      ]
+    }
   ]
 }
