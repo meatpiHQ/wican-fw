@@ -253,20 +253,20 @@ static void can_rx_task(void *pvParameters)
 //    		ESP_LOGI(TAG, "bvoltage: %f", bvoltage);
 //    	}
         process_led(0);
-        // static uint32_t min_heap = UINT32_MAX;
-        // static uint32_t max_heap = 0;
-        // uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
+        static uint32_t min_heap = UINT32_MAX;
+        static uint32_t max_heap = 0;
+        uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
         
-        // // Track min/max on every loop iteration
-        // min_heap = (free_heap < min_heap) ? free_heap : min_heap;
-        // max_heap = (free_heap > max_heap) ? free_heap : max_heap;
+        // Track min/max on every loop iteration
+        min_heap = (free_heap < min_heap) ? free_heap : min_heap;
+        max_heap = (free_heap > max_heap) ? free_heap : max_heap;
 
-        // // Print only every second
-        // if(esp_timer_get_time() - time_old > 1000*1000)
-        // {
-        //     time_old = esp_timer_get_time();
-        //     ESP_LOGI(TAG, "heap current: %lu min: %lu max: %lu", free_heap, min_heap, max_heap);
-        // }
+        // Print only every second
+        if(esp_timer_get_time() - time_old > 1000*1000)
+        {
+            time_old = esp_timer_get_time();
+            ESP_LOGI("heap_print", "heap current: %lu min: %lu max: %lu", free_heap, min_heap, max_heap);
+        }
 
         while(can_receive(&rx_msg, 0) ==  ESP_OK)
         {
@@ -607,11 +607,12 @@ void app_main(void)
 	// pdTRUE, /* BIT_0 should be cleared before returning. */
 	// pdFALSE, /* Don't wait for both bits, either bit will do. */
 	// portMAX_DELAY);/* Wait forever. */  
-	esp_log_level_set("*", ESP_LOG_NONE);
+	esp_log_level_set("*", ESP_LOG_ERROR);
 	// esp_log_level_set("autopid_parser", ESP_LOG_ERROR);
 	// esp_log_level_set("autopid_task", ESP_LOG_ERROR);
 	// esp_log_level_set("elm327_process_cmd", ESP_LOG_ERROR);
 	// esp_log_level_set("can_rx_task", ESP_LOG_INFO);
 	// esp_log_level_set("adc_task", ESP_LOG_INFO);
+	esp_log_level_set("heap_print", ESP_LOG_INFO);
 }
 
