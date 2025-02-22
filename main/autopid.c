@@ -489,18 +489,24 @@ void autopid_data_publish(void) {
                     }
                 }
             }
-            limitJsonDecimalPrecision(root);
-            char *json_str = cJSON_PrintUnformatted(root);
-            if (json_str) {
-                if(all_pids->group_destination && strlen(all_pids->group_destination) > 0)
-                {
-                    mqtt_publish(all_pids->group_destination, json_str, 0, 0, 1);
-                    ESP_LOGI(TAG, "Published to %s", all_pids->group_destination);
-                }else{
-                    mqtt_publish(config_server_get_mqtt_rx_topic(), json_str, 0, 0, 1);
+
+            if (root->child) {
+                limitJsonDecimalPrecision(root);
+                char *json_str = cJSON_PrintUnformatted(root);
+                if (json_str) {
+                    if(all_pids->group_destination && strlen(all_pids->group_destination) > 0)
+                    {
+                        mqtt_publish(all_pids->group_destination, json_str, 0, 0, 1);
+                        ESP_LOGI(TAG, "Published to %s", all_pids->group_destination);
+                    }else{
+                        mqtt_publish(config_server_get_mqtt_rx_topic(), json_str, 0, 0, 1);
+                    }
+                    free(json_str);
                 }
-                free(json_str);
+            } else {
+                ESP_LOGW(TAG, "No valid parameters found to publish");
             }
+
             cJSON_Delete(root);
         }
         xSemaphoreGive(all_pids->mutex);
@@ -1109,9 +1115,9 @@ static void autopid_task(void *pvParameters)
 
                         if(curr_pid->pid_type == PID_CUSTOM || curr_pid->pid_type == PID_SPECIFIC) 
                         {
-                            if(all_pids->pids->init != NULL && strlen(all_pids->pids->init) > 0)
+                            if(curr_pid->init != NULL && strlen(curr_pid->init) > 0)
                             {
-                                send_commands(all_pids->pids->init, 2);
+                                send_commands(curr_pid->init, 2);
                             }
                         }
 
@@ -1281,7 +1287,7 @@ cJSON* parse_json_file(FILE* f) {
     return root;
 }
 
-all_pids_t* load_all_pids(void) {
+all_pids_t* load_all_pids(void){
     int total_pids = 0;
     int car_data_pids = 0;
     int auto_pids = 0;
@@ -1400,7 +1406,29 @@ all_pids_t* load_all_pids(void) {
                         strcpy(curr_pid->cmd, pid_item->valuestring);
                         strcat(curr_pid->cmd, "\r");
                     }                    
-                    curr_pid->init = init_item ? strdup(init_item->valuestring) : NULL;
+
+                    curr_pid->init = NULL;
+                    if (init_item && init_item->valuestring) {
+                        size_t init_len = strlen(init_item->valuestring);
+                        
+                        if (init_len > 0) {
+                            curr_pid->init = (char*)malloc(init_len + 2);
+                            if (curr_pid->init) {
+                                strncpy(curr_pid->init, init_item->valuestring, init_len);
+                                curr_pid->init[init_len] = '\0';
+                                
+                                // Replace semicolons with carriage returns
+                                for (size_t j = 0; j < init_len; j++) {
+                                    if (curr_pid->init[j] == ';') {
+                                        curr_pid->init[j] = '\r';
+                                    }
+                                }
+                            } else {
+                                ESP_LOGE(TAG, "Failed to allocate memory for init");
+                            }
+                        }
+                    }
+
                     curr_pid->period = period_item ? atoi(period_item->valuestring) : 10000;
                     curr_pid->rxheader = rxheader_item ? strdup(rxheader_item->valuestring) : NULL;
                     curr_pid->pid_type = PID_CUSTOM;

@@ -804,7 +804,7 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 		ESP_LOGI(TAG, "Firmware version: %ld.%ld", firmware_ver_major, firmware_ver_minor);
 	} 
 
-    sprintf(fver, "%ld.%ld", firmware_ver_major, firmware_ver_minor);
+    sprintf(fver, "%ld.%02ld", firmware_ver_major, firmware_ver_minor);
     sprintf(hver, "WiCAN-%s", HARDWARE_VERSION);
 
 	cJSON_AddStringToObject(root, "wifi_mode", device_config.wifi_mode);

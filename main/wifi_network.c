@@ -313,6 +313,16 @@ void wifi_network_init(char* sta_ssid, char* sta_pass)
             derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
     strcpy( (char*)wifi_config_ap.ap.password, (char*)config_server_get_ap_pass());
 
+    esp_err_t hostname_err = esp_netif_set_hostname(sta_netif, (char *)wifi_config_ap.ap.ssid);
+    if (hostname_err == ESP_OK)
+    {
+        ESP_LOGI(WIFI_TAG, "Hostname set to: %s", (char *)wifi_config_ap.ap.ssid);
+    }
+    else
+    {
+        ESP_LOGE(WIFI_TAG, "Failed to set hostname: %s", esp_err_to_name(hostname_err));
+    }
+
     esp_netif_ip_info_t ipInfo;
     IP4_ADDR(&ipInfo.ip, 192,168,80,1);
 	IP4_ADDR(&ipInfo.gw, 192,168,80,1);

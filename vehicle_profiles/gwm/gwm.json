@@ -1,0 +1,58 @@
+{
+  "car_model": "GWM: Ora Good Cat/Funky Cat/ES11/Haomao/Ora 03",
+  "init": "ATSP6;ATAT1;",
+  "pids": [
+    {
+      "pid": "22D0621",
+      "pid_init": "ATSH78A;ATFCSH78A;ATFCSD300000;ATFCSM1;ATCRA7CA;",
+      "parameters": [
+        {
+          "name": "SoC",
+          "class": "battery",
+          "expression": "[B4:B5]/10",
+          "unit": "%",
+          "min": "-5",
+          "max": "105"
+        }
+      ]
+    },
+    {
+      "pid": "2202102",
+      "pid_init": "ATSH76C;ATFCSH76C;ATCRA7AC;",
+      "parameters": [
+        {
+          "name": "TirePressureFL",
+          "class": "pressure",
+          "expression": "B5*0.2-0.22",
+          "unit": "psi",
+          "min": "",
+          "max": ""
+        },
+        {
+          "name": "TirePressureFR",
+          "class": "pressure",
+          "expression": "B7*0.2-0.22",
+          "unit": "psi",
+          "min": "",
+          "max": ""
+        },
+        {
+          "name": "TirePressureRL",
+          "class": "pressure",
+          "expression": "B10*0.2-0.22",
+          "unit": "psi",
+          "min": "",
+          "max": ""
+        },
+        {
+          "name": "TirePressureRR",
+          "class": "pressure",
+          "expression": "B12*0.2-0.22",
+          "unit": "psi",
+          "min": "",
+          "max": ""
+        }
+      ]
+    }
+  ]
+}

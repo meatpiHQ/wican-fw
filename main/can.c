@@ -120,7 +120,7 @@ void can_enable(void)
 	{
 		return;
 	}
-	gpio_set_level(CAN_STDBY_GPIO_NUM, 0);
+	
 	twai_timing_config_t *t_config;
 	t_config = (twai_timing_config_t *)&twai_timing_config[datarate];
 //	t_config = (twai_timing_config_t *)&twai_timing_config[CAN_500K];
@@ -145,6 +145,7 @@ void can_enable(void)
 	twai_clear_receive_queue();
 	can_unblock();
 	can_cfg.bus_state = ON_BUS;
+	gpio_set_level(CAN_STDBY_GPIO_NUM, 0);
 }
 
 void can_disable(void)

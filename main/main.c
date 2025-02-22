@@ -62,7 +62,7 @@
 #define ACTIVE_LED_GPIO_NUM			9
 #define BLE_EN_PIN_NUM				5
 #define PWR_LED_GPIO_NUM			7
-#define GPIO_OUTPUT_PIN_SEL  ((1ULL<<CONNECTED_LED_GPIO_NUM) | (1ULL<<ACTIVE_LED_GPIO_NUM) | (1ULL<<PWR_LED_GPIO_NUM) | (1ULL<<CAN_STDBY_GPIO_NUM))
+#define GPIO_OUTPUT_PIN_SEL  ((1ULL<<CONNECTED_LED_GPIO_NUM) | (1ULL<<ACTIVE_LED_GPIO_NUM) | (1ULL<<PWR_LED_GPIO_NUM))
 #define BLE_EN_PIN_SEL		(1ULL<<BLE_EN_PIN_NUM)
 #define BLE_Enabled()		(!gpio_get_level(BLE_EN_PIN_NUM))
 
@@ -382,6 +382,10 @@ void app_main(void)
 	gpio_set_level(CONNECTED_LED_GPIO_NUM, 1);
 	gpio_set_level(ACTIVE_LED_GPIO_NUM, 1);
 
+    gpio_reset_pin(CAN_STDBY_GPIO_NUM);
+    gpio_set_direction(CAN_STDBY_GPIO_NUM, GPIO_MODE_OUTPUT);
+    gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
+
     xMsg_Rx_Queue = xQueueCreate(16, sizeof( xdev_buffer) );
     xMsg_Tx_Queue = xQueueCreate(16, sizeof( xdev_buffer) );
     xmsg_ws_tx_queue = xQueueCreate(8, sizeof( xdev_buffer) );
@@ -521,7 +525,8 @@ void app_main(void)
     const esp_partition_t *running = esp_ota_get_running_partition();
     esp_app_desc_t running_app_info;
 	uint32_t firmware_ver_minor, firmware_ver_major;
-
+    ESP_LOGI(TAG, "Running partition type %d subtype %d (offset 0x%08lx)",
+             running->type, running->subtype, running->address);
     if (esp_ota_get_partition_description(running, &running_app_info) == ESP_OK)
     {
         ESP_LOGI(TAG, "Running firmware version: %s", running_app_info.version);
@@ -607,5 +612,6 @@ void app_main(void)
 	// esp_log_level_set("autopid_task", ESP_LOG_ERROR);
 	// esp_log_level_set("elm327_process_cmd", ESP_LOG_ERROR);
 	// esp_log_level_set("can_rx_task", ESP_LOG_INFO);
+	// esp_log_level_set("adc_task", ESP_LOG_INFO);
 }
 

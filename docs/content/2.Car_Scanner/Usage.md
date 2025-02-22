@@ -1,3 +1,0 @@
-# Car Scanner
-
-Not yet documented ...

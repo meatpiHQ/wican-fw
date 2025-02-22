@@ -1,0 +1,20 @@
+{
+  "car_model": "BYD: Dolphin",
+  "init": "ATST96;ATSP6;",
+  "pids": [
+    {
+      "pid": "2200051",
+      "pid_init": "ATSH7E7;",
+      "parameters": [
+        {
+          "name": "SoC",
+          "class": "battery",
+          "expression": "B4",
+          "unit": "%",
+          "min": "",
+          "max": ""
+        }
+      ]
+    }
+  ]
+}

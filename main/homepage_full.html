@@ -128,7 +128,7 @@
             width: 100%;
         }
 
-        input[type="text"],
+        input,
         input[type="number"],
         select {
             width: 100%;
@@ -140,7 +140,7 @@
             background-color: var(--white);
         }
 
-        input[type="text"]:focus,
+        input:focus,
         input[type="number"]:focus,
         select:focus {
             border-color: var(--primary-color);
@@ -148,7 +148,7 @@
             outline: none;
         }
 
-        input[type="text"]:disabled,
+        input:disabled,
         input[type="number"]:disabled,
         select:disabled {
             background-color: var(--gray-100);
@@ -166,6 +166,7 @@
             font-weight: 500;
             cursor: pointer;
             transition: var(--transition);
+            width: auto;
         }
 
         button:hover,
@@ -358,8 +359,21 @@
                 width: calc(100% - 200px);
             }
         }
+        .system-button {
+            min-width: 110px;
+            width: auto;
+            padding: 0.65rem 1.25rem;
+            white-space: nowrap;
+            margin: 0.1rem;
+        }
 
         @media (max-width: 768px) {
+            .system-button {
+                min-width: 110px;
+                width: 100%;
+                margin: 0.1rem 0;
+            }
+            
             .sidebar {
                 width: 100%;
                 height: auto;
@@ -577,7 +591,6 @@
                                 <option value="500K">500K</option>
                                 <option value="800K">800K</option>
                                 <option value="1000K">1000K</option>
-                                <option value="auto">Auto</option>
                             </select>
                         </td>
                     </tr>
@@ -700,30 +713,31 @@
                         </tr>
                     </table>
                     <div style="overflow-x:auto;">
-                        <table id="can_flt_table">
+                        <div class="section-title">MQTT CAN Filter</div>
+                        <table id="can_flt_table" >
                             <tr>
-                                <th>CAN ID (dec)</th>
-                                <th>Name</th>
-                                <th>PID</th>
-                                <th>Index</th>
-                                <th>Start Bit</th>
-                                <th>Bit Length</th>
-                                <th>Expression</th>
-                                <th>Cycle ms</th>
+                                <th style="text-align: left;">CAN ID (dec)</th>
+                                <th style="text-align: left;">Name</th>
+                                <th style="text-align: left;">PID</th>
+                                <th style="text-align: left;">Index</th>
+                                <th style="text-align: left;">Start Bit</th>
+                                <th style="text-align: left;">Bit Length</th>
+                                <th style="text-align: left;">Expression</th>
+                                <th style="text-align: left;">Cycle ms</th>
                                 <th><input id="store_canflt_button" name="store_canflt_button" type="button"
-                                        onclick="storeCANFLT()" value="Store" style="width: 70px;" /></th>
+                                        onclick="storeCANFLT()" value="Store" style="width: 100%;" /></th>
                             </tr>
                             <tr>
-                                <td><input type="number" id="canId" min="0" max="536870912" style="width: 100px;" /></td>
-                                <td><input type="text" id="name" maxlength="16" style="width: 70px;" /></td>
-                                <td><input type="number" id="pid" style="width: 40px;" /></td>
-                                <td><input type="number" id="pindex" style="width: 40px;" /></td>
-                                <td><input type="number" id="startBit" min="0" max="63" style="width: 40px;" /></td>
-                                <td><input type="number" id="bitLength" min="1" max="64" style="width: 40px;" /></td>
-                                <td><input type="text" id="expression" maxlength="32" style="width: 100px;" /></td>
-                                <td><input type="number" id="cycle" min="100" max="1000" style="width: 50px;" /></td>
+                                <td style="width: 10%;" ><input type="number" id="canId" min="0" max="536870912" style="width: 80%;"/></td>
+                                <td style="width: 20%;"><input type="text" id="name" maxlength="16" style="width: 90%;"/></td>
+                                <td style="width: 10%;"><input type="number" id="pid"  style="width: 80%;"/></td>
+                                <td style="width: 10%;"><input type="number" id="pindex"  style="width: 80%;"/></td>
+                                <td style="width: 10%;"><input type="number" id="startBit" min="0" max="63"  style="width: 80%;"/></td>
+                                <td style="width: 10%;"><input type="number" id="bitLength" min="1" max="64" style="width: 80%;"/></td>
+                                <td style="width: 20%;"><input type="text" id="expression" maxlength="64"  style="width: 90%;"/></td>
+                                <td style="width: 10%;"><input type="number" id="cycle" min="100" max="1000"  style="width: 80%;"/></td>
                                 <td><input id="add_row_button" name="add_row_button" type="button" onclick="addCANFLTRow()"
-                                        value="Add ID" style="width: 70px;" /></td>
+                                        value="Add ID" style="width: 100%;" /></td>
                             </tr>
                         </table>
                     </div>
@@ -737,7 +751,7 @@
                 <tr>
                     <td>MQTT HA Discovery:</td>
                     <td>
-                        <select id="ha_discovery" name="ha_discovery" onchange="checkForDuplicates(); toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
+                        <select id="ha_discovery" name="ha_discovery" toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
                             <option value="disable">Disable</option>
                         </select>
                     </td>
@@ -745,7 +759,7 @@
                 <tr>
                     <td>Grouping:</td>
                     <td>
-                        <select id="grouping" name="grouping" onchange="checkForDuplicates(); toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
+                        <select id="grouping" name="grouping" toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
                             <option value="disable">Disable</option>
                             <option value="enable">Enable</option>
                         </select>
@@ -1032,61 +1046,60 @@
             <table class="form-table">
                 <tr>
                     <td>Reboot WiCAN:</td>
-                    <td><input id="reboot_button" name="reboot_button" type="button" onclick="reboot()" value="Reboot" style="width: 15%;" /></td>
+                    <td><input id="reboot_button" name="reboot_button" type="button" onclick="reboot()" value="Reboot" class="system-button" /></td>
                 </tr>
                 <tr>
                     <td>Download Configuration:</td>
-                    <td><input id="download_cfg_butt" name="download_cfg_butt" type="button" onclick="downloadCfg()" value="Download" style="width: 15%;" /></td>
+                    <td><input id="download_cfg_butt" name="download_cfg_butt" type="button" onclick="downloadCfg()" value="Download" class="system-button" /></td>
                 </tr>
                 <tr>
                     <td>Upload Configuration:</td>
                     <td>
-                        <input type="button" onclick="document.getElementById('fileInput').click()" value="Upload" style="width: 15%;" />
+                        <input type="button" onclick="document.getElementById('fileInput').click()" value="Upload" class="system-button" />
                         <input type="file" id="fileInput" accept=".json" onchange="uploadCfg()" style="display: none;" />
                     </td>
                 </tr>
-                
             </table>
-
-            <div class="section-title">Firmware Update</div>
-            <table class="form-table">
-                <tr>
-                    <td><input id="ota_file" name="ota_file" type="file" accept=".bin" /></td>
-                    <td><input id="ota_submit_button" type="button" value="Update" onclick="otaClick()" style="width: 15%;" /></td>
-                </tr>
-            </table>
-        </div>
         
-        <div id="about_tab" class="tabcontent">
-            <div class="section-title">About</div>
+            <div class="section-title">Firmware Update</div>
             <form id="ota_form" action="/upload/ota.bin" method="post" enctype="multipart/form-data">
                 <table class="form-table">
                     <tr>
-                        <td>Firmware ver:</td>
-                        <td>
-                            <div id="fw_version">1.00</div>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>Hardware ver:</td>
-                        <td>
-                            <div id="hw_version">v2.10</div>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>Git ver:</td>
-                        <td>
-                            <div id="git_version">v2.10</div>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>Designed By:</td>
-                        <td>
-                            <div id="made_by"><a href="https://www.meatpi.com/"><b>meatpi.com</b></a></div>
-                        </td>
+                        <td><input id="ota_file" name="ota_file" type="file" accept=".bin" /></td>
+                        <td><input id="ota_submit_button" type="button" value="Update" onclick="otaClick()" class="system-button" /></td>
                     </tr>
                 </table>
             </form>
+        </div>
+               
+        <div id="about_tab" class="tabcontent">
+            <div class="section-title">About</div>
+            <table class="form-table">
+                <tr>
+                    <td>Firmware ver:</td>
+                    <td>
+                        <div id="fw_version">1.00</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Hardware ver:</td>
+                    <td>
+                        <div id="hw_version">v2.10</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Git ver:</td>
+                    <td>
+                        <div id="git_version">v2.10</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Designed By:</td>
+                    <td>
+                        <div id="made_by"><a href="https://www.meatpi.com/"><b>meatpi.com</b></a></div>
+                    </td>
+                </tr>
+            </table>
         </div>
         <input id="submit_button" name="submit_button" type="button" onclick="postConfig()" value="Submit Changes" disabled />
     </div>
@@ -1457,13 +1470,14 @@ function addCollapsibleRow(rowData = {}) {
                 </tr>
                 <tr>
                     <td>Send_to:</td>
-                    <td><input type="text" class="send-to-input" value="${rowData.Send_to || ''}" 
+                    <td><input type="text" class="send-to-input" value="${rowData.Send_to || ''}"
                         placeholder="Enter destination"></td>
                 </tr>
             </table>
         </div>
     `;
-
+    console.log("addCollapsibleRow:", rowData);
+    console.log("Send_to value:", rowData.Send_to);
     // Add these CSS styles
     const style = document.createElement('style');
     style.textContent = pidEntryStyles;
@@ -1483,7 +1497,7 @@ function addCollapsibleRow(rowData = {}) {
 
     const toggleCollapse = (e) => {
         e.stopPropagation();
-        const isHidden = content.style.display === 'none';
+        const isHidden = content.style.display === 'none' || getComputedStyle(content).display === 'none';
         content.style.display = isHidden ? 'block' : 'none';
         collapseBtn.textContent = isHidden ? '▲' : '▼';
     };
@@ -1701,8 +1715,7 @@ function addCarParameter(rowData = {}) {
 function loadAutoTable(jsonData) {
         try {
             console.log("Raw jsonData:", jsonData);
-            const data = JSON.parse(jsonData);
-            console.log("Parsed data:", data);
+            const data = jsonData;
 
             // First set the initialisation value
             const initialisationElement = document.getElementById("initialisation");
@@ -1910,8 +1923,8 @@ function loadAutoTable(jsonData) {
                     if (pidData.PID.length === 0 || pidData.PID.length >= 10) {
                         throw new Error("PID must not be empty and must be less than 10 characters");
                     }
-                    if (pidData.Expression.length === 0 || pidData.Expression.length >= 32) {
-                        throw new Error("Expression must not be empty and must be less than 32 characters");
+                    if (pidData.Expression.length === 0 || pidData.Expression.length >= 64) {
+                        throw new Error("Expression must not be empty and must be less than 64 characters");
                     }
                     if (!/^\d+$/.test(pidData.Period) || (parseInt(pidData.Period) < 100 && parseInt(pidData.Period) != 0)) {
                         throw new Error("Period must be a number greater than 100");
@@ -1989,60 +2002,26 @@ function loadAutoTable(jsonData) {
         }
     }
 
+    function toggleDestinationField() {
+        const groupingValue = document.getElementById("grouping").value;
+        toggleDestinationAndCycle();  // Reuse the updated function
+    }
 
-    function checkForDuplicates() {
-        const rows = document.querySelectorAll('.pid-entry');
-        const pidMap = new Map();
+    function toggleSendToFields() {
+        const groupingValue = document.getElementById("grouping")?.value || 'disable';
+        const table = document.getElementById("automate_table");
+        if (!table) return;
 
-        rows.forEach(row => {
-            const pidInput = row.querySelector('.pid-input');
+        const rows = table.getElementsByClassName('pid-entry');
+        if (!rows.length) return;
+
+        Array.from(rows).forEach(row => {
             const sendToInput = row.querySelector('.send-to-input');
-            
-            if (pidInput && pidInput.value) {
-                const pidValue = pidInput.value;
-
-                // Check if the PID already exists
-                if (pidMap.has(pidValue)) {
-                    pidMap.get(pidValue).push(sendToInput);
-                } else {
-                    pidMap.set(pidValue, [sendToInput]);
-                }
-            }
-        });
-
-        // Disable `sendToInput` for duplicate PIDs
-        pidMap.forEach((inputs, pid) => {
-            if (inputs.length > 1) {
-                inputs.forEach(input => {
-                    input.disabled = true;
-                    input.value = '';
-                });
-            } else {
-                inputs[0].disabled = false; // Enable input if it's not a duplicate
+            if (sendToInput) {
+                sendToInput.disabled = (groupingValue === "Group ALL");
             }
         });
     }
-
-        function toggleDestinationField() {
-			const groupingValue = document.getElementById("grouping").value;
-			toggleDestinationAndCycle();  // Reuse the updated function
-        }
-
-        function toggleSendToFields() {
-            const groupingValue = document.getElementById("grouping")?.value || 'disable';
-            const table = document.getElementById("automate_table");
-            if (!table) return;
-
-            const rows = table.getElementsByClassName('pid-entry');
-            if (!rows.length) return;
-
-            Array.from(rows).forEach(row => {
-                const sendToInput = row.querySelector('.send-to-input');
-                if (sendToInput) {
-                    sendToInput.disabled = (groupingValue === "Group ALL");
-                }
-            });
-        }
 
 	var canData = [];
 
@@ -2079,7 +2058,7 @@ function loadAutoTable(jsonData) {
 		cell6.innerHTML = bitLength;
 		cell7.innerHTML = expression;
 		cell8.innerHTML = cycle;
-		cell9.innerHTML = '<button style="width: 70px;" onclick="deleteCANFLTRow(this)">Delete</button>';
+		cell9.innerHTML = '<button style="width: 100%;" onclick="deleteCANFLTRow(this)">Delete</button>';
 		canData.push({
 			CANID: canId,
 			Name: name,
@@ -2335,7 +2314,8 @@ function loadAutoTable(jsonData) {
         xhttp.onload = function() {
             console.log("Server response:", this.responseText); // Debug log
             if(this.responseText !== "NONE") {
-                loadAutoTable(this.responseText);
+                const data = JSON.parse(this.responseText);
+                loadAutoTable(data);
                 document.getElementById("custom_pid_store").disabled = true;
             } else {
                 console.log("No PID data found on server");
@@ -2919,8 +2899,8 @@ function loadAutoTable(jsonData) {
 			alert("Name must be between 1 and 16 characters in length.");
 			return;
 		}
-		if(expression.length < 1 || expression.length > 32) {
-			alert("Expression must be between 1 and 32 characters in length.");
+		if(expression.length < 1 || expression.length > 64) {
+			alert("Expression must be between 1 and 64 characters in length.");
 			return;
 		}
 		if(isNaN(pid) || pid < -1 || pid > 255) {
@@ -2955,7 +2935,7 @@ function loadAutoTable(jsonData) {
 			cell6.innerHTML = bitLength;
 			cell7.innerHTML = expression;
 			cell8.innerHTML = cycle;
-			cell9.innerHTML = '<button style="width: 70px;" onclick="deleteCANFLTRow(this) ">Delete</button>';
+			cell9.innerHTML = '<button style="width: 100%;" onclick="deleteCANFLTRow(this) ">Delete</button>';
 			canData.push({
 				CANID: canId,
 				Name: name,
