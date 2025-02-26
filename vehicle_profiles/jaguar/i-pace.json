@@ -201,8 +201,32 @@
             "name": "batteryMaxRegen",
             "pid_init": "ATSH7E4;",
             "expression": "[B4:B5]/100",
-            "unit": "%",
-            "class": "battery"
+            "unit": "kW",
+            "class": "power"
+          }
+        ]
+      },
+      {
+        "pid": "22491b",
+        "parameters": [
+          {
+            "name": "batteryCoolantOutletTemp",
+            "pid_init": "ATSH7E4;",
+            "expression": "B4-40",
+            "unit": "°C",
+            "class": "temperature"
+          }
+        ]
+      },
+      {
+        "pid": "22491c",
+        "parameters": [
+          {
+            "name": "batteryCoolantInletTemp",
+            "pid_init": "ATSH7E4;",
+            "expression": "B4-40",
+            "unit": "°C",
+            "class": "temperature"
           }
         ]
       },
@@ -227,6 +251,209 @@
             "expression": "B4-40",
             "unit": "°C",
             "class": "temperature"
+          }
+        ]
+      },
+      {
+        "pid": "22dd09",
+        "parameters": [
+          {
+            "name": "vehicleSpeed",
+            "pid_init": "ATSH7E4;",
+            "expression": "B4",
+            "unit": "km/h",
+            "class": "speed"
+          }
+        ]
+      },
+      {
+        "pid": "222076",
+        "parameters": [
+          {
+            "name": "frontLeftTirePressure",
+            "pid_init": "ATSH751;",
+            "expression": "[B4:B5]",
+            "unit": "kPa",
+            "class": "pressure"
+          }
+        ]
+      },
+      {
+        "pid": "222077",
+        "parameters": [
+          {
+            "name": "frontRightTirePressure",
+            "pid_init": "ATSH751;",
+            "expression": "[B4:B5]",
+            "unit": "kPa",
+            "class": "pressure"
+          }
+        ]
+      },
+      {
+        "pid": "222078",
+        "parameters": [
+          {
+            "name": "rearLeftTirePressure",
+            "pid_init": "ATSH751;",
+            "expression": "[B4:B5]",
+            "unit": "kPa",
+            "class": "pressure"
+          }
+        ]
+      },
+      {
+        "pid": "222079",
+        "parameters": [
+          {
+            "name": "rearRightTirePressure",
+            "pid_init": "ATSH751;",
+            "expression": "[B4:B5]",
+            "unit": "kPa",
+            "class": "pressure"
+          }
+        ]
+      },
+      {
+        "pid": "222a0a",
+        "parameters": [
+          {
+            "name": "frontLeftTireTemp",
+            "pid_init": "ATSH751;",
+            "expression": "B4-50",
+            "unit": "°C",
+            "class": "temperature"
+          }
+        ]
+      },
+      {
+        "pid": "222a0b",
+        "parameters": [
+          {
+            "name": "frontRightTireTemp",
+            "pid_init": "ATSH751;",
+            "expression": "B4-50",
+            "unit": "°C",
+            "class": "temperature"
+          }
+        ]
+      },
+      {
+        "pid": "222a0c",
+        "parameters": [
+          {
+            "name": "rearLeftTireTemp",
+            "pid_init": "ATSH751;",
+            "expression": "B4-50",
+            "unit": "°C",
+            "class": "temperature"
+          }
+        ]
+      },
+      {
+        "pid": "222a0d",
+        "parameters": [
+          {
+            "name": "readRightTireTemp",
+            "pid_init": "ATSH751;",
+            "expression": "B4-50",
+            "unit": "°C",
+            "class": "temperature"
+          }
+        ]
+      },
+      {
+        "pid": "229924",
+        "parameters": [
+          {
+            "name": "ambientTemp",
+            "pid_init": "ATSH733;",
+            "expression": "(B4/2)-40",
+            "unit": "°C",
+            "class": "temperature"
+          }
+        ]
+      },
+      {
+        "pid": "22498f",
+        "parameters": [
+          {
+            "name": "mainsACVoltage",
+            "pid_init": "ATSH7E5;",
+            "expression": "B4*2",
+            "unit": "V",
+            "class": "voltage"
+          },
+          {
+            "name": "mainsACCurrent",
+            "pid_init": "ATSH7E5;",
+            "expression": "B5/5",
+            "unit": "A",
+            "class": "current"
+          }
+        ]
+      },
+      {
+        "pid": "2249a8",
+        "parameters": [
+          {
+            "name": "controlPilotPWMDutyCycle",
+            "pid_init": "ATSH7E5;",
+            "expression": "[B4:B5]/10",
+            "unit": "%",
+            "class": ""
+          },
+          {
+            "name": "controlPilotFrequency",
+            "pid_init": "ATSH7E5;",
+            "expression": "[B6:B7]",
+            "unit": "Hz",
+            "class": "frequency"
+          },
+          {
+            "name": "controlPilotStatusCode",
+            "pid_init": "ATSH7E5;",
+            "expression": "B8",
+            "unit": "",
+            "class": ""
+          },
+          {
+            "name": "controlPilotVoltage",
+            "pid_init": "ATSH7E5;",
+            "expression": "[B9:B10]/1000",
+            "unit": "V",
+            "class": "voltage"
+          },
+          {
+            "name": "evseMaxCurrent",
+            "pid_init": "ATSH7E5;",
+            "expression": "[B11:B12]/10",
+            "unit": "A",
+            "class": "current"
+          }
+        ]
+      },
+      {
+        "pid": "224208",
+        "parameters": [
+          {
+            "name": "DCDCOutputCurrent",
+            "pid_init": "ATSH753;",
+            "expression": "[B4:B5]/100",
+            "unit": "A",
+            "class": "current"
+          }
+        ]
+      },
+      {
+        "pid": "22420a",
+        "parameters": [
+          {
+            "name": "DCDCOutputVoltage",
+            "pid_init": "ATSH753;",
+            "expression": "B4/10",
+            "unit": "V",
+            "class": "voltage"
           }
         ]
       }
