@@ -4,16 +4,9 @@
     "pids": [
         {
             "pid": "22DDBC3",
-            "parameters": [
-                {
-                    "name": "SoC",
-                    "expression": "[B11:B12]/10",
-                    "unit": "%",
-                    "class": "battery",
-                    "min": "0",
-                    "max": "100"
-                }
-            ]
+            "parameters": {
+                "SOC": "[B11:B12]/10"
+            }
         }
     ]
 }
