@@ -1,10 +1,12 @@
 import { glob } from 'glob'
 import { readFile, writeFile } from 'fs/promises';
+import editJsonFile from 'edit-json-file'
 
 const source_folder = '../vehicle_profiles';
 const target = '../vehicle_profiles.json'
 
-const files = await glob(source_folder + '/**/*.json');
+const files = await glob(source_folder + '/bmw/*.json');
+const params = JSON.parse(await readFile('params.json'));
 
 let result = {
     'cars': []
@@ -12,6 +14,17 @@ let result = {
 
 async function add_json(path){
     let data = JSON.parse(await readFile(path));
+    let newParams = [];
+    Object.keys(data.pids).forEach(key => {
+        for( const [param, exp] of Object.entries(data.pids[key].parameters)){
+            newParams.push({
+                "name": param,
+                "expression": exp,
+                ...params[param].settings
+            })
+        }
+        data.pids[key].parameters = newParams;
+    })
     result.cars.push(data)
 }
 
@@ -49,3 +62,13 @@ if(supportedVehiclesListFilepath.length == 0 || supportedVehiclesListFilepath.le
     throw new Error('Unable to determine automateDirectory');
 }
 await writeFile(supportedVehiclesListFilepath[0], supportedVehiclesListContent);
+
+
+let param_array = Object.getOwnPropertyNames(params);
+let schema_file = editJsonFile('schema.json');
+const PARAM_PATH = "properties.pids.items.properties.parameters.propertyNames.enum";
+let existing_params = schema_file.get(PARAM_PATH);
+if(existing_params !== param_array){
+    schema_file.set(PARAM_PATH, param_array);
+    schema_file.save();
+}

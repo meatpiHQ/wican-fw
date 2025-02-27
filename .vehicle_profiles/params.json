@@ -1,0 +1,11 @@
+{
+    "SOC": {
+        "description": "State Of Charge",
+        "settings": {
+            "unit": "%",
+            "class": "battery",
+            "min": "0",
+            "max": "100"
+        }
+    }
+}
