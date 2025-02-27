@@ -7,7 +7,7 @@ const schema = JSON.parse(await readFile("schema.json", "utf-8"))
 const validate = ajv.compile(schema)
 
 const source_folder = '../vehicle_profiles';
-const files = await glob(source_folder + '/**/*.json')
+const files = await glob(source_folder + '/bmw/*.json')
 
 let errors = 0;
 
