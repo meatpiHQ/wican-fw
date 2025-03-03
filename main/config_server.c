@@ -844,7 +844,7 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	sprintf(volt, "%.1fV", tmp);
 	cJSON_AddStringToObject(root, "batt_voltage", volt);
 
-	cJSON_AddStringToObject(root, "mqtt_en", device_config.batt_alert);
+	cJSON_AddStringToObject(root, "mqtt_en", device_config.mqtt_en);
 	cJSON_AddStringToObject(root, "mqtt_url", device_config.mqtt_url);
 	cJSON_AddStringToObject(root, "mqtt_port", device_config.mqtt_port);
 	cJSON_AddStringToObject(root, "mqtt_user", device_config.mqtt_user);
