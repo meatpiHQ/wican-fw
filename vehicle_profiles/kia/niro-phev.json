@@ -13,7 +13,7 @@
         "pid": "2101",
         "parameters": {
             "SOC": "B09/2",
-            "CHARGER_CONNECTED": "B14:7",
+            "CHARGER_CONNECTED": "B14:7"
         }
       }
     ]

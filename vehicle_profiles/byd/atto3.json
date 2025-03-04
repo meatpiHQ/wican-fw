@@ -11,7 +11,7 @@
         {
             "pid": "220008",
             "parameters": {
-                "HV_VOLTS": "[B4:B5]"
+                "HV_V": "[B4:B5]"
             }
         },
         {

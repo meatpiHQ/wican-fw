@@ -60,11 +60,8 @@
 				{
 					"pid": "229243",
 					"parameters": {
-							"name": "KwhCharged",
-							"pid_init": "",
-							"expression": "[B5:B8] * 0.001",
-							"unit": "kwh",
-							"class": "battery"
+							"KWH_CHARGED": "[B5:B8] * 0.001"
+							
 						}
 				},				
 				{

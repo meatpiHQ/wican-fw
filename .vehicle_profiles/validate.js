@@ -17,8 +17,6 @@ async function validate_profile(path){
     let data = JSON.parse(file);
     let valid = validate(data);
     if(valid) return
-
-    console.log(path)
     console.log(validate.errors)
     errors++;
 }

@@ -8,6 +8,15 @@ const target = '../vehicle_profiles.json'
 const files = await glob(source_folder + '/**/*.json');
 const params = JSON.parse(await readFile('params.json'));
 
+let param_array = Object.getOwnPropertyNames(params);
+let schema_file = editJsonFile('schema.json');
+const PARAM_PATH = "properties.pids.items.properties.parameters.propertyNames.enum";
+let existing_params = schema_file.get(PARAM_PATH);
+if(existing_params !== param_array){
+    schema_file.set(PARAM_PATH, param_array);
+    schema_file.save();
+}
+
 let result = {
     'cars': []
 };
@@ -64,11 +73,3 @@ if(supportedVehiclesListFilepath.length == 0 || supportedVehiclesListFilepath.le
 await writeFile(supportedVehiclesListFilepath[0], supportedVehiclesListContent);
 
 
-let param_array = Object.getOwnPropertyNames(params);
-let schema_file = editJsonFile('schema.json');
-const PARAM_PATH = "properties.pids.items.properties.parameters.propertyNames.enum";
-let existing_params = schema_file.get(PARAM_PATH);
-if(existing_params !== param_array){
-    schema_file.set(PARAM_PATH, param_array);
-    schema_file.save();
-}

@@ -5,7 +5,7 @@
        {
           "pid":"2240281",
           "pid_init":"ATSHD01635;ATCP1D;ATCRA1EC6AE80;ATFCSH1DD01635;ATFCSD300000;ATFCSM1;",
-          "parameters":[
+          "parameters":
              {
                 "SOC": "(B4*0.6554)-0.08"
              }

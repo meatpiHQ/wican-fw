@@ -4,51 +4,35 @@
     "pids": [
       {
         "pid": "224910",
-        "parameters": [
+        "parameters": 
           {
-            "name": "batterySOC",
-            "pid_init": "ATSH7E4;",
-            "expression": "[B4:B5]/100",
-            "unit": "%",
-            "class": "battery"
+            "SOC": "[B4:B5]/100"
           }
-        ]
       },
       {
         "pid": "224911",
-        "parameters": [
+        "pid_init": "ATSH7E4;",
+        "parameters": 
           {
-            "name": "batterySOCMin",
-            "pid_init": "ATSH7E4;",
-            "expression": "[B4:B5]/100",
-            "unit": "%",
-            "class": "battery"
+            "SOC_MIN": "[B4:B5]/100"
+            
           }
-        ]
       },
       {
         "pid": "224914",
-        "parameters": [
+        "pid_init": "ATSH7E4;",
+        "parameters": 
           {
-            "name": "batterySOCMax",
-            "pid_init": "ATSH7E4;",
-            "expression": "[B4:B5]/100",
-            "unit": "%",
-            "class": "battery"
+            "SOC_MAX": "[B4:B5]/100",
           }
-        ]
       },
       {
         "pid": "224918",
-        "parameters": [
+        "pid_init": "ATSH7E4;",
+        "parameters": 
           {
-            "name": "batterySoHCapacity",
-            "pid_init": "ATSH7E4;",
-            "expression": "B4/2",
-            "unit": "%",
-            "class": "battery"
+            "SOH": "B4/2"
           }
-        ]
       },
       {
         "pid": "224919",

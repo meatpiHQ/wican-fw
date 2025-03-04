@@ -258,5 +258,26 @@
             "unit": "V",
             "class": "battery"
         }
+    },
+    "KWH_CHARGED": {
+        "description": "Total kWh Charged",
+        "settings": {
+            "unit": "kwh",
+                "class": "battery"
+        }
+    },
+    "SOC_MIN": {
+        "description": "Minimum SOC",
+        "settings": {
+            "unit": "%",
+            "class": "battery"
+        }
+    },
+    "SOC_MAX": {
+        "description": "Max SOC",
+        "settings": {
+            "unit": "%",
+            "class": "battery"
+        }
     }
 }
