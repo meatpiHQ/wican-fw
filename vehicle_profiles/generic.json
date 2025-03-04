@@ -37,13 +37,13 @@
         {
             "pid": "01111",
             "parameters": {
-                    "THROTTLE": "B3/2.55",
+                    "THROTTLE": "B3/2.55"
                 }
         },
         {
             "pid": "01101",
             "parameters": {
-                    "MAF": "[B3:B4]*0.01",
+                    "MAF": "[B3:B4]*0.01"
                     
                 }
         },
