@@ -4,47 +4,27 @@
     "pids": [
         {
             "pid": "222002",
-            "parameters": [
-                {
-                    "name": "SoC",
-                    "expression": "[B4:B5]*0.02",
-                    "unit": "%",
-                    "class": "battery"
-                }
-            ]
+            "parameters": {
+                "SOC": "[B4:B5]*0.02"
+            }
         },
         {
             "pid": "223206",
-            "parameters": [
-                {
-                    "name": "SoH",
-                    "expression": "B4",
-                    "unit": "%",
-                    "class": "battery"
-                }
-            ]
+            "parameters": {
+                "SOH": "B4"
+            }
         },
         {
             "pid": "223451",
-            "parameters": [
-                {
-                    "name": "Range",
-                    "expression": "[B4:B5]",
-                    "unit": "km",
-                    "class": "distance"
-                }
-            ]
+            "parameters": {
+                    "RANGE": "[B4:B5]"
+            }
         },
         {
             "pid": "222006",
-            "parameters": [
-                {
-                    "name": "Odometer",
-                    "expression": "[B4:B6]",
-                    "unit": "km",
-                    "class": "distance"
-                }
-            ]
+            "parameters": {
+                "ODOMETER": "[B4:B6]"
+            }
         }
     ]
 }

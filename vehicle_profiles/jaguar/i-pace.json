@@ -6,7 +6,7 @@
         "pid": "224910",
         "parameters": [
           {
-            "name": "batterySoC",
+            "name": "batterySOC",
             "pid_init": "ATSH7E4;",
             "expression": "[B4:B5]/100",
             "unit": "%",
@@ -18,7 +18,7 @@
         "pid": "224911",
         "parameters": [
           {
-            "name": "batterySoCMin",
+            "name": "batterySOCMin",
             "pid_init": "ATSH7E4;",
             "expression": "[B4:B5]/100",
             "unit": "%",
@@ -30,7 +30,7 @@
         "pid": "224914",
         "parameters": [
           {
-            "name": "batterySoCMax",
+            "name": "batterySOCMax",
             "pid_init": "ATSH7E4;",
             "expression": "[B4:B5]/100",
             "unit": "%",

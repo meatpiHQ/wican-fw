@@ -5,26 +5,16 @@
         {
             "pid":"2240281",
             "pid_init":"ATCP1D;ATCRA1EC6AE80;ATFCSH1DD01635;ATFCSD300000;ATFCSM1;",
-            "parameters": [
-                {
-                    "name": "SoC",
-                    "class":"battery",
-                    "expression":"(B4*0.6554)-0.08",
-                    "unit":"%"
+            "parameters": {
+                    "SOC":"(B4*0.6554)-0.08"
                 }
-            ]
         },
         {
             "pid": "22DD011",
             "pid_init":"ATCP1D;ATCRA1EC6EE80;ATFCSH1DD01637;",
-            "parameters": [
-                {
-                    "name":"Odometer",
-                    "class":"distance",
-                    "expression":"([B4:B7])/256",
-                    "unit":"km"
+            "parameters": {
+                    "ODOMETER": "([B4:B7])/256"
                 }
-            ]
         }
     ]
 }

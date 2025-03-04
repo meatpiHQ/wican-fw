@@ -5,26 +5,16 @@
         {
             "pid": "2283341",
             "pid_init":"ATSH7E4",
-            "parameters": [
-                {
-                    "name": "SOC",
-                    "expression": "(B4*100)/255",
-                    "unit": "%",
-                    "class": "battery"
-                }
-            ]
+            "parameters": {
+                "SOC": "(B4*100)/255"
+            }
         },
         {
             "pid": "2241A31",
             "pid_init":"ATSH7E4",
-            "parameters": [
-                {
-                    "name": "Capacity",
-                    "expression": "[B4:B5]/10",
-                    "unit": "Ah",
-                    "class": "battery"
-                }
-            ]
+            "parameters":{
+                "BATT_CAPACITY": "[B4:B5]/10"
+            }
         }
     ]
 }

@@ -5,16 +5,9 @@
     {
       "pid": "2200051",
       "pid_init": "ATSH7E7;",
-      "parameters": [
-        {
-          "name": "SoC",
-          "class": "battery",
-          "expression": "B4",
-          "unit": "%",
-          "min": "",
-          "max": ""
-        }
-      ]
+      "parameters": {
+        "SOC": "B4"
+      }
     }
   ]
 }

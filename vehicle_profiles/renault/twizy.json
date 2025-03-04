@@ -4,15 +4,10 @@
     "pids":[
        {
           "pid":"21035",
-          "parameters":[
+          "parameters":
              {
-                "name":"SOC",
-                "pid_init":"ATFCSM0;ATSH79B;ATSH79B;ATFCSM1;ATCRA7BB;",
-                "expression":"[B29:B30]/100",
-                "unit":"%",
-                "class":"battery"
+                "SOC": "ATFCSM0;ATSH79B;ATSH79B;ATFCSM1;ATCRA7BB;"
              }
-          ]
        }
     ]
  }

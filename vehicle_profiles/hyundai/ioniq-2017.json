@@ -4,52 +4,19 @@
   "pids": [
     {
       "pid": "21057",
-      "parameters": [
-        {
-          "name": "SOC_DISPLAY",
-          "expression": "B39/2",
-          "unit": "%",
-          "class": "battery"
-        },
-        {
-          "name": "SOH",
-          "expression": "[B33:B34]/10",
-          "unit": "%",
-          "class": ""
+      "parameters": {
+          "SOC_D": "B39/2",
+          "SOH": "[B33:B34]/10"
         }
-      ]
     },
     {
       "pid": "2101",
-      "parameters": [
-        {
-          "name": "SOC_BMS",
-          "expression": "B09/2",
-          "unit": "%",
-          "class": "battery"
-        },
-        {
-          "name": "Charger_Connected",
-          "expression": "B14:5",
-          "unit": "",
-          "class": "plug",
-          "type": "binary_sensor"
-        },
-        {
-          "name": "Charging",
-          "expression": "B14:7",
-          "unit": "",
-          "class": "battery_charging",
-          "type": "binary_sensor"
-        },
-        {
-          "name": "HV_Charger_Connected",
-          "expression": "B14:6",
-          "unit": "",
-          "class": "plug",
-          "type": "binary_sensor"
+      "parameters": {
+          "SOC": "B09/2",
+          "CHARGER_CONNECTED": "B14:5",
+          "CHARGING": "B14:7",
+          "CHARGING_DC": "B14:6"
         }
-      ]
     }
   ]
 }

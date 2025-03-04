@@ -4,14 +4,9 @@
     "pids": [
         {
             "pid": "222002",
-            "parameters": [
-                {
-                    "name": "SoC",
-                    "expression": "((B4*256)+B5)/50",
-                    "unit": "%",
-                    "class": "battery"
-                }
-            ]
+            "parameters": {
+                "SOC": "((B4*256)+B5)/50"
+            }
         }
     ]
 }

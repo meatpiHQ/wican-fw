@@ -4,116 +4,62 @@
 			"pids": [
 				{
 					"pid": "222006",
-					"parameters": [
-						{
-							"name": "Odometer",
-							"pid_init": "",
-							"expression": "[B4:B6]",
-							"unit": "km",
-							"class": "distance"
+					"parameters": {
+							"ODOMETER": "[B4:B6]"
 						}
-					]
 				},
 				{
 					"pid": "222B85",
-					"parameters": [
-						{
-							"name": "Plugged",
-							"pid_init": "",
-							"expression": "B4",
-							"unit": "",
-							"class": "battery"
+					"parameters": {
+							"CHARGER_CONNECTED": "B4"
 						}
-					]
 				},
 				{
 					"pid": "229002",
-					"parameters": [
-						{
-							"name": "SOC",
-							"pid_init": "",
-							"expression": "[B4:B5] * 0.01",
-							"unit": "%",
-							"class": "battery"
+					"parameters": {
+							"SOC": "[B4:B5] * 0.01"
 						}
-					]
 				},
 				{
 					"pid": "22300F",
-					"parameters": [
-						{
-							"name": "PowerAvail",
-							"pid_init": "",
-							"expression": "[B4:B5] * 0.025",
-							"unit": "kW",
-							"class": "battery"
+					"parameters": {
+							"HV_AV": "[B4:B5] * 0.025"
+							
 						}
-					]
 				},
 				{
 					"pid": "22300B",
-					"parameters": [
-						{
-							"name": "AcPhases",
-							"pid_init": "",
-							"expression": "B4",
-							"unit": "",
-							"class": "battery"
+					"parameters": {
+							"AC_P": "B4"	
 						}
-					]
 				},
 				{
 					"pid": "222218",
-					"parameters": [
-						{
-							"name": "TempAmb",
-							"pid_init": "",
-							"expression": "([B4:B5] * 0.1) - 273",
-							"unit": "°C",
-							"class": "none"
+					"parameters": {
+							"TMP_A": "([B4:B5] * 0.1) - 273"	
 						}
-					]
 				},
 				{
 					"pid": "222005",
-					"parameters": [
-						{
-							"name": "Batt12v",
-							"pid_init": "",
-							"expression": "[B4:B5] * 0.01",
-							"unit": "V",
-							"class": "battery"
+					"parameters": {
+							"LV_V": "[B4:B5] * 0.01"	
 						}
-					]
 				},
 				{
 					"pid": "229003",
-					"parameters": [
-						{
-							"name": "SOH",
-							"pid_init": "",
-							"expression": "[B4:B5] * 0.01",
-							"unit": "%",
-							"class": "battery"
+					"parameters": {
+							"SOH": "[B4:B5] * 0.01"
 						}
-					]
 				},
 				{
 					"pid": "2291C8",
-					"parameters": [
-						{
-							"name": "KwhAvail",
-							"pid_init": "",
-							"expression": "[B4:B6] * 0.001",
-							"unit": "kwh",
-							"class": "battery"
+					"parameters": {
+							"HV_CAPACITY_R": "[B4:B6] * 0.001"
 						}
-					]
 				},
 				{
 					"pid": "229243",
-					"parameters": [
-						{
+					"parameters": {
 							"name": "KwhCharged",
 							"pid_init": "",
 							"expression": "[B5:B8] * 0.001",
@@ -124,27 +70,16 @@
 				},				
 				{
 					"pid": "22300D",
-					"parameters": [
-						{
-							"name": "AcCurrent",
-							"pid_init": "",
-							"expression": "[B4:B5] * 0.1",
-							"unit": "A",
-							"class": "battery"
+					"parameters": {
+							"AC_C_C": "[B4:B5] * 0.1"
+							
 						}
-					]
 				},
 				{
 					"pid": "222B8A",
-					"parameters": [
-						{
-							"name": "AcVoltage",
-							"pid_init": "",
-							"expression": "[B4:B5] * 0.5",
-							"unit": "V",
-							"class": "battery"
+					"parameters": {
+							"AC_C_V": "[B4:B5] * 0.5"	
 						}
-					]
 				}
 			]
 		}

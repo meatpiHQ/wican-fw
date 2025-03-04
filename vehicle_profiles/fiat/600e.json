@@ -5,44 +5,23 @@
         {
             "pid": "22D4101",
             "pid_init":"ATSH6B4;ATFCSH6B4;ATCRA694;",
-            "parameters": [
-                {
-                    "name": "SOC",
-                    "expression": "[B4:B5]/512",
-                    "unit": "%",
-                    "class": "battery",
-                    "min": "-5",
-                    "max": "105"
-                }
-            ]
+            "parameters": {
+                "SOC": "[B4:B5]/512"
+            }
         },
         {
             "pid": "22D8601",
             "pid_init":"ATSH6B4;ATFCSH6B4;ATCRA694;",
-            "parameters": [
-                {
-                    "name": "SOH",
-                    "expression": "[B5:B6]/16",
-                    "unit": "%",
-                    "class": "battery",
-                    "min": "0",
-                    "max": "105"
-                }
-            ]
+            "parameters": {
+                "SOH": "[B5:B6]/16"
+            }
         },
         {
             "pid": "22D8151",
             "pid_init":"ATSH6B4;ATFCSH6B4;ATCRA694;",
-            "parameters": [
-                {
-                    "name": "HV_Volts",
-                    "expression": "[B4:B5]/16",
-                    "unit": "V",
-                    "class": "voltage",
-                    "min": "350",
-                    "max": "480"
-                }
-            ]
+            "parameters": {
+                    "HV_V": "[B4:B5]/16"
+            }
         }
     ]
 }

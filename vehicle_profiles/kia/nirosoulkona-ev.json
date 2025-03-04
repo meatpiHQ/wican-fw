@@ -31,7 +31,7 @@
           "class": "current"
         },
         {
-          "name": "HV_Volts",
+          "name": "HV_VOLTS",
           "expression": "[B19:B20]/10",
           "unit": "V",
           "class": "voltage"

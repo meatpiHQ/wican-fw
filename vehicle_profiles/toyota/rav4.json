@@ -4,39 +4,27 @@
 	"pids": [
 		{
 			"pid": "015B2",
-			"parameters": [
+			"parameters": 
 				{
-					"name": "SoC",
-					"pid_init": "ATST96;",
-					"expression": "(B3*20)/51",
-					"unit": "%",
-					"class": "battery"
+					"SOC": "ATST96;"
 				}
-			]
 		},
 		{
 			"pid": "01A61",
-			"parameters": [
+			"pid_init": "ATST96;",
+			"parameters": 
 				{
-					"name": "Odometer",
-					"pid_init": "ATST96;",
-					"expression": "([B3:B6])/10",
-					"unit": "km",
-					"class": "distance"
+					"ODOMETER": "([B3:B6])/10"
 				}
-			]
 		},
 		{
 			"pid":"01317",
-			"parameters": [
+			"pid_init": "ATSH7DF;",
+			"parameters": 
 				{
-					"name": "OILCH_DIS",
-					"pid_init": "ATSH7DF;",
-					"expression": "(256*B3)+B4",
-					"unit": "km",
-					"class": "distance"
+					"OILCH_DIS": "(256*B3)+B4"
+					
 				}
-			]
 		}
 	]
 }

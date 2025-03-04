@@ -4,42 +4,21 @@
     "pids": [
         {
             "pid": "221FFC1",
-            "parameters": [
-                {
-                    "name": "SOC",
-                    "expression": "((B5*256)+B4)/100",
-                    "unit": "%",
-                    "class": "battery",
-                    "min": "-5",
-                    "max": "105"
-                }
-            ]
+            "parameters": {
+                "SOC": "((B5*256)+B4)/100"
+            }
         },
         {
             "pid": "220008",
-            "parameters": [
-                {
-                    "name": "HV_Volts",
-                    "expression": "[B4:B5]",
-                    "unit": "V",
-                    "class": "voltage",
-                    "min": "200",
-                    "max": "465"
-                }
-            ]
+            "parameters": {
+                "HV_VOLTS": "[B4:B5]"
+            }
         },
         {
             "pid": "220032",
-            "parameters": [
-                {
-                    "name": "Batt_Temp",
-                    "expression": "B4-40",
-                    "unit": "°C",
-                    "class": "temperature",
-                    "min": "-40",
-                    "max": "80"
-                }
-            ]
+            "parameters": {
+                "BATT_TEMP": "B4-40"
+            }
         }
     ]
 }

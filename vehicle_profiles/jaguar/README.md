@@ -12,9 +12,9 @@ These are confirmed working on a model year 2019 I-PACE.
 
 |Supported|Name|PID|Module|Description|Notes|
 |:-------:|----|---|------|-----------|-----|
-|✅|batterySoC|4910|BECM (7E4)| The "true" HV battery state of charge||
-|✅|batterySoCMin|4911|BECM (7E4)|||
-|✅|batterySoCMax|4914|BECM (7E4)|||
+|✅|batterySOC|4910|BECM (7E4)| The "true" HV battery state of charge||
+|✅|batterySOCMin|4911|BECM (7E4)|||
+|✅|batterySOCMax|4914|BECM (7E4)|||
 |✅|batterySoHCapacity|4918|BECM (7E4)|||
 |✅|batterySoHCapacityMin|4919|BECM (7E4)|||
 |✅|batterySoHCapacityMax|491A|BECM (7E4)|||

@@ -7,12 +7,8 @@
           "pid_init":"ATSHD01635;ATCP1D;ATCRA1EC6AE80;ATFCSH1DD01635;ATFCSD300000;ATFCSM1;",
           "parameters":[
              {
-                "class":"battery",
-                "expression":"(B4*0.6554)-0.08",
-                "name":"soc",
-                "unit":"%"
+                "SOC": "(B4*0.6554)-0.08"
              }
-          ]
        }
     ]
  }

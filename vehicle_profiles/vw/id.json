@@ -5,50 +5,35 @@
       {
          "pid":"22028C1",
          "pid_init":"ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATCRA17FE007B;",
-         "parameters":[
+         "parameters":
             {
-               "class":"battery",
-               "expression":"B4*0.4425-6.1947",
-               "name":"soc",
-               "unit":"%"
+               "SOC": "B4*0.4425-6.1947"
             }
-         ]
       },
       {
          "pid":"222AB62",
          "pid_init":"ATSP6;ATCP18;ATSH710;ATFCSH710;ATCRA77A;",
-         "parameters":[
+         "parameters":
             {
-               "class":"none",
-               "expression":"(B5*256)+B6",
-               "name":"range",
-               "unit":"km"
+               "RANGE": "(B5*256)+B6"
             }
-         ]
       },
       {
          "pid":"22295A",
          "pid_init":"ATSP7;ATCP17;ATSHFC0076;ATFCSH17FC0076;ATCRA17FE0076;",
-         "parameters":[
+         "parameters":
             {
-               "class":"none",
-               "expression":"[B4:B6]",
-               "name":"odometer",
-               "unit":"km"
+               "ODOMETER": "[B4:B6]"
             }
-         ]
       },
       {
          "pid":"222AB2",
          "pid_init":"ATSP6;ATCP18;ATSH710;ATFCSH710;ATCRA77A;",
-         "parameters":[
+         "parameters":
             {
-               "class":"battery",
-               "expression":"[B4:B5]*50/1000",
-               "name":"capacity",
-               "unit":"kWh"
+               "HV_CAPACITY_KWH": "[B4:B5]*50/1000"
+               
             }
-         ]
       }
    ]
 }

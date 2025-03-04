@@ -4,113 +4,68 @@
     "pids": [
         {
             "pid": "010C1",
-            "parameters": [
-                {
-                    "name": "EngineRPM",
-                    "expression": "[B3:B4]*0.25",
-                    "unit": "RPM",
-                    "class": "frequency"
+            "parameters": {
+                    "ENGINE_RPM": "[B3:B4]*0.25"
                 }
-            ]
         },
         {
             "pid": "010D1",
-            "parameters": [
-                {
-                    "name": "VehicleSpeed",
-                    "expression": "B3",
-                    "unit": "km/h",
-                    "class": "speed"
+            "parameters": {
+                    "SPEED": "B3"
+                    
                 }
-            ]
         },
         {
             "pid": "01051",
-            "parameters": [
-                {
-                    "name": "Coolant",
-                    "expression": "B3-40",
-                    "unit": "°C",
-                    "class": "temperature"
-                }
-            ]
+            "parameters": {
+                "COOLANT_TMP": "B3-40"
+            }
         },
         {
             "pid": "012F1",
-            "parameters": [
-                {
-                    "name": "FuelLevel",
-                    "expression": "B3/2.55",
-                    "unit": "%",
-                    "class": "none"
+            "parameters": {
+                    "FUEL": "B3/2.55"   
                 }
-            ]
         },
         {
             "pid": "010F1",
-            "parameters": [
-                {
-                    "name": "IntakeAirTemp",
-                    "expression": "B3-40",
-                    "unit": "°C",
-                    "class": "temperature"
+            "parameters": {
+                    "INTAKE_AIR_TMP": "B3-40"
+                    
                 }
-            ]
         },
         {
             "pid": "01111",
-            "parameters": [
-                {
-                    "name": "Throttle",
-                    "expression": "B3/2.55",
-                    "unit": "%",
-                    "class": "none"
+            "parameters": {
+                    "THROTTLE": "B3/2.55",
                 }
-            ]
         },
         {
             "pid": "01101",
-            "parameters": [
-                {
-                    "name": "MAF",
-                    "expression": "[B3:B4]*0.01",
-                    "unit": "g/s",
-                    "class": "none"
+            "parameters": {
+                    "MAF": "[B3:B4]*0.01",
+                    
                 }
-            ]
         },
         {
             "pid": "010A1",
-            "parameters": [
-                {
-                    "name": "FuelPressure",
-                    "expression": "B3*3",
-                    "unit": "kPa",
-                    "class": "pressure"
+            "parameters": {
+                    "FUEL_PRESSURE": "B3*3"
+                    
                 }
-            ]
         },
         {
             "pid": "01061",
-            "parameters": [
-                {
-                    "name": "ShortTermFuelTrim",
-                    "expression": "(B3/1.28)-100",
-                    "unit": "%",
-                    "class": "none"
+            "parameters": {
+                    "STFT": "(B3/1.28)-100"
+                    
                 }
-            ]
         },
         {
             "pid": "01A61",
-            "parameters": [
-                {
-                    "name": "Odometer",
-                    "expression": "[B3:B6]",
-                    "unit": "km",
-                    "class": "distance"
+            "parameters": {
+                    "ODOMETER": "[B3:B6]"
                 }
-            ]
         }
     ]
 }

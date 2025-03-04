@@ -5,7 +5,7 @@ import editJsonFile from 'edit-json-file'
 const source_folder = '../vehicle_profiles';
 const target = '../vehicle_profiles.json'
 
-const files = await glob(source_folder + '/bmw/*.json');
+const files = await glob(source_folder + '/**/*.json');
 const params = JSON.parse(await readFile('params.json'));
 
 let result = {
