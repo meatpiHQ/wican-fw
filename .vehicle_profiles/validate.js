@@ -13,6 +13,7 @@ let errors = 0;
 
 async function validate_profile(path){
     let file = await readFile(path, "utf-8");
+    console.log("Parsing: " + path);
     let data = JSON.parse(file);
     let valid = validate(data);
     if(valid) return
