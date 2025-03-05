@@ -1,81 +1,78 @@
 {
-			"car_model": "Renault Zoe Ph2 (2020-)",
-			"init": "ATE0;ATH1;ATSP7;ATS0;ATM0;ATAT1;ATFCSM1;ATCP18;",
-			"pids": [
-				{
-					"pid": "222006",
-					"parameters": {
-							"ODOMETER": "[B4:B6]"
-						}
-				},
-				{
-					"pid": "222B85",
-					"parameters": {
-							"CHARGER_CONNECTED": "B4"
-						}
-				},
-				{
-					"pid": "229002",
-					"parameters": {
-							"SOC": "[B4:B5] * 0.01"
-						}
-				},
-				{
-					"pid": "22300F",
-					"parameters": {
-							"HV_AV": "[B4:B5] * 0.025"
-							
-						}
-				},
-				{
-					"pid": "22300B",
-					"parameters": {
-							"AC_P": "B4"	
-						}
-				},
-				{
-					"pid": "222218",
-					"parameters": {
-							"TMP_A": "([B4:B5] * 0.1) - 273"	
-						}
-				},
-				{
-					"pid": "222005",
-					"parameters": {
-							"LV_V": "[B4:B5] * 0.01"	
-						}
-				},
-				{
-					"pid": "229003",
-					"parameters": {
-							"SOH": "[B4:B5] * 0.01"
-						}
-				},
-				{
-					"pid": "2291C8",
-					"parameters": {
-							"HV_CAPACITY_R": "[B4:B6] * 0.001"
-						}
-				},
-				{
-					"pid": "229243",
-					"parameters": {
-							"KWH_CHARGED": "[B5:B8] * 0.001"
-							
-						}
-				},				
-				{
-					"pid": "22300D",
-					"parameters": {
-							"AC_C_C": "[B4:B5] * 0.1"
-							
-						}
-				},
-				{
-					"pid": "222B8A",
-					"parameters": {
-							"AC_C_V": "[B4:B5] * 0.5"	
-						}
-				}
-			]
-		}
+  "car_model": "Renault Zoe Ph2 (2020-)",
+  "init": "ATE0;ATH1;ATSP7;ATS0;ATM0;ATAT1;ATFCSM1;ATCP18;",
+  "pids": [
+    {
+      "pid": "222006",
+      "parameters": {
+        "ODOMETER": "[B4:B6]"
+      }
+    },
+    {
+      "pid": "222B85",
+      "parameters": {
+        "CHARGER_CONNECTED": "B4"
+      }
+    },
+    {
+      "pid": "229002",
+      "parameters": {
+        "SOC": "[B4:B5] * 0.01"
+      }
+    },
+    {
+      "pid": "22300F",
+      "parameters": {
+        "HV_AV": "[B4:B5] * 0.025"
+      }
+    },
+    {
+      "pid": "22300B",
+      "parameters": {
+        "AC_P": "B4"
+      }
+    },
+    {
+      "pid": "222218",
+      "parameters": {
+        "TMP_A": "([B4:B5] * 0.1) - 273"
+      }
+    },
+    {
+      "pid": "222005",
+      "parameters": {
+        "LV_V": "[B4:B5] * 0.01"
+      }
+    },
+    {
+      "pid": "229003",
+      "parameters": {
+        "SOH": "[B4:B5] * 0.01"
+      }
+    },
+    {
+      "pid": "2291C8",
+      "parameters": {
+        "HV_CAPACITY_R": "[B4:B6] * 0.001"
+      }
+    },
+    {
+      "pid": "229243",
+      "parameters": {
+        "KWH_CHARGED": "[B5:B8] * 0.001"
+      }
+    },
+    {
+      "pid": "22300D",
+      "parameters": {
+        "AC_C_C": "[B4:B5] * 0.1"
+      }
+    },
+    {
+      "pid": "222B8A",
+      "parameters": {
+        "AC_C_V": "[B4:B5] * 0.5"
+      }
+    }
+  ]
+}

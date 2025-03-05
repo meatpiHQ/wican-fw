@@ -10,25 +10,25 @@ These are confirmed working on a model year 2019 I-PACE.
 
 ### PID Listing
 
-|Supported|Name|PID|Module|Description|Notes|
-|:-------:|----|---|------|-----------|-----|
-|✅|batterySOC|4910|BECM (7E4)| The "true" HV battery state of charge||
-|✅|batterySOCMin|4911|BECM (7E4)|||
-|✅|batterySOCMax|4914|BECM (7E4)|||
-|✅|batterySoHCapacity|4918|BECM (7E4)|||
-|✅|batterySoHCapacityMin|4919|BECM (7E4)|||
-|✅|batterySoHCapacityMax|491A|BECM (7E4)|||
-|✅|batterySoHPower|4915|BECM (7E4)|||
-|✅|batterySoHPowerMin|4916|BECM (7E4)|||
-|✅|batterySoHPowerMax|4917|BECM (7E4)|||
-|✅|batteryCellMinVolt|4904|BECM (7E4)|Minimum voltage of any of the 108 HV battery cells||
-|✅|batteryCellMaxVolt|4903|BECM (7E4)|Maximum voltage of any of the 108 HV battery cells||
-|✅|batteryVolt|490F|BECM (7E4)|Voltage of HV battery||
-|✅|batteryCurrent|490C|BECM (7E4)|Current of HV battery|Positive is discharging|
-|✅|batteryTempMin|4906|BECM (7E4)|Minimum temperature of any of the 108 HV battery cells||
-|✅|batteryTempMax|4905|BECM (7E4)|Maximum temperature of any of the 108 HV battery cells||
-|✅|batteryTempAvg|4907|BECM (7E4)|Average temperature of any of the 108 HV battery cells||
-|✅|batteryMaxRegen|4913|BECM (7E4)|Maximum allowed regen rate (kW)||
-|✅|odometer|DD01|BECM (7E4)|||
-|✅|cabinTemp|DD04|BECM (7E4)|||
-|❌|vin|F190|BECM (7E4)|Vehicle Idenification Number|Multi frame message|
+| Supported | Name                  | PID  | Module     | Description                                            | Notes                   |
+| :-------: | --------------------- | ---- | ---------- | ------------------------------------------------------ | ----------------------- |
+|    ✅     | batterySOC            | 4910 | BECM (7E4) | The "true" HV battery state of charge                  |                         |
+|    ✅     | batterySOCMin         | 4911 | BECM (7E4) |                                                        |                         |
+|    ✅     | batterySOCMax         | 4914 | BECM (7E4) |                                                        |                         |
+|    ✅     | batterySoHCapacity    | 4918 | BECM (7E4) |                                                        |                         |
+|    ✅     | batterySoHCapacityMin | 4919 | BECM (7E4) |                                                        |                         |
+|    ✅     | batterySoHCapacityMax | 491A | BECM (7E4) |                                                        |                         |
+|    ✅     | batterySoHPower       | 4915 | BECM (7E4) |                                                        |                         |
+|    ✅     | batterySoHPowerMin    | 4916 | BECM (7E4) |                                                        |                         |
+|    ✅     | batterySoHPowerMax    | 4917 | BECM (7E4) |                                                        |                         |
+|    ✅     | batteryCellMinVolt    | 4904 | BECM (7E4) | Minimum voltage of any of the 108 HV battery cells     |                         |
+|    ✅     | batteryCellMaxVolt    | 4903 | BECM (7E4) | Maximum voltage of any of the 108 HV battery cells     |                         |
+|    ✅     | batteryVolt           | 490F | BECM (7E4) | Voltage of HV battery                                  |                         |
+|    ✅     | batteryCurrent        | 490C | BECM (7E4) | Current of HV battery                                  | Positive is discharging |
+|    ✅     | batteryTempMin        | 4906 | BECM (7E4) | Minimum temperature of any of the 108 HV battery cells |                         |
+|    ✅     | batteryTempMax        | 4905 | BECM (7E4) | Maximum temperature of any of the 108 HV battery cells |                         |
+|    ✅     | batteryTempAvg        | 4907 | BECM (7E4) | Average temperature of any of the 108 HV battery cells |                         |
+|    ✅     | batteryMaxRegen       | 4913 | BECM (7E4) | Maximum allowed regen rate (kW)                        |                         |
+|    ✅     | odometer              | DD01 | BECM (7E4) |                                                        |                         |
+|    ✅     | cabinTemp             | DD04 | BECM (7E4) |                                                        |                         |
+|    ❌     | vin                   | F190 | BECM (7E4) | Vehicle Idenification Number                           | Multi frame message     |

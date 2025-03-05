@@ -1,131 +1,120 @@
 {
-    "car_model": "Jaguar: I-PACE",
-    "init": "ATSP6;ATST96;",
-    "pids": [
-      {
-        "pid": "224910",
-        "parameters": 
-          {
-            "SOC": "[B4:B5]/100"
-          }
-      },
-      {
-        "pid": "224911",
-        "parameters": 
-          {
-            "SOC_MIN": "[B4:B5]/100"
-            
-          }
-      },
-      {
-        "pid": "224914",
-        "parameters": 
-          {
-            "SOC_MAX": "[B4:B5]/100"
-          }
-      },
-      {
-        "pid": "224918",
-        "parameters": 
-          {
-            "SOH": "B4/2"
-          }
-      },
-      {
-        "pid": "224919",
-        "parameters": 
-          {
-            "HV_C_D_MIN": "B4/2"
-          }
-      },
-      {
-        "pid": "22491a",
-        "parameters": 
-          {
-            "HV_C_D_MAX": "B4/2"
-          }
-        
-      },
-      {
-        "pid": "224915",
-        "parameters": {
-            "HV_C_D_MAX": "B4/2"
-          }
-      },
-      {
-        "pid": "224916",
-        "parameters": 
-          {
-            "HV_C_D_MIN": "B4/2"
-          }
-      },
-      {
-        "pid": "224917",
-        "parameters": 
-          {
-            "HV_C_D_MAX": "B4/2"
-          }
-      },
-      {
-        "pid": "224904",
-        "parameters": {
-            "HV_C_V_MIN": "[B4:B5]/1000"
-          }
-      },
-      {
-        "pid": "224903",
-        "parameters": {
-            "HV_C_V_MAX": "[B4:B5]/1000"
-          }
-      },
-      {
-        "pid": "22490F",
-        "parameters": {
-            "HV_V": "[B4:B5]/100"
-          }
-      },
-      {
-        "pid": "22490C",
-        "parameters": {
-            "HV_A": "([B4:B5]-32768)/40"
-          }
-      },
-      {
-        "pid": "224906",
-        "parameters": {
-            "HV_T_MIN": "(B4/2)-40"
-          }
-      },
-      {
-        "pid": "224905",
-        "parameters": {
-            "HV_T_MAX": "(B4/2)-40"
-          }
-      },
-      {
-        "pid": "224907",
-        "parameters": {
-            "HV_T_A": "(B4/2)-40"
-          }
-      },
-      {
-        "pid": "224913",
-        "parameters": {
-            "REGEN_MAX": "[B4:B5]/100"
-          }
-      },
-      {
-        "pid": "22dd01",
-        "parameters": {
-            "ODOMETER": "[B4:B6]"
-          }
-      },
-      {
-        "pid": "22dd04",
-        "parameters": {
-            "T_CAB": "B4-40"
-          }
+  "car_model": "Jaguar: I-PACE",
+  "init": "ATSP6;ATST96;",
+  "pids": [
+    {
+      "pid": "224910",
+      "parameters": {
+        "SOC": "[B4:B5]/100"
       }
-    ]
-  }
-  
+    },
+    {
+      "pid": "224911",
+      "parameters": {
+        "SOC_MIN": "[B4:B5]/100"
+      }
+    },
+    {
+      "pid": "224914",
+      "parameters": {
+        "SOC_MAX": "[B4:B5]/100"
+      }
+    },
+    {
+      "pid": "224918",
+      "parameters": {
+        "SOH": "B4/2"
+      }
+    },
+    {
+      "pid": "224919",
+      "parameters": {
+        "HV_C_D_MIN": "B4/2"
+      }
+    },
+    {
+      "pid": "22491a",
+      "parameters": {
+        "HV_C_D_MAX": "B4/2"
+      }
+    },
+    {
+      "pid": "224915",
+      "parameters": {
+        "HV_C_D_MAX": "B4/2"
+      }
+    },
+    {
+      "pid": "224916",
+      "parameters": {
+        "HV_C_D_MIN": "B4/2"
+      }
+    },
+    {
+      "pid": "224917",
+      "parameters": {
+        "HV_C_D_MAX": "B4/2"
+      }
+    },
+    {
+      "pid": "224904",
+      "parameters": {
+        "HV_C_V_MIN": "[B4:B5]/1000"
+      }
+    },
+    {
+      "pid": "224903",
+      "parameters": {
+        "HV_C_V_MAX": "[B4:B5]/1000"
+      }
+    },
+    {
+      "pid": "22490F",
+      "parameters": {
+        "HV_V": "[B4:B5]/100"
+      }
+    },
+    {
+      "pid": "22490C",
+      "parameters": {
+        "HV_A": "([B4:B5]-32768)/40"
+      }
+    },
+    {
+      "pid": "224906",
+      "parameters": {
+        "HV_T_MIN": "(B4/2)-40"
+      }
+    },
+    {
+      "pid": "224905",
+      "parameters": {
+        "HV_T_MAX": "(B4/2)-40"
+      }
+    },
+    {
+      "pid": "224907",
+      "parameters": {
+        "HV_T_A": "(B4/2)-40"
+      }
+    },
+    {
+      "pid": "224913",
+      "parameters": {
+        "REGEN_MAX": "[B4:B5]/100"
+      }
+    },
+    {
+      "pid": "22dd01",
+      "parameters": {
+        "ODOMETER": "[B4:B6]"
+      }
+    },
+    {
+      "pid": "22dd04",
+      "parameters": {
+        "T_CAB": "B4-40"
+      }
+    }
+  ]
+}

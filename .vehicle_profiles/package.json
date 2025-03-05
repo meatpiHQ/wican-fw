@@ -13,6 +13,10 @@
   "dependencies": {
     "ajv": "^8.17.1",
     "edit-json-file": "^1.8.1",
-    "glob": "^11.0.0"
+    "glob": "^11.0.0",
+    "prettier": "^3.5.3"
+  },
+  "devDependencies": {
+    "prettier-plugin-sort-json": "^4.1.1"
   }
 }

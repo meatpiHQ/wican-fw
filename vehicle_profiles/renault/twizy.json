@@ -1,13 +1,12 @@
 {
-    "car_model":"Renault: Twizy",
-    "init":"ATSP6;ATST96;ATSH79B;ATFCSH79B;ATFCSD300000;ATFCSM1;ATCRA7BB;",
-    "pids":[
-       {
-          "pid":"21035",
-          "parameters":
-             {
-                "SOC": "ATFCSM0;ATSH79B;ATSH79B;ATFCSM1;ATCRA7BB;"
-             }
-       }
-    ]
- }
+  "car_model": "Renault: Twizy",
+  "init": "ATSP6;ATST96;ATSH79B;ATFCSH79B;ATFCSD300000;ATFCSM1;ATCRA7BB;",
+  "pids": [
+    {
+      "pid": "21035",
+      "parameters": {
+        "SOC": "ATFCSM0;ATSH79B;ATSH79B;ATFCSM1;ATCRA7BB;"
+      }
+    }
+  ]
+}

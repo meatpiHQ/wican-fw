@@ -1,71 +1,66 @@
 {
-    "car_model": "AAA: Generic",
-    "init": "ATSP6;",
-    "pids": [
-        {
-            "pid": "010C1",
-            "parameters": {
-                    "ENGINE_RPM": "[B3:B4]*0.25"
-                }
-        },
-        {
-            "pid": "010D1",
-            "parameters": {
-                    "SPEED": "B3"
-                    
-                }
-        },
-        {
-            "pid": "01051",
-            "parameters": {
-                "COOLANT_TMP": "B3-40"
-            }
-        },
-        {
-            "pid": "012F1",
-            "parameters": {
-                    "FUEL": "B3/2.55"   
-                }
-        },
-        {
-            "pid": "010F1",
-            "parameters": {
-                    "INTAKE_AIR_TMP": "B3-40"
-                    
-                }
-        },
-        {
-            "pid": "01111",
-            "parameters": {
-                    "THROTTLE": "B3/2.55"
-                }
-        },
-        {
-            "pid": "01101",
-            "parameters": {
-                    "MAF": "[B3:B4]*0.01"
-                    
-                }
-        },
-        {
-            "pid": "010A1",
-            "parameters": {
-                    "FUEL_PRESSURE": "B3*3"
-                    
-                }
-        },
-        {
-            "pid": "01061",
-            "parameters": {
-                    "STFT": "(B3/1.28)-100"
-                    
-                }
-        },
-        {
-            "pid": "01A61",
-            "parameters": {
-                    "ODOMETER": "[B3:B6]"
-                }
-        }
-    ]
+  "car_model": "AAA: Generic",
+  "init": "ATSP6;",
+  "pids": [
+    {
+      "pid": "010C1",
+      "parameters": {
+        "ENGINE_RPM": "[B3:B4]*0.25"
+      }
+    },
+    {
+      "pid": "010D1",
+      "parameters": {
+        "SPEED": "B3"
+      }
+    },
+    {
+      "pid": "01051",
+      "parameters": {
+        "COOLANT_TMP": "B3-40"
+      }
+    },
+    {
+      "pid": "012F1",
+      "parameters": {
+        "FUEL": "B3/2.55"
+      }
+    },
+    {
+      "pid": "010F1",
+      "parameters": {
+        "INTAKE_AIR_TMP": "B3-40"
+      }
+    },
+    {
+      "pid": "01111",
+      "parameters": {
+        "THROTTLE": "B3/2.55"
+      }
+    },
+    {
+      "pid": "01101",
+      "parameters": {
+        "MAF": "[B3:B4]*0.01"
+      }
+    },
+    {
+      "pid": "010A1",
+      "parameters": {
+        "FUEL_PRESSURE": "B3*3"
+      }
+    },
+    {
+      "pid": "01061",
+      "parameters": {
+        "STFT": "(B3/1.28)-100"
+      }
+    },
+    {
+      "pid": "01A61",
+      "parameters": {
+        "ODOMETER": "[B3:B6]"
+      }
+    }
+  ]
 }

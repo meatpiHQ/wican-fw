@@ -1,27 +1,27 @@
 {
-    "car_model": "Fiat: 600e",
-    "init": "ATSP6;ATST96;ATSH79B;ATFCSH79B;ATFCSD300000;ATFCSM1;",
-    "pids": [
-        {
-            "pid": "22D4101",
-            "pid_init":"ATSH6B4;ATFCSH6B4;ATCRA694;",
-            "parameters": {
-                "SOC": "[B4:B5]/512"
-            }
-        },
-        {
-            "pid": "22D8601",
-            "pid_init":"ATSH6B4;ATFCSH6B4;ATCRA694;",
-            "parameters": {
-                "SOH": "[B5:B6]/16"
-            }
-        },
-        {
-            "pid": "22D8151",
-            "pid_init":"ATSH6B4;ATFCSH6B4;ATCRA694;",
-            "parameters": {
-                    "HV_V": "[B4:B5]/16"
-            }
-        }
-    ]
+  "car_model": "Fiat: 600e",
+  "init": "ATSP6;ATST96;ATSH79B;ATFCSH79B;ATFCSD300000;ATFCSM1;",
+  "pids": [
+    {
+      "pid": "22D4101",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": {
+        "SOC": "[B4:B5]/512"
+      }
+    },
+    {
+      "pid": "22D8601",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": {
+        "SOH": "[B5:B6]/16"
+      }
+    },
+    {
+      "pid": "22D8151",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": {
+        "HV_V": "[B4:B5]/16"
+      }
+    }
+  ]
 }

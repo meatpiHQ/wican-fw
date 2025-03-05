@@ -1,30 +1,26 @@
 {
-	"car_model": "Toyota: Rav4",
-	"init": "ATSP6;",
-	"pids": [
-		{
-			"pid": "015B2",
-			"parameters": 
-				{
-					"SOC": "ATST96;"
-				}
-		},
-		{
-			"pid": "01A61",
-			"pid_init": "ATST96;",
-			"parameters": 
-				{
-					"ODOMETER": "([B3:B6])/10"
-				}
-		},
-		{
-			"pid":"01317",
-			"pid_init": "ATSH7DF;",
-			"parameters": 
-				{
-					"OILCH_DIS": "(256*B3)+B4"
-					
-				}
-		}
-	]
+  "car_model": "Toyota: Rav4",
+  "init": "ATSP6;",
+  "pids": [
+    {
+      "pid": "015B2",
+      "parameters": {
+        "SOC": "ATST96;"
+      }
+    },
+    {
+      "pid": "01A61",
+      "pid_init": "ATST96;",
+      "parameters": {
+        "ODOMETER": "([B3:B6])/10"
+      }
+    },
+    {
+      "pid": "01317",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "OILCH_DIS": "(256*B3)+B4"
+      }
+    }
+  ]
 }

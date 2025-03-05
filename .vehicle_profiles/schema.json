@@ -1,7 +1,5 @@
 {
-  "title": "WiCan Vehicle Profile",
   "description": "Data about various models of cars and their settings",
-  "type": "object",
   "properties": {
     "car_model": {
       "description": "Name of car model, should include Make and Model(s)",
@@ -17,9 +15,7 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": [
-          "pid"
-        ],
+        "required": ["pid"],
         "properties": {
           "pid": {
             "description": "The PID for this group of parameters",
@@ -98,5 +94,7 @@
         }
       }
     }
-  }
+  },
+  "title": "WiCan Vehicle Profile",
+  "type": "object"
 }

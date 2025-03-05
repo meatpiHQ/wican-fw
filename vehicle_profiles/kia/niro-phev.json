@@ -1,21 +1,20 @@
 {
-    "car_model": "Kia: Niro PHEV",
-    "init": "ATSP6;ATSH7E4;ATST96;",
-    "pids": [
-      {
-        "pid": "2105",
-        "parameters": {
-            "SOC_D": "B47/2",
-            "SOH": "[B44:B45]/10"
-          }
-      },
-      {
-        "pid": "2101",
-        "parameters": {
-            "SOC": "B09/2",
-            "CHARGER_CONNECTED": "B14:7"
-        }
+  "car_model": "Kia: Niro PHEV",
+  "init": "ATSP6;ATSH7E4;ATST96;",
+  "pids": [
+    {
+      "pid": "2105",
+      "parameters": {
+        "SOC_D": "B47/2",
+        "SOH": "[B44:B45]/10"
       }
-    ]
-  }
-  
+    },
+    {
+      "pid": "2101",
+      "parameters": {
+        "SOC": "B09/2",
+        "CHARGER_CONNECTED": "B14:7"
+      }
+    }
+  ]
+}

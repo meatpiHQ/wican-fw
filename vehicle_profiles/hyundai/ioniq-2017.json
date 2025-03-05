@@ -5,18 +5,18 @@
     {
       "pid": "21057",
       "parameters": {
-          "SOC_D": "B39/2",
-          "SOH": "[B33:B34]/10"
-        }
+        "SOC_D": "B39/2",
+        "SOH": "[B33:B34]/10"
+      }
     },
     {
       "pid": "2101",
       "parameters": {
-          "SOC": "B09/2",
-          "CHARGER_CONNECTED": "B14:5",
-          "CHARGING": "B14:7",
-          "CHARGING_DC": "B14:6"
-        }
+        "SOC": "B09/2",
+        "CHARGER_CONNECTED": "B14:5",
+        "CHARGING": "B14:7",
+        "CHARGING_DC": "B14:6"
+      }
     }
   ]
 }

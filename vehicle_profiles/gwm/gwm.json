@@ -6,7 +6,7 @@
       "pid": "22D0621",
       "pid_init": "ATSH78A;ATFCSH78A;ATFCSD300000;ATFCSM1;ATCRA7CA;",
       "parameters": {
-          "SOC": "[B4:B5]/10"
+        "SOC": "[B4:B5]/10"
       }
     },
     {
@@ -17,7 +17,7 @@
         "TYRE_P_FR": "B7*0.2-0.22",
         "TYRE_P_RL": "B10*0.2-0.22",
         "TYRE_P_RR": "B12*0.2-0.22"
+      }
     }
-  }
-]
+  ]
 }
