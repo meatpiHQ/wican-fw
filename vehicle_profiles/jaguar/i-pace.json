@@ -11,7 +11,6 @@
       },
       {
         "pid": "224911",
-        "pid_init": "ATSH7E4;",
         "parameters": 
           {
             "SOC_MIN": "[B4:B5]/100"
@@ -20,15 +19,13 @@
       },
       {
         "pid": "224914",
-        "pid_init": "ATSH7E4;",
         "parameters": 
           {
-            "SOC_MAX": "[B4:B5]/100",
+            "SOC_MAX": "[B4:B5]/100"
           }
       },
       {
         "pid": "224918",
-        "pid_init": "ATSH7E4;",
         "parameters": 
           {
             "SOH": "B4/2"
@@ -36,183 +33,98 @@
       },
       {
         "pid": "224919",
-        "parameters": [
+        "parameters": 
           {
-            "name": "batterySoHCapacityMin",
-            "pid_init": "ATSH7E4;",
-            "expression": "B4/2",
-            "unit": "%",
-            "class": "battery"
+            "HV_C_D_MIN": "B4/2"
           }
-        ]
       },
       {
         "pid": "22491a",
-        "parameters": [
+        "parameters": 
           {
-            "name": "batterySoHCapacityMax",
-            "pid_init": "ATSH7E4;",
-            "expression": "B4/2",
-            "unit": "%",
-            "class": "battery"
+            "HV_C_D_MAX": "B4/2"
           }
-        ]
+        
       },
       {
         "pid": "224915",
-        "parameters": [
-          {
-            "name": "batterySoHPower",
-            "pid_init": "ATSH7E4;",
-            "expression": "B4/2",
-            "unit": "%",
-            "class": "battery"
+        "parameters": {
+            "HV_C_D_MAX": "B4/2"
           }
-        ]
       },
       {
         "pid": "224916",
-        "parameters": [
+        "parameters": 
           {
-            "name": "batterySoHPowerMin",
-            "pid_init": "ATSH7E4;",
-            "expression": "B4/2",
-            "unit": "%",
-            "class": "battery"
+            "HV_C_D_MIN": "B4/2"
           }
-        ]
       },
       {
         "pid": "224917",
-        "parameters": [
+        "parameters": 
           {
-            "name": "batterySoHPowerMax",
-            "pid_init": "ATSH7E4;",
-            "expression": "B4/2",
-            "unit": "%",
-            "class": "battery"
+            "HV_C_D_MAX": "B4/2"
           }
-        ]
       },
       {
         "pid": "224904",
-        "parameters": [
-          {
-            "name": "batteryCellMinVolt",
-            "pid_init": "ATSH7E4;",
-            "expression": "[B4:B5]/1000",
-            "unit": "V",
-            "class": "voltage"
+        "parameters": {
+            "HV_C_V_MIN": "[B4:B5]/1000"
           }
-        ]
       },
       {
         "pid": "224903",
-        "parameters": [
-          {
-            "name": "batteryCellMaxVolt",
-            "pid_init": "ATSH7E4;",
-            "expression": "[B4:B5]/1000",
-            "unit": "V",
-            "class": "voltage"
+        "parameters": {
+            "HV_C_V_MAX": "[B4:B5]/1000"
           }
-        ]
       },
       {
         "pid": "22490F",
-        "parameters": [
-          {
-            "name": "batteryVolt",
-            "pid_init": "ATSH7E4;",
-            "expression": "[B4:B5]/100",
-            "unit": "V",
-            "class": "voltage"
+        "parameters": {
+            "HV_V": "[B4:B5]/100"
           }
-        ]
       },
       {
         "pid": "22490C",
-        "parameters": [
-          {
-            "name": "batteryCurrent",
-            "pid_init": "ATSH7E4;",
-            "expression": "([B4:B5]-32768)/40",
-            "unit": "A",
-            "class": "current"
+        "parameters": {
+            "HV_A": "([B4:B5]-32768)/40"
           }
-        ]
       },
       {
         "pid": "224906",
-        "parameters": [
-          {
-            "name": "batteryTempMin",
-            "pid_init": "ATSH7E4;",
-            "expression": "(B4/2)-40",
-            "unit": "°C",
-            "class": "temperature"
+        "parameters": {
+            "HV_T_MIN": "(B4/2)-40"
           }
-        ]
       },
       {
         "pid": "224905",
-        "parameters": [
-          {
-            "name": "batteryTempMax",
-            "pid_init": "ATSH7E4;",
-            "expression": "(B4/2)-40",
-            "unit": "°C",
-            "class": "temperature"
+        "parameters": {
+            "HV_T_MAX": "(B4/2)-40"
           }
-        ]
       },
       {
         "pid": "224907",
-        "parameters": [
-          {
-            "name": "batteryTempAvg",
-            "pid_init": "ATSH7E4;",
-            "expression": "(B4/2)-40",
-            "unit": "°C",
-            "class": "temperature"
+        "parameters": {
+            "HV_T_A": "(B4/2)-40"
           }
-        ]
       },
       {
         "pid": "224913",
-        "parameters": [
-          {
-            "name": "batteryMaxRegen",
-            "pid_init": "ATSH7E4;",
-            "expression": "[B4:B5]/100",
-            "unit": "%",
-            "class": "battery"
+        "parameters": {
+            "REGEN_MAX": "[B4:B5]/100"
           }
-        ]
       },
       {
         "pid": "22dd01",
-        "parameters": [
-          {
-            "name": "odometer",
-            "pid_init": "ATSH7E4;",
-            "expression": "[B4:B6]",
-            "unit": "km",
-            "class": "distance"
+        "parameters": {
+            "ODOMETER": "[B4:B6]"
           }
-        ]
       },
       {
         "pid": "22dd04",
-        "parameters": [
-          {
-            "name": "cabinTemp",
-            "pid_init": "ATSH7E4;",
-            "expression": "B4-40",
-            "unit": "°C",
-            "class": "temperature"
+        "parameters": {
+            "T_CAB": "B4-40"
           }
-        ]
       }
     ]
   }

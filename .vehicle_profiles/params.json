@@ -153,7 +153,139 @@
             "class": "battery"
         }
     },
-
+    "HV_W": {
+        "descrition": "High Voltage Power in watts",
+        "settings": {
+            "unit": "W",
+            "class": "power"
+        }
+    },
+    "HV_A": {
+        "description": "High Voltage Battery current",
+        "settings": {
+            "unit": "A",
+          "class": "current"
+        }
+    },
+    "HV_T_MAX": {
+        "description": "Highest temp reading from HV Battery",
+        "settings": {
+            "unit": "°C",
+            "class": "temperature"
+        }
+    },
+    "HV_T_MIN": {
+        "description": "Lowest temp reading from HV Battery",
+        "settings": {
+            "unit": "°C",
+            "class": "temperature"
+        }
+    },
+    "HV_T_A": {
+        "description": "Average temp reading from HV Battery",
+        "settings": {
+            "unit": "°C",
+            "class": "temperature"
+        }
+    },
+    "HV_T_1": {
+        "description": "HV Battery Temp Sensor 1",
+        "settings": {
+            "unit": "°C",
+            "class": "temperature"
+        }
+    },
+    "HV_T_2": {
+        "description": "HV Battery Temp Sensor 2",
+        "settings": {
+            "unit": "°C",
+            "class": "temperature"
+        }
+    },
+    "HV_T_3": {
+        "description": "HV Battery Temp Sensor 3",
+        "settings": {
+            "unit": "°C",
+            "class": "temperature"
+        }
+    },
+    "HV_T_4": {
+        "description": "HV Battery Temp Sensor 4",
+        "settings": {
+            "unit": "°C",
+            "class": "temperature"
+        }
+    },
+    "HV_T_5": {
+        "description": "HV Battery Temp Sensor 5",
+        "settings": {
+            "unit": "°C",
+            "class": "temperature"
+        }
+    },
+    "HV_T_I": {
+        "description": "HV Battery Inlet Temp",
+        "settings": {
+            "unit": "°C",
+            "class": "temperature"
+        }
+    },
+    "HV_C_V_MAX": {
+        "description": "HV Battery Highest cell voltage",
+        "settings": {
+            "unit": "V",
+          "class": "voltage"
+        }
+    },
+    "HV_C_V_MAX_NO": {
+        "description": "HV Battery which cell is highest",
+        "settings": {
+            "unit": "none",
+            "class": "none"
+        }
+    },
+    "HV_C_V_MIN": {
+        "description": "HV Battery Lowest cell voltage",
+        "settings": {
+            "unit": "V",
+          "class": "voltage"
+        }
+    },
+    "HV_C_V_MIN_NO": {
+        "description": "HV Battery which cell is lowest",
+        "settings": {
+            "unit": "none",
+            "class": "none"
+        }
+    },
+    "HV_C_D_MIN_NO": {
+        "description": "HV Battery which cell has lowest deterioration",
+        "settings": {
+            "unit": "none",
+            "class": "none"
+        }
+    },
+    "HV_C_D_MIN": {
+        "description": "HV Battery minimum deterioration",
+        "settings": {
+            "unit": "%",
+            "class": "none"
+        }
+    },
+    "HV_C_D_MAX": {
+        "description": "HV Battery max deterioration",
+        "settings": {
+            "unit": "%",
+            "class": "none"
+        }
+    },
+    "HV_C_D_MAX_NO": {
+        "description": "HV Battery which cell has highest deterioration",
+        "settings": {
+            "unit": "none",
+            "class": "none"
+        }
+    },
     "AC_P": {
         "description": "AC Phases Connected",
         "settings": {
@@ -278,6 +410,50 @@
         "settings": {
             "unit": "%",
             "class": "battery"
+        }
+    },
+    "REGEN_MAX": {
+        "description": "Max regen achieved",
+        "settings": {
+            "unit": "kW",
+          "class": "power"
+        }
+    },
+    "POWER_MAX": {
+        "description": "Max power used",
+        "settings": {
+            "unit": "kW",
+          "class": "power"
+        }
+    },
+    "GEAR": {
+        "description": "Which gear is the car in",
+        "settings": {
+            "unit": "none",
+            "class": "none"
+        }
+    },
+    "PARK_BRAKE": {
+        "description": "Is the park brake on?",
+        "settings": {
+            "unit": "none",
+          "class": "none",
+          "type": "binary_sensor"
+        }
+    },
+    "READY": {
+        "description": "Is the car ready?",
+        "settings": {
+            "unit": "none",
+          "class": "none",
+          "type": "binary_sensor"
+        }
+    },
+    "T_CAB": {
+        "description": "Cabin Temp",
+        "settings": {
+            "unit": "°C",
+            "class": "temperature"
         }
     }
 }
