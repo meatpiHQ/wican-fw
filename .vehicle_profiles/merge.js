@@ -59,8 +59,7 @@ await writeFile(target, resultString);
 const models = result.cars
   .map((car) => car.car_model)
   .filter((model) => model !== "AAA: Generic");
-let supportedVehiclesListContent = 
-`<!--
+let supportedVehiclesListContent = `<!--
 
 ================================================================
 THIS FILE WAS GENERATED! DO NOT UPDATE OR YOUR CHANGES ARE LOST!
@@ -70,7 +69,7 @@ THIS FILE WAS GENERATED! DO NOT UPDATE OR YOUR CHANGES ARE LOST!
 # Supported Vehicles
 For vehicles listed below a WiCAN vehicle profiles exists:
 `;
-models.forEach((model) => ( supportedVehiclesListContent += `- ${model}\n`));
+models.forEach((model) => (supportedVehiclesListContent += `- ${model}\n`));
 
 const supportedVehiclesListFilepath = await glob(
   "../docs/content/*.Config/*.Automate/*.Supported_Vehicles.md",
