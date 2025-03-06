@@ -119,15 +119,15 @@
   "HV_CAPACITY_KWH": {
     "description": "HV Battery capacity in kWh",
     "settings": {
-      "name": "capacity",
-      "unit": "kWh"
+      "unit": "kWh",
+      "class": "none"
     }
   },
   "HV_CAPACITY_R": {
     "description": "HV Battery capacity Remaining",
     "settings": {
-      "name": "battery",
-      "unit": "kWh"
+      "unit": "kWh",
+      "class": "none"
     }
   },
   "HV_C_D_MAX": {
@@ -298,8 +298,7 @@
     "settings": {
       "class": "distance",
       "unit": "km",
-      "min": "",
-      "max": ""
+      "min": "0"
     }
   },
   "OILCH_DIS": {
@@ -418,8 +417,7 @@
     "settings": {
       "class": "pressure",
       "unit": "psi",
-      "min": "0",
-      "max": ""
+      "min": "0"
     }
   },
   "TYRE_P_FR": {
@@ -427,8 +425,7 @@
     "settings": {
       "class": "pressure",
       "unit": "psi",
-      "min": "0",
-      "max": ""
+      "min": "0"
     }
   },
   "TYRE_P_RL": {
@@ -436,8 +433,7 @@
     "settings": {
       "class": "pressure",
       "unit": "psi",
-      "min": "0",
-      "max": ""
+      "min": "0"
     }
   },
   "TYRE_P_RR": {
@@ -445,8 +441,7 @@
     "settings": {
       "class": "pressure",
       "unit": "psi",
-      "min": "0",
-      "max": ""
+      "min": "0"
     }
   },
   "T_CAB": {
