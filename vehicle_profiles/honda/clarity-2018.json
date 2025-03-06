@@ -1,32 +1,20 @@
 {
-	"car_model": "Honda: Clarity-2018",
-	"init": "ATSP7;ATST96;",
-	"pids": [
-	  {
-		"pid": "22202A",
-		"pid_init": "ATSHDA01F1;",
-		"parameters": [
-		  {
-			"name": "SoC",
-			"expression": "B62",
-			"unit": "%",
-			"class": "battery"
-		  }
-		]
-	  },
-	  {
-		"pid": "2270229",
-		"pid_init": "ATSHDA60F1;",
-		"parameters": [
-		  {
-			"name": "Odometer",
-			"class": "distance",
-			"expression": "[B12:B14]",
-			"unit": "miles",
-			"min": "",
-			"max": ""
-		  }
-		]
-	  }
-	]
-  }
+  "car_model": "Honda: Clarity-2018",
+  "init": "ATSP7;ATST96;",
+  "pids": [
+    {
+      "pid": "22202A",
+      "pid_init": "ATSHDA01F1;",
+      "parameters": {
+        "SOC": "B62"
+      }
+    },
+    {
+      "pid": "2270229",
+      "pid_init": "ATSHDA60F1;",
+      "parameters": {
+        "ODOMETER": "[B12:B14]"
+      }
+    }
+  ]
+}

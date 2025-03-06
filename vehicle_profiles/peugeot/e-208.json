@@ -1,5 +1,5 @@
 {
-  "car_model": "Fiat: 600e",
+  "car_model": "Peugeot: e-208",
   "init": "ATSP6;ATST96;ATSH79B;ATFCSH79B;ATFCSD300000;ATFCSM1;",
   "pids": [
     {
@@ -21,6 +21,13 @@
       "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
       "parameters": {
         "HV_V": "[B4:B5]/16"
+      }
+    },
+    {
+      "pid": "22D49C1",
+      "pid_init": "ATSH6A6;ATFCSH6A6;ATCRA686;",
+      "parameters": {
+        "ODOMETER": "[B6:B7]"
       }
     }
   ]

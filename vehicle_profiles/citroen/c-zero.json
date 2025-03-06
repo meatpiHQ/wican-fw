@@ -1,17 +1,12 @@
 {
-    "car_model": "Citroen: C-Zero",
-    "init": "ATSP6;ATFCSH761;ATFCSD300000;ATFCSM1;ATSH761;ATCRA762;",
-    "pids": [
-        {
-            "pid": "2101",
-            "parameters": [
-                {
-                    "name": "SoC",
-                    "expression": "(B4/2)-5",
-                    "unit": "%",
-                    "class": "battery"
-                }
-            ]
-        }
-    ]
+  "car_model": "Citroen: C-Zero",
+  "init": "ATSP6;ATFCSH761;ATFCSD300000;ATFCSM1;ATSH761;ATCRA762;",
+  "pids": [
+    {
+      "pid": "2101",
+      "parameters": {
+        "SOC": "(B4/2)-5"
+      }
+    }
+  ]
 }

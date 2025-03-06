@@ -26,10 +26,12 @@ jobs:
           cd .vehicle_profiles
           npm ci
           npm run build
+          npx prettier ../vehicle_profiles --write
+          npx prettier . --write
           cd -
       - name: Commit
         uses: EndBug/add-and-commit@v9
         with:
-          add: 'vehicle_profiles.json docs/content/0.Config/6.Automate/2.Supported_Vehicles.md'
+          add: 'vehicle_profiles.json docs/content/0.Config/6.Automate/2.Supported_Vehicles.md vehicle_profiles/ .vehicle_profiles/'
           author_name: Jay Oswald
           author_email: jay@oswald.net.au

@@ -1,54 +1,34 @@
 {
-   "car_model":"VW: ID",
-   "init":"ATST96;ATFCSD300000;ATFCSM1;",
-   "pids":[
-      {
-         "pid":"22028C1",
-         "pid_init":"ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATCRA17FE007B;",
-         "parameters":[
-            {
-               "class":"battery",
-               "expression":"B4*0.4425-6.1947",
-               "name":"soc",
-               "unit":"%"
-            }
-         ]
-      },
-      {
-         "pid":"222AB62",
-         "pid_init":"ATSP6;ATCP18;ATSH710;ATFCSH710;ATCRA77A;",
-         "parameters":[
-            {
-               "class":"none",
-               "expression":"(B5*256)+B6",
-               "name":"range",
-               "unit":"km"
-            }
-         ]
-      },
-      {
-         "pid":"22295A",
-         "pid_init":"ATSP7;ATCP17;ATSHFC0076;ATFCSH17FC0076;ATCRA17FE0076;",
-         "parameters":[
-            {
-               "class":"none",
-               "expression":"[B4:B6]",
-               "name":"odometer",
-               "unit":"km"
-            }
-         ]
-      },
-      {
-         "pid":"222AB2",
-         "pid_init":"ATSP6;ATCP18;ATSH710;ATFCSH710;ATCRA77A;",
-         "parameters":[
-            {
-               "class":"battery",
-               "expression":"[B4:B5]*50/1000",
-               "name":"capacity",
-               "unit":"kWh"
-            }
-         ]
+  "car_model": "VW: ID",
+  "init": "ATST96;ATFCSD300000;ATFCSM1;",
+  "pids": [
+    {
+      "pid": "22028C1",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATCRA17FE007B;",
+      "parameters": {
+        "SOC": "B4*0.4425-6.1947"
       }
-   ]
+    },
+    {
+      "pid": "222AB62",
+      "pid_init": "ATSP6;ATCP18;ATSH710;ATFCSH710;ATCRA77A;",
+      "parameters": {
+        "RANGE": "(B5*256)+B6"
+      }
+    },
+    {
+      "pid": "22295A",
+      "pid_init": "ATSP7;ATCP17;ATSHFC0076;ATFCSH17FC0076;ATCRA17FE0076;",
+      "parameters": {
+        "ODOMETER": "[B4:B6]"
+      }
+    },
+    {
+      "pid": "222AB2",
+      "pid_init": "ATSP6;ATCP18;ATSH710;ATFCSH710;ATCRA77A;",
+      "parameters": {
+        "HV_CAPACITY_KWH": "[B4:B5]*50/1000"
+      }
+    }
+  ]
 }

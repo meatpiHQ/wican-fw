@@ -1,42 +1,25 @@
 {
-	"car_model": "Toyota: Rav4",
-	"init": "ATSP6;",
-	"pids": [
-		{
-			"pid": "015B2",
-			"parameters": [
-				{
-					"name": "SoC",
-					"pid_init": "ATST96;",
-					"expression": "(B3*20)/51",
-					"unit": "%",
-					"class": "battery"
-				}
-			]
-		},
-		{
-			"pid": "01A61",
-			"parameters": [
-				{
-					"name": "Odometer",
-					"pid_init": "ATST96;",
-					"expression": "([B3:B6])/10",
-					"unit": "km",
-					"class": "distance"
-				}
-			]
-		},
-		{
-			"pid":"01317",
-			"parameters": [
-				{
-					"name": "OILCH_DIS",
-					"pid_init": "ATSH7DF;",
-					"expression": "(256*B3)+B4",
-					"unit": "km",
-					"class": "distance"
-				}
-			]
-		}
-	]
+  "car_model": "Toyota: Rav4",
+  "init": "ATSP6;",
+  "pids": [
+    {
+      "pid": "015B2",
+      "parameters": {
+        "SOC": "(B3*20)/51"
+      }
+    },
+    {
+      "pid": "01A61",
+      "parameters": {
+        "ODOMETER": "([B3:B6])/10"
+      }
+    },
+    {
+      "pid": "01317",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "OILCH_DIS": "(256*B3)+B4"
+      }
+    }
+  ]
 }

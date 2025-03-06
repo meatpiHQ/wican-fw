@@ -1,5 +1,5 @@
 {
-  "car_model": "Peugeot: iON",
+  "car_model": "Mitsubishi: iMiEV/Outlander-PHEV",
   "init": "ATSP6;ATFCSH761;ATFCSD300000;ATFCSM1;ATSH761;ATCRA762;",
   "pids": [
     {

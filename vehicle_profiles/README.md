@@ -12,7 +12,6 @@ If you would like to add/update a car please make sure it is formatted properly,
 
 **pids**: Parameter ID request
 
-
 **parameters**: Parameters within a specific PID request. A PID response might contain multiple parameters, such as battery State of Health (SoH) and battery voltage.
 
 **expression**: The expression used to calculate the parameter value
@@ -22,6 +21,7 @@ If you would like to add/update a car please make sure it is formatted properly,
 **class**: The class of the sensor, see [Home Assistant List](https://www.home-assistant.io/integrations/sensor/#device-class)
 
 **Example:**
+
 ```
 {
     "car_model": "Hyundai: Ioniq5/Ioniq6/Kona",
@@ -29,8 +29,7 @@ If you would like to add/update a car please make sure it is formatted properly,
     "pids": [
         {
             "pid": "2201019",
-            "parameters": [
-                {
+            "parameters": {
                     "name": "SOC_BMS",
                     "expression": "B10/2",
                     "unit": "%"
@@ -44,8 +43,7 @@ If you would like to add/update a car please make sure it is formatted properly,
         },
         {
             "pid": "2201057",
-            "parameters": [
-                {
+            "parameters": {
                     "name": "SOH",
                     "expression": "[B34:B35]/10",
                     "unit": "%"
