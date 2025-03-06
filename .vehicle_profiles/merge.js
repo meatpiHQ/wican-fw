@@ -24,8 +24,8 @@ let result = {
 
 async function add_json(path) {
   let data = JSON.parse(await readFile(path));
-  let newParams = [];
   Object.keys(data.pids).forEach((key) => {
+    let newParams = [];
     for (const [param, exp] of Object.entries(data.pids[key].parameters)) {
       newParams.push({
         name: param,
