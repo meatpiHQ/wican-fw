@@ -5,7 +5,7 @@
     {
       "pid": "21035",
       "parameters": {
-        "SOC": "ATFCSM0;ATSH79B;ATSH79B;ATFCSM1;ATCRA7BB;"
+        "SOC": "[B29:B30]/100"
       }
     }
   ]

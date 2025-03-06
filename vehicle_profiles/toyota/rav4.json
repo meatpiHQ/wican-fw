@@ -5,12 +5,11 @@
     {
       "pid": "015B2",
       "parameters": {
-        "SOC": "ATST96;"
+        "SOC": "(B3*20)/51"
       }
     },
     {
       "pid": "01A61",
-      "pid_init": "ATST96;",
       "parameters": {
         "ODOMETER": "([B3:B6])/10"
       }
