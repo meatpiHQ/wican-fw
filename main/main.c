@@ -509,6 +509,16 @@ void app_main(void)
 	static StackType_t *heap_task_stack;
 	static StaticTask_t heap_task_buffer;
 
+	gpio_reset_pin(BUTTON_GPIO_NUM);
+	gpio_set_direction(BUTTON_GPIO_NUM, GPIO_MODE_INPUT);
+	gpio_set_pull_mode(BUTTON_GPIO_NUM, GPIO_PULLUP_ONLY);
+	sd_card_init();
+	
+	if(gpio_get_level(BUTTON_GPIO_NUM) == 0)
+	{
+		sdcard_perform_ota_update("/wican.bin");
+	}
+
 	heap_task_stack = heap_caps_malloc(1024*3 * sizeof(StackType_t), MALLOC_CAP_SPIRAM);
 
 	if (heap_task_stack != NULL) {
@@ -529,8 +539,6 @@ void app_main(void)
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
-
-	sd_card_init();
 
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());

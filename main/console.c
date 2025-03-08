@@ -25,6 +25,12 @@
 #include "lwip/sockets.h"
 #include "esp_wifi.h"
 #include "esp_netif.h"
+#include "esp_chip_info.h"
+#include "esp_private/esp_clk.h"
+#include "esp_system.h"
+#include "esp_timer.h"
+#include "soc/efuse_reg.h"
+#include "esp_flash.h"
 
 #define PROMPT "wican> "
 #define MAX_CMDLINE_LENGTH 256
@@ -67,7 +73,7 @@ static struct {
 struct {
     struct arg_lit *voltage;
     struct arg_lit *reboot;
-    struct arg_lit *id;
+    struct arg_lit *info;
     struct arg_lit *memory;
     struct arg_end *end;
 } system_args;
@@ -247,8 +253,9 @@ static int cmd_system(int argc, char **argv)
         return 0;
     }
 
-    if (system_args.id->count > 0)
+    if (system_args.info->count > 0)
     {
+        // Get device ID
         char device_id[13];
         if (hw_config_get_device_id(device_id) != ESP_OK)
         {
@@ -256,6 +263,61 @@ static int cmd_system(int argc, char **argv)
             return 1;
         }
         console_printf("Device ID: %s\n", device_id);
+        
+        // Get running partition info
+        const esp_partition_t *running = esp_ota_get_running_partition();
+        esp_app_desc_t running_app_info;
+        
+        if (esp_ota_get_partition_description(running, &running_app_info) == ESP_OK) {
+            console_printf("Running Partition: %s\n", running->label);
+            console_printf("App Version: %s\n", running_app_info.version);
+            console_printf("Project Name: %s\n", running_app_info.project_name);
+            console_printf("Build Time: %s %s\n", running_app_info.date, running_app_info.time);
+            console_printf("IDF Version: %s\n", running_app_info.idf_ver);
+        }
+        
+        // Get chip info
+        esp_chip_info_t chip_info;
+        esp_chip_info(&chip_info);
+        console_printf("Chip Model: %s\n", 
+            chip_info.model == CHIP_ESP32 ? "ESP32" : 
+            chip_info.model == CHIP_ESP32S2 ? "ESP32-S2" : 
+            chip_info.model == CHIP_ESP32S3 ? "ESP32-S3" : 
+            chip_info.model == CHIP_ESP32C3 ? "ESP32-C3" : "Unknown");
+        console_printf("CPU Cores: %d\n", chip_info.cores);
+        console_printf("CPU Frequency: %d MHz\n", esp_clk_cpu_freq() / 1000000);
+        
+        // console_printf("Flash Size: %d MB\n", spi_flash_get_chip_size() / (1024 * 1024));
+        unsigned major_rev = chip_info.revision / 100;
+        unsigned minor_rev = chip_info.revision % 100;
+
+        uint32_t flash_size;
+
+        console_printf("Chip Revision: v%d.%d\n", major_rev, minor_rev);
+        if(esp_flash_get_size(NULL, &flash_size) != ESP_OK)
+        {
+            console_printf("Get flash size failed\n");
+            return 1;
+        }
+    
+        console_printf("Flash Size: %ld MB\n", flash_size / (uint32_t)(1024 * 1024),
+               (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
+    
+        console_printf("Minimum free heap size: %" PRIu32 " bytes\n", esp_get_minimum_free_heap_size());
+        
+        // Get uptime
+        int64_t uptime_us = esp_timer_get_time();
+        int uptime_s = uptime_us / 1000000;
+        int uptime_m = uptime_s / 60;
+        int uptime_h = uptime_m / 60;
+        int uptime_d = uptime_h / 24;
+        
+        console_printf("System Uptime: %dd %dh %dm %ds\n", 
+            uptime_d, 
+            uptime_h % 24, 
+            uptime_m % 60, 
+            uptime_s % 60);
+        
         console_printf("OK\n");
         return 0;
     }
@@ -488,7 +550,7 @@ static void console_register_commands(void)
     
     system_args.voltage = arg_lit0("v", "voltage", "Get system voltage");
     system_args.reboot = arg_lit0("r", "reboot", "Reboot system");
-    system_args.id = arg_lit0("i", "id", "Get device ID");
+    system_args.info = arg_lit0("i", "info", "Get system information including device ID");
     system_args.memory = arg_lit0("m", "memory", "Get heap memory info");
     system_args.end = arg_end(5);
 
