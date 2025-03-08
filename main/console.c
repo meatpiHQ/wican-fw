@@ -23,7 +23,8 @@
 #include "esp_vfs.h"
 #include "esp_timer.h"
 #include "lwip/sockets.h"
-
+#include "esp_wifi.h"
+#include "esp_netif.h"
 
 #define PROMPT "wican> "
 #define MAX_CMDLINE_LENGTH 256
@@ -76,6 +77,12 @@ static struct {
     struct arg_lit *test;
     struct arg_end *end;
 } sdcard_args;
+
+static struct {
+    struct arg_lit *status;
+    struct arg_lit *info;
+    struct arg_end *end;
+} wifi_args;
 
 static void tcp_console_write(const char* data, size_t len)
 {
@@ -328,6 +335,140 @@ static int cmd_sdcard(int argc, char **argv)
     return 1;
 }
 
+static int cmd_wifi(int argc, char **argv)
+{
+    int nerrors = arg_parse(argc, argv, (void **)&wifi_args);
+    if (nerrors != 0) 
+    {
+        arg_print_errors(stderr, wifi_args.end, argv[0]);
+        return 1;
+    }
+
+    if (wifi_args.status->count > 0)
+    {
+        // Get WiFi connection status
+        wifi_mode_t mode;
+        esp_err_t err = esp_wifi_get_mode(&mode);
+        if (err != ESP_OK) {
+            console_printf("Error: Failed to get WiFi mode (error %d)\n", err);
+            return 1;
+        }
+        
+        if (mode == WIFI_MODE_NULL) {
+            console_printf("WiFi not initialized\n");
+        } else if (mode == WIFI_MODE_STA || mode == WIFI_MODE_APSTA) {
+            wifi_ap_record_t ap_info;
+            err = esp_wifi_sta_get_ap_info(&ap_info);
+            if (err == ESP_OK) {
+                console_printf("WiFi Status: Connected\n");
+                console_printf("SSID: %s\n", ap_info.ssid);
+                console_printf("RSSI: %d dBm\n", ap_info.rssi);
+            } else if (err == ESP_ERR_WIFI_NOT_CONNECT) {
+                console_printf("WiFi Status: Disconnected\n");
+            } else {
+                console_printf("WiFi Status: Error getting connection info (error %d)\n", err);
+            }
+        } else if (mode == WIFI_MODE_AP) {
+            console_printf("WiFi Status: Access Point mode\n");
+        }
+        
+        console_printf("OK\n");
+        return 0;
+    }
+
+    if (wifi_args.info->count > 0)
+    {
+        // Get detailed WiFi connection information
+        wifi_mode_t mode;
+        esp_err_t err = esp_wifi_get_mode(&mode);
+        if (err != ESP_OK) {
+            console_printf("Error: Failed to get WiFi mode (error %d)\n", err);
+            return 1;
+        }
+        
+        console_printf("WiFi Mode: ");
+        switch (mode) {
+            case WIFI_MODE_NULL: console_printf("Not initialized\n"); break;
+            case WIFI_MODE_STA: console_printf("Station\n"); break;
+            case WIFI_MODE_AP: console_printf("Access Point\n"); break;
+            case WIFI_MODE_APSTA: console_printf("AP+Station\n"); break;
+            default: console_printf("Unknown\n");
+        }
+        
+        if (mode == WIFI_MODE_STA || mode == WIFI_MODE_APSTA) {
+            wifi_config_t wifi_cfg;
+            err = esp_wifi_get_config(WIFI_IF_STA, &wifi_cfg);
+            if (err == ESP_OK) {
+                console_printf("Station Configuration:\n");
+                console_printf("  SSID: %s\n", wifi_cfg.sta.ssid);
+                
+                // Get connection info
+                wifi_ap_record_t ap_info;
+                err = esp_wifi_sta_get_ap_info(&ap_info);
+                if (err == ESP_OK) {
+                    console_printf("  Connected to AP:\n");
+                    console_printf("    BSSID: %02x:%02x:%02x:%02x:%02x:%02x\n",
+                        ap_info.bssid[0], ap_info.bssid[1], ap_info.bssid[2],
+                        ap_info.bssid[3], ap_info.bssid[4], ap_info.bssid[5]);
+                    console_printf("    Channel: %d\n", ap_info.primary);
+                    console_printf("    RSSI: %d dBm\n", ap_info.rssi);
+                    console_printf("    Authentication Mode: ");
+                    switch (ap_info.authmode) {
+                        case WIFI_AUTH_OPEN: console_printf("Open\n"); break;
+                        case WIFI_AUTH_WEP: console_printf("WEP\n"); break;
+                        case WIFI_AUTH_WPA_PSK: console_printf("WPA PSK\n"); break;
+                        case WIFI_AUTH_WPA2_PSK: console_printf("WPA2 PSK\n"); break;
+                        case WIFI_AUTH_WPA_WPA2_PSK: console_printf("WPA/WPA2 PSK\n"); break;
+                        case WIFI_AUTH_WPA2_ENTERPRISE: console_printf("WPA2 Enterprise\n"); break;
+                        default: console_printf("Unknown\n");
+                    }
+                    
+                    // Get IP info using esp_netif APIs
+                    esp_netif_t *sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+                    if (sta_netif) {
+                        esp_netif_ip_info_t ip_info;
+                        err = esp_netif_get_ip_info(sta_netif, &ip_info);
+                        if (err == ESP_OK) {
+                            console_printf("    IP Address: " IPSTR "\n", IP2STR(&ip_info.ip));
+                            console_printf("    Subnet Mask: " IPSTR "\n", IP2STR(&ip_info.netmask));
+                            console_printf("    Gateway: " IPSTR "\n", IP2STR(&ip_info.gw));
+                        } else {
+                            console_printf("    Error getting IP info (error %d)\n", err);
+                        }
+                    } else {
+                        console_printf("    Error getting netif handle\n");
+                    }
+                } else if (err == ESP_ERR_WIFI_NOT_CONNECT) {
+                    console_printf("  Not connected to any AP\n");
+                } else {
+                    console_printf("  Error getting connection info (error %d)\n", err);
+                }
+            } else {
+                console_printf("Error getting station configuration (error %d)\n", err);
+            }
+        }
+        
+        if (mode == WIFI_MODE_AP || mode == WIFI_MODE_APSTA) {
+            wifi_config_t wifi_cfg;
+            err = esp_wifi_get_config(WIFI_IF_AP, &wifi_cfg);
+            if (err == ESP_OK) {
+                console_printf("AP Configuration:\n");
+                console_printf("  SSID: %s\n", wifi_cfg.ap.ssid);
+                console_printf("  Channel: %d\n", wifi_cfg.ap.channel);
+                console_printf("  Max connections: %d\n", wifi_cfg.ap.max_connection);
+            } else {
+                console_printf("Error getting AP configuration (error %d)\n", err);
+            }
+        }
+        
+        console_printf("OK\n");
+        return 0;
+    }
+
+    console_printf("Error: No valid subcommand\n");
+    return 1;
+}
+
 static void console_register_commands(void)
 {
     esp_console_register_help_command();
@@ -354,27 +495,49 @@ static void console_register_commands(void)
     sdcard_args.info = arg_lit0("i", "info", "Get SD card information");
     sdcard_args.test = arg_lit0("t", "test", "Test SD card read/write");
     sdcard_args.end = arg_end(3);
+    
+    // Initialize WiFi command arguments
+    wifi_args.status = arg_lit0("s", "status", "Get WiFi connection status");
+    wifi_args.info = arg_lit0("i", "info", "Get detailed WiFi connection information");
+    wifi_args.end = arg_end(3);
 
     const console_cmd_t cmd_table[] = {
         {"version", "Get firmware version", NULL, &cmd_version},
         {"status", "Get system status", NULL, &cmd_status},
-        {"imu", "IMU control and status", NULL, &cmd_imu},
-        {"rtc", "RTC module control", NULL, &cmd_rtcm},
-        {"led", "LED driver control", NULL, &cmd_led},
-        {"system", "System control and status", NULL, &cmd_system},
-        {"sdcard", "SD card control and status", NULL, &cmd_sdcard},
+        {"imu", "IMU control and status", "Usage: imu [-i]", &cmd_imu},
+        {"rtc", "RTC module control", "Usage: rtc [-s|-r]", &cmd_rtcm},
+        {"led", "LED driver control", "Usage: led [-i]", &cmd_led},
+        {"system", "System control and status", "Usage: system [-v|-r|-i|-m]", &cmd_system},
+        {"sdcard", "SD card control and status", "Usage: sdcard [-i|-t]", &cmd_sdcard},
+        {"wifi", "WiFi connection control and status", "Usage: wifi [-s|-i]", &cmd_wifi},
         {NULL, NULL, NULL, NULL}
     };
     
     const console_cmd_t *cmd = &cmd_table[0];
     while (cmd->command != NULL)
     {
-        const esp_console_cmd_t console_cmd = {
+        esp_console_cmd_t console_cmd = {
             .command = cmd->command,
             .help = cmd->help,
             .hint = cmd->hint,
             .func = cmd->func,
         };
+        
+        // Add argtable for each command
+        if (strcmp(cmd->command, "imu") == 0) {
+            console_cmd.argtable = &imu_args;
+        } else if (strcmp(cmd->command, "rtc") == 0) {
+            console_cmd.argtable = &rtcm_args;
+        } else if (strcmp(cmd->command, "led") == 0) {
+            console_cmd.argtable = &led_args;
+        } else if (strcmp(cmd->command, "system") == 0) {
+            console_cmd.argtable = &system_args;
+        } else if (strcmp(cmd->command, "sdcard") == 0) {
+            console_cmd.argtable = &sdcard_args;
+        } else if (strcmp(cmd->command, "wifi") == 0) {
+            console_cmd.argtable = &wifi_args;
+        }
+        
         ESP_ERROR_CHECK(esp_console_cmd_register(&console_cmd));
         cmd++;
     }
