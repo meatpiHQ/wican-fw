@@ -21,7 +21,8 @@ static bool s_card_mounted = false;
 
 esp_err_t sdcard_perform_ota_update(const char* firmware_path)
 {
-    if (!sdcard_is_mounted() || !sdcard_is_available()) {
+    if (!sdcard_is_mounted() || !sdcard_is_available()) 
+    {
         ESP_LOGE(TAG, "SD card not available for OTA update");
         return ESP_ERR_INVALID_STATE;
     }
@@ -32,7 +33,8 @@ esp_err_t sdcard_perform_ota_update(const char* firmware_path)
     
     // Open firmware file
     FILE *firmware_file = fopen(full_path, "rb");
-    if (firmware_file == NULL) {
+    if (firmware_file == NULL) 
+    {
         ESP_LOGE(TAG, "Failed to open firmware file: %s", full_path);
         return ESP_ERR_NOT_FOUND;
     }
@@ -49,7 +51,7 @@ esp_err_t sdcard_perform_ota_update(const char* firmware_path)
         .use_one_fat = false,
     };
     static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
-    
+
     esp_err_t ret = esp_vfs_fat_spiflash_mount_rw_wl("/fatfs", "storage", &mount_config, &s_wl_handle);
     if (ret != ESP_OK) 
     {
@@ -60,16 +62,22 @@ esp_err_t sdcard_perform_ota_update(const char* firmware_path)
     ESP_LOGI(TAG, "FAT filesystem mounted successfully");
 
     FILE *f = fopen("/fatfs/config.json", "r");
-    if (f != NULL) {
+    if (f != NULL) 
+    {
         // File exists, close it
         fclose(f);
         // Delete the file
-        if (unlink("/fatfs/config.json") == 0) {
+        if (unlink("/fatfs/config.json") == 0) 
+        {
             ESP_LOGI(TAG, "Config file deleted successfully");
-        } else {
+        } 
+        else 
+        {
             ESP_LOGE(TAG, "Failed to delete config file");
         }
-    } else {
+    } 
+    else 
+    {
         ESP_LOGI(TAG, "Config file does not exist");
     }
 
@@ -77,14 +85,16 @@ esp_err_t sdcard_perform_ota_update(const char* firmware_path)
     
     // Get file size
     struct stat file_stat;
-    if (stat(full_path, &file_stat) != 0) {
+    if (stat(full_path, &file_stat) != 0) 
+    {
         ESP_LOGE(TAG, "Failed to get firmware file size");
         fclose(firmware_file);
         return ESP_FAIL;
     }
     
     const esp_partition_t *update_partition = esp_ota_get_next_update_partition(NULL);
-    if (update_partition == NULL) {
+    if (update_partition == NULL) 
+    {
         ESP_LOGE(TAG, "Failed to get OTA update partition");
         fclose(firmware_file);
         return ESP_FAIL;
@@ -94,7 +104,8 @@ esp_err_t sdcard_perform_ota_update(const char* firmware_path)
     
     esp_ota_handle_t ota_handle;
     esp_err_t err = esp_ota_begin(update_partition, file_stat.st_size, &ota_handle);
-    if (err != ESP_OK) {
+    if (err != ESP_OK) 
+    {
         ESP_LOGE(TAG, "Failed to begin OTA update: %s", esp_err_to_name(err));
         fclose(firmware_file);
         return err;
@@ -102,7 +113,8 @@ esp_err_t sdcard_perform_ota_update(const char* firmware_path)
     
     // Allocate buffer in internal RAM
     uint8_t *buffer = malloc(OTA_BUFFER_SIZE);
-    if (buffer == NULL) {
+    if (buffer == NULL) 
+    {
         ESP_LOGE(TAG, "Failed to allocate buffer in internal RAM");
         fclose(firmware_file);
         esp_ota_abort(ota_handle);
@@ -116,9 +128,11 @@ esp_err_t sdcard_perform_ota_update(const char* firmware_path)
     size_t total_bytes_read = 0;
     int last_percentage = -1;  // Track last percentage to avoid too many log messages
     
-    while ((bytes_read = fread(buffer, 1, OTA_BUFFER_SIZE, firmware_file)) > 0) {
+    while ((bytes_read = fread(buffer, 1, OTA_BUFFER_SIZE, firmware_file)) > 0) 
+    {
         err = esp_ota_write(ota_handle, buffer, bytes_read);
-        if (err != ESP_OK) {
+        if (err != ESP_OK) 
+        {
             ESP_LOGE(TAG, "Failed to write OTA data: %s", esp_err_to_name(err));
             fclose(firmware_file);
             free(buffer);
@@ -132,7 +146,8 @@ esp_err_t sdcard_perform_ota_update(const char* firmware_path)
         int current_percentage = (total_bytes_read * 100) / file_stat.st_size;
         
         // Only print when percentage changes to avoid flooding the logs
-        if (current_percentage != last_percentage) {
+        if (current_percentage != last_percentage) 
+        {
             ESP_LOGI(TAG, "OTA progress: %d%% (%d/%d bytes)", 
                     current_percentage, 
                     total_bytes_read, 
@@ -147,14 +162,16 @@ esp_err_t sdcard_perform_ota_update(const char* firmware_path)
     
     // Finalize OTA update
     err = esp_ota_end(ota_handle);
-    if (err != ESP_OK) {
+    if (err != ESP_OK) 
+    {
         ESP_LOGE(TAG, "Failed to finalize OTA update: %s", esp_err_to_name(err));
         return err;
     }
     
     // Set new boot partition
     err = esp_ota_set_boot_partition(update_partition);
-    if (err != ESP_OK) {
+    if (err != ESP_OK) 
+    {
         ESP_LOGE(TAG, "Failed to set boot partition: %s", esp_err_to_name(err));
         return err;
     }
