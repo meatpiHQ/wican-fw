@@ -6,18 +6,16 @@
 #include "driver/sdmmc_host.h"
 #include "sdcard.h"
 #include "hw_config.h"
+#include "esp_ota_ops.h"
+#include "esp_system.h"
+#include "esp_heap_caps.h"  
 
 #define MOUNT_POINT "/sdcard"
+#define OTA_BUFFER_SIZE 4096  
 
 static const char *TAG = "sd_card";
 static sdmmc_card_t *s_card = NULL;
 static bool s_card_mounted = false;
-
-#define OTA_BUFFER_SIZE 4096  
-
-#include "esp_ota_ops.h"
-#include "esp_system.h"
-#include "esp_heap_caps.h"  
 
 esp_err_t sdcard_perform_ota_update(const char* firmware_path)
 {
