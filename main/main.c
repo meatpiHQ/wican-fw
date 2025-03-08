@@ -847,7 +847,7 @@ void app_main(void)
 
 	if(port == -1)
 	{
-		port = 3333;
+		port = 35000;
 	}
 
 	if(protocol != AUTO_PID)
