@@ -52,6 +52,20 @@ static esp_err_t wusb3801_register_write_byte(uint8_t reg_addr, uint8_t data)
     return ret;
 }
 
+uint8_t wusb3801_get_dev_id(void)
+{
+    uint8_t dev_id = 0;
+    wusb3801_register_read(WUSB3801_DEV_ID_REG, &dev_id);
+    return dev_id;
+}
+
+uint8_t wusb3801_get_cc_stat(void)
+{
+    uint8_t cc_status = 0;
+    wusb3801_register_read(WUSB3801_CC_STAT_REG, &cc_status);
+    return cc_status;
+}
+
 void wusb3801_init(i2c_port_t i2c_num)
 {
     uint8_t dev_id = 0;
@@ -60,15 +74,15 @@ void wusb3801_init(i2c_port_t i2c_num)
     wusb3801_register_read(WUSB3801_DEV_ID_REG, &dev_id);
 
     ESP_LOGI(TAG, "wusb3801 device id: %02X", dev_id);
-    wusb3801_register_write_byte(WUSB3801_CTRL_REG, 0x0C);
-    wusb3801_register_read(WUSB3801_CTRL_REG, &dev_id);
+    // wusb3801_register_write_byte(WUSB3801_CTRL_REG, 0x0C);
+    // wusb3801_register_read(WUSB3801_CTRL_REG, &dev_id);
 
-    ESP_LOGI(TAG, "WUSB3801_CTRL_REG: %02X", dev_id);
-    while(1)
-    {
+    // ESP_LOGI(TAG, "WUSB3801_CTRL_REG: %02X", dev_id);
+    // while(1)
+    // {
         wusb3801_register_read(WUSB3801_CC_STAT_REG, &dev_id);
 
-        ESP_LOGI(TAG, "wusb3801 status: %02X", dev_id);
-        vTaskDelay(pdMS_TO_TICKS(3000));
-    }
+        // ESP_LOGI(TAG, "wusb3801 status: %02X", dev_id);
+        // vTaskDelay(pdMS_TO_TICKS(3000));
+    // }
 }

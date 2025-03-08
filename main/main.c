@@ -928,7 +928,7 @@ void app_main(void)
 
 
 	
-	// wusb3801_init(I2C_MASTER_NUM);
+	wusb3801_init(I2C_MASTER_NUM);
 	// xEventTask = xEventGroupCreate();
 	// xTaskCreate(ftp_task, "FTP", 1024*6, NULL, 2, NULL);
 	// xEventGroupWaitBits( xEventTask,

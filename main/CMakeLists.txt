@@ -63,6 +63,7 @@ idf_component_register(
         "elm327.c"
         "obd.c"
         "autopid.c"
+        "wusb3801.c"
         "${srcs}"
     INCLUDE_DIRS        # Public include directories
     PRIV_INCLUDE_DIRS   # Private include directories

@@ -31,6 +31,7 @@
 #include "esp_timer.h"
 #include "soc/efuse_reg.h"
 #include "esp_flash.h"
+#include "wusb3801.h"
 
 #define PROMPT "wican> "
 #define MAX_CMDLINE_LENGTH 256
@@ -89,6 +90,12 @@ static struct {
     struct arg_lit *info;
     struct arg_end *end;
 } wifi_args;
+
+static struct {
+    struct arg_lit *cc_status;
+    struct arg_lit *id;
+    struct arg_end *end;
+} wusb_args;
 
 static void tcp_console_write(const char* data, size_t len)
 {
@@ -531,6 +538,35 @@ static int cmd_wifi(int argc, char **argv)
     return 1;
 }
 
+static int cmd_wusb(int argc, char **argv)
+{
+    int nerrors = arg_parse(argc, argv, (void **)&wusb_args);
+    if (nerrors != 0) 
+    {
+        arg_print_errors(stderr, wusb_args.end, argv[0]);
+        return 1;
+    }
+
+    if (wusb_args.id->count > 0)
+    {
+        uint8_t id = wusb3801_get_dev_id();
+        console_printf("WUSB3801 Device ID: 0x%02X\n", id);
+        console_printf("OK\n");
+        return 0;
+    }
+
+    if (wusb_args.cc_status->count > 0)
+    {
+        uint8_t cc_stat = wusb3801_get_cc_stat();
+        console_printf("WUSB3801 CC Status: 0x%02X\n", cc_stat);
+        console_printf("OK\n");
+        return 0;
+    }
+
+    console_printf("Error: No valid subcommand\n");
+    return 1;
+}
+
 static void console_register_commands(void)
 {
     esp_console_register_help_command();
@@ -548,6 +584,11 @@ static void console_register_commands(void)
     led_args.id = arg_lit0("i", "id", "Get LED driver device ID");
     led_args.end = arg_end(2);
     
+    // Initialize WUSB command arguments
+    wusb_args.cc_status = arg_lit0("c", "cc", "Get CC status");
+    wusb_args.id = arg_lit0("i", "id", "Get WUSB device ID");
+    wusb_args.end = arg_end(3);
+    
     system_args.voltage = arg_lit0("v", "voltage", "Get system voltage");
     system_args.reboot = arg_lit0("r", "reboot", "Reboot system");
     system_args.info = arg_lit0("i", "info", "Get system information including device ID");
@@ -563,12 +604,14 @@ static void console_register_commands(void)
     wifi_args.info = arg_lit0("i", "info", "Get detailed WiFi connection information");
     wifi_args.end = arg_end(3);
 
+    
     const console_cmd_t cmd_table[] = {
         {"version", "Get firmware version", NULL, &cmd_version},
         {"status", "Get system status", NULL, &cmd_status},
         {"imu", "IMU control and status", "Usage: imu [-i]", &cmd_imu},
         {"rtc", "RTC module control", "Usage: rtc [-s|-r]", &cmd_rtcm},
         {"led", "LED driver control", "Usage: led [-i]", &cmd_led},
+        {"wusb", "WUSB3801 USB-C controller", "Usage: wusb [-i|-c]", &cmd_wusb},
         {"system", "System control and status", "Usage: system [-v|-r|-i|-m]", &cmd_system},
         {"sdcard", "SD card control and status", "Usage: sdcard [-i|-t]", &cmd_sdcard},
         {"wifi", "WiFi connection control and status", "Usage: wifi [-s|-i]", &cmd_wifi},
@@ -592,6 +635,8 @@ static void console_register_commands(void)
             console_cmd.argtable = &rtcm_args;
         } else if (strcmp(cmd->command, "led") == 0) {
             console_cmd.argtable = &led_args;
+        } else if (strcmp(cmd->command, "wusb") == 0) {
+            console_cmd.argtable = &wusb_args;
         } else if (strcmp(cmd->command, "system") == 0) {
             console_cmd.argtable = &system_args;
         } else if (strcmp(cmd->command, "sdcard") == 0) {
