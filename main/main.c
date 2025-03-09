@@ -94,7 +94,7 @@ static xdev_buffer ucTCP_RX_Buffer;
 static xdev_buffer ucTCP_TX_Buffer;
 static xdev_buffer ucBLE_TX_Buffer;
 
-static uint8_t protocol = SLCAN;
+static uint8_t protocol = OBD_ELM327;
 
 int FTP_TASK_FINISH_BIT = BIT2;
 EventGroupHandle_t xEventTask;
