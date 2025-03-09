@@ -17,6 +17,32 @@ static const char *TAG = "sd_card";
 static sdmmc_card_t *s_card = NULL;
 static bool s_card_mounted = false;
 
+static bool delete_config_file(const char* file_path) 
+{
+    FILE *f = fopen(file_path, "r");
+    if (f != NULL) 
+    {
+        // File exists, close it
+        fclose(f);
+        // Delete the file
+        if (unlink(file_path) == 0) 
+        {
+            ESP_LOGI(TAG, "%s deleted successfully", file_path);
+            return true;
+        } 
+        else 
+        {
+            ESP_LOGE(TAG, "Failed to delete %s", file_path);
+            return false;
+        }
+    } 
+    else 
+    {
+        ESP_LOGI(TAG, "%s does not exist", file_path);
+        return true;  // Not an error if file doesn't exist
+    }
+}
+
 esp_err_t sdcard_perform_ota_update(const char* firmware_path)
 {
     if (!sdcard_is_mounted() || !sdcard_is_available()) 
@@ -58,26 +84,12 @@ esp_err_t sdcard_perform_ota_update(const char* firmware_path)
     }
     
     ESP_LOGI(TAG, "FAT filesystem mounted successfully");
-
-    FILE *f = fopen("/fatfs/config.json", "r");
-    if (f != NULL) 
-    {
-        // File exists, close it
-        fclose(f);
-        // Delete the file
-        if (unlink("/fatfs/config.json") == 0) 
-        {
-            ESP_LOGI(TAG, "Config file deleted successfully");
-        } 
-        else 
-        {
-            ESP_LOGE(TAG, "Failed to delete config file");
-        }
-    } 
-    else 
-    {
-        ESP_LOGI(TAG, "Config file does not exist");
-    }
+    
+    // Delete all configuration files
+    delete_config_file("/fatfs/config.json");
+    delete_config_file("/fatfs/car_data.json");
+    delete_config_file("/fatfs/auto_pid.json");
+    delete_config_file("/fatfs/mqtt_canfilt.json");
 
     ESP_LOGI(TAG, "Starting OTA from SD card file: %s", full_path);
     
