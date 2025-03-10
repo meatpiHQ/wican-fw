@@ -58,6 +58,7 @@ typedef struct {
 static struct {
     struct arg_lit *sync;
     struct arg_lit *read;
+    struct arg_lit *id;
     struct arg_end *end;
 } rtcm_args;
 
@@ -173,9 +174,11 @@ static int cmd_rtcm(int argc, char **argv)
         return 1;
     }
 
-    if (rtcm_args.sync->count > 0) {
+    if (rtcm_args.sync->count > 0)
+    {
         // Sync time from internet
-        if (rtcm_sync_internet_time() != ESP_OK) {
+        if (rtcm_sync_internet_time() != ESP_OK)
+        {
             console_printf("Error: Failed to sync time\n");
             return 1;
         }
@@ -183,23 +186,38 @@ static int cmd_rtcm(int argc, char **argv)
         console_printf("OK\n");
         return 0;
     }
-
-    if (rtcm_args.read->count > 0) {
+    else if (rtcm_args.read->count > 0) 
+    {
         uint8_t hour, min, sec;
         uint8_t year, month, day, weekday;
         
         esp_err_t ret_time = rtcm_get_time(&hour, &min, &sec);
         esp_err_t ret_date = rtcm_get_date(&year, &month, &day, &weekday);
 
-        if (ret_time == ESP_OK && ret_date == ESP_OK) {
+        if (ret_time == ESP_OK && ret_date == ESP_OK) 
+        {
             console_printf("20%02X-%02X-%02X %02X:%02X:%02X (Day %d)\n", 
                    year, month, day, hour, min, sec, weekday);
             console_printf("OK\n");
             return 0;
-        } else {
+        } 
+        else 
+        {
             console_printf("Error: Failed to read RTC time/date\n");
             return 1;
         }
+    }
+    else if (rtcm_args.id->count > 0)
+    {
+        uint8_t id;
+        if (rtcm_get_device_id(&id) != ESP_OK) 
+        { 
+            console_printf("Error: Failed to read RTC module ID\n");
+            return 1;
+        }
+        console_printf("RTC Module Device ID: 0x%02X\n", id);
+        console_printf("OK\n");
+        return 0;
     }
 
     console_printf("Error: No valid subcommand\n");
@@ -578,7 +596,8 @@ static void console_register_commands(void)
     // Initialize RTCM command arguments
     rtcm_args.sync = arg_lit0("s", "sync", "Sync time from internet");
     rtcm_args.read = arg_lit0("r", "read", "Read current time and date");
-    rtcm_args.end = arg_end(2);
+    rtcm_args.id = arg_lit0("i", "id", "Get RTC module device ID");  // Add this new argument
+    rtcm_args.end = arg_end(3);
 
     // Initialize LED command arguments with other arg initializations
     led_args.id = arg_lit0("i", "id", "Get LED driver device ID");
@@ -609,7 +628,7 @@ static void console_register_commands(void)
         {"version", "Get firmware version", NULL, &cmd_version},
         {"status", "Get system status", NULL, &cmd_status},
         {"imu", "IMU control and status", "Usage: imu [-i]", &cmd_imu},
-        {"rtc", "RTC module control", "Usage: rtc [-s|-r]", &cmd_rtcm},
+        {"rtc", "RTC module control", "Usage: rtc [-s|-r|-i]", &cmd_rtcm},
         {"led", "LED driver control", "Usage: led [-i]", &cmd_led},
         {"wusb", "WUSB3801 USB-C controller", "Usage: wusb [-i|-c]", &cmd_wusb},
         {"system", "System control and status", "Usage: system [-v|-r|-i|-m]", &cmd_system},
