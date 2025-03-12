@@ -233,8 +233,14 @@ static void obd_parse_response(char *str, uint32_t len, QueueHandle_t *q, char* 
             float sleep_voltage;
             float wakeup_voltage;
             uint32_t sleep_time;
-
-            ESP_LOGW(TAG, "Sleep mode enabled");
+            if(config_server_get_sleep_config() == 1)
+            {
+                ESP_LOGW(TAG, "Sleep mode enabled");
+            }
+            else
+            {
+                ESP_LOGW(TAG, "Sleep mode disabled");
+            }
             if(config_server_get_wakeup_volt(&wakeup_voltage) == -1)
             {
                 wakeup_voltage = 13.5f;
