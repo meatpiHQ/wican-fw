@@ -75,6 +75,7 @@
 #include "wc_mdns.h"
 #include "elm327.h"
 #include "hw_config.h"
+#include "rtcm.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
@@ -678,7 +679,7 @@ static esp_err_t system_commands_handler(httpd_req_t *req)
     if (command != NULL && cJSON_IsString(command) && command->valuestring != NULL)
     {
         const char *cmd = command->valuestring;
-		ESP_LOGI(TAG, "Received command: %s", cmd);
+        ESP_LOGI(TAG, "Received command: %s", cmd);
   
         if (cmd != NULL && strlen(cmd) > 0)
         {
@@ -693,10 +694,54 @@ static esp_err_t system_commands_handler(httpd_req_t *req)
                     ESP_LOGE(TAG, "Restart timer is NULL");
                 }
             }
-			else if (strcmp(cmd, "force_update_obd") == 0)
-			{
-				elm327_update_obd(true);
-			}
+            else if (strcmp(cmd, "force_update_obd") == 0)
+            {
+                elm327_update_obd(true);
+            }
+            else if (strcmp(cmd, "set_rtc_time") == 0)
+            {
+                // Get time parameters from JSON
+                cJSON *hour = cJSON_GetObjectItem(root, "hour");
+                cJSON *min = cJSON_GetObjectItem(root, "min");
+                cJSON *sec = cJSON_GetObjectItem(root, "sec");
+                cJSON *year = cJSON_GetObjectItem(root, "year");
+                cJSON *month = cJSON_GetObjectItem(root, "month");
+                cJSON *day = cJSON_GetObjectItem(root, "day");
+                cJSON *weekday = cJSON_GetObjectItem(root, "weekday");
+                
+                // Check if all required parameters are present and valid
+                if (hour && min && sec && year && month && day && weekday &&
+                    cJSON_IsNumber(hour) && cJSON_IsNumber(min) && cJSON_IsNumber(sec) &&
+                    cJSON_IsNumber(year) && cJSON_IsNumber(month) && cJSON_IsNumber(day) &&
+                    cJSON_IsNumber(weekday))
+                {
+                    // Set time
+                    esp_err_t time_err = rtcm_set_time(
+                        (uint8_t)hour->valueint, 
+                        (uint8_t)min->valueint, 
+                        (uint8_t)sec->valueint
+                    );
+                    
+                    // Set date
+                    esp_err_t date_err = rtcm_set_date(
+                        (uint8_t)year->valueint,
+                        (uint8_t)month->valueint,
+                        (uint8_t)day->valueint,
+                        (uint8_t)weekday->valueint
+                    );
+                    
+                    if (time_err == ESP_OK && date_err == ESP_OK) {
+                        ESP_LOGI(TAG, "RTC time set successfully");
+                    } else {
+                        ESP_LOGE(TAG, "Failed to set RTC time: time_err=%d, date_err=%d", 
+                                time_err, date_err);
+                    }
+                }
+                else
+                {
+                    ESP_LOGE(TAG, "Missing or invalid parameters for set_rtc_time command");
+                }
+            }
         }
         else
         {
@@ -715,6 +760,7 @@ static esp_err_t system_commands_handler(httpd_req_t *req)
 
     return ESP_OK;
 }
+
 
 static esp_err_t logo_handler(httpd_req_t *req)
 {

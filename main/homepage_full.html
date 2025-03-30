@@ -1108,6 +1108,7 @@
     <script>
         document.addEventListener('DOMContentLoaded', (event) => {
             document.getElementById("submit_button").disabled = true;
+            setRTCTime();
         });
 		let latest_car_models = null;
         function loadCarModels(data) {
@@ -1127,6 +1128,44 @@
 			toggleDestinationAndCycle();
 			toggleSendToFields();
             toggleStandardPIDOptions();
+        }
+
+        function setRTCTime() {
+            // Get current date and time
+            const now = new Date();
+            
+            // Convert decimal to BCD format
+            function decToBcd(val) {
+                return Math.floor(val / 10) * 16 + (val % 10);
+            }
+            
+            // Format data for the RTC with BCD conversion
+            const rtcData = {
+                command: "set_rtc_time",
+                hour: decToBcd(now.getHours()),
+                min: decToBcd(now.getMinutes()),
+                sec: decToBcd(now.getSeconds()),
+                year: decToBcd(now.getFullYear() % 100), // Get last 2 digits of year (e.g. 23 for 2023)
+                month: decToBcd(now.getMonth() + 1), // JavaScript months are 0-based
+                day: decToBcd(now.getDate()),
+                weekday: decToBcd(now.getDay()) // 0 = Sunday, 1 = Monday, etc.
+            };
+            
+            // Send request to set RTC time
+            fetch('/system_commands', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(rtcData)
+            })
+            .then(response => response.text())
+            .then(data => {
+                console.log('RTC time set successfully:', data);
+            })
+            .catch(error => {
+                console.error('Error setting RTC time:', error);
+            });
         }
 
         function showNotification(message, color = "red", duration = 5000) {
