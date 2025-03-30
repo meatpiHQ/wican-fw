@@ -63,11 +63,12 @@ idf_component_register(
         "elm327.c"
         "obd.c"
         "autopid.c"
+        "wusb3801.c"
         "${srcs}"
     INCLUDE_DIRS        # Public include directories
     PRIV_INCLUDE_DIRS   # Private include directories
     REQUIRES "${requires}"
-    PRIV_REQUIRES       # Private requirements
+    PRIV_REQUIRES       spi_flash # Private requirements
     EMBED_FILES 
         "homepage.html"
         "obd_fw/V2.3.18.txt"

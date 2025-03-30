@@ -31,5 +31,7 @@
 #define WUSB3801_I2C_TIMEOUT_MS          100
 
 void wusb3801_init(i2c_port_t i2c_num);
+uint8_t wusb3801_get_dev_id(void);
+uint8_t wusb3801_get_cc_stat(void);
 
 #endif

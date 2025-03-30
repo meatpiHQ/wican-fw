@@ -54,7 +54,7 @@ static esp_timer_handle_t periodic_timer;
 static const uint32_t can_speed[] = {5000, 10000, 20000, 25000, 50000, 100000,
 						125000, 250000, 500000, 800000, 1000000};
 
-void (*gvret_response)(char*, uint32_t, QueueHandle_t *q);
+void (*gvret_response)(char*, uint32_t, QueueHandle_t *q, char* cmd_str);
 
 void gvert_tmr_set_start(void)
 {
@@ -181,7 +181,7 @@ void gvret_parse(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t
 				transmitBuffer[transmitBufferLength++] = temp8;
 				temp8 = checksumCalc(buff, 2);
 				transmitBuffer[transmitBufferLength++]  = temp8;
-				gvret_response((char*)transmitBuffer, transmitBufferLength, q);
+				gvret_response((char*)transmitBuffer, transmitBufferLength, q, NULL);
 				transmitBufferLength = 0;
 				state = IDLE;
 				break;
@@ -212,7 +212,7 @@ void gvret_parse(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t
 				transmitBuffer[transmitBufferLength++] = (uint8_t)(temp16 >> 8);
 				temp8 = checksumCalc(buff, 9);
 				transmitBuffer[transmitBufferLength++] = temp8;
-				gvret_response((char*)transmitBuffer, transmitBufferLength, q);
+				gvret_response((char*)transmitBuffer, transmitBufferLength, q, NULL);
 				transmitBufferLength = 0;
 				state = IDLE;
 				break;
@@ -240,7 +240,7 @@ void gvret_parse(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t
 				transmitBuffer[transmitBufferLength++] = settings.CAN1Speed >> 8;
 				transmitBuffer[transmitBufferLength++] = settings.CAN1Speed >> 16;
 				transmitBuffer[transmitBufferLength++] = settings.CAN1Speed >> 24;
-				gvret_response((char*)transmitBuffer, transmitBufferLength, q);
+				gvret_response((char*)transmitBuffer, transmitBufferLength, q, NULL);
 				transmitBufferLength = 0;
 				state = IDLE;
 				break;
@@ -254,7 +254,7 @@ void gvret_parse(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t
 				transmitBuffer[transmitBufferLength++] = 0;
 				transmitBuffer[transmitBufferLength++] = 0;
 				transmitBuffer[transmitBufferLength++] = 0; //was single wire mode. Should be rethought for this board.
-				gvret_response((char*)transmitBuffer, transmitBufferLength, q);
+				gvret_response((char*)transmitBuffer, transmitBufferLength, q, NULL);
 				transmitBufferLength = 0;
 				state = IDLE;
 				break;
@@ -268,7 +268,7 @@ void gvret_parse(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t
 				transmitBuffer[transmitBufferLength++] = 0x09;
 				transmitBuffer[transmitBufferLength++] = 0xDE;
 				transmitBuffer[transmitBufferLength++] = 0xAD;
-				gvret_response((char*)transmitBuffer, transmitBufferLength, q);
+				gvret_response((char*)transmitBuffer, transmitBufferLength, q, NULL);
 				transmitBufferLength = 0;
 				state = IDLE;
 				break;
@@ -286,7 +286,7 @@ void gvret_parse(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t
 				transmitBuffer[transmitBufferLength++] = 0xF1;
 				transmitBuffer[transmitBufferLength++] = 12;
 				transmitBuffer[transmitBufferLength++] = 1;//SysSettings.numBuses;
-				gvret_response((char*)transmitBuffer, transmitBufferLength, q);
+				gvret_response((char*)transmitBuffer, transmitBufferLength, q, NULL);
 				transmitBufferLength = 0;
 				state = IDLE;
 				break;
@@ -295,7 +295,7 @@ void gvret_parse(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t
 				transmitBuffer[transmitBufferLength++]  = 13;
 				for (int u = 2; u < 17; u++) transmitBuffer[transmitBufferLength++] = 0;
 				step = 0;
-				gvret_response((char*)transmitBuffer, transmitBufferLength, q);
+				gvret_response((char*)transmitBuffer, transmitBufferLength, q, NULL);
 				transmitBufferLength = 0;
 				state = IDLE;
 				break;
@@ -392,7 +392,7 @@ void gvret_parse(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t
 			break;
 			case TIME_SYNC:
 				state = IDLE;
-				gvret_response((char*)transmitBuffer, transmitBufferLength, q);
+				gvret_response((char*)transmitBuffer, transmitBufferLength, q, NULL);
 				transmitBufferLength = 0;
 				break;
 			case GET_DIG_INPUTS:

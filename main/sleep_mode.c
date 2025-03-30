@@ -39,25 +39,14 @@
 #include "slcan.h"
 #include "can.h"
 #include "ble.h"
+#include "esp_sleep.h"
 #include "wifi_network.h"
 #include "esp_mac.h"
 #include "esp_ota_ops.h"
 #include "nvs.h"
-#include "nvs_flash.h"
-#include "driver/adc.h"
-#include "esp_adc_cal.h"
-// #include "esp_adc/adc_cali.h"
 #include "sleep_mode.h"
-#include "ble.h"
-#include "esp_sleep.h"
-#include "lwip/sockets.h"
-#include "lwip/dns.h"
-#include "lwip/netdb.h"
-
-#include "esp_log.h"
 #include "mqtt_client.h"
 #include "ver.h"
-#include "esp_sleep.h"
 #include "driver/rtc_io.h"
 #include "led.h"
 #include "obd.h"
@@ -762,7 +751,7 @@ void enter_deep_sleep(void)
     ESP_LOGI(TAG, "Entering deep sleep");
     configure_wakeup_sources();
     
-    adc_continuous_stop(adc_handle);
+    // adc_continuous_stop(adc_handle);
     
 	if(gpio_get_level(OBD_READY_PIN) == 1)
 	{
@@ -813,10 +802,11 @@ void light_sleep_task(void *pvParameters)
         sleep_voltage = 13.1f;
     }
 
-    if(config_server_get_wakeup_volt(&wakeup_voltage) == -1) 
-	{
-        wakeup_voltage = 13.4f;
-    }
+    // if(config_server_get_wakeup_volt(&wakeup_voltage) == -1) 
+	// {
+    //     wakeup_voltage = 13.4f;
+    // }
+    wakeup_voltage = sleep_voltage + 0.1f;
     
 	if(config_server_get_sleep_time(&sleep_time) == -1)
 	{
@@ -898,7 +888,7 @@ void light_sleep_task(void *pvParameters)
 					{
                         ESP_LOGI(TAG, "Voltage above wakeup threshold, starting wakeup timer");
                         current_state = STATE_WAKE_PENDING;
-                        wc_timer_set(&wakeup_timer, 2000); // 2 second timer for stable voltage
+                        wc_timer_set(&wakeup_timer, 1000); // 2 second timer for stable voltage
                     }
                     break;
 
@@ -931,17 +921,26 @@ void light_sleep_task(void *pvParameters)
         }
 
         // Handle sleep entry
-        if(current_state == STATE_SLEEPING && gpio_get_level(OBD_READY_PIN) == 1) 
+        // if(current_state == STATE_SLEEPING && gpio_get_level(OBD_READY_PIN) == 1) 
+        // {
+        //     // adc_continuous_stop(handle);
+        //     ESP_LOGW(TAG, "Sleep...");
+        //     esp_sleep_enable_timer_wakeup(2*1000000);
+        //     esp_light_sleep_start();
+        //     ESP_LOGW(TAG, "Wakeup...");
+        //     if(gpio_get_level(OBD_READY_PIN) == 0)
+        //     {
+        //         esp_restart();
+        //     }
+        //     // adc_continuous_start(handle);
+        // }
+        if(current_state == STATE_SLEEPING) 
         {
             // adc_continuous_stop(handle);
             ESP_LOGW(TAG, "Sleep...");
             esp_sleep_enable_timer_wakeup(2*1000000);
             esp_light_sleep_start();
             ESP_LOGW(TAG, "Wakeup...");
-            if(gpio_get_level(OBD_READY_PIN) == 0)
-            {
-                esp_restart();
-            }
             // adc_continuous_start(handle);
         }
         if(current_state != STATE_SLEEPING)

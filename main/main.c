@@ -94,7 +94,7 @@ static xdev_buffer ucTCP_RX_Buffer;
 static xdev_buffer ucTCP_TX_Buffer;
 static xdev_buffer ucBLE_TX_Buffer;
 
-static uint8_t protocol = SLCAN;
+static uint8_t protocol = OBD_ELM327;
 
 int FTP_TASK_FINISH_BIT = BIT2;
 EventGroupHandle_t xEventTask;
@@ -509,6 +509,16 @@ void app_main(void)
 	static StackType_t *heap_task_stack;
 	static StaticTask_t heap_task_buffer;
 
+	gpio_reset_pin(BUTTON_GPIO_NUM);
+	gpio_set_direction(BUTTON_GPIO_NUM, GPIO_MODE_INPUT);
+	gpio_set_pull_mode(BUTTON_GPIO_NUM, GPIO_PULLUP_ONLY);
+	sd_card_init();
+	
+	if(gpio_get_level(BUTTON_GPIO_NUM) == 0)
+	{
+		sdcard_perform_ota_update("/wican.bin");
+	}
+
 	heap_task_stack = heap_caps_malloc(1024*3 * sizeof(StackType_t), MALLOC_CAP_SPIRAM);
 
 	if (heap_task_stack != NULL) {
@@ -529,8 +539,6 @@ void app_main(void)
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
-
-	sd_card_init();
 
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -839,7 +847,7 @@ void app_main(void)
 
 	if(port == -1)
 	{
-		port = 3333;
+		port = 35000;
 	}
 
 	if(protocol != AUTO_PID)
@@ -920,7 +928,7 @@ void app_main(void)
 
 
 	
-	// wusb3801_init(I2C_MASTER_NUM);
+	wusb3801_init(I2C_MASTER_NUM);
 	// xEventTask = xEventGroupCreate();
 	// xTaskCreate(ftp_task, "FTP", 1024*6, NULL, 2, NULL);
 	// xEventGroupWaitBits( xEventTask,

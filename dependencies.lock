@@ -88,7 +88,7 @@ dependencies:
   idf:
     source:
       type: idf
-    version: 5.3.2
+    version: 5.4.0
   meatpihq/usb_host_ch34x_vcp:
     component_hash: a448631fda325ce5f3f1b4bb4707c7cb075c6a4d71ff4026a22ef2191efc9af4
     dependencies:

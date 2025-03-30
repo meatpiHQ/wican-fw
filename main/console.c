@@ -23,7 +23,15 @@
 #include "esp_vfs.h"
 #include "esp_timer.h"
 #include "lwip/sockets.h"
-
+#include "esp_wifi.h"
+#include "esp_netif.h"
+#include "esp_chip_info.h"
+#include "esp_private/esp_clk.h"
+#include "esp_system.h"
+#include "esp_timer.h"
+#include "soc/efuse_reg.h"
+#include "esp_flash.h"
+#include "wusb3801.h"
 
 #define PROMPT "wican> "
 #define MAX_CMDLINE_LENGTH 256
@@ -50,6 +58,7 @@ typedef struct {
 static struct {
     struct arg_lit *sync;
     struct arg_lit *read;
+    struct arg_lit *id;
     struct arg_end *end;
 } rtcm_args;
 
@@ -66,7 +75,7 @@ static struct {
 struct {
     struct arg_lit *voltage;
     struct arg_lit *reboot;
-    struct arg_lit *id;
+    struct arg_lit *info;
     struct arg_lit *memory;
     struct arg_end *end;
 } system_args;
@@ -76,6 +85,18 @@ static struct {
     struct arg_lit *test;
     struct arg_end *end;
 } sdcard_args;
+
+static struct {
+    struct arg_lit *status;
+    struct arg_lit *info;
+    struct arg_end *end;
+} wifi_args;
+
+static struct {
+    struct arg_lit *cc_status;
+    struct arg_lit *id;
+    struct arg_end *end;
+} wusb_args;
 
 static void tcp_console_write(const char* data, size_t len)
 {
@@ -153,9 +174,11 @@ static int cmd_rtcm(int argc, char **argv)
         return 1;
     }
 
-    if (rtcm_args.sync->count > 0) {
+    if (rtcm_args.sync->count > 0)
+    {
         // Sync time from internet
-        if (rtcm_sync_internet_time() != ESP_OK) {
+        if (rtcm_sync_internet_time() != ESP_OK)
+        {
             console_printf("Error: Failed to sync time\n");
             return 1;
         }
@@ -163,23 +186,38 @@ static int cmd_rtcm(int argc, char **argv)
         console_printf("OK\n");
         return 0;
     }
-
-    if (rtcm_args.read->count > 0) {
+    else if (rtcm_args.read->count > 0) 
+    {
         uint8_t hour, min, sec;
         uint8_t year, month, day, weekday;
         
         esp_err_t ret_time = rtcm_get_time(&hour, &min, &sec);
         esp_err_t ret_date = rtcm_get_date(&year, &month, &day, &weekday);
 
-        if (ret_time == ESP_OK && ret_date == ESP_OK) {
+        if (ret_time == ESP_OK && ret_date == ESP_OK) 
+        {
             console_printf("20%02X-%02X-%02X %02X:%02X:%02X (Day %d)\n", 
                    year, month, day, hour, min, sec, weekday);
             console_printf("OK\n");
             return 0;
-        } else {
+        } 
+        else 
+        {
             console_printf("Error: Failed to read RTC time/date\n");
             return 1;
         }
+    }
+    else if (rtcm_args.id->count > 0)
+    {
+        uint8_t id;
+        if (rtcm_get_device_id(&id) != ESP_OK) 
+        { 
+            console_printf("Error: Failed to read RTC module ID\n");
+            return 1;
+        }
+        console_printf("RTC Module Device ID: 0x%02X\n", id);
+        console_printf("OK\n");
+        return 0;
     }
 
     console_printf("Error: No valid subcommand\n");
@@ -240,8 +278,9 @@ static int cmd_system(int argc, char **argv)
         return 0;
     }
 
-    if (system_args.id->count > 0)
+    if (system_args.info->count > 0)
     {
+        // Get device ID
         char device_id[13];
         if (hw_config_get_device_id(device_id) != ESP_OK)
         {
@@ -249,6 +288,61 @@ static int cmd_system(int argc, char **argv)
             return 1;
         }
         console_printf("Device ID: %s\n", device_id);
+        
+        // Get running partition info
+        const esp_partition_t *running = esp_ota_get_running_partition();
+        esp_app_desc_t running_app_info;
+        
+        if (esp_ota_get_partition_description(running, &running_app_info) == ESP_OK) {
+            console_printf("Running Partition: %s\n", running->label);
+            console_printf("App Version: %s\n", running_app_info.version);
+            console_printf("Project Name: %s\n", running_app_info.project_name);
+            console_printf("Build Time: %s %s\n", running_app_info.date, running_app_info.time);
+            console_printf("IDF Version: %s\n", running_app_info.idf_ver);
+        }
+        
+        // Get chip info
+        esp_chip_info_t chip_info;
+        esp_chip_info(&chip_info);
+        console_printf("Chip Model: %s\n", 
+            chip_info.model == CHIP_ESP32 ? "ESP32" : 
+            chip_info.model == CHIP_ESP32S2 ? "ESP32-S2" : 
+            chip_info.model == CHIP_ESP32S3 ? "ESP32-S3" : 
+            chip_info.model == CHIP_ESP32C3 ? "ESP32-C3" : "Unknown");
+        console_printf("CPU Cores: %d\n", chip_info.cores);
+        console_printf("CPU Frequency: %d MHz\n", esp_clk_cpu_freq() / 1000000);
+        
+        // console_printf("Flash Size: %d MB\n", spi_flash_get_chip_size() / (1024 * 1024));
+        unsigned major_rev = chip_info.revision / 100;
+        unsigned minor_rev = chip_info.revision % 100;
+
+        uint32_t flash_size;
+
+        console_printf("Chip Revision: v%d.%d\n", major_rev, minor_rev);
+        if(esp_flash_get_size(NULL, &flash_size) != ESP_OK)
+        {
+            console_printf("Get flash size failed\n");
+            return 1;
+        }
+    
+        console_printf("Flash Size: %ld MB\n", flash_size / (uint32_t)(1024 * 1024),
+               (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
+    
+        console_printf("Minimum free heap size: %" PRIu32 " bytes\n", esp_get_minimum_free_heap_size());
+        
+        // Get uptime
+        int64_t uptime_us = esp_timer_get_time();
+        int uptime_s = uptime_us / 1000000;
+        int uptime_m = uptime_s / 60;
+        int uptime_h = uptime_m / 60;
+        int uptime_d = uptime_h / 24;
+        
+        console_printf("System Uptime: %dd %dh %dm %ds\n", 
+            uptime_d, 
+            uptime_h % 24, 
+            uptime_m % 60, 
+            uptime_s % 60);
+        
         console_printf("OK\n");
         return 0;
     }
@@ -328,6 +422,169 @@ static int cmd_sdcard(int argc, char **argv)
     return 1;
 }
 
+static int cmd_wifi(int argc, char **argv)
+{
+    int nerrors = arg_parse(argc, argv, (void **)&wifi_args);
+    if (nerrors != 0) 
+    {
+        arg_print_errors(stderr, wifi_args.end, argv[0]);
+        return 1;
+    }
+
+    if (wifi_args.status->count > 0)
+    {
+        // Get WiFi connection status
+        wifi_mode_t mode;
+        esp_err_t err = esp_wifi_get_mode(&mode);
+        if (err != ESP_OK) {
+            console_printf("Error: Failed to get WiFi mode (error %d)\n", err);
+            return 1;
+        }
+        
+        if (mode == WIFI_MODE_NULL) {
+            console_printf("WiFi not initialized\n");
+        } else if (mode == WIFI_MODE_STA || mode == WIFI_MODE_APSTA) {
+            wifi_ap_record_t ap_info;
+            err = esp_wifi_sta_get_ap_info(&ap_info);
+            if (err == ESP_OK) {
+                console_printf("WiFi Status: Connected\n");
+                console_printf("SSID: %s\n", ap_info.ssid);
+                console_printf("RSSI: %d dBm\n", ap_info.rssi);
+            } else if (err == ESP_ERR_WIFI_NOT_CONNECT) {
+                console_printf("WiFi Status: Disconnected\n");
+            } else {
+                console_printf("WiFi Status: Error getting connection info (error %d)\n", err);
+            }
+        } else if (mode == WIFI_MODE_AP) {
+            console_printf("WiFi Status: Access Point mode\n");
+        }
+        
+        console_printf("OK\n");
+        return 0;
+    }
+
+    if (wifi_args.info->count > 0)
+    {
+        // Get detailed WiFi connection information
+        wifi_mode_t mode;
+        esp_err_t err = esp_wifi_get_mode(&mode);
+        if (err != ESP_OK) {
+            console_printf("Error: Failed to get WiFi mode (error %d)\n", err);
+            return 1;
+        }
+        
+        console_printf("WiFi Mode: ");
+        switch (mode) {
+            case WIFI_MODE_NULL: console_printf("Not initialized\n"); break;
+            case WIFI_MODE_STA: console_printf("Station\n"); break;
+            case WIFI_MODE_AP: console_printf("Access Point\n"); break;
+            case WIFI_MODE_APSTA: console_printf("AP+Station\n"); break;
+            default: console_printf("Unknown\n");
+        }
+        
+        if (mode == WIFI_MODE_STA || mode == WIFI_MODE_APSTA) {
+            wifi_config_t wifi_cfg;
+            err = esp_wifi_get_config(WIFI_IF_STA, &wifi_cfg);
+            if (err == ESP_OK) {
+                console_printf("Station Configuration:\n");
+                console_printf("  SSID: %s\n", wifi_cfg.sta.ssid);
+                
+                // Get connection info
+                wifi_ap_record_t ap_info;
+                err = esp_wifi_sta_get_ap_info(&ap_info);
+                if (err == ESP_OK) {
+                    console_printf("  Connected to AP:\n");
+                    console_printf("    BSSID: %02x:%02x:%02x:%02x:%02x:%02x\n",
+                        ap_info.bssid[0], ap_info.bssid[1], ap_info.bssid[2],
+                        ap_info.bssid[3], ap_info.bssid[4], ap_info.bssid[5]);
+                    console_printf("    Channel: %d\n", ap_info.primary);
+                    console_printf("    RSSI: %d dBm\n", ap_info.rssi);
+                    console_printf("    Authentication Mode: ");
+                    switch (ap_info.authmode) {
+                        case WIFI_AUTH_OPEN: console_printf("Open\n"); break;
+                        case WIFI_AUTH_WEP: console_printf("WEP\n"); break;
+                        case WIFI_AUTH_WPA_PSK: console_printf("WPA PSK\n"); break;
+                        case WIFI_AUTH_WPA2_PSK: console_printf("WPA2 PSK\n"); break;
+                        case WIFI_AUTH_WPA_WPA2_PSK: console_printf("WPA/WPA2 PSK\n"); break;
+                        case WIFI_AUTH_WPA2_ENTERPRISE: console_printf("WPA2 Enterprise\n"); break;
+                        default: console_printf("Unknown\n");
+                    }
+                    
+                    // Get IP info using esp_netif APIs
+                    esp_netif_t *sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+                    if (sta_netif) {
+                        esp_netif_ip_info_t ip_info;
+                        err = esp_netif_get_ip_info(sta_netif, &ip_info);
+                        if (err == ESP_OK) {
+                            console_printf("    IP Address: " IPSTR "\n", IP2STR(&ip_info.ip));
+                            console_printf("    Subnet Mask: " IPSTR "\n", IP2STR(&ip_info.netmask));
+                            console_printf("    Gateway: " IPSTR "\n", IP2STR(&ip_info.gw));
+                        } else {
+                            console_printf("    Error getting IP info (error %d)\n", err);
+                        }
+                    } else {
+                        console_printf("    Error getting netif handle\n");
+                    }
+                } else if (err == ESP_ERR_WIFI_NOT_CONNECT) {
+                    console_printf("  Not connected to any AP\n");
+                } else {
+                    console_printf("  Error getting connection info (error %d)\n", err);
+                }
+            } else {
+                console_printf("Error getting station configuration (error %d)\n", err);
+            }
+        }
+        
+        if (mode == WIFI_MODE_AP || mode == WIFI_MODE_APSTA) {
+            wifi_config_t wifi_cfg;
+            err = esp_wifi_get_config(WIFI_IF_AP, &wifi_cfg);
+            if (err == ESP_OK) {
+                console_printf("AP Configuration:\n");
+                console_printf("  SSID: %s\n", wifi_cfg.ap.ssid);
+                console_printf("  Channel: %d\n", wifi_cfg.ap.channel);
+                console_printf("  Max connections: %d\n", wifi_cfg.ap.max_connection);
+            } else {
+                console_printf("Error getting AP configuration (error %d)\n", err);
+            }
+        }
+        
+        console_printf("OK\n");
+        return 0;
+    }
+
+    console_printf("Error: No valid subcommand\n");
+    return 1;
+}
+
+static int cmd_wusb(int argc, char **argv)
+{
+    int nerrors = arg_parse(argc, argv, (void **)&wusb_args);
+    if (nerrors != 0) 
+    {
+        arg_print_errors(stderr, wusb_args.end, argv[0]);
+        return 1;
+    }
+
+    if (wusb_args.id->count > 0)
+    {
+        uint8_t id = wusb3801_get_dev_id();
+        console_printf("WUSB3801 Device ID: 0x%02X\n", id);
+        console_printf("OK\n");
+        return 0;
+    }
+
+    if (wusb_args.cc_status->count > 0)
+    {
+        uint8_t cc_stat = wusb3801_get_cc_stat();
+        console_printf("WUSB3801 CC Status: 0x%02X\n", cc_stat);
+        console_printf("OK\n");
+        return 0;
+    }
+
+    console_printf("Error: No valid subcommand\n");
+    return 1;
+}
+
 static void console_register_commands(void)
 {
     esp_console_register_help_command();
@@ -339,42 +596,74 @@ static void console_register_commands(void)
     // Initialize RTCM command arguments
     rtcm_args.sync = arg_lit0("s", "sync", "Sync time from internet");
     rtcm_args.read = arg_lit0("r", "read", "Read current time and date");
-    rtcm_args.end = arg_end(2);
+    rtcm_args.id = arg_lit0("i", "id", "Get RTC module device ID");  // Add this new argument
+    rtcm_args.end = arg_end(3);
 
     // Initialize LED command arguments with other arg initializations
     led_args.id = arg_lit0("i", "id", "Get LED driver device ID");
     led_args.end = arg_end(2);
     
+    // Initialize WUSB command arguments
+    wusb_args.cc_status = arg_lit0("c", "cc", "Get CC status");
+    wusb_args.id = arg_lit0("i", "id", "Get WUSB device ID");
+    wusb_args.end = arg_end(3);
+    
     system_args.voltage = arg_lit0("v", "voltage", "Get system voltage");
     system_args.reboot = arg_lit0("r", "reboot", "Reboot system");
-    system_args.id = arg_lit0("i", "id", "Get device ID");
+    system_args.info = arg_lit0("i", "info", "Get system information including device ID");
     system_args.memory = arg_lit0("m", "memory", "Get heap memory info");
     system_args.end = arg_end(5);
 
     sdcard_args.info = arg_lit0("i", "info", "Get SD card information");
     sdcard_args.test = arg_lit0("t", "test", "Test SD card read/write");
     sdcard_args.end = arg_end(3);
+    
+    // Initialize WiFi command arguments
+    wifi_args.status = arg_lit0("s", "status", "Get WiFi connection status");
+    wifi_args.info = arg_lit0("i", "info", "Get detailed WiFi connection information");
+    wifi_args.end = arg_end(3);
 
+    
     const console_cmd_t cmd_table[] = {
         {"version", "Get firmware version", NULL, &cmd_version},
         {"status", "Get system status", NULL, &cmd_status},
-        {"imu", "IMU control and status", NULL, &cmd_imu},
-        {"rtc", "RTC module control", NULL, &cmd_rtcm},
-        {"led", "LED driver control", NULL, &cmd_led},
-        {"system", "System control and status", NULL, &cmd_system},
-        {"sdcard", "SD card control and status", NULL, &cmd_sdcard},
+        {"imu", "IMU control and status", "Usage: imu [-i]", &cmd_imu},
+        {"rtc", "RTC module control", "Usage: rtc [-s|-r|-i]", &cmd_rtcm},
+        {"led", "LED driver control", "Usage: led [-i]", &cmd_led},
+        {"wusb", "WUSB3801 USB-C controller", "Usage: wusb [-i|-c]", &cmd_wusb},
+        {"system", "System control and status", "Usage: system [-v|-r|-i|-m]", &cmd_system},
+        {"sdcard", "SD card control and status", "Usage: sdcard [-i|-t]", &cmd_sdcard},
+        {"wifi", "WiFi connection control and status", "Usage: wifi [-s|-i]", &cmd_wifi},
         {NULL, NULL, NULL, NULL}
     };
     
     const console_cmd_t *cmd = &cmd_table[0];
     while (cmd->command != NULL)
     {
-        const esp_console_cmd_t console_cmd = {
+        esp_console_cmd_t console_cmd = {
             .command = cmd->command,
             .help = cmd->help,
             .hint = cmd->hint,
             .func = cmd->func,
         };
+        
+        // Add argtable for each command
+        if (strcmp(cmd->command, "imu") == 0) {
+            console_cmd.argtable = &imu_args;
+        } else if (strcmp(cmd->command, "rtc") == 0) {
+            console_cmd.argtable = &rtcm_args;
+        } else if (strcmp(cmd->command, "led") == 0) {
+            console_cmd.argtable = &led_args;
+        } else if (strcmp(cmd->command, "wusb") == 0) {
+            console_cmd.argtable = &wusb_args;
+        } else if (strcmp(cmd->command, "system") == 0) {
+            console_cmd.argtable = &system_args;
+        } else if (strcmp(cmd->command, "sdcard") == 0) {
+            console_cmd.argtable = &sdcard_args;
+        } else if (strcmp(cmd->command, "wifi") == 0) {
+            console_cmd.argtable = &wifi_args;
+        }
+        
         ESP_ERROR_CHECK(esp_console_cmd_register(&console_cmd));
         cmd++;
     }

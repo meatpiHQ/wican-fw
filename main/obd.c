@@ -226,15 +226,21 @@ static void obd_parse_response(char *str, uint32_t len, QueueHandle_t *q, char* 
         static uint32_t response_len = 0;
         static int64_t response_cmd_time = 0;
         
-        if(config_server_get_sleep_config() == 1)
+        // if(config_server_get_sleep_config() == 1)
         {
             static char sleep_cmd[32] = {0};
             static char wake_cmd[32] = {0};
             float sleep_voltage;
             float wakeup_voltage;
             uint32_t sleep_time;
-
-            ESP_LOGW(TAG, "Sleep mode enabled");
+            if(config_server_get_sleep_config() == 1)
+            {
+                ESP_LOGW(TAG, "Sleep mode enabled");
+            }
+            else
+            {
+                ESP_LOGW(TAG, "Sleep mode disabled");
+            }
             if(config_server_get_wakeup_volt(&wakeup_voltage) == -1)
             {
                 wakeup_voltage = 13.5f;
@@ -307,18 +313,18 @@ static void obd_parse_response(char *str, uint32_t len, QueueHandle_t *q, char* 
                 // elm327_disable_wake_commands();
             }               
         }
-        else
-        {
-            ESP_LOGW(TAG, "Sleep mode disabled");
-            if(config.vl_wake.en == 1 || config.vl_sleep.en == 1)
-            {
-                elm327_process_cmd((uint8_t *)"STSLVl off,off\r", 0, NULL, response_buffer, 
-                                &response_len, &response_cmd_time, NULL);
-                elm327_process_cmd((uint8_t *)"ATZ\r", 0, NULL, response_buffer, 
-                                &response_len, &response_cmd_time, NULL);
-                vTaskDelay(pdMS_TO_TICKS(100));
-            }
-        }
+        // else
+        // {
+        //     ESP_LOGW(TAG, "Sleep mode disabled");
+        //     if(config.vl_wake.en == 1 || config.vl_sleep.en == 1)
+        //     {
+        //         elm327_process_cmd((uint8_t *)"STSLVl off,off\r", 0, NULL, response_buffer, 
+        //                         &response_len, &response_cmd_time, NULL);
+        //         elm327_process_cmd((uint8_t *)"ATZ\r", 0, NULL, response_buffer, 
+        //                         &response_len, &response_cmd_time, NULL);
+        //         vTaskDelay(pdMS_TO_TICKS(100));
+        //     }
+        // }
     }
     else if(check_command(cmd_str, "STSBR2000000\r"))
     {

@@ -860,7 +860,7 @@ static void append_to_buffer(char *buffer, const char *new_data)
     }
 }
 
-void autopid_parser(char *str, uint32_t len, QueueHandle_t *q)
+void autopid_parser(char *str, uint32_t len, QueueHandle_t *q, char* cmd_str)
 {
     static response_t response;
     if (str != NULL && strlen(str) != 0)

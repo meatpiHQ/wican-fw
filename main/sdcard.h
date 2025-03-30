@@ -92,6 +92,12 @@ esp_err_t sdcard_get_info(sdmmc_card_info_t *info);
  */
 esp_err_t sdcard_test_rw(void);
 
+/**
+ * Perform OTA update from a firmware file on the SD card
+ * @param firmware_path Path to firmware file relative to SD card mount point
+ * @return ESP_OK on success, or an error code on failure
+ */
+esp_err_t sdcard_perform_ota_update(const char* firmware_path);
 
 #ifdef __cplusplus
 }
