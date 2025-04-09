@@ -1,0 +1,46 @@
+{
+    "car_model": "MG: MG5/Marvel/ZS",
+    "init": "ATSP6;ATST64;",
+    "pids": [
+      {
+        "pid": "22B0461",
+        "pid_init": "ATSH7E5;ATCRA7ED;",
+        "parameters": [
+          {
+            "name": "SOC",
+            "expression": "[B4:B5]*1.035/10"
+          }
+        ]
+      },
+      {
+        "pid": "22B061",
+        "pid_init": "ATSH7E5;ATCRA7ED;",
+        "parameters": [
+          {
+            "name": "SOH",
+            "expression": "[B4:B5]/100"
+          }
+        ]
+      },
+      {
+        "pid": "22B0561",
+        "pid_init": "ATSH7E5;ATCRA7ED;",
+        "parameters": [
+          {
+            "name": "BATT_TEMP",
+            "expression": "(B4/2)-40"
+          }
+        ]
+      },
+      {
+        "pid": "22B042",
+        "pid_init": "ATSH7E5;ATCRA7ED;",
+        "parameters": [
+          {
+            "name": "HV_V",
+            "expression": "[B4:B5]*0.25"
+          }
+        ]
+      }
+    ]
+  }
