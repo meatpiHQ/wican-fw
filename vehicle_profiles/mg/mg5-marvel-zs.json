@@ -1,42 +1,34 @@
 {
-    "car_model": "MG: MG5/Marvel/ZS",
-    "init": "ATSP6;ATST64;",
-    "pids": [
-      {
-        "pid": "22B0461",
-        "pid_init": "ATSH7E5;ATCRA7ED;",
-        "parameters": [
-          {
-            "SOC": "[B4:B5]*1.035/10"
-          }
-        ]
-      },
-      {
-        "pid": "22B061",
-        "pid_init": "ATSH7E5;ATCRA7ED;",
-        "parameters": [
-          {
-            "SOH": "[B4:B5]/100"
-          }
-        ]
-      },
-      {
-        "pid": "22B0561",
-        "pid_init": "ATSH7E5;ATCRA7ED;",
-        "parameters": [
-          {
-            "BATT_TEMP": "(B4/2)-40"
-          }
-        ]
-      },
-      {
-        "pid": "22B042",
-        "pid_init": "ATSH7E5;ATCRA7ED;",
-        "parameters": [
-          {
-            "HV_V":"[B4:B5]*0.25"
-          }
-        ]
-      }
-    ]
-  }
+  "car_model": "MG: MG5/Marvel/ZS",
+  "init": "ATSP6;ATST64;",
+  "pids": [
+    {
+      "pid": "22B0461",
+      "pid_init": "ATSH7E5;ATCRA7ED;",
+      "parameters": {
+          "SOC": "[B4:B5]*1.035/10"
+        }
+    },
+    {
+      "pid": "22B061",
+      "pid_init": "ATSH7E5;ATCRA7ED;",
+      "parameters": {
+          "SOH": "[B4:B5]/100"
+        }
+    },
+    {
+      "pid": "22B0561",
+      "pid_init": "ATSH7E5;ATCRA7ED;",
+      "parameters": {
+          "BATT_TEMP": "(B4/2)-40"
+        }
+    },
+    {
+      "pid": "22B042",
+      "pid_init": "ATSH7E5;ATCRA7ED;",
+      "parameters": {
+          "HV_V":"[B4:B5]*0.25"
+        }
+    }
+  ]
+}
