@@ -9,7 +9,6 @@
 #include "esp_littlefs.h"
 #include "sqlite3.h"
 #include "sqllib.h"
-#include "db_iface.h"
 #include "esp_timer.h"
 #include "string.h"
 
