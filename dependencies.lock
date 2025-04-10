@@ -24,7 +24,7 @@ dependencies:
       type: service
     version: 1.5.1
   espressif/mdns:
-    component_hash: af6306fe65d637a3683d1cf671508fcedd6b05f9ca029a8815abeab64001fb8d
+    component_hash: 3ec0af5f6bce310512e90f482388d21cc7c0e99668172d2f895356165fc6f7c5
     dependencies:
     - name: idf
       require: private
@@ -32,7 +32,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.4.0
+    version: 1.8.2
   espressif/usb_host_cdc_acm:
     component_hash: f76e1283e7ef0e7970e8a708c4ee443ff0aa112572e25319d30b7ec555cc0aee
     dependencies:
@@ -89,6 +89,16 @@ dependencies:
     source:
       type: idf
     version: 5.4.0
+  joltwallet/littlefs:
+    component_hash: 34b8c56a14f10b440845fe972ce34ef41d1d205bcb139b3dfc58983a10abf59b
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.19.1
   meatpihq/usb_host_ch34x_vcp:
     component_hash: a448631fda325ce5f3f1b4bb4707c7cb075c6a4d71ff4026a22ef2191efc9af4
     dependencies:
@@ -102,6 +112,14 @@ dependencies:
       path: host/class/cdc/usb_host_ch34x_vcp
       type: git
     version: c80a574e26b4807816fdcb939218d143841b852c
+  nopnop2002/sqlite3:
+    component_hash: 6f20e0e4fb6f6bf21dc3b54d332b1f750e7014a4feb1cbe940f6aa6289a7ab83
+    dependencies: []
+    source:
+      git: https://github.com/nopnop2002/esp32-idf-sqlite3.git
+      path: components/esp32-idf-sqlite3/
+      type: git
+    version: 4afa6d7d85159b7bc3591fcadc95751a3a53a5d3
 direct_dependencies:
 - eil/i2cdev
 - espressif/mdns
@@ -109,7 +127,9 @@ direct_dependencies:
 - espressif/usb_host_ftdi_vcp
 - espressif/usb_host_vcp
 - idf
+- joltwallet/littlefs
 - meatpihq/usb_host_ch34x_vcp
-manifest_hash: 27d5ae939fc4914b4a3f65ec8cfdc58976ece18e5e11ed30b9fae0f9f7af31ab
+- nopnop2002/sqlite3
+manifest_hash: 9259c7c779187767fd1cdad9bafe99a0c2446917ba890f322ca2616b3dc67bb2
 target: esp32s3
 version: 2.0.0

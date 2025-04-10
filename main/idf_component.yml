@@ -1,5 +1,9 @@
 ## IDF Component Manager Manifest File
 dependencies:
+  joltwallet/littlefs: "~=1.19.1"
+  nopnop2002/sqlite3:
+    path: components/esp32-idf-sqlite3/
+    git: https://github.com/nopnop2002/esp32-idf-sqlite3.git
   espressif/mdns: ^1.0.0
   espressif/usb_host_cp210x_vcp: ^2.0.0
   espressif/usb_host_ftdi_vcp: ^2.0.0
