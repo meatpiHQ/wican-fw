@@ -543,6 +543,15 @@
                             <input type="text" id="ap_pass_value" name="ap_pass_value" value="Testpass" />
                         </td>
                     </tr>
+                    <tr>
+                        <td>Auto-Disable AP:</td>
+                        <td>
+                            <select name="ap_auto_disable" id="ap_auto_disable" onchange="submit_enable();">
+                                <option value="enable">Enable</option>
+                                <option value="disable">Disable</option>
+                            </select>
+                        </td>
+                    </tr>
                 </table>
 
                 <div class="divider"></div>
@@ -2102,6 +2111,7 @@ function loadAutoTable(jsonData) {
 			document.getElementById("pass_value").disabled = true;
             document.getElementById("sta_security").disabled = true;
 			document.getElementById("ble_status").disabled = false;
+            document.getElementById("ap_auto_disable").disabled = true;
 		} else {
 			document.getElementById("ssid_value").disabled = false;
 			document.getElementById("pass_value").disabled = false;
@@ -2386,6 +2396,7 @@ function loadAutoTable(jsonData) {
 		obj["mqtt_user"] = document.getElementById("mqtt_user").value;
 		obj["mqtt_pass"] = document.getElementById("mqtt_pass").value;
 		obj["mqtt_tx_topic"] = document.getElementById("mqtt_tx_topic").value;
+        obj["ap_auto_disable"] = document.getElementById("ap_auto_disable").value;
 		if(document.getElementById("mqtt_tx_en_checkbox").checked){
 			obj["mqtt_tx_en"] = "enable";
 		}else{
@@ -2585,11 +2596,20 @@ function loadAutoTable(jsonData) {
 				document.getElementById("ssid_value").disabled = false;
 				document.getElementById("pass_value").disabled = false;
                 document.getElementById("sta_security").disabled = false;
+                document.getElementById("ap_auto_disable").disabled = false;
 			} else if(obj.wifi_mode == "AP") {
 				document.getElementById("wifi_mode").selectedIndex = "0";
 				document.getElementById("ssid_value").disabled = true;
 				document.getElementById("pass_value").disabled = true;
+                document.getElementById("ap_auto_disable").disabled = true;
 			}
+
+            if(obj.ap_auto_disable == "enable") {
+				document.getElementById("ap_auto_disable").selectedIndex = "0";
+			} else {
+				document.getElementById("ap_auto_disable").selectedIndex = "1";
+			}
+
 			var ch = parseInt(obj.ap_ch);
 			ch = ch - 1;
 			document.getElementById("ap_ch_value").selectedIndex = ch.toString();
