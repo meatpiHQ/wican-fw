@@ -28,6 +28,7 @@ set(srcs
     "rtcm.c"
     "console.c"
     "hw_config.c"
+    "obd_logger.c"
 )
 
 # Define required components
@@ -51,6 +52,7 @@ set(requires
     json
     wear_levelling
     esp_http_client
+    spi_flash
 )
 
 # Register the component
