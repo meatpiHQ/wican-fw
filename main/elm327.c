@@ -1765,7 +1765,7 @@ void elm327_hardreset_chip(void)
         int len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS+300);
 		if(len > 0)
 		{
-			ESP_LOG_BUFFER_CHAR(TAG, rsp_buffer, len);
+			// ESP_LOG_BUFFER_CHAR(TAG, rsp_buffer, len);
 			ESP_LOGW(TAG, "Hardreset OK");
 		}
 		else
