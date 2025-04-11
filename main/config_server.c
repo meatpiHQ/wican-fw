@@ -72,6 +72,7 @@
 #include "sleep_mode.h"
 #include "autopid.h"
 #include "wc_mdns.h"
+#include "hw_config.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
@@ -368,7 +369,7 @@ static esp_err_t store_config_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
 
-    FILE *f = fopen("/spiffs/config.json", "w");
+    FILE *f = fopen(FS_MOUNT_POINT"/config.json", "w");
     if (f)
     {
         // Write the received data into the file
@@ -423,7 +424,7 @@ static esp_err_t store_canflt_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
 
-    FILE *f = fopen("/spiffs/mqtt_canfilt.json", "w");
+    FILE *f = fopen(FS_MOUNT_POINT"/mqtt_canfilt.json", "w");
     if (f)
     {
         // Write the received data into the file
@@ -442,7 +443,7 @@ static esp_err_t store_canflt_handler(httpd_req_t *req)
 
 	free(mqtt_canflt_file);
 	mqtt_canflt_file = NULL;
-	FILE* f1 = fopen("/spiffs/mqtt_canfilt.json", "r");
+	FILE* f1 = fopen(FS_MOUNT_POINT"/mqtt_canfilt.json", "r");
 	if (f1 != NULL)
 	{
 		fseek(f1, 0, SEEK_END);
@@ -483,7 +484,7 @@ static esp_err_t load_canflt_handler(httpd_req_t *req)
 
 static esp_err_t load_pid_auto_handler(httpd_req_t *req)
 {
-    FILE *f = fopen("/spiffs/auto_pid.json", "r");
+    FILE *f = fopen(FS_MOUNT_POINT"/auto_pid.json", "r");
     if (f == NULL) 
 	{
         const char* resp_str = "NONE";
@@ -527,7 +528,7 @@ static esp_err_t load_pid_auto_handler(httpd_req_t *req)
 
 static esp_err_t load_pid_auto_config_handler(httpd_req_t *req)
 {
-    const char *filepath = "/spiffs/car_data.json";
+    const char *filepath = FS_MOUNT_POINT"/car_data.json";
     ESP_LOGI(TAG, "Opening file: %s", filepath);
     FILE *fd = fopen(filepath, "r");
 
@@ -698,7 +699,7 @@ static esp_err_t store_auto_data_handler(httpd_req_t *req)
     ESP_LOGI(TAG, "Auto Table json: %s", buf);
 
     // Open file with error handling
-    FILE *f = fopen("/spiffs/auto_pid.json", "w");
+    FILE *f = fopen(FS_MOUNT_POINT"/auto_pid.json", "w");
     if (!f)
 	{
         ESP_LOGE(TAG, "Failed to open file for writing");
@@ -741,7 +742,7 @@ static esp_err_t store_car_data_handler(httpd_req_t *req)
 {
     int total_len = req->content_len;
     int received = 0;
-	const char *filepath = "/spiffs/car_data.json";
+	const char *filepath = FS_MOUNT_POINT"/car_data.json";
 
     FILE *file = fopen(filepath, "w");
     if (!file)
@@ -1466,7 +1467,7 @@ static const httpd_uri_t ws = {
         .user_ctx   = NULL,
         .is_websocket = true
 };
-static struct file_server_data server_data = {.base_path = "/spiffs"};
+static struct file_server_data server_data = {.base_path = FS_MOUNT_POINT""};
 //static struct file_server_data *server_data = NULL;
 /* URI handler for uploading files to server */
 static const httpd_uri_t file_upload = {
@@ -1963,6 +1964,20 @@ static void config_server_load_cfg(char *cfg)
 	ESP_LOGE(TAG, "device_config.sta_security: %s", device_config.wakeup_volt);
 	//*****
 
+	//*****
+	key = cJSON_GetObjectItem(root,"ap_auto_disable");
+	if(key == 0)
+	{
+		strcpy(device_config.ap_auto_disable, "disable");
+	}
+	else
+	{
+		strcpy(device_config.ap_auto_disable, key->valuestring);
+	}
+
+	ESP_LOGE(TAG, "device_config.ap_auto_disable: %s", device_config.ap_auto_disable);
+	//*****	
+
 	cJSON_Delete(root);
 	return;
 
@@ -1970,12 +1985,12 @@ static void config_server_load_cfg(char *cfg)
 config_error:
     // Check if destination file exists before renaming
 
-    if (stat("/spiffs/config.json", &st) == 0)
+    if (stat(FS_MOUNT_POINT"/config.json", &st) == 0)
     {
     	ESP_LOGE(TAG, "config.json file error, restoring default");
         // Delete it if it exists
-        unlink("/spiffs/config.json");
-		FILE* f = fopen("/spiffs/config.json", "w");
+        unlink(FS_MOUNT_POINT"/config.json");
+		FILE* f = fopen(FS_MOUNT_POINT"/config.json", "w");
 		// sprintf(device_config_default, device_id, device_id);
 		fprintf(f, device_config_default, (char*)device_id, (char*)device_id, (char*)device_id);
 		fclose(f);
@@ -2067,7 +2082,7 @@ static httpd_handle_t config_server_init(void)
 		ESP_LOGI(TAG, "Initializing SPIFFS");
 
 		esp_vfs_spiffs_conf_t conf = {
-		  .base_path = "/spiffs",
+		  .base_path = FS_MOUNT_POINT"",
 		  .partition_label = NULL,
 		  .max_files = 5,
 		  .format_if_mount_failed = true
@@ -2108,15 +2123,15 @@ static httpd_handle_t config_server_init(void)
 		// Use POSIX and C standard library functions to work with files.
 		// First create a file.
 		ESP_LOGI(TAG, "Opening file");
-		FILE* f = fopen("/spiffs/config.json", "r");
+		FILE* f = fopen(FS_MOUNT_POINT"/config.json", "r");
 		if (f == NULL)
 		{
 			ESP_LOGI(TAG, "Config file does not exist, load default");
-			f = fopen("/spiffs/config.json", "w");
+			f = fopen(FS_MOUNT_POINT"/config.json", "w");
 //			fwrite(device_config_default , 1 , sizeof(device_config_default) , f );
 			fprintf(f, device_config_default, (char*)device_id, (char*)device_id, (char*)device_id);
 			fclose(f);
-			f = fopen("/spiffs/config.json", "r");
+			f = fopen(FS_MOUNT_POINT"/config.json", "r");
 		}
 		fseek(f, 0, SEEK_END);
 		int filesize = ftell(f);
@@ -2132,7 +2147,7 @@ static httpd_handle_t config_server_init(void)
 		ESP_LOGI(TAG, "config.json: %s", device_config_file);
 		config_server_load_cfg(device_config_file);
 		
-		FILE* f1 = fopen("/spiffs/mqtt_canfilt.json", "r");
+		FILE* f1 = fopen(FS_MOUNT_POINT"/mqtt_canfilt.json", "r");
 		if (f1 != NULL)
 		{
 			fseek(f1, 0, SEEK_END);
@@ -2573,6 +2588,19 @@ wifi_security_t config_server_get_sta_security(void)
 	return WIFI_MAX;
 }
 
+int8_t config_server_get_ap_auto_disable(void)
+{
+	if(strcmp(device_config.ap_auto_disable, "enable") == 0)
+	{
+		return 1;
+	}
+	else if(strcmp(device_config.ap_auto_disable, "disable") == 0)
+	{
+		return 0;
+	}
+	return -1;
+}
+
 void config_server_set_ble_config(uint8_t b)
 {
 	cJSON * root;
@@ -2587,7 +2615,7 @@ void config_server_set_ble_config(uint8_t b)
 	}
 	const char *resp_str = cJSON_Print(root);
 	ESP_LOGI(TAG, "resp_str:%s", resp_str);
-	FILE* f = fopen("/spiffs/config.json", "w");
+	FILE* f = fopen(FS_MOUNT_POINT"/config.json", "w");
 	if (f != NULL)
 	{
 		fprintf(f, resp_str);

@@ -39,6 +39,7 @@
 #include "obd2_standard_pids.h"
 #include "wc_timer.h"
 #include <float.h>
+#include "hw_config.h"
 
 #define TAG __func__
 
@@ -1293,7 +1294,7 @@ all_pids_t* load_all_pids(void){
     int auto_pids = 0;
     
     // Count car_data.json pids
-    FILE* f = fopen("/spiffs/car_data.json", "r");
+    FILE* f = fopen(FS_MOUNT_POINT"/car_data.json", "r");
     if (f) {
         cJSON* root = parse_json_file(f);
         if (root) {
@@ -1307,7 +1308,7 @@ all_pids_t* load_all_pids(void){
     }
     
     // Count auto_pid.json pids
-    f = fopen("/spiffs/auto_pid.json", "r");
+    f = fopen(FS_MOUNT_POINT"/auto_pid.json", "r");
     if (f) {
         cJSON* root = parse_json_file(f);
         if (root) {
@@ -1333,7 +1334,7 @@ all_pids_t* load_all_pids(void){
     int pid_index = 0;
     
     // Load auto_pid.json pids
-    f = fopen("/spiffs/auto_pid.json", "r");
+    f = fopen(FS_MOUNT_POINT"/auto_pid.json", "r");
     if (f) {
         cJSON* root = parse_json_file(f);
         if (root) {
@@ -1573,7 +1574,7 @@ all_pids_t* load_all_pids(void){
         fclose(f);
     }
     
-    f = fopen("/spiffs/car_data.json", "r");
+    f = fopen(FS_MOUNT_POINT"/car_data.json", "r");
     if (f) {
         cJSON* root = parse_json_file(f);
         if (root) {

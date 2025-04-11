@@ -63,6 +63,7 @@ typedef struct _device_config
 {
 	char wifi_mode[65];
 	char ap_ch[65];
+	char ap_auto_disable[12];
 	char sta_ssid[65];
 	char sta_pass[65];
 	char sta_security[8];
@@ -156,3 +157,4 @@ int8_t config_server_get_wakeup_volt(float *wakeup_volt);
 int8_t config_server_get_sleep_time(uint32_t *sleep_time);
 int8_t config_server_get_wakeup_time(uint32_t *wakeup_time);
 wifi_security_t config_server_get_sta_security(void);
+int8_t config_server_get_ap_auto_disable(void);
