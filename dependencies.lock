@@ -89,6 +89,16 @@ dependencies:
     source:
       type: idf
     version: 5.4.0
+  joltwallet/littlefs:
+    component_hash: 34b8c56a14f10b440845fe972ce34ef41d1d205bcb139b3dfc58983a10abf59b
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.19.1
   meatpihq/usb_host_ch34x_vcp:
     component_hash: a448631fda325ce5f3f1b4bb4707c7cb075c6a4d71ff4026a22ef2191efc9af4
     dependencies:
@@ -109,7 +119,8 @@ direct_dependencies:
 - espressif/usb_host_ftdi_vcp
 - espressif/usb_host_vcp
 - idf
+- joltwallet/littlefs
 - meatpihq/usb_host_ch34x_vcp
-manifest_hash: 27d5ae939fc4914b4a3f65ec8cfdc58976ece18e5e11ed30b9fae0f9f7af31ab
+manifest_hash: 37edc9e97759e8dc802d62cb88b1f5a1eaeae46c6d98a73dafc6b101bcdac72e
 target: esp32s3
 version: 2.0.0

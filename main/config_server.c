@@ -42,8 +42,11 @@
 #include <sys/unistd.h>
 #include <sys/stat.h>
 #include "ff.h"
+#if USE_FATFS	
 #include "esp_vfs_fat.h"
+#endif	
 
+#include "esp_vfs.h"
 #include "config_server.h"
 #include "cJSON.h"
 #include<stdio.h>
@@ -75,6 +78,7 @@
 #include "wc_mdns.h"
 #include "elm327.h"
 #include "hw_config.h"
+#include "esp_littlefs.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
@@ -2177,10 +2181,12 @@ static httpd_handle_t config_server_init(void)
     	xip_Queue = xQueueCreate(1, 20);
     }
 
-	static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
+	
 
 	if(esp_fatfs_flag == 0) 
 	{
+		#ifdef USE_FATFS
+		static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
 		ESP_LOGI(TAG, "Initializing FAT filesystem");
 
 		const esp_vfs_fat_mount_config_t mount_config = {
@@ -2198,7 +2204,37 @@ static httpd_handle_t config_server_init(void)
 		}
 		
 		ESP_LOGI(TAG, "FAT filesystem mounted successfully");
+		#else
+			ESP_LOGI(TAG, "Initializing LittleFS filesystem");
+			
+			esp_vfs_littlefs_conf_t conf = {
+				.base_path = FS_MOUNT_POINT,
+				.partition_label = "storage",
+				.format_if_mount_failed = true,
+				.dont_mount = false,
+			};
+			
+			esp_err_t ret = esp_vfs_littlefs_register(&conf);
+			if (ret != ESP_OK) 
+			{
+				ESP_LOGE(TAG, "Failed to mount LittleFS (%s)", esp_err_to_name(ret));
+				return NULL;
+			}
+			
+			ESP_LOGI(TAG, "LittleFS filesystem mounted successfully");
 
+			size_t total = 0, used = 0;
+			ret = esp_littlefs_info(conf.partition_label, &total, &used);
+			if (ret != ESP_OK)
+			{
+					ESP_LOGE(TAG, "Failed to get LittleFS partition information (%s)", esp_err_to_name(ret));
+			}
+			else
+			{
+					ESP_LOGI(TAG, "Partition size: total: %d, used: %d", total, used);
+			}
+
+		#endif
 		// Handle config.json
 		FILE* f = fopen(FS_MOUNT_POINT"/config.json", "r");
 		if (f == NULL)

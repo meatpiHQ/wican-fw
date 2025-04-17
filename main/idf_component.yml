@@ -4,9 +4,9 @@ dependencies:
   espressif/usb_host_cp210x_vcp: ^2.0.0
   espressif/usb_host_ftdi_vcp: ^2.0.0
   meatpihq/usb_host_ch34x_vcp:
-    git: "https://github.com/meatpiHQ/esp-usb.git"
-    path: "host/class/cdc/usb_host_ch34x_vcp"
-    version: "ch343"
+    git: https://github.com/meatpiHQ/esp-usb.git
+    path: host/class/cdc/usb_host_ch34x_vcp
+    version: ch343
   espressif/usb_host_vcp: ^1.0.0~5
   ## Required IDF version
   idf:
@@ -23,3 +23,4 @@ dependencies:
   #   # All dependencies of `main` are public by default.
   #   public: true
   eil/i2cdev: ^1.5.1
+  joltwallet/littlefs: ^1.19.1
