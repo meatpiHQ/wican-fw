@@ -42,6 +42,7 @@
 #include "hw_config.h"
 
 #define TAG __func__
+// #define TAG "AUTO_PID"
 
 #define TEMP_BUFFER_LENGTH  32
 #define ECU_CONNECTED_BIT			BIT0
@@ -213,10 +214,10 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
     cJSON *root = cJSON_CreateObject();
     cJSON *pid_array = cJSON_CreateArray();
     // char restore_cmd[64];
-    static const char *supported_protocols[] = {"ATSP6\rATSH7DF\rATCRA\r",
-                                                "ATSP7\rATSH18DB33F1\rATCRA\r",
-                                                "ATSP8\rATSH7DF\rATCRA\r",
-                                                "ATSP9\rATSH18DB33F1\rATCRA\r",
+    static const char *supported_protocols[] = {"ATTP6\rATSH7DF\rATCRA\r",
+                                                "ATTP7\rATSH18DB33F1\rATCRA\r",
+                                                "ATTP8\rATSH7DF\rATCRA\r",
+                                                "ATTP9\rATSH18DB33F1\rATCRA\r",
                                                 };
 
     response = (response_t *)malloc(sizeof(response_t)); 
@@ -227,11 +228,13 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
         return ESP_ERR_NO_MEM;
     }
 
+    xSemaphoreTake(all_pids->mutex, portMAX_DELAY);
+    
     if(protocol >= 6 && protocol <= 9) 
     {
         ESP_LOGI(TAG, "Setting protocol %d", protocol);
 
-        static const char *elm327_config = "ate0\rath1\ratl0\rats1\ratst96\r";
+        static const char *elm327_config = "atm0\rate0\rath1\ratl0\rats1\ratst96\r";
         // elm327_process_cmd((uint8_t*)elm327_config, strlen(elm327_config), &frame, &autopidQueue);
         // while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS);
         elm327_process_cmd((uint8_t*)elm327_config , strlen(elm327_config), &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, NULL);
@@ -247,6 +250,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
         ESP_LOGE(TAG, "Invalid protocol number: %d", protocol);
         // elm327_unlock();
         free(response);
+        xSemaphoreGive(all_pids->mutex);
         return ESP_FAIL;
     }
     
@@ -346,7 +350,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
             // while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS);
             
             free(response);
-
+            xSemaphoreGive(all_pids->mutex);
             return ESP_OK;
         }
         ESP_LOGW(TAG, "JSON string too long for buffer");
@@ -362,6 +366,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
     cJSON_Delete(root);
     free(response);
     // elm327_unlock();
+    xSemaphoreGive(all_pids->mutex);
     return ESP_FAIL;
 }
 
@@ -837,13 +842,19 @@ void parse_elm327_response(char *buffer, response_t *response) {
         }
         ESP_LOGI(TAG, "Null priority data set - frames: %d, all headers same: %d", 
                 frame_count, all_headers_same);
-    } else {
-        response->priority_data = lowest_header_data;
-        response->priority_data_len = lowest_header_length;
-        ESP_LOGI(TAG, "Priority data set - length: %u, starting with byte: 0x%02X", 
-                response->priority_data_len, 
-                response->priority_data[0]);
-    }
+        } else {
+            response->priority_data = lowest_header_data;
+            response->priority_data_len = lowest_header_length;
+            
+            if (response->priority_data != NULL && response->priority_data_len > 0) {
+                ESP_LOGI(TAG, "Priority data set - length: %u, starting with byte: 0x%02X", 
+                        response->priority_data_len, 
+                        response->priority_data[0]);
+            } else {
+                ESP_LOGI(TAG, "Priority data set but empty or invalid - length: %u", 
+                        response->priority_data_len);
+            }
+        }
     
     ESP_LOGI(TAG, "Parsing complete. Headers - Lowest: 0x%lX, Highest: 0x%lX, Total frames: %d, Total bytes: %lu, Priority data length: %u",
             lowest_header, highest_header, frame_count, response->length, response->priority_data_len);
@@ -996,7 +1007,7 @@ static void publish_parameter_mqtt(parameter_t *param) {
 
 static void autopid_task(void *pvParameters)
 {
-    static char default_init[] = "ati\rate0\rath1\ratl0\rats1\ratsp6\ratst96\r";
+    static char default_init[] = "ati\rate0\rath1\ratl0\rats1\ratm0\ratst96\r";
     wc_timer_t ecu_check_timer;
     wc_timer_t group_cycle_timer;
 
@@ -1267,6 +1278,19 @@ static void autopid_task(void *pvParameters)
 
 }
 
+// Helper function to replace all occurrences of "ATSP" with "ATTP" in a string
+static void replace_atsp_with_attp(char *str) {
+    if (!str) return;
+    
+    char *atsp_pos = strstr(str, "ATSP");
+    while (atsp_pos != NULL) {
+        // Replace SP with TP
+        atsp_pos[2] = 'T';
+        atsp_pos[3] = 'P';
+        // Look for the next occurrence
+        atsp_pos = strstr(atsp_pos + 4, "ATSP");
+    }
+}
 
 cJSON* parse_json_file(FILE* f) {
     fseek(f, 0, SEEK_END);
@@ -1353,6 +1377,7 @@ all_pids_t* load_all_pids(void){
                             all_pids->custom_init[j] = '\r';
                         }
                     }
+                    replace_atsp_with_attp(all_pids->custom_init);
                 }
             } else {
                 all_pids->custom_init = NULL;
@@ -1419,6 +1444,7 @@ all_pids_t* load_all_pids(void){
                                         curr_pid->init[j] = '\r';
                                     }
                                 }
+                                replace_atsp_with_attp(curr_pid->init);
                             } else {
                                 ESP_LOGE(TAG, "Failed to allocate memory for init");
                             }
@@ -1514,13 +1540,13 @@ all_pids_t* load_all_pids(void){
                         if(curr_pid->rxheader != NULL && strlen(curr_pid->rxheader) > 0)
                         {
                             ESP_LOGI(TAG, "Setting up STD init buffer with protocol: %s, SH value: %s, RX header: %s", all_pids->std_ecu_protocol, sh_value, curr_pid->rxheader);
-                            snprintf(std_init_buf, sizeof(std_init_buf), "ATSP%s\rATSH%s\rATCRA%s\r",
+                            snprintf(std_init_buf, sizeof(std_init_buf), "ATTP%s\rATSH%s\rATCRA%s\r",
                                                         all_pids->std_ecu_protocol, sh_value, curr_pid->rxheader);
                         }
                         else
                         {
                             ESP_LOGI(TAG, "Setting up STD init buffer with protocol: %s, SH value: %s", all_pids->std_ecu_protocol, sh_value);
-                            snprintf(std_init_buf, sizeof(std_init_buf), "ATSP%s\rATSH%s\rATCRA\r",
+                            snprintf(std_init_buf, sizeof(std_init_buf), "ATTP%s\rATSH%s\rATCRA\r",
                                                         all_pids->std_ecu_protocol, sh_value);                        
                         }
                         all_pids->standard_init = strdup(std_init_buf);
@@ -1580,15 +1606,20 @@ all_pids_t* load_all_pids(void){
                     cJSON* init_item = cJSON_GetObjectItem(car, "init");
                     if (init_item && init_item->valuestring) {
                         all_pids->specific_init = strdup(init_item->valuestring);
-                        if (all_pids->specific_init) {
-                            for (size_t j = 0; j < strlen(all_pids->specific_init); j++) {
-                                if (all_pids->specific_init[j] == ';') {
-                                    all_pids->specific_init[j] = '\r';
+                        if (init_item && init_item->valuestring) {
+                            all_pids->specific_init = strdup(init_item->valuestring);
+                            if (all_pids->specific_init) {
+                                // First replace semicolons with carriage returns
+                                for (size_t j = 0; j < strlen(all_pids->specific_init); j++) {
+                                    if (all_pids->specific_init[j] == ';') {
+                                        all_pids->specific_init[j] = '\r';
+                                    }
                                 }
+                                replace_atsp_with_attp(all_pids->specific_init);
                             }
+                        } else {
+                            all_pids->specific_init = NULL;
                         }
-                    } else {
-                        all_pids->specific_init = NULL;
                     }
                     
                     cJSON* pids = cJSON_GetObjectItem(car, "pids");
@@ -1619,6 +1650,7 @@ all_pids_t* load_all_pids(void){
                                                 curr_pid->init[j] = '\r';
                                             }
                                         }
+                                        replace_atsp_with_attp(curr_pid->init);
                                     } else {
                                         ESP_LOGE(TAG, "Failed to allocate memory for init");
                                     }
@@ -1769,7 +1801,7 @@ void autopid_init(char* id)
     if (all_pids)
     {
         all_pids->mutex = xSemaphoreCreateMutex();
-        // print_pids(all_pids); broken
+        print_pids(all_pids); //broken
         if (!all_pids->mutex)
         {
             ESP_LOGE(TAG, "Failed to create all_pids mutex");
@@ -1784,7 +1816,7 @@ void autopid_init(char* id)
 
     // autopid_load_config(config_str);
     // // char *desired_car_model = "Toyota Camry";
-    // if(car.car_specific_en && car.selected_car_model != NULL)
+    // if(car.car_specific_en && car.selected_car_model != NULL)d
     // {
     //     autopid_load_car_specific(car.selected_car_model);
     // }
