@@ -426,6 +426,7 @@
         <button class="tablinks" onclick="openTab(event, 'automate')"><b>Automate</b></button>
         <button class="tablinks" onclick="openTab(event, 'monitor')"><b>Monitor</b></button>
         <button class="tablinks" onclick="openTab(event, 'power_saving_tab')"><b>Power Saving</b></button>
+        <button class="tablinks" onclick="openTab(event, 'logger')"><b>Logger Settings</b></button>
         <button class="tablinks" onclick="openTab(event, 'system_tab')"><b>System</b></button>
         <button class="tablinks" onclick="openTab(event, 'about_tab')"><b>About</b></button>
     </div>
@@ -1041,6 +1042,43 @@
             </div>
 
         </div>
+        <div id="logger" class="tabcontent">
+            <div class="section-title">Logger Settings</div>
+            <table class="form-table">
+                <tr>
+                    <td>Logger Mode:</td>
+                    <td>
+                        <select name="logger_status" id="logger_status" onChange="submit_enable();">
+                            <option value="enable">Enable</option>
+                            <option value="disable">Disable</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Log Storage:</td>
+                    <td>
+                        <select name="log_storage" id="log_storage" onChange="submit_enable();">
+                            <option value="sd_card">SD Card</option>
+                            <!-- <option value="internal">Internal</option> -->
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Log Interval:</td>
+                    <td class="slider-container">
+                        <input type="range" 
+                            id="log_interval" 
+                            name="log_interval" 
+                            value="10" 
+                            min="1" 
+                            max="300" 
+                            step="1"
+                            oninput="document.getElementById('log_interval_value').textContent = this.value;submit_enable();">
+                        <span id="log_interval_value">10</span>sec
+                    </td>
+                </tr>
+            </table>
+        </div>
         <div id="system_tab" class="tabcontent">
             <div class="section-title">System</div>
             <table class="form-table">
@@ -1111,6 +1149,7 @@
             setRTCTime();
         });
 		let latest_car_models = null;
+        let bleAlertShown = false;
         function loadCarModels(data) {
             const carModelSelect = document.getElementById("car_model");
             if (data && Array.isArray(data.supported)) {
@@ -2148,14 +2187,16 @@ function loadAutoTable(jsonData) {
 			document.getElementById("ble_status").disabled = true;
 			document.getElementById("ble_status").selectedIndex = "1";
 		}
-		if(document.getElementById("ble_status").selectedIndex == "0") {
-			alert("Warrning!\\r\\n\\r\\nWhen BLE is connected the WiFi AP WiCAN_xxxxxx will be disabled.\\r\\nTo re-ennable the WiFi AP Turn OFF BLE on your phone or device, then power cycle WiCAN. If you connect to WiFi AP ssid WiCAN_xxxxxx, the BLE will automatically be disabled.");
-			document.getElementById("mqtt_en").value = "disable";
+		if(document.getElementById("ble_status").selectedIndex == "0"
+            && !bleAlertShown) {
+            alert("Warning!\n\nWhen BLE is connected the WiFi AP WiCAN_xxxxxx will be disabled.\nTo re-enable the WiFi AP Turn OFF BLE on your phone or device, then power cycle WiCAN. If you connect to WiFi AP ssid WiCAN_xxxxxx, the BLE will automatically be disabled.");
+            document.getElementById("mqtt_en").value = "disable";
 			document.getElementById("mqtt_en_div").style.display = "none";
 			document.getElementById("mqtt_en").disabled = true;
 			document.getElementById("batt_alert").value = "disable";
 			document.getElementById("batt_alert_div").style.display = "none";
 			document.getElementById("batt_alert").disabled = true;
+            bleAlertShown = true;
 		} else {
 			document.getElementById("mqtt_en").disabled = false;
 			document.getElementById("batt_alert").disabled = false;
