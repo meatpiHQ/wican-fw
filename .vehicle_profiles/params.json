@@ -316,6 +316,78 @@
       "type": "binary_sensor"
     }
   },
+  "PCM_Desired_Boost": {
+    "description": "Desired Boost Pressure",
+    "settings": {
+      "unit": "kPa",
+      "class": "pressure",
+      "min": "0",
+      "max": "1000"
+    }
+  },
+  "PCM_Fuel_Rate": {
+    "description": "Fuel Consumption Rate",
+    "settings": {
+      "unit": "g/s",
+      "class": "volume_flow_rate",
+      "min": "0",
+      "max": "255"
+    }
+  },
+  "PCM_Gear": {
+    "description": "Current Transmission Gear",
+    "settings": {
+      "unit": "",
+      "class": "none",
+      "min": "0",
+      "max": "100"
+    }
+  },
+  "PCM_Knock_Count": {
+    "description": "Engine Knock Count",
+    "settings": {
+      "unit": "",
+      "class": "none",
+      "min": "0",
+      "max": "255"
+    }
+  },
+  "PCM_Learned_Octane_Ratio": {
+    "description": "Learned Octane Ratio",
+    "settings": {
+      "unit": "%",
+      "class": "percentage",
+      "min": "-100",
+      "max": "100"
+    }
+  },
+  "PCM_Oil_Life": {
+    "description": "Engine Oil Life Remaining",
+    "settings": {
+      "unit": "%",
+      "class": "percentage",
+      "min": "0",
+      "max": "100"
+    }
+  },
+  "PCM_Transmission_Temp": {
+    "description": "Transmission Temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "200"
+    }
+  },
+  "PCM_Wastegate": {
+    "description": "Wastegate Position",
+    "settings": {
+      "unit": "%",
+      "class": "percentage",
+      "min": "0",
+      "max": "100"
+    }
+  },
   "POWER_MAX": {
     "description": "Max power used",
     "settings": {
@@ -449,78 +521,6 @@
     "settings": {
       "unit": "°C",
       "class": "temperature"
-    }
-  },
-  "PCM_Transmission_Temp": {
-    "description": "Transmission Temperature",
-    "settings": {
-      "unit": "°C",
-      "class": "temperature",
-      "min": "-40",
-      "max": "200"
-    }
-  },
-  "PCM_Desired_Boost": {
-    "description": "Desired Boost Pressure",
-    "settings": {
-      "unit": "kPa",
-      "class": "pressure",
-      "min": "0",
-      "max": "1000"
-    }
-  },
-  "PCM_Oil_Life": {
-    "description": "Engine Oil Life Remaining",
-    "settings": {
-      "unit": "%",
-      "class": "percentage",
-      "min": "0",
-      "max": "100"
-    }
-  },
-  "PCM_Gear": {
-    "description": "Current Transmission Gear",
-    "settings": {
-      "unit": "",
-      "class": "none",
-      "min": "0",
-      "max": "100"
-    }
-  },
-  "PCM_Wastegate": {
-    "description": "Wastegate Position",
-    "settings": {
-      "unit": "%",
-      "class": "percentage",
-      "min": "0",
-      "max": "100"
-    }
-  },
-  "PCM_Knock_Count": {
-    "description": "Engine Knock Count",
-    "settings": {
-      "unit": "",
-      "class": "none",
-      "min": "0",
-      "max": "255"
-    }
-  },
-  "PCM_Fuel_Rate": {
-    "description": "Fuel Consumption Rate",
-    "settings": {
-      "unit": "g/s",
-      "class": "volume_flow_rate",
-      "min": "0",
-      "max": "255"
-    }
-  },
-  "PCM_Learned_Octane_Ratio": {
-    "description": "Learned Octane Ratio",
-    "settings": {
-      "unit": "%",
-      "class": "percentage",
-      "min": "-100",
-      "max": "100"
     }
   }
 }
