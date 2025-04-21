@@ -979,6 +979,29 @@
                     </td>
                 </tr>
                 <tr>
+                    <td>Periodic wake up:</td>
+                    <td>
+                        <select name="periodic_wakeup" id="periodic_wakeup" onchange="submit_enable();">
+                            <option value="enable">Enable</option>
+                            <option value="disable">Disable</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr id="wakeup_every_row">
+                    <td>Wakeup Every:</td>
+                    <td class="slider-container">
+                        <input type="range" 
+                               id="wakeup_interval" 
+                               name="wakeup_interval" 
+                               value="5" 
+                               min="1" 
+                               max="240" 
+                               step="1"
+                               oninput="document.getElementById('wakeup_interval_value').textContent = this.value;submit_enable();">
+                        <span id="wakeup_interval_value">5</span>min
+                    </td>
+                </tr>
+                <tr>
                     <td>Battery Alert:</td>
                     <td>
                         <select name="batt_alert" id="batt_alert" onchange="submit_enable();">
@@ -2196,6 +2219,22 @@ function loadAutoTable(jsonData) {
 			document.getElementById("mqtt_elm327_log").disabled = true;
             document.getElementById("mqtt_elm327_log").value = "disable";
 		}
+
+        const sleepStatus = document.getElementById("sleep_status").value;
+        const periodicWakeup = document.getElementById("periodic_wakeup");
+        const wakeupEveryRow = document.getElementById("wakeup_every_row");
+        if (sleepStatus === "disable") {
+            periodicWakeup.disabled = true;
+            periodicWakeup.value = "disable";
+            wakeupEveryRow.style.display = "none";
+        } else {
+            periodicWakeup.disabled = false;
+            if (periodicWakeup.value === "enable") {
+                wakeupEveryRow.style.display = "table-row";
+            } else {
+                wakeupEveryRow.style.display = "none";
+            }
+        }
 	}
 	document.getElementById("defaultOpen").click();
 
@@ -2373,8 +2412,10 @@ function loadAutoTable(jsonData) {
 		obj["ble_pass"] = document.getElementById("ble_pass_value").value;
 		obj["ble_status"] = document.getElementById("ble_status").value;
 		obj["sleep_status"] = document.getElementById("sleep_status").value;
+        obj["periodic_wakeup"] = document.getElementById("periodic_wakeup").value;
 		obj["sleep_volt"] = document.getElementById("sleep_volt").value;
         obj["sleep_time"] = document.getElementById("sleep_time").value;
+        obj["wakeup_interval"] = document.getElementById("wakeup_interval").value;
 		obj["batt_alert"] = document.getElementById("batt_alert").value;
 		obj["batt_alert_ssid"] = document.getElementById("batt_alert_ssid").value;
 		obj["batt_alert_pass"] = document.getElementById("batt_alert_pass").value;
@@ -2662,6 +2703,12 @@ function loadAutoTable(jsonData) {
 				document.getElementById("sleep_status").selectedIndex = "1";
 			}
 
+            if(obj.periodic_wakeup == "enable") {
+				document.getElementById("periodic_wakeup").selectedIndex = "0";
+			} else if(obj.periodic_wakeup == "disable") {
+				document.getElementById("periodic_wakeup").selectedIndex = "1";
+			}
+
 			if ("mqtt_tx_en" in obj) {
 				if (obj.mqtt_tx_en === "enable") {
 					document.getElementById("mqtt_tx_en_checkbox").checked = true;
@@ -2694,6 +2741,8 @@ function loadAutoTable(jsonData) {
             document.getElementById("sleep_volt_value").textContent = obj.sleep_volt;
             document.getElementById("sleep_time").value = obj.sleep_time;
             document.getElementById('sleep_time_value').textContent = obj.sleep_time;
+            document.getElementById("wakeup_interval").value = obj.wakeup_interval;
+            document.getElementById('wakeup_interval_value').textContent = obj.wakeup_interval;
 			document.getElementById("batt_alert").value = obj.batt_alert;
 			document.getElementById("batt_alert_ssid").value = obj.batt_alert_ssid;
 			document.getElementById("batt_alert_pass").value = obj.batt_alert_pass;

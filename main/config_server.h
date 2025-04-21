@@ -80,6 +80,8 @@ typedef struct _device_config
 	char wakeup_volt[10];
 	char sleep_time[32];
 	char wakeup_time[32];
+	char periodic_wakeup[32];
+	char wakeup_interval[32];
 	char batt_alert[32];
 	char batt_alert_ssid[65];
 	char batt_alert_pass[65];
@@ -158,3 +160,5 @@ int8_t config_server_get_sleep_time(uint32_t *sleep_time);
 int8_t config_server_get_wakeup_time(uint32_t *wakeup_time);
 wifi_security_t config_server_get_sta_security(void);
 int8_t config_server_get_ap_auto_disable(void);
+int8_t config_server_get_periodic_wakeup(void);
+int8_t config_server_get_wakeup_interval(uint32_t *wakeup_interval);
