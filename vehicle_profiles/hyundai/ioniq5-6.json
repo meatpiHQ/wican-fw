@@ -38,9 +38,10 @@
       }
     },
     {
-      "pid": "22B0023",
+      "pid": "22B002",
+      "pid_init": "ATSH7C6;ATFCSH7C6",
       "parameters": {
-        "ODOMETER": "[B13:B14]"
+        "ODOMETER": "[B5:B6]"
       }
     }
   ]
