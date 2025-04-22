@@ -53,6 +53,8 @@ static char* device_id;
 static EventGroupHandle_t xautopid_event_group = NULL;
 static all_pids_t* all_pids = NULL;
 static response_t elm327_response;
+static autopid_data_t autopid_data;
+
 #if HARDWARE_VER == WICAN_PRO
 static char elm327_autopid_cmd_buffer[BUFFER_SIZE];
 static uint32_t elm327_autopid_cmd_buffer_len = 0;
@@ -424,16 +426,21 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
 //     }
 // }
 
-char *autopid_data_read(void)
+static void autopid_data_update(all_pids_t *pids)
 {
-    static char *json_str = NULL;
-    
-    if (!all_pids || !all_pids->mutex) {
+    if (!pids || !pids->mutex) {
         ESP_LOGE(TAG, "Invalid all_pids or mutex");
-        return NULL;
+        return;
     }
+    
+    //take autopid_data mutex
+    if (xSemaphoreTake(autopid_data.mutex, portMAX_DELAY) == pdTRUE) {
+        //free old data
+        if (autopid_data.json_str != NULL) {
+            free(autopid_data.json_str);
+            autopid_data.json_str = NULL;
+        }
 
-    if (xSemaphoreTake(all_pids->mutex, portMAX_DELAY) == pdTRUE) {
         cJSON *root = cJSON_CreateObject();
         if (root) {
             for (uint32_t i = 0; i < all_pids->pid_count; i++) {
@@ -450,10 +457,35 @@ char *autopid_data_read(void)
                 }
             }
             limitJsonDecimalPrecision(root);
-            json_str = cJSON_PrintUnformatted(root);
+            autopid_data.json_str = cJSON_PrintUnformatted(root);
             cJSON_Delete(root);
         }
-        xSemaphoreGive(all_pids->mutex);
+
+        //release mutex
+        xSemaphoreGive(autopid_data.mutex);
+    }
+}
+
+char *autopid_data_read(void)
+{
+    //json_str must be freed by the caller
+    static char *json_str = NULL;
+    
+    if (!autopid_data.mutex) {
+        ESP_LOGE(TAG, "Invalid mutex");
+        return NULL;
+    }
+
+    if (xSemaphoreTake(autopid_data.mutex, portMAX_DELAY) == pdTRUE) {
+        if (autopid_data.json_str != NULL) {
+            json_str = (char *)malloc(strlen(autopid_data.json_str) + 1);
+            if (json_str != NULL) {
+                strcpy(json_str, autopid_data.json_str);
+            }
+        } else {
+            json_str = NULL;
+        }
+        xSemaphoreGive(autopid_data.mutex);
     }
     return json_str;
 }
@@ -536,6 +568,7 @@ char* autopid_get_config(void)
     if (!parameters_object)
     {
         ESP_LOGE(TAG, "Failed to create JSON object");
+        xSemaphoreGive(all_pids->mutex);
         return NULL;
     }
 
@@ -1252,6 +1285,7 @@ static void autopid_task(void *pvParameters)
             }
         }
 
+        autopid_data_update(all_pids);
         // elm327_unlock();
         xSemaphoreGive(all_pids->mutex);
         vTaskDelay(pdMS_TO_TICKS(10));
@@ -1805,6 +1839,12 @@ void autopid_init(char* id)
         if (!all_pids->mutex)
         {
             ESP_LOGE(TAG, "Failed to create all_pids mutex");
+            return;
+        }
+        autopid_data.mutex = xSemaphoreCreateMutex();
+        if (!autopid_data.mutex)
+        {
+            ESP_LOGE(TAG, "Failed to create autopid_data mutex");
             return;
         }
     }

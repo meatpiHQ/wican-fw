@@ -105,13 +105,11 @@ typedef struct
     SemaphoreHandle_t mutex;
 }all_pids_t;
 
-////////////////
-
-// typedef struct 
-// {
-//     char *data;              // Pointer to a dynamically allocated string
-//     SemaphoreHandle_t mutex; // Mutex to protect access to the data
-// } autopid_data_t;
+typedef struct 
+{
+    char *json_str;              // Pointer to a dynamically allocated string
+    SemaphoreHandle_t mutex; // Mutex to protect access to the data
+} autopid_data_t;
 
 void autopid_parser(char *str, uint32_t len, QueueHandle_t *q, char* cmd_str);
 void autopid_init(char* id);
