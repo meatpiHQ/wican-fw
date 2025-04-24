@@ -70,6 +70,14 @@
                 "ODOMETER",
                 "OILCH_DIS",
                 "PARK_BRAKE",
+                "PCM_Desired_Boost",
+                "PCM_Fuel_Rate",
+                "PCM_Gear",
+                "PCM_Knock_Count",
+                "PCM_Learned_Octane_Ratio",
+                "PCM_Oil_Life",
+                "PCM_Transmission_Temp",
+                "PCM_Wastegate",
                 "POWER_MAX",
                 "RANGE",
                 "READY",
@@ -87,15 +95,7 @@
                 "TYRE_P_FR",
                 "TYRE_P_RL",
                 "TYRE_P_RR",
-                "T_CAB",
-                "PCM_Transmission_Temp",
-                "PCM_Desired_Boost",
-                "PCM_Oil_Life",
-                "PCM_Gear",
-                "PCM_Wastegate",
-                "PCM_Knock_Count",
-                "PCM_Fuel_Rate",
-                "PCM_Learned_Octane_Ratio"
+                "T_CAB"
               ]
             }
           }
