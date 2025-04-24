@@ -2557,7 +2557,7 @@ int8_t config_server_get_wakeup_interval(uint32_t *wakeup_interval)
     }
     
     // Validate range
-    if (wk_int < 1 || wk_int > 30)
+    if (wk_int < 1 || wk_int > 240)
 	{
         return -1;
     }

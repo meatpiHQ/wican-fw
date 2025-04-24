@@ -812,7 +812,7 @@ void light_sleep_task(void *pvParameters)
     static wc_timer_t sleep_timer;
     static wc_timer_t wakeup_timer;
 	static uint32_t sleep_time;
-	static uint32_t periodic_wakeup;
+	static int8_t periodic_wakeup;
 	static uint32_t wakeup_interval;
 	static wc_timer_t periodic_wakeup_timer;
 
@@ -849,6 +849,7 @@ void light_sleep_task(void *pvParameters)
     if(config_server_get_wakeup_interval(&wakeup_interval) == -1)
     {
         wakeup_interval = 5*60000; //5 min
+        ESP_LOGW(TAG, "Failed to get wakeup interval, using default 5 min");
     }
     else
     {
@@ -866,8 +867,8 @@ void light_sleep_task(void *pvParameters)
     // ESP_ERROR_CHECK(adc_continuous_start(handle));
 
     // Log initial configuration
-    ESP_LOGI(TAG, "Sleep task started. Sleep enabled: %d, Sleep voltage: %.2f, Wakeup voltage: %.2f, Sleep time: %lu", 
-             sleep_en, sleep_voltage, wakeup_voltage, sleep_time);
+    ESP_LOGI(TAG, "Sleep task started. Sleep enabled: %d, Sleep voltage: %.2f, Wakeup voltage: %.2f, Sleep time: %lu, Periodic wakeup: %d, Wakeup interval: %lu", 
+             sleep_en, sleep_voltage, wakeup_voltage, sleep_time, periodic_wakeup, wakeup_interval);
 
     // Initialize voltage read timer
     wc_timer_set(&voltage_read_timer, 3000);
