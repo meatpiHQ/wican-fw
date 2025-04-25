@@ -1750,7 +1750,7 @@ void elm327_hardreset_chip(void)
 	{
 		vTaskDelay(pdMS_TO_TICKS(300));
 		uart_flush_input(UART_NUM_1);
-		xQueueReset(uart1_queue);
+		// xQueueReset(uart1_queue);
 		if(gpio_get_level(OBD_READY_PIN) == 1)
 		{
 			gpio_set_level(OBD_RESET_PIN, 0);
