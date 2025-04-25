@@ -817,7 +817,7 @@ void app_main(void)
 	{
 		xmsg_mqtt_rx_queue = xQueueCreate(32, sizeof(mqtt_can_message_t) );
 		#if HARDWARE_VER == WICAN_PRO
-		if(protocol != AUTO_PID && protocol != OBD_ELM327)
+		// if(protocol != AUTO_PID && protocol != OBD_ELM327)
 		{
 			can_set_bitrate(can_datarate);
 			can_enable();
