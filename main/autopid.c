@@ -1375,9 +1375,15 @@ all_pids_t* load_all_pids(void){
 
     total_pids = car_data_pids + auto_pids;
     
+    ESP_LOGI(TAG, "Allocating memory for %d pids...", total_pids);
     all_pids_t* all_pids = (all_pids_t*)calloc(1, sizeof(all_pids_t));
     if (!all_pids) return NULL;
     
+    if(total_pids == 0) {
+        ESP_LOGE(TAG, "No PIDs found in car_data.json or auto_pid.json");
+        return all_pids;
+    }
+
     all_pids->pids = (pid_data2_t*)calloc(total_pids, sizeof(pid_data2_t));
     if (!all_pids->pids) {
         free(all_pids);
@@ -1386,6 +1392,7 @@ all_pids_t* load_all_pids(void){
     
     int pid_index = 0;
     
+    ESP_LOGI(TAG, "Loading auto_pid.json pids...");
     // Load auto_pid.json pids
     f = fopen(FS_MOUNT_POINT"/auto_pid.json", "r");
     if (f) {
@@ -1835,7 +1842,11 @@ void autopid_init(char* id)
     if (all_pids)
     {
         all_pids->mutex = xSemaphoreCreateMutex();
-        print_pids(all_pids); //broken
+
+        if(all_pids->pid_count > 0){
+            print_pids(all_pids); //broken
+        }
+
         if (!all_pids->mutex)
         {
             ESP_LOGE(TAG, "Failed to create all_pids mutex");
@@ -1854,6 +1865,11 @@ void autopid_init(char* id)
         return;
     }
 
+    if(all_pids->pid_count == 0)
+    {
+        ESP_LOGE(TAG, "No PIDs found in car_data.json or auto_pid.json");
+        return;
+    }
     // autopid_load_config(config_str);
     // // char *desired_car_model = "Toyota Camry";
     // if(car.car_specific_en && car.selected_car_model != NULL)d
