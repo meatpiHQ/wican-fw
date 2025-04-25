@@ -1865,6 +1865,22 @@ void autopid_init(char* id)
     //     car.pid_count = 0;
     // }
 
-    xTaskCreate(autopid_task, "autopid_task", 5000, (void *)AF_INET, 5, NULL);
+    static StackType_t *autopid_task_stack;
+    static StaticTask_t autopid_task_buffer;
+    
+    // Allocate stack memory in PSRAM
+    autopid_task_stack = heap_caps_malloc(5000 * sizeof(StackType_t), MALLOC_CAP_SPIRAM);
+    
+    // Check if memory allocation was successful
+    if (autopid_task_stack != NULL){
+        // Create task with static allocation
+        xTaskCreateStatic(autopid_task, "autopid_task", 5000, (void *)AF_INET, 5, 
+                         autopid_task_stack, &autopid_task_buffer);
+    }
+    else 
+    {
+        // Handle memory allocation failure
+        ESP_LOGE(TAG, "Failed to allocate autopid_task stack in PSRAM");
+    }
 
 }
