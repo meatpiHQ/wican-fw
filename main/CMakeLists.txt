@@ -72,4 +72,5 @@ idf_component_register(
     EMBED_FILES 
         "homepage.html"
         "obd_fw/V2.3.18.txt"
+        "logo.txt"
 )
