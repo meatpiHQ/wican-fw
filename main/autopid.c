@@ -294,6 +294,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
         ESP_LOGI(TAG, "Raw response length: %lu", response->length);
         ESP_LOG_BUFFER_HEX(TAG, response->data, response->length);
 
+
         // Skip mode byte (0x41) and PID byte
         if (response->length >= 7) {
             uint8_t merged_frame[7] = {0};
@@ -358,7 +359,8 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
     if (json_str) {
         ESP_LOGI(TAG, "JSON string created, length: %zu", strlen(json_str));
         if (strlen(json_str) < available_pids_size) {
-            strcpy(available_pids, json_str);
+            strncpy(available_pids, json_str, available_pids_size - 1);
+            available_pids[available_pids_size - 1] = '\0'; // Ensure null-termination
             free(json_str);
             cJSON_Delete(root);
 
@@ -378,7 +380,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
 
     ESP_LOGI(TAG, "Restoring protocol settings");
     elm327_process_cmd((uint8_t*)restore_cmd, strlen(restore_cmd), &frame, &autopidQueue);
-    while (xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS);
+    while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS);
     
     cJSON_Delete(root);
     free(response);
