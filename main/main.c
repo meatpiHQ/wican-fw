@@ -609,11 +609,11 @@ void app_main(void)
 	// esp_log_level_set("elm327_process_cmd", ESP_LOG_ERROR);
 	// esp_log_level_set("can_rx_task", ESP_LOG_INFO);
 	// esp_log_level_set("read_ss_adc_voltage", ESP_LOG_NONE);
-	
+
 //     esp_log_level_set("MQTT_CLIENT", ESP_LOG_VERBOSE);
 //     esp_log_level_set("transport_base", ESP_LOG_VERBOSE);
 //     esp_log_level_set("esp-tls", ESP_LOG_VERBOSE);
 //     esp_log_level_set("transport", ESP_LOG_VERBOSE);
 //     esp_log_level_set("outbox", ESP_LOG_VERBOSE);
-// }
+}
 
