@@ -303,24 +303,30 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
                             char pid_str[64];
                             
                             // If the PID has multiple parameters
-                            if (pid_info->num_params > 1) {
+                            if (pid_info->num_params > 1 && pid_info->params) {
                                 ESP_LOGI(TAG, "Processing multi-parameter PID: %02X", pid);
                                 // Add each parameter as a separate entry
                                 for (int p = 0; p < pid_info->num_params; p++) {
-                                    snprintf(pid_str, sizeof(pid_str), "%02X-%s", 
-                                            pid, pid_info->params[p].name);
-                                    ESP_LOGI(TAG, "PID %02X parameter %d supported: %s", 
-                                            pid, p + 1, pid_str);
-                                    cJSON_AddItemToArray(pid_array, cJSON_CreateString(pid_str));
+                                    if (pid_info->params[p].name) {
+                                        snprintf(pid_str, sizeof(pid_str), "%02X-%s", 
+                                                pid, pid_info->params[p].name);
+                                        ESP_LOGI(TAG, "PID %02X parameter %d supported: %s", 
+                                                pid, p + 1, pid_str);
+                                        cJSON_AddItemToArray(pid_array, cJSON_CreateString(pid_str));
+                                    } else {
+                                        ESP_LOGW(TAG, "PID %02X parameter %d has NULL name", pid, p + 1);
+                                    }
                                 }
-                            } else {
+                            } else if (pid_info->params && pid_info->params[0].name) {
                                 // Single parameter PID
                                 snprintf(pid_str, sizeof(pid_str), "%02X-%s", 
                                         pid, pid_info->params[0].name);
                                 ESP_LOGI(TAG, "PID %02X supported: %s", pid, pid_str);
                                 cJSON_AddItemToArray(pid_array, cJSON_CreateString(pid_str));
+                            } else {
+                                ESP_LOGW(TAG, "PID %02X has invalid or NULL parameters", pid);
                             }
-                        }
+                        }   
                     }
                 }
             } else {
