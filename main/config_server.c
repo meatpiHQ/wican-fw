@@ -1978,6 +1978,27 @@ static void config_server_load_cfg(char *cfg)
 	ESP_LOGE(TAG, "device_config.ap_auto_disable: %s", device_config.ap_auto_disable);
 	//*****	
 
+	//*****
+	key = cJSON_GetObjectItem(root,"keep_alive");
+	if(key == 0)
+	{
+		strcpy(device_config.keep_alive, "30");
+	}
+	else
+	{
+		uint32_t keep_alive = atoi(device_config.keep_alive);
+
+		if(keep_alive > 120 && keep_alive < 1)
+		{
+			strcpy(device_config.keep_alive, "30");
+		}
+
+		strcpy(device_config.keep_alive, key->valuestring);
+	}
+
+	ESP_LOGE(TAG, "device_config.keep_alive: %s", device_config.keep_alive);
+	//*****
+
 	cJSON_Delete(root);
 	return;
 
@@ -2431,6 +2452,27 @@ char *config_server_get_alert_mqtt_user(void)
 char *config_server_get_alert_mqtt_pass(void)
 {
 	return device_config.batt_mqtt_pass;
+}
+
+int8_t config_server_get_keep_alive(uint32_t *keep_alive)
+{
+    char *endptr;
+    long kp_alive = strtol(device_config.keep_alive, &endptr, 10);
+    
+    // Check for conversion errors
+    if (*endptr != '\0' || endptr == device_config.keep_alive)
+	{
+        return -1;
+    }
+    
+    // Validate range
+    if (kp_alive < 1 || kp_alive > 120)
+	{
+        return -1;
+    }
+    
+    *keep_alive = (uint32_t)kp_alive;
+    return 1;
 }
 
 int config_server_get_alert_time(void)

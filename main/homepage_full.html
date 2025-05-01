@@ -693,6 +693,20 @@
                             <td><input type="text" id="mqtt_pass" name="mqtt_pass" value="meatpi" /></td>
                         </tr>
                         <tr>
+                            <td><label for="keep_alive"><b>Keep Alive:</b></label></td>
+                            <td class="slider-container">
+                                <input type="range" 
+                                       id="keep_alive" 
+                                       name="keep_alive" 
+                                       value="30" 
+                                       min="2" 
+                                       max="120" 
+                                       step="1"
+                                       oninput="document.getElementById('keep_alive_value').textContent = this.value;submit_enable();">
+                                <span id="keep_alive_value">30</span>seconds
+                            </td>
+                        </tr>
+                        <tr>
                             <td><label for="mqtt_tx_topic"><b>TX Topic:</b></label></td>
                             <td><input type="text" id="mqtt_tx_topic" name="mqtt_tx_topic" value="" /></td>
                             <td><input type="checkbox" id="mqtt_tx_en_checkbox" name="mqtt_tx_en_checkbox"
@@ -2395,6 +2409,7 @@ function loadAutoTable(jsonData) {
 		obj["mqtt_port"] = document.getElementById("mqtt_port").value;
 		obj["mqtt_user"] = document.getElementById("mqtt_user").value;
 		obj["mqtt_pass"] = document.getElementById("mqtt_pass").value;
+        obj["keep_alive"] = document.getElementById("keep_alive").value;
 		obj["mqtt_tx_topic"] = document.getElementById("mqtt_tx_topic").value;
         obj["ap_auto_disable"] = document.getElementById("ap_auto_disable").value;
 		if(document.getElementById("mqtt_tx_en_checkbox").checked){
@@ -2709,6 +2724,8 @@ function loadAutoTable(jsonData) {
 			document.getElementById("mqtt_port").value = obj.mqtt_port;
 			document.getElementById("mqtt_user").value = obj.mqtt_user;
 			document.getElementById("mqtt_pass").value = obj.mqtt_pass;
+            document.getElementById('keep_alive_value').textContent = obj.keep_alive_value;
+            document.getElementById("keep_alive").value = obj.keep_alive;
 			document.getElementById("mqtt_tx_topic").value = obj.mqtt_tx_topic;
 			document.getElementById("mqtt_rx_topic").value = obj.mqtt_rx_topic;
 			document.getElementById("mqtt_status_topic").value = obj.mqtt_status_topic;
