@@ -1,23 +1,13 @@
 {
-  "profileName": "XPeng G6",
-  "car_model": "XPeng G6",
-  "init": "ATZ;ATE0;ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;ATFCSH704;ATFCSD300000;ATFCSM1;",
+  "car_model": "Xpeng: G6",
+  "init": "ATSP6;ATFCSH704;ATFCSD300000;ATFCSM1;",
   "pids": [
     {
       "pid": "22031E",
-      "pid_init": "",
-      "parameters": [
-        {
-          "name": "Battery SOC",
-          "pid_init": "ATSH7E0",
-          "expression": "((B4*256)+B5)/10",
-          "unit": "%",
-          "class": "",
-          "period": "5000",
-          "min": "0",
-          "max": "100"
-        }
-      ]
+      "pid_init": "ATSH7E0",
+      "parameters": {
+        "SOC": "((B4*256)+B5)/10"
+      }
     }
   ]
 }
