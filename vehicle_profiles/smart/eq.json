@@ -1,0 +1,13 @@
+{
+  "car_model": "Smart: EQ",
+  "init": "ATST64;ATSP6;ATFCSD300000;ATFCSM1;",
+  "pids": [
+    {
+      "pid": "21083",
+      "pid_init": "ATSH79B;ATFCSH79B;ATCRA7BB;",
+      "parameters": {
+        "SOC": "[B11:B12]*0.063"
+      }
+    }
+  ]
+}
