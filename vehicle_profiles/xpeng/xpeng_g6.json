@@ -6,7 +6,7 @@
       "pid": "22031E",
       "pid_init": "ATSH7E0",
       "parameters": {
-        "SOC": "((B4*256)+B5)/10"
+        "SOC": "[B4:B5]/10"
       }
     }
   ]
