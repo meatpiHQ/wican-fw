@@ -1,0 +1,13 @@
+{
+  "car_model": "Xpeng: G6",
+  "init": "ATSP6;ATFCSH704;ATFCSD300000;ATFCSM1;",
+  "pids": [
+    {
+      "pid": "22031E",
+      "pid_init": "ATSH7E0",
+      "parameters": {
+        "SOC": "[B4:B5]/10"
+      }
+    }
+  ]
+}
