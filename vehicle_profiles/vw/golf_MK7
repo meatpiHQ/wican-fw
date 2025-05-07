@@ -4,14 +4,14 @@
   "pids": [
     {
       "pid": "012F",
-      "pid_init": "ATSH7E0;ATFCSH7E0;ATCRA7E8;"
+      "pid_init": "ATSH7E0;ATFCSH7E0;ATCRA7E8;",
       "parameters": {
         "Fuel level": "B3/2.55"
       }
-    }
+    },
     {
       "pid": "222203",
-      "pid_init": "ATSH714;ATFCSH714;ATCRA77E;"
+      "pid_init": "ATSH714;ATFCSH714;ATCRA77E;",
       "parameters": {
         "Odometer": "[B4:B6]"
       }
