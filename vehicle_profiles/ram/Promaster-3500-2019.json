@@ -4,7 +4,7 @@
   "pids": [
     {
       "pid": "22B010",
-      "pid_init": "ATSH DA 10 F1;",
+      "pid_init": "ATS0;ATSHDA10F1;",
       "parameters": {
         "PCM_Transmission_Temp": "((((B4*256)+B5)*(1/64))-32)*(5/9)"
       }
