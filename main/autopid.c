@@ -1391,14 +1391,11 @@ all_pids_t* load_all_pids(void){
         return all_pids;
     }
 
-    all_pids->pids = (pid_data2_t*)calloc(total_pids, sizeof(pid_data2_t));
-    
     all_pids->pids = (pid_data_t*)calloc(total_pids, sizeof(pid_data_t));
     if (!all_pids->pids) {
         free(all_pids);
         return NULL;
     }
-    
     int pid_index = 0;
     
     ESP_LOGI(TAG, "Loading auto_pid.json pids...");
@@ -1968,11 +1965,8 @@ void autopid_init(char* id)
     // {
     //     car.pid_count = 0;
     // }
-    ESP_LOGI(TAG, "trying to take mutex...");
     xSemaphoreTake(all_pids->mutex, portMAX_DELAY);
-    ESP_LOGI(TAG, "1. Starting OBD logger init...");
     autopid_init_obd_logger();
-    ESP_LOGI(TAG, "2. OBD logger init done.");
     xSemaphoreGive(all_pids->mutex);
 
     static StackType_t *autopid_task_stack;
