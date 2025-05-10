@@ -82,11 +82,11 @@ typedef struct
     uint32_t parameters_count;
     pid_type_t pid_type;
     char* rxheader;
-}pid_data2_t;
+}pid_data_t;
 
 typedef struct 
 {
-    pid_data2_t *pids;
+    pid_data_t *pids;
     uint32_t pid_count;
     char* custom_init;
     char* standard_init;

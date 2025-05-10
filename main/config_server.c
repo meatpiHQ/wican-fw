@@ -111,8 +111,15 @@ static char can_datarate_str[11][7] = {
 								"1000K",
 };
 
-// const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"3333\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"slcan\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
-const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
+const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\
+										\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\
+										\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"batt_alert\":\"disable\",\
+										\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\
+										\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\
+										\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\
+										\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\",\
+										\"logger_status\":\"disable\",\"log_filesystem\":\"littlefs\",\"log_storage\":\"sdcard\",\"log_period\":\"10\"}";
+
 static device_config_t device_config;
 TimerHandle_t xrestartTimer;
 
@@ -968,6 +975,10 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	cJSON_AddStringToObject(root, "batt_alert_time", device_config.batt_alert_time);
 	cJSON_AddStringToObject(root, "batt_mqtt_user", device_config.batt_mqtt_user);
 	cJSON_AddStringToObject(root, "batt_mqtt_pass", device_config.batt_mqtt_pass);
+	cJSON_AddStringToObject(root, "logger_status", device_config.logger_status);
+	cJSON_AddStringToObject(root, "log_filesystem", device_config.log_filesystem);
+	cJSON_AddStringToObject(root, "log_period", device_config.log_period);
+	cJSON_AddStringToObject(root, "log_storage", device_config.log_storage);
 
 	char volt[8]= {0};
 	float tmp = 0;
@@ -2106,6 +2117,68 @@ static void config_server_load_cfg(char *cfg)
 	ESP_LOGE(TAG, "device_config.sta_security: %s", device_config.wakeup_volt);
 	//*****
 
+	//*****
+	key = cJSON_GetObjectItem(root,"logger_status");
+	if(key == 0)
+	{
+		strcpy(device_config.logger_status, "disable");
+	}
+	else
+	{
+		strcpy(device_config.logger_status, key->valuestring);
+	}
+	ESP_LOGE(TAG, "device_config.logger_status: %s", device_config.logger_status);
+	//*****
+
+	//*****
+	key = cJSON_GetObjectItem(root,"log_filesystem");
+	if(key == 0)
+	{
+		strcpy(device_config.logger_status, "littlefs");
+	}
+	else
+	{
+		strcpy(device_config.log_filesystem, key->valuestring);
+	}
+	ESP_LOGE(TAG, "device_config.log_filesystem: %s", device_config.log_filesystem);
+	//*****
+
+	//*****
+	key = cJSON_GetObjectItem(root,"log_storage");
+
+	if(key == 0)
+	{
+		strcpy(device_config.sta_security, "sdcard");
+	}
+	else
+	{
+		strcpy(device_config.sta_security, key->valuestring);
+	}
+
+	ESP_LOGE(TAG, "device_config.log_storage: %s", device_config.log_storage);
+	//*****
+
+	//*****
+	key = cJSON_GetObjectItem(root,"log_period");
+	if(key == 0)
+	{
+		strcpy(device_config.log_period, "10");
+	}
+	else
+	{
+		uint32_t log_period = atoi(device_config.log_period);
+
+		if(log_period > 300 && log_period < 1)
+		{
+			strcpy(device_config.log_period, "10");
+		}
+
+		strcpy(device_config.log_period, key->valuestring);
+	}
+	ESP_LOGE(TAG, "device_config.log_period: %s", device_config.log_period);
+	//*****
+
+
 	cJSON_Delete(root);
 	return;
 
@@ -2701,6 +2774,66 @@ wifi_security_t config_server_get_sta_security(void)
 		return WIFI_WPA3_PSK;
 	}
 	return WIFI_MAX;
+}
+
+int8_t config_server_get_logger_config(void)
+{
+	if(strcmp(device_config.logger_status, "enable") == 0)
+	{
+		return 1;
+	}
+	else if(strcmp(device_config.logger_status, "disable") == 0)
+	{
+		return 0;
+	}
+	return -1;
+}
+
+log_filesystem_t config_server_get_log_filesystem(void)
+{
+	if(strcmp(device_config.log_filesystem, "littlefs") == 0)
+	{
+		return LOG_FS_LITTLEFS;
+	}
+	else if(strcmp(device_config.log_filesystem, "fatfs") == 0)
+	{
+		return LOG_FS_FATFS;
+	}
+	return MAX_LOG_FS;
+}
+
+log_storage_t config_server_get_log_storage(void)
+{
+	if(strcmp(device_config.log_storage, "sdcard") == 0)
+	{
+		return LOG_SDCARD;
+	}
+	else if(strcmp(device_config.log_storage, "internal") == 0)
+	{
+		return LOG_INTERNAL;
+	}
+	return MAX_LOG_STORAGE;
+}
+
+int8_t config_server_get_log_period(uint32_t *log_period)
+{
+	char *endptr;
+	long log_int = strtol(device_config.log_period, &endptr, 10);
+	
+	// Check for conversion errors
+	if (*endptr != '\0' || endptr == device_config.log_period)
+	{
+		return -1;
+	}
+	
+	// Validate range
+	if (log_int < 1 || log_int > 300)
+	{
+		return -1;
+	}
+	
+	*log_period = (uint32_t)log_int;
+	return 1;
 }
 
 void config_server_set_ble_config(uint8_t b)

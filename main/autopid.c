@@ -39,6 +39,7 @@
 #include "obd2_standard_pids.h"
 #include "wc_timer.h"
 #include <float.h>
+#include "obd_logger.h"
 
 #define TAG __func__
 
@@ -431,7 +432,7 @@ char *autopid_data_read(void)
         cJSON *root = cJSON_CreateObject();
         if (root) {
             for (uint32_t i = 0; i < all_pids->pid_count; i++) {
-                pid_data2_t *curr_pid = &all_pids->pids[i];
+                pid_data_t *curr_pid = &all_pids->pids[i];
                 for (uint32_t j = 0; j < curr_pid->parameters_count; j++) {
                     parameter_t *param = &curr_pid->parameters[j];
                     if (param->name && param->value != FLT_MAX) {
@@ -462,7 +463,7 @@ void autopid_data_publish(void) {
         cJSON *root = cJSON_CreateObject();
         if (root) {
             for (uint32_t i = 0; i < all_pids->pid_count; i++) {
-                pid_data2_t *curr_pid = &all_pids->pids[i];
+                pid_data_t *curr_pid = &all_pids->pids[i];
                 for (uint32_t j = 0; j < curr_pid->parameters_count; j++) {
                     parameter_t *param = &curr_pid->parameters[j];
                     if (param->name && param->value != FLT_MAX) {
@@ -937,7 +938,7 @@ static bool all_parameters_failed(all_pids_t* all_pids) {
     
     xSemaphoreTake(all_pids->mutex, portMAX_DELAY);
     for (uint32_t i = 0; i < all_pids->pid_count; i++) {
-        pid_data2_t *curr_pid = &all_pids->pids[i];
+        pid_data_t *curr_pid = &all_pids->pids[i];
         for (uint32_t p = 0; p < curr_pid->parameters_count; p++) {
             if (!curr_pid->parameters[p].failed) {
                 any_success = true;
@@ -1045,7 +1046,7 @@ static void autopid_task(void *pvParameters)
         // Loop through all PIDs
         for(uint32_t i = 0; i < all_pids->pid_count; i++) 
         {
-            pid_data2_t *curr_pid = &all_pids->pids[i];
+            pid_data_t *curr_pid = &all_pids->pids[i];
             // Skip if PID type not enabled
             if((curr_pid->pid_type == PID_STD && !all_pids->pid_std_en) ||
             (curr_pid->pid_type == PID_CUSTOM && !all_pids->pid_custom_en) ||
@@ -1319,7 +1320,7 @@ all_pids_t* load_all_pids(void){
     all_pids_t* all_pids = (all_pids_t*)calloc(1, sizeof(all_pids_t));
     if (!all_pids) return NULL;
     
-    all_pids->pids = (pid_data2_t*)calloc(total_pids, sizeof(pid_data2_t));
+    all_pids->pids = (pid_data_t*)calloc(total_pids, sizeof(pid_data_t));
     if (!all_pids->pids) {
         free(all_pids);
         return NULL;
@@ -1374,7 +1375,7 @@ all_pids_t* load_all_pids(void){
             if (pids) {
                 cJSON* pid;
                 cJSON_ArrayForEach(pid, pids) {
-                    pid_data2_t* curr_pid = &all_pids->pids[pid_index];
+                    pid_data_t* curr_pid = &all_pids->pids[pid_index];
                     
                     cJSON* name_item = cJSON_GetObjectItem(pid, "Name");
                     cJSON* init_item = cJSON_GetObjectItem(pid, "Init");
@@ -1460,7 +1461,7 @@ all_pids_t* load_all_pids(void){
             if (std_pids) {
                 cJSON* pid;
                 cJSON_ArrayForEach(pid, std_pids) {
-                    pid_data2_t* curr_pid = &all_pids->pids[pid_index];
+                    pid_data_t* curr_pid = &all_pids->pids[pid_index];
                     curr_pid->pid_type = PID_STD;
 
                     char std_init_buf[64];
@@ -1487,6 +1488,8 @@ all_pids_t* load_all_pids(void){
                             DEST_DEFAULT) : DEST_DEFAULT;
                         curr_pid->parameters->timer = 0;
                         curr_pid->parameters->value = FLT_MAX;
+                        curr_pid->parameters->min = FLT_MAX;
+                        curr_pid->parameters->max = FLT_MAX;
                         curr_pid->parameters->sensor_type = sensor_type_item ? 
                             (strcmp(sensor_type_item->valuestring, "binary") == 0 ? BINARY_SENSOR : SENSOR) : SENSOR;
                             
@@ -1598,7 +1601,7 @@ all_pids_t* load_all_pids(void){
                         
                         cJSON_ArrayForEach(pid, pids) 
                         {
-                            pid_data2_t* curr_pid = &all_pids->pids[pid_index];
+                            pid_data_t* curr_pid = &all_pids->pids[pid_index];
                             cJSON* pid_item = cJSON_GetObjectItem(pid, "pid");
                             cJSON* init_item = cJSON_GetObjectItem(pid, "pid_init");
 
@@ -1713,6 +1716,83 @@ all_pids_t* load_all_pids(void){
     return all_pids;
 }
 
+static void autopid_init_obd_logger(void)
+{
+    ESP_LOGI(TAG, "Initializing Autopid OBD logger...");
+
+    // Prepare parameters from autopid for the OBD logger
+    obd_param_entry_t *params = NULL;
+    size_t param_count = 0;
+
+    // Allocate memory for all possible parameters
+    size_t max_params = 0;
+    for (uint32_t i = 0; i < all_pids->pid_count; i++) {
+        max_params += all_pids->pids[i].parameters_count;
+    }
+    
+    params = malloc(sizeof(obd_param_entry_t) * max_params);
+    if (!params) {
+        ESP_LOGE(TAG, "Failed to allocate memory for OBD logger parameters");
+        return;
+    }
+    
+    // Convert autopid parameters to OBD logger format
+    for (uint32_t i = 0; i < all_pids->pid_count; i++) {
+        pid_data_t *pid = &all_pids->pids[i];
+        
+        for (uint32_t j = 0; j < pid->parameters_count; j++) {
+            parameter_t *param = &pid->parameters[j];
+            
+            // Create metadata JSON
+            char *metadata = malloc(256);
+            if (!metadata) {
+                continue;
+            }
+            
+            // snprintf(metadata, 256, 
+            //         "{\"unit\":\"%s\",\"min\":%f,\"max\":%f,\"period\":%lu}", 
+            //         param->unit ? param->unit : "", 
+            //         param->min, param->max, param->period);
+            snprintf(metadata, 256, 
+                "{\"unit\":\"%s\",\"period\":%lu}", 
+                param->unit ? param->unit : "", param->period);
+    
+            // Add parameter to list
+            params[param_count].name = strdup(param->name);
+            params[param_count].type = "NUMERIC";
+            params[param_count].metadata = metadata;
+            param_count++;
+        }
+    }
+    
+    // Initialize OBD logger with these parameters
+    // obd_logger_init_params(params, param_count);
+    
+    static obd_logger_t obd_logger = {
+        .path = "/sdcard",
+        .period_sec = 10,
+        .db_filename = "obd_data.db",
+        .obd_logger_get_params_cb = autopid_data_read
+    };
+    
+    obd_logger.obd_logger_params = params;
+    obd_logger.obd_logger_params_count = param_count;
+        
+    if(odb_logger_init(&obd_logger) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize OBD logger");
+        return;
+    }
+
+    // Free allocated memory
+    for (size_t i = 0; i < param_count; i++) {
+        free((void*)params[i].name);
+        free((void*)params[i].metadata);
+    }
+    free(params);
+
+    ESP_LOGI(TAG, "OBD logger initialized with %zu parameters", param_count);
+}
+
 void print_pids(all_pids_t* all_pids) {
     const char* pid_type_str[] = {"Standard", "Custom", "Specific"};
     
@@ -1721,7 +1801,7 @@ void print_pids(all_pids_t* all_pids) {
     printf("Specific Init: %s\n", all_pids->specific_init);
     
     for (int i = 0; i < all_pids->pid_count; i++) {
-        pid_data2_t* pid = &all_pids->pids[i];
+        pid_data_t* pid = &all_pids->pids[i];
         printf("\nPID %d:\n", i + 1);
         printf("  Type: %s\n", pid_type_str[pid->pid_type]);
         printf("  Command: %s\n", pid->cmd ? pid->cmd : "NULL");
@@ -1791,6 +1871,12 @@ void autopid_init(char* id)
     // {
     //     car.pid_count = 0;
     // }
+    ESP_LOGI(TAG, "trying to take mutex...");
+    xSemaphoreTake(all_pids->mutex, portMAX_DELAY);
+    ESP_LOGI(TAG, "1. Starting OBD logger init...");
+    autopid_init_obd_logger();
+    ESP_LOGI(TAG, "2. OBD logger init done.");
+    xSemaphoreGive(all_pids->mutex);
 
     xTaskCreate(autopid_task, "autopid_task", 5000, (void *)AF_INET, 5, NULL);
 

@@ -1046,7 +1046,7 @@
             <div class="section-title">Logger Settings</div>
             <table class="form-table">
                 <tr>
-                    <td>Logger Mode:</td>
+                    <td>Logger:</td>
                     <td>
                         <select name="logger_status" id="logger_status" onChange="submit_enable();">
                             <option value="enable">Enable</option>
@@ -1058,23 +1058,32 @@
                     <td>Log Storage:</td>
                     <td>
                         <select name="log_storage" id="log_storage" onChange="submit_enable();">
-                            <option value="sd_card">SD Card</option>
+                            <option value="sdcard">SDcard</option>
                             <!-- <option value="internal">Internal</option> -->
                         </select>
                     </td>
                 </tr>
                 <tr>
-                    <td>Log Interval:</td>
+                    <td>Storage Filesystem:</td>
+                    <td>
+                        <select name="log_filesystem" id="log_filesystem" onChange="submit_enable();">
+                            <option value="littlefs">LittleFS</option>
+                            <option value="fatfs">FATFS</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Log Period:</td>
                     <td class="slider-container">
                         <input type="range" 
-                            id="log_interval" 
-                            name="log_interval" 
+                            id="log_period" 
+                            name="log_period" 
                             value="10" 
                             min="1" 
                             max="300" 
                             step="1"
-                            oninput="document.getElementById('log_interval_value').textContent = this.value;submit_enable();">
-                        <span id="log_interval_value">10</span>sec
+                            oninput="document.getElementById('log_period_value').textContent = this.value;submit_enable();">
+                        <span id="log_period_value">10</span>sec
                     </td>
                 </tr>
             </table>
@@ -2479,6 +2488,10 @@ function loadAutoTable(jsonData) {
         }
 		obj["mqtt_status_topic"] = document.getElementById("mqtt_status_topic").value;
 		obj["mqtt_elm327_log"] = document.getElementById("mqtt_elm327_log").value;
+        obj["logger_status"] = document.getElementById("logger_status").value;
+        obj["log_filesystem"] = document.getElementById("log_filesystem").value;
+        obj["log_storage"] = document.getElementById("log_storage").value;
+        obj["log_period"] = document.getElementById("log_period").value;
 		var configJSON = JSON.stringify(obj);
 		const xhttp = new XMLHttpRequest();
 		xhttp.onload = function() {
@@ -2743,6 +2756,26 @@ function loadAutoTable(jsonData) {
                 document.getElementById("mqtt_rx_en_checkbox").checked = false;
                 document.getElementById("mqtt_rx_topic").disabled = true;
             }
+            
+            if (obj.logger_status === "enable") {
+                document.getElementById("logger_status").selectedIndex = "0";
+            } else if (obj.logger_status === "disable") {
+                document.getElementById("logger_status").selectedIndex = "1";
+            }
+
+            if (obj.log_filesystem === "littlefs") {
+                document.getElementById("log_filesystem").selectedIndex = "0";
+            } else if (obj.log_filesystem === "fatfs") {
+                document.getElementById("log_filesystem").selectedIndex = "1";
+            }
+
+            if (obj.log_storage === "sdcard") {
+                document.getElementById("log_storage").selectedIndex = "0";
+            } else if (obj.log_storage === "internal") {
+                document.getElementById("log_storage").selectedIndex = "1";
+            }
+
+            document.getElementById('log_period_value').textContent = obj.log_period;
             
 			txCheckBoxChanged();
             rxCheckBoxChanged();
