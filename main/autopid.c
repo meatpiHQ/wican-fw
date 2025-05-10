@@ -40,8 +40,10 @@
 #include "wc_timer.h"
 #include <float.h>
 #include "obd_logger.h"
+#include "hw_config.h"
 
 #define TAG __func__
+// #define TAG "AUTO_PID"
 
 #define TEMP_BUFFER_LENGTH  32
 #define ECU_CONNECTED_BIT			BIT0
@@ -52,6 +54,8 @@ static char* device_id;
 static EventGroupHandle_t xautopid_event_group = NULL;
 static all_pids_t* all_pids = NULL;
 static response_t elm327_response;
+static autopid_data_t autopid_data;
+
 #if HARDWARE_VER == WICAN_PRO
 static char elm327_autopid_cmd_buffer[BUFFER_SIZE];
 static uint32_t elm327_autopid_cmd_buffer_len = 0;
@@ -213,10 +217,10 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
     cJSON *root = cJSON_CreateObject();
     cJSON *pid_array = cJSON_CreateArray();
     // char restore_cmd[64];
-    static const char *supported_protocols[] = {"ATSP6\rATSH7DF\rATCRA\r",
-                                                "ATSP7\rATSH18DB33F1\rATCRA\r",
-                                                "ATSP8\rATSH7DF\rATCRA\r",
-                                                "ATSP9\rATSH18DB33F1\rATCRA\r",
+    static const char *supported_protocols[] = {"ATTP6\rATSH7DF\rATCRA\r",
+                                                "ATTP7\rATSH18DB33F1\rATCRA\r",
+                                                "ATTP8\rATSH7DF\rATCRA\r",
+                                                "ATTP9\rATSH18DB33F1\rATCRA\r",
                                                 };
 
     response = (response_t *)malloc(sizeof(response_t)); 
@@ -227,11 +231,13 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
         return ESP_ERR_NO_MEM;
     }
 
+    xSemaphoreTake(all_pids->mutex, portMAX_DELAY);
+    
     if(protocol >= 6 && protocol <= 9) 
     {
         ESP_LOGI(TAG, "Setting protocol %d", protocol);
 
-        static const char *elm327_config = "ate0\rath1\ratl0\rats1\ratst96\r";
+        static const char *elm327_config = "atm0\rate0\rath1\ratl0\rats1\ratst96\r";
         // elm327_process_cmd((uint8_t*)elm327_config, strlen(elm327_config), &frame, &autopidQueue);
         // while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS);
         elm327_process_cmd((uint8_t*)elm327_config , strlen(elm327_config), &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, NULL);
@@ -247,6 +253,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
         ESP_LOGE(TAG, "Invalid protocol number: %d", protocol);
         // elm327_unlock();
         free(response);
+        xSemaphoreGive(all_pids->mutex);
         return ESP_FAIL;
     }
     
@@ -297,24 +304,30 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
                             char pid_str[64];
                             
                             // If the PID has multiple parameters
-                            if (pid_info->num_params > 1) {
+                            if (pid_info->num_params > 1 && pid_info->params) {
                                 ESP_LOGI(TAG, "Processing multi-parameter PID: %02X", pid);
                                 // Add each parameter as a separate entry
                                 for (int p = 0; p < pid_info->num_params; p++) {
-                                    snprintf(pid_str, sizeof(pid_str), "%02X-%s", 
-                                            pid, pid_info->params[p].name);
-                                    ESP_LOGI(TAG, "PID %02X parameter %d supported: %s", 
-                                            pid, p + 1, pid_str);
-                                    cJSON_AddItemToArray(pid_array, cJSON_CreateString(pid_str));
+                                    if (pid_info->params[p].name) {
+                                        snprintf(pid_str, sizeof(pid_str), "%02X-%s", 
+                                                pid, pid_info->params[p].name);
+                                        ESP_LOGI(TAG, "PID %02X parameter %d supported: %s", 
+                                                pid, p + 1, pid_str);
+                                        cJSON_AddItemToArray(pid_array, cJSON_CreateString(pid_str));
+                                    } else {
+                                        ESP_LOGW(TAG, "PID %02X parameter %d has NULL name", pid, p + 1);
+                                    }
                                 }
-                            } else {
+                            } else if (pid_info->params && pid_info->params[0].name) {
                                 // Single parameter PID
                                 snprintf(pid_str, sizeof(pid_str), "%02X-%s", 
                                         pid, pid_info->params[0].name);
                                 ESP_LOGI(TAG, "PID %02X supported: %s", pid, pid_str);
                                 cJSON_AddItemToArray(pid_array, cJSON_CreateString(pid_str));
+                            } else {
+                                ESP_LOGW(TAG, "PID %02X has invalid or NULL parameters", pid);
                             }
-                        }
+                        }   
                     }
                 }
             } else {
@@ -346,7 +359,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
             // while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS);
             
             free(response);
-
+            xSemaphoreGive(all_pids->mutex);
             return ESP_OK;
         }
         ESP_LOGW(TAG, "JSON string too long for buffer");
@@ -362,6 +375,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
     cJSON_Delete(root);
     free(response);
     // elm327_unlock();
+    xSemaphoreGive(all_pids->mutex);
     return ESP_FAIL;
 }
 
@@ -419,16 +433,21 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
 //     }
 // }
 
-char *autopid_data_read(void)
+static void autopid_data_update(all_pids_t *pids)
 {
-    static char *json_str = NULL;
-    
-    if (!all_pids || !all_pids->mutex) {
+    if (!pids || !pids->mutex) {
         ESP_LOGE(TAG, "Invalid all_pids or mutex");
-        return NULL;
+        return;
     }
+    
+    //take autopid_data mutex
+    if (xSemaphoreTake(autopid_data.mutex, portMAX_DELAY) == pdTRUE) {
+        //free old data
+        if (autopid_data.json_str != NULL) {
+            free(autopid_data.json_str);
+            autopid_data.json_str = NULL;
+        }
 
-    if (xSemaphoreTake(all_pids->mutex, portMAX_DELAY) == pdTRUE) {
         cJSON *root = cJSON_CreateObject();
         if (root) {
             for (uint32_t i = 0; i < all_pids->pid_count; i++) {
@@ -445,10 +464,35 @@ char *autopid_data_read(void)
                 }
             }
             limitJsonDecimalPrecision(root);
-            json_str = cJSON_PrintUnformatted(root);
+            autopid_data.json_str = cJSON_PrintUnformatted(root);
             cJSON_Delete(root);
         }
-        xSemaphoreGive(all_pids->mutex);
+
+        //release mutex
+        xSemaphoreGive(autopid_data.mutex);
+    }
+}
+
+char *autopid_data_read(void)
+{
+    //json_str must be freed by the caller
+    static char *json_str = NULL;
+    
+    if (!autopid_data.mutex) {
+        ESP_LOGE(TAG, "Invalid mutex");
+        return NULL;
+    }
+
+    if (xSemaphoreTake(autopid_data.mutex, portMAX_DELAY) == pdTRUE) {
+        if (autopid_data.json_str != NULL) {
+            json_str = (char *)malloc(strlen(autopid_data.json_str) + 1);
+            if (json_str != NULL) {
+                strcpy(json_str, autopid_data.json_str);
+            }
+        } else {
+            json_str = NULL;
+        }
+        xSemaphoreGive(autopid_data.mutex);
     }
     return json_str;
 }
@@ -531,6 +575,7 @@ char* autopid_get_config(void)
     if (!parameters_object)
     {
         ESP_LOGE(TAG, "Failed to create JSON object");
+        xSemaphoreGive(all_pids->mutex);
         return NULL;
     }
 
@@ -837,13 +882,19 @@ void parse_elm327_response(char *buffer, response_t *response) {
         }
         ESP_LOGI(TAG, "Null priority data set - frames: %d, all headers same: %d", 
                 frame_count, all_headers_same);
-    } else {
-        response->priority_data = lowest_header_data;
-        response->priority_data_len = lowest_header_length;
-        ESP_LOGI(TAG, "Priority data set - length: %u, starting with byte: 0x%02X", 
-                response->priority_data_len, 
-                response->priority_data[0]);
-    }
+        } else {
+            response->priority_data = lowest_header_data;
+            response->priority_data_len = lowest_header_length;
+            
+            if (response->priority_data != NULL && response->priority_data_len > 0) {
+                ESP_LOGI(TAG, "Priority data set - length: %u, starting with byte: 0x%02X", 
+                        response->priority_data_len, 
+                        response->priority_data[0]);
+            } else {
+                ESP_LOGI(TAG, "Priority data set but empty or invalid - length: %u", 
+                        response->priority_data_len);
+            }
+        }
     
     ESP_LOGI(TAG, "Parsing complete. Headers - Lowest: 0x%lX, Highest: 0x%lX, Total frames: %d, Total bytes: %lu, Priority data length: %u",
             lowest_header, highest_header, frame_count, response->length, response->priority_data_len);
@@ -996,7 +1047,7 @@ static void publish_parameter_mqtt(parameter_t *param) {
 
 static void autopid_task(void *pvParameters)
 {
-    static char default_init[] = "ati\rate0\rath1\ratl0\rats1\ratsp6\ratst96\r";
+    static char default_init[] = "ati\rate0\rath1\ratl0\rats1\ratm0\ratst96\r";
     wc_timer_t ecu_check_timer;
     wc_timer_t group_cycle_timer;
 
@@ -1241,6 +1292,7 @@ static void autopid_task(void *pvParameters)
             }
         }
 
+        autopid_data_update(all_pids);
         // elm327_unlock();
         xSemaphoreGive(all_pids->mutex);
         vTaskDelay(pdMS_TO_TICKS(10));
@@ -1267,6 +1319,19 @@ static void autopid_task(void *pvParameters)
 
 }
 
+// Helper function to replace all occurrences of "ATSP" with "ATTP" in a string
+static void replace_atsp_with_attp(char *str) {
+    if (!str) return;
+    
+    char *atsp_pos = strstr(str, "ATSP");
+    while (atsp_pos != NULL) {
+        // Replace SP with TP
+        atsp_pos[2] = 'T';
+        atsp_pos[3] = 'P';
+        // Look for the next occurrence
+        atsp_pos = strstr(atsp_pos + 4, "ATSP");
+    }
+}
 
 cJSON* parse_json_file(FILE* f) {
     fseek(f, 0, SEEK_END);
@@ -1289,7 +1354,7 @@ all_pids_t* load_all_pids(void){
     int auto_pids = 0;
     
     // Count car_data.json pids
-    FILE* f = fopen("/fatfs/car_data.json", "r");
+    FILE* f = fopen(FS_MOUNT_POINT"/car_data.json", "r");
     if (f) {
         cJSON* root = parse_json_file(f);
         if (root) {
@@ -1303,7 +1368,7 @@ all_pids_t* load_all_pids(void){
     }
     
     // Count auto_pid.json pids
-    f = fopen("/fatfs/auto_pid.json", "r");
+    f = fopen(FS_MOUNT_POINT"/auto_pid.json", "r");
     if (f) {
         cJSON* root = parse_json_file(f);
         if (root) {
@@ -1317,8 +1382,16 @@ all_pids_t* load_all_pids(void){
 
     total_pids = car_data_pids + auto_pids;
     
+    ESP_LOGI(TAG, "Allocating memory for %d pids...", total_pids);
     all_pids_t* all_pids = (all_pids_t*)calloc(1, sizeof(all_pids_t));
     if (!all_pids) return NULL;
+    
+    if(total_pids == 0) {
+        ESP_LOGE(TAG, "No PIDs found in car_data.json or auto_pid.json");
+        return all_pids;
+    }
+
+    all_pids->pids = (pid_data2_t*)calloc(total_pids, sizeof(pid_data2_t));
     
     all_pids->pids = (pid_data_t*)calloc(total_pids, sizeof(pid_data_t));
     if (!all_pids->pids) {
@@ -1328,8 +1401,9 @@ all_pids_t* load_all_pids(void){
     
     int pid_index = 0;
     
+    ESP_LOGI(TAG, "Loading auto_pid.json pids...");
     // Load auto_pid.json pids
-    f = fopen("/fatfs/auto_pid.json", "r");
+    f = fopen(FS_MOUNT_POINT"/auto_pid.json", "r");
     if (f) {
         cJSON* root = parse_json_file(f);
         if (root) {
@@ -1353,6 +1427,7 @@ all_pids_t* load_all_pids(void){
                             all_pids->custom_init[j] = '\r';
                         }
                     }
+                    replace_atsp_with_attp(all_pids->custom_init);
                 }
             } else {
                 all_pids->custom_init = NULL;
@@ -1419,6 +1494,7 @@ all_pids_t* load_all_pids(void){
                                         curr_pid->init[j] = '\r';
                                     }
                                 }
+                                replace_atsp_with_attp(curr_pid->init);
                             } else {
                                 ESP_LOGE(TAG, "Failed to allocate memory for init");
                             }
@@ -1516,13 +1592,13 @@ all_pids_t* load_all_pids(void){
                         if(curr_pid->rxheader != NULL && strlen(curr_pid->rxheader) > 0)
                         {
                             ESP_LOGI(TAG, "Setting up STD init buffer with protocol: %s, SH value: %s, RX header: %s", all_pids->std_ecu_protocol, sh_value, curr_pid->rxheader);
-                            snprintf(std_init_buf, sizeof(std_init_buf), "ATSP%s\rATSH%s\rATCRA%s\r",
+                            snprintf(std_init_buf, sizeof(std_init_buf), "ATTP%s\rATSH%s\rATCRA%s\r",
                                                         all_pids->std_ecu_protocol, sh_value, curr_pid->rxheader);
                         }
                         else
                         {
                             ESP_LOGI(TAG, "Setting up STD init buffer with protocol: %s, SH value: %s", all_pids->std_ecu_protocol, sh_value);
-                            snprintf(std_init_buf, sizeof(std_init_buf), "ATSP%s\rATSH%s\rATCRA\r",
+                            snprintf(std_init_buf, sizeof(std_init_buf), "ATTP%s\rATSH%s\rATCRA\r",
                                                         all_pids->std_ecu_protocol, sh_value);                        
                         }
                         all_pids->standard_init = strdup(std_init_buf);
@@ -1571,7 +1647,7 @@ all_pids_t* load_all_pids(void){
         fclose(f);
     }
     
-    f = fopen("/fatfs/car_data.json", "r");
+    f = fopen(FS_MOUNT_POINT"/car_data.json", "r");
     if (f) {
         cJSON* root = parse_json_file(f);
         if (root) {
@@ -1582,15 +1658,20 @@ all_pids_t* load_all_pids(void){
                     cJSON* init_item = cJSON_GetObjectItem(car, "init");
                     if (init_item && init_item->valuestring) {
                         all_pids->specific_init = strdup(init_item->valuestring);
-                        if (all_pids->specific_init) {
-                            for (size_t j = 0; j < strlen(all_pids->specific_init); j++) {
-                                if (all_pids->specific_init[j] == ';') {
-                                    all_pids->specific_init[j] = '\r';
+                        if (init_item && init_item->valuestring) {
+                            all_pids->specific_init = strdup(init_item->valuestring);
+                            if (all_pids->specific_init) {
+                                // First replace semicolons with carriage returns
+                                for (size_t j = 0; j < strlen(all_pids->specific_init); j++) {
+                                    if (all_pids->specific_init[j] == ';') {
+                                        all_pids->specific_init[j] = '\r';
+                                    }
                                 }
+                                replace_atsp_with_attp(all_pids->specific_init);
                             }
+                        } else {
+                            all_pids->specific_init = NULL;
                         }
-                    } else {
-                        all_pids->specific_init = NULL;
                     }
                     
                     cJSON* pids = cJSON_GetObjectItem(car, "pids");
@@ -1621,6 +1702,7 @@ all_pids_t* load_all_pids(void){
                                                 curr_pid->init[j] = '\r';
                                             }
                                         }
+                                        replace_atsp_with_attp(curr_pid->init);
                                     } else {
                                         ESP_LOGE(TAG, "Failed to allocate memory for init");
                                     }
@@ -1848,10 +1930,20 @@ void autopid_init(char* id)
     if (all_pids)
     {
         all_pids->mutex = xSemaphoreCreateMutex();
-        // print_pids(all_pids); broken
+
+        if(all_pids->pid_count > 0){
+            print_pids(all_pids); //broken
+        }
+
         if (!all_pids->mutex)
         {
             ESP_LOGE(TAG, "Failed to create all_pids mutex");
+            return;
+        }
+        autopid_data.mutex = xSemaphoreCreateMutex();
+        if (!autopid_data.mutex)
+        {
+            ESP_LOGE(TAG, "Failed to create autopid_data mutex");
             return;
         }
     }
@@ -1861,9 +1953,14 @@ void autopid_init(char* id)
         return;
     }
 
+    if(all_pids->pid_count == 0)
+    {
+        ESP_LOGE(TAG, "No PIDs found in car_data.json or auto_pid.json");
+        return;
+    }
     // autopid_load_config(config_str);
     // // char *desired_car_model = "Toyota Camry";
-    // if(car.car_specific_en && car.selected_car_model != NULL)
+    // if(car.car_specific_en && car.selected_car_model != NULL)d
     // {
     //     autopid_load_car_specific(car.selected_car_model);
     // }
@@ -1878,6 +1975,22 @@ void autopid_init(char* id)
     ESP_LOGI(TAG, "2. OBD logger init done.");
     xSemaphoreGive(all_pids->mutex);
 
-    xTaskCreate(autopid_task, "autopid_task", 5000, (void *)AF_INET, 5, NULL);
+    static StackType_t *autopid_task_stack;
+    static StaticTask_t autopid_task_buffer;
+    
+    // Allocate stack memory in PSRAM
+    autopid_task_stack = heap_caps_malloc(5000 * sizeof(StackType_t), MALLOC_CAP_SPIRAM);
+    
+    // Check if memory allocation was successful
+    if (autopid_task_stack != NULL){
+        // Create task with static allocation
+        xTaskCreateStatic(autopid_task, "autopid_task", 5000, (void *)AF_INET, 5, 
+                         autopid_task_stack, &autopid_task_buffer);
+    }
+    else 
+    {
+        // Handle memory allocation failure
+        ESP_LOGE(TAG, "Failed to allocate autopid_task stack in PSRAM");
+    }
 
 }

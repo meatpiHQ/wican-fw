@@ -9,6 +9,8 @@
 #include "esp_ota_ops.h"
 #include "esp_system.h"
 #include "esp_heap_caps.h"  
+#include "hw_config.h"
+#include "esp_littlefs.h"
 
 #define MOUNT_POINT "/sdcard"
 #define OTA_BUFFER_SIZE 4096  
@@ -66,30 +68,62 @@ esp_err_t sdcard_perform_ota_update(const char* firmware_path)
     ESP_LOGI(TAG, "Deleting config file before OTA update");
 
     // Delete config file if it exists
-    ESP_LOGI(TAG, "Initializing FAT filesystem");
+    ESP_LOGI(TAG, "Deleting config file before OTA update");
 
-    const esp_vfs_fat_mount_config_t mount_config = {
-        .max_files = 4,
-        .format_if_mount_failed = true,
-        .allocation_unit_size = CONFIG_WL_SECTOR_SIZE,
-        .use_one_fat = false,
-    };
-    static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
-
-    esp_err_t ret = esp_vfs_fat_spiflash_mount_rw_wl("/fatfs", "storage", &mount_config, &s_wl_handle);
-    if (ret != ESP_OK) 
-    {
-        ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(ret));
-        return ESP_ERR_NOT_FOUND;
-    }
+    // Delete config file if it exists
+    #ifdef USE_FATFS
+        ESP_LOGI(TAG, "Initializing FAT filesystem");
+        const esp_vfs_fat_mount_config_t mount_config = {
+            .max_files = 4,
+            .format_if_mount_failed = true,
+            .allocation_unit_size = CONFIG_WL_SECTOR_SIZE,
+            .use_one_fat = false,
+        };
+        static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
     
-    ESP_LOGI(TAG, "FAT filesystem mounted successfully");
+        esp_err_t ret = esp_vfs_fat_spiflash_mount_rw_wl(FS_MOUNT_POINT"", "storage", &mount_config, &s_wl_handle);
+        if (ret != ESP_OK) 
+        {
+            ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(ret));
+            return ESP_ERR_NOT_FOUND;
+        }
+        
+        ESP_LOGI(TAG, "FAT filesystem mounted successfully");
+    #else
+        ESP_LOGI(TAG, "Initializing LittleFS filesystem");
+        
+        esp_vfs_littlefs_conf_t conf = {
+            .base_path = FS_MOUNT_POINT,
+            .partition_label = "storage",
+            .format_if_mount_failed = true,
+            .dont_mount = false,
+        };
+        
+        esp_err_t ret = esp_vfs_littlefs_register(&conf);
+        if (ret != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Failed to mount LittleFS (%s)", esp_err_to_name(ret));
+            return ESP_ERR_NOT_FOUND;
+        }
+        
+        ESP_LOGI(TAG, "LittleFS filesystem mounted successfully");
+        size_t total = 0, used = 0;
+        ret = esp_littlefs_info(conf.partition_label, &total, &used);
+        if (ret != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Failed to get LittleFS partition information (%s)", esp_err_to_name(ret));
+        }
+        else
+        {
+            ESP_LOGI(TAG, "Partition size: total: %d, used: %d", total, used);
+        }
+    #endif
     
     // Delete all configuration files
-    delete_config_file("/fatfs/config.json");
-    delete_config_file("/fatfs/car_data.json");
-    delete_config_file("/fatfs/auto_pid.json");
-    delete_config_file("/fatfs/mqtt_canfilt.json");
+    delete_config_file(FS_MOUNT_POINT"/config.json");
+    delete_config_file(FS_MOUNT_POINT"/car_data.json");
+    delete_config_file(FS_MOUNT_POINT"/auto_pid.json");
+    delete_config_file(FS_MOUNT_POINT"/mqtt_canfilt.json");
 
     ESP_LOGI(TAG, "Starting OTA from SD card file: %s", full_path);
     

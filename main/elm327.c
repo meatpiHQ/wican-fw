@@ -1750,7 +1750,7 @@ void elm327_hardreset_chip(void)
 	{
 		vTaskDelay(pdMS_TO_TICKS(300));
 		uart_flush_input(UART_NUM_1);
-		xQueueReset(uart1_queue);
+		// xQueueReset(uart1_queue);
 		if(gpio_get_level(OBD_READY_PIN) == 1)
 		{
 			gpio_set_level(OBD_RESET_PIN, 0);
@@ -1765,7 +1765,7 @@ void elm327_hardreset_chip(void)
         int len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS+300);
 		if(len > 0)
 		{
-			ESP_LOG_BUFFER_CHAR(TAG, rsp_buffer, len);
+			// ESP_LOG_BUFFER_CHAR(TAG, rsp_buffer, len);
 			ESP_LOGW(TAG, "Hardreset OK");
 		}
 		else
@@ -2370,9 +2370,16 @@ void elm327_init(response_callback_t rsp_callback, QueueHandle_t *rx_queue, void
     xqueue_elm327_uart_rx = rx_queue;
     elm327_can_log = can_log;
 	elm327_response = rsp_callback;
+
     elm327_cmd_queue = xQueueCreate(ELM327_CMD_QUEUE_SIZE, sizeof(elm327_commands_t));
+	if (elm327_cmd_queue == NULL){
+		ESP_LOGE(TAG, "Failed to create queue");
+	}
 
 	xuart1_semaphore = xSemaphoreCreateMutex();
+	if (xuart1_semaphore == NULL) {
+		ESP_LOGE(TAG, "Failed to create semaphore");
+	}
 	
     uart_config_t uart1_config = 
     {
@@ -2394,6 +2401,7 @@ void elm327_init(response_callback_t rsp_callback, QueueHandle_t *rx_queue, void
     uart_param_config(UART_NUM_1, &uart1_config);
     uart_set_pin(UART_NUM_1, GPIO_NUM_16, GPIO_NUM_15, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 
+	vTaskDelay(pdMS_TO_TICKS(50));
 	elm327_hardreset_chip();
 
 	// elm327_update_obd_from_file("/sdcard/MIC3624_v2.3.07.beta4.txt");

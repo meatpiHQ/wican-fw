@@ -77,6 +77,7 @@ typedef struct _device_config
 {
 	char wifi_mode[65];
 	char ap_ch[65];
+	char ap_auto_disable[12];
 	char sta_ssid[65];
 	char sta_pass[65];
 	char sta_security[8];
@@ -93,6 +94,8 @@ typedef struct _device_config
 	char wakeup_volt[10];
 	char sleep_time[32];
 	char wakeup_time[32];
+	char periodic_wakeup[32];
+	char wakeup_interval[32];
 	char batt_alert[32];
 	char batt_alert_ssid[65];
 	char batt_alert_pass[65];
@@ -178,3 +181,6 @@ int8_t config_server_get_logger_status(void);
 int8_t config_server_get_log_period(uint32_t *log_period);
 log_storage_t config_server_get_log_storage(void);
 log_filesystem_t config_server_get_log_filesystem(void);
+int8_t config_server_get_ap_auto_disable(void);
+int8_t config_server_get_periodic_wakeup(void);
+int8_t config_server_get_wakeup_interval(uint32_t *wakeup_interval);

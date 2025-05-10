@@ -1104,7 +1104,13 @@ esp_err_t console_init(void)
     ESP_ERROR_CHECK(esp_console_new_repl_usb_cdc(&cdc_config, &repl_config, &repl));
 #elif CONFIG_ESP_CONSOLE_UART
     esp_console_dev_uart_config_t uart_config = ESP_CONSOLE_DEV_UART_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_console_new_repl_uart(&uart_config, &repl_config, &repl));
+
+    esp_err_t ret = esp_console_new_repl_uart(&uart_config, &repl_config, &repl);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to create UART REPL: %d", ret);
+        return ret;
+    }
 #endif
     tcp_console_init();
     console_register_commands();

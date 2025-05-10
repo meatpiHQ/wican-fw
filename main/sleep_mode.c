@@ -52,7 +52,8 @@
 #include "obd.h"
 #include "esp_adc/adc_oneshot.h"
 
-#define TAG 		__func__
+// #define TAG 		__func__
+#define TAG         "SLEEP_MODE"
 
 #if HARDWARE_VER != WICAN_PRO
 
@@ -571,7 +572,7 @@ int8_t sleep_mode_init(uint8_t enable, float sleep_volt)
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "esp_adc/adc_continuous.h"
+// #include "esp_adc/adc_continuous.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
 #include "elm327.h"
@@ -583,15 +584,13 @@ int8_t sleep_mode_init(uint8_t enable, float sleep_volt)
 
 #define ADC_UNIT          ADC_UNIT_1
 #define ADC_CONV_MODE     ADC_CONV_SINGLE_UNIT_1
-#define ADC_ATTEN         ADC_ATTEN_DB_12  // 0-3.3V
-#define ADC_BIT_WIDTH     SOC_ADC_DIGI_MAX_BITWIDTH
+#define ADC_ATTEN         ADC_ATTEN_DB_6  // 0-3.3V
+#define ADC_BIT_WIDTH     ADC_BITWIDTH_DEFAULT 
 #define ADC_READ_LEN      256
 
 #define ADC_OUTPUT_TYPE   ADC_DIGI_OUTPUT_FORMAT_TYPE2
 #define ADC_GET_CHANNEL(p_data)   ((p_data)->type2.channel)
 #define ADC_GET_DATA(p_data)      ((p_data)->type2.data)
-
-#define TAG			 __func__
 
 static adc_oneshot_unit_handle_t adc_handle;
 static adc_cali_handle_t cali_handle = NULL;
@@ -608,6 +607,7 @@ static void calibration_init(void)
     ESP_LOGI(TAG, "calibration scheme version is %s", "Curve Fitting");
     adc_cali_curve_fitting_config_t cali_config = {
         .unit_id = ADC_UNIT,
+        .chan = ADC_CHANNEL_3,
         .atten = ADC_ATTEN,
         .bitwidth = ADC_BIT_WIDTH,
     };
@@ -662,6 +662,7 @@ void oneshot_adc_init(void)
 
     ESP_LOGI(TAG, "ADC channel: %d, Attenuation: %d", ADC_CHANNEL_3, ADC_ATTEN);
 
+    calibration_init();
     // Initialize calibration
     // do_calibration = example_adc_calibration_init(ADC_UNIT, ADC_CHANNEL_3, ADC_ATTEN, &cali_handle);
 }
@@ -680,40 +681,57 @@ esp_err_t read_ss_adc_voltage(float *voltage_out)
     int sum_voltage = 0;
 
     // Take multiple readings
-    for (int i = 0; i < NUM_SAMPLES; i++) {
+    for (int i = 0; i < NUM_SAMPLES; i++)
+    {
         int raw_value;
         esp_err_t ret = adc_oneshot_read(adc_handle, ADC_CHANNEL_3, &raw_value);
         
-        if (ret == ESP_OK && raw_value < 4096) {
+        if (ret == ESP_OK && raw_value < 4096)
+        {
             int voltage = 0;
             
             // Convert raw to voltage using calibration
-            if (do_calibration) {
-                ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle, raw_value, &voltage));
-            } else {
+            if (do_calibration)
+            {
+                ret = adc_cali_raw_to_voltage(cali_handle, raw_value, &voltage);
+            } 
+            else
+            {
                 voltage = (raw_value * 3300) / 4095;
             }
             
-            sum_raw += raw_value;
-            sum_voltage += voltage;
-            valid_samples++;
-            
-            if (raw_value < min_raw) min_raw = raw_value;
-            if (raw_value > max_raw) max_raw = raw_value;
-            
-            // Print first few samples for debugging
-            if (valid_samples <= 5) {
-                ESP_LOGI(TAG, "Sample[%d]: Chan=%d, Raw=%d, Voltage=%dmV", 
-                        (int)valid_samples, ADC_CHANNEL_3, raw_value, voltage);
+            if(ret == ESP_OK)
+            {
+                sum_raw += raw_value;
+                sum_voltage += voltage;
+                valid_samples++;
+                
+                if (raw_value < min_raw) min_raw = raw_value;
+                if (raw_value > max_raw) max_raw = raw_value;
+                
+                // Print first few samples for debugging
+                // if (valid_samples <= 5) 
+                // {
+                //     ESP_LOGI(TAG, "Sample[%d]: Chan=%d, Raw=%d, Voltage=%dmV", 
+                //             (int)valid_samples, ADC_CHANNEL_3, raw_value, voltage);
+                // }
             }
-            
+            else
+            {
+                ESP_LOGE(TAG, "ADC adc_cali_raw_to_voltage error: %d", ret);
+            }
             // Small delay between readings
             vTaskDelay(pdMS_TO_TICKS(1));
+        }
+        else
+        {
+            ESP_LOGE(TAG, "ADC read error: %d", ret);
         }
     }
 
     // Calculate averages
-    if (valid_samples > 0) {
+    if (valid_samples > 0) 
+    {
         int avg_raw = sum_raw / valid_samples;
         int avg_voltage = sum_voltage / valid_samples;
         
@@ -794,7 +812,10 @@ void light_sleep_task(void *pvParameters)
     static wc_timer_t sleep_timer;
     static wc_timer_t wakeup_timer;
 	static uint32_t sleep_time;
-	
+	static int8_t periodic_wakeup;
+	static uint32_t wakeup_interval;
+	static wc_timer_t periodic_wakeup_timer;
+
     // Initialize configuration
     sleep_en = config_server_get_sleep_config();
     if(config_server_get_sleep_volt(&sleep_voltage) == -1)
@@ -817,20 +838,37 @@ void light_sleep_task(void *pvParameters)
 	{
 		sleep_time *= 60000; //change min to ms
 	}
-	
+
+	periodic_wakeup = config_server_get_periodic_wakeup();
+
+    if(periodic_wakeup == -1)
+    {
+        periodic_wakeup = 0;
+    }
+
+    if(config_server_get_wakeup_interval(&wakeup_interval) == -1)
+    {
+        wakeup_interval = 5*60000; //5 min
+        ESP_LOGW(TAG, "Failed to get wakeup interval, using default 5 min");
+    }
+    else
+    {
+        wakeup_interval *= 60000; //change min to ms
+    }
+
     // Create queues
     voltage_queue = xQueueCreate(1, sizeof(float));
     sleep_state_queue = xQueueCreate(1, sizeof(sleep_state_info_t));
 
     // Initialize ADC
-    calibration_init();
+    // calibration_init();
     // continuous_adc_init();
     oneshot_adc_init();
     // ESP_ERROR_CHECK(adc_continuous_start(handle));
 
     // Log initial configuration
-    ESP_LOGI(TAG, "Sleep task started. Sleep enabled: %d, Sleep voltage: %.2f, Wakeup voltage: %.2f, Sleep time: %lu", 
-             sleep_en, sleep_voltage, wakeup_voltage, sleep_time);
+    ESP_LOGI(TAG, "Sleep task started. Sleep enabled: %d, Sleep voltage: %.2f, Wakeup voltage: %.2f, Sleep time: %lu, Periodic wakeup: %d, Wakeup interval: %lu", 
+             sleep_en, sleep_voltage, wakeup_voltage, sleep_time, periodic_wakeup, wakeup_interval);
 
     // Initialize voltage read timer
     wc_timer_set(&voltage_read_timer, 3000);
@@ -880,6 +918,10 @@ void light_sleep_task(void *pvParameters)
                         state_info.voltage = battery_voltage;
                         xQueueOverwrite(sleep_state_queue, &state_info);
                         vTaskDelay(pdMS_TO_TICKS(1000));
+                        if(periodic_wakeup)
+                        {
+                            wc_timer_set(&periodic_wakeup_timer, wakeup_interval);
+                        }
                     }
                     break;
 
@@ -889,6 +931,12 @@ void light_sleep_task(void *pvParameters)
                         ESP_LOGI(TAG, "Voltage above wakeup threshold, starting wakeup timer");
                         current_state = STATE_WAKE_PENDING;
                         wc_timer_set(&wakeup_timer, 1000); // 2 second timer for stable voltage
+                    }
+                    else if(periodic_wakeup && wc_timer_is_expired(&periodic_wakeup_timer))
+                    {
+                        ESP_LOGI(TAG, "Periodic wakeup timer expired, returning to normal mode");
+                        current_state = STATE_NORMAL;
+                        esp_restart();
                     }
                     break;
 
@@ -936,12 +984,13 @@ void light_sleep_task(void *pvParameters)
         // }
         if(current_state == STATE_SLEEPING) 
         {
-            // adc_continuous_stop(handle);
+            static wc_timer_t waketime = 0;
             ESP_LOGW(TAG, "Sleep...");
+            ESP_LOGW(TAG, "Wake time: %lld", (esp_timer_get_time()-waketime)/1000);
             esp_sleep_enable_timer_wakeup(2*1000000);
             esp_light_sleep_start();
+            waketime = esp_timer_get_time();
             ESP_LOGW(TAG, "Wakeup...");
-            // adc_continuous_start(handle);
         }
         if(current_state != STATE_SLEEPING)
         {

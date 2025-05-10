@@ -400,11 +400,13 @@ static void can_rx_task(void *pvParameters)
 				{
 					ucTCP_TX_Buffer.usLen = gvret_parse_can_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
 				}
+				#if HARDWARE_VER != WICAN_PRO
 				else if(protocol == OBD_ELM327 || protocol == AUTO_PID)
 				{
 					// Let elm327.c decide which messages to process
 					xQueueSend( xmsg_obd_rx_queue, ( void * ) &rx_msg, pdMS_TO_TICKS(0) );
 				}
+				#endif
 
 
 
@@ -459,6 +461,7 @@ static void can_rx_task(void *pvParameters)
 	}
 }
 
+#ifdef PRINT_HEAP
 static void print_heap_task(void *pvParameters)
 {
     while(1) 
@@ -487,6 +490,7 @@ static void print_heap_task(void *pvParameters)
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
+#endif
 
 #if HARDWARE_VER == WICAN_PRO
 //This is a hack to get ble working 
@@ -506,9 +510,6 @@ static void obd_rx_task(void *pvParameters)
 
 void app_main(void)
 {
-	static StackType_t *heap_task_stack;
-	static StaticTask_t heap_task_buffer;
-
 	gpio_reset_pin(BUTTON_GPIO_NUM);
 	gpio_set_direction(BUTTON_GPIO_NUM, GPIO_MODE_INPUT);
 	gpio_set_pull_mode(BUTTON_GPIO_NUM, GPIO_PULLUP_ONLY);
@@ -518,6 +519,10 @@ void app_main(void)
 	{
 		sdcard_perform_ota_update("/wican.bin");
 	}
+
+	#ifdef PRINT_HEAP
+	static StackType_t *heap_task_stack;
+	static StaticTask_t heap_task_buffer;
 
 	heap_task_stack = heap_caps_malloc(1024*3 * sizeof(StackType_t), MALLOC_CAP_SPIRAM);
 
@@ -530,6 +535,7 @@ void app_main(void)
 						heap_task_stack,
 						&heap_task_buffer);
 	}
+	#endif
 
 	sleep_mode_print_wakeup_reason();
 
@@ -811,7 +817,7 @@ void app_main(void)
 	{
 		xmsg_mqtt_rx_queue = xQueueCreate(32, sizeof(mqtt_can_message_t) );
 		#if HARDWARE_VER == WICAN_PRO
-		if(protocol != AUTO_PID && protocol != OBD_ELM327)
+		// if(protocol != AUTO_PID && protocol != OBD_ELM327)
 		{
 			can_set_bitrate(can_datarate);
 			can_enable();
@@ -922,9 +928,30 @@ void app_main(void)
         // }
     }
 	wc_mdns_init((char*)uid, hardware_version, firmware_version);
-    xTaskCreate(can_rx_task, "can_rx_task", 1024*3, (void*)AF_INET, 5, NULL);
-    xTaskCreate(can_tx_task, "can_tx_task", 1024*3, (void*)AF_INET, 5, NULL);
-	xTaskCreate(obd_rx_task, "obd_rx_task", 1024*3, (void*)AF_INET, 5, NULL);
+// Declare static stack and task buffers
+	static StackType_t *can_rx_task_stack, *can_tx_task_stack, *obd_rx_task_stack;
+	static StaticTask_t can_rx_task_buffer, can_tx_task_buffer, obd_rx_task_buffer;
+
+	// Allocate stack memory in PSRAM
+	can_rx_task_stack = heap_caps_malloc(1024*3 * sizeof(StackType_t), MALLOC_CAP_SPIRAM);
+	can_tx_task_stack = heap_caps_malloc(1024*3 * sizeof(StackType_t), MALLOC_CAP_SPIRAM);
+	obd_rx_task_stack = heap_caps_malloc(1024*3 * sizeof(StackType_t), MALLOC_CAP_SPIRAM);
+
+	if (can_rx_task_stack != NULL && can_tx_task_stack != NULL && obd_rx_task_stack != NULL) 
+	{
+		xTaskCreateStatic(can_rx_task, "can_rx_task", 1024*3, (void*)AF_INET, 5, 
+						can_rx_task_stack, &can_rx_task_buffer);
+		xTaskCreateStatic(can_tx_task, "can_tx_task", 1024*3, (void*)AF_INET, 5, 
+						can_tx_task_stack, &can_tx_task_buffer);
+		xTaskCreateStatic(obd_rx_task, "obd_rx_task", 1024*3, (void*)AF_INET, 5, 
+						obd_rx_task_stack, &obd_rx_task_buffer);
+	} 
+	else 
+	{
+		ESP_LOGE(TAG, "Failed to allocate task stacks in PSRAM");
+		return;
+	}
+
 
 
 	
@@ -943,9 +970,10 @@ void app_main(void)
 	// esp_log_level_set("rtcm", ESP_LOG_INFO);
 	// esp_log_level_set("console", ESP_LOG_INFO);
 	// esp_log_level_set("usb", ESP_LOG_INFO);
-	// esp_log_level_set("read_ss_adc_voltage", ESP_LOG_NONE);	
+	esp_log_level_set("read_ss_adc_voltage", ESP_LOG_NONE);	
 	// esp_log_level_set("HEAP", ESP_LOG_NONE);
 	// esp_log_level_set("autopid_find_standard_pid", ESP_LOG_INFO);
+	// esp_log_level_set("SLEEP_MODE", ESP_LOG_INFO);
 	
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
@@ -956,6 +984,7 @@ void app_main(void)
 		usb_host_init();
 	}
     #endif
+
 	console_init();
 }
 
