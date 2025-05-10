@@ -8,7 +8,7 @@
 #include "esp_log.h"
 #include "esp_littlefs.h"
 #include "sqlite3.h"
-#include "sqllib.h"
+// #include "sqllib.h"
 #include "esp_timer.h"
 #include "string.h"
 #include "rtcm.h"
@@ -55,6 +55,73 @@ static char db_path[128] = {0};
 static uint32_t logger_period = 0;
 static uint32_t obd_logger_params_count = 0;
 static obd_logger_get_params_cb_t obd_logger_get_params = NULL;
+
+
+// Callback debug message
+const char* data = "Callback function called";
+
+/**
+ * @brief Default callback function for SQLite operations
+ * 
+ * @param data User data passed to callback
+ * @param argc Number of columns in result
+ * @param argv Array of result values
+ * @param azColName Array of column names
+ * @return int Always returns 0 to continue
+ */
+static int obd_logger_ex_cb(void *data, int argc, char **argv, char **azColName) {
+    int i;
+    ESP_LOGI(TAG, "%s: ", (const char*)data);
+    for (i = 0; i < argc; i++) {
+        ESP_LOGI(TAG, "%s = %s", azColName[i], argv[i] ? argv[i] : "NULL");
+    }
+    ESP_LOGI(TAG, "---");
+    return 0;
+}
+
+/**
+ * @brief Open a SQLite database file
+ * 
+ * @param filename Path to the database file
+ * @param db Pointer to SQLite database handle
+ * @return int SQLITE_OK on success, error code on failure
+ */
+int obd_logger_db_open(const char *filename, sqlite3 **db) {
+    int rc = sqlite3_open(filename, db);
+    if (rc) {
+        ESP_LOGE(TAG, "Can't open database: %s", sqlite3_errmsg(*db));
+        return rc;
+    } else {
+        ESP_LOGI(TAG, "Opened database successfully: %s", filename);
+    }
+    return rc;
+}
+
+/**
+ * @brief Execute a SQL statement
+ * 
+ * @param db SQLite database handle
+ * @param sql SQL statement to execute
+ * @return int SQLITE_OK on success, error code on failure
+ */
+int obd_logger_db_exec(sqlite3 *db, const char *sql) {
+    char *zErrMsg = 0;
+    ESP_LOGD(TAG, "Executing SQL: %s", sql);
+    
+    int64_t start = esp_timer_get_time();
+    int rc = sqlite3_exec(db, sql, obd_logger_ex_cb, (void*)data, &zErrMsg);
+    
+    if (rc != SQLITE_OK) {
+        ESP_LOGE(TAG, "SQL error: %s", zErrMsg);
+        sqlite3_free(zErrMsg);
+    } else {
+        ESP_LOGI(TAG, "SQL operation completed successfully");
+    }
+    
+    ESP_LOGI(TAG, "SQL execution time: %lld ms", (esp_timer_get_time() - start) / 1000);
+    return rc;
+}
+
 
 esp_err_t obd_logger_store_param(const char *param_name, float value)
 {
@@ -125,7 +192,7 @@ esp_err_t obd_logger_store_param(const char *param_name, float value)
              "INSERT INTO param_data (DateTime, param_id, value) VALUES ('%s', %d, %f);", 
              timestamp, param_id, value);
     
-    if (db_exec(db_file, query) != SQLITE_OK) 
+    if (obd_logger_db_exec(db_file, query) != SQLITE_OK) 
     {
         ESP_LOGE(TAG, "Failed to insert parameter data: %s", sqlite3_errmsg(db_file));
         xSemaphoreGive(db_mutex);
@@ -160,7 +227,7 @@ esp_err_t obd_logger_init_params(const obd_param_entry_t *param_entries, size_t 
         snprintf(query, sizeof(query), 
                  "INSERT OR IGNORE INTO param_info (Name, Type, Data) VALUES ('%s', '%s', '%s');", 
                  param_entries[i].name, param_entries[i].type, param_entries[i].metadata);
-        db_exec(db_file, query);
+        obd_logger_db_exec(db_file, query);
     }
     
     // Now query all parameters to build the lookup table
@@ -257,7 +324,7 @@ esp_err_t obd_logger_store_params(const param_value_t *params, size_t count)
              year_dec, month_dec, day_dec, hour_dec, min_dec, sec_dec);
     
     // Begin transaction
-    if (db_exec(db_file, "BEGIN TRANSACTION;") != SQLITE_OK) {
+    if (obd_logger_db_exec(db_file, "BEGIN TRANSACTION;") != SQLITE_OK) {
         ESP_LOGE(TAG, "Failed to begin transaction: %s", sqlite3_errmsg(db_file));
         xSemaphoreGive(db_mutex);
         return ESP_FAIL;
@@ -287,7 +354,7 @@ esp_err_t obd_logger_store_params(const param_value_t *params, size_t count)
                  "INSERT INTO param_data (DateTime, param_id, value) VALUES ('%s', %d, %f);", 
                  timestamp, param_id, params[i].value);
         
-        if (db_exec(db_file, query) != SQLITE_OK) {
+        if (obd_logger_db_exec(db_file, query) != SQLITE_OK) {
             ESP_LOGE(TAG, "Failed to insert parameter data for '%s': %s", 
                      params[i].name, sqlite3_errmsg(db_file));
             success = false;
@@ -299,16 +366,16 @@ esp_err_t obd_logger_store_params(const param_value_t *params, size_t count)
     
     // Commit or rollback transaction based on success
     if (success) {
-        if (db_exec(db_file, "COMMIT;") != SQLITE_OK) {
+        if (obd_logger_db_exec(db_file, "COMMIT;") != SQLITE_OK) {
             ESP_LOGE(TAG, "Failed to commit transaction: %s", sqlite3_errmsg(db_file));
-            db_exec(db_file, "ROLLBACK;");
+            obd_logger_db_exec(db_file, "ROLLBACK;");
             success = false;
         }
         else {
             ESP_LOGI(TAG, "Successfully stored %d parameters at %s", count, timestamp);
         }
     } else {
-        db_exec(db_file, "ROLLBACK;");
+        obd_logger_db_exec(db_file, "ROLLBACK;");
         ESP_LOGE(TAG, "Rolling back transaction due to errors");
     }
     
@@ -321,7 +388,7 @@ static esp_err_t init_db_tables(void)
     if (xSemaphoreTake(db_mutex, portMAX_DELAY) == pdTRUE)
     {
         // Initialize the SQLite database connection
-        if (db_open(db_path, &db_file))
+        if (obd_logger_db_open(db_path, &db_file))
         {
             ESP_LOGE(TAG, "Failed to open database");
             db_path[0] = '\0';
@@ -330,7 +397,7 @@ static esp_err_t init_db_tables(void)
         }
 
         // Execute the SQL statements
-        if(db_exec(db_file, sql_param_data))
+        if(obd_logger_db_exec(db_file, sql_param_data))
         {
             ESP_LOGE(TAG, "Failed to create param_data table");
             sqlite3_close(db_file);
@@ -340,7 +407,7 @@ static esp_err_t init_db_tables(void)
             return ESP_FAIL;
         }
 
-        if(db_exec(db_file, sql_param_info))
+        if(obd_logger_db_exec(db_file, sql_param_info))
         {
             ESP_LOGE(TAG, "Failed to create param_info table");
             sqlite3_close(db_file);
