@@ -1,6 +1,6 @@
 ## IDF Component Manager Manifest File
 dependencies:
-  joltwallet/littlefs: "~=1.19.1"
+  joltwallet/littlefs: "~=1.19.2"
   nopnop2002/sqlite3:
     path: components/esp32-idf-sqlite3/
     git: https://github.com/nopnop2002/esp32-idf-sqlite3.git
@@ -27,4 +27,4 @@ dependencies:
   #   # All dependencies of `main` are public by default.
   #   public: true
   eil/i2cdev: ^1.5.1
-  joltwallet/littlefs: ^1.19.1
+  joltwallet/littlefs: ^1.19.2
