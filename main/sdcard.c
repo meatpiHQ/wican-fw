@@ -16,7 +16,11 @@
 #define OTA_BUFFER_SIZE 4096  
 
 static const char *TAG = "sd_card";
+#ifdef USE_SD_FATFS
 static sdmmc_card_t *s_card = NULL;
+#else
+static sdmmc_card_t sdcard;
+#endif
 static bool s_card_mounted = false;
 
 static bool delete_config_file(const char* file_path) 
@@ -240,18 +244,13 @@ esp_err_t sd_card_init(void)
     }
 
     esp_err_t ret;
-    // Mount configuration
-    esp_vfs_fat_sdmmc_mount_config_t mount_config = 
-    {
-        .format_if_mount_failed = false,
-        .max_files = 5,
-        .allocation_unit_size = 16 * 1024
-    };
+
 
     ESP_LOGI(TAG, "Initializing SD card");
     
     // Initialize SDMMC peripheral
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
     // This initializes the slot without card detect (CD) and write protect (WP) signals
     sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
 
@@ -262,6 +261,16 @@ esp_err_t sd_card_init(void)
     slot_config.d1 = SDCARD_D1;
     slot_config.d2 = SDCARD_D2;
     slot_config.d3 = SDCARD_D3;
+
+    // Mount the filesystem
+    #ifdef USE_SD_FATFS
+    // Mount configuration
+    esp_vfs_fat_sdmmc_mount_config_t mount_config = 
+    {
+        .format_if_mount_failed = false,
+        .max_files = 5,
+        .allocation_unit_size = 16 * 1024
+    };
 
     // Mount the filesystem
     ret = esp_vfs_fat_sdmmc_mount(MOUNT_POINT, &host, &slot_config, &mount_config, &s_card);
@@ -278,12 +287,72 @@ esp_err_t sd_card_init(void)
         }
         return ret;
     }
+        // Print card info
+        sdmmc_card_print_info(stdout, s_card);
+        ESP_LOGI(TAG, "FAT filesystem mounted successfully");
+    #else
+        ESP_LOGI(TAG, "Initializing LittleFS filesystem");
+        
+        // Mount SD card
+        ret = sdmmc_host_init();
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to initialize host: %s", esp_err_to_name(ret));
+            return ret;
+        }
+        
+        ret = sdmmc_host_init_slot(SDMMC_HOST_SLOT_1, &slot_config);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to initialize slot: %s", esp_err_to_name(ret));
+            return ret;
+        }
+        
+        // Card detection
+        ret = sdmmc_card_init(&host, &sdcard);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to initialize SD card: %s", esp_err_to_name(ret));
+            return ret;
+        }
+        // Print card info
+        ESP_LOGI(TAG, "SD card detected: Size: %lluMB", ((uint64_t)sdcard.csd.capacity * sdcard.csd.sector_size) / (1024 * 1024));
+        
+        esp_vfs_littlefs_conf_t conf = {
+            .base_path = MOUNT_POINT,
+            .partition_label = NULL,  // Not using internal flash partition
+            .partition = NULL,        // Not using internal flash partition
+            .sdcard = &sdcard,           // Using SD card
+            .format_if_mount_failed = true,
+            .dont_mount = false,
+            .read_only = false,
+            .grow_on_mount = true,
+        };
+
+        // Use settings defined above to initialize and mount LittleFS filesystem.
+        ret = esp_vfs_littlefs_register(&conf);
+
+        if (ret != ESP_OK) {
+            if (ret == ESP_FAIL) {
+                ESP_LOGE(TAG, "Failed to mount or format filesystem");
+            } else if (ret == ESP_ERR_NOT_FOUND) {
+                ESP_LOGE(TAG, "Failed to find LittleFS on SD card");
+            } else {
+                ESP_LOGE(TAG, "Failed to initialize LittleFS on SD card (%s)", esp_err_to_name(ret));
+            }
+            return ret;
+        }
+
+        size_t total = 0, used = 0;
+        ret = esp_littlefs_sdmmc_info(&sdcard, &total, &used);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to get LittleFS SD card information (%s)", esp_err_to_name(ret));
+            esp_littlefs_format_sdmmc(&sdcard);
+        } else {
+            ESP_LOGI(TAG, "LittleFS SD card info: total: %u bytes, used: %u bytes", total, used);
+            ESP_LOGI(TAG, "SD card LittleFS partition size: total: %f MB, used: %f MB", (float)(total/(1024*1024)), (float)(used/(1024*1024)));
+        }
+    #endif
 
     s_card_mounted = true;
     ESP_LOGI(TAG, "SD card mounted successfully");
-    
-    // Print card info
-    sdmmc_card_print_info(stdout, s_card);
     
     return ESP_OK;
 }
@@ -297,28 +366,48 @@ esp_err_t sd_card_deinit(void)
     }
 
     // Unmount partition and disable SDMMC
+    #ifdef USE_SD_FATFS
     esp_err_t ret = esp_vfs_fat_sdcard_unmount(MOUNT_POINT, s_card);
     if (ret != ESP_OK) 
     {
         ESP_LOGE(TAG, "Failed to unmount SD card");
         return ret;
     }
-
-    s_card_mounted = false;
     s_card = NULL;
+    #else
+    esp_err_t ret = esp_vfs_littlefs_unregister(MOUNT_POINT);
+    if (ret != ESP_OK) 
+    {
+        ESP_LOGE(TAG, "Failed to unmount LittleFS filesystem (%s)", esp_err_to_name(ret));
+        return ret;
+    }
+    #endif
+    s_card_mounted = false;
+    
     ESP_LOGI(TAG, "SD card unmounted successfully");
     return ESP_OK;
 }
 
 bool sdcard_is_available(void) 
 {
+    #ifdef USE_SD_FATFS
     if (!s_card_mounted || s_card == NULL) 
     {
         return false;
     }
+    #else
+    if (!s_card_mounted) 
+    {
+        return false;
+    }
+    #endif
 
     // Just check if we can get the card status
+    #ifdef USE_SD_FATFS
     esp_err_t err = sdmmc_get_status(s_card);
+    #else
+    esp_err_t err = sdmmc_get_status(&sdcard);
+    #endif
     if (err != ESP_OK) 
     {
         ESP_LOGW(TAG, "Failed to get card status");
@@ -340,6 +429,7 @@ bool sdcard_is_mounted(void)
 
 esp_err_t sdcard_get_info(sdmmc_card_info_t *info) 
 {
+    #ifdef USE_SD_FATFS
     if (!s_card_mounted || !sdcard_is_available() || s_card == NULL) 
     {
         return ESP_ERR_INVALID_STATE;
@@ -362,6 +452,30 @@ esp_err_t sdcard_get_info(sdmmc_card_info_t *info)
     } else {
         info->type = (s_card->ocr & (1 << 30)) ? CARD_TYPE_SDHC : CARD_TYPE_SDSC;
     }
+    #else
+    if (!s_card_mounted || !sdcard_is_available()) 
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    info->capacity = (((uint64_t) sdcard.csd.capacity) * sdcard.csd.sector_size) / (1024 * 1024);
+    info->sector_size = sdcard.csd.sector_size;
+    info->speed = sdcard.max_freq_khz;
+    info->bus_width = sdcard.host.slot;
+    
+    // Add card name
+    strncpy(info->name, sdcard.cid.name, sizeof(info->name) - 1);
+    info->name[sizeof(info->name) - 1] = '\0';
+    
+    // Add card type
+    if (sdcard.is_sdio) {
+        info->type = CARD_TYPE_SDIO;
+    } else if (sdcard.is_mmc) {
+        info->type = CARD_TYPE_MMC;
+    } else {
+        info->type = (sdcard.ocr & (1 << 30)) ? CARD_TYPE_SDHC : CARD_TYPE_SDSC;
+    }
+    #endif
 
     return ESP_OK;
 }
