@@ -6,8 +6,26 @@
       "pid": "21083",
       "pid_init": "ATSH79B;ATFCSH79B;ATCRA7BB;",
       "parameters": {
-        "SOC": "[B11:B12]*0.063"
+        "SOC": "[B11:B12]/16"
       }
+    {
+      "pid": "220207",
+      "pid_init": "ATSH743;ATFCSH743;ATCRA763;",
+      "parameters": {
+        "Odometer": "[B4:B6]"
+      }
+     {
+      "pid": "223451",
+      "pid_init": "ATSH7E4;ATFCSH7E4;ATCRA7EC;",
+      "parameters": {
+        "RANGE": "[B4:B5]"
+      } 
+    {
+      "pid": "223008",
+      "pid_init": "ATSH792;ATFCSH792;ATCRA793;",
+      "parameters": {
+        "CHARGER_CONNECTED": "B4"
+      }      
     }
   ]
 }
