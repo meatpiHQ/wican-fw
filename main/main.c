@@ -970,10 +970,14 @@ void app_main(void)
 	// esp_log_level_set("rtcm", ESP_LOG_INFO);
 	// esp_log_level_set("console", ESP_LOG_INFO);
 	// esp_log_level_set("usb", ESP_LOG_INFO);
-	esp_log_level_set("read_ss_adc_voltage", ESP_LOG_NONE);	
+	// esp_log_level_set("read_ss_adc_voltage", ESP_LOG_NONE);	
 	// esp_log_level_set("HEAP", ESP_LOG_NONE);
 	// esp_log_level_set("autopid_find_standard_pid", ESP_LOG_INFO);
 	// esp_log_level_set("SLEEP_MODE", ESP_LOG_INFO);
+	// esp_log_level_set("OBD_LOGGER", ESP_LOG_INFO);
+	// esp_log_level_set("OBD_LOGGER_WS_IFACE", ESP_LOG_INFO);
+	// esp_log_level_set("CONFIG_SERVER", ESP_LOG_INFO);
+	// esp_log_level_set("EX_TIME", ESP_LOG_INFO);
 	
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
     gpio_set_level(PWR_LED_GPIO_NUM, 1);

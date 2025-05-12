@@ -1849,7 +1849,7 @@ static void autopid_init_obd_logger(void)
     
     static obd_logger_t obd_logger = {
         .path = "/sdcard",
-        .period_sec = 10,
+        .period_sec = 2,
         .db_filename = "obd_data.db",
         .obd_logger_get_params_cb = autopid_data_read
     };

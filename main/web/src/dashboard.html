@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WiCAN Dashboard</title>
+    <script src="/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .chart-container {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        select, button, input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .param-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .param-card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+        .param-value {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .param-name {
+            font-size: 14px;
+            color: #666;
+        }
+        .param-unit {
+            font-size: 12px;
+            color: #999;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: 1px solid #ddd;
+            background-color: #f1f1f1;
+        }
+        .tab.active {
+            background-color: white;
+            border-bottom: none;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        #queryConsole {
+            width: 100%;
+            height: 200px;
+            font-family: monospace;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        #queryResult {
+            width: 100%;
+            height: 300px;
+            font-family: monospace;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            overflow: auto;
+            white-space: pre;
+            background-color: #f8f8f8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>WiCAN Dashboard</h1>
+            <div id="connectionStatus" class="status disconnected">Disconnected</div>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" data-tab="realtime">Realtime</div>
+            <div class="tab" data-tab="history">History</div>
+            <div class="tab" data-tab="query">SQL Query</div>
+        </div>
+
+        <div id="realtime" class="tab-content active">
+            <div class="controls">
+                <select id="paramSelect">
+                    <option value="">Select Parameter</option>
+                </select>
+                <button id="addParam">Add Parameter</button>
+                <button id="clearParams">Clear All</button>
+            </div>
+            
+            <div class="param-grid" id="paramGrid"></div>
+            
+            <div class="chart-container">
+                <canvas id="realtimeChart"></canvas>
+            </div>
+        </div>
+
+        <div id="history" class="tab-content">
+            <div class="controls">
+                <select id="historyParamSelect">
+                    <option value="">Select Parameter</option>
+                </select>
+                <label for="startTime">Start:</label>
+                <input type="datetime-local" id="startTime">
+                <label for="endTime">End:</label>
+                <input type="datetime-local" id="endTime">
+                <button id="loadHistory">Load Data</button>
+            </div>
+            
+            <div class="chart-container">
+                <canvas id="historyChart"></canvas>
+            </div>
+        </div>
+
+        <div id="query" class="tab-content">
+            <textarea id="queryConsole" placeholder="Enter SQL query here..."></textarea>
+            <div class="controls">
+                <button id="executeQuery">Execute Query</button>
+            </div>
+            <pre id="queryResult"></pre>
+        </div>
+    </div>
+
+    <script src="dashboard.js"></script>
+</body>
+</html>

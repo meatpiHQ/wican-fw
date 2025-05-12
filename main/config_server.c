@@ -80,6 +80,7 @@
 #include "hw_config.h"
 #include "rtcm.h"
 #include "esp_littlefs.h"
+#include "obd_logger_ws_iface.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
@@ -90,7 +91,7 @@ static QueueHandle_t xip_Queue = NULL;
 static QueueHandle_t *xTX_Queue, *xRX_Queue;
 
 static uint8_t ws_led;
-#define TAG __func__
+#define TAG "CONFIG_SERVER"
 
 httpd_handle_t server = NULL;
 char *device_config_file = NULL;
@@ -101,6 +102,27 @@ extern const unsigned char homepage_start[] asm("_binary_homepage_html_start");
 extern const unsigned char homepage_end[]   asm("_binary_homepage_html_end");
 extern const unsigned char logo_start[] asm("_binary_logo_txt_start");
 extern const unsigned char logo_end[]   asm("_binary_logo_txt_end");
+extern const unsigned char dashboard_html_start[] asm("_binary_dashboard_html_start");
+extern const unsigned char dashboard_html_end[] asm("_binary_dashboard_html_end");
+extern const unsigned char dashboard_js_start[] asm("_binary_dashboard_js_start");
+extern const unsigned char dashboard_js_end[] asm("_binary_dashboard_js_end");
+extern const unsigned char chart_js_start[] asm("_binary_chart_js_start");
+extern const unsigned char chart_js_end[] asm("_binary_chart_js_end");
+
+typedef struct {
+    const char *uri;
+    const char *content_type;
+    const unsigned char *data_start;
+    const unsigned char *data_end;
+} file_lookup_t;
+
+static const file_lookup_t file_lookup[] = {
+    {"/dashboard.html", "text/html", dashboard_html_start, dashboard_html_end},
+    {"/dashboard.js", "application/javascript", dashboard_js_start, dashboard_js_end},
+	{"/chart.js", "application/javascript", chart_js_start, chart_js_end},
+    // Add more files as needed
+    {NULL, NULL, NULL, NULL} // Sentinel to mark end of array
+};
 
 static char can_datarate_str[11][7] = {
 								"5k",
@@ -142,7 +164,7 @@ void config_server_reboot(void)
 /* Max length a file path can have on storage */
 #define FILE_PATH_MAX (ESP_VFS_PATH_MAX + CONFIG_SPIFFS_OBJ_NAME_LEN)
 /* Scratch buffer size */
-#define SCRATCH_BUFSIZE  4096
+#define SCRATCH_BUFSIZE  (1024*100)
 
 #define MAX_FILE_SIZE   (2000*1024) // 200 KB
 #define MAX_FILE_SIZE_STR "200KB"
@@ -152,7 +174,7 @@ struct file_server_data {
     char base_path[ESP_VFS_PATH_MAX + 1];
 
     /* Scratch buffer for temporary storage during file transfer */
-    char scratch[SCRATCH_BUFSIZE];
+    char *scratch;
 };
 
 
@@ -350,6 +372,30 @@ int32_t config_server_get_port(void)
 		return port_val;
 	}
 	return -1;
+}
+
+static esp_err_t file_handler(httpd_req_t *req)
+{
+    char *uri = req->uri;
+    ESP_LOGI(TAG, "Request URI: %s", uri);
+    
+    // Look for the requested URI in our lookup table
+    const file_lookup_t *file = file_lookup;
+    while (file->uri != NULL) {
+        if (strcmp(uri, file->uri) == 0) {
+            // Found a match, serve this file
+            httpd_resp_set_type(req, file->content_type);
+            const size_t file_size = file->data_end - file->data_start;
+            esp_err_t ret = httpd_resp_send(req, (const char*)file->data_start, file_size);
+            return (ret == ESP_OK) ? ESP_OK : ESP_FAIL;
+        }
+        file++;
+    }
+    
+    // If we get here, the requested URI wasn't found in our lookup table
+    // Return 404 Not Found
+    httpd_resp_send_404(req);
+    return ESP_OK;
 }
 
 static esp_err_t index_handler(httpd_req_t *req)
@@ -1678,7 +1724,12 @@ static const httpd_uri_t scan_available_pids_uri = {
     .handler   = scan_available_pids_handler,
     .user_ctx  = NULL
 };
-
+static const httpd_uri_t file_uri = {
+    .uri       = "/*",
+    .method    = HTTP_GET,
+    .handler   = file_handler,
+    .user_ctx  = &server_data 
+};
 static void config_server_load_cfg(char *cfg)
 {
 	cJSON * root, *key = 0;
@@ -2319,9 +2370,10 @@ static httpd_handle_t config_server_init(void)
 //            sizeof(server_data->base_path));
 
     config.lru_purge_enable = true;
-
+	config.uri_match_fn = httpd_uri_match_wildcard;
     if(xServerEventGroup == NULL)
     {
+		server_data.scratch = malloc(SCRATCH_BUFSIZE);
     	xServerEventGroup = xEventGroupCreate();
     	config_server_wifi_connected(0);
     }
@@ -2462,7 +2514,7 @@ static httpd_handle_t config_server_init(void)
                        );
 
     // Start the httpd server
-	config.max_uri_handlers = 19;
+	config.max_uri_handlers = 21;
 	config.stack_size = (10*1024);
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK)
@@ -2488,6 +2540,8 @@ static httpd_handle_t config_server_init(void)
 		httpd_register_uri_handler(server, &store_car_data_uri);
 		httpd_register_uri_handler(server, &system_commands);
 		httpd_register_uri_handler(server, &scan_available_pids_uri);
+		httpd_register_uri_handler(server, &obd_logger_ws);
+		httpd_register_uri_handler(server, &file_uri);
         #if CONFIG_EXAMPLE_BASIC_AUTH
         httpd_register_basic_auth(server);
         #endif

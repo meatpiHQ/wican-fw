@@ -427,12 +427,19 @@
         <button class="tablinks" onclick="openTab(event, 'monitor')"><b>Monitor</b></button>
         <button class="tablinks" onclick="openTab(event, 'power_saving_tab')"><b>Power Saving</b></button>
         <button class="tablinks" onclick="openTab(event, 'logger')"><b>Logger Settings</b></button>
+        <button class="tablinks" onclick="openTab(event, 'dashboard_tab')"><b>Dashboard</b></button>
         <button class="tablinks" onclick="openTab(event, 'system_tab')"><b>System</b></button>
         <button class="tablinks" onclick="openTab(event, 'about_tab')"><b>About</b></button>
     </div>
 
     <div class="content">
         <div id="notification" class="notification-container"></div>
+        <div id="dashboard_tab" class="tabcontent">
+            <div class="section-title">Dashboard</div>
+            <div id="dashboard-content">
+                <p>Loading dashboard content...</p>
+            </div>
+        </div>
         <div id="status_view" class="tabcontent">
             <div class="section-title">Status</div>
             <table class="form-table">
@@ -1208,6 +1215,38 @@
 			toggleDestinationAndCycle();
 			toggleSendToFields();
             toggleStandardPIDOptions();
+        }
+
+        function loadDashboard() {
+            const dashboardContent = document.getElementById('dashboard-content');
+            
+            // Show loading state
+            dashboardContent.innerHTML = '<p>Loading dashboard content...</p>';
+            
+            // Fetch the dashboard HTML content
+            fetch('/dashboard.html')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to load dashboard content');
+                    }
+                    return response.text();
+                })
+                .then(html => {
+                    // Insert the HTML content
+                    dashboardContent.innerHTML = html;
+                    
+                    // Load the dashboard JavaScript
+                    const script = document.createElement('script');
+                    script.src = '/dashboard.js';
+                    script.onerror = () => {
+                        showNotification('Failed to load dashboard JavaScript', 'red');
+                    };
+                    document.body.appendChild(script);
+                })
+                .catch(error => {
+                    dashboardContent.innerHTML = `<p>Error loading dashboard: ${error.message}</p>`;
+                    showNotification('Failed to load dashboard content', 'red');
+                });
         }
 
         function setRTCTime() {
@@ -2198,19 +2237,24 @@ function loadAutoTable(jsonData) {
 		document.getElementById("cycle").value = "";
 	}
 
-	function openTab(evt, tabName) {
-		var i, tabcontent, tablinks;
-		tabcontent = document.getElementsByClassName("tabcontent");
-		for(i = 0; i < tabcontent.length; i++) {
-			tabcontent[i].style.display = "none";
-		}
-		tablinks = document.getElementsByClassName("tablinks");
-		for(i = 0; i < tablinks.length; i++) {
-			tablinks[i].className = tablinks[i].className.replace(" active", "");
-		}
-		document.getElementById(tabName).style.display = "block";
-		evt.currentTarget.className += " active";
-	}
+    function openTab(evt, tabName) {
+        var i, tabcontent, tablinks;
+        tabcontent = document.getElementsByClassName("tabcontent");
+        for(i = 0; i < tabcontent.length; i++) {
+            tabcontent[i].style.display = "none";
+        }
+        tablinks = document.getElementsByClassName("tablinks");
+        for(i = 0; i < tablinks.length; i++) {
+            tablinks[i].className = tablinks[i].className.replace(" active", "");
+        }
+        document.getElementById(tabName).style.display = "block";
+        evt.currentTarget.className += " active";
+        
+        // Load dashboard content when dashboard tab is opened
+        if (tabName === 'dashboard_tab') {
+            loadDashboard();
+        }
+    }
 
 	function sta_enable() {}
 

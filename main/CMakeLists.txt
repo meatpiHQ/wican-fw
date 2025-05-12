@@ -74,7 +74,10 @@ idf_component_register(
         REQUIRES "${requires}"
         PRIV_REQUIRES       spi_flash # Private requirements
         EMBED_FILES 
-        "homepage.html"
+        "web/src/homepage.html"
+        "web/src/dashboard.html"
+        "web/src/dashboard.js"
+        "web/src/chart.js"
         "obd_fw/V2.3.18.txt"
         "logo.txt"
 )

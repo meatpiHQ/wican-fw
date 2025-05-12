@@ -29,17 +29,13 @@ typedef struct{
     uint32_t obd_logger_params_count;
 }obd_logger_t;
 
-// Initialize OBD logger with a database path
+typedef int (*obd_logger_db_exec_cb)(void *data, int argc, char **argv, char **azColName);
+
 esp_err_t odb_logger_init(obd_logger_t *obd_logger);
-
-// Initialize parameters in the OBD logger database
 esp_err_t obd_logger_init_params(const obd_param_entry_t *param_entries, size_t count);
-
-// Store a single parameter value
-esp_err_t obd_logger_store_param(const char *param_name, float value);
-
-// Store multiple parameter values at once
 esp_err_t obd_logger_store_params(const param_value_t *params, size_t count);
-
+esp_err_t obd_logger_lock(uint32_t wait_ms);
+void obd_logger_unlock(void);
+int obd_logger_db_execute(char *sql, obd_logger_db_exec_cb callback, void *callback_arg);
 
 #endif // OBD_LOGGER_H

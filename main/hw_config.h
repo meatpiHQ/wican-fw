@@ -27,7 +27,7 @@
 #else
 #define FS_MOUNT_POINT              "/littlefs"
 #endif
-// #define USE_SD_FATFS    
+#define USE_SD_FATFS    
 #define TX_GPIO_NUM             	2
 #define RX_GPIO_NUM             	1
 #define CAN_STDBY_GPIO_NUM			38

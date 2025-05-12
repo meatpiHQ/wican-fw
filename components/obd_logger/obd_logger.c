@@ -1,3 +1,23 @@
+/*
+ * This file is part of the WiCAN project.
+ *
+ * Copyright (C) 2022  Meatpi Electronics.
+ * Written by Ali Slim <ali@meatpi.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include <stdio.h>
 #include <sys/unistd.h>
 #include "freertos/FreeRTOS.h"
@@ -14,6 +34,7 @@
 #include "rtcm.h"
 #include "obd_logger.h"
 #include "cJSON.h"
+#include "obd_logger_ws_iface.h"
 
 #define TAG                                 "OBD_LOGGER"
 #define OBD_LOGGERR_TASK_STACK_SIZE         (1024*8)
@@ -86,7 +107,7 @@ static int obd_logger_ex_cb(void *data, int argc, char **argv, char **azColName)
  * @param db Pointer to SQLite database handle
  * @return int SQLITE_OK on success, error code on failure
  */
-int obd_logger_db_open(const char *filename, sqlite3 **db) {
+static int obd_logger_db_open(const char *filename, sqlite3 **db) {
     int rc = sqlite3_open(filename, db);
     if (rc) {
         ESP_LOGE(TAG, "Can't open database: %s", sqlite3_errmsg(*db));
@@ -104,7 +125,7 @@ int obd_logger_db_open(const char *filename, sqlite3 **db) {
  * @param sql SQL statement to execute
  * @return int SQLITE_OK on success, error code on failure
  */
-int obd_logger_db_exec(sqlite3 *db, const char *sql) {
+static int obd_logger_db_exec(sqlite3 *db, const char *sql) {
     char *zErrMsg = 0;
     ESP_LOGD(TAG, "Executing SQL: %s", sql);
     
@@ -115,15 +136,74 @@ int obd_logger_db_exec(sqlite3 *db, const char *sql) {
         ESP_LOGE(TAG, "SQL error: %s", zErrMsg);
         sqlite3_free(zErrMsg);
     } else {
-        ESP_LOGI(TAG, "SQL operation completed successfully");
+        ESP_LOGD(TAG, "SQL operation completed successfully");
     }
     
-    ESP_LOGI(TAG, "SQL execution time: %lld ms", (esp_timer_get_time() - start) / 1000);
+    ESP_LOGD(TAG, "SQL execution time: %lld ms", (esp_timer_get_time() - start) / 1000);
     return rc;
 }
 
+/**
+ * @brief Acquire a lock on the database mutex
+ * 
+ * Attempts to take the database mutex with a specified wait time. 
+ * If the mutex is not initialized, logs an error message.
+ * 
+ * @param wait_ms Wait time in milliseconds
+ * @return esp_err_t ESP_OK on success, ESP_FAIL on failure
+ */
+esp_err_t obd_logger_lock(uint32_t wait_ms) {
+    if (db_mutex != NULL) {
+        if (xSemaphoreTake(db_mutex, pdMS_TO_TICKS(wait_ms)) != pdTRUE) {
+            ESP_LOGE(TAG, "Failed to take mutex");
+            return ESP_FAIL;
+        }
+        return ESP_OK;
+    } else {
+        ESP_LOGE(TAG, "Mutex not initialized");
+        return ESP_FAIL;
+    }
+}
+/**
+ * @brief Release the database mutex
+ * 
+ * Attempts to release the database mutex. If the mutex is not initialized,
+ * logs an error message.
+ */
+void obd_logger_unlock(void) {
+    if (db_mutex != NULL) {
+        xSemaphoreGive(db_mutex);
+    } else {
+        ESP_LOGE(TAG, "Mutex not initialized");
+    }
+}
 
-esp_err_t obd_logger_store_param(const char *param_name, float value)
+/**
+ * @brief Execute a SQL statement on the database
+ * 
+ * @param sql SQL statement to execute
+ * @param callback Optional callback function to process query results
+ * @return int SQLITE_OK on success, error code on failure
+ */
+int obd_logger_db_execute(char *sql, sqlite3_callback callback, void *callback_arg) {
+    char *zErrMsg = 0;
+    int rc = sqlite3_exec(db_file, sql, callback, callback_arg, &zErrMsg);
+    
+    if (rc != SQLITE_OK) {
+        ESP_LOGE(TAG, "SQL error: %s", zErrMsg);
+        sqlite3_free(zErrMsg);
+    }
+    
+    return rc;
+}
+
+/**
+ * @brief Get the total number of entries in the database
+ * 
+ * @param count Pointer to store the count value
+ * @return esp_err_t ESP_OK on success, ESP_FAIL on failure
+ */
+esp_err_t obd_logger_get_total_entries(uint32_t *count)
 {
     if (db_file == NULL) 
     {
@@ -131,76 +211,49 @@ esp_err_t obd_logger_store_param(const char *param_name, float value)
         return ESP_FAIL;
     }
     
+    if (count == NULL)
+    {
+        ESP_LOGE(TAG, "Invalid pointer provided");
+        return ESP_FAIL;
+    }
+    
+    // Initialize count to 0
+    *count = 0;
+    
     if (xSemaphoreTake(db_mutex, portMAX_DELAY) != pdTRUE) 
     {
         ESP_LOGE(TAG, "Failed to take mutex");
         return ESP_FAIL;
     }
     
-    // Find the parameter ID from the lookup table
-    int param_id = -1;
-    for (int i = 0; i < param_count; i++) 
+    // Prepare the query to count total entries
+    const char *query = "SELECT COUNT(*) FROM param_data;";
+    
+    sqlite3_stmt *stmt;
+    int rc = sqlite3_prepare_v2(db_file, query, -1, &stmt, NULL);
+    
+    if (rc != SQLITE_OK)
     {
-        if (strcmp(param_lookup[i].name, param_name) == 0) 
-        {
-            param_id = param_lookup[i].id;
-            break;
-        }
+        ESP_LOGE(TAG, "Failed to prepare statement: %s", sqlite3_errmsg(db_file));
+        xSemaphoreGive(db_mutex);
+        return ESP_FAIL;
     }
     
-    if (param_id == -1) 
+    // Execute the query
+    if (sqlite3_step(stmt) == SQLITE_ROW)
     {
-        ESP_LOGE(TAG, "Parameter '%s' not found in lookup table", param_name);
-        xSemaphoreGive(db_mutex);
-        return ESP_FAIL;
+        // Get the count value
+        *count = sqlite3_column_int(stmt, 0);
+        ESP_LOGI(TAG, "Total entries in database: %lu", *count);
     }
-    
-    // Get current timestamp from RTCM module
-    uint8_t hour, min, sec;
-    uint8_t year, month, day, weekday;
-    
-    esp_err_t ret = rtcm_get_time(&hour, &min, &sec);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to get time from RTCM");
-        xSemaphoreGive(db_mutex);
-        return ESP_FAIL;
-    }
-    
-    ret = rtcm_get_date(&year, &month, &day, &weekday);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to get date from RTCM");
-        xSemaphoreGive(db_mutex);
-        return ESP_FAIL;
-    }
-    
-    // Convert BCD format to decimal
-    uint8_t hour_dec = ((hour >> 4) & 0x0F) * 10 + (hour & 0x0F);
-    uint8_t min_dec = ((min >> 4) & 0x0F) * 10 + (min & 0x0F);
-    uint8_t sec_dec = ((sec >> 4) & 0x0F) * 10 + (sec & 0x0F);
-    uint8_t year_dec = ((year >> 4) & 0x0F) * 10 + (year & 0x0F);
-    uint8_t month_dec = ((month >> 4) & 0x0F) * 10 + (month & 0x0F);
-    uint8_t day_dec = ((day >> 4) & 0x0F) * 10 + (day & 0x0F);
-    
-    char timestamp[32];
-    // Format: YYYY-MM-DD HH:MM:SS (assumed year is 20XX based on RTC module)
-    snprintf(timestamp, sizeof(timestamp), "20%02d-%02d-%02d %02d:%02d:%02d", 
-             year_dec, month_dec, day_dec, hour_dec, min_dec, sec_dec);
-    
-    // Prepare SQL statement to insert the data
-    char query[256];
-    snprintf(query, sizeof(query), 
-             "INSERT INTO param_data (DateTime, param_id, value) VALUES ('%s', %d, %f);", 
-             timestamp, param_id, value);
-    
-    if (obd_logger_db_exec(db_file, query) != SQLITE_OK) 
+    else
     {
-        ESP_LOGE(TAG, "Failed to insert parameter data: %s", sqlite3_errmsg(db_file));
-        xSemaphoreGive(db_mutex);
-        return ESP_FAIL;
+        ESP_LOGW(TAG, "Failed to get count from database");
     }
     
-    ESP_LOGI(TAG, "Stored parameter: %s = %f at %s", param_name, value, timestamp);
+    sqlite3_finalize(stmt);
     xSemaphoreGive(db_mutex);
+    
     return ESP_OK;
 }
 
@@ -280,9 +333,11 @@ esp_err_t obd_logger_init_params(const obd_param_entry_t *param_entries, size_t 
  */
 esp_err_t obd_logger_store_params(const param_value_t *params, size_t count)
 {
-    if (db_file == NULL) 
+    ESP_LOGI(TAG, "obd_logger_store_params called with %d parameters", count);
+    
+    if (db_file == NULL || count == 0) 
     {
-        ESP_LOGE(TAG, "Database not initialized");
+        ESP_LOGE(TAG, "Database not initialized or no parameters");
         return ESP_FAIL;
     }
     
@@ -319,68 +374,115 @@ esp_err_t obd_logger_store_params(const param_value_t *params, size_t count)
     uint8_t day_dec = ((day >> 4) & 0x0F) * 10 + (day & 0x0F);
     
     char timestamp[32];
-    // Format: YYYY-MM-DD HH:MM:SS (assumed year is 20XX based on RTC module)
     snprintf(timestamp, sizeof(timestamp), "20%02d-%02d-%02d %02d:%02d:%02d", 
              year_dec, month_dec, day_dec, hour_dec, min_dec, sec_dec);
     
+    int64_t start_time = esp_timer_get_time();
+    int total_stored = 0;
+    int rc;
+    
+    // Temporarily optimize SQLite for maximum performance during bulk insert
+    sqlite3_exec(db_file, "PRAGMA synchronous = OFF;", NULL, NULL, NULL);
+    sqlite3_exec(db_file, "PRAGMA journal_mode = MEMORY;", NULL, NULL, NULL);
+    
     // Begin transaction
-    if (obd_logger_db_exec(db_file, "BEGIN TRANSACTION;") != SQLITE_OK) {
+    rc = sqlite3_exec(db_file, "BEGIN TRANSACTION;", NULL, NULL, NULL);
+    if (rc != SQLITE_OK) {
         ESP_LOGE(TAG, "Failed to begin transaction: %s", sqlite3_errmsg(db_file));
+        sqlite3_exec(db_file, "PRAGMA synchronous = NORMAL;", NULL, NULL, NULL);
+        sqlite3_exec(db_file, "PRAGMA journal_mode = WAL;", NULL, NULL, NULL);
         xSemaphoreGive(db_mutex);
         return ESP_FAIL;
     }
     
-    bool success = true;
-    char query[256];
+    // Prepare statement
+    sqlite3_stmt *stmt;
+    const char *sql = "INSERT INTO param_data (DateTime, param_id, value) VALUES (?, ?, ?);";
+    rc = sqlite3_prepare_v2(db_file, sql, -1, &stmt, NULL);
     
-    // Process each parameter
+    if (rc != SQLITE_OK) {
+        ESP_LOGE(TAG, "Failed to prepare statement: %s", sqlite3_errmsg(db_file));
+        sqlite3_exec(db_file, "ROLLBACK;", NULL, NULL, NULL);
+        sqlite3_exec(db_file, "PRAGMA synchronous = NORMAL;", NULL, NULL, NULL);
+        sqlite3_exec(db_file, "PRAGMA journal_mode = WAL;", NULL, NULL, NULL);
+        xSemaphoreGive(db_mutex);
+        return ESP_FAIL;
+    }
+    
+    // Pre-bind the timestamp (same for all rows)
+    sqlite3_bind_text(stmt, 1, timestamp, -1, SQLITE_STATIC);
+    
+    // Prepare for faster parameter lookup
+    // We'll build a simple lookup array
+    int *param_id_cache = malloc(count * sizeof(int));
+    if (!param_id_cache) {
+        sqlite3_finalize(stmt);
+        sqlite3_exec(db_file, "ROLLBACK;", NULL, NULL, NULL);
+        sqlite3_exec(db_file, "PRAGMA synchronous = NORMAL;", NULL, NULL, NULL);
+        sqlite3_exec(db_file, "PRAGMA journal_mode = WAL;", NULL, NULL, NULL);
+        xSemaphoreGive(db_mutex);
+        return ESP_FAIL;
+    }
+    
+    // Pre-lookup all parameter IDs to avoid repeated string comparisons
     for (size_t i = 0; i < count; i++) {
-        // Find the parameter ID from the lookup table
-        int param_id = -1;
+        param_id_cache[i] = -1;
         for (int j = 0; j < param_count; j++) {
             if (strcmp(param_lookup[j].name, params[i].name) == 0) {
-                param_id = param_lookup[j].id;
+                param_id_cache[i] = param_lookup[j].id;
                 break;
             }
         }
         
-        if (param_id == -1) {
-            ESP_LOGW(TAG, "Parameter '%s' not found in lookup table, skipping", params[i].name);
-            continue;
+        if (param_id_cache[i] == -1) {
+            ESP_LOGW(TAG, "Parameter '%s' not found in lookup table", params[i].name);
         }
-        
-        // Prepare SQL statement to insert the data
-        snprintf(query, sizeof(query), 
-                 "INSERT INTO param_data (DateTime, param_id, value) VALUES ('%s', %d, %f);", 
-                 timestamp, param_id, params[i].value);
-        
-        if (obd_logger_db_exec(db_file, query) != SQLITE_OK) {
-            ESP_LOGE(TAG, "Failed to insert parameter data for '%s': %s", 
-                     params[i].name, sqlite3_errmsg(db_file));
-            success = false;
-            break;
-        }
-        
-        ESP_LOGI(TAG, "Stored parameter: %s = %f", params[i].name, params[i].value);
     }
     
-    // Commit or rollback transaction based on success
-    if (success) {
-        if (obd_logger_db_exec(db_file, "COMMIT;") != SQLITE_OK) {
-            ESP_LOGE(TAG, "Failed to commit transaction: %s", sqlite3_errmsg(db_file));
-            obd_logger_db_exec(db_file, "ROLLBACK;");
-            success = false;
+    // Insert all parameters
+    for (size_t i = 0; i < count; i++) {
+        if (param_id_cache[i] == -1) {
+            continue;  // Skip parameters not found in lookup table
         }
-        else {
-            ESP_LOGI(TAG, "Successfully stored %d parameters at %s", count, timestamp);
+        
+        // Bind parameter ID and value (timestamp is already bound)
+        sqlite3_bind_int(stmt, 2, param_id_cache[i]);
+        sqlite3_bind_double(stmt, 3, params[i].value);
+        
+        // Execute statement
+        rc = sqlite3_step(stmt);
+        if (rc != SQLITE_DONE) {
+            ESP_LOGW(TAG, "Failed to insert parameter '%s': %s", 
+                     params[i].name, sqlite3_errmsg(db_file));
+        } else {
+            total_stored++;
         }
-    } else {
-        obd_logger_db_exec(db_file, "ROLLBACK;");
-        ESP_LOGE(TAG, "Rolling back transaction due to errors");
+        
+        // Reset statement for next parameter (but keep timestamp binding)
+        sqlite3_reset(stmt);
     }
+    
+    // Clean up
+    sqlite3_finalize(stmt);
+    free(param_id_cache);
+    
+    // Commit transaction
+    rc = sqlite3_exec(db_file, "COMMIT;", NULL, NULL, NULL);
+    if (rc != SQLITE_OK) {
+        ESP_LOGE(TAG, "Failed to commit transaction: %s", sqlite3_errmsg(db_file));
+        sqlite3_exec(db_file, "ROLLBACK;", NULL, NULL, NULL);
+    }
+    
+    // Restore normal SQLite settings
+    sqlite3_exec(db_file, "PRAGMA synchronous = NORMAL;", NULL, NULL, NULL);
+    sqlite3_exec(db_file, "PRAGMA journal_mode = WAL;", NULL, NULL, NULL);
+    
+    int64_t end_time = esp_timer_get_time();
+    ESP_LOGI(TAG, "Successfully stored %d parameters in database. Storage time: %lld ms", 
+             total_stored, (end_time - start_time) / 1000);
     
     xSemaphoreGive(db_mutex);
-    return success ? ESP_OK : ESP_FAIL;
+    return ESP_OK;
 }
 
 static esp_err_t init_db_tables(void)
@@ -416,6 +518,15 @@ static esp_err_t init_db_tables(void)
             xSemaphoreGive(db_mutex);
             return ESP_FAIL;
         }
+        
+        // Set performance-optimized journal mode
+        obd_logger_db_exec(db_file, "PRAGMA journal_mode = WAL;");
+        
+        // Reduce sync overhead (with some durability trade-offs)
+        obd_logger_db_exec(db_file, "PRAGMA synchronous = NORMAL;");
+        
+        // Increase cache size to reduce disk I/O
+        obd_logger_db_exec(db_file, "PRAGMA cache_size = 20000;");
         
         ESP_LOGI(TAG, "Database tables initialized");
         xSemaphoreGive(db_mutex);
@@ -612,26 +723,6 @@ esp_err_t obd_logger_get_latest_time(char *datetime, size_t max_len)
 
 static void obd_logger_task(void *pvParameters)
 {
-    // Initialize the SQLite database connection
-    
-
-
-    // static const obd_param_entry_t default_params[] = {
-    //     {"RPM", "NUMERIC", "{\"unit\":\"rpm\"}"},
-    //     {"SPEED", "NUMERIC", "{\"unit\":\"km/h\"}"},
-    //     {"ENGINE_TEMP", "NUMERIC", "{\"unit\":\"°C\"}"},
-    //     {"THROTTLE", "NUMERIC", "{\"unit\":\"%\"}"},
-    //     {"FUEL_LEVEL", "NUMERIC", "{\"unit\":\"%\"}"}
-    // };
-    
-    // if(obd_logger_init_params(default_params, sizeof(default_params)/sizeof(default_params[0])) == ESP_FAIL)
-    // {
-    //     ESP_LOGE(TAG, "Failed to initialize parameter lookup table");
-    //     vTaskDelete(NULL);
-    // }
-
-    ESP_LOGI(TAG, "Testing time retrieval...");
-    
     char db_time[32] = {0};
     char current_time[32] = {0};
     
@@ -644,37 +735,75 @@ static void obd_logger_task(void *pvParameters)
         ESP_LOGW(TAG, "No data in database or error retrieving latest time");
     }
 
-    // obd_logger_test_store_params();
-    // example_query_usage();
+    uint32_t entry_count = 0;
+    if (obd_logger_get_total_entries(&entry_count) == ESP_OK) {
+        ESP_LOGI(TAG, "Current database size: %lu entries", entry_count);
+    }
     
     while (1)
     {
-
         // Get parameters from callback function
         if (obd_logger_get_params != NULL) {
             char* params_json = obd_logger_get_params();
+            int64_t start_time = esp_timer_get_time();
             if (params_json != NULL) {
                 ESP_LOGI(TAG, "Received parameters from callback: %s", params_json);
                 
                 // Parse the parameters from JSON and store them
                 cJSON *root = cJSON_Parse(params_json);
                 if (root != NULL) {
-                    param_value_t param_values[obd_logger_params_count];
-                    int valid_params = 0;
+                    // Allocate arrays with proper string storage
+                    param_value_t *param_values = malloc(sizeof(param_value_t) * obd_logger_params_count);
+                    char (*param_names)[50] = malloc(sizeof(char[50]) * obd_logger_params_count);
                     
-                    // Iterate through all keys in the JSON object
-                    cJSON *element = NULL;
-                    cJSON_ArrayForEach(element, root) {
-                        // element->string contains the key (param name)
-                        // element->valuedouble contains the value (for numeric values)
-                        if (cJSON_IsNumber(element) && valid_params < obd_logger_params_count) {
-                            param_values[valid_params].name = element->string;
-                            param_values[valid_params].value = (float)element->valuedouble;
-                            valid_params++;
-                        }
+                    if (param_values == NULL || param_names == NULL) {
+                        ESP_LOGE(TAG, "Failed to allocate memory for parameters");
+                        free(param_values);
+                        free(param_names);
+                        cJSON_Delete(root);
+                        free(params_json);
+                        continue;
                     }
                     
+                    int valid_params = 0;
+                    
+                    // Iterate through all JSON object members
+                    cJSON *element = root->child;
+                    while (element != NULL && valid_params < obd_logger_params_count) {
+                        if (element->string != NULL) {
+                            ESP_LOGD(TAG, "Processing JSON element: %s, type: %d", 
+                                    element->string, element->type);
+                            
+                            if (cJSON_IsNumber(element)) {
+                                // Copy the parameter name to avoid issues with pointers
+                                strncpy(param_names[valid_params], element->string, 49);
+                                param_names[valid_params][49] = '\0';
+                                
+                                param_values[valid_params].name = param_names[valid_params];
+                                param_values[valid_params].value = (float)element->valuedouble;
+                                
+                                ESP_LOGD(TAG, "Parsed parameter %d: %s = %f", 
+                                         valid_params,
+                                         param_values[valid_params].name, 
+                                         param_values[valid_params].value);
+                                
+                                valid_params++;
+                            }
+                        }
+                        element = element->next;
+                    }
+                    
+                    ESP_LOGI(TAG, "Total valid parameters parsed: %d", valid_params);
+                    
                     if (valid_params > 0) {
+                        ESP_LOGI(TAG, "Storing %d parameters in database", valid_params);
+                        
+                        // Debug: Print all parameters before storing
+                        for (int i = 0; i < valid_params; i++) {
+                            ESP_LOGD(TAG, "Parameter %d: %s = %f", 
+                                     i, param_values[i].name, param_values[i].value);
+                        }
+                        
                         esp_err_t result = obd_logger_store_params(param_values, valid_params);
                         if (result != ESP_OK) {
                             ESP_LOGE(TAG, "Failed to store parameters in database");
@@ -683,6 +812,8 @@ static void obd_logger_task(void *pvParameters)
                         ESP_LOGW(TAG, "No valid parameters found in JSON");
                     }
                     
+                    free(param_values);
+                    free(param_names);
                     cJSON_Delete(root);
                 } else {
                     ESP_LOGE(TAG, "Failed to parse parameters JSON");
@@ -690,12 +821,14 @@ static void obd_logger_task(void *pvParameters)
                 
                 free(params_json);
             }
+            
+            int64_t end_time = esp_timer_get_time();
+            ESP_LOGI("EX_TIME", "Parameters processing and storage time: %lld ms", (end_time - start_time) / 1000);
         } else {
             ESP_LOGW(TAG, "Parameter callback function is not set");
         }
         
         // Wait for the configured period before getting parameters again
-        // Use the logger_period value that was set during initialization
         uint32_t delay_period = (logger_period > 0) ? (logger_period * 1000) : 10000;
         vTaskDelay(pdMS_TO_TICKS(delay_period));
     }
@@ -758,5 +891,7 @@ esp_err_t odb_logger_init(obd_logger_t *obd_logger)
     }
     ESP_LOGI(TAG, "OBD logger task created successfully");
     ESP_LOGI(TAG, "OBD logger initialized successfully");
+
+    obd_logger_ws_iface_init();
     return ESP_OK;
 }
