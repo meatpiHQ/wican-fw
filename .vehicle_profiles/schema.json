@@ -35,6 +35,8 @@
                 "CHARGING",
                 "CHARGING_DC",
                 "COOLANT_TMP",
+                "ENGINE_OIL_PRES",
+                "ENGINE_OIL_TEMP",
                 "ENGINE_RPM",
                 "FUEL",
                 "FUEL_PRESSURE",

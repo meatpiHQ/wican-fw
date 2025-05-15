@@ -67,6 +67,20 @@
       "class": "temperature"
     }
   },
+  "ENGINE_OIL_PRES": {
+    "description": "Engine Oil Pressure",
+    "settings": {
+      "unit": "KPa",
+      "class": "pressure"
+    }
+  },
+  "ENGINE_OIL_TEMP": {
+    "description": "Engine Oil Temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature"
+    }
+  },
   "ENGINE_RPM": {
     "description": "Engine RPM",
     "settings": {
