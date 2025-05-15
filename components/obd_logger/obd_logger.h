@@ -3,6 +3,8 @@
 
 #include "esp_err.h"
 
+#define DB_FILE_NAME "obd_data.db"
+
 // Parameter entry structure
 typedef struct {
     const char *name;     // Parameter name
@@ -36,6 +38,8 @@ esp_err_t obd_logger_init_params(const obd_param_entry_t *param_entries, size_t 
 esp_err_t obd_logger_store_params(const param_value_t *params, size_t count);
 esp_err_t obd_logger_lock(uint32_t wait_ms);
 void obd_logger_unlock(void);
+void obd_logger_lock_close(void);
+void obd_logger_unlock_open(void);
 int obd_logger_db_execute(char *sql, obd_logger_db_exec_cb callback, void *callback_arg);
 
 #endif // OBD_LOGGER_H

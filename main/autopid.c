@@ -42,8 +42,8 @@
 #include "obd_logger.h"
 #include "hw_config.h"
 
-#define TAG __func__
-// #define TAG "AUTO_PID"
+// #define TAG __func__
+#define TAG "AUTO_PID"
 
 #define TEMP_BUFFER_LENGTH  32
 #define ECU_CONNECTED_BIT			BIT0
@@ -1849,8 +1849,8 @@ static void autopid_init_obd_logger(void)
     
     static obd_logger_t obd_logger = {
         .path = "/sdcard",
-        .period_sec = 2,
-        .db_filename = "obd_data.db",
+        .period_sec = 10,
+        .db_filename = DB_FILE_NAME,
         .obd_logger_get_params_cb = autopid_data_read
     };
     

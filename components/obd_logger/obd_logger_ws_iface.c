@@ -26,7 +26,24 @@
  #include "freertos/queue.h"
  #include "freertos/semphr.h"
  #include <string.h>
- 
+ #include <stdint.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <stdbool.h>
+ #include <sys/unistd.h>
+ #include <sys/stat.h>
+ #include <sys/time.h>
+ #include <fcntl.h>
+ #include <string.h>
+ #include <assert.h>
+ #include "esp_err.h"
+ #include "esp_random.h"
+ #include "driver/sdmmc_types.h"
+ #include "sdmmc_cmd.h"
+ #include "wear_levelling.h"
+ #include "esp_log.h"
+ #include "esp_check.h"
+
  #define TAG "OBD_LOGGER_WS_IFACE"
  
  // Configuration constants
@@ -451,7 +468,87 @@
      free(buf);
      return ESP_OK;
  }
- 
+ #define CHUNK_SIZE 1024*64
+// Database file download handler
+esp_err_t obd_logger_db_download_handler(httpd_req_t *req) {
+    // Get the database file path
+    // extern char db_path[128]; // Make sure this is externally accessible or pass it to the function
+    
+    ESP_LOGI(TAG, "DB download request received for file: %s", "/sdcard/obd_data.db");
+    
+    // // Check if database exists
+    // struct stat file_stat;
+    // if (stat(db_path, &file_stat) != 0) {
+    //     ESP_LOGE(TAG, "Database file not found");
+    //     httpd_resp_send_404(req);
+    //     return ESP_FAIL;
+    // }
+    
+    obd_logger_lock_close(); // Lock the database to prevent concurrent access
+    
+    // Set response headers
+    httpd_resp_set_type(req, "application/octet-stream");
+    httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=wican_obd_data.db");
+    
+    // Open the file
+    int file = open("/sdcard/obd_logger.db", 0666);
+    if (file < 0) {
+        ESP_LOGE(TAG, "Failed to open database file");
+        obd_logger_unlock_open();
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+    
+    // Read and send file in chunks
+    char* chunk = malloc(CHUNK_SIZE);
+    if (chunk == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate memory for file chunk");
+        close(file);
+        obd_logger_unlock_open();
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+    
+    size_t bytes_read;
+    esp_err_t ret = ESP_OK;
+    
+    // ESP_LOGI(TAG, "Starting to send database file, size: %ld bytes", file_stat.st_size);
+    
+    while ((bytes_read = read(file, chunk, CHUNK_SIZE)) > 0) {
+        if(bytes_read < CHUNK_SIZE) {
+            ESP_LOGI(TAG, "End of file reached, bytes read: %zu", bytes_read);
+            
+        }
+        if (httpd_resp_send_chunk(req, chunk, bytes_read) != ESP_OK) {
+            ESP_LOGE(TAG, "File sending failed");
+            ret = ESP_FAIL;
+            break;
+        }
+    }
+    
+    // Finalize the HTTP response
+    httpd_resp_send_chunk(req, NULL, 0);
+    
+    // Clean up
+    free(chunk);
+    close(file);
+    // obd_logger_unlock();
+    obd_logger_unlock_open(); // Unlock the database after sending the file
+
+    
+    ESP_LOGI(TAG, "Database file download %s", (ret == ESP_OK) ? "completed successfully" : "failed");
+    return ret;
+}
+
+const httpd_uri_t db_download_uri = {
+    .uri = "/download_db",
+    .method = HTTP_GET,
+    .handler = obd_logger_db_download_handler,
+    .user_ctx = NULL
+};
+
+
+
  // Initialization function
  esp_err_t obd_logger_ws_iface_init(void) {
      // Create mutex for connection management

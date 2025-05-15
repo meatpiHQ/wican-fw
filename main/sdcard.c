@@ -269,7 +269,7 @@ esp_err_t sd_card_init(void)
     {
         .format_if_mount_failed = true,
         .max_files = 5,
-        .allocation_unit_size = 16 * 1024
+        .allocation_unit_size = 65536
     };
 
     // Mount the filesystem

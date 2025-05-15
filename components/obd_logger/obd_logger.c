@@ -179,6 +179,35 @@ void obd_logger_unlock(void) {
 }
 
 /**
+ * @brief Initialize the database and create necessary tables
+ * 
+ * @param db_path Path to the database file
+ * @return esp_err_t ESP_OK on success, ESP_FAIL on failure
+ */
+void obd_logger_lock_close(void){
+    if (db_mutex != NULL) {
+        if (xSemaphoreTake(db_mutex, portMAX_DELAY) == pdTRUE) {
+            sqlite3_close(db_file);
+        } else {
+            ESP_LOGE(TAG, "Failed to take mutex");
+        }
+    } else {
+        ESP_LOGE(TAG, "Mutex not initialized");
+    }
+}
+
+/**
+ * @brief Open the database and unlock the mutex
+ * 
+ * Opens the database using the specified path and then releases the database mutex.
+ */
+void obd_logger_unlock_open(void){
+
+    obd_logger_db_open(db_path, &db_file);
+    obd_logger_unlock();
+}
+
+/**
  * @brief Execute a SQL statement on the database
  * 
  * @param sql SQL statement to execute
