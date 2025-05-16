@@ -35,6 +35,7 @@
 #include "obd_logger.h"
 #include "cJSON.h"
 #include "obd_logger_ws_iface.h"
+#include "obd_logger_db_manager.h"
 #include <time.h>
 
 #define TAG                                 "OBD_LOGGER"
@@ -78,10 +79,6 @@ static uint32_t logger_period = 0;
 static uint32_t obd_logger_params_count = 0;
 static obd_logger_get_params_cb_t obd_logger_get_params = NULL;
 
-
-// Callback debug message
-const char* data = "Callback function called";
-
 /**
  * @brief Default callback function for SQLite operations
  * 
@@ -93,7 +90,7 @@ const char* data = "Callback function called";
  */
 static int obd_logger_ex_cb(void *data, int argc, char **argv, char **azColName) {
     int i;
-    ESP_LOGI(TAG, "%s: ", (const char*)data);
+
     for (i = 0; i < argc; i++) {
         ESP_LOGI(TAG, "%s = %s", azColName[i], argv[i] ? argv[i] : "NULL");
     }
@@ -131,7 +128,7 @@ static int obd_logger_db_exec(sqlite3 *db, const char *sql) {
     ESP_LOGD(TAG, "Executing SQL: %s", sql);
     
     int64_t start = esp_timer_get_time();
-    int rc = sqlite3_exec(db, sql, obd_logger_ex_cb, (void*)data, &zErrMsg);
+    int rc = sqlite3_exec(db, sql, obd_logger_ex_cb, NULL, &zErrMsg);
     
     if (rc != SQLITE_OK) {
         ESP_LOGE(TAG, "SQL error: %s", zErrMsg);
@@ -142,6 +139,70 @@ static int obd_logger_db_exec(sqlite3 *db, const char *sql) {
     
     ESP_LOGD(TAG, "SQL execution time: %lld ms", (esp_timer_get_time() - start) / 1000);
     return rc;
+}
+
+/**
+ * @brief Handler for database manager events
+ */
+static void obd_logger_db_event_handler(obd_db_event_t event, void* event_data)
+{
+    switch (event) {
+        case OBD_DB_ROTATION_STARTED:
+            ESP_LOGI(TAG, "Database rotation started - closing current DB");
+            if (db_file != NULL) {
+                // Close the database but keep the mutex (will be released after rotation)
+                if (xSemaphoreTake(db_mutex, portMAX_DELAY) == pdTRUE) {
+                    sqlite3_close(db_file);
+                    db_file = NULL;
+                    // Note: We don't release the mutex here, it will be released
+                    // after the new database is opened
+                }
+            }
+            break;
+
+        case OBD_DB_ROTATION_COMPLETED:
+            {
+                ESP_LOGI(TAG, "Database rotation completed - opening new DB");
+                // Get the new database path
+                char new_db_path[128];
+                if (obd_db_manager_get_current_path(new_db_path, sizeof(new_db_path)) == ESP_OK) {
+                    // Update the path
+                    strncpy(db_path, new_db_path, sizeof(db_path) - 1);
+                    db_path[sizeof(db_path) - 1] = '\0';
+                    
+                    // Open the new database
+                    if (obd_logger_db_open(db_path, &db_file)) {
+                        ESP_LOGE(TAG, "Failed to open new database after rotation");
+                    } else {
+                        // Initialize tables in the new database
+                        obd_logger_db_exec(db_file, sql_param_data);
+                        obd_logger_db_exec(db_file, sql_param_info);
+                        
+                        // Set performance-optimized journal mode
+                        obd_logger_db_exec(db_file, "PRAGMA journal_mode = WAL;");
+                        obd_logger_db_exec(db_file, "PRAGMA synchronous = NORMAL;");
+                        obd_logger_db_exec(db_file, "PRAGMA cache_size = 20000;");
+                    }
+                    
+                    // If we took the mutex during rotation start, release it now
+                    xSemaphoreGive(db_mutex);
+                }
+            }
+            break;
+
+        case OBD_DB_ROTATION_FAILED:
+            ESP_LOGE(TAG, "Database rotation failed");
+            // If we took the mutex during rotation start, release it
+            xSemaphoreGive(db_mutex);
+            break;
+
+        case OBD_DB_SIZE_WARNING:
+            if (event_data) {
+                uint32_t size = *(uint32_t*)event_data;
+                ESP_LOGW(TAG, "Database approaching size limit: %"PRIu32" bytes", size);
+            }
+            break;
+    }
 }
 
 /**
@@ -185,10 +246,14 @@ void obd_logger_unlock(void) {
  * @param db_path Path to the database file
  * @return esp_err_t ESP_OK on success, ESP_FAIL on failure
  */
-void obd_logger_lock_close(void){
+void obd_logger_lock_close(void) {
     if (db_mutex != NULL) {
         if (xSemaphoreTake(db_mutex, portMAX_DELAY) == pdTRUE) {
-            sqlite3_close(db_file);
+            if (db_file != NULL) {
+                sqlite3_close(db_file);
+                db_file = NULL;
+            }
+            // Note: mutex remains taken until obd_logger_unlock_open is called
         } else {
             ESP_LOGE(TAG, "Failed to take mutex");
         }
@@ -202,9 +267,20 @@ void obd_logger_lock_close(void){
  * 
  * Opens the database using the specified path and then releases the database mutex.
  */
-void obd_logger_unlock_open(void){
-
-    obd_logger_db_open(db_path, &db_file);
+void obd_logger_unlock_open(void) {
+    // Get the current path from the DB manager
+    char current_path[128];
+    if (obd_db_manager_get_current_path(current_path, sizeof(current_path)) == ESP_OK) {
+        // Update the local path
+        strncpy(db_path, current_path, sizeof(db_path) - 1);
+        db_path[sizeof(db_path) - 1] = '\0';
+        
+        // Open the database
+        obd_logger_db_open(db_path, &db_file);
+    } else {
+        ESP_LOGE(TAG, "Failed to get current database path");
+    }
+    
     obd_logger_unlock();
 }
 
@@ -370,52 +446,17 @@ esp_err_t obd_logger_store_params(const param_value_t *params, size_t count)
         ESP_LOGE(TAG, "Database not initialized or no parameters");
         return ESP_FAIL;
     }
-    
+
+    // Check if database rotation is needed before writing
+    obd_db_manager_check_and_rotate();
+
     if (xSemaphoreTake(db_mutex, portMAX_DELAY) != pdTRUE) 
     {
         ESP_LOGE(TAG, "Failed to take mutex");
         return ESP_FAIL;
     }
     
-    // Get current timestamp from RTCM module
-    uint8_t hour, min, sec;
-    uint8_t year, month, day, weekday;
-    
-    esp_err_t ret = rtcm_get_time(&hour, &min, &sec);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to get time from RTCM");
-        xSemaphoreGive(db_mutex);
-        return ESP_FAIL;
-    }
-    
-    ret = rtcm_get_date(&year, &month, &day, &weekday);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to get date from RTCM");
-        xSemaphoreGive(db_mutex);
-        return ESP_FAIL;
-    }
-    
-    // Convert BCD format to decimal
-    uint8_t hour_dec = ((hour >> 4) & 0x0F) * 10 + (hour & 0x0F);
-    uint8_t min_dec = ((min >> 4) & 0x0F) * 10 + (min & 0x0F);
-    uint8_t sec_dec = ((sec >> 4) & 0x0F) * 10 + (sec & 0x0F);
-    uint8_t year_dec = ((year >> 4) & 0x0F) * 10 + (year & 0x0F);
-    uint8_t month_dec = ((month >> 4) & 0x0F) * 10 + (month & 0x0F);
-    uint8_t day_dec = ((day >> 4) & 0x0F) * 10 + (day & 0x0F);
-    
-    // Calculate Unix timestamp
-    // Note: This is a simplified calculation that doesn't account for leap years perfectly
-    // but is sufficient for most applications
-    struct tm timeinfo;
-    timeinfo.tm_year = 100 + year_dec; // Years since 1900
-    timeinfo.tm_mon = month_dec - 1;   // Months are 0-based
-    timeinfo.tm_mday = day_dec;
-    timeinfo.tm_hour = hour_dec;
-    timeinfo.tm_min = min_dec;
-    timeinfo.tm_sec = sec_dec;
-    timeinfo.tm_isdst = -1;            // Not used
-    
-    time_t unix_timestamp = mktime(&timeinfo);
+    time_t unix_timestamp = rtcm_get_unix_timestamp();
     
     int64_t start_time = esp_timer_get_time();
     int total_stored = 0;
@@ -767,7 +808,6 @@ esp_err_t obd_logger_get_latest_time(char *datetime, size_t max_len)
 static void obd_logger_task(void *pvParameters)
 {
     char db_time[32] = {0};
-    char current_time[32] = {0};
     
     // Get the latest time from the database
     esp_err_t ret1 = obd_logger_get_latest_time(db_time, sizeof(db_time));
@@ -905,7 +945,31 @@ esp_err_t odb_logger_init(obd_logger_t *obd_logger)
     }
 
     sqlite3_initialize();
-    sprintf(db_path, "%s/obd_logger.db", obd_logger->path);
+    // Initialize DB manager with configuration
+    obd_db_manager_config_t db_config = {
+        .max_size_bytes = 4 * 1024 * 1024,  // 4MB limit
+        .max_db_files = 100,                // Keep last 100 database files
+        .check_size_before_write = true     // Check size before writing
+    };
+
+    strncpy(db_config.base_path, obd_logger->path, sizeof(db_config.base_path) - 1);
+    db_config.base_path[sizeof(db_config.base_path) - 1] = '\0';
+
+    esp_err_t ret = obd_db_manager_init(&db_config);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize DB manager");
+        return ESP_FAIL;
+    }
+    
+    // Register event callback
+    obd_db_manager_register_callback(obd_logger_db_event_handler);
+    
+    // Get the current database path
+    ret = obd_db_manager_get_current_path(db_path, sizeof(db_path));
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get current database path");
+        return ESP_FAIL;
+    }
 
     ESP_LOGI(TAG, "Database path: %s", db_path);
     ESP_LOGI(TAG, "Creating OBD logger task");
@@ -958,5 +1022,7 @@ esp_err_t odb_logger_init(obd_logger_t *obd_logger)
     ESP_LOGI(TAG, "OBD logger initialized successfully");
 
     obd_logger_ws_iface_init();
+    // obd_db_manager_force_rotation();
+    
     return ESP_OK;
 }

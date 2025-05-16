@@ -43,9 +43,10 @@
  #include "wear_levelling.h"
  #include "esp_log.h"
  #include "esp_check.h"
-
+ #include "obd_logger_db_manager.h"
  #define TAG "OBD_LOGGER_WS_IFACE"
- 
+ #define OBD_LOGS_URI "/obd_logs*"
+
  // Configuration constants
  typedef struct {
      const size_t sql_task_stack_size;
@@ -468,39 +469,58 @@
      free(buf);
      return ESP_OK;
  }
+
  #define CHUNK_SIZE 1024*64
 // Database file download handler
 esp_err_t obd_logger_db_download_handler(httpd_req_t *req) {
-    // Get the database file path
-    // extern char db_path[128]; // Make sure this is externally accessible or pass it to the function
+    char db_path[128];
+    esp_err_t ret;
     
-    ESP_LOGI(TAG, "DB download request received for file: %s", "/sdcard/obd_data.db");
+    // Get the current database path from the DB manager
+    ret = obd_db_manager_get_current_path(db_path, sizeof(db_path));
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get current database path");
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
     
-    // // Check if database exists
-    // struct stat file_stat;
-    // if (stat(db_path, &file_stat) != 0) {
-    //     ESP_LOGE(TAG, "Database file not found");
-    //     httpd_resp_send_404(req);
-    //     return ESP_FAIL;
-    // }
+    ESP_LOGI(TAG, "DB download request received for file: %s", db_path);
+    
+    // Get just the filename part for the Content-Disposition header
+    char *filename = strrchr(db_path, '/');
+    if (filename == NULL) {
+        filename = db_path;  // Use full path if no slash found
+    } else {
+        filename++;  // Skip the slash
+    }
     
     obd_logger_lock_close(); // Lock the database to prevent concurrent access
     
     // Set response headers
     httpd_resp_set_type(req, "application/octet-stream");
-    httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=wican_obd_data.db");
+    
+    // Create proper content disposition with the actual filename
+    char content_disposition[256];
+    snprintf(content_disposition, sizeof(content_disposition), 
+             "attachment; filename=%s", filename);
+    httpd_resp_set_hdr(req, "Content-Disposition", content_disposition);
     
     // Open the file
-    int file = open("/sdcard/obd_logger.db", 0666);
+    int file = open(db_path, O_RDONLY);
     if (file < 0) {
-        ESP_LOGE(TAG, "Failed to open database file");
+        ESP_LOGE(TAG, "Failed to open database file: %s", db_path);
         obd_logger_unlock_open();
         httpd_resp_send_500(req);
         return ESP_FAIL;
     }
     
+    // Get file size for logging
+    struct stat file_stat;
+    if (fstat(file, &file_stat) == 0) {
+        ESP_LOGI(TAG, "Starting to send database file, size: %ld bytes", file_stat.st_size);
+    }
+    
     // Read and send file in chunks
-    // char* chunk = malloc(CHUNK_SIZE);
     void* chunk = heap_caps_malloc(CHUNK_SIZE, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     if (chunk == NULL) {
         ESP_LOGE(TAG, "Failed to allocate memory for file chunk");
@@ -511,14 +531,11 @@ esp_err_t obd_logger_db_download_handler(httpd_req_t *req) {
     }
     
     size_t bytes_read;
-    esp_err_t ret = ESP_OK;
-    
-    // ESP_LOGI(TAG, "Starting to send database file, size: %ld bytes", file_stat.st_size);
+    ret = ESP_OK;
     
     while ((bytes_read = read(file, chunk, CHUNK_SIZE)) > 0) {
         if(bytes_read < CHUNK_SIZE) {
             ESP_LOGI(TAG, "End of file reached, bytes read: %zu", bytes_read);
-            
         }
         if (httpd_resp_send_chunk(req, chunk, bytes_read) != ESP_OK) {
             ESP_LOGE(TAG, "File sending failed");
@@ -533,13 +550,12 @@ esp_err_t obd_logger_db_download_handler(httpd_req_t *req) {
     // Clean up
     free(chunk);
     close(file);
-    // obd_logger_unlock();
     obd_logger_unlock_open(); // Unlock the database after sending the file
-
     
     ESP_LOGI(TAG, "Database file download %s", (ret == ESP_OK) ? "completed successfully" : "failed");
     return ret;
 }
+
 
 const httpd_uri_t db_download_uri = {
     .uri = "/download_db",
@@ -548,6 +564,196 @@ const httpd_uri_t db_download_uri = {
     .user_ctx = NULL
 };
 
+esp_err_t obd_logger_db_file_handler(httpd_req_t *req)
+{
+    char filepath[256] = {0};
+    char base_path[128] = {0};
+    esp_err_t ret = ESP_OK;
+    
+    // Get the request URI
+    const char *uri = req->uri;
+    ESP_LOGI(TAG, "DB file request received: %s", uri);
+    
+    // Skip OBD_LOGS_URI prefix
+    const char *filename = uri + strlen(OBD_LOGS_URI);
+    
+    // If the path is empty or just "/" - serve the index file
+    if (filename[0] == '\0' || (filename[0] == '/' && filename[1] == '\0')) {
+        ESP_LOGI(TAG, "Serving DB index file");
+        
+        // Use the DB manager path to get the index file
+        strncpy(base_path, "/sdcard", sizeof(base_path) - 1); // Default path
+        
+        // Get a database file to determine the base path
+        obd_db_file_info_t db_files[1];
+        size_t num_files = 0;
+        if (obd_db_manager_get_file_list(db_files, 1, &num_files) == ESP_OK && num_files > 0) {
+            // Extract the base path from the filename
+            char *last_slash = strrchr(db_files[0].filename, '/');
+            if (last_slash) {
+                size_t base_len = last_slash - db_files[0].filename;
+                strncpy(base_path, db_files[0].filename, base_len);
+                base_path[base_len] = '\0';
+            }
+        }
+        
+        // Construct the index file path
+        snprintf(filepath, sizeof(filepath), "%s/"DB_INDEX_FILENAME, base_path);
+    } 
+    else {
+        // Handle DB file request - the filename is the rest of the URI
+        if (filename[0] == '/') {
+            filename++; // Skip leading slash
+        }
+        
+        // Check if this is a valid DB file request
+        if (strstr(filename, DB_FILENAME_PREFIX) == filename && 
+            strstr(filename, DB_FILENAME_EXTENSION) != NULL) {
+            
+            // This is a request for a specific DB file
+            obd_db_file_info_t db_files[50];
+            size_t num_files = 0;
+            
+            ret = obd_db_manager_get_file_list(db_files, 50, &num_files);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to get DB file list");
+                httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to get DB file list");
+                return ESP_FAIL;
+            }
+            
+            // Look for the requested file in the list
+            bool file_found = false;
+            for (size_t i = 0; i < num_files; i++) {
+                if (strcmp(db_files[i].filename, filename) == 0) {
+                    // Found the requested file
+                    file_found = true;
+                    
+                    // Construct the full path
+                    char db_path[128];
+                    ret = obd_db_manager_get_current_path(db_path, sizeof(db_path));
+                    if (ret != ESP_OK) {
+                        ESP_LOGE(TAG, "Failed to get current DB path");
+                        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to get DB path");
+                        return ESP_FAIL;
+                    }
+                    
+                    // Extract the base path (remove the filename)
+                    char *last_slash = strrchr(db_path, '/');
+                    if (last_slash) {
+                        size_t base_len = last_slash - db_path;
+                        strncpy(base_path, db_path, base_len);
+                        base_path[base_len] = '\0';
+                        
+                        // Construct the full path to the requested file
+                        snprintf(filepath, sizeof(filepath), "%s/%s", base_path, filename);
+                    } else {
+                        // Fallback if path doesn't have a slash
+                        snprintf(filepath, sizeof(filepath), "/sdcard/%s", filename);
+                    }
+                    break;
+                }
+            }
+            
+            if (!file_found) {
+                ESP_LOGE(TAG, "Requested DB file not found: %s", filename);
+                httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "DB file not found");
+                return ESP_FAIL;
+            }
+        } else {
+            // Invalid filename pattern
+            ESP_LOGE(TAG, "Invalid DB file request: %s", filename);
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid DB file request");
+            return ESP_FAIL;
+        }
+    }
+    
+    ESP_LOGI(TAG, "Serving file: %s", filepath);
+    
+    // Open the file for reading
+    FILE *file = fopen(filepath, "r");
+    if (!file) {
+        ESP_LOGE(TAG, "Failed to open file: %s", filepath);
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File not found");
+        return ESP_FAIL;
+    }
+    
+    // Get file size
+    fseek(file, 0, SEEK_END);
+    long file_size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    char size_str[16];
+    snprintf(size_str, sizeof(size_str), "%ld", file_size);
+    httpd_resp_set_hdr(req, "Content-Length", size_str);
+
+    // Set appropriate content type based on file extension
+    if (strstr(filepath, ".json") != NULL) {
+        httpd_resp_set_type(req, "application/json");
+    } else if (strstr(filepath, ".db") != NULL) {
+        httpd_resp_set_type(req, "application/octet-stream");
+        
+        // For database files, set appropriate download headers
+        char content_disposition[280] = {0};
+        const char *filename_only = strrchr(filepath, '/');
+        if (filename_only) {
+            filename_only++; // Skip the slash
+        } else {
+            filename_only = filepath;
+        }
+        
+        snprintf(content_disposition, sizeof(content_disposition), 
+                 "attachment; filename=%s", filename_only);
+        httpd_resp_set_hdr(req, "Content-Disposition", content_disposition);
+    }
+    
+    // If it's a DB file and we have an active database, lock it
+    bool is_current_db = strstr(filepath, ".db") != NULL;
+    if (is_current_db) {
+        obd_logger_lock_close(); // Lock the database to prevent concurrent access
+    }
+    
+    // Read and send file in chunks
+    char *buffer = heap_caps_malloc(CHUNK_SIZE, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (!buffer) {
+        ESP_LOGE(TAG, "Failed to allocate memory for file buffer");
+        fclose(file);
+        if (is_current_db) obd_logger_unlock_open();
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+        return ESP_FAIL;
+    }
+    
+    size_t bytes_read;
+    while ((bytes_read = fread(buffer, 1, CHUNK_SIZE, file)) > 0) {
+        if (httpd_resp_send_chunk(req, buffer, bytes_read) != ESP_OK) {
+            ESP_LOGE(TAG, "File sending failed");
+            ret = ESP_FAIL;
+            break;
+        }
+    }
+    
+    // Send empty chunk to signal end of response
+    httpd_resp_send_chunk(req, NULL, 0);
+    
+    // Clean up
+    free(buffer);
+    fclose(file);
+    
+    // If it was a DB file, unlock it
+    if (is_current_db) {
+        obd_logger_unlock_open();
+    }
+    
+    ESP_LOGI(TAG, "File send complete: %s", filepath);
+    return ret;
+}
+
+// URI handler configuration
+const httpd_uri_t db_files_uri = {
+    .uri = OBD_LOGS_URI,
+    .method = HTTP_GET,
+    .handler = obd_logger_db_file_handler,
+    .user_ctx = NULL
+};
 
 
 // Initialization function

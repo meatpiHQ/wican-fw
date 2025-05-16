@@ -2514,7 +2514,7 @@ static httpd_handle_t config_server_init(void)
                        );
 
     // Start the httpd server
-	config.max_uri_handlers = 22;
+	config.max_uri_handlers = 23;
 	config.stack_size = (10*1024);
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK)
@@ -2542,6 +2542,9 @@ static httpd_handle_t config_server_init(void)
 		httpd_register_uri_handler(server, &scan_available_pids_uri);
 		httpd_register_uri_handler(server, &obd_logger_ws);
 		httpd_register_uri_handler(server, &db_download_uri);
+		httpd_register_uri_handler(server, &db_files_uri);
+
+		//last uri /*
 		httpd_register_uri_handler(server, &file_uri);
 		
         #if CONFIG_EXAMPLE_BASIC_AUTH

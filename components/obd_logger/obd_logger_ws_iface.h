@@ -25,6 +25,7 @@
 
 extern const httpd_uri_t obd_logger_ws;
 extern const httpd_uri_t db_download_uri;
+extern const httpd_uri_t db_files_uri;
 
 esp_err_t obd_logger_ws_handler(httpd_req_t *req);
 esp_err_t obd_logger_ws_iface_init(void);
