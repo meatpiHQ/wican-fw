@@ -1250,7 +1250,7 @@
         }
 
         function setRTCTime() {
-            // Get current date and time
+            // Get current date and time in UTC
             const now = new Date();
             
             // Convert decimal to BCD format
@@ -1258,16 +1258,16 @@
                 return Math.floor(val / 10) * 16 + (val % 10);
             }
             
-            // Format data for the RTC with BCD conversion
+            // Format data for the RTC with BCD conversion using UTC methods
             const rtcData = {
                 command: "set_rtc_time",
-                hour: decToBcd(now.getHours()),
-                min: decToBcd(now.getMinutes()),
-                sec: decToBcd(now.getSeconds()),
-                year: decToBcd(now.getFullYear() % 100), // Get last 2 digits of year (e.g. 23 for 2023)
-                month: decToBcd(now.getMonth() + 1), // JavaScript months are 0-based
-                day: decToBcd(now.getDate()),
-                weekday: decToBcd(now.getDay()) // 0 = Sunday, 1 = Monday, etc.
+                hour: decToBcd(now.getUTCHours()),
+                min: decToBcd(now.getUTCMinutes()),
+                sec: decToBcd(now.getUTCSeconds()),
+                year: decToBcd(now.getUTCFullYear() % 100), // Get last 2 digits of year (e.g. 23 for 2023)
+                month: decToBcd(now.getUTCMonth() + 1), // JavaScript months are 0-based
+                day: decToBcd(now.getUTCDate()),
+                weekday: decToBcd(now.getUTCDay()) // 0 = Sunday, 1 = Monday, etc.
             };
             
             // Send request to set RTC time
@@ -1280,7 +1280,7 @@
             })
             .then(response => response.text())
             .then(data => {
-                console.log('RTC time set successfully:', data);
+                console.log('RTC time set successfully (UTC):', data);
             })
             .catch(error => {
                 console.error('Error setting RTC time:', error);
