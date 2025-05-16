@@ -35,6 +35,7 @@
 #include "obd_logger.h"
 #include "cJSON.h"
 #include "obd_logger_ws_iface.h"
+#include <time.h>
 
 #define TAG                                 "OBD_LOGGER"
 #define OBD_LOGGERR_TASK_STACK_SIZE         (1024*8)
@@ -45,7 +46,7 @@
 // Create param_data table
 const char *sql_param_data = 
     "CREATE TABLE IF NOT EXISTS param_data ("
-    "DateTime TEXT, "
+    "timestamp INTEGER, "
     "param_id INTEGER, "
     "value REAL"
     ");";
@@ -402,9 +403,19 @@ esp_err_t obd_logger_store_params(const param_value_t *params, size_t count)
     uint8_t month_dec = ((month >> 4) & 0x0F) * 10 + (month & 0x0F);
     uint8_t day_dec = ((day >> 4) & 0x0F) * 10 + (day & 0x0F);
     
-    char timestamp[32];
-    snprintf(timestamp, sizeof(timestamp), "20%02d-%02d-%02d %02d:%02d:%02d", 
-             year_dec, month_dec, day_dec, hour_dec, min_dec, sec_dec);
+    // Calculate Unix timestamp
+    // Note: This is a simplified calculation that doesn't account for leap years perfectly
+    // but is sufficient for most applications
+    struct tm timeinfo;
+    timeinfo.tm_year = 100 + year_dec; // Years since 1900
+    timeinfo.tm_mon = month_dec - 1;   // Months are 0-based
+    timeinfo.tm_mday = day_dec;
+    timeinfo.tm_hour = hour_dec;
+    timeinfo.tm_min = min_dec;
+    timeinfo.tm_sec = sec_dec;
+    timeinfo.tm_isdst = -1;            // Not used
+    
+    time_t unix_timestamp = mktime(&timeinfo);
     
     int64_t start_time = esp_timer_get_time();
     int total_stored = 0;
@@ -426,7 +437,7 @@ esp_err_t obd_logger_store_params(const param_value_t *params, size_t count)
     
     // Prepare statement
     sqlite3_stmt *stmt;
-    const char *sql = "INSERT INTO param_data (DateTime, param_id, value) VALUES (?, ?, ?);";
+    const char *sql = "INSERT INTO param_data (timestamp, param_id, value) VALUES (?, ?, ?);";
     rc = sqlite3_prepare_v2(db_file, sql, -1, &stmt, NULL);
     
     if (rc != SQLITE_OK) {
@@ -439,7 +450,7 @@ esp_err_t obd_logger_store_params(const param_value_t *params, size_t count)
     }
     
     // Pre-bind the timestamp (same for all rows)
-    sqlite3_bind_text(stmt, 1, timestamp, -1, SQLITE_STATIC);
+    sqlite3_bind_int64(stmt, 1, unix_timestamp);
     
     // Prepare for faster parameter lookup
     // We'll build a simple lookup array
@@ -619,31 +630,39 @@ esp_err_t obd_logger_query_param(const char *param_name, const char *start_time,
     int remaining = sizeof(query);
     int written;
     
-    // Base query
+    // Base query - convert timestamp to readable format in the query
     written = snprintf(query_ptr, remaining, 
-                     "SELECT pd.DateTime, pd.value, pi.Name, pi.Type, pi.Data "
+                     "SELECT datetime(timestamp, 'unixepoch') as DateTime, pd.value, pi.Name, pi.Type, pi.Data "
                      "FROM param_data pd "
                      "JOIN param_info pi ON pd.param_id = pi.Id "
                      "WHERE pd.param_id = %d", param_id);
     query_ptr += written;
     remaining -= written;
     
-    // Add time range filters if provided
+    // Convert start_time and end_time strings to Unix timestamps if provided
     if (start_time != NULL && remaining > 0) {
-        written = snprintf(query_ptr, remaining, " AND pd.DateTime >= '%s'", start_time);
-        query_ptr += written;
-        remaining -= written;
+        struct tm tm_start = {0};
+        if (strptime(start_time, "%Y-%m-%d %H:%M:%S", &tm_start) != NULL) {
+            time_t start_timestamp = mktime(&tm_start);
+            written = snprintf(query_ptr, remaining, " AND pd.timestamp >= %lld", (long long)start_timestamp);
+            query_ptr += written;
+            remaining -= written;
+        }
     }
     
     if (end_time != NULL && remaining > 0) {
-        written = snprintf(query_ptr, remaining, " AND pd.DateTime <= '%s'", end_time);
-        query_ptr += written;
-        remaining -= written;
+        struct tm tm_end = {0};
+        if (strptime(end_time, "%Y-%m-%d %H:%M:%S", &tm_end) != NULL) {
+            time_t end_timestamp = mktime(&tm_end);
+            written = snprintf(query_ptr, remaining, " AND pd.timestamp <= %lld", (long long)end_timestamp);
+            query_ptr += written;
+            remaining -= written;
+        }
     }
     
     // Add order and limit
     if (remaining > 0) {
-        written = snprintf(query_ptr, remaining, " ORDER BY pd.DateTime DESC");
+        written = snprintf(query_ptr, remaining, " ORDER BY pd.timestamp DESC");
         query_ptr += written;
         remaining -= written;
     }
@@ -710,7 +729,7 @@ esp_err_t obd_logger_get_latest_time(char *datetime, size_t max_len)
     }
     
     // Prepare the query to get the latest timestamp
-    const char *query = "SELECT DateTime FROM param_data ORDER BY DateTime DESC LIMIT 1;";
+    const char *query = "SELECT timestamp FROM param_data ORDER BY timestamp DESC LIMIT 1;";
     
     sqlite3_stmt *stmt;
     int rc = sqlite3_prepare_v2(db_file, query, -1, &stmt, NULL);
@@ -725,18 +744,13 @@ esp_err_t obd_logger_get_latest_time(char *datetime, size_t max_len)
     // Execute the query
     if (sqlite3_step(stmt) == SQLITE_ROW)
     {
-        // Get the datetime value
-        const char *time_str = (const char *)sqlite3_column_text(stmt, 0);
-        if (time_str)
-        {
-            strncpy(datetime, time_str, max_len - 1);
-            datetime[max_len - 1] = '\0'; // Ensure null termination
-            ESP_LOGI(TAG, "Latest datetime in database: %s", datetime);
-        }
-        else
-        {
-            ESP_LOGW(TAG, "No datetime value found");
-        }
+        // Get the timestamp value
+        time_t unix_time = sqlite3_column_int64(stmt, 0);
+        struct tm *timeinfo = localtime(&unix_time);
+        
+        // Format the time as a string
+        strftime(datetime, max_len, "%Y-%m-%d %H:%M:%S", timeinfo);
+        ESP_LOGI(TAG, "Latest datetime in database: %s", datetime);
     }
     else
     {
