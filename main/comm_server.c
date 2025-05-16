@@ -441,16 +441,93 @@ int8_t tcp_server_init(uint32_t port, QueueHandle_t *xTXp_Queue, QueueHandle_t *
 	xEventGroupSetBits( xSocketEventGroup, PORT_CLOSED_BIT );
 	xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
 	udp_enable = udp_en;
-	xTaskCreate(tcp_server_task, "tcp_server", 4096, (void*)AF_INET, 5, &xserver_handle);
+	static StackType_t *server_task_stack, *rx_task_stack, *tx_task_stack;
+	static StaticTask_t server_task_buffer, rx_task_buffer, tx_task_buffer;
+	
+	server_task_stack = heap_caps_malloc(4096, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+	rx_task_stack = heap_caps_malloc(4096, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+	tx_task_stack = heap_caps_malloc(4096, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+	
+	if (server_task_stack == NULL || rx_task_stack == NULL || tx_task_stack == NULL)
+	{
+		ESP_LOGE(TAG, "Failed to allocate task stack memory");
+		if (server_task_stack) heap_caps_free(server_task_stack);
+		if (rx_task_stack) heap_caps_free(rx_task_stack);
+		if (tx_task_stack) heap_caps_free(tx_task_stack);
+		return -1;
+	}
+	
+	// Create static tasks
+	xserver_handle = xTaskCreateStatic(
+		tcp_server_task,
+		"tcp_server",
+		4096,
+		(void*)AF_INET,
+		5,
+		server_task_stack,
+		&server_task_buffer
+	);
+	
+	if (xserver_handle == NULL)
+	{
+		ESP_LOGE(TAG, "Failed to create server task");
+		heap_caps_free(server_task_stack);
+		heap_caps_free(rx_task_stack);
+		heap_caps_free(tx_task_stack);
+		return -1;
+	}
+	
 	if(!udp_enable)
 	{
-		xTaskCreate(tcp_server_rx_task, "tcp_rx_server", 4096, (void*)AF_INET, 5, &xrx_handle);
-		xTaskCreate(tcp_server_tx_task, "tcp_tx_server", 4096, (void*)AF_INET, 5, &xtx_handle);
+		xrx_handle = xTaskCreateStatic(
+			tcp_server_rx_task,
+			"tcp_rx_server",
+			4096,
+			(void*)AF_INET,
+			5,
+			rx_task_stack,
+			&rx_task_buffer
+		);
+		
+		xtx_handle = xTaskCreateStatic(
+			tcp_server_tx_task,
+			"tcp_tx_server",
+			4096,
+			(void*)AF_INET,
+			5,
+			tx_task_stack,
+			&tx_task_buffer
+		);
 	}
 	else
 	{
-		xTaskCreate(udp_server_rx_task, "udp_rx_server", 4096, (void*)AF_INET, 5, &xrx_handle);
-		xTaskCreate(udp_server_tx_task, "udp_tx_server", 4096, (void*)AF_INET, 5, &xtx_handle);
+		xrx_handle = xTaskCreateStatic(
+			udp_server_rx_task,
+			"udp_rx_server",
+			4096,
+			(void*)AF_INET,
+			5,
+			rx_task_stack,
+			&rx_task_buffer
+		);
+		
+		xtx_handle = xTaskCreateStatic(
+			udp_server_tx_task,
+			"udp_tx_server",
+			4096,
+			(void*)AF_INET,
+			5,
+			tx_task_stack,
+			&tx_task_buffer
+		);
+	}
+	
+	if (xrx_handle == NULL || xtx_handle == NULL)
+	{
+		ESP_LOGE(TAG, "Failed to create rx/tx tasks");
+		if (xrx_handle == NULL) heap_caps_free(rx_task_stack);
+		if (xtx_handle == NULL) heap_caps_free(tx_task_stack);
+		return -1;
 	}
 	return 0;
 }

@@ -2419,9 +2419,48 @@ void elm327_init(response_callback_t rsp_callback, QueueHandle_t *rx_queue, void
 
     obd_init();
 
-    xTaskCreate(uart1_event_task, "uart1_event_task", 2048*2, NULL, 12, NULL);
-	xTaskCreate(elm327_read_task, "elm327_read_task", 2048*2, NULL, 12, NULL);
- 
+    static StackType_t *uart1_event_task_stack, *elm327_read_task_stack;
+    static StaticTask_t uart1_event_task_buffer, elm327_read_task_buffer;
+    
+    uart1_event_task_stack = heap_caps_malloc(2048*2, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    elm327_read_task_stack = heap_caps_malloc(2048*2, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    
+    if (uart1_event_task_stack == NULL || elm327_read_task_stack == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to allocate task stack memory");
+        if (uart1_event_task_stack) heap_caps_free(uart1_event_task_stack);
+        if (elm327_read_task_stack) heap_caps_free(elm327_read_task_stack);
+        return;
+    }
+    
+    // Create static tasks
+    TaskHandle_t uart1_event_task_handle = xTaskCreateStatic(
+        uart1_event_task,
+        "uart1_event_task",
+        2048*2,
+        NULL,
+        12,
+        uart1_event_task_stack,
+        &uart1_event_task_buffer
+    );
+    
+    TaskHandle_t elm327_read_task_handle = xTaskCreateStatic(
+        elm327_read_task,
+        "elm327_read_task",
+        2048*2,
+        NULL,
+        12,
+        elm327_read_task_stack,
+        &elm327_read_task_buffer
+    );
+    
+    if (uart1_event_task_handle == NULL || elm327_read_task_handle == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to create tasks");
+        if (uart1_event_task_handle == NULL) heap_caps_free(uart1_event_task_stack);
+        if (elm327_read_task_handle == NULL) heap_caps_free(elm327_read_task_stack);
+    }
+
 }
 
 #endif

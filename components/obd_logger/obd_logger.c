@@ -908,16 +908,38 @@ esp_err_t odb_logger_init(obd_logger_t *obd_logger)
         return ESP_FAIL;
     }
 
-    BaseType_t ret = xTaskCreate(obd_logger_task, 
-                                "obd_logger", 
-                                OBD_LOGGERR_TASK_STACK_SIZE, 
-                                NULL, 5, NULL);
-    if (ret != pdPASS) 
+    // Allocate stack memory in PSRAM for the task
+    static StackType_t *obd_logger_task_stack;
+    static StaticTask_t obd_logger_task_buffer;
+    
+    obd_logger_task_stack = heap_caps_malloc(OBD_LOGGERR_TASK_STACK_SIZE, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    
+    if (obd_logger_task_stack == NULL)
     {
-        ESP_LOGE(TAG, "Failed to create task");
+        ESP_LOGE(TAG, "Failed to allocate task stack memory");
         vSemaphoreDelete(db_mutex);
         return ESP_FAIL;
     }
+    
+    // Create static task
+    TaskHandle_t task_handle = xTaskCreateStatic(
+        obd_logger_task,
+        "obd_logger",
+        OBD_LOGGERR_TASK_STACK_SIZE,
+        NULL,
+        5,
+        obd_logger_task_stack,
+        &obd_logger_task_buffer
+    );
+    
+    if (task_handle == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to create task");
+        heap_caps_free(obd_logger_task_stack);
+        vSemaphoreDelete(db_mutex);
+        return ESP_FAIL;
+    }
+
     ESP_LOGI(TAG, "OBD logger task created successfully");
     ESP_LOGI(TAG, "OBD logger initialized successfully");
 

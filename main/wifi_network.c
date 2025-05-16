@@ -343,7 +343,35 @@ void wifi_network_init(char* sta_ssid, char* sta_pass)
     	ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config_sta) );
     	if(xwifi_handle == NULL)
     	{
-    		xTaskCreate(wifi_conn_task, "wifi_conn_task", 4096, (void*)AF_INET, 5, &xwifi_handle);
+            // Allocate stack memory in PSRAM for the WiFi connection task
+            static StackType_t *wifi_conn_task_stack;
+            static StaticTask_t wifi_conn_task_buffer;
+            
+            wifi_conn_task_stack = heap_caps_malloc(4096, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+            
+            if (wifi_conn_task_stack == NULL)
+            {
+                ESP_LOGE(WIFI_TAG, "Failed to allocate WiFi connection task stack memory");
+                return;
+            }
+            
+            // Create static task
+            xwifi_handle = xTaskCreateStatic(
+                wifi_conn_task,
+                "wifi_conn_task",
+                4096,
+                (void*)AF_INET,
+                5,
+                wifi_conn_task_stack,
+                &wifi_conn_task_buffer
+            );
+            
+            if (xwifi_handle == NULL)
+            {
+                ESP_LOGE(WIFI_TAG, "Failed to create WiFi connection task");
+                heap_caps_free(wifi_conn_task_stack);
+                return;
+            }
     	}
     }
     else

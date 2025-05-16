@@ -634,6 +634,33 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
     s_mqtt_event_group = xEventGroupCreate();
     client = esp_mqtt_client_init(&mqtt_cfg);
 
-    xTaskCreate(mqtt_task, "mqtt_task", 1024*5, (void*)AF_INET, 5, NULL);
+    static StackType_t *mqtt_task_stack;
+    static StaticTask_t mqtt_task_buffer;
+    
+    mqtt_task_stack = heap_caps_malloc(1024*5, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    
+    if (mqtt_task_stack == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to allocate MQTT task stack memory");
+        return;
+    }
+    
+    // Create static task
+    TaskHandle_t mqtt_task_handle = xTaskCreateStatic(
+        mqtt_task,
+        "mqtt_task",
+        1024*5,
+        (void*)AF_INET,
+        5,
+        mqtt_task_stack,
+        &mqtt_task_buffer
+    );
+    
+    if (mqtt_task_handle == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to create MQTT task");
+        heap_caps_free(mqtt_task_stack);
+        return;
+    }
 }
 

@@ -1915,10 +1915,18 @@ void autopid_init(char* id)
         xautopid_event_group = xEventGroupCreate();
     }
 
-    autopidQueue = xQueueCreate(QUEUE_SIZE, sizeof(response_t));
+    // Define static queue storage and structure
+    static StaticQueue_t autopidQueue_buffer;
+    static uint8_t autopidQueue_storage[QUEUE_SIZE * sizeof(response_t)];
+    
+    // Create a static queue
+    autopidQueue = xQueueCreateStatic(QUEUE_SIZE, 
+                                     sizeof(response_t), 
+                                     autopidQueue_storage, 
+                                     &autopidQueue_buffer);
     if (autopidQueue == NULL)
     {
-        ESP_LOGE(TAG, "Failed to create queue");
+        ESP_LOGE(TAG, "Failed to create static queue");
         return;
     }
 
@@ -1928,9 +1936,9 @@ void autopid_init(char* id)
     {
         all_pids->mutex = xSemaphoreCreateMutex();
 
-        if(all_pids->pid_count > 0){
-            print_pids(all_pids); //broken
-        }
+        // if(all_pids->pid_count > 0){
+        //     print_pids(all_pids); //broken
+        // }
 
         if (!all_pids->mutex)
         {

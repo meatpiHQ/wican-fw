@@ -138,8 +138,35 @@ extern "C" void usb_host_init(void)
     };
     ESP_ERROR_CHECK(usb_host_install(&host_config));
 
-    BaseType_t task_created = xTaskCreate(usb_lib_task, "usb_lib", 4096, NULL, EXAMPLE_USB_HOST_PRIORITY, NULL);
-    assert(task_created == pdTRUE);
+    // Allocate stack memory in PSRAM for the USB library task
+    static StackType_t *usb_lib_task_stack;
+    static StaticTask_t usb_lib_task_buffer;
+    
+    usb_lib_task_stack = (StackType_t*)heap_caps_malloc(4096, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    
+    if (usb_lib_task_stack == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to allocate USB library task stack memory");
+        return;
+    }
+    
+    // Create static task
+    TaskHandle_t usb_task_handle = xTaskCreateStatic(
+        usb_lib_task,
+        "usb_lib",
+        4096,
+        NULL,
+        EXAMPLE_USB_HOST_PRIORITY,
+        usb_lib_task_stack,
+        &usb_lib_task_buffer
+    );
+    
+    if (usb_task_handle == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to create USB library task");
+        heap_caps_free(usb_lib_task_stack);
+        return;
+    }
 
     ESP_LOGI(TAG, "Installing CDC-ACM driver");
     ESP_ERROR_CHECK(cdc_acm_host_install(NULL));

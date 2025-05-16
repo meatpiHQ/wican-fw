@@ -2458,7 +2458,7 @@ static httpd_handle_t config_server_init(void)
 			long filesize = ftell(f);
 			fseek(f, 0, SEEK_SET);
 
-			device_config_file = malloc(filesize + 1);
+			device_config_file = heap_caps_malloc(filesize + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 			if (device_config_file != NULL)
 			{
 				fread(device_config_file, sizeof(char), filesize, f);
@@ -2483,7 +2483,7 @@ static httpd_handle_t config_server_init(void)
 			long filesize = ftell(f);
 			fseek(f, 0, SEEK_SET);
 
-			mqtt_canflt_file = malloc(filesize + 1);
+			mqtt_canflt_file = heap_caps_malloc(filesize + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 			if (mqtt_canflt_file != NULL)
 			{
 				fread(mqtt_canflt_file, sizeof(char), filesize, f);
@@ -2629,17 +2629,45 @@ void config_server_start(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, u
 {
     if (server == NULL)
     {
-		device_id = did;
-    	ws_led = connected_led;
-    	xTX_Queue = xTXp_Queue;
-    	xRX_Queue = xRXp_Queue;
+        device_id = did;
+        ws_led = connected_led;
+        xTX_Queue = xTXp_Queue;
+        xRX_Queue = xRXp_Queue;
         ESP_LOGI(TAG, "Starting webserver");
         server = config_server_init();
 
-        xTaskCreate(websocket_task, "ws_task", 4096, (void*)AF_INET, 5, &xwebsocket_handle);
-
+        // Allocate stack memory in PSRAM for the websocket task
+        static StackType_t *websocket_task_stack;
+        static StaticTask_t websocket_task_buffer;
+        
+        websocket_task_stack = heap_caps_malloc(4096, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+        
+        if (websocket_task_stack == NULL)
+        {
+            ESP_LOGE(TAG, "Failed to allocate websocket task stack memory");
+            return;
+        }
+        
+        // Create static task
+        xwebsocket_handle = xTaskCreateStatic(
+            websocket_task,
+            "ws_task",
+            4096,
+            (void*)AF_INET,
+            5,
+            websocket_task_stack,
+            &websocket_task_buffer
+        );
+        
+        if (xwebsocket_handle == NULL)
+        {
+            ESP_LOGE(TAG, "Failed to create websocket task");
+            heap_caps_free(websocket_task_stack);
+            return;
+        }
     }
 }
+
 int8_t config_server_get_ble_config(void)
 {
 	if(strcmp(device_config.ble_status, "enable") == 0)

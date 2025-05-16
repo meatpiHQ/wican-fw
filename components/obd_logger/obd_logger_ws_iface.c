@@ -500,7 +500,8 @@ esp_err_t obd_logger_db_download_handler(httpd_req_t *req) {
     }
     
     // Read and send file in chunks
-    char* chunk = malloc(CHUNK_SIZE);
+    // char* chunk = malloc(CHUNK_SIZE);
+    void* chunk = heap_caps_malloc(CHUNK_SIZE, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     if (chunk == NULL) {
         ESP_LOGE(TAG, "Failed to allocate memory for file chunk");
         close(file);
@@ -549,57 +550,85 @@ const httpd_uri_t db_download_uri = {
 
 
 
- // Initialization function
- esp_err_t obd_logger_ws_iface_init(void) {
-     // Create mutex for connection management
-     conn_mutex = xSemaphoreCreateMutex();
-     if (!conn_mutex) {
-         ESP_LOGE(TAG, "Failed to create connection mutex");
-         return ESP_ERR_NO_MEM;
-     }
-     
-     // Initialize connection array
-     memset(connections, 0, sizeof(connections));
-     
-     // Create queues
-     sql_queue = xQueueCreate(CONFIG.sql_queue_size, sizeof(SQLRequest));
-     if (!sql_queue) {
-         ESP_LOGE(TAG, "Failed to create SQL queue");
-         vSemaphoreDelete(conn_mutex);
-         return ESP_ERR_NO_MEM;
-     }
-     
-     resp_queue = xQueueCreate(CONFIG.resp_queue_size, sizeof(Response));
-     if (!resp_queue) {
-         ESP_LOGE(TAG, "Failed to create response queue");
-         vQueueDelete(sql_queue);
-         vSemaphoreDelete(conn_mutex);
-         return ESP_ERR_NO_MEM;
-     }
-     
-     // Create tasks
-     if (xTaskCreate(sql_execution_task, "sql_task", CONFIG.sql_task_stack_size,
-                     NULL, 5, &sql_task_handle) != pdPASS) {
-         ESP_LOGE(TAG, "Failed to create SQL task");
-         goto error_cleanup;
-     }
-     
-     if (xTaskCreate(response_task, "resp_task", CONFIG.resp_task_stack_size,
-                     NULL, 5, &resp_task_handle) != pdPASS) {
-         ESP_LOGE(TAG, "Failed to create response task");
-         vTaskDelete(sql_task_handle);
-         goto error_cleanup;
-     }
-     
-     ESP_LOGI(TAG, "OBD logger WebSocket interface initialized");
-     return ESP_OK;
-     
- error_cleanup:
-     vQueueDelete(resp_queue);
-     vQueueDelete(sql_queue);
-     vSemaphoreDelete(conn_mutex);
-     return ESP_ERR_NO_MEM;
- }
+// Initialization function
+esp_err_t obd_logger_ws_iface_init(void) {
+    // Create mutex for connection management
+    conn_mutex = xSemaphoreCreateMutex();
+    if (!conn_mutex) {
+        ESP_LOGE(TAG, "Failed to create connection mutex");
+        return ESP_ERR_NO_MEM;
+    }
+    
+    // Initialize connection array
+    memset(connections, 0, sizeof(connections));
+    
+    // Create queues
+    sql_queue = xQueueCreate(CONFIG.sql_queue_size, sizeof(SQLRequest));
+    if (!sql_queue) {
+        ESP_LOGE(TAG, "Failed to create SQL queue");
+        vSemaphoreDelete(conn_mutex);
+        return ESP_ERR_NO_MEM;
+    }
+    
+    resp_queue = xQueueCreate(CONFIG.resp_queue_size, sizeof(Response));
+    if (!resp_queue) {
+        ESP_LOGE(TAG, "Failed to create response queue");
+        vQueueDelete(sql_queue);
+        vSemaphoreDelete(conn_mutex);
+        return ESP_ERR_NO_MEM;
+    }
+    
+    // Allocate stack memory in PSRAM for tasks
+    static StackType_t *sql_task_stack, *resp_task_stack;
+    static StaticTask_t sql_task_buffer, resp_task_buffer;
+    
+    sql_task_stack = heap_caps_malloc(CONFIG.sql_task_stack_size, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    resp_task_stack = heap_caps_malloc(CONFIG.resp_task_stack_size, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    
+    if (sql_task_stack == NULL || resp_task_stack == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate task stack memory");
+        if (sql_task_stack) heap_caps_free(sql_task_stack);
+        if (resp_task_stack) heap_caps_free(resp_task_stack);
+        goto error_cleanup;
+    }
+    
+    // Create static tasks
+    sql_task_handle = xTaskCreateStatic(
+        sql_execution_task,
+        "sql_task",
+        CONFIG.sql_task_stack_size,
+        NULL,
+        5,
+        sql_task_stack,
+        &sql_task_buffer
+    );
+    
+    resp_task_handle = xTaskCreateStatic(
+        response_task,
+        "resp_task",
+        CONFIG.resp_task_stack_size,
+        NULL,
+        5,
+        resp_task_stack,
+        &resp_task_buffer
+    );
+    
+    if (sql_task_handle == NULL || resp_task_handle == NULL) {
+        ESP_LOGE(TAG, "Failed to create tasks");
+        heap_caps_free(sql_task_stack);
+        heap_caps_free(resp_task_stack);
+        goto error_cleanup;
+    }
+    
+    ESP_LOGI(TAG, "OBD logger WebSocket interface initialized");
+    return ESP_OK;
+    
+error_cleanup:
+    vQueueDelete(resp_queue);
+    vQueueDelete(sql_queue);
+    vSemaphoreDelete(conn_mutex);
+    return ESP_ERR_NO_MEM;
+}
  
  // Cleanup function
  void obd_logger_ws_iface_deinit(void) {
