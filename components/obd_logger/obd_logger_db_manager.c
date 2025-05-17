@@ -184,7 +184,11 @@ esp_err_t obd_db_manager_force_rotation(void)
     // Store the old path for the index update
     char old_path[128];
     strcpy(old_path, db_manager.current_db_path);
-
+    
+    // Record the rotation time using RTCM
+    // We don't need to explicitly store this as it will be used
+    // in update_json_index when adding the "ended" field
+    
     // Create a new database file
     esp_err_t ret = create_new_db_file(false);
     if (ret != ESP_OK) {
@@ -298,10 +302,18 @@ esp_err_t obd_db_manager_get_file_list(obd_db_file_info_t *db_files,
                     db_files[*num_files].created_time = st.st_mtime;
                     db_files[*num_files].size_bytes = st.st_size;
                     
-                    // Set status (active or archived)
-                    if (strcmp(full_path, db_manager.current_db_path) == 0) {
-                        db_files[*num_files].status = DB_FILE_ACTIVE;
+                    // Extract current filename from path for comparison
+                    char *current_filename = strrchr(db_manager.current_db_path, '/');
+                    if (current_filename) {
+                        current_filename++; // Skip the slash
+                        // Compare just the filenames, not full paths
+                        if (strcmp(entry->d_name, current_filename) == 0) {
+                            db_files[*num_files].status = DB_FILE_ACTIVE;
+                        } else {
+                            db_files[*num_files].status = DB_FILE_ARCHIVED;
+                        }
                     } else {
+                        // Fallback if no slash in path
                         db_files[*num_files].status = DB_FILE_ARCHIVED;
                     }
                     
@@ -357,13 +369,20 @@ esp_err_t obd_db_manager_get_file_info(const char *filename,
     file_info->created_time = st.st_mtime;
     file_info->size_bytes = st.st_size;
     
-    // Check if this is the current active file
-    if (strcmp(full_path, db_manager.current_db_path) == 0) {
-        file_info->status = DB_FILE_ACTIVE;
+    // Extract current filename from path and compare only filenames
+    char *current_filename = strrchr(db_manager.current_db_path, '/');
+    if (current_filename) {
+        current_filename++; // Skip the slash
+        if (strcmp(filename, current_filename) == 0) {
+            file_info->status = DB_FILE_ACTIVE;
+        } else {
+            file_info->status = DB_FILE_ARCHIVED;
+        }
     } else {
+        // Fallback if no slash in path
         file_info->status = DB_FILE_ARCHIVED;
     }
-    
+
     return ESP_OK;
 }
 
@@ -703,6 +722,40 @@ static esp_err_t update_json_index(void)
         cJSON_AddStringToObject(db_item, "filename", db_files[i].filename);
         cJSON_AddStringToObject(db_item, "created", time_str);
         cJSON_AddNumberToObject(db_item, "size", db_files[i].size_bytes);
+        
+        // Add the ended timestamp for archived files
+        if (db_files[i].status != DB_FILE_ACTIVE) {
+            // For archived files, add the ended timestamp
+            char ended_time_str[32];
+            
+            if (i > 0 && db_files[i-1].status == DB_FILE_ACTIVE) {
+                // This is the most recently archived file
+                // Use current RTCM time as the end time
+                if (rtcm_get_iso8601_time(ended_time_str, sizeof(ended_time_str)) == ESP_OK) {
+                    cJSON_AddStringToObject(db_item, "ended", ended_time_str);
+                }
+            } else if (i < num_files - 1) {
+                // Use the creation time of the next newest file
+                // Extract timestamp from the next file's name or use its creation time
+                if (extract_timestamp_from_filename(db_files[i+1].filename, ended_time_str, sizeof(ended_time_str)) == ESP_OK) {
+                    cJSON_AddStringToObject(db_item, "ended", ended_time_str);
+                } else {
+                    // Fallback to next file's creation timestamp
+                    time_t ended_time = db_files[i+1].created_time;
+                    struct tm *timeinfo = localtime(&ended_time);
+                    if (timeinfo) {
+                        strftime(ended_time_str, sizeof(ended_time_str), "%Y-%m-%dT%H:%M:%S", timeinfo);
+                        cJSON_AddStringToObject(db_item, "ended", ended_time_str);
+                    }
+                }
+            } else {
+                // If this is the oldest file, use RTCM time
+                if (rtcm_get_iso8601_time(ended_time_str, sizeof(ended_time_str)) == ESP_OK) {
+                    cJSON_AddStringToObject(db_item, "ended", ended_time_str);
+                }
+            }
+        }
+        
         cJSON_AddStringToObject(db_item, "status", 
                                 db_files[i].status == DB_FILE_ACTIVE ? "active" : 
                                 db_files[i].status == DB_FILE_ARCHIVED ? "archived" : "corrupted");
