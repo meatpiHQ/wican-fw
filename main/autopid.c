@@ -1105,40 +1105,7 @@ static void autopid_task(void *pvParameters)
             {
                 continue;
             }
-            // autopid_data_write
-            if(curr_pid->pid_type != previous_pid_type) {
-                // Send appropriate initialization based on new PID type
-                switch(curr_pid->pid_type) {
-                    case PID_CUSTOM:
-                        if(all_pids->custom_init && strlen(all_pids->custom_init) > 0) {
-                            ESP_LOGI(TAG, "Sending custom init: %s, length: %d", 
-                                    all_pids->custom_init, strlen(all_pids->custom_init));
-                            send_commands(all_pids->custom_init, 2);
-                        }
-                        break;
-                        
-                    case PID_STD:
-                        if(all_pids->standard_init && strlen(all_pids->standard_init) > 0) {
-                            ESP_LOGI(TAG, "Sending standard init: %s, length: %d", 
-                                    all_pids->standard_init, strlen(all_pids->standard_init));
-                            send_commands(all_pids->standard_init, 2);
-                        }
-                        break;
-                        
-                    case PID_SPECIFIC:
-                        if(all_pids->specific_init && strlen(all_pids->specific_init) > 0) {
-                            ESP_LOGI(TAG, "Sending specific init: %s, length: %d", 
-                                    all_pids->specific_init, strlen(all_pids->specific_init));
-                            send_commands(all_pids->specific_init, 2);
-                        }
-                        break;
-                        
-                    case PID_MAX:
-                        break;
-                }
 
-                previous_pid_type = curr_pid->pid_type;
-            }
             // Loop through parameters
             for(uint32_t p = 0; p < curr_pid->parameters_count; p++) 
             {
@@ -1147,6 +1114,41 @@ static void autopid_task(void *pvParameters)
                 // Check parameter timer
                 if(wc_timer_is_expired(&param->timer)) 
                 {
+                    // autopid_data_write
+                    if(curr_pid->pid_type != previous_pid_type) {
+                        // Send appropriate initialization based on new PID type
+                        switch(curr_pid->pid_type) {
+                            case PID_CUSTOM:
+                                if(all_pids->custom_init && strlen(all_pids->custom_init) > 0) {
+                                    ESP_LOGI(TAG, "Sending custom init: %s, length: %d", 
+                                            all_pids->custom_init, strlen(all_pids->custom_init));
+                                    send_commands(all_pids->custom_init, 2);
+                                }
+                                break;
+                                
+                            case PID_STD:
+                                if(all_pids->standard_init && strlen(all_pids->standard_init) > 0) {
+                                    ESP_LOGI(TAG, "Sending standard init: %s, length: %d", 
+                                            all_pids->standard_init, strlen(all_pids->standard_init));
+                                    send_commands(all_pids->standard_init, 2);
+                                }
+                                break;
+                                
+                            case PID_SPECIFIC:
+                                if(all_pids->specific_init && strlen(all_pids->specific_init) > 0) {
+                                    ESP_LOGI(TAG, "Sending specific init: %s, length: %d", 
+                                            all_pids->specific_init, strlen(all_pids->specific_init));
+                                    send_commands(all_pids->specific_init, 2);
+                                }
+                                break;
+                                
+                            case PID_MAX:
+                                break;
+                        }
+
+                        previous_pid_type = curr_pid->pid_type;
+                    }
+
                     ESP_LOGI(TAG, "Processing parameter: %s", param->name);
                     // Reset timer with parameter period
                     wc_timer_set(&param->timer, param->period);
