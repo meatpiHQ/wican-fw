@@ -520,10 +520,18 @@ esp_err_t obd_logger_db_download_handler(httpd_req_t *req) {
         ESP_LOGI(TAG, "Starting to send database file, size: %ld bytes", file_stat.st_size);
     }
     
-    // Read and send file in chunks
+    // First try internal memory for better performance
     void* chunk = heap_caps_malloc(CHUNK_SIZE, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    
+    // If internal memory allocation fails, try PSRAM as fallback
     if (chunk == NULL) {
-        ESP_LOGE(TAG, "Failed to allocate memory for file chunk");
+        ESP_LOGW(TAG, "Internal memory allocation failed for file chunk, trying PSRAM");
+        chunk = heap_caps_malloc(CHUNK_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    }
+    
+    // If both internal and PSRAM allocation fail, handle the error
+    if (chunk == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate memory for file chunk (both internal and PSRAM)");
         close(file);
         obd_logger_unlock_open();
         httpd_resp_send_500(req);
@@ -713,9 +721,18 @@ esp_err_t obd_logger_db_file_handler(httpd_req_t *req)
     }
     
     // Read and send file in chunks
+    // First try internal memory for better performance
     char *buffer = heap_caps_malloc(CHUNK_SIZE, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    
+    // If internal memory allocation fails, try PSRAM as fallback
     if (!buffer) {
-        ESP_LOGE(TAG, "Failed to allocate memory for file buffer");
+        ESP_LOGW(TAG, "Internal memory allocation failed, trying PSRAM");
+        buffer = heap_caps_malloc(CHUNK_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    }
+    
+    // If both internal and PSRAM allocation fail, handle the error
+    if (!buffer) {
+        ESP_LOGE(TAG, "Failed to allocate memory for file buffer (both internal and PSRAM)");
         fclose(file);
         if (is_current_db) obd_logger_unlock_open();
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
