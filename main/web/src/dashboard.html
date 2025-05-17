@@ -3,683 +3,129 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OBD Logger WebSocket Client</title>
+    <title>OBD Data Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css">
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
-            background-color: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #333;
-            margin-bottom: 30px;
-            text-align: center;
-        }
-        .connection-section {
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #eee;
-        }
-        .query-section {
-            margin-bottom: 30px;
-        }
-        .form-group {
-            margin-bottom: 15px;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            color: #555;
-            font-weight: bold;
-        }
-        input[type="text"], textarea {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            box-sizing: border-box;
-        }
-        textarea {
-            height: 100px;
-            resize: vertical;
-        }
-        button {
-            background-color: #4CAF50;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            margin-right: 10px;
-            margin-bottom: 10px;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-        button:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-        }
-        .status {
-            display: inline-block;
-            padding: 5px 10px;
-            border-radius: 15px;
-            font-size: 14px;
-            margin-left: 10px;
-        }
-        .status.connected {
-            background-color: #4CAF50;
-            color: white;
-        }
-        .status.disconnected {
-            background-color: #f44336;
-            color: white;
-        }
-        .status.connecting {
-            background-color: #ff9800;
-            color: white;
-        }
-        .response-area {
-            background-color: #f8f8f8;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            padding: 15px;
-            min-height: 200px;
-            max-height: 400px;
+        .parameter-list {
+            max-height: 300px;
             overflow-y: auto;
-            white-space: pre-wrap;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
         }
-        .log-entry {
+        .search-box {
             margin-bottom: 10px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #ddd;
         }
-        .log-entry:last-child {
-            border-bottom: none;
-        }
-        .log-timestamp {
-            color: #666;
-            font-size: 12px;
-        }
-        .log-query {
-            color: #2196F3;
-            margin-top: 5px;
-        }
-        .log-response {
-            color: #333;
-            margin-top: 5px;
-        }
-        .error {
-            color: #f44336;
-        }
-        .db-section {
-            margin-bottom: 20px;
-            padding: 15px;
-            background-color: #f0f8ff;
-            border-radius: 5px;
-            border: 1px solid #cce5ff;
-        }
-        .db-info {
-            margin-top: 10px;
-            font-size: 14px;
-            color: #555;
-        }
-        .file-upload {
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px dashed #ccc;
-        }
-        .file-upload input {
-            margin-top: 10px;
-        }
-        .manual-download {
-            margin-top: 15px;
-            font-size: 14px;
-            color: #555;
-        }
-        /* Upload area styling */
-        .upload-area {
-            border: 2px dashed #cce5ff;
-            border-radius: 5px;
-            padding: 20px;
-            text-align: center;
-            margin-top: 15px;
+        .parameter-chart {
             background-color: #f8f9fa;
-            cursor: pointer;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
-        .upload-area.dragover {
-            background-color: #e8f4ff;
-            border-color: #4CAF50;
+        #chart-container {
+
+
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
         }
-        .upload-area i {
-            font-size: 30px;
-            color: #6c757d;
-            margin-bottom: 10px;
+        @media (min-width: 992px) {
+            /* Optional: For larger screens, you could display charts in a grid */
+            #chart-container {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));
+            }
+        }
+        .loading {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .param-checkbox {
+            margin-right: 8px;
+        }
+        .legend {
+            margin-top: 10px;
+        }
+        .legend-item {
+            display: inline-block;
+            margin-right: 15px;
+        }
+        .color-box {
+            display: inline-block;
+            width: 15px;
+            height: 15px;
+            margin-right: 5px;
         }
     </style>
-    <!-- SQL.js library from CDN -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
 </head>
 <body>
-    <div class="container">
-        <h1>OBD Logger WebSocket Client</h1>
+    <div class="container mt-4">
+        <h1 class="mb-4">OBD Data Dashboard</h1>
         
-        <div class="connection-section">
-            <div class="form-group">
-                <label for="serverIp">Server IP Address:</label>
-                <input type="text" id="serverIp" placeholder="e.g., 192.168.1.100" value="192.168.0.108">
-            </div>
-            <button id="connectBtn" onclick="toggleConnection()">Connect</button>
-            <span id="connectionStatus" class="status disconnected">Disconnected</span>
-        </div>
-        
-        <div class="db-section">
-            <h3>Local Database Operations</h3>
-            
-            <!-- Option 1: Direct fetch (may fail due to CORS) -->
-            <button id="fetchDbBtn" onclick="fetchDatabase()">Fetch Database</button>
-            
-            <!-- Option 2: Manual download and upload -->
-            <div class="file-upload">
-                <p class="manual-download">
-                    If automatic fetch fails, you can:
-                    <br>1. <a id="manualDownloadLink" href="#" target="_blank">Download the database file</a> manually
-                    <br>2. Then upload it here:
-                </p>
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>Date Range</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="dateRange" class="form-label">Select date range:</label>
+                            <input type="text" id="dateRange" class="form-control" />
+                        </div>
+                    </div>
+                </div>
                 
-                <div class="upload-area" id="uploadArea">
-                    <p>Drop SQLite DB file here or click to browse</p>
-                    <input type="file" id="dbFileInput" style="display: none;" accept=".db,.sqlite,.sqlite3">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Parameters</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="search-box">
+                            <input type="text" id="paramSearch" class="form-control" placeholder="Search parameters...">
+                        </div>
+                        <div class="parameter-list" id="parameterList">
+                            <div class="loading" id="paramLoading">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p>Loading parameters...</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             
-            <span id="dbStatus" class="status">No database loaded</span>
-            <div id="dbInfo" class="db-info"></div>
-        </div>
-
-        <div class="query-section">
-            <div class="form-group">
-                <label for="sqlQuery">SQLite Query:</label>
-                <textarea id="sqlQuery" placeholder="Enter your SQLite query here...">SELECT * FROM obd_data LIMIT 10;</textarea>
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Data Visualization</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="databaseInfo" class="mb-3">
+                            <!-- Status and info will be inserted here -->
+                        </div>
+                        <div id="dbLoading" class="loading">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p>Loading database information...</p>
+                        </div>
+                        <div id="chart-container"></div>
+                        <div id="chartLegend" class="legend"></div>
+                    </div>
+                </div>
             </div>
-            <button id="sendBtn" onclick="sendQuery()" disabled>Send to Server</button>
-            <button id="localQueryBtn" onclick="executeLocalQuery()" disabled>Run Query Locally</button>
-            <button onclick="clearLog()">Clear Log</button>
-        </div>
-        
-        <div class="form-group">
-            <label>Response Log:</label>
-            <div id="responseArea" class="response-area"></div>
         </div>
     </div>
 
-    <script>
-        let ws = null;
-        let connected = false;
-        let db = null;
-        let dbFileSize = 0;
-        
-        // Update manual download link when server IP changes
-        document.getElementById('serverIp').addEventListener('change', updateManualDownloadLink);
-        document.getElementById('serverIp').addEventListener('input', updateManualDownloadLink);
-        
-        function updateManualDownloadLink() {
-            const serverIp = document.getElementById('serverIp').value;
-            if (serverIp) {
-                const downloadLink = document.getElementById('manualDownloadLink');
-                downloadLink.href = `http://${serverIp}/download_db`;
-                downloadLink.textContent = `Download the database from ${serverIp}`;
-            }
-        }
-        
-        // Initialize the manual download link
-        updateManualDownloadLink();
-        
-        // Setup file upload functionality
-        const uploadArea = document.getElementById('uploadArea');
-        const fileInput = document.getElementById('dbFileInput');
-        
-        uploadArea.addEventListener('click', () => {
-            fileInput.click();
-        });
-        
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
-        });
-        
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
-        });
-        
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            
-            if (e.dataTransfer.files.length) {
-                handleFileUpload(e.dataTransfer.files[0]);
-            }
-        });
-        
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length) {
-                handleFileUpload(e.target.files[0]);
-            }
-        });
-        
-        function handleFileUpload(file) {
-            if (!file) return;
-            
-            // Check if file looks like a SQLite database
-            if (!file.name.endsWith('.db') && 
-                !file.name.endsWith('.sqlite') && 
-                !file.name.endsWith('.sqlite3') && 
-                file.type !== 'application/x-sqlite3' && 
-                file.type !== 'application/vnd.sqlite3') {
-                
-                if (!confirm('This file does not appear to be a SQLite database. Try anyway?')) {
-                    return;
-                }
-            }
-            
-            updateDbStatus('Reading uploaded file...');
-            logMessage('info', `Processing uploaded file: ${file.name} (${formatFileSize(file.size)})`);
-            
-            const reader = new FileReader();
-            
-            reader.onload = async (event) => {
-                try {
-                    const arrayBuffer = event.target.result;
-                    dbFileSize = file.size;
-                    
-                    // Initialize SQL.js
-                    updateDbStatus('Initializing SQL.js...');
-                    const SQL = await initSqlJs({
-                        locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
-                    });
-                    
-                    // Create a database from the file
-                    updateDbStatus('Loading database...');
-                    const uInt8Array = new Uint8Array(arrayBuffer);
-                    db = new SQL.Database(uInt8Array);
-                    
-                    // Get basic database info
-                    try {
-                        const tableCountResult = db.exec("SELECT count(*) FROM sqlite_master WHERE type='table'");
-                        const tableCount = tableCountResult[0].values[0][0];
-                        
-                        // Get list of tables
-                        const tablesResult = db.exec("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
-                        const tables = tablesResult[0].values.map(v => v[0]).join(', ');
-                        
-                        updateDbStatus(
-                            'Database loaded successfully', 
-                            `File: ${file.name} | Size: ${formatFileSize(file.size)} | Tables: ${tableCount} | ${tables}`
-                        );
-                        
-                        logMessage('success', `SQLite database loaded successfully. You can now run queries locally.`);
-                    } catch (error) {
-                        // The file might not be a valid SQLite database
-                        updateDbStatus('Error: Not a valid SQLite database');
-                        logMessage('error', 'The file does not appear to be a valid SQLite database.');
-                        db = null;
-                    }
-                } catch (error) {
-                    updateDbStatus(`Error: ${error.message}`);
-                    logMessage('error', `Failed to load database: ${error.message}`);
-                }
-            };
-            
-            reader.onerror = () => {
-                updateDbStatus('Error reading file');
-                logMessage('error', 'Error reading the uploaded file.');
-            };
-            
-            reader.readAsArrayBuffer(file);
-        }
-        
-        function updateConnectionStatus(status) {
-            const statusElement = document.getElementById('connectionStatus');
-            const connectBtn = document.getElementById('connectBtn');
-            const sendBtn = document.getElementById('sendBtn');
-            
-            switch(status) {
-                case 'connected':
-                    statusElement.textContent = 'Connected';
-                    statusElement.className = 'status connected';
-                    connectBtn.textContent = 'Disconnect';
-                    sendBtn.disabled = false;
-                    connected = true;
-                    break;
-                case 'disconnected':
-                    statusElement.textContent = 'Disconnected';
-                    statusElement.className = 'status disconnected';
-                    connectBtn.textContent = 'Connect';
-                    sendBtn.disabled = true;
-                    connected = false;
-                    break;
-                case 'connecting':
-                    statusElement.textContent = 'Connecting...';
-                    statusElement.className = 'status connecting';
-                    connectBtn.textContent = 'Cancel';
-                    sendBtn.disabled = true;
-                    break;
-            }
-        }
-        
-        function updateDbStatus(status, info = '') {
-            const statusElement = document.getElementById('dbStatus');
-            const localQueryBtn = document.getElementById('localQueryBtn');
-            const dbInfoElement = document.getElementById('dbInfo');
-            
-            statusElement.textContent = status;
-            if (info) {
-                dbInfoElement.textContent = info;
-            }
-            
-            if (status === 'Database loaded successfully') {
-                statusElement.className = 'status connected';
-                localQueryBtn.disabled = false;
-            } else if (status.includes('Error') || status.includes('Failed')) {
-                statusElement.className = 'status disconnected';
-                localQueryBtn.disabled = true;
-            } else {
-                statusElement.className = 'status connecting';
-                localQueryBtn.disabled = true;
-            }
-        }
-        
-        function logMessage(type, message, query = null) {
-            const responseArea = document.getElementById('responseArea');
-            const logEntry = document.createElement('div');
-            logEntry.className = 'log-entry';
-            
-            let html = '';
-            
-            if (query) {
-                html += `<div class="log-query">Query: ${query}</div>`;
-            }
-            
-            if (type === 'error') {
-                html += `<div class="log-response error">Error: ${message}</div>`;
-            } else {
-                html += `<div class="log-response">${message}</div>`;
-            }
-            
-            logEntry.innerHTML = html;
-            responseArea.insertBefore(logEntry, responseArea.firstChild);
-        }
-        
-        function toggleConnection() {
-            if (connected) {
-                disconnect();
-            } else {
-                connect();
-            }
-        }
-        
-        function connect() {
-            const serverIp = document.getElementById('serverIp').value;
-            if (!serverIp) {
-                alert('Please enter a server IP address');
-                return;
-            }
-            
-            updateConnectionStatus('connecting');
-            
-            const wsUrl = `ws://${serverIp}/obd_logger_ws`;
-            logMessage('info', `Connecting to ${wsUrl}...`);
-            
-            try {
-                ws = new WebSocket(wsUrl);
-                
-                ws.onopen = () => {
-                    updateConnectionStatus('connected');
-                    logMessage('success', 'Successfully connected to WebSocket server');
-                };
-                
-                ws.onmessage = (event) => {
-                    try {
-                        const response = JSON.parse(event.data);
-                        logMessage('response', JSON.stringify(response, null, 2));
-                    } catch (e) {
-                        logMessage('response', event.data);
-                    }
-                };
-                
-                ws.onerror = (error) => {
-                    logMessage('error', 'WebSocket error occurred');
-                    console.error('WebSocket error:', error);
-                };
-                
-                ws.onclose = () => {
-                    updateConnectionStatus('disconnected');
-                    logMessage('info', 'Disconnected from WebSocket server');
-                };
-            } catch (error) {
-                updateConnectionStatus('disconnected');
-                logMessage('error', `Failed to connect: ${error.message}`);
-            }
-        }
-        
-        function disconnect() {
-            if (ws) {
-                ws.close();
-                ws = null;
-            }
-            updateConnectionStatus('disconnected');
-        }
-        
-        function sendQuery() {
-            const query = document.getElementById('sqlQuery').value.trim();
-            if (!query) {
-                alert('Please enter a SQLite query');
-                return;
-            }
-            
-            if (!ws || ws.readyState !== WebSocket.OPEN) {
-                logMessage('error', 'Not connected to WebSocket server');
-                return;
-            }
-            
-            logMessage('info', 'Sending query to server...', query);
-            
-            try {
-                ws.send(query);
-            } catch (error) {
-                logMessage('error', `Failed to send query: ${error.message}`);
-            }
-        }
-        
-        async function fetchDatabase() {
-            const serverIp = document.getElementById('serverIp').value;
-            if (!serverIp) {
-                alert('Please enter a server IP address');
-                return;
-            }
-            
-            updateDbStatus('Fetching database...');
-            
-            try {
-                // You'll need to create this endpoint on your server
-                const downloadUrl = `http://${serverIp}/download_db`;
-                logMessage('info', `Attempting to download database from ${downloadUrl}...`);
-                
-                const startTime = Date.now();
-                
-                try {
-                    const response = await fetch(downloadUrl);
-                    
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    
-                    // Get the file size if available
-                    const contentLength = response.headers.get('Content-Length');
-                    if (contentLength) {
-                        dbFileSize = parseInt(contentLength, 10);
-                    }
-                    
-                    // Get the binary data
-                    const dbData = await response.arrayBuffer();
-                    const downloadTime = ((Date.now() - startTime) / 1000).toFixed(1);
-                    
-                    await loadDbFromArrayBuffer(dbData, dbFileSize || dbData.byteLength, downloadTime);
-                } catch (fetchError) {
-                    updateDbStatus('Error: CORS issue detected');
-                    logMessage('error', `Failed to fetch database automatically due to a CORS issue. Please use the manual download option instead.`);
-                    logMessage('info', 'CORS issue explanation: Your server is not configured to allow cross-origin requests, which prevents JavaScript from downloading the file. You can download it manually using your browser and then upload it here.');
-                }
-            } catch (error) {
-                updateDbStatus(`Error: ${error.message}`);
-                logMessage('error', `Failed to load database: ${error.message}`);
-            }
-        }
-        
-        async function loadDbFromArrayBuffer(arrayBuffer, fileSize, downloadTime = 'N/A') {
-            try {
-                updateDbStatus('Loading database into SQL.js...');
-                
-                // Initialize SQL.js
-                const SQL = await initSqlJs({
-                    locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
-                });
-                
-                // Create a database from the file
-                const uInt8Array = new Uint8Array(arrayBuffer);
-                db = new SQL.Database(uInt8Array);
-                
-                // Get basic database info
-                const tableCountResult = db.exec("SELECT count(*) FROM sqlite_master WHERE type='table'");
-                const tableCount = tableCountResult[0].values[0][0];
-                
-                // Get list of tables
-                const tablesResult = db.exec("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
-                const tables = tablesResult[0].values.map(v => v[0]).join(', ');
-                
-                const fileSizeFormatted = formatFileSize(fileSize);
-                
-                updateDbStatus(
-                    'Database loaded successfully', 
-                    `Size: ${fileSizeFormatted} | Download time: ${downloadTime}s | Tables: ${tableCount} | ${tables}`
-                );
-                
-                logMessage('success', `SQLite database loaded successfully (${fileSizeFormatted}). You can now run queries locally.`);
-                return true;
-            } catch (error) {
-                updateDbStatus(`Error loading database: ${error.message}`);
-                logMessage('error', `Failed to process database: ${error.message}`);
-                return false;
-            }
-        }
-        
-        function formatFileSize(bytes) {
-            if (bytes < 1024) return bytes + ' bytes';
-            else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
-            else return (bytes / 1048576).toFixed(1) + ' MB';
-        }
-        
-        function executeLocalQuery() {
-            if (!db) {
-                alert('Please fetch the database first');
-                return;
-            }
-            
-            const query = document.getElementById('sqlQuery').value.trim();
-            if (!query) {
-                alert('Please enter a SQLite query');
-                return;
-            }
-            
-            try {
-                logMessage('info', 'Executing local query...', query);
-                
-                const startTime = performance.now();
-                
-                // Execute the query
-                const results = db.exec(query);
-                
-                const executionTime = (performance.now() - startTime).toFixed(1);
-                
-                // Format and display results
-                const formattedResults = formatSqlResults(results, executionTime);
-                logMessage('response', formattedResults);
-            } catch (error) {
-                logMessage('error', `Query error: ${error.message}`);
-            }
-        }
-        
-        function formatSqlResults(results, executionTime) {
-            if (!results || results.length === 0) {
-                return `Query executed successfully in ${executionTime}ms. No results returned.`;
-            }
-            
-            let output = `Query executed in ${executionTime}ms\n\n`;
-            
-            results.forEach((result, resultIndex) => {
-                const columns = result.columns;
-                const values = result.values;
-                
-                if (resultIndex > 0) {
-                    output += '\n\n--- Next Result Set ---\n\n';
-                }
-                
-                // Create a table-like output for results
-                output += `Columns (${columns.length}): ${columns.join(', ')}\n`;
-                output += `Rows: ${values.length}\n\n`;
-                
-                // Limit displayed rows to avoid overwhelming the UI
-                const maxRowsToShow = 100;
-                const displayValues = values.length > maxRowsToShow ? 
-                    values.slice(0, maxRowsToShow) : values;
-                
-                displayValues.forEach((row, i) => {
-                    output += `Row ${i+1}:\n`;
-                    columns.forEach((col, j) => {
-                        const value = row[j] === null ? 'NULL' : row[j];
-                        output += `  ${col}: ${value}\n`;
-                    });
-                    if (i < displayValues.length - 1) {
-                        output += '\n';
-                    }
-                });
-                
-                if (values.length > maxRowsToShow) {
-                    output += `\n... (${values.length - maxRowsToShow} more rows not shown)`;
-                }
-            });
-            
-            return output;
-        }
-        
-        function clearLog() {
-            document.getElementById('responseArea').innerHTML = '';
-        }
-        
-        // Handle Enter key in query textarea
-        document.getElementById('sqlQuery').addEventListener('keydown', (event) => {
-            if (event.ctrlKey && event.key === 'Enter') {
-                event.preventDefault();
-                if (db) {
-                    executeLocalQuery();
-                } else if (connected) {
-                    sendQuery();
-                } else {
-                    alert('Please connect to server or load a database first');
-                }
-            }
-        });
-    </script>
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment/moment.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sql.js@1.8.0/dist/sql-wasm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.0/dist/chartjs-adapter-moment.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.7.1/dist/jszip.min.js"></script>
+    <script src="dashboard.js"></script>
 </body>
 </html>
