@@ -1218,35 +1218,8 @@
         }
 
         function loadDashboard() {
-            const dashboardContent = document.getElementById('dashboard-content');
-            
-            // Show loading state
-            dashboardContent.innerHTML = '<p>Loading dashboard content...</p>';
-            
-            // Fetch the dashboard HTML content
-            fetch('/dashboard.html')
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Failed to load dashboard content');
-                    }
-                    return response.text();
-                })
-                .then(html => {
-                    // Insert the HTML content
-                    dashboardContent.innerHTML = html;
-                    
-                    // Load the dashboard JavaScript
-                    const script = document.createElement('script');
-                    script.src = '/dashboard.js';
-                    script.onerror = () => {
-                        showNotification('Failed to load dashboard JavaScript', 'red');
-                    };
-                    document.body.appendChild(script);
-                })
-                .catch(error => {
-                    dashboardContent.innerHTML = `<p>Error loading dashboard: ${error.message}</p>`;
-                    showNotification('Failed to load dashboard content', 'red');
-                });
+            // Redirect to the dashboard page
+            window.location.href = '/dashboard.html';
         }
 
         function setRTCTime() {
