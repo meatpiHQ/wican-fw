@@ -18,8 +18,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
- #ifndef OBD_LOGGER_WS_IFACE_H
- #define OBD_LOGGER_WS_IFACE_H
+ #ifndef OBD_LOGGER_IFACE_H
+ #define OBD_LOGGER_IFACE_H
  
 #include "esp_http_server.h"
 
@@ -27,8 +27,7 @@ extern const httpd_uri_t obd_logger_ws;
 extern const httpd_uri_t db_download_uri;
 extern const httpd_uri_t db_files_uri;
 
-esp_err_t obd_logger_ws_handler(httpd_req_t *req);
-esp_err_t obd_logger_ws_iface_init(void);
+esp_err_t obd_logger_iface_init(void);
  
- #endif /* OBD_LOGGER_WS_IFACE_H */
+ #endif /* OBD_LOGGER_IFACE_H */
  

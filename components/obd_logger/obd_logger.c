@@ -34,7 +34,7 @@
 #include "rtcm.h"
 #include "obd_logger.h"
 #include "cJSON.h"
-#include "obd_logger_ws_iface.h"
+#include "obd_logger_iface.h"
 #include "obd_logger_db_manager.h"
 #include <time.h>
 
@@ -1021,7 +1021,7 @@ esp_err_t odb_logger_init(obd_logger_t *obd_logger)
     ESP_LOGI(TAG, "OBD logger task created successfully");
     ESP_LOGI(TAG, "OBD logger initialized successfully");
 
-    obd_logger_ws_iface_init();
+    obd_logger_iface_init();
     // obd_db_manager_force_rotation();
     
     return ESP_OK;
