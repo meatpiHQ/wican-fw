@@ -80,7 +80,9 @@
 #include "hw_config.h"
 #include "rtcm.h"
 #include "esp_littlefs.h"
-#include "obd_logger_ws_iface.h"
+#include "obd_logger_iface.h"
+#include "https_client_mgr.h"
+#include "sdcard.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
@@ -108,20 +110,54 @@ extern const unsigned char dashboard_js_start[] asm("_binary_dashboard_js_start"
 extern const unsigned char dashboard_js_end[] asm("_binary_dashboard_js_end");
 extern const unsigned char chart_js_start[] asm("_binary_chart_js_start");
 extern const unsigned char chart_js_end[] asm("_binary_chart_js_end");
+extern const unsigned char sql_wasm_js_start[] asm("_binary_sqlwasm_js_start");
+extern const unsigned char sql_wasm_js_end[] asm("_binary_sqlwasm_js_end");
+extern const unsigned char sql_wasm_wasm_start[] asm("_binary_sqlwasm_wasm_start");
+extern const unsigned char sql_wasm_wasm_end[] asm("_binary_sqlwasm_wasm_end");
+extern const unsigned char bootstrap_bundle_min_js_start[] asm("_binary_bootstrap_bundle_min_js_start");
+extern const unsigned char bootstrap_bundle_min_js_end[] asm("_binary_bootstrap_bundle_min_js_end");
+extern const unsigned char daterangepicker_min_js_start[] asm("_binary_daterangepicker_min_js_start");
+extern const unsigned char daterangepicker_min_js_end[] asm("_binary_daterangepicker_min_js_end");
+extern const unsigned char jquery_min_js_start[] asm("_binary_jquery_min_js_start");
+extern const unsigned char jquery_min_js_end[] asm("_binary_jquery_min_js_end");
+extern const unsigned char moment_min_js_start[] asm("_binary_moment_min_js_start");
+extern const unsigned char moment_min_js_end[] asm("_binary_moment_min_js_end");
+extern const unsigned char chartjs_adapter_moment_min_js_start[] asm("_binary_chartjs_adapter_moment_min_js_start");
+extern const unsigned char chartjs_adapter_moment_min_js_end[] asm("_binary_chartjs_adapter_moment_min_js_end");
+extern const unsigned char jszip_min_js_start[] asm("_binary_jszip_min_js_start");
+extern const unsigned char jszip_min_js_end[] asm("_binary_jszip_min_js_end");
+extern const unsigned char daterangepicker_css_start[] asm("_binary_daterangepicker_css_start");
+extern const unsigned char daterangepicker_css_end[] asm("_binary_daterangepicker_css_end");
+extern const unsigned char bootstrap_min_css_start[] asm("_binary_bootstrap_min_css_start");
+extern const unsigned char bootstrap_min_css_end[] asm("_binary_bootstrap_min_css_end");
 
 typedef struct {
     const char *uri;
     const char *content_type;
     const unsigned char *data_start;
     const unsigned char *data_end;
+    bool load_from_fs;      
+    const char *fs_path;
+	const char *download_uri;
 } file_lookup_t;
 
 static const file_lookup_t file_lookup[] = {
-    {"/dashboard.html", "text/html", dashboard_html_start, dashboard_html_end},
-    {"/dashboard.js", "application/javascript", dashboard_js_start, dashboard_js_end},
-	{"/chart.js", "application/javascript", chart_js_start, chart_js_end},
-    // Add more files as needed
-    {NULL, NULL, NULL, NULL} // Sentinel to mark end of array
+    {"/dashboard.html", "text/html", dashboard_html_start, dashboard_html_end, false, NULL, NULL},
+    {"/dashboard.js", "application/javascript", dashboard_js_start, dashboard_js_end, false, NULL, NULL},
+	{"/chartjs-adapter-moment.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/chartjs-adapter-moment.min.js", "https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.0/dist/chartjs-adapter-moment.min.js"},
+	{"/jquery-3.6.0.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/jquery-3.6.0.min.js", "https://code.jquery.com/jquery-3.6.0.min.js"},
+	{"/bootstrap.bundle.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/bootstrap.bundle.min.js", "https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"},
+	{"/moment.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/moment.min.js", "https://cdn.jsdelivr.net/npm/moment/moment.min.js"},
+	{"/daterangepicker.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/daterangepicker.min.js", "https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"},
+	{"/sql-wasm.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/sql-wasm.js", "https://cdn.jsdelivr.net/npm/sql.js@1.8.0/dist/sql-wasm.js"},
+	{"/chart.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/chart.js", "https://cdn.jsdelivr.net/npm/chart.js"},
+	{"/jszip.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/jszip.min.js", "https://cdn.jsdelivr.net/npm/jszip@3.7.1/dist/jszip.min.js"},
+	{"/sql-wasm.wasm", "application/wasm", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/sql-wasm.wasm", "https://cdn.jsdelivr.net/npm/sql.js@1.8.0/dist/sql-wasm.wasm"},
+	{"/bootstrap.min.css", "text/css", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/bootstrap.min.css", "https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css"},
+	{"/daterangepicker.min.css", "text/css", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/daterangepicker.min.css", "https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.css"},
+	{"/daterangepicker.css", "text/css", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/daterangepicker.min.css", "https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css"},
+
+	{NULL, NULL, NULL, NULL, false, NULL, NULL} // Sentinel to mark end of array
 };
 
 static char can_datarate_str[11][7] = {
@@ -374,20 +410,161 @@ int32_t config_server_get_port(void)
 	return -1;
 }
 
+// Create directories recursively if they don't exist
+static esp_err_t create_dir_recursively(const char* path) {
+    if (!path) return ESP_ERR_INVALID_ARG;
+    
+    char* temp_path = strdup(path);
+    if (!temp_path) return ESP_ERR_NO_MEM;
+    
+    // Make sure the path ends with a delimiter
+    size_t len = strlen(temp_path);
+    if (temp_path[len-1] != '/') {
+        char* new_path = realloc(temp_path, len + 2);
+        if (!new_path) {
+            free(temp_path);
+            return ESP_ERR_NO_MEM;
+        }
+        temp_path = new_path;
+        temp_path[len] = '/';
+        temp_path[len+1] = '\0';
+    }
+    
+    // Create parent directories
+    for (char* p = temp_path + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            
+            // Try to create directory
+            if (mkdir(temp_path, 0755) != 0) {
+                // Ignore error if directory already exists
+                if (errno != EEXIST) {
+                    ESP_LOGE(TAG, "Failed to create directory %s: %s", temp_path, strerror(errno));
+                }
+            } else {
+                ESP_LOGI(TAG, "Created directory: %s", temp_path);
+            }
+            
+            *p = '/';
+        }
+    }
+    
+    free(temp_path);
+    return ESP_OK;
+}
+
 static esp_err_t file_handler(httpd_req_t *req)
 {
     char *uri = req->uri;
+	const uint32_t chunk_size = 1024 * 64;
     ESP_LOGI(TAG, "Request URI: %s", uri);
     
     // Look for the requested URI in our lookup table
     const file_lookup_t *file = file_lookup;
     while (file->uri != NULL) {
         if (strcmp(uri, file->uri) == 0) {
-            // Found a match, serve this file
-            httpd_resp_set_type(req, file->content_type);
-            const size_t file_size = file->data_end - file->data_start;
-            esp_err_t ret = httpd_resp_send(req, (const char*)file->data_start, file_size);
-            return (ret == ESP_OK) ? ESP_OK : ESP_FAIL;
+            ESP_LOGI(TAG, "Found file entry: %s", file->uri);
+            
+            // If configured to load from filesystem
+            if (file->load_from_fs && file->fs_path != NULL) {
+                struct stat st;
+                if (stat(file->fs_path, &st) == 0) {
+                    // File exists on filesystem, serve it
+                    ESP_LOGI(TAG, "Serving file from filesystem: %s", file->fs_path);
+                    FILE *fp = fopen(file->fs_path, "r");
+                    if (fp) {
+                        httpd_resp_set_type(req, file->content_type);
+                        char *buffer = malloc(chunk_size);
+                        if (!buffer) {
+                            fclose(fp);
+                            return ESP_ERR_NO_MEM;
+                        }
+                        
+                        size_t bytes_read;
+                        while ((bytes_read = fread(buffer, 1, chunk_size, fp)) > 0) {
+                            httpd_resp_send_chunk(req, buffer, bytes_read);
+                        }
+                        httpd_resp_send_chunk(req, NULL, 0); // End response
+                        free(buffer);
+                        fclose(fp);
+                        return ESP_OK;
+                    }
+                } else if (file->download_uri != NULL) {
+					// File doesn't exist, try to download it
+					ESP_LOGI(TAG, "File not found on filesystem, attempting to download from: %s", file->download_uri);
+					
+					esp_err_t ret = https_client_mgr_init();
+					if (ret != ESP_OK) {
+						ESP_LOGE(TAG, "Failed to initialize HTTPS client: %s", esp_err_to_name(ret));
+						httpd_resp_send_500(req);
+						return ESP_FAIL;
+					}
+					
+					// Create directories recursively
+					char *path_copy = strdup(file->fs_path);
+					if (path_copy) {
+						char *last_slash = strrchr(path_copy, '/');
+						if (last_slash) {
+							*last_slash = '\0';
+							create_dir_recursively(path_copy);
+						}
+						free(path_copy);
+					}
+					
+					// Download the file
+					ret = https_client_mgr_download_file(
+						file->download_uri,
+						file->fs_path,
+						NULL  // No progress callback in this context
+					);
+					
+					https_client_mgr_deinit();
+					
+					if (ret == ESP_OK) {
+						ESP_LOGI(TAG, "File downloaded successfully: %s", file->fs_path);
+						
+						// Now serve the downloaded file
+						FILE *fp = fopen(file->fs_path, "r");
+						if (fp) {
+							httpd_resp_set_type(req, file->content_type);
+							char *buffer = malloc(chunk_size);
+							if (!buffer) {
+								fclose(fp);
+								httpd_resp_send_500(req);
+								return ESP_ERR_NO_MEM;
+							}
+							
+							size_t bytes_read;
+							while ((bytes_read = fread(buffer, 1, chunk_size, fp)) > 0) {
+								httpd_resp_send_chunk(req, buffer, bytes_read);
+							}
+							httpd_resp_send_chunk(req, NULL, 0); // End response
+							free(buffer);
+							fclose(fp);
+							return ESP_OK;
+						} else {
+							ESP_LOGE(TAG, "Failed to open downloaded file: %s", file->fs_path);
+						}
+					} else {
+						ESP_LOGE(TAG, "Failed to download file: %s, error: %s", 
+								file->download_uri, esp_err_to_name(ret));
+					}
+				}				
+            }
+            
+            // Fallback to serving from memory if filesystem loading failed or wasn't configured
+            if (file->data_start != NULL && file->data_end != NULL) {
+                ESP_LOGI(TAG, "Serving file from memory: %s", file->uri);
+                httpd_resp_set_type(req, file->content_type);
+                const size_t file_size = file->data_end - file->data_start;
+                esp_err_t ret = httpd_resp_send(req, (const char*)file->data_start, file_size);
+                return (ret == ESP_OK) ? ESP_OK : ESP_FAIL;
+            }
+            
+            // If we get here, we couldn't serve the file
+            ESP_LOGE(TAG, "Failed to serve file: %s", file->uri);
+            httpd_resp_send_500(req);
+            return ESP_FAIL;
         }
         file++;
     }
@@ -2516,6 +2693,7 @@ static httpd_handle_t config_server_init(void)
     // Start the httpd server
 	config.max_uri_handlers = 23;
 	config.stack_size = (10*1024);
+	config.max_open_sockets = 15;
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK)
     {

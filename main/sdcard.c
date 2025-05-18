@@ -12,10 +12,9 @@
 #include "hw_config.h"
 #include "esp_littlefs.h"
 
-#define MOUNT_POINT "/sdcard"
 #define OTA_BUFFER_SIZE 4096  
 
-static const char *TAG = "sd_card";
+static const char *TAG = "SDCARD";
 #ifdef USE_SD_FATFS
 static sdmmc_card_t *s_card = NULL;
 #else
@@ -59,7 +58,7 @@ esp_err_t sdcard_perform_ota_update(const char* firmware_path)
 
     // Construct full path
     char full_path[128];
-    snprintf(full_path, sizeof(full_path), "%s%s", MOUNT_POINT, firmware_path);
+    snprintf(full_path, sizeof(full_path), "%s%s", SD_CARD_MOUNT_POINT, firmware_path);
     
     // Open firmware file
     FILE *firmware_file = fopen(full_path, "rb");
@@ -273,7 +272,7 @@ esp_err_t sd_card_init(void)
     };
 
     // Mount the filesystem
-    ret = esp_vfs_fat_sdmmc_mount(MOUNT_POINT, &host, &slot_config, &mount_config, &s_card);
+    ret = esp_vfs_fat_sdmmc_mount(SD_CARD_MOUNT_POINT, &host, &slot_config, &mount_config, &s_card);
 
     if (ret != ESP_OK) 
     {
@@ -367,7 +366,7 @@ esp_err_t sd_card_deinit(void)
 
     // Unmount partition and disable SDMMC
     #ifdef USE_SD_FATFS
-    esp_err_t ret = esp_vfs_fat_sdcard_unmount(MOUNT_POINT, s_card);
+    esp_err_t ret = esp_vfs_fat_sdcard_unmount(SD_CARD_MOUNT_POINT, s_card);
     if (ret != ESP_OK) 
     {
         ESP_LOGE(TAG, "Failed to unmount SD card");
@@ -419,7 +418,7 @@ bool sdcard_is_available(void)
 
 const char* sdcard_get_mount_point(void) 
 {
-    return MOUNT_POINT;
+    return SD_CARD_MOUNT_POINT;
 }
 
 bool sdcard_is_mounted(void)
@@ -489,7 +488,7 @@ esp_err_t sdcard_test_rw(void)
         return ESP_ERR_INVALID_STATE;
     }
 
-    const char *test_path = MOUNT_POINT "/test.txt";
+    const char *test_path = SD_CARD_MOUNT_POINT "/test.txt";
     const char *test_content = "WiCAN SD Card Test";
     char read_buffer[32] = {0};
     

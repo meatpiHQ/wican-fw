@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-#define MOUNT_POINT "/sdcard"
+#define SD_CARD_MOUNT_POINT "/sdcard"
 
 typedef enum {
     CARD_TYPE_SDSC = 0,
