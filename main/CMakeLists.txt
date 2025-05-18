@@ -54,6 +54,7 @@ set(requires
     esp_http_client
     spi_flash
     obd_logger
+    https_client_mgr
 )
 
 # Register the component
@@ -77,7 +78,6 @@ idf_component_register(
         "web/src/homepage.html"
         "web/src/dashboard.html"
         "web/src/dashboard.js"
-        "web/src/chart.js"
         "obd_fw/V2.3.18.txt"
         "logo.txt"
 )
