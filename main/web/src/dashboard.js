@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', async function() {
     // Initialize SQLite
     const SQL = await initSqlJs({
-        locateFile: file => `https://cdn.jsdelivr.net/npm/sql.js@1.8.0/dist/sql-wasm.wasm`
+        locateFile: file => `sql-wasm.wasm`
     });
     
     let dbIndex = null;
@@ -597,7 +597,9 @@ async function updateChart() {
         
         const downloadButton = document.createElement('button');
         downloadButton.id = 'downloadDbButton';
-        downloadButton.className = 'btn btn-primary btn-sm mt-2';
+        downloadButton.className = 'btn btn-sm mt-2'; // Removed color class
+        downloadButton.style.backgroundColor = '#24478f';
+        downloadButton.style.color = 'white'; // Setting text color to white for better contrast
         downloadButton.textContent = 'Download Selected Database Files';
         downloadButton.addEventListener('click', downloadDatabaseData);
         
@@ -610,7 +612,7 @@ async function updateChart() {
     // JSZip is required for the download functionality
     if (!window.JSZip) {
         const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/jszip@3.7.1/dist/jszip.min.js';
+        script.src = 'jszip.min.js';
         document.head.appendChild(script);
     }
 });
