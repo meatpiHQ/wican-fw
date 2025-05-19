@@ -13,7 +13,7 @@
       "pid": "220207",
       "pid_init": "ATSH743;ATFCSH743;ATCRA763;",
       "parameters": {
-        "Odometer": "[B4:B6]"
+        "ODOMETER": "[B4:B6]"
       }
     },
       {
