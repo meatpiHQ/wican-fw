@@ -1,0 +1,13 @@
+{
+  "car_model": "Chevrolet: Volt Gen2",
+  "init": "ATSP6;ATST96;",
+  "pids": [
+    {
+      "pid": "22005B",
+      "pid_init": "ATSH7E0",
+      "parameters": {
+        "SOC": "(B4*100)/255"
+      }
+    }
+  ]
+}
