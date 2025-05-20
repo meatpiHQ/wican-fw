@@ -511,7 +511,7 @@ static void obd_rx_task(void *pvParameters)
 void app_main(void)
 {
 	void* internal_buf = NULL;
-	internal_buf = heap_caps_malloc(64 * 1024, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+	// internal_buf = heap_caps_malloc(64 * 1024, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 
 	gpio_reset_pin(BUTTON_GPIO_NUM);
 	gpio_set_direction(BUTTON_GPIO_NUM, GPIO_MODE_INPUT);
