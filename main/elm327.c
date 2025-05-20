@@ -1312,7 +1312,7 @@ void elm327_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q), QueueH
 #define DEFAULT_BAUD_RATE 115200
 // #define DESIRED_BAUD_RATE 115200
 // #define DEFAULT_BAUD_RATE 2000000
-#define BUFFER_SIZE 128
+#define UART_BUFFER_SIZE 128
 
 #define ELM327_UPDATE_BUF_SIZE 512
 #define ELM327_UPDATE_MAX_LINE_LENGTH 256
@@ -1659,7 +1659,7 @@ static int uart_read_until_pattern(uart_port_t uart_num, char* buffer, size_t bu
 
 bool elm327_set_baudrate(void)
 {
-    char rx_buffer[BUFFER_SIZE];
+    char rx_buffer[UART_BUFFER_SIZE];
     int len;
     bool success = false;
     char command[20];
@@ -1677,7 +1677,7 @@ bool elm327_set_baudrate(void)
 
         uart_write_bytes(UART_NUM_1, "VTVERS\r", 7);
         
-        len = uart_read_until_pattern(UART_NUM_1, rx_buffer, BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
+        len = uart_read_until_pattern(UART_NUM_1, rx_buffer, UART_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
         
         if (len > 2 && rx_buffer[len-2] == '\r' && rx_buffer[len-1] == '>')
         {
@@ -1690,7 +1690,7 @@ bool elm327_set_baudrate(void)
             ESP_LOGI(TAG, "Trying %d baud", DEFAULT_BAUD_RATE);
             
             uart_write_bytes(UART_NUM_1, "VTVERS\r", 7);
-            len = uart_read_until_pattern(UART_NUM_1, rx_buffer, BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
+            len = uart_read_until_pattern(UART_NUM_1, rx_buffer, UART_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
             
             if (len > 2 && rx_buffer[len-2] == '\r' && rx_buffer[len-1] == '>')
             {
@@ -1699,7 +1699,7 @@ bool elm327_set_baudrate(void)
                 
                 snprintf(command, sizeof(command), "STSBR %d\r", DESIRED_BAUD_RATE);
                 uart_write_bytes(UART_NUM_1, command, strlen(command));
-                len = uart_read_until_pattern(UART_NUM_1, rx_buffer, BUFFER_SIZE - 1, "OK", UART_TIMEOUT_MS);
+                len = uart_read_until_pattern(UART_NUM_1, rx_buffer, UART_BUFFER_SIZE - 1, "OK", UART_TIMEOUT_MS);
                 
                 if (len > 0 && strstr(rx_buffer, "OK"))
                 {
@@ -1707,7 +1707,7 @@ bool elm327_set_baudrate(void)
                     uart_set_baudrate(UART_NUM_1, DESIRED_BAUD_RATE);
                     
                     uart_write_bytes(UART_NUM_1, "VTVERS\r", 7);
-                    len = uart_read_until_pattern(UART_NUM_1, rx_buffer, BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
+                    len = uart_read_until_pattern(UART_NUM_1, rx_buffer, UART_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
                     
                     if (len > 2 && rx_buffer[len-2] == '\r' && rx_buffer[len-1] == '>')
                     {
@@ -1715,7 +1715,7 @@ bool elm327_set_baudrate(void)
                         success = true;
                         
                         uart_write_bytes(UART_NUM_1, "STWBR\r", 6);
-                        uart_read_until_pattern(UART_NUM_1, rx_buffer, BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
+                        uart_read_until_pattern(UART_NUM_1, rx_buffer, UART_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
                     }
                     else
                     {
@@ -1762,7 +1762,7 @@ void elm327_hardreset_chip(void)
 			uart_write_bytes(UART_NUM_1, "ATZ\r", strlen("ATZ\r"));
 		}
 		memset(rsp_buffer, 0, sizeof(rsp_buffer));
-        int len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS+300);
+        int len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, UART_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS+300);
 		if(len > 0)
 		{
 			// ESP_LOG_BUFFER_CHAR(TAG, rsp_buffer, len);
@@ -2078,11 +2078,11 @@ static void elm327_disable_wake_commands(void)
 	xSemaphoreTake(xuart1_semaphore, portMAX_DELAY);
 	//make sure chip goes to sleep
 	uart_write_bytes(UART_NUM_1, "ATPP 0F SV 95\r", strlen("ATPP 0F SV 95\r"));
-    uart_read_until_pattern(UART_NUM_1, rx_buffer, BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
+    uart_read_until_pattern(UART_NUM_1, rx_buffer, UART_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
 	bzero(rx_buffer, 256);
 	vTaskDelay(pdMS_TO_TICKS(100));
 	uart_write_bytes(UART_NUM_1, "ATPP 0F ON\r", strlen("ATPP 0F ON\r"));
-    uart_read_until_pattern(UART_NUM_1, rx_buffer, BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
+    uart_read_until_pattern(UART_NUM_1, rx_buffer, UART_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
 	vTaskDelay(pdMS_TO_TICKS(100));
 	xSemaphoreGive(xuart1_semaphore);
 	elm327_hardreset_chip();
