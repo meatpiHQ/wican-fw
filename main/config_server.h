@@ -177,7 +177,7 @@ int8_t config_server_get_wakeup_volt(float *wakeup_volt);
 int8_t config_server_get_sleep_time(uint32_t *sleep_time);
 int8_t config_server_get_wakeup_time(uint32_t *wakeup_time);
 wifi_security_t config_server_get_sta_security(void);
-int8_t config_server_get_logger_status(void);
+int8_t config_server_get_logger_config(void);
 int8_t config_server_get_log_period(uint32_t *log_period);
 log_storage_t config_server_get_log_storage(void);
 log_filesystem_t config_server_get_log_filesystem(void);
