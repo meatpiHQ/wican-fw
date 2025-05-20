@@ -510,7 +510,9 @@ static void obd_rx_task(void *pvParameters)
 
 void app_main(void)
 {
-	void* internal_buf = heap_caps_malloc(64 * 1024, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+	void* internal_buf = NULL;
+	internal_buf = heap_caps_malloc(64 * 1024, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+
 	gpio_reset_pin(BUTTON_GPIO_NUM);
 	gpio_set_direction(BUTTON_GPIO_NUM, GPIO_MODE_INPUT);
 	gpio_set_pull_mode(BUTTON_GPIO_NUM, GPIO_PULLUP_ONLY);
@@ -776,8 +778,13 @@ void app_main(void)
 		// #if HARDWARE_VER != WICAN_PRO
 		// can_enable();
 		// #endif
-		
-		autopid_init((char*)&uid[0]);
+		uint32_t log_period = 0;
+		if(config_server_get_log_period(&log_period) == -1)
+		{
+			ESP_LOGE(TAG, "error getting log period");
+			log_period = 60;
+		}
+		autopid_init((char*)&uid[0], config_server_get_logger_config(), log_period);
 	}
 
 	#else
@@ -888,6 +895,10 @@ void app_main(void)
 			#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 			ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, pass, &ble_uid[0]);
 			#elif HARDWARE_VER == WICAN_PRO
+			if(internal_buf != NULL)
+			{
+				free(internal_buf);
+			}
 			ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, 0, pass, &ble_uid[0]);
 			#endif
 		}
@@ -976,12 +987,13 @@ void app_main(void)
 	// esp_log_level_set("autopid_find_standard_pid", ESP_LOG_INFO);
 	// esp_log_level_set("SLEEP_MODE", ESP_LOG_INFO);
 	// esp_log_level_set("OBD_LOGGER", ESP_LOG_INFO);
-	esp_log_level_set("OBD_LOGGER_WS_IFACE", ESP_LOG_INFO);
+	// esp_log_level_set("OBD_LOGGER_WS_IFACE", ESP_LOG_INFO);
 	// esp_log_level_set("CONFIG_SERVER", ESP_LOG_INFO);
 	// esp_log_level_set("EX_TIME", ESP_LOG_INFO);
 	// esp_log_level_set("AUTO_PID", ESP_LOG_INFO);
 	// esp_log_level_set("QUERY_EXAMPLE", ESP_LOG_INFO);
 	// esp_log_level_set("sqlite_log", ESP_LOG_INFO);
+	// esp_log_level_set("AUTO_PID", ESP_LOG_INFO);
 	
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
@@ -994,6 +1006,9 @@ void app_main(void)
     #endif
 
 	console_init();
-	free(internal_buf);
+	if(internal_buf != NULL)
+	{
+		free(internal_buf);
+	}
 }
 
