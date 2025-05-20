@@ -1106,7 +1106,6 @@
                     <td>Storage Filesystem:</td>
                     <td>
                         <select name="log_filesystem" id="log_filesystem" onChange="submit_enable();">
-                            <option value="littlefs">LittleFS</option>
                             <option value="fatfs">FATFS</option>
                         </select>
                     </td>
@@ -1117,12 +1116,12 @@
                         <input type="range" 
                             id="log_period" 
                             name="log_period" 
-                            value="10" 
-                            min="1" 
+                            value="60" 
+                            min="10" 
                             max="300" 
                             step="1"
                             oninput="document.getElementById('log_period_value').textContent = this.value;submit_enable();">
-                        <span id="log_period_value">10</span>sec
+                        <span id="log_period_value">60</span>sec
                     </td>
                 </tr>
             </table>
@@ -2847,10 +2846,8 @@ function loadAutoTable(jsonData) {
                 document.getElementById("logger_status").selectedIndex = "1";
             }
 
-            if (obj.log_filesystem === "littlefs") {
+            if (obj.log_filesystem === "fatfs") {
                 document.getElementById("log_filesystem").selectedIndex = "0";
-            } else if (obj.log_filesystem === "fatfs") {
-                document.getElementById("log_filesystem").selectedIndex = "1";
             }
 
             if (obj.log_storage === "sdcard") {
