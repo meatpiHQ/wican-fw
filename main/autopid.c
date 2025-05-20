@@ -48,7 +48,7 @@
 #define TEMP_BUFFER_LENGTH  32
 #define ECU_CONNECTED_BIT			BIT0
 
-static char auto_pid_buf[BUFFER_SIZE];
+static char* auto_pid_buf;
 static QueueHandle_t autopidQueue;
 static char* device_id;
 static EventGroupHandle_t xautopid_event_group = NULL;
@@ -57,7 +57,7 @@ static response_t elm327_response;
 static autopid_data_t autopid_data;
 
 #if HARDWARE_VER == WICAN_PRO
-static char elm327_autopid_cmd_buffer[BUFFER_SIZE];
+static char* elm327_autopid_cmd_buffer;
 static uint32_t elm327_autopid_cmd_buffer_len = 0;
 static int64_t elm327_autopid_last_cmd_time = 0;
 #endif
@@ -902,7 +902,7 @@ void parse_elm327_response(char *buffer, response_t *response) {
 
 static void append_to_buffer(char *buffer, const char *new_data) 
 {
-    if (strlen(buffer) + strlen(new_data) < BUFFER_SIZE) 
+    if (strlen(buffer) + strlen(new_data) < AUTOPID_BUFFER_SIZE) 
     {
         strcat(buffer, new_data);
     }
@@ -1797,7 +1797,7 @@ all_pids_t* load_all_pids(void){
     return all_pids;
 }
 
-static void autopid_init_obd_logger(void)
+static void autopid_init_obd_logger(uint32_t log_period)
 {
     ESP_LOGI(TAG, "Initializing Autopid OBD logger...");
 
@@ -1825,7 +1825,7 @@ static void autopid_init_obd_logger(void)
             parameter_t *param = &pid->parameters[j];
             
             // Create metadata JSON
-            char *metadata = malloc(256);
+            char *metadata = malloc(1024*4);
             if (!metadata) {
                 continue;
             }
@@ -1834,7 +1834,7 @@ static void autopid_init_obd_logger(void)
             //         "{\"unit\":\"%s\",\"min\":%f,\"max\":%f,\"period\":%lu}", 
             //         param->unit ? param->unit : "", 
             //         param->min, param->max, param->period);
-            snprintf(metadata, 256, 
+            snprintf(metadata, 1024*4, 
                 "{\"unit\":\"%s\",\"period\":%lu}", 
                 param->unit ? param->unit : "", param->period);
     
@@ -1851,11 +1851,10 @@ static void autopid_init_obd_logger(void)
     
     static obd_logger_t obd_logger = {
         .path = "/sdcard",
-        .period_sec = 10,
         .db_filename = DB_FILE_NAME,
         .obd_logger_get_params_cb = autopid_data_read
     };
-    
+    obd_logger.period_sec = log_period;
     obd_logger.obd_logger_params = params;
     obd_logger.obd_logger_params_count = param_count;
         
@@ -1904,7 +1903,7 @@ void print_pids(all_pids_t* all_pids) {
     }
 }
 
-void autopid_init(char* id)
+void autopid_init(char* id, bool enable_logging, uint32_t logging_period)
 {
     device_id = id;
     // if(autopid_data.mutex == NULL)
@@ -1917,10 +1916,20 @@ void autopid_init(char* id)
         xautopid_event_group = xEventGroupCreate();
     }
 
+    #if HARDWARE_VER == WICAN_PRO
+    auto_pid_buf = (char *)heap_caps_malloc(AUTOPID_BUFFER_SIZE, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    elm327_autopid_cmd_buffer = (char *)heap_caps_malloc(AUTOPID_BUFFER_SIZE, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    #else
+    auto_pid_buf = (char *)malloc(AUTOPID_BUFFER_SIZE);     
+    #endif
+
     // Define static queue storage and structure
     static StaticQueue_t autopidQueue_buffer;
-    static uint8_t autopidQueue_storage[QUEUE_SIZE * sizeof(response_t)];
-    
+    static uint8_t* autopidQueue_storage;
+
+    // Allocate queue storage in PSRAM
+    autopidQueue_storage = (uint8_t *)heap_caps_malloc(QUEUE_SIZE * sizeof(response_t), MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+
     // Create a static queue
     autopidQueue = xQueueCreateStatic(QUEUE_SIZE, 
                                      sizeof(response_t), 
@@ -1975,9 +1984,12 @@ void autopid_init(char* id)
     // {
     //     car.pid_count = 0;
     // }
-    xSemaphoreTake(all_pids->mutex, portMAX_DELAY);
-    autopid_init_obd_logger();
-    xSemaphoreGive(all_pids->mutex);
+    
+    if(enable_logging){
+        xSemaphoreTake(all_pids->mutex, portMAX_DELAY);
+        autopid_init_obd_logger(logging_period);
+        xSemaphoreGive(all_pids->mutex);
+    }
 
     static StackType_t *autopid_task_stack;
     static StaticTask_t autopid_task_buffer;
