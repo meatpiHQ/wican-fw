@@ -41,13 +41,13 @@
 #include <float.h>
 #include "hw_config.h"
 
-#define TAG __func__
-// #define TAG "AUTO_PID"
+// #define TAG __func__
+#define TAG "AUTO_PID"
 
 #define TEMP_BUFFER_LENGTH  32
 #define ECU_CONNECTED_BIT			BIT0
 
-static char auto_pid_buf[BUFFER_SIZE];
+static char* auto_pid_buf;
 static QueueHandle_t autopidQueue;
 static char* device_id;
 static EventGroupHandle_t xautopid_event_group = NULL;
@@ -56,7 +56,7 @@ static response_t elm327_response;
 static autopid_data_t autopid_data;
 
 #if HARDWARE_VER == WICAN_PRO
-static char elm327_autopid_cmd_buffer[BUFFER_SIZE];
+static char* elm327_autopid_cmd_buffer;
 static uint32_t elm327_autopid_cmd_buffer_len = 0;
 static int64_t elm327_autopid_last_cmd_time = 0;
 #endif
@@ -901,7 +901,7 @@ void parse_elm327_response(char *buffer, response_t *response) {
 
 static void append_to_buffer(char *buffer, const char *new_data) 
 {
-    if (strlen(buffer) + strlen(new_data) < BUFFER_SIZE) 
+    if (strlen(buffer) + strlen(new_data) < AUTOPID_BUFFER_SIZE) 
     {
         strcat(buffer, new_data);
     }
@@ -1104,40 +1104,7 @@ static void autopid_task(void *pvParameters)
             {
                 continue;
             }
-            // autopid_data_write
-            if(curr_pid->pid_type != previous_pid_type) {
-                // Send appropriate initialization based on new PID type
-                switch(curr_pid->pid_type) {
-                    case PID_CUSTOM:
-                        if(all_pids->custom_init && strlen(all_pids->custom_init) > 0) {
-                            ESP_LOGI(TAG, "Sending custom init: %s, length: %d", 
-                                    all_pids->custom_init, strlen(all_pids->custom_init));
-                            send_commands(all_pids->custom_init, 2);
-                        }
-                        break;
-                        
-                    case PID_STD:
-                        if(all_pids->standard_init && strlen(all_pids->standard_init) > 0) {
-                            ESP_LOGI(TAG, "Sending standard init: %s, length: %d", 
-                                    all_pids->standard_init, strlen(all_pids->standard_init));
-                            send_commands(all_pids->standard_init, 2);
-                        }
-                        break;
-                        
-                    case PID_SPECIFIC:
-                        if(all_pids->specific_init && strlen(all_pids->specific_init) > 0) {
-                            ESP_LOGI(TAG, "Sending specific init: %s, length: %d", 
-                                    all_pids->specific_init, strlen(all_pids->specific_init));
-                            send_commands(all_pids->specific_init, 2);
-                        }
-                        break;
-                        
-                    case PID_MAX:
-                        break;
-                }
 
-                previous_pid_type = curr_pid->pid_type;
-            }
             // Loop through parameters
             for(uint32_t p = 0; p < curr_pid->parameters_count; p++) 
             {
@@ -1146,6 +1113,41 @@ static void autopid_task(void *pvParameters)
                 // Check parameter timer
                 if(wc_timer_is_expired(&param->timer)) 
                 {
+                    // autopid_data_write
+                    if(curr_pid->pid_type != previous_pid_type) {
+                        // Send appropriate initialization based on new PID type
+                        switch(curr_pid->pid_type) {
+                            case PID_CUSTOM:
+                                if(all_pids->custom_init && strlen(all_pids->custom_init) > 0) {
+                                    ESP_LOGI(TAG, "Sending custom init: %s, length: %d", 
+                                            all_pids->custom_init, strlen(all_pids->custom_init));
+                                    send_commands(all_pids->custom_init, 2);
+                                }
+                                break;
+                                
+                            case PID_STD:
+                                if(all_pids->standard_init && strlen(all_pids->standard_init) > 0) {
+                                    ESP_LOGI(TAG, "Sending standard init: %s, length: %d", 
+                                            all_pids->standard_init, strlen(all_pids->standard_init));
+                                    send_commands(all_pids->standard_init, 2);
+                                }
+                                break;
+                                
+                            case PID_SPECIFIC:
+                                if(all_pids->specific_init && strlen(all_pids->specific_init) > 0) {
+                                    ESP_LOGI(TAG, "Sending specific init: %s, length: %d", 
+                                            all_pids->specific_init, strlen(all_pids->specific_init));
+                                    send_commands(all_pids->specific_init, 2);
+                                }
+                                break;
+                                
+                            case PID_MAX:
+                                break;
+                        }
+
+                        previous_pid_type = curr_pid->pid_type;
+                    }
+
                     ESP_LOGI(TAG, "Processing parameter: %s", param->name);
                     // Reset timer with parameter period
                     wc_timer_set(&param->timer, param->period);
@@ -1836,7 +1838,26 @@ void autopid_init(char* id)
         xautopid_event_group = xEventGroupCreate();
     }
 
-    autopidQueue = xQueueCreate(QUEUE_SIZE, sizeof(response_t));
+    #if HARDWARE_VER == WICAN_PRO
+    auto_pid_buf = (char *)heap_caps_malloc(AUTOPID_BUFFER_SIZE, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    elm327_autopid_cmd_buffer = (char *)heap_caps_malloc(AUTOPID_BUFFER_SIZE, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    #else
+    auto_pid_buf = (char *)malloc(AUTOPID_BUFFER_SIZE);     
+    #endif
+
+    // Define static queue storage and structure
+    static StaticQueue_t autopidQueue_buffer;
+    static uint8_t* autopidQueue_storage;
+
+    // Allocate queue storage in PSRAM
+    autopidQueue_storage = (uint8_t *)heap_caps_malloc(QUEUE_SIZE * sizeof(response_t), MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+
+    // Create a static queue
+    autopidQueue = xQueueCreateStatic(QUEUE_SIZE, 
+                                     sizeof(response_t), 
+                                     autopidQueue_storage, 
+                                     &autopidQueue_buffer);
+
     if (autopidQueue == NULL)
     {
         ESP_LOGE(TAG, "Failed to create queue");

@@ -21,12 +21,12 @@
 #ifndef __AUTO_PID_H__
 #define __AUTO_PID_H__
 
-#define BUFFER_SIZE 1024
+#define AUTOPID_BUFFER_SIZE (1024*4)
 #define QUEUE_SIZE 10
 
 
 typedef struct {
-    uint8_t data[BUFFER_SIZE];
+    uint8_t data[AUTOPID_BUFFER_SIZE];
     uint32_t length;
     uint8_t* priority_data;
     uint8_t  priority_data_len;
