@@ -1,6 +1,6 @@
 {
   "car_model": "Opel: Ampere-E",
-  "init": "ATSP6;ATST96;",
+  "init": "ATSP6;ATST96;ATSH7E0;ATSH7E1;ATSH7E4;",
   "pids": [
     {
       "pid": "2283341",
