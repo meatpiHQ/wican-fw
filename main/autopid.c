@@ -734,6 +734,12 @@ char* autopid_get_config(void)
 // }
 
 void parse_elm327_response(char *buffer, response_t *response) {
+
+    if (buffer == NULL || response == NULL) {
+        ESP_LOGE(TAG, "Invalid buffer or response pointer");
+        return;
+    }
+
     ESP_LOGI(TAG, "Starting to parse ELM327 response. Input buffer: %s", buffer);
     
     int k = 0;
@@ -879,6 +885,7 @@ void parse_elm327_response(char *buffer, response_t *response) {
         response->priority_data_len = 0;
         if (lowest_header_data != NULL) {
             free(lowest_header_data);
+            lowest_header_data = NULL;
         }
         ESP_LOGI(TAG, "Null priority data set - frames: %d, all headers same: %d", 
                 frame_count, all_headers_same);
@@ -1918,7 +1925,20 @@ void autopid_init(char* id, bool enable_logging, uint32_t logging_period)
 
     #if HARDWARE_VER == WICAN_PRO
     auto_pid_buf = (char *)heap_caps_malloc(AUTOPID_BUFFER_SIZE, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    if(auto_pid_buf == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to allocate auto_pid_buf in PSRAM");
+        return;
+    }
+    memset(auto_pid_buf, 0, AUTOPID_BUFFER_SIZE);
+
     elm327_autopid_cmd_buffer = (char *)heap_caps_malloc(AUTOPID_BUFFER_SIZE, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    if(elm327_autopid_cmd_buffer == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to allocate elm327_autopid_cmd_buffer in PSRAM");
+        return;
+    }
+    memset(elm327_autopid_cmd_buffer, 0, AUTOPID_BUFFER_SIZE);
     #else
     auto_pid_buf = (char *)malloc(AUTOPID_BUFFER_SIZE);     
     #endif
@@ -1929,7 +1949,12 @@ void autopid_init(char* id, bool enable_logging, uint32_t logging_period)
 
     // Allocate queue storage in PSRAM
     autopidQueue_storage = (uint8_t *)heap_caps_malloc(QUEUE_SIZE * sizeof(response_t), MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-
+    if (autopidQueue_storage == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to allocate queue storage in PSRAM");
+        return;
+    }
+    memset(autopidQueue_storage, 0, QUEUE_SIZE * sizeof(response_t));
     // Create a static queue
     autopidQueue = xQueueCreateStatic(QUEUE_SIZE, 
                                      sizeof(response_t), 
@@ -1996,7 +2021,12 @@ void autopid_init(char* id, bool enable_logging, uint32_t logging_period)
     
     // Allocate stack memory in PSRAM
     autopid_task_stack = heap_caps_malloc(5000 * sizeof(StackType_t), MALLOC_CAP_SPIRAM);
-    
+    if(autopid_task_stack == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to allocate autopid_task stack in PSRAM");
+        return;
+    }
+    memset(autopid_task_stack, 0, 5000 * sizeof(StackType_t));
     // Check if memory allocation was successful
     if (autopid_task_stack != NULL){
         // Create task with static allocation
