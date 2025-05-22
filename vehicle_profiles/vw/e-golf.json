@@ -7,6 +7,12 @@
       "parameters": {
         "SOC": "((B4-20)*10)/22"
       }
+    },
+    {
+      "pid": "2202BD",
+      "parameters": {
+        "Odometer": "[B5:B7]"
+      }
     }
   ]
 }
