@@ -1392,6 +1392,7 @@ int8_t elm327_process_cmd(uint8_t *cmd, uint32_t len, QueueHandle_t *q,
             elm327_commands_t *command_data;
 			// command_data = (elm327_commands_t*) malloc(sizeof(elm327_commands_t));
 			command_data = (elm327_commands_t*) heap_caps_aligned_alloc(16,sizeof(elm327_commands_t), MALLOC_CAP_SPIRAM);
+			memset(command_data, 0, sizeof(elm327_commands_t));
             // command_data->command = (char*) malloc(*cmd_buffer_len + 1);
 			command_data->command = (char*) heap_caps_aligned_alloc(16,*cmd_buffer_len + 1, MALLOC_CAP_SPIRAM);
             if (command_data->command == NULL)
@@ -1438,6 +1439,7 @@ static void uart1_event_task(void *pvParameters)
     uart_event_t event;
 
 	uart_read_buf = (uint8_t *)heap_caps_aligned_alloc(4, ELM327_MAX_CMD_LEN, MALLOC_CAP_SPIRAM);
+	memset(uart_read_buf, 0, ELM327_MAX_CMD_LEN);
 
     while (1) 
     {
