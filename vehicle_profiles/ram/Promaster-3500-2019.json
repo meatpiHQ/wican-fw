@@ -13,14 +13,14 @@
       "pid": "22022A",
       "pid_init": "ATS0;ATSHDA10F1;",
       "parameters": {
-        "ENGINE_OIL_PRES": "(B4*170/255)*6.895"
+        "ENGINE_OIL_PRES": "B4*4"
       }
     },
     {
       "pid": "220121",
       "pid_init": "ATS0;ATSHDA10F1;",
       "parameters": {
-        "ENGINE_OIL_TEMP": "((B4+40)-32)*5/9"
+        "ENGINE_OIL_TEMP": "B4-64"
       }
     }
   ]
