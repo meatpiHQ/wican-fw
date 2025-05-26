@@ -61,6 +61,7 @@
 #include <ctype.h>
 #include "esp_timer.h"
 #include "expression_parser.h"
+#include "autopid.h"
 
 #define TAG 		__func__
 // #define TAG 		"MQTT_CLIENT"
@@ -291,6 +292,10 @@ static void mqtt_parse_data(void *handler_args, esp_event_base_t base, int32_t e
             sleep_mode_get_voltage(&vbatt);
             sprintf(cmd_response, "{\"battery_voltage\": %f}", vbatt);
             mqtt_publish(mqtt_rsp_topic, cmd_response, strlen(cmd_response), 0, 0);
+        }
+        else if(strcmp(cmd->valuestring, "get_autopid_data") == 0)
+        {
+            autopid_request_data();
         }
         else
         {
