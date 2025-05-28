@@ -1089,16 +1089,8 @@ void sleep_mode_init(void)
 	// if(config_server_get_sleep_config())
 	{
 		// xTaskCreate(sleep_task, "sleep_task", 4096, (void*)AF_INET, 5, NULL);
-        static StackType_t *light_sleep_task_stack;
+        static StackType_t light_sleep_task_stack[4096];
         static StaticTask_t light_sleep_task_buffer;
-        
-        light_sleep_task_stack = heap_caps_malloc(4096, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-        
-        if (light_sleep_task_stack == NULL)
-        {
-            ESP_LOGE(TAG, "Failed to allocate light sleep task stack memory");
-            return;
-        }
         
         // Create static task
         TaskHandle_t sleep_task_handle = xTaskCreateStatic(
