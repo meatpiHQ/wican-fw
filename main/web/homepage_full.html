@@ -100,6 +100,11 @@
             margin-bottom: 1.5rem;
         }
 
+        .description-text {
+            padding-left: 0.75rem;
+            padding-right: 0.75rem;
+        }
+
         .form-table {
             width: 100%;
             border-collapse: separate;
@@ -128,8 +133,13 @@
             width: 100%;
         }
 
+        input[type="text"],
+        input[type="file"],
+        input[type="number"] {
+            width: calc(100% - 1.3rem - 2px);
+        }
+
         input,
-        input[type="number"],
         select {
             width: 100%;
             padding: 0.65rem;
