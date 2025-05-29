@@ -760,7 +760,7 @@
                 <tr>
                     <td>MQTT HA Discovery:</td>
                     <td>
-                        <select id="ha_discovery" name="ha_discovery" toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
+                        <select id="ha_discovery" name="ha_discovery" onchange="toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
                             <option value="disable">Disable</option>
                         </select>
                     </td>
@@ -768,7 +768,7 @@
                 <tr>
                     <td>Grouping:</td>
                     <td>
-                        <select id="grouping" name="grouping" toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
+                        <select id="grouping" name="grouping" onchange="toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
                             <option value="disable">Disable</option>
                             <option value="enable">Enable</option>
                         </select>
