@@ -67,6 +67,7 @@
 #include "imu.h"
 #include "rtcm.h"
 #include "console.h"
+#include "dev_status.h"
 
 #define TAG 		__func__
 #define USB_ID_PIN					39
@@ -339,7 +340,7 @@ static void can_rx_task(void *pvParameters)
         static twai_message_t rx_msg;
 //        esp_err_t ret = 0xFF;
 
-
+		dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
 //    	time_old = esp_timer_get_time();
 //    	if((esp_timer_get_time() - time_old) > 1000000)
 //    	{
@@ -512,6 +513,9 @@ void app_main(void)
 {
 	void* internal_buf = NULL;
 	internal_buf = heap_caps_malloc(66 * 1024, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+	dev_status_init();
+	dev_status_set_bits(DEV_AWAKE_BIT);
+	dev_status_clear_bits(DEV_SLEEP_BIT);
 
 	gpio_reset_pin(BUTTON_GPIO_NUM);
 	gpio_set_direction(BUTTON_GPIO_NUM, GPIO_MODE_INPUT);

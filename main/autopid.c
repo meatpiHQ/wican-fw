@@ -41,6 +41,7 @@
 #include <float.h>
 #include "obd_logger.h"
 #include "hw_config.h"
+#include "dev_status.h"
 
 // #define TAG __func__
 #define TAG "AUTO_PID"
@@ -1098,6 +1099,7 @@ static void autopid_task(void *pvParameters)
     {
         static pid_type_t previous_pid_type = PID_MAX;
 
+        dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
         // elm327_lock();
         xSemaphoreTake(all_pids->mutex, portMAX_DELAY);
         

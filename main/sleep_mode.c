@@ -51,6 +51,7 @@
 #include "led.h"
 #include "obd.h"
 #include "esp_adc/adc_oneshot.h"
+#include "dev_status.h"
 
 // #define TAG 		__func__
 #define TAG         "SLEEP_MODE"
@@ -721,7 +722,7 @@ esp_err_t read_ss_adc_voltage(float *voltage_out)
                 ESP_LOGE(TAG, "ADC adc_cali_raw_to_voltage error: %d", ret);
             }
             // Small delay between readings
-            vTaskDelay(pdMS_TO_TICKS(1));
+            // vTaskDelay(pdMS_TO_TICKS(1));
         }
         else
         {
@@ -908,6 +909,8 @@ void light_sleep_task(void *pvParameters)
 					{
                         ESP_LOGI(TAG, "Low voltage timeout expired, entering sleep mode");
                         current_state = STATE_SLEEPING;
+                        dev_status_clear_bits(DEV_AWAKE_BIT);
+                        dev_status_set_bits(DEV_SLEEP_BIT);
                         elm327_sleep();
                         can_disable();
                         wifi_network_deinit();

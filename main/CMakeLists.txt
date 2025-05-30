@@ -28,7 +28,7 @@ set(srcs
     "rtcm.c"
     "console.c"
     "hw_config.c"
-    # "obd_logger.c"
+    "dev_status.c"
 )
 
 # Define required components
