@@ -78,7 +78,11 @@
 #include "wc_mdns.h"
 #include "elm327.h"
 #include "hw_config.h"
+#include "rtcm.h"
 #include "esp_littlefs.h"
+#include "obd_logger_iface.h"
+#include "https_client_mgr.h"
+#include "sdcard.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
@@ -89,7 +93,7 @@ static QueueHandle_t xip_Queue = NULL;
 static QueueHandle_t *xTX_Queue, *xRX_Queue;
 
 static uint8_t ws_led;
-#define TAG __func__
+#define TAG "CONFIG_SERVER"
 
 httpd_handle_t server = NULL;
 char *device_config_file = NULL;
@@ -100,6 +104,61 @@ extern const unsigned char homepage_start[] asm("_binary_homepage_html_start");
 extern const unsigned char homepage_end[]   asm("_binary_homepage_html_end");
 extern const unsigned char logo_start[] asm("_binary_logo_txt_start");
 extern const unsigned char logo_end[]   asm("_binary_logo_txt_end");
+extern const unsigned char dashboard_html_start[] asm("_binary_dashboard_html_start");
+extern const unsigned char dashboard_html_end[] asm("_binary_dashboard_html_end");
+extern const unsigned char dashboard_js_start[] asm("_binary_dashboard_js_start");
+extern const unsigned char dashboard_js_end[] asm("_binary_dashboard_js_end");
+extern const unsigned char chart_js_start[] asm("_binary_chart_js_start");
+extern const unsigned char chart_js_end[] asm("_binary_chart_js_end");
+extern const unsigned char sql_wasm_js_start[] asm("_binary_sqlwasm_js_start");
+extern const unsigned char sql_wasm_js_end[] asm("_binary_sqlwasm_js_end");
+extern const unsigned char sql_wasm_wasm_start[] asm("_binary_sqlwasm_wasm_start");
+extern const unsigned char sql_wasm_wasm_end[] asm("_binary_sqlwasm_wasm_end");
+extern const unsigned char bootstrap_bundle_min_js_start[] asm("_binary_bootstrap_bundle_min_js_start");
+extern const unsigned char bootstrap_bundle_min_js_end[] asm("_binary_bootstrap_bundle_min_js_end");
+extern const unsigned char daterangepicker_min_js_start[] asm("_binary_daterangepicker_min_js_start");
+extern const unsigned char daterangepicker_min_js_end[] asm("_binary_daterangepicker_min_js_end");
+extern const unsigned char jquery_min_js_start[] asm("_binary_jquery_min_js_start");
+extern const unsigned char jquery_min_js_end[] asm("_binary_jquery_min_js_end");
+extern const unsigned char moment_min_js_start[] asm("_binary_moment_min_js_start");
+extern const unsigned char moment_min_js_end[] asm("_binary_moment_min_js_end");
+extern const unsigned char chartjs_adapter_moment_min_js_start[] asm("_binary_chartjs_adapter_moment_min_js_start");
+extern const unsigned char chartjs_adapter_moment_min_js_end[] asm("_binary_chartjs_adapter_moment_min_js_end");
+extern const unsigned char jszip_min_js_start[] asm("_binary_jszip_min_js_start");
+extern const unsigned char jszip_min_js_end[] asm("_binary_jszip_min_js_end");
+extern const unsigned char daterangepicker_css_start[] asm("_binary_daterangepicker_css_start");
+extern const unsigned char daterangepicker_css_end[] asm("_binary_daterangepicker_css_end");
+extern const unsigned char bootstrap_min_css_start[] asm("_binary_bootstrap_min_css_start");
+extern const unsigned char bootstrap_min_css_end[] asm("_binary_bootstrap_min_css_end");
+
+typedef struct {
+    const char *uri;
+    const char *content_type;
+    const unsigned char *data_start;
+    const unsigned char *data_end;
+    bool load_from_fs;      
+    const char *fs_path;
+	const char *download_uri;
+} file_lookup_t;
+
+static const file_lookup_t file_lookup[] = {
+    {"/dashboard.html", "text/html", dashboard_html_start, dashboard_html_end, false, NULL, NULL},
+    {"/dashboard.js", "application/javascript", dashboard_js_start, dashboard_js_end, false, NULL, NULL},
+	{"/chartjs-adapter-moment.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/chartjs-adapter-moment.min.js", "https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.0/dist/chartjs-adapter-moment.min.js"},
+	{"/jquery-3.6.0.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/jquery-3.6.0.min.js", "https://code.jquery.com/jquery-3.6.0.min.js"},
+	{"/bootstrap.bundle.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/bootstrap.bundle.min.js", "https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"},
+	{"/moment.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/moment.min.js", "https://cdn.jsdelivr.net/npm/moment/moment.min.js"},
+	{"/daterangepicker.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/daterangepicker.min.js", "https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"},
+	{"/sql-wasm.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/sql-wasm.js", "https://cdn.jsdelivr.net/npm/sql.js@1.8.0/dist/sql-wasm.js"},
+	{"/chart.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/chart.js", "https://cdn.jsdelivr.net/npm/chart.js"},
+	{"/jszip.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/jszip.min.js", "https://cdn.jsdelivr.net/npm/jszip@3.7.1/dist/jszip.min.js"},
+	{"/sql-wasm.wasm", "application/wasm", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/sql-wasm.wasm", "https://cdn.jsdelivr.net/npm/sql.js@1.8.0/dist/sql-wasm.wasm"},
+	{"/bootstrap.min.css", "text/css", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/bootstrap.min.css", "https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css"},
+	{"/daterangepicker.min.css", "text/css", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/daterangepicker.min.css", "https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.css"},
+	{"/daterangepicker.css", "text/css", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/daterangepicker.min.css", "https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css"},
+
+	{NULL, NULL, NULL, NULL, false, NULL, NULL} // Sentinel to mark end of array
+};
 
 static char can_datarate_str[11][7] = {
 								"5k",
@@ -115,8 +174,17 @@ static char can_datarate_str[11][7] = {
 								"1000K",
 };
 
+const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\
+										\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\
+										\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"batt_alert\":\"disable\",\
+										\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\
+										\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\
+										\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\
+										\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\",\
+										\"logger_status\":\"disable\",\"log_filesystem\":\"littlefs\",\"log_storage\":\"sdcard\",\"log_period\":\"10\"}";
+
 // const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\", \"ap_auto_disable\": \"disable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
-const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\", \"ap_auto_disable\": \"disable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"periodic_wakeup\":\"disable\",\"wakeup_interval\":\"5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
+// const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\", \"ap_auto_disable\": \"disable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"periodic_wakeup\":\"disable\",\"wakeup_interval\":\"5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
 static device_config_t device_config;
 TimerHandle_t xrestartTimer;
 
@@ -132,7 +200,7 @@ void config_server_reboot(void)
 /* Max length a file path can have on storage */
 #define FILE_PATH_MAX (ESP_VFS_PATH_MAX + CONFIG_SPIFFS_OBJ_NAME_LEN)
 /* Scratch buffer size */
-#define SCRATCH_BUFSIZE  4096
+#define SCRATCH_BUFSIZE  (1024*100)
 
 #define MAX_FILE_SIZE   (2000*1024) // 200 KB
 #define MAX_FILE_SIZE_STR "200KB"
@@ -142,7 +210,7 @@ struct file_server_data {
     char base_path[ESP_VFS_PATH_MAX + 1];
 
     /* Scratch buffer for temporary storage during file transfer */
-    char scratch[SCRATCH_BUFSIZE];
+    char *scratch;
 };
 
 
@@ -340,6 +408,171 @@ int32_t config_server_get_port(void)
 		return port_val;
 	}
 	return -1;
+}
+
+// Create directories recursively if they don't exist
+static esp_err_t create_dir_recursively(const char* path) {
+    if (!path) return ESP_ERR_INVALID_ARG;
+    
+    char* temp_path = strdup(path);
+    if (!temp_path) return ESP_ERR_NO_MEM;
+    
+    // Make sure the path ends with a delimiter
+    size_t len = strlen(temp_path);
+    if (temp_path[len-1] != '/') {
+        char* new_path = realloc(temp_path, len + 2);
+        if (!new_path) {
+            free(temp_path);
+            return ESP_ERR_NO_MEM;
+        }
+        temp_path = new_path;
+        temp_path[len] = '/';
+        temp_path[len+1] = '\0';
+    }
+    
+    // Create parent directories
+    for (char* p = temp_path + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            
+            // Try to create directory
+            if (mkdir(temp_path, 0755) != 0) {
+                // Ignore error if directory already exists
+                if (errno != EEXIST) {
+                    ESP_LOGE(TAG, "Failed to create directory %s: %s", temp_path, strerror(errno));
+                }
+            } else {
+                ESP_LOGI(TAG, "Created directory: %s", temp_path);
+            }
+            
+            *p = '/';
+        }
+    }
+    
+    free(temp_path);
+    return ESP_OK;
+}
+
+static esp_err_t file_handler(httpd_req_t *req)
+{
+    char *uri = req->uri;
+	const uint32_t chunk_size = 1024 * 64;
+    ESP_LOGI(TAG, "Request URI: %s", uri);
+    
+    // Look for the requested URI in our lookup table
+    const file_lookup_t *file = file_lookup;
+    while (file->uri != NULL) {
+        if (strcmp(uri, file->uri) == 0) {
+            ESP_LOGI(TAG, "Found file entry: %s", file->uri);
+            
+            // If configured to load from filesystem
+            if (file->load_from_fs && file->fs_path != NULL) {
+                struct stat st;
+                if (stat(file->fs_path, &st) == 0) {
+                    // File exists on filesystem, serve it
+                    ESP_LOGI(TAG, "Serving file from filesystem: %s", file->fs_path);
+                    FILE *fp = fopen(file->fs_path, "r");
+                    if (fp) {
+                        httpd_resp_set_type(req, file->content_type);
+                        char *buffer = malloc(chunk_size);
+                        if (!buffer) {
+                            fclose(fp);
+                            return ESP_ERR_NO_MEM;
+                        }
+                        
+                        size_t bytes_read;
+                        while ((bytes_read = fread(buffer, 1, chunk_size, fp)) > 0) {
+                            httpd_resp_send_chunk(req, buffer, bytes_read);
+                        }
+                        httpd_resp_send_chunk(req, NULL, 0); // End response
+                        free(buffer);
+                        fclose(fp);
+                        return ESP_OK;
+                    }
+                } else if (file->download_uri != NULL) {
+					// File doesn't exist, try to download it
+					ESP_LOGI(TAG, "File not found on filesystem, attempting to download from: %s", file->download_uri);
+					
+					esp_err_t ret = https_client_mgr_init();
+					if (ret != ESP_OK) {
+						ESP_LOGE(TAG, "Failed to initialize HTTPS client: %s", esp_err_to_name(ret));
+						httpd_resp_send_500(req);
+						return ESP_FAIL;
+					}
+					
+					// Create directories recursively
+					char *path_copy = strdup(file->fs_path);
+					if (path_copy) {
+						char *last_slash = strrchr(path_copy, '/');
+						if (last_slash) {
+							*last_slash = '\0';
+							create_dir_recursively(path_copy);
+						}
+						free(path_copy);
+					}
+					
+					// Download the file
+					ret = https_client_mgr_download_file(
+						file->download_uri,
+						file->fs_path,
+						NULL  // No progress callback in this context
+					);
+					
+					https_client_mgr_deinit();
+					
+					if (ret == ESP_OK) {
+						ESP_LOGI(TAG, "File downloaded successfully: %s", file->fs_path);
+						
+						// Now serve the downloaded file
+						FILE *fp = fopen(file->fs_path, "r");
+						if (fp) {
+							httpd_resp_set_type(req, file->content_type);
+							char *buffer = malloc(chunk_size);
+							if (!buffer) {
+								fclose(fp);
+								httpd_resp_send_500(req);
+								return ESP_ERR_NO_MEM;
+							}
+							
+							size_t bytes_read;
+							while ((bytes_read = fread(buffer, 1, chunk_size, fp)) > 0) {
+								httpd_resp_send_chunk(req, buffer, bytes_read);
+							}
+							httpd_resp_send_chunk(req, NULL, 0); // End response
+							free(buffer);
+							fclose(fp);
+							return ESP_OK;
+						} else {
+							ESP_LOGE(TAG, "Failed to open downloaded file: %s", file->fs_path);
+						}
+					} else {
+						ESP_LOGE(TAG, "Failed to download file: %s, error: %s", 
+								file->download_uri, esp_err_to_name(ret));
+					}
+				}				
+            }
+            
+            // Fallback to serving from memory if filesystem loading failed or wasn't configured
+            if (file->data_start != NULL && file->data_end != NULL) {
+                ESP_LOGI(TAG, "Serving file from memory: %s", file->uri);
+                httpd_resp_set_type(req, file->content_type);
+                const size_t file_size = file->data_end - file->data_start;
+                esp_err_t ret = httpd_resp_send(req, (const char*)file->data_start, file_size);
+                return (ret == ESP_OK) ? ESP_OK : ESP_FAIL;
+            }
+            
+            // If we get here, we couldn't serve the file
+            ESP_LOGE(TAG, "Failed to serve file: %s", file->uri);
+            httpd_resp_send_500(req);
+            return ESP_FAIL;
+        }
+        file++;
+    }
+    
+    // If we get here, the requested URI wasn't found in our lookup table
+    // Return 404 Not Found
+    httpd_resp_send_404(req);
+    return ESP_OK;
 }
 
 static esp_err_t index_handler(httpd_req_t *req)
@@ -683,7 +916,7 @@ static esp_err_t system_commands_handler(httpd_req_t *req)
     if (command != NULL && cJSON_IsString(command) && command->valuestring != NULL)
     {
         const char *cmd = command->valuestring;
-		ESP_LOGI(TAG, "Received command: %s", cmd);
+        ESP_LOGI(TAG, "Received command: %s", cmd);
   
         if (cmd != NULL && strlen(cmd) > 0)
         {
@@ -698,10 +931,54 @@ static esp_err_t system_commands_handler(httpd_req_t *req)
                     ESP_LOGE(TAG, "Restart timer is NULL");
                 }
             }
-			else if (strcmp(cmd, "force_update_obd") == 0)
-			{
-				elm327_update_obd(true);
-			}
+            else if (strcmp(cmd, "force_update_obd") == 0)
+            {
+                elm327_update_obd(true);
+            }
+            else if (strcmp(cmd, "set_rtc_time") == 0)
+            {
+                // Get time parameters from JSON
+                cJSON *hour = cJSON_GetObjectItem(root, "hour");
+                cJSON *min = cJSON_GetObjectItem(root, "min");
+                cJSON *sec = cJSON_GetObjectItem(root, "sec");
+                cJSON *year = cJSON_GetObjectItem(root, "year");
+                cJSON *month = cJSON_GetObjectItem(root, "month");
+                cJSON *day = cJSON_GetObjectItem(root, "day");
+                cJSON *weekday = cJSON_GetObjectItem(root, "weekday");
+                
+                // Check if all required parameters are present and valid
+                if (hour && min && sec && year && month && day && weekday &&
+                    cJSON_IsNumber(hour) && cJSON_IsNumber(min) && cJSON_IsNumber(sec) &&
+                    cJSON_IsNumber(year) && cJSON_IsNumber(month) && cJSON_IsNumber(day) &&
+                    cJSON_IsNumber(weekday))
+                {
+                    // Set time
+                    esp_err_t time_err = rtcm_set_time(
+                        (uint8_t)hour->valueint, 
+                        (uint8_t)min->valueint, 
+                        (uint8_t)sec->valueint
+                    );
+                    
+                    // Set date
+                    esp_err_t date_err = rtcm_set_date(
+                        (uint8_t)year->valueint,
+                        (uint8_t)month->valueint,
+                        (uint8_t)day->valueint,
+                        (uint8_t)weekday->valueint
+                    );
+                    
+                    if (time_err == ESP_OK && date_err == ESP_OK) {
+                        ESP_LOGI(TAG, "RTC time set successfully");
+                    } else {
+                        ESP_LOGE(TAG, "Failed to set RTC time: time_err=%d, date_err=%d", 
+                                time_err, date_err);
+                    }
+                }
+                else
+                {
+                    ESP_LOGE(TAG, "Missing or invalid parameters for set_rtc_time command");
+                }
+            }
         }
         else
         {
@@ -720,6 +997,7 @@ static esp_err_t system_commands_handler(httpd_req_t *req)
 
     return ESP_OK;
 }
+
 
 static esp_err_t logo_handler(httpd_req_t *req)
 {
@@ -934,6 +1212,10 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	cJSON_AddStringToObject(root, "batt_alert_time", device_config.batt_alert_time);
 	cJSON_AddStringToObject(root, "batt_mqtt_user", device_config.batt_mqtt_user);
 	cJSON_AddStringToObject(root, "batt_mqtt_pass", device_config.batt_mqtt_pass);
+	cJSON_AddStringToObject(root, "logger_status", device_config.logger_status);
+	cJSON_AddStringToObject(root, "log_filesystem", device_config.log_filesystem);
+	cJSON_AddStringToObject(root, "log_period", device_config.log_period);
+	cJSON_AddStringToObject(root, "log_storage", device_config.log_storage);
 
 	char volt[8]= {0};
 	float tmp = 0;
@@ -1619,7 +1901,12 @@ static const httpd_uri_t scan_available_pids_uri = {
     .handler   = scan_available_pids_handler,
     .user_ctx  = NULL
 };
-
+static const httpd_uri_t file_uri = {
+    .uri       = "/*",
+    .method    = HTTP_GET,
+    .handler   = file_handler,
+    .user_ctx  = &server_data 
+};
 static void config_server_load_cfg(char *cfg)
 {
 	cJSON * root, *key = 0;
@@ -2073,6 +2360,66 @@ static void config_server_load_cfg(char *cfg)
 	//*****
 
 	//*****
+	key = cJSON_GetObjectItem(root,"logger_status");
+	if(key == 0)
+	{
+		strcpy(device_config.logger_status, "disable");
+	}
+	else
+	{
+		strcpy(device_config.logger_status, key->valuestring);
+	}
+	ESP_LOGE(TAG, "device_config.logger_status: %s", device_config.logger_status);
+	//*****
+
+	//*****
+	key = cJSON_GetObjectItem(root,"log_filesystem");
+	if(key == 0)
+	{
+		strcpy(device_config.logger_status, "littlefs");
+	}
+	else
+	{
+		strcpy(device_config.log_filesystem, key->valuestring);
+	}
+	ESP_LOGE(TAG, "device_config.log_filesystem: %s", device_config.log_filesystem);
+	//*****
+
+	//*****
+	key = cJSON_GetObjectItem(root,"log_storage");
+
+	if(key == 0)
+	{
+		strcpy(device_config.sta_security, "sdcard");
+	}
+	else
+	{
+		strcpy(device_config.sta_security, key->valuestring);
+	}
+
+	ESP_LOGE(TAG, "device_config.log_storage: %s", device_config.log_storage);
+	//*****
+
+	//*****
+	key = cJSON_GetObjectItem(root,"log_period");
+	if(key == 0)
+	{
+		strcpy(device_config.log_period, "10");
+	}
+	else
+	{
+		uint32_t log_period = atoi(device_config.log_period);
+
+		if(log_period > 300 && log_period < 1)
+		{
+			strcpy(device_config.log_period, "10");
+		}
+
+		strcpy(device_config.log_period, key->valuestring);
+	}
+	ESP_LOGE(TAG, "device_config.log_period: %s", device_config.log_period);
+	//*****
+
 	key = cJSON_GetObjectItem(root,"ap_auto_disable");
 	if(key == 0)
 	{
@@ -2200,9 +2547,10 @@ static httpd_handle_t config_server_init(void)
 //            sizeof(server_data->base_path));
 
     config.lru_purge_enable = true;
-
+	config.uri_match_fn = httpd_uri_match_wildcard;
     if(xServerEventGroup == NULL)
     {
+		server_data.scratch = malloc(SCRATCH_BUFSIZE);
     	xServerEventGroup = xEventGroupCreate();
     	config_server_wifi_connected(0);
     }
@@ -2287,7 +2635,7 @@ static httpd_handle_t config_server_init(void)
 			long filesize = ftell(f);
 			fseek(f, 0, SEEK_SET);
 
-			device_config_file = malloc(filesize + 1);
+			device_config_file = heap_caps_malloc(filesize + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 			if (device_config_file != NULL)
 			{
 				fread(device_config_file, sizeof(char), filesize, f);
@@ -2312,7 +2660,7 @@ static httpd_handle_t config_server_init(void)
 			long filesize = ftell(f);
 			fseek(f, 0, SEEK_SET);
 
-			mqtt_canflt_file = malloc(filesize + 1);
+			mqtt_canflt_file = heap_caps_malloc(filesize + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 			if (mqtt_canflt_file != NULL)
 			{
 				fread(mqtt_canflt_file, sizeof(char), filesize, f);
@@ -2343,8 +2691,9 @@ static httpd_handle_t config_server_init(void)
                        );
 
     // Start the httpd server
-	config.max_uri_handlers = 19;
+	config.max_uri_handlers = 23;
 	config.stack_size = (10*1024);
+	config.max_open_sockets = 15;
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK)
     {
@@ -2369,6 +2718,13 @@ static httpd_handle_t config_server_init(void)
 		httpd_register_uri_handler(server, &store_car_data_uri);
 		httpd_register_uri_handler(server, &system_commands);
 		httpd_register_uri_handler(server, &scan_available_pids_uri);
+		httpd_register_uri_handler(server, &obd_logger_ws);
+		httpd_register_uri_handler(server, &db_download_uri);
+		httpd_register_uri_handler(server, &db_files_uri);
+
+		//last uri /*
+		httpd_register_uri_handler(server, &file_uri);
+		
         #if CONFIG_EXAMPLE_BASIC_AUTH
         httpd_register_basic_auth(server);
         #endif
@@ -2454,17 +2810,45 @@ void config_server_start(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, u
 {
     if (server == NULL)
     {
-		device_id = did;
-    	ws_led = connected_led;
-    	xTX_Queue = xTXp_Queue;
-    	xRX_Queue = xRXp_Queue;
+        device_id = did;
+        ws_led = connected_led;
+        xTX_Queue = xTXp_Queue;
+        xRX_Queue = xRXp_Queue;
         ESP_LOGI(TAG, "Starting webserver");
         server = config_server_init();
 
-        xTaskCreate(websocket_task, "ws_task", 4096, (void*)AF_INET, 5, &xwebsocket_handle);
-
+        // Allocate stack memory in PSRAM for the websocket task
+        static StackType_t *websocket_task_stack;
+        static StaticTask_t websocket_task_buffer;
+        
+        websocket_task_stack = heap_caps_malloc(4096, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+        
+        if (websocket_task_stack == NULL)
+        {
+            ESP_LOGE(TAG, "Failed to allocate websocket task stack memory");
+            return;
+        }
+        
+        // Create static task
+        xwebsocket_handle = xTaskCreateStatic(
+            websocket_task,
+            "ws_task",
+            4096,
+            (void*)AF_INET,
+            5,
+            websocket_task_stack,
+            &websocket_task_buffer
+        );
+        
+        if (xwebsocket_handle == NULL)
+        {
+            ESP_LOGE(TAG, "Failed to create websocket task");
+            heap_caps_free(websocket_task_stack);
+            return;
+        }
     }
 }
+
 int8_t config_server_get_ble_config(void)
 {
 	if(strcmp(device_config.ble_status, "enable") == 0)
@@ -2782,6 +3166,20 @@ wifi_security_t config_server_get_sta_security(void)
 	return WIFI_MAX;
 }
 
+int8_t config_server_get_logger_config(void)
+{
+	if(strcmp(device_config.logger_status, "enable") == 0)
+	{
+		return 1;
+	}
+	else if(strcmp(device_config.logger_status, "disable") == 0)
+	{
+		return 0;
+	}
+
+	return -1;
+}
+
 int8_t config_server_get_ap_auto_disable(void)
 {
 	if(strcmp(device_config.ap_auto_disable, "enable") == 0)
@@ -2793,6 +3191,53 @@ int8_t config_server_get_ap_auto_disable(void)
 		return 0;
 	}
 	return -1;
+}
+
+log_filesystem_t config_server_get_log_filesystem(void)
+{
+	if(strcmp(device_config.log_filesystem, "littlefs") == 0)
+	{
+		return LOG_FS_LITTLEFS;
+	}
+	else if(strcmp(device_config.log_filesystem, "fatfs") == 0)
+	{
+		return LOG_FS_FATFS;
+	}
+	return MAX_LOG_FS;
+}
+
+log_storage_t config_server_get_log_storage(void)
+{
+	if(strcmp(device_config.log_storage, "sdcard") == 0)
+	{
+		return LOG_SDCARD;
+	}
+	else if(strcmp(device_config.log_storage, "internal") == 0)
+	{
+		return LOG_INTERNAL;
+	}
+	return MAX_LOG_STORAGE;
+}
+
+int8_t config_server_get_log_period(uint32_t *log_period)
+{
+	char *endptr;
+	long log_int = strtol(device_config.log_period, &endptr, 10);
+	
+	// Check for conversion errors
+	if (*endptr != '\0' || endptr == device_config.log_period)
+	{
+		return -1;
+	}
+	
+	// Validate range
+	if (log_int < 1 || log_int > 300)
+	{
+		return -1;
+	}
+	
+	*log_period = (uint32_t)log_int;
+	return 1;
 }
 
 void config_server_set_ble_config(uint8_t b)

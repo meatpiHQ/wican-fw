@@ -1255,7 +1255,34 @@ void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t conn
 
 	if(xble_handle == NULL)
 	{
-		xTaskCreate(ble_task, "ble_task", 4096, (void*)AF_INET, 5, &xble_handle);
+		static StackType_t *ble_task_stack;
+		static StaticTask_t ble_task_buffer;
+		
+		ble_task_stack = heap_caps_malloc(4096, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+		
+		if (ble_task_stack == NULL)
+		{
+			ESP_LOGE(GATTS_TABLE_TAG, "Failed to allocate BLE task stack memory");
+			return;
+		}
+		
+		// Create static task
+		xble_handle = xTaskCreateStatic(
+			ble_task,
+			"ble_task",
+			4096,
+			(void*)AF_INET,
+			5,
+			ble_task_stack,
+			&ble_task_buffer
+		);
+		
+		if (xble_handle == NULL)
+		{
+			ESP_LOGE(GATTS_TABLE_TAG, "Failed to create BLE task");
+			heap_caps_free(ble_task_stack);
+			return;
+		}
 	}
 
 //    esp_log_level_set(GATTS_TABLE_TAG, ESP_LOG_NONE);

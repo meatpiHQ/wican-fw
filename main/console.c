@@ -1042,18 +1042,33 @@ static esp_err_t tcp_console_init(void)
         return ESP_ERR_INVALID_STATE;
     }
 
-    // Create TCP console task
-    BaseType_t task_created = xTaskCreate(tcp_console_task, 
-                                        "tcp_console", 
-                                        4096, 
-                                        NULL, 
-                                        5, 
-                                        &tcp_console_task_handle);
+    // Allocate stack memory in PSRAM for the TCP console task
+    static StackType_t *tcp_console_task_stack;
+    static StaticTask_t tcp_console_task_buffer;
     
-    if (task_created != pdPASS)
+    tcp_console_task_stack = heap_caps_malloc(4096, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    
+    if (tcp_console_task_stack == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to allocate TCP console task stack memory");
+        return ESP_ERR_NO_MEM;
+    }
+    
+    // Create static task
+    tcp_console_task_handle = xTaskCreateStatic(
+        tcp_console_task,
+        "tcp_console",
+        4096,
+        NULL,
+        5,
+        tcp_console_task_stack,
+        &tcp_console_task_buffer
+    );
+    
+    if (tcp_console_task_handle == NULL)
     {
         ESP_LOGE(TAG, "Failed to create TCP console task");
-        // esp_console_deinit();
+        heap_caps_free(tcp_console_task_stack);
         return ESP_ERR_NO_MEM;
     }
 
@@ -1082,14 +1097,21 @@ static void tcp_console_deinit(void)
 
     if (tcp_console_task_handle)
     {
+        // Get the task stack pointer before deleting the task
+        StackType_t *stack_ptr = (StackType_t *)pxTaskGetStackStart(tcp_console_task_handle);
+        
         vTaskDelete(tcp_console_task_handle);
         tcp_console_task_handle = NULL;
+        
+        // Free the stack memory
+        if (stack_ptr) {
+            heap_caps_free(stack_ptr);
+        }
     }
 
     esp_console_deinit();
     is_console_initialized = false;
 }
-
 
 esp_err_t console_init(void)
 {

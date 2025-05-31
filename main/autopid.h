@@ -24,7 +24,6 @@
 #define AUTOPID_BUFFER_SIZE (1024*4)
 #define QUEUE_SIZE 10
 
-
 typedef struct {
     uint8_t data[AUTOPID_BUFFER_SIZE];
     uint32_t length;
@@ -82,11 +81,11 @@ typedef struct
     uint32_t parameters_count;
     pid_type_t pid_type;
     char* rxheader;
-}pid_data2_t;
+}pid_data_t;
 
 typedef struct 
 {
-    pid_data2_t *pids;
+    pid_data_t *pids;
     uint32_t pid_count;
     char* custom_init;
     char* standard_init;
@@ -112,7 +111,7 @@ typedef struct
 } autopid_data_t;
 
 void autopid_parser(char *str, uint32_t len, QueueHandle_t *q, char* cmd_str);
-void autopid_init(char* id);
+void autopid_init(char* id, bool enable_logging, uint32_t logging_period);
 char *autopid_data_read(void);
 bool autopid_get_ecu_status(void);
 char* autopid_get_config(void);

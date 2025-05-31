@@ -126,7 +126,7 @@ esp_err_t imu_init(i2c_port_t i2c_num, gpio_num_t sda_gpio, gpio_num_t scl_gpio,
     
     gpio_config(&io_conf);
 
-	imu_motion_evt_queue = xQueueCreate(10, sizeof(uint32_t));
+    imu_motion_evt_queue = xQueueCreate(10, sizeof(uint32_t));
 
     gpio_install_isr_service(0);
     gpio_isr_handler_add(IMU_INT_GPIO_NUM, imu_isr_handler, (void *)IMU_INT_GPIO_NUM);
@@ -174,17 +174,33 @@ esp_err_t imu_init(i2c_port_t i2c_num, gpio_num_t sda_gpio, gpio_num_t scl_gpio,
 
     ESP_LOGI(TAG, "IMU initialized successfully");
 
-    BaseType_t ret_task = xTaskCreate(
+    // Allocate stack memory in PSRAM for the IMU motion task
+    static StackType_t *imu_motion_task_stack;
+    static StaticTask_t imu_motion_task_buffer;
+    
+    imu_motion_task_stack = heap_caps_malloc(1024*3, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    
+    if (imu_motion_task_stack == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to allocate IMU motion task stack memory");
+        return ESP_FAIL;
+    }
+    
+    // Create static task
+    TaskHandle_t imu_task_handle = xTaskCreateStatic(
         imu_motion_task,
         "imu_motion_task",
-        (1024*3),
+        1024*3,
         NULL,
         5,
-        NULL
+        imu_motion_task_stack,
+        &imu_motion_task_buffer
     );
-
-    if (ret_task != pdPASS) {
+    
+    if (imu_task_handle == NULL)
+    {
         ESP_LOGE(TAG, "Failed to create IMU motion task");
+        heap_caps_free(imu_motion_task_stack);
         return ESP_FAIL;
     }
 

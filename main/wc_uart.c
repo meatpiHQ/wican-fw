@@ -205,6 +205,34 @@ void wc_uart_init(void)
 
     uart_set_pin(UART_NUM_2, GPIO_NUM_17, GPIO_NUM_18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 
-    xTaskCreate(uart2_event_task, "uart1_event_task", 2048*2, NULL, 5, NULL);
+    // Allocate stack memory in PSRAM for the UART event task
+    static StackType_t *uart2_event_task_stack;
+    static StaticTask_t uart2_event_task_buffer;
+    
+    uart2_event_task_stack = heap_caps_malloc(2048*2, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    
+    if (uart2_event_task_stack == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to allocate UART event task stack memory");
+        return;
+    }
+    
+    // Create static task
+    TaskHandle_t uart2_task_handle = xTaskCreateStatic(
+        uart2_event_task,
+        "uart2_event_task",
+        2048*2,
+        NULL,
+        5,
+        uart2_event_task_stack,
+        &uart2_event_task_buffer
+    );
+    
+    if (uart2_task_handle == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to create UART event task");
+        heap_caps_free(uart2_event_task_stack);
+        return;
+    }
 }
 #endif

@@ -771,5 +771,32 @@ void gvret_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q))
     gvert_tmr_start_time = esp_timer_get_time();
     ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 4294967296-100));
 
-    xTaskCreate(gvret_broadcast_task, "gvret_bcast_task", 4096, (void*)AF_INET, 5, NULL);
+    static StackType_t *gvret_bcast_task_stack;
+    static StaticTask_t gvret_bcast_task_buffer;
+    
+    gvret_bcast_task_stack = heap_caps_malloc(4096, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    
+    if (gvret_bcast_task_stack == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to allocate GVRET broadcast task stack memory");
+        return;
+    }
+    
+    // Create static task
+    TaskHandle_t gvret_bcast_handle = xTaskCreateStatic(
+        gvret_broadcast_task,
+        "gvret_bcast_task",
+        4096,
+        (void*)AF_INET,
+        5,
+        gvret_bcast_task_stack,
+        &gvret_bcast_task_buffer
+    );
+    
+    if (gvret_bcast_handle == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to create GVRET broadcast task");
+        heap_caps_free(gvret_bcast_task_stack);
+        return;
+    }
 }

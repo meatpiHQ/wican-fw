@@ -33,6 +33,7 @@
 #include "lwip/sockets.h"
 #include "config_server.h"
 #include "ble.h"
+#include "dev_status.h"
 
 #define WIFI_CONNECTED_BIT 			BIT0
 #define WIFI_FAIL_BIT     			BIT1
@@ -54,8 +55,9 @@ static void wifi_network_event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
 {
     static bool sta_successfuly_connected = false;
+    bool wifi_init = xEventGroupGetBits(s_wifi_event_group) & WIFI_INIT_BIT;
     
-    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
+    if (wifi_init && event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
     {
     	ESP_LOGI(WIFI_TAG, "WIFI_EVENT_STA_START");
         esp_wifi_connect();
@@ -71,7 +73,8 @@ static void wifi_network_event_handler(void* arg, esp_event_base_t event_base,
         wifi_mode_t current_mode;
         esp_err_t err = esp_wifi_get_mode(&current_mode);
 
-        if (err == ESP_OK && current_mode == WIFI_MODE_STA && !sta_successfuly_connected && ap_auto_disable)
+        if (err == ESP_OK && current_mode == WIFI_MODE_STA && !sta_successfuly_connected 
+                    && ap_auto_disable && wifi_init)
         {
             ESP_LOGI(WIFI_TAG, "Switching to APSTA mode");
             esp_wifi_stop();
@@ -87,7 +90,7 @@ static void wifi_network_event_handler(void* arg, esp_event_base_t event_base,
         wifi_mode_t current_mode;
         esp_err_t err = esp_wifi_get_mode(&current_mode);
 
-        if (err == ESP_OK && current_mode == WIFI_MODE_APSTA && ap_auto_disable)
+        if (err == ESP_OK && current_mode == WIFI_MODE_APSTA && ap_auto_disable && wifi_init)
         {
             ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
             ESP_LOGI(WIFI_TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
@@ -228,7 +231,13 @@ static void wifi_conn_task(void *pvParameters)
 		            portMAX_DELAY);
 		ESP_LOGI(WIFI_TAG, "Trying to connect...");
 		xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECT_IDLE_BIT);
-		esp_wifi_connect();
+
+        dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
+        if((xEventGroupGetBits(s_wifi_event_group) & WIFI_INIT_BIT))
+        {
+            esp_wifi_connect();
+        }
+		
 		xEventGroupWaitBits(s_wifi_event_group,
 					WIFI_CONNECT_IDLE_BIT,
 		            pdFALSE,
@@ -343,7 +352,35 @@ void wifi_network_init(char* sta_ssid, char* sta_pass)
     	ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config_sta) );
     	if(xwifi_handle == NULL)
     	{
-    		xTaskCreate(wifi_conn_task, "wifi_conn_task", 4096, (void*)AF_INET, 5, &xwifi_handle);
+            // Allocate stack memory in PSRAM for the WiFi connection task
+            static StackType_t *wifi_conn_task_stack;
+            static StaticTask_t wifi_conn_task_buffer;
+            
+            wifi_conn_task_stack = heap_caps_malloc(4096, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+            
+            if (wifi_conn_task_stack == NULL)
+            {
+                ESP_LOGE(WIFI_TAG, "Failed to allocate WiFi connection task stack memory");
+                return;
+            }
+            
+            // Create static task
+            xwifi_handle = xTaskCreateStatic(
+                wifi_conn_task,
+                "wifi_conn_task",
+                4096,
+                (void*)AF_INET,
+                5,
+                wifi_conn_task_stack,
+                &wifi_conn_task_buffer
+            );
+            
+            if (xwifi_handle == NULL)
+            {
+                ESP_LOGE(WIFI_TAG, "Failed to create WiFi connection task");
+                heap_caps_free(wifi_conn_task_stack);
+                return;
+            }
     	}
     }
     else

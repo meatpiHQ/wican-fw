@@ -59,6 +59,20 @@ typedef enum
 	WIFI_MAX
 }wifi_security_t;
 
+typedef enum
+{
+	LOG_SDCARD,
+	LOG_INTERNAL,
+	MAX_LOG_STORAGE
+}log_storage_t;
+
+typedef enum
+{
+	LOG_FS_LITTLEFS,
+	LOG_FS_FATFS,
+	MAX_LOG_FS
+}log_filesystem_t;
+
 typedef struct _device_config
 {
 	char wifi_mode[65];
@@ -104,6 +118,10 @@ typedef struct _device_config
 	char mqtt_tx_topic[64];
 	char mqtt_rx_topic[64];
 	char mqtt_status_topic[64];
+	char logger_status[16];
+	char log_storage[16];
+	char log_filesystem[16];
+	char log_period[16];
 }device_config_t;
 
 
@@ -159,6 +177,10 @@ int8_t config_server_get_wakeup_volt(float *wakeup_volt);
 int8_t config_server_get_sleep_time(uint32_t *sleep_time);
 int8_t config_server_get_wakeup_time(uint32_t *wakeup_time);
 wifi_security_t config_server_get_sta_security(void);
+int8_t config_server_get_logger_config(void);
+int8_t config_server_get_log_period(uint32_t *log_period);
+log_storage_t config_server_get_log_storage(void);
+log_filesystem_t config_server_get_log_filesystem(void);
 int8_t config_server_get_ap_auto_disable(void);
 int8_t config_server_get_periodic_wakeup(void);
 int8_t config_server_get_wakeup_interval(uint32_t *wakeup_interval);

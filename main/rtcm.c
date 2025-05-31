@@ -114,6 +114,105 @@ esp_err_t rtcm_get_device_id(uint8_t *id)
     return rx8130_register_read(RX8130_REG_ID, id, 1);
 }
 
+esp_err_t rtcm_get_iso8601_time(char *timestamp, size_t max_len)
+{
+    if (timestamp == NULL || max_len < 20) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    // Try to get time from RTCM module
+    uint8_t hour, min, sec;
+    uint8_t year, month, day, weekday;
+    
+    if (rtcm_get_time(&hour, &min, &sec) == ESP_OK && 
+        rtcm_get_date(&year, &month, &day, &weekday) == ESP_OK) {
+        
+        // Convert BCD format to decimal
+        uint8_t hour_dec = ((hour >> 4) & 0x0F) * 10 + (hour & 0x0F);
+        uint8_t min_dec = ((min >> 4) & 0x0F) * 10 + (min & 0x0F);
+        uint8_t sec_dec = ((sec >> 4) & 0x0F) * 10 + (sec & 0x0F);
+        uint8_t year_dec = ((year >> 4) & 0x0F) * 10 + (year & 0x0F);
+        uint8_t month_dec = ((month >> 4) & 0x0F) * 10 + (month & 0x0F);
+        uint8_t day_dec = ((day >> 4) & 0x0F) * 10 + (day & 0x0F);
+        
+        // Format timestamp 
+        snprintf(timestamp, max_len, "20%02d-%02d-%02dT%02d:%02d:%02d", 
+                year_dec, month_dec, day_dec, hour_dec, min_dec, sec_dec);
+                
+        return ESP_OK;
+    } else {
+        // Use system time as fallback
+        time_t now;
+        struct tm timeinfo;
+        
+        time(&now);
+        localtime_r(&now, &timeinfo);
+        strftime(timestamp, max_len, "%Y-%m-%dT%H:%M:%S", &timeinfo);
+        
+        ESP_LOGW(TAG, "RTCM time not available, using system time: %s", timestamp);
+        return ESP_OK;
+    }
+}
+
+time_t rtcm_bcd_to_unix_timestamp(uint8_t hour, uint8_t min, uint8_t sec, 
+                                 uint8_t year, uint8_t month, uint8_t day)
+{
+    // Convert BCD format to decimal
+    uint8_t hour_dec = ((hour >> 4) & 0x0F) * 10 + (hour & 0x0F);
+    uint8_t min_dec = ((min >> 4) & 0x0F) * 10 + (min & 0x0F);
+    uint8_t sec_dec = ((sec >> 4) & 0x0F) * 10 + (sec & 0x0F);
+    uint8_t year_dec = ((year >> 4) & 0x0F) * 10 + (year & 0x0F);
+    uint8_t month_dec = ((month >> 4) & 0x0F) * 10 + (month & 0x0F);
+    uint8_t day_dec = ((day >> 4) & 0x0F) * 10 + (day & 0x0F);
+    
+    // Calculate Unix timestamp
+    // Note: This is a simplified calculation that doesn't account for leap years perfectly
+    // but is sufficient for most applications
+    struct tm timeinfo;
+    timeinfo.tm_year = 100 + year_dec; // Years since 1900 (assuming 20xx)
+    timeinfo.tm_mon = month_dec - 1;   // Months are 0-based
+    timeinfo.tm_mday = day_dec;
+    timeinfo.tm_hour = hour_dec;
+    timeinfo.tm_min = min_dec;
+    timeinfo.tm_sec = sec_dec;
+    timeinfo.tm_isdst = -1;            // Not used
+    
+    // Validate time components to avoid invalid timestamps
+    if (timeinfo.tm_year < 100 || timeinfo.tm_year > 200 ||  // Year from 2000-2100
+        timeinfo.tm_mon < 0 || timeinfo.tm_mon > 11 ||       // Month 0-11
+        timeinfo.tm_mday < 1 || timeinfo.tm_mday > 31 ||     // Day 1-31
+        timeinfo.tm_hour < 0 || timeinfo.tm_hour > 23 ||     // Hour 0-23
+        timeinfo.tm_min < 0 || timeinfo.tm_min > 59 ||       // Minute 0-59
+        timeinfo.tm_sec < 0 || timeinfo.tm_sec > 59) {       // Second 0-59
+        ESP_LOGE(TAG, "Invalid time components: %02d-%02d-%02d %02d:%02d:%02d", 
+                 year_dec, month_dec, day_dec, hour_dec, min_dec, sec_dec);
+        return 0;
+    }
+    
+    time_t unix_timestamp = mktime(&timeinfo);
+    if (unix_timestamp < 0) {
+        ESP_LOGE(TAG, "Failed to convert time to Unix timestamp");
+        return 0;
+    }
+    
+    return unix_timestamp;
+}
+
+time_t rtcm_get_unix_timestamp(void)
+{
+    uint8_t hour, min, sec;
+    uint8_t year, month, day, weekday;
+    
+    // Read current time and date from RTC
+    if (rtcm_get_time(&hour, &min, &sec) != ESP_OK || 
+        rtcm_get_date(&year, &month, &day, &weekday) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get time/date from RTC");
+        return 0;
+    }
+    
+    return rtcm_bcd_to_unix_timestamp(hour, min, sec, year, month, day);
+}
+
 esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
     static int output_len;

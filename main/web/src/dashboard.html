@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <head>
+        <title>WiCAN Log Data Dashboard</title>
+        <link href="bootstrap.min.css" rel="stylesheet">
+        <style>
+            /* Add this style block to change heading colors */
+            h1, h2, h3, h4, h5, h6 {
+                color: #24478f; /* Using the color you specified earlier */
+            }
+        </style>
+    </head>
+    <link href="bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="daterangepicker.css">
+    <style>
+        .parameter-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .search-box {
+            margin-bottom: 10px;
+        }
+        .parameter-chart {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        #chart-container {
+
+
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        @media (min-width: 992px) {
+            /* Optional: For larger screens, you could display charts in a grid */
+            #chart-container {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));
+            }
+        }
+        .loading {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .param-checkbox {
+            margin-right: 8px;
+        }
+        .legend {
+            margin-top: 10px;
+        }
+        .legend-item {
+            display: inline-block;
+            margin-right: 15px;
+        }
+        .color-box {
+            display: inline-block;
+            width: 15px;
+            height: 15px;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="mb-4">WiCAN Logger Dashboard</h1>
+        
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>Date Range</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="dateRange" class="form-label">Select date range:</label>
+                            <input type="text" id="dateRange" class="form-control" />
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Parameters</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="search-box">
+                            <input type="text" id="paramSearch" class="form-control" placeholder="Search parameters...">
+                        </div>
+                        <div class="parameter-list" id="parameterList">
+                            <div class="loading" id="paramLoading">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p>Loading parameters...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Data Visualization</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="databaseInfo" class="mb-3">
+                            <!-- Status and info will be inserted here -->
+                        </div>
+                        <div id="dbLoading" class="loading">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p>Loading database information...</p>
+                        </div>
+                        <div id="chart-container"></div>
+                        <div id="chartLegend" class="legend"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="jquery-3.6.0.min.js"></script>
+    <script src="bootstrap.bundle.min.js"></script>
+    <script src="moment.min.js"></script>
+    <script src="daterangepicker.min.js"></script>
+    <script src="sql-wasm.js"></script>
+    <script src="chart.js"></script>
+    <script src="chartjs-adapter-moment.min.js"></script>
+    <script src="jszip.min.js"></script>
+    <script src="dashboard.js"></script>
+
+</body>
+</html>

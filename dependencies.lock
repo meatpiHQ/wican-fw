@@ -12,19 +12,19 @@ dependencies:
   eil/i2cdev:
     component_hash: 320f24484a1678083133ca19c195ea58740c188dd590626980b1cf2032539aaa
     dependencies:
-    - name: idf
-      require: private
-      version: '>=4.3'
     - name: eil/esp_idf_lib_helpers
       registry_url: https://components.espressif.com
       require: private
       version: '>=1.2.1'
+    - name: idf
+      require: private
+      version: '>=4.3'
     source:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.5.1
   espressif/mdns:
-    component_hash: af6306fe65d637a3683d1cf671508fcedd6b05f9ca029a8815abeab64001fb8d
+    component_hash: 3ec0af5f6bce310512e90f482388d21cc7c0e99668172d2f895356165fc6f7c5
     dependencies:
     - name: idf
       require: private
@@ -32,9 +32,9 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.4.0
+    version: 1.8.2
   espressif/usb_host_cdc_acm:
-    component_hash: f76e1283e7ef0e7970e8a708c4ee443ff0aa112572e25319d30b7ec555cc0aee
+    component_hash: 72cd608e75ac356dd617239edcb4b9a0a63bdce7eae0c64c7715db5108bce578
     dependencies:
     - name: idf
       require: private
@@ -42,21 +42,21 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 2.0.6
+    version: 2.1.0
   espressif/usb_host_cp210x_vcp:
-    component_hash: 6a36fd6179b2264a7d8854aa643d872f0d6408dd8f67a23d96e8cb8e49dfd087
+    component_hash: d8f33825476a6ebb2c5c12dc69f94a0bcd0fa418d1370af886a20bdc31cce952
     dependencies:
-    - name: idf
-      require: private
-      version: '>=4.4'
     - name: espressif/usb_host_cdc_acm
       registry_url: https://components.espressif.com
       require: public
-      version: '>=1.0.4,<3.0.0'
+      version: ^2.1.0
+    - name: idf
+      require: private
+      version: '>=4.4'
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 2.0.0
+    version: 2.1.0
   espressif/usb_host_ftdi_vcp:
     component_hash: a24180724b8d7fdf01b920b6baebd01057d52d1a4ae5bf7ce009963cc24ebb42
     dependencies:
@@ -74,13 +74,13 @@ dependencies:
   espressif/usb_host_vcp:
     component_hash: 99b3ad314fa966cb32970e468625672994e259c69c7c668d9c0a13d65993a0e7
     dependencies:
-    - name: idf
-      require: private
-      version: '>=4.4'
     - name: espressif/usb_host_cdc_acm
       registry_url: https://components.espressif.com
       require: public
       version: '>=1.0.4,<3.0.0'
+    - name: idf
+      require: private
+      version: '>=4.4'
     source:
       registry_url: https://components.espressif.com/
       type: service
@@ -90,7 +90,7 @@ dependencies:
       type: idf
     version: 5.4.1
   joltwallet/littlefs:
-    component_hash: 34b8c56a14f10b440845fe972ce34ef41d1d205bcb139b3dfc58983a10abf59b
+    component_hash: e1dbe782be5aa58e879fe9f22bee60e5ff68acbfe3793d92a2e730c27374c787
     dependencies:
     - name: idf
       require: private
@@ -98,7 +98,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.19.1
+    version: 1.19.2
   meatpihq/usb_host_ch34x_vcp:
     component_hash: a448631fda325ce5f3f1b4bb4707c7cb075c6a4d71ff4026a22ef2191efc9af4
     dependencies:
@@ -112,6 +112,14 @@ dependencies:
       path: host/class/cdc/usb_host_ch34x_vcp
       type: git
     version: c80a574e26b4807816fdcb939218d143841b852c
+  nopnop2002/sqlite3:
+    component_hash: 3deae8ed52e238e19eb13d2a347f1b2a9efe1d7e04007be6df7b04555a5543f7
+    dependencies: []
+    source:
+      git: https://github.com/nopnop2002/esp32-idf-sqlite3.git
+      path: components/esp32-idf-sqlite3/
+      type: git
+    version: 8c38efacd2d9225295e2abcc85f565c9b65bb1e0
 direct_dependencies:
 - eil/i2cdev
 - espressif/mdns
@@ -121,6 +129,7 @@ direct_dependencies:
 - idf
 - joltwallet/littlefs
 - meatpihq/usb_host_ch34x_vcp
-manifest_hash: 37edc9e97759e8dc802d62cb88b1f5a1eaeae46c6d98a73dafc6b101bcdac72e
+- nopnop2002/sqlite3
+manifest_hash: f13ed069d554bf963f2131d6ab31c7ad751aefdd32d5242991bbfc340c1ef9b1
 target: esp32s3
 version: 2.0.0

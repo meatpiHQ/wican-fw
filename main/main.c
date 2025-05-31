@@ -67,6 +67,7 @@
 #include "imu.h"
 #include "rtcm.h"
 #include "console.h"
+#include "dev_status.h"
 
 #define TAG 		__func__
 #define USB_ID_PIN					39
@@ -339,7 +340,7 @@ static void can_rx_task(void *pvParameters)
         static twai_message_t rx_msg;
 //        esp_err_t ret = 0xFF;
 
-
+		dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
 //    	time_old = esp_timer_get_time();
 //    	if((esp_timer_get_time() - time_old) > 1000000)
 //    	{
@@ -351,9 +352,9 @@ static void can_rx_task(void *pvParameters)
         // process_led(0);
     	if(esp_timer_get_time() - time_old > 1000*1000)
     	{
-    		uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
-    		time_old = esp_timer_get_time();
-    		ESP_LOGI(TAG, "free_heap: %lu", free_heap);
+    		// uint32_t free_heap = heap_caps_get_free_size(HEAP_CAPS);
+    		// time_old = esp_timer_get_time();
+    		// ESP_LOGI(TAG, "free_heap: %lu", free_heap);
 //        		ESP_LOGI(TAG, "msg %u/sec", num_msg);
 //        		num_msg = 0;
     	}
@@ -510,6 +511,12 @@ static void obd_rx_task(void *pvParameters)
 
 void app_main(void)
 {
+	void* internal_buf = NULL;
+	internal_buf = heap_caps_malloc(66 * 1024, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+	dev_status_init();
+	dev_status_set_bits(DEV_AWAKE_BIT);
+	dev_status_clear_bits(DEV_SLEEP_BIT);
+
 	gpio_reset_pin(BUTTON_GPIO_NUM);
 	gpio_set_direction(BUTTON_GPIO_NUM, GPIO_MODE_INPUT);
 	gpio_set_pull_mode(BUTTON_GPIO_NUM, GPIO_PULLUP_ONLY);
@@ -775,8 +782,13 @@ void app_main(void)
 		// #if HARDWARE_VER != WICAN_PRO
 		// can_enable();
 		// #endif
-		
-		autopid_init((char*)&uid[0]);
+		uint32_t log_period = 0;
+		if(config_server_get_log_period(&log_period) == -1)
+		{
+			ESP_LOGE(TAG, "error getting log period");
+			log_period = 60;
+		}
+		autopid_init((char*)&uid[0], config_server_get_logger_config(), log_period);
 	}
 
 	#else
@@ -887,6 +899,10 @@ void app_main(void)
 			#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 			ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, pass, &ble_uid[0]);
 			#elif HARDWARE_VER == WICAN_PRO
+			if(internal_buf != NULL)
+			{
+				free(internal_buf);
+			}
 			ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, 0, pass, &ble_uid[0]);
 			#endif
 		}
@@ -933,14 +949,14 @@ void app_main(void)
 	static StaticTask_t can_rx_task_buffer, can_tx_task_buffer, obd_rx_task_buffer;
 
 	// Allocate stack memory in PSRAM
-	can_rx_task_stack = heap_caps_malloc(1024*3 * sizeof(StackType_t), MALLOC_CAP_SPIRAM);
-	can_tx_task_stack = heap_caps_malloc(1024*3 * sizeof(StackType_t), MALLOC_CAP_SPIRAM);
-	obd_rx_task_stack = heap_caps_malloc(1024*3 * sizeof(StackType_t), MALLOC_CAP_SPIRAM);
+	can_rx_task_stack = heap_caps_malloc(1024*3, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+	can_tx_task_stack = heap_caps_malloc(1024*3, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+	obd_rx_task_stack = heap_caps_malloc(1024*3, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
 
 	if (can_rx_task_stack != NULL && can_tx_task_stack != NULL && obd_rx_task_stack != NULL) 
 	{
-		xTaskCreateStatic(can_rx_task, "can_rx_task", 1024*3, (void*)AF_INET, 5, 
-						can_rx_task_stack, &can_rx_task_buffer);
+		// xTaskCreateStatic(can_rx_task, "can_rx_task", 1024*3, (void*)AF_INET, 5, 
+		// 				can_rx_task_stack, &can_rx_task_buffer);
 		xTaskCreateStatic(can_tx_task, "can_tx_task", 1024*3, (void*)AF_INET, 5, 
 						can_tx_task_stack, &can_tx_task_buffer);
 		xTaskCreateStatic(obd_rx_task, "obd_rx_task", 1024*3, (void*)AF_INET, 5, 
@@ -974,6 +990,14 @@ void app_main(void)
 	// esp_log_level_set("HEAP", ESP_LOG_NONE);
 	// esp_log_level_set("autopid_find_standard_pid", ESP_LOG_INFO);
 	// esp_log_level_set("SLEEP_MODE", ESP_LOG_INFO);
+	// esp_log_level_set("OBD_LOGGER", ESP_LOG_INFO);
+	// esp_log_level_set("OBD_LOGGER_WS_IFACE", ESP_LOG_INFO);
+	// esp_log_level_set("CONFIG_SERVER", ESP_LOG_INFO);
+	// esp_log_level_set("EX_TIME", ESP_LOG_INFO);
+	// esp_log_level_set("AUTO_PID", ESP_LOG_INFO);
+	// esp_log_level_set("QUERY_EXAMPLE", ESP_LOG_INFO);
+	// esp_log_level_set("sqlite_log", ESP_LOG_INFO);
+	// esp_log_level_set("AUTO_PID", ESP_LOG_INFO);
 	
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
@@ -986,5 +1010,9 @@ void app_main(void)
     #endif
 
 	console_init();
+	if(internal_buf != NULL)
+	{
+		free(internal_buf);
+	}
 }
 

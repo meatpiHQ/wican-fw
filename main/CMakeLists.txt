@@ -28,6 +28,7 @@ set(srcs
     "rtcm.c"
     "console.c"
     "hw_config.c"
+    "dev_status.c"
 )
 
 # Define required components
@@ -51,6 +52,9 @@ set(requires
     json
     wear_levelling
     esp_http_client
+    spi_flash
+    obd_logger
+    https_client_mgr
 )
 
 # Register the component
@@ -65,12 +69,15 @@ idf_component_register(
         "autopid.c"
         "wusb3801.c"
         "${srcs}"
-    INCLUDE_DIRS        # Public include directories
-    PRIV_INCLUDE_DIRS   # Private include directories
-    REQUIRES "${requires}"
-    PRIV_REQUIRES       spi_flash # Private requirements
-    EMBED_FILES 
-        "homepage.html"
+        INCLUDE_DIRS "." 
+        INCLUDE_DIRS        # Public include directories
+        PRIV_INCLUDE_DIRS   # Private include directories
+        REQUIRES "${requires}"
+        PRIV_REQUIRES       spi_flash # Private requirements
+        EMBED_FILES 
+        "web/src/homepage.html"
+        "web/src/dashboard.html"
+        "web/src/dashboard.js"
         "obd_fw/V2.3.18.txt"
         "logo.txt"
 )
