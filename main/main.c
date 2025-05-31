@@ -997,7 +997,6 @@ void app_main(void)
 	// esp_log_level_set("AUTO_PID", ESP_LOG_INFO);
 	// esp_log_level_set("QUERY_EXAMPLE", ESP_LOG_INFO);
 	// esp_log_level_set("sqlite_log", ESP_LOG_INFO);
-	// esp_log_level_set("AUTO_PID", ESP_LOG_INFO);
 	
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
     gpio_set_level(PWR_LED_GPIO_NUM, 1);

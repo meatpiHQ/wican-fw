@@ -50,4 +50,5 @@ void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, Q
 esp_err_t elm327_sleep(void);
 void elm327_lock(void);
 void elm327_send_cmd(uint8_t* cmd, uint32_t cmd_len);
+esp_err_t elm327_get_protocol_number(uint8_t *protocol_number);
 #endif

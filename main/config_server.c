@@ -1722,6 +1722,7 @@ esp_err_t autopid_data_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+#define MAX_AVAILABLE_PIDS_SIZE 		(1024*8)
 static esp_err_t scan_available_pids_handler(httpd_req_t *req)
 {
     char protocol[8];
@@ -1743,14 +1744,14 @@ static esp_err_t scan_available_pids_handler(httpd_req_t *req)
         }
     }
 
-    char *available_pids = malloc(5120);
+    char *available_pids = malloc(MAX_AVAILABLE_PIDS_SIZE);
     if (available_pids == NULL) {
         httpd_resp_send_500(req);
         return ESP_FAIL;
     }
-    memset(available_pids, 0, 5120);
+    memset(available_pids, 0, MAX_AVAILABLE_PIDS_SIZE);
     
-    if (autopid_find_standard_pid(protocol_num, available_pids, 5120) == ESP_OK) {
+    if (autopid_find_standard_pid(protocol_num, available_pids, MAX_AVAILABLE_PIDS_SIZE) == ESP_OK) {
         httpd_resp_set_type(req, "application/json");
         httpd_resp_send(req, available_pids, strlen(available_pids));
     }

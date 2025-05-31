@@ -40,6 +40,7 @@
 #include "obd.h"
 #include "sleep_mode.h"
 #include "types.h"
+#include "elm327.h"
 
 #define TAG 		__func__
 
@@ -1785,6 +1786,155 @@ void elm327_hardreset_chip(void)
     {
         ESP_LOGE(TAG, "UART configuration failed");
     }
+	// uint8_t protocol_number = 0;
+	// elm327_get_protocol_number(&protocol_number);
+}
+
+esp_err_t elm327_get_protocol_number(uint8_t *protocol_number)
+{
+	esp_err_t ret = ESP_FAIL;
+	char *rsp_buffer = NULL;
+	uint32_t rsp_len;
+
+	if (protocol_number == NULL) {
+		ESP_LOGE(TAG, "Invalid protocol_number pointer");
+		return ESP_ERR_INVALID_ARG;
+	}
+
+	rsp_buffer = (char *) heap_caps_malloc(512, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+	if (rsp_buffer == NULL)
+	{
+		ESP_LOGE(TAG, "Failed to allocate memory");
+		return ESP_ERR_NO_MEM;
+	}
+	
+	if (xSemaphoreTake(xuart1_semaphore, portMAX_DELAY) == pdTRUE)
+	{
+		uart_flush_input(UART_NUM_1);
+		xQueueReset(uart1_queue);
+		
+		// Step 1: Set automatic protocol with ATTP0
+		uart_write_bytes(UART_NUM_1, "ATTP0\r", strlen("ATTP0\r"));
+		int len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, 512, "\r>", UART_TIMEOUT_MS+300);
+		
+		if (len > 0) {
+			ESP_LOGI(TAG, "ATTP0 response:");
+			ESP_LOG_BUFFER_HEXDUMP(TAG, rsp_buffer, len, ESP_LOG_INFO);
+			if (strstr(rsp_buffer, "OK") == NULL) {
+				ESP_LOGW(TAG, "ATTP0 did not return OK, continuing anyway");
+			}
+		} else {
+			ESP_LOGE(TAG, "No response to ATTP0 command");
+			ret = ESP_ERR_TIMEOUT;
+			goto cleanup;
+		}
+		
+		// Clear buffer for next command
+		memset(rsp_buffer, 0, 512);
+		uart_flush_input(UART_NUM_1);
+		xQueueReset(uart1_queue);
+		
+		// Step 2: Send 0100 to establish protocol
+		uart_write_bytes(UART_NUM_1, "0100\r", strlen("0100\r"));
+		len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, 512, "\r>", UART_TIMEOUT_MS+10000);
+		
+		if (len > 0) {
+			ESP_LOGI(TAG, "0100 response:");
+			ESP_LOG_BUFFER_HEXDUMP(TAG, rsp_buffer, len, ESP_LOG_INFO);
+			// Check if we got a valid response (not "NO DATA" or "BUS INIT ERROR")
+			if (strstr(rsp_buffer, "NO DATA") != NULL || 
+				strstr(rsp_buffer, "BUS INIT") != NULL ||
+				strstr(rsp_buffer, "ERROR") != NULL) {
+				ESP_LOGE(TAG, "Failed to establish protocol with 0100 command");
+				ret = ESP_ERR_NOT_FOUND;
+				goto cleanup;
+			}
+		} else {
+			ESP_LOGE(TAG, "No response to 0100 command");
+			ret = ESP_ERR_TIMEOUT;
+			goto cleanup;
+		}
+		
+		// Clear buffer for final command
+		memset(rsp_buffer, 0, 512);
+		uart_flush_input(UART_NUM_1);
+		xQueueReset(uart1_queue);
+		
+		// Step 3: Get protocol number with ATDPN
+        uart_write_bytes(UART_NUM_1, "ATDPN\r", strlen("ATDPN\r"));
+        len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, 512, "\r>", UART_TIMEOUT_MS+300);
+		
+		if (len > 0) {
+			ESP_LOGI(TAG, "ATDPN response:");
+			ESP_LOG_BUFFER_HEXDUMP(TAG, rsp_buffer, len, ESP_LOG_INFO);
+			// Parse the response - look for protocol number
+			char *protocol_start = NULL;
+			uint8_t skip_char = 0;
+			if(strstr(rsp_buffer, "ATDPN\r") != NULL){
+				ESP_LOGI(TAG, "Echo is enabled");
+				skip_char = strlen("ATDPN\r");
+			}
+
+			// Check for "AX" format first
+			if (len >= 2 && rsp_buffer[0] == 'A') {
+				protocol_start = &rsp_buffer[1 + skip_char];
+			}
+			// Check for "X" format
+			else if (len >= 1) {
+				protocol_start = &rsp_buffer[0 + skip_char];
+			}
+			
+			if (protocol_start != NULL) {
+				char protocol_char = protocol_start[0];
+				
+				// Convert hex character to number (0-9, A-C)
+				if (protocol_char >= '0' && protocol_char <= '9') {
+					*protocol_number = protocol_char - '0';
+					ret = ESP_OK;
+				}
+				else if (protocol_char >= 'A' && protocol_char <= 'C') {
+					*protocol_number = protocol_char - 'A' + 10;
+					ret = ESP_OK;
+				}
+				else if (protocol_char >= 'a' && protocol_char <= 'c') {
+					*protocol_number = protocol_char - 'a' + 10;
+					ret = ESP_OK;
+				}
+				else {
+					ESP_LOGE(TAG, "Invalid protocol character: %c", protocol_char);
+					ret = ESP_ERR_INVALID_RESPONSE;
+				}
+				
+				if (ret == ESP_OK) {
+					ESP_LOGI(TAG, "Protocol number: %d", *protocol_number);
+				}
+			}
+			else {
+				ESP_LOGE(TAG, "Could not parse protocol from response");
+				ret = ESP_ERR_INVALID_RESPONSE;
+			}
+		}
+		else {
+			ESP_LOGE(TAG, "No response received or timeout");
+			ret = ESP_ERR_TIMEOUT;
+		}
+		
+cleanup:
+		uart_flush_input(UART_NUM_1);
+		xQueueReset(uart1_queue);
+		xSemaphoreGive(xuart1_semaphore);
+	}
+	else {
+		ESP_LOGE(TAG, "Failed to take semaphore");
+		ret = ESP_ERR_TIMEOUT;
+	}
+	
+	// Free allocated memory
+	if (rsp_buffer != NULL) {
+		heap_caps_free(rsp_buffer);
+	}
+	
+	return ret;
 }
 
 esp_err_t elm327_sleep(void)

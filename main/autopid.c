@@ -58,12 +58,29 @@ static EventGroupHandle_t xautopid_event_group = NULL;
 static all_pids_t* all_pids = NULL;
 static response_t elm327_response;
 static autopid_data_t autopid_data;
+static QueueHandle_t protocolnumberQueue = NULL;
 
 #if HARDWARE_VER == WICAN_PRO
 static char* elm327_autopid_cmd_buffer;
 static uint32_t elm327_autopid_cmd_buffer_len = 0;
 static int64_t elm327_autopid_last_cmd_time = 0;
 #endif
+
+static const uint8_t autopid_protocol_header_length[] = {
+    0,  // 0: Automatic
+    6,  // 1: SAE J1850 PWM (41.6 kbaud)
+    6,  // 2: SAE J1850 VPW (10.4 kbaud) 
+    6,  // 3: ISO 9141-2 (5 baud init, 10.4 kbaud)
+    6,  // 4: ISO 14230-4 KWP (5 baud init, 10.4 kbaud)
+    6,  // 5: ISO 14230-4 KWP (fast init, 10.4 kbaud)
+    0,  // 6: ISO 15765-4 CAN (11 bit ID, 500 kbaud)
+    9,  // 7: ISO 15765-4 CAN (29 bit ID, 500 kbaud)
+    0,  // 8: ISO 15765-4 CAN (11 bit ID, 250 kbaud)
+    9,  // 9: ISO 15765-4 CAN (29 bit ID, 250 kbaud)
+    9,  // A: SAE J1939 CAN (29 bit ID, 250 kbaud)
+    0,  // B: USER1 CAN (11 bit ID, 125 kbaud)
+    0   // C: USER2 CAN (29 bit ID, 50 kbaud)
+};
 
 //Helper functions
 // Custom printer function to format numbers with 2 decimal places
@@ -110,6 +127,47 @@ void limitJsonDecimalPrecision(cJSON* item)
     }
 }
 
+esp_err_t autopid_set_protocol_number(int32_t protocol_value)
+{
+    if (protocolnumberQueue == NULL) {
+        ESP_LOGE(TAG, "Protocol queue not initialized");
+        return ESP_FAIL;
+    }
+
+    // Clear any existing value in the queue
+    xQueueReset(protocolnumberQueue);
+    
+    // Add the new protocol value
+    if (xQueueSend(protocolnumberQueue, &protocol_value, pdMS_TO_TICKS(100)) != pdPASS) {
+        ESP_LOGE(TAG, "Failed to set protocol number: %ld", protocol_value);
+        return ESP_FAIL;
+    }
+    
+    ESP_LOGI(TAG, "Protocol number set to: %ld", protocol_value);
+    return ESP_OK;
+}
+
+esp_err_t autopid_get_protocol_number(int32_t *protocol_value)
+{
+    if (protocolnumberQueue == NULL) {
+        ESP_LOGE(TAG, "Protocol queue not initialized");
+        return ESP_FAIL;
+    }
+    
+    if (protocol_value == NULL) {
+        ESP_LOGE(TAG, "Invalid protocol_value pointer");
+        return ESP_FAIL;
+    }
+
+    // Peek at the value without removing it from the queue
+    if (xQueuePeek(protocolnumberQueue, protocol_value, 0) != pdPASS) {
+        ESP_LOGW(TAG, "No protocol number available in queue");
+        return ESP_FAIL;
+    }
+    
+    ESP_LOGD(TAG, "Retrieved protocol number: %ld", *protocol_value);
+    return ESP_OK;
+}
 
 
 const std_pid_t* get_pid_from_string(const char* pid_string)
@@ -219,15 +277,26 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
     uint32_t supported_pids = 0;
     cJSON *root = cJSON_CreateObject();
     cJSON *pid_array = cJSON_CreateArray();
-    // char restore_cmd[64];
-    static const char *supported_protocols[] = {"ATTP6\rATSH7DF\rATCRA\r",
-                                                "ATTP7\rATSH18DB33F1\rATCRA\r",
-                                                "ATTP8\rATSH7DF\rATCRA\r",
-                                                "ATTP9\rATSH18DB33F1\rATCRA\r",
+    uint8_t selected_protocol = 0;
+    static const char *supported_protocols[] = {"ATTP0\r",               // Protocol 0 
+                                                "ATTP6\rATSH7DF\rATCRA\r",      // Protocol 6
+                                                "ATTP7\rATSH18DB33F1\rATCRA\r", // Protocol 7
+                                                "ATTP8\rATSH7DF\rATCRA\r",      // Protocol 8
+                                                "ATTP9\rATSH18DB33F1\rATCRA\r", // Protocol 9
                                                 };
 
+    if(protocol >= 6 && protocol <= 9) 
+    {
+        selected_protocol = protocol - 5;  //supported_protocols index, 6-5 = 1, 7-5 = 2, 8-5 = 3, 9-5 = 4
+    }
+    else
+    {
+        selected_protocol = 0;
+    }
+
     response = (response_t *)malloc(sizeof(response_t)); 
-    
+    memset(response, 0, sizeof(response_t));
+
     if (response == NULL)
     {
         ESP_LOGE(TAG, "Failed to allocate memory for response");
@@ -236,7 +305,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
 
     xSemaphoreTake(all_pids->mutex, portMAX_DELAY);
     
-    if(protocol >= 6 && protocol <= 9) 
+    if((protocol >= 6 && protocol <= 9) || protocol == 0) 
     {
         ESP_LOGI(TAG, "Setting protocol %d", protocol);
 
@@ -244,16 +313,16 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
         // elm327_process_cmd((uint8_t*)elm327_config, strlen(elm327_config), &frame, &autopidQueue);
         // while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS);
         elm327_process_cmd((uint8_t*)elm327_config , strlen(elm327_config), &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, NULL);
-        const char* protocol_cmds = supported_protocols[protocol-6];
+        const char* protocol_cmds = supported_protocols[selected_protocol];
         ESP_LOGI(TAG, "Sending protocol commands: %s", protocol_cmds);
         // elm327_process_cmd((uint8_t*)protocol_cmds, strlen(protocol_cmds), &frame, &autopidQueue);
         // while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS);
         elm327_process_cmd((uint8_t*)protocol_cmds , strlen(protocol_cmds), &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, NULL);
-        ESP_LOGI(TAG, "Protocol %d set successfully", protocol);
+        ESP_LOGI(TAG, "Protocol %d set successfully", selected_protocol);
     }
     else
     {
-        ESP_LOGE(TAG, "Invalid protocol number: %d", protocol);
+        ESP_LOGE(TAG, "Invalid protocol number: %d", selected_protocol);
         // elm327_unlock();
         free(response);
         xSemaphoreGive(all_pids->mutex);
@@ -271,72 +340,81 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
         "01A0\r",  // PIDs 0xA1-0xC0
     };
 
+	uint8_t proto_number = 0;
+
+    if(protocol == 0){
+        if(elm327_get_protocol_number(&proto_number) == ESP_OK){
+            ESP_LOGI(TAG, "Protocol number: %u", proto_number);
+            autopid_set_protocol_number(proto_number);
+        }
+    }
+
     while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(100)) == pdPASS);
     ESP_LOGI(TAG, "Starting PID support command processing");
     for (int i = 0; i < sizeof(pid_support_cmds)/sizeof(pid_support_cmds[0]); i++) {
-    ESP_LOGI(TAG, "Processing PID support command: %s", pid_support_cmds[i]);
-    // if (elm327_process_cmd((uint8_t*)pid_support_cmds[i], strlen(pid_support_cmds[i]), &frame, &autopidQueue) != 0) {
-    if (elm327_process_cmd((uint8_t*)pid_support_cmds[i] , strlen(pid_support_cmds[i]), &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, autopid_parser) != 0) {
-        ESP_LOGW(TAG, "Failed to process PID support command: %s", pid_support_cmds[i]);
-        continue;
-    }
-    
-    if (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS) {
-        ESP_LOGI(TAG, "Raw response length: %lu", response->length);
-        ESP_LOG_BUFFER_HEX(TAG, response->data, response->length);
+        ESP_LOGI(TAG, "Processing PID support command: %s", pid_support_cmds[i]);
 
-        // Skip mode byte (0x41) and PID byte
-        if ((strstr((char*)response->data, "error") == NULL) && response->length >= 7) {
-            uint8_t merged_frame[7] = {0};
-            merge_response_frames(response->data, response->length, merged_frame);
-            
-            // Extract bitmap from merged frame
-            supported_pids = (merged_frame[3] << 24) | 
-                            (merged_frame[4] << 16) | 
-                            (merged_frame[5] << 8) | 
-                            merged_frame[6];
-            
-            ESP_LOGI(TAG, "Merged frame bitmap: 0x%08lx", supported_pids);
+        if (elm327_process_cmd((uint8_t*)pid_support_cmds[i] , strlen(pid_support_cmds[i]), &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, autopid_parser) != 0) {
+            ESP_LOGW(TAG, "Failed to process PID support command: %s", pid_support_cmds[i]);
+            continue;
+        }
+        
+        if (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(10000)) == pdPASS) {
+            ESP_LOGI(TAG, "Raw response length: %lu", response->length);
+            ESP_LOG_BUFFER_HEX(TAG, response->data, response->length);
 
-                for (int bit = 0; bit < 32; bit++) {
-                    if (supported_pids & (1 << (31 - bit))) {
-                        uint8_t pid = (i * 32) + bit + 1;
-                        const std_pid_t* pid_info = get_pid(pid);
-                        
-                        if (pid_info) {
-                            char pid_str[64];
+            // Skip mode byte (0x41) and PID byte
+            if ((strstr((char*)response->data, "error") == NULL) && response->length >= 7) {
+                uint8_t merged_frame[7] = {0};
+                merge_response_frames(response->data, response->length, merged_frame);
+                
+                // Extract bitmap from merged frame
+                supported_pids = (merged_frame[3] << 24) | 
+                                (merged_frame[4] << 16) | 
+                                (merged_frame[5] << 8) | 
+                                merged_frame[6];
+                
+                ESP_LOGI(TAG, "Merged frame bitmap: 0x%08lx", supported_pids);
+
+                    for (int bit = 0; bit < 32; bit++) {
+                        if (supported_pids & (1 << (31 - bit))) {
+                            uint8_t pid = (i * 32) + bit + 1;
+                            const std_pid_t* pid_info = get_pid(pid);
                             
-                            // If the PID has multiple parameters
-                            if (pid_info->num_params > 1 && pid_info->params) {
-                                ESP_LOGI(TAG, "Processing multi-parameter PID: %02X", pid);
-                                // Add each parameter as a separate entry
-                                for (int p = 0; p < pid_info->num_params; p++) {
-                                    if (pid_info->params[p].name) {
-                                        snprintf(pid_str, sizeof(pid_str), "%02X-%s", 
-                                                pid, pid_info->params[p].name);
-                                        ESP_LOGI(TAG, "PID %02X parameter %d supported: %s", 
-                                                pid, p + 1, pid_str);
-                                        cJSON_AddItemToArray(pid_array, cJSON_CreateString(pid_str));
-                                    } else {
-                                        ESP_LOGW(TAG, "PID %02X parameter %d has NULL name", pid, p + 1);
+                            if (pid_info) {
+                                char pid_str[64];
+                                
+                                // If the PID has multiple parameters
+                                if (pid_info->num_params > 1 && pid_info->params) {
+                                    ESP_LOGI(TAG, "Processing multi-parameter PID: %02X", pid);
+                                    // Add each parameter as a separate entry
+                                    for (int p = 0; p < pid_info->num_params; p++) {
+                                        if (pid_info->params[p].name) {
+                                            snprintf(pid_str, sizeof(pid_str), "%02X-%s", 
+                                                    pid, pid_info->params[p].name);
+                                            ESP_LOGI(TAG, "PID %02X parameter %d supported: %s", 
+                                                    pid, p + 1, pid_str);
+                                            cJSON_AddItemToArray(pid_array, cJSON_CreateString(pid_str));
+                                        } else {
+                                            ESP_LOGW(TAG, "PID %02X parameter %d has NULL name", pid, p + 1);
+                                        }
                                     }
+                                } else if (pid_info->params && pid_info->params[0].name) {
+                                    // Single parameter PID
+                                    snprintf(pid_str, sizeof(pid_str), "%02X-%s", 
+                                            pid, pid_info->params[0].name);
+                                    ESP_LOGI(TAG, "PID %02X supported: %s", pid, pid_str);
+                                    cJSON_AddItemToArray(pid_array, cJSON_CreateString(pid_str));
+                                } else {
+                                    ESP_LOGW(TAG, "PID %02X has invalid or NULL parameters", pid);
                                 }
-                            } else if (pid_info->params && pid_info->params[0].name) {
-                                // Single parameter PID
-                                snprintf(pid_str, sizeof(pid_str), "%02X-%s", 
-                                        pid, pid_info->params[0].name);
-                                ESP_LOGI(TAG, "PID %02X supported: %s", pid, pid_str);
-                                cJSON_AddItemToArray(pid_array, cJSON_CreateString(pid_str));
-                            } else {
-                                ESP_LOGW(TAG, "PID %02X has invalid or NULL parameters", pid);
-                            }
-                        }   
+                            }   
+                        }
                     }
+                } else {
+                    ESP_LOGW(TAG, "Response length too short: %lu", response->length);
                 }
             } else {
-                ESP_LOGW(TAG, "Response length too short: %lu", response->length);
-            }
-        } else {
             if (response->length >= 7) {
                 ESP_LOGW(TAG, "No response received for PID support command: %s", pid_support_cmds[i]);
             }else {
@@ -759,6 +837,17 @@ void parse_elm327_response(char *buffer, response_t *response) {
     frame = strtok(buffer, "\r\n");
     ESP_LOGI(TAG, "First frame: %s", frame ? frame : "NULL");
 
+    int32_t current_protocol_number = -1;
+
+    if(autopid_get_protocol_number(&current_protocol_number) == ESP_OK)
+    {
+        ESP_LOGI(TAG, "Current protocol number: %ld", current_protocol_number);
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Failed to get protocol number");
+    }
+    
     while (frame != NULL) {
         ESP_LOGD(TAG, "Processing frame %d: %s", frame_count + 1, frame);
         frame_count++;
@@ -794,21 +883,29 @@ void parse_elm327_response(char *buffer, response_t *response) {
             }
 
             data_start++;
-
-            // Handle different header formats
-            switch (header_length) {
-                case 2: 
-                    data_start += 9;
-                    ESP_LOGV(TAG, "2-byte header format: Adjusted data_start by 9");
-                    break;
-                case 3:
-                case 8:
-                    ESP_LOGV(TAG, "%d-byte header format: No adjustment needed", header_length);
-                    break;
-                default:
-                    ESP_LOGW(TAG, "Unexpected header length: %d, skipping frame", header_length);
-                    frame = strtok(NULL, "\r\n");
-                    continue;
+            if(current_protocol_number == -1 || (current_protocol_number > sizeof(autopid_protocol_header_length )))
+            {
+                // Handle different header formats
+                switch (header_length) {
+                    case 2: 
+                        data_start += 9;
+                        ESP_LOGW(TAG, "2-byte header format: Adjusted data_start by 9");
+                        break;
+                    case 3:
+                    case 8:
+                        ESP_LOGW(TAG, "%d-byte header format: No adjustment needed", header_length);
+                        break;
+                    default:
+                        ESP_LOGW(TAG, "Unexpected header length: %d, skipping frame", header_length);
+                        frame = strtok(NULL, "\r\n");
+                        continue;
+                }
+            }
+            else
+            {
+                // Adjust data_start based on protocol number
+                ESP_LOGI(TAG, "Adjusting data_start based on protocol number: %ld, header length: + %d", current_protocol_number, autopid_protocol_header_length[current_protocol_number]);
+                data_start += (uint8_t)autopid_protocol_header_length[current_protocol_number];
             }
 
             // Store start position for copying data
@@ -1092,7 +1189,21 @@ static void autopid_task(void *pvParameters)
     // bool *pid_failed = calloc(total_params, sizeof(bool));
     // xSemaphoreGive(all_pids->mutex);
     
-
+    if(strcmp(all_pids->std_ecu_protocol, "0") == 0) 
+    {
+        ESP_LOGI(TAG, "Protocol is Auto");
+        
+        // elm327_get_protocol_number
+        uint8_t auto_protocol_number = 0;
+        if(elm327_get_protocol_number(&auto_protocol_number) == ESP_OK){
+            autopid_set_protocol_number(auto_protocol_number);
+            sprintf(all_pids->standard_init, "ATTP%01X\r", auto_protocol_number);
+        }else{
+            ESP_LOGE(TAG, "Failed to get protocol number");
+        }
+        
+        ESP_LOGI(TAG, "Protocol number: %u", auto_protocol_number);
+    }
 
     ESP_LOGI(TAG, "Autopid Start loop");
     ESP_LOGI(TAG, "Total PIDs: %lu", all_pids->pid_count);
@@ -1607,19 +1718,26 @@ all_pids_t* load_all_pids(void){
                             sh_value = "18DB33F1";
                         }
 
-                        if(curr_pid->rxheader != NULL && strlen(curr_pid->rxheader) > 0)
+                        if(is_protocol_68 || is_protocol_79)
                         {
-                            ESP_LOGI(TAG, "Setting up STD init buffer with protocol: %s, SH value: %s, RX header: %s", all_pids->std_ecu_protocol, sh_value, curr_pid->rxheader);
-                            snprintf(std_init_buf, sizeof(std_init_buf), "ATTP%s\rATSH%s\rATCRA%s\r",
-                                                        all_pids->std_ecu_protocol, sh_value, curr_pid->rxheader);
+                            if(curr_pid->rxheader != NULL && strlen(curr_pid->rxheader) > 0)
+                            {
+                                ESP_LOGI(TAG, "Setting up STD init buffer with protocol: %s, SH value: %s, RX header: %s", all_pids->std_ecu_protocol, sh_value, curr_pid->rxheader);
+                                snprintf(std_init_buf, sizeof(std_init_buf), "ATTP%s\rATSH%s\rATCRA%s\r",
+                                                            all_pids->std_ecu_protocol, sh_value, curr_pid->rxheader);
+                            }
+                            else
+                            {
+                                ESP_LOGI(TAG, "Setting up STD init buffer with protocol: %s, SH value: %s", all_pids->std_ecu_protocol, sh_value);
+                                snprintf(std_init_buf, sizeof(std_init_buf), "ATTP%s\rATSH%s\rATCRA\r",
+                                                            all_pids->std_ecu_protocol, sh_value);                        
+                            }
+                            all_pids->standard_init = strdup(std_init_buf);
                         }
                         else
                         {
-                            ESP_LOGI(TAG, "Setting up STD init buffer with protocol: %s, SH value: %s", all_pids->std_ecu_protocol, sh_value);
-                            snprintf(std_init_buf, sizeof(std_init_buf), "ATTP%s\rATSH%s\rATCRA\r",
-                                                        all_pids->std_ecu_protocol, sh_value);                        
+                            all_pids->standard_init = strdup("ATTP0\r  ");
                         }
-                        all_pids->standard_init = strdup(std_init_buf);
 
                         if(curr_pid->parameters->name != NULL && strlen(curr_pid->parameters->name) > 0)
                         {
@@ -1988,6 +2106,20 @@ void autopid_init(char* id, bool enable_logging, uint32_t logging_period)
         ESP_LOGE(TAG, "Failed to create static queue");
         return;
     }
+
+    // Define static queue storage and structure for protocol number
+    static StaticQueue_t protocolQueue_buffer;
+    static uint8_t protocolQueue_storage[1 * sizeof(int32_t)];
+
+    // Create a static queue for protocol number
+    protocolnumberQueue = xQueueCreateStatic(1, sizeof(int32_t), protocolQueue_storage, &protocolQueue_buffer);
+
+    if(protocolnumberQueue == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to create static protocol queue");
+        return;
+    }
+    autopid_set_protocol_number(-1); // Initialize with -1
 
     all_pids = load_all_pids();
     
