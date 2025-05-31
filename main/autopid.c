@@ -1099,7 +1099,15 @@ static void autopid_task(void *pvParameters)
     {
         static pid_type_t previous_pid_type = PID_MAX;
 
-        dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
+        if(dev_status_is_sleeping())
+        {
+            ESP_LOGI(TAG, "Device is sleeping, waiting for wakeup");
+            obd_logger_disable();
+            dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
+            ESP_LOGI(TAG, "Device awake, resuming autopid task");
+            obd_logger_enable();
+        }
+
         // elm327_lock();
         xSemaphoreTake(all_pids->mutex, portMAX_DELAY);
         
@@ -1858,9 +1866,20 @@ static void autopid_init_obd_logger(uint32_t log_period)
     // Initialize OBD logger with these parameters
     // obd_logger_init_params(params, param_count);
     
+    //create directory if not exists
+    if (mkdir(DB_ROOT_PATH"/"DB_DIR_NAME, 0755) != 0) {
+        // Ignore error if directory already exists
+        if (errno != EEXIST) {
+            ESP_LOGE(TAG, "Failed to create directory %s: %s", DB_ROOT_PATH"/"DB_DIR_NAME, strerror(errno));
+        }
+    } else {
+        ESP_LOGI(TAG, "Created directory: %s", DB_ROOT_PATH"/"DB_DIR_NAME);
+    }
+
+
     static obd_logger_t obd_logger = {
-        .path = "/sdcard",
-        .db_filename = DB_FILE_NAME,
+        .path = DB_ROOT_PATH"/"DB_DIR_NAME,
+        .db_filename = DB_ROOT_PATH"/"DB_DIR_NAME"/"DB_DIR_NAME,
         .obd_logger_get_params_cb = autopid_data_read
     };
     obd_logger.period_sec = log_period;
