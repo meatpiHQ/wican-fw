@@ -460,6 +460,13 @@ static void response_task(void *pvParameters)
 // WebSocket handler
 static esp_err_t obd_logger_handler(httpd_req_t *req)
 {
+    if (!obd_logger_is_initialized() || !obd_logger_is_enabled())
+    {
+        ESP_LOGE(TAG, "OBD Logger not initialized or enabled");
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
     if (req->method == HTTP_GET)
     {
         int fd = httpd_req_to_sockfd(req);
@@ -670,7 +677,7 @@ esp_err_t obd_logger_db_file_handler(httpd_req_t *req)
         ESP_LOGI(TAG, "Serving DB index file");
 
         // Use the DB manager path to get the index file
-        strncpy(base_path, "/sdcard", sizeof(base_path) - 1); // Default path
+        strncpy(base_path, DB_ROOT_PATH"/"DB_DIR_NAME, sizeof(base_path) - 1); // Default path
 
         // Get a database file to determine the base path
         obd_db_file_info_t db_files[1];
@@ -747,8 +754,8 @@ esp_err_t obd_logger_db_file_handler(httpd_req_t *req)
                     }
                     else
                     {
-                        // Fallback if path doesn't have a slash
-                        snprintf(filepath, sizeof(filepath), "/sdcard/%s", filename);
+                        // Fallback if path doesn't have a slash, use DB_ROOT_PATH"/"DB_DIR_NAME
+                        snprintf(filepath, sizeof(filepath), "%s/%s", DB_ROOT_PATH"/"DB_DIR_NAME, filename);
                     }
                     break;
                 }

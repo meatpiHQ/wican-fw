@@ -3,7 +3,9 @@
 
 #include "esp_err.h"
 
-#define DB_FILE_NAME "obd_data.db"
+#define DB_FILE_NAME    "obd_data.db"
+#define DB_DIR_NAME     "obd_logs"
+#define DB_ROOT_PATH    "/sdcard"
 
 // Parameter entry structure
 typedef struct {
@@ -16,6 +18,8 @@ typedef struct {
 typedef struct {
     const char *name;
     float value;
+    float old_value;
+    bool changed;
 } param_value_t;
 
 // Typedef for the get parameters callback function
@@ -41,5 +45,9 @@ void obd_logger_unlock(void);
 void obd_logger_lock_close(void);
 void obd_logger_unlock_open(void);
 int obd_logger_db_execute(char *sql, obd_logger_db_exec_cb callback, void *callback_arg);
+void obd_logger_enable(void);
+void obd_logger_disable(void);
+bool obd_logger_is_enabled(void);
+bool obd_logger_is_initialized(void);
 
 #endif // OBD_LOGGER_H

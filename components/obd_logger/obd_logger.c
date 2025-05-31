@@ -20,6 +20,9 @@
 
 #include <stdio.h>
 #include <sys/unistd.h>
+#include <time.h>
+#include <math.h>
+#include <float.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -28,7 +31,6 @@
 #include "esp_log.h"
 #include "esp_littlefs.h"
 #include "sqlite3.h"
-// #include "sqllib.h"
 #include "esp_timer.h"
 #include "string.h"
 #include "rtcm.h"
@@ -36,13 +38,16 @@
 #include "cJSON.h"
 #include "obd_logger_iface.h"
 #include "obd_logger_db_manager.h"
-#include <time.h>
 
 #define TAG                                 "OBD_LOGGER"
 #define OBD_LOGGERR_TASK_STACK_SIZE         (1024*8)
 
 // Define max number of parameters
 #define MAX_PARAMS 50
+
+#define OBD_LOGGER_INITIALIZED_BIT  BIT0
+#define OBD_LOGGER_ENABLED_BIT      BIT1
+#define OBD_LOGGER_DISABLED_BIT     BIT2
 
 // Create param_data table
 const char *sql_param_data = 
@@ -78,6 +83,74 @@ static char db_path[128] = {0};
 static uint32_t logger_period = 0;
 static uint32_t obd_logger_params_count = 0;
 static obd_logger_get_params_cb_t obd_logger_get_params = NULL;
+static EventGroupHandle_t obd_logger_event_group = NULL;
+
+/**
+ * @brief Enable OBD logging
+ */
+void obd_logger_enable(void) {
+    if (obd_logger_event_group != NULL) {
+        xEventGroupSetBits(obd_logger_event_group, OBD_LOGGER_ENABLED_BIT);
+        xEventGroupClearBits(obd_logger_event_group, OBD_LOGGER_DISABLED_BIT);
+        ESP_LOGI(TAG, "OBD logging enabled");
+    }
+}
+
+/**
+ * @brief Disable OBD logging
+ */
+void obd_logger_disable(void) {
+    if (obd_logger_event_group != NULL) {
+        xEventGroupSetBits(obd_logger_event_group, OBD_LOGGER_DISABLED_BIT);
+        xEventGroupClearBits(obd_logger_event_group, OBD_LOGGER_ENABLED_BIT);
+        ESP_LOGI(TAG, "OBD logging disabled");
+    }
+}
+
+/**
+ * @brief Check if OBD logging is enabled
+ * @return true if enabled, false if disabled
+ */
+bool obd_logger_is_enabled(void) {
+    if (obd_logger_event_group != NULL) {
+        EventBits_t bits = xEventGroupGetBits(obd_logger_event_group);
+        return (bits & OBD_LOGGER_ENABLED_BIT) != 0;
+    }
+    return false;
+}
+
+/**
+ * @brief Set OBD logger as initialized
+ */
+void obd_logger_set_initialized(void) {
+    if (obd_logger_event_group != NULL) {
+        xEventGroupSetBits(obd_logger_event_group, OBD_LOGGER_INITIALIZED_BIT);
+        ESP_LOGI(TAG, "OBD logger marked as initialized");
+    }
+}
+
+/**
+ * @brief Clear OBD logger initialized status
+ */
+void obd_logger_clear_initialized(void) {
+    if (obd_logger_event_group != NULL) {
+        xEventGroupClearBits(obd_logger_event_group, OBD_LOGGER_INITIALIZED_BIT);
+        ESP_LOGI(TAG, "OBD logger initialization status cleared");
+    }
+}
+
+/**
+ * @brief Check if OBD logger is initialized
+ * @return true if initialized, false if not initialized
+ */
+bool obd_logger_is_initialized(void) {
+    if (obd_logger_event_group != NULL) {
+        EventBits_t bits = xEventGroupGetBits(obd_logger_event_group);
+        return (bits & OBD_LOGGER_INITIALIZED_BIT) != 0;
+    }
+    return false;
+}
+
 
 /**
  * @brief Default callback function for SQLite operations
@@ -431,7 +504,7 @@ esp_err_t obd_logger_init_params(const obd_param_entry_t *param_entries, size_t 
 }
 
 /**
- * @brief Store multiple parameters in the database at the same time
+ * @brief Store multiple parameters in the database only if their values have changed significantly
  * 
  * @param params Array of parameter name and value pairs
  * @param count Number of parameters to store
@@ -446,6 +519,21 @@ esp_err_t obd_logger_store_params(const param_value_t *params, size_t count)
         ESP_LOGE(TAG, "Database not initialized or no parameters");
         return ESP_FAIL;
     }
+
+    // First pass: count how many parameters have actually changed significantly
+    size_t changed_count = 0;
+    for (size_t i = 0; i < count; i++) {
+        if (params[i].changed) {
+            changed_count++;
+        }
+    }
+    
+    if (changed_count == 0) {
+        ESP_LOGI(TAG, "No parameter values changed significantly (threshold: 0.001), skipping storage");
+        return ESP_OK;
+    }
+    
+    ESP_LOGI(TAG, "%d out of %d parameters have changed significantly", changed_count, count);
 
     // Check if database rotation is needed before writing
     obd_db_manager_check_and_rotate();
@@ -494,7 +582,7 @@ esp_err_t obd_logger_store_params(const param_value_t *params, size_t count)
     sqlite3_bind_int64(stmt, 1, unix_timestamp);
     
     // Prepare for faster parameter lookup
-    // We'll build a simple lookup array
+    // We'll build a simple lookup array only for significantly changed parameters
     int *param_id_cache = malloc(count * sizeof(int));
     if (!param_id_cache) {
         sqlite3_finalize(stmt);
@@ -508,23 +596,38 @@ esp_err_t obd_logger_store_params(const param_value_t *params, size_t count)
     // Pre-lookup all parameter IDs to avoid repeated string comparisons
     for (size_t i = 0; i < count; i++) {
         param_id_cache[i] = -1;
-        for (int j = 0; j < param_count; j++) {
-            if (strcmp(param_lookup[j].name, params[i].name) == 0) {
-                param_id_cache[i] = param_lookup[j].id;
-                break;
+        
+        // Only lookup parameters that have changed significantly
+        if (params[i].changed) {
+            for (int j = 0; j < param_count; j++) {
+                if (strcmp(param_lookup[j].name, params[i].name) == 0) {
+                    param_id_cache[i] = param_lookup[j].id;
+                    break;
+                }
             }
+            
+            if (param_id_cache[i] == -1) {
+                ESP_LOGW(TAG, "Parameter '%s' not found in lookup table", params[i].name);
+            }
+        }
+    }
+
+    
+    // Insert only parameters that have changed significantly
+    for (size_t i = 0; i < count; i++) {
+
+        // Skip parameters that haven't changed or changed insignificantly
+        if (!params[i].changed) {
+            ESP_LOGD(TAG, "Skipping parameter '%s': changed flag is false", params[i].name);
+            continue;
         }
         
         if (param_id_cache[i] == -1) {
-            ESP_LOGW(TAG, "Parameter '%s' not found in lookup table", params[i].name);
-        }
-    }
-    
-    // Insert all parameters
-    for (size_t i = 0; i < count; i++) {
-        if (param_id_cache[i] == -1) {
             continue;  // Skip parameters not found in lookup table
         }
+        
+        ESP_LOGD(TAG, "Storing parameter '%s': %.6f -> %.6f ", 
+                 params[i].name, params[i].old_value, params[i].value);
         
         // Bind parameter ID and value (timestamp is already bound)
         sqlite3_bind_int(stmt, 2, param_id_cache[i]);
@@ -559,8 +662,8 @@ esp_err_t obd_logger_store_params(const param_value_t *params, size_t count)
     sqlite3_exec(db_file, "PRAGMA journal_mode = WAL;", NULL, NULL, NULL);
     
     int64_t end_time = esp_timer_get_time();
-    ESP_LOGI(TAG, "Successfully stored %d parameters in database. Storage time: %lld ms", 
-             total_stored, (end_time - start_time) / 1000);
+    ESP_LOGI(TAG, "Successfully stored %d significantly changed parameters out of %zu total in database. Storage time: %lld ms", 
+             total_stored, count, (end_time - start_time) / 1000);
     
     xSemaphoreGive(db_mutex);
     return ESP_OK;
@@ -823,8 +926,42 @@ static void obd_logger_task(void *pvParameters)
         ESP_LOGI(TAG, "Current database size: %lu entries", entry_count);
     }
     
+    // Allocate arrays with proper string storage
+    param_value_t *param_values = heap_caps_malloc(sizeof(param_value_t) * obd_logger_params_count, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    char (*param_names)[MAX_PARAMS] = heap_caps_malloc(sizeof(char[MAX_PARAMS]) * obd_logger_params_count, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    if (param_values == NULL || param_names == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate memory for parameters");
+        if (param_values) heap_caps_free(param_values);
+        if (param_names) heap_caps_free(param_names);
+        vTaskDelete(NULL);
+        return;
+    }else{
+        memset(param_values, 0, sizeof(param_value_t) * obd_logger_params_count);
+        memset(param_names, 0, sizeof(char[MAX_PARAMS]) * obd_logger_params_count);
+    }
+
+    for(int i = 0; i < obd_logger_params_count; i++)
+    {
+        param_values[i].changed = false;
+        param_values[i].old_value = FLT_MAX;
+    }
+
+    obd_logger_set_initialized();
+    obd_logger_enable();
+    
     while (1)
     {
+        // Wait for logging to be enabled or check current state
+        if (obd_logger_event_group != NULL) {
+            EventBits_t bits = xEventGroupWaitBits(
+                obd_logger_event_group,
+                OBD_LOGGER_ENABLED_BIT,
+                pdFALSE,        // Don't clear bits
+                pdTRUE,         // Wait for any bit
+                portMAX_DELAY   // Wait indefinitely
+            );
+        }
+        
         // Get parameters from callback function
         if (obd_logger_get_params != NULL) {
             char* params_json = obd_logger_get_params();
@@ -835,14 +972,9 @@ static void obd_logger_task(void *pvParameters)
                 // Parse the parameters from JSON and store them
                 cJSON *root = cJSON_Parse(params_json);
                 if (root != NULL) {
-                    // Allocate arrays with proper string storage
-                    param_value_t *param_values = malloc(sizeof(param_value_t) * obd_logger_params_count);
-                    char (*param_names)[50] = malloc(sizeof(char[50]) * obd_logger_params_count);
                     
                     if (param_values == NULL || param_names == NULL) {
                         ESP_LOGE(TAG, "Failed to allocate memory for parameters");
-                        free(param_values);
-                        free(param_names);
                         cJSON_Delete(root);
                         free(params_json);
                         continue;
@@ -861,7 +993,7 @@ static void obd_logger_task(void *pvParameters)
                                 // Copy the parameter name to avoid issues with pointers
                                 strncpy(param_names[valid_params], element->string, 49);
                                 param_names[valid_params][49] = '\0';
-                                
+                                param_values[valid_params].old_value = param_values[valid_params].value;
                                 param_values[valid_params].name = param_names[valid_params];
                                 param_values[valid_params].value = (float)element->valuedouble;
                                 
@@ -879,7 +1011,24 @@ static void obd_logger_task(void *pvParameters)
                     ESP_LOGI(TAG, "Total valid parameters parsed: %d", valid_params);
                     
                     if (valid_params > 0) {
-                        ESP_LOGI(TAG, "Storing %d parameters in database", valid_params);
+
+                        size_t changed_count = 0;
+                        for (size_t i = 0; i < valid_params; i++) {
+                            float diff = fabsf(param_values[i].value - param_values[i].old_value);
+                            if ( diff > 0.001f) {
+                                param_values[i].changed = true;
+                                changed_count++;
+                                ESP_LOGD(TAG, "Parameter %s changed: %.3f -> %.3f (diff: %.3f)", 
+                                        param_values[i].name, param_values[i].old_value, 
+                                        param_values[i].value, diff);
+                            }else{
+                                param_values[i].changed = false;
+                                ESP_LOGD(TAG, "Parameter %s unchanged: %.3f (diff: %.3f)", 
+                                        param_values[i].name, param_values[i].value, diff);
+                            }
+                        }
+
+                        ESP_LOGI(TAG, "Storing in database changed parameters %d out of %d ", changed_count, valid_params);
                         
                         // Debug: Print all parameters before storing
                         for (int i = 0; i < valid_params; i++) {
@@ -895,8 +1044,6 @@ static void obd_logger_task(void *pvParameters)
                         ESP_LOGW(TAG, "No valid parameters found in JSON");
                     }
                     
-                    free(param_values);
-                    free(param_names);
                     cJSON_Delete(root);
                 } else {
                     ESP_LOGE(TAG, "Failed to parse parameters JSON");
@@ -923,6 +1070,15 @@ esp_err_t odb_logger_init(obd_logger_t *obd_logger)
     if (db_mutex == NULL)
     {
         ESP_LOGE(TAG, "Failed to create mutex");
+        return ESP_FAIL;
+    }
+
+    // Create event group for enable/disable control
+    obd_logger_event_group = xEventGroupCreate();
+    if (obd_logger_event_group == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to create event group");
+        vSemaphoreDelete(db_mutex);
         return ESP_FAIL;
     }
 
