@@ -767,9 +767,18 @@ void gvret_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q))
     settings.CAN0Speed = can_speed[config_server_get_can_rate()];
 
     xgvert_tmr_semaphore = xSemaphoreCreateMutex();
-    ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
+    if(esp_timer_create(&periodic_timer_args, &periodic_timer))
+	{
+		ESP_LOGE(TAG, "Failed to create timer");
+		return;
+	}
+
     gvert_tmr_start_time = esp_timer_get_time();
-    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, 4294967296-100));
+    if(esp_timer_start_periodic(periodic_timer, 4294967296-100) != ESP_OK)
+	{
+		ESP_LOGE(TAG, "Failed to start timer");
+		return;
+	}
 
     static StackType_t *gvret_bcast_task_stack;
     static StaticTask_t gvret_bcast_task_buffer;
