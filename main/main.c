@@ -512,7 +512,7 @@ static void obd_rx_task(void *pvParameters)
 void app_main(void)
 {
 	void* internal_buf = NULL;
-	internal_buf = heap_caps_malloc(66 * 1024, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+	// internal_buf = heap_caps_malloc(66 * 1024, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 	dev_status_init();
 	dev_status_set_bits(DEV_AWAKE_BIT);
 	dev_status_clear_bits(DEV_SLEEP_BIT);
@@ -947,19 +947,20 @@ void app_main(void)
 // Declare static stack and task buffers
 	static StackType_t *can_rx_task_stack, *can_tx_task_stack, *obd_rx_task_stack;
 	static StaticTask_t can_rx_task_buffer, can_tx_task_buffer, obd_rx_task_buffer;
+	static const int can_task_stack_size = (1024*6);
 
 	// Allocate stack memory in PSRAM
-	can_rx_task_stack = heap_caps_malloc(1024*3, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-	can_tx_task_stack = heap_caps_malloc(1024*3, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-	obd_rx_task_stack = heap_caps_malloc(1024*3, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+	can_rx_task_stack = heap_caps_malloc(can_task_stack_size, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+	can_tx_task_stack = heap_caps_malloc(can_task_stack_size, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+	obd_rx_task_stack = heap_caps_malloc(can_task_stack_size, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
 
 	if (can_rx_task_stack != NULL && can_tx_task_stack != NULL && obd_rx_task_stack != NULL) 
 	{
-		// xTaskCreateStatic(can_rx_task, "can_rx_task", 1024*3, (void*)AF_INET, 5, 
-		// 				can_rx_task_stack, &can_rx_task_buffer);
-		xTaskCreateStatic(can_tx_task, "can_tx_task", 1024*3, (void*)AF_INET, 5, 
+		xTaskCreateStatic(can_rx_task, "can_rx_task", can_task_stack_size, (void*)AF_INET, 5, 
+						can_rx_task_stack, &can_rx_task_buffer);
+		xTaskCreateStatic(can_tx_task, "can_tx_task", can_task_stack_size, (void*)AF_INET, 5, 
 						can_tx_task_stack, &can_tx_task_buffer);
-		xTaskCreateStatic(obd_rx_task, "obd_rx_task", 1024*3, (void*)AF_INET, 5, 
+		xTaskCreateStatic(obd_rx_task, "obd_rx_task", can_task_stack_size, (void*)AF_INET, 5, 
 						obd_rx_task_stack, &obd_rx_task_buffer);
 	} 
 	else 
@@ -989,14 +990,14 @@ void app_main(void)
 	esp_log_level_set("read_ss_adc_voltage", ESP_LOG_NONE);	
 	// esp_log_level_set("HEAP", ESP_LOG_NONE);
 	// esp_log_level_set("autopid_find_standard_pid", ESP_LOG_INFO);
-	// esp_log_level_set("SLEEP_MODE", ESP_LOG_INFO);
+	// esp_log_level_set("SLEEP_MODE", ESP_LOG_NONE);
 	// esp_log_level_set("OBD_LOGGER", ESP_LOG_INFO);
 	// esp_log_level_set("OBD_LOGGER_WS_IFACE", ESP_LOG_INFO);
 	// esp_log_level_set("CONFIG_SERVER", ESP_LOG_INFO);
 	// esp_log_level_set("EX_TIME", ESP_LOG_INFO);
-	// esp_log_level_set("AUTO_PID", ESP_LOG_INFO);
-	// esp_log_level_set("QUERY_EXAMPLE", ESP_LOG_INFO);
-	// esp_log_level_set("sqlite_log", ESP_LOG_INFO);
+	// esp_log_level_set("AUTO_PID", ESP_LOG_NONE);
+	// esp_log_level_set("OBD", ESP_LOG_NONE);
+	// esp_log_level_set("ELM327", ESP_LOG_NONE);
 	
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
