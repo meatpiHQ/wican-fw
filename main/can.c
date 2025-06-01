@@ -130,19 +130,42 @@ void can_enable(void)
 //	f_config.acceptance_code = can_cfg.filter;
 //	f_config.acceptance_mask = can_cfg.mask;
 	f_config.single_filter = 1;
-	g_config_silent.intr_flags = ESP_INTR_FLAG_LEVEL1 | ESP_INTR_FLAG_SHARED;
-	g_config_normal.intr_flags = ESP_INTR_FLAG_LEVEL1 | ESP_INTR_FLAG_SHARED;
+	g_config_silent.intr_flags = ESP_INTR_FLAG_LEVEL3 | ESP_INTR_FLAG_SHARED;
+	g_config_normal.intr_flags = ESP_INTR_FLAG_LEVEL3 | ESP_INTR_FLAG_SHARED;
 	if(can_cfg.silent)
 	{
-		ESP_ERROR_CHECK(twai_driver_install(&g_config_silent, (const twai_timing_config_t *)t_config, &f_config));
+		if(twai_driver_install(&g_config_silent, (const twai_timing_config_t *)t_config, &f_config) == ESP_OK)
+		{
+			ESP_LOGI(TAG, "start silent mode");
+		}
+		else
+		{
+			ESP_LOGE(TAG, "Failed to install TWAI driver in silent mode");
+			return;
+		}
 	}
 	else
 	{
-//		ESP_LOGW(TAG, "start normal mode");
-		ESP_ERROR_CHECK(twai_driver_install(&g_config_normal, (const twai_timing_config_t *)t_config, &f_config));
+		if(twai_driver_install(&g_config_normal, (const twai_timing_config_t *)t_config, &f_config) == ESP_OK)
+		{
+			ESP_LOGI(TAG, "start normal mode");
+		}
+		else
+		{
+			ESP_LOGE(TAG, "Failed to install TWAI driver in normal mode");
+			return;
+		}
 	}
 
-	ESP_ERROR_CHECK(twai_start());
+	if(twai_start() == ESP_OK)
+	{
+		ESP_LOGI(TAG, "start twai");
+	}
+	else
+	{
+		ESP_LOGE(TAG, "Failed to start TWAI");
+		return;
+	}
 	twai_clear_receive_queue();
 	can_unblock();
 	can_cfg.bus_state = ON_BUS;
@@ -160,8 +183,22 @@ void can_disable(void)
 	{
 		gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
 		can_block();
-		ESP_ERROR_CHECK(twai_stop());
-		ESP_ERROR_CHECK(twai_driver_uninstall());
+		if(twai_stop() == ESP_OK)
+		{
+			ESP_LOGI(TAG, "stop twai");
+		}
+		else
+		{
+			ESP_LOGE(TAG, "Failed to stop TWAI");
+		}
+		if(twai_driver_uninstall() == ESP_OK)
+		{
+			ESP_LOGI(TAG, "uninstall twai");
+		}
+		else
+		{
+			ESP_LOGE(TAG, "Failed to uninstall TWAI");
+		}
 		can_cfg.bus_state = OFF_BUS;
 	}
 }
