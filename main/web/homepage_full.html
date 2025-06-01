@@ -100,6 +100,11 @@
             margin-bottom: 1.5rem;
         }
 
+        .description-text {
+            padding-left: 0.75rem;
+            padding-right: 0.75rem;
+        }
+
         .form-table {
             width: 100%;
             border-collapse: separate;
@@ -128,8 +133,13 @@
             width: 100%;
         }
 
+        input[type="text"],
+        input[type="file"],
+        input[type="number"] {
+            width: calc(100% - 1.3rem - 2px);
+        }
+
         input,
-        input[type="number"],
         select {
             width: 100%;
             padding: 0.65rem;
@@ -1168,6 +1178,9 @@
             </table>
         
             <div class="section-title">Firmware Update</div>
+            <div class="description-text">
+                Firmware updates are available on <a href="https://github.com/meatpiHQ/wican-fw/releases">GitHub</a>. Instructions are available <a href="https://meatpihq.github.io/wican-fw/config/firmware-update">here</a>.
+            </div>
             <form id="ota_form" action="/upload/ota.bin" method="post" enctype="multipart/form-data">
                 <table class="form-table">
                     <tr>
