@@ -1979,6 +1979,7 @@ esp_err_t elm327_sleep(void)
 		}
 		else
 		{
+			ESP_LOGE(TAG, "%s: Sleep failed", __func__);
 			ret = ESP_FAIL;
 		}
 		uart_flush_input(UART_NUM_1);
