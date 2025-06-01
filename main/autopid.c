@@ -68,11 +68,11 @@ static int64_t elm327_autopid_last_cmd_time = 0;
 
 static const uint8_t autopid_protocol_header_length[] = {
     0,  // 0: Automatic
-    6,  // 1: SAE J1850 PWM (41.6 kbaud)
-    6,  // 2: SAE J1850 VPW (10.4 kbaud) 
-    6,  // 3: ISO 9141-2 (5 baud init, 10.4 kbaud)
-    6,  // 4: ISO 14230-4 KWP (5 baud init, 10.4 kbaud)
-    6,  // 5: ISO 14230-4 KWP (fast init, 10.4 kbaud)
+    3,  // 1: SAE J1850 PWM (41.6 kbaud)
+    3,  // 2: SAE J1850 VPW (10.4 kbaud) 
+    3,  // 3: ISO 9141-2 (5 baud init, 10.4 kbaud)
+    3,  // 4: ISO 14230-4 KWP (5 baud init, 10.4 kbaud)
+    3,  // 5: ISO 14230-4 KWP (fast init, 10.4 kbaud)
     0,  // 6: ISO 15765-4 CAN (11 bit ID, 500 kbaud)
     9,  // 7: ISO 15765-4 CAN (29 bit ID, 500 kbaud)
     0,  // 8: ISO 15765-4 CAN (11 bit ID, 250 kbaud)
