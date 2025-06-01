@@ -43,7 +43,8 @@
 #include "elm327.h"
 #include "dev_status.h"
 
-#define TAG 		__func__
+// #define TAG 		__func__
+#define TAG         "ELM327"
 
 #define SERVICE_01			0x01
 #define SERVICE_02			0x02
