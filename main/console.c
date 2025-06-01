@@ -664,7 +664,7 @@ static void console_register_commands(void)
             console_cmd.argtable = &wifi_args;
         }
         
-        ESP_ERROR_CHECK(esp_console_cmd_register(&console_cmd));
+        ESP_ERROR_CHECK_WITHOUT_ABORT(esp_console_cmd_register(&console_cmd));
         cmd++;
     }
 }
