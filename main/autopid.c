@@ -1308,11 +1308,13 @@ static void autopid_task(void *pvParameters)
                         {
                             ESP_LOGI(TAG, "Command processed successfully");
                             
-                            if(xQueueReceive(autopidQueue, &elm327_response, pdMS_TO_TICKS(1000)) == pdPASS)
+                            if(xQueueReceive(autopidQueue, &elm327_response, pdMS_TO_TICKS(12000)) == pdPASS)
                             {
                                 ESP_LOGI(TAG, "Response received, length: %lu", elm327_response.length);
                                 ESP_LOG_BUFFER_HEXDUMP(TAG, elm327_response.data, 1, ESP_LOG_INFO);
-                                if(strstr((char*)elm327_response.data, "error") == NULL)
+                                if(strstr((char*)elm327_response.data, "error") == NULL &&
+                                    strstr((char*)elm327_response.data, "SEARCHING") == NULL &&
+                                    strstr((char*)elm327_response.data, "UNABLE TO CONNECT") == NULL)
                                 {
                                     double result;
 
@@ -2164,8 +2166,17 @@ void autopid_init(char* id, bool enable_logging, uint32_t logging_period)
     // {
     //     car.pid_count = 0;
     // }
+
+    if(dev_status_is_bit_set(SDCARD_MOUNTED_BIT)){
+        ESP_LOGI(TAG, "SD Card mounted");
+    }
+    else
+    {
+        ESP_LOGI(TAG, "SD Card not mounted");
+    }
     
-    if(enable_logging){
+    // Initialize OBD logger if enabled and SD card is mounted
+    if(enable_logging && dev_status_is_bit_set(SDCARD_MOUNTED_BIT)){
         xSemaphoreTake(all_pids->mutex, portMAX_DELAY);
         autopid_init_obd_logger(logging_period);
         xSemaphoreGive(all_pids->mutex);
