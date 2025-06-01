@@ -176,7 +176,7 @@ static char can_datarate_str[11][7] = {
 
 const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\
 										\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\
-										\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"batt_alert\":\"disable\",\
+										\"ble_status\":\"disable\",\"sleep_status\":\"enable\",\"periodic_wakeup\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"sleep_time\":\"5\",\"wakeup_interval\":\"90\",\"batt_alert\":\"disable\",\
 										\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\
 										\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\
 										\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\
@@ -1196,6 +1196,7 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	cJSON_AddStringToObject(root, "git_version", GIT_SHA);
 	cJSON_AddStringToObject(root, "protocol", device_config.protocol);
 	cJSON_AddStringToObject(root, "sleep_status", device_config.sleep_status);
+	cJSON_AddStringToObject(root, "sleep_disable_agree", device_config.sleep_disable_agree);
 	cJSON_AddStringToObject(root, "sleep_volt", device_config.sleep_volt);
 	cJSON_AddStringToObject(root, "wakeup_volt", device_config.wakeup_volt);
 	cJSON_AddStringToObject(root, "periodic_wakeup", device_config.periodic_wakeup);
@@ -2451,7 +2452,7 @@ static void config_server_load_cfg(char *cfg)
 	key = cJSON_GetObjectItem(root,"wakeup_interval");
 	if(key == 0)
 	{
-		strcpy(device_config.wakeup_interval, "5");
+		strcpy(device_config.wakeup_interval, "60");
 	}
 	else
 	{
@@ -2459,6 +2460,22 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	ESP_LOGE(TAG, "device_config.wakeup_interval: %s", device_config.wakeup_interval);
+	//*****	
+
+
+	//*****
+	// sleep_disable_agree
+	key = cJSON_GetObjectItem(root,"sleep_disable_agree");
+	if(key == 0)
+	{
+		strcpy(device_config.sleep_disable_agree, "no");
+	}
+	else
+	{
+		strcpy(device_config.sleep_disable_agree, key->valuestring);
+	}
+
+	ESP_LOGE(TAG, "device_config.sleep_disable_agree: %s", device_config.sleep_disable_agree);
 	//*****	
 
 	cJSON_Delete(root);
@@ -2865,15 +2882,15 @@ int8_t config_server_get_ble_config(void)
 
 int8_t config_server_get_sleep_config(void)
 {
-	if(strcmp(device_config.sleep_status, "enable") == 0)
+	if(strcmp(device_config.sleep_status, "enable") == 0 || strcmp(device_config.sleep_disable_agree, "no") == 0)
 	{
 		return 1;
 	}
-	else if(strcmp(device_config.sleep_status, "disable") == 0)
+	else if(strcmp(device_config.sleep_status, "disable") == 0 && strcmp(device_config.sleep_disable_agree, "yes") == 0)
 	{
 		return 0;
 	}
-	return -1;
+	return 1;
 }
 
 int8_t config_server_get_sleep_volt(float *sleep_volt)
@@ -2944,7 +2961,7 @@ int8_t config_server_get_wakeup_interval(uint32_t *wakeup_interval)
     }
     
     // Validate range
-    if (wk_int < 1 || wk_int > 240)
+    if (wk_int < 5 || wk_int > 240)
 	{
         return -1;
     }

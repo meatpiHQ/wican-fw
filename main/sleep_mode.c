@@ -850,7 +850,7 @@ void light_sleep_task(void *pvParameters)
 
     if(config_server_get_wakeup_interval(&wakeup_interval) == -1)
     {
-        wakeup_interval = 5*60000; //5 min
+        wakeup_interval = 30*60000; //5 min
         ESP_LOGW(TAG, "Failed to get wakeup interval, using default 5 min");
     }
     else

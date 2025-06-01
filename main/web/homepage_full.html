@@ -440,6 +440,26 @@
                 <p>Loading dashboard content...</p>
             </div>
         </div>
+        <div id="sleep_warning_div" style="display: none;">
+            <div class="divider"></div>
+            <div class="section-title" style="color: #dc2626;">⚠️ Sleep Mode Disabled Warning</div>
+            <table class="form-table">
+                <tr>
+                    <td colspan="2" style="background-color: #fee2e2; padding: 1rem; border-radius: 6px;">
+                        <strong>WARNING:</strong> Disabling sleep mode will continuously drain your vehicle's battery and may cause battery discharge when the vehicle is off. This should only be disabled for testing purposes.
+                    </td>
+                </tr>
+                <tr>
+                    <td><label for="sleep_disable_agree"><b>I understand the risks:</b></label></td>
+                    <td>
+                        <select name="sleep_disable_agree" id="sleep_disable_agree" onChange="submit_enable();">
+                            <option value="no">No - I do not agree</option>
+                            <option value="yes">Yes - I understand and agree</option>
+                        </select>
+                    </td>
+                </tr>
+            </table>
+        </div>
         <div id="status_view" class="tabcontent">
             <div class="section-title">Status</div>
             <table class="form-table">
@@ -953,7 +973,7 @@
                 <tr>
                     <td>Sleep Mode:</td>
                     <td>
-                        <select name="sleep_status" id="sleep_status" onChange="submit_enable();">
+                        <select name="sleep_status" id="sleep_status" onChange="toggleSleepWarning();submit_enable();">
                             <option value="enable">Enable</option>
                             <option value="disable">Disable</option>
                         </select>
@@ -1002,12 +1022,12 @@
                         <input type="range" 
                                id="wakeup_interval" 
                                name="wakeup_interval" 
-                               value="5" 
-                               min="1" 
+                               value="60" 
+                               min="5" 
                                max="240" 
                                step="1"
                                oninput="document.getElementById('wakeup_interval_value').textContent = this.value;submit_enable();">
-                        <span id="wakeup_interval_value">5</span>min
+                        <span id="wakeup_interval_value">60</span>min
                     </td>
                 </tr>
                 <tr>
@@ -2287,7 +2307,11 @@ function loadAutoTable(jsonData) {
 		} else if(document.getElementById("sleep_volt").value < 12 || document.getElementById("sleep_volt").value > 15) {
             showNotification("Sleep Voltage Value, min=12.0 max=15.0", "red");
 			document.getElementById("submit_button").disabled = true;
-		}
+		}else if(document.getElementById("sleep_status").value == "disable" && 
+            document.getElementById("sleep_disable_agree").value == "no") {
+            showNotification("You must agree to disable sleep mode", "red");
+            document.getElementById("submit_button").disabled = true;
+        }
         else {
 			document.getElementById("submit_button").disabled = false;
 		}
@@ -2518,6 +2542,7 @@ function loadAutoTable(jsonData) {
 		obj["ble_pass"] = document.getElementById("ble_pass_value").value;
 		obj["ble_status"] = document.getElementById("ble_status").value;
 		obj["sleep_status"] = document.getElementById("sleep_status").value;
+        obj["sleep_disable_agree"] = document.getElementById("sleep_disable_agree").value;
         obj["periodic_wakeup"] = document.getElementById("periodic_wakeup").value;
 		obj["sleep_volt"] = document.getElementById("sleep_volt").value;
         obj["sleep_time"] = document.getElementById("sleep_time").value;
@@ -2813,6 +2838,12 @@ function loadAutoTable(jsonData) {
 				document.getElementById("sleep_status").selectedIndex = "1";
 			}
 
+            if(obj.sleep_disable_agree == "yes") {
+                document.getElementById("sleep_disable_agree").selectedIndex = "1";
+            } else {
+                document.getElementById("sleep_disable_agree").selectedIndex = "0";
+            }
+            toggleSleepWarning();
             if(obj.periodic_wakeup == "enable") {
 				document.getElementById("periodic_wakeup").selectedIndex = "0";
 			} else if(obj.periodic_wakeup == "disable") {
@@ -3176,6 +3207,21 @@ function loadAutoTable(jsonData) {
 		postCANFLT();
 		document.getElementById("store_canflt_button").disabled = true;
 	}
+
+    function toggleSleepWarning() {
+        const sleepStatus = document.getElementById("sleep_status").value;
+        const sleepWarningDiv = document.getElementById("sleep_warning_div");
+        const agreementSelect = document.getElementById("sleep_disable_agree");
+        
+        if (sleepStatus === "disable") {
+            sleepWarningDiv.style.display = "block";
+            // Reset agreement when showing warning
+            agreementSelect.value = "no";
+        } else {
+            sleepWarningDiv.style.display = "none";
+        }
+    }
+
     </script>
 </body>
 

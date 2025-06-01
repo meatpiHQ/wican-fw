@@ -90,6 +90,7 @@ typedef struct _device_config
 	char ble_pass[18];
 	char ble_status[32];
 	char sleep_status[32];
+	char sleep_disable_agree[10];
 	char sleep_volt[10];
 	char wakeup_volt[10];
 	char sleep_time[32];
