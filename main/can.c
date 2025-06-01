@@ -66,9 +66,9 @@ static TimerHandle_t xCAN_EN_Timer;
 //static uint8_t auto_retransmit = 0;
 static uint8_t datarate = CAN_500K;
 //static uint8_t bus_state = OFF_BUS;
-//static uint32_t mask = 0xFFFFFFFF;
-//static uint32_t filter = 0;
-static can_cfg_t can_cfg = {.bus_state = END_BUS, .auto_bitrate = 0};
+// static uint32_t mask = 0xFFFFFFFF;
+// static uint32_t filter = 0;
+static can_cfg_t can_cfg = {.bus_state = END_BUS, .auto_bitrate = 0, .mask = 0xFFFFFFFF, .filter = 0};
 
 #define TWAI_CONFIG(tx_io_num, rx_io_num, op_mode) {.mode = op_mode, .tx_io = tx_io_num, .rx_io = rx_io_num,        \
                                                                     .clkout_io = TWAI_IO_UNUSED, .bus_off_io = TWAI_IO_UNUSED,      \
@@ -123,12 +123,9 @@ void can_enable(void)
 	
 	twai_timing_config_t *t_config;
 	t_config = (twai_timing_config_t *)&twai_timing_config[datarate];
-//	t_config = (twai_timing_config_t *)&twai_timing_config[CAN_500K];
-	f_config.acceptance_code = 0;
-	f_config.acceptance_mask = 0xFFFFFFFF;
 
-//	f_config.acceptance_code = can_cfg.filter;
-//	f_config.acceptance_mask = can_cfg.mask;
+	f_config.acceptance_code = can_cfg.filter;
+	f_config.acceptance_mask = can_cfg.mask;
 	f_config.single_filter = 1;
 
 	if(can_cfg.silent)
