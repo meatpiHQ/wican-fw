@@ -16,6 +16,7 @@ extern "C" {
 #define WIFI_CONNECTED_BIT  BIT2
 #define MQTT_CONNECTED_BIT  BIT3
 #define BLE_CONNECTED_BIT   BIT4
+#define SDCARD_MOUNTED_BIT  BIT5 
 
 // Initialize device status event group
 void dev_status_init(void);
