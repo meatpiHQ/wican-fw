@@ -734,12 +734,13 @@ esp_err_t read_ss_adc_voltage(float *voltage_out)
     if (valid_samples > 0) 
     {
         int avg_raw = sum_raw / valid_samples;
-        int avg_voltage = sum_voltage / valid_samples;
+        float avg_voltage = (float)sum_voltage / valid_samples;
         
         #ifdef HV_PRO_V140
         float volt_rounded = ((float)avg_voltage * 7.25f) / 1000;
         #else
         float volt_rounded = ((float)avg_voltage * 11) / 1000;
+        volt_rounded+=0.1f;  // Adjust for calibration offset
         #endif
         
         volt_rounded = roundf(volt_rounded * 10.0f) / 10.0f;
