@@ -219,14 +219,14 @@ esp_err_t imu_config_wom(uint8_t threshold)
         .polarity = ICM42670_INT_POLARITY_ACTIVE_HIGH,
     };
 
-    ESP_ERROR_CHECK(icm42670_config_int_pin(&dev, 1, int_config));
+    ESP_ERROR_CHECK_WITHOUT_ABORT(icm42670_config_int_pin(&dev, 1, int_config));
 
     icm42670_int_source_t sources = {0};
     sources.wom_x = true;
     sources.wom_y = true;
     sources.wom_z = true;
 
-    ESP_ERROR_CHECK(icm42670_set_int_sources(&dev, 1, sources));
+    ESP_ERROR_CHECK_WITHOUT_ABORT(icm42670_set_int_sources(&dev, 1, sources));
 
     const icm42670_wom_config_t wom_config = {
         .trigger = ICM42670_WOM_INT_DUR_FIRST,
