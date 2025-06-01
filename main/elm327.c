@@ -1304,21 +1304,23 @@ void elm327_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q), QueueH
 #include "hw_config.h"
 
 /* Defines and Constants */
-#define BUF_SIZE (1024)
-#define ELM327_CMD_QUEUE_SIZE 100
-#define ELM327_MAX_CMD_LEN (UART_BUF_SIZE)
-#define ELM327_CMD_TIMEOUT_MS   10000
-#define ELM327_CMD_TIMEOUT_US   (ELM327_CMD_TIMEOUT_MS*1000)  // 10 seconds in microseconds
-#define UART_TIMEOUT_MS 1200
-#define DESIRED_BAUD_RATE 2000000
-#define DEFAULT_BAUD_RATE 115200
+#define BUF_SIZE 						(1024)
+#define ELM327_CMD_QUEUE_SIZE 			100
+#define ELM327_MAX_CMD_LEN 				(UART_BUF_SIZE)
+#define ELM327_CMD_TIMEOUT_MS   		10000
+#define ELM327_CMD_TIMEOUT_US   		(ELM327_CMD_TIMEOUT_MS*1000)  // 10 seconds in microseconds
+#define UART_TIMEOUT_MS 				1200
+#define DESIRED_BAUD_RATE 				2000000
+#define DEFAULT_BAUD_RATE 				115200
 // #define DESIRED_BAUD_RATE 115200
 // #define DEFAULT_BAUD_RATE 2000000
-#define UART_BUFFER_SIZE 128
+#define UART_BUFFER_SIZE 				128
 
-#define ELM327_UPDATE_BUF_SIZE 512
-#define ELM327_UPDATE_MAX_LINE_LENGTH 256
-#define ELM327_UPDATE_TIMEOUT_MS 5000
+#define ELM327_UPDATE_BUF_SIZE 			512
+#define ELM327_UPDATE_MAX_LINE_LENGTH 	256
+#define ELM327_UPDATE_TIMEOUT_MS 		5000
+
+#define ELM327_CMD_MUTEX_TIMOUT			10000
 
 typedef struct {
     bool in_normal_state;
@@ -1352,7 +1354,7 @@ typedef struct
 /* Global Variables */
 static QueueHandle_t elm327_cmd_queue;
 QueueHandle_t uart1_queue = NULL;
-SemaphoreHandle_t xuart1_semaphore = NULL;
+static SemaphoreHandle_t xuart1_semaphore = NULL;
 
 extern const unsigned char obd_fw_start[] asm("_binary_V2_3_18_txt_start");
 extern const unsigned char obd_fw_end[]   asm("_binary_V2_3_18_txt_end");
@@ -1427,10 +1429,16 @@ int8_t elm327_process_cmd(uint8_t *cmd, uint32_t len, QueueHandle_t *q,
 
 void elm327_send_cmd(uint8_t* cmd, uint32_t cmd_len)
 {
-	xSemaphoreTake(xuart1_semaphore, portMAX_DELAY);
-	ESP_LOG_BUFFER_HEXDUMP(TAG, (char*)cmd, strlen((char*)cmd), ESP_LOG_INFO);
-	uart_write_bytes(UART_NUM_1, cmd, cmd_len);
-	xSemaphoreGive(xuart1_semaphore);
+	if(xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(ELM327_CMD_MUTEX_TIMOUT)) == pdTRUE)
+	{
+		ESP_LOG_BUFFER_HEXDUMP(TAG, (char*)cmd, strlen((char*)cmd), ESP_LOG_INFO);
+		uart_write_bytes(UART_NUM_1, cmd, cmd_len);
+		xSemaphoreGive(xuart1_semaphore);
+	}
+	else
+	{
+		ESP_LOGE(TAG, "%s: Failed to take UART semaphore", __func__);
+	}
 }
 
 static void uart1_event_task(void *pvParameters)
@@ -1451,7 +1459,7 @@ static void uart1_event_task(void *pvParameters)
 			sleep_state_info_t sleep_state;
 			sleep_mode_get_state(&sleep_state);
 			memset(uart_read_buf, 0, sizeof(uart_read_buf));
-            if ((elm327_chip_get_status() == ELM327_READY) && (sleep_state.state != STATE_SLEEPING) && xSemaphoreTake(xuart1_semaphore, portMAX_DELAY) == pdTRUE)
+            if ((elm327_chip_get_status() == ELM327_READY) && (sleep_state.state != STATE_SLEEPING) && xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(ELM327_CMD_MUTEX_TIMOUT)) == pdTRUE)
             {
                 // uart_flush(UART_NUM_1);
                 uart_event_t event;
@@ -1669,7 +1677,7 @@ bool elm327_set_baudrate(void)
     bool success = false;
     char command[20];
     
-    if (xSemaphoreTake(xuart1_semaphore, portMAX_DELAY) == pdTRUE)
+    if (xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(ELM327_CMD_MUTEX_TIMOUT)) == pdTRUE)
     {
         uart_flush(UART_NUM_1);
         if (uart1_queue)
@@ -1737,8 +1745,13 @@ bool elm327_set_baudrate(void)
                 ESP_LOGE(TAG, "No response at %d baud", DEFAULT_BAUD_RATE);
             }
         }
+		xSemaphoreGive(xuart1_semaphore);
     }
-    xSemaphoreGive(xuart1_semaphore);
+	else
+	{
+		ESP_LOGE(TAG, "%s: Failed to take UART semaphore", __func__);
+	}
+    
     return success;
 }
 
@@ -1751,7 +1764,7 @@ void elm327_hardreset_chip(void)
 {
     static char rsp_buffer[100];
     uint32_t rsp_len;
-	if (xSemaphoreTake(xuart1_semaphore, portMAX_DELAY) == pdTRUE)
+	if (xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(ELM327_CMD_MUTEX_TIMOUT)) == pdTRUE)
 	{
 		vTaskDelay(pdMS_TO_TICKS(500));
 		uart_flush_input(UART_NUM_1);
@@ -1780,6 +1793,11 @@ void elm327_hardreset_chip(void)
 		uart_flush_input(UART_NUM_1);
 		xSemaphoreGive(xuart1_semaphore);
 	}
+	else
+	{
+		ESP_LOGE(TAG, "%s: Failed to take UART semaphore", __func__);
+	}
+
 	vTaskDelay(pdMS_TO_TICKS(50));
     if (elm327_set_baudrate())
     {
@@ -1811,7 +1829,7 @@ esp_err_t elm327_get_protocol_number(uint8_t *protocol_number)
 		return ESP_ERR_NO_MEM;
 	}
 	
-	if (xSemaphoreTake(xuart1_semaphore, portMAX_DELAY) == pdTRUE)
+	if (xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(ELM327_CMD_MUTEX_TIMOUT)) == pdTRUE)
 	{
 		uart_flush_input(UART_NUM_1);
 		xQueueReset(uart1_queue);
@@ -1928,7 +1946,7 @@ cleanup:
 		xSemaphoreGive(xuart1_semaphore);
 	}
 	else {
-		ESP_LOGE(TAG, "Failed to take semaphore");
+		ESP_LOGE(TAG, "%s: Failed to take semaphore", __func__);
 		ret = ESP_ERR_TIMEOUT;
 	}
 	
@@ -1946,7 +1964,7 @@ esp_err_t elm327_sleep(void)
     uint32_t rsp_len;
 	esp_err_t ret = ESP_FAIL;
 
-	if (xSemaphoreTake(xuart1_semaphore, portMAX_DELAY) == pdTRUE)
+	if (xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(ELM327_CMD_MUTEX_TIMOUT)) == pdTRUE)
 	{
 		ESP_LOGI(TAG, "Got semaphore, preparing to sleep");
 		uart_flush_input(UART_NUM_1);
@@ -1963,16 +1981,20 @@ esp_err_t elm327_sleep(void)
 		{
 			ret = ESP_FAIL;
 		}
-		// uart_flush_input(UART_NUM_1);
+		uart_flush_input(UART_NUM_1);
 		// xQueueReset(uart1_queue);
-		// xSemaphoreGive(xuart1_semaphore);
+		xSemaphoreGive(xuart1_semaphore);
+	}
+	else
+	{
+		ESP_LOGE(TAG, "%s: Failed to take semaphore", __func__);
 	}
 	return ret;
 }
 
 void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, QueueHandle_t *response_q, response_callback_t response_callback)
 {
-	if (xSemaphoreTake(xuart1_semaphore, portMAX_DELAY) == pdTRUE)
+	if (xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(ELM327_CMD_MUTEX_TIMOUT)) == pdTRUE)
     {
 		uint32_t len;
 		bool terminator_received = false;
@@ -2034,12 +2056,14 @@ void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, Q
 							break;
 						}
 					}
-
 				}
-
 			}
 		}
 		xSemaphoreGive(xuart1_semaphore);
+	}
+	else
+	{
+		ESP_LOGE(TAG, "%s: Failed to take semaphore", __func__);
 	}
 }
 
@@ -2230,17 +2254,33 @@ esp_err_t elm327_check_obd_device()
 
 static void elm327_disable_wake_commands(void)
 {
-	char* rx_buffer = malloc(256);
-	xSemaphoreTake(xuart1_semaphore, portMAX_DELAY);
-	//make sure chip goes to sleep
-	uart_write_bytes(UART_NUM_1, "ATPP 0F SV 95\r", strlen("ATPP 0F SV 95\r"));
-    uart_read_until_pattern(UART_NUM_1, rx_buffer, UART_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
-	bzero(rx_buffer, 256);
-	vTaskDelay(pdMS_TO_TICKS(100));
-	uart_write_bytes(UART_NUM_1, "ATPP 0F ON\r", strlen("ATPP 0F ON\r"));
-    uart_read_until_pattern(UART_NUM_1, rx_buffer, UART_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
-	vTaskDelay(pdMS_TO_TICKS(100));
-	xSemaphoreGive(xuart1_semaphore);
+	if(xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(ELM327_CMD_MUTEX_TIMOUT)) == pdTRUE)
+	{
+		char* rx_buffer = malloc(256);
+		if(rx_buffer == NULL)
+		{
+			ESP_LOGE(TAG, "Failed to allocate memory for rx_buffer");
+			xSemaphoreGive(xuart1_semaphore);
+			return;
+		}
+		bzero(rx_buffer, 256);
+		uart_flush_input(UART_NUM_1);
+		//make sure chip goes to sleep
+		uart_write_bytes(UART_NUM_1, "ATPP 0F SV 95\r", strlen("ATPP 0F SV 95\r"));
+		uart_read_until_pattern(UART_NUM_1, rx_buffer, UART_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
+		bzero(rx_buffer, 256);
+		vTaskDelay(pdMS_TO_TICKS(100));
+		uart_write_bytes(UART_NUM_1, "ATPP 0F ON\r", strlen("ATPP 0F ON\r"));
+		uart_read_until_pattern(UART_NUM_1, rx_buffer, UART_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
+		vTaskDelay(pdMS_TO_TICKS(100));
+		xSemaphoreGive(xuart1_semaphore);
+		free(rx_buffer);
+	}
+	else
+	{
+		ESP_LOGE(TAG, "%s: Failed to take UART semaphore", __func__);
+	}
+
 	elm327_hardreset_chip();
 }
 
@@ -2248,111 +2288,120 @@ esp_err_t elm327_update_obd(bool force_update)
 {
     const char* current_ptr = (const char*)obd_fw_start;
     const char* end_ptr = (const char*)obd_fw_end;
-	xSemaphoreTake(xuart1_semaphore, portMAX_DELAY);
-    esp_err_t ret = elm327_check_obd_device();
-    if (ret != ESP_OK)
-	{
-		xSemaphoreGive(xuart1_semaphore);
-        return ret;
-    }
+	esp_err_t ret = ESP_FAIL;
 
-	if(device_status.need_update == false && force_update == false)
-	{
+	if(xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(ELM327_CMD_MUTEX_TIMOUT)) == pdTRUE)
+    {
+		ret = elm327_check_obd_device();
+		if (ret != ESP_OK)
+		{
+			xSemaphoreGive(xuart1_semaphore);
+			return ret;
+		}
+
+		if(device_status.need_update == false && force_update == false)
+		{
+			xSemaphoreGive(xuart1_semaphore);
+			return ret;
+		}
+
+		ESP_LOGW(TAG, "MIC3624 Start update");
+		
+		char* response;
+		size_t response_size;
+		
+		// Enter update mode
+		ret = elm327_send_update_command("VTDLMIC3422\r", &response, &response_size, ELM327_UPDATE_TIMEOUT_MS);
+		if (ret != ESP_OK)
+		{
+			xSemaphoreGive(xuart1_semaphore);
+			return ret;
+		}
+		free(response);
+
+		led_fast_blink(LED_RED, 255, true);
+
+		uint32_t line_count = 0;
+		bool update_complete = false;
+		char line[ELM327_UPDATE_MAX_LINE_LENGTH];
+		
+		// Process embedded firmware data
+		while (current_ptr < end_ptr)
+		{
+			// Copy line until newline or end of data
+			size_t i = 0;
+			while (current_ptr < end_ptr && i < (ELM327_UPDATE_MAX_LINE_LENGTH - 1) && *current_ptr != '\n')
+			{
+				line[i++] = *current_ptr++;
+			}
+			line[i] = '\0';
+			
+			// Skip remaining newline character if present
+			if (current_ptr < end_ptr && *current_ptr == '\n')
+			{
+				current_ptr++;
+			}
+
+			line_count++;
+			size_t len = strlen(line);
+
+			// Remove carriage return if present
+			if (len > 0 && line[len-1] == '\r')
+			{
+				line[--len] = '\0';
+			}
+
+			// Skip empty lines
+			if (len == 0)
+			{
+				continue;
+			}
+
+			// Check for end marker
+			if (strncmp(line, "FFF1", 4) == 0)
+			{
+				update_complete = true;
+				break;
+			}
+
+			// Prepare and send command
+			char* cmd = malloc(len + 8);  // "VTDLDT" + line + \r + \0
+			if (!cmd)
+			{
+				ret = ESP_ERR_NO_MEM;
+				break;
+			}
+			
+			snprintf(cmd, len + 8, "VTDLDT%s\r", line);
+			ret = elm327_send_update_command(cmd, &response, &response_size, ELM327_UPDATE_TIMEOUT_MS);
+			free(cmd);
+			if (response) free(response);
+			
+			if (ret != ESP_OK)
+			{
+				ESP_LOGE(TAG, "Failed at line %lu", line_count);
+				break;
+			}
+
+			vTaskDelay(pdMS_TO_TICKS(1));
+		}
+
+		// End update if everything was successful
+		if (ret == ESP_OK && update_complete)
+		{
+			ret = elm327_send_update_command("VTDLED\r", &response, &response_size, ELM327_UPDATE_TIMEOUT_MS);
+			if (response) free(response);
+			vTaskDelay(pdMS_TO_TICKS(2000));
+		}
+		
+		ESP_LOGW(TAG, "ELM327 chip update DONE!");
+
 		xSemaphoreGive(xuart1_semaphore);
-		return ret;
 	}
-
-    ESP_LOGW(TAG, "MIC3624 Start update");
-	
-    char* response;
-    size_t response_size;
-    
-    // Enter update mode
-    ret = elm327_send_update_command("VTDLMIC3422\r", &response, &response_size, ELM327_UPDATE_TIMEOUT_MS);
-    if (ret != ESP_OK)
+	else
 	{
-		xSemaphoreGive(xuart1_semaphore);
-        return ret;
-    }
-    free(response);
-
-	led_fast_blink(LED_RED, 255, true);
-
-    uint32_t line_count = 0;
-    bool update_complete = false;
-    char line[ELM327_UPDATE_MAX_LINE_LENGTH];
-    
-    // Process embedded firmware data
-    while (current_ptr < end_ptr)
-	{
-        // Copy line until newline or end of data
-        size_t i = 0;
-        while (current_ptr < end_ptr && i < (ELM327_UPDATE_MAX_LINE_LENGTH - 1) && *current_ptr != '\n')
-		{
-            line[i++] = *current_ptr++;
-        }
-        line[i] = '\0';
-        
-        // Skip remaining newline character if present
-        if (current_ptr < end_ptr && *current_ptr == '\n')
-		{
-            current_ptr++;
-        }
-
-        line_count++;
-        size_t len = strlen(line);
-
-        // Remove carriage return if present
-        if (len > 0 && line[len-1] == '\r')
-		{
-            line[--len] = '\0';
-        }
-
-        // Skip empty lines
-        if (len == 0)
-		{
-            continue;
-        }
-
-        // Check for end marker
-        if (strncmp(line, "FFF1", 4) == 0)
-		{
-            update_complete = true;
-            break;
-        }
-
-        // Prepare and send command
-        char* cmd = malloc(len + 8);  // "VTDLDT" + line + \r + \0
-        if (!cmd)
-		{
-            ret = ESP_ERR_NO_MEM;
-            break;
-        }
-        
-        snprintf(cmd, len + 8, "VTDLDT%s\r", line);
-        ret = elm327_send_update_command(cmd, &response, &response_size, ELM327_UPDATE_TIMEOUT_MS);
-        free(cmd);
-        if (response) free(response);
-        
-        if (ret != ESP_OK)
-		{
-            ESP_LOGE(TAG, "Failed at line %lu", line_count);
-            break;
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(1));
-    }
-
-    // End update if everything was successful
-    if (ret == ESP_OK && update_complete)
-	{
-        ret = elm327_send_update_command("VTDLED\r", &response, &response_size, ELM327_UPDATE_TIMEOUT_MS);
-        if (response) free(response);
-        vTaskDelay(pdMS_TO_TICKS(2000));
-    }
-	
-	ESP_LOGW(TAG, "ELM327 chip update DONE!");
-	xSemaphoreGive(xuart1_semaphore);
+		ESP_LOGE(TAG, "%s: Failed to take semaphore", __func__);
+	}
     elm327_hardreset_chip();
 
 	elm327_disable_wake_commands();
@@ -2481,40 +2530,47 @@ void elm327_read_task(void *pvParameters)
 		dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
         if(xQueuePeek(uart1_queue, (void *)&event, portMAX_DELAY)) 
         {
-			xSemaphoreTake(xuart1_semaphore, portMAX_DELAY);
-            bzero(dtmp.ucElement, sizeof(dtmp.ucElement));
-			// TODO: fix this. Here it's checking if queu is not empty, other task might have processed the queue while waiting for empty queue
-			if((xQueuePeek(uart1_queue, (void *)&event, 0)) == pdTRUE && xQueueReceive(uart1_queue, (void *)&event, portMAX_DELAY) == pdTRUE)
+			if(xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(ELM327_CMD_MUTEX_TIMOUT)) == pdTRUE)
 			{
-				switch(event.type) 
+				bzero(dtmp.ucElement, sizeof(dtmp.ucElement));
+				// TODO: fix this. Here it's checking if queu is not empty, other task might have processed the queue while waiting for empty queue
+				if((xQueuePeek(uart1_queue, (void *)&event, 0)) == pdTRUE && xQueueReceive(uart1_queue, (void *)&event, portMAX_DELAY) == pdTRUE)
 				{
-					case UART_DATA:
-						uart_read_bytes(UART_NUM_1, dtmp.ucElement, event.size, portMAX_DELAY);
-						
-						if(elm327_response != NULL)
-						{
-							ESP_LOG_BUFFER_HEXDUMP(TAG, (char*)dtmp.ucElement, event.size, ESP_LOG_INFO);
-							dtmp.usLen = event.size;
-							// ESP_LOG_BUFFER_CHAR(TAG, (char*)dtmp, event.size);
-							elm327_response((char*)dtmp.ucElement, 
-													event.size, 
-													xqueue_elm327_uart_rx, 
-													NULL);
-						}
-						break;
-					case UART_FIFO_OVF:
-						uart_flush_input(UART_NUM_1);
-						xQueueReset(uart1_queue);
-						break;
-					case UART_BUFFER_FULL:
-						uart_flush_input(UART_NUM_1);
-						xQueueReset(uart1_queue);
-						break;
-					default:
-						break;
+					switch(event.type) 
+					{
+						case UART_DATA:
+							uart_read_bytes(UART_NUM_1, dtmp.ucElement, event.size, portMAX_DELAY);
+							
+							if(elm327_response != NULL)
+							{
+								ESP_LOG_BUFFER_HEXDUMP(TAG, (char*)dtmp.ucElement, event.size, ESP_LOG_INFO);
+								dtmp.usLen = event.size;
+								// ESP_LOG_BUFFER_CHAR(TAG, (char*)dtmp, event.size);
+								elm327_response((char*)dtmp.ucElement, 
+														event.size, 
+														xqueue_elm327_uart_rx, 
+														NULL);
+							}
+							break;
+						case UART_FIFO_OVF:
+							uart_flush_input(UART_NUM_1);
+							xQueueReset(uart1_queue);
+							break;
+						case UART_BUFFER_FULL:
+							uart_flush_input(UART_NUM_1);
+							xQueueReset(uart1_queue);
+							break;
+						default:
+							break;
+					}
 				}
+				xSemaphoreGive(xuart1_semaphore);
 			}
-			xSemaphoreGive(xuart1_semaphore);
+			else
+			{
+				ESP_LOGE(TAG, "%s: Failed to take semaphore", __func__);
+				vTaskDelay(pdMS_TO_TICKS(100));
+			}
         }
     }
     
