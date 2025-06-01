@@ -1198,6 +1198,7 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	cJSON_AddStringToObject(root, "sleep_status", device_config.sleep_status);
 	cJSON_AddStringToObject(root, "sleep_disable_agree", device_config.sleep_disable_agree);
 	cJSON_AddStringToObject(root, "sleep_volt", device_config.sleep_volt);
+	cJSON_AddStringToObject(root, "sleep_time", device_config.sleep_time);
 	cJSON_AddStringToObject(root, "wakeup_volt", device_config.wakeup_volt);
 	cJSON_AddStringToObject(root, "periodic_wakeup", device_config.periodic_wakeup);
 	cJSON_AddStringToObject(root, "wakeup_interval", device_config.wakeup_interval);
@@ -2330,7 +2331,7 @@ static void config_server_load_cfg(char *cfg)
 	key = cJSON_GetObjectItem(root,"sleep_time");
 	if(key == 0)
 	{
-		strcpy(device_config.sleep_time, "2");
+		strcpy(device_config.sleep_time, "5");
 	}
 	else
 	{
@@ -2338,7 +2339,7 @@ static void config_server_load_cfg(char *cfg)
 
 		if(sleep_time > 30 && sleep_time < 1)
 		{
-			strcpy(device_config.sleep_time, "2");
+			strcpy(device_config.sleep_time, "5");
 		}
 
 		strcpy(device_config.sleep_time, key->valuestring);
