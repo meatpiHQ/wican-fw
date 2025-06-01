@@ -63,3 +63,6 @@ docs/node_modules
 #managed components
 managed_components/
 .vscode/
+
+# Clangd Cache
+.cache/
