@@ -22,6 +22,7 @@
 #include "usb/vcp.hpp"
 #include "usb/usb_host.h"
 #include "driver/gpio.h"
+#include "dev_status.h"
 
 using namespace esp_usb;
 
@@ -76,6 +77,8 @@ static void usb_lib_task(void *arg)
 {
     while (1) {
         uint32_t event_flags;
+
+        dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
         usb_host_lib_handle_events(portMAX_DELAY, &event_flags);
         if (event_flags & USB_HOST_LIB_EVENT_FLAGS_NO_CLIENTS) {
             ESP_ERROR_CHECK(usb_host_device_free_all());

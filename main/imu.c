@@ -5,6 +5,8 @@
 #include "hw_config.h"
 #include "wc_timer.h"
 #include "rtc.h"
+#include "dev_status.h"
+
 #define TAG "imu"
 #define STATIONARY_TIME_MS      3000
 
@@ -58,6 +60,7 @@ static void imu_motion_task(void *pvParameters)
 
     while (1) 
     {
+        dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
         // Wait for WoM interrupt event
         if (xQueueReceive(imu_motion_evt_queue, &gpio_num, pdMS_TO_TICKS(100)))
         {

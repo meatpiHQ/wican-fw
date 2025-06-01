@@ -41,6 +41,7 @@
 #include "sleep_mode.h"
 #include "types.h"
 #include "elm327.h"
+#include "dev_status.h"
 
 #define TAG 		__func__
 
@@ -1444,6 +1445,7 @@ static void uart1_event_task(void *pvParameters)
 
     while (1) 
     {
+		dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
         if (xQueueReceive(elm327_cmd_queue, (void*)&elm327_command, portMAX_DELAY) == pdTRUE)
         {
 			sleep_state_info_t sleep_state;
@@ -1751,7 +1753,7 @@ void elm327_hardreset_chip(void)
     uint32_t rsp_len;
 	if (xSemaphoreTake(xuart1_semaphore, portMAX_DELAY) == pdTRUE)
 	{
-		vTaskDelay(pdMS_TO_TICKS(300));
+		vTaskDelay(pdMS_TO_TICKS(500));
 		uart_flush_input(UART_NUM_1);
 		// xQueueReset(uart1_queue);
 		if(gpio_get_level(OBD_READY_PIN) == 1)
@@ -1775,9 +1777,10 @@ void elm327_hardreset_chip(void)
 		{
 			ESP_LOGE(TAG, "Hardreset failed");
 		}
+		uart_flush_input(UART_NUM_1);
 		xSemaphoreGive(xuart1_semaphore);
 	}
-	
+	vTaskDelay(pdMS_TO_TICKS(50));
     if (elm327_set_baudrate())
     {
         ESP_LOGI(TAG, "UART configuration completed successfully");
@@ -1945,6 +1948,7 @@ esp_err_t elm327_sleep(void)
 
 	if (xSemaphoreTake(xuart1_semaphore, portMAX_DELAY) == pdTRUE)
 	{
+		ESP_LOGI(TAG, "Got semaphore, preparing to sleep");
 		uart_flush_input(UART_NUM_1);
 		xQueueReset(uart1_queue);
         uart_write_bytes(UART_NUM_1, "STSLEEP0\r", strlen("STSLEEP0\r"));
@@ -2474,6 +2478,7 @@ void elm327_read_task(void *pvParameters)
     
     while(1) 
     {
+		dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
         if(xQueuePeek(uart1_queue, (void *)&event, portMAX_DELAY)) 
         {
 			xSemaphoreTake(xuart1_semaphore, portMAX_DELAY);

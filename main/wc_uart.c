@@ -33,6 +33,7 @@
 #include "esp_log.h"
 #include "elm327.h"
 #include "obd.h"
+#include "dev_status.h"
 
 #define TAG         __func__
 
@@ -156,6 +157,7 @@ static void uart2_event_task(void *pvParameters)
     ESP_LOGW(TAG, "Start UART2 event task!");
     for (;;)
     {
+        dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
         // Waiting for UART event.
         if (xQueueReceive(uart2_queue, (void *)&event, (TickType_t)portMAX_DELAY))
         {

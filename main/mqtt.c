@@ -61,6 +61,7 @@
 #include <ctype.h>
 #include "esp_timer.h"
 #include "expression_parser.h"
+#include "dev_status.h"
 
 #define TAG 		__func__
 #define MQTT_TX_RX_BUF_SIZE         (1024*20)
@@ -357,6 +358,7 @@ static void mqtt_task(void *pvParameters)
 
 	while(1)
 	{
+        dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
 		xQueuePeek(*xmqtt_tx_queue, ( void * ) &tx_frame, portMAX_DELAY);
 		if(mqtt_connected())
 		{
