@@ -986,6 +986,7 @@ void light_sleep_task(void *pvParameters)
         //     }
         //     // adc_continuous_start(handle);
         // }
+        
         if(current_state == STATE_SLEEPING) 
         {
             static wc_timer_t waketime = 0;
@@ -995,6 +996,28 @@ void light_sleep_task(void *pvParameters)
             esp_light_sleep_start();
             waketime = esp_timer_get_time();
             ESP_LOGW(TAG, "Wakeup...");
+
+            static uint8_t elm327_sleep_retries = 0;
+
+            if(elm327_chip_get_status() == ELM327_READY)
+            {
+                ESP_LOGW(TAG, "ELM327 chip is NOT sleeping after wakeup, retrying... (%u/6)", elm327_sleep_retries);
+                if(elm327_sleep_retries < 6)
+                {
+                    elm327_sleep();
+                    elm327_sleep_retries++;
+                }
+                else
+                {
+                    ESP_LOGE(TAG, "ELM327 chip is still NOT sleeping after 6 retries, restarting...");
+                    esp_restart();
+                }
+                
+            }
+            else
+            {
+                elm327_sleep_retries = 0;
+            }
         }
         if(current_state != STATE_SLEEPING)
         {
