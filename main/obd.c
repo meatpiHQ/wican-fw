@@ -32,7 +32,9 @@
 #include "hw_config.h"
 
 /* Defines and Constants */
-#define TAG                     __func__
+// #define TAG                     __func__
+#define TAG                     "OBD"
+
 #define check_command(a,b)      (strcmp(a, b) == 0)
 #define GET_VOLTAGE_CMD         "ATRV\r"
 #define GET_SLEEP_CONFIG_CMD    "STSLCS\r"
