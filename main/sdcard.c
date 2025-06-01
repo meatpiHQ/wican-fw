@@ -74,7 +74,7 @@ esp_err_t sdcard_perform_ota_update(const char* firmware_path)
     ESP_LOGI(TAG, "Deleting config file before OTA update");
 
     // Delete config file if it exists
-    #ifdef USE_FATFS
+    #ifdef 0
         ESP_LOGI(TAG, "Initializing FAT filesystem");
         const esp_vfs_fat_mount_config_t mount_config = {
             .max_files = 4,
@@ -96,7 +96,7 @@ esp_err_t sdcard_perform_ota_update(const char* firmware_path)
         ESP_LOGI(TAG, "Initializing LittleFS filesystem");
         
         esp_vfs_littlefs_conf_t conf = {
-            .base_path = FS_MOUNT_POINT,
+            .base_path = SD_CARD_MOUNT_POINT,
             .partition_label = "storage",
             .format_if_mount_failed = true,
             .dont_mount = false,
@@ -123,10 +123,10 @@ esp_err_t sdcard_perform_ota_update(const char* firmware_path)
     #endif
     
     // Delete all configuration files
-    delete_config_file(FS_MOUNT_POINT"/config.json");
-    delete_config_file(FS_MOUNT_POINT"/car_data.json");
-    delete_config_file(FS_MOUNT_POINT"/auto_pid.json");
-    delete_config_file(FS_MOUNT_POINT"/mqtt_canfilt.json");
+    delete_config_file(SD_CARD_MOUNT_POINT"/config.json");
+    delete_config_file(SD_CARD_MOUNT_POINT"/car_data.json");
+    delete_config_file(SD_CARD_MOUNT_POINT"/auto_pid.json");
+    delete_config_file(SD_CARD_MOUNT_POINT"/mqtt_canfilt.json");
 
     ESP_LOGI(TAG, "Starting OTA from SD card file: %s", full_path);
     
