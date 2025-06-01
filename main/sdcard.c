@@ -74,7 +74,7 @@ esp_err_t sdcard_perform_ota_update(const char* firmware_path)
     ESP_LOGI(TAG, "Deleting config file before OTA update");
 
     // Delete config file if it exists
-    #ifdef 0
+    #if 0
         ESP_LOGI(TAG, "Initializing FAT filesystem");
         const esp_vfs_fat_mount_config_t mount_config = {
             .max_files = 4,
