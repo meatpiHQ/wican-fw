@@ -11,6 +11,7 @@
 #include "esp_heap_caps.h"  
 #include "hw_config.h"
 #include "esp_littlefs.h"
+#include "dev_status.h"
 
 #define OTA_BUFFER_SIZE 4096  
 
@@ -351,6 +352,7 @@ esp_err_t sd_card_init(void)
     #endif
 
     s_card_mounted = true;
+    dev_status_set_bits(SDCARD_MOUNTED_BIT);
     ESP_LOGI(TAG, "SD card mounted successfully");
     
     return ESP_OK;
