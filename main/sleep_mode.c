@@ -1004,13 +1004,21 @@ void light_sleep_task(void *pvParameters)
                 ESP_LOGW(TAG, "ELM327 chip is NOT sleeping after wakeup, retrying... (%u/6)", elm327_sleep_retries);
                 if(elm327_sleep_retries < 6)
                 {
+                    elm327_hardreset_chip();
+                    vTaskDelay(pdMS_TO_TICKS(500));
                     elm327_sleep();
+                    vTaskDelay(pdMS_TO_TICKS(100));
                     elm327_sleep_retries++;
                 }
                 else
                 {
                     ESP_LOGE(TAG, "ELM327 chip is still NOT sleeping after 6 retries, restarting...");
+                    vTaskDelay(pdMS_TO_TICKS(100));
                     esp_restart();
+                }
+                if(elm327_chip_get_status() == ELM327_SLEEP)
+                {
+                    ESP_LOGW(TAG, "ELM327 chip is sleeping now");
                 }
             }
             else
