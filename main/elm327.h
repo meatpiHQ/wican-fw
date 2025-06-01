@@ -51,4 +51,5 @@ esp_err_t elm327_sleep(void);
 void elm327_lock(void);
 void elm327_send_cmd(uint8_t* cmd, uint32_t cmd_len);
 esp_err_t elm327_get_protocol_number(uint8_t *protocol_number);
+void elm327_hardreset_chip(void);
 #endif
