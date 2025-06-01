@@ -939,7 +939,7 @@ void light_sleep_task(void *pvParameters)
                     else if(periodic_wakeup && wc_timer_is_expired(&periodic_wakeup_timer))
                     {
                         ESP_LOGI(TAG, "Periodic wakeup timer expired, returning to normal mode");
-                        current_state = STATE_NORMAL;
+                        // current_state = STATE_NORMAL;
                         esp_restart();
                     }
                     break;
@@ -953,7 +953,7 @@ void light_sleep_task(void *pvParameters)
                     else if (wc_timer_is_expired(&wakeup_timer)) 
 					{
                         ESP_LOGI(TAG, "Voltage stable above threshold, returning to normal mode");
-                        current_state = STATE_NORMAL;
+                        // current_state = STATE_NORMAL;
                         esp_restart();
                     }
                     break;
@@ -1012,7 +1012,6 @@ void light_sleep_task(void *pvParameters)
                     ESP_LOGE(TAG, "ELM327 chip is still NOT sleeping after 6 retries, restarting...");
                     esp_restart();
                 }
-                
             }
             else
             {
