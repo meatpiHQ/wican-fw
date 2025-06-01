@@ -48,6 +48,6 @@ void wc_mdns_init(char *id, char* hv, char* fv)
         {"path", "/"}
     };
 
-    ESP_ERROR_CHECK(mdns_service_add("WiCAN-WebServer", "_http", "_tcp", 80, serviceTxtData,
+    ESP_ERROR_CHECK_WITHOUT_ABORT(mdns_service_add("WiCAN-WebServer", "_http", "_tcp", 80, serviceTxtData,
                                      sizeof(serviceTxtData) / sizeof(serviceTxtData[0])));
 }
