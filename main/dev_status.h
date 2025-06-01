@@ -6,6 +6,10 @@
 #include "esp_log.h"
 #include <stdbool.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Device status event bits
 #define DEV_AWAKE_BIT       BIT0
 #define DEV_SLEEP_BIT       BIT1
@@ -50,5 +54,9 @@ bool dev_status_is_any_bit_set(EventBits_t bits);
 #define dev_status_is_wifi_connected() dev_status_is_bit_set(WIFI_CONNECTED_BIT)
 #define dev_status_is_mqtt_connected() dev_status_is_bit_set(MQTT_CONNECTED_BIT)
 #define dev_status_is_ble_connected()  dev_status_is_bit_set(BLE_CONNECTED_BIT)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // DEV_STATUS_H
