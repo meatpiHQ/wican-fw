@@ -2623,11 +2623,21 @@ void elm327_init(response_callback_t rsp_callback, QueueHandle_t *rx_queue, void
 	// elm327_update_obd_from_file("/sdcard/MIC3624_v2.3.18.txt");
 	elm327_update_obd(false);
 
+	static uint8_t status_not_ready_count = 0;
 	while(elm327_chip_get_status() != ELM327_READY)
 	{
 		ESP_LOGW(TAG, "ELM327 not ready...");
+
+		if(status_not_ready_count++ > 10)
+		{
+			ESP_LOGE(TAG, "ELM327 not ready for too long, hardreset chip");
+			elm327_hardreset_chip();
+			status_not_ready_count = 0;
+			break;
+		}
 		vTaskDelay(pdMS_TO_TICKS(200));
 	}
+	status_not_ready_count = 0;
 	
     uart_flush(UART_NUM_1);
 
