@@ -1,0 +1,13 @@
+{
+  "car_model": "BMW: 528i",
+  "init": "ATST96;ATSP6;",
+  "pids": [
+    {
+      "pid": "22DA232",
+      "pid_init": "ATSH6F1;ATCRA618;ATCEA18;ATFCSD18300000;",
+      "parameters": {
+        "ODOMETER": "([B10:B12]/250.037)*125"
+      }
+    }
+  ]
+}
