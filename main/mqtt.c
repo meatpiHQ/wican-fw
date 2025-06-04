@@ -427,7 +427,7 @@ static void mqtt_task(void *pvParameters)
                         start_index = found_index + 1;
                     }
                 }
-                else
+                else if(config_server_mqtt_rx_en_config())
                 {
                     sprintf(json_buffer, "{\"bus\":\"0\",\"type\":\"rx\",\"ts\":%lu,\"frame\":[", (pdTICKS_TO_MS(xTaskGetTickCount())%60000));
 
@@ -624,7 +624,18 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
     xmqtt_tx_queue = xtx_queue;
     mqtt_led = connected_led;
     device_id = id;
-    
+
+    // uint32_t keep_alive = 0;
+    // if(config_server_get_keep_alive(&keep_alive) != -1)
+    // {
+    //     mqtt_cfg.session.keepalive = keep_alive;
+    // }
+    // else
+    // {
+    //     mqtt_cfg.session.keepalive = 30;
+    // }
+    // ESP_LOGI(TAG, "MQTT Keep Alive: %d", mqtt_cfg.session.keepalive);
+
     strcpy(mqtt_sub_topic, config_server_get_mqtt_tx_topic());
     
     strcpy(mqtt_status_topic, config_server_get_mqtt_status_topic());
