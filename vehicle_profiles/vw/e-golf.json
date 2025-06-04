@@ -11,7 +11,7 @@
     {
       "pid": "2202BD",
       "parameters": {
-        "Odometer": "[B5:B7]"
+        "ODOMETER": "[B5:B7]"
       }
     }
   ]
