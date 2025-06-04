@@ -4,7 +4,7 @@
   "pids": [
     {
       "pid": "22DA232",
-      "pid_init": "ATSH6F1;ATCRA618;ATCEA18;ATFCSD18300000;",
+      "pid_init": "ATSH6F1;ATCRA618;ATCEA18;ATTAF1;ATCERF1;ATFCSD18300000;ATFCSM1;",
       "parameters": {
         "ODOMETER": "([B10:B12]/250.037)*125"
       }
