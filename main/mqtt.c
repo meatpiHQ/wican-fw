@@ -64,7 +64,7 @@
 #include "dev_status.h"
 #include "wc_timer.h"
 
-#define TAG 		__func__
+#define TAG 		"MQTT"
 #define MQTT_TX_RX_BUF_SIZE         (1024*20)
 #define MQTT_OUT_BUF_SIZE           (1024*20)
 #define MQTT_BATTERY_TIMER_MS        (1000*60*10)
@@ -79,7 +79,7 @@ static char *mqtt_status_topic;
 static char *mqtt_cmd_topic;
 static char *mqtt_rsp_topic;
 static char *mqtt_battery_topic;
-
+static char battery_buffer[64];
 static uint8_t mqtt_led = 0;
 
 static QueueHandle_t *xmqtt_tx_queue;
@@ -122,6 +122,30 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             esp_mqtt_client_subscribe(client, mqtt_cmd_topic, 0);
 			gpio_set_level(mqtt_led, 0);
 			esp_mqtt_client_publish(client, mqtt_status_topic, "{\"status\": \"online\"}", 0, 0, 1);
+
+            static float vbatt = 0;
+            if (sleep_mode_get_voltage(&vbatt) == ESP_OK) 
+            {
+                // Use snprintf for buffer safety
+                int len = snprintf(battery_buffer, sizeof(battery_buffer), 
+                                "{\"battery_voltage\": %.2f}", vbatt);
+                
+                if (len > 0 && len < sizeof(battery_buffer)) 
+                {
+                    // Check MQTT publish result
+                    int msg_id = esp_mqtt_client_publish(client, mqtt_battery_topic, 
+                                                    battery_buffer, 0, 0, 1);
+                    if (msg_id < 0)
+                    {
+                        ESP_LOGE(TAG, "Failed to publish battery voltage");
+                    }
+                }
+            } 
+            else
+            {
+                ESP_LOGE(TAG, "Failed to read battery voltage");
+            }
+
             xEventGroupSetBits(s_mqtt_event_group, MQTT_CONNECTED_BIT);
 			break;
 		case MQTT_EVENT_DISCONNECTED:
@@ -345,10 +369,7 @@ static void mqtt_task(void *pvParameters)
 	static char mqtt_topic[64];
     static char mqtt_elm327_topic[64];
 	static uint64_t can_data = 0;
-    static char mqtt_battery_topic[64];
-    wc_timer_t battery_timer;
 
-    wc_timer_set(&battery_timer, 0);
 	// sprintf(mqtt_topic, "wican/%s/can/rx", device_id);
     strcpy(mqtt_topic, config_server_get_mqtt_rx_topic());
     sprintf(mqtt_elm327_topic, "wican/%s/elm327", device_id);
@@ -364,40 +385,11 @@ static void mqtt_task(void *pvParameters)
 
 	while(1)
 	{
-        dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
 		xQueuePeek(*xmqtt_tx_queue, ( void * ) &tx_frame, portMAX_DELAY);
+        dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
+        
 		if(mqtt_connected())
 		{
-            if (wc_timer_is_expired(&battery_timer))
-            {
-                float vbatt = 0;
-                char battery_buffer[64];
-                wc_timer_set(&battery_timer, MQTT_BATTERY_TIMER_MS);
-
-                // Add error handling for voltage reading
-                if (sleep_mode_get_voltage(&vbatt) == ESP_OK) 
-                {
-                    // Use snprintf for buffer safety
-                    int len = snprintf(battery_buffer, sizeof(battery_buffer), 
-                                    "{\"battery_voltage\": %.2f}", vbatt);
-                    
-                    if (len > 0 && len < sizeof(battery_buffer)) 
-                    {
-                        // Check MQTT publish result
-                        int msg_id = esp_mqtt_client_publish(client, mqtt_battery_topic, 
-                                                        battery_buffer, 0, 0, 1);
-                        if (msg_id < 0)
-                        {
-                            ESP_LOGE(TAG, "Failed to publish battery voltage");
-                        }
-                    }
-                } 
-                else
-                {
-                    ESP_LOGE(TAG, "Failed to read battery voltage");
-                }
-            }
-
 			json_buffer[0] = 0;
             if(tx_frame.type == MQTT_CAN)
             {
@@ -706,7 +698,7 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
     static StackType_t *mqtt_task_stack;
     static StaticTask_t mqtt_task_buffer;
     
-    mqtt_task_stack = heap_caps_malloc(1024*5, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    mqtt_task_stack = heap_caps_malloc(1024*6, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
     
     if (mqtt_task_stack == NULL)
     {
@@ -718,7 +710,7 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
     TaskHandle_t mqtt_task_handle = xTaskCreateStatic(
         mqtt_task,
         "mqtt_task",
-        1024*5,
+        1024*6,
         (void*)AF_INET,
         5,
         mqtt_task_stack,
