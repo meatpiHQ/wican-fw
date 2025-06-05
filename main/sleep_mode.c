@@ -1008,9 +1008,10 @@ void light_sleep_task(void *pvParameters)
                     vTaskDelay(pdMS_TO_TICKS(500));
                     elm327_sleep();
                     gpio_hold_en(OBD_READY_PIN);
+                    rtc_gpio_hold_en(OBD_READY_PIN);
                     rtc_gpio_pulldown_en(OBD_READY_PIN);
                     gpio_deep_sleep_hold_en();
-                    rtc_gpio_hold_en(OBD_READY_PIN);
+                    
                     vTaskDelay(pdMS_TO_TICKS(100));
                     elm327_sleep_retries++;
                 }
