@@ -156,6 +156,11 @@ static void wifi_network_event_handler(void* arg, esp_event_base_t event_base,
 
 void wifi_network_deinit(void)
 {
+    if (s_wifi_event_group == NULL) 
+    {
+        ESP_LOGW(WIFI_TAG, "WiFi event group not initialized");
+        return;
+    }
 	xEventGroupWaitBits(s_wifi_event_group,
 						WIFI_CONNECT_IDLE_BIT,
 						pdFALSE,
@@ -182,6 +187,11 @@ void wifi_network_deinit(void)
 }
 void wifi_network_restart(void)
 {
+    if (s_wifi_event_group == NULL) 
+    {
+        ESP_LOGW(WIFI_TAG, "WiFi event group not initialized");
+        return;
+    }
 	xEventGroupSetBits(s_wifi_event_group, WIFI_INIT_BIT);
     esp_err_t err = esp_wifi_start();
     esp_wifi_disconnect();
@@ -193,13 +203,22 @@ void wifi_network_restart(void)
 
 void wifi_network_stop(void)
 {
+    if (s_wifi_event_group == NULL) 
+    {
+        ESP_LOGW(WIFI_TAG, "WiFi event group not initialized");
+        return;
+    }
     xEventGroupClearBits(s_wifi_event_group, WIFI_INIT_BIT);
     esp_wifi_stop();
 }
 
 void wifi_network_start(void)
 {
-    xEventGroupSetBits(s_wifi_event_group, WIFI_INIT_BIT);
+    if (s_wifi_event_group == NULL) 
+    {
+        ESP_LOGW(WIFI_TAG, "WiFi event group not initialized");
+        return;
+    }
     esp_err_t err = esp_wifi_start();
     if (err == ESP_ERR_WIFI_NOT_INIT)
     {
