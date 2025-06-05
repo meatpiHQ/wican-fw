@@ -352,7 +352,7 @@ esp_err_t sd_card_init(void)
     #endif
 
     s_card_mounted = true;
-    dev_status_set_bits(SDCARD_MOUNTED_BIT);
+    dev_status_set_bits(DEV_SDCARD_MOUNTED_BIT);
     ESP_LOGI(TAG, "SD card mounted successfully");
     
     return ESP_OK;

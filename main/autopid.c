@@ -2167,7 +2167,7 @@ void autopid_init(char* id, bool enable_logging, uint32_t logging_period)
     //     car.pid_count = 0;
     // }
 
-    if(dev_status_is_bit_set(SDCARD_MOUNTED_BIT)){
+    if(dev_status_is_bit_set(DEV_SDCARD_MOUNTED_BIT)){
         ESP_LOGI(TAG, "SD Card mounted");
     }
     else
@@ -2176,7 +2176,7 @@ void autopid_init(char* id, bool enable_logging, uint32_t logging_period)
     }
     
     // Initialize OBD logger if enabled and SD card is mounted
-    if(enable_logging && dev_status_is_bit_set(SDCARD_MOUNTED_BIT)){
+    if(enable_logging && dev_status_is_bit_set(DEV_SDCARD_MOUNTED_BIT)){
         xSemaphoreTake(all_pids->mutex, portMAX_DELAY);
         autopid_init_obd_logger(logging_period);
         xSemaphoreGive(all_pids->mutex);

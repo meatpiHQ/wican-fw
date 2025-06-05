@@ -9,9 +9,9 @@ static const char* get_bit_name(EventBits_t bit)
     switch (bit) {
         case DEV_AWAKE_BIT:       return "DEV_AWAKE";
         case DEV_SLEEP_BIT:       return "DEV_SLEEP";
-        case WIFI_CONNECTED_BIT:  return "WIFI_CONNECTED";
-        case MQTT_CONNECTED_BIT:  return "MQTT_CONNECTED";
-        case BLE_CONNECTED_BIT:   return "BLE_CONNECTED";
+        case DEV_WIFI_CONNECTED_BIT:  return "WIFI_CONNECTED";
+        case DEV_MQTT_CONNECTED_BIT:  return "MQTT_CONNECTED";
+        case DEV_BLE_CONNECTED_BIT:   return "BLE_CONNECTED";
         default:                  return "UNKNOWN";
     }
 }
@@ -21,9 +21,9 @@ static void log_bits(const char* action, EventBits_t bits)
 {
     if (bits & DEV_AWAKE_BIT)       ESP_LOGI(DEV_STATUS_TAG, "%s: DEV_AWAKE", action);
     if (bits & DEV_SLEEP_BIT)       ESP_LOGI(DEV_STATUS_TAG, "%s: DEV_SLEEP", action);
-    if (bits & WIFI_CONNECTED_BIT)  ESP_LOGI(DEV_STATUS_TAG, "%s: WIFI_CONNECTED", action);
-    if (bits & MQTT_CONNECTED_BIT)  ESP_LOGI(DEV_STATUS_TAG, "%s: MQTT_CONNECTED", action);
-    if (bits & BLE_CONNECTED_BIT)   ESP_LOGI(DEV_STATUS_TAG, "%s: BLE_CONNECTED", action);
+    if (bits & DEV_WIFI_CONNECTED_BIT)  ESP_LOGI(DEV_STATUS_TAG, "%s: WIFI_CONNECTED", action);
+    if (bits & DEV_MQTT_CONNECTED_BIT)  ESP_LOGI(DEV_STATUS_TAG, "%s: MQTT_CONNECTED", action);
+    if (bits & DEV_BLE_CONNECTED_BIT)   ESP_LOGI(DEV_STATUS_TAG, "%s: BLE_CONNECTED", action);
 }
 
 void dev_status_init(void)
