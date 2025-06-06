@@ -93,6 +93,7 @@ typedef struct
     char* specific_init;
     char* selected_car_model;
     char* grouping;
+    char* autopid_polling;
     destination_type_t group_destination_type;
     char* group_destination;    //"destination"
     bool pid_std_en;
@@ -104,6 +105,13 @@ typedef struct
     uint32_t cycle;     //To be removed when std pid gets its own period
     SemaphoreHandle_t mutex;
 }all_pids_t;
+
+
+typedef struct{
+    char* name;
+    float value;
+    sensor_type_t sensor_type; 
+}autopid_value_t;
 
 ////////////////
 
@@ -119,4 +127,5 @@ char *autopid_data_read(void);
 bool autopid_get_ecu_status(void);
 char* autopid_get_config(void);
 esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint32_t available_pids_size) ;
+void autopid_request_data(void);
 #endif

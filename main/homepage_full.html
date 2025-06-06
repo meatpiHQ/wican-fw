@@ -774,7 +774,7 @@
                 <tr>
                     <td>MQTT HA Discovery:</td>
                     <td>
-                        <select id="ha_discovery" name="ha_discovery" toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
+                        <select id="ha_discovery" name="ha_discovery" onchange="toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
                             <option value="disable">Disable</option>
                         </select>
                     </td>
@@ -782,7 +782,7 @@
                 <tr>
                     <td>Grouping:</td>
                     <td>
-                        <select id="grouping" name="grouping" toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
+                        <select id="grouping" name="grouping" onchange="toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
                             <option value="disable">Disable</option>
                             <option value="enable">Enable</option>
                         </select>
@@ -806,6 +806,14 @@
                     <td>Cycle Time(ms):</td>
                     <td>
                         <input type="text" id="group_cycle" name="group_cycle" value="5000" disabled oninput="enableAutoStoreButton();submit_enable();">
+                    </td>
+                </tr>
+                <td>Polling:</td>
+                    <td>
+                        <select id="autopid_polling" name="autopid_polling" onchange="enableAutoStoreButton();submit_enable();">
+                            <option value="enable">Enable</option>
+                            <option value="disable">Disable</option>
+                        </select>
                     </td>
                 </tr>
             </table>
@@ -1764,6 +1772,7 @@ function loadAutoTable(jsonData) {
             setElementValue("car_specific", data.car_specific, 'disable');
             setElementValue("ha_discovery", 'disable');
             setElementValue("grouping", data.grouping, 'disable');
+            setElementValue("autopid_polling", data.autopid_polling, 'enable');
             setElementValue("group_cycle", data.cycle, '5000');
             setElementValue("destination", data.destination, '');
             setElementValue("car_model", data.car_model, '');
@@ -1867,6 +1876,7 @@ function loadAutoTable(jsonData) {
             // Get form values with null checks
             const initialisationValue = document.getElementById("initialisation")?.value || '';
             const groupingValue = document.getElementById("grouping")?.value || 'disable';
+            const autopid_pollingValue = document.getElementById("autopid_polling")?.value || 'enable';
             const groupDestTypeValue = document.getElementById("group_dest_type")?.value || 'Default';
             const ha_discoveryValue = document.getElementById("ha_discovery")?.value || 'disable';
             const destinationValue = document.getElementById("destination")?.value || '';
@@ -1986,6 +1996,7 @@ function loadAutoTable(jsonData) {
             const jsonData = {
                 initialisation: initialisationValue,
                 grouping: groupingValue,
+                autopid_polling: autopid_pollingValue,
                 group_dest_type: groupDestTypeValue,
                 destination: destinationValue,
                 cycle: cycleValue,
