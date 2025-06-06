@@ -55,6 +55,7 @@
 #include "autopid.h"
 #include "wc_mdns.h"
 #include "hw_config.h"
+#include "dev_status.h"
 
 #define TAG 		__func__
 
@@ -167,6 +168,9 @@ static void can_tx_task(void *pvParameters)
 
 		memset(ucTCP_RX_Buffer.ucElement,0, DEV_BUFFER_LENGTH);
 		xQueueReceive(xMsg_Rx_Queue, &ucTCP_RX_Buffer, portMAX_DELAY);
+
+		dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
+
 		ESP_LOGI(TAG, "----------");
 		ESP_LOG_BUFFER_HEXDUMP(TAG, ucTCP_RX_Buffer.ucElement, ucTCP_RX_Buffer.usLen, ESP_LOG_INFO);
 		ESP_LOGI(TAG, "----------");
@@ -263,6 +267,8 @@ static void can_rx_task(void *pvParameters)
         //     time_old = esp_timer_get_time();
         //     ESP_LOGI(TAG, "heap current: %lu min: %lu max: %lu", free_heap, min_heap, max_heap);
         // }
+		
+		dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
 
         while(can_receive(&rx_msg, 0) ==  ESP_OK)
         {
@@ -357,6 +363,8 @@ static void can_rx_task(void *pvParameters)
 
 void app_main(void)
 {
+	dev_status_init();
+	dev_status_set_bits(DEV_AWAKE_BIT);
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());

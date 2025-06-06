@@ -40,6 +40,7 @@
 #include "wc_timer.h"
 #include <float.h>
 #include "hw_config.h"
+#include "dev_status.h"
 
 #define TAG __func__
 
@@ -1143,6 +1144,8 @@ static void autopid_task(void *pvParameters)
     while(1) 
     {
         static pid_type_t previous_pid_type = PID_MAX;
+
+        dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
 
         if (xEventGroupGetBits(xautopid_event_group) & AUTOPID_POLLING_DISABLED_BIT) 
         {

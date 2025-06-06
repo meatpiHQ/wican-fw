@@ -62,6 +62,7 @@
 #include "esp_timer.h"
 #include "expression_parser.h"
 #include "autopid.h"
+#include "dev_status.h"
 
 #define TAG 		__func__
 // #define TAG 		"MQTT_CLIENT"
@@ -365,6 +366,7 @@ static void mqtt_task(void *pvParameters)
 	while(1)
 	{
 		xQueuePeek(*xmqtt_tx_queue, ( void * ) &tx_frame, portMAX_DELAY);
+        dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
 		if(mqtt_connected())
 		{
 			json_buffer[0] = 0;

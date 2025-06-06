@@ -57,6 +57,7 @@
 #include "mqtt_client.h"
 #include "ver.h"
 #include "math.h"
+#include "dev_status.h"
 
 #define TAG 			  __func__
 
@@ -474,6 +475,8 @@ static void adc_task(void *pvParameters)
 					}
 					else if(battery_voltage < sleep_voltage)
 					{
+                        dev_status_clear_bits(DEV_AWAKE_BIT);
+                        dev_status_set_bits(DEV_SLEEP_BIT);
 						sleep_state = SLEEP_STATE;
 					}
 					break;
