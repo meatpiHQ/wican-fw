@@ -2529,6 +2529,7 @@ function loadAutoTable(jsonData) {
 			submit_enable();
 		};
 		xhttp.open("POST", "/store_canflt");
+        xhttp.setRequestHeader("Content-Type", "application/json");
 		xhttp.send(canfltJSON);
 	}
 
@@ -2609,6 +2610,7 @@ function loadAutoTable(jsonData) {
         };
 
 		xhttp.open("POST", "/store_config");
+        xhttp.setRequestHeader("Content-Type", "application/json");
 		xhttp.send(configJSON);
 	}
 
