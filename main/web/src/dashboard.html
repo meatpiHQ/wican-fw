@@ -3,123 +3,743 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <head>
-        <title>WiCAN Log Data Dashboard</title>
-        <link href="bootstrap.min.css" rel="stylesheet">
-        <style>
-            /* Add this style block to change heading colors */
-            h1, h2, h3, h4, h5, h6 {
-                color: #24478f; /* Using the color you specified earlier */
-            }
-        </style>
-    </head>
-    <link href="bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="daterangepicker.css">
+    <title>WiCAN Dashboard - MeatPi Electronics</title>
+    <link href="/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/daterangepicker.css">
     <style>
-        .parameter-list {
-            max-height: 300px;
-            overflow-y: auto;
+        :root {
+            --primary-color: #24478f;
+            --secondary-color: #46d2eb;
+            --success-color: #10b981;
+            --danger-color: #ef4444;
+            --warning-color: #f59e0b;
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8f9fa;
+            --bg-tertiary: #f3f4f6;
+            --card-bg: #ffffff;
+            --card-hover: #f8f9fa;
+            --text-primary: #1f2937;
+            --text-secondary: #6b7280;
+            --text-muted: #9ca3af;
+            --border-color: #e5e7eb;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
         }
-        .search-box {
-            margin-bottom: 10px;
+        
+        body {
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
         }
-        .parameter-chart {
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            padding: 15px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        
+        /* Header Styles */
+        .dashboard-header {
+            background: var(--bg-primary);
+            border-radius: 1rem;
+            box-shadow: var(--shadow-md);
+            padding: 2rem;
+            margin-bottom: 2rem;
+            border: 1px solid var(--border-color);
         }
-        #chart-container {
-
-
+        
+        .header-content {
             display: flex;
-            flex-direction: column;
-            gap: 20px;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 2rem;
         }
-        @media (min-width: 992px) {
-            /* Optional: For larger screens, you could display charts in a grid */
-            #chart-container {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));
+        
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+        
+        .logo-container {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .logo-svg {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .title-section h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin: 0;
+            color: var(--primary-color);
+        }
+        
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            margin: 0;
+            font-weight: 500;
+        }
+        
+        /* Connection Status */
+        .connection-status {
+            background: var(--bg-secondary);
+            border-radius: 2rem;
+            padding: 0.5rem 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            border: 1px solid var(--border-color);
+        }
+        
+        .connection-dot {
+            width: 0.75rem;
+            height: 0.75rem;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        .connection-connected {
+            background-color: var(--success-color);
+        }
+        
+        .connection-disconnected {
+            background-color: var(--danger-color);
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+        
+        /* Navigation Tabs */
+        .nav-tabs {
+            border: none;
+            background: var(--bg-primary);
+            border-radius: 0.75rem;
+            padding: 0.5rem;
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+        }
+        
+        .nav-tabs .nav-link {
+            border: none;
+            color: var(--text-secondary);
+            font-weight: 600;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .nav-tabs .nav-link:hover {
+            color: var(--primary-color);
+            background: var(--bg-secondary);
+        }
+        
+        .nav-tabs .nav-link.active {
+            color: white;
+            background: var(--primary-color);
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .nav-tabs .nav-link.active i {
+            color: white;
+        }
+        
+        /* Card Styles */
+        .section-card {
+            background: var(--card-bg);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+            transition: all 0.2s ease;
+        }
+        
+        .section-card:hover {
+            box-shadow: var(--shadow-md);
+        }
+        
+        .section-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .section-icon {
+            width: 1.5rem;
+            height: 1.5rem;
+            color: var(--primary-color);
+            margin-right: 0.75rem;
+        }
+        
+        .section-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 0;
+        }
+        
+        /* Metrics Grid */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 1rem;
+        }
+        
+        .metric-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            padding: 1.25rem;
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+            transform-origin: left;
+        }
+        
+        .metric-card:hover::before {
+            transform: scaleX(1);
+        }
+        
+        .metric-card:hover {
+            background: var(--card-bg);
+            box-shadow: var(--shadow-md);
+            transform: translateY(-2px);
+        }
+        
+        .metric-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+        
+        .metric-title {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin: 0;
+            flex: 1;
+        }
+        
+        .metric-icon {
+            width: 2rem;
+            height: 2rem;
+            color: var(--secondary-color);
+            opacity: 0.7;
+            flex-shrink: 0;
+        }
+        
+        .metric-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 0;
+            line-height: 1;
+        }
+        
+        .metric-unit {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            font-weight: 400;
+            margin-left: 0.25rem;
+        }
+        
+        /* Status Indicators */
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.75rem;
+            border-radius: 2rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            gap: 0.375rem;
+        }
+        
+        .status-active {
+            background-color: #dcfce7;
+            color: #15803d;
+            border: 1px solid #bbf7d0;
+        }
+        
+        .status-inactive {
+            background-color: #f3f4f6;
+            color: #6b7280;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .status-unknown {
+            background-color: #fef3c7;
+            color: #d97706;
+            border: 1px solid #fde68a;
+        }
+        
+        .status-icon {
+            width: 1rem;
+            height: 1rem;
+        }
+        
+        /* Controls */
+        .controls-section {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .form-switch {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .form-switch .form-check-input {
+            background-color: var(--border-color);
+            border-color: var(--border-color);
+            cursor: pointer;
+            width: 3rem;
+            height: 1.5rem;
+        }
+        
+        .form-switch .form-check-input:checked {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        .form-switch .form-check-label {
+            color: var(--text-primary);
+            font-weight: 500;
+            cursor: pointer;
+        }
+        
+        .btn-custom {
+            padding: 0.625rem 1.25rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-primary-custom {
+            background: var(--primary-color);
+            color: white;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .btn-primary-custom:hover {
+            background: #1e3a6f;
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+            color: white;
+        }
+        
+        .btn-success-custom {
+            background: var(--success-color);
+            color: white;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .btn-success-custom:hover {
+            background: #059669;
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+            color: white;
+        }
+        
+        /* Loading States */
+        .loading-spinner {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 4rem;
+            color: var(--text-secondary);
+        }
+        
+        .spinner-border {
+            border-color: var(--primary-color);
+            border-right-color: transparent;
+        }
+        
+        /* No Data Message */
+        .no-data-message {
+            background: var(--card-bg);
+            border-radius: 0.75rem;
+            box-shadow: var(--shadow-sm);
+            padding: 3rem;
+            text-align: center;
+            border: 1px solid var(--border-color);
+        }
+        
+        .no-data-icon {
+            width: 4rem;
+            height: 4rem;
+            color: var(--text-muted);
+            margin: 0 auto 1.5rem;
+        }
+        
+        /* Charts and Visualization */
+        .parameter-chart {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        /* Search Box */
+        .search-box input {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 0.5rem;
+            padding: 0.625rem 1rem;
+            transition: all 0.2s ease;
+        }
+        
+        .search-box input:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(36, 71, 143, 0.1);
+            outline: none;
+        }
+        
+        .search-box input::placeholder {
+            color: var(--text-muted);
+        }
+        
+        /* Parameter List */
+        .parameter-list {
+            max-height: 400px;
+            overflow-y: auto;
+            padding-right: 0.5rem;
+        }
+        
+        .parameter-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .parameter-list::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+            border-radius: 3px;
+        }
+        
+        .parameter-list::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+        
+        .parameter-list::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+        
+        /* Custom form controls */
+        .form-control, .form-select {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        
+        .form-control:focus, .form-select:focus {
+            background: var(--bg-primary);
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(36, 71, 143, 0.1);
+            color: var(--text-primary);
+        }
+        
+        .form-label {
+            color: var(--text-primary);
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+        
+        /* Input group styling */
+        .input-group-text {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+        
+        .input-group .form-control:focus + .input-group-text {
+            border-color: var(--primary-color);
+        }
+        
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .dashboard-header {
+                padding: 1.5rem;
+            }
+            
+            .title-section h1 {
+                font-size: 1.5rem;
+            }
+            
+            .logo-container {
+                width: 50px;
+                height: 50px;
+            }
+            
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header-content {
+                gap: 1rem;
+            }
+            
+            .connection-status {
+                width: 100%;
+                justify-content: center;
             }
         }
-        .loading {
-            text-align: center;
-            margin: 20px 0;
+        
+        /* Animations */
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
-        .param-checkbox {
-            margin-right: 8px;
+        
+        .metric-card {
+            animation: slideIn 0.3s ease forwards;
         }
-        .legend {
-            margin-top: 10px;
+        
+        /* Utility classes */
+        .text-muted {
+            color: var(--text-muted) !important;
         }
-        .legend-item {
-            display: inline-block;
-            margin-right: 15px;
+        
+        .text-primary {
+            color: var(--text-primary) !important;
         }
-        .color-box {
-            display: inline-block;
-            width: 15px;
-            height: 15px;
-            margin-right: 5px;
+        
+        .text-secondary {
+            color: var(--text-secondary) !important;
+        }
+        
+        /* Date Range Picker Custom Styles */
+        .daterangepicker {
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-lg);
+            border-radius: 0.5rem;
+            color: var(--text-primary);
+        }
+        
+        .daterangepicker .calendar-table {
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-color);
+        }
+        
+        .daterangepicker td.active, .daterangepicker td.active:hover {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .daterangepicker td.available:hover, .daterangepicker th.available:hover {
+            background-color: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+        
+        .daterangepicker .ranges li:hover {
+            background-color: var(--bg-secondary);
+            color: var(--primary-color);
+        }
+        
+        .daterangepicker .ranges li.active {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .daterangepicker .drp-selected {
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+        
+        .daterangepicker .drp-buttons .btn {
+            font-weight: 500;
+            padding: 0.375rem 0.75rem;
+            border-radius: 0.375rem;
+        }
+        
+        .daterangepicker .drp-buttons .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        .daterangepicker .drp-buttons .btn-primary:hover {
+            background-color: #1e3a6f;
+            border-color: #1e3a6f;
         }
     </style>
 </head>
+
 <body>
-    <div class="container mt-4">
-        <h1 class="mb-4">WiCAN Logger Dashboard</h1>
-        
-        <div class="row">
-            <div class="col-md-4">
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <h5>Date Range</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <label for="dateRange" class="form-label">Select date range:</label>
-                            <input type="text" id="dateRange" class="form-control" />
+    <div class="container-fluid p-4">
+        <div class="container" style="max-width: 1200px;">
+            <!-- Enhanced Header with Logo -->
+            <div class="dashboard-header">
+                <div class="header-content">
+                    <div class="logo-section">
+                        <div class="logo-container">
+                            <!-- MeatPi Logo SVG with proper styling -->
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="-240.382 -81.2424 169.481 169.48" width="169.481px" height="169.48px">
+                        <g id="_haaUNSc7au_3N3MChrVwU" transform="matrix(1, 0, 0, 1, -110.17194694793051, 6.703576287733796)">
+                            <path fill="#46d2eb" d="M -45.47 81.534 C -50.214 81.534 -54.839 81.046 -59.374 80.3 L -55.487 70.615 C -52.203 71.059 -48.875 71.366 -45.47 71.366 C -40.76 71.366 -36.167 70.874 -31.698 70.042 L -42.994 57.807 L -59.028 57.807 L -62.418 57.807 L -65.807 57.807 L -65.807 47.641 L -76.916 47.641 C -78.09 49.656 -80.252 51.031 -82.753 51.031 C -86.496 51.031 -89.534 47.995 -89.534 44.249 C -89.534 40.504 -86.498 37.47 -82.753 37.47 C -80.25 37.47 -78.088 38.841 -76.916 40.86 L -65.807 40.86 L -65.807 37.47 L -65.807 30.688 L -59.028 30.688 L -25.13 30.688 L -25.13 32.138 L -16.813 41.148 C -16.22 40.978 -15.606 40.86 -14.962 40.86 C -11.218 40.86 -8.182 43.895 -8.182 47.641 C -8.182 51.383 -11.216 54.417 -14.962 54.417 C -18.708 54.417 -21.74 51.385 -21.74 47.641 C -21.74 47.084 -21.657 46.551 -21.533 46.033 L -29.437 37.47 L -59.026 37.47 L -59.026 51.029 L -38.689 51.029 L -38.689 52.475 L -24.141 68.23 C -11.757 64.539 -0.763 57.682 8.008 48.654 L -2.318 37.47 L -4.791 37.47 L -4.791 5.41 L -15.026 -5.669 C -17.857 -3.204 -20.866 -0.581 -23.785 1.963 C -24.348 2.459 -25.467 3.43 -25.467 3.43 L -28.519 3.476 L -28.519 3.572 L -43.018 3.572 C -44.192 5.59 -46.354 6.963 -48.856 6.963 C -52.6 6.963 -55.636 3.928 -55.636 0.182 C -55.636 -3.564 -52.6 -6.596 -48.856 -6.596 C -46.354 -6.596 -44.192 -5.225 -43.018 -3.206 L -28.519 -3.206 L -28.519 -2.466 L -8.182 -20.588 L -8.182 -47.272 L -21.738 -47.272 L -21.738 -32.771 C -19.723 -31.598 -18.352 -29.436 -18.352 -26.935 C -18.352 -23.191 -21.384 -20.153 -25.13 -20.153 C -28.872 -20.153 -31.909 -23.189 -31.909 -26.935 C -31.909 -29.438 -30.538 -31.599 -28.519 -32.771 L -28.519 -47.272 L -28.519 -50.662 L -28.519 -54.051 L -8.182 -54.051 L -8.182 -67.579 C -10.868 -69.132 -13.625 -70.579 -16.508 -71.793 C -17.587 -71.296 -18.779 -70.998 -20.047 -70.998 C -24.725 -70.998 -28.519 -74.793 -28.519 -79.473 C -28.519 -84.151 -24.725 -87.946 -20.047 -87.946 C -15.823 -87.946 -12.35 -84.85 -11.708 -80.812 C 18.269 -67.761 39.271 -37.986 39.271 -3.206 C 39.271 43.594 1.334 81.534 -45.47 81.534 Z M 12.155 0.184 C 8.411 0.184 5.377 -2.848 5.377 -6.594 C 5.377 -9.097 6.75 -11.259 8.765 -12.434 L 8.765 -40.49 L 12.155 -40.49 L 15.546 -40.49 L 19.068 -40.49 C 13.883 -49.4 6.881 -57.117 -1.401 -63.191 L -1.401 -13.374 L -6.188 -13.374 C -7.288 -12.417 -8.542 -11.321 -9.913 -10.129 L 2.375 3.184 L 1.865 3.574 L 1.985 3.574 L 1.985 13.743 L 6.317 13.743 C 7.488 11.724 9.65 10.353 12.153 10.353 C 15.896 10.353 18.934 13.389 18.934 17.135 C 18.934 20.877 15.898 23.914 12.153 23.914 C 9.65 23.914 7.488 22.541 6.317 20.524 L 1.985 20.524 L 1.985 32.14 L 12.527 43.558 C 22.864 30.769 29.104 14.528 29.104 -3.204 C 29.104 -14.095 26.719 -24.404 22.516 -33.711 L 15.544 -33.711 L 15.544 -12.434 C 17.563 -11.257 18.934 -9.097 18.934 -6.594 C 18.934 -2.85 15.898 0.184 12.155 0.184 Z M -45.47 -77.778 C -47.757 -77.778 -50.013 -77.635 -52.246 -77.433 L -52.246 -55.991 L -43.93 -46.982 C -43.339 -47.151 -42.725 -47.27 -42.081 -47.27 C -38.337 -47.27 -35.299 -44.234 -35.299 -40.488 C -35.299 -36.744 -38.335 -33.709 -42.081 -33.709 C -45.826 -33.709 -48.858 -36.744 -48.858 -40.488 C -48.858 -41.044 -48.775 -41.579 -48.649 -42.095 L -53.423 -47.27 L -57.035 -47.27 L -68.994 -36.844 L -59.841 -26.933 L -59.03 -26.933 L -59.03 -26.051 L -58.996 -26.014 L -59.03 -25.984 L -59.03 17.137 L -24.188 17.137 C -23.017 15.116 -20.855 13.745 -18.352 13.745 C -14.608 13.745 -11.57 16.781 -11.57 20.526 C -11.57 24.272 -14.606 27.304 -18.352 27.304 C -20.855 27.304 -23.017 25.931 -24.188 23.916 L -59.026 23.916 L -62.416 23.916 L -65.805 23.916 L -65.805 -23.402 L -96.896 -57.08 C -98.779 -55.285 -100.55 -53.383 -102.24 -51.402 L -73.397 -20.153 L -72.585 -20.153 L -72.585 -19.274 L -72.551 -19.236 L -72.585 -19.206 L -72.585 20.524 L -72.585 27.302 L -79.363 27.302 L -96.312 27.302 L -99.7 27.302 L -103.09 27.302 L -103.09 10.355 L -118.77 10.355 C -113.6 38.406 -92.737 60.933 -65.608 68.539 L -69.421 78.048 C -104.55 67.701 -130.21 35.268 -130.21 -3.204 C -130.21 -50.006 -92.267 -87.944 -45.468 -87.944 C -40.86 -87.944 -36.371 -87.477 -31.962 -86.769 L -35.845 -77.085 C -39.003 -77.492 -42.199 -77.778 -45.47 -77.778 Z M -106.47 -45.985 C -115.01 -33.886 -120.04 -19.148 -120.04 -3.204 C -120.04 -0.918 -119.92 1.338 -119.72 3.574 L -96.314 3.574 L -96.314 6.965 L -96.314 10.355 L -96.314 20.524 L -79.365 20.524 L -79.365 -16.622 L -89.962 -28.1 L -99.81 -14.456 C -99.75 -14.102 -99.7 -13.745 -99.7 -13.374 C -99.7 -9.63 -102.74 -6.594 -106.48 -6.594 C -110.22 -6.594 -113.26 -9.63 -113.26 -13.374 C -113.26 -17.117 -110.22 -20.153 -106.48 -20.153 C -105.72 -20.153 -105.01 -20.001 -104.33 -19.773 L -94.651 -33.181 L -106.47 -45.985 Z M -59.026 -76.486 C -71.261 -74.236 -82.412 -68.957 -91.773 -61.53 L -73.589 -41.829 L -59.026 -54.526 L -59.026 -76.486 Z" clip-rule="evenodd" fill-rule="evenodd" id="_efnfk55a8_25"/>
+                        </g>
+                        </svg>
+                        </div>
+                        <div class="title-section">
+                            <h1>WiCAN Dashboard</h1>
+                            <p class="subtitle">MeatPi Electronics</p>
                         </div>
                     </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header">
-                        <h5>Parameters</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="search-box">
-                            <input type="text" id="paramSearch" class="form-control" placeholder="Search parameters...">
-                        </div>
-                        <div class="parameter-list" id="parameterList">
-                            <div class="loading" id="paramLoading">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">Loading...</span>
-                                </div>
-                                <p>Loading parameters...</p>
-                            </div>
-                        </div>
+                    <div class="connection-status">
+                        <div class="connection-dot" id="connectionDot"></div>
+                        <span id="connectionText" style="font-weight: 500;">Connecting...</span>
+                        <small class="text-muted ms-2" id="lastUpdate">Last updated: Never</small>
                     </div>
                 </div>
             </div>
             
-            <div class="col-md-8">
-                <div class="card">
-                    <div class="card-header">
-                        <h5>Data Visualization</h5>
-                    </div>
-                    <div class="card-body">
-                        <div id="databaseInfo" class="mb-3">
-                            <!-- Status and info will be inserted here -->
-                        </div>
-                        <div id="dbLoading" class="loading">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
+            <!-- Navigation Tabs -->
+            <ul class="nav nav-tabs" id="dashboardTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="live-data-tab" data-bs-toggle="tab" data-bs-target="#live-data" type="button" role="tab">
+                        <i data-lucide="activity"></i>
+                        Live Data
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="logger-data-tab" data-bs-toggle="tab" data-bs-target="#logger-data" type="button" role="tab">
+                        <i data-lucide="database"></i>
+                        Logger Data
+                    </button>
+                </li>
+            </ul>
+            
+            <!-- Tab Content -->
+            <div class="tab-content" id="dashboardTabContent">
+                <!-- Live Data Tab -->
+                <div class="tab-pane fade show active" id="live-data" role="tabpanel">
+                    <!-- Controls -->
+                    <div class="section-card">
+                        <div class="controls-section">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="autoRefreshToggle" checked>
+                                <label class="form-check-label" for="autoRefreshToggle">
+                                    Auto-refresh (5s)
+                                </label>
                             </div>
-                            <p>Loading database information...</p>
+                            <button class="btn btn-custom btn-success-custom" id="refreshBtn" onclick="fetchLiveData()">
+                                <i data-lucide="refresh-cw" id="refreshIcon"></i>
+                                Refresh Now
+                            </button>
                         </div>
-                        <div id="chart-container"></div>
-                        <div id="chartLegend" class="legend"></div>
+                    </div>
+                    
+                    <!-- Loading State -->
+                    <div id="liveDataLoading" class="loading-spinner">
+                        <div class="spinner-border text-primary me-3" role="status"></div>
+                        <span>Loading live data...</span>
+                    </div>
+                    
+                    <!-- Live Data Container -->
+                    <div id="liveDataContainer" style="display: none;">
+                        <!-- Sections will be inserted here -->
+                    </div>
+                    
+                    <!-- No Data Message -->
+                    <div id="noDataMessage" class="no-data-message" style="display: none;">
+                        <i data-lucide="car" class="no-data-icon"></i>
+                        <h3 class="h4 mb-2">No Live Data Available</h3>
+                        <p class="text-muted mb-0">Start your engine and check your WiCAN connection</p>
+                    </div>
+                </div>
+                
+                <!-- Logger Data Tab -->
+                <div class="tab-pane fade" id="logger-data" role="tabpanel">
+                    <div class="row">
+                        <div class="col-lg-4">
+                            <div class="section-card">
+                                <div class="section-header">
+                                    <i data-lucide="calendar" class="section-icon"></i>
+                                    <h3 class="section-title">Date Range</h3>
+                                </div>
+                                <div class="mb-0">
+                                    <label for="dateRange" class="form-label">Select date range:</label>
+                                    <div class="input-group">
+                                        <input type="text" id="dateRange" class="form-control" placeholder="Select date range" readonly style="cursor: pointer; background-color: white;" />
+                                        <span class="input-group-text" style="cursor: pointer;">
+                                            <i data-lucide="calendar" style="width: 18px; height: 18px;"></i>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="section-card">
+                                <div class="section-header">
+                                    <i data-lucide="settings" class="section-icon"></i>
+                                    <h3 class="section-title">Parameters</h3>
+                                </div>
+                                <div class="search-box mb-3">
+                                    <input type="text" id="paramSearch" class="form-control" placeholder="Search parameters...">
+                                </div>
+                                <div class="parameter-list" id="parameterList">
+                                    <div class="loading-spinner" id="paramLoading">
+                                        <div class="spinner-border text-primary me-3" role="status"></div>
+                                        <span>Loading parameters...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-lg-8">
+                            <div class="section-card">
+                                <div class="section-header">
+                                    <i data-lucide="bar-chart-3" class="section-icon"></i>
+                                    <h3 class="section-title">Data Visualization</h3>
+                                </div>
+                                <div id="databaseInfo" class="mb-3"></div>
+                                <div id="dbLoading" class="loading-spinner">
+                                    <div class="spinner-border text-primary me-3" role="status"></div>
+                                    <span>Loading database information...</span>
+                                </div>
+                                <div id="chart-container"></div>
+                                <div id="chartLegend" class="legend mt-3"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -136,6 +756,860 @@
     <script src="chartjs-adapter-moment.min.js"></script>
     <script src="jszip.min.js"></script>
     <script src="dashboard.js"></script>
+    <script>
+        // Embedded Lucide icons used in the dashboard
+        const lucideIcons = {
+            "activity": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
+            "database": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>',
+            "thermometer": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/></svg>',
+            "gauge": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>',
+            "zap": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+            "battery": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="16" height="10" rx="2" ry="2"/><line x1="22" x2="22" y1="11" y2="13"/></svg>',
+            "trending-up": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>',
+            "route": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg>',
+            "fuel": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 22h12"/><path d="M12 16H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h8"/><path d="M17 22V9"/><path d="M17 13H9"/><path d="M20 13V5a2 2 0 0 0-2-2h-3v10"/></svg>',
+            "bar-chart-3": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>',
+            "droplets": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.84-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z"/><path d="M12.56 6.6A10.97 10.97 0 0 0 14 3.02c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a6.98 6.98 0 0 1-11.91 4.97"/></svg>',
+            "wind": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/><path d="M9.6 4.6A2 2 0 1 1 11 8H2"/><path d="M12.6 19.4A2 2 0 1 0 14 16H2"/></svg>',
+            "disc": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="2"/></svg>',
+            "settings": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>',
+            "circle": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>',
+            "percent": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" x2="5" y1="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>',
+            "power": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" x2="12" y1="2" y2="12"/></svg>',
+            "hash": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="9" y2="9"/><line x1="4" x2="20" y1="15" y2="15"/><line x1="10" x2="8" y1="3" y2="21"/><line x1="16" x2="14" y1="3" y2="21"/></svg>',
+            "car": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 16H9m10 0h3v-3.15a1 1 0 0 0-.84-.99L16 11l-2.7-3.6a1 1 0 0 0-.8-.4H5.24a2 2 0 0 0-1.8 1.1l-.8 1.63A6 6 0 0 0 2 12.42V16h2"/><circle cx="6.5" cy="16.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/></svg>',
+            "calendar": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>',
+            "refresh-cw": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>',
+            "check-circle": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+            "x-circle": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+            "alert-triangle": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+        };
 
+        // Add CSS for proper icon sizing and centering
+        const iconStyle = document.createElement('style');
+        iconStyle.textContent = `
+            /* Fix icon sizing and centering */
+            [data-lucide] {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                stroke-width: 2;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+                fill: none;
+            }
+            
+            /* Icon sizes based on container */
+            .section-icon svg {
+                width: 100%;
+                height: 100%;
+            }
+            
+            .metric-icon svg {
+                width: 100%;
+                height: 100%;
+            }
+            
+            .status-icon svg {
+                width: 100%;
+                height: 100%;
+            }
+            
+            /* Ensure all icon containers properly center their content */
+            .metric-icon, .section-icon, .status-icon {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            
+            /* Match the original styling for nav icons */
+            .nav-link [data-lucide] {
+                width: 18px;
+                height: 18px;
+                margin-right: 5px;
+            }
+            
+            /* Fixed size for small icons */
+            .status-indicator [data-lucide], 
+            .input-group-text [data-lucide],
+            .btn [data-lucide] {
+                width: 18px;
+                height: 18px;
+            }
+            
+            /* Larger icons */
+            .no-data-icon [data-lucide] {
+                width: 48px;
+                height: 48px;
+            }
+            
+            /* Fix for the specific metric card icons to ensure proper alignment */
+            .metric-card .metric-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+            }
+            
+            .metric-card .metric-icon {
+                width: 2rem;
+                height: 2rem;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+        `;
+        document.head.appendChild(iconStyle);
+
+        // Simple Lucide-compatible implementation
+        const lucide = {
+            createIcons: function() {
+                document.querySelectorAll('[data-lucide]').forEach(function(element) {
+                    const iconName = element.getAttribute('data-lucide');
+                    if (lucideIcons[iconName]) {
+                        element.innerHTML = lucideIcons[iconName];
+                        // Keep the data attribute for future reference
+                        element.setAttribute('icon', iconName);
+                    }
+                });
+            },
+            replace: function(element) {
+                const iconName = element.getAttribute('icon');
+                if (lucideIcons[iconName]) {
+                    element.innerHTML = lucideIcons[iconName];
+                }
+            }
+        };
+
+        // Initialize icons on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            lucide.createIcons();
+        });
+    </script>
+
+    
+    <script>
+        let autoRefreshInterval;
+        let isConnected = false;
+        let parameterInfo = {};
+        
+        const iconMapping = {
+            'temperature': 'thermometer',
+            'pressure': 'gauge',
+            'speed': 'gauge',
+            'power': 'zap',
+            'battery': 'battery',
+            'voltage': 'zap',
+            'current': 'trending-up',
+            'distance': 'route',
+            'volume_storage': 'fuel',
+            'power_factor': 'bar-chart-3',
+            'fluid': 'droplets',
+            'air': 'wind',
+            'rotation': 'disc',
+            'gear': 'settings',
+            'tire': 'circle',
+            'none': 'bar-chart-3',
+            'degC': 'thermometer',
+            '°C': 'thermometer',
+            'kPa': 'gauge',
+            'psi': 'gauge',
+            'rpm': 'disc',
+            '%': 'percent',
+            'V': 'zap',
+            'A': 'trending-up',
+            'W': 'power',
+            'kW': 'zap',
+            'kwh': 'battery',
+            'kWh': 'battery',
+            'km': 'route',
+            'km/h': 'gauge',
+            'mph': 'gauge',
+            'g/s': 'wind',
+            'L': 'fuel',
+            'gal': 'fuel',
+            'bar': 'gauge',
+            'Encoded': 'hash',
+            'none': 'bar-chart-3'
+        };
+        
+        const parameterSections = {
+            'Battery & Charging': {
+                icon: 'battery',
+                keywords: ['SOC', 'SOH', 'HV_V', 'HV_A', 'HV_W', 'RANGE', 'KWH_CHARGED', 'CHARGING', 'CHARGER_CONNECTED', 'CHARGING_DC', 'AC_C_C', 'AC_C_V', 'LV_V', 'BATT_CAPACITY', 'HV_CAPACITY'],
+                classes: ['battery', 'voltage', 'current', 'power'],
+                units: ['V', 'A', 'W', 'kW', 'kWh', 'kwh', '%']
+            },
+            'Vehicle Status': {
+                icon: 'car',
+                keywords: ['SPEED', 'ODOMETER', 'GEAR', 'THROTTLE', 'READY', 'PARK_BRAKE', 'FUEL', 'AC_P'],
+                classes: ['speed', 'distance', 'gear', 'volume_storage'],
+                units: ['km/h', 'mph', 'km', 'L', 'gal']
+            },
+            'Engine Parameters': {
+                icon: 'settings',
+                keywords: ['ENGINE_RPM', 'ENGINE_OIL_PRES', 'ENGINE_OIL_TEMP', 'PCM_Oil_Life', 'OILCH_DIS', 'FUEL_PRESSURE', 'PCM_Fuel_Rate', 'MAF', 'STFT', 'PCM_Knock_Count', 'PCM_Desired_Boost', 'PCM_Wastegate', 'PCM_Gear', 'PCM_Transmission_Temp', 'PCM_Learned_Octane_Ratio'],
+                classes: ['rotation', 'pressure', 'fluid', 'air'],
+                units: ['rpm', 'kPa', 'psi', 'bar', 'g/s']
+            },
+            'Temperatures': {
+                icon: 'thermometer',
+                keywords: ['BATT_TEMP', 'HV_T_A', 'HV_T_MAX', 'HV_T_MIN', 'HV_T_I', 'HV_T_1', 'HV_T_2', 'HV_T_3', 'HV_T_4', 'HV_T_5', 'COOLANT_TMP', 'INTAKE_AIR_TMP', 'T_CAB', 'TMP_A'],
+                classes: ['temperature'],
+                units: ['degC', '°C']
+            },
+            'Tire Pressures': {
+                icon: 'circle',
+                keywords: ['TYRE_P_FL', 'TYRE_P_FR', 'TYRE_P_RL', 'TYRE_P_RR'],
+                classes: ['tire', 'pressure'],
+                units: ['kPa', 'psi', 'bar']
+            },
+            'Battery Cell Analysis': {
+                icon: 'battery',
+                keywords: ['HV_C_V_MAX', 'HV_C_V_MAX_NO', 'HV_C_V_MIN', 'HV_C_V_MIN_NO', 'HV_C_D_MAX', 'HV_C_D_MAX_NO', 'HV_C_D_MIN', 'HV_C_D_MIN_NO'],
+                classes: ['battery'],
+                units: ['V']
+            },
+            'Power & Performance': {
+                icon: 'zap',
+                keywords: ['POWER_MAX', 'REGEN_MAX', 'HV_AV'],
+                classes: ['power', 'power_factor'],
+                units: ['W', 'kW', '%']
+            }
+        };
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            lucide.createIcons();
+            loadParameterInfo();
+            fetchLiveData();
+            startAutoRefresh();
+            
+        // Ensure jQuery and dependencies are loaded
+        $(document).ready(function() {
+            // Initialize date range picker when jQuery is ready
+            setTimeout(function() {
+                if ($.fn.daterangepicker) {
+                    $('#dateRange').daterangepicker({
+                        startDate: moment().subtract(7, 'days'),
+                        endDate: moment(),
+                        ranges: {
+                            'Today': [moment(), moment()],
+                            'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                            'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                            'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+                            'This Month': [moment().startOf('month'), moment().endOf('month')],
+                            'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+                        },
+                        locale: {
+                            format: 'MM/DD/YYYY',
+                            separator: ' - ',
+                            applyLabel: 'Apply',
+                            cancelLabel: 'Cancel',
+                            fromLabel: 'From',
+                            toLabel: 'To',
+                            customRangeLabel: 'Custom',
+                            weekLabel: 'W',
+                            daysOfWeek: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
+                            monthNames: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+                        },
+                        autoApply: false,
+                        alwaysShowCalendars: true,
+                        showDropdowns: true,
+                        linkedCalendars: false,
+                        opens: 'right',
+                        drops: 'down',
+                        buttonClasses: 'btn btn-sm',
+                        applyButtonClasses: 'btn-primary',
+                        cancelClass: 'btn-secondary'
+                    });
+                    
+                    // Set initial display value
+                    $('#dateRange').val(moment().subtract(7, 'days').format('MM/DD/YYYY') + ' - ' + moment().format('MM/DD/YYYY'));
+                    
+                    // Date range change handler
+                    $('#dateRange').on('apply.daterangepicker', function(ev, picker) {
+                        console.log('Date range selected:', picker.startDate.format('YYYY-MM-DD'), 'to', picker.endDate.format('YYYY-MM-DD'));
+                        $(this).val(picker.startDate.format('MM/DD/YYYY') + ' - ' + picker.endDate.format('MM/DD/YYYY'));
+                        
+                        // Trigger data reload with new date range
+                        if (typeof loadLoggerData === 'function') {
+                            loadLoggerData(picker.startDate, picker.endDate);
+                        }
+                    });
+                    
+                    // Cancel handler
+                    $('#dateRange').on('cancel.daterangepicker', function(ev, picker) {
+                        // Keep the previous value
+                    });
+                    
+                    // Make calendar icon clickable
+                    $('.input-group-text').on('click', function() {
+                        $('#dateRange').click();
+                    });
+                    
+                    // Recreate icons for the calendar icon in the input group
+                    lucide.createIcons();
+                } else {
+                    console.error('DateRangePicker plugin not loaded');
+                }
+            }, 100); // Small delay to ensure all scripts are loaded
+        });
+        });
+        
+        document.getElementById('live-data-tab').addEventListener('shown.bs.tab', function () {
+            fetchLiveData();
+            startAutoRefresh();
+        });
+        
+        document.getElementById('logger-data-tab').addEventListener('shown.bs.tab', function () {
+            stopAutoRefresh();
+            if (typeof initializeLoggerDashboard === 'function') {
+                initializeLoggerDashboard();
+            } else {
+                // Initialize logger dashboard components if the function doesn't exist
+                console.log('Initializing logger dashboard...');
+                // The daterangepicker is already initialized in DOMContentLoaded
+                // You can add additional logger initialization here if needed
+            }
+        });
+        
+        document.getElementById('autoRefreshToggle').addEventListener('change', function() {
+            if (this.checked) {
+                startAutoRefresh();
+            } else {
+                stopAutoRefresh();
+            }
+        });
+        
+        async function loadParameterInfo() {
+            try {
+                // Load standard PID info
+                console.log('Loading standard PID info...');
+                try {
+                    const stdPidResponse = await fetch('/std_pid_info');
+                    if (stdPidResponse.ok) {
+                        const stdPids = await stdPidResponse.json();
+                        if (Array.isArray(stdPids)) {
+                            stdPids.forEach(param => {
+                                if (param && param.name) {
+                                    parameterInfo[param.name] = {
+                                        unit: param.unit || '',
+                                        class: param.class || 'none'
+                                    };
+                                }
+                            });
+                            console.log('Standard PID info loaded:', Object.keys(parameterInfo).length, 'parameters');
+                        }
+                    }
+                } catch (stdError) {
+                    console.warn('Failed to load standard PID info:', stdError.message);
+                }
+                
+                // Load auto PID info with JSON repair attempt
+                console.log('Loading auto PID info...');
+                try {
+                    const autoPidResponse = await fetch('/load_auto_pid_car_data');
+                    if (autoPidResponse.ok) {
+                        let responseText = await autoPidResponse.text();
+                        console.log('Auto PID response length:', responseText.length);
+                        
+                        // Parse JSON directly without repair attempts
+                        try {
+                            const autoPidData = JSON.parse(responseText);
+                            processAutoPidData(autoPidData);
+                        } catch (jsonError) {
+                            console.warn('JSON parse failed:', jsonError.message);
+                            throw new Error('Failed to parse Auto PID data');
+                        }
+                    }
+                } catch (autoError) {
+                    console.warn('Failed to load auto PID info:', autoError.message);
+                }
+                
+            } catch (error) {
+                console.error('Error in loadParameterInfo:', error);
+            }
+            
+            // Ensure we have some basic parameter info even if loading fails
+            if (Object.keys(parameterInfo).length === 0) {
+                console.log('Using fallback parameter info');
+                addFallbackParameterInfo();
+            }
+            
+            console.log('Total parameters loaded:', Object.keys(parameterInfo).length);
+        }
+        
+        function processAutoPidData(autoPidData) {
+            if (autoPidData && autoPidData.cars && Array.isArray(autoPidData.cars)) {
+                autoPidData.cars.forEach(car => {
+                    if (car.pids && Array.isArray(car.pids)) {
+                        car.pids.forEach(pid => {
+                            if (pid.parameters && Array.isArray(pid.parameters)) {
+                                pid.parameters.forEach(param => {
+                                    if (param && param.name) {
+                                        parameterInfo[param.name] = {
+                                            unit: param.unit || '',
+                                            class: param.class || 'none'
+                                        };
+                                    }
+                                });
+                            }
+                        });
+                    }
+                });
+                console.log('Auto PID info processed successfully');
+            }
+        }
+        
+        function addFallbackParameterInfo() {
+            const fallbackParams = {
+                // Battery & EV parameters
+                'SOC': { unit: '%', class: 'battery' },
+                'SOH': { unit: '%', class: 'battery' },
+                'HV_V': { unit: 'V', class: 'voltage' },
+                'HV_A': { unit: 'A', class: 'current' },
+                'HV_W': { unit: 'W', class: 'power' },
+                'RANGE': { unit: 'km', class: 'distance' },
+                'CHARGING': { unit: 'none', class: 'none' },
+                'CHARGER_CONNECTED': { unit: 'none', class: 'none' },
+                
+                // Vehicle parameters  
+                'SPEED': { unit: 'km/h', class: 'speed' },
+                'ENGINE_RPM': { unit: 'rpm', class: 'rotation' },
+                'ODOMETER': { unit: 'km', class: 'distance' },
+                'GEAR': { unit: 'none', class: 'gear' },
+                'THROTTLE': { unit: '%', class: 'none' },
+                'READY': { unit: 'none', class: 'none' },
+                'PARK_BRAKE': { unit: 'none', class: 'none' },
+                'FUEL': { unit: '%', class: 'volume_storage' },
+                
+                // Temperature parameters
+                'BATT_TEMP': { unit: '°C', class: 'temperature' },
+                'COOLANT_TMP': { unit: '°C', class: 'temperature' },
+                'INTAKE_AIR_TMP': { unit: '°C', class: 'temperature' },
+                
+                // Pressure parameters
+                'ENGINE_OIL_PRES': { unit: 'kPa', class: 'pressure' },
+                'FUEL_PRESSURE': { unit: 'kPa', class: 'pressure' },
+                'TYRE_P_FL': { unit: 'kPa', class: 'pressure' },
+                'TYRE_P_FR': { unit: 'kPa', class: 'pressure' },
+                'TYRE_P_RL': { unit: 'kPa', class: 'pressure' },
+                'TYRE_P_RR': { unit: 'kPa', class: 'pressure' }
+            };
+            
+            Object.assign(parameterInfo, fallbackParams);
+        }
+        
+        function getParameterIcon(paramName) {
+            const cleanParamName = paramName.replace(/^\w+-/, '');
+            const info = parameterInfo[paramName] || parameterInfo[cleanParamName];
+            
+            if (info) {
+                if (info.class && iconMapping[info.class]) {
+                    return iconMapping[info.class];
+                }
+                if (info.unit && iconMapping[info.unit]) {
+                    return iconMapping[info.unit];
+                }
+            }
+            
+            return iconMapping['none'];
+        }
+        
+        function getParameterUnit(paramName) {
+            const cleanParamName = paramName.replace(/^\w+-/, '');
+            const info = parameterInfo[paramName] || parameterInfo[cleanParamName];
+            return info ? info.unit : '';
+        }
+        
+        function getBinaryStatus(value) {
+            if (value === true || value === 1 || value === '1') return 'active';
+            if (value === false || value === 0 || value === '0') return 'inactive';
+            return 'unknown';
+        }
+        
+        function isBinaryParameter(paramName, value) {
+            const binaryKeywords = ['CHARGING', 'CONNECTED', 'READY', 'BRAKE', 'DC'];
+            const numericKeywords = ['SPEED', 'RPM', 'TEMP', 'PRESSURE', 'VOLTAGE', 'CURRENT', 'POWER', 'SOC', 'RANGE', 'ODOMETER', 'THROTTLE', 'FUEL', 'GEAR'];
+            
+            if (numericKeywords.some(keyword => paramName.toUpperCase().includes(keyword))) {
+                return false;
+            }
+            
+            if (binaryKeywords.some(keyword => paramName.toUpperCase().includes(keyword))) {
+                return true;
+            }
+            
+            if (typeof value === 'boolean') {
+                return true;
+            }
+            
+            if (typeof value === 'number' && (value === 0 || value === 1)) {
+                const info = parameterInfo[paramName] || parameterInfo[paramName.replace(/^\w+-/, '')];
+                if (info && info.unit && info.unit !== 'none' && info.unit !== '') {
+                    return false;
+                }
+                return true;
+            }
+            
+            return false;
+        }
+        
+        function organizeParameters(data) {
+            const sections = {};
+            const unassigned = {};
+            
+            Object.keys(parameterSections).forEach(sectionName => {
+                sections[sectionName] = {};
+            });
+            
+            Object.entries(data).forEach(([key, value]) => {
+                let assigned = false;
+                const cleanParamName = key.replace(/^\w+-/, '');
+                const info = parameterInfo[key] || parameterInfo[cleanParamName];
+                
+                for (const [sectionName, sectionConfig] of Object.entries(parameterSections)) {
+                    if (sectionConfig.keywords.some(keyword => key.includes(keyword))) {
+                        sections[sectionName][key] = value;
+                        assigned = true;
+                        break;
+                    }
+                    
+                    if (!assigned && info) {
+                        if (info.class && sectionConfig.classes && sectionConfig.classes.includes(info.class)) {
+                            sections[sectionName][key] = value;
+                            assigned = true;
+                            break;
+                        }
+                        
+                        if (!assigned && info.unit && sectionConfig.units && sectionConfig.units.includes(info.unit)) {
+                            if (sectionName === 'Tire Pressures') {
+                                if (key.toLowerCase().includes('tyre') || key.toLowerCase().includes('tire')) {
+                                    sections[sectionName][key] = value;
+                                    assigned = true;
+                                    break;
+                                }
+                            } else {
+                                sections[sectionName][key] = value;
+                                assigned = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                if (!assigned) {
+                    unassigned[key] = value;
+                }
+            });
+            
+            if (Object.keys(unassigned).length > 0) {
+                sections['Other Parameters'] = unassigned;
+                parameterSections['Other Parameters'] = { icon: 'bar-chart-3', keywords: [], classes: [], units: [] };
+            }
+            
+            Object.keys(sections).forEach(sectionName => {
+                if (Object.keys(sections[sectionName]).length === 0) {
+                    delete sections[sectionName];
+                }
+            });
+            
+            return sections;
+        }
+        
+        function fetchLiveData() {
+            const refreshIcon = document.getElementById('refreshIcon');
+            
+            fetch('/autopid_data')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    updateConnectionStatus(true);
+                    displayLiveData(data);
+                    updateLastUpdateTime();
+                })
+                .catch(error => {
+                    console.error('Error fetching live data:', error);
+                    updateConnectionStatus(false);
+                    showNoDataMessage();
+                })
+                .finally(() => {
+                    document.getElementById('liveDataLoading').style.display = 'none';
+                });
+        }
+        
+        function displayLiveData(data) {
+            const container = document.getElementById('liveDataContainer');
+            const noDataMsg = document.getElementById('noDataMessage');
+            
+            if (!data || Object.keys(data).length === 0) {
+                showNoDataMessage();
+                return;
+            }
+            
+            noDataMsg.style.display = 'none';
+            
+            // First time or after connection loss, build the entire structure
+            if (container.innerHTML === '' || container.style.display === 'none') {
+                container.style.display = 'block';
+                const organizedData = organizeParameters(data);
+                
+                Object.entries(organizedData).forEach(([sectionName, sectionData], sectionIndex) => {
+                    const sectionElement = createSection(sectionName, sectionData, sectionIndex);
+                    container.appendChild(sectionElement);
+                });
+                
+                lucide.createIcons();
+            } else {
+                // Just update values for existing elements
+                updateMetricValues(data);
+            }
+        }
+        
+        function createSection(sectionName, sectionData, sectionIndex) {
+            const section = document.createElement('div');
+            section.className = 'section-card';
+            section.style.animationDelay = `${sectionIndex * 0.05}s`;
+            
+            const sectionConfig = parameterSections[sectionName] || { icon: 'bar-chart-3' };
+            
+            section.innerHTML = `
+                <div class="section-header">
+                    <i data-lucide="${sectionConfig.icon}" class="section-icon"></i>
+                    <h3 class="section-title">${sectionName}</h3>
+                </div>
+                <div class="metrics-grid" id="section-${sectionName.replace(/\s+/g, '-')}">
+                </div>
+            `;
+            
+            const metricsGrid = section.querySelector('.metrics-grid');
+            
+            Object.entries(sectionData).forEach(([key, value], index) => {
+                const card = createMetricCard(key, value, index);
+                metricsGrid.appendChild(card);
+            });
+            
+            return section;
+        }
+        
+        function updateMetricValues(data) {
+            Object.entries(data).forEach(([paramName, paramValue]) => {
+                // Find the element for this parameter
+                const elements = document.querySelectorAll(`.metric-card[data-param="${paramName}"]`);
+                
+                if (elements.length > 0) {
+                    elements.forEach(card => {
+                        const isBinary = isBinaryParameter(paramName, paramValue);
+                        
+                        if (isBinary) {
+                            const status = getBinaryStatus(paramValue);
+                            const statusIndicator = card.querySelector('.status-indicator');
+                            if (statusIndicator) {
+                                statusIndicator.className = `status-indicator status-${status}`;
+                                const statusIcon = statusIndicator.querySelector('.status-icon');
+                                const statusText = statusIndicator.querySelector('.status-text');
+                                
+                                if (statusIcon) {
+                                    // Update icon without recreating
+                                    const newIconName = status === 'active' ? 'check-circle' : 
+                                                    status === 'inactive' ? 'x-circle' : 'alert-triangle';
+                                    
+                                    if (statusIcon.getAttribute('icon') !== newIconName) {
+                                        statusIcon.setAttribute('icon', newIconName);
+                                        lucide.replace(statusIcon);
+                                    }
+                                }
+                                
+                                if (statusText) {
+                                    statusText.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+                                }
+                            }
+                        } else {
+                            const valueElement = card.querySelector('.metric-value');
+                            if (valueElement) {
+                                // Keep the unit, just update the value text
+                                const unitElement = valueElement.querySelector('.metric-unit');
+                                const unitHtml = unitElement ? unitElement.outerHTML : '';
+                                valueElement.innerHTML = paramValue + (unitHtml || '');
+                            }
+                        }
+                    });
+                }
+            });
+        }
+
+        function createMetricCard(paramName, paramValue, index) {
+            const card = document.createElement('div');
+            card.className = 'metric-card';
+            card.style.animationDelay = `${index * 0.02}s`;
+            card.setAttribute('data-param', paramName); // Add data attribute for easy lookup
+            
+            const displayName = paramName.replace(/^\w+-/, '').replace(/([A-Z])/g, ' $1').trim();
+            const iconName = getParameterIcon(paramName);
+            const unit = getParameterUnit(paramName);
+            const isBinary = isBinaryParameter(paramName, paramValue);
+            
+            if (isBinary) {
+                const status = getBinaryStatus(paramValue);
+                card.innerHTML = `
+                    <div class="metric-header">
+                        <p class="metric-title">${displayName}</p>
+                        <i data-lucide="${iconName}" class="metric-icon"></i>
+                    </div>
+                    <div class="status-indicator status-${status}">
+                        <i data-lucide="${status === 'active' ? 'check-circle' : status === 'inactive' ? 'x-circle' : 'alert-triangle'}" class="status-icon"></i>
+                        <span class="status-text">${status.charAt(0).toUpperCase() + status.slice(1)}</span>
+                    </div>
+                `;
+            } else {
+                card.innerHTML = `
+                    <div class="metric-header">
+                        <p class="metric-title">${displayName}</p>
+                        <i data-lucide="${iconName}" class="metric-icon"></i>
+                    </div>
+                    <p class="metric-value">
+                        ${paramValue}
+                        ${unit ? `<span class="metric-unit">${unit}</span>` : ''}
+                    </p>
+                `;
+            }
+            
+            return card;
+        }
+        
+        function updateConnectionStatus(connected) {
+            isConnected = connected;
+            const connectionDot = document.getElementById('connectionDot');
+            const connectionText = document.getElementById('connectionText');
+            
+            if (connected) {
+                connectionDot.className = 'connection-dot connection-connected';
+                connectionText.textContent = 'Connected';
+            } else {
+                connectionDot.className = 'connection-dot connection-disconnected';
+                connectionText.textContent = 'Disconnected';
+            }
+        }
+        
+        function showNoDataMessage() {
+            document.getElementById('liveDataContainer').style.display = 'none';
+            document.getElementById('noDataMessage').style.display = 'block';
+        }
+        
+        function updateLastUpdateTime() {
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent = 
+                `Last updated: ${now.toLocaleTimeString()}`;
+        }
+        
+        function startAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+            }
+            
+            if (document.getElementById('autoRefreshToggle').checked) {
+                autoRefreshInterval = setInterval(() => {
+                    if (document.getElementById('live-data').classList.contains('active')) {
+                        fetchLiveData();
+                    }
+                }, 5000);
+            }
+        }
+        
+        function stopAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
+        }
+        
+        window.addEventListener('unhandledrejection', function(event) {
+            console.error('Unhandled promise rejection:', event.reason);
+            updateConnectionStatus(false);
+        });
+        
+        let performanceMetrics = {
+            lastFetchTime: 0,
+            averageFetchTime: 0,
+            fetchCount: 0
+        };
+        
+        function trackPerformance(startTime) {
+            const fetchTime = Date.now() - startTime;
+            performanceMetrics.fetchCount++;
+            performanceMetrics.lastFetchTime = fetchTime;
+            performanceMetrics.averageFetchTime = 
+                (performanceMetrics.averageFetchTime * (performanceMetrics.fetchCount - 1) + fetchTime) / performanceMetrics.fetchCount;
+            
+            if (fetchTime > 2000) {
+                console.warn(`Slow fetch detected: ${fetchTime}ms`);
+            }
+        }
+        
+        const originalFetch = window.fetch;
+        window.fetch = function(...args) {
+            const startTime = Date.now();
+            return originalFetch.apply(this, args).then(response => {
+                trackPerformance(startTime);
+                return response;
+            });
+        };
+        
+        setInterval(() => {
+            if (performanceMetrics.fetchCount > 0) {
+                const connectionText = document.getElementById('connectionText');
+                if (isConnected) {
+                    connectionText.textContent = `Connected (${performanceMetrics.lastFetchTime}ms)`;
+                }
+            }
+        }, 1000);
+        
+        window.addEventListener('beforeunload', function() {
+            stopAutoRefresh();
+        });
+        
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                stopAutoRefresh();
+            } else if (document.getElementById('autoRefreshToggle').checked) {
+                startAutoRefresh();
+            }
+        });
+        
+        function handleMobileLayout() {
+            const isMobile = window.innerWidth < 768;
+            const metricsGrids = document.querySelectorAll('.metrics-grid');
+            
+            metricsGrids.forEach(grid => {
+                if (isMobile) {
+                    grid.style.gridTemplateColumns = '1fr';
+                } else {
+                    grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(260px, 1fr))';
+                }
+            });
+        }
+        
+        window.addEventListener('resize', handleMobileLayout);
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(handleMobileLayout, 100);
+        });
+        
+        // Add CSS for spinning animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+            }
+            .spin {
+                animation: spin 1s linear infinite;
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
 </body>
 </html>
