@@ -18,4 +18,5 @@ esp_err_t rtcm_get_iso8601_time(char *timestamp, size_t max_len);
 time_t rtcm_bcd_to_unix_timestamp(uint8_t hour, uint8_t min, uint8_t sec, 
 uint8_t year, uint8_t month, uint8_t day);
 time_t rtcm_get_unix_timestamp(void);
+esp_err_t rtcm_sync_system_time_from_rtc(void);
 #endif /* _RTCM_H_ */
