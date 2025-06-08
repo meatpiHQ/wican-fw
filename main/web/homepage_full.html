@@ -2290,7 +2290,7 @@ function loadAutoTable(jsonData) {
             bleAlertShown = true;
 		} else {
 			document.getElementById("mqtt_en").disabled = false;
-			document.getElementById("batt_alert").disabled = false;
+			document.getElementById("batt_alert").disabled = true;
 		}
 		if(document.getElementById("ap_pass_value").value.length < 8 || document.getElementById("ap_pass_value").value.length > 63 || document.getElementById("pass_value").value.length < 8 || document.getElementById("pass_value").value.length > 63) {
             showNotification("AP/Station password len, min=0 max=64", "red");
@@ -2339,14 +2339,14 @@ function loadAutoTable(jsonData) {
 		}
 		if(document.getElementById("sleep_status").value == "enable") {
 			if(document.getElementById("ble_status").selectedIndex != "0") {
-				document.getElementById("batt_alert").disabled = false;
+				document.getElementById("batt_alert").disabled = true;
 			}
 		} else if(document.getElementById("sleep_status").value == "disable") {
 			document.getElementById("batt_alert").disabled = true;
-			document.getElementById("batt_alert").selectedIndex = "1";
+			document.getElementById("batt_alert").selectedIndex = "0";
 		}
 		if(document.getElementById("batt_alert").value == "enable") {
-			document.getElementById("batt_alert_div").style.display = "block";
+			document.getElementById("batt_alert_div").style.display = "none";
 		} else if(document.getElementById("batt_alert").value == "disable") {
 			document.getElementById("batt_alert_div").style.display = "none";
 		}
@@ -2411,7 +2411,7 @@ function loadAutoTable(jsonData) {
 			document.getElementById("protocol").value = obj.protocol;
 			document.getElementById("batt_voltage").innerHTML = obj.batt_voltage;
 			if(document.getElementById("batt_alert").value == "enable") {
-				document.getElementById("batt_alert_div").style.display = "block";
+				document.getElementById("batt_alert_div").style.display = "none";
 			} else if(document.getElementById("batt_alert").value == "disable") {
 				document.getElementById("batt_alert_div").style.display = "none";
 			}
@@ -2916,7 +2916,7 @@ function loadAutoTable(jsonData) {
             document.getElementById('sleep_time_value').textContent = obj.sleep_time;
             document.getElementById("wakeup_interval").value = obj.wakeup_interval;
             document.getElementById('wakeup_interval_value').textContent = obj.wakeup_interval;
-			document.getElementById("batt_alert").value = obj.batt_alert;
+			document.getElementById("batt_alert").value = "disable";
 			document.getElementById("batt_alert_ssid").value = obj.batt_alert_ssid;
 			document.getElementById("batt_alert_pass").value = obj.batt_alert_pass;
 			document.getElementById("batt_alert_volt").value = obj.batt_alert_volt;
@@ -2951,7 +2951,7 @@ function loadAutoTable(jsonData) {
 				document.getElementById("port_type").disabled = true;
 			}
 			if(document.getElementById("batt_alert").value == "enable") {
-				document.getElementById("batt_alert_div").style.display = "block";
+				document.getElementById("batt_alert_div").style.display = "none";
 			} else if(document.getElementById("batt_alert").value == "disable") {
 				document.getElementById("batt_alert_div").style.display = "none";
 			}

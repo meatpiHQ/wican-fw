@@ -2194,13 +2194,13 @@ static void config_server_load_cfg(char *cfg)
 	ESP_LOGE(TAG, "device_config.sleep_volt: %s", device_config.sleep_volt);
 
 	//*****
-	key = cJSON_GetObjectItem(root,"batt_alert");
-	if(key == 0 || (strlen(key->valuestring) > sizeof(device_config.batt_alert)))
-	{
-		goto config_error;
-	}
+	// key = cJSON_GetObjectItem(root,"batt_alert");
+	// if(key == 0 || (strlen(key->valuestring) > sizeof(device_config.batt_alert)))
+	// {
+	// 	goto config_error;
+	// }
 
-	strcpy(device_config.batt_alert, key->valuestring);
+	strcpy(device_config.batt_alert, "disable");
 	ESP_LOGE(TAG, "device_config.batt_alert: %s", device_config.batt_alert);
 	//*****
 
