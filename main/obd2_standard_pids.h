@@ -3625,4 +3625,30 @@ static inline const std_pid_t* get_pid(uint8_t pid_number) {
     return (pid_number < PID_ARRAY_SIZE) ? &pid_array[pid_number] : NULL;
 }
 
+/**
+ * @brief Create JSON string containing all standard OBD2 PIDs information
+ * @return Pointer to JSON string allocated in PSRAM, or NULL on failure
+ * @note Caller is responsible for freeing the returned memory using heap_caps_free()
+ */
+char* create_standard_pids_json(void);
+
+/**
+ * @brief Get standard PIDs information as JSON string (cached)
+ * @return Pointer to JSON string in PSRAM, or NULL on failure
+ */
+char* get_standard_pids_json(void);
+
+/**
+ * @brief Free the standard PIDs JSON string from PSRAM
+ */
+void free_standard_pids_json(void);
+
+/**
+ * @brief Get information for a specific PID as JSON
+ * @param pid_number The PID number (0x00 to 0xFF)
+ * @return Pointer to JSON string allocated in PSRAM, or NULL if PID not found
+ * @note Caller is responsible for freeing the returned memory using heap_caps_free()
+ */
+char* get_pid_info_json(uint8_t pid_number);
+
 #endif // OBD2_PIDS_H
