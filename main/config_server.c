@@ -480,7 +480,8 @@ static esp_err_t file_handler(httpd_req_t *req)
                             fclose(fp);
                             return ESP_ERR_NO_MEM;
                         }
-                        
+                        memset(buffer, 0, chunk_size);
+
                         size_t bytes_read;
                         while ((bytes_read = fread(buffer, 1, chunk_size, fp)) > 0) {
                             httpd_resp_send_chunk(req, buffer, bytes_read);
@@ -534,6 +535,7 @@ static esp_err_t file_handler(httpd_req_t *req)
 								httpd_resp_send_500(req);
 								return ESP_ERR_NO_MEM;
 							}
+							memset(buffer, 0, chunk_size);
 							
 							size_t bytes_read;
 							while ((bytes_read = fread(buffer, 1, chunk_size, fp)) > 0) {
@@ -619,6 +621,7 @@ static esp_err_t store_config_handler(httpd_req_t *req)
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
         return ESP_ERR_NO_MEM;
     }
+	memset(buf, 0, buf_size + 1);
 
     // Receive data
     int received = httpd_req_recv(req, buf, buf_size);
@@ -696,6 +699,7 @@ static esp_err_t store_canflt_handler(httpd_req_t *req)
     {
         return ESP_ERR_NO_MEM; // Memory allocation failure
     }
+	memset(buf, 0, buf_size + 1);
 
     int ret = httpd_req_recv(req, buf, buf_size);
 
@@ -738,6 +742,7 @@ static esp_err_t store_canflt_handler(httpd_req_t *req)
 		int32_t filesize = ftell(f1);
 		fseek(f1, 0, SEEK_SET);
 		mqtt_canflt_file = malloc(filesize+1);
+		memset(mqtt_canflt_file, 0, filesize + 1);
 		ESP_LOGI(__func__, "mqtt_canflt_file File size: %ld", filesize);
 		fseek(f1, 0, SEEK_SET);
 		fread(mqtt_canflt_file, sizeof(char), filesize, f1);
@@ -792,6 +797,8 @@ static esp_err_t load_pid_auto_handler(httpd_req_t *req)
         httpd_resp_send_500(req);
         return ESP_FAIL;
     }
+
+	memset(buf, 0, filesize + 1);
 
     size_t read = fread(buf, 1, filesize, f);
     fclose(f);
@@ -850,7 +857,7 @@ static esp_err_t load_pid_auto_config_handler(httpd_req_t *req)
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
         return ESP_FAIL;
     }
-
+	memset(buf, 0, file_size + 1);
     // Read the file into the buffer
     size_t read_len = fread(buf, 1, file_size, fd);
     fclose(fd);
@@ -935,6 +942,7 @@ static esp_err_t system_commands_handler(httpd_req_t *req)
         ESP_LOGE(TAG, "Memory allocation failure");
         return ESP_ERR_NO_MEM;
     }
+	memset(buf, 0, buf_size + 1);
 
     int ret = httpd_req_recv(req, buf, buf_size);
     if (ret <= 0)
@@ -1166,6 +1174,8 @@ static esp_err_t store_car_data_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
 
+	memset(json_buffer, 0, total_len + 1);
+
     // Receive all data first
     char *temp_buffer = malloc(1024);
     if (!temp_buffer) {
@@ -1174,6 +1184,8 @@ static esp_err_t store_car_data_handler(httpd_req_t *req)
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
         return ESP_FAIL;
     }
+
+	memset(temp_buffer, 0, 1024);
 
     esp_err_t ret_val = ESP_OK;
     while (received < total_len) {
@@ -2693,7 +2705,14 @@ static httpd_handle_t config_server_init(void)
     if(xServerEventGroup == NULL)
     {
 		server_data.scratch = malloc(SCRATCH_BUFSIZE);
-    	xServerEventGroup = xEventGroupCreate();
+		if(server_data.scratch == NULL)
+		{
+			ESP_LOGE(TAG, "Failed to allocate memory for server data");
+			return NULL;
+		}
+		memset(server_data.scratch, 0, SCRATCH_BUFSIZE);
+		
+		xServerEventGroup = xEventGroupCreate();
     	config_server_wifi_connected(0);
     }
 
@@ -2780,6 +2799,7 @@ static httpd_handle_t config_server_init(void)
 			device_config_file = heap_caps_malloc(filesize + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 			if (device_config_file != NULL)
 			{
+				memset(device_config_file, 0, filesize + 1);
 				fread(device_config_file, sizeof(char), filesize, f);
 				device_config_file[filesize] = 0;
 				ESP_LOGI(TAG, "config.json: %s", device_config_file);
@@ -2805,6 +2825,7 @@ static httpd_handle_t config_server_init(void)
 			mqtt_canflt_file = heap_caps_malloc(filesize + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 			if (mqtt_canflt_file != NULL)
 			{
+				memset(mqtt_canflt_file, 0, filesize + 1);
 				fread(mqtt_canflt_file, sizeof(char), filesize, f);
 				mqtt_canflt_file[filesize] = 0;
 				ESP_LOGI(TAG, "mqtt_canfilt.json: %s", mqtt_canflt_file);
@@ -2972,6 +2993,7 @@ void config_server_start(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, u
             ESP_LOGE(TAG, "Failed to allocate websocket task stack memory");
             return;
         }
+        memset(websocket_task_stack, 0, 4096);
         
         // Create static task
         xwebsocket_handle = xTaskCreateStatic(
