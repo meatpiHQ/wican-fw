@@ -79,6 +79,8 @@ idf_component_register(
         "web/src/homepage.html"
         "web/src/dashboard.html"
         "web/src/dashboard.js"
+        "web/src/lucide_icons.js"
+        "web/src/dashboard_live.js"
         "obd_fw/V2.3.18.txt"
         "logo.txt"
 )
