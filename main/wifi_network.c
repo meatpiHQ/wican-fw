@@ -34,6 +34,7 @@
 #include "config_server.h"
 #include "ble.h"
 #include "dev_status.h"
+#include <cJSON.h>
 
 #define WIFI_CONNECTED_BIT 			BIT0
 #define WIFI_FAIL_BIT     			BIT1
@@ -265,6 +266,96 @@ static void wifi_conn_task(void *pvParameters)
 		vTaskDelay(pdTICKS_TO_MS(connect_delay[s_retry_num++]));
 		s_retry_num %= (sizeof(connect_delay)/sizeof(TickType_t));
 	}
+}
+
+char* wifi_network_scan(void)
+{
+    wifi_scan_config_t scan_config = {
+        .ssid = NULL,
+        .bssid = NULL,
+        .channel = 0,
+        .show_hidden = true,
+        .scan_type = WIFI_SCAN_TYPE_ACTIVE,
+        .scan_time.active.min = 100,
+        .scan_time.active.max = 300
+    };
+    
+    ESP_LOGI(WIFI_TAG, "Starting WiFi scan");
+    
+    // Start the scan
+    ESP_ERROR_CHECK(esp_wifi_scan_start(&scan_config, true));
+    
+    // Get number of discovered access points
+    uint16_t ap_count = 0;
+    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
+    
+    if (ap_count == 0) {
+        ESP_LOGI(WIFI_TAG, "No access points found");
+        cJSON *empty_json = cJSON_CreateObject();
+        cJSON *empty_array = cJSON_CreateArray();
+        cJSON_AddItemToObject(empty_json, "networks", empty_array);
+        char *json_str = cJSON_Print(empty_json);
+        cJSON_Delete(empty_json);
+        return json_str;
+    }
+    
+    // Allocate memory for AP records
+    wifi_ap_record_t *ap_records = malloc(sizeof(wifi_ap_record_t) * ap_count);
+    if (ap_records == NULL) {
+        ESP_LOGE(WIFI_TAG, "Failed to allocate memory for AP records");
+        return NULL;
+    }
+    
+    // Get AP records
+    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&ap_count, ap_records));
+    
+    // Create JSON object
+    cJSON *root = cJSON_CreateObject();
+    cJSON *networks = cJSON_CreateArray();
+    cJSON_AddItemToObject(root, "networks", networks);
+    
+    // Add each AP to the JSON array
+    for (int i = 0; i < ap_count; i++) {
+        cJSON *ap = cJSON_CreateObject();
+        
+        cJSON_AddStringToObject(ap, "ssid", (char*)ap_records[i].ssid);
+        cJSON_AddNumberToObject(ap, "rssi", ap_records[i].rssi);
+        cJSON_AddNumberToObject(ap, "channel", ap_records[i].primary);
+        
+        // Convert auth mode to string
+        char *auth_mode;
+        switch (ap_records[i].authmode) {
+            case WIFI_AUTH_OPEN: auth_mode = "OPEN"; break;
+            case WIFI_AUTH_WEP: auth_mode = "WEP"; break;
+            case WIFI_AUTH_WPA_PSK: auth_mode = "WPA_PSK"; break;
+            case WIFI_AUTH_WPA2_PSK: auth_mode = "WPA2_PSK"; break;
+            case WIFI_AUTH_WPA_WPA2_PSK: auth_mode = "WPA_WPA2_PSK"; break;
+            case WIFI_AUTH_WPA3_PSK: auth_mode = "WPA3_PSK"; break;
+            case WIFI_AUTH_WPA2_WPA3_PSK: auth_mode = "WPA2_WPA3_PSK"; break;
+            default: auth_mode = "UNKNOWN"; break;
+        }
+        cJSON_AddStringToObject(ap, "auth_mode", auth_mode);
+        
+        // Convert MAC address to string
+        char mac_str[18];
+        snprintf(mac_str, sizeof(mac_str), "%02x:%02x:%02x:%02x:%02x:%02x",
+                 ap_records[i].bssid[0], ap_records[i].bssid[1], ap_records[i].bssid[2],
+                 ap_records[i].bssid[3], ap_records[i].bssid[4], ap_records[i].bssid[5]);
+        cJSON_AddStringToObject(ap, "bssid", mac_str);
+        
+        cJSON_AddItemToArray(networks, ap);
+    }
+    
+    // Convert JSON to string
+    char *json_str = cJSON_PrintUnformatted(root);
+    
+    // Cleanup
+    cJSON_Delete(root);
+    free(ap_records);
+    
+    ESP_LOGI(WIFI_TAG, "Scan completed, found %d access points", ap_count);
+    ESP_LOGI(WIFI_TAG, "Scan result: %s", json_str);
+    return json_str;
 }
 
 void wifi_network_init(char* sta_ssid, char* sta_pass)

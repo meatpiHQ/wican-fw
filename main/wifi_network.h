@@ -27,4 +27,5 @@ void wifi_network_deinit(void);
 void wifi_network_restart(void);
 void wifi_network_stop(void);
 void wifi_network_start(void);
+char* wifi_network_scan(void);
 #endif
