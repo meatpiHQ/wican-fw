@@ -29,6 +29,7 @@ set(srcs
     "console.c"
     "hw_config.c"
     "dev_status.c"
+    "obd2_standard_pids.c"
 )
 
 # Define required components
