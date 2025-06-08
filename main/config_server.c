@@ -101,6 +101,9 @@ char *device_config_file = NULL;
 static char *mqtt_canflt_file = NULL;
 static char *device_id;
 
+//Function prototypes
+static esp_err_t wifi_scan_handler(httpd_req_t *req);
+
 extern const unsigned char homepage_start[] asm("_binary_homepage_html_start");
 extern const unsigned char homepage_end[]   asm("_binary_homepage_html_end");
 extern const unsigned char logo_start[] asm("_binary_logo_txt_start");
@@ -165,6 +168,16 @@ static const file_lookup_t file_lookup[] = {
 	{"/daterangepicker.css", "text/css", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/daterangepicker.min.css", "https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css"},
 	
 	{NULL, NULL, NULL, NULL, false, NULL, NULL} // Sentinel to mark end of array
+};
+
+typedef struct {
+    const char *uri;
+    esp_err_t (*handler)(httpd_req_t *req);
+} handler_lookup_t;
+
+static const handler_lookup_t get_req_handler_lookup[] = {
+	{"/wifi_scan", wifi_scan_handler},
+	{NULL, NULL} 
 };
 
 static char can_datarate_str[11][7] = {
@@ -460,13 +473,36 @@ static esp_err_t create_dir_recursively(const char* path) {
     return ESP_OK;
 }
 
-static esp_err_t file_handler(httpd_req_t *req)
+static esp_err_t wifi_scan_handler(httpd_req_t *req)
+{
+    char *scan_results = wifi_network_scan();
+    if (scan_results != NULL) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, scan_results, strlen(scan_results));
+        free(scan_results); // Free the allocated memory
+    } else {
+        // Handle error case
+        httpd_resp_send_500(req);
+    }
+    return ESP_OK;
+}
+
+static esp_err_t get_uri_handler(httpd_req_t *req)
 {
     char *uri = req->uri;
 	const uint32_t chunk_size = 1024 * 64;
     ESP_LOGI(TAG, "Request URI: %s", uri);
     
-    // Look for the requested URI in our lookup table
+    const handler_lookup_t *handler = get_req_handler_lookup;
+	
+    while (handler->uri != NULL) {
+        if (strcmp(uri, handler->uri) == 0) {
+			handler->handler(req);
+            return ESP_OK;
+        }
+        handler++;
+    }
+
     const file_lookup_t *file = file_lookup;
     while (file->uri != NULL) {
         if (strcmp(uri, file->uri) == 0) {
@@ -2038,10 +2074,10 @@ static const httpd_uri_t scan_available_pids_uri = {
     .handler   = scan_available_pids_handler,
     .user_ctx  = NULL
 };
-static const httpd_uri_t file_uri = {
+static const httpd_uri_t get_uri_common = {
     .uri       = "/*",
     .method    = HTTP_GET,
-    .handler   = file_handler,
+    .handler   = get_uri_handler,
     .user_ctx  = &server_data 
 };
 static const httpd_uri_t std_pid_info = {
@@ -2894,7 +2930,7 @@ static httpd_handle_t config_server_init(void)
 		httpd_register_uri_handler(server, &db_download_uri);
 		httpd_register_uri_handler(server, &db_files_uri);
 		//last uri /*
-		httpd_register_uri_handler(server, &file_uri);
+		httpd_register_uri_handler(server, &get_uri_common);
 		
         #if CONFIG_EXAMPLE_BASIC_AUTH
         httpd_register_basic_auth(server);

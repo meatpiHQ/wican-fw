@@ -425,6 +425,27 @@
                 border-radius: 4px;
             }
         }
+
+
+        #wifi_networks_list option {
+            padding: 0.25rem;
+        }
+
+        .wifi-scan-container {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .wifi-scan-container input {
+            flex: 1;
+        }
+
+        #wifi_scan_button {
+            min-width: 60px;
+            white-space: nowrap;
+        }
+
     </style>
 </head>
 
@@ -434,10 +455,10 @@
         <button class="tablinks" onclick="openTab(event, 'status_view')" id="defaultOpen"><b>Status</b></button>
         <button class="tablinks" onclick="openTab(event, 'wifi_settings')"><b>Settings</b></button>
         <button class="tablinks" onclick="openTab(event, 'automate')"><b>Automate</b></button>
-        <button class="tablinks" onclick="openTab(event, 'monitor')"><b>Monitor</b></button>
+        <button class="tablinks" onclick="openTab(event, 'dashboard_tab')"><b>Dashboard</b></button>
         <button class="tablinks" onclick="openTab(event, 'power_saving_tab')"><b>Power Saving</b></button>
         <button class="tablinks" onclick="openTab(event, 'logger')"><b>Logger Settings</b></button>
-        <button class="tablinks" onclick="openTab(event, 'dashboard_tab')"><b>Dashboard</b></button>
+        <button class="tablinks" onclick="openTab(event, 'monitor')"><b>CAN Monitor</b></button>
         <button class="tablinks" onclick="openTab(event, 'system_tab')"><b>System</b></button>
         <button class="tablinks" onclick="openTab(event, 'about_tab')"><b>About</b></button>
     </div>
@@ -599,7 +620,18 @@
                     <tr>
                         <td>SSID:</td>
                         <td>
-                            <input type="text" id="ssid_value" name="ssid_value" value="MeatPi" disabled />
+                            <div class="wifi-scan-container">
+                                <input type="text" id="ssid_value" name="ssid_value" value="MeatPi" disabled />
+                                <button type="button" id="wifi_scan_button" onclick="scanWifiNetworks()" disabled>Scan</button>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr id="wifi_networks_row" style="display: none;">
+                        <td>Available Networks:</td>
+                        <td>
+                            <select id="wifi_networks_list" onchange="selectWifiNetwork()">
+                                <option value="">Select a network...</option>
+                            </select>
                         </td>
                     </tr>
                     <tr>
@@ -1250,32 +1282,27 @@
         }
 
         function loadDashboard() {
-            // Redirect to the dashboard page
             window.location.href = '/dashboard.html';
         }
 
         function setRTCTime() {
-            // Get current date and time in UTC
             const now = new Date();
             
-            // Convert decimal to BCD format
             function decToBcd(val) {
                 return Math.floor(val / 10) * 16 + (val % 10);
             }
             
-            // Format data for the RTC with BCD conversion using UTC methods
             const rtcData = {
                 command: "set_rtc_time",
                 hour: decToBcd(now.getUTCHours()),
                 min: decToBcd(now.getUTCMinutes()),
                 sec: decToBcd(now.getUTCSeconds()),
-                year: decToBcd(now.getUTCFullYear() % 100), // Get last 2 digits of year (e.g. 23 for 2023)
-                month: decToBcd(now.getUTCMonth() + 1), // JavaScript months are 0-based
+                year: decToBcd(now.getUTCFullYear() % 100),
+                month: decToBcd(now.getUTCMonth() + 1),
                 day: decToBcd(now.getUTCDate()),
-                weekday: decToBcd(now.getUTCDay()) // 0 = Sunday, 1 = Monday, etc.
+                weekday: decToBcd(now.getUTCDay()) 
             };
             
-            // Send request to set RTC time
             fetch('/system_commands', {
                 method: 'POST',
                 headers: {
@@ -1295,7 +1322,6 @@
         function showNotification(message, color = "red", duration = 5000) {
             const notification = document.getElementById("notification");
             
-            // Set the colors based on the parameter
             switch (color) {
                 case "red":
                     notification.style.backgroundColor = "#fee2e2";
@@ -1326,12 +1352,10 @@
             notification.innerHTML = message;
             notification.classList.add("show");
             
-            // Clear any existing timeout
             if (window.notificationTimeout) {
                 clearTimeout(window.notificationTimeout);
             }
             
-            // Set new timeout
             window.notificationTimeout = setTimeout(() => {
                 notification.classList.remove("show");
             }, duration);
@@ -1434,7 +1458,7 @@
 
 		function sendCARDataFile() {
 			const fileInput = document.getElementById("car_data_file");
-			const maxFileSize = 200 * 1024; // 200KB in bytes
+			const maxFileSize = 200 * 1024; 
 
 			if (fileInput.files.length == 0) {
                 showNotification("No files selected!", "red");
@@ -1452,9 +1476,7 @@
 				reader.onload = function(event) {
 					try {
                         const jsonData = JSON.parse(event.target.result);
-                        // If single car format, wrap it in cars array
                         const formattedData = jsonData.car_model ? { cars: [jsonData] } : jsonData;
-                        // Remove all whitespace and formatting
                         const unformattedJson = JSON.stringify(formattedData).replace(/\s+/g, '');
                         
                         const form = document.getElementById('car_data_form');
@@ -1482,8 +1504,6 @@
 						alert("The selected file is not a valid JSON file!");
 					}
 				};
-
-				// Read the file as text
 				reader.readAsText(file);
 			}
 		}
@@ -1492,156 +1512,155 @@
             addCollapsibleRow();
             enableAutoStoreButton();
         }
-async function scanAvailablePIDs() {
-    const scanButton = document.querySelector('#scan_pids_button');
-    const addButton = document.querySelector('#add_pid_button');
-    
-    try {
-        // Reset states at start
-        scanButton.disabled = true;
-        scanButton.textContent = "Scanning...";
-        addButton.disabled = true;
 
-        const ecuProtocol = document.getElementById('ecu_protocol').value;
-        const response = await fetch(`/scan_available_pids?protocol=${ecuProtocol}`);
+    async function scanAvailablePIDs() {
+        const scanButton = document.querySelector('#scan_pids_button');
+        const addButton = document.querySelector('#add_pid_button');
         
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        try {
+            scanButton.disabled = true;
+            scanButton.textContent = "Scanning...";
+            addButton.disabled = true;
+
+            const ecuProtocol = document.getElementById('ecu_protocol').value;
+            const response = await fetch(`/scan_available_pids?protocol=${ecuProtocol}`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            const pidSelect = document.getElementById('available_pids');
+            pidSelect.innerHTML = '';
+            if (data.text) {
+                showNotification(data.text, "red");
+            } else if (data.std_pids && Array.isArray(data.std_pids) && data.std_pids.length > 0) {
+                data.std_pids.forEach(pid => {
+                    const option = document.createElement('option');
+                    option.value = pid;
+                    option.textContent = pid;
+                    pidSelect.appendChild(option);
+                });
+                addButton.disabled = false;
+                showNotification("PID scan complete", "green");
+            } else {
+                showNotification("No PIDs found. Try a different protocol or check if ignition is ON", "orange");
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            showNotification("PID scan failed: " + error.message, "red");
+        } finally {
+            scanButton.disabled = false;
+            scanButton.textContent = "Scan PIDs";
+        }
+    }
+
+    const pidEntryStyles = `
+        .pid-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+            margin-top: 0.5rem;
+            border: 2px solid var(--gray-300);
+            border-radius: 8px;
         }
         
-        const data = await response.json();
-        const pidSelect = document.getElementById('available_pids');
-        pidSelect.innerHTML = '';
-        if (data.text) {
-            showNotification(data.text, "red");
-        } else if (data.std_pids && Array.isArray(data.std_pids) && data.std_pids.length > 0) {
-            data.std_pids.forEach(pid => {
-                const option = document.createElement('option');
-                option.value = pid;
-                option.textContent = pid;
-                pidSelect.appendChild(option);
-            });
-            addButton.disabled = false;
-            showNotification("PID scan complete", "green");
-        } else {
-            showNotification("No PIDs found. Try a different protocol or check if ignition is ON", "orange");
+        .header-right {
+            display: flex;
+            gap: 0.5rem;
         }
-    } catch (error) {
-        console.error('Error:', error);
-        showNotification("PID scan failed: " + error.message, "red");
-    } finally {
-        // Always reset button state
-        scanButton.disabled = false;
-        scanButton.textContent = "Scan PIDs";
-    }
-}
-const pidEntryStyles = `
-    .pid-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 0.5rem;
-        margin-top: 0.5rem;
-        border: 2px solid var(--gray-300);
-        border-radius: 8px;
-    }
-    
-    .header-right {
-        display: flex;
-        gap: 0.5rem;
-    }
-    
-    .collapse-btn {
-        background: none;
-        border: none;
-        cursor: pointer;
-        font-size: 1.2rem;
-        padding: 0.25rem 0.5rem;
-        color: var(--gray-700);
-    }
-    
-    .pid-content {
-        display: flex;
-        flex-direction: column;
-        gap: 1.5rem;
-        transition: height 0.3s ease;
-    }
-    
-    .pid-content.hidden {
-        display: none;
-    }
-`;
-function addCollapsibleRow(rowData = {}) {
-    const container = document.querySelector('.pid-entries');
-    const entry = document.createElement('div');
-    entry.className = 'pid-entry';
-
-    entry.innerHTML = `
-        <div class="pid-header">
-            <div class="header-left">
-                <button type="button" class="collapse-btn">▼</button>
-                <span class="pid-title">New PID</span>
-            </div>
-            <div class="header-right">
-                <button type="button" class="delete-btn">Delete</button>
-            </div>
-        </div>
-        <div class="pid-content hidden">
-            <table class="compact-form-table">
-                <tr>
-                    <td>Name:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td>
-                    <td><input type="text" class="name-input" value="${rowData.Name || ''}" 
-                        placeholder="Parameter Name"></td>
-                </tr>
-                <tr>
-                    <td>Init:</td>
-                    <td><input type="text" class="init-input" value="${rowData.Init || ''}" 
-                        placeholder="PID Init"></td>
-                </tr>
-                <tr>
-                    <td>PID:</td>
-                    <td><input type="text" class="pid-input" value="${rowData.PID || ''}" 
-                        placeholder="PID"></td>
-                </tr>
-                <tr>
-                    <td>Expression:</td>
-                    <td><input type="text" class="expression-input" value="${rowData.Expression || ''}" 
-                        placeholder="Enter expression"></td>
-                </tr>
-                <tr>
-                    <td>Min Value:</td>
-                    <td><input type="number" class="min-value-input" value="${rowData.MinValue || ''}" 
-                        step="0.01" placeholder="Minimum value"></td>
-                </tr>
-                <tr>
-                    <td>Max Value:</td>
-                    <td><input type="number" class="max-value-input" value="${rowData.MaxValue || ''}" 
-                        step="0.01" placeholder="Maximum value"></td>
-                </tr>
-                <tr>
-                    <td>Period(ms):</td>
-                    <td><input type="number" class="period-input" value="${rowData.Period || ''}" 
-                        placeholder="ms"></td>
-                </tr>
-                <tr>
-                    <td>Destination Type:</td>
-                    <td><select class="type-select">
-                        <option value="Default" ${rowData.Type === 'Default' ? 'selected' : ''}>Default</option>
-                        <option value="MQTT_Topic" ${rowData.Type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
-                        <option value="MQTT_WallBox" ${rowData.Type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
-                    </select></td>
-                </tr>
-                <tr>
-                    <td>Send_to:</td>
-                    <td><input type="text" class="send-to-input" value="${rowData.Send_to || ''}"
-                        placeholder="Enter destination"></td>
-                </tr>
-            </table>
-        </div>
+        
+        .collapse-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 0.25rem 0.5rem;
+            color: var(--gray-700);
+        }
+        
+        .pid-content {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            transition: height 0.3s ease;
+        }
+        
+        .pid-content.hidden {
+            display: none;
+        }
     `;
+    function addCollapsibleRow(rowData = {}) {
+        const container = document.querySelector('.pid-entries');
+        const entry = document.createElement('div');
+        entry.className = 'pid-entry';
+
+        entry.innerHTML = `
+            <div class="pid-header">
+                <div class="header-left">
+                    <button type="button" class="collapse-btn">▼</button>
+                    <span class="pid-title">New PID</span>
+                </div>
+                <div class="header-right">
+                    <button type="button" class="delete-btn">Delete</button>
+                </div>
+            </div>
+            <div class="pid-content hidden">
+                <table class="compact-form-table">
+                    <tr>
+                        <td>Name:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td>
+                        <td><input type="text" class="name-input" value="${rowData.Name || ''}" 
+                            placeholder="Parameter Name"></td>
+                    </tr>
+                    <tr>
+                        <td>Init:</td>
+                        <td><input type="text" class="init-input" value="${rowData.Init || ''}" 
+                            placeholder="PID Init"></td>
+                    </tr>
+                    <tr>
+                        <td>PID:</td>
+                        <td><input type="text" class="pid-input" value="${rowData.PID || ''}" 
+                            placeholder="PID"></td>
+                    </tr>
+                    <tr>
+                        <td>Expression:</td>
+                        <td><input type="text" class="expression-input" value="${rowData.Expression || ''}" 
+                            placeholder="Enter expression"></td>
+                    </tr>
+                    <tr>
+                        <td>Min Value:</td>
+                        <td><input type="number" class="min-value-input" value="${rowData.MinValue || ''}" 
+                            step="0.01" placeholder="Minimum value"></td>
+                    </tr>
+                    <tr>
+                        <td>Max Value:</td>
+                        <td><input type="number" class="max-value-input" value="${rowData.MaxValue || ''}" 
+                            step="0.01" placeholder="Maximum value"></td>
+                    </tr>
+                    <tr>
+                        <td>Period(ms):</td>
+                        <td><input type="number" class="period-input" value="${rowData.Period || ''}" 
+                            placeholder="ms"></td>
+                    </tr>
+                    <tr>
+                        <td>Destination Type:</td>
+                        <td><select class="type-select">
+                            <option value="Default" ${rowData.Type === 'Default' ? 'selected' : ''}>Default</option>
+                            <option value="MQTT_Topic" ${rowData.Type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
+                            <option value="MQTT_WallBox" ${rowData.Type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
+                        </select></td>
+                    </tr>
+                    <tr>
+                        <td>Send_to:</td>
+                        <td><input type="text" class="send-to-input" value="${rowData.Send_to || ''}"
+                            placeholder="Enter destination"></td>
+                    </tr>
+                </table>
+            </div>
+        `;
     console.log("addCollapsibleRow:", rowData);
     console.log("Send_to value:", rowData.Send_to);
-    // Add these CSS styles
     const style = document.createElement('style');
     style.textContent = pidEntryStyles;
     document.head.appendChild(style);
@@ -1874,26 +1893,22 @@ function addCarParameter(rowData = {}) {
     }
 }
 
-// Update the loadAutoTable function to work with the new structure
 function loadAutoTable(jsonData) {
         try {
             console.log("Raw jsonData:", jsonData);
             const data = jsonData;
 
-            // First set the initialisation value
             const initialisationElement = document.getElementById("initialisation");
             if (initialisationElement) {
                 initialisationElement.value = data.initialisation || '';
             }
 
-            // Clear existing content
             const automateTable = document.getElementById("automate_table");
             if (!automateTable) {
                 console.error("Automate table not found");
                 return;
             }
 
-            // Set form values safely
             const setElementValue = (id, value, defaultValue = '') => {
                 const element = document.getElementById(id);
                 if (element) {
@@ -1941,7 +1956,6 @@ function loadAutoTable(jsonData) {
                 });
             }
 
-            // Update UI states after elements are created
             requestAnimationFrame(() => {
                 try {
                     const carSpecificElement = document.getElementById("car_specific");
@@ -1996,15 +2010,12 @@ function loadAutoTable(jsonData) {
 		
     async function storeAutoTableData() {
         try {
-            // Get all PID entries with null checks
             const custom_pid_data = [];
             const std_pid_data = [];
 
-            // Get entries with null checks
             const entries = document.querySelectorAll('.pid-entry');
             const standardEntries = document.querySelectorAll('.std-pid-entry');
 
-            // Get form values with null checks
             const initialisationValue = document.getElementById("initialisation")?.value || '';
             const groupingValue = document.getElementById("grouping")?.value || 'disable';
             const groupDestTypeValue = document.getElementById("group_dest_type")?.value || 'Default';
@@ -2065,7 +2076,6 @@ function loadAutoTable(jsonData) {
                 return false;
             }
 
-            // Process each PID entry
             if(entries?.length) {
                 entries.forEach((entry, index) => {
                     const pidData = {
@@ -2122,7 +2132,6 @@ function loadAutoTable(jsonData) {
                 });
             }            
             
-            // Prepare data object for sending
             const jsonData = {
                 initialisation: initialisationValue,
                 grouping: groupingValue,
@@ -2138,7 +2147,6 @@ function loadAutoTable(jsonData) {
                 ecu_protocol: ecu_protocolValue
             };
 
-            // Send to server
             await fetch('store_auto_data', {
                 method: 'POST',
                 headers: {
@@ -2167,7 +2175,7 @@ function loadAutoTable(jsonData) {
 
     function toggleDestinationField() {
         const groupingValue = document.getElementById("grouping").value;
-        toggleDestinationAndCycle();  // Reuse the updated function
+        toggleDestinationAndCycle();  
     }
 
     function toggleSendToFields() {
@@ -2255,7 +2263,6 @@ function loadAutoTable(jsonData) {
         document.getElementById(tabName).style.display = "block";
         evt.currentTarget.className += " active";
         
-        // Load dashboard content when dashboard tab is opened
         if (tabName === 'dashboard_tab') {
             loadDashboard();
         }
@@ -2265,19 +2272,24 @@ function loadAutoTable(jsonData) {
 
 	function submit_enable() {
         console.log("sumbit_enable");
-		if(document.getElementById("wifi_mode").value == "AP") {
-			document.getElementById("ssid_value").disabled = true;
-			document.getElementById("pass_value").disabled = true;
+        const wifiMode = document.getElementById("wifi_mode").value;
+        const wifiScanButton = document.getElementById("wifi_scan_button");
+        
+        if(wifiMode == "AP") {
+            document.getElementById("ssid_value").disabled = true;
+            document.getElementById("pass_value").disabled = true;
             document.getElementById("sta_security").disabled = true;
-			document.getElementById("ble_status").disabled = false;
+            document.getElementById("ble_status").disabled = false;
             document.getElementById("ap_auto_disable").disabled = true;
-		} else {
-			document.getElementById("ssid_value").disabled = false;
-			document.getElementById("pass_value").disabled = false;
+            wifiScanButton.disabled = true;
+        } else {
+            document.getElementById("ssid_value").disabled = false;
+            document.getElementById("pass_value").disabled = false;
             document.getElementById("sta_security").disabled = false;
-			document.getElementById("ble_status").disabled = true;
-			document.getElementById("ble_status").selectedIndex = "1";
-		}
+            document.getElementById("ble_status").disabled = true;
+            document.getElementById("ble_status").selectedIndex = "1";
+            wifiScanButton.disabled = false; 
+        }
 		if(document.getElementById("ble_status").selectedIndex == "0"
             && !bleAlertShown) {
             alert("Warning!\n\nWhen BLE is connected the WiFi AP WiCAN_xxxxxx will be disabled.\nTo re-enable the WiFi AP Turn OFF BLE on your phone or device, then power cycle WiCAN. If you connect to WiFi AP ssid WiCAN_xxxxxx, the BLE will automatically be disabled.");
@@ -2450,7 +2462,6 @@ function loadAutoTable(jsonData) {
             console.log("Car models:", this.responseText);
             if(this.responseText != "NONE") {
                 var obj = JSON.parse(this.responseText);
-                // Create array of car models
                 const carModels = [];
                 if (obj && Array.isArray(obj.cars)) {
                     obj.cars.forEach(car => {
@@ -2458,7 +2469,6 @@ function loadAutoTable(jsonData) {
                             carModels.push(car.car_model);
                         }
                         
-                        // Load parameters for each PID
                         if (car.pids) {
                             document.getElementById("specific_init").value = car.init;
                             car.pids.forEach(pid => {
@@ -2484,7 +2494,6 @@ function loadAutoTable(jsonData) {
                         }
                     });
                 }
-                // Load car models dropdown
                 var modifiedObj = { "supported": carModels };
                 loadCarModels(modifiedObj);
             } else {
@@ -2500,10 +2509,10 @@ function loadAutoTable(jsonData) {
 
 
     function loadautoPID() {
-        console.log("Loading auto PID data..."); // Debug log
+        console.log("Loading auto PID data..."); 
         const xhttp = new XMLHttpRequest();
         xhttp.onload = function() {
-            console.log("Server response:", this.responseText); // Debug log
+            console.log("Server response:", this.responseText);
             if(this.responseText !== "NONE") {
                 const data = JSON.parse(this.responseText);
                 loadAutoTable(data);
@@ -2535,7 +2544,7 @@ function loadAutoTable(jsonData) {
 
 	async function postConfig() {
 		var obj = {};
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Add 1 second delay
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
         const storeResult = await storeAutoTableData();
         if (!storeResult) {
@@ -2652,7 +2661,7 @@ function loadAutoTable(jsonData) {
             '/load_canflt'
         ];
         
-        const delay = 500; // 500ms delay between requests
+        const delay = 500; 
         let combinedData = {};
         let hasErrors = false;
         
@@ -2743,7 +2752,6 @@ function loadAutoTable(jsonData) {
                                     throw new Error(`HTTP error! status: ${response.status}`);
                                 }
 
-                                // Add delay before next request
                                 await new Promise(resolve => setTimeout(resolve, delay));
 
                             } catch (fetchError) {
@@ -2758,7 +2766,6 @@ function loadAutoTable(jsonData) {
                         alert('Configuration uploaded successfully, Rebooting...');
                     }
                     
-                    // Clear the file input after upload
                     fileInput.value = '';
 
                 } catch (parseError) {
@@ -2964,7 +2971,6 @@ function loadAutoTable(jsonData) {
 			loadautoPIDCarData();
             loadautoPID();
             document.getElementById("car_model").addEventListener('change', function() {
-                // Clear existing entries
                 document.querySelector('.specific-pid-entries').innerHTML = '';
                 
                 const selectedModel = this.value;
@@ -3229,13 +3235,118 @@ function loadAutoTable(jsonData) {
         
         if (sleepStatus === "disable") {
             sleepWarningDiv.style.display = "block";
-            // Reset agreement when showing warning
             agreementSelect.value = "no";
         } else {
             sleepWarningDiv.style.display = "none";
         }
     }
 
+    async function scanWifiNetworks() {
+        const scanButton = document.getElementById('wifi_scan_button');
+        const networksList = document.getElementById('wifi_networks_list');
+        const networksRow = document.getElementById('wifi_networks_row');
+        
+        try {
+            scanButton.disabled = true;
+            scanButton.textContent = "Scanning...";
+            
+            const response = await fetch('/wifi_scan');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.text();
+            
+            // Clear existing options
+            networksList.innerHTML = '<option value="">Select a network...</option>';
+            
+            if (data && data !== "NONE") {
+                try {
+                    const scanResult = JSON.parse(data);
+                    if (scanResult.networks && Array.isArray(scanResult.networks)) {
+                        // Filter out networks with empty SSID and sort by signal strength
+                        const validNetworks = scanResult.networks
+                            .filter(network => network.ssid && network.ssid.trim() !== '')
+                            .sort((a, b) => b.rssi - a.rssi); // Sort by signal strength (strongest first)
+                        
+                        // Remove duplicates (same SSID, keep the strongest signal)
+                        const uniqueNetworks = [];
+                        const seenSSIDs = new Set();
+                        
+                        validNetworks.forEach(network => {
+                            if (!seenSSIDs.has(network.ssid)) {
+                                seenSSIDs.add(network.ssid);
+                                uniqueNetworks.push(network);
+                            }
+                        });
+                        
+                        if (uniqueNetworks.length > 0) {
+                            uniqueNetworks.forEach(network => {
+                                const option = document.createElement('option');
+                                option.value = network.ssid;
+                                
+                                // Create a nice display name with signal strength and security
+                                const signalBars = getSignalQuality(network.rssi);
+                                const security = getSecurityType(network.auth_mode);
+                                option.textContent = `${network.ssid} (${signalBars}, ${network.rssi} dBm, ${security})`;
+                                
+                                networksList.appendChild(option);
+                            });
+                            networksRow.style.display = 'table-row';
+                            showNotification(`Found ${uniqueNetworks.length} WiFi networks`, "green");
+                        } else {
+                            showNotification("No valid networks found", "yellow");
+                        }
+                    } else {
+                        throw new Error("Invalid scan data format");
+                    }
+                } catch (parseError) {
+                    console.error('Parse error:', parseError);
+                    showNotification("Failed to parse scan results", "red");
+                }
+            } else {
+                showNotification("No networks found", "yellow");
+            }
+        } catch (error) {
+            console.error('WiFi scan error:', error);
+            showNotification("WiFi scan failed: " + error.message, "red");
+        } finally {
+            scanButton.disabled = false;
+            scanButton.textContent = "Scan";
+        }
+    }
+
+    function getSignalQuality(rssi) {
+        // Convert RSSI to signal quality text
+        if (rssi >= -50) return "Excellent"; // Excellent
+        if (rssi >= -60) return "Good";      // Good  
+        if (rssi >= -70) return "Fair";      // Fair
+        return "Weak";                       // Weak
+    }
+
+    function getSecurityType(authMode) {
+        // Simplify auth mode display
+        switch(authMode) {
+            case "OPEN": return "Open";
+            case "WPA_PSK": return "WPA";
+            case "WPA2_PSK": return "WPA2";
+            case "WPA_WPA2_PSK": return "WPA/WPA2";
+            case "WPA2_WPA3_PSK": return "WPA2/WPA3";
+            case "WPA3_PSK": return "WPA3";
+            default: return authMode;
+        }
+    }
+
+    function selectWifiNetwork() {
+        const networksList = document.getElementById('wifi_networks_list');
+        const ssidInput = document.getElementById('ssid_value');
+        
+        if (networksList.value) {
+            ssidInput.value = networksList.value;
+            submit_enable(); // Trigger form validation
+            enableAutoStoreButton(); // Enable store button if it exists
+        }
+    }
     </script>
 </body>
 
