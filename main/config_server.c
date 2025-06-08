@@ -83,6 +83,7 @@
 #include "obd_logger_iface.h"
 #include "https_client_mgr.h"
 #include "sdcard.h"
+#include "obd2_standard_pids.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
@@ -588,58 +589,96 @@ static esp_err_t index_handler(httpd_req_t *req)
 
 static esp_err_t store_config_handler(httpd_req_t *req)
 {
+    esp_err_t ret_val = ESP_OK;
     char *buf = NULL;
+    FILE *f = NULL;
     size_t buf_size = req->content_len;
+    bool response_sent = false;
 
-    if (buf_size <= 0)
-    {
-        return ESP_FAIL; // Invalid content length
-    }
-
-    buf = (char *)malloc(buf_size);
-    if (!buf)
-    {
-        return ESP_ERR_NO_MEM; // Memory allocation failure
-    }
-
-    int ret = httpd_req_recv(req, buf, buf_size);
-
-    if (ret <= 0)
-    {
-        if (ret == HTTPD_SOCK_ERR_TIMEOUT)
-        {
-            // Retry receiving if timeout occurred
-            free(buf);
+    // Validate content type
+    char content_type[32];
+    if (httpd_req_get_hdr_value_str(req, "Content-Type", content_type, sizeof(content_type)) == ESP_OK) {
+        if (strncmp(content_type, "application/json", 16) != 0) {
+            ESP_LOGE(TAG, "Invalid content type: %s", content_type);
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Content type must be application/json");
             return ESP_FAIL;
         }
-        // Handle read error
-        free(buf);
+    }
+
+    // Check content length
+    if (buf_size <= 0 || buf_size > MAX_FILE_SIZE) {
+        ESP_LOGE(TAG, "Invalid content length: %d", buf_size);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid content length");
         return ESP_FAIL;
     }
 
-    FILE *f = fopen(FS_MOUNT_POINT"/config.json", "w");
-    if (f)
-    {
-        // Write the received data into the file
-        fwrite(buf, 1, buf_size, f);
-        fclose(f);
-    }
-    else
-    {
-        // Handle file open error
-        free(buf);
-        return ESP_FAIL;
+    // Allocate memory
+    buf = (char *)malloc(buf_size + 1);  // +1 for null terminator
+    if (!buf) {
+        ESP_LOGE(TAG, "Failed to allocate memory for config data");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
+        return ESP_ERR_NO_MEM;
     }
 
-    // Free dynamically allocated memory
-    free(buf);
+    // Receive data
+    int received = httpd_req_recv(req, buf, buf_size);
+    if (received <= 0) {
+        ESP_LOGE(TAG, "Failed to receive data: %d", received);
+        ret_val = ESP_FAIL;
+        goto cleanup;
+    }
 
+    // Null terminate and validate JSON
+    buf[received] = '\0';
+    cJSON *json = cJSON_Parse(buf);
+    if (!json) {
+        ESP_LOGE(TAG, "Invalid JSON format");
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON format");
+        response_sent = true;
+        ret_val = ESP_FAIL;
+        goto cleanup;
+    }
+    cJSON_Delete(json);
+
+    // Open file
+    f = fopen(FS_MOUNT_POINT"/config.json", "w");
+    if (!f) {
+        ESP_LOGE(TAG, "Failed to open config file for writing");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to save configuration");
+        response_sent = true;
+        ret_val = ESP_FAIL;
+        goto cleanup;
+    }
+
+    // Write to file
+    size_t written = fwrite(buf, 1, received, f);
+    if (written != received) {
+        ESP_LOGE(TAG, "Failed to write configuration: %d/%d bytes written", written, received);
+        ret_val = ESP_FAIL;
+        goto cleanup;
+    }
+
+    // Send success response
     const char *resp_str = "Configuration saved! Rebooting...";
     httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
+    response_sent = true;
 
-    // xTimerStart( xrestartTimer, 0 );
-	config_server_reboot();
-    return ESP_OK;
+    // Trigger reboot
+    config_server_reboot();
+
+cleanup:
+    if (f) {
+        fclose(f);
+    }
+    if (buf) {
+        free(buf);
+    }
+    
+    if (ret_val != ESP_OK && !response_sent) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to process request");
+    }
+    
+    return ret_val;
 }
 
 static esp_err_t store_canflt_handler(httpd_req_t *req)
@@ -833,7 +872,7 @@ static esp_err_t load_pid_auto_config_handler(httpd_req_t *req)
 
     ESP_LOGI(TAG, "Sending response: %s", buf);
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, buf, read_len);  // Use actual content length instead of HTTPD_RESP_USE_STRLEN
+    httpd_resp_send(req, buf, HTTPD_RESP_USE_STRLEN);  // Use actual content length instead of HTTPD_RESP_USE_STRLEN
     
     free(buf);
     return ESP_OK;
@@ -966,7 +1005,7 @@ static esp_err_t system_commands_handler(httpd_req_t *req)
                         (uint8_t)day->valueint,
                         (uint8_t)weekday->valueint
                     );
-                    
+                    rtcm_sync_system_time_from_rtc();
                     if (time_err == ESP_OK && date_err == ESP_OK) {
                         ESP_LOGI(TAG, "RTC time set successfully");
                     } else {
@@ -1110,40 +1149,105 @@ static esp_err_t store_car_data_handler(httpd_req_t *req)
 {
     int total_len = req->content_len;
     int received = 0;
-	const char *filepath = FS_MOUNT_POINT"/car_data.json";
+    const char *filepath = FS_MOUNT_POINT"/car_data.json";
+    
+    // Validate content length
+    if (total_len <= 0 || total_len > MAX_FILE_SIZE) {
+        ESP_LOGE(TAG, "Invalid content length: %d", total_len);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid content length");
+        return ESP_FAIL;
+    }
 
+    // Allocate buffer for entire JSON content
+    char *json_buffer = malloc(total_len + 1);
+    if (!json_buffer) {
+        ESP_LOGE(TAG, "Failed to allocate JSON buffer");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
+        return ESP_FAIL;
+    }
+
+    // Receive all data first
+    char *temp_buffer = malloc(1024);
+    if (!temp_buffer) {
+        ESP_LOGE(TAG, "Failed to allocate temp buffer");
+        free(json_buffer);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
+        return ESP_FAIL;
+    }
+
+    esp_err_t ret_val = ESP_OK;
+    while (received < total_len) {
+        int ret = httpd_req_recv(req, temp_buffer, MIN(1024, total_len - received));
+        if (ret < 0) {
+            if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
+                continue;  // Retry on timeout
+            }
+            ESP_LOGE(TAG, "Failed to receive JSON data: %d", ret);
+            ret_val = ESP_FAIL;
+            break;
+        }
+        
+        if (ret == 0) {
+            ESP_LOGE(TAG, "Connection closed unexpectedly");
+            ret_val = ESP_FAIL;
+            break;
+        }
+        
+        // Copy to JSON buffer
+        memcpy(json_buffer + received, temp_buffer, ret);
+        received += ret;
+    }
+
+    free(temp_buffer);
+    
+    if (ret_val != ESP_OK) {
+        free(json_buffer);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive data");
+        return ESP_FAIL;
+    }
+
+    // Null terminate the JSON string
+    json_buffer[received] = '\0';
+    
+    // Validate JSON format
+    cJSON *json = cJSON_Parse(json_buffer);
+    if (!json) {
+        const char *error_ptr = cJSON_GetErrorPtr();
+        if (error_ptr != NULL) {
+            ESP_LOGE(TAG, "JSON parse error before: %s", error_ptr);
+        } else {
+            ESP_LOGE(TAG, "Invalid JSON format");
+        }
+        free(json_buffer);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON format");
+        return ESP_FAIL;
+    }
+    
+    // JSON is valid, clean up parser
+    cJSON_Delete(json);
+    
+    // Now write validated JSON to file
     FILE *file = fopen(filepath, "w");
-    if (!file)
-    {
+    if (!file) {
         ESP_LOGE(TAG, "Failed to open file for writing");
+        free(json_buffer);
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open file for writing");
         return ESP_FAIL;
     }
 
-    static char buffer[16];
-    while (received < total_len)
-    {
-        int ret = httpd_req_recv(req, buffer, sizeof(buffer));
-        if (ret <= 0)
-        {
-            ESP_LOGE(TAG, "Failed to receive JSON data");
-            fclose(file);
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive JSON data");
-            return ESP_FAIL;
-        }
-        if (fwrite(buffer, 1, ret, file) != ret)
-        {
-            ESP_LOGE(TAG, "Failed to write data to file");
-            fclose(file);
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to write data to file");
-            return ESP_FAIL;
-        }
-        received += ret;
+    if (fwrite(json_buffer, 1, received, file) != received) {
+        ESP_LOGE(TAG, "Failed to write data to file");
+        fclose(file);
+        free(json_buffer);
+        unlink(filepath);  // Clean up partial file
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to write data to file");
+        return ESP_FAIL;
     }
 
     fclose(file);
-    ESP_LOGI(TAG, "JSON data successfully stored");
-
+    free(json_buffer);
+    
+    ESP_LOGI(TAG, "Valid JSON data successfully stored (%d bytes)", received);
     httpd_resp_send(req, "Data stored successfully", HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
@@ -1717,7 +1821,7 @@ esp_err_t autopid_data_handler(httpd_req_t *req)
 
     httpd_resp_set_type(req, "application/json");
 
-    httpd_resp_send(req, data, strlen(data));
+    httpd_resp_send(req, data, HTTPD_RESP_USE_STRLEN);
 
     free(data);
 
@@ -1735,7 +1839,7 @@ static esp_err_t scan_available_pids_handler(httpd_req_t *req)
     {
         httpd_resp_set_type(req, "application/json");
         const char *resp_str = "{\"text\":\"Set protocol to AutoPid and reboot to be able to scan\"}";
-        httpd_resp_send(req, resp_str, strlen(resp_str));
+        httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
         return ESP_OK;
     }
 	
@@ -1755,10 +1859,22 @@ static esp_err_t scan_available_pids_handler(httpd_req_t *req)
     
     if (autopid_find_standard_pid(protocol_num, available_pids, MAX_AVAILABLE_PIDS_SIZE) == ESP_OK) {
         httpd_resp_set_type(req, "application/json");
-        httpd_resp_send(req, available_pids, strlen(available_pids));
+        httpd_resp_send(req, available_pids, HTTPD_RESP_USE_STRLEN);
     }
 
     free(available_pids);
+    return ESP_OK;
+}
+
+static esp_err_t std_pid_info_handler(httpd_req_t *req) 
+{
+    char *pid_info = get_standard_pids_json();
+    if (pid_info == NULL) {
+        httpd_resp_send_404(req);
+        return ESP_OK;
+    }
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, pid_info, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
 
@@ -1910,6 +2026,13 @@ static const httpd_uri_t file_uri = {
     .handler   = file_handler,
     .user_ctx  = &server_data 
 };
+static const httpd_uri_t std_pid_info = {
+    .uri       = "/std_pid_info",
+    .method    = HTTP_GET,
+    .handler   = std_pid_info_handler,
+    .user_ctx  = &server_data 
+};
+
 static void config_server_load_cfg(char *cfg)
 {
 	cJSON * root, *key = 0;
@@ -2710,7 +2833,7 @@ static httpd_handle_t config_server_init(void)
                        );
 
     // Start the httpd server
-	config.max_uri_handlers = 23;
+	config.max_uri_handlers = 24;
 	config.stack_size = (10*1024);
 	config.max_open_sockets = 15;
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
@@ -2737,10 +2860,12 @@ static httpd_handle_t config_server_init(void)
 		httpd_register_uri_handler(server, &store_car_data_uri);
 		httpd_register_uri_handler(server, &system_commands);
 		httpd_register_uri_handler(server, &scan_available_pids_uri);
+		httpd_register_uri_handler(server, &std_pid_info);
+		
+		//Add before this line
 		httpd_register_uri_handler(server, &obd_logger_ws);
 		httpd_register_uri_handler(server, &db_download_uri);
 		httpd_register_uri_handler(server, &db_files_uri);
-
 		//last uri /*
 		httpd_register_uri_handler(server, &file_uri);
 		
