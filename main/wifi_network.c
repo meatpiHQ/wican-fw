@@ -82,6 +82,7 @@ static void wifi_network_event_handler(void* arg, esp_event_base_t event_base,
             esp_wifi_set_mode(WIFI_MODE_APSTA);
             esp_wifi_start();
             esp_wifi_connect();
+            dev_status_set_bits(DEV_WIFI_ENABLED_BIT);
         }
 
         sta_successfuly_connected = false;
@@ -103,6 +104,7 @@ static void wifi_network_event_handler(void* arg, esp_event_base_t event_base,
             sta_successfuly_connected = true;
             esp_wifi_start();
             esp_wifi_connect();
+            dev_status_set_bits(DEV_WIFI_ENABLED_BIT);
         }
         else
         {
@@ -181,6 +183,7 @@ void wifi_network_deinit(void)
     esp_event_handler_unregister(WIFI_EVENT,
 									ESP_EVENT_ANY_ID,
 									&wifi_network_event_handler);
+    dev_status_clear_bits(DEV_WIFI_ENABLED_BIT);
     if (err == ESP_ERR_WIFI_NOT_INIT)
     {
         return;
@@ -200,6 +203,7 @@ void wifi_network_restart(void)
     {
         return;
     }
+    dev_status_set_bits(DEV_WIFI_ENABLED_BIT);
 }
 
 void wifi_network_stop(void)
@@ -211,6 +215,7 @@ void wifi_network_stop(void)
     }
     xEventGroupClearBits(s_wifi_event_group, WIFI_INIT_BIT);
     esp_wifi_stop();
+    dev_status_clear_bits(DEV_WIFI_ENABLED_BIT);
 }
 
 void wifi_network_start(void)
@@ -226,6 +231,7 @@ void wifi_network_start(void)
         ESP_LOGE(WIFI_TAG, "wifi failed to start");
         return;
     }
+    dev_status_set_bits(DEV_WIFI_ENABLED_BIT);
 }
 
 bool wifi_network_is_connected(void)
