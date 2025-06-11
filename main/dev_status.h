@@ -11,12 +11,16 @@ extern "C" {
 #endif
 
 // Device status event bits
-#define DEV_AWAKE_BIT           BIT0
-#define DEV_SLEEP_BIT           BIT1
-#define DEV_WIFI_CONNECTED_BIT  BIT2
-#define DEV_MQTT_CONNECTED_BIT  BIT3
-#define DEV_BLE_CONNECTED_BIT   BIT4
-#define DEV_SDCARD_MOUNTED_BIT  BIT5 
+#define DEV_AWAKE_BIT                   BIT0
+#define DEV_SLEEP_BIT                   BIT1
+#define DEV_WIFI_CONNECTED_BIT          BIT2
+#define DEV_MQTT_CONNECTED_BIT          BIT3
+#define DEV_BLE_CONNECTED_BIT           BIT4
+#define DEV_SDCARD_MOUNTED_BIT          BIT5 
+#define DEV_RST_REASON_SW_BIT           BIT6
+#define DEV_RST_REASON_DEEP_SLEEP_BIT   BIT7
+#define DEV_BLE_ENABLED_BIT             BIT8
+#define DEV_WIFI_ENABLED_BIT            BIT9
 
 // Initialize device status event group
 void dev_status_init(void);
