@@ -30,6 +30,9 @@ set(srcs
     "hw_config.c"
     "dev_status.c"
     "obd2_standard_pids.c"
+    "auto_connect.c"
+    "vehicle.c"
+    "wifi_mgr.c"
 )
 
 # Define required components
@@ -56,6 +59,7 @@ set(requires
     spi_flash
     obd_logger
     https_client_mgr
+    unity
 )
 
 # Register the component
