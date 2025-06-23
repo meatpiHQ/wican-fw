@@ -377,6 +377,7 @@ static void mqtt_task(void *pvParameters)
 	while(!wifi_network_is_connected())
 	{
 		vTaskDelay(pdMS_TO_TICKS(1000));
+        dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
 	}
 
 	esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
