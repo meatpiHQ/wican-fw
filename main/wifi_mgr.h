@@ -10,14 +10,17 @@
 #include "esp_system.h"
 #include "esp_event.h"
 #include "esp_mac.h"
+#include "freertos/event_groups.h"
 
-// Event group bits
+// Event group bits for external status monitoring
 #define WIFI_CONNECTED_BIT      BIT0
 #define WIFI_FAIL_BIT          BIT1
 #define WIFI_DISCONNECTED_BIT  BIT2
 #define WIFI_INIT_BIT          BIT3
 #define WIFI_CONNECT_IDLE_BIT  BIT4
 #define WIFI_AP_STARTED_BIT    BIT5
+#define WIFI_ENABLED_BIT        BIT6
+#define WIFI_STA_GOT_IP_BIT    BIT7
 
 #define WIFI_MGR_DEFAULT_CONFIG() { \
     .sta_ssid = "", \
@@ -51,7 +54,6 @@
     .power_save_mode = WIFI_PS_NONE \
 }
 
-
 // WiFi Manager modes
 typedef enum {
     WIFI_MGR_MODE_OFF = 0,
@@ -84,19 +86,6 @@ typedef struct {
     // Power saving
     wifi_ps_type_t power_save_mode;
 } wifi_mgr_config_t;
-
-// WiFi Manager status structure
-typedef struct {
-    bool initialized;
-    bool enabled;
-    wifi_mgr_mode_t current_mode;
-    bool sta_connected;
-    bool ap_started;
-    char sta_ip[16];
-    int sta_retry_count;
-    uint16_t ap_connected_stations;
-} wifi_mgr_status_t;
-
 
 // Callback function types
 typedef void (*wifi_mgr_sta_connected_cb_t)(void);
@@ -132,11 +121,15 @@ esp_err_t wifi_mgr_sta_disconnect(void);
 esp_err_t wifi_mgr_set_ap_config(const char* ssid, const char* password, uint8_t channel, uint8_t max_connections);
 esp_err_t wifi_mgr_set_ap_auto_disable(bool enable);
 
-// Status and information
-wifi_mgr_status_t wifi_mgr_get_status(void);
+// Status queries (lightweight alternatives to full status structure)
 bool wifi_mgr_is_sta_connected(void);
 bool wifi_mgr_is_ap_started(void);
+bool wifi_mgr_is_enabled(void);
 char* wifi_mgr_get_sta_ip(void);
+uint16_t wifi_mgr_get_ap_connected_stations(void);
+
+// Event group access for external status monitoring
+EventGroupHandle_t wifi_mgr_get_event_group(void);
 
 // WiFi scanning
 char* wifi_mgr_scan_networks(void);
@@ -146,6 +139,5 @@ esp_err_t wifi_mgr_set_callbacks(wifi_mgr_callbacks_t* callbacks);
 
 // Power management
 esp_err_t wifi_mgr_set_power_save_mode(wifi_ps_type_t mode);
-
 
 #endif // WIFI_MGR_H

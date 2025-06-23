@@ -40,8 +40,23 @@ static esp_netif_t* sta_netif = NULL;
 static TaskHandle_t reconnect_task_handle = NULL;
 static EventGroupHandle_t wifi_event_group = NULL;
 static wifi_mgr_config_t wifi_config;
-static wifi_mgr_status_t wifi_status = {0};
 static wifi_mgr_callbacks_t user_callbacks = {0};
+static QueueHandle_t sta_ip_queue = NULL;
+static QueueHandle_t ap_stations_queue = NULL;
+
+// Internal status structure (not exposed to external modules)
+typedef struct {
+    bool initialized;
+    bool enabled;
+    wifi_mgr_mode_t current_mode;
+    bool sta_connected;
+    bool ap_started;
+    char sta_ip[16];
+    int sta_retry_count;
+    uint16_t ap_connected_stations;
+} wifi_mgr_status_t;
+
+static wifi_mgr_status_t wifi_status = {0};
 
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
 static void wifi_reconnect_task(void* pvParameters);
@@ -79,6 +94,28 @@ esp_err_t wifi_mgr_init(wifi_mgr_config_t* config) {
         return ESP_ERR_NO_MEM;
     }
     
+    // Create status queues
+    sta_ip_queue = xQueueCreate(1, sizeof(char[16]));
+    ap_stations_queue = xQueueCreate(1, sizeof(uint16_t));
+
+    if (sta_ip_queue == NULL || ap_stations_queue == NULL) {
+        ESP_LOGE(TAG, "Failed to create status queues");
+        if (sta_ip_queue) vQueueDelete(sta_ip_queue);
+        if (ap_stations_queue) vQueueDelete(ap_stations_queue);
+        esp_event_handler_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler);
+        esp_wifi_deinit();
+        esp_netif_destroy(ap_netif);
+        esp_netif_destroy(sta_netif);
+        vEventGroupDelete(wifi_event_group);
+        return ESP_ERR_NO_MEM;
+    }
+
+    // Initialize with default values
+    char default_ip[16] = "";
+    uint16_t default_stations = 0;
+    xQueueOverwrite(sta_ip_queue, default_ip);
+    xQueueOverwrite(ap_stations_queue, &default_stations);
+
     // Initialize network interfaces
     ap_netif = esp_netif_create_default_wifi_ap();
     sta_netif = esp_netif_create_default_wifi_sta();
@@ -87,6 +124,8 @@ esp_err_t wifi_mgr_init(wifi_mgr_config_t* config) {
         ESP_LOGE(TAG, "Failed to create network interfaces");
         if (ap_netif) esp_netif_destroy(ap_netif);
         if (sta_netif) esp_netif_destroy(sta_netif);
+        if (sta_ip_queue) vQueueDelete(sta_ip_queue);
+        if (ap_stations_queue) vQueueDelete(ap_stations_queue);
         vEventGroupDelete(wifi_event_group);
         return ESP_ERR_NO_MEM;
     }
@@ -98,6 +137,8 @@ esp_err_t wifi_mgr_init(wifi_mgr_config_t* config) {
         ESP_LOGE(TAG, "WiFi init failed: %s", esp_err_to_name(ret));
         esp_netif_destroy(ap_netif);
         esp_netif_destroy(sta_netif);
+        if (sta_ip_queue) vQueueDelete(sta_ip_queue);
+        if (ap_stations_queue) vQueueDelete(ap_stations_queue);
         vEventGroupDelete(wifi_event_group);
         return ret;
     }
@@ -109,6 +150,8 @@ esp_err_t wifi_mgr_init(wifi_mgr_config_t* config) {
         esp_wifi_deinit();
         esp_netif_destroy(ap_netif);
         esp_netif_destroy(sta_netif);
+        if (sta_ip_queue) vQueueDelete(sta_ip_queue);
+        if (ap_stations_queue) vQueueDelete(ap_stations_queue);
         vEventGroupDelete(wifi_event_group);
         return ret;
     }
@@ -120,6 +163,8 @@ esp_err_t wifi_mgr_init(wifi_mgr_config_t* config) {
         esp_wifi_deinit();
         esp_netif_destroy(ap_netif);
         esp_netif_destroy(sta_netif);
+        if (sta_ip_queue) vQueueDelete(sta_ip_queue);
+        if (ap_stations_queue) vQueueDelete(ap_stations_queue);
         vEventGroupDelete(wifi_event_group);
         return ret;
     }
@@ -158,6 +203,11 @@ esp_err_t wifi_mgr_deinit(void) {
     // Set initialized to false immediately to prevent re-entry
     wifi_status.initialized = false;
     
+    // Clear ALL event bits first
+    if (wifi_event_group != NULL) {
+        xEventGroupClearBits(wifi_event_group, 0xFFFFFF);
+    }
+    
     // Disable WiFi first
     wifi_mgr_disable();
     
@@ -187,20 +237,24 @@ esp_err_t wifi_mgr_deinit(void) {
         sta_netif = NULL;
     }
     
-    // Clean up event group
-    if (wifi_event_group != NULL) {
-        vEventGroupDelete(wifi_event_group);
-        wifi_event_group = NULL;
+    // Clean up queues
+    if (sta_ip_queue != NULL) {
+        vQueueDelete(sta_ip_queue);
+        sta_ip_queue = NULL;
+    }
+    if (ap_stations_queue != NULL) {
+        vQueueDelete(ap_stations_queue);
+        ap_stations_queue = NULL;
     }
     
-    // Deinitialize network interface (NOTE: Only call if no other components use netif)
-    // esp_netif_deinit(); // Commented out - other components might still need netif
+    // DON'T delete the event group - preserve it for status monitoring
+    // The event group will be reused on next init
     
-    // Clear all status and config (redundant but explicit)
+    // Clear all status and config
     memset(&wifi_status, 0, sizeof(wifi_status));
     memset(&wifi_config, 0, sizeof(wifi_config));
     
-    ESP_LOGI(TAG, "WiFi Manager deinitialized");
+    ESP_LOGI(TAG, "WiFi Manager deinitialized (event group preserved for status monitoring)");
     return ESP_OK;
 }
 
@@ -308,16 +362,19 @@ esp_err_t wifi_mgr_enable(void) {
         return ret;
     }
     
+    // Update status BEFORE creating reconnect task
+    wifi_status.enabled = true;
+    wifi_status.current_mode = wifi_config.mode;
+    
+    // Set event bits BEFORE creating reconnect task
+    xEventGroupSetBits(wifi_event_group, WIFI_INIT_BIT | WIFI_ENABLED_BIT);
+    
     // Create reconnect task if STA auto-reconnect is enabled
     if ((wifi_config.mode == WIFI_MGR_MODE_STA || wifi_config.mode == WIFI_MGR_MODE_APSTA || wifi_config.mode == WIFI_MGR_MODE_AUTO) 
         && wifi_config.sta_auto_reconnect && reconnect_task_handle == NULL) {
         
         xTaskCreate(wifi_reconnect_task, "wifi_reconnect", 4096, NULL, 5, &reconnect_task_handle);
     }
-    
-    wifi_status.enabled = true;
-    wifi_status.current_mode = wifi_config.mode;
-    xEventGroupSetBits(wifi_event_group, WIFI_INIT_BIT);
     
     ESP_LOGI(TAG, "WiFi enabled with mode: %d", wifi_config.mode);
     return ESP_OK;
@@ -334,7 +391,7 @@ esp_err_t wifi_mgr_disable(void) {
     ESP_LOGI(TAG, "Disabling WiFi...");
     
     // CRITICAL: Clear event bits FIRST to prevent reconnect task from acting
-    xEventGroupClearBits(wifi_event_group, WIFI_INIT_BIT | WIFI_CONNECTED_BIT | WIFI_AP_STARTED_BIT | WIFI_DISCONNECTED_BIT);
+    xEventGroupClearBits(wifi_event_group, WIFI_INIT_BIT | WIFI_ENABLED_BIT | WIFI_CONNECTED_BIT | WIFI_AP_STARTED_BIT | WIFI_DISCONNECTED_BIT | WIFI_STA_GOT_IP_BIT);
     
     // Delete reconnect task
     if (reconnect_task_handle != NULL) {
@@ -346,7 +403,6 @@ esp_err_t wifi_mgr_disable(void) {
     if (wifi_status.sta_connected) {
         ESP_LOGI(TAG, "Disconnecting STA...");
         esp_wifi_disconnect();
-        // Don't wait for disconnection event since we cleared the bits
         vTaskDelay(pdMS_TO_TICKS(100)); // Just a short delay for the disconnect command
     }
     
@@ -367,6 +423,12 @@ esp_err_t wifi_mgr_disable(void) {
     wifi_status.ap_connected_stations = 0;
     memset(wifi_status.sta_ip, 0, sizeof(wifi_status.sta_ip));
     
+    // Update queues
+    char empty_ip[16] = "";
+    uint16_t zero_stations = 0;
+    if (sta_ip_queue) xQueueOverwrite(sta_ip_queue, empty_ip);
+    if (ap_stations_queue) xQueueOverwrite(ap_stations_queue, &zero_stations);
+    
     ESP_LOGI(TAG, "WiFi disabled");
     return ESP_OK;
 }
@@ -376,12 +438,16 @@ esp_err_t wifi_mgr_disable(void) {
  */
 esp_err_t wifi_mgr_set_mode(wifi_mgr_mode_t mode) {
     wifi_config.mode = mode;
+
+    if (!wifi_status.enabled) {
+        wifi_status.current_mode = mode;
+    }
     
     if (wifi_status.enabled) {
         ESP_LOGI(TAG, "Mode change requested to %d, restarting WiFi...", mode);
         
         // CRITICAL: Clear event bits FIRST to prevent reconnect task interference
-        xEventGroupClearBits(wifi_event_group, WIFI_INIT_BIT | WIFI_CONNECTED_BIT | WIFI_AP_STARTED_BIT | WIFI_DISCONNECTED_BIT);
+        xEventGroupClearBits(wifi_event_group, WIFI_INIT_BIT | WIFI_ENABLED_BIT | WIFI_CONNECTED_BIT | WIFI_AP_STARTED_BIT | WIFI_DISCONNECTED_BIT | WIFI_STA_GOT_IP_BIT);
         
         // Delete reconnect task if it exists
         if (reconnect_task_handle != NULL) {
@@ -407,6 +473,12 @@ esp_err_t wifi_mgr_set_mode(wifi_mgr_mode_t mode) {
         wifi_status.current_mode = WIFI_MGR_MODE_OFF;
         wifi_status.ap_connected_stations = 0;
         memset(wifi_status.sta_ip, 0, sizeof(wifi_status.sta_ip));
+        
+        // Update queues
+        char empty_ip[16] = "";
+        uint16_t zero_stations = 0;
+        if (sta_ip_queue) xQueueOverwrite(sta_ip_queue, empty_ip);
+        if (ap_stations_queue) xQueueOverwrite(ap_stations_queue, &zero_stations);
         
         // Restart with new mode
         return wifi_mgr_enable();
@@ -498,6 +570,16 @@ esp_err_t wifi_mgr_sta_connect(void) {
  * Disconnect from STA network
  */
 esp_err_t wifi_mgr_sta_disconnect(void) {
+    if (!wifi_status.enabled) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    // Check if STA is actually connected
+    if (!wifi_status.sta_connected) {
+        ESP_LOGW(TAG, "STA not connected, disconnect not needed");
+        return ESP_OK;
+    }
+    
     return esp_wifi_disconnect();
 }
 
@@ -532,31 +614,68 @@ esp_err_t wifi_mgr_set_ap_auto_disable(bool enable) {
 }
 
 /**
- * Get WiFi Manager status
- */
-wifi_mgr_status_t wifi_mgr_get_status(void) {
-    return wifi_status;
-}
-
-/**
  * Check if STA is connected
  */
 bool wifi_mgr_is_sta_connected(void) {
-    return wifi_status.sta_connected;
+    if (wifi_event_group == NULL) {
+        return false;
+    }
+    EventBits_t bits = xEventGroupGetBits(wifi_event_group);
+    return (bits & WIFI_CONNECTED_BIT) != 0;
 }
 
 /**
  * Check if AP is started
  */
 bool wifi_mgr_is_ap_started(void) {
-    return wifi_status.ap_started;
+    if (wifi_event_group == NULL) {
+        return false;
+    }
+    EventBits_t bits = xEventGroupGetBits(wifi_event_group);
+    return (bits & WIFI_AP_STARTED_BIT) != 0;
+}
+
+/**
+ * Check if WiFi is enabled
+ */
+bool wifi_mgr_is_enabled(void) {
+    if (wifi_event_group == NULL) {
+        return false;
+    }
+    EventBits_t bits = xEventGroupGetBits(wifi_event_group);
+    return (bits & WIFI_ENABLED_BIT) != 0;
 }
 
 /**
  * Get STA IP address
  */
 char* wifi_mgr_get_sta_ip(void) {
-    return wifi_status.sta_ip;
+    static char sta_ip_buffer[16] = "";
+    
+    if (sta_ip_queue != NULL) {
+        xQueuePeek(sta_ip_queue, sta_ip_buffer, 0);
+    }
+    return sta_ip_buffer;
+}
+
+/**
+ * Get number of connected AP stations
+ */
+uint16_t wifi_mgr_get_ap_connected_stations(void) {
+    if (ap_stations_queue == NULL) {
+        return 0;
+    }
+    
+    uint16_t count = 0;
+    xQueuePeek(ap_stations_queue, &count, 0);
+    return count;
+}
+
+/**
+ * Get event group handle for external status monitoring
+ */
+EventGroupHandle_t wifi_mgr_get_event_group(void) {
+    return wifi_event_group;
 }
 
 /**
@@ -719,7 +838,9 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                 ESP_LOGI(TAG, "STA disconnected");
                 wifi_status.sta_connected = false;
                 memset(wifi_status.sta_ip, 0, sizeof(wifi_status.sta_ip));
-                xEventGroupClearBits(wifi_event_group, WIFI_CONNECTED_BIT);
+                // Update queue with empty IP
+                if (sta_ip_queue) xQueueOverwrite(sta_ip_queue, wifi_status.sta_ip);
+                xEventGroupClearBits(wifi_event_group, WIFI_CONNECTED_BIT | WIFI_STA_GOT_IP_BIT);
                 xEventGroupSetBits(wifi_event_group, WIFI_DISCONNECTED_BIT);
                 
                 if (user_callbacks.sta_disconnected) {
@@ -748,6 +869,8 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                 ESP_LOGI(TAG, "AP stopped");
                 wifi_status.ap_started = false;
                 wifi_status.ap_connected_stations = 0;
+                // Update queue
+                if (ap_stations_queue) xQueueOverwrite(ap_stations_queue, &wifi_status.ap_connected_stations);
                 xEventGroupClearBits(wifi_event_group, WIFI_AP_STARTED_BIT);
                 break;
                 
@@ -755,6 +878,8 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                 wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
                 ESP_LOGI(TAG, "Station connected to AP: " MACSTR ", AID=%d", MAC2STR(event->mac), event->aid);
                 wifi_status.ap_connected_stations++;
+                // Update queue
+                if (ap_stations_queue) xQueueOverwrite(ap_stations_queue, &wifi_status.ap_connected_stations);
                 
                 if (user_callbacks.ap_station_connected) {
                     user_callbacks.ap_station_connected(event->mac, event->aid);
@@ -768,6 +893,8 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                 if (wifi_status.ap_connected_stations > 0) {
                     wifi_status.ap_connected_stations--;
                 }
+                // Update queue
+                if (ap_stations_queue) xQueueOverwrite(ap_stations_queue, &wifi_status.ap_connected_stations);
                 
                 if (user_callbacks.ap_station_disconnected) {
                     user_callbacks.ap_station_disconnected(event->mac, event->aid);
@@ -782,8 +909,10 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         wifi_status.sta_connected = true;
         wifi_status.sta_retry_count = 0;
         snprintf(wifi_status.sta_ip, sizeof(wifi_status.sta_ip), IPSTR, IP2STR(&event->ip_info.ip));
+        // Update queue
+        if (sta_ip_queue) xQueueOverwrite(sta_ip_queue, wifi_status.sta_ip);
         
-        xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
+        xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT | WIFI_STA_GOT_IP_BIT);
         xEventGroupClearBits(wifi_event_group, WIFI_DISCONNECTED_BIT);
         
         if (user_callbacks.sta_connected) {
@@ -808,9 +937,12 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
  * WiFi reconnect task
  */
 static void wifi_reconnect_task(void* pvParameters) {
-    const TickType_t reconnect_delay = pdMS_TO_TICKS(1000); // 5 seconds
+    const TickType_t reconnect_delay = pdMS_TO_TICKS(5000); // 5 seconds
     
     ESP_LOGI(TAG, "WiFi reconnect task started");
+    
+    // Wait a moment for WiFi to fully initialize
+    vTaskDelay(pdMS_TO_TICKS(1000));
     
     while (1) {
         // Wait for disconnection event
@@ -820,8 +952,9 @@ static void wifi_reconnect_task(void* pvParameters) {
                                                portMAX_DELAY);
         
         // Check if WiFi is still initialized and enabled before reconnecting
-        if (!(xEventGroupGetBits(wifi_event_group) & WIFI_INIT_BIT)) {
-            ESP_LOGI(TAG, "WiFi not initialized, reconnect task exiting");
+        EventBits_t current_bits = xEventGroupGetBits(wifi_event_group);
+        if (!(current_bits & WIFI_INIT_BIT) || !(current_bits & WIFI_ENABLED_BIT)) {
+            ESP_LOGI(TAG, "WiFi not initialized or enabled (bits: 0x%08lX), reconnect task exiting", current_bits);
             break;
         }
         
@@ -838,11 +971,12 @@ static void wifi_reconnect_task(void* pvParameters) {
         }
         
         // Wait before reconnecting
-        vTaskDelay(pdMS_TO_TICKS(reconnect_delay)); 
+        vTaskDelay(reconnect_delay); 
         
         // Double-check conditions before attempting reconnection
+        current_bits = xEventGroupGetBits(wifi_event_group);
         if (wifi_status.enabled && !wifi_status.sta_connected && 
-            (xEventGroupGetBits(wifi_event_group) & WIFI_INIT_BIT)) {
+            (current_bits & WIFI_INIT_BIT) && (current_bits & WIFI_ENABLED_BIT)) {
             
             ESP_LOGI(TAG, "Attempting to reconnect (attempt %d)", wifi_status.sta_retry_count + 1);
             wifi_status.sta_retry_count++;
@@ -852,7 +986,8 @@ static void wifi_reconnect_task(void* pvParameters) {
                 ESP_LOGE(TAG, "WiFi connect failed: %s", esp_err_to_name(ret));
             }
         } else {
-            ESP_LOGI(TAG, "Skipping reconnect - conditions not met");
+            ESP_LOGI(TAG, "Skipping reconnect - conditions not met (enabled:%d, connected:%d, bits:0x%08lX)", 
+                     wifi_status.enabled, wifi_status.sta_connected, current_bits);
         }
     }
     
