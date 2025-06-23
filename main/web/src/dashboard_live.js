@@ -51,9 +51,9 @@ const parameterSections = {
     },
     'Vehicle Status': {
         icon: 'car',
-        keywords: ['SPEED', 'ODOMETER', 'GEAR', 'THROTTLE', 'READY', 'PARK_BRAKE', 'FUEL', 'AC_P'],
+        keywords: ['SPEED', 'ODOMETER', 'GEAR', 'THROTTLE', 'READY', 'PARK_BRAKE', 'FUEL', 'TANK', 'LEVEL', 'AC_P'],
         classes: ['speed', 'distance', 'gear', 'volume_storage'],
-        units: ['km/h', 'mph', 'km', 'L', 'gal']
+        units: ['km/h', 'mph', 'km', 'L', 'gal', '%']
     },
     'Engine Parameters': {
         icon: 'settings',
@@ -377,31 +377,47 @@ function organizeParameters(data) {
         const cleanParamName = key.replace(/^\w+-/, '');
         const info = parameterInfo[key] || parameterInfo[cleanParamName];
         
-        for (const [sectionName, sectionConfig] of Object.entries(parameterSections)) {
-            if (sectionConfig.keywords.some(keyword => key.includes(keyword))) {
-                sections[sectionName][key] = value;
+        // Special handling for fuel-related parameters
+        if (key.toLowerCase().includes('fuel') || key.toLowerCase().includes('tank') || key.toLowerCase().includes('level')) {
+            if (key.toLowerCase().includes('fuel') || key.toLowerCase().includes('tank')) {
+                sections['Vehicle Status'][key] = value;
                 assigned = true;
-                break;
             }
-            
-            if (!assigned && info) {
-                if (info.class && sectionConfig.classes && sectionConfig.classes.includes(info.class)) {
+        }
+        
+        if (!assigned) {
+            for (const [sectionName, sectionConfig] of Object.entries(parameterSections)) {
+                if (sectionConfig.keywords.some(keyword => key.toUpperCase().includes(keyword.toUpperCase()))) {
                     sections[sectionName][key] = value;
                     assigned = true;
                     break;
                 }
                 
-                if (!assigned && info.unit && sectionConfig.units && sectionConfig.units.includes(info.unit)) {
-                    if (sectionName === 'Tire Pressures') {
-                        if (key.toLowerCase().includes('tyre') || key.toLowerCase().includes('tire')) {
+                if (!assigned && info) {
+                    if (info.class && sectionConfig.classes && sectionConfig.classes.includes(info.class)) {
+                        sections[sectionName][key] = value;
+                        assigned = true;
+                        break;
+                    }
+                    
+                    if (!assigned && info.unit && sectionConfig.units && sectionConfig.units.includes(info.unit)) {
+                        // Skip % unit matching for Battery & Charging if it's a fuel parameter
+                        if (sectionName === 'Battery & Charging' && info.unit === '%' && 
+                            (key.toLowerCase().includes('fuel') || key.toLowerCase().includes('tank'))) {
+                            continue;
+                        }
+                        
+                        if (sectionName === 'Tire Pressures') {
+                            if (key.toLowerCase().includes('tyre') || key.toLowerCase().includes('tire')) {
+                                sections[sectionName][key] = value;
+                                assigned = true;
+                                break;
+                            }
+                        } else {
                             sections[sectionName][key] = value;
                             assigned = true;
                             break;
                         }
-                    } else {
-                        sections[sectionName][key] = value;
-                        assigned = true;
-                        break;
                     }
                 }
             }
