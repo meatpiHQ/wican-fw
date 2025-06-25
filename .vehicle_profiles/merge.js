@@ -88,13 +88,20 @@ await writeFile(supportedVehiclesListFilepath[0], supportedVehiclesListContent);
 
 // Generate Supported_Parameters.md
 const supportedParametersListFilepath = await glob(
+
   "../docs/content/*.Config/*.Automate/*.Supported_Parameters.md",
 );
-if (
-  supportedParametersListFilepath.length == 0 ||
-  supportedParametersListFilepath.length != 1
-)
+let supportedParametersTargetPath = null;
+if (supportedParametersListFilepath.length === 1) {
+  supportedParametersTargetPath = supportedParametersListFilepath[0];
+} else if (supportedParametersListFilepath.length === 0) {
+  // Default to the same directory as Supported_Vehicles.md, with the expected filename
+  const vehiclesPath = supportedVehiclesListFilepath[0];
+  const dir = vehiclesPath.substring(0, vehiclesPath.lastIndexOf("/"));
+  supportedParametersTargetPath = `${dir}/4.Supported_Parameters.md`;
+} else {
   throw new Error("Unable to determine automateDirectory for Supported_Parameters.md");
+}
 
 let supportedParametersContent = `<!--
 
@@ -110,7 +117,6 @@ This table lists all supported parameters, their descriptions, and settings as u
 |-----------|-------------|----------|
 `;
 
-
 param_array.forEach((param) => {
   const entry = params[param];
   // Some entries may have typo 'decription' instead of 'description'
@@ -124,4 +130,4 @@ param_array.forEach((param) => {
   supportedParametersContent += `| \`${param}\` | ${desc} | ${settings} |\n`;
 });
 
-await writeFile(supportedParametersListFilepath[0], supportedParametersContent);
+await writeFile(supportedParametersTargetPath, supportedParametersContent);
