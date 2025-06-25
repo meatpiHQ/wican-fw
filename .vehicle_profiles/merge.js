@@ -24,6 +24,10 @@ let result = {
 
 async function add_json(path) {
   let data = JSON.parse(await readFile(path));
+  if (!data.pids || typeof data.pids !== "object") {
+    console.warn(`Warning: Skipping file without valid 'pids': ${path}`);
+    return;
+  }
   Object.keys(data.pids).forEach((key) => {
     let newParams = [];
     for (const [param, exp] of Object.entries(data.pids[key].parameters)) {
@@ -81,3 +85,43 @@ if (
   throw new Error("Unable to determine automateDirectory");
 }
 await writeFile(supportedVehiclesListFilepath[0], supportedVehiclesListContent);
+
+// Generate Supported_Parameters.md
+const supportedParametersListFilepath = await glob(
+  "../docs/content/*.Config/*.Automate/*.Supported_Parameters.md",
+);
+if (
+  supportedParametersListFilepath.length == 0 ||
+  supportedParametersListFilepath.length != 1
+)
+  throw new Error("Unable to determine automateDirectory for Supported_Parameters.md");
+
+let supportedParametersContent = `<!--
+
+================================================================
+THIS FILE WAS GENERATED! DO NOT UPDATE OR YOUR CHANGES ARE LOST!
+================================================================
+
+-->
+# Supported Parameters
+This table lists all supported parameters, their descriptions, and settings as used in WiCAN vehicle profiles.
+
+| Parameter | Description | Settings |
+|-----------|-------------|----------|
+`;
+
+
+param_array.forEach((param) => {
+  const entry = params[param];
+  // Some entries may have typo 'decription' instead of 'description'
+  const desc = entry.description || entry.decription || "";
+  // Format settings as JSON, but compact
+  const settings = entry.settings ?
+    Object.entries(entry.settings)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join(", ") :
+    "";
+  supportedParametersContent += `| \`${param}\` | ${desc} | ${settings} |\n`;
+});
+
+await writeFile(supportedParametersListFilepath[0], supportedParametersContent);
