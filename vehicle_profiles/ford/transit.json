@@ -1,126 +1,174 @@
 {
-  "car_model": "Ford-Transit",
+  "car_model": "2021-Ford-Transit-North-America",
   "init": "ATE0;ATL0;ATH0;ATR1;ATST32;ATSP6;ATCAF1;",
   "pids": [
     {
-      "pid": "221E1C",
-      "pid_init": "ATSH7E0",
-      "parameters": [
-        {
-          "name": "Ford-PCM-Transmission-Temp",
-          "class": "temperature",
-          "expression": "(([B4:B5])*45)/720",
-          "unit": "C",
-          "min": "-40",
-          "max": "200"
-        }
-      ],
-      "isExpanded": true
+      "pid": "22402B",
+      "pid_init": "ATSH000726;STCAFCP726,72E;",
+      "parameters": {
+        "HV_A": "([B4:B5]-32768)/256"
+      }
     },
     {
-      "pid": "2204661",
-      "pid_init": "ATSH7E0",
-      "parameters": [
-        {
-          "name": "Ford-PCM-Desired-Boost",
-          "class": "pressure",
-          "expression": "((256*B4)+B5)/128",
-          "unit": "kPa",
-          "min": "0",
-          "max": "1000"
-        }
-      ],
-      "isExpanded": true
+      "pid": "224028",
+      "pid_init": "ATSH000726;STCAFCP726,72E;",
+      "parameters": {
+        "SOC": "B4"
+      }
     },
     {
-      "pid": "22054B1",
-      "pid_init": "ATSH7E0",
-      "parameters": [
-        {
-          "name": "Ford-PCM-Oil-Life",
-          "class": "percentage",
-          "expression": "B4",
-          "unit": "%",
-          "min": "0",
-          "max": "100"
-        }
-      ],
-      "isExpanded": true
+      "pid": "22402A",
+      "pid_init": "ATSH000726;STCAFCP726,72E;",
+      "parameters": {
+        "HV_V": "([B4:B5]/256)/10"
+      }
     },
     {
-      "pid": "221E121",
-      "pid_init": "ATSH7E0",
-      "parameters": [
-        {
-          "name": "Ford-PCM-Gear",
-          "class": "",
-          "expression": "B4",
-          "unit": "",
-          "min": "0",
-          "max": "100"
-        }
-      ],
-      "isExpanded": true
+      "pid": "222813",
+      "pid_init": "ATSH000726;STCAFCP726,72E;",
+      "parameters": {
+        "TYRE_P_FL": "[B4:B5]/10"
+      }
     },
     {
-      "pid": "2204621",
-      "pid_init": "ATSH7E0",
-      "parameters": [
-        {
-          "name": "Ford-PCM-Wastegate",
-          "class": "percentage",
-          "expression": "B4/128*100",
-          "unit": "%",
-          "min": "0",
-          "max": "100"
-        }
-      ],
-      "isExpanded": true
+      "pid": "222816",
+      "pid_init": "ATSH000726;STCAFCP726,72E;",
+      "parameters": {
+        "TYRE_P_RL": "[B4:B5]/10"
+      }
     },
     {
-      "pid": "220404",
-      "pid_init": "ATSH7E0",
-      "parameters": [
-        {
-          "name": "Ford-PCM-Knock-Count",
-          "class": "",
-          "expression": "B4",
-          "unit": "",
-          "min": "0",
-          "max": "255"
-        }
-      ],
-      "isExpanded": true
+      "pid": "222814",
+      "pid_init": "ATSH000726;STCAFCP726,72E;",
+      "parameters": {
+        "TYRE_P_FR": "[B4:B5]/10"
+      }
     },
     {
-      "pid": "22F49D1",
-      "pid_init": "ATSH7E0",
-      "parameters": [
-        {
-          "name": "Ford-PCM-Fuel-Rate",
-          "class": "volume_flow_rate",
-          "expression": "([B4:B5])*2/100",
-          "unit": "g/s",
-          "min": "0",
-          "max": "255"
-        }
-      ],
-      "isExpanded": true
+      "pid": "222815",
+      "pid_init": "ATSH000726;STCAFCP726,72E;",
+      "parameters": {
+        "TYRE_P_RR": "[B4:B5]/10"
+      }
+    },
+    {
+      "pid": "22099B",
+      "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+      "parameters": {
+        "PCM-AC-Compressor": "B4"
+      }
+    },
+    {
+      "pid": "220598",
+      "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+      "parameters": {
+        "PCM-Alternator-Duty-Cycle": "B4"
+      }
+    },
+    {
+      "pid": "222B00",
+      "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+      "parameters": {
+        "PARK_BRAKE": "B4"
+      }
+    },
+    {
+      "pid": "220651",
+      "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+      "parameters": {
+        "PCM-Drive-Mode": "B4"
+      }
+    },
+    {
+      "pid": "22F405",
+      "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+      "parameters": {
+        "COOLANT_TMP": "B4-40"
+      }
+    },
+    {
+      "pid": "22F423",
+      "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+      "parameters": {
+        "FUEL_PRESSURE": "[B4:B5]"
+      }
+    },
+    {
+      "pid": "2203DC",
+      "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+      "parameters": {
+        "PCM-Fuel-Pressure-Desired": "[B4:B5]"
+      }
+    },
+    {
+      "pid": "220307",
+      "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+      "parameters": {
+        "PCM-Fuel-Pump-Duty-Cycle": "(B4*100)/255"
+      }
+    },
+    {
+      "pid": "22F49D",
+      "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+      "parameters": {
+        "PCM-Fuel-Rate": "[B4:B5]*2/100"
+      }
+    },
+    {
+      "pid": "22F403",
+      "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+      "parameters": {
+        "PCM-Fuel-System-Status": "B4"
+      }
+    },
+    {
+      "pid": "22F40F",
+      "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+      "parameters": {
+        "INTAKE_AIR_TMP": "B4-40"
+      }
+    },
+    {
+      "pid": "2203CA",
+      "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+      "parameters": {
+        "PCM-Intake-Air-Temp-2": "B4-40"
+      }
     },
     {
       "pid": "2203E8",
-      "pid_init": "ATSH7E0",
-      "parameters": [
-        {
-          "name": "Ford-PCM-Learned-Octane-Ratio",
-          "class": "percentage",
-          "expression": "([B4:B5])/16384",
-          "unit": "%",
-          "min": "-100",
-          "max": "100"
-        }
-      ],
-      "isExpanded": true
+      "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+      "parameters": {
+        "PCM-Learned-Octane-Ratio": "[B4:B5]/16384"
+      }
+    },
+    {
+      "pid": "22054B",
+      "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+      "parameters": {
+        "PCM-Oil-Life": "B4"
+      }
+    },
+    {
+      "pid": "221E1C",
+      "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+      "parameters": {
+        "PCM-Trans-Fluid-Temp": "[B4:B5]/16"
+      }
+    },
+    {
+      "pid": "221E12",
+      "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+      "parameters": {
+        "GEAR": "B4"
+      }
+    },
+    {
+      "pid": "220462",
+      "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+      "parameters": {
+        "PCM-Wastegate": "B4*100/128"
+      }
     }
   ]
 }
