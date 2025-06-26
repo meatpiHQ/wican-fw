@@ -346,8 +346,8 @@ esp_err_t wifi_mgr_enable(void) {
         
         // Set AP IP configuration
         esp_netif_ip_info_t ip_info;
-        IP4_ADDR(&ip_info.ip, 192, 168, 4, 1);
-        IP4_ADDR(&ip_info.gw, 192, 168, 4, 1);
+        IP4_ADDR(&ip_info.ip, 192, 168, 0, 10);
+        IP4_ADDR(&ip_info.gw, 192, 168, 0, 10);
         IP4_ADDR(&ip_info.netmask, 255, 255, 255, 0);
         
         esp_netif_dhcps_stop(ap_netif);
@@ -847,14 +847,20 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                     user_callbacks.sta_disconnected();
                 }
                 
-                // Handle auto-switch back to APSTA mode if in AUTO mode
+                // Only switch back to APSTA if we're actually in STA mode and not in a mode transition
                 if (wifi_config.mode == WIFI_MGR_MODE_AUTO && wifi_config.ap_auto_disable) {
                     wifi_mode_t current_mode;
                     if (esp_wifi_get_mode(&current_mode) == ESP_OK && current_mode == WIFI_MODE_STA) {
-                        ESP_LOGI(TAG, "Switching back to APSTA mode");
-                        esp_wifi_stop();
-                        esp_wifi_set_mode(WIFI_MODE_APSTA);
-                        esp_wifi_start();
+                        // Add a small delay to avoid rapid mode switching
+                        vTaskDelay(pdMS_TO_TICKS(1000));
+                        // Check if we're still disconnected before switching back
+                        if (!wifi_status.sta_connected) {
+                            ESP_LOGI(TAG, "Switching back to APSTA mode");
+                            esp_err_t ret = esp_wifi_set_mode(WIFI_MODE_APSTA);
+                            if (ret != ESP_OK) {
+                                ESP_LOGE(TAG, "Failed to switch back to APSTA mode: %s", esp_err_to_name(ret));
+                            }
+                        }
                     }
                 }
                 break;
@@ -924,10 +930,11 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
             wifi_mode_t current_mode;
             if (esp_wifi_get_mode(&current_mode) == ESP_OK && current_mode == WIFI_MODE_APSTA) {
                 ESP_LOGI(TAG, "Auto-disabling AP mode");
-                esp_wifi_stop();
-                esp_wifi_set_mode(WIFI_MODE_STA);
-                esp_wifi_start();
-                esp_wifi_connect();
+                // Don't stop WiFi completely - just change mode to preserve STA connection
+                esp_err_t ret = esp_wifi_set_mode(WIFI_MODE_STA);
+                if (ret != ESP_OK) {
+                    ESP_LOGE(TAG, "Failed to switch to STA mode: %s", esp_err_to_name(ret));
+                }
             }
         }
     }
@@ -938,6 +945,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
  */
 static void wifi_reconnect_task(void* pvParameters) {
     const TickType_t reconnect_delay = pdMS_TO_TICKS(5000); // 5 seconds
+    const TickType_t ap_client_check_delay = pdMS_TO_TICKS(10000); // 10 seconds
     
     ESP_LOGI(TAG, "WiFi reconnect task started");
     
@@ -945,13 +953,7 @@ static void wifi_reconnect_task(void* pvParameters) {
     vTaskDelay(pdMS_TO_TICKS(1000));
     
     while (1) {
-        // Wait for disconnection event
-        EventBits_t bits = xEventGroupWaitBits(wifi_event_group, 
-                                               WIFI_DISCONNECTED_BIT, 
-                                               pdTRUE, pdFALSE, 
-                                               portMAX_DELAY);
-        
-        // Check if WiFi is still initialized and enabled before reconnecting
+        // Check if WiFi is still initialized and enabled
         EventBits_t current_bits = xEventGroupGetBits(wifi_event_group);
         if (!(current_bits & WIFI_INIT_BIT) || !(current_bits & WIFI_ENABLED_BIT)) {
             ESP_LOGI(TAG, "WiFi not initialized or enabled (bits: 0x%08lX), reconnect task exiting", current_bits);
@@ -961,12 +963,45 @@ static void wifi_reconnect_task(void* pvParameters) {
         // Check if we should attempt reconnection
         if (!wifi_config.sta_auto_reconnect || !wifi_status.enabled) {
             ESP_LOGI(TAG, "Auto-reconnect disabled or WiFi disabled, skipping");
+            vTaskDelay(reconnect_delay);
+            continue;
+        }
+        
+        // Check if STA is already connected
+        if (wifi_status.sta_connected) {
+            vTaskDelay(reconnect_delay);
+            continue;
+        }
+        
+        // Check if we have a disconnection event or if we're already disconnected
+        bool should_reconnect = false;
+        if (current_bits & WIFI_DISCONNECTED_BIT) {
+            // Clear the disconnected bit since we're handling it
+            xEventGroupClearBits(wifi_event_group, WIFI_DISCONNECTED_BIT);
+            should_reconnect = true;
+        } else if (!wifi_status.sta_connected) {
+            // STA is disconnected but no event bit set, still try to reconnect
+            should_reconnect = true;
+        }
+        
+        if (!should_reconnect) {
+            vTaskDelay(reconnect_delay);
+            continue;
+        }
+        
+        // Check if AP has connected stations - pause reconnection to avoid channel switching
+        if (wifi_status.ap_connected_stations > 0) {
+            ESP_LOGI(TAG, "AP has %d connected stations, pausing STA reconnection to avoid channel switching", 
+                     wifi_status.ap_connected_stations);
+            vTaskDelay(ap_client_check_delay); // Wait and check again, don't consume the disconnect event
             continue;
         }
         
         // Check retry limit
         if (wifi_config.sta_max_retry >= 0 && wifi_status.sta_retry_count >= wifi_config.sta_max_retry) {
-            ESP_LOGW(TAG, "Max retry attempts reached (%d), stopping auto-reconnect", wifi_config.sta_max_retry);
+            ESP_LOGW(TAG, "Max retry attempts reached (%d), waiting before next attempt", wifi_config.sta_max_retry);
+            vTaskDelay(pdMS_TO_TICKS(60000)); // Wait 1 minute before trying again
+            wifi_status.sta_retry_count = 0; // Reset retry count after long wait
             continue;
         }
         
