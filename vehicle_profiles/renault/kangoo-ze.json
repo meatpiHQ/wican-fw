@@ -1,12 +1,105 @@
 {
-  "car_model": "Renault: Kangoo Z.E",
-  "init": "ATSP6;",
-  "pids": [
-    {
-      "pid": "222002",
-      "parameters": {
-        "SOC": "((B4*256)+B5)/50"
-      }
-    }
-  ]
+    "car_model": "Renault: Kangoo Z.E",
+    "init": "ATSP6;",
+    "pids": [
+        {
+            "pid": "222002",
+            "parameters": [
+                {
+                    "name": "SoC",
+                    "expression": "[B4:B5] * 0.02",
+                    "unit": "%",
+                    "class": "battery",
+					"min": "0",
+					"max": "100",
+					"period": "1000"
+                }
+            ]
+        },
+        {
+            "pid": "222005",
+            "parameters": [
+                {
+                    "name": "LV Battery",
+                    "expression": "[B4:B5] * 0.01",
+                    "unit": "V",
+                    "class": "battery"
+                }
+            ]
+        },    
+        {
+            "pid": "222006",
+            "parameters": [
+                {
+                    "name": "Odometer",
+                    "pid_init": "",
+                    "expression": "[B4:B6]",
+                    "unit": "km",
+                    "class": "none",
+					"period": "10000"
+                }
+            ]
+        },
+        {
+            "pid": "223206",
+            "parameters": [
+                {
+                    "name": "SoH",
+                    "expression": "B4",
+                    "unit": "%",
+                    "class": "battery",
+					"min": "0",
+					"max": "100",
+					"period": "10000"
+                }
+            ]
+        },
+        {
+            "pid": "223203",
+            "parameters": [
+                {
+                    "name": "HV Battery",
+                    "expression": "[B4:B5] * 0.2",
+                    "unit": "V",
+                    "class": "battery",
+					"period": "10000"
+                }
+            ]
+        },
+        {
+            "pid": "222001",
+            "parameters": [
+                {
+                    "name": "HV Bat. Temp",
+                    "expression": "B4-40",
+                    "unit": "°C",
+                    "class": "temperature",
+					"period": "10000"
+                }
+            ]
+        },
+        {
+            "pid": "22320C",
+            "parameters": [
+                {
+                    "name": "Available Discharge Energy",
+                    "expression": "[B4:B5]*0.005",
+                    "unit": "kWh",
+                    "class": "battery"
+                }
+            ]
+        },
+        {
+            "pid": "223451",
+            "parameters": [
+                {
+                    "name": "Range",
+                    "expression": "[B4:B5]",
+                    "unit": "km",
+                    "class": "none",
+					"period": "10000"
+                }
+            ]
+        }
+    ]
 }
