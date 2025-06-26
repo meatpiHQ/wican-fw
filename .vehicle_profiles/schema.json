@@ -15,7 +15,9 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["pid"],
+        "required": [
+          "pid"
+        ],
         "properties": {
           "pid": {
             "description": "The PID for this group of parameters",
