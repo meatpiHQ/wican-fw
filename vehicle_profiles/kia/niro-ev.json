@@ -1,5 +1,5 @@
 {
-  "car_model": "Hyundai: Ioniq5/Ioniq6/Kona",
+  "car_model": "Kia: Niro EV",
   "init": "ATSH7E4;ATST96;",
   "pids": [
     {
@@ -38,10 +38,10 @@
       }
     },
     {
-      "pid": "22B0025",
+      "pid": "22B002",
       "pid_init": "ATSH7C6;ATFCSH7C6",
       "parameters": {
-        "ODOMETER": "[B17:B18]"
+        "ODOMETER": "[B5:B6]"
       }
     }
   ]

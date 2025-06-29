@@ -1,0 +1,20 @@
+{
+  "car_model": "Nissan : Ariya",
+  "init": "ATSP7;ATST96;ATFCSH18DADBF1;ATFCSD300000;ATFCSM1;",
+  "pids": [
+    {
+      "pid": "2290021",
+      "pid_init": "ATSHDADBF1;ATFCSH18DADBF1;ATCRA18DAF1DB;",
+      "parameters": {
+        "SOC": "[B4:B5]/100"
+      }
+    },
+    {
+      "pid": "2290031",
+      "pid_init": "ATSHDADBF1;ATFCSH18DADBF1;ATCRA18DAF1DB;",
+      "parameters": {
+        "SOH": "[B4:B5]/100"
+      }
+    }
+  ]
+}

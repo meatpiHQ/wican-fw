@@ -1,0 +1,13 @@
+{
+  "car_model": "Audi: PQ25/PQ26/PQ35/PQ46/MQB",
+  "init": "ATSP6;ATST96;",
+  "pids": [
+    {
+      "pid": "2222031",
+      "pid_init": "ATSH714;ATCRA77E;",
+      "parameters": {
+        "ODOMETER": "[B4:B6]"
+      }
+    }
+  ]
+}

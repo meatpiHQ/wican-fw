@@ -1,0 +1,12 @@
+{
+  "car_model": "Smart: #1",
+  "init": "ATST64;ATSH7DF;ATSP7;",
+  "pids": [
+    {
+      "pid": "224801",
+      "parameters": {
+        "SOC": "([B4:B5]-3)/470"
+      }
+    }
+  ]
+}

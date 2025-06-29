@@ -1,0 +1,13 @@
+{
+  "car_model": "Chevrolet: Volt/Ampera",
+  "init": "ATSP6;ATST96;",
+  "pids": [
+    {
+      "pid": "015B1",
+      "pid_init": "",
+      "parameters": {
+        "SOC": "B3/2.55"
+      }
+    }
+  ]
+}

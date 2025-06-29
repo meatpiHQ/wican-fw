@@ -1,0 +1,13 @@
+{
+  "car_model": "Honda: Prologue",
+  "init": "ATSP7;ATST96;",
+  "pids": [
+    {
+      "pid": "222B435",
+      "pid_init": "ATSHDACBF1;ATCRA142AF1CB;ATFCSH14DACBF1;ATFCSD300000;ATFCSM1;",
+      "parameters": {
+        "SOC": "B5/255"
+      }
+    }
+  ]
+}

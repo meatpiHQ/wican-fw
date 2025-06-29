@@ -693,6 +693,20 @@
                             <td><input type="text" id="mqtt_pass" name="mqtt_pass" value="meatpi" /></td>
                         </tr>
                         <tr>
+                            <td><label for="keep_alive"><b>Keep Alive:</b></label></td>
+                            <td class="slider-container">
+                                <input type="range" 
+                                       id="keep_alive" 
+                                       name="keep_alive" 
+                                       value="30" 
+                                       min="2" 
+                                       max="120" 
+                                       step="1"
+                                       oninput="document.getElementById('keep_alive_value').textContent = this.value;submit_enable();">
+                                <span id="keep_alive_value">30</span>seconds
+                            </td>
+                        </tr>
+                        <tr>
                             <td><label for="mqtt_tx_topic"><b>TX Topic:</b></label></td>
                             <td><input type="text" id="mqtt_tx_topic" name="mqtt_tx_topic" value="" /></td>
                             <td><input type="checkbox" id="mqtt_tx_en_checkbox" name="mqtt_tx_en_checkbox"
@@ -760,7 +774,7 @@
                 <tr>
                     <td>MQTT HA Discovery:</td>
                     <td>
-                        <select id="ha_discovery" name="ha_discovery" toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
+                        <select id="ha_discovery" name="ha_discovery" onchange="toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
                             <option value="disable">Disable</option>
                         </select>
                     </td>
@@ -768,7 +782,7 @@
                 <tr>
                     <td>Grouping:</td>
                     <td>
-                        <select id="grouping" name="grouping" toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
+                        <select id="grouping" name="grouping" onchange="toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
                             <option value="disable">Disable</option>
                             <option value="enable">Enable</option>
                         </select>
@@ -792,6 +806,14 @@
                     <td>Cycle Time(ms):</td>
                     <td>
                         <input type="text" id="group_cycle" name="group_cycle" value="5000" disabled oninput="enableAutoStoreButton();submit_enable();">
+                    </td>
+                </tr>
+                <td>Polling:</td>
+                    <td>
+                        <select id="autopid_polling" name="autopid_polling" onchange="enableAutoStoreButton();submit_enable();">
+                            <option value="enable">Enable</option>
+                            <option value="disable">Disable</option>
+                        </select>
                     </td>
                 </tr>
             </table>
@@ -1750,6 +1772,7 @@ function loadAutoTable(jsonData) {
             setElementValue("car_specific", data.car_specific, 'disable');
             setElementValue("ha_discovery", 'disable');
             setElementValue("grouping", data.grouping, 'disable');
+            setElementValue("autopid_polling", data.autopid_polling, 'enable');
             setElementValue("group_cycle", data.cycle, '5000');
             setElementValue("destination", data.destination, '');
             setElementValue("car_model", data.car_model, '');
@@ -1853,6 +1876,7 @@ function loadAutoTable(jsonData) {
             // Get form values with null checks
             const initialisationValue = document.getElementById("initialisation")?.value || '';
             const groupingValue = document.getElementById("grouping")?.value || 'disable';
+            const autopid_pollingValue = document.getElementById("autopid_polling")?.value || 'enable';
             const groupDestTypeValue = document.getElementById("group_dest_type")?.value || 'Default';
             const ha_discoveryValue = document.getElementById("ha_discovery")?.value || 'disable';
             const destinationValue = document.getElementById("destination")?.value || '';
@@ -1972,6 +1996,7 @@ function loadAutoTable(jsonData) {
             const jsonData = {
                 initialisation: initialisationValue,
                 grouping: groupingValue,
+                autopid_polling: autopid_pollingValue,
                 group_dest_type: groupDestTypeValue,
                 destination: destinationValue,
                 cycle: cycleValue,
@@ -2395,6 +2420,7 @@ function loadAutoTable(jsonData) {
 		obj["mqtt_port"] = document.getElementById("mqtt_port").value;
 		obj["mqtt_user"] = document.getElementById("mqtt_user").value;
 		obj["mqtt_pass"] = document.getElementById("mqtt_pass").value;
+        obj["keep_alive"] = document.getElementById("keep_alive").value;
 		obj["mqtt_tx_topic"] = document.getElementById("mqtt_tx_topic").value;
         obj["ap_auto_disable"] = document.getElementById("ap_auto_disable").value;
 		if(document.getElementById("mqtt_tx_en_checkbox").checked){
@@ -2709,6 +2735,8 @@ function loadAutoTable(jsonData) {
 			document.getElementById("mqtt_port").value = obj.mqtt_port;
 			document.getElementById("mqtt_user").value = obj.mqtt_user;
 			document.getElementById("mqtt_pass").value = obj.mqtt_pass;
+            document.getElementById('keep_alive_value').textContent = obj.keep_alive_value;
+            document.getElementById("keep_alive").value = obj.keep_alive;
 			document.getElementById("mqtt_tx_topic").value = obj.mqtt_tx_topic;
 			document.getElementById("mqtt_rx_topic").value = obj.mqtt_rx_topic;
 			document.getElementById("mqtt_status_topic").value = obj.mqtt_status_topic;

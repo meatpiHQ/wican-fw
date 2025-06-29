@@ -61,8 +61,12 @@
 #include <ctype.h>
 #include "esp_timer.h"
 #include "expression_parser.h"
+#include "autopid.h"
+#include "dev_status.h"
 
 #define TAG 		__func__
+// #define TAG 		"MQTT_CLIENT"
+
 #define MQTT_TX_RX_BUF_SIZE         (1024*5)
 #define MQTT_OUT_BUF_SIZE           (1024*5)
 
@@ -290,6 +294,10 @@ static void mqtt_parse_data(void *handler_args, esp_event_base_t base, int32_t e
             sprintf(cmd_response, "{\"battery_voltage\": %f}", vbatt);
             mqtt_publish(mqtt_rsp_topic, cmd_response, strlen(cmd_response), 0, 0);
         }
+        else if(strcmp(cmd->valuestring, "get_autopid_data") == 0)
+        {
+            autopid_request_data();
+        }
         else
         {
             ESP_LOGW(TAG, "Unknown command received: %s", cmd->valuestring);
@@ -358,6 +366,7 @@ static void mqtt_task(void *pvParameters)
 	while(1)
 	{
 		xQueuePeek(*xmqtt_tx_queue, ( void * ) &tx_frame, portMAX_DELAY);
+        dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
 		if(mqtt_connected())
 		{
 			json_buffer[0] = 0;
@@ -622,7 +631,18 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
     xmqtt_tx_queue = xtx_queue;
     mqtt_led = connected_led;
     device_id = id;
-    
+
+    uint32_t keep_alive = 0;
+    if(config_server_get_keep_alive(&keep_alive) != -1)
+    {
+        mqtt_cfg.session.keepalive = keep_alive;
+    }
+    else
+    {
+        mqtt_cfg.session.keepalive = 30;
+    }
+    ESP_LOGI(TAG, "MQTT Keep Alive: %d", mqtt_cfg.session.keepalive);
+
     strcpy(mqtt_sub_topic, config_server_get_mqtt_tx_topic());
     
     strcpy(mqtt_status_topic, config_server_get_mqtt_status_topic());

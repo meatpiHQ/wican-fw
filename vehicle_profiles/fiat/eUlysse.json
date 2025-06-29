@@ -1,0 +1,62 @@
+{
+  "car_model": "Fiat: e-Ulysse",
+  "init": "ATSP6;ATST96;ATSH79B;ATFCSH79B;ATFCSD300000;ATFCSM1;",
+  "pids": [
+    {
+      "pid": "22D4101",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": {
+        "SOC": "[B4:B5]/512"
+      }
+    },
+    {
+      "pid": "22D8601",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": {
+        "SOH": "[B5:B6]/16"
+      }
+    },
+    {
+      "pid": "22D8151",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": {
+        "HV_V": "[B4:B5]/16"
+      }
+    },
+    {
+      "pid": "22D8EF1",
+      "pid_init": "ATSH6A2;ATFCSH6A2;ATCRA682;",
+      "parameters": {
+        "HV_T_A": "B4"
+      }
+    },
+    {
+      "pid": "22D8701",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": {
+        "HV_C_V_MAX": "[B4:B5]"
+      }
+    },
+    {
+      "pid": "22D86F1",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": {
+        "HV_C_V_MIN": "[B4:B5]"
+      }
+    },
+    {
+      "pid": "22D4341",
+      "pid_init": "ATSH6A2;ATFCSH6A2;ATCRA682;",
+      "parameters": {
+        "TMP_A": "B4"
+      }
+    },
+    {
+      "pid": "22D49C1",
+      "pid_init": "ATSH6A6;ATFCSH6A6;ATCRA686;",
+      "parameters": {
+        "ODOMETER": "[B6:B7]"
+      }
+    }
+  ]
+}

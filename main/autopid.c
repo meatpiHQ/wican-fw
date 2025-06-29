@@ -40,11 +40,14 @@
 #include "wc_timer.h"
 #include <float.h>
 #include "hw_config.h"
+#include "dev_status.h"
 
 #define TAG __func__
 
 #define TEMP_BUFFER_LENGTH  32
-#define ECU_CONNECTED_BIT			BIT0
+#define ECU_CONNECTED_BIT			        BIT0
+#define AUTOPID_POLLING_DISABLED_BIT	    BIT1
+#define AUTOPID_REQUEST_BIT			        BIT2
 
 static char auto_pid_buf[BUFFER_SIZE];
 static QueueHandle_t autopidQueue;
@@ -52,6 +55,9 @@ static char* device_id;
 static EventGroupHandle_t xautopid_event_group = NULL;
 static all_pids_t* all_pids = NULL;
 static response_t elm327_response;
+static autopid_value_t *autopid_values = NULL;
+static uint32_t autopid_values_count = 0;
+static SemaphoreHandle_t autopid_values_mutex = NULL;
 
 //Helper functions
 // Custom printer function to format numbers with 2 decimal places
@@ -294,6 +300,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
         ESP_LOGI(TAG, "Raw response length: %lu", response->length);
         ESP_LOG_BUFFER_HEX(TAG, response->data, response->length);
 
+
         // Skip mode byte (0x41) and PID byte
         if (response->length >= 7) {
             uint8_t merged_frame[7] = {0};
@@ -316,24 +323,30 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
                             char pid_str[64];
                             
                             // If the PID has multiple parameters
-                            if (pid_info->num_params > 1) {
+                            if (pid_info->num_params > 1 && pid_info->params) {
                                 ESP_LOGI(TAG, "Processing multi-parameter PID: %02X", pid);
                                 // Add each parameter as a separate entry
                                 for (int p = 0; p < pid_info->num_params; p++) {
-                                    snprintf(pid_str, sizeof(pid_str), "%02X-%s", 
-                                            pid, pid_info->params[p].name);
-                                    ESP_LOGI(TAG, "PID %02X parameter %d supported: %s", 
-                                            pid, p + 1, pid_str);
-                                    cJSON_AddItemToArray(pid_array, cJSON_CreateString(pid_str));
+                                    if (pid_info->params[p].name) {
+                                        snprintf(pid_str, sizeof(pid_str), "%02X-%s", 
+                                                pid, pid_info->params[p].name);
+                                        ESP_LOGI(TAG, "PID %02X parameter %d supported: %s", 
+                                                pid, p + 1, pid_str);
+                                        cJSON_AddItemToArray(pid_array, cJSON_CreateString(pid_str));
+                                    } else {
+                                        ESP_LOGW(TAG, "PID %02X parameter %d has NULL name", pid, p + 1);
+                                    }
                                 }
-                            } else {
+                            } else if (pid_info->params && pid_info->params[0].name) {
                                 // Single parameter PID
                                 snprintf(pid_str, sizeof(pid_str), "%02X-%s", 
                                         pid, pid_info->params[0].name);
                                 ESP_LOGI(TAG, "PID %02X supported: %s", pid, pid_str);
                                 cJSON_AddItemToArray(pid_array, cJSON_CreateString(pid_str));
+                            } else {
+                                ESP_LOGW(TAG, "PID %02X has invalid or NULL parameters", pid);
                             }
-                        }
+                        }                        
                     }
                 }
             } else {
@@ -352,7 +365,8 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
     if (json_str) {
         ESP_LOGI(TAG, "JSON string created, length: %zu", strlen(json_str));
         if (strlen(json_str) < available_pids_size) {
-            strcpy(available_pids, json_str);
+            strncpy(available_pids, json_str, available_pids_size - 1);
+            available_pids[available_pids_size - 1] = '\0'; // Ensure null-termination
             free(json_str);
             cJSON_Delete(root);
 
@@ -372,7 +386,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
 
     ESP_LOGI(TAG, "Restoring protocol settings");
     elm327_process_cmd((uint8_t*)restore_cmd, strlen(restore_cmd), &frame, &autopidQueue);
-    while (xQueueReceive(autopidQueue, &response, pdMS_TO_TICKS(1000)) == pdPASS);
+    while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS);
     
     cJSON_Delete(root);
     free(response);
@@ -434,28 +448,100 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
 //     }
 // }
 
+void autopid_update_values(void)
+{
+    if (!all_pids || !all_pids->mutex || !autopid_values || !autopid_values_mutex) {
+        ESP_LOGE(TAG, "Invalid pointers for updating autopid values");
+        return;
+    }
+
+    // Take both mutexes to ensure thread safety
+    if (xSemaphoreTake(all_pids->mutex, portMAX_DELAY) != pdTRUE) {
+        ESP_LOGE(TAG, "Failed to take all_pids mutex");
+        return;
+    }
+
+    if (xSemaphoreTake(autopid_values_mutex, portMAX_DELAY) != pdTRUE) {
+        ESP_LOGE(TAG, "Failed to take autopid_values mutex");
+        xSemaphoreGive(all_pids->mutex);
+        return;
+    }
+
+    // Update autopid_values from all_pids
+    uint32_t value_index = 0;
+    
+    for (uint32_t i = 0; i < all_pids->pid_count && value_index < autopid_values_count; i++) {
+        pid_data2_t *curr_pid = &all_pids->pids[i];
+        
+        // Skip if PID type not enabled
+        if ((curr_pid->pid_type == PID_STD && !all_pids->pid_std_en) ||
+            (curr_pid->pid_type == PID_CUSTOM && !all_pids->pid_custom_en) ||
+            (curr_pid->pid_type == PID_SPECIFIC && !all_pids->pid_specific_en)) {
+            continue;
+        }
+
+        for (uint32_t j = 0; j < curr_pid->parameters_count && value_index < autopid_values_count; j++) {
+            parameter_t *param = &curr_pid->parameters[j];
+            
+            if (param->name && autopid_values[value_index].name) {
+                // Check if names match
+                if (strcmp(param->name, autopid_values[value_index].name) == 0) {
+                    // Update the value and sensor type
+                    autopid_values[value_index].value = param->value;
+                    autopid_values[value_index].sensor_type = param->sensor_type;
+                    ESP_LOGD(TAG, "Updated autopid_values[%lu]: %s = %.2f", 
+                            value_index, param->name, param->value);
+                }
+            }
+            value_index++;
+        }
+    }
+
+    xSemaphoreGive(autopid_values_mutex);
+    xSemaphoreGive(all_pids->mutex);
+    
+    ESP_LOGI(TAG, "Updated %lu autopid values from all_pids", value_index);
+}
+
+void autopid_request_data(void)
+{
+    if (xautopid_event_group != NULL) {
+        xEventGroupSetBits(xautopid_event_group, AUTOPID_REQUEST_BIT);
+    } else {
+        ESP_LOGE(TAG, "autopid event group not initialized");
+    }
+}
+
+
 char *autopid_data_read(void)
 {
     static char *json_str = NULL;
     
-    if (!all_pids || !all_pids->mutex) {
-        ESP_LOGE(TAG, "Invalid all_pids or mutex");
+    if (!autopid_values || !autopid_values_mutex) {
+        ESP_LOGE(TAG, "Invalid autopid_values or mutex");
         return NULL;
     }
 
-    if (xSemaphoreTake(all_pids->mutex, portMAX_DELAY) == pdTRUE) {
+    // Only set request bit and wait if polling is disabled
+    if (xEventGroupGetBits(xautopid_event_group) & AUTOPID_POLLING_DISABLED_BIT) {
+        // Set the request bit to signal autopid task
+        xEventGroupSetBits(xautopid_event_group, AUTOPID_REQUEST_BIT);
+        
+        while (xEventGroupGetBits(xautopid_event_group) & AUTOPID_REQUEST_BIT) {
+            vTaskDelay(pdMS_TO_TICKS(100)); // Small delay to prevent busy waiting
+        }
+    }
+
+    if (xSemaphoreTake(autopid_values_mutex, portMAX_DELAY) == pdTRUE) {
         cJSON *root = cJSON_CreateObject();
         if (root) {
-            for (uint32_t i = 0; i < all_pids->pid_count; i++) {
-                pid_data2_t *curr_pid = &all_pids->pids[i];
-                for (uint32_t j = 0; j < curr_pid->parameters_count; j++) {
-                    parameter_t *param = &curr_pid->parameters[j];
-                    if (param->name && param->value != FLT_MAX) {
-                        if (param->sensor_type == BINARY_SENSOR) {
-                            cJSON_AddStringToObject(root, param->name, param->value > 0 ? "on" : "off");
-                        } else {
-                            cJSON_AddNumberToObject(root, param->name, param->value);
-                        }
+            for (uint32_t i = 0; i < autopid_values_count; i++) {
+                autopid_value_t *value = &autopid_values[i];
+                if (value->name && value->value != FLT_MAX) {
+                    if (value->sensor_type == BINARY_SENSOR) {
+                        cJSON_AddStringToObject(root, value->name, value->value > 0 ? "on" : "off");
+                    } else {
+                        cJSON_AddNumberToObject(root, value->name, value->value);
                     }
                 }
             }
@@ -463,7 +549,7 @@ char *autopid_data_read(void)
             json_str = cJSON_PrintUnformatted(root);
             cJSON_Delete(root);
         }
-        xSemaphoreGive(all_pids->mutex);
+        xSemaphoreGive(autopid_values_mutex);
     }
     return json_str;
 }
@@ -1041,7 +1127,16 @@ static void autopid_task(void *pvParameters)
     // bool *pid_failed = calloc(total_params, sizeof(bool));
     // xSemaphoreGive(all_pids->mutex);
     
-
+    if(strcmp("enable", all_pids->autopid_polling) == 0)
+    {
+        ESP_LOGI(TAG, "Autopid polling enabled");
+        xEventGroupClearBits(xautopid_event_group, AUTOPID_POLLING_DISABLED_BIT);
+    }
+    else
+    {
+        ESP_LOGI(TAG, "Autopid polling disabled");
+        xEventGroupSetBits(xautopid_event_group, AUTOPID_POLLING_DISABLED_BIT);
+    }
 
     ESP_LOGI(TAG, "Autopid Start loop");
     ESP_LOGI(TAG, "Total PIDs: %lu", all_pids->pid_count);
@@ -1049,6 +1144,13 @@ static void autopid_task(void *pvParameters)
     while(1) 
     {
         static pid_type_t previous_pid_type = PID_MAX;
+
+        dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
+
+        if (xEventGroupGetBits(xautopid_event_group) & AUTOPID_POLLING_DISABLED_BIT) 
+        {
+            xEventGroupWaitBits(xautopid_event_group, AUTOPID_REQUEST_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
+        }
 
         elm327_lock();
         xSemaphoreTake(all_pids->mutex, portMAX_DELAY);
@@ -1064,40 +1166,7 @@ static void autopid_task(void *pvParameters)
             {
                 continue;
             }
-            // autopid_data_write
-            if(curr_pid->pid_type != previous_pid_type) {
-                // Send appropriate initialization based on new PID type
-                switch(curr_pid->pid_type) {
-                    case PID_CUSTOM:
-                        if(all_pids->custom_init && strlen(all_pids->custom_init) > 0) {
-                            ESP_LOGI(TAG, "Sending custom init: %s, length: %d", 
-                                    all_pids->custom_init, strlen(all_pids->custom_init));
-                            send_commands(all_pids->custom_init, 2);
-                        }
-                        break;
-                        
-                    case PID_STD:
-                        if(all_pids->standard_init && strlen(all_pids->standard_init) > 0) {
-                            ESP_LOGI(TAG, "Sending standard init: %s, length: %d", 
-                                    all_pids->standard_init, strlen(all_pids->standard_init));
-                            send_commands(all_pids->standard_init, 2);
-                        }
-                        break;
-                        
-                    case PID_SPECIFIC:
-                        if(all_pids->specific_init && strlen(all_pids->specific_init) > 0) {
-                            ESP_LOGI(TAG, "Sending specific init: %s, length: %d", 
-                                    all_pids->specific_init, strlen(all_pids->specific_init));
-                            send_commands(all_pids->specific_init, 2);
-                        }
-                        break;
-                        
-                    case PID_MAX:
-                        break;
-                }
 
-                previous_pid_type = curr_pid->pid_type;
-            }
             // Loop through parameters
             for(uint32_t p = 0; p < curr_pid->parameters_count; p++) 
             {
@@ -1106,6 +1175,41 @@ static void autopid_task(void *pvParameters)
                 // Check parameter timer
                 if(wc_timer_is_expired(&param->timer)) 
                 {
+                    // autopid_data_write
+                    if(curr_pid->pid_type != previous_pid_type) {
+                        // Send appropriate initialization based on new PID type
+                        switch(curr_pid->pid_type) {
+                            case PID_CUSTOM:
+                                if(all_pids->custom_init && strlen(all_pids->custom_init) > 0) {
+                                    ESP_LOGI(TAG, "Sending custom init: %s, length: %d", 
+                                            all_pids->custom_init, strlen(all_pids->custom_init));
+                                    send_commands(all_pids->custom_init, 2);
+                                }
+                                break;
+                                
+                            case PID_STD:
+                                if(all_pids->standard_init && strlen(all_pids->standard_init) > 0) {
+                                    ESP_LOGI(TAG, "Sending standard init: %s, length: %d", 
+                                            all_pids->standard_init, strlen(all_pids->standard_init));
+                                    send_commands(all_pids->standard_init, 2);
+                                }
+                                break;
+                                
+                            case PID_SPECIFIC:
+                                if(all_pids->specific_init && strlen(all_pids->specific_init) > 0) {
+                                    ESP_LOGI(TAG, "Sending specific init: %s, length: %d", 
+                                            all_pids->specific_init, strlen(all_pids->specific_init));
+                                    send_commands(all_pids->specific_init, 2);
+                                }
+                                break;
+                                
+                            case PID_MAX:
+                                break;
+                        }
+
+                        previous_pid_type = curr_pid->pid_type;
+                    }
+
                     ESP_LOGI(TAG, "Processing parameter: %s", param->name);
                     // Reset timer with parameter period
                     wc_timer_set(&param->timer, param->period);
@@ -1248,6 +1352,13 @@ static void autopid_task(void *pvParameters)
 
         elm327_unlock();
         xSemaphoreGive(all_pids->mutex);
+
+        autopid_update_values();
+        
+        if (xEventGroupGetBits(xautopid_event_group) & AUTOPID_POLLING_DISABLED_BIT) {
+            xEventGroupClearBits(xautopid_event_group, AUTOPID_REQUEST_BIT);
+        }
+
         vTaskDelay(pdMS_TO_TICKS(10));
 
         if (strcmp("enable", all_pids->grouping) == 0 && all_pids->group_destination_type == DEST_MQTT_TOPIC && wc_timer_is_expired(&group_cycle_timer))
@@ -1266,7 +1377,6 @@ static void autopid_task(void *pvParameters)
             }
             wc_timer_set(&ecu_check_timer, 2000); // Reset timer for next check
         }
-
     }
 
 
@@ -1340,6 +1450,7 @@ all_pids_t* load_all_pids(void){
         if (root) {
             cJSON* init_item = cJSON_GetObjectItem(root, "initialisation");
             cJSON* grouping_item = cJSON_GetObjectItem(root, "grouping");
+            cJSON* autopid_polling_item = cJSON_GetObjectItem(root, "autopid_polling");
             cJSON* car_model_item = cJSON_GetObjectItem(root, "car_model");
             cJSON* ecu_protocol_item = cJSON_GetObjectItem(root, "ecu_protocol");
             cJSON* ha_discovery_item = cJSON_GetObjectItem(root, "ha_discovery");
@@ -1364,6 +1475,7 @@ all_pids_t* load_all_pids(void){
             }
 
             all_pids->grouping = (grouping_item && grouping_item->valuestring && strlen(grouping_item->valuestring) > 1) ? strdup(grouping_item->valuestring) : strdup("disable");
+            all_pids->autopid_polling = (autopid_polling_item && autopid_polling_item->valuestring && strlen(autopid_polling_item->valuestring) > 1) ? strdup(autopid_polling_item->valuestring) : strdup("enable");
             all_pids->vehicle_model = car_model_item ? strdup(car_model_item->valuestring) : NULL;
             all_pids->std_ecu_protocol = ecu_protocol_item ? strdup(ecu_protocol_item->valuestring) : NULL;
             all_pids->ha_discovery_en = ha_discovery_item ? (strcmp(ha_discovery_item->valuestring, "enable") == 0) : false;
@@ -1762,6 +1874,13 @@ void autopid_init(char* id)
         xautopid_event_group = xEventGroupCreate();
     }
 
+    // Set polling disabled bit
+    xEventGroupSetBits(xautopid_event_group, AUTOPID_POLLING_DISABLED_BIT);
+
+    // Set request bit  
+    xEventGroupSetBits(xautopid_event_group, AUTOPID_REQUEST_BIT);
+
+
     autopidQueue = xQueueCreate(QUEUE_SIZE, sizeof(response_t));
     if (autopidQueue == NULL)
     {
@@ -1797,6 +1916,30 @@ void autopid_init(char* id)
     // {
     //     car.pid_count = 0;
     // }
+    autopid_values_mutex = xSemaphoreCreateMutex();
+
+    if (!autopid_values_mutex)
+    {
+        ESP_LOGE(TAG, "Failed to create autopid_values mutex");
+        return;
+    }
+    autopid_values = malloc(sizeof(autopid_value_t) * all_pids->pid_count);
+    if (!autopid_values)
+    {
+        ESP_LOGE(TAG, "Failed to allocate memory for autopid_values");
+        return;
+    }
+
+    for (int i = 0; i < all_pids->pid_count; i++)
+    {
+        autopid_values[i].name = malloc(strlen(all_pids->pids[i].parameters->name) + 1);
+        strcpy(autopid_values[i].name, all_pids->pids[i].parameters->name);
+        autopid_values[i].value = FLT_MAX;
+        autopid_values[i].sensor_type = all_pids->pids[i].parameters->sensor_type;
+    }
+    autopid_values_count = all_pids->pid_count;
+
+
 
     xTaskCreate(autopid_task, "autopid_task", 5000, (void *)AF_INET, 5, NULL);
 

@@ -91,6 +91,7 @@ typedef struct _device_config
 	char batt_alert_time[16];
 	char batt_mqtt_user[64];
 	char batt_mqtt_pass[64];
+	char keep_alive[16];
 	char mqtt_en[10];
 	char mqtt_tx_en[10];
 	char mqtt_rx_en[10];
@@ -158,3 +159,4 @@ int8_t config_server_get_sleep_time(uint32_t *sleep_time);
 int8_t config_server_get_wakeup_time(uint32_t *wakeup_time);
 wifi_security_t config_server_get_sta_security(void);
 int8_t config_server_get_ap_auto_disable(void);
+int8_t config_server_get_keep_alive(uint32_t *keep_alive);
