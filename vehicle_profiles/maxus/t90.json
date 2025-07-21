@@ -1,0 +1,13 @@
+{
+  "car_model": "Maxus: T90/EUNIC5/EUNIC6/EUNIC9/EV30/EG10/eDeliver3/eDeliver9",
+  "init": "ATSP6;ATST96;",
+  "pids": [
+    {
+      "pid": "22E0021",
+      "pid_init": "ATSH7E3",
+      "parameters": {
+        "SOC": "B4"
+      }
+    }
+  ]
+}

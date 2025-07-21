@@ -1,0 +1,34 @@
+{
+  "car_model": "Porsche: Taycan",
+  "init": "ATST96;ATFCSD300000;ATFCSM1;",
+  "pids": [
+    {
+      "pid": "22028C1",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATCRA17FE007B;",
+      "parameters": {
+        "SOC": "B4-3"
+      }
+    },
+    {
+      "pid": "222AB62",
+      "pid_init": "ATSP6;ATCP18;ATSH710;ATFCSH710;ATCRA77A;",
+      "parameters": {
+        "RANGE": "[B5:B6]"
+      }
+    },
+    {
+      "pid": "222AB2",
+      "pid_init": "ATSP6;ATCP18;ATSH710;ATFCSH710;ATCRA77A;",
+      "parameters": {
+        "KWH_CHARGED": "B5"
+      }
+    },
+    {
+      "pid": "221DD01",
+      "pid_init": "ATSP6;ATCP18;ATSH744;ATFCSH744;ATFCSD300000;ATFCSM1;ATCRA7AE;",
+      "parameters": {
+        "SOC_D": "B4/2"
+      }
+    }
+  ]
+}
