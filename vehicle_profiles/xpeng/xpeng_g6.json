@@ -8,6 +8,13 @@
       "parameters": {
         "SOC": "[B4:B5]/10"
       }
-    }
+    },
+    {
+      "pid": "2201011",
+      "pid_init": "ATFCSM1;ATCRA784",
+      "parameters": {
+        "ODOMETER": "[B4:B6]"
+     }
+	  }  
   ]
 }
