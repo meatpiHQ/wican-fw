@@ -14,7 +14,7 @@
       "pid_init": "ATFCSM1;ATCRA784",
       "parameters": {
         "ODOMETER": "[B4:B6]"
-     }
-	  }  
+      }
+    }
   ]
 }
