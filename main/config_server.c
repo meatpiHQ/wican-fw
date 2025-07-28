@@ -109,7 +109,7 @@ static char can_datarate_str[11][7] = {
 								"1000K",
 };
 
-const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"3333\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"slcan\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"keep_alive\":\"30\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
+const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"3333\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"slcan\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_rx_individual_en\":\"disable\",\"mqtt_rx_individual_retain\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"keep_alive\":\"30\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
 static device_config_t device_config;
 TimerHandle_t xrestartTimer;
 
@@ -1846,6 +1846,34 @@ static void config_server_load_cfg(char *cfg)
 	//*****
 
 	//*****
+	key = cJSON_GetObjectItem(root,"mqtt_rx_individual_en");
+	if(key == 0 || (strlen(key->valuestring) > sizeof(device_config.mqtt_rx_individual_en)))
+	{
+		strcpy(device_config.mqtt_rx_individual_en,"disable");
+	}
+	else
+	{
+		strcpy(device_config.mqtt_rx_individual_en, key->valuestring);
+	}
+
+	ESP_LOGE(TAG, "device_config.mqtt_rx_individual_en: %s", device_config.mqtt_rx_individual_en);
+	//*****
+
+	//*****
+	key = cJSON_GetObjectItem(root,"mqtt_rx_individual_retain");
+	if(key == 0 || (strlen(key->valuestring) > sizeof(device_config.mqtt_rx_individual_retain)))
+	{
+		strcpy(device_config.mqtt_rx_individual_retain,"disable");
+	}
+	else
+	{
+		strcpy(device_config.mqtt_rx_individual_retain, key->valuestring);
+	}
+
+	ESP_LOGE(TAG, "device_config.mqtt_rx_individual_retain: %s", device_config.mqtt_rx_individual_retain);
+	//*****
+
+	//*****
 	key = cJSON_GetObjectItem(root,"mqtt_tx_topic");
 	if(key == 0 || (strlen(key->valuestring) > sizeof(device_config.mqtt_tx_topic)))
 	{
@@ -2571,6 +2599,33 @@ int8_t config_server_mqtt_elm327_log(void)
 	}
 	return -1;
 }
+
+int8_t config_server_mqtt_rx_individual_en(void)
+{
+	if(strcmp(device_config.mqtt_rx_individual_en, "enable") == 0)
+	{
+		return 1;
+	}
+	else if(strcmp(device_config.mqtt_rx_individual_en, "disable") == 0)
+	{
+		return 0;
+	}
+	return -1;
+}
+
+int8_t config_server_mqtt_rx_individual_retain(void)
+{
+	if(strcmp(device_config.mqtt_rx_individual_retain, "enable") == 0)
+	{
+		return 1;
+	}
+	else if(strcmp(device_config.mqtt_rx_individual_retain, "disable") == 0)
+	{
+		return 0;
+	}
+	return -1;
+}
+
 char *config_server_get_mqtt_url(void)
 {
 	return device_config.mqtt_url;
