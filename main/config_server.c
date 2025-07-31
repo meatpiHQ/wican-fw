@@ -2632,13 +2632,17 @@ wifi_security_t config_server_get_sta_security(void)
 
 int8_t config_server_get_ap_auto_disable(void)
 {
-	if(strcmp(device_config.ap_auto_disable, "enable") == 0)
+	if(strcmp(device_config.ap_auto_disable, "station") == 0 || strcmp(device_config.ap_auto_disable, "enable") == 0)
 	{
-		return 1;
+		return AP_AUTODIS_STATION;
+	}
+	else if(strcmp(device_config.ap_auto_disable, "timeout") == 0)
+	{
+		return AP_AUTODIS_TIMEOUT;
 	}
 	else if(strcmp(device_config.ap_auto_disable, "disable") == 0)
 	{
-		return 0;
+		return AP_AUTODIS_DISABLE;
 	}
 	return -1;
 }

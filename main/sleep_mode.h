@@ -24,5 +24,7 @@
 
 int8_t sleep_mode_init(uint8_t enable, float sleep_volt);
 int8_t sleep_mode_get_voltage(float *val);
+void sleep_mode_check_wakeup_flag();
+void sleep_mode_set_wakeup_flag();
 
 #endif
