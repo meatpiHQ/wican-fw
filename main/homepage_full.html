@@ -973,6 +973,15 @@
                     </td>
                 </tr>
                 <tr>
+                    <td>Wakeup on CAN activity:</td>
+                    <td>
+                        <select name="sleep_can" id="sleep_can" onChange="submit_enable();">
+                            <option value="enable">Enable</option>
+                            <option value="disable">Disable</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
                     <td>Sleep Voltage:</td>
                     <td class="slider-container">
                         <input type="range" 
@@ -2199,9 +2208,12 @@ function loadAutoTable(jsonData) {
 		}
 		if(document.getElementById("sleep_status").value == "enable") {
 			if(document.getElementById("ble_status").selectedIndex != "0") {
+				document.getElementById("sleep_can").disabled = false;
 				document.getElementById("batt_alert").disabled = false;
 			}
 		} else if(document.getElementById("sleep_status").value == "disable") {
+			document.getElementById("sleep_can").disabled = true;
+			document.getElementById("sleep_can").selectedIndex = "1";
 			document.getElementById("batt_alert").disabled = true;
 			document.getElementById("batt_alert").selectedIndex = "1";
 		}
@@ -2398,6 +2410,7 @@ function loadAutoTable(jsonData) {
 		obj["ble_pass"] = document.getElementById("ble_pass_value").value;
 		obj["ble_status"] = document.getElementById("ble_status").value;
 		obj["sleep_status"] = document.getElementById("sleep_status").value;
+		obj["sleep_can"] = document.getElementById("sleep_can").value;
 		obj["sleep_volt"] = document.getElementById("sleep_volt").value;
         obj["sleep_time"] = document.getElementById("sleep_time").value;
 		obj["batt_alert"] = document.getElementById("batt_alert").value;
@@ -2686,6 +2699,11 @@ function loadAutoTable(jsonData) {
 				document.getElementById("sleep_status").selectedIndex = "0";
 			} else if(obj.sleep_status == "disable") {
 				document.getElementById("sleep_status").selectedIndex = "1";
+			}
+			if(obj.sleep_can == "enable") {
+				document.getElementById("sleep_can").selectedIndex = "0";
+			} else if(obj.sleep_can == "disable") {
+				document.getElementById("sleep_can").selectedIndex = "1";
 			}
 
 			if ("mqtt_tx_en" in obj) {
