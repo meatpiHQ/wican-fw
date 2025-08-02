@@ -13,14 +13,15 @@ extern "C" {
 // Device status event bits
 #define DEV_AWAKE_BIT                   BIT0
 #define DEV_SLEEP_BIT                   BIT1
-#define DEV_WIFI_CONNECTED_BIT          BIT2
+#define DEV_STA_CONNECTED_BIT           BIT2
 #define DEV_MQTT_CONNECTED_BIT          BIT3
 #define DEV_BLE_CONNECTED_BIT           BIT4
 #define DEV_SDCARD_MOUNTED_BIT          BIT5 
 #define DEV_RST_REASON_SW_BIT           BIT6
 #define DEV_RST_REASON_DEEP_SLEEP_BIT   BIT7
 #define DEV_BLE_ENABLED_BIT             BIT8
-#define DEV_WIFI_ENABLED_BIT            BIT9
+#define DEV_STA_ENABLED_BIT             BIT9
+#define DEV_AP_ENABLED_BIT              BIT10
 
 // Initialize device status event group
 void dev_status_init(void);
@@ -44,19 +45,25 @@ bool dev_status_is_any_bit_set(EventBits_t bits);
 // Macros for common operations
 #define dev_status_set_awake()          dev_status_set_bits(DEV_AWAKE_BIT); dev_status_clear_bits(DEV_SLEEP_BIT)
 #define dev_status_set_sleep()          dev_status_set_bits(DEV_SLEEP_BIT); dev_status_clear_bits(DEV_AWAKE_BIT)
-#define dev_status_set_wifi_connected() dev_status_set_bits(DEV_WIFI_CONNECTED_BIT)
+#define dev_status_set_sta_connected()  dev_status_set_bits(DEV_STA_CONNECTED_BIT)
+#define dev_status_set_sta_enabled()    dev_status_set_bits(DEV_STA_ENABLED_BIT)
+#define dev_status_set_ap_enabled()     dev_status_set_bits(DEV_AP_ENABLED_BIT)
 #define dev_status_set_mqtt_connected() dev_status_set_bits(DEV_MQTT_CONNECTED_BIT)
 #define dev_status_set_ble_connected()  dev_status_set_bits(DEV_BLE_CONNECTED_BIT)
 
 #define dev_status_clear_awake()          dev_status_clear_bits(DEV_AWAKE_BIT)
 #define dev_status_clear_sleep()          dev_status_clear_bits(DEV_SLEEP_BIT)
-#define dev_status_clear_wifi_connected() dev_status_clear_bits(DEV_WIFI_CONNECTED_BIT)
+#define dev_status_clear_sta_connected() dev_status_clear_bits(DEV_STA_CONNECTED_BIT)
+#define dev_status_clear_sta_enabled()   dev_status_clear_bits(DEV_STA_ENABLED_BIT)
+#define dev_status_clear_ap_enabled()    dev_status_clear_bits(DEV_AP_ENABLED_BIT)
 #define dev_status_clear_mqtt_connected() dev_status_clear_bits(DEV_MQTT_CONNECTED_BIT)
-#define dev_status_clear_ble_connected()  dev_status_clear_bits(BLE_CONNECTED_BIT)
+#define dev_status_clear_ble_connected()  dev_status_clear_bits(DEV_BLE_CONNECTED_BIT)
 
 #define dev_status_is_awake()        dev_status_is_bit_set(DEV_AWAKE_BIT)
 #define dev_status_is_sleeping()     dev_status_is_bit_set(DEV_SLEEP_BIT)
-#define dev_status_is_wifi_connected() dev_status_is_bit_set(DEV_WIFI_CONNECTED_BIT)
+#define dev_status_is_sta_connected()  dev_status_is_bit_set(DEV_STA_CONNECTED_BIT)
+#define dev_status_is_sta_enabled()    dev_status_is_bit_set(DEV_STA_ENABLED_BIT)
+#define dev_status_is_ap_enabled()     dev_status_is_bit_set(DEV_AP_ENABLED_BIT)
 #define dev_status_is_mqtt_connected() dev_status_is_bit_set(DEV_MQTT_CONNECTED_BIT)
 #define dev_status_is_ble_connected()  dev_status_is_bit_set(DEV_BLE_CONNECTED_BIT)
 

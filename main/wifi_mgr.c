@@ -33,6 +33,7 @@
 #include "lwip/sockets.h"
 #include <cJSON.h>
 #include "wifi_mgr.h"
+#include "dev_status.h"
 
 static const char *TAG = "WiFi_Manager";
 static esp_netif_t* ap_netif = NULL;
@@ -423,6 +424,11 @@ esp_err_t wifi_mgr_disable(void) {
     wifi_status.ap_connected_stations = 0;
     memset(wifi_status.sta_ip, 0, sizeof(wifi_status.sta_ip));
     
+    // Clear device status bits
+    dev_status_clear_sta_connected();
+    dev_status_clear_sta_enabled();
+    dev_status_clear_ap_enabled();
+    
     // Update queues
     char empty_ip[16] = "";
     uint16_t zero_stations = 0;
@@ -473,6 +479,11 @@ esp_err_t wifi_mgr_set_mode(wifi_mgr_mode_t mode) {
         wifi_status.current_mode = WIFI_MGR_MODE_OFF;
         wifi_status.ap_connected_stations = 0;
         memset(wifi_status.sta_ip, 0, sizeof(wifi_status.sta_ip));
+        
+        // Clear device status bits
+        dev_status_clear_sta_connected();
+        dev_status_clear_sta_enabled();
+        dev_status_clear_ap_enabled();
         
         // Update queues
         char empty_ip[16] = "";
@@ -843,6 +854,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         switch (event_id) {
             case WIFI_EVENT_STA_START:
                 ESP_LOGI(TAG, "STA started");
+                dev_status_set_sta_enabled();
                 if (wifi_config.sta_auto_reconnect) {
                     esp_wifi_connect();
                 }
@@ -850,6 +862,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                 
             case WIFI_EVENT_STA_CONNECTED:
                 ESP_LOGI(TAG, "STA connected");
+                dev_status_set_sta_connected();
                 break;
                 
             case WIFI_EVENT_STA_DISCONNECTED:
@@ -860,6 +873,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                 if (sta_ip_queue) xQueueOverwrite(sta_ip_queue, wifi_status.sta_ip);
                 xEventGroupClearBits(wifi_event_group, WIFI_CONNECTED_BIT | WIFI_STA_GOT_IP_BIT);
                 xEventGroupSetBits(wifi_event_group, WIFI_DISCONNECTED_BIT);
+                dev_status_clear_sta_connected();
                 
                 if (user_callbacks.sta_disconnected) {
                     user_callbacks.sta_disconnected();
@@ -887,6 +901,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                 ESP_LOGI(TAG, "AP started");
                 wifi_status.ap_started = true;
                 xEventGroupSetBits(wifi_event_group, WIFI_AP_STARTED_BIT);
+                dev_status_set_ap_enabled();
                 break;
                 
             case WIFI_EVENT_AP_STOP:
@@ -896,6 +911,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                 // Update queue
                 if (ap_stations_queue) xQueueOverwrite(ap_stations_queue, &wifi_status.ap_connected_stations);
                 xEventGroupClearBits(wifi_event_group, WIFI_AP_STARTED_BIT);
+                dev_status_clear_ap_enabled();
                 break;
                 
             case WIFI_EVENT_AP_STACONNECTED: {
