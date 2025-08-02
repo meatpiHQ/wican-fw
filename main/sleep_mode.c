@@ -52,6 +52,7 @@
 #include "obd.h"
 #include "esp_adc/adc_oneshot.h"
 #include "dev_status.h"
+#include "wifi_mgr.h"
 
 // #define TAG 		__func__
 #define TAG         "SLEEP_MODE"
@@ -914,7 +915,7 @@ void light_sleep_task(void *pvParameters)
                         dev_status_set_bits(DEV_SLEEP_BIT);
                         elm327_sleep();
                         can_disable();
-                        wifi_network_deinit();
+                        wifi_mgr_deinit();
                         ble_disable();
                         led_set_level(0,0,0);
                         // Update immediately to prevenet elm327 wakeup 

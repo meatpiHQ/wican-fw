@@ -452,15 +452,42 @@
 <body onload="Load();">
     <div class="sidebar">
         <embed src="/logo.svg" class="logo" />
-        <button class="tablinks" onclick="openTab(event, 'status_view')" id="defaultOpen"><b>Status</b></button>
-        <button class="tablinks" onclick="openTab(event, 'wifi_settings')"><b>Settings</b></button>
-        <button class="tablinks" onclick="openTab(event, 'automate')"><b>Automate</b></button>
-        <button class="tablinks" onclick="openTab(event, 'dashboard_tab')"><b>Dashboard</b></button>
-        <button class="tablinks" onclick="openTab(event, 'power_saving_tab')"><b>Power Saving</b></button>
-        <button class="tablinks" onclick="openTab(event, 'logger')"><b>Logger Settings</b></button>
-        <button class="tablinks" onclick="openTab(event, 'monitor')"><b>CAN Monitor</b></button>
-        <button class="tablinks" onclick="openTab(event, 'system_tab')"><b>System</b></button>
-        <button class="tablinks" onclick="openTab(event, 'about_tab')"><b>About</b></button>
+        <button class="tablinks" onclick="openTab(event, 'status_view')" id="defaultOpen">
+            <span data-lucide="signal" style="width: 18px; height: 18px; margin-right: 8px;"></span>
+            <b>Status</b>
+        </button>
+        <button class="tablinks" onclick="openTab(event, 'wifi_settings')">
+            <span data-lucide="settings" style="width: 18px; height: 18px; margin-right: 8px;"></span>
+            <b>Settings</b>
+        </button>
+        <button class="tablinks" onclick="openTab(event, 'automate')">
+            <span data-lucide="zap" style="width: 18px; height: 18px; margin-right: 8px;"></span>
+            <b>Automate</b>
+        </button>
+        <button class="tablinks" onclick="openTab(event, 'dashboard_tab')">
+            <span data-lucide="bar-chart-3" style="width: 18px; height: 18px; margin-right: 8px;"></span>
+            <b>Dashboard</b>
+        </button>
+        <button class="tablinks" onclick="openTab(event, 'power_saving_tab')">
+            <span data-lucide="battery" style="width: 18px; height: 18px; margin-right: 8px;"></span>
+            <b>Power Saving</b>
+        </button>
+        <button class="tablinks" onclick="openTab(event, 'logger')">
+            <span data-lucide="file-text" style="width: 18px; height: 18px; margin-right: 8px;"></span>
+            <b>Logger Settings</b>
+        </button>
+        <button class="tablinks" onclick="openTab(event, 'monitor')">
+            <span data-lucide="monitor" style="width: 18px; height: 18px; margin-right: 8px;"></span>
+            <b>CAN Monitor</b>
+        </button>
+        <button class="tablinks" onclick="openTab(event, 'system_tab')">
+            <span data-lucide="cpu" style="width: 18px; height: 18px; margin-right: 8px;"></span>
+            <b>System</b>
+        </button>
+        <button class="tablinks" onclick="openTab(event, 'about_tab')">
+            <span data-lucide="info" style="width: 18px; height: 18px; margin-right: 8px;"></span>
+            <b>About</b>
+        </button>
     </div>
 
     <div class="content">
@@ -569,9 +596,10 @@
                     <tr>
                         <td>Mode:</td>
                         <td>
-                            <select name="wifi_mode" id="wifi_mode">
+                            <select name="wifi_mode" id="wifi_mode" onchange="toggleSmartConnectConfig(); submit_enable();">
                                 <option value="AP">AP</option>
                                 <option value="APStation">AP+Station</option>
+                                <option value="SmartConnect">SmartConnect</option>
                             </select>
                         </td>
                     </tr>
@@ -613,43 +641,155 @@
                     </tr>
                 </table>
 
+                <!-- SmartConnect Configuration -->
+                <div id="smartconnect_config" style="display: none;">
+                    <div class="divider"></div>
+                    <div class="section-title">SmartConnect Configuration</div>
+                    
+                    <!-- Home Mode Configuration -->
+                    <div class="divider"></div>
+                    <div class="section-title" style="font-size: 1.25rem; color: #2563eb; border-bottom: 2px solid #93c5fd; padding-bottom: 0.25rem; display: flex; align-items: center; gap: 8px;">
+                        <span data-lucide="home" style="width: 20px; height: 20px;"></span>
+                        Home Mode
+                    </div>
+                    <table class="form-table">
+                        <tr>
+                            <td>Home SSID:</td>
+                            <td>
+                                <input type="text" id="home_ssid" name="home_ssid" value="MeatPi" oninput="submit_enable();" />
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Home Password:</td>
+                            <td>
+                                <input type="text" id="home_password" name="home_password" value="TomatoSauce" oninput="submit_enable();" />
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Home Security:</td>
+                            <td>
+                                <select id="home_security" name="home_security" onchange="submit_enable();">
+                                    <option value="wpa3">WPA3</option>
+                                    <option value="wpa2">WPA2</option>
+                                </select>
+                            </td>
+                        </tr>
+                    </table>
+                    
+                    <!-- Drive Mode Configuration -->
+                    <div class="divider"></div>
+                    <div class="section-title" style="font-size: 1.25rem; color: #059669; border-bottom: 2px solid #6ee7b7; padding-bottom: 0.25rem; display: flex; align-items: center; gap: 8px;">
+                        <span data-lucide="car" style="width: 20px; height: 20px;"></span>
+                        Drive Mode
+                    </div>
+                    <table class="form-table">
+                        <tr>
+                            <td>Drive Connection Type:</td>
+                            <td>
+                                <select name="drive_connection_type" id="drive_connection_type" onchange="toggleDriveConfig(); submit_enable();">
+                                    <option value="wifi">WiFi</option>
+                                    <option value="ble">BLE</option>
+                                </select>
+                            </td>
+                        </tr>
+                        <tr id="drive_wifi_config">
+                            <td>Drive SSID:</td>
+                            <td>
+                                <input type="text" id="drive_ssid" name="drive_ssid" value="MeatPi" oninput="submit_enable();" />
+                            </td>
+                        </tr>
+                        <tr id="drive_wifi_password">
+                            <td>Drive Password:</td>
+                            <td>
+                                <input type="text" id="drive_password" name="drive_password" value="TomatoSauce" oninput="submit_enable();" />
+                            </td>
+                        </tr>
+                        <tr id="drive_wifi_security">
+                            <td>Drive Security:</td>
+                            <td>
+                                <select id="drive_security" name="drive_security" onchange="submit_enable();">
+                                    <option value="wpa3">WPA3</option>
+                                    <option value="wpa2">WPA2</option>
+                                </select>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+
                 <div class="divider"></div>
 
-                <div class="section-title">Station Config</div>
+                <!-- Station Config Section -->
+                <div id="station_config_section">
+                    <div class="section-title">Station Config</div>
+                    <table class="form-table">
+                        <tr>
+                            <td>SSID:</td>
+                            <td>
+                                <div class="wifi-scan-container">
+                                    <input type="text" id="ssid_value" name="ssid_value" value="MeatPi" disabled />
+                                    <button type="button" id="wifi_scan_button" onclick="scanWifiNetworks()" disabled>Scan</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr id="wifi_networks_row" style="display: none;">
+                            <td>Available Networks:</td>
+                            <td>
+                                <select id="wifi_networks_list" onchange="selectWifiNetwork()">
+                                    <option value="">Select a network...</option>
+                                </select>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Password:</td>
+                            <td>
+                                <input type="text" id="pass_value" name="pass_value" value="TomatoSauce" disabled />
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Security:</td>
+                            <td>
+                                <select id="sta_security" name="sta_security" disabled>
+                                    <option value="wpa3">WPA3</option>
+                                    <option value="wpa2">WPA2</option>
+                                </select>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <div class="divider"></div>
+
+                <div class="section-title">BLE</div>
                 <table class="form-table">
                     <tr>
-                        <td>SSID:</td>
+                        <td>Passkey:</td>
                         <td>
-                            <div class="wifi-scan-container">
-                                <input type="text" id="ssid_value" name="ssid_value" value="MeatPi" disabled />
-                                <button type="button" id="wifi_scan_button" onclick="scanWifiNetworks()" disabled>Scan</button>
-                            </div>
-                        </td>
-                    </tr>
-                    <tr id="wifi_networks_row" style="display: none;">
-                        <td>Available Networks:</td>
-                        <td>
-                            <select id="wifi_networks_list" onchange="selectWifiNetwork()">
-                                <option value="">Select a network...</option>
-                            </select>
+                            <input type="number" id="ble_pass_value" name="ble_pass_value" value="000000" min="0" max="999999" />
                         </td>
                     </tr>
                     <tr>
-                        <td>Password:</td>
+                        <td>BLE Status:</td>
                         <td>
-                            <input type="text" id="pass_value" name="pass_value" value="TomatoSauce" disabled />
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>Security:</td>
-                        <td>
-                            <select id="sta_security" name="sta_security" disabled>
-                                <option value="wpa3">WPA3</option>
-                                <option value="wpa2">WPA2</option>
+                            <select name="ble_status" id="ble_status" onchange="submit_enable();">
+                                <option value="enable">Enable</option>
+                                <option value="disable" selected>Disable</option>
                             </select>
                         </td>
                     </tr>
                 </table>
+
+                <!-- BLE Warning Section -->
+                <div id="ble_warning_div" style="display: none; margin: 8px 0;">
+                    <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 8px; padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                            <span style="font-size: 16px; margin-right: 8px;">⚠️</span>
+                            <strong style="color: #92400e; font-size: 14px;">BLE Connection Warning</strong>
+                        </div>
+                        <div style="color: #78350f; font-size: 13px; line-height: 1.4;">
+                            When BLE connects, WiFi AP is disabled. To restore WiFi AP: disconnect BLE and power cycle device.
+                        </div>
+                    </div>
+                </div>
 
                 <div class="divider"></div>
 
@@ -714,28 +854,7 @@
                         <td>
                             <select name="mqtt_en" id="mqtt_en">
                                 <option value="enable">Enable</option>
-                                <option value="disable">Disable</option>
-                            </select>
-                        </td>
-                    </tr>
-                </table>
-
-                <div class="divider"></div>
-
-                <div class="section-title">BLE</div>
-                <table class="form-table">
-                    <tr>
-                        <td>Passkey:</td>
-                        <td>
-                            <input type="number" id="ble_pass_value" name="ble_pass_value" value="000000" min="0" max="999999" />
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>BLE Status:</td>
-                        <td>
-                            <select name="ble_status" id="ble_status">
-                                <option value="enable">Enable</option>
-                                <option value="disable">Disable</option>
+                                <option value="disable" selected>Disable</option>
                             </select>
                         </td>
                     </tr>
@@ -1279,6 +1398,7 @@
 			toggleDestinationAndCycle();
 			toggleSendToFields();
             toggleStandardPIDOptions();
+            toggleSmartConnectConfig();
         }
 
         function loadDashboard() {
@@ -1413,6 +1533,63 @@
             ecuProtocolSelect.disabled = !isEnabled;
             availablePidsSelect.disabled = !isEnabled;
             scanPidButton.disabled = !isEnabled;
+        }
+
+        function toggleSmartConnectConfig() {
+            const wifiMode = document.getElementById("wifi_mode").value;
+            const smartConnectConfig = document.getElementById("smartconnect_config");
+            const stationConfigSection = document.getElementById("station_config_section");
+            
+            if (wifiMode === "SmartConnect") {
+                smartConnectConfig.style.display = "block";
+                stationConfigSection.style.display = "none"; // Hide Station Config
+                toggleDriveConfig(); // Initialize drive config visibility
+            } else {
+                smartConnectConfig.style.display = "none";
+                stationConfigSection.style.display = "block"; // Show Station Config
+                // Re-enable BLE when not in SmartConnect mode
+                const bleStatus = document.getElementById("ble_status");
+                const blePasskey = document.getElementById("ble_pass_value");
+                bleStatus.disabled = false;
+                blePasskey.disabled = false;
+            }
+            // Trigger validation when switching modes
+            submit_enable();
+        }
+
+        function toggleDriveConfig() {
+            const wifiMode = document.getElementById("wifi_mode").value;
+            const driveConnectionType = document.getElementById("drive_connection_type").value;
+            const driveWifiConfig = document.getElementById("drive_wifi_config");
+            const driveWifiPassword = document.getElementById("drive_wifi_password");
+            const driveWifiSecurity = document.getElementById("drive_wifi_security");
+            const bleStatus = document.getElementById("ble_status");
+            const blePasskey = document.getElementById("ble_pass_value");
+            
+            // Only apply SmartConnect logic when in SmartConnect mode
+            if (wifiMode === "SmartConnect") {
+                if (driveConnectionType === "wifi") {
+                    // Show WiFi config, force disable BLE
+                    driveWifiConfig.style.display = "table-row";
+                    driveWifiPassword.style.display = "table-row";
+                    driveWifiSecurity.style.display = "table-row";
+                    bleStatus.value = "disable";
+                    bleStatus.selectedIndex = 1; // Select "Disable" option
+                    bleStatus.disabled = true;
+                    blePasskey.disabled = true;
+                } else if (driveConnectionType === "ble") {
+                    // Hide WiFi config, force enable BLE
+                    driveWifiConfig.style.display = "none";
+                    driveWifiPassword.style.display = "none";
+                    driveWifiSecurity.style.display = "none";
+                    bleStatus.value = "enable";
+                    bleStatus.selectedIndex = 0; // Select "Enable" option
+                    bleStatus.disabled = true;
+                    blePasskey.disabled = false;
+                }
+            }
+            // Trigger validation when changing drive connection type
+            submit_enable();
         }
 
         function toggleDestinationAndCycle() {
@@ -2270,126 +2447,266 @@ function loadAutoTable(jsonData) {
 
 	function sta_enable() {}
 
-	function submit_enable() {
-        console.log("sumbit_enable");
-        const wifiMode = document.getElementById("wifi_mode").value;
-        const wifiScanButton = document.getElementById("wifi_scan_button");
-        
-        if(wifiMode == "AP") {
-            document.getElementById("ssid_value").disabled = true;
-            document.getElementById("pass_value").disabled = true;
-            document.getElementById("sta_security").disabled = true;
-            document.getElementById("ble_status").disabled = false;
-            document.getElementById("ap_auto_disable").disabled = true;
-            wifiScanButton.disabled = true;
-        } else {
-            document.getElementById("ssid_value").disabled = false;
-            document.getElementById("pass_value").disabled = false;
-            document.getElementById("sta_security").disabled = false;
-            document.getElementById("ble_status").disabled = true;
-            document.getElementById("ble_status").selectedIndex = "1";
-            wifiScanButton.disabled = false; 
-        }
-		if(document.getElementById("ble_status").selectedIndex == "0"
-            && !bleAlertShown) {
-            alert("Warning!\n\nWhen BLE is connected the WiFi AP WiCAN_xxxxxx will be disabled.\nTo re-enable the WiFi AP Turn OFF BLE on your phone or device, then power cycle WiCAN. If you connect to WiFi AP ssid WiCAN_xxxxxx, the BLE will automatically be disabled.");
-            document.getElementById("mqtt_en").value = "disable";
-			document.getElementById("mqtt_en_div").style.display = "none";
-			document.getElementById("mqtt_en").disabled = true;
-			document.getElementById("batt_alert").value = "disable";
-			document.getElementById("batt_alert_div").style.display = "none";
-			document.getElementById("batt_alert").disabled = true;
-            bleAlertShown = true;
-		} else {
-			document.getElementById("mqtt_en").disabled = false;
-			document.getElementById("batt_alert").disabled = true;
-		}
-		if(document.getElementById("ap_pass_value").value.length < 8 || document.getElementById("ap_pass_value").value.length > 63 || document.getElementById("pass_value").value.length < 8 || document.getElementById("pass_value").value.length > 63) {
-            showNotification("AP/Station password len, min=0 max=64", "red");
-			document.getElementById("submit_button").disabled = true;
-		} else if(document.getElementById("ssid_value").value.length < 1 || document.getElementById("ssid_value").value.length > 32) {
-            showNotification("AP/station ssid len, min=1 max=32", "red");
-			document.getElementById("submit_button").disabled = true;
-		} else if(document.getElementById("mqtt_tx_topic").value.length < 1 || document.getElementById("mqtt_tx_topic").value.length > 32) {
-            showNotification("MQTT TX Topic length, min=1 max=64", "red");
-			document.getElementById("submit_button").disabled = true;
-		}  else if(document.getElementById("mqtt_rx_topic").value.length < 1 || document.getElementById("mqtt_rx_topic").value.length > 32) {
-            showNotification("MQTT RX Topic length, min=1 max=64", "red");
-			document.getElementById("submit_button").disabled = true;
-		}  else if(document.getElementById("mqtt_status_topic").value.length < 1 || document.getElementById("mqtt_status_topic").value.length > 32) {
-            showNotification("MQTT Status Topic length, min=1 max=64", "red");
-			document.getElementById("submit_button").disabled = true;
-		} else if(document.getElementById("tcp_port_value").value > 65535 || document.getElementById("tcp_port_value").value < 1) {
-            showNotification("Port value, min=1 max=65535", "red");
-			document.getElementById("submit_button").disabled = true;
-		} else if(document.getElementById("batt_alert_port").value > 65535 || document.getElementById("batt_alert_port").value < 1) {
-            showNotification("Port value, min=1 max=65535", "red");
-			document.getElementById("submit_button").disabled = true;
-		} else if(document.getElementById("ble_pass_value").value.length != 6 || document.getElementById("ble_pass_value").value.charAt(0) == "0") {
-            showNotification("Passkey length, min=6 max=6, 1st number not 0", "red");
-			document.getElementById("submit_button").disabled = true;
-		} else if(document.getElementById("sleep_volt").value < 12 || document.getElementById("sleep_volt").value > 15) {
-            showNotification("Sleep Voltage Value, min=12.0 max=15.0", "red");
-			document.getElementById("submit_button").disabled = true;
-		}else if(document.getElementById("sleep_status").value == "disable" && 
-            document.getElementById("sleep_disable_agree").value == "no") {
-            showNotification("You must agree to disable sleep mode", "red");
-            document.getElementById("submit_button").disabled = true;
-        }
-        else {
-			document.getElementById("submit_button").disabled = false;
-		}
-		if(document.getElementById("protocol").value == "savvycan") {
-			document.getElementById("tcp_port_value").value = "23";
-			document.getElementById("tcp_port_value").disabled = true;
-			document.getElementById("port_type").selectedIndex = "0";
-			document.getElementById("port_type").disabled = true;
-		} else {
-			document.getElementById("tcp_port_value").disabled = false;
-			document.getElementById("port_type").selectedIndex = "0";
-			document.getElementById("port_type").disabled = false;
-		}
-		if(document.getElementById("sleep_status").value == "enable") {
-			if(document.getElementById("ble_status").selectedIndex != "0") {
-				document.getElementById("batt_alert").disabled = true;
-			}
-		} else if(document.getElementById("sleep_status").value == "disable") {
-			document.getElementById("batt_alert").disabled = true;
-			document.getElementById("batt_alert").selectedIndex = "0";
-		}
-		if(document.getElementById("batt_alert").value == "enable") {
-			document.getElementById("batt_alert_div").style.display = "none";
-		} else if(document.getElementById("batt_alert").value == "disable") {
-			document.getElementById("batt_alert_div").style.display = "none";
-		}
-		if(document.getElementById("mqtt_en").value == "enable") {
-			document.getElementById("mqtt_en_div").style.display = "block";
-		} else if(document.getElementById("mqtt_en").value == "disable") {
-			document.getElementById("mqtt_en_div").style.display = "none";
-		}
-		if(document.getElementById("protocol").value == "elm327") {
-			document.getElementById("mqtt_elm327_log").disabled = false;
-		} else {
-			document.getElementById("mqtt_elm327_log").disabled = true;
-            document.getElementById("mqtt_elm327_log").value = "disable";
-		}
+    // Helper function to get DOM elements efficiently
+    function getElements() {
+        return {
+            wifiMode: document.getElementById("wifi_mode"),
+            wifiScanButton: document.getElementById("wifi_scan_button"),
+            ssidValue: document.getElementById("ssid_value"),
+            passValue: document.getElementById("pass_value"),
+            staSecurity: document.getElementById("sta_security"),
+            bleStatus: document.getElementById("ble_status"),
+            apAutoDisable: document.getElementById("ap_auto_disable"),
+            bleWarningDiv: document.getElementById("ble_warning_div"),
+            mqttEn: document.getElementById("mqtt_en"),
+            mqttEnDiv: document.getElementById("mqtt_en_div"),
+            battAlert: document.getElementById("batt_alert"),
+            battAlertDiv: document.getElementById("batt_alert_div"),
+            submitButton: document.getElementById("submit_button"),
+            apPassValue: document.getElementById("ap_pass_value"),
+            mqttTxTopic: document.getElementById("mqtt_tx_topic"),
+            mqttRxTopic: document.getElementById("mqtt_rx_topic"),
+            mqttStatusTopic: document.getElementById("mqtt_status_topic"),
+            tcpPortValue: document.getElementById("tcp_port_value"),
+            battAlertPort: document.getElementById("batt_alert_port"),
+            blePassValue: document.getElementById("ble_pass_value"),
+            sleepVolt: document.getElementById("sleep_volt"),
+            sleepStatus: document.getElementById("sleep_status"),
+            sleepDisableAgree: document.getElementById("sleep_disable_agree"),
+            protocol: document.getElementById("protocol"),
+            portType: document.getElementById("port_type"),
+            mqttElm327Log: document.getElementById("mqtt_elm327_log"),
+            periodicWakeup: document.getElementById("periodic_wakeup"),
+            wakeupEveryRow: document.getElementById("wakeup_every_row")
+        };
+    }
 
-        const sleepStatus = document.getElementById("sleep_status").value;
-        const periodicWakeup = document.getElementById("periodic_wakeup");
-        const wakeupEveryRow = document.getElementById("wakeup_every_row");
-        if (sleepStatus === "disable") {
-            periodicWakeup.disabled = true;
-            periodicWakeup.value = "disable";
-            wakeupEveryRow.style.display = "none";
+    // Helper function to validate field length
+    function validateLength(value, min, max, fieldName) {
+        const length = value.length;
+        return length >= min && length <= max;
+    }
+
+    // Helper function to validate port number
+    function validatePort(value) {
+        const port = parseInt(value);
+        return port >= 1 && port <= 65535;
+    }
+
+    // Helper function to disable submit button with error message
+    function disableSubmitWithError(message) {
+        showNotification(message, "red");
+        return false;
+    }
+
+    function submit_enable() {
+        console.log("submit_enable");
+        const elements = getElements();
+        const wifiMode = elements.wifiMode.value;
+        
+        // Configure WiFi mode-specific settings
+        configureWifiModeSettings(elements, wifiMode);
+        
+        // Handle BLE status and warnings
+        handleBleStatus(elements);
+        
+        // Validate form and enable/disable submit button
+        const isValid = validateForm(elements, wifiMode);
+        elements.submitButton.disabled = !isValid;
+        
+        // Configure protocol-specific settings
+        configureProtocolSettings(elements);
+        
+        // Configure sleep and battery alert settings
+        configureSleepSettings(elements);
+        
+        // Configure MQTT and battery alert visibility
+        configureMqttAndBatteryAlerts(elements);
+        
+        // Configure periodic wakeup settings
+        configurePeriodicWakeup(elements);
+    }
+
+    function configureWifiModeSettings(elements, wifiMode) {
+        const isAP = wifiMode === "AP";
+        const isSmartConnect = wifiMode === "SmartConnect";
+        
+        // Set station fields
+        elements.ssidValue.disabled = isAP;
+        elements.passValue.disabled = isAP;
+        elements.staSecurity.disabled = isAP;
+        elements.apAutoDisable.disabled = isAP;
+        elements.wifiScanButton.disabled = isAP;
+        
+        // Set BLE settings based on mode
+        if (isAP) {
+            elements.bleStatus.disabled = false;
+        } else if (isSmartConnect) {
+            elements.bleStatus.selectedIndex = 0;
+            elements.bleStatus.disabled = true;
         } else {
-            periodicWakeup.disabled = false;
-            if (periodicWakeup.value === "enable") {
-                wakeupEveryRow.style.display = "table-row";
-            } else {
-                wakeupEveryRow.style.display = "none";
+            elements.bleStatus.disabled = true;
+            elements.bleStatus.selectedIndex = 1;
+        }
+    }
+
+    function handleBleStatus(elements) {
+        const isBleEnabled = elements.bleStatus.value === "enable";
+        
+        elements.bleWarningDiv.style.display = isBleEnabled ? "block" : "none";
+        
+        if (isBleEnabled && !window.bleAlertShown) {
+            elements.mqttEn.value = "disable";
+            elements.mqttEnDiv.style.display = "none";
+            elements.mqttEn.disabled = true;
+            elements.battAlert.value = "disable";
+            elements.battAlertDiv.style.display = "none";
+            elements.battAlert.disabled = true;
+            window.bleAlertShown = true;
+        } else if (!isBleEnabled) {
+            elements.mqttEn.disabled = false;
+            elements.battAlert.disabled = true;
+        }
+    }
+
+    function validateForm(elements, wifiMode) {
+        // Password validation
+        const apPassLen = elements.apPassValue.value.length;
+        const passLen = elements.passValue.value.length;
+        if ((apPassLen < 8 || apPassLen > 63) || (passLen < 8 || passLen > 63)) {
+            return disableSubmitWithError("AP/Station password length, min=8 max=63");
+        }
+        
+        // SSID validation
+        if (!validateLength(elements.ssidValue.value, 1, 32)) {
+            return disableSubmitWithError("AP/Station SSID length, min=1 max=32");
+        }
+        
+        // MQTT topics validation - only validate if MQTT is enabled
+        const isMqttEnabled = elements.mqttEn.value === "enable";
+        if (isMqttEnabled) {
+            if (!validateLength(elements.mqttTxTopic.value, 1, 64)) {
+                return disableSubmitWithError("MQTT TX Topic length, min=1 max=64");
+            }
+            if (!validateLength(elements.mqttRxTopic.value, 1, 64)) {
+                return disableSubmitWithError("MQTT RX Topic length, min=1 max=64");
+            }
+            if (!validateLength(elements.mqttStatusTopic.value, 1, 64)) {
+                return disableSubmitWithError("MQTT Status Topic length, min=1 max=64");
             }
         }
-	}
+        
+        // Port validation
+        if (!validatePort(elements.tcpPortValue.value)) {
+            return disableSubmitWithError("TCP Port value, min=1 max=65535");
+        }
+        if (!validatePort(elements.battAlertPort.value)) {
+            return disableSubmitWithError("Battery Alert Port value, min=1 max=65535");
+        }
+        
+        // BLE passkey validation - only validate if BLE is enabled
+        const isBleEnabled = elements.bleStatus.value === "enable";
+        if (isBleEnabled) {
+            const blePass = elements.blePassValue.value;
+            if (blePass.length !== 6 || blePass.charAt(0) === "0") {
+                return disableSubmitWithError("BLE Passkey: 6 digits required, first digit cannot be 0");
+            }
+        }
+        
+        // Sleep voltage validation
+        const sleepVolt = parseFloat(elements.sleepVolt.value);
+        if (sleepVolt < 12 || sleepVolt > 15) {
+            return disableSubmitWithError("Sleep Voltage Value, min=12.0 max=15.0");
+        }
+        
+        // Sleep disable agreement validation
+        if (elements.sleepStatus.value === "disable" && elements.sleepDisableAgree.value === "no") {
+            return disableSubmitWithError("You must agree to disable sleep mode");
+        }
+        
+        // SmartConnect validation
+        if (wifiMode === "SmartConnect") {
+            return validateSmartConnect();
+        }
+        
+        return true;
+    }
+
+    function validateSmartConnect() {
+        const homeSSID = document.getElementById("home_ssid").value.trim();
+        const homePassword = document.getElementById("home_password").value.trim();
+        const driveConnectionType = document.getElementById("drive_connection_type").value;
+        const driveSSID = document.getElementById("drive_ssid").value.trim();
+        const drivePassword = document.getElementById("drive_password").value.trim();
+        
+        if (!homeSSID || !homePassword) {
+            return disableSubmitWithError("SmartConnect: Home SSID and Password are required");
+        }
+        
+        if (driveConnectionType === "wifi" && (!driveSSID || !drivePassword)) {
+            return disableSubmitWithError("SmartConnect: Drive SSID and Password are required when WiFi is selected");
+        }
+        
+        return true;
+    }
+
+    function configureProtocolSettings(elements) {
+        const isSavvyCan = elements.protocol.value === "savvycan";
+        const isElm327 = elements.protocol.value === "elm327";
+        
+        if (isSavvyCan) {
+            elements.tcpPortValue.value = "23";
+            elements.tcpPortValue.disabled = true;
+            elements.portType.selectedIndex = 0;
+            elements.portType.disabled = true;
+        } else {
+            elements.tcpPortValue.disabled = false;
+            elements.portType.selectedIndex = 0;
+            elements.portType.disabled = false;
+        }
+        
+        elements.mqttElm327Log.disabled = !isElm327;
+        if (!isElm327) {
+            elements.mqttElm327Log.value = "disable";
+        }
+    }
+
+    function configureSleepSettings(elements) {
+        const sleepEnabled = elements.sleepStatus.value === "enable";
+        const bleEnabled = elements.bleStatus.value === "enable";
+        
+        if (sleepEnabled) {
+            if (!bleEnabled) {
+                elements.battAlert.disabled = true;
+            }
+        } else {
+            elements.battAlert.disabled = true;
+            elements.battAlert.selectedIndex = 0;
+        }
+    }
+
+    function configureMqttAndBatteryAlerts(elements) {
+        // Battery alert div is always hidden in current logic
+        elements.battAlertDiv.style.display = "none";
+        
+        // MQTT div visibility
+        const mqttEnabled = elements.mqttEn.value === "enable";
+        elements.mqttEnDiv.style.display = mqttEnabled ? "block" : "none";
+    }
+
+    function configurePeriodicWakeup(elements) {
+        const sleepDisabled = elements.sleepStatus.value === "disable";
+        
+        if (sleepDisabled) {
+            elements.periodicWakeup.disabled = true;
+            elements.periodicWakeup.value = "disable";
+            elements.wakeupEveryRow.style.display = "none";
+        } else {
+            elements.periodicWakeup.disabled = false;
+            const wakeupEnabled = elements.periodicWakeup.value === "enable";
+            elements.wakeupEveryRow.style.display = wakeupEnabled ? "table-row" : "none";
+        }
+    }
 	document.getElementById("defaultOpen").click();
 
 	function checkStatus() {
@@ -2555,6 +2872,17 @@ function loadAutoTable(jsonData) {
 		obj["sta_ssid"] = document.getElementById("ssid_value").value;
 		obj["sta_pass"] = document.getElementById("pass_value").value;
         obj["sta_security"] = document.getElementById("sta_security").value;
+		
+		// SmartConnect fields
+		if (document.getElementById("wifi_mode").value === "SmartConnect") {
+			obj["home_ssid"] = document.getElementById("home_ssid").value;
+			obj["home_password"] = document.getElementById("home_password").value;
+			obj["home_security"] = document.getElementById("home_security").value;
+			obj["drive_ssid"] = document.getElementById("drive_ssid").value;
+			obj["drive_password"] = document.getElementById("drive_password").value;
+			obj["drive_security"] = document.getElementById("drive_security").value;
+			obj["drive_connection_type"] = document.getElementById("drive_connection_type").value;
+		}
 		obj["can_datarate"] = document.getElementById("can_datarate").value;
 		obj["can_mode"] = document.getElementById("can_mode").value;
 		obj["port_type"] = document.getElementById("port_type").value;
@@ -2799,6 +3127,16 @@ function loadAutoTable(jsonData) {
 				document.getElementById("ssid_value").disabled = true;
 				document.getElementById("pass_value").disabled = true;
                 document.getElementById("ap_auto_disable").disabled = true;
+			} else if(obj.wifi_mode == "SmartConnect") {
+				document.getElementById("wifi_mode").selectedIndex = "2";
+				// Load SmartConnect configuration
+				document.getElementById("home_ssid").value = obj.home_ssid || "";
+				document.getElementById("home_password").value = obj.home_password || "";
+				document.getElementById("home_security").value = obj.home_security || "wpa3";
+				document.getElementById("drive_ssid").value = obj.drive_ssid || "";
+				document.getElementById("drive_password").value = obj.drive_password || "";
+				document.getElementById("drive_security").value = obj.drive_security || "wpa3";
+				document.getElementById("drive_connection_type").value = obj.drive_connection_type || "wifi";
 			}
 
             if(obj.ap_auto_disable == "enable") {
@@ -2849,9 +3187,9 @@ function loadAutoTable(jsonData) {
 				document.getElementById("port_type").selectedIndex = "1";
 			}
 			if(obj.ble_status == "enable") {
-				document.getElementById("ble_status").selectedIndex = "0";
+				document.getElementById("ble_status").selectedIndex = 0;
 			} else if(obj.ble_status == "disable") {
-				document.getElementById("ble_status").selectedIndex = "1";
+				document.getElementById("ble_status").selectedIndex = 1;
 			}
 			if(obj.sleep_status == "enable") {
 				document.getElementById("sleep_status").selectedIndex = "0";
@@ -3000,6 +3338,14 @@ function loadAutoTable(jsonData) {
 		checkStatus();
 		xhttp.open("GET", "/load_config");
 		xhttp.send();
+		
+		// Initialize SmartConnect configuration visibility
+		toggleSmartConnectConfig();
+		
+		// Initialize lucide icons
+		if (typeof lucide !== 'undefined' && lucide.createIcons) {
+			lucide.createIcons();
+		}
 	}
 
 	function monitor_add_line(id, type, len, data, time) {
@@ -3348,6 +3694,9 @@ function loadAutoTable(jsonData) {
         }
     }
     </script>
+    
+    <!-- Lucide Icons -->
+    <script src="/lucide_icons.js"></script>
 </body>
 
 </html>

@@ -21,11 +21,20 @@
 #ifndef __WIFI_NETWORK_H__
 #define __WIFI_NETWORK_H__
 
-bool wifi_network_is_connected(void);
-void wifi_network_init(char* sta_ssid, char* sta_pass);
-void wifi_network_deinit(void);
-void wifi_network_restart(void);
-void wifi_network_stop(void);
-void wifi_network_start(void);
-char* wifi_network_scan(void);
+#include "config_server.h"  // For wifi_security_t type
+
+// bool wifi_network_is_connected(void);
+// void wifi_network_init(char* sta_ssid, char* sta_pass);
+void wifi_network_init(char* ap_ssid_uid);
+// SmartConnect mode checking function
+bool wifi_network_is_smartconnect_mode(void);
+// Helper function to get SmartConnect credentials
+// SmartConnect mode switching functions for future enhancement
+// void wifi_network_switch_to_home_mode(void);
+// void wifi_network_switch_to_drive_mode(void);
+// void wifi_network_deinit(void);
+// void wifi_network_restart(void);
+// void wifi_network_stop(void);
+// void wifi_network_start(void);
+// char* wifi_network_scan(void);
 #endif

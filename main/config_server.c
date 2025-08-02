@@ -84,6 +84,7 @@
 #include "https_client_mgr.h"
 #include "sdcard.h"
 #include "obd2_standard_pids.h"
+#include "wifi_mgr.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
@@ -194,7 +195,10 @@ static char can_datarate_str[11][7] = {
 								"1000K",
 };
 
-const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\
+const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\
+										\"home_ssid\":\"MeatPi\",\"home_password\":\"TomatoSauce\",\"home_security\":\"wpa3\",\
+										\"drive_ssid\":\"MeatPi\",\"drive_password\":\"TomatoSauce\",\"drive_security\":\"wpa3\",\"drive_connection_type\":\"wifi\",\
+										\"can_datarate\":\"500K\",\
 										\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\
 										\"ble_status\":\"disable\",\"sleep_status\":\"enable\",\"periodic_wakeup\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"sleep_time\":\"5\",\"wakeup_interval\":\"90\",\"batt_alert\":\"disable\",\
 										\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\
@@ -273,6 +277,10 @@ int8_t config_server_get_wifi_mode(void)
 	{
 		return APSTA_MODE;
 	}
+	else if(strcmp(device_config.wifi_mode, "SmartConnect") == 0)
+	{
+		return SMARTCONNECT_MODE;
+	}
 	return -1;
 }
 
@@ -312,6 +320,68 @@ char *config_server_get_sta_pass(void)
 {
 	return device_config.sta_pass;
 }
+
+char *config_server_get_home_ssid(void)
+{
+	return device_config.home_ssid;
+}
+
+char *config_server_get_home_password(void)
+{
+	return device_config.home_password;
+}
+
+char *config_server_get_home_security(void)
+{
+	return device_config.home_security;
+}
+
+char *config_server_get_drive_ssid(void)
+{
+	return device_config.drive_ssid;
+}
+
+char *config_server_get_drive_password(void)
+{
+	return device_config.drive_password;
+}
+
+char *config_server_get_drive_security(void)
+{
+	return device_config.drive_security;
+}
+
+char *config_server_get_drive_connection_type(void)
+{
+	return device_config.drive_connection_type;
+}
+
+wifi_security_t config_server_get_home_security_type(void)
+{
+	if(strcmp(device_config.home_security, "wpa2") == 0)
+	{
+		return WIFI_WPA2_PSK;
+	}
+	else if(strcmp(device_config.home_security, "wpa3") == 0)
+	{
+		return WIFI_WPA3_PSK;
+	}
+	return WIFI_WPA3_PSK; // Default to WPA3
+}
+
+wifi_security_t config_server_get_drive_security_type(void)
+{
+	if(strcmp(device_config.drive_security, "wpa2") == 0)
+	{
+		return WIFI_WPA2_PSK;
+	}
+	else if(strcmp(device_config.drive_security, "wpa3") == 0)
+	{
+		return WIFI_WPA3_PSK;
+	}
+	return WIFI_WPA3_PSK; // Default to WPA3
+}
+
 int8_t config_server_protocol(void)
 {
 	if(strcmp(device_config.protocol, "slcan") == 0)
@@ -475,7 +545,7 @@ static esp_err_t create_dir_recursively(const char* path) {
 
 static esp_err_t wifi_scan_handler(httpd_req_t *req)
 {
-    char *scan_results = wifi_network_scan();
+    char *scan_results = wifi_mgr_scan_networks();
     if (scan_results != NULL) {
         httpd_resp_set_type(req, "application/json");
         httpd_resp_send(req, scan_results, strlen(scan_results));
@@ -1340,7 +1410,14 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	cJSON_AddStringToObject(root, "sta_ssid", device_config.sta_ssid);
 	cJSON_AddStringToObject(root, "sta_pass", device_config.sta_pass);
 	cJSON_AddStringToObject(root, "sta_security", device_config.sta_security);
-	cJSON_AddStringToObject(root, "sta_status", (wifi_network_is_connected()?"Connected":"Not Connected"));
+	cJSON_AddStringToObject(root, "home_ssid", device_config.home_ssid);
+	cJSON_AddStringToObject(root, "home_password", device_config.home_password);
+	cJSON_AddStringToObject(root, "home_security", device_config.home_security);
+	cJSON_AddStringToObject(root, "drive_ssid", device_config.drive_ssid);
+	cJSON_AddStringToObject(root, "drive_password", device_config.drive_password);
+	cJSON_AddStringToObject(root, "drive_security", device_config.drive_security);
+	cJSON_AddStringToObject(root, "drive_connection_type", device_config.drive_connection_type);
+	cJSON_AddStringToObject(root, "sta_status", (wifi_mgr_is_sta_connected()?"Connected":"Not Connected"));
 	cJSON_AddStringToObject(root, "sta_ip", ip_str);
 	cJSON_AddStringToObject(root, "mdns", wc_mdns_get_hostname());
 	cJSON_AddStringToObject(root, "ble_status", device_config.ble_status);
@@ -1393,6 +1470,13 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	cJSON_AddStringToObject(root, "mqtt_status_topic", device_config.mqtt_status_topic);
 	cJSON_AddStringToObject(root, "device_id", device_id);
 	cJSON_AddStringToObject(root, "sta_security", device_config.sta_security);
+	cJSON_AddStringToObject(root, "home_ssid", device_config.home_ssid);
+	cJSON_AddStringToObject(root, "home_password", device_config.home_password);
+	cJSON_AddStringToObject(root, "home_security", device_config.home_security);
+	cJSON_AddStringToObject(root, "drive_ssid", device_config.drive_ssid);
+	cJSON_AddStringToObject(root, "drive_password", device_config.drive_password);
+	cJSON_AddStringToObject(root, "drive_security", device_config.drive_security);
+	cJSON_AddStringToObject(root, "drive_connection_type", device_config.drive_connection_type);
 
 	if(autopid_get_ecu_status())
 	{
@@ -2538,6 +2622,85 @@ static void config_server_load_cfg(char *cfg)
 
 	ESP_LOGE(TAG, "device_config.sta_security: %s", device_config.wakeup_volt);
 	//*****
+
+	//**** SmartConnect fields ****
+	key = cJSON_GetObjectItem(root,"home_ssid");
+	if(key == 0)
+	{
+		strcpy(device_config.home_ssid, "MeatPi");
+	}
+	else
+	{
+		strcpy(device_config.home_ssid, key->valuestring);
+	}
+	ESP_LOGI(TAG, "device_config.home_ssid: %s", device_config.home_ssid);
+
+	key = cJSON_GetObjectItem(root,"home_password");
+	if(key == 0)
+	{
+		strcpy(device_config.home_password, "TomatoSauce");
+	}
+	else
+	{
+		strcpy(device_config.home_password, key->valuestring);
+	}
+	ESP_LOGI(TAG, "device_config.home_password: %s", device_config.home_password);
+
+	key = cJSON_GetObjectItem(root,"home_security");
+	if(key == 0)
+	{
+		strcpy(device_config.home_security, "wpa3");
+	}
+	else
+	{
+		strcpy(device_config.home_security, key->valuestring);
+	}
+	ESP_LOGI(TAG, "device_config.home_security: %s", device_config.home_security);
+
+	key = cJSON_GetObjectItem(root,"drive_ssid");
+	if(key == 0)
+	{
+		strcpy(device_config.drive_ssid, "MeatPi");
+	}
+	else
+	{
+		strcpy(device_config.drive_ssid, key->valuestring);
+	}
+	ESP_LOGI(TAG, "device_config.drive_ssid: %s", device_config.drive_ssid);
+
+	key = cJSON_GetObjectItem(root,"drive_password");
+	if(key == 0)
+	{
+		strcpy(device_config.drive_password, "TomatoSauce");
+	}
+	else
+	{
+		strcpy(device_config.drive_password, key->valuestring);
+	}
+	ESP_LOGI(TAG, "device_config.drive_password: %s", device_config.drive_password);
+
+	key = cJSON_GetObjectItem(root,"drive_security");
+	if(key == 0)
+	{
+		strcpy(device_config.drive_security, "wpa3");
+	}
+	else
+	{
+		strcpy(device_config.drive_security, key->valuestring);
+	}
+	ESP_LOGI(TAG, "device_config.drive_security: %s", device_config.drive_security);
+
+	key = cJSON_GetObjectItem(root,"drive_connection_type");
+	if(key == 0)
+	{
+		strcpy(device_config.drive_connection_type, "wifi");
+	}
+	else
+	{
+		strcpy(device_config.drive_connection_type, key->valuestring);
+	}
+	ESP_LOGI(TAG, "device_config.drive_connection_type: %s", device_config.drive_connection_type);
+	//**** End SmartConnect fields ****
 
 	//*****
 	key = cJSON_GetObjectItem(root,"logger_status");

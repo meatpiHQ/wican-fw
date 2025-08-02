@@ -694,12 +694,26 @@ char* wifi_mgr_scan_networks(void) {
         ESP_LOGE(TAG, "Failed to get WiFi mode: %s", esp_err_to_name(ret));
         return NULL;
     }
-    
+
     if (current_mode == WIFI_MODE_NULL) {
         ESP_LOGE(TAG, "WiFi not started");
         return NULL;
     }
-    
+
+    // If in AP-only mode, temporarily switch to APSTA for scanning
+    bool switched_mode = false;
+    if (current_mode == WIFI_MODE_AP) {
+        ESP_LOGI(TAG, "Switching from AP to APSTA mode for scan");
+        ret = esp_wifi_set_mode(WIFI_MODE_APSTA);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to switch to APSTA mode: %s", esp_err_to_name(ret));
+            return NULL;
+        }
+        switched_mode = true;
+        // Give time for mode switch
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
     wifi_scan_config_t scan_config = {
         .ssid = NULL,
         .bssid = NULL,
@@ -709,13 +723,17 @@ char* wifi_mgr_scan_networks(void) {
         .scan_time.active.min = 100,
         .scan_time.active.max = 300
     };
-    
+
     ESP_LOGI(TAG, "Starting WiFi scan");
-    
+
     ret = esp_wifi_scan_start(&scan_config, true);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "WiFi scan start failed: %s", esp_err_to_name(ret));
-        
+        // Restore mode if we switched
+        if (switched_mode) {
+            esp_wifi_set_mode(WIFI_MODE_AP);
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
         // Return empty result instead of NULL for failed scans
         cJSON *empty_json = cJSON_CreateObject();
         cJSON *empty_array = cJSON_CreateArray();
@@ -934,6 +952,31 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                 esp_err_t ret = esp_wifi_set_mode(WIFI_MODE_STA);
                 if (ret != ESP_OK) {
                     ESP_LOGE(TAG, "Failed to switch to STA mode: %s", esp_err_to_name(ret));
+                }
+            }
+        }
+
+        // If AP is enabled (APSTA/AUTO mode), ap_auto_disable is false, and STA is connected, update AP channel to match STA
+        if ((wifi_config.mode == WIFI_MGR_MODE_APSTA || wifi_config.mode == WIFI_MGR_MODE_AUTO)
+            && !wifi_config.ap_auto_disable) {
+            wifi_mode_t current_mode;
+            static wifi_config_t ap_cfg;
+            static wifi_config_t sta_cfg;
+            if (esp_wifi_get_mode(&current_mode) == ESP_OK && current_mode == WIFI_MODE_APSTA) {
+                // Get STA config to read channel
+                if (esp_wifi_get_config(WIFI_IF_STA, &sta_cfg) == ESP_OK) {
+                    uint8_t sta_channel = sta_cfg.sta.channel;
+                    // Get AP config
+                    if (esp_wifi_get_config(WIFI_IF_AP, &ap_cfg) == ESP_OK) {
+                        if (ap_cfg.ap.channel != sta_channel) {
+                            ESP_LOGI(TAG, "Updating AP channel to match STA channel: %d", sta_channel);
+                            ap_cfg.ap.channel = sta_channel;
+                            esp_err_t ret = esp_wifi_set_config(WIFI_IF_AP, &ap_cfg);
+                            if (ret != ESP_OK) {
+                                ESP_LOGE(TAG, "Failed to update AP channel: %s", esp_err_to_name(ret));
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -68,6 +68,8 @@
 #include "rtcm.h"
 #include "console.h"
 #include "dev_status.h"
+#include "wifi_mgr.h"
+#include "vehicle.h"
 
 #define TAG 		__func__
 #define USB_ID_PIN					39
@@ -103,6 +105,7 @@ static uint8_t mqtt_elm327_log_en = 0;
 static uint8_t derived_mac_addr[6] = {0};
 static uint8_t uid[16];
 static uint8_t ble_uid[33];
+static char ap_ssid[33] = {0};
 static char hardware_version[16];
 static char firmware_version[10];
 
@@ -685,6 +688,11 @@ void app_main(void)
     sprintf((char *)uid,"%02x%02x%02x%02x%02x%02x",
             derived_mac_addr[0], derived_mac_addr[1], derived_mac_addr[2],
             derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
+
+    sprintf(ap_ssid, "WiCAN_%02x%02x%02x%02x%02x%02x",
+			derived_mac_addr[0], derived_mac_addr[1], derived_mac_addr[2],
+			derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
+			
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 		config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, (char*)&uid[0]);
 	#else
@@ -860,9 +868,15 @@ void app_main(void)
 //
 //		mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM, &xmsg_mqtt_rx_queue);
 //	}
+	vehicle_config_t vehicle_config;
+	if(config_server_get_sleep_volt(&vehicle_config.voltage_at_ignition) == -1)
+	{
+		ESP_LOGE(TAG, "Error getting sleep voltage");
+		vehicle_config.voltage_at_ignition = 13.1;  // Default value
+	}
+	vehicle_init(&vehicle_config);
+	wifi_network_init(ap_ssid);
 
-
-	wifi_network_init(NULL, NULL);
 	int32_t port = config_server_get_port();
 
 	if(port == -1)
@@ -982,7 +996,7 @@ void app_main(void)
 	// pdTRUE, /* BIT_0 should be cleared before returning. */
 	// pdFALSE, /* Don't wait for both bits, either bit will do. */
 	// portMAX_DELAY);/* Wait forever. */ 
-	esp_log_level_set("*", ESP_LOG_NONE);
+	// esp_log_level_set("*", ESP_LOG_NONE);
 	// esp_log_level_set("*", ESP_LOG_ERROR);
 	// esp_log_level_set("HEAP", ESP_LOG_INFO);
 	// esp_log_level_set("imu", ESP_LOG_INFO);
@@ -992,7 +1006,7 @@ void app_main(void)
 	esp_log_level_set("read_ss_adc_voltage", ESP_LOG_NONE);	
 	// esp_log_level_set("HEAP", ESP_LOG_NONE);
 	// esp_log_level_set("autopid_find_standard_pid", ESP_LOG_INFO);
-	// esp_log_level_set("SLEEP_MODE", ESP_LOG_NONE);
+	esp_log_level_set("SLEEP_MODE", ESP_LOG_NONE);
 	// esp_log_level_set("OBD_LOGGER", ESP_LOG_INFO);
 	// esp_log_level_set("OBD_LOGGER_WS_IFACE", ESP_LOG_INFO);
 	// esp_log_level_set("CONFIG_SERVER", ESP_LOG_INFO);
