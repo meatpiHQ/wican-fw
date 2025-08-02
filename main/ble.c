@@ -1184,6 +1184,7 @@ void ble_enable(void)
 
     if(dev_status_is_bit_set(DEV_BLE_ENABLED_BIT))
     {
+        ESP_LOGW(GATTS_TABLE_TAG, "BLE already enabled");
         return;
     }
     
@@ -1292,9 +1293,15 @@ void ble_enable(void)
 
 void ble_disable(void)
 {
+    if(!dev_status_is_bit_set(DEV_BLE_ENABLED_BIT))
+    {
+        ESP_LOGW(GATTS_TABLE_TAG, "BLE already disabled");
+        return;
+    }
 	esp_bluedroid_disable();
 	esp_bluedroid_deinit();
 	esp_bt_controller_disable();
 	esp_bt_controller_deinit();
     dev_status_clear_bits(DEV_BLE_ENABLED_BIT);
+    dev_status_clear_bits(DEV_BLE_CONNECTED_BIT);
 }
