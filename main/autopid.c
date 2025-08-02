@@ -1197,7 +1197,16 @@ static void autopid_task(void *pvParameters)
         uint8_t auto_protocol_number = 0;
         if(elm327_get_protocol_number(&auto_protocol_number) == ESP_OK){
             autopid_set_protocol_number(auto_protocol_number);
-            sprintf(all_pids->standard_init, "ATTP%01X\r", auto_protocol_number);
+            
+            // Free existing standard_init if allocated
+            if(all_pids->standard_init) {
+                free(all_pids->standard_init);
+            }
+            
+            // Allocate new memory for the protocol string
+            char protocol_str[16];
+            snprintf(protocol_str, sizeof(protocol_str), "ATTP%01X\r", auto_protocol_number);
+            all_pids->standard_init = strdup(protocol_str);
         }else{
             ESP_LOGE(TAG, "Failed to get protocol number");
         }
