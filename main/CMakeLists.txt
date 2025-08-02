@@ -30,7 +30,7 @@ set(srcs
     "hw_config.c"
     "dev_status.c"
     "obd2_standard_pids.c"
-    "auto_connect.c"
+    "smartconnect.c"
     "vehicle.c"
     "wifi_mgr.c"
 )
