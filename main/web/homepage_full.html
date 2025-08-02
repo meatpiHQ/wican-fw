@@ -713,6 +713,20 @@
                                 </select>
                             </td>
                         </tr>
+                        <tr>
+                            <td>Drive Mode Timeout:</td>
+                            <td class="slider-container">
+                                <input type="range" 
+                                       id="drive_mode_timeout" 
+                                       name="drive_mode_timeout" 
+                                       value="60" 
+                                       min="10" 
+                                       max="600" 
+                                       step="1"
+                                       oninput="document.getElementById('drive_mode_timeout_value').textContent = this.value;submit_enable();">
+                                <span id="drive_mode_timeout_value">60</span>sec
+                            </td>
+                        </tr>
                     </table>
                 </div>
 
@@ -2882,6 +2896,7 @@ function loadAutoTable(jsonData) {
 			obj["drive_password"] = document.getElementById("drive_password").value;
 			obj["drive_security"] = document.getElementById("drive_security").value;
 			obj["drive_connection_type"] = document.getElementById("drive_connection_type").value;
+			obj["drive_mode_timeout"] = document.getElementById("drive_mode_timeout").value;
 		}
 		obj["can_datarate"] = document.getElementById("can_datarate").value;
 		obj["can_mode"] = document.getElementById("can_mode").value;
@@ -3137,6 +3152,9 @@ function loadAutoTable(jsonData) {
 				document.getElementById("drive_password").value = obj.drive_password || "";
 				document.getElementById("drive_security").value = obj.drive_security || "wpa3";
 				document.getElementById("drive_connection_type").value = obj.drive_connection_type || "wifi";
+				// Load drive mode timeout value and update display
+				document.getElementById("drive_mode_timeout").value = obj.drive_mode_timeout || "60";
+				document.getElementById("drive_mode_timeout_value").textContent = obj.drive_mode_timeout || "60";
 			}
 
             if(obj.ap_auto_disable == "enable") {
