@@ -796,7 +796,7 @@
                 <div id="ble_warning_div" style="display: none; margin: 8px 0;">
                     <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 8px; padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                         <div style="display: flex; align-items: center; margin-bottom: 6px;">
-                            <span style="font-size: 16px; margin-right: 8px;">⚠️</span>
+                            <span data-lucide="alert-triangle" style="font-size: 16px; margin-right: 8px;"></span>
                             <strong style="color: #92400e; font-size: 14px;">BLE Connection Warning</strong>
                         </div>
                         <div style="color: #78350f; font-size: 13px; line-height: 1.4;">
@@ -1557,6 +1557,7 @@
             if (wifiMode === "SmartConnect") {
                 smartConnectConfig.style.display = "block";
                 stationConfigSection.style.display = "none"; // Hide Station Config
+                
                 toggleDriveConfig(); // Initialize drive config visibility
             } else {
                 smartConnectConfig.style.display = "none";
@@ -2556,11 +2557,9 @@ function loadAutoTable(jsonData) {
         if (isAP) {
             elements.bleStatus.disabled = false;
         } else if (isSmartConnect) {
-            elements.bleStatus.selectedIndex = 0;
             elements.bleStatus.disabled = true;
         } else {
             elements.bleStatus.disabled = true;
-            elements.bleStatus.selectedIndex = 1;
         }
     }
 
