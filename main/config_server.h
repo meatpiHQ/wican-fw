@@ -89,6 +89,7 @@ typedef struct _device_config
 	char drive_password[65];
 	char drive_security[8];
 	char drive_connection_type[8];
+	char drive_mode_timeout[8];
 	char can_datarate[65];
 	char can_mode[65];
 	char port_type[65];
@@ -147,6 +148,7 @@ char *config_server_get_drive_ssid(void);
 char *config_server_get_drive_password(void);
 char *config_server_get_drive_security(void);
 char *config_server_get_drive_connection_type(void);
+char *config_server_get_drive_mode_timeout(void);
 wifi_security_t config_server_get_home_security_type(void);
 wifi_security_t config_server_get_drive_security_type(void);
 int8_t config_server_get_can_rate(void);

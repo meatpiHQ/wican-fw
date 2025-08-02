@@ -197,7 +197,7 @@ static char can_datarate_str[11][7] = {
 
 const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\
 										\"home_ssid\":\"MeatPi\",\"home_password\":\"TomatoSauce\",\"home_security\":\"wpa3\",\
-										\"drive_ssid\":\"MeatPi\",\"drive_password\":\"TomatoSauce\",\"drive_security\":\"wpa3\",\"drive_connection_type\":\"wifi\",\
+										\"drive_ssid\":\"MeatPi\",\"drive_password\":\"TomatoSauce\",\"drive_security\":\"wpa3\",\"drive_connection_type\":\"wifi\",\"drive_mode_timeout\":\"60\",\
 										\"can_datarate\":\"500K\",\
 										\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\
 										\"ble_status\":\"disable\",\"sleep_status\":\"enable\",\"periodic_wakeup\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"sleep_time\":\"5\",\"wakeup_interval\":\"90\",\"batt_alert\":\"disable\",\
@@ -354,6 +354,11 @@ char *config_server_get_drive_security(void)
 char *config_server_get_drive_connection_type(void)
 {
 	return device_config.drive_connection_type;
+}
+
+char *config_server_get_drive_mode_timeout(void)
+{
+	return device_config.drive_mode_timeout;
 }
 
 wifi_security_t config_server_get_home_security_type(void)
@@ -1417,6 +1422,7 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	cJSON_AddStringToObject(root, "drive_password", device_config.drive_password);
 	cJSON_AddStringToObject(root, "drive_security", device_config.drive_security);
 	cJSON_AddStringToObject(root, "drive_connection_type", device_config.drive_connection_type);
+	cJSON_AddStringToObject(root, "drive_mode_timeout", device_config.drive_mode_timeout);
 	cJSON_AddStringToObject(root, "sta_status", (wifi_mgr_is_sta_connected()?"Connected":"Not Connected"));
 	cJSON_AddStringToObject(root, "sta_ip", ip_str);
 	cJSON_AddStringToObject(root, "mdns", wc_mdns_get_hostname());
@@ -1477,6 +1483,7 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	cJSON_AddStringToObject(root, "drive_password", device_config.drive_password);
 	cJSON_AddStringToObject(root, "drive_security", device_config.drive_security);
 	cJSON_AddStringToObject(root, "drive_connection_type", device_config.drive_connection_type);
+	cJSON_AddStringToObject(root, "drive_mode_timeout", device_config.drive_mode_timeout);
 
 	if(autopid_get_ecu_status())
 	{
@@ -2700,6 +2707,17 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.drive_connection_type, key->valuestring);
 	}
 	ESP_LOGI(TAG, "device_config.drive_connection_type: %s", device_config.drive_connection_type);
+
+	key = cJSON_GetObjectItem(root,"drive_mode_timeout");
+	if(key == 0)
+	{
+		strcpy(device_config.drive_mode_timeout, "60");
+	}
+	else
+	{
+		strcpy(device_config.drive_mode_timeout, key->valuestring);
+	}
+	ESP_LOGI(TAG, "device_config.drive_mode_timeout: %s", device_config.drive_mode_timeout);
 	//**** End SmartConnect fields ****
 
 	//*****

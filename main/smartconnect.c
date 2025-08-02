@@ -24,6 +24,7 @@
 #include "freertos/event_groups.h"
 #include "esp_log.h"
 #include <string.h>
+#include <stdlib.h>
 #include "sleep_mode.h"
 #include "wifi_network.h"
 #include "wifi_mgr.h"
@@ -57,6 +58,7 @@ static smartconnect_config_t smartconnect_config = SMARTCONNECT_DEFAULT_CONFIG()
 // Current state and timer
 static smartconnect_state_t current_state = SMARTCONNECT_STATE_INIT;
 static wc_timer_t state_timer;
+static wc_timer_t drive_mode_timeout_timer;
 
 // Status logging counters
 static int wifi_status_log_counter = 0;
@@ -148,10 +150,26 @@ void smartconnect_task(void *pvParameters) {
             case SMARTCONNECT_STATE_DRIVE_MODE:
                 if(ignition_state == VEHICLE_STATE_IGNITION_OFF)
                 {
-                    ESP_LOGI(TAG, "Ignition OFF in drive mode, disabling drive mode");
-                    disable_drive_mode();
-                    wc_timer_set(&state_timer, HOME_MODE_DELAY_MS);
-                    current_state = SMARTCONNECT_STATE_WAITING_IGNITION_OFF;
+                    ESP_LOGI(TAG, "Ignition OFF in drive mode, starting drive mode timeout");
+                    
+                    // Get drive mode timeout from config server (in seconds)
+                    char *timeout_str = config_server_get_drive_mode_timeout();
+                    uint32_t timeout_ms = HOME_MODE_DELAY_MS;  // Default fallback
+                    
+                    if (timeout_str != NULL && strlen(timeout_str) > 0) {
+                        uint32_t timeout_seconds = atoi(timeout_str);
+                        if (timeout_seconds > 0) {
+                            timeout_ms = timeout_seconds * 1000;  // Convert to milliseconds
+                            ESP_LOGI(TAG, "Using drive mode timeout: %lu seconds", timeout_seconds);
+                        } else {
+                            ESP_LOGW(TAG, "Invalid drive mode timeout value, using default");
+                        }
+                    } else {
+                        ESP_LOGW(TAG, "No drive mode timeout configured, using default");
+                    }
+                    
+                    wc_timer_set(&drive_mode_timeout_timer, timeout_ms);
+                    current_state = SMARTCONNECT_STATE_DRIVE_MODE_TIMEOUT;
                 }
                 else
                 {
@@ -168,6 +186,22 @@ void smartconnect_task(void *pvParameters) {
                             wifi_status_log_counter = 0;
                         }
                     }
+                }
+                break;
+
+            case SMARTCONNECT_STATE_DRIVE_MODE_TIMEOUT:
+                if(ignition_state == VEHICLE_STATE_IGNITION_ON)
+                {
+                    ESP_LOGI(TAG, "Ignition ON during drive mode timeout, returning to drive mode");
+                    current_state = SMARTCONNECT_STATE_DRIVE_MODE;
+                }
+                else if(wc_timer_is_expired(&drive_mode_timeout_timer))
+                {
+                    ESP_LOGI(TAG, "Drive mode timeout expired, switching to home mode");
+                    disable_drive_mode();
+                    enable_home_mode();
+                    home_status_log_counter = 0;  // Reset counter for new state
+                    current_state = SMARTCONNECT_STATE_HOME_MODE;
                 }
                 break;
 
