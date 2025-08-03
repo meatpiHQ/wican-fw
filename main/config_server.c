@@ -2036,14 +2036,14 @@ esp_err_t autopid_data_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-#define MAX_AVAILABLE_PIDS_SIZE 		(1024*8)
+#define MAX_AVAILABLE_PIDS_SIZE 		(1024*15)
 static esp_err_t scan_available_pids_handler(httpd_req_t *req)
 {
     char protocol[8];
     char param[32];
     uint8_t protocol_num = 6; // Default protocol
 
-    if(config_server_protocol() != AUTO_PID)
+    if(config_server_protocol() != AUTO_PID && config_server_get_drive_protocol() != AUTO_PID && config_server_get_home_protocol() != AUTO_PID)
     {
         httpd_resp_set_type(req, "application/json");
         const char *resp_str = "{\"text\":\"Set protocol to AutoPid and reboot to be able to scan\"}";
@@ -2058,7 +2058,8 @@ static esp_err_t scan_available_pids_handler(httpd_req_t *req)
         }
     }
 
-    char *available_pids = malloc(MAX_AVAILABLE_PIDS_SIZE);
+    // char *available_pids = malloc(MAX_AVAILABLE_PIDS_SIZE);
+    char *available_pids = heap_caps_malloc(MAX_AVAILABLE_PIDS_SIZE, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
     if (available_pids == NULL) {
         httpd_resp_send_500(req);
         return ESP_FAIL;
