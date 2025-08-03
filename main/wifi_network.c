@@ -133,13 +133,12 @@ void wifi_network_init(char* ap_ssid_uid)
     
     // Set AP channel
     int8_t ap_channel = config_server_get_ap_ch();
-    if (ap_channel > 0 && ap_channel <= 13) {
+    if (ap_channel > 0 && ap_channel <= 14) {
         wifi_config.ap_channel = ap_channel;
     }
     
     // Set AP auto-disable from config server
     int8_t ap_auto_disable = config_server_get_ap_auto_disable();
-    wifi_config.ap_auto_disable = (ap_auto_disable == 1);
     
     // Set auto-reconnect parameters
     wifi_config.sta_auto_reconnect = true;
