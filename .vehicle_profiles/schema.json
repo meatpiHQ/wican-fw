@@ -97,6 +97,10 @@
                 "TYRE_P_FR",
                 "TYRE_P_RL",
                 "TYRE_P_RR",
+                "TYRE_T_FL",
+                "TYRE_T_FR",
+                "TYRE_T_RL",
+                "TYRE_T_RR",
                 "T_CAB"
               ]
             }
