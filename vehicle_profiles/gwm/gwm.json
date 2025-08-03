@@ -28,7 +28,7 @@
       "pid": "22D0311",
       "pid_init": "ATSH78A;ATFCSH78A;ATFCSM1;ATCRA7CA;",
       "parameters": {
-        "COOLANT_T": "([B6:B7]-400)/10"
+        "COOLANT_TMP": "([B6:B7]-400)/10"
       }
     },
     {
