@@ -61,7 +61,7 @@ static wifi_mgr_status_t wifi_status = {0};
 
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
 static void wifi_reconnect_task(void* pvParameters);
-
+static wifi_country_t country_01 = {.cc = "01", .schan = 1, .nchan = 14, .policy = WIFI_COUNTRY_POLICY_AUTO};
 /**
  * Initialize WiFi Manager with configuration
  */
@@ -143,7 +143,7 @@ esp_err_t wifi_mgr_init(wifi_mgr_config_t* config) {
         vEventGroupDelete(wifi_event_group);
         return ret;
     }
-    
+    esp_wifi_set_country(&country_01);
     // Register event handlers
     ret = esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL);
     if (ret != ESP_OK) {
