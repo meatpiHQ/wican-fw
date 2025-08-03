@@ -196,8 +196,8 @@ static char can_datarate_str[11][7] = {
 };
 
 const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\
-										\"home_ssid\":\"MeatPi\",\"home_password\":\"TomatoSauce\",\"home_security\":\"wpa3\",\
-										\"drive_ssid\":\"MeatPi\",\"drive_password\":\"TomatoSauce\",\"drive_security\":\"wpa3\",\"drive_connection_type\":\"wifi\",\"drive_mode_timeout\":\"60\",\
+										\"home_ssid\":\"MeatPi\",\"home_password\":\"TomatoSauce\",\"home_security\":\"wpa3\",\"home_protocol\":\"elm327\",\
+										\"drive_ssid\":\"MeatPi\",\"drive_password\":\"TomatoSauce\",\"drive_security\":\"wpa3\",\"drive_protocol\":\"elm327\",\"drive_connection_type\":\"wifi\",\"drive_mode_timeout\":\"60\",\
 										\"can_datarate\":\"500K\",\
 										\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\
 										\"ble_status\":\"disable\",\"sleep_status\":\"enable\",\"periodic_wakeup\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"sleep_time\":\"5\",\"wakeup_interval\":\"90\",\"batt_alert\":\"disable\",\
@@ -336,6 +336,31 @@ char *config_server_get_home_security(void)
 	return device_config.home_security;
 }
 
+int8_t config_server_get_home_protocol(void)
+{
+	if(strcmp(device_config.home_protocol, "slcan") == 0)
+	{
+		return SLCAN;
+	}
+	else if(strcmp(device_config.home_protocol, "realdash66") == 0)
+	{
+		return REALDASH;
+	}
+	else if(strcmp(device_config.home_protocol, "savvycan") == 0)
+	{
+		return SAVVYCAN;
+	}
+	else if(strcmp(device_config.home_protocol, "elm327") == 0)
+	{
+		return OBD_ELM327;
+	}
+	else if(strcmp(device_config.home_protocol, "auto_pid") == 0)
+	{
+		return AUTO_PID;
+	}
+	return OBD_ELM327;
+}
+
 char *config_server_get_drive_ssid(void)
 {
 	return device_config.drive_ssid;
@@ -349,6 +374,31 @@ char *config_server_get_drive_password(void)
 char *config_server_get_drive_security(void)
 {
 	return device_config.drive_security;
+}
+
+int8_t config_server_get_drive_protocol(void)
+{
+	if(strcmp(device_config.drive_protocol, "slcan") == 0)
+	{
+		return SLCAN;
+	}
+	else if(strcmp(device_config.drive_protocol, "realdash66") == 0)
+	{
+		return REALDASH;
+	}
+	else if(strcmp(device_config.drive_protocol, "savvycan") == 0)
+	{
+		return SAVVYCAN;
+	}
+	else if(strcmp(device_config.drive_protocol, "elm327") == 0)
+	{
+		return OBD_ELM327;
+	}
+	else if(strcmp(device_config.drive_protocol, "auto_pid") == 0)
+	{
+		return AUTO_PID;
+	}
+	return OBD_ELM327;
 }
 
 char *config_server_get_drive_connection_type(void)
@@ -1418,9 +1468,11 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	cJSON_AddStringToObject(root, "home_ssid", device_config.home_ssid);
 	cJSON_AddStringToObject(root, "home_password", device_config.home_password);
 	cJSON_AddStringToObject(root, "home_security", device_config.home_security);
+	cJSON_AddStringToObject(root, "home_protocol", device_config.home_protocol);
 	cJSON_AddStringToObject(root, "drive_ssid", device_config.drive_ssid);
 	cJSON_AddStringToObject(root, "drive_password", device_config.drive_password);
 	cJSON_AddStringToObject(root, "drive_security", device_config.drive_security);
+	cJSON_AddStringToObject(root, "drive_protocol", device_config.drive_protocol);
 	cJSON_AddStringToObject(root, "drive_connection_type", device_config.drive_connection_type);
 	cJSON_AddStringToObject(root, "drive_mode_timeout", device_config.drive_mode_timeout);
 	cJSON_AddStringToObject(root, "sta_status", (wifi_mgr_is_sta_connected()?"Connected":"Not Connected"));
@@ -1479,9 +1531,11 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	cJSON_AddStringToObject(root, "home_ssid", device_config.home_ssid);
 	cJSON_AddStringToObject(root, "home_password", device_config.home_password);
 	cJSON_AddStringToObject(root, "home_security", device_config.home_security);
+	cJSON_AddStringToObject(root, "home_protocol", device_config.home_protocol);
 	cJSON_AddStringToObject(root, "drive_ssid", device_config.drive_ssid);
 	cJSON_AddStringToObject(root, "drive_password", device_config.drive_password);
 	cJSON_AddStringToObject(root, "drive_security", device_config.drive_security);
+	cJSON_AddStringToObject(root, "drive_protocol", device_config.drive_protocol);
 	cJSON_AddStringToObject(root, "drive_connection_type", device_config.drive_connection_type);
 	cJSON_AddStringToObject(root, "drive_mode_timeout", device_config.drive_mode_timeout);
 
@@ -2267,7 +2321,7 @@ static void config_server_load_cfg(char *cfg)
 		goto config_error;
 	}
 	strcpy(device_config.ap_pass, key->valuestring);
-	ESP_LOGE(TAG, "device_config.ap_pass: %s", device_config.ap_pass);
+	ESP_LOGI(TAG, "device_config.ap_pass: %s", device_config.ap_pass);
 
 	key = cJSON_GetObjectItem(root,"protocol");
 	if(key == 0)
@@ -2279,7 +2333,7 @@ static void config_server_load_cfg(char *cfg)
 		goto config_error;
 	}
 	strcpy(device_config.protocol, key->valuestring);
-	ESP_LOGE(TAG, "device_config.protocol: %s", device_config.protocol);
+	ESP_LOGI(TAG, "device_config.protocol: %s", device_config.protocol);
 
 	key = cJSON_GetObjectItem(root,"ble_pass");
 	if(key == 0)
@@ -2291,7 +2345,7 @@ static void config_server_load_cfg(char *cfg)
 		goto config_error;
 	}
 	strcpy(device_config.ble_pass, key->valuestring);
-	ESP_LOGE(TAG, "device_config.ble_pass: %s", device_config.ble_pass);
+	ESP_LOGI(TAG, "device_config.ble_pass: %s", device_config.ble_pass);
 
 	key = cJSON_GetObjectItem(root,"sleep_status");
 	if(key == 0)
@@ -2300,7 +2354,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.sleep_status, key->valuestring);
-	ESP_LOGE(TAG, "device_config.sleep_status: %s", device_config.sleep_status);
+	ESP_LOGI(TAG, "device_config.sleep_status: %s", device_config.sleep_status);
 
 	key = cJSON_GetObjectItem(root,"ble_status");
 	if(key == 0)
@@ -2309,7 +2363,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.ble_status, key->valuestring);
-	ESP_LOGE(TAG, "device_config.ble_status: %s", device_config.ble_status);
+	ESP_LOGI(TAG, "device_config.ble_status: %s", device_config.ble_status);
 
 	key = cJSON_GetObjectItem(root,"sleep_volt");
 	if(key == 0)
@@ -2318,7 +2372,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.sleep_volt, key->valuestring);
-	ESP_LOGE(TAG, "device_config.sleep_volt: %s", device_config.sleep_volt);
+	ESP_LOGI(TAG, "device_config.sleep_volt: %s", device_config.sleep_volt);
 
 	//*****
 	// key = cJSON_GetObjectItem(root,"batt_alert");
@@ -2328,7 +2382,7 @@ static void config_server_load_cfg(char *cfg)
 	// }
 
 	strcpy(device_config.batt_alert, "disable");
-	ESP_LOGE(TAG, "device_config.batt_alert: %s", device_config.batt_alert);
+	ESP_LOGI(TAG, "device_config.batt_alert: %s", device_config.batt_alert);
 	//*****
 
 	//*****
@@ -2339,7 +2393,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.batt_alert_ssid, key->valuestring);
-	ESP_LOGE(TAG, "device_config.batt_alert_ssid: %s", device_config.batt_alert_ssid);
+	ESP_LOGI(TAG, "device_config.batt_alert_ssid: %s", device_config.batt_alert_ssid);
 	//*****
 
 	//*****
@@ -2350,7 +2404,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.batt_alert_pass, key->valuestring);
-	ESP_LOGE(TAG, "device_config.batt_alert_pass: %s", device_config.batt_alert_pass);
+	ESP_LOGI(TAG, "device_config.batt_alert_pass: %s", device_config.batt_alert_pass);
 	//*****
 
 	//*****
@@ -2361,7 +2415,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.batt_alert_volt, key->valuestring);
-	ESP_LOGE(TAG, "device_config.batt_alert_volt: %s", device_config.batt_alert_volt);
+	ESP_LOGI(TAG, "device_config.batt_alert_volt: %s", device_config.batt_alert_volt);
 	//*****
 
 	//*****
@@ -2372,7 +2426,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.batt_alert_protocol, key->valuestring);
-	ESP_LOGE(TAG, "device_config.batt_alert_protocol: %s", device_config.batt_alert_protocol);
+	ESP_LOGI(TAG, "device_config.batt_alert_protocol: %s", device_config.batt_alert_protocol);
 	//*****
 
 	//*****
@@ -2383,7 +2437,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.batt_alert_url, key->valuestring);
-	ESP_LOGE(TAG, "device_config.batt_alert_url: %s", device_config.batt_alert_url);
+	ESP_LOGI(TAG, "device_config.batt_alert_url: %s", device_config.batt_alert_url);
 	//*****
 
 	//*****
@@ -2394,7 +2448,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.batt_alert_port, key->valuestring);
-	ESP_LOGE(TAG, "device_config.batt_alert_port: %s", device_config.batt_alert_port);
+	ESP_LOGI(TAG, "device_config.batt_alert_port: %s", device_config.batt_alert_port);
 	//*****
 
 	//*****
@@ -2405,7 +2459,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.batt_alert_topic, key->valuestring);
-	ESP_LOGE(TAG, "device_config.batt_alert_topic: %s", device_config.batt_alert_topic);
+	ESP_LOGI(TAG, "device_config.batt_alert_topic: %s", device_config.batt_alert_topic);
 	//*****
 
 	//*****
@@ -2416,7 +2470,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.batt_mqtt_user, key->valuestring);
-	ESP_LOGE(TAG, "device_config.batt_mqtt_user: %s", device_config.batt_mqtt_user);
+	ESP_LOGI(TAG, "device_config.batt_mqtt_user: %s", device_config.batt_mqtt_user);
 	//*****
 
 	//*****
@@ -2427,7 +2481,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.batt_mqtt_pass, key->valuestring);
-	ESP_LOGE(TAG, "device_config.batt_mqtt_pass: %s", device_config.batt_mqtt_pass);
+	ESP_LOGI(TAG, "device_config.batt_mqtt_pass: %s", device_config.batt_mqtt_pass);
 	//*****
 
 	//*****
@@ -2438,7 +2492,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.batt_alert_time, key->valuestring);
-	ESP_LOGE(TAG, "device_config.batt_alert_time: %s", device_config.batt_alert_time);
+	ESP_LOGI(TAG, "device_config.batt_alert_time: %s", device_config.batt_alert_time);
 	//*****
 
 
@@ -2451,7 +2505,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.mqtt_en, key->valuestring);
-	ESP_LOGE(TAG, "device_config.mqtt_en: %s", device_config.mqtt_en);
+	ESP_LOGI(TAG, "device_config.mqtt_en: %s", device_config.mqtt_en);
 	//*****
 
 	//*****
@@ -2473,7 +2527,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.mqtt_port, key->valuestring);
-	ESP_LOGE(TAG, "device_config.mqtt_port: %s", device_config.mqtt_port);
+	ESP_LOGI(TAG, "device_config.mqtt_port: %s", device_config.mqtt_port);
 	//*****
 
 	//*****
@@ -2484,7 +2538,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.mqtt_user, key->valuestring);
-	ESP_LOGE(TAG, "device_config.mqtt_user: %s", device_config.mqtt_user);
+	ESP_LOGI(TAG, "device_config.mqtt_user: %s", device_config.mqtt_user);
 	//*****
 
 	//*****
@@ -2495,7 +2549,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.mqtt_pass, key->valuestring);
-	ESP_LOGE(TAG, "device_config.mqtt_pass: %s", device_config.mqtt_pass);
+	ESP_LOGI(TAG, "device_config.mqtt_pass: %s", device_config.mqtt_pass);
 	//*****
 
 	//*****
@@ -2506,7 +2560,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.mqtt_elm327_log, key->valuestring);
-	ESP_LOGE(TAG, "device_config.mqtt_elm327_log: %s", device_config.mqtt_elm327_log);
+	ESP_LOGI(TAG, "device_config.mqtt_elm327_log: %s", device_config.mqtt_elm327_log);
 	//*****
 
 	//*****
@@ -2524,7 +2578,7 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.mqtt_tx_topic, key->valuestring);
 	}
 	
-	ESP_LOGE(TAG, "device_config.mqtt_tx_topic: %s", device_config.mqtt_tx_topic);
+	ESP_LOGI(TAG, "device_config.mqtt_tx_topic: %s", device_config.mqtt_tx_topic);
 	//*****
 
 	//*****
@@ -2538,7 +2592,7 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.mqtt_tx_en, key->valuestring);
 	}
 	
-	ESP_LOGE(TAG, "device_config.mqtt_tx_en: %s", device_config.mqtt_tx_en);
+	ESP_LOGI(TAG, "device_config.mqtt_tx_en: %s", device_config.mqtt_tx_en);
 	//*****
 
 	//*****
@@ -2552,7 +2606,7 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.mqtt_rx_en, key->valuestring);
 	}
 
-	ESP_LOGE(TAG, "device_config.mqtt_rx_en: %s", device_config.mqtt_rx_en);
+	ESP_LOGI(TAG, "device_config.mqtt_rx_en: %s", device_config.mqtt_rx_en);
 	//*****
 
 	//*****
@@ -2566,7 +2620,7 @@ static void config_server_load_cfg(char *cfg)
 	strcpy(device_config.mqtt_rx_topic, key->valuestring);
 
 	
-	ESP_LOGE(TAG, "device_config.mqtt_rx_topic: %s", device_config.mqtt_rx_topic);
+	ESP_LOGI(TAG, "device_config.mqtt_rx_topic: %s", device_config.mqtt_rx_topic);
 	//*****
 
 	//*****
@@ -2578,7 +2632,7 @@ static void config_server_load_cfg(char *cfg)
 	strcpy(device_config.mqtt_status_topic, key->valuestring);
 
 	
-	ESP_LOGE(TAG, "device_config.mqtt_status_topic: %s", device_config.mqtt_status_topic);
+	ESP_LOGI(TAG, "device_config.mqtt_status_topic: %s", device_config.mqtt_status_topic);
 	//*****
 
 	//*****
@@ -2592,7 +2646,7 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.wakeup_volt, key->valuestring);
 	}
 
-	ESP_LOGE(TAG, "device_config.wakeup_volt: %s", device_config.wakeup_volt);
+	ESP_LOGI(TAG, "device_config.wakeup_volt: %s", device_config.wakeup_volt);
 	//*****
 	
 	//*****
@@ -2613,7 +2667,7 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.sleep_time, key->valuestring);
 	}
 
-	ESP_LOGE(TAG, "device_config.sleep_time: %s", device_config.sleep_time);
+	ESP_LOGI(TAG, "device_config.sleep_time: %s", device_config.sleep_time);
 	//*****
 
 	//*****
@@ -2627,7 +2681,7 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.sta_security, key->valuestring);
 	}
 
-	ESP_LOGE(TAG, "device_config.sta_security: %s", device_config.wakeup_volt);
+	ESP_LOGI(TAG, "device_config.sta_security: %s", device_config.wakeup_volt);
 	//*****
 
 	//**** SmartConnect fields ****
@@ -2663,6 +2717,17 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.home_security, key->valuestring);
 	}
 	ESP_LOGI(TAG, "device_config.home_security: %s", device_config.home_security);
+
+	key = cJSON_GetObjectItem(root,"home_protocol");
+	if(key == 0)
+	{
+		strcpy(device_config.home_protocol, "auto_pid");
+	}
+	else
+	{
+		strcpy(device_config.home_protocol, key->valuestring);
+	}
+	ESP_LOGI(TAG, "device_config.home_protocol: %s", device_config.home_protocol);
 
 	key = cJSON_GetObjectItem(root,"drive_ssid");
 	if(key == 0)
@@ -2718,6 +2783,18 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.drive_mode_timeout, key->valuestring);
 	}
 	ESP_LOGI(TAG, "device_config.drive_mode_timeout: %s", device_config.drive_mode_timeout);
+
+	key = cJSON_GetObjectItem(root,"drive_protocol");
+	if(key == 0)
+	{
+		strcpy(device_config.drive_protocol, "auto_pid");
+	}
+	else
+	{
+		strcpy(device_config.drive_protocol, key->valuestring);
+	}
+	ESP_LOGI(TAG, "device_config.drive_protocol: %s", device_config.drive_protocol);
+
 	//**** End SmartConnect fields ****
 
 	//*****
@@ -2730,7 +2807,7 @@ static void config_server_load_cfg(char *cfg)
 	{
 		strcpy(device_config.logger_status, key->valuestring);
 	}
-	ESP_LOGE(TAG, "device_config.logger_status: %s", device_config.logger_status);
+	ESP_LOGI(TAG, "device_config.logger_status: %s", device_config.logger_status);
 	//*****
 
 	//*****
@@ -2743,7 +2820,7 @@ static void config_server_load_cfg(char *cfg)
 	{
 		strcpy(device_config.log_filesystem, key->valuestring);
 	}
-	ESP_LOGE(TAG, "device_config.log_filesystem: %s", device_config.log_filesystem);
+	ESP_LOGI(TAG, "device_config.log_filesystem: %s", device_config.log_filesystem);
 	//*****
 
 	//*****
@@ -2758,7 +2835,7 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.sta_security, key->valuestring);
 	}
 
-	ESP_LOGE(TAG, "device_config.log_storage: %s", device_config.log_storage);
+	ESP_LOGI(TAG, "device_config.log_storage: %s", device_config.log_storage);
 	//*****
 
 	//*****
@@ -2778,7 +2855,7 @@ static void config_server_load_cfg(char *cfg)
 
 		strcpy(device_config.log_period, key->valuestring);
 	}
-	ESP_LOGE(TAG, "device_config.log_period: %s", device_config.log_period);
+	ESP_LOGI(TAG, "device_config.log_period: %s", device_config.log_period);
 	//*****
 
 	key = cJSON_GetObjectItem(root,"ap_auto_disable");
@@ -2791,7 +2868,7 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.ap_auto_disable, key->valuestring);
 	}
 
-	ESP_LOGE(TAG, "device_config.ap_auto_disable: %s", device_config.ap_auto_disable);
+	ESP_LOGI(TAG, "device_config.ap_auto_disable: %s", device_config.ap_auto_disable);
 
 	//*****
 	key = cJSON_GetObjectItem(root,"periodic_wakeup");
@@ -2804,7 +2881,7 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.periodic_wakeup, key->valuestring);
 	}
 
-	ESP_LOGE(TAG, "device_config.periodic_wakeup: %s", device_config.periodic_wakeup);
+	ESP_LOGI(TAG, "device_config.periodic_wakeup: %s", device_config.periodic_wakeup);
 	//*****	
 
 	//*****	
@@ -2818,7 +2895,7 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.wakeup_interval, key->valuestring);
 	}
 
-	ESP_LOGE(TAG, "device_config.wakeup_interval: %s", device_config.wakeup_interval);
+	ESP_LOGI(TAG, "device_config.wakeup_interval: %s", device_config.wakeup_interval);
 	//*****	
 
 
@@ -2834,7 +2911,7 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.sleep_disable_agree, key->valuestring);
 	}
 
-	ESP_LOGE(TAG, "device_config.sleep_disable_agree: %s", device_config.sleep_disable_agree);
+	ESP_LOGI(TAG, "device_config.sleep_disable_agree: %s", device_config.sleep_disable_agree);
 	//*****	
 
 	cJSON_Delete(root);

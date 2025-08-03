@@ -1163,10 +1163,10 @@ static void autopid_task(void *pvParameters)
     vTaskDelay(pdMS_TO_TICKS(100));
     send_commands(default_init, 50);
 
-    while(config_server_mqtt_en_config() == 1 && !mqtt_connected())
-    {
-        vTaskDelay(pdMS_TO_TICKS(2000));
-    }
+    // while(config_server_mqtt_en_config() == 1 && !mqtt_connected())
+    // {
+    //     vTaskDelay(pdMS_TO_TICKS(2000));
+    // }
 
     // if(config_server_mqtt_en_config() == 1 && all_pids->ha_discovery_en)
     // {
@@ -1229,7 +1229,17 @@ static void autopid_task(void *pvParameters)
             ESP_LOGI(TAG, "Device awake, resuming autopid task");
             obd_logger_enable();
         }
-
+        
+        if(!dev_status_is_autopid_enabled())
+        {
+            ESP_LOGI(TAG, "Autopid is disabled, waiting for enable");
+            obd_logger_disable();
+            dev_status_wait_for_bits(DEV_AUTOPID_ENABLED_BIT, portMAX_DELAY);
+            ESP_LOGI(TAG, "Autopid enabled, resuming autopid task");
+            obd_logger_enable();
+            send_commands(default_init, 50);
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
         // elm327_lock();
         xSemaphoreTake(all_pids->mutex, portMAX_DELAY);
         
@@ -2214,4 +2224,14 @@ void autopid_init(char* id, bool enable_logging, uint32_t logging_period)
         ESP_LOGE(TAG, "Failed to allocate autopid_task stack in PSRAM");
     }
 
+    if(dev_status_is_smartconnect_enabled())
+    {
+        dev_status_clear_autopid_enabled(); //controller by smartconnect
+        ESP_LOGI(TAG, "Autopid is controlled by SmartConnect, disabling autopid");
+    }
+    else
+    {
+        dev_status_set_autopid_enabled();
+        ESP_LOGI(TAG, "Autopid enabled");
+    }
 }

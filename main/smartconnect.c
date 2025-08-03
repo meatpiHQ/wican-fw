@@ -251,6 +251,17 @@ static void enable_drive_mode(void)
 {
     ESP_LOGI(TAG, "Enabling DRIVE MODE");
     
+    // Set drive mode enabled bit and clear home mode bit
+    dev_status_set_drive_mode_enabled();
+    dev_status_clear_home_mode_enabled();
+    
+    // Check drive protocol and manage autopid bit
+    int8_t drive_protocol = config_server_get_drive_protocol();
+    if (drive_protocol == OBD_ELM327) {
+        ESP_LOGI(TAG, "Drive mode: ELM327 protocol - disabling AutoPID");
+        dev_status_clear_autopid_enabled();
+    }
+    
     // Ensure complete disconnection from home WiFi
     ESP_LOGI(TAG, "Disconnecting from home WiFi...");
     wifi_mgr_sta_disconnect();
@@ -328,6 +339,17 @@ static void enable_drive_mode(void)
 static void enable_home_mode(void)
 {
     ESP_LOGI(TAG, "Enabling HOME MODE");
+    
+    // Set home mode enabled bit and clear drive mode bit
+    dev_status_set_home_mode_enabled();
+    dev_status_clear_drive_mode_enabled();
+    
+    // Check home protocol and manage autopid bit
+    int8_t home_protocol = config_server_get_home_protocol();
+    if (home_protocol == AUTO_PID) {
+        ESP_LOGI(TAG, "Home mode: AutoPID protocol - enabling AutoPID");
+        dev_status_set_autopid_enabled();
+    }
     
     // In Home mode, only WiFi is allowed - disable BLE
     ESP_LOGI(TAG, "Disabling BLE for home mode...");
@@ -419,6 +441,9 @@ static void disable_drive_mode(void)
 {
     ESP_LOGI(TAG, "Disabling DRIVE MODE");
     
+    // Clear drive mode enabled bit
+    dev_status_clear_drive_mode_enabled();
+    
     // Get drive connection type to know what to disable
     char *drive_connection_type = config_server_get_drive_connection_type();
     
@@ -445,6 +470,9 @@ static void disable_drive_mode(void)
 static void disable_home_mode(void)
 {
     ESP_LOGI(TAG, "Disabling HOME MODE");
+    
+    // Clear home mode enabled bit
+    dev_status_clear_home_mode_enabled();
     
     // Disconnect from home network and disable AP
     if (smartconnect_config.home_mode_enable_ap_sta) {

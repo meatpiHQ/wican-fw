@@ -674,6 +674,15 @@
                                 </select>
                             </td>
                         </tr>
+                        <tr>
+                            <td>Home Protocol:</td>
+                            <td>
+                                <select id="home_protocol" name="home_protocol" onchange="submit_enable();">
+                                    <option value="elm327">elm327</option>
+                                    <option value="auto_pid">AutoPID</option>
+                                </select>
+                            </td>
+                        </tr>
                     </table>
                     
                     <!-- Drive Mode Configuration -->
@@ -710,6 +719,15 @@
                                 <select id="drive_security" name="drive_security" onchange="submit_enable();">
                                     <option value="wpa3">WPA3</option>
                                     <option value="wpa2">WPA2</option>
+                                </select>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Drive Protocol:</td>
+                            <td>
+                                <select id="drive_protocol" name="drive_protocol" onchange="submit_enable();">
+                                    <option value="elm327">elm327</option>
+                                    <option value="auto_pid">AutoPID</option>
                                 </select>
                             </td>
                         </tr>
@@ -1553,15 +1571,18 @@
             const wifiMode = document.getElementById("wifi_mode").value;
             const smartConnectConfig = document.getElementById("smartconnect_config");
             const stationConfigSection = document.getElementById("station_config_section");
+            const protocolSelect = document.getElementById("protocol");
             
             if (wifiMode === "SmartConnect") {
                 smartConnectConfig.style.display = "block";
                 stationConfigSection.style.display = "none"; // Hide Station Config
+                protocolSelect.disabled = true; // Disable Protocol selection
                 
                 toggleDriveConfig(); // Initialize drive config visibility
             } else {
                 smartConnectConfig.style.display = "none";
                 stationConfigSection.style.display = "block"; // Show Station Config
+                protocolSelect.disabled = false; // Re-enable Protocol selection
                 // Re-enable BLE when not in SmartConnect mode
                 const bleStatus = document.getElementById("ble_status");
                 const blePasskey = document.getElementById("ble_pass_value");
@@ -2894,6 +2915,8 @@ function loadAutoTable(jsonData) {
 			obj["drive_ssid"] = document.getElementById("drive_ssid").value;
 			obj["drive_password"] = document.getElementById("drive_password").value;
 			obj["drive_security"] = document.getElementById("drive_security").value;
+			obj["home_protocol"] = document.getElementById("home_protocol").value;
+            obj["drive_protocol"] = document.getElementById("drive_protocol").value;
 			obj["drive_connection_type"] = document.getElementById("drive_connection_type").value;
 			obj["drive_mode_timeout"] = document.getElementById("drive_mode_timeout").value;
 		}
@@ -3147,9 +3170,11 @@ function loadAutoTable(jsonData) {
 				document.getElementById("home_ssid").value = obj.home_ssid || "";
 				document.getElementById("home_password").value = obj.home_password || "";
 				document.getElementById("home_security").value = obj.home_security || "wpa3";
+				document.getElementById("home_protocol").value = obj.home_protocol || "elm327";
 				document.getElementById("drive_ssid").value = obj.drive_ssid || "";
 				document.getElementById("drive_password").value = obj.drive_password || "";
 				document.getElementById("drive_security").value = obj.drive_security || "wpa3";
+				document.getElementById("drive_protocol").value = obj.drive_protocol || "elm327";
 				document.getElementById("drive_connection_type").value = obj.drive_connection_type || "wifi";
 				// Load drive mode timeout value and update display
 				document.getElementById("drive_mode_timeout").value = obj.drive_mode_timeout || "60";

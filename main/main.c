@@ -747,7 +747,18 @@ void app_main(void)
 	}
 
 	protocol = config_server_protocol();
-	// protocol = OBD_ELM327;
+	if(config_server_get_wifi_mode() == SMARTCONNECT_MODE)
+	{
+		if(config_server_get_drive_protocol() == AUTO_PID ||
+			config_server_get_home_protocol() == AUTO_PID)
+		{
+			protocol = AUTO_PID;
+		}
+		else
+		{
+			protocol = OBD_ELM327;
+		}
+	}
 
 	if(protocol == REALDASH)
 	{

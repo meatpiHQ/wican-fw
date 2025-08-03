@@ -22,6 +22,10 @@ extern "C" {
 #define DEV_BLE_ENABLED_BIT             BIT8
 #define DEV_STA_ENABLED_BIT             BIT9
 #define DEV_AP_ENABLED_BIT              BIT10
+#define DEV_AUTOPID_ENABLED_BIT         BIT11
+#define DEV_HOME_MODE_ENABLED_BIT       BIT12
+#define DEV_DRIVE_MODE_ENABLED_BIT      BIT13
+#define DEV_SMARTCONNECT_ENABLED_BIT    BIT14
 
 // Initialize device status event group
 void dev_status_init(void);
@@ -48,6 +52,10 @@ bool dev_status_is_any_bit_set(EventBits_t bits);
 #define dev_status_set_sta_connected()  dev_status_set_bits(DEV_STA_CONNECTED_BIT)
 #define dev_status_set_sta_enabled()    dev_status_set_bits(DEV_STA_ENABLED_BIT)
 #define dev_status_set_ap_enabled()     dev_status_set_bits(DEV_AP_ENABLED_BIT)
+#define dev_status_set_autopid_enabled() dev_status_set_bits(DEV_AUTOPID_ENABLED_BIT)
+#define dev_status_set_home_mode_enabled() dev_status_set_bits(DEV_HOME_MODE_ENABLED_BIT)
+#define dev_status_set_drive_mode_enabled() dev_status_set_bits(DEV_DRIVE_MODE_ENABLED_BIT)
+#define dev_status_set_smartconnect_enabled() dev_status_set_bits(DEV_SMARTCONNECT_ENABLED_BIT)
 #define dev_status_set_mqtt_connected() dev_status_set_bits(DEV_MQTT_CONNECTED_BIT)
 #define dev_status_set_ble_connected()  dev_status_set_bits(DEV_BLE_CONNECTED_BIT)
 
@@ -56,6 +64,10 @@ bool dev_status_is_any_bit_set(EventBits_t bits);
 #define dev_status_clear_sta_connected() dev_status_clear_bits(DEV_STA_CONNECTED_BIT)
 #define dev_status_clear_sta_enabled()   dev_status_clear_bits(DEV_STA_ENABLED_BIT)
 #define dev_status_clear_ap_enabled()    dev_status_clear_bits(DEV_AP_ENABLED_BIT)
+#define dev_status_clear_autopid_enabled() dev_status_clear_bits(DEV_AUTOPID_ENABLED_BIT)
+#define dev_status_clear_home_mode_enabled() dev_status_clear_bits(DEV_HOME_MODE_ENABLED_BIT)
+#define dev_status_clear_drive_mode_enabled() dev_status_clear_bits(DEV_DRIVE_MODE_ENABLED_BIT)
+#define dev_status_clear_smartconnect_enabled() dev_status_clear_bits(DEV_SMARTCONNECT_ENABLED_BIT)
 #define dev_status_clear_mqtt_connected() dev_status_clear_bits(DEV_MQTT_CONNECTED_BIT)
 #define dev_status_clear_ble_connected()  dev_status_clear_bits(DEV_BLE_CONNECTED_BIT)
 
@@ -64,6 +76,10 @@ bool dev_status_is_any_bit_set(EventBits_t bits);
 #define dev_status_is_sta_connected()  dev_status_is_bit_set(DEV_STA_CONNECTED_BIT)
 #define dev_status_is_sta_enabled()    dev_status_is_bit_set(DEV_STA_ENABLED_BIT)
 #define dev_status_is_ap_enabled()     dev_status_is_bit_set(DEV_AP_ENABLED_BIT)
+#define dev_status_is_autopid_enabled() dev_status_is_bit_set(DEV_AUTOPID_ENABLED_BIT)
+#define dev_status_is_home_mode_enabled() dev_status_is_bit_set(DEV_HOME_MODE_ENABLED_BIT)
+#define dev_status_is_drive_mode_enabled() dev_status_is_bit_set(DEV_DRIVE_MODE_ENABLED_BIT)
+#define dev_status_is_smartconnect_enabled() dev_status_is_bit_set(DEV_SMARTCONNECT_ENABLED_BIT)
 #define dev_status_is_mqtt_connected() dev_status_is_bit_set(DEV_MQTT_CONNECTED_BIT)
 #define dev_status_is_ble_connected()  dev_status_is_bit_set(DEV_BLE_CONNECTED_BIT)
 

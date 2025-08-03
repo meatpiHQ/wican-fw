@@ -255,7 +255,7 @@ esp_err_t wifi_mgr_deinit(void) {
     memset(&wifi_status, 0, sizeof(wifi_status));
     memset(&wifi_config, 0, sizeof(wifi_config));
     
-    ESP_LOGI(TAG, "WiFi Manager deinitialized (event group preserved for status monitoring)");
+    ESP_LOGI(TAG, "WiFi Manager deinitialized");
     return ESP_OK;
 }
 
