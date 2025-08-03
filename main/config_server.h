@@ -74,6 +74,13 @@ typedef enum
 	MAX_LOG_FS
 }log_filesystem_t;
 
+typedef enum
+{
+	DRIVE_CONNECTION_WIFI,
+	DRIVE_CONNECTION_BLE,
+	DRIVE_CONNECTION_MAX
+}drive_connection_type_t;
+
 typedef struct _device_config
 {
 	char wifi_mode[65];
@@ -151,7 +158,7 @@ char *config_server_get_drive_ssid(void);
 char *config_server_get_drive_password(void);
 char *config_server_get_drive_security(void);
 int8_t config_server_get_drive_protocol(void);
-char *config_server_get_drive_connection_type(void);
+drive_connection_type_t config_server_get_drive_connection_type(void);
 char *config_server_get_drive_mode_timeout(void);
 wifi_security_t config_server_get_home_security_type(void);
 wifi_security_t config_server_get_drive_security_type(void);

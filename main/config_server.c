@@ -401,9 +401,17 @@ int8_t config_server_get_drive_protocol(void)
 	return OBD_ELM327;
 }
 
-char *config_server_get_drive_connection_type(void)
+drive_connection_type_t config_server_get_drive_connection_type(void)
 {
-	return device_config.drive_connection_type;
+	if(strcmp(device_config.drive_connection_type, "wifi") == 0)
+	{
+		return DRIVE_CONNECTION_WIFI;
+	}
+	else if(strcmp(device_config.drive_connection_type, "ble") == 0)
+	{
+		return DRIVE_CONNECTION_BLE;
+	}
+	return DRIVE_CONNECTION_WIFI; // Default to WiFi
 }
 
 char *config_server_get_drive_mode_timeout(void)
@@ -1435,7 +1443,8 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 {
 
 	char ip_str[20] = {0};
-	config_server_get_sta_ip(ip_str);
+
+	strcpy(ip_str, wifi_mgr_get_sta_ip() ? wifi_mgr_get_sta_ip() : "");
 	cJSON *root = cJSON_CreateObject();
 	static char fver[16];
 	static char hver[32];
@@ -2975,7 +2984,37 @@ void vrestartTimerCallback( TimerHandle_t xTimer )
 	esp_restart();
 }
 
-
+static void register_server_uris(void)
+{
+	ESP_LOGI(TAG, "Registering URI handlers");
+	httpd_register_uri_handler(server, &index_uri);
+	httpd_register_uri_handler(server, &store_config_uri);
+	httpd_register_uri_handler(server, &check_status_uri);
+	httpd_register_uri_handler(server, &load_config_uri);
+	httpd_register_uri_handler(server, &logo_uri);
+	httpd_register_uri_handler(server, &ws);
+	httpd_register_uri_handler(server, &file_upload);
+	httpd_register_uri_handler(server, &system_reboot);
+	httpd_register_uri_handler(server, &store_canflt_uri);
+	httpd_register_uri_handler(server, &load_canflt_uri);
+	httpd_register_uri_handler(server, &store_auto_data_uri);
+	httpd_register_uri_handler(server, &load_pid_auto_uri);
+	httpd_register_uri_handler(server, &load_pid_auto_conf_uri);
+	httpd_register_uri_handler(server, &upload_car_data);
+	httpd_register_uri_handler(server, &autopid_data);
+	httpd_register_uri_handler(server, &load_car_config_uri);
+	httpd_register_uri_handler(server, &store_car_data_uri);
+	httpd_register_uri_handler(server, &system_commands);
+	httpd_register_uri_handler(server, &scan_available_pids_uri);
+	httpd_register_uri_handler(server, &std_pid_info);
+	
+	//Add before this line
+	httpd_register_uri_handler(server, &obd_logger_ws);
+	httpd_register_uri_handler(server, &db_download_uri);
+	httpd_register_uri_handler(server, &db_files_uri);
+	//last uri /*
+	httpd_register_uri_handler(server, &get_uri_common);
+}
 //static char* device_config = NULL;
 static uint8_t esp_fatfs_flag = 0;
 static httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -3161,34 +3200,8 @@ static httpd_handle_t config_server_init(void)
     if (httpd_start(&server, &config) == ESP_OK)
     {
         // Set URI handlers
-        ESP_LOGI(TAG, "Registering URI handlers");
-        httpd_register_uri_handler(server, &index_uri);
-        httpd_register_uri_handler(server, &store_config_uri);
-        httpd_register_uri_handler(server, &check_status_uri);
-        httpd_register_uri_handler(server, &load_config_uri);
-        httpd_register_uri_handler(server, &logo_uri);
-        httpd_register_uri_handler(server, &ws);
-        httpd_register_uri_handler(server, &file_upload);
-		httpd_register_uri_handler(server, &system_reboot);
-		httpd_register_uri_handler(server, &store_canflt_uri);
-		httpd_register_uri_handler(server, &load_canflt_uri);
-		httpd_register_uri_handler(server, &store_auto_data_uri);
-		httpd_register_uri_handler(server, &load_pid_auto_uri);
-		httpd_register_uri_handler(server, &load_pid_auto_conf_uri);
-		httpd_register_uri_handler(server, &upload_car_data);
-		httpd_register_uri_handler(server, &autopid_data);
-		httpd_register_uri_handler(server, &load_car_config_uri);
-		httpd_register_uri_handler(server, &store_car_data_uri);
-		httpd_register_uri_handler(server, &system_commands);
-		httpd_register_uri_handler(server, &scan_available_pids_uri);
-		httpd_register_uri_handler(server, &std_pid_info);
-		
-		//Add before this line
-		httpd_register_uri_handler(server, &obd_logger_ws);
-		httpd_register_uri_handler(server, &db_download_uri);
-		httpd_register_uri_handler(server, &db_files_uri);
-		//last uri /*
-		httpd_register_uri_handler(server, &get_uri_common);
+		register_server_uris();
+		ESP_LOGI(TAG, "Server started successfully");
 		
         #if CONFIG_EXAMPLE_BASIC_AUTH
         httpd_register_basic_auth(server);
@@ -3202,21 +3215,13 @@ static httpd_handle_t config_server_init(void)
 void config_server_restart(void)
 {
     // Start the httpd server
-    ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
+    ESP_LOGI(TAG, "Restarting server on port: '%d'", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK)
     {
         // Set URI handlers
         ESP_LOGI(TAG, "Registering URI handlers");
-        httpd_register_uri_handler(server, &index_uri);
-        httpd_register_uri_handler(server, &store_config_uri);
-        httpd_register_uri_handler(server, &check_status_uri);
-        httpd_register_uri_handler(server, &load_config_uri);
-        httpd_register_uri_handler(server, &logo_uri);
-        httpd_register_uri_handler(server, &ws);
-        httpd_register_uri_handler(server, &file_upload);
-		httpd_register_uri_handler(server, &system_reboot);
-		httpd_register_uri_handler(server, &store_canflt_uri);
-		httpd_register_uri_handler(server, &load_canflt_uri);
+        register_server_uris();
+		ESP_LOGI(TAG, "Server restarted successfully");
         return;
     }
 
@@ -3656,7 +3661,7 @@ int8_t config_server_get_ap_auto_disable(void)
 	{
 		return 0;
 	}
-	return -1;
+	return 0;
 }
 
 log_filesystem_t config_server_get_log_filesystem(void)
