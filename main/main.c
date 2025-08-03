@@ -301,7 +301,7 @@ static void can_tx_task(void *pvParameters)
 		{
 			gvret_parse(msg_ptr, temp_len, &tx_msg, &xMsg_Tx_Queue);
 		}
-		else if(protocol == OBD_ELM327)
+		else if(protocol == OBD_ELM327 || protocol == AUTO_PID)
 		{
 			#if HARDWARE_VER == WICAN_PRO
 			static char elm327_cmd_buffer[2048];
