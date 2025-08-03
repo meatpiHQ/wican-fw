@@ -2751,7 +2751,10 @@ function loadAutoTable(jsonData) {
 				document.getElementById("wifi_mode_current").innerHTML = "AP+Station";
 			} else if(obj.wifi_mode == "AP") {
 				document.getElementById("wifi_mode_current").innerHTML = "AP";
+			} else if(obj.wifi_mode == "SmartConnect") {
+				document.getElementById("wifi_mode_current").innerHTML = "SmartConnect";
 			}
+
 			document.getElementById("sta_status").innerHTML = obj.sta_status;
 			document.getElementById("ap_channel_status").innerHTML = obj.ap_ch;
 			document.getElementById("sta_ip").innerHTML = obj.sta_ip;
