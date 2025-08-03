@@ -83,6 +83,8 @@
 #include "obd_logger_iface.h"
 #include "https_client_mgr.h"
 #include "sdcard.h"
+#include "obd2_standard_pids.h"
+#include "wifi_mgr.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
@@ -99,6 +101,9 @@ httpd_handle_t server = NULL;
 char *device_config_file = NULL;
 static char *mqtt_canflt_file = NULL;
 static char *device_id;
+
+//Function prototypes
+static esp_err_t wifi_scan_handler(httpd_req_t *req);
 
 extern const unsigned char homepage_start[] asm("_binary_homepage_html_start");
 extern const unsigned char homepage_end[]   asm("_binary_homepage_html_end");
@@ -130,6 +135,10 @@ extern const unsigned char daterangepicker_css_start[] asm("_binary_daterangepic
 extern const unsigned char daterangepicker_css_end[] asm("_binary_daterangepicker_css_end");
 extern const unsigned char bootstrap_min_css_start[] asm("_binary_bootstrap_min_css_start");
 extern const unsigned char bootstrap_min_css_end[] asm("_binary_bootstrap_min_css_end");
+extern const unsigned char dashboard_live_js_start[] asm("_binary_dashboard_live_js_start");
+extern const unsigned char dashboard_live_js_end[] asm("_binary_dashboard_live_js_end");
+extern const unsigned char lucide_icons_js_start[] asm("_binary_lucide_icons_js_start");
+extern const unsigned char lucide_icons_js_end[] asm("_binary_lucide_icons_js_end");
 
 typedef struct {
     const char *uri;
@@ -144,6 +153,8 @@ typedef struct {
 static const file_lookup_t file_lookup[] = {
     {"/dashboard.html", "text/html", dashboard_html_start, dashboard_html_end, false, NULL, NULL},
     {"/dashboard.js", "application/javascript", dashboard_js_start, dashboard_js_end, false, NULL, NULL},
+	{"/dashboard_live.js", "application/javascript", dashboard_live_js_start, dashboard_live_js_end, false, NULL, NULL},
+	{"/lucide_icons.js", "application/javascript", lucide_icons_js_start, lucide_icons_js_end, false, NULL, NULL},
 	{"/chartjs-adapter-moment.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/chartjs-adapter-moment.min.js", "https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.0/dist/chartjs-adapter-moment.min.js"},
 	{"/jquery-3.6.0.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/jquery-3.6.0.min.js", "https://code.jquery.com/jquery-3.6.0.min.js"},
 	{"/bootstrap.bundle.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/bootstrap.bundle.min.js", "https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"},
@@ -156,8 +167,18 @@ static const file_lookup_t file_lookup[] = {
 	{"/bootstrap.min.css", "text/css", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/bootstrap.min.css", "https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css"},
 	{"/daterangepicker.min.css", "text/css", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/daterangepicker.min.css", "https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.css"},
 	{"/daterangepicker.css", "text/css", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/daterangepicker.min.css", "https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css"},
-
+	
 	{NULL, NULL, NULL, NULL, false, NULL, NULL} // Sentinel to mark end of array
+};
+
+typedef struct {
+    const char *uri;
+    esp_err_t (*handler)(httpd_req_t *req);
+} handler_lookup_t;
+
+static const handler_lookup_t get_req_handler_lookup[] = {
+	{"/wifi_scan", wifi_scan_handler},
+	{NULL, NULL} 
 };
 
 static char can_datarate_str[11][7] = {
@@ -174,7 +195,10 @@ static char can_datarate_str[11][7] = {
 								"1000K",
 };
 
-const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\
+const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\
+										\"home_ssid\":\"MeatPi\",\"home_password\":\"TomatoSauce\",\"home_security\":\"wpa3\",\"home_protocol\":\"elm327\",\
+										\"drive_ssid\":\"MeatPi\",\"drive_password\":\"TomatoSauce\",\"drive_security\":\"wpa3\",\"drive_protocol\":\"elm327\",\"drive_connection_type\":\"wifi\",\"drive_mode_timeout\":\"60\",\
+										\"can_datarate\":\"500K\",\
 										\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\
 										\"ble_status\":\"disable\",\"sleep_status\":\"enable\",\"periodic_wakeup\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"sleep_time\":\"5\",\"wakeup_interval\":\"90\",\"batt_alert\":\"disable\",\
 										\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\
@@ -253,6 +277,10 @@ int8_t config_server_get_wifi_mode(void)
 	{
 		return APSTA_MODE;
 	}
+	else if(strcmp(device_config.wifi_mode, "SmartConnect") == 0)
+	{
+		return SMARTCONNECT_MODE;
+	}
 	return -1;
 }
 
@@ -292,6 +320,131 @@ char *config_server_get_sta_pass(void)
 {
 	return device_config.sta_pass;
 }
+
+char *config_server_get_home_ssid(void)
+{
+	return device_config.home_ssid;
+}
+
+char *config_server_get_home_password(void)
+{
+	return device_config.home_password;
+}
+
+char *config_server_get_home_security(void)
+{
+	return device_config.home_security;
+}
+
+int8_t config_server_get_home_protocol(void)
+{
+	if(strcmp(device_config.home_protocol, "slcan") == 0)
+	{
+		return SLCAN;
+	}
+	else if(strcmp(device_config.home_protocol, "realdash66") == 0)
+	{
+		return REALDASH;
+	}
+	else if(strcmp(device_config.home_protocol, "savvycan") == 0)
+	{
+		return SAVVYCAN;
+	}
+	else if(strcmp(device_config.home_protocol, "elm327") == 0)
+	{
+		return OBD_ELM327;
+	}
+	else if(strcmp(device_config.home_protocol, "auto_pid") == 0)
+	{
+		return AUTO_PID;
+	}
+	return OBD_ELM327;
+}
+
+char *config_server_get_drive_ssid(void)
+{
+	return device_config.drive_ssid;
+}
+
+char *config_server_get_drive_password(void)
+{
+	return device_config.drive_password;
+}
+
+char *config_server_get_drive_security(void)
+{
+	return device_config.drive_security;
+}
+
+int8_t config_server_get_drive_protocol(void)
+{
+	if(strcmp(device_config.drive_protocol, "slcan") == 0)
+	{
+		return SLCAN;
+	}
+	else if(strcmp(device_config.drive_protocol, "realdash66") == 0)
+	{
+		return REALDASH;
+	}
+	else if(strcmp(device_config.drive_protocol, "savvycan") == 0)
+	{
+		return SAVVYCAN;
+	}
+	else if(strcmp(device_config.drive_protocol, "elm327") == 0)
+	{
+		return OBD_ELM327;
+	}
+	else if(strcmp(device_config.drive_protocol, "auto_pid") == 0)
+	{
+		return AUTO_PID;
+	}
+	return OBD_ELM327;
+}
+
+drive_connection_type_t config_server_get_drive_connection_type(void)
+{
+	if(strcmp(device_config.drive_connection_type, "wifi") == 0)
+	{
+		return DRIVE_CONNECTION_WIFI;
+	}
+	else if(strcmp(device_config.drive_connection_type, "ble") == 0)
+	{
+		return DRIVE_CONNECTION_BLE;
+	}
+	return DRIVE_CONNECTION_WIFI; // Default to WiFi
+}
+
+char *config_server_get_drive_mode_timeout(void)
+{
+	return device_config.drive_mode_timeout;
+}
+
+wifi_security_t config_server_get_home_security_type(void)
+{
+	if(strcmp(device_config.home_security, "wpa2") == 0)
+	{
+		return WIFI_WPA2_PSK;
+	}
+	else if(strcmp(device_config.home_security, "wpa3") == 0)
+	{
+		return WIFI_WPA3_PSK;
+	}
+	return WIFI_WPA3_PSK; // Default to WPA3
+}
+
+wifi_security_t config_server_get_drive_security_type(void)
+{
+	if(strcmp(device_config.drive_security, "wpa2") == 0)
+	{
+		return WIFI_WPA2_PSK;
+	}
+	else if(strcmp(device_config.drive_security, "wpa3") == 0)
+	{
+		return WIFI_WPA3_PSK;
+	}
+	return WIFI_WPA3_PSK; // Default to WPA3
+}
+
 int8_t config_server_protocol(void)
 {
 	if(strcmp(device_config.protocol, "slcan") == 0)
@@ -453,13 +606,36 @@ static esp_err_t create_dir_recursively(const char* path) {
     return ESP_OK;
 }
 
-static esp_err_t file_handler(httpd_req_t *req)
+static esp_err_t wifi_scan_handler(httpd_req_t *req)
+{
+    char *scan_results = wifi_mgr_scan_networks();
+    if (scan_results != NULL) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, scan_results, strlen(scan_results));
+        free(scan_results); // Free the allocated memory
+    } else {
+        // Handle error case
+        httpd_resp_send_500(req);
+    }
+    return ESP_OK;
+}
+
+static esp_err_t get_uri_handler(httpd_req_t *req)
 {
     char *uri = req->uri;
 	const uint32_t chunk_size = 1024 * 64;
     ESP_LOGI(TAG, "Request URI: %s", uri);
     
-    // Look for the requested URI in our lookup table
+    const handler_lookup_t *handler = get_req_handler_lookup;
+	
+    while (handler->uri != NULL) {
+        if (strcmp(uri, handler->uri) == 0) {
+			handler->handler(req);
+            return ESP_OK;
+        }
+        handler++;
+    }
+
     const file_lookup_t *file = file_lookup;
     while (file->uri != NULL) {
         if (strcmp(uri, file->uri) == 0) {
@@ -479,7 +655,8 @@ static esp_err_t file_handler(httpd_req_t *req)
                             fclose(fp);
                             return ESP_ERR_NO_MEM;
                         }
-                        
+                        memset(buffer, 0, chunk_size);
+
                         size_t bytes_read;
                         while ((bytes_read = fread(buffer, 1, chunk_size, fp)) > 0) {
                             httpd_resp_send_chunk(req, buffer, bytes_read);
@@ -533,6 +710,7 @@ static esp_err_t file_handler(httpd_req_t *req)
 								httpd_resp_send_500(req);
 								return ESP_ERR_NO_MEM;
 							}
+							memset(buffer, 0, chunk_size);
 							
 							size_t bytes_read;
 							while ((bytes_read = fread(buffer, 1, chunk_size, fp)) > 0) {
@@ -588,58 +766,97 @@ static esp_err_t index_handler(httpd_req_t *req)
 
 static esp_err_t store_config_handler(httpd_req_t *req)
 {
+    esp_err_t ret_val = ESP_OK;
     char *buf = NULL;
+    FILE *f = NULL;
     size_t buf_size = req->content_len;
+    bool response_sent = false;
 
-    if (buf_size <= 0)
-    {
-        return ESP_FAIL; // Invalid content length
-    }
-
-    buf = (char *)malloc(buf_size);
-    if (!buf)
-    {
-        return ESP_ERR_NO_MEM; // Memory allocation failure
-    }
-
-    int ret = httpd_req_recv(req, buf, buf_size);
-
-    if (ret <= 0)
-    {
-        if (ret == HTTPD_SOCK_ERR_TIMEOUT)
-        {
-            // Retry receiving if timeout occurred
-            free(buf);
+    // Validate content type
+    char content_type[32];
+    if (httpd_req_get_hdr_value_str(req, "Content-Type", content_type, sizeof(content_type)) == ESP_OK) {
+        if (strncmp(content_type, "application/json", 16) != 0) {
+            ESP_LOGE(TAG, "Invalid content type: %s", content_type);
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Content type must be application/json");
             return ESP_FAIL;
         }
-        // Handle read error
-        free(buf);
+    }
+
+    // Check content length
+    if (buf_size <= 0 || buf_size > MAX_FILE_SIZE) {
+        ESP_LOGE(TAG, "Invalid content length: %d", buf_size);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid content length");
         return ESP_FAIL;
     }
 
-    FILE *f = fopen(FS_MOUNT_POINT"/config.json", "w");
-    if (f)
-    {
-        // Write the received data into the file
-        fwrite(buf, 1, buf_size, f);
-        fclose(f);
+    // Allocate memory
+    buf = (char *)malloc(buf_size + 1);  // +1 for null terminator
+    if (!buf) {
+        ESP_LOGE(TAG, "Failed to allocate memory for config data");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
+        return ESP_ERR_NO_MEM;
     }
-    else
-    {
-        // Handle file open error
-        free(buf);
-        return ESP_FAIL;
+	memset(buf, 0, buf_size + 1);
+
+    // Receive data
+    int received = httpd_req_recv(req, buf, buf_size);
+    if (received <= 0) {
+        ESP_LOGE(TAG, "Failed to receive data: %d", received);
+        ret_val = ESP_FAIL;
+        goto cleanup;
     }
 
-    // Free dynamically allocated memory
-    free(buf);
+    // Null terminate and validate JSON
+    buf[received] = '\0';
+    cJSON *json = cJSON_Parse(buf);
+    if (!json) {
+        ESP_LOGE(TAG, "Invalid JSON format");
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON format");
+        response_sent = true;
+        ret_val = ESP_FAIL;
+        goto cleanup;
+    }
+    cJSON_Delete(json);
 
+    // Open file
+    f = fopen(FS_MOUNT_POINT"/config.json", "w");
+    if (!f) {
+        ESP_LOGE(TAG, "Failed to open config file for writing");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to save configuration");
+        response_sent = true;
+        ret_val = ESP_FAIL;
+        goto cleanup;
+    }
+
+    // Write to file
+    size_t written = fwrite(buf, 1, received, f);
+    if (written != received) {
+        ESP_LOGE(TAG, "Failed to write configuration: %d/%d bytes written", written, received);
+        ret_val = ESP_FAIL;
+        goto cleanup;
+    }
+
+    // Send success response
     const char *resp_str = "Configuration saved! Rebooting...";
     httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
+    response_sent = true;
 
-    // xTimerStart( xrestartTimer, 0 );
-	config_server_reboot();
-    return ESP_OK;
+    // Trigger reboot
+    config_server_reboot();
+
+cleanup:
+    if (f) {
+        fclose(f);
+    }
+    if (buf) {
+        free(buf);
+    }
+    
+    if (ret_val != ESP_OK && !response_sent) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to process request");
+    }
+    
+    return ret_val;
 }
 
 static esp_err_t store_canflt_handler(httpd_req_t *req)
@@ -657,6 +874,7 @@ static esp_err_t store_canflt_handler(httpd_req_t *req)
     {
         return ESP_ERR_NO_MEM; // Memory allocation failure
     }
+	memset(buf, 0, buf_size + 1);
 
     int ret = httpd_req_recv(req, buf, buf_size);
 
@@ -699,6 +917,7 @@ static esp_err_t store_canflt_handler(httpd_req_t *req)
 		int32_t filesize = ftell(f1);
 		fseek(f1, 0, SEEK_SET);
 		mqtt_canflt_file = malloc(filesize+1);
+		memset(mqtt_canflt_file, 0, filesize + 1);
 		ESP_LOGI(__func__, "mqtt_canflt_file File size: %ld", filesize);
 		fseek(f1, 0, SEEK_SET);
 		fread(mqtt_canflt_file, sizeof(char), filesize, f1);
@@ -753,6 +972,8 @@ static esp_err_t load_pid_auto_handler(httpd_req_t *req)
         httpd_resp_send_500(req);
         return ESP_FAIL;
     }
+
+	memset(buf, 0, filesize + 1);
 
     size_t read = fread(buf, 1, filesize, f);
     fclose(f);
@@ -811,7 +1032,7 @@ static esp_err_t load_pid_auto_config_handler(httpd_req_t *req)
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
         return ESP_FAIL;
     }
-
+	memset(buf, 0, file_size + 1);
     // Read the file into the buffer
     size_t read_len = fread(buf, 1, file_size, fd);
     fclose(fd);
@@ -833,7 +1054,7 @@ static esp_err_t load_pid_auto_config_handler(httpd_req_t *req)
 
     ESP_LOGI(TAG, "Sending response: %s", buf);
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, buf, read_len);  // Use actual content length instead of HTTPD_RESP_USE_STRLEN
+    httpd_resp_send(req, buf, HTTPD_RESP_USE_STRLEN);  // Use actual content length instead of HTTPD_RESP_USE_STRLEN
     
     free(buf);
     return ESP_OK;
@@ -896,6 +1117,7 @@ static esp_err_t system_commands_handler(httpd_req_t *req)
         ESP_LOGE(TAG, "Memory allocation failure");
         return ESP_ERR_NO_MEM;
     }
+	memset(buf, 0, buf_size + 1);
 
     int ret = httpd_req_recv(req, buf, buf_size);
     if (ret <= 0)
@@ -966,7 +1188,7 @@ static esp_err_t system_commands_handler(httpd_req_t *req)
                         (uint8_t)day->valueint,
                         (uint8_t)weekday->valueint
                     );
-                    
+                    rtcm_sync_system_time_from_rtc();
                     if (time_err == ESP_OK && date_err == ESP_OK) {
                         ESP_LOGI(TAG, "RTC time set successfully");
                     } else {
@@ -1110,40 +1332,109 @@ static esp_err_t store_car_data_handler(httpd_req_t *req)
 {
     int total_len = req->content_len;
     int received = 0;
-	const char *filepath = FS_MOUNT_POINT"/car_data.json";
+    const char *filepath = FS_MOUNT_POINT"/car_data.json";
+    
+    // Validate content length
+    if (total_len <= 0 || total_len > MAX_FILE_SIZE) {
+        ESP_LOGE(TAG, "Invalid content length: %d", total_len);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid content length");
+        return ESP_FAIL;
+    }
 
+    // Allocate buffer for entire JSON content
+    char *json_buffer = malloc(total_len + 1);
+    if (!json_buffer) {
+        ESP_LOGE(TAG, "Failed to allocate JSON buffer");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
+        return ESP_FAIL;
+    }
+
+	memset(json_buffer, 0, total_len + 1);
+
+    // Receive all data first
+    char *temp_buffer = malloc(1024);
+    if (!temp_buffer) {
+        ESP_LOGE(TAG, "Failed to allocate temp buffer");
+        free(json_buffer);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
+        return ESP_FAIL;
+    }
+
+	memset(temp_buffer, 0, 1024);
+
+    esp_err_t ret_val = ESP_OK;
+    while (received < total_len) {
+        int ret = httpd_req_recv(req, temp_buffer, MIN(1024, total_len - received));
+        if (ret < 0) {
+            if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
+                continue;  // Retry on timeout
+            }
+            ESP_LOGE(TAG, "Failed to receive JSON data: %d", ret);
+            ret_val = ESP_FAIL;
+            break;
+        }
+        
+        if (ret == 0) {
+            ESP_LOGE(TAG, "Connection closed unexpectedly");
+            ret_val = ESP_FAIL;
+            break;
+        }
+        
+        // Copy to JSON buffer
+        memcpy(json_buffer + received, temp_buffer, ret);
+        received += ret;
+    }
+
+    free(temp_buffer);
+    
+    if (ret_val != ESP_OK) {
+        free(json_buffer);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive data");
+        return ESP_FAIL;
+    }
+
+    // Null terminate the JSON string
+    json_buffer[received] = '\0';
+    
+    // Validate JSON format
+    cJSON *json = cJSON_Parse(json_buffer);
+    if (!json) {
+        const char *error_ptr = cJSON_GetErrorPtr();
+        if (error_ptr != NULL) {
+            ESP_LOGE(TAG, "JSON parse error before: %s", error_ptr);
+        } else {
+            ESP_LOGE(TAG, "Invalid JSON format");
+        }
+        free(json_buffer);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON format");
+        return ESP_FAIL;
+    }
+    
+    // JSON is valid, clean up parser
+    cJSON_Delete(json);
+    
+    // Now write validated JSON to file
     FILE *file = fopen(filepath, "w");
-    if (!file)
-    {
+    if (!file) {
         ESP_LOGE(TAG, "Failed to open file for writing");
+        free(json_buffer);
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open file for writing");
         return ESP_FAIL;
     }
 
-    static char buffer[16];
-    while (received < total_len)
-    {
-        int ret = httpd_req_recv(req, buffer, sizeof(buffer));
-        if (ret <= 0)
-        {
-            ESP_LOGE(TAG, "Failed to receive JSON data");
-            fclose(file);
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive JSON data");
-            return ESP_FAIL;
-        }
-        if (fwrite(buffer, 1, ret, file) != ret)
-        {
-            ESP_LOGE(TAG, "Failed to write data to file");
-            fclose(file);
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to write data to file");
-            return ESP_FAIL;
-        }
-        received += ret;
+    if (fwrite(json_buffer, 1, received, file) != received) {
+        ESP_LOGE(TAG, "Failed to write data to file");
+        fclose(file);
+        free(json_buffer);
+        unlink(filepath);  // Clean up partial file
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to write data to file");
+        return ESP_FAIL;
     }
 
     fclose(file);
-    ESP_LOGI(TAG, "JSON data successfully stored");
-
+    free(json_buffer);
+    
+    ESP_LOGI(TAG, "Valid JSON data successfully stored (%d bytes)", received);
     httpd_resp_send(req, "Data stored successfully", HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
@@ -1152,7 +1443,8 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 {
 
 	char ip_str[20] = {0};
-	config_server_get_sta_ip(ip_str);
+
+	strcpy(ip_str, wifi_mgr_get_sta_ip() ? wifi_mgr_get_sta_ip() : "");
 	cJSON *root = cJSON_CreateObject();
 	static char fver[16];
 	static char hver[32];
@@ -1182,7 +1474,17 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	cJSON_AddStringToObject(root, "sta_ssid", device_config.sta_ssid);
 	cJSON_AddStringToObject(root, "sta_pass", device_config.sta_pass);
 	cJSON_AddStringToObject(root, "sta_security", device_config.sta_security);
-	cJSON_AddStringToObject(root, "sta_status", (wifi_network_is_connected()?"Connected":"Not Connected"));
+	cJSON_AddStringToObject(root, "home_ssid", device_config.home_ssid);
+	cJSON_AddStringToObject(root, "home_password", device_config.home_password);
+	cJSON_AddStringToObject(root, "home_security", device_config.home_security);
+	cJSON_AddStringToObject(root, "home_protocol", device_config.home_protocol);
+	cJSON_AddStringToObject(root, "drive_ssid", device_config.drive_ssid);
+	cJSON_AddStringToObject(root, "drive_password", device_config.drive_password);
+	cJSON_AddStringToObject(root, "drive_security", device_config.drive_security);
+	cJSON_AddStringToObject(root, "drive_protocol", device_config.drive_protocol);
+	cJSON_AddStringToObject(root, "drive_connection_type", device_config.drive_connection_type);
+	cJSON_AddStringToObject(root, "drive_mode_timeout", device_config.drive_mode_timeout);
+	cJSON_AddStringToObject(root, "sta_status", (wifi_mgr_is_sta_connected()?"Connected":"Not Connected"));
 	cJSON_AddStringToObject(root, "sta_ip", ip_str);
 	cJSON_AddStringToObject(root, "mdns", wc_mdns_get_hostname());
 	cJSON_AddStringToObject(root, "ble_status", device_config.ble_status);
@@ -1235,6 +1537,16 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	cJSON_AddStringToObject(root, "mqtt_status_topic", device_config.mqtt_status_topic);
 	cJSON_AddStringToObject(root, "device_id", device_id);
 	cJSON_AddStringToObject(root, "sta_security", device_config.sta_security);
+	cJSON_AddStringToObject(root, "home_ssid", device_config.home_ssid);
+	cJSON_AddStringToObject(root, "home_password", device_config.home_password);
+	cJSON_AddStringToObject(root, "home_security", device_config.home_security);
+	cJSON_AddStringToObject(root, "home_protocol", device_config.home_protocol);
+	cJSON_AddStringToObject(root, "drive_ssid", device_config.drive_ssid);
+	cJSON_AddStringToObject(root, "drive_password", device_config.drive_password);
+	cJSON_AddStringToObject(root, "drive_security", device_config.drive_security);
+	cJSON_AddStringToObject(root, "drive_protocol", device_config.drive_protocol);
+	cJSON_AddStringToObject(root, "drive_connection_type", device_config.drive_connection_type);
+	cJSON_AddStringToObject(root, "drive_mode_timeout", device_config.drive_mode_timeout);
 
 	if(autopid_get_ecu_status())
 	{
@@ -1717,25 +2029,25 @@ esp_err_t autopid_data_handler(httpd_req_t *req)
 
     httpd_resp_set_type(req, "application/json");
 
-    httpd_resp_send(req, data, strlen(data));
+    httpd_resp_send(req, data, HTTPD_RESP_USE_STRLEN);
 
     free(data);
 
     return ESP_OK;
 }
 
-#define MAX_AVAILABLE_PIDS_SIZE 		(1024*8)
+#define MAX_AVAILABLE_PIDS_SIZE 		(1024*15)
 static esp_err_t scan_available_pids_handler(httpd_req_t *req)
 {
     char protocol[8];
     char param[32];
     uint8_t protocol_num = 6; // Default protocol
 
-    if(config_server_protocol() != AUTO_PID)
+    if(config_server_protocol() != AUTO_PID && config_server_get_drive_protocol() != AUTO_PID && config_server_get_home_protocol() != AUTO_PID)
     {
         httpd_resp_set_type(req, "application/json");
         const char *resp_str = "{\"text\":\"Set protocol to AutoPid and reboot to be able to scan\"}";
-        httpd_resp_send(req, resp_str, strlen(resp_str));
+        httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
         return ESP_OK;
     }
 	
@@ -1746,7 +2058,8 @@ static esp_err_t scan_available_pids_handler(httpd_req_t *req)
         }
     }
 
-    char *available_pids = malloc(MAX_AVAILABLE_PIDS_SIZE);
+    // char *available_pids = malloc(MAX_AVAILABLE_PIDS_SIZE);
+    char *available_pids = heap_caps_malloc(MAX_AVAILABLE_PIDS_SIZE, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
     if (available_pids == NULL) {
         httpd_resp_send_500(req);
         return ESP_FAIL;
@@ -1755,10 +2068,22 @@ static esp_err_t scan_available_pids_handler(httpd_req_t *req)
     
     if (autopid_find_standard_pid(protocol_num, available_pids, MAX_AVAILABLE_PIDS_SIZE) == ESP_OK) {
         httpd_resp_set_type(req, "application/json");
-        httpd_resp_send(req, available_pids, strlen(available_pids));
+        httpd_resp_send(req, available_pids, HTTPD_RESP_USE_STRLEN);
     }
 
     free(available_pids);
+    return ESP_OK;
+}
+
+static esp_err_t std_pid_info_handler(httpd_req_t *req) 
+{
+    char *pid_info = get_standard_pids_json();
+    if (pid_info == NULL) {
+        httpd_resp_send_404(req);
+        return ESP_OK;
+    }
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, pid_info, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
 
@@ -1904,12 +2229,19 @@ static const httpd_uri_t scan_available_pids_uri = {
     .handler   = scan_available_pids_handler,
     .user_ctx  = NULL
 };
-static const httpd_uri_t file_uri = {
+static const httpd_uri_t get_uri_common = {
     .uri       = "/*",
     .method    = HTTP_GET,
-    .handler   = file_handler,
+    .handler   = get_uri_handler,
     .user_ctx  = &server_data 
 };
+static const httpd_uri_t std_pid_info = {
+    .uri       = "/std_pid_info",
+    .method    = HTTP_GET,
+    .handler   = std_pid_info_handler,
+    .user_ctx  = &server_data 
+};
+
 static void config_server_load_cfg(char *cfg)
 {
 	cJSON * root, *key = 0;
@@ -1999,7 +2331,7 @@ static void config_server_load_cfg(char *cfg)
 		goto config_error;
 	}
 	strcpy(device_config.ap_pass, key->valuestring);
-	ESP_LOGE(TAG, "device_config.ap_pass: %s", device_config.ap_pass);
+	ESP_LOGI(TAG, "device_config.ap_pass: %s", device_config.ap_pass);
 
 	key = cJSON_GetObjectItem(root,"protocol");
 	if(key == 0)
@@ -2011,7 +2343,7 @@ static void config_server_load_cfg(char *cfg)
 		goto config_error;
 	}
 	strcpy(device_config.protocol, key->valuestring);
-	ESP_LOGE(TAG, "device_config.protocol: %s", device_config.protocol);
+	ESP_LOGI(TAG, "device_config.protocol: %s", device_config.protocol);
 
 	key = cJSON_GetObjectItem(root,"ble_pass");
 	if(key == 0)
@@ -2023,7 +2355,7 @@ static void config_server_load_cfg(char *cfg)
 		goto config_error;
 	}
 	strcpy(device_config.ble_pass, key->valuestring);
-	ESP_LOGE(TAG, "device_config.ble_pass: %s", device_config.ble_pass);
+	ESP_LOGI(TAG, "device_config.ble_pass: %s", device_config.ble_pass);
 
 	key = cJSON_GetObjectItem(root,"sleep_status");
 	if(key == 0)
@@ -2032,7 +2364,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.sleep_status, key->valuestring);
-	ESP_LOGE(TAG, "device_config.sleep_status: %s", device_config.sleep_status);
+	ESP_LOGI(TAG, "device_config.sleep_status: %s", device_config.sleep_status);
 
 	key = cJSON_GetObjectItem(root,"ble_status");
 	if(key == 0)
@@ -2041,7 +2373,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.ble_status, key->valuestring);
-	ESP_LOGE(TAG, "device_config.ble_status: %s", device_config.ble_status);
+	ESP_LOGI(TAG, "device_config.ble_status: %s", device_config.ble_status);
 
 	key = cJSON_GetObjectItem(root,"sleep_volt");
 	if(key == 0)
@@ -2050,17 +2382,17 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.sleep_volt, key->valuestring);
-	ESP_LOGE(TAG, "device_config.sleep_volt: %s", device_config.sleep_volt);
+	ESP_LOGI(TAG, "device_config.sleep_volt: %s", device_config.sleep_volt);
 
 	//*****
-	key = cJSON_GetObjectItem(root,"batt_alert");
-	if(key == 0 || (strlen(key->valuestring) > sizeof(device_config.batt_alert)))
-	{
-		goto config_error;
-	}
+	// key = cJSON_GetObjectItem(root,"batt_alert");
+	// if(key == 0 || (strlen(key->valuestring) > sizeof(device_config.batt_alert)))
+	// {
+	// 	goto config_error;
+	// }
 
-	strcpy(device_config.batt_alert, key->valuestring);
-	ESP_LOGE(TAG, "device_config.batt_alert: %s", device_config.batt_alert);
+	strcpy(device_config.batt_alert, "disable");
+	ESP_LOGI(TAG, "device_config.batt_alert: %s", device_config.batt_alert);
 	//*****
 
 	//*****
@@ -2071,7 +2403,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.batt_alert_ssid, key->valuestring);
-	ESP_LOGE(TAG, "device_config.batt_alert_ssid: %s", device_config.batt_alert_ssid);
+	ESP_LOGI(TAG, "device_config.batt_alert_ssid: %s", device_config.batt_alert_ssid);
 	//*****
 
 	//*****
@@ -2082,7 +2414,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.batt_alert_pass, key->valuestring);
-	ESP_LOGE(TAG, "device_config.batt_alert_pass: %s", device_config.batt_alert_pass);
+	ESP_LOGI(TAG, "device_config.batt_alert_pass: %s", device_config.batt_alert_pass);
 	//*****
 
 	//*****
@@ -2093,7 +2425,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.batt_alert_volt, key->valuestring);
-	ESP_LOGE(TAG, "device_config.batt_alert_volt: %s", device_config.batt_alert_volt);
+	ESP_LOGI(TAG, "device_config.batt_alert_volt: %s", device_config.batt_alert_volt);
 	//*****
 
 	//*****
@@ -2104,7 +2436,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.batt_alert_protocol, key->valuestring);
-	ESP_LOGE(TAG, "device_config.batt_alert_protocol: %s", device_config.batt_alert_protocol);
+	ESP_LOGI(TAG, "device_config.batt_alert_protocol: %s", device_config.batt_alert_protocol);
 	//*****
 
 	//*****
@@ -2115,7 +2447,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.batt_alert_url, key->valuestring);
-	ESP_LOGE(TAG, "device_config.batt_alert_url: %s", device_config.batt_alert_url);
+	ESP_LOGI(TAG, "device_config.batt_alert_url: %s", device_config.batt_alert_url);
 	//*****
 
 	//*****
@@ -2126,7 +2458,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.batt_alert_port, key->valuestring);
-	ESP_LOGE(TAG, "device_config.batt_alert_port: %s", device_config.batt_alert_port);
+	ESP_LOGI(TAG, "device_config.batt_alert_port: %s", device_config.batt_alert_port);
 	//*****
 
 	//*****
@@ -2137,7 +2469,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.batt_alert_topic, key->valuestring);
-	ESP_LOGE(TAG, "device_config.batt_alert_topic: %s", device_config.batt_alert_topic);
+	ESP_LOGI(TAG, "device_config.batt_alert_topic: %s", device_config.batt_alert_topic);
 	//*****
 
 	//*****
@@ -2148,7 +2480,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.batt_mqtt_user, key->valuestring);
-	ESP_LOGE(TAG, "device_config.batt_mqtt_user: %s", device_config.batt_mqtt_user);
+	ESP_LOGI(TAG, "device_config.batt_mqtt_user: %s", device_config.batt_mqtt_user);
 	//*****
 
 	//*****
@@ -2159,7 +2491,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.batt_mqtt_pass, key->valuestring);
-	ESP_LOGE(TAG, "device_config.batt_mqtt_pass: %s", device_config.batt_mqtt_pass);
+	ESP_LOGI(TAG, "device_config.batt_mqtt_pass: %s", device_config.batt_mqtt_pass);
 	//*****
 
 	//*****
@@ -2170,7 +2502,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.batt_alert_time, key->valuestring);
-	ESP_LOGE(TAG, "device_config.batt_alert_time: %s", device_config.batt_alert_time);
+	ESP_LOGI(TAG, "device_config.batt_alert_time: %s", device_config.batt_alert_time);
 	//*****
 
 
@@ -2183,7 +2515,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.mqtt_en, key->valuestring);
-	ESP_LOGE(TAG, "device_config.mqtt_en: %s", device_config.mqtt_en);
+	ESP_LOGI(TAG, "device_config.mqtt_en: %s", device_config.mqtt_en);
 	//*****
 
 	//*****
@@ -2205,7 +2537,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.mqtt_port, key->valuestring);
-	ESP_LOGE(TAG, "device_config.mqtt_port: %s", device_config.mqtt_port);
+	ESP_LOGI(TAG, "device_config.mqtt_port: %s", device_config.mqtt_port);
 	//*****
 
 	//*****
@@ -2216,7 +2548,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.mqtt_user, key->valuestring);
-	ESP_LOGE(TAG, "device_config.mqtt_user: %s", device_config.mqtt_user);
+	ESP_LOGI(TAG, "device_config.mqtt_user: %s", device_config.mqtt_user);
 	//*****
 
 	//*****
@@ -2227,7 +2559,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.mqtt_pass, key->valuestring);
-	ESP_LOGE(TAG, "device_config.mqtt_pass: %s", device_config.mqtt_pass);
+	ESP_LOGI(TAG, "device_config.mqtt_pass: %s", device_config.mqtt_pass);
 	//*****
 
 	//*****
@@ -2238,7 +2570,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	strcpy(device_config.mqtt_elm327_log, key->valuestring);
-	ESP_LOGE(TAG, "device_config.mqtt_elm327_log: %s", device_config.mqtt_elm327_log);
+	ESP_LOGI(TAG, "device_config.mqtt_elm327_log: %s", device_config.mqtt_elm327_log);
 	//*****
 
 	//*****
@@ -2256,7 +2588,7 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.mqtt_tx_topic, key->valuestring);
 	}
 	
-	ESP_LOGE(TAG, "device_config.mqtt_tx_topic: %s", device_config.mqtt_tx_topic);
+	ESP_LOGI(TAG, "device_config.mqtt_tx_topic: %s", device_config.mqtt_tx_topic);
 	//*****
 
 	//*****
@@ -2270,7 +2602,7 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.mqtt_tx_en, key->valuestring);
 	}
 	
-	ESP_LOGE(TAG, "device_config.mqtt_tx_en: %s", device_config.mqtt_tx_en);
+	ESP_LOGI(TAG, "device_config.mqtt_tx_en: %s", device_config.mqtt_tx_en);
 	//*****
 
 	//*****
@@ -2284,7 +2616,7 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.mqtt_rx_en, key->valuestring);
 	}
 
-	ESP_LOGE(TAG, "device_config.mqtt_rx_en: %s", device_config.mqtt_rx_en);
+	ESP_LOGI(TAG, "device_config.mqtt_rx_en: %s", device_config.mqtt_rx_en);
 	//*****
 
 	//*****
@@ -2298,7 +2630,7 @@ static void config_server_load_cfg(char *cfg)
 	strcpy(device_config.mqtt_rx_topic, key->valuestring);
 
 	
-	ESP_LOGE(TAG, "device_config.mqtt_rx_topic: %s", device_config.mqtt_rx_topic);
+	ESP_LOGI(TAG, "device_config.mqtt_rx_topic: %s", device_config.mqtt_rx_topic);
 	//*****
 
 	//*****
@@ -2310,7 +2642,7 @@ static void config_server_load_cfg(char *cfg)
 	strcpy(device_config.mqtt_status_topic, key->valuestring);
 
 	
-	ESP_LOGE(TAG, "device_config.mqtt_status_topic: %s", device_config.mqtt_status_topic);
+	ESP_LOGI(TAG, "device_config.mqtt_status_topic: %s", device_config.mqtt_status_topic);
 	//*****
 
 	//*****
@@ -2324,7 +2656,7 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.wakeup_volt, key->valuestring);
 	}
 
-	ESP_LOGE(TAG, "device_config.wakeup_volt: %s", device_config.wakeup_volt);
+	ESP_LOGI(TAG, "device_config.wakeup_volt: %s", device_config.wakeup_volt);
 	//*****
 	
 	//*****
@@ -2345,7 +2677,7 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.sleep_time, key->valuestring);
 	}
 
-	ESP_LOGE(TAG, "device_config.sleep_time: %s", device_config.sleep_time);
+	ESP_LOGI(TAG, "device_config.sleep_time: %s", device_config.sleep_time);
 	//*****
 
 	//*****
@@ -2359,8 +2691,121 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.sta_security, key->valuestring);
 	}
 
-	ESP_LOGE(TAG, "device_config.sta_security: %s", device_config.wakeup_volt);
+	ESP_LOGI(TAG, "device_config.sta_security: %s", device_config.wakeup_volt);
 	//*****
+
+	//**** SmartConnect fields ****
+	key = cJSON_GetObjectItem(root,"home_ssid");
+	if(key == 0)
+	{
+		strcpy(device_config.home_ssid, "MeatPi");
+	}
+	else
+	{
+		strcpy(device_config.home_ssid, key->valuestring);
+	}
+	ESP_LOGI(TAG, "device_config.home_ssid: %s", device_config.home_ssid);
+
+	key = cJSON_GetObjectItem(root,"home_password");
+	if(key == 0)
+	{
+		strcpy(device_config.home_password, "TomatoSauce");
+	}
+	else
+	{
+		strcpy(device_config.home_password, key->valuestring);
+	}
+	ESP_LOGI(TAG, "device_config.home_password: %s", device_config.home_password);
+
+	key = cJSON_GetObjectItem(root,"home_security");
+	if(key == 0)
+	{
+		strcpy(device_config.home_security, "wpa3");
+	}
+	else
+	{
+		strcpy(device_config.home_security, key->valuestring);
+	}
+	ESP_LOGI(TAG, "device_config.home_security: %s", device_config.home_security);
+
+	key = cJSON_GetObjectItem(root,"home_protocol");
+	if(key == 0)
+	{
+		strcpy(device_config.home_protocol, "auto_pid");
+	}
+	else
+	{
+		strcpy(device_config.home_protocol, key->valuestring);
+	}
+	ESP_LOGI(TAG, "device_config.home_protocol: %s", device_config.home_protocol);
+
+	key = cJSON_GetObjectItem(root,"drive_ssid");
+	if(key == 0)
+	{
+		strcpy(device_config.drive_ssid, "MeatPi");
+	}
+	else
+	{
+		strcpy(device_config.drive_ssid, key->valuestring);
+	}
+	ESP_LOGI(TAG, "device_config.drive_ssid: %s", device_config.drive_ssid);
+
+	key = cJSON_GetObjectItem(root,"drive_password");
+	if(key == 0)
+	{
+		strcpy(device_config.drive_password, "TomatoSauce");
+	}
+	else
+	{
+		strcpy(device_config.drive_password, key->valuestring);
+	}
+	ESP_LOGI(TAG, "device_config.drive_password: %s", device_config.drive_password);
+
+	key = cJSON_GetObjectItem(root,"drive_security");
+	if(key == 0)
+	{
+		strcpy(device_config.drive_security, "wpa3");
+	}
+	else
+	{
+		strcpy(device_config.drive_security, key->valuestring);
+	}
+	ESP_LOGI(TAG, "device_config.drive_security: %s", device_config.drive_security);
+
+	key = cJSON_GetObjectItem(root,"drive_connection_type");
+	if(key == 0)
+	{
+		strcpy(device_config.drive_connection_type, "wifi");
+	}
+	else
+	{
+		strcpy(device_config.drive_connection_type, key->valuestring);
+	}
+	ESP_LOGI(TAG, "device_config.drive_connection_type: %s", device_config.drive_connection_type);
+
+	key = cJSON_GetObjectItem(root,"drive_mode_timeout");
+	if(key == 0)
+	{
+		strcpy(device_config.drive_mode_timeout, "60");
+	}
+	else
+	{
+		strcpy(device_config.drive_mode_timeout, key->valuestring);
+	}
+	ESP_LOGI(TAG, "device_config.drive_mode_timeout: %s", device_config.drive_mode_timeout);
+
+	key = cJSON_GetObjectItem(root,"drive_protocol");
+	if(key == 0)
+	{
+		strcpy(device_config.drive_protocol, "auto_pid");
+	}
+	else
+	{
+		strcpy(device_config.drive_protocol, key->valuestring);
+	}
+	ESP_LOGI(TAG, "device_config.drive_protocol: %s", device_config.drive_protocol);
+
+	//**** End SmartConnect fields ****
 
 	//*****
 	key = cJSON_GetObjectItem(root,"logger_status");
@@ -2372,7 +2817,7 @@ static void config_server_load_cfg(char *cfg)
 	{
 		strcpy(device_config.logger_status, key->valuestring);
 	}
-	ESP_LOGE(TAG, "device_config.logger_status: %s", device_config.logger_status);
+	ESP_LOGI(TAG, "device_config.logger_status: %s", device_config.logger_status);
 	//*****
 
 	//*****
@@ -2385,7 +2830,7 @@ static void config_server_load_cfg(char *cfg)
 	{
 		strcpy(device_config.log_filesystem, key->valuestring);
 	}
-	ESP_LOGE(TAG, "device_config.log_filesystem: %s", device_config.log_filesystem);
+	ESP_LOGI(TAG, "device_config.log_filesystem: %s", device_config.log_filesystem);
 	//*****
 
 	//*****
@@ -2400,7 +2845,7 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.sta_security, key->valuestring);
 	}
 
-	ESP_LOGE(TAG, "device_config.log_storage: %s", device_config.log_storage);
+	ESP_LOGI(TAG, "device_config.log_storage: %s", device_config.log_storage);
 	//*****
 
 	//*****
@@ -2420,7 +2865,7 @@ static void config_server_load_cfg(char *cfg)
 
 		strcpy(device_config.log_period, key->valuestring);
 	}
-	ESP_LOGE(TAG, "device_config.log_period: %s", device_config.log_period);
+	ESP_LOGI(TAG, "device_config.log_period: %s", device_config.log_period);
 	//*****
 
 	key = cJSON_GetObjectItem(root,"ap_auto_disable");
@@ -2433,7 +2878,7 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.ap_auto_disable, key->valuestring);
 	}
 
-	ESP_LOGE(TAG, "device_config.ap_auto_disable: %s", device_config.ap_auto_disable);
+	ESP_LOGI(TAG, "device_config.ap_auto_disable: %s", device_config.ap_auto_disable);
 
 	//*****
 	key = cJSON_GetObjectItem(root,"periodic_wakeup");
@@ -2446,7 +2891,7 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.periodic_wakeup, key->valuestring);
 	}
 
-	ESP_LOGE(TAG, "device_config.periodic_wakeup: %s", device_config.periodic_wakeup);
+	ESP_LOGI(TAG, "device_config.periodic_wakeup: %s", device_config.periodic_wakeup);
 	//*****	
 
 	//*****	
@@ -2460,7 +2905,7 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.wakeup_interval, key->valuestring);
 	}
 
-	ESP_LOGE(TAG, "device_config.wakeup_interval: %s", device_config.wakeup_interval);
+	ESP_LOGI(TAG, "device_config.wakeup_interval: %s", device_config.wakeup_interval);
 	//*****	
 
 
@@ -2476,7 +2921,7 @@ static void config_server_load_cfg(char *cfg)
 		strcpy(device_config.sleep_disable_agree, key->valuestring);
 	}
 
-	ESP_LOGE(TAG, "device_config.sleep_disable_agree: %s", device_config.sleep_disable_agree);
+	ESP_LOGI(TAG, "device_config.sleep_disable_agree: %s", device_config.sleep_disable_agree);
 	//*****	
 
 	cJSON_Delete(root);
@@ -2540,7 +2985,37 @@ void vrestartTimerCallback( TimerHandle_t xTimer )
 	esp_restart();
 }
 
-
+static void register_server_uris(void)
+{
+	ESP_LOGI(TAG, "Registering URI handlers");
+	httpd_register_uri_handler(server, &index_uri);
+	httpd_register_uri_handler(server, &store_config_uri);
+	httpd_register_uri_handler(server, &check_status_uri);
+	httpd_register_uri_handler(server, &load_config_uri);
+	httpd_register_uri_handler(server, &logo_uri);
+	httpd_register_uri_handler(server, &ws);
+	httpd_register_uri_handler(server, &file_upload);
+	httpd_register_uri_handler(server, &system_reboot);
+	httpd_register_uri_handler(server, &store_canflt_uri);
+	httpd_register_uri_handler(server, &load_canflt_uri);
+	httpd_register_uri_handler(server, &store_auto_data_uri);
+	httpd_register_uri_handler(server, &load_pid_auto_uri);
+	httpd_register_uri_handler(server, &load_pid_auto_conf_uri);
+	httpd_register_uri_handler(server, &upload_car_data);
+	httpd_register_uri_handler(server, &autopid_data);
+	httpd_register_uri_handler(server, &load_car_config_uri);
+	httpd_register_uri_handler(server, &store_car_data_uri);
+	httpd_register_uri_handler(server, &system_commands);
+	httpd_register_uri_handler(server, &scan_available_pids_uri);
+	httpd_register_uri_handler(server, &std_pid_info);
+	
+	//Add before this line
+	httpd_register_uri_handler(server, &obd_logger_ws);
+	httpd_register_uri_handler(server, &db_download_uri);
+	httpd_register_uri_handler(server, &db_files_uri);
+	//last uri /*
+	httpd_register_uri_handler(server, &get_uri_common);
+}
 //static char* device_config = NULL;
 static uint8_t esp_fatfs_flag = 0;
 static httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -2570,7 +3045,14 @@ static httpd_handle_t config_server_init(void)
     if(xServerEventGroup == NULL)
     {
 		server_data.scratch = malloc(SCRATCH_BUFSIZE);
-    	xServerEventGroup = xEventGroupCreate();
+		if(server_data.scratch == NULL)
+		{
+			ESP_LOGE(TAG, "Failed to allocate memory for server data");
+			return NULL;
+		}
+		memset(server_data.scratch, 0, SCRATCH_BUFSIZE);
+		
+		xServerEventGroup = xEventGroupCreate();
     	config_server_wifi_connected(0);
     }
 
@@ -2657,6 +3139,7 @@ static httpd_handle_t config_server_init(void)
 			device_config_file = heap_caps_malloc(filesize + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 			if (device_config_file != NULL)
 			{
+				memset(device_config_file, 0, filesize + 1);
 				fread(device_config_file, sizeof(char), filesize, f);
 				device_config_file[filesize] = 0;
 				ESP_LOGI(TAG, "config.json: %s", device_config_file);
@@ -2682,6 +3165,7 @@ static httpd_handle_t config_server_init(void)
 			mqtt_canflt_file = heap_caps_malloc(filesize + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 			if (mqtt_canflt_file != NULL)
 			{
+				memset(mqtt_canflt_file, 0, filesize + 1);
 				fread(mqtt_canflt_file, sizeof(char), filesize, f);
 				mqtt_canflt_file[filesize] = 0;
 				ESP_LOGI(TAG, "mqtt_canfilt.json: %s", mqtt_canflt_file);
@@ -2710,39 +3194,15 @@ static httpd_handle_t config_server_init(void)
                        );
 
     // Start the httpd server
-	config.max_uri_handlers = 23;
+	config.max_uri_handlers = 24;
 	config.stack_size = (10*1024);
 	config.max_open_sockets = 15;
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK)
     {
         // Set URI handlers
-        ESP_LOGI(TAG, "Registering URI handlers");
-        httpd_register_uri_handler(server, &index_uri);
-        httpd_register_uri_handler(server, &store_config_uri);
-        httpd_register_uri_handler(server, &check_status_uri);
-        httpd_register_uri_handler(server, &load_config_uri);
-        httpd_register_uri_handler(server, &logo_uri);
-        httpd_register_uri_handler(server, &ws);
-        httpd_register_uri_handler(server, &file_upload);
-		httpd_register_uri_handler(server, &system_reboot);
-		httpd_register_uri_handler(server, &store_canflt_uri);
-		httpd_register_uri_handler(server, &load_canflt_uri);
-		httpd_register_uri_handler(server, &store_auto_data_uri);
-		httpd_register_uri_handler(server, &load_pid_auto_uri);
-		httpd_register_uri_handler(server, &load_pid_auto_conf_uri);
-		httpd_register_uri_handler(server, &upload_car_data);
-		httpd_register_uri_handler(server, &autopid_data);
-		httpd_register_uri_handler(server, &load_car_config_uri);
-		httpd_register_uri_handler(server, &store_car_data_uri);
-		httpd_register_uri_handler(server, &system_commands);
-		httpd_register_uri_handler(server, &scan_available_pids_uri);
-		httpd_register_uri_handler(server, &obd_logger_ws);
-		httpd_register_uri_handler(server, &db_download_uri);
-		httpd_register_uri_handler(server, &db_files_uri);
-
-		//last uri /*
-		httpd_register_uri_handler(server, &file_uri);
+		register_server_uris();
+		ESP_LOGI(TAG, "Server started successfully");
 		
         #if CONFIG_EXAMPLE_BASIC_AUTH
         httpd_register_basic_auth(server);
@@ -2756,21 +3216,13 @@ static httpd_handle_t config_server_init(void)
 void config_server_restart(void)
 {
     // Start the httpd server
-    ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
+    ESP_LOGI(TAG, "Restarting server on port: '%d'", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK)
     {
         // Set URI handlers
         ESP_LOGI(TAG, "Registering URI handlers");
-        httpd_register_uri_handler(server, &index_uri);
-        httpd_register_uri_handler(server, &store_config_uri);
-        httpd_register_uri_handler(server, &check_status_uri);
-        httpd_register_uri_handler(server, &load_config_uri);
-        httpd_register_uri_handler(server, &logo_uri);
-        httpd_register_uri_handler(server, &ws);
-        httpd_register_uri_handler(server, &file_upload);
-		httpd_register_uri_handler(server, &system_reboot);
-		httpd_register_uri_handler(server, &store_canflt_uri);
-		httpd_register_uri_handler(server, &load_canflt_uri);
+        register_server_uris();
+		ESP_LOGI(TAG, "Server restarted successfully");
         return;
     }
 
@@ -2847,6 +3299,7 @@ void config_server_start(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, u
             ESP_LOGE(TAG, "Failed to allocate websocket task stack memory");
             return;
         }
+        memset(websocket_task_stack, 0, 4096);
         
         // Create static task
         xwebsocket_handle = xTaskCreateStatic(
@@ -3209,7 +3662,7 @@ int8_t config_server_get_ap_auto_disable(void)
 	{
 		return 0;
 	}
-	return -1;
+	return 0;
 }
 
 log_filesystem_t config_server_get_log_filesystem(void)

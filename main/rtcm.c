@@ -1,3 +1,23 @@
+/*
+ * This file is part of the WiCAN project.
+ *
+ * Copyright (C) 2022  Meatpi Electronics.
+ * Written by Ali Slim <ali@meatpi.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "rtcm.h"
 #include "driver/i2c.h"
 #include "esp_log.h"
@@ -411,6 +431,68 @@ esp_err_t rtcm_sync_internet_time(void)
 
     esp_netif_sntp_deinit();
     return ret;
+}
+
+esp_err_t rtcm_sync_system_time_from_rtc(void)
+{
+    uint8_t hour, min, sec;
+    uint8_t year, month, day, weekday;
+    esp_err_t ret;
+    
+    // Read current time and date from RTC
+    ret = rtcm_get_time(&hour, &min, &sec);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get time from RTC");
+        return ret;
+    }
+    
+    ret = rtcm_get_date(&year, &month, &day, &weekday);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get date from RTC");
+        return ret;
+    }
+    
+    // Convert BCD format to decimal
+    uint8_t hour_dec = ((hour >> 4) & 0x0F) * 10 + (hour & 0x0F);
+    uint8_t min_dec = ((min >> 4) & 0x0F) * 10 + (min & 0x0F);
+    uint8_t sec_dec = ((sec >> 4) & 0x0F) * 10 + (sec & 0x0F);
+    uint8_t year_dec = ((year >> 4) & 0x0F) * 10 + (year & 0x0F);
+    uint8_t month_dec = ((month >> 4) & 0x0F) * 10 + (month & 0x0F);
+    uint8_t day_dec = ((day >> 4) & 0x0F) * 10 + (day & 0x0F);
+    
+    // Set up the timespec structure
+    struct timeval tv;
+    struct tm timeinfo = {
+        .tm_sec = sec_dec,
+        .tm_min = min_dec,
+        .tm_hour = hour_dec,
+        .tm_mday = day_dec,
+        .tm_mon = month_dec - 1,  // tm_mon is 0-based (0-11)
+        .tm_year = 100 + year_dec, // Years since 1900, assuming 20xx
+        .tm_isdst = -1            // Let the system determine DST
+    };
+    
+    // Convert to timestamp
+    time_t timestamp = mktime(&timeinfo);
+    if (timestamp == -1) {
+        ESP_LOGE(TAG, "Failed to convert RTC time to timestamp");
+        return ESP_FAIL;
+    }
+    
+    // Set system time
+    tv.tv_sec = timestamp;
+    tv.tv_usec = 0;
+    ret = settimeofday(&tv, NULL);
+    
+    if (ret != 0) {
+        ESP_LOGE(TAG, "Failed to set system time from RTC: %d", ret);
+        return ESP_FAIL;
+    }
+    
+    ESP_LOGI(TAG, "System time synchronized from RTC: %04d-%02d-%02d %02d:%02d:%02d", 
+             2000 + year_dec, month_dec, day_dec, hour_dec, min_dec, sec_dec);
+             
+    return ESP_OK;
 }
 
 esp_err_t rtcm_init(i2c_port_t i2c_num)

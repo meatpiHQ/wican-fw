@@ -49,6 +49,8 @@
 #include "comm_server.h"
 #include "config_server.h"
 #include "wifi_network.h"
+#include "dev_status.h"
+#include "wifi_mgr.h"
 
 #define ADV_CONFIG_FLAG                           (1 << 0)
 #define SCAN_RSP_CONFIG_FLAG                      (1 << 1)
@@ -68,6 +70,7 @@
 
 #define BLE_CONNECTED_BIT 			BIT0
 #define BLE_CONGEST_BIT				BIT1
+#define BLE_ENABLED_BIT				BIT2
 
 #define CHAR_DECLARATION_SIZE       (sizeof(uint8_t))
 #define SVC_INST_ID         
@@ -824,7 +827,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
             ESP_LOGI(GATTS_TABLE_TAG, "ESP_GATTS_CONNECT_EVT");
         	config_server_stop();
         	// wifi_network_deinit();
-            wifi_network_stop();
+            wifi_mgr_disable();
             esp_ble_conn_update_params_t conn_params = {0};
             memcpy(conn_params.bda, param->connect.remote_bda, sizeof(esp_bd_addr_t));
             /* For the iOS system, please refer to Apple official documents about the BLE connection parameters restrictions. */
@@ -838,6 +841,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
     	    spp_gatts_if = gatts_if;
     	    is_connected = true;
     	    xEventGroupSetBits(s_ble_event_group, BLE_CONNECTED_BIT);
+            dev_status_set_bits(DEV_BLE_CONNECTED_BIT);
 			#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
     	    gpio_set_level(conn_led, 0);
 			#endif
@@ -854,11 +858,13 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
                 break;
         case ESP_GATTS_DISCONNECT_EVT:
             ESP_LOGI(GATTS_TABLE_TAG, "ESP_GATTS_DISCONNECT_EVT, disconnect reason 0x%x", param->disconnect.reason);
-            wifi_network_start();
+            wifi_mgr_enable();
             config_server_restart();
 //            wifi_network_restart();
 //        	config_server_restart();
             is_connected = false;
+            xEventGroupClearBits(s_ble_event_group, BLE_CONNECTED_BIT);
+            dev_status_clear_bits(DEV_BLE_CONNECTED_BIT);
 			#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
             gpio_set_level(conn_led, 1);
 			#endif
@@ -1138,11 +1144,11 @@ void ble_send(uint8_t* buf, uint8_t buf_len)
 		// vTaskDelay(20 / portTICK_PERIOD_MS);
 	}
 }
+
 static uint32_t ble_pass_key = 0;
 void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t connected_led, int passkey, uint8_t* uid)
 {
-	esp_err_t ret;
-
+	// Only set up variables and state, don't start BLE stack
 	if(conn_led == 0 && dev_name[0] == 0)
 	{
 		strcpy((char*)dev_name, (char*)uid);
@@ -1168,9 +1174,21 @@ void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t conn
 	}
 
 	xEventGroupClearBits(s_ble_event_group, BLE_CONNECTED_BIT);
+    dev_status_clear_bits(DEV_BLE_CONNECTED_BIT);
 	xEventGroupClearBits(s_ble_event_group, BLE_CONGEST_BIT);
-//	ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_BLE));
+}
 
+void ble_enable(void)
+{
+	esp_err_t ret;
+
+    if(dev_status_is_bit_set(DEV_BLE_ENABLED_BIT))
+    {
+        ESP_LOGW(GATTS_TABLE_TAG, "BLE already enabled");
+        return;
+    }
+    
+	// Initialize and enable Bluetooth controller
 	esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
     bt_cfg.controller_task_stack_size = (1024*8);
 	ret = esp_bt_controller_init(&bt_cfg);
@@ -1196,6 +1214,7 @@ void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t conn
 		return;
 	}
 
+	// Register callbacks
 	ret = esp_ble_gatts_register_callback(gatts_event_handler);
 	if (ret){
 		ESP_LOGE(GATTS_TABLE_TAG, "gatts register error, error code = %x", ret);
@@ -1212,30 +1231,18 @@ void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t conn
 		return;
 	}
 
-    // The documentation on how this works is not clear. It is used in the ESP
-	// SPP server demo. From experimentation, the value set here is sometimes
-	// sent back to us via the ESP_GATTS_MTU_EVT. Only when it is sent back,
-	// does it mean the MTU has been increased from the default of 23. From
-	// looking at the ESP code its max value is 517.
-	//
-	// Tested configurations:
-	// - Realdash on Android: this value is sent back
-	// - ble-serial on MacOS: this value is sent back
-	// - Carscanner on Android: this value is not sent back. And based on
-	//   experimentation the message length is capped at 20 bytes which is
-	//   consistent with the default MTU setting of 23.
+    // Set local MTU
     esp_err_t local_mtu_ret = esp_ble_gatt_set_local_mtu(517);
     if (local_mtu_ret){
         ESP_LOGE(GATTS_TABLE_TAG, "set local  MTU failed, error code = %x", local_mtu_ret);
     }
-	/* set the security iocap & auth_req & key size & init key response key parameters to the stack*/
-	esp_ble_auth_req_t auth_req = ESP_LE_AUTH_REQ_SC_MITM_BOND;     //bonding with peer device after authentication
-	esp_ble_io_cap_t iocap = ESP_IO_CAP_OUT;           //set the IO capability to No output No input
-	uint8_t key_size = 16;      //the key size should be 7~16 bytes
+
+	// Set up security parameters
+	esp_ble_auth_req_t auth_req = ESP_LE_AUTH_REQ_SC_MITM_BOND;
+	esp_ble_io_cap_t iocap = ESP_IO_CAP_OUT;
+	uint8_t key_size = 16;
 	uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
 	uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
-	//set static passkey
-//	uint32_t passkey = 123456;
 	uint8_t auth_option = ESP_BLE_ONLY_ACCEPT_SPECIFIED_AUTH_DISABLE;
 	uint8_t oob_support = ESP_BLE_OOB_DISABLE;
 
@@ -1246,13 +1253,10 @@ void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t conn
 	esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, sizeof(uint8_t));
 	esp_ble_gap_set_security_param(ESP_BLE_SM_ONLY_ACCEPT_SPECIFIED_SEC_AUTH, &auth_option, sizeof(uint8_t));
 	esp_ble_gap_set_security_param(ESP_BLE_SM_OOB_SUPPORT, &oob_support, sizeof(uint8_t));
-	/* If your BLE device acts as a Slave, the init_key means you hope which types of key of the master should distribute to you,
-	and the response key means which key you can distribute to the master;
-	If your BLE device acts as a master, the response key means you hope which types of key of the slave should distribute to you,
-	and the init key means which key you can distribute to the slave. */
 	esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(uint8_t));
 	esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(uint8_t));
 
+	// Create BLE task if not already created
 	if(xble_handle == NULL)
 	{
 		static StackType_t *ble_task_stack;
@@ -1284,19 +1288,20 @@ void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t conn
 			return;
 		}
 	}
-
-//    esp_log_level_set(GATTS_TABLE_TAG, ESP_LOG_NONE);
+    dev_status_set_bits(DEV_BLE_ENABLED_BIT);
 }
 
 void ble_disable(void)
 {
+    if(!dev_status_is_bit_set(DEV_BLE_ENABLED_BIT))
+    {
+        ESP_LOGW(GATTS_TABLE_TAG, "BLE already disabled");
+        return;
+    }
 	esp_bluedroid_disable();
 	esp_bluedroid_deinit();
 	esp_bt_controller_disable();
 	esp_bt_controller_deinit();
-}
-void ble_enable(void)
-{
-	ble_init(0,0,0,0,0);
-//	esp_bluedroid_enable();
+    dev_status_clear_bits(DEV_BLE_ENABLED_BIT);
+    dev_status_clear_bits(DEV_BLE_CONNECTED_BIT);
 }

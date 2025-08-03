@@ -18,23 +18,45 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __WIFI_NETWORK_H__
-#define __WIFI_NETWORK_H__
 
-#include "config_server.h"  // For wifi_security_t type
+#ifndef VEHICLE_H
+#define VEHICLE_H
 
-// bool wifi_network_is_connected(void);
-// void wifi_network_init(char* sta_ssid, char* sta_pass);
-void wifi_network_init(char* ap_ssid_uid);
-// SmartConnect mode checking function
-bool wifi_network_is_smartconnect_mode(void);
-// Helper function to get SmartConnect credentials
-// SmartConnect mode switching functions for future enhancement
-// void wifi_network_switch_to_home_mode(void);
-// void wifi_network_switch_to_drive_mode(void);
-// void wifi_network_deinit(void);
-// void wifi_network_restart(void);
-// void wifi_network_stop(void);
-// void wifi_network_start(void);
-// char* wifi_network_scan(void);
+#include "freertos/FreeRTOS.h"
+#include "freertos/event_groups.h"
+#include "esp_log.h"
+#include <stdbool.h>
+
+#ifdef __cplusplus
+extern "C" {
 #endif
+
+// Vehicle event bits
+#define VEHICLE_IGNITION_ON_BIT     BIT0
+#define VEHICLE_STATIONARY_BIT      BIT1
+
+typedef enum {
+    VEHICLE_STATE_IGNITION_OFF,
+    VEHICLE_STATE_IGNITION_ON,
+    VEHICLE_STATE_IGNITION_INVALID
+} vehicle_ignition_state_t;
+
+typedef struct {
+    float voltage_at_ignition;
+
+} vehicle_config_t;
+
+
+
+
+// typedef struct {
+//     bool ignition_on;
+//     bool stationary;
+//     float voltage;
+// } vehicle_state_t;
+
+
+void vehicle_init(vehicle_config_t *vehicle_config);
+vehicle_ignition_state_t vehicle_ignition_state(void);
+
+#endif 

@@ -26,6 +26,7 @@
 
 #define AP_MODE				0
 #define APSTA_MODE			1
+#define SMARTCONNECT_MODE	2
 
 #define CAN_5K				0
 #define CAN_10K				1
@@ -73,6 +74,13 @@ typedef enum
 	MAX_LOG_FS
 }log_filesystem_t;
 
+typedef enum
+{
+	DRIVE_CONNECTION_WIFI,
+	DRIVE_CONNECTION_BLE,
+	DRIVE_CONNECTION_MAX
+}drive_connection_type_t;
+
 typedef struct _device_config
 {
 	char wifi_mode[65];
@@ -81,6 +89,16 @@ typedef struct _device_config
 	char sta_ssid[65];
 	char sta_pass[65];
 	char sta_security[8];
+	char home_ssid[65];
+	char home_password[65];
+	char home_security[8];
+	char home_protocol[65];
+	char drive_ssid[65];
+	char drive_password[65];
+	char drive_security[8];
+	char drive_protocol[65];
+	char drive_connection_type[8];
+	char drive_mode_timeout[8];
 	char can_datarate[65];
 	char can_mode[65];
 	char port_type[65];
@@ -132,6 +150,18 @@ int8_t config_server_get_wifi_mode(void);
 int8_t config_server_get_ap_ch(void);
 char *config_server_get_sta_ssid(void);
 char *config_server_get_sta_pass(void);
+char *config_server_get_home_ssid(void);
+char *config_server_get_home_password(void);
+char *config_server_get_home_security(void);
+int8_t config_server_get_home_protocol(void);
+char *config_server_get_drive_ssid(void);
+char *config_server_get_drive_password(void);
+char *config_server_get_drive_security(void);
+int8_t config_server_get_drive_protocol(void);
+drive_connection_type_t config_server_get_drive_connection_type(void);
+char *config_server_get_drive_mode_timeout(void);
+wifi_security_t config_server_get_home_security_type(void);
+wifi_security_t config_server_get_drive_security_type(void);
 int8_t config_server_get_can_rate(void);
 int8_t config_server_get_can_mode(void);
 int8_t config_server_get_port_type(void);

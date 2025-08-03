@@ -29,6 +29,10 @@ set(srcs
     "console.c"
     "hw_config.c"
     "dev_status.c"
+    "obd2_standard_pids.c"
+    "smartconnect.c"
+    "vehicle.c"
+    "wifi_mgr.c"
 )
 
 # Define required components
@@ -55,6 +59,7 @@ set(requires
     spi_flash
     obd_logger
     https_client_mgr
+    unity
 )
 
 # Register the component
@@ -78,6 +83,8 @@ idf_component_register(
         "web/src/homepage.html"
         "web/src/dashboard.html"
         "web/src/dashboard.js"
+        "web/src/lucide_icons.js"
+        "web/src/dashboard_live.js"
         "obd_fw/V2.3.18.txt"
         "logo.txt"
 )

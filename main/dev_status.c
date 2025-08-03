@@ -7,23 +7,27 @@ static EventGroupHandle_t s_dev_status_event_group = NULL;
 static const char* get_bit_name(EventBits_t bit)
 {
     switch (bit) {
-        case DEV_AWAKE_BIT:       return "DEV_AWAKE";
-        case DEV_SLEEP_BIT:       return "DEV_SLEEP";
-        case DEV_WIFI_CONNECTED_BIT:  return "WIFI_CONNECTED";
+        case DEV_AWAKE_BIT:           return "DEV_AWAKE";
+        case DEV_SLEEP_BIT:           return "DEV_SLEEP";
+        case DEV_STA_CONNECTED_BIT:   return "STA_CONNECTED";
         case DEV_MQTT_CONNECTED_BIT:  return "MQTT_CONNECTED";
         case DEV_BLE_CONNECTED_BIT:   return "BLE_CONNECTED";
-        default:                  return "UNKNOWN";
+        case DEV_STA_ENABLED_BIT:     return "STA_ENABLED";
+        case DEV_AP_ENABLED_BIT:      return "AP_ENABLED";
+        default:                      return "UNKNOWN";
     }
 }
 
 // Helper function to log multiple bits
 static void log_bits(const char* action, EventBits_t bits)
 {
-    if (bits & DEV_AWAKE_BIT)       ESP_LOGI(DEV_STATUS_TAG, "%s: DEV_AWAKE", action);
-    if (bits & DEV_SLEEP_BIT)       ESP_LOGI(DEV_STATUS_TAG, "%s: DEV_SLEEP", action);
-    if (bits & DEV_WIFI_CONNECTED_BIT)  ESP_LOGI(DEV_STATUS_TAG, "%s: WIFI_CONNECTED", action);
+    if (bits & DEV_AWAKE_BIT)           ESP_LOGI(DEV_STATUS_TAG, "%s: DEV_AWAKE", action);
+    if (bits & DEV_SLEEP_BIT)           ESP_LOGI(DEV_STATUS_TAG, "%s: DEV_SLEEP", action);
+    if (bits & DEV_STA_CONNECTED_BIT)   ESP_LOGI(DEV_STATUS_TAG, "%s: STA_CONNECTED", action);
     if (bits & DEV_MQTT_CONNECTED_BIT)  ESP_LOGI(DEV_STATUS_TAG, "%s: MQTT_CONNECTED", action);
     if (bits & DEV_BLE_CONNECTED_BIT)   ESP_LOGI(DEV_STATUS_TAG, "%s: BLE_CONNECTED", action);
+    if (bits & DEV_STA_ENABLED_BIT)     ESP_LOGI(DEV_STATUS_TAG, "%s: STA_ENABLED", action);
+    if (bits & DEV_AP_ENABLED_BIT)      ESP_LOGI(DEV_STATUS_TAG, "%s: AP_ENABLED", action);
 }
 
 void dev_status_init(void)

@@ -68,6 +68,8 @@
 #include "rtcm.h"
 #include "console.h"
 #include "dev_status.h"
+#include "wifi_mgr.h"
+#include "vehicle.h"
 
 #define TAG 		__func__
 #define USB_ID_PIN					39
@@ -103,6 +105,7 @@ static uint8_t mqtt_elm327_log_en = 0;
 static uint8_t derived_mac_addr[6] = {0};
 static uint8_t uid[16];
 static uint8_t ble_uid[33];
+static char ap_ssid[33] = {0};
 static char hardware_version[16];
 static char firmware_version[10];
 
@@ -205,7 +208,7 @@ void send_to_host(char* str, uint32_t len, QueueHandle_t *q)
     static xdev_buffer xsend_buffer;  // Consider non-static for multithreading
     uint32_t bytes_sent = 0;
     uint32_t bytes_to_send;
-	ESP_LOGW(TAG, "Herer");
+
     if (len == 0)
     {
 		if(str == NULL || strlen(str) == 0)
@@ -298,7 +301,7 @@ static void can_tx_task(void *pvParameters)
 		{
 			gvret_parse(msg_ptr, temp_len, &tx_msg, &xMsg_Tx_Queue);
 		}
-		else if(protocol == OBD_ELM327)
+		else if(protocol == OBD_ELM327 || protocol == AUTO_PID)
 		{
 			#if HARDWARE_VER == WICAN_PRO
 			static char elm327_cmd_buffer[2048];
@@ -685,6 +688,11 @@ void app_main(void)
     sprintf((char *)uid,"%02x%02x%02x%02x%02x%02x",
             derived_mac_addr[0], derived_mac_addr[1], derived_mac_addr[2],
             derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
+
+    sprintf(ap_ssid, "WiCAN_%02x%02x%02x%02x%02x%02x",
+			derived_mac_addr[0], derived_mac_addr[1], derived_mac_addr[2],
+			derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
+			
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 		config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, (char*)&uid[0]);
 	#else
@@ -739,7 +747,21 @@ void app_main(void)
 	}
 
 	protocol = config_server_protocol();
-	// protocol = OBD_ELM327;
+
+	wifi_mode_t wifi_mode = config_server_get_wifi_mode();
+
+	if(wifi_mode == SMARTCONNECT_MODE)
+	{
+		if(config_server_get_drive_protocol() == AUTO_PID ||
+			config_server_get_home_protocol() == AUTO_PID)
+		{
+			protocol = AUTO_PID;
+		}
+		else
+		{
+			protocol = OBD_ELM327;
+		}
+	}
 
 	if(protocol == REALDASH)
 	{
@@ -860,9 +882,15 @@ void app_main(void)
 //
 //		mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM, &xmsg_mqtt_rx_queue);
 //	}
+	vehicle_config_t vehicle_config;
+	if(config_server_get_sleep_volt(&vehicle_config.voltage_at_ignition) == -1)
+	{
+		ESP_LOGE(TAG, "Error getting sleep voltage");
+		vehicle_config.voltage_at_ignition = 13.1;  // Default value
+	}
+	vehicle_init(&vehicle_config);
+	wifi_network_init(ap_ssid);
 
-
-	wifi_network_init(NULL, NULL);
 	int32_t port = config_server_get_port();
 
 	if(port == -1)
@@ -888,26 +916,31 @@ void app_main(void)
 			tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, 0, 0);
 			#endif
 		}
-		
-		if(config_server_get_ble_config())
+	}
+
+	if(config_server_get_ble_config())
+	{
+		int pass = config_server_ble_pass();
+		static xdev_buffer* xmsg_ble_tx_queue_Storage;
+		static StaticQueue_t xmsg_ble_tx_queue_Buffer;
+		// xMsg_Rx_Queue_Storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
+		// xmsg_ble_tx_queue = xQueueCreate(20, sizeof( xdev_buffer) );
+		xmsg_ble_tx_queue_Storage = (xdev_buffer *)heap_caps_malloc(100 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
+		xmsg_ble_tx_queue = xQueueCreateStatic(100, xdev_buffer_size, (uint8_t *)xmsg_ble_tx_queue_Storage, &xmsg_ble_tx_queue_Buffer);
+		#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
+		ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, pass, &ble_uid[0]);
+		#elif HARDWARE_VER == WICAN_PRO
+		if(internal_buf != NULL)
 		{
-			int pass = config_server_ble_pass();
-			static xdev_buffer* xmsg_ble_tx_queue_Storage;
-			static StaticQueue_t xmsg_ble_tx_queue_Buffer;
-			// xMsg_Rx_Queue_Storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
-			// xmsg_ble_tx_queue = xQueueCreate(20, sizeof( xdev_buffer) );
-			xmsg_ble_tx_queue_Storage = (xdev_buffer *)heap_caps_malloc(100 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
-			xmsg_ble_tx_queue = xQueueCreateStatic(100, xdev_buffer_size, (uint8_t *)xmsg_ble_tx_queue_Storage, &xmsg_ble_tx_queue_Buffer);
-			#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
-			ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, pass, &ble_uid[0]);
-			#elif HARDWARE_VER == WICAN_PRO
-			if(internal_buf != NULL)
-			{
-				free(internal_buf);
-			}
-			ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, 0, pass, &ble_uid[0]);
-			#endif
+			free(internal_buf);
 		}
+		ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, 0, pass, &ble_uid[0]);
+		if(wifi_mode != SMARTCONNECT_MODE)
+		{
+			ble_enable();
+			ESP_LOGI(TAG, "BLE enabled, SMARTCONNECT mode is disabled");
+		}
+		#endif
 	}
 
     const esp_partition_t *running = esp_ota_get_running_partition();
@@ -992,11 +1025,11 @@ void app_main(void)
 	esp_log_level_set("read_ss_adc_voltage", ESP_LOG_NONE);	
 	// esp_log_level_set("HEAP", ESP_LOG_NONE);
 	// esp_log_level_set("autopid_find_standard_pid", ESP_LOG_INFO);
-	// esp_log_level_set("SLEEP_MODE", ESP_LOG_NONE);
+	esp_log_level_set("SLEEP_MODE", ESP_LOG_NONE);
 	// esp_log_level_set("OBD_LOGGER", ESP_LOG_INFO);
 	// esp_log_level_set("OBD_LOGGER_WS_IFACE", ESP_LOG_INFO);
 	// esp_log_level_set("CONFIG_SERVER", ESP_LOG_INFO);
-	// esp_log_level_set("EX_TIME", ESP_LOG_INFO);
+	// esp_log_level_set("SMARTCONNECT", ESP_LOG_INFO);
 	// esp_log_level_set("AUTO_PID", ESP_LOG_NONE);
 	// esp_log_level_set("OBD", ESP_LOG_NONE);
 	// esp_log_level_set("ELM327", ESP_LOG_NONE);

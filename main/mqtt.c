@@ -63,6 +63,7 @@
 #include "expression_parser.h"
 #include "dev_status.h"
 #include "wc_timer.h"
+#include "wifi_mgr.h"
 
 #define TAG 		"MQTT"
 #define MQTT_TX_RX_BUF_SIZE         (1024*20)
@@ -374,9 +375,10 @@ static void mqtt_task(void *pvParameters)
     strcpy(mqtt_topic, config_server_get_mqtt_rx_topic());
     sprintf(mqtt_elm327_topic, "wican/%s/elm327", device_id);
 
-	while(!wifi_network_is_connected())
+	while(!wifi_mgr_is_sta_connected())
 	{
 		vTaskDelay(pdMS_TO_TICKS(1000));
+        dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
 	}
 
 	esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
