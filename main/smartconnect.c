@@ -276,14 +276,36 @@ static void enable_drive_mode(void)
     vTaskDelay(pdMS_TO_TICKS(300)); // Allow time for complete deinitialization
     
     // Get drive connection type from config server
-    char *drive_connection_type = config_server_get_drive_connection_type();
+    drive_connection_type_t drive_connection_type = config_server_get_drive_connection_type();
     
-    if (drive_connection_type && strcmp(drive_connection_type, "ble") == 0) {
-        // BLE mode: Enable BLE for configuration
-        ESP_LOGI(TAG, "Drive mode: BLE connection - enabling BLE");
+    if (drive_connection_type == DRIVE_CONNECTION_BLE) {
+        // BLE mode: Enable BLE for configuration and WiFi in AP mode
+        ESP_LOGI(TAG, "Drive mode: BLE connection - enabling BLE and WiFi AP");
         ble_enable();
-        wifi_mgr_disable(); // Ensure WiFi is disabled
-    } else if (drive_connection_type && strcmp(drive_connection_type, "wifi") == 0 && 
+        
+        // Configure WiFi for AP-only mode in BLE drive mode
+        wifi_mgr_config_t wifi_config = WIFI_MGR_DEFAULT_CONFIG();
+        wifi_config.mode = WIFI_MGR_MODE_AP;
+        
+        // Configure AP settings using provided SSID UID
+        strncpy(wifi_config.ap_ssid, ap_ssid_uid, sizeof(wifi_config.ap_ssid) - 1);
+        wifi_config.ap_ssid[sizeof(wifi_config.ap_ssid) - 1] = '\0';
+        
+        // Use AP password from config server
+        char *ap_pass = config_server_get_ap_pass();
+        if (ap_pass != NULL && strlen(ap_pass) > 0) {
+            strncpy(wifi_config.ap_password, ap_pass, sizeof(wifi_config.ap_password) - 1);
+        } else {
+            strcpy(wifi_config.ap_password, "12345678"); // Default fallback
+        }
+        
+        wifi_config.ap_channel = config_server_get_ap_ch();
+        wifi_config.ap_max_connections = 4;
+        wifi_config.ap_auto_disable = config_server_get_ap_auto_disable();  // Keep AP always on in BLE drive mode
+        
+        wifi_mgr_init(&wifi_config);
+        wifi_mgr_enable();
+    } else if (drive_connection_type == DRIVE_CONNECTION_WIFI && 
                strlen(smartconnect_config.drive_ssid) > 0) {
         // WiFi mode: Connect to Drive WiFi
         ESP_LOGI(TAG, "Drive mode: WiFi connection - connecting to %s", smartconnect_config.drive_ssid);
@@ -330,7 +352,8 @@ static void enable_drive_mode(void)
     }
     
     ESP_LOGI(TAG, "DRIVE MODE enabled - Connection type: %s", 
-             drive_connection_type ? drive_connection_type : "none");
+             (drive_connection_type == DRIVE_CONNECTION_WIFI) ? "wifi" : 
+             (drive_connection_type == DRIVE_CONNECTION_BLE) ? "ble+wifi_ap" : "unknown");
 }
 
 /**
@@ -415,9 +438,9 @@ static void enable_home_mode(void)
             strcpy(wifi_config.ap_password, "12345678"); // Default fallback
         }
         
-        wifi_config.ap_channel = 6;
+        wifi_config.ap_channel = config_server_get_ap_ch();
         wifi_config.ap_max_connections = 4;
-        wifi_config.ap_auto_disable = false;  // Keep AP always on in home mode
+        wifi_config.ap_auto_disable = config_server_get_ap_auto_disable();  // Keep AP always on in home mode
         
         wifi_mgr_init(&wifi_config);
         wifi_mgr_enable();
@@ -445,9 +468,9 @@ static void disable_drive_mode(void)
     dev_status_clear_drive_mode_enabled();
     
     // Get drive connection type to know what to disable
-    char *drive_connection_type = config_server_get_drive_connection_type();
+    drive_connection_type_t drive_connection_type = config_server_get_drive_connection_type();
     
-    if (drive_connection_type && strcmp(drive_connection_type, "wifi") == 0) {
+    if (drive_connection_type == DRIVE_CONNECTION_WIFI) {
         ESP_LOGI(TAG, "Disconnecting drive mode WiFi");
         wifi_mgr_sta_disconnect();
         vTaskDelay(pdMS_TO_TICKS(100)); // Allow time for disconnection
@@ -455,10 +478,14 @@ static void disable_drive_mode(void)
         vTaskDelay(pdMS_TO_TICKS(100));
         wifi_mgr_deinit(); // Complete cleanup
         vTaskDelay(pdMS_TO_TICKS(100));
-    } else if (drive_connection_type && strcmp(drive_connection_type, "ble") == 0) {
-        ESP_LOGI(TAG, "Disabling drive mode BLE");
+    } else if (drive_connection_type == DRIVE_CONNECTION_BLE) {
+        ESP_LOGI(TAG, "Disabling drive mode BLE and WiFi AP");
         ble_disable();
         vTaskDelay(pdMS_TO_TICKS(100)); // Allow time for BLE shutdown
+        wifi_mgr_disable();
+        vTaskDelay(pdMS_TO_TICKS(100));
+        wifi_mgr_deinit(); // Complete cleanup
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
     
     ESP_LOGI(TAG, "DRIVE MODE disabled");
@@ -565,7 +592,7 @@ esp_err_t smartconnect_load_config(void)
     // Load Drive WiFi configuration from config server
     char *drive_ssid = config_server_get_drive_ssid();
     char *drive_password = config_server_get_drive_password();
-    char *drive_connection_type = config_server_get_drive_connection_type();
+    drive_connection_type_t drive_connection_type = config_server_get_drive_connection_type();
     
     if (drive_ssid != NULL && strlen(drive_ssid) > 0) {
         strncpy(config.drive_ssid, drive_ssid, sizeof(config.drive_ssid) - 1);
@@ -586,7 +613,9 @@ esp_err_t smartconnect_load_config(void)
     ESP_LOGI(TAG, "Loaded SmartConnect configuration:");
     ESP_LOGI(TAG, "  Home SSID: %s", config.home_ssid);
     ESP_LOGI(TAG, "  Drive SSID: %s", config.drive_ssid);
-    ESP_LOGI(TAG, "  Drive connection type: %s", drive_connection_type ? drive_connection_type : "default");
+    ESP_LOGI(TAG, "  Drive connection type: %s", 
+             (drive_connection_type == DRIVE_CONNECTION_WIFI) ? "wifi" : 
+             (drive_connection_type == DRIVE_CONNECTION_BLE) ? "ble" : "unknown");
     
     return smartconnect_set_config(&config);
 }
