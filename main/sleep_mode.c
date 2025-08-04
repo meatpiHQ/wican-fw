@@ -386,6 +386,7 @@ static void adc_task(void *pvParameters)
 						ESP_LOGI(TAG, "low voltage: %f", battery_voltage);
 						sleep_detect_time = esp_timer_get_time();
 						sleep_state++;
+						dev_status_clear_bits(DEV_SLEEP_CAN_BUSY_BIT);
 					}
 					break;
 				}
@@ -394,6 +395,12 @@ static void adc_task(void *pvParameters)
 					if(battery_voltage > sleep_voltage)
 					{
 						ESP_LOGI(TAG, "high voltage: %f", battery_voltage);
+						sleep_state = RUN_STATE;
+					}
+
+					if(config_server_get_sleep_can() && dev_status_is_bit_set(DEV_SLEEP_CAN_BUSY_BIT))
+					{
+						ESP_LOGI(TAG, "CAN active, don't sleep");
 						sleep_state = RUN_STATE;
 					}
 
@@ -414,6 +421,21 @@ static void adc_task(void *pvParameters)
 						wakeup_detect_time = esp_timer_get_time();
 						ESP_LOGI(TAG, "wake up, voltage: %f", battery_voltage);
 						sleep_state = WAKEUP_STATE;
+					}
+
+					if(config_server_get_sleep_can())
+					{
+						can_set_silent(1);
+						//can_set_filter(0);
+						//can_set_mask(0xFFFFFFFF);
+						can_enable();
+						static twai_message_t rx_msg;
+						if(can_receive(&rx_msg, pdMS_TO_TICKS(50)) == ESP_OK)
+						{
+							ESP_LOGI(TAG, "Wake up now...");
+							esp_restart();
+						}
+						can_disable();
 					}
 
 					if(config_server_get_battery_alert_config())
