@@ -27,6 +27,10 @@
 #define AP_MODE				0
 #define APSTA_MODE			1
 
+#define AP_AUTODIS_DISABLE  0
+#define AP_AUTODIS_STATION  1
+#define AP_AUTODIS_TIMEOUT  2
+
 #define CAN_5K				0
 #define CAN_10K				1
 #define CAN_20K				2
