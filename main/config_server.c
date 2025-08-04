@@ -2354,7 +2354,14 @@ int8_t config_server_get_sleep_config(void)
 
 int8_t config_server_get_sleep_volt(float *sleep_volt)
 {
-	*sleep_volt = atof(device_config.sleep_volt);
+	char *endptr;
+	*sleep_volt = strtof(device_config.sleep_volt, &endptr);
+
+	// Check for conversion errors
+	if (*endptr != '\0' || endptr == device_config.sleep_volt)
+	{
+		return -1;
+	}
 
 	if(*sleep_volt >= 12.0f && *sleep_volt <= 15.0f)
 	{
@@ -2365,7 +2372,14 @@ int8_t config_server_get_sleep_volt(float *sleep_volt)
 
 int8_t config_server_get_wakeup_volt(float *wakeup_volt)
 {
-	*wakeup_volt = atof(device_config.wakeup_volt);
+	char *endptr;
+	*wakeup_volt = strtof(device_config.wakeup_volt, &endptr);
+
+	// Check for conversion errors
+	if (*endptr != '\0' || endptr == device_config.wakeup_volt)
+	{
+		return -1;
+	}
 
 	if(*wakeup_volt >= 12.0f && *wakeup_volt <= 15.0f)
 	{
@@ -2502,14 +2516,16 @@ int config_server_get_alert_time(void)
 
 int8_t config_server_get_alert_volt(float *alert_volt)
 {
-	*alert_volt = atof(device_config.batt_alert_volt);
+	char *endptr;
+	*alert_volt = strtof(device_config.batt_alert_volt, &endptr);
 
-	if(device_config.batt_alert_volt[2] != '.')
+	// Check for conversion errors
+	if (*endptr != '\0' || endptr == device_config.batt_alert_volt)
 	{
 		return -1;
 	}
 
-	if(*alert_volt > 8.0f && *alert_volt <= 15.0f)
+	if(*alert_volt >= 8.0f && *alert_volt <= 15.0f)
 	{
 		return 1;
 	}

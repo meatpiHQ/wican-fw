@@ -1024,8 +1024,17 @@
                     </tr>
                     <tr>
                         <td><label for="batt_alert_volt"><b>Alert Voltage:</b></label></td>
-                        <td><input type="number" step="0.1" id="batt_alert_volt" name="batt_alert_volt" value="11.0"
-                                min="9.0" max="15.0" /></td>
+                        <td class="slider-container">
+                            <input type="range" 
+                                   id="batt_alert_volt" 
+                                   name="batt_alert_volt" 
+                                   value="11.0" 
+                                   min="8.0" 
+                                   max="15.0" 
+                                   step="0.1"
+                                   oninput="document.getElementById('batt_alert_volt_value').textContent = this.value;submit_enable();">
+                            <span id="batt_alert_volt_value">11.0</span>V
+                        </td>
                     </tr>
                     <tr>
                         <td><label for="batt_alert_protocol"><b>Alert Protocol:</b></label></td>
@@ -2183,6 +2192,9 @@ function loadAutoTable(jsonData) {
 		} else if(document.getElementById("sleep_volt").value < 12 || document.getElementById("sleep_volt").value > 15) {
             showNotification("Sleep Voltage Value, min=12.0 max=15.0", "red");
 			document.getElementById("submit_button").disabled = true;
+		} else if(document.getElementById("batt_alert_volt").value < 8 || document.getElementById("batt_alert_volt").value > 15) {
+            showNotification("Alert Voltage Value, min=8.0 max=15.0", "red");
+			document.getElementById("submit_button").disabled = true;
 		}
         else {
 			document.getElementById("submit_button").disabled = false;
@@ -2724,6 +2736,7 @@ function loadAutoTable(jsonData) {
 			document.getElementById("batt_alert_ssid").value = obj.batt_alert_ssid;
 			document.getElementById("batt_alert_pass").value = obj.batt_alert_pass;
 			document.getElementById("batt_alert_volt").value = obj.batt_alert_volt;
+			document.getElementById("batt_alert_volt_value").textContent = obj.batt_alert_volt;
 			document.getElementById("batt_alert_protocol").value = obj.batt_alert_protocol;
 			document.getElementById("batt_alert_url").value = obj.batt_alert_url.slice(7);
 			document.getElementById("batt_alert_port").value = obj.batt_alert_port;
