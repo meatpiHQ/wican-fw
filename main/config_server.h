@@ -100,6 +100,8 @@ typedef struct _device_config
 	char mqtt_user[64];
 	char mqtt_pass[64];
 	char mqtt_elm327_log[10];
+	char mqtt_rx_individual_en[10];
+	char mqtt_rx_individual_retain[10];
 	char mqtt_tx_topic[64];
 	char mqtt_rx_topic[64];
 	char mqtt_status_topic[64];
@@ -149,6 +151,8 @@ char *config_server_get_mqtt_user(void);
 char *config_server_get_mmqtt_pass(void);
 char *config_server_get_mqtt_canflt(void);
 int8_t config_server_mqtt_elm327_log(void);
+int8_t config_server_mqtt_rx_individual_en(void);
+int8_t config_server_mqtt_rx_individual_retain(void);
 char *config_server_get_mqtt_tx_topic(void);
 char *config_server_get_mqtt_rx_topic(void);
 char *config_server_get_mqtt_status_topic(void);

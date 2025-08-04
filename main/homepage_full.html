@@ -737,6 +737,26 @@
                     </table>
                     <div style="overflow-x:auto;">
                         <div class="section-title">MQTT CAN Filter</div>
+                        <table class="form-table">
+                            <tr>
+                                <td>RX Individual Enable:</td>
+                                <td>
+                                    <select name="mqtt_rx_individual_en" id="mqtt_rx_individual_en">
+                                        <option value="enable">Enable</option>
+                                        <option value="disable">Disable</option>
+                                    </select>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>RX Individual Retain:</td>
+                                <td>
+                                    <select name="mqtt_rx_individual_retain" id="mqtt_rx_individual_retain">
+                                        <option value="enable">Enable</option>
+                                        <option value="disable">Disable</option>
+                                    </select>
+                                </td>
+                            </tr>
+                        </table>
                         <table id="can_flt_table" >
                             <tr>
                                 <th style="text-align: left;">CAN ID (dec)</th>
@@ -2436,6 +2456,8 @@ function loadAutoTable(jsonData) {
         }
 		obj["mqtt_status_topic"] = document.getElementById("mqtt_status_topic").value;
 		obj["mqtt_elm327_log"] = document.getElementById("mqtt_elm327_log").value;
+		obj["mqtt_rx_individual_en"] = document.getElementById("mqtt_rx_individual_en").value;
+		obj["mqtt_rx_individual_retain"] = document.getElementById("mqtt_rx_individual_retain").value;
 		var configJSON = JSON.stringify(obj);
 		const xhttp = new XMLHttpRequest();
 		xhttp.onload = function() {
@@ -2741,6 +2763,8 @@ function loadAutoTable(jsonData) {
 			document.getElementById("mqtt_rx_topic").value = obj.mqtt_rx_topic;
 			document.getElementById("mqtt_status_topic").value = obj.mqtt_status_topic;
 			document.getElementById("mqtt_elm327_log").value = obj.mqtt_elm327_log;
+			document.getElementById("mqtt_rx_individual_en").value = obj.mqtt_rx_individual_en;
+			document.getElementById("mqtt_rx_individual_retain").value = obj.mqtt_rx_individual_retain;
 			if(obj.batt_alert_time == "1") {
 				document.getElementById("batt_alert_time").selectedIndex = "0";
 			} else if(obj.batt_alert_time == "6") {
