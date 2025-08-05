@@ -38,6 +38,7 @@
 #define SDCARD_D1                   13
 #define SDCARD_D2                   12
 #define SDCARD_D3                   48
+#define SDCARD_DETECT_PIN           40
 
 #define OBD_RESET_PIN           (GPIO_NUM_41)
 #define OBD_LED_EN_PIN          (GPIO_NUM_42)
