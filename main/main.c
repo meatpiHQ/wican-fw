@@ -66,10 +66,12 @@
 #include "sdcard.h"
 #include "imu.h"
 #include "rtcm.h"
-#include "console.h"
+#include "cmdline.h"
 #include "dev_status.h"
 #include "wifi_mgr.h"
 #include "vehicle.h"
+#include "wc_timer.h"
+#include "filesystem.h"
 
 #define TAG 		__func__
 #define USB_ID_PIN					39
@@ -512,6 +514,30 @@ static void obd_rx_task(void *pvParameters)
 }
 #endif 
 
+void safe_mode_check(void)
+{
+	static wc_timer_t button_timer;
+	wc_timer_set(&button_timer, 5000); // 5 seconds
+
+	ESP_LOGI(TAG, "Checking if button is pressed for safe mode...");
+	led_set_level(135, 206, 235);
+	vTaskDelay(pdMS_TO_TICKS(2000));
+	while(gpio_get_level(BUTTON_GPIO_NUM) == 0)
+	{
+		if(wc_timer_is_expired(&button_timer))
+		{
+			ESP_LOGI(TAG, "Button pressed for more than 5 seconds, entering safe mode");
+			led_set_level(255, 255, 0);
+			cmdline_safemode_init();
+			while (1)
+			{
+				vTaskDelay(pdMS_TO_TICKS(10000));
+			}
+		}
+		vTaskDelay(pdMS_TO_TICKS(100));
+	}
+}
+
 void app_main(void)
 {
 	void* internal_buf = NULL;
@@ -523,12 +549,21 @@ void app_main(void)
 	gpio_reset_pin(BUTTON_GPIO_NUM);
 	gpio_set_direction(BUTTON_GPIO_NUM, GPIO_MODE_INPUT);
 	gpio_set_pull_mode(BUTTON_GPIO_NUM, GPIO_PULLUP_ONLY);
+
+	gpio_reset_pin(SDCARD_DETECT_PIN);
+	gpio_set_direction(SDCARD_DETECT_PIN, GPIO_MODE_INPUT);
+	gpio_set_pull_mode(SDCARD_DETECT_PIN, GPIO_PULLUP_ONLY);
+
 	sd_card_init();
 	
-	if(gpio_get_level(BUTTON_GPIO_NUM) == 0)
+	if(dev_status_is_bit_set(DEV_SDCARD_MOUNTED_BIT) && gpio_get_level(BUTTON_GPIO_NUM) == 0)
 	{
 		sdcard_perform_ota_update("/wican.bin");
 	}
+
+	i2c_master_init();
+	led_init(I2C_MASTER_NUM);
+	safe_mode_check();
 
 	#ifdef PRINT_HEAP
 	static StackType_t *heap_task_stack;
@@ -586,8 +621,6 @@ void app_main(void)
 	gpio_pulldown_dis(4);
 	
 	#if HARDWARE_VER == WICAN_PRO
-	i2c_master_init();
-	led_init(I2C_MASTER_NUM);
 	imu_init(I2C_MASTER_NUM, I2C_MASTER_SDA_IO, I2C_MASTER_SCL_IO, IMU_INT_GPIO_NUM);
 	rtcm_init(I2C_MASTER_NUM);
 	// rtcm_set_time(0x23, 0x32, 0x00);  // 12:30:00 in BCD
@@ -1015,7 +1048,7 @@ void app_main(void)
 	// pdTRUE, /* BIT_0 should be cleared before returning. */
 	// pdFALSE, /* Don't wait for both bits, either bit will do. */
 	// portMAX_DELAY);/* Wait forever. */ 
-	// esp_log_level_set("*", ESP_LOG_NONE);
+	esp_log_level_set("*", ESP_LOG_NONE);
 	// esp_log_level_set("*", ESP_LOG_ERROR);
 	// esp_log_level_set("HEAP", ESP_LOG_INFO);
 	// esp_log_level_set("imu", ESP_LOG_INFO);
@@ -1044,7 +1077,7 @@ void app_main(void)
 	}
     #endif
 
-	console_init();
+	cmdline_init();
 	if(internal_buf != NULL)
 	{
 		free(internal_buf);

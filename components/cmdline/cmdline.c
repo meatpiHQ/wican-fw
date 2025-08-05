@@ -95,7 +95,6 @@ static void register_all_commands(void)
     cmd_sdcard_register();
     cmd_wifi_register();
     cmd_wusb_register();
-    cmd_factoryreset_register();
 }
 
 static void process_command(char* cmd)
@@ -288,6 +287,35 @@ static esp_err_t tcp_console_init(void)
 
     is_cmdline_initialized = true;
     return ESP_OK;
+}
+
+esp_err_t cmdline_safemode_init(void)
+{
+    esp_console_repl_t *repl = NULL;
+    esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
+    repl_config.task_stack_size = (4*1024);
+    repl_config.prompt = PROMPT;
+    repl_config.max_cmdline_length = 256;
+    
+#if CONFIG_ESP_CONSOLE_USB_CDC
+    esp_console_dev_usb_cdc_config_t cdc_config = ESP_CONSOLE_DEV_CDC_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_console_new_repl_usb_cdc(&cdc_config, &repl_config, &repl));
+#elif CONFIG_ESP_CONSOLE_UART
+    esp_console_dev_uart_config_t uart_config = ESP_CONSOLE_DEV_UART_CONFIG_DEFAULT();
+
+    esp_err_t ret = esp_console_new_repl_uart(&uart_config, &repl_config, &repl);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create UART REPL: %d", ret);
+        return ret;
+    }
+#endif
+
+    esp_console_register_help_command();
+    cmd_version_register();
+    cmd_factoryreset_register();
+    cmd_system_register();
+    
+    return esp_console_start_repl(repl);
 }
 
 esp_err_t cmdline_init(void)

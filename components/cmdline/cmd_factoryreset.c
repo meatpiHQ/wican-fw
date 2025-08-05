@@ -35,7 +35,7 @@ static const char *TAG = "cmd_factoryreset";
 // Factory reset state
 static bool factory_reset_pending = false;
 static uint64_t factory_reset_timestamp = 0;
-#define FACTORY_RESET_TIMEOUT_MS 30000  // 30 seconds timeout
+#define FACTORY_RESET_TIMEOUT_MS 60000  // 60 seconds timeout
 
 static struct {
     struct arg_lit *confirm;
@@ -117,7 +117,7 @@ static int cmd_factoryreset(int argc, char **argv)
     cmdline_printf("This action CANNOT be undone!\n");
     cmdline_printf("\n");
     cmdline_printf("To proceed, run: factoryreset --confirm\n");
-    cmdline_printf("You have 30 seconds to confirm.\n");
+    cmdline_printf("You have 60 seconds to confirm.\n");
     cmdline_printf("============================\n");
     
     return 0;

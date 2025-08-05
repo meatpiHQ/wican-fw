@@ -27,5 +27,6 @@
 typedef void (*cmdline_output_func_t)(const char *data, size_t len);
 
 esp_err_t cmdline_init(void);
+esp_err_t cmdline_safemode_init(void);
 void cmdline_set_output_func(cmdline_output_func_t output_func);
 void cmdline_printf(const char *fmt, ...);
