@@ -71,7 +71,7 @@ static int cmd_factoryreset(int argc, char **argv)
         
         // Delete all configuration files
         cmdline_printf("Deleting configuration files...\n");
-        // filesystem_delete_config_files();
+        filesystem_delete_config_files();
         
         // Clear the pending flag
         factory_reset_pending = false;
