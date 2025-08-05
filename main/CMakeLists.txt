@@ -33,6 +33,7 @@ set(srcs
     "smartconnect.c"
     "vehicle.c"
     "wifi_mgr.c"
+    "filesystem.c"
 )
 
 # Define required components
@@ -60,6 +61,7 @@ set(requires
     obd_logger
     https_client_mgr
     unity
+    cmdline
 )
 
 # Register the component
