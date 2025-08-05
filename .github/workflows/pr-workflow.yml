@@ -1,0 +1,63 @@
+name: PR Workflow for Vehicle Profiles
+
+on:
+  pull_request:
+    paths:
+      - 'vehicle_profiles/**'
+
+jobs:
+  vehicle-profiles-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .vehicle_profiles
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: '.vehicle_profiles/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate vehicle profiles
+        run: npm run validate
+
+      - name: Merge and format vehicle profiles
+        if: success()
+        run: |
+          npm run build
+          npx prettier ../vehicle_profiles.json --write
+
+      - name: Validate merge output
+        run: |
+          if [ ! -f ../vehicle_profiles.json ]; then
+            echo "Error: vehicle_profiles.json was not created"
+            exit 1
+          fi
+          echo "Generated file size: $(wc -c < ../vehicle_profiles.json) bytes"
+
+      - name: Upload merged vehicle profiles
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vehicle_profiles.json
+          path: ../vehicle_profiles.json # Relative to the working-directory
+
+      - name: Comment on PR with testing instructions
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const message = `✅ Vehicle profiles merged successfully!\n\nPlease use the merged files from the uploaded artifact (vehicle_profiles.json) for your testing.`;
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: prNumber,
+              body: message
+            });
