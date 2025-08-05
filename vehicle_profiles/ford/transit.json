@@ -1,5 +1,5 @@
 {
-  "car_model": "2021-Ford-Transit-North-America",
+  "car_model": "Ford: Transit North America 2022",
   "init": "ATE0;ATL0;ATH0;ATR1;ATST32;ATSP6;ATCAF1;",
   "pids": [
     {
