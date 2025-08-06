@@ -41,6 +41,12 @@ typedef enum {
     VEHICLE_STATE_IGNITION_INVALID
 } vehicle_ignition_state_t;
 
+typedef enum {
+    VEHICLE_MOTION_STATIONARY,
+    VEHICLE_MOTION_ACTIVE,
+    VEHICLE_MOTION_INVALID
+} vehicle_motion_state_t;
+
 typedef struct {
     float voltage_at_ignition;
 
@@ -58,5 +64,6 @@ typedef struct {
 
 void vehicle_init(vehicle_config_t *vehicle_config);
 vehicle_ignition_state_t vehicle_ignition_state(void);
+vehicle_motion_state_t vehicle_motion_state(void);
 
 #endif 

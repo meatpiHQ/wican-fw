@@ -24,7 +24,7 @@
 #include "freertos/event_groups.h"
 #include "esp_log.h"
 #include "sleep_mode.h"
-
+#include "imu.h"
 
 static const char *TAG = "VEHICLE";
 static EventGroupHandle_t vehicle_event_group;
@@ -48,6 +48,24 @@ vehicle_ignition_state_t vehicle_ignition_state(void)
     else
     {
         return VEHICLE_STATE_IGNITION_INVALID;
+    }
+}
+
+vehicle_motion_state_t vehicle_motion_state(void)
+{
+    activity_state_t imu_state = imu_get_activity_state();
+    
+    switch(imu_state)
+    {
+        case ACTIVITY_STATE_STATIONARY:
+            return VEHICLE_MOTION_STATIONARY;
+            
+        case ACTIVITY_STATE_ACTIVE:
+            return VEHICLE_MOTION_ACTIVE;
+            
+        case ACTIVITY_STATE_INVALID:
+        default:
+            return VEHICLE_MOTION_INVALID;
     }
 }
 

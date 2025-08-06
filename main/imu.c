@@ -34,6 +34,7 @@
 static icm42670_t dev = {0};
 static QueueHandle_t imu_motion_evt_queue = NULL;
 static QueueHandle_t activity_state_queue = NULL;
+static uint8_t imu_wom_threshold = 8; // Default threshold value
 
 void IRAM_ATTR imu_isr_handler(void* arg)
 {
@@ -47,10 +48,13 @@ static void imu_motion_task(void *pvParameters)
     activity_state_t current_state = ACTIVITY_STATE_STATIONARY;
     activity_state_t last_reported_state = ACTIVITY_STATE_STATIONARY;
 
-    // Configure WoM with threshold of 50mg (approximately)
-    // The threshold value is an 8-bit value where 1 LSB = 1g/256
-    // So for 50mg: threshold = (0.05g * 256) ≈ 13
-    esp_err_t ret = imu_config_wom(40);
+    // Get configurable WoM threshold from configuration
+    // The threshold value is an 8-bit value where 1 LSB = 3.9mg for ICM-42670-P
+    // Range: 1-32, where each unit represents 3.9mg of acceleration
+    uint8_t threshold = imu_wom_threshold;
+    ESP_LOGI(TAG, "Using IMU threshold: %d (%.1fmg)", threshold, threshold * 3.9f);
+    
+    esp_err_t ret = imu_config_wom(threshold);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to configure WoM");
         return;
@@ -135,9 +139,12 @@ activity_state_t imu_get_activity_state(void)
 }
 
 //TODO: scl_gpio, scl_gpio amd int_gpio are not used
-esp_err_t imu_init(i2c_port_t i2c_num, gpio_num_t sda_gpio, gpio_num_t scl_gpio, gpio_num_t int_gpio)
+esp_err_t imu_init(i2c_port_t i2c_num, gpio_num_t sda_gpio, gpio_num_t scl_gpio, gpio_num_t int_gpio, uint8_t threshold)
 {
     esp_err_t ret;
+
+    // Store the threshold for use by the motion task
+    imu_wom_threshold = threshold;
 
     // Configure GPIO for IMU interrupt
     gpio_config_t io_conf = {

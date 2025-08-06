@@ -480,6 +480,10 @@
             <span data-lucide="monitor" style="width: 18px; height: 18px; margin-right: 8px;"></span>
             <b>CAN Monitor</b>
         </button>
+        <button class="tablinks" onclick="openTab(event, 'advanced_tab')">
+            <span data-lucide="settings" style="width: 18px; height: 18px; margin-right: 8px;"></span>
+            <b>Advanced</b>
+        </button>
         <button class="tablinks" onclick="openTab(event, 'system_tab')">
             <span data-lucide="cpu" style="width: 18px; height: 18px; margin-right: 8px;"></span>
             <b>System</b>
@@ -1335,6 +1339,26 @@
                             step="1"
                             oninput="document.getElementById('log_period_value').textContent = this.value;submit_enable();">
                         <span id="log_period_value">60</span>sec
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <div id="advanced_tab" class="tabcontent">
+            <div class="section-title">Advanced Settings</div>
+            <table class="form-table">
+                <tr>
+                    <td>Motion Threshold:</td>
+                    <td class="slider-container">
+                        <input type="range" 
+                               id="imu_threshold" 
+                               name="imu_threshold" 
+                               value="8" 
+                               min="1" 
+                               max="32" 
+                               step="1"
+                               oninput="document.getElementById('imu_threshold_value').textContent = (this.value * 3.9).toFixed(1) + ' mg';submit_enable();"
+                               onchange="submit_enable();">
+                        <span id="imu_threshold_value">31.2 mg</span>
                     </td>
                 </tr>
             </table>
@@ -2908,21 +2932,17 @@ function loadAutoTable(jsonData) {
 		obj["ap_ch"] = document.getElementById("ap_ch_value").value;
 		obj["sta_ssid"] = document.getElementById("ssid_value").value;
 		obj["sta_pass"] = document.getElementById("pass_value").value;
-        obj["sta_security"] = document.getElementById("sta_security").value;
-		
-		// SmartConnect fields
-		if (document.getElementById("wifi_mode").value === "SmartConnect") {
-			obj["home_ssid"] = document.getElementById("home_ssid").value;
-			obj["home_password"] = document.getElementById("home_password").value;
-			obj["home_security"] = document.getElementById("home_security").value;
-			obj["drive_ssid"] = document.getElementById("drive_ssid").value;
-			obj["drive_password"] = document.getElementById("drive_password").value;
-			obj["drive_security"] = document.getElementById("drive_security").value;
-			obj["home_protocol"] = document.getElementById("home_protocol").value;
-            obj["drive_protocol"] = document.getElementById("drive_protocol").value;
-			obj["drive_connection_type"] = document.getElementById("drive_connection_type").value;
-			obj["drive_mode_timeout"] = document.getElementById("drive_mode_timeout").value;
-		}
+		obj["sta_security"] = document.getElementById("sta_security").value;
+		obj["home_ssid"] = document.getElementById("home_ssid").value;
+		obj["home_password"] = document.getElementById("home_password").value;
+		obj["home_security"] = document.getElementById("home_security").value;
+		obj["drive_ssid"] = document.getElementById("drive_ssid").value;
+		obj["drive_password"] = document.getElementById("drive_password").value;
+		obj["drive_security"] = document.getElementById("drive_security").value;
+		obj["home_protocol"] = document.getElementById("home_protocol").value;
+		obj["drive_protocol"] = document.getElementById("drive_protocol").value;
+		obj["drive_connection_type"] = document.getElementById("drive_connection_type").value;
+		obj["drive_mode_timeout"] = document.getElementById("drive_mode_timeout").value;
 		obj["can_datarate"] = document.getElementById("can_datarate").value;
 		obj["can_mode"] = document.getElementById("can_mode").value;
 		obj["port_type"] = document.getElementById("port_type").value;
@@ -2932,11 +2952,11 @@ function loadAutoTable(jsonData) {
 		obj["ble_pass"] = document.getElementById("ble_pass_value").value;
 		obj["ble_status"] = document.getElementById("ble_status").value;
 		obj["sleep_status"] = document.getElementById("sleep_status").value;
-        obj["sleep_disable_agree"] = document.getElementById("sleep_disable_agree").value;
-        obj["periodic_wakeup"] = document.getElementById("periodic_wakeup").value;
+		obj["sleep_disable_agree"] = document.getElementById("sleep_disable_agree").value;
+		obj["periodic_wakeup"] = document.getElementById("periodic_wakeup").value;
 		obj["sleep_volt"] = document.getElementById("sleep_volt").value;
-        obj["sleep_time"] = document.getElementById("sleep_time").value;
-        obj["wakeup_interval"] = document.getElementById("wakeup_interval").value;
+		obj["sleep_time"] = document.getElementById("sleep_time").value;
+		obj["wakeup_interval"] = document.getElementById("wakeup_interval").value;
 		obj["batt_alert"] = document.getElementById("batt_alert").value;
 		obj["batt_alert_ssid"] = document.getElementById("batt_alert_ssid").value;
 		obj["batt_alert_pass"] = document.getElementById("batt_alert_pass").value;
@@ -2958,14 +2978,14 @@ function loadAutoTable(jsonData) {
 		obj["mqtt_user"] = document.getElementById("mqtt_user").value;
 		obj["mqtt_pass"] = document.getElementById("mqtt_pass").value;
 		obj["mqtt_tx_topic"] = document.getElementById("mqtt_tx_topic").value;
-        obj["ap_auto_disable"] = document.getElementById("ap_auto_disable").value;
+		obj["ap_auto_disable"] = document.getElementById("ap_auto_disable").value;
 		if(document.getElementById("mqtt_tx_en_checkbox").checked){
 			obj["mqtt_tx_en"] = "enable";
 		}else{
 			obj["mqtt_tx_en"] = "disable";
 		}
 		obj["mqtt_rx_topic"] = document.getElementById("mqtt_rx_topic").value;
-        if(document.getElementById("mqtt_rx_en_checkbox").checked){
+		if(document.getElementById("mqtt_rx_en_checkbox").checked){
             obj["mqtt_rx_en"] = "enable";
         }else{
             obj["mqtt_rx_en"] = "disable";
@@ -2976,6 +2996,7 @@ function loadAutoTable(jsonData) {
         obj["log_filesystem"] = document.getElementById("log_filesystem").value;
         obj["log_storage"] = document.getElementById("log_storage").value;
         obj["log_period"] = document.getElementById("log_period").value;
+        obj["imu_threshold"] = document.getElementById("imu_threshold").value;
 		var configJSON = JSON.stringify(obj);
 		const xhttp = new XMLHttpRequest();
 		xhttp.onload = function() {
@@ -3294,6 +3315,10 @@ function loadAutoTable(jsonData) {
 
             document.getElementById('log_period_value').textContent = obj.log_period;
             
+            // Load IMU threshold value and update display
+            document.getElementById("imu_threshold").value = obj.imu_threshold || "8";
+            document.getElementById("imu_threshold_value").textContent = ((obj.imu_threshold || 8) * 3.9).toFixed(1) + ' mg';
+			
 			txCheckBoxChanged();
             rxCheckBoxChanged();
 			document.getElementById("protocol").value = obj.protocol;

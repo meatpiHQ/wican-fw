@@ -10,7 +10,7 @@ typedef enum {
     ACTIVITY_STATE_INVALID
 } activity_state_t;
 
-esp_err_t imu_init(i2c_port_t i2c_num, gpio_num_t sda_gpio, gpio_num_t scl_gpio, gpio_num_t int_gpio);
+esp_err_t imu_init(i2c_port_t i2c_num, gpio_num_t sda_gpio, gpio_num_t scl_gpio, gpio_num_t int_gpio, uint8_t threshold);
 esp_err_t imu_config_wom(uint8_t threshold);
 esp_err_t imu_enable_wom(bool enable);
 esp_err_t imu_read_accel(float *ax, float *ay, float *az);

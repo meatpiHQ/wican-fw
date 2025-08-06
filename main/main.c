@@ -520,8 +520,13 @@ void safe_mode_check(void)
 	wc_timer_set(&button_timer, 5000); // 5 seconds
 
 	ESP_LOGI(TAG, "Checking if button is pressed for safe mode...");
-	led_set_level(135, 206, 235);
-	vTaskDelay(pdMS_TO_TICKS(2000));
+	
+	if((gpio_get_level(BUTTON_GPIO_NUM) == 0))
+	{
+		led_set_level(135, 206, 235);
+		vTaskDelay(pdMS_TO_TICKS(2000));
+	}
+
 	while(gpio_get_level(BUTTON_GPIO_NUM) == 0)
 	{
 		if(wc_timer_is_expired(&button_timer))
@@ -621,7 +626,11 @@ void app_main(void)
 	gpio_pulldown_dis(4);
 	
 	#if HARDWARE_VER == WICAN_PRO
-	imu_init(I2C_MASTER_NUM, I2C_MASTER_SDA_IO, I2C_MASTER_SCL_IO, IMU_INT_GPIO_NUM);
+	uint8_t imu_threshold = 8; // Default value
+	if(config_server_get_imu_threshold(&imu_threshold) != 0) {
+		ESP_LOGW(TAG, "Failed to get IMU threshold from config, using default: %d", imu_threshold);
+	}
+	imu_init(I2C_MASTER_NUM, I2C_MASTER_SDA_IO, I2C_MASTER_SCL_IO, IMU_INT_GPIO_NUM, imu_threshold);
 	rtcm_init(I2C_MASTER_NUM);
 	// rtcm_set_time(0x23, 0x32, 0x00);  // 12:30:00 in BCD
 	// rtcm_set_date(0x24, 0x12, 0x27, 0x06);  // 2024-01-20 Saturday(6) in BCD	
@@ -1051,7 +1060,7 @@ void app_main(void)
 	esp_log_level_set("*", ESP_LOG_NONE);
 	// esp_log_level_set("*", ESP_LOG_ERROR);
 	// esp_log_level_set("HEAP", ESP_LOG_INFO);
-	// esp_log_level_set("imu", ESP_LOG_INFO);
+	esp_log_level_set("imu", ESP_LOG_INFO);
 	// esp_log_level_set("rtcm", ESP_LOG_INFO);
 	// esp_log_level_set("console", ESP_LOG_INFO);
 	// esp_log_level_set("usb", ESP_LOG_INFO);
@@ -1062,7 +1071,7 @@ void app_main(void)
 	// esp_log_level_set("OBD_LOGGER", ESP_LOG_INFO);
 	// esp_log_level_set("OBD_LOGGER_WS_IFACE", ESP_LOG_INFO);
 	// esp_log_level_set("CONFIG_SERVER", ESP_LOG_INFO);
-	// esp_log_level_set("SMARTCONNECT", ESP_LOG_INFO);
+	esp_log_level_set("SMARTCONNECT", ESP_LOG_INFO);
 	// esp_log_level_set("AUTO_PID", ESP_LOG_NONE);
 	// esp_log_level_set("OBD", ESP_LOG_NONE);
 	// esp_log_level_set("ELM327", ESP_LOG_NONE);
@@ -1071,6 +1080,18 @@ void app_main(void)
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
 	#elif HARDWARE_VER == WICAN_PRO
 	led_set_level(0,0,200);
+	// // led_enable_fade(LED_RED, 1, 0);
+	// led_pattern_ms_t breathing_pattern = {
+	// 	.rise_time_ms = 1000,    // 1 second fade in
+	// 	.hold_time_ms = 500,     // Hold for 0.5 seconds
+	// 	.fall_time_ms = 1000,    // 1 second fade out
+	// 	.off_time_ms = 500,      // Off for 0.5 seconds
+	// 	.delay_time_ms = 0,      // No initial delay
+	// 	.repeat_times = 0        // Repeat forever
+	// };
+	// led_set_level(100, 0, 200);  // Set blue color
+	// led_set_pattern_ms(LED_BLUE, &breathing_pattern);
+	// led_set_pattern_ms(LED_GREEN, &breathing_pattern);
 	if(gpio_get_level(USB_ID_PIN) == 0)
 	{
 		usb_host_init();

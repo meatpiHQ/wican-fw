@@ -78,8 +78,8 @@ static void disable_home_mode(void);
  * Main state machine loop
  */
 void smartconnect_task(void *pvParameters) {
-    vehicle_ignition_state_t ignition_state;
-    vehicle_ignition_state_t prev_ignition_state = VEHICLE_STATE_IGNITION_INVALID;
+    vehicle_motion_state_t motion_state;
+    vehicle_motion_state_t prev_motion_state = VEHICLE_MOTION_INVALID;
 
     ESP_LOGI(TAG, "Auto Connect task started");
 
@@ -87,11 +87,11 @@ void smartconnect_task(void *pvParameters) {
     {
         dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
 
-        ignition_state = vehicle_ignition_state();
-        ESP_LOGI(TAG, "Current ignition state: %d", ignition_state);
-        if(ignition_state == VEHICLE_STATE_IGNITION_INVALID)
+        motion_state = vehicle_motion_state();
+        ESP_LOGI(TAG, "Current vehicle motion state: %d", motion_state);
+        if(motion_state == VEHICLE_MOTION_INVALID)
         {
-            ESP_LOGE(TAG, "Invalid ignition state");
+            ESP_LOGE(TAG, "Invalid vehicle motion state");
             vTaskDelay(pdMS_TO_TICKS(1000));
             continue;
         }
@@ -101,24 +101,24 @@ void smartconnect_task(void *pvParameters) {
         {
             case SMARTCONNECT_STATE_INIT:
                 ESP_LOGI(TAG, "State: INIT");
-                if(ignition_state == VEHICLE_STATE_IGNITION_ON)
+                if(motion_state == VEHICLE_MOTION_ACTIVE)
                 {
-                    ESP_LOGI(TAG, "Ignition ON detected, waiting for stability...");
+                    ESP_LOGI(TAG, "Vehicle motion detected, waiting for stability...");
                     wc_timer_set(&state_timer, DRIVE_MODE_DELAY_MS);
                     current_state = SMARTCONNECT_STATE_WAITING_IGNITION_ON;
                 }
-                else if(ignition_state == VEHICLE_STATE_IGNITION_OFF)
+                else if(motion_state == VEHICLE_MOTION_STATIONARY)
                 {
-                    ESP_LOGI(TAG, "Ignition OFF detected, waiting for stability...");
+                    ESP_LOGI(TAG, "Vehicle stationary detected, waiting for stability...");
                     wc_timer_set(&state_timer, HOME_MODE_DELAY_MS);
                     current_state = SMARTCONNECT_STATE_WAITING_IGNITION_OFF;
                 }
                 break;
 
             case SMARTCONNECT_STATE_WAITING_IGNITION_ON:
-                if(ignition_state == VEHICLE_STATE_IGNITION_OFF)
+                if(motion_state == VEHICLE_MOTION_STATIONARY)
                 {
-                    ESP_LOGI(TAG, "Ignition turned OFF before timer expired");
+                    ESP_LOGI(TAG, "Vehicle became stationary before timer expired");
                     wc_timer_set(&state_timer, HOME_MODE_DELAY_MS);
                     current_state = SMARTCONNECT_STATE_WAITING_IGNITION_OFF;
                 }
@@ -132,9 +132,9 @@ void smartconnect_task(void *pvParameters) {
                 break;
 
             case SMARTCONNECT_STATE_WAITING_IGNITION_OFF:
-                if(ignition_state == VEHICLE_STATE_IGNITION_ON)
+                if(motion_state == VEHICLE_MOTION_ACTIVE)
                 {
-                    ESP_LOGI(TAG, "Ignition turned ON before timer expired");
+                    ESP_LOGI(TAG, "Vehicle motion detected before timer expired");
                     wc_timer_set(&state_timer, DRIVE_MODE_DELAY_MS);
                     current_state = SMARTCONNECT_STATE_WAITING_IGNITION_ON;
                 }
@@ -148,28 +148,36 @@ void smartconnect_task(void *pvParameters) {
                 break;
 
             case SMARTCONNECT_STATE_DRIVE_MODE:
-                if(ignition_state == VEHICLE_STATE_IGNITION_OFF)
+                if(motion_state == VEHICLE_MOTION_STATIONARY)
                 {
-                    ESP_LOGI(TAG, "Ignition OFF in drive mode, starting drive mode timeout");
-                    
-                    // Get drive mode timeout from config server (in seconds)
-                    char *timeout_str = config_server_get_drive_mode_timeout();
-                    uint32_t timeout_ms = HOME_MODE_DELAY_MS;  // Default fallback
-                    
-                    if (timeout_str != NULL && strlen(timeout_str) > 0) {
-                        uint32_t timeout_seconds = atoi(timeout_str);
-                        if (timeout_seconds > 0) {
-                            timeout_ms = timeout_seconds * 1000;  // Convert to milliseconds
-                            ESP_LOGI(TAG, "Using drive mode timeout: %lu seconds", timeout_seconds);
-                        } else {
-                            ESP_LOGW(TAG, "Invalid drive mode timeout value, using default");
-                        }
+                    // Check if BLE is enabled and connected - if so, stay in drive mode
+                    drive_connection_type_t drive_connection_type = config_server_get_drive_connection_type();
+                    if (drive_connection_type == DRIVE_CONNECTION_BLE && dev_status_is_ble_connected()) {
+                        ESP_LOGI(TAG, "Vehicle stopped but BLE is connected - staying in drive mode");
+                        // Reset WiFi status log counter to avoid spam
+                        wifi_status_log_counter = 0;
                     } else {
-                        ESP_LOGW(TAG, "No drive mode timeout configured, using default");
+                        ESP_LOGI(TAG, "Vehicle stopped in drive mode, starting drive mode timeout");
+                        
+                        // Get drive mode timeout from config server (in seconds)
+                        char *timeout_str = config_server_get_drive_mode_timeout();
+                        uint32_t timeout_ms = HOME_MODE_DELAY_MS;  // Default fallback
+                        
+                        if (timeout_str != NULL && strlen(timeout_str) > 0) {
+                            uint32_t timeout_seconds = atoi(timeout_str);
+                            if (timeout_seconds > 0) {
+                                timeout_ms = timeout_seconds * 1000;  // Convert to milliseconds
+                                ESP_LOGI(TAG, "Using drive mode timeout: %lu seconds", timeout_seconds);
+                            } else {
+                                ESP_LOGW(TAG, "Invalid drive mode timeout value, using default");
+                            }
+                        } else {
+                            ESP_LOGW(TAG, "No drive mode timeout configured, using default");
+                        }
+                        
+                        wc_timer_set(&drive_mode_timeout_timer, timeout_ms);
+                        current_state = SMARTCONNECT_STATE_DRIVE_MODE_TIMEOUT;
                     }
-                    
-                    wc_timer_set(&drive_mode_timeout_timer, timeout_ms);
-                    current_state = SMARTCONNECT_STATE_DRIVE_MODE_TIMEOUT;
                 }
                 else
                 {
@@ -190,25 +198,41 @@ void smartconnect_task(void *pvParameters) {
                 break;
 
             case SMARTCONNECT_STATE_DRIVE_MODE_TIMEOUT:
-                if(ignition_state == VEHICLE_STATE_IGNITION_ON)
+                if(motion_state == VEHICLE_MOTION_ACTIVE)
                 {
-                    ESP_LOGI(TAG, "Ignition ON during drive mode timeout, returning to drive mode");
+                    ESP_LOGI(TAG, "Vehicle motion detected during drive mode timeout, returning to drive mode");
                     current_state = SMARTCONNECT_STATE_DRIVE_MODE;
                 }
                 else if(wc_timer_is_expired(&drive_mode_timeout_timer))
                 {
-                    ESP_LOGI(TAG, "Drive mode timeout expired, switching to home mode");
-                    disable_drive_mode();
-                    enable_home_mode();
-                    home_status_log_counter = 0;  // Reset counter for new state
-                    current_state = SMARTCONNECT_STATE_HOME_MODE;
+                    // Check if BLE is connected before switching to home mode
+                    drive_connection_type_t drive_connection_type = config_server_get_drive_connection_type();
+                    if (drive_connection_type == DRIVE_CONNECTION_BLE && dev_status_is_ble_connected()) {
+                        ESP_LOGI(TAG, "Drive mode timeout expired but BLE is connected - returning to drive mode");
+                        current_state = SMARTCONNECT_STATE_DRIVE_MODE;
+                    } else {
+                        ESP_LOGI(TAG, "Drive mode timeout expired, switching to home mode");
+                        disable_drive_mode();
+                        enable_home_mode();
+                        home_status_log_counter = 0;  // Reset counter for new state
+                        current_state = SMARTCONNECT_STATE_HOME_MODE;
+                    }
+                }
+                else
+                {
+                    // During timeout, check if BLE becomes connected
+                    drive_connection_type_t drive_connection_type = config_server_get_drive_connection_type();
+                    if (drive_connection_type == DRIVE_CONNECTION_BLE && dev_status_is_ble_connected()) {
+                        ESP_LOGI(TAG, "BLE connected during drive mode timeout, returning to drive mode");
+                        current_state = SMARTCONNECT_STATE_DRIVE_MODE;
+                    }
                 }
                 break;
 
             case SMARTCONNECT_STATE_HOME_MODE:
-                if(ignition_state == VEHICLE_STATE_IGNITION_ON)
+                if(motion_state == VEHICLE_MOTION_ACTIVE)
                 {
-                    ESP_LOGI(TAG, "Ignition ON in home mode, disabling home mode");
+                    ESP_LOGI(TAG, "Vehicle motion detected in home mode, disabling home mode");
                     disable_home_mode();
                     wc_timer_set(&state_timer, DRIVE_MODE_DELAY_MS);
                     current_state = SMARTCONNECT_STATE_WAITING_IGNITION_ON;
@@ -239,7 +263,7 @@ void smartconnect_task(void *pvParameters) {
                 break;
         }
 
-        prev_ignition_state = ignition_state;
+        prev_motion_state = motion_state;
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
