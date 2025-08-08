@@ -72,6 +72,7 @@
 #include "vehicle.h"
 #include "wc_timer.h"
 #include "filesystem.h"
+#include "safemode.h"
 
 #define TAG 		__func__
 #define USB_ID_PIN					39
@@ -534,6 +535,8 @@ void safe_mode_check(void)
 			ESP_LOGI(TAG, "Button pressed for more than 5 seconds, entering safe mode");
 			led_set_level(255, 255, 0);
 			cmdline_safemode_init();
+		
+			safemode_start();
 			while (1)
 			{
 				vTaskDelay(pdMS_TO_TICKS(10000));
@@ -1060,7 +1063,7 @@ void app_main(void)
 	esp_log_level_set("*", ESP_LOG_NONE);
 	// esp_log_level_set("*", ESP_LOG_ERROR);
 	// esp_log_level_set("HEAP", ESP_LOG_INFO);
-	esp_log_level_set("imu", ESP_LOG_INFO);
+	// esp_log_level_set("imu", ESP_LOG_INFO);
 	// esp_log_level_set("rtcm", ESP_LOG_INFO);
 	// esp_log_level_set("console", ESP_LOG_INFO);
 	// esp_log_level_set("usb", ESP_LOG_INFO);
@@ -1071,10 +1074,11 @@ void app_main(void)
 	// esp_log_level_set("OBD_LOGGER", ESP_LOG_INFO);
 	// esp_log_level_set("OBD_LOGGER_WS_IFACE", ESP_LOG_INFO);
 	// esp_log_level_set("CONFIG_SERVER", ESP_LOG_INFO);
-	esp_log_level_set("SMARTCONNECT", ESP_LOG_INFO);
+	// esp_log_level_set("SMARTCONNECT", ESP_LOG_INFO);
 	// esp_log_level_set("AUTO_PID", ESP_LOG_NONE);
 	// esp_log_level_set("OBD", ESP_LOG_NONE);
-	// esp_log_level_set("ELM327", ESP_LOG_NONE);
+	esp_log_level_set("BLE", ESP_LOG_INFO);
+	
 	
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
     gpio_set_level(PWR_LED_GPIO_NUM, 1);

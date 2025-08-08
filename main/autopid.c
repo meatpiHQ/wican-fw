@@ -566,7 +566,7 @@ char *autopid_data_read(void)
 
     if (xSemaphoreTake(autopid_data.mutex, portMAX_DELAY) == pdTRUE) {
         if (autopid_data.json_str != NULL) {
-            json_str = (char *)malloc(strlen(autopid_data.json_str) + 1);
+            json_str = (char *)heap_caps_malloc(strlen(autopid_data.json_str) + 1, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
             if (json_str != NULL) {
                 strcpy(json_str, autopid_data.json_str);
             }
@@ -576,6 +576,45 @@ char *autopid_data_read(void)
         xSemaphoreGive(autopid_data.mutex);
     }
     return json_str;
+}
+
+char *autopid_get_value_by_name(char* name)
+{
+    //json_str must be freed by the caller
+    char *result_json = NULL;
+    
+    if (!autopid_data.mutex) {
+        ESP_LOGE(TAG, "Invalid mutex");
+        return NULL;
+    } else if (name == NULL || strlen(name) == 0) {
+        ESP_LOGE(TAG, "Invalid name");
+        return NULL;
+    }
+
+    if (xSemaphoreTake(autopid_data.mutex, portMAX_DELAY) == pdTRUE) {
+        if (autopid_data.json_str != NULL) {
+            char *json_copy = (char *)heap_caps_malloc(strlen(autopid_data.json_str) + 1, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+            if (json_copy != NULL) {
+                strcpy(json_copy, autopid_data.json_str);
+                
+                cJSON *root = cJSON_Parse(json_copy);
+                if (root) {
+                    cJSON *item = cJSON_GetObjectItem(root, name);
+                    if (item) {
+                        cJSON *result = cJSON_CreateObject();
+                        cJSON *value_copy = cJSON_Duplicate(item, 1);
+                        cJSON_AddItemToObject(result, name, value_copy);
+                        result_json = cJSON_PrintUnformatted(result);
+                        cJSON_Delete(result);
+                    }
+                    cJSON_Delete(root);
+                }
+                heap_caps_free(json_copy);
+            }
+        }
+        xSemaphoreGive(autopid_data.mutex);
+    }
+    return result_json;
 }
 
 void autopid_data_publish(void) {

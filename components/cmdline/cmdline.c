@@ -41,6 +41,7 @@
 #include "cmd_wusb.h"
 #include "cmd_status.h"
 #include "cmd_factoryreset.h"
+#include "cmd_autopid.h"
 
 #define PROMPT "wican> "
 #define MAX_CMDLINE_LENGTH 256
@@ -95,6 +96,7 @@ static void register_all_commands(void)
     cmd_sdcard_register();
     cmd_wifi_register();
     cmd_wusb_register();
+    cmd_autopid_register();
 }
 
 static void process_command(char* cmd)
@@ -126,6 +128,41 @@ static void process_command(char* cmd)
     } else if (err != ESP_OK) {
         if (output_func) output_func("Internal error\n", 15);
     }
+}
+
+esp_err_t cmdline_run(const char *cmd)
+{
+    if (cmd == NULL) return ESP_ERR_INVALID_ARG;
+
+    char cmd_copy[MAX_CMDLINE_LENGTH];
+    strncpy(cmd_copy, cmd, MAX_CMDLINE_LENGTH - 1);
+    cmd_copy[MAX_CMDLINE_LENGTH - 1] = '\0';
+
+    // Trim trailing spaces/CR/LF
+    size_t cmd_len = strlen(cmd_copy);
+    while (cmd_len > 0 && (cmd_copy[cmd_len - 1] == ' ' ||
+                           cmd_copy[cmd_len - 1] == '\r' ||
+                           cmd_copy[cmd_len - 1] == '\n')) {
+        cmd_copy[--cmd_len] = '\0';
+    }
+
+    // Ignore empty
+    if (cmd_len == 0) return ESP_OK;
+
+    int ret = 0;
+    esp_err_t err = esp_console_run(cmd_copy, &ret);
+
+    if (err == ESP_ERR_NOT_FOUND) {
+        if (output_func) output_func("Command not found\n", 18);
+    } else if (err == ESP_ERR_INVALID_ARG) {
+        if (output_func) output_func("Invalid arguments\n", 18);
+    } else if (err == ESP_OK && ret != ESP_OK) {
+        if (output_func) output_func("Command returned non-zero error code\n", 37);
+    } else if (err != ESP_OK) {
+        if (output_func) output_func("Internal error\n", 15);
+    }
+
+    return err;
 }
 
 static void tcp_console_task(void* arg)

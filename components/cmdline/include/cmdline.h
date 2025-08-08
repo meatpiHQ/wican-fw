@@ -30,3 +30,5 @@ esp_err_t cmdline_init(void);
 esp_err_t cmdline_safemode_init(void);
 void cmdline_set_output_func(cmdline_output_func_t output_func);
 void cmdline_printf(const char *fmt, ...);
+// Run a single command line string through esp_console
+esp_err_t cmdline_run(const char *cmd);

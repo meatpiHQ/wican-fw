@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WiCAN Safe Mode</title>
+    <style>
+        :root {
+            --primary-color: #dc2626;
+            --primary-light: #fecaca;
+            --primary-dark: #991b1b;
+            --background-color: #f0f2f5;
+            --white: #ffffff;
+            --gray-100: #f7f7f7;
+            --gray-200: #e9ecef;
+            --gray-300: #dee2e6;
+            --gray-700: #495057;
+            --shadow-md: 0 4px 6px rgba(0,0,0,0.1);
+            --transition: all 0.3s ease;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--background-color);
+            margin: 0;
+            color: var(--gray-700);
+            line-height: 1.5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        .container {
+            background-color: var(--white);
+            border-radius: 12px;
+            box-shadow: var(--shadow-md);
+            padding: 3rem;
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+        .warning-header {
+            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+            border: 2px solid var(--primary-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .warning-title {
+            font-size: 1.75rem;
+            font-weight: 600;
+            color: var(--primary-dark);
+            margin: 0 0 0.5rem;
+        }
+        .warning-text {
+            color: var(--primary-dark);
+            font-size: 1rem;
+            margin: 0;
+        }
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 2rem 0 1rem;
+            color: var(--gray-700);
+        }
+        .form-group {
+            margin-bottom: 2rem;
+            text-align: left;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        input[type="file"] {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px dashed var(--gray-300);
+            border-radius: 8px;
+            background-color: var(--gray-100);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        input[type="file"]:hover {
+            border-color: var(--primary-color);
+        }
+        .btn {
+            padding: 0.875rem 2rem;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            margin: 0.5rem;
+            font-size: 1rem;
+        }
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: var(--white);
+        }
+        .btn-primary:hover {
+            background-color: var(--primary-dark);
+        }
+        .btn-secondary {
+            background-color: var(--gray-300);
+            color: var(--gray-700);
+        }
+        .btn-secondary:hover {
+            background-color: var(--gray-200);
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .divider {
+            height: 1px;
+            background-color: var(--gray-200);
+            margin: 2rem 0;
+        }
+        .status-message {
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+            display: none;
+        }
+        .status-success {
+            background-color: #d1fae5;
+            color: #065f46;
+            border: 1px solid #10b981;
+        }
+        .status-error {
+            background-color: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #ef4444;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: var(--gray-200);
+            border-radius: 10px;
+            overflow: hidden;
+            display: none;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: var(--primary-color);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="warning-header">
+            <h1 class="warning-title">WiCAN Safe Mode</h1>
+            <p class="warning-text">Device is in safe mode. Only firmware update and factory reset are available.</p>
+        </div>
+
+        <div class="section-title">Factory Reset</div>
+        <p>Reset all settings to factory defaults. This action cannot be undone.</p>
+        <button type="button" class="btn btn-secondary" onclick="confirmFactoryReset()">Factory Reset</button>
+
+        <div class="divider"></div>
+
+        <div class="section-title">Firmware Update</div>
+        <form id="firmware-form" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="firmware-file">Select Firmware File (.bin):</label>
+                <input type="file" id="firmware-file" name="firmware" accept=".bin" required>
+            </div>
+            <button type="submit" class="btn btn-primary" id="update-btn">Update Firmware</button>
+        </form>
+
+        <div class="progress-bar" id="progress-bar">
+            <div class="progress-fill" id="progress-fill"></div>
+        </div>
+
+        <div class="status-message" id="status-message"></div>
+    </div>
+
+    <script>
+        document.getElementById('firmware-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            updateFirmware();
+        });
+
+        function updateFirmware() {
+            const fileInput = document.getElementById('firmware-file');
+            const updateBtn = document.getElementById('update-btn');
+            const progressBar = document.getElementById('progress-bar');
+            const progressFill = document.getElementById('progress-fill');
+            const statusMessage = document.getElementById('status-message');
+
+            if (!fileInput.files[0]) {
+                showStatus('Please select a firmware file', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('firmware', fileInput.files[0]);
+
+            updateBtn.disabled = true;
+            updateBtn.textContent = 'Updating...';
+            progressBar.style.display = 'block';
+            statusMessage.style.display = 'none';
+
+            fetch('/upload_firmware', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (response.ok) {
+                    progressFill.style.width = '100%';
+                    showStatus('Firmware update successful! Device will reboot in 3 seconds...', 'success');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 3000);
+                } else {
+                    throw new Error('Update failed');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showStatus('Firmware update failed. Please try again.', 'error');
+            })
+            .finally(() => {
+                updateBtn.disabled = false;
+                updateBtn.textContent = 'Update Firmware';
+                progressBar.style.display = 'none';
+                progressFill.style.width = '0%';
+            });
+        }
+
+        function confirmFactoryReset() {
+            if (confirm('Are you sure you want to perform a factory reset? This will erase all settings and cannot be undone.')) {
+                factoryReset();
+            }
+        }
+
+        function factoryReset() {
+            showStatus('Performing factory reset...', 'success');
+            
+            fetch('/factory_reset', {
+                method: 'POST'
+            })
+            .then(response => {
+                if (response.ok) {
+                    showStatus('Factory reset successful! Device will reboot...', 'success');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    throw new Error('Reset failed');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showStatus('Factory reset failed. Please try again.', 'error');
+            });
+        }
+
+        function showStatus(message, type) {
+            const statusMessage = document.getElementById('status-message');
+            statusMessage.textContent = message;
+            statusMessage.className = 'status-message status-' + type;
+            statusMessage.style.display = 'block';
+        }
+    </script>
+</body>
+</html>

@@ -36,7 +36,7 @@
 #include "config_server.h"
 
 #define TAG                                 "SMARTCONNECT"
-#define SMARTCONNECT_TASK_STACK_SIZE        4096
+#define SMARTCONNECT_TASK_STACK_SIZE        8192
 
 #define DRIVE_MODE_DELAY_MS                 2000    // 2 seconds
 #define HOME_MODE_DELAY_MS                  5000    // 5 seconds
@@ -81,6 +81,8 @@ void smartconnect_task(void *pvParameters) {
     vehicle_motion_state_t motion_state;
     vehicle_motion_state_t prev_motion_state = VEHICLE_MOTION_INVALID;
 
+    enable_home_mode();  // Start in home mode
+    vTaskDelay(pdMS_TO_TICKS(3000));
     ESP_LOGI(TAG, "Auto Connect task started");
 
     while(1)

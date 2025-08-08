@@ -116,4 +116,5 @@ char *autopid_data_read(void);
 bool autopid_get_ecu_status(void);
 char* autopid_get_config(void);
 esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint32_t available_pids_size) ;
+char *autopid_get_value_by_name(char* name);
 #endif
