@@ -35,6 +35,7 @@ set(srcs
     "wifi_mgr.c"
     "filesystem.c"
     "safemode.c"
+    "multipart_upload.c"
 )
 
 # Define required components
@@ -63,6 +64,7 @@ set(requires
     https_client_mgr
     unity
     cmdline
+    zorxx__multipart-parser
 )
 
 # Register the component

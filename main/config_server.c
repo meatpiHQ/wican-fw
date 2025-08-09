@@ -2982,6 +2982,27 @@ static void config_server_load_cfg(char *cfg)
 	ESP_LOGI(TAG, "device_config.imu_threshold: %s", device_config.imu_threshold);
 	//*****
 
+	//*****
+	key = cJSON_GetObjectItem(root,"debug");
+	if(key == 0 || key->valuestring == NULL || (strlen(key->valuestring) == 0))
+	{
+		device_config.debug_enabled = 0; // default to no debug
+	}
+	else
+	{
+		strcmp(key->valuestring, "enabled") == 0 ? (device_config.debug_enabled = 1) : (device_config.debug_enabled = 0);
+	}
+
+	if(device_config.debug_enabled)
+	{
+		ESP_LOGW(TAG, "\r\n\r\n*****************Debug mode enabled*****************\r\n\r\n");
+	}
+	else
+	{
+		ESP_LOGI(TAG, "Debug mode disabled");
+	}
+	//*****
+
 	cJSON_Delete(root);
 	return;
 
@@ -3752,6 +3773,11 @@ int8_t config_server_get_imu_threshold(uint8_t *imu_threshold)
 	
 	*imu_threshold = (uint8_t)imu_int;
 	return 1;
+}
+
+bool config_server_is_debug_enabled(void)
+{
+	return device_config.debug_enabled;
 }
 
 void config_server_set_ble_config(uint8_t b)

@@ -42,6 +42,7 @@
 #include "cmd_status.h"
 #include "cmd_factoryreset.h"
 #include "cmd_autopid.h"
+#include "cmd_debug.h"
 
 #define PROMPT "wican> "
 #define MAX_CMDLINE_LENGTH 256
@@ -351,6 +352,7 @@ esp_err_t cmdline_safemode_init(void)
     cmd_version_register();
     cmd_factoryreset_register();
     cmd_system_register();
+    cmd_debug_register();
     
     return esp_console_start_repl(repl);
 }

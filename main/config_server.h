@@ -142,6 +142,7 @@ typedef struct _device_config
 	char log_filesystem[16];
 	char log_period[16];
 	char imu_threshold[16];
+	bool debug_enabled;
 }device_config_t;
 
 
@@ -217,3 +218,4 @@ int8_t config_server_get_ap_auto_disable(void);
 int8_t config_server_get_periodic_wakeup(void);
 int8_t config_server_get_wakeup_interval(uint32_t *wakeup_interval);
 int8_t config_server_get_imu_threshold(uint8_t *imu_threshold);
+bool config_server_is_debug_enabled(void);
