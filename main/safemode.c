@@ -1,5 +1,26 @@
+/*
+ * This file is part of the WiCAN project.
+ *
+ * Copyright (C) 2022  Meatpi Electronics.
+ * Written by Ali Slim <ali@meatpi.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
@@ -13,6 +34,8 @@
 #include "lwip/sockets.h"
 #include "wifi_mgr.h"
 #include "filesystem.h"
+#include "multipart_parser.h"
+#include "multipart_upload.h"
 
 // Define MIN macro if not already defined
 #ifndef MIN
@@ -20,6 +43,96 @@
 #endif
 
 static const char *TAG = "SAFEMODE";
+
+typedef struct
+{
+    esp_ota_handle_t ota_handle;
+    const esp_partition_t *ota_partition;
+    bool is_firmware_field;
+    bool ota_started;
+    httpd_req_t *req;
+} ota_context_t;
+
+// OTA upload state for multipart_upload component
+typedef struct
+{
+    esp_ota_handle_t ota_handle;
+    const esp_partition_t *ota_partition;
+    bool ota_started;
+    esp_err_t last_err;
+} ota_upload_state_t;
+
+static bool ota_on_part_begin(const multipart_part_info_t *info, void *user_ctx)
+{
+    ota_upload_state_t *st = (ota_upload_state_t*)user_ctx;
+    // Only accept the form field named "firmware"
+    if (info && strcasecmp(info->name, "firmware") == 0)
+    {
+        st->ota_partition = esp_ota_get_next_update_partition(NULL);
+        if (!st->ota_partition)
+        {
+            ESP_LOGE(TAG, "No OTA partition found");
+            st->last_err = ESP_ERR_NOT_FOUND;
+            return false;
+        }
+        esp_err_t err = esp_ota_begin(st->ota_partition, OTA_WITH_SEQUENTIAL_WRITES, &st->ota_handle);
+        if (err != ESP_OK)
+        {
+            ESP_LOGE(TAG, "esp_ota_begin failed: %s", esp_err_to_name(err));
+            st->last_err = err;
+            return false;
+        }
+        st->ota_started = true;
+        ESP_LOGI(TAG, "OTA update started (field: %s, filename: %s)", info->name, info->filename);
+        return true; // accept data for this part
+    }
+    // Skip any other fields
+    return false;
+}
+
+static esp_err_t ota_on_part_data(const char *data, size_t len, void *user_ctx)
+{
+    ota_upload_state_t *st = (ota_upload_state_t*)user_ctx;
+    if (st->ota_started && len)
+    {
+        esp_err_t err = esp_ota_write(st->ota_handle, data, len);
+        if (err != ESP_OK)
+        {
+            ESP_LOGE(TAG, "esp_ota_write failed: %s", esp_err_to_name(err));
+            st->last_err = err;
+            return err;
+        }
+    }
+    return ESP_OK;
+}
+
+static void ota_on_part_end(void *user_ctx)
+{
+    // Nothing extra per part; finalization happens on on_finished
+}
+
+static void ota_on_finished(void *user_ctx)
+{
+    ota_upload_state_t *st = (ota_upload_state_t*)user_ctx;
+    if (st->ota_started)
+    {
+        esp_err_t err = esp_ota_end(st->ota_handle);
+        if (err != ESP_OK)
+        {
+            ESP_LOGE(TAG, "esp_ota_end failed: %s", esp_err_to_name(err));
+            st->last_err = err;
+            return;
+        }
+        err = esp_ota_set_boot_partition(st->ota_partition);
+        if (err != ESP_OK)
+        {
+            ESP_LOGE(TAG, "esp_ota_set_boot_partition failed: %s", esp_err_to_name(err));
+            st->last_err = err;
+            return;
+        }
+        ESP_LOGI(TAG, "Firmware update successful");
+    }
+}
 
 // HTTP server handlers
 static esp_err_t root_handler(httpd_req_t *req)
@@ -33,132 +146,38 @@ static esp_err_t root_handler(httpd_req_t *req)
 
 static esp_err_t upload_firmware_handler(httpd_req_t *req)
 {
-    char buf[1024];
-    esp_ota_handle_t update_handle = 0;
-    const esp_partition_t *update_partition = NULL;
-    esp_err_t err;
-    int remaining = req->content_len;
-    bool first_chunk = true;
+    ESP_LOGI(TAG, "Starting firmware update, size: %d", req->content_len);
 
-    ESP_LOGI(TAG, "Starting firmware update, size: %d", remaining);
+    multipart_upload_handlers_t handlers = {
+        .on_part_begin = ota_on_part_begin,
+        .on_part_data = ota_on_part_data,
+        .on_part_end = ota_on_part_end,
+        .on_finished = ota_on_finished,
+    };
 
-    // Get the next update partition
-    update_partition = esp_ota_get_next_update_partition(NULL);
-    if (update_partition == NULL)
+    ota_upload_state_t state = {0};
+
+    multipart_upload_config_t cfg = multipart_upload_default_config();
+    cfg.rx_buf_size = 1024*4;
+
+    esp_err_t err = multipart_upload_handle(req, &handlers, &state, &cfg);
+
+    if (err != ESP_OK || !state.ota_started || state.last_err != ESP_OK)
     {
-        ESP_LOGE(TAG, "No OTA partition found");
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No OTA partition");
-        return ESP_FAIL;
-    }
-
-    // Begin OTA update
-    err = esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES, &update_handle);
-    if (err != ESP_OK)
-    {
-        ESP_LOGE(TAG, "esp_ota_begin failed: %s", esp_err_to_name(err));
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA begin failed");
-        return ESP_FAIL;
-    }
-
-    while (remaining > 0)
-    {
-        int recv_len = httpd_req_recv(req, buf, MIN(remaining, sizeof(buf)));
-        if (recv_len <= 0)
+        // Abort OTA if it had started but failed
+        if (state.ota_started && state.last_err != ESP_OK)
         {
-            if (recv_len == HTTPD_SOCK_ERR_TIMEOUT)
-            {
-                continue;
-            }
-            esp_ota_abort(update_handle);
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Receive timeout");
-            return ESP_FAIL;
+            esp_ota_abort(state.ota_handle);
         }
-
-        // Skip multipart headers on first chunk
-        if (first_chunk)
-        {
-            char *data_start = strstr(buf, "\r\n\r\n");
-            if (data_start != NULL)
-            {
-                data_start += 4; // Skip the \r\n\r\n
-                // Find the end boundary and calculate actual data length
-                char *boundary_start = strstr(data_start, "\r\n--");
-                int data_len;
-                if (boundary_start != NULL)
-                {
-                    data_len = boundary_start - data_start;
-                }
-                else
-                {
-                    data_len = recv_len - (data_start - buf);
-                }
-
-                if (data_len > 0)
-                {
-                    err = esp_ota_write(update_handle, data_start, data_len);
-                    if (err != ESP_OK)
-                    {
-                        ESP_LOGE(TAG, "esp_ota_write failed: %s", esp_err_to_name(err));
-                        esp_ota_abort(update_handle);
-                        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA write failed");
-                        return ESP_FAIL;
-                    }
-                }
-            }
-            first_chunk = false;
-        }
-        else
-        {
-            // For subsequent chunks, check for boundary
-            char *boundary_start = strstr(buf, "\r\n--");
-            int data_len = boundary_start ? (boundary_start - buf) : recv_len;
-
-            if (data_len > 0)
-            {
-                err = esp_ota_write(update_handle, buf, data_len);
-                if (err != ESP_OK)
-                {
-                    ESP_LOGE(TAG, "esp_ota_write failed: %s", esp_err_to_name(err));
-                    esp_ota_abort(update_handle);
-                    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA write failed");
-                    return ESP_FAIL;
-                }
-            }
-
-            if (boundary_start)
-            {
-                break; // End of data
-            }
-        }
-
-        remaining -= recv_len;
-    }
-
-    // Finalize OTA update
-    err = esp_ota_end(update_handle);
-    if (err != ESP_OK)
-    {
-        ESP_LOGE(TAG, "esp_ota_end failed: %s", esp_err_to_name(err));
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA end failed");
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Firmware upload failed");
         return ESP_FAIL;
     }
 
-    // Set boot partition
-    err = esp_ota_set_boot_partition(update_partition);
-    if (err != ESP_OK)
-    {
-        ESP_LOGE(TAG, "esp_ota_set_boot_partition failed: %s", esp_err_to_name(err));
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Set boot partition failed");
-        return ESP_FAIL;
-    }
-
-    ESP_LOGI(TAG, "Firmware update successful");
     httpd_resp_sendstr(req, "OK");
 
     // Reboot after a short delay
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    vTaskDelay(3000 / portTICK_PERIOD_MS);
     esp_restart();
-
     return ESP_OK;
 }
 
@@ -185,6 +204,7 @@ static httpd_handle_t start_webserver(void)
 {
     httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.stack_size = (15*1024);
     config.max_uri_handlers = 8;
     config.max_resp_headers = 8;
     config.uri_match_fn = httpd_uri_match_wildcard;
@@ -254,8 +274,17 @@ void safemode_start(void)
     ESP_ERROR_CHECK(ret);
 
     // Initialize TCP/IP and WiFi stack for AP mode
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    // Tolerate already-initialized modules
+    esp_err_t err = esp_netif_init();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE)
+    {
+        ESP_ERROR_CHECK(err);
+    }
+    err = esp_event_loop_create_default();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE)
+    {
+        ESP_ERROR_CHECK(err);
+    }
     esp_netif_create_default_wifi_ap();
     ap_netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
 
@@ -270,17 +299,18 @@ void safemode_start(void)
     sprintf((char *)ap_config.ap.ssid, "WiCAN_%02x%02x%02x%02x%02x%02x",
         mac_addr[0], mac_addr[1], mac_addr[2],
         mac_addr[3], mac_addr[4], mac_addr[5]);
-        
+
     strcpy((char *)ap_config.ap.password, "@meatpi#");
     ap_config.ap.ssid_len = strlen((char *)ap_config.ap.ssid);
     ap_config.ap.channel = 6;
-    ap_config.ap.authmode = WIFI_AUTH_WPA2_WPA3_PSK;
+    ap_config.ap.authmode = WIFI_AUTH_WPA2_PSK;
     ap_config.ap.pmf_cfg = (wifi_pmf_config_t)
     {
         .required = false,
         .capable = true
     };
     ap_config.ap.pmf_cfg.required = false;
+    ap_config.ap.max_connection = 4;
     esp_wifi_set_ps(WIFI_PS_NONE); // Disable power save mode for AP
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
@@ -300,19 +330,16 @@ void safemode_start(void)
     {
         ESP_LOGE(TAG, "AP netif handle is NULL, cannot configure DHCP or IP info");
     }
-    esp_netif_set_ip_info(ap_netif, &ip_info);
-    esp_netif_dhcps_start(ap_netif);
 
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    // Start web server
-    if (start_webserver() == NULL)
+    // Start web server only once
+    httpd_handle_t server = start_webserver();
+    if (server == NULL)
     {
         ESP_LOGE(TAG, "Failed to start web server. Safe mode interface will not be available.");
         return;
     }
-    ESP_LOGI(TAG, "Safe mode initialized successfully");
-    start_webserver();
 
     ESP_LOGI(TAG, "Safe mode initialized successfully");
 }

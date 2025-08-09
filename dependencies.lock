@@ -120,6 +120,13 @@ dependencies:
       path: components/esp32-idf-sqlite3/
       type: git
     version: 8c38efacd2d9225295e2abcc85f565c9b65bb1e0
+  zorxx/multipart-parser:
+    component_hash: a80b98bbdd530829b5a4df54cd8332a265ef4d310392562cf37d4cac548c5fd2
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.0.1
 direct_dependencies:
 - eil/i2cdev
 - espressif/mdns
@@ -130,6 +137,7 @@ direct_dependencies:
 - joltwallet/littlefs
 - meatpihq/usb_host_ch34x_vcp
 - nopnop2002/sqlite3
-manifest_hash: f13ed069d554bf963f2131d6ab31c7ad751aefdd32d5242991bbfc340c1ef9b1
+- zorxx/multipart-parser
+manifest_hash: 83cdd7f8b621463c35d160d83f456a530b72e9d4d76615c4bfc046c1c986192d
 target: esp32s3
 version: 2.0.0

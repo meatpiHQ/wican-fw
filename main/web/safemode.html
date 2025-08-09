@@ -17,6 +17,8 @@
             --gray-700: #495057;
             --shadow-md: 0 4px 6px rgba(0,0,0,0.1);
             --transition: all 0.3s ease;
+            --success-color: #10b981; /* green */
+            --success-dark: #065f46;
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -140,12 +142,24 @@
             border-radius: 10px;
             overflow: hidden;
             display: none;
+            position: relative; /* enable centered text overlay */
         }
         .progress-fill {
             height: 100%;
-            background-color: var(--primary-color);
+            background-color: var(--success-color); /* green */
             width: 0%;
-            transition: width 0.3s ease;
+            transition: width 0.2s linear;
+        }
+        .progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--success-dark);
+            pointer-events: none;
+            z-index: 1;
         }
     </style>
 </head>
@@ -173,6 +187,7 @@
 
         <div class="progress-bar" id="progress-bar">
             <div class="progress-fill" id="progress-fill"></div>
+            <div class="progress-text" id="progress-text">0%</div>
         </div>
 
         <div class="status-message" id="status-message"></div>
@@ -189,6 +204,7 @@
             const updateBtn = document.getElementById('update-btn');
             const progressBar = document.getElementById('progress-bar');
             const progressFill = document.getElementById('progress-fill');
+            const progressText = document.getElementById('progress-text');
             const statusMessage = document.getElementById('status-message');
 
             if (!fileInput.files[0]) {
@@ -202,33 +218,71 @@
             updateBtn.disabled = true;
             updateBtn.textContent = 'Updating...';
             progressBar.style.display = 'block';
+            progressFill.style.width = '0%';
+            progressText.textContent = '0%';
             statusMessage.style.display = 'none';
 
-            fetch('/upload_firmware', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => {
-                if (response.ok) {
-                    progressFill.style.width = '100%';
-                    showStatus('Firmware update successful! Device will reboot in 3 seconds...', 'success');
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 3000);
+            // Use XMLHttpRequest to get reliable upload progress events
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/upload_firmware');
+
+            // Cap visual progress at 95% until the server confirms success
+            xhr.upload.onprogress = function (e) {
+                if (e.lengthComputable) {
+                    const raw = Math.round((e.loaded / e.total) * 100);
+                    const percent = Math.min(95, raw);
+                    progressFill.style.width = percent + '%';
+                    progressText.textContent = percent + '%';
                 } else {
-                    throw new Error('Update failed');
+                    progressText.textContent = 'Uploading...';
                 }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                showStatus('Firmware update failed. Please try again.', 'error');
-            })
-            .finally(() => {
+            };
+
+            // When upload finished sending but before server responds
+            xhr.upload.onload = function () {
+                // Hold at 95% and indicate processing/verification on device
+                progressFill.style.width = '95%';
+                progressText.textContent = 'Processing...';
+            };
+
+            xhr.onload = function () {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    progressFill.style.width = '100%';
+                    progressText.textContent = '100%';
+                    showStatus('Firmware update successful! Device will reboot in 3 seconds...', 'success');
+                    // Keep 100% visible until the device reboots
+                    setTimeout(() => {
+                        progressBar.style.display = 'none';
+                        progressFill.style.width = '0%';
+                        progressText.textContent = '0%';
+                    }, 3200);
+                } else {
+                    showStatus('Firmware update failed. Please try again.', 'error');
+                    // Briefly show the last state then hide
+                    setTimeout(() => {
+                        progressBar.style.display = 'none';
+                        progressFill.style.width = '0%';
+                        progressText.textContent = '0%';
+                    }, 1500);
+                }
+            };
+
+            xhr.onerror = function () {
+                showStatus('Network error during firmware upload.', 'error');
+                setTimeout(() => {
+                    progressBar.style.display = 'none';
+                    progressFill.style.width = '0%';
+                    progressText.textContent = '0%';
+                }, 1500);
+            };
+
+            xhr.onloadend = function () {
+                // Only re-enable the button; hiding the bar is handled per outcome above
                 updateBtn.disabled = false;
                 updateBtn.textContent = 'Update Firmware';
-                progressBar.style.display = 'none';
-                progressFill.style.width = '0%';
-            });
+            };
+
+            xhr.send(formData);
         }
 
         function confirmFactoryReset() {
@@ -239,16 +293,11 @@
 
         function factoryReset() {
             showStatus('Performing factory reset...', 'success');
-            
-            fetch('/factory_reset', {
-                method: 'POST'
-            })
+            fetch('/factory_reset', { method: 'POST' })
             .then(response => {
                 if (response.ok) {
                     showStatus('Factory reset successful! Device will reboot...', 'success');
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 2000);
+                    setTimeout(() => { window.location.reload(); }, 2000);
                 } else {
                     throw new Error('Reset failed');
                 }
