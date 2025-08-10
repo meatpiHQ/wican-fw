@@ -30,6 +30,7 @@
 #include "lwip/sys.h"
 #include <string.h>
 #include <stdarg.h>
+#include <errno.h>
 
 #include "cmd_version.h"
 #include "cmd_system.h"
@@ -51,38 +52,136 @@
 #define RECV_BUF_SIZE (MAX_CMDLINE_LENGTH)
 #define MAX_HISTORY_LINES 50
 
-static const char* TAG = "cmdline";
+static const char* TAG = "CMDLINE";
 static TaskHandle_t tcp_console_task_handle = NULL;
 static int server_socket = -1;
 static int client_socket = -1;
 static bool is_cmdline_initialized = false;
-static cmdline_output_func_t output_func = NULL;
+static cmdline_output_func_t tcp_output_func = NULL;
+static cmdline_output_func_t ble_output_func = NULL;
+
+// Command source and IO routing context
+typedef enum {
+    CMD_SRC_UART = 0,
+    CMD_SRC_TCP,
+    CMD_SRC_BLE,
+} cmd_source_t;
+
+typedef struct {
+    cmd_source_t src;
+    cmdline_output_func_t tcp; // writer for TCP (may be NULL)
+    cmdline_output_func_t ble; // writer for BLE (may be NULL)
+} cmd_io_t;
+
+static const cmd_io_t k_uart_io = { .src = CMD_SRC_UART, .tcp = NULL, .ble = NULL };
+static const cmd_io_t *s_current_io = &k_uart_io;
+
+static inline void cmdline_set_current_io(const cmd_io_t *io)
+{
+    s_current_io = (io ? io : &k_uart_io);
+}
 
 static void tcp_console_write(const char* data, size_t len)
 {
-    if (client_socket < 0) {
+    if (client_socket < 0 || data == NULL || len == 0) {
         return;
     }
-    send(client_socket, data, len, 0);
+
+    size_t total_sent = 0;
+    while (total_sent < len) {
+        size_t remaining = len - total_sent;
+        size_t chunk = remaining > 1024 ? 1024 : remaining; // send in manageable chunks
+        ssize_t n = send(client_socket, data + total_sent, chunk, 0);
+        if (n > 0) {
+            total_sent += (size_t)n;
+        } else if (n < 0) {
+            int err = errno;
+            if (err == EINTR) {
+                continue; // interrupted, retry
+            }
+            if (err == EAGAIN || err == EWOULDBLOCK) {
+                vTaskDelay(pdMS_TO_TICKS(5));
+                continue; // try again after a short wait
+            }
+            // unrecoverable send error
+            break;
+        } else {
+            // n == 0, connection likely closed
+            break;
+        }
+        // yield occasionally to avoid starving other tasks
+        taskYIELD();
+    }
 }
 
 void cmdline_printf(const char *fmt, ...)
 {
-    char buf[256];
-    va_list args;
-    va_start(args, fmt);
-    vsnprintf(buf, sizeof(buf), fmt, args);
-    va_end(args);
-    
-    printf("%s", buf);
-    if (output_func) {
-        output_func(buf, strlen(buf));
+    // First, compute the required length
+    va_list args1;
+    va_start(args1, fmt);
+    va_list args2;
+    va_copy(args2, args1);
+    int needed = vsnprintf(NULL, 0, fmt, args1);
+    va_end(args1);
+    if (needed < 0) {
+        va_end(args2);
+        return;
     }
+
+    size_t size = (size_t)needed + 1; // include NUL
+    char *buf = (char *)heap_caps_malloc(size, MALLOC_CAP_8BIT);
+    if (!buf) {
+        va_end(args2);
+        return;
+    }
+
+    vsnprintf(buf, size, fmt, args2);
+    va_end(args2);
+
+    // Route output to the active IO context only
+    switch (s_current_io->src) {
+        case CMD_SRC_TCP:
+            if (s_current_io->tcp) {
+                s_current_io->tcp(buf, strlen(buf));
+            } else if (tcp_output_func) {
+                tcp_output_func(buf, strlen(buf));
+            } else {
+                printf("%s", buf);
+            }
+            break;
+        case CMD_SRC_BLE:
+            if (s_current_io->ble) {
+                s_current_io->ble(buf, strlen(buf));
+            } else if (ble_output_func) {
+                ble_output_func(buf, strlen(buf));
+            } else {
+                printf("%s", buf);
+            }
+            break;
+        case CMD_SRC_UART:
+        default:
+            printf("%s", buf);
+            break;
+    }
+
+    heap_caps_free(buf);
 }
 
-void cmdline_set_output_func(cmdline_output_func_t func)
+void cmdline_set_tcp_output_func(cmdline_output_func_t func)
 {
-    output_func = func;
+    tcp_output_func = func;
+}
+
+void cmdline_set_ble_output_func(cmdline_output_func_t func)
+{
+    ble_output_func = func;
+}
+
+void cmdline_print_prompt_on_ble(void)
+{
+    if (ble_output_func) {
+        ble_output_func(PROMPT, strlen(PROMPT));
+    }
 }
 
 static void register_all_commands(void)
@@ -100,7 +199,8 @@ static void register_all_commands(void)
     cmd_autopid_register();
 }
 
-static void process_command(char* cmd)
+// New: process command with IO context
+static void process_command_io(char* cmd, const cmd_io_t *io)
 {
     char cmd_copy[MAX_CMDLINE_LENGTH];
     strncpy(cmd_copy, cmd, MAX_CMDLINE_LENGTH - 1);
@@ -116,19 +216,30 @@ static void process_command(char* cmd)
     if (cmd_len == 0) {
         return;
     }
+
+    const cmd_io_t *prev = s_current_io;
+    cmdline_set_current_io(io);
     
     int ret;
     esp_err_t err = esp_console_run(cmd_copy, &ret);
     
     if (err == ESP_ERR_NOT_FOUND) {
-        if (output_func) output_func("Command not found\n", 18);
+        cmdline_printf("Command not found\n");
     } else if (err == ESP_ERR_INVALID_ARG) {
-        if (output_func) output_func("Invalid arguments\n", 18);
+        cmdline_printf("Invalid arguments\n");
     } else if (err == ESP_OK && ret != ESP_OK) {
-        if (output_func) output_func("Command returned non-zero error code\n", 37);
+        cmdline_printf("Command returned non-zero error code\n");
     } else if (err != ESP_OK) {
-        if (output_func) output_func("Internal error\n", 15);
+        cmdline_printf("Internal error\n");
     }
+
+    cmdline_set_current_io(prev);
+}
+
+// Backward-compatible wrapper defaults to UART
+static void process_command(char* cmd)
+{
+    process_command_io(cmd, &k_uart_io);
 }
 
 esp_err_t cmdline_run(const char *cmd)
@@ -150,19 +261,61 @@ esp_err_t cmdline_run(const char *cmd)
     // Ignore empty
     if (cmd_len == 0) return ESP_OK;
 
+    const cmd_io_t *prev = s_current_io;
+    cmdline_set_current_io(&k_uart_io);
+
     int ret = 0;
     esp_err_t err = esp_console_run(cmd_copy, &ret);
 
     if (err == ESP_ERR_NOT_FOUND) {
-        if (output_func) output_func("Command not found\n", 18);
+        cmdline_printf("Command not found\n");
     } else if (err == ESP_ERR_INVALID_ARG) {
-        if (output_func) output_func("Invalid arguments\n", 18);
+        cmdline_printf("Invalid arguments\n");
     } else if (err == ESP_OK && ret != ESP_OK) {
-        if (output_func) output_func("Command returned non-zero error code\n", 37);
+        cmdline_printf("Command returned non-zero error code\n");
     } else if (err != ESP_OK) {
-        if (output_func) output_func("Internal error\n", 15);
+        cmdline_printf("Internal error\n");
     }
 
+    cmdline_set_current_io(prev);
+    return err;
+}
+
+// Run a command with BLE as the active output sink
+esp_err_t cmdline_run_on_ble(const char *cmd)
+{
+    if (cmd == NULL) return ESP_ERR_INVALID_ARG;
+
+    char cmd_copy[MAX_CMDLINE_LENGTH];
+    strncpy(cmd_copy, cmd, MAX_CMDLINE_LENGTH - 1);
+    cmd_copy[MAX_CMDLINE_LENGTH - 1] = '\0';
+
+    size_t cmd_len = strlen(cmd_copy);
+    while (cmd_len > 0 && (cmd_copy[cmd_len - 1] == ' ' ||
+                           cmd_copy[cmd_len - 1] == '\r' ||
+                           cmd_copy[cmd_len - 1] == '\n')) {
+        cmd_copy[--cmd_len] = '\0';
+    }
+    if (cmd_len == 0) return ESP_OK;
+
+    cmd_io_t ble_io = { .src = CMD_SRC_BLE, .tcp = NULL, .ble = ble_output_func };
+    const cmd_io_t *prev = s_current_io;
+    cmdline_set_current_io(&ble_io);
+
+    int ret = 0;
+    esp_err_t err = esp_console_run(cmd_copy, &ret);
+
+    if (err == ESP_ERR_NOT_FOUND) {
+        cmdline_printf("Command not found\n");
+    } else if (err == ESP_ERR_INVALID_ARG) {
+        cmdline_printf("Invalid arguments\n");
+    } else if (err == ESP_OK && ret != ESP_OK) {
+        cmdline_printf("Command returned non-zero error code\n");
+    } else if (err != ESP_OK) {
+        cmdline_printf("Internal error\n");
+    }
+
+    cmdline_set_current_io(prev);
     return err;
 }
 
@@ -248,6 +401,9 @@ static void tcp_console_task(void* arg)
 
         tcp_console_write(PROMPT, strlen(PROMPT));
 
+        // Build IO context for this TCP session
+        cmd_io_t tcp_io = { .src = CMD_SRC_TCP, .tcp = tcp_console_write, .ble = NULL };
+
         while (1) {
             int len = recv(client_socket, recv_buf, RECV_BUF_SIZE - 1, 0);
             if (len <= 0) {
@@ -269,7 +425,7 @@ static void tcp_console_task(void* arg)
                 if (c == '\n') {
                     if (cmd_pos > 0) {
                         cmd_buf[cmd_pos] = '\0';
-                        process_command(cmd_buf);
+                        process_command_io(cmd_buf, &tcp_io);
                         memset(cmd_buf, 0, MAX_CMDLINE_LENGTH);
                         cmd_pos = 0;
                     }
@@ -378,7 +534,8 @@ esp_err_t cmdline_init(void)
     }
 #endif
 
-    cmdline_set_output_func(tcp_console_write);
+    // Set TCP transport writer and start TCP console
+    cmdline_set_tcp_output_func(tcp_console_write);
     tcp_console_init();
     register_all_commands();
     

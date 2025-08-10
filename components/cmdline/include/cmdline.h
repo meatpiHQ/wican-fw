@@ -28,7 +28,9 @@ typedef void (*cmdline_output_func_t)(const char *data, size_t len);
 
 esp_err_t cmdline_init(void);
 esp_err_t cmdline_safemode_init(void);
-void cmdline_set_output_func(cmdline_output_func_t output_func);
+void cmdline_set_tcp_output_func(cmdline_output_func_t func);
+void cmdline_set_ble_output_func(cmdline_output_func_t func);
 void cmdline_printf(const char *fmt, ...);
-// Run a single command line string through esp_console
 esp_err_t cmdline_run(const char *cmd);
+esp_err_t cmdline_run_on_ble(const char *cmd);
+void cmdline_print_prompt_on_ble(void);

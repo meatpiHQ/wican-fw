@@ -69,7 +69,7 @@
 
 #define GATTS_DEMO_CHAR_VAL_LEN_MAX               0x40
 #define BLE_SEND_BUF_SIZE                         490
-#define BLE_CMDLINE_MAX                           256
+#define BLE_CMDLINE_MAX                           1024
 static void ble_cmdline_output(const char *data, size_t len);
 
 #define BLE_CONNECTED_BIT 			BIT0
@@ -357,7 +357,7 @@ static bool is_connected = false;
 static uint8_t test1[] __attribute__((unused)) = {0x66 ,0x33 ,0x22 ,0x11 ,0xBB ,0x00 ,0x00 ,0x00 ,0x11 ,0x00 ,0x00 ,0x00 ,0x33 ,0x00 ,0x00 ,0x00 ,0xA4 ,0x3C ,0xD9 ,0x49};
 
 // BLE cmdline input buffer/state
-static char ble_cmdline_inbuf[BLE_CMDLINE_MAX];
+static char* ble_cmdline_inbuf = NULL;
 static size_t ble_cmdline_inlen = 0;
 
 
@@ -514,7 +514,7 @@ static const esp_gatts_attr_db_t fff0_attr_db[FFF0_IDX_NB] = {
     {{ESP_GATT_AUTO_RSP},
      {ESP_UUID_LEN_128, (uint8_t *)CMD_OUT_CHAR_UUID,
       ESP_GATT_PERM_READ,
-      20, sizeof(char_value_dummy), (uint8_t *)char_value_dummy}},
+      BLE_SEND_BUF_SIZE, sizeof(char_value_dummy), (uint8_t *)char_value_dummy}},
     [IDX_CHAR_CLI_OUT_CCCD] =
     {{ESP_GATT_AUTO_RSP},
      {ESP_UUID_LEN_16, (uint8_t *)&client_char_config_uuid,
@@ -530,7 +530,7 @@ static const esp_gatts_attr_db_t fff0_attr_db[FFF0_IDX_NB] = {
     {{ESP_GATT_AUTO_RSP},
      {ESP_UUID_LEN_128, (uint8_t *)CMD_IN_CHAR_UUID,
       ESP_GATT_PERM_WRITE,
-      20, 0, NULL}},
+      BLE_CMDLINE_MAX, 0, NULL}},
 };
 
 static const esp_gatts_attr_db_t spp_attr_db[SPP_IDX_NB] __attribute__((unused)) = {
@@ -853,46 +853,58 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
             ESP_LOG_BUFFER_HEX(GATTS_TABLE_TAG, param->write.value, param->write.len);
 
             if (param->write.handle == fff0_profile_handle_table[IDX_CHAR_CLI_IN_VAL]) {
-                // Accumulate bytes until newline, then execute console command
-                if (param->write.len > 0) {
-                    size_t to_copy = param->write.len;
-                    if (to_copy > (BLE_CMDLINE_MAX - 1 - ble_cmdline_inlen)) {
-                        to_copy = BLE_CMDLINE_MAX - 1 - ble_cmdline_inlen;
-                    }
-                    if (to_copy > 0) {
-                        memcpy(&ble_cmdline_inbuf[ble_cmdline_inlen], param->write.value, to_copy);
-                        ble_cmdline_inlen += to_copy;
+                // Handle Prepare Write (long write) by accumulating into input buffer
+                if (param->write.is_prep) {
+                    size_t end = (size_t)param->write.offset + (size_t)param->write.len;
+                    if (end <= (BLE_CMDLINE_MAX - 1)) {
+                        memcpy(&ble_cmdline_inbuf[param->write.offset], param->write.value, param->write.len);
+                        if (end > ble_cmdline_inlen) ble_cmdline_inlen = end;
                         ble_cmdline_inbuf[ble_cmdline_inlen] = '\0';
+                        ESP_LOGI(GATTS_TABLE_TAG, "Prepared write chunk, offset=%u, len=%u, total=%u", param->write.offset, param->write.len, (unsigned)ble_cmdline_inlen);
+                    } else {
+                        ESP_LOGE(GATTS_TABLE_TAG, "Prepared write overflow (end=%u > max=%u)", (unsigned)end, (unsigned)(BLE_CMDLINE_MAX - 1));
                     }
+                } else {
+                    // Accumulate bytes until newline, then execute console command
+                    if (param->write.len > 0) {
+                        size_t to_copy = param->write.len;
+                        if (to_copy > (BLE_CMDLINE_MAX - 1 - ble_cmdline_inlen)) {
+                            to_copy = BLE_CMDLINE_MAX - 1 - ble_cmdline_inlen;
+                        }
+                        if (to_copy > 0) {
+                            memcpy(&ble_cmdline_inbuf[ble_cmdline_inlen], param->write.value, to_copy);
+                            ble_cmdline_inlen += to_copy;
+                            ble_cmdline_inbuf[ble_cmdline_inlen] = '\0';
+                        }
 
-                    // Process complete lines (terminated by \r or \n)
-                    size_t line_start = 0;
-                    for (size_t i = 0; i < ble_cmdline_inlen; i++) {
-                        char c = ble_cmdline_inbuf[i];
-                        if (c == '\r' || c == '\n') {
-                            ble_cmdline_inbuf[i] = '\0';
-                            if (i > line_start) {
-                                const char *cmd = &ble_cmdline_inbuf[line_start];
-                                ESP_LOGI(GATTS_TABLE_TAG, "BLE CMD: %s", cmd);
-                                cmdline_run(cmd);
+                        // Process complete lines (terminated by \r or \n)
+                        size_t line_start = 0;
+                        for (size_t i = 0; i < ble_cmdline_inlen; i++) {
+                            char c = ble_cmdline_inbuf[i];
+                            if (c == '\r' || c == '\n') {
+                                ble_cmdline_inbuf[i] = '\0';
+                                if (i > line_start) {
+                                    const char *cmd = &ble_cmdline_inbuf[line_start];
+                                    ESP_LOGI(GATTS_TABLE_TAG, "BLE CMD: %s", cmd);
+                                    cmdline_run_on_ble(cmd);
+                                }
+                                // Skip consecutive CR/LF
+                                line_start = i + 1;
                             }
-                            // Skip consecutive CR/LF
-                            line_start = i + 1;
+                        }
+                        // Shift any remaining partial command to start
+                        if (line_start > 0) {
+                            size_t remaining = ble_cmdline_inlen - line_start;
+                            if (remaining > 0) {
+                                memmove(ble_cmdline_inbuf, &ble_cmdline_inbuf[line_start], remaining);
+                            }
+                            ble_cmdline_inlen = remaining;
+                            ble_cmdline_inbuf[ble_cmdline_inlen] = '\0';
                         }
                     }
-                    // Shift any remaining partial command to start
-                    if (line_start > 0) {
-                        size_t remaining = ble_cmdline_inlen - line_start;
-                        if (remaining > 0) {
-                            memmove(ble_cmdline_inbuf, &ble_cmdline_inbuf[line_start], remaining);
-                        }
-                        ble_cmdline_inlen = remaining;
-                        ble_cmdline_inbuf[ble_cmdline_inlen] = '\0';
-                    }
+                    // Send prompt
+                    cmdline_print_prompt_on_ble();
                 }
-                // Send prompt
-                static const char prompt[] = "wican> ";
-                ble_cmdline_output(prompt, sizeof(prompt) - 1);
             } else {
                 ESP_LOGI(GATTS_TABLE_TAG, "Write to characteristic (handle: 0x%04x)", param->write.handle);
                 memcpy(rx_buffer.ucElement, param->write.value, param->write.len);
@@ -905,6 +917,37 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
             break;
         case ESP_GATTS_EXEC_WRITE_EVT:
             ESP_LOGI(GATTS_TABLE_TAG, "ESP_GATTS_EXEC_WRITE_EVT");
+            if (param->exec_write.exec_write_flag == ESP_GATT_PREP_WRITE_EXEC) {
+                // Process any complete lines in the prepared buffer
+                size_t line_start = 0;
+                for (size_t i = 0; i < ble_cmdline_inlen; i++) {
+                    char c = ble_cmdline_inbuf[i];
+                    if (c == '\r' || c == '\n') {
+                        ble_cmdline_inbuf[i] = '\0';
+                        if (i > line_start) {
+                            const char *cmd = &ble_cmdline_inbuf[line_start];
+                            ESP_LOGI(GATTS_TABLE_TAG, "BLE PREP CMD: %s", cmd);
+                            cmdline_run_on_ble(cmd);
+                        }
+                        line_start = i + 1;
+                    }
+                }
+                // If no newline, treat entire buffer as one command
+                if (line_start == 0 && ble_cmdline_inlen > 0) {
+                    ble_cmdline_inbuf[ble_cmdline_inlen] = '\0';
+                    ESP_LOGI(GATTS_TABLE_TAG, "BLE PREP CMD (no NL): %s", ble_cmdline_inbuf);
+                    cmdline_run_on_ble(ble_cmdline_inbuf);
+                }
+                // Reset buffer
+                ble_cmdline_inlen = 0;
+                ble_cmdline_inbuf[0] = '\0';
+                // Send prompt
+                cmdline_print_prompt_on_ble();
+            } else {
+                // Cancel prepared write
+                ble_cmdline_inlen = 0;
+                ble_cmdline_inbuf[0] = '\0';
+            }
             break;
         case ESP_GATTS_MTU_EVT:
             ESP_LOGI(GATTS_TABLE_TAG, "ESP_GATTS_MTU_EVT");
@@ -968,12 +1011,9 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
             esp_ble_set_encryption(param->connect.remote_bda, ESP_BLE_SEC_ENCRYPT_MITM);
 
             // Route console output to BLE and print prompt
-            cmdline_set_output_func(ble_cmdline_output);
+            cmdline_set_ble_output_func(ble_cmdline_output);
             ble_cmdline_inlen = 0;
-            {
-                static const char prompt[] = "wican> ";
-                ble_cmdline_output(prompt, sizeof(prompt) - 1);
-            }
+            cmdline_print_prompt_on_ble();
             break;
         case ESP_GATTS_DISCONNECT_EVT:
             ESP_LOGI(GATTS_TABLE_TAG, "ESP_GATTS_DISCONNECT_EVT, disconnect reason 0x%x", param->disconnect.reason);
@@ -988,7 +1028,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
             /* start advertising again when missing the connect */
             esp_ble_gap_start_advertising(&heart_rate_adv_params);
             // Stop routing console output to BLE
-            cmdline_set_output_func(NULL);
+            cmdline_set_ble_output_func(NULL);
             ble_cmdline_inlen = 0;
             break;
         case ESP_GATTS_OPEN_EVT:
@@ -1296,6 +1336,15 @@ void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t conn
         s_ble_event_group = xEventGroupCreate();
     }
 
+    if(ble_cmdline_inbuf == NULL)
+    {
+        ble_cmdline_inbuf = heap_caps_malloc(BLE_CMDLINE_MAX, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+        if(ble_cmdline_inbuf == NULL)
+        {
+            ESP_LOGE(GATTS_TABLE_TAG, "Failed to allocate memory for BLE command line input buffer");
+            return;
+        }
+    }
     xEventGroupClearBits(s_ble_event_group, BLE_CONNECTED_BIT);
     dev_status_clear_bits(DEV_BLE_CONNECTED_BIT);
     xEventGroupClearBits(s_ble_event_group, BLE_CONGEST_BIT);
@@ -1381,6 +1430,7 @@ void ble_enable(void)
 
     // Create BLE task if not already created
     if(xble_handle == NULL)
+   
     {
         static StackType_t *ble_task_stack;
         static StaticTask_t ble_task_buffer;
