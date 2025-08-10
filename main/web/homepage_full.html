@@ -3190,21 +3190,22 @@ function loadAutoTable(jsonData) {
                 document.getElementById("ap_auto_disable").disabled = true;
 			} else if(obj.wifi_mode == "SmartConnect") {
 				document.getElementById("wifi_mode").selectedIndex = "2";
-				// Load SmartConnect configuration
-				document.getElementById("home_ssid").value = obj.home_ssid || "";
-				document.getElementById("home_password").value = obj.home_password || "";
-				document.getElementById("home_security").value = obj.home_security || "wpa3";
-				document.getElementById("home_protocol").value = obj.home_protocol || "elm327";
-				document.getElementById("drive_ssid").value = obj.drive_ssid || "";
-				document.getElementById("drive_password").value = obj.drive_password || "";
-				document.getElementById("drive_security").value = obj.drive_security || "wpa3";
-				document.getElementById("drive_protocol").value = obj.drive_protocol || "elm327";
-				document.getElementById("drive_connection_type").value = obj.drive_connection_type || "wifi";
-				// Load drive mode timeout value and update display
-				document.getElementById("drive_mode_timeout").value = obj.drive_mode_timeout || "60";
-				document.getElementById("drive_mode_timeout_value").textContent = obj.drive_mode_timeout || "60";
 			}
 
+            // Load SmartConnect configuration
+            document.getElementById("home_ssid").value = obj.home_ssid || "";
+            document.getElementById("home_password").value = obj.home_password || "";
+            document.getElementById("home_security").value = obj.home_security || "wpa3";
+            document.getElementById("home_protocol").value = obj.home_protocol || "elm327";
+            document.getElementById("drive_ssid").value = obj.drive_ssid || "";
+            document.getElementById("drive_password").value = obj.drive_password || "";
+            document.getElementById("drive_security").value = obj.drive_security || "wpa3";
+            document.getElementById("drive_protocol").value = obj.drive_protocol || "elm327";
+            document.getElementById("drive_connection_type").value = obj.drive_connection_type || "wifi";
+            // Load drive mode timeout value and update display
+            document.getElementById("drive_mode_timeout").value = obj.drive_mode_timeout || "60";
+            document.getElementById("drive_mode_timeout_value").textContent = obj.drive_mode_timeout || "60";
+            
             if(obj.ap_auto_disable == "enable") {
 				document.getElementById("ap_auto_disable").selectedIndex = "0";
 			} else {
