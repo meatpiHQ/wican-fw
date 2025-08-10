@@ -754,9 +754,9 @@
 
                 <div class="divider"></div>
 
-                <!-- Station Config Section -->
+                <!-- Network Configuration Section -->
                 <div id="station_config_section">
-                    <div class="section-title">Station Config</div>
+                    <div class="section-title">Network Configuration</div>
                     <table class="form-table">
                         <tr>
                             <td>SSID:</td>
@@ -791,6 +791,16 @@
                             </td>
                         </tr>
                     </table>
+
+                    <div class="divider"></div>
+                    <div class="section-title">Backup Networks <span style="font-weight: normal; font-size: 0.9rem; color: #6b7280;">(max 5)</span></div>
+                    <div id="fallback_networks_container">
+                        <div id="fallback_rows"></div>
+                        <div class="button-group">
+                            <button type="button" id="add_fallback_button" onclick="addFallbackNetworkRow()">Add SSID</button>
+                        </div>
+                        <div style="color:#6b7280; font-size: 12px; margin-top: 6px;">These SSIDs are used as backup networks if the primary station fails.</div>
+                    </div>
                 </div>
                 
                 <div class="divider"></div>
@@ -1596,22 +1606,29 @@
             const smartConnectConfig = document.getElementById("smartconnect_config");
             const stationConfigSection = document.getElementById("station_config_section");
             const protocolSelect = document.getElementById("protocol");
+            const addFbBtn = document.getElementById("add_fallback_button");
+            const fbRows = document.querySelectorAll('#fallback_rows input, #fallback_rows select, #fallback_rows button');
             
             if (wifiMode === "SmartConnect") {
                 smartConnectConfig.style.display = "block";
-                stationConfigSection.style.display = "none"; // Hide Station Config
-                protocolSelect.disabled = true; // Disable Protocol selection
+                stationConfigSection.style.display = "none";
+                protocolSelect.disabled = true; 
                 
-                toggleDriveConfig(); // Initialize drive config visibility
+                toggleDriveConfig(); 
+                
+                if (addFbBtn) addFbBtn.disabled = true;
+                fbRows.forEach(el => el.disabled = true);
             } else {
                 smartConnectConfig.style.display = "none";
-                stationConfigSection.style.display = "block"; // Show Station Config
-                protocolSelect.disabled = false; // Re-enable Protocol selection
-                // Re-enable BLE when not in SmartConnect mode
+                stationConfigSection.style.display = "block";
+                protocolSelect.disabled = false;
+
                 const bleStatus = document.getElementById("ble_status");
                 const blePasskey = document.getElementById("ble_pass_value");
                 bleStatus.disabled = false;
                 blePasskey.disabled = false;
+                if (addFbBtn) addFbBtn.disabled = false;
+                fbRows.forEach(el => el.disabled = false);
             }
             // Trigger validation when switching modes
             submit_enable();
@@ -1691,6 +1708,57 @@
             } else {
                 document.getElementById("mqtt_rx_topic").disabled = true;
             }
+        }
+
+        // Fallback Networks UI helpers
+        function renderFallbackNetworks(list) {
+            const container = document.getElementById('fallback_rows');
+            if (!container) return;
+            container.innerHTML = '';
+            const limited = Array.isArray(list) ? list.slice(0,5) : [];
+            limited.forEach(item => addFallbackNetworkRow(item));
+            updateAddFallbackButtonState();
+        }
+
+        function addFallbackNetworkRow(data = {}) {
+            const container = document.getElementById('fallback_rows');
+            if (!container) return;
+            const current = container.querySelectorAll('.fallback-row').length;
+            if (current >= 5) return;
+
+            const row = document.createElement('div');
+            row.className = 'fallback-row';
+            row.style.display = 'grid';
+            row.style.gridTemplateColumns = '1fr 1fr 120px auto';
+            row.style.gap = '8px';
+            row.style.margin = '6px 0';
+
+            row.innerHTML = `
+                <input type="text" class="fb-ssid" placeholder="SSID" value="${(data.ssid||'').replace(/"/g,'&quot;')}" oninput="submit_enable();" />
+                <input type="text" class="fb-pass" placeholder="Password" value="${(data.pass||data.password||'').replace(/"/g,'&quot;')}" oninput="submit_enable();" />
+                <select class="fb-sec" onchange="submit_enable();">
+                    <option value="wpa3" ${((data.security||'wpa3')==='wpa3')?'selected':''}>WPA3</option>
+                    <option value="wpa2" ${((data.security||'wpa3')==='wpa2')?'selected':''}>WPA2</option>
+                </select>
+                <button type="button" class="fb-remove" onclick="removeFallbackRow(this)">Remove</button>
+            `;
+            container.appendChild(row);
+            updateAddFallbackButtonState();
+            submit_enable();
+        }
+
+        function removeFallbackRow(btn) {
+            const row = btn.closest('.fallback-row');
+            if (row) row.remove();
+            updateAddFallbackButtonState();
+            submit_enable();
+        }
+
+        function updateAddFallbackButtonState() {
+            const addBtn = document.getElementById('add_fallback_button');
+            if (!addBtn) return;
+            const count = document.querySelectorAll('#fallback_rows .fallback-row').length;
+            addBtn.disabled = count >= 5 || document.getElementById('wifi_mode').value === 'SmartConnect';
         }
 
 		function sendCARDataFile() {
@@ -2605,6 +2673,9 @@ function loadAutoTable(jsonData) {
             elements.bleStatus.disabled = true;
         } else {
             elements.bleStatus.disabled = true;
+            elements.bleStatus.value = "disable";
+            elements.bleStatus.selectedIndex = 1;
+            elements.blePassValue.disabled = true;
         }
     }
 
@@ -2997,6 +3068,23 @@ function loadAutoTable(jsonData) {
         obj["log_storage"] = document.getElementById("log_storage").value;
         obj["log_period"] = document.getElementById("log_period").value;
         obj["imu_threshold"] = document.getElementById("imu_threshold").value;
+
+        // Collect fallback networks (max 5)
+        try {
+            const rows = document.querySelectorAll('#fallback_rows .fallback-row');
+            const fallbacks = [];
+            rows.forEach(r => {
+                const ssid = r.querySelector('.fb-ssid').value.trim();
+                const pass = r.querySelector('.fb-pass').value;
+                const sec = r.querySelector('.fb-sec').value;
+                if (ssid) {
+                    fallbacks.push({ ssid, pass, security: sec });
+                }
+            });
+            obj["sta_fallbacks"] = fallbacks.slice(0, 5);
+        } catch (e) {
+            console.warn('fallback networks parse error', e);
+        }
 		var configJSON = JSON.stringify(obj);
 		const xhttp = new XMLHttpRequest();
 		xhttp.onload = function() {
@@ -3379,6 +3467,14 @@ function loadAutoTable(jsonData) {
 			loadCANFLT();
 			loadautoPIDCarData();
             loadautoPID();
+
+            // Load fallback networks if present
+            try {
+                const fb = Array.isArray(obj.sta_fallbacks) ? obj.sta_fallbacks : [];
+                renderFallbackNetworks(fb);
+            } catch(e) {
+                renderFallbackNetworks([]);
+            }
             document.getElementById("car_model").addEventListener('change', function() {
                 document.querySelector('.specific-pid-entries').innerHTML = '';
                 

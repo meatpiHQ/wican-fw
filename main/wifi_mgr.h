@@ -22,6 +22,8 @@
 #define WIFI_ENABLED_BIT        BIT6
 #define WIFI_STA_GOT_IP_BIT    BIT7
 
+#define WIFI_MGR_MAX_FALLBACKS 5
+
 #define WIFI_MGR_DEFAULT_CONFIG() { \
     .sta_ssid = "", \
     .sta_password = "", \
@@ -71,6 +73,13 @@ typedef struct {
     wifi_auth_mode_t sta_auth_mode;
     bool sta_auto_reconnect;
     int sta_max_retry;          // -1 for infinite retries
+    // Fallback STA networks (priority by index: 0 = highest)
+    struct {
+        char ssid[32];
+        char password[64];
+        wifi_auth_mode_t auth_mode;
+    } fallbacks[WIFI_MGR_MAX_FALLBACKS];
+    uint8_t fallback_count;
     
     // AP Configuration
     char ap_ssid[32];

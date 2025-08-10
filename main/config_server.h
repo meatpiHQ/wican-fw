@@ -89,6 +89,16 @@ typedef struct _device_config
 	char sta_ssid[65];
 	char sta_pass[65];
 	char sta_security[8];
+	// Backup STA networks (fallbacks)
+	// Parsed from JSON key: "sta_fallbacks" as array of objects
+	//   { "ssid": string (1..32), "pass": string (0..64), "security": "open"|"wpa2"|"wpa3" }
+	// Max 5 entries retained
+	struct {
+		char ssid[65];
+		char pass[65];
+		char security[8];
+	} sta_fallbacks[5];
+	int sta_fallbacks_count;
 	char home_ssid[65];
 	char home_password[65];
 	char home_security[8];
@@ -219,3 +229,9 @@ int8_t config_server_get_periodic_wakeup(void);
 int8_t config_server_get_wakeup_interval(uint32_t *wakeup_interval);
 int8_t config_server_get_imu_threshold(uint8_t *imu_threshold);
 bool config_server_is_debug_enabled(void);
+
+// Fallback STA networks accessors
+int config_server_get_sta_fallbacks_count(void);
+const char *config_server_get_sta_fallback_ssid(int index);
+const char *config_server_get_sta_fallback_pass(int index);
+wifi_security_t config_server_get_sta_fallback_security(int index);

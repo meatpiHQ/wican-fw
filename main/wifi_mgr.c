@@ -30,6 +30,7 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include <string.h>
+#include <stdlib.h>
 #include "lwip/sockets.h"
 #include <cJSON.h>
 #include "wifi_mgr.h"
@@ -58,10 +59,192 @@ typedef struct {
 } wifi_mgr_status_t;
 
 static wifi_mgr_status_t wifi_status = {0};
+// Cursor for sequential non-scan attempts across primary and fallbacks
+static int s_select_seq_cursor = -1;
 
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
 static void wifi_reconnect_task(void* pvParameters);
 static wifi_country_t country_01 = {.cc = "01", .schan = 1, .nchan = 14, .policy = WIFI_COUNTRY_POLICY_AUTO};
+
+// Helper: check if an SSID exists in the scanned AP list
+static bool wifi_mgr_ssid_present(const wifi_ap_record_t* ap_records, uint16_t ap_count, const char* ssid) {
+    if (!ssid || !ssid[0] || !ap_records || ap_count == 0) return false;
+    for (uint16_t i = 0; i < ap_count; ++i) {
+        if (strcmp((const char*)ap_records[i].ssid, ssid) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Internal: Scan and choose primary or first available fallback, then connect
+static void wifi_mgr_scan_select_and_connect(void) {
+    // Only relevant when STA is part of the current mode
+    if (!(wifi_config.mode == WIFI_MGR_MODE_STA || wifi_config.mode == WIFI_MGR_MODE_APSTA || wifi_config.mode == WIFI_MGR_MODE_AUTO)) {
+        esp_wifi_connect();
+        return;
+    }
+
+    // If nothing to choose from (no primary and no fallbacks), just connect
+    if ((wifi_config.sta_ssid[0] == '\0') && (wifi_config.fallback_count == 0)) {
+        esp_wifi_connect();
+        return;
+    }
+
+    // Determine current WiFi mode and switch if necessary to allow scanning
+    wifi_mode_t current_mode;
+    bool switched_mode = false;
+    if (esp_wifi_get_mode(&current_mode) == ESP_OK) {
+        if (current_mode == WIFI_MODE_AP) {
+            ESP_LOGI(TAG, "Switching from AP to APSTA mode for selection scan");
+            if (esp_wifi_set_mode(WIFI_MODE_APSTA) == ESP_OK) {
+                switched_mode = true;
+                vTaskDelay(pdMS_TO_TICKS(100));
+            } else {
+                ESP_LOGW(TAG, "Failed to switch to APSTA for scan; proceeding");
+            }
+        }
+    }
+
+    // Perform a blocking scan
+    wifi_scan_config_t scan_config = {
+        .ssid = NULL,
+        .bssid = NULL,
+        .channel = 0,
+        .show_hidden = true,
+        .scan_type = WIFI_SCAN_TYPE_ACTIVE,
+        .scan_time.active.min = 100,
+        .scan_time.active.max = 300
+    };
+
+    esp_err_t ret;
+    const int max_attempts = 3;
+    for (int a = 0; a < max_attempts; ++a) {
+        ret = esp_wifi_scan_start(&scan_config, true);
+        if (ret == ESP_OK) break;
+        if (ret == ESP_ERR_WIFI_STATE) {
+            // Backoff to let state settle
+            int delay_ms = 200 + a * 200; // 200, 400, 600
+            vTaskDelay(pdMS_TO_TICKS(delay_ms));
+            continue;
+        }
+        break;
+    }
+    if (ret != ESP_OK) {
+        wifi_mode_t dbg_mode; esp_wifi_get_mode(&dbg_mode);
+        ESP_LOGW(TAG, "Scan failed (%s) in mode %d, attempting sequential connect without scan", esp_err_to_name(ret), dbg_mode);
+        if (switched_mode) {
+            esp_wifi_set_mode(WIFI_MODE_AP);
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+        // Sequential attempt: rotate over primary and fallbacks by index
+        int total = (wifi_config.sta_ssid[0] ? 1 : 0) + wifi_config.fallback_count;
+        if (total <= 0) {
+            esp_wifi_connect();
+            return;
+        }
+        s_select_seq_cursor = (s_select_seq_cursor + 1) % total;
+        const char* chosen_ssid = NULL;
+        const char* chosen_pass = NULL;
+        wifi_auth_mode_t chosen_auth = WIFI_AUTH_WPA2_PSK;
+        if (wifi_config.sta_ssid[0] && s_select_seq_cursor == 0) {
+            chosen_ssid = wifi_config.sta_ssid;
+            chosen_pass = wifi_config.sta_password;
+            chosen_auth = wifi_config.sta_auth_mode;
+            ESP_LOGI(TAG, "Sequential connect (no scan): primary SSID: %s", chosen_ssid);
+        } else {
+            int fb_index = wifi_config.sta_ssid[0] ? (s_select_seq_cursor - 1) : s_select_seq_cursor;
+            chosen_ssid = wifi_config.fallbacks[fb_index].ssid;
+            chosen_pass = wifi_config.fallbacks[fb_index].password;
+            chosen_auth = wifi_config.fallbacks[fb_index].auth_mode;
+            ESP_LOGI(TAG, "Sequential connect (no scan): fallback[%d] SSID: %s", fb_index, chosen_ssid);
+        }
+        if (chosen_ssid) {
+            if (wifi_mgr_set_sta_config(chosen_ssid, chosen_pass ? chosen_pass : "", chosen_auth) != ESP_OK) {
+                ESP_LOGW(TAG, "Failed to set STA config for sequential connect; using current");
+            }
+        }
+        esp_wifi_connect();
+        return;
+    }
+
+    uint16_t ap_count = 0;
+    esp_wifi_scan_get_ap_num(&ap_count);
+    if (ap_count == 0) {
+        ESP_LOGI(TAG, "No APs found; connecting with current STA config");
+        if (switched_mode) {
+            esp_wifi_set_mode(WIFI_MODE_AP);
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+        esp_wifi_connect();
+        return;
+    }
+
+    wifi_ap_record_t *ap_records = malloc(sizeof(wifi_ap_record_t) * ap_count);
+    if (!ap_records) {
+        ESP_LOGW(TAG, "No memory for AP records; connecting with current STA config");
+        if (switched_mode) {
+            esp_wifi_set_mode(WIFI_MODE_AP);
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+        esp_wifi_connect();
+        return;
+    }
+
+    ret = esp_wifi_scan_get_ap_records(&ap_count, ap_records);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Get AP records failed (%s); connecting with current STA config", esp_err_to_name(ret));
+        free(ap_records);
+        if (switched_mode) {
+            esp_wifi_set_mode(WIFI_MODE_AP);
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+        esp_wifi_connect();
+        return;
+    }
+
+    const char* chosen_ssid = NULL;
+    const char* chosen_pass = NULL;
+    wifi_auth_mode_t chosen_auth = wifi_config.sta_auth_mode;
+
+    // Prefer primary if present
+    if (wifi_mgr_ssid_present(ap_records, ap_count, wifi_config.sta_ssid)) {
+        chosen_ssid = wifi_config.sta_ssid;
+        chosen_pass = wifi_config.sta_password;
+        chosen_auth = wifi_config.sta_auth_mode;
+        ESP_LOGI(TAG, "Selected primary SSID: %s", chosen_ssid);
+    } else {
+        // Otherwise pick first available fallback by priority
+        for (uint8_t i = 0; i < wifi_config.fallback_count; ++i) {
+            if (wifi_mgr_ssid_present(ap_records, ap_count, wifi_config.fallbacks[i].ssid)) {
+                chosen_ssid = wifi_config.fallbacks[i].ssid;
+                chosen_pass = wifi_config.fallbacks[i].password;
+                chosen_auth = wifi_config.fallbacks[i].auth_mode;
+                ESP_LOGI(TAG, "Selected fallback[%u] SSID: %s", i, chosen_ssid);
+                break;
+            }
+        }
+    }
+
+    if (chosen_ssid) {
+        // Update running STA config and connect
+        if (wifi_mgr_set_sta_config(chosen_ssid, chosen_pass ? chosen_pass : "", chosen_auth) != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to set selected STA config; connecting with current config");
+            esp_wifi_connect();
+        } else {
+            esp_wifi_connect();
+        }
+    } else {
+        ESP_LOGI(TAG, "No preferred networks present; connecting with current STA config");
+        esp_wifi_connect();
+    }
+
+    free(ap_records);
+    if (switched_mode) {
+        esp_wifi_set_mode(WIFI_MODE_AP);
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
 /**
  * Initialize WiFi Manager with configuration
  */
@@ -856,7 +1039,12 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                 ESP_LOGI(TAG, "STA started");
                 dev_status_set_sta_enabled();
                 if (wifi_config.sta_auto_reconnect) {
-                    esp_wifi_connect();
+                    // If fallbacks configured, scan and select; else connect directly
+                    if (wifi_config.fallback_count > 0) {
+                        wifi_mgr_scan_select_and_connect();
+                    } else {
+                        esp_wifi_connect();
+                    }
                 }
                 break;
                 
@@ -1075,7 +1263,13 @@ static void wifi_reconnect_task(void* pvParameters) {
             ESP_LOGI(TAG, "Attempting to reconnect (attempt %d)", wifi_status.sta_retry_count + 1);
             wifi_status.sta_retry_count++;
             
-            esp_err_t ret = esp_wifi_connect();
+            esp_err_t ret;
+            if (wifi_config.fallback_count > 0) {
+                wifi_mgr_scan_select_and_connect();
+                ret = ESP_OK; // function itself triggers connect and logs
+            } else {
+                ret = esp_wifi_connect();
+            }
             if (ret != ESP_OK) {
                 ESP_LOGE(TAG, "WiFi connect failed: %s", esp_err_to_name(ret));
             }

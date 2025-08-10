@@ -139,10 +139,40 @@ void wifi_network_init(char* ap_ssid_uid)
     
     // Set AP auto-disable from config server
     int8_t ap_auto_disable = config_server_get_ap_auto_disable();
+    wifi_config.ap_auto_disable = (ap_auto_disable != 0);
     
     // Set auto-reconnect parameters
     wifi_config.sta_auto_reconnect = true;
     wifi_config.sta_max_retry = -1; // Infinite retries
+
+    // Populate fallback networks from config server (priority by index)
+    wifi_config.fallback_count = 0;
+    int fb_count = config_server_get_sta_fallbacks_count();
+    if (fb_count > 0) {
+        if (fb_count > WIFI_MGR_MAX_FALLBACKS) fb_count = WIFI_MGR_MAX_FALLBACKS;
+        for (int i = 0; i < fb_count; ++i) {
+            const char* f_ssid = config_server_get_sta_fallback_ssid(i);
+            const char* f_pass = config_server_get_sta_fallback_pass(i);
+            wifi_security_t f_sec = config_server_get_sta_fallback_security(i);
+            if (f_ssid && f_ssid[0]) {
+                strncpy(wifi_config.fallbacks[wifi_config.fallback_count].ssid, f_ssid, sizeof(wifi_config.fallbacks[0].ssid) - 1);
+                wifi_config.fallbacks[wifi_config.fallback_count].ssid[sizeof(wifi_config.fallbacks[0].ssid) - 1] = '\0';
+                if (f_pass) {
+                    strncpy(wifi_config.fallbacks[wifi_config.fallback_count].password, f_pass, sizeof(wifi_config.fallbacks[0].password) - 1);
+                    wifi_config.fallbacks[wifi_config.fallback_count].password[sizeof(wifi_config.fallbacks[0].password) - 1] = '\0';
+                } else {
+                    wifi_config.fallbacks[wifi_config.fallback_count].password[0] = '\0';
+                }
+                switch (f_sec) {
+                    case WIFI_OPEN: wifi_config.fallbacks[wifi_config.fallback_count].auth_mode = WIFI_AUTH_OPEN; break;
+                    case WIFI_WPA3_PSK: wifi_config.fallbacks[wifi_config.fallback_count].auth_mode = WIFI_AUTH_WPA3_PSK; break;
+                    case WIFI_WPA2_PSK: default: wifi_config.fallbacks[wifi_config.fallback_count].auth_mode = WIFI_AUTH_WPA2_PSK; break;
+                }
+                wifi_config.fallback_count++;
+            }
+        }
+        ESP_LOGI(TAG, "   - Fallback networks loaded: %u", wifi_config.fallback_count);
+    }
     
     ESP_LOGI(TAG, "  WiFi Configuration from Config Server:");
     ESP_LOGI(TAG, "   - WiFi Mode: %d (AP=0, APSTA=1, SMARTCONNECT=2)", wifi_mode);

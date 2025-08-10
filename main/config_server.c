@@ -2253,7 +2253,15 @@ static void config_server_load_cfg(char *cfg)
 		ESP_LOGE(TAG, "Failed to parse JSON config");
 		goto config_error_no_json;
 	}
-    struct stat st;
+	struct stat st;
+
+	// Initialize fallback list to empty before parsing
+	device_config.sta_fallbacks_count = 0;
+	for (int i = 0; i < 5; ++i) {
+		device_config.sta_fallbacks[i].ssid[0] = '\0';
+		device_config.sta_fallbacks[i].pass[0] = '\0';
+		strlcpy(device_config.sta_fallbacks[i].security, "wpa3", sizeof(device_config.sta_fallbacks[i].security));
+	}
 
 	key = cJSON_GetObjectItem(root,"wifi_mode");
 	if(key == 0)
@@ -2727,6 +2735,48 @@ static void config_server_load_cfg(char *cfg)
 
 	ESP_LOGI(TAG, "device_config.sta_security: %s", device_config.wakeup_volt);
 	//*****
+
+	//***** Parse optional fallback STA networks *****
+	cJSON *fallbacks = cJSON_GetObjectItem(root, "sta_fallbacks");
+	if (fallbacks && cJSON_IsArray(fallbacks))
+	{
+		int count = cJSON_GetArraySize(fallbacks);
+		int kept = 0;
+		for (int i = 0; i < count && kept < 5; ++i)
+		{
+			cJSON *item = cJSON_GetArrayItem(fallbacks, i);
+			if (!cJSON_IsObject(item))
+				continue;
+			cJSON *f_ssid = cJSON_GetObjectItem(item, "ssid");
+			cJSON *f_pass = cJSON_GetObjectItem(item, "pass");
+			cJSON *f_sec  = cJSON_GetObjectItem(item, "security");
+			if (!f_ssid || !cJSON_IsString(f_ssid) || strlen(f_ssid->valuestring) == 0 || strlen(f_ssid->valuestring) > 64)
+				continue;
+			// Password can be empty for open networks; limit to 64
+			const char *pass_val = (f_pass && cJSON_IsString(f_pass)) ? f_pass->valuestring : "";
+			if (strlen(pass_val) > 64)
+				continue;
+			const char *sec_val = (f_sec && cJSON_IsString(f_sec)) ? f_sec->valuestring : "wpa3";
+
+			strlcpy(device_config.sta_fallbacks[kept].ssid, f_ssid->valuestring, sizeof(device_config.sta_fallbacks[kept].ssid));
+			strlcpy(device_config.sta_fallbacks[kept].pass, pass_val, sizeof(device_config.sta_fallbacks[kept].pass));
+			if (strcmp(sec_val, "wpa2") == 0 || strcmp(sec_val, "wpa3") == 0)
+			{
+				strlcpy(device_config.sta_fallbacks[kept].security, sec_val, sizeof(device_config.sta_fallbacks[kept].security));
+			}
+			else
+			{
+				strlcpy(device_config.sta_fallbacks[kept].security, "wpa3", sizeof(device_config.sta_fallbacks[kept].security));
+			}
+			kept++;
+		}
+		device_config.sta_fallbacks_count = kept;
+		ESP_LOGI(TAG, "Loaded %d STA fallback networks", device_config.sta_fallbacks_count);
+	}
+	else
+	{
+		ESP_LOGI(TAG, "No STA fallback networks defined");
+	}
 
 	//**** SmartConnect fields ****
 	key = cJSON_GetObjectItem(root,"home_ssid");
@@ -3278,6 +3328,34 @@ void config_server_stop(void)
         httpd_stop(server);
         server = NULL;
     }
+}
+
+// ======= Fallback STA networks getters =======
+int config_server_get_sta_fallbacks_count(void)
+{
+	return device_config.sta_fallbacks_count;
+}
+
+const char *config_server_get_sta_fallback_ssid(int index)
+{
+	if (index < 0 || index >= device_config.sta_fallbacks_count) return NULL;
+	return device_config.sta_fallbacks[index].ssid;
+}
+
+const char *config_server_get_sta_fallback_pass(int index)
+{
+	if (index < 0 || index >= device_config.sta_fallbacks_count) return NULL;
+	return device_config.sta_fallbacks[index].pass;
+}
+
+wifi_security_t config_server_get_sta_fallback_security(int index)
+{
+	if (index < 0 || index >= device_config.sta_fallbacks_count) return WIFI_MAX;
+	const char *sec = device_config.sta_fallbacks[index].security;
+	if (strcmp(sec, "open") == 0) return WIFI_OPEN;
+	if (strcmp(sec, "wpa2") == 0) return WIFI_WPA2_PSK;
+	if (strcmp(sec, "wpa3") == 0) return WIFI_WPA3_PSK;
+	return WIFI_WPA2_PSK;
 }
 static void websocket_task(void *pvParameters)
 {
