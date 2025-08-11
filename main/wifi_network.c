@@ -78,6 +78,10 @@ void wifi_network_init(char* ap_ssid_uid)
         wifi_config = (wifi_mgr_config_t)WIFI_MGR_DEFAULT_CONFIG();
         wifi_config.mode = WIFI_MGR_MODE_APSTA;
         ESP_LOGI(TAG, "Configuring AP+STA mode");
+    } else if (wifi_mode == BLESTA_MODE) {
+        wifi_config = (wifi_mgr_config_t)WIFI_MGR_DEFAULT_CONFIG();
+        wifi_config.mode = WIFI_MGR_MODE_STA; // STA only, BLE handled elsewhere
+        ESP_LOGI(TAG, "Configuring BLE+STA mode (STA-only WiFi)");
     } else {
         // Default to AUTO mode
         wifi_config = (wifi_mgr_config_t)WIFI_MGR_AUTO_CONFIG();

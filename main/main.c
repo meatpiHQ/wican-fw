@@ -1079,9 +1079,12 @@ void app_main(void)
 	// esp_log_level_set("OBD_LOGGER_WS_IFACE", ESP_LOG_INFO);
 	// esp_log_level_set("CONFIG_SERVER", ESP_LOG_INFO);
 	// esp_log_level_set("SMARTCONNECT", ESP_LOG_INFO);
-	// esp_log_level_set("AUTO_PID", ESP_LOG_NONE);
+	// esp_log_level_set("ELM327", ESP_LOG_INFO);
 	// esp_log_level_set("OBD", ESP_LOG_NONE);
 	// esp_log_level_set("BLE", ESP_LOG_INFO);
+	// esp_log_level_set("WiFi_Manager", ESP_LOG_INFO);
+	// esp_log_level_set("WiFi_NETWORK", ESP_LOG_INFO);
+
 	
 	
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100

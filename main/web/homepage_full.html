@@ -603,6 +603,7 @@
                             <select name="wifi_mode" id="wifi_mode" onchange="toggleSmartConnectConfig(); submit_enable();">
                                 <option value="AP">AP</option>
                                 <option value="APStation">AP+Station</option>
+                                <option value="BLEStation">BLE+Station</option>
                                 <option value="SmartConnect">SmartConnect</option>
                             </select>
                         </td>
@@ -2658,6 +2659,7 @@ function loadAutoTable(jsonData) {
     function configureWifiModeSettings(elements, wifiMode) {
         const isAP = wifiMode === "AP";
         const isSmartConnect = wifiMode === "SmartConnect";
+        const isBLEStation = wifiMode === "BLEStation";
         
         // Set station fields
         elements.ssidValue.disabled = isAP;
@@ -2669,8 +2671,16 @@ function loadAutoTable(jsonData) {
         // Set BLE settings based on mode
         if (isAP) {
             elements.bleStatus.disabled = false;
-        } else if (isSmartConnect) {
+            elements.blePassValue.disabled = false;
+        } else if (isBLEStation) {
             elements.bleStatus.disabled = true;
+            elements.bleStatus.value = "enable";
+            elements.bleStatus.selectedIndex = 0;
+            elements.blePassValue.disabled = false;
+        } 
+        else if (isSmartConnect) {
+            elements.bleStatus.disabled = true;
+            elements.blePassValue.disabled = true;
         } else {
             elements.bleStatus.disabled = true;
             elements.bleStatus.value = "disable";
@@ -2681,8 +2691,11 @@ function loadAutoTable(jsonData) {
 
     function handleBleStatus(elements) {
         const isBleEnabled = elements.bleStatus.value === "enable";
-        
-        elements.bleWarningDiv.style.display = isBleEnabled ? "block" : "none";
+        const isBLEStation = elements.wifiMode.value === "BLEStation";
+
+        elements.bleWarningDiv.style.display = (isBleEnabled && !isBLEStation) ? "block" : "none";
+        // Enable BLE passkey input only when BLE is enabled
+        elements.blePassValue.disabled = !isBleEnabled;
         
         if (isBleEnabled && !window.bleAlertShown) {
             elements.mqttEn.value = "disable";
@@ -2842,9 +2855,11 @@ function loadAutoTable(jsonData) {
 		const xhttp = new XMLHttpRequest();
 		xhttp.onload = function() {
 			var obj = JSON.parse(this.responseText);
-			if(obj.wifi_mode == "APStation") {
+            if(obj.wifi_mode == "APStation") {
 				document.getElementById("wifi_mode_current").innerHTML = "AP+Station";
-			} else if(obj.wifi_mode == "AP") {
+            } else if(obj.wifi_mode == "BLEStation") {
+                document.getElementById("wifi_mode_current").innerHTML = "BLE+Station";
+            } else if(obj.wifi_mode == "AP") {
 				document.getElementById("wifi_mode_current").innerHTML = "AP";
 			} else if(obj.wifi_mode == "SmartConnect") {
 				document.getElementById("wifi_mode_current").innerHTML = "SmartConnect";
@@ -3265,19 +3280,25 @@ function loadAutoTable(jsonData) {
 		const xhttp = new XMLHttpRequest();
 		xhttp.onload = function() {
 			var obj = JSON.parse(this.responseText);
-			if(obj.wifi_mode == "APStation") {
+            if(obj.wifi_mode == "APStation") {
 				document.getElementById("wifi_mode").selectedIndex = "1";
 				document.getElementById("ssid_value").disabled = false;
 				document.getElementById("pass_value").disabled = false;
                 document.getElementById("sta_security").disabled = false;
                 document.getElementById("ap_auto_disable").disabled = false;
-			} else if(obj.wifi_mode == "AP") {
+            } else if(obj.wifi_mode == "BLEStation") {
+                document.getElementById("wifi_mode").selectedIndex = "2";
+                document.getElementById("ssid_value").disabled = false;
+                document.getElementById("pass_value").disabled = false;
+                document.getElementById("sta_security").disabled = false;
+                document.getElementById("ap_auto_disable").disabled = false;
+            } else if(obj.wifi_mode == "AP") {
 				document.getElementById("wifi_mode").selectedIndex = "0";
 				document.getElementById("ssid_value").disabled = true;
 				document.getElementById("pass_value").disabled = true;
                 document.getElementById("ap_auto_disable").disabled = true;
 			} else if(obj.wifi_mode == "SmartConnect") {
-				document.getElementById("wifi_mode").selectedIndex = "2";
+                document.getElementById("wifi_mode").selectedIndex = "3";
 			}
 
             // Load SmartConnect configuration
