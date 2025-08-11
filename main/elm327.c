@@ -1432,8 +1432,66 @@ void elm327_send_cmd(uint8_t* cmd, uint32_t cmd_len)
 {
 	if(xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(ELM327_CMD_MUTEX_TIMOUT)) == pdTRUE)
 	{
-		ESP_LOG_BUFFER_HEXDUMP(TAG, (char*)cmd, strlen((char*)cmd), ESP_LOG_INFO);
-		uart_write_bytes(UART_NUM_1, cmd, cmd_len);
+		ESP_LOG_BUFFER_HEXDUMP(TAG, (char*)cmd, cmd_len, ESP_LOG_INFO);
+
+		// Support multiple commands in one buffer: process per CR/CRLF-delimited segment
+		#define IS_WS(c) ((c) == ' ' || (c) == '\t')
+		#define EQLI(a,b) (((a) | 0x20) == ((b) | 0x20))
+		uint32_t pos = 0;
+		while (pos < cmd_len) {
+			// locate end of segment (delimiter is \r or \n)
+			uint32_t seg_start = pos;
+			uint32_t seg_end = pos;
+			while (seg_end < cmd_len && cmd[seg_end] != '\r' && cmd[seg_end] != '\n') { seg_end++; }
+			// analyze segment [seg_start, seg_end)
+			int atz_seg = 0;
+			uint32_t i = seg_start;
+			while (i < seg_end && IS_WS(cmd[i])) { i++; }
+			if (i < seg_end && EQLI(cmd[i], 'a')) {
+				i++;
+				while (i < seg_end && IS_WS(cmd[i])) { i++; }
+				if (i < seg_end && EQLI(cmd[i], 't')) {
+					i++;
+					while (i < seg_end && IS_WS(cmd[i])) { i++; }
+					if (i < seg_end && EQLI(cmd[i], 'z')) {
+						i++;
+						while (i < seg_end && IS_WS(cmd[i])) { i++; }
+						if (i == seg_end) { atz_seg = 1; }
+					}
+				}
+			}
+
+			// determine delimiter length to consume (\r? then optional \n)
+			uint32_t delim_len = 0;
+			if (seg_end < cmd_len) {
+				if (cmd[seg_end] == '\r') {
+					delim_len++;
+					if (seg_end + delim_len < cmd_len && cmd[seg_end + delim_len] == '\n') { delim_len++; }
+				} else if (cmd[seg_end] == '\n') {
+					delim_len++;
+				}
+			}
+
+			if (atz_seg) {
+				static const char replace_cmd[] = "ATWC\r";
+				ESP_LOGI(TAG, "Replaced ATZ command with ATWC");
+				uart_write_bytes(UART_NUM_1, (const uint8_t*)replace_cmd, sizeof(replace_cmd) - 1);
+			} else {
+				// write original segment including its delimiters
+				if (seg_start < seg_end) {
+					uart_write_bytes(UART_NUM_1, (const uint8_t*)&cmd[seg_start], seg_end - seg_start);
+				}
+				if (delim_len) {
+					uart_write_bytes(UART_NUM_1, (const uint8_t*)&cmd[seg_end], delim_len);
+				}
+			}
+
+			pos = seg_end + delim_len;
+			if (seg_end == cmd_len) { break; }
+		}
+		#undef IS_WS
+		#undef EQLI
+		
 		xSemaphoreGive(xuart1_semaphore);
 	}
 	else
