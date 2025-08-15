@@ -276,6 +276,8 @@ static void can_rx_task(void *pvParameters)
 
         	process_led(1);
 
+        	dev_status_set_bits(DEV_SLEEP_CAN_BUSY_BIT);
+
         	if(config_server_ws_connected())
         	{
         		ucTCP_TX_Buffer.usLen = slcan_parse_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
