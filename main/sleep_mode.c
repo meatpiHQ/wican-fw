@@ -469,6 +469,7 @@ static void adc_task(void *pvParameters)
 						if((esp_timer_get_time() - wakeup_detect_time) > WAKEUP_TIME_DELAY)
 						{
 							ESP_LOGI(TAG, "Wake up now...");
+							sleep_mode_set_wakeup_flag();
 							esp_restart();
 
 						}
@@ -525,4 +526,28 @@ int8_t sleep_mode_init(uint8_t enable, float sleep_volt)
 	xTaskCreate(adc_task, "adc_task", 4096, (void*)AF_INET, 5, NULL);
 
 	return 1;
+}
+
+void sleep_mode_check_wakeup_flag()
+{
+	nvs_handle_t nvs;
+	uint8_t wakeup_flag = 0;
+	nvs_open("boot", NVS_READWRITE, &nvs);
+	nvs_get_u8(nvs, "wakeup", &wakeup_flag);
+	if (wakeup_flag == 1) {
+		ESP_LOGI(TAG, "Boot from sleep wakeup");
+		nvs_set_u8(nvs, "wakeup", 0);
+		nvs_commit(nvs);
+		dev_status_set_bits(DEV_SLEEP_WAKEUP_BIT);
+	}
+	nvs_close(nvs);
+}
+
+void sleep_mode_set_wakeup_flag()
+{
+	nvs_handle_t nvs;
+	nvs_open("boot", NVS_READWRITE, &nvs);
+	nvs_set_u8(nvs, "wakeup", 1);
+	nvs_commit(nvs);
+	nvs_close(nvs);
 }

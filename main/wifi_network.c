@@ -50,6 +50,7 @@
  static EventGroupHandle_t s_wifi_event_group = NULL;
  static const TickType_t connect_delay[] = {1000, 1000, 1000, 1000, 1000,1000};
  static int8_t ap_auto_disable = 0;
+ static TimerHandle_t xAP_disable_Timer;
  
  static void wifi_network_event_handler(void* arg, esp_event_base_t event_base,
                                  int32_t event_id, void* event_data)
@@ -79,7 +80,7 @@
          esp_err_t err = esp_wifi_get_mode(&current_mode);
  
         if (err == ESP_OK && current_mode == WIFI_MODE_STA && !sta_successfuly_connected 
-                    && ap_auto_disable && wifi_init)
+                    && ap_auto_disable == AP_AUTODIS_STATION && wifi_init)
         {
              ESP_LOGI(WIFI_TAG, "Switching to APSTA mode");
              esp_wifi_stop();
@@ -95,7 +96,7 @@
          wifi_mode_t current_mode;
          esp_err_t err = esp_wifi_get_mode(&current_mode);
  
-         if (err == ESP_OK && current_mode == WIFI_MODE_APSTA && ap_auto_disable && wifi_init)
+         if (err == ESP_OK && current_mode == WIFI_MODE_APSTA && ap_auto_disable == AP_AUTODIS_STATION && wifi_init)
          {
              ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
              ESP_LOGI(WIFI_TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
@@ -118,7 +119,7 @@
              s_retry_num = 0;
  
              ESP_LOGI(WIFI_TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
-             if(ap_auto_disable)
+             if(ap_auto_disable == AP_AUTODIS_STATION)
              {
                  ESP_LOGI(WIFI_TAG, "Already in station-only mode");
              }
@@ -140,6 +141,10 @@
              ble_disable();
              ESP_LOGW(WIFI_TAG, "disable ble");
          }
+         if(xTimerIsTimerActive( xAP_disable_Timer ) != pdFALSE)
+         {
+             xTimerStop( xAP_disable_Timer, 0 );
+         }
      }
      else if (event_id == WIFI_EVENT_AP_STADISCONNECTED)
      {
@@ -147,20 +152,37 @@
          wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
          ESP_LOGI(WIFI_TAG, "station "MACSTR" leave, AID=%d",
                   MAC2STR(event->mac), event->aid);
-         if(config_server_get_ble_config())
+         wifi_sta_list_t sta_list;
+         esp_wifi_ap_get_sta_list(&sta_list);
+         ESP_LOGI(WIFI_TAG, "station count: %d", sta_list.num);
+         if(sta_list.num == 0)
          {
-             ble_enable();
-             ESP_LOGW(WIFI_TAG, "enable ble");
+             if(config_server_get_ble_config())
+             {
+                 ble_enable();
+                 ESP_LOGW(WIFI_TAG, "enable ble");
+             }
+             if(ap_auto_disable == AP_AUTODIS_TIMEOUT)
+             {
+                 ESP_LOGW(WIFI_TAG, "start AP disable timer");
+                 xTimerStart( xAP_disable_Timer, 0 );
+             }
          }
      }
      else if(event_id == WIFI_EVENT_AP_START)
      {
          ESP_LOGI(WIFI_TAG, "WIFI_EVENT_AP_START");
+         xTimerStart(xAP_disable_Timer, 0);
      }
  }
  
  void wifi_network_deinit(void)
  {
+     if(xTimerIsTimerActive( xAP_disable_Timer ) != pdFALSE)
+     {
+         xTimerStop( xAP_disable_Timer, 0 );
+     }
+
      xEventGroupWaitBits(s_wifi_event_group,
                          WIFI_CONNECT_IDLE_BIT,
                          pdFALSE,
@@ -249,6 +271,38 @@
      }
  }
  
+ static void vAP_disable_Callback( TimerHandle_t xTimer )
+ {
+      bool wifi_init = false;
+
+      if(s_wifi_event_group != NULL)
+      {
+         wifi_init = xEventGroupGetBits(s_wifi_event_group) & WIFI_INIT_BIT;
+      }
+
+      wifi_mode_t current_mode;
+      esp_err_t err = esp_wifi_get_mode(&current_mode);
+
+      if (err == ESP_OK && wifi_init)
+      {
+         if (current_mode == WIFI_MODE_APSTA)
+         {
+              // Disable AP mode
+              ESP_LOGI(WIFI_TAG, "Disabling AP mode after AP auto disable timeout...");
+              esp_wifi_stop();
+              esp_wifi_set_mode(WIFI_MODE_STA);
+              esp_wifi_start();
+              esp_wifi_connect();
+         }
+         else if (current_mode == WIFI_MODE_AP)
+         {
+              // Disable Wifi
+              ESP_LOGI(WIFI_TAG, "Disabling Wifi after AP auto disable timeout...");
+              wifi_network_deinit();
+         }
+      }
+ }
+
  void wifi_network_init(char* sta_ssid, char* sta_pass)
  {
      if(s_wifi_event_group == NULL)
@@ -257,6 +311,12 @@
          ap_netif = esp_netif_create_default_wifi_ap();
  
          sta_netif = esp_netif_create_default_wifi_sta();
+
+         xAP_disable_Timer = xTimerCreate("AP disable Timer",
+                                          pdMS_TO_TICKS(60000),
+                                          pdFALSE,
+                                          ( void * ) 0,
+                                          vAP_disable_Callback);
      }
  
      if(xEventGroupGetBits(s_wifi_event_group) & WIFI_INIT_BIT)
@@ -265,6 +325,11 @@
      }
  
      ap_auto_disable = config_server_get_ap_auto_disable();
+
+     if(ap_auto_disable == AP_AUTODIS_TIMEOUT && config_server_get_wifi_mode() == AP_MODE && dev_status_is_bit_set(DEV_SLEEP_WAKEUP_BIT))
+     {
+         return;
+     }
  
      int8_t channel = config_server_get_ap_ch();
      if(channel == -1)
@@ -395,6 +460,12 @@
  
      ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config_ap));
      ESP_ERROR_CHECK(esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20));
+
+     if(ap_auto_disable == AP_AUTODIS_TIMEOUT && dev_status_is_bit_set(DEV_SLEEP_WAKEUP_BIT))
+     {
+         ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+     }
+
      ESP_ERROR_CHECK(esp_wifi_start());
      xEventGroupSetBits(s_wifi_event_group, WIFI_INIT_BIT);
      xEventGroupSetBits(s_wifi_event_group, WIFI_DISCONNECTED_BIT);
