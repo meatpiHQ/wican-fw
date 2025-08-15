@@ -201,7 +201,7 @@ const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"st
 										\"drive_ssid\":\"MeatPi\",\"drive_password\":\"TomatoSauce\",\"drive_security\":\"wpa3\",\"drive_protocol\":\"elm327\",\"drive_connection_type\":\"wifi\",\"drive_mode_timeout\":\"60\",\
 										\"can_datarate\":\"500K\",\
 										\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\
-										\"ble_status\":\"disable\",\"sleep_status\":\"enable\",\"periodic_wakeup\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"sleep_time\":\"5\",\"wakeup_interval\":\"90\",\"batt_alert\":\"disable\",\
+								\"ble_status\":\"disable\",\"ble_power\":\"9\",\"sleep_status\":\"enable\",\"periodic_wakeup\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"sleep_time\":\"5\",\"wakeup_interval\":\"90\",\"batt_alert\":\"disable\",\
 										\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\
 										\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\
 										\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\
@@ -1494,6 +1494,7 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	cJSON_AddStringToObject(root, "sta_ip", ip_str);
 	cJSON_AddStringToObject(root, "mdns", wc_mdns_get_hostname());
 	cJSON_AddStringToObject(root, "ble_status", device_config.ble_status);
+	cJSON_AddStringToObject(root, "ble_power", device_config.ble_power);
 //	cJSON_AddStringToObject(root, "can_datarate", device_config.can_datarate);
 	cJSON_AddStringToObject(root, "can_datarate", can_datarate_str[can_get_bitrate()]);
 	cJSON_AddStringToObject(root, "can_mode", device_config.can_mode);
@@ -2393,6 +2394,23 @@ static void config_server_load_cfg(char *cfg)
 	}
 	strlcpy(device_config.ble_pass, key->valuestring, sizeof(device_config.ble_pass));
 	ESP_LOGI(TAG, "device_config.ble_pass: %s", device_config.ble_pass);
+
+	key = cJSON_GetObjectItem(root,"ble_power");
+	if(key && key->valuestring) {
+		// Accept only expected discrete values: -12,-9,-6,-3,0,3,6,9
+		int p = atoi(key->valuestring);
+		switch(p){
+			case -12: case -9: case -6: case -3: case 0: case 3: case 6: case 9:
+				strlcpy(device_config.ble_power, key->valuestring, sizeof(device_config.ble_power));
+				break;
+			default:
+				strlcpy(device_config.ble_power, "9", sizeof(device_config.ble_power));
+				ESP_LOGW(TAG, "Invalid ble_power %d, defaulting to 9", p);
+		}
+	} else {
+		strlcpy(device_config.ble_power, "9", sizeof(device_config.ble_power));
+		ESP_LOGW(TAG, "ble_power missing, defaulting to 9");
+	}
 
 	key = cJSON_GetObjectItem(root,"sleep_status");
 	if(key == 0)
@@ -3860,6 +3878,20 @@ int8_t config_server_get_imu_threshold(uint8_t *imu_threshold)
 bool config_server_is_debug_enabled(void)
 {
 	return device_config.debug_enabled;
+}
+
+int8_t config_server_get_ble_power(int8_t *power_dbm)
+{
+	if(!power_dbm) return -1;
+	int p = atoi(device_config.ble_power);
+	switch(p){
+		case -12: case -9: case -6: case -3: case 0: case 3: case 6: case 9:
+			*power_dbm = (int8_t)p;
+			return 0;
+		default:
+			*power_dbm = 9;
+			return -1; // indicate defaulted
+	}
 }
 
 void config_server_set_ble_config(uint8_t b)

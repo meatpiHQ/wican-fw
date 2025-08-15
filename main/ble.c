@@ -1386,6 +1386,41 @@ void ble_enable(void)
         return;
     }
 
+    // Apply configured BLE TX power (ESP32-S3 supports -12 to +9 dBm in 3 dB steps)
+    int8_t pwr_dbm = 9; // default high power
+    if(config_server_get_ble_power(&pwr_dbm) != 0){
+        ESP_LOGW(GATTS_TABLE_TAG, "Using default BLE TX power: %d dBm", (int)pwr_dbm);
+    } else {
+        ESP_LOGI(GATTS_TABLE_TAG, "Configured BLE TX power: %d dBm", (int)pwr_dbm);
+    }
+
+    esp_err_t pwr_ret = ESP_OK;
+#ifdef esp_ble_tx_power_set_enhanced
+    // Try enhanced API directly with dBm value
+    pwr_ret = esp_ble_tx_power_set_enhanced(ESP_BLE_ENHANCED_PWR_TYPE_DEFAULT, pwr_dbm);
+    if(pwr_ret != ESP_OK){
+        ESP_LOGW(GATTS_TABLE_TAG, "Enhanced TX power set failed (%s), falling back", esp_err_to_name(pwr_ret));
+    }
+    if(pwr_ret != ESP_OK)
+#endif
+    {
+        esp_power_level_t lvl = ESP_PWR_LVL_P9;
+        switch(pwr_dbm){
+            case -12: lvl = ESP_PWR_LVL_N12; break;
+            case -9: lvl = ESP_PWR_LVL_N9; break;
+            case -6: lvl = ESP_PWR_LVL_N6; break;
+            case -3: lvl = ESP_PWR_LVL_N3; break;
+            case 0: lvl = ESP_PWR_LVL_N0; break;
+            case 3: lvl = ESP_PWR_LVL_P3; break;
+            case 6: lvl = ESP_PWR_LVL_P6; break;
+            case 9: default: lvl = ESP_PWR_LVL_P9; break;
+        }
+        pwr_ret = esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, lvl);
+        if(pwr_ret != ESP_OK){
+            ESP_LOGW(GATTS_TABLE_TAG, "Failed to set BLE TX power (legacy) %s", esp_err_to_name(pwr_ret));
+        }
+    }
+
     // Register callbacks
     ret = esp_ble_gatts_register_callback(gatts_event_handler);
     if (ret){

@@ -118,6 +118,7 @@ typedef struct _device_config
 	char protocol[65];
 	char ble_pass[18];
 	char ble_status[32];
+	char ble_power[8]; // dBm value as string (e.g., -12, -9, -6, -3, 0, 3, 6, 9)
 	char sleep_status[32];
 	char sleep_disable_agree[10];
 	char sleep_volt[10];
@@ -187,6 +188,7 @@ char *config_server_get_ap_pass(void);
 int8_t config_server_protocol(void);
 int config_server_ble_pass(void);
 int8_t config_server_get_sleep_config(void);
+int8_t config_server_get_ble_power(int8_t *power_dbm); // returns 0 on success
 //void config_server_set_ble_tempfn(char b);
 //char config_server_get_ble_tempfn(void);
 int8_t config_server_get_ble_config(void);

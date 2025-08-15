@@ -823,6 +823,20 @@
                             </select>
                         </td>
                     </tr>
+                    <tr>
+                        <td>BLE Power:</td>
+                        <td class="slider-container">
+                            <input type="range"
+                                   id="ble_power"
+                                   name="ble_power"
+                                   value="9"
+                                   min="-12"
+                                   max="9"
+                                   step="3"
+                                   oninput="document.getElementById('ble_power_value').textContent = this.value;submit_enable();">
+                            <span id="ble_power_value">9</span>dBm
+                        </td>
+                    </tr>
                 </table>
 
                 <!-- BLE Warning Section -->
@@ -3037,6 +3051,7 @@ function loadAutoTable(jsonData) {
 		obj["protocol"] = document.getElementById("protocol").value;
 		obj["ble_pass"] = document.getElementById("ble_pass_value").value;
 		obj["ble_status"] = document.getElementById("ble_status").value;
+        obj["ble_power"] = document.getElementById("ble_power").value; // BLE TX power (dBm)
 		obj["sleep_status"] = document.getElementById("sleep_status").value;
 		obj["sleep_disable_agree"] = document.getElementById("sleep_disable_agree").value;
 		obj["periodic_wakeup"] = document.getElementById("periodic_wakeup").value;
@@ -3429,6 +3444,10 @@ function loadAutoTable(jsonData) {
             document.getElementById("imu_threshold").value = obj.imu_threshold || "8";
             document.getElementById("imu_threshold_value").textContent = ((obj.imu_threshold || 8) * 3.9).toFixed(1) + ' mg';
 			
+            const blePowerVal = ("ble_power" in obj) ? obj.ble_power : 9;
+            document.getElementById("ble_power").value = blePowerVal;
+            document.getElementById("ble_power_value").textContent = blePowerVal;
+
 			txCheckBoxChanged();
             rxCheckBoxChanged();
 			document.getElementById("protocol").value = obj.protocol;
