@@ -44,6 +44,9 @@ static struct {
     struct arg_end *end;
 } system_args;
 
+static esp_partition_t *running_partition = NULL;
+static esp_app_desc_t running_app_info;
+
 static int cmd_system(int argc, char **argv)
 {
     int nerrors = arg_parse(argc, argv, (void **)&system_args);
@@ -77,12 +80,9 @@ static int cmd_system(int argc, char **argv)
             return 1;
         }
         cmdline_printf("Device ID: %s\n", device_id);
-        
-        const esp_partition_t *running = esp_ota_get_running_partition();
-        esp_app_desc_t running_app_info;
-        
-        if (esp_ota_get_partition_description(running, &running_app_info) == ESP_OK) {
-            cmdline_printf("Running Partition: %s\n", running->label);
+
+        if (running_partition != NULL) {
+            cmdline_printf("Running Partition: %s\n", running_partition->label);
             cmdline_printf("App Version: %s\n", running_app_info.version);
             cmdline_printf("Project Name: %s\n", running_app_info.project_name);
             cmdline_printf("Build Time: %s %s\n", running_app_info.date, running_app_info.time);
@@ -157,6 +157,9 @@ static int cmd_system(int argc, char **argv)
 
 esp_err_t cmd_system_register(void)
 {
+    running_partition = esp_ota_get_running_partition();
+    esp_ota_get_partition_description(running_partition, &running_app_info);
+
     system_args.voltage = arg_lit0("v", "voltage", "Get system voltage");
     system_args.reboot = arg_lit0("r", "reboot", "Reboot system");
     system_args.info = arg_lit0("i", "info", "Get system information including device ID");

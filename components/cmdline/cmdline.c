@@ -455,9 +455,9 @@ static esp_err_t tcp_console_init(void)
 
     static StackType_t *tcp_console_task_stack;
     static StaticTask_t tcp_console_task_buffer;
-    
-    tcp_console_task_stack = heap_caps_malloc(4096, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-    
+    const size_t tcp_console_task_stack_size = 1024 * 5;
+    tcp_console_task_stack = heap_caps_malloc(tcp_console_task_stack_size, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+
     if (tcp_console_task_stack == NULL) {
         ESP_LOGE(TAG, "Failed to allocate TCP console task stack memory");
         return ESP_ERR_NO_MEM;
@@ -466,7 +466,7 @@ static esp_err_t tcp_console_init(void)
     tcp_console_task_handle = xTaskCreateStatic(
         tcp_console_task,
         "tcp_console",
-        4096,
+        tcp_console_task_stack_size,
         NULL,
         5,
         tcp_console_task_stack,
