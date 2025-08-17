@@ -47,7 +47,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vehicle_profiles.json
-          path: ${{ github.workspace }}/../vehicle_profiles.json # Relative to the working-directory
+          path: ${{ github.workspace }}/vehicle_profiles.json # Relative to the working-directory
 
       - name: Comment on PR with testing instructions
         if: success()
