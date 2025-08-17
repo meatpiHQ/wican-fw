@@ -1,0 +1,48 @@
+{
+  "car_model": "Opel: EOBD (2004 - present)",
+  "init": "ATSP6;ATST96;",
+  "pids": [
+    {
+      "pid": "1ADF",
+      "pid_init": "ATSH7E0;ATCRA7E8;",
+      "parameters": {
+        "ODOMETER": "[B3:B6]*0.015644"
+      }
+    },
+    {
+      "pid": "1A6D",
+      "pid_init": "ATSH7E0;ATCRA7E8;",
+      "parameters": {
+        "PCM_Oil_Life": "B3/2.55"
+      }
+    },
+    {
+      "pid": "2250051",
+      "pid_init": "ATSH241;ATCRA641;",
+      "parameters": {
+        "TYRE_P_FL": "[B4:B5]/16"
+      }
+    },
+    {
+      "pid": "2250081",
+      "pid_init": "ATSH241;ATCRA641;",
+      "parameters": {
+        "TYRE_P_RL": "[B4:B5]/16"
+      }
+    },
+    {
+      "pid": "2250061",
+      "pid_init": "ATSH241;ATCRA641;",
+      "parameters": {
+        "TYRE_P_FR": "[B4:B5]/16"
+      }
+    },
+    {
+      "pid": "2250071",
+      "pid_init": "ATSH241;ATCRA641;",
+      "parameters": {
+        "TYRE_P_RR": "[B4:B5]/16"
+      }
+    }
+  ]
+}

@@ -7,19 +7,18 @@
 ## Order on [**Mouser**](https://www.mouser.com/c/?m=MeatPi) or [**Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics)
 
 ---
+# WiCAN PRO
+
+### Order on [**Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics/wican-pro)
+
+![1](https://github.com/user-attachments/assets/ed94e7b2-3d8a-4b1c-a759-c1e7a28d4a67)
+
 
 # WiCAN PRO 4G Module
 
 ### ESPNetLink is an LTE and GPS module that provides IoT connectivity and real-time vehicle tracking for your WiCAN PRO adapter. To support this project, please subscribe for updates [**Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics/espnetlink)
 
 ![image](https://github.com/user-attachments/assets/5314bd88-768f-4e8c-8eea-dd2ed4649283)
-
-# WiCAN PRO
-
-### Ongoing crowdfunding campaign for a new product in development! If you would like to support this project, please subscribe for updates on [**Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics/wican-pro)
-
-![image](https://github.com/meatpiHQ/wican-fw/assets/94690098/1648a50f-d5a4-40fc-9794-78b8b57ccc0d)
-
 
 # WiCAN
 

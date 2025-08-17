@@ -30,6 +30,7 @@
 #include "driver/gpio.h"
 #include "types.h"
 #include "lwip/sockets.h"
+#include "dev_status.h"
 
 static const int RX_BUF_SIZE = 1024;
 
@@ -48,6 +49,7 @@ static void uart_rx_task(void *arg)
 //    	uart_write_bytes(UART_NUM_0, tx_buffer.ucElement, tx_buffer.usLen);
         if(xQueueReceive(uart0_queue, (void * )&event, (portTickType)portMAX_DELAY))
         {
+            dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
             bzero(rx_buffer.ucElement, sizeof(rx_buffer.ucElement));
 //            //ESP_LOGI(TAG, "uart[%d] event:", UART_NUM_0);
             switch(event.type)
@@ -88,6 +90,7 @@ static void uart_tx_task(void *arg)
     while (1)
     {
     	xQueueReceive(*xuart_tx_queue, ( void * ) &tx_buffer, portMAX_DELAY);
+        dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
     	uart_write_bytes(UART_NUM_0, tx_buffer.ucElement, tx_buffer.usLen);
 //    	rx_buffer.usLen = uart_read_bytes(UART_NUM_0, rx_buffer.ucElement, RX_BUF_SIZE, 1 / portTICK_PERIOD_MS);
 //    	rx_buffer.dev_channel = DEV_UART;

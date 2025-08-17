@@ -1,5 +1,5 @@
 {
-  "car_model": "BYD: Dolphin",
+  "car_model": "BYD: Dolphin/Shark",
   "init": "ATST96;ATSP6;",
   "pids": [
     {

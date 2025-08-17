@@ -38,7 +38,9 @@ To connect WiCAN to Home Assistant, you first need to connect it to the same WiF
 
 1. **Select Vehicle Model**:  
    Select your vehicle model from the dropdown list.  
-   If your vehicle model is not yet supported, please open an issue on GitHub, and we will walk you through adding support.
+   If your vehicle is an electric or hybrid model and is not yet supported, please open an issue on GitHub, and we’ll guide you through the process of adding support.
+
+   If your vehicle is not an EV or hybrid, you can try scanning for standard PIDs using the instructions [here](https://meatpihq.github.io/wican-fw/config/automate/usage#standard-pids)
 
 1. **Set Cycle Time**:  
    Set the **Cycle Time** in milliseconds. This defines how often WiCAN will request parameters from the ECU.

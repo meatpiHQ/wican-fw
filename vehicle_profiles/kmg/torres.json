@@ -1,0 +1,12 @@
+{
+  "car_model": "KGM: Torres EVX",
+  "init": "ATSP6;ATSH7E0;ATST96;",
+  "pids": [
+    {
+      "pid": "22FD0D2",
+      "parameters": {
+        "SOC": "[B9:B10]/10"
+      }
+    }
+  ]
+}

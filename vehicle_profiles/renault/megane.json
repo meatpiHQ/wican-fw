@@ -1,0 +1,13 @@
+{
+  "car_model": "Renault: Ariya/Scenic EV E-TECH/Renault 5 E-TECH/Renault 4 E-TECH/Megane E-TECH GSR2 2024/Master EV E-TECH",
+  "init": "ATSP6;ATST96;",
+  "pids": [
+    {
+      "pid": "015B1",
+      "pid_init": "ATSHDB33F1;ATCRA18DAF1DB;",
+      "parameters": {
+        "SOC": "B3/2.55"
+      }
+    }
+  ]
+}

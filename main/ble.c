@@ -49,6 +49,8 @@
 #include "comm_server.h"
 #include "config_server.h"
 #include "wifi_network.h"
+#include "dev_status.h"
+
 /* Attributes State Machine */
 enum
 {
@@ -676,7 +678,7 @@ static void ble_task(void *pvParameters)
 									portMAX_DELAY);
 
 
-
+				dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
 				while(!ble_tx_ready())
 				{
 					vTaskDelay(pdMS_TO_TICKS(1));
