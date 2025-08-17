@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'vehicle_profiles/**'
+      - '.vehicle_profiles/**'
 
 jobs:
   vehicle-profiles-check:
