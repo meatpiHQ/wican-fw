@@ -7,7 +7,7 @@
       "pid_init": "ATSH78A;ATFCSH78A;ATFCSD300000;ATFCSM1;ATCRA7CA;",
       "parameters": {
         "SOC": "[B4:B5]/10",
-        "SOE": "[B6:B7]/10"
+        "HV_CAPACITY_KWH": "[B6:B7]/10"
       }
     },
     {
