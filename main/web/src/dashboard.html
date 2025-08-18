@@ -747,16 +747,63 @@
     </div>
 
     <!-- Scripts -->
-    <script src="jquery-3.6.0.min.js"></script>
-    <script src="bootstrap.bundle.min.js"></script>
-    <script src="moment.min.js"></script>
-    <script src="daterangepicker.min.js"></script>
-    <script src="sql-wasm.js"></script>
-    <script src="chart.js"></script>
-    <script src="chartjs-adapter-moment.min.js"></script>
-    <script src="jszip.min.js"></script>
-    <script src="dashboard.js"></script>
-    <script src="lucide_icons.js"></script>
-    <script src="dashboard_live.js"></script>
+    <script>
+        let scriptsFailedCount = 0;
+        const totalScripts = 11;
+        
+        function showSDCardError() {
+            if (scriptsFailedCount > 0) {
+                const errorDiv = document.createElement('div');
+                errorDiv.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: #fee2e2;
+                    color: #991b1b;
+                    padding: 1rem 2rem;
+                    border-radius: 0.5rem;
+                    border: 1px solid #fecaca;
+                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                    z-index: 9999;
+                    font-weight: 500;
+                    max-width: 90vw;
+                    text-align: center;
+                `;
+                errorDiv.innerHTML = `
+                    <strong>⚠️ Dashboard Error</strong><br>
+                    An SD card must be installed for the dashboard to load properly.<br>
+                    <small>Missing required JavaScript files (${scriptsFailedCount}/${totalScripts} failed to load)</small>
+                `;
+                document.body.appendChild(errorDiv);
+                
+                setTimeout(() => {
+                    errorDiv.style.opacity = '0';
+                    errorDiv.style.transition = 'opacity 0.5s ease';
+                    setTimeout(() => errorDiv.remove(), 500);
+                }, 8000);
+            }
+        }
+        
+        function handleScriptError(src) {
+            scriptsFailedCount++;
+            console.error('Failed to load script:', src);
+        }
+        
+        window.addEventListener('load', () => {
+            setTimeout(showSDCardError, 1000);
+        });
+    </script>
+    <script src="jquery-3.6.0.min.js" onerror="handleScriptError('jquery-3.6.0.min.js')"></script>
+    <script src="bootstrap.bundle.min.js" onerror="handleScriptError('bootstrap.bundle.min.js')"></script>
+    <script src="moment.min.js" onerror="handleScriptError('moment.min.js')"></script>
+    <script src="daterangepicker.min.js" onerror="handleScriptError('daterangepicker.min.js')"></script>
+    <script src="sql-wasm.js" onerror="handleScriptError('sql-wasm.js')"></script>
+    <script src="chart.js" onerror="handleScriptError('chart.js')"></script>
+    <script src="chartjs-adapter-moment.min.js" onerror="handleScriptError('chartjs-adapter-moment.min.js')"></script>
+    <script src="jszip.min.js" onerror="handleScriptError('jszip.min.js')"></script>
+    <script src="dashboard.js" onerror="handleScriptError('dashboard.js')"></script>
+    <script src="lucide_icons.js" onerror="handleScriptError('lucide_icons.js')"></script>
+    <script src="dashboard_live.js" onerror="handleScriptError('dashboard_live.js')"></script>
 </body>
 </html>
