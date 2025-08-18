@@ -492,6 +492,10 @@
             <span data-lucide="info" style="width: 18px; height: 18px; margin-right: 8px;"></span>
             <b>About</b>
         </button>
+        <div id="firmware-update-notice" style="margin: 2rem 1rem 1rem 1rem; padding: 0.75rem; border-radius: 8px; background: hsl(0, 89%, 81%); color: #24478f; font-size: 0.95rem; display: none; text-align: center; border: 1px solid #fde68a;">
+            <span style="font-weight: 600;">New firmware available!</span><br>
+            <a id="firmware-update-link" href="https://github.com/meatpiHQ/wican-fw/releases" target="_blank" style="color: #2563eb; text-decoration: underline;">Download</a>
+        </div>
     </div>
 
     <div class="content">
@@ -1456,6 +1460,37 @@
     
     
     <script>
+        async function checkFirmwareUpdate() {
+            try {
+                const currentVersion = document.getElementById('fw_version')?.textContent?.trim();
+                if (!currentVersion) return;
+
+                const response = await fetch('https://api.github.com/repos/meatpiHQ/wican-fw/releases');
+                if (!response.ok) return;
+                const releases = await response.json();
+                const proRelease = releases.find(rel =>
+                    (rel.name && rel.name.toUpperCase().includes('PRO')) ||
+                    (rel.tag_name && rel.tag_name.toUpperCase().includes('P'))
+                );
+                if (!proRelease) return;
+
+                const match = proRelease.name.match(/v(\d+\.\d+)/i);
+                const latestVersion = match ? match[1] : null;
+                if (!latestVersion) return;
+
+                if (currentVersion.replace(/[^\d.]/g, '') !== latestVersion) {
+                    const notice = document.getElementById('firmware-update-notice');
+                    if (notice) {
+                        const url = proRelease.html_url || 'https://github.com/meatpiHQ/wican-fw/releases';
+                        let versionText = ` <span style='color:#b45309'>(v${latestVersion})</span>`;
+                        notice.innerHTML = `<span style=\"font-weight: 600;\">New firmware available!</span><br><a id=\"firmware-update-link\" href=\"${url}\" target=\"_blank\" style=\"color: #2563eb; text-decoration: underline;\">Download</a>${versionText}`;
+                        notice.style.display = 'block';
+                    }
+                }
+            } catch (e) {
+            }
+        }
+        // document.addEventListener('DOMContentLoaded', checkFirmwareUpdate);
         document.addEventListener('DOMContentLoaded', (event) => {
             document.getElementById("submit_button").disabled = true;
             setRTCTime();
@@ -2910,6 +2945,7 @@ function loadAutoTable(jsonData) {
 			} else if(document.getElementById("mqtt_en").value == "disable") {
 				document.getElementById("mqtt_en_div").style.display = "none";
 			}
+            checkFirmwareUpdate();
 		};
 		xhttp.open("GET", "/check_status");
 		xhttp.send();
