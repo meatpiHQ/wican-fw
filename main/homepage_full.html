@@ -670,7 +670,18 @@
                         </td>
                     </tr>
                 </table>
-
+                <!-- BLE Warning Section -->
+                <div id="ble_warning_div" style="display: none; margin: 8px 0;">
+                    <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 8px; padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                            <span data-lucide="alert-triangle" style="font-size: 16px; margin-right: 8px;"></span>
+                            <strong style="color: #92400e; font-size: 14px;">BLE Connection Warning</strong>
+                        </div>
+                        <div style="color: #78350f; font-size: 13px; line-height: 1.4;">
+                            When BLE connects, WiFi AP is disabled. To restore WiFi AP: disconnect BLE and power cycle device.
+                        </div>
+                    </div>
+                </div>
                 <div id="mqtt_en_div">
                     <div class="divider"></div>
                     <div class="section-title">MQTT</div>
@@ -2158,7 +2169,7 @@ function loadAutoTable(jsonData) {
 			document.getElementById("ble_status").selectedIndex = "1";
 		}
 		if(document.getElementById("ble_status").selectedIndex == "0") {
-			alert("Warrning!\\r\\n\\r\\nWhen BLE is connected the WiFi AP WiCAN_xxxxxx will be disabled.\\r\\nTo re-ennable the WiFi AP Turn OFF BLE on your phone or device, then power cycle WiCAN. If you connect to WiFi AP ssid WiCAN_xxxxxx, the BLE will automatically be disabled.");
+			document.getElementById("ble_warning_div").style.display = "block";
 			document.getElementById("mqtt_en").value = "disable";
 			document.getElementById("mqtt_en_div").style.display = "none";
 			document.getElementById("mqtt_en").disabled = true;
@@ -2166,6 +2177,7 @@ function loadAutoTable(jsonData) {
 			document.getElementById("batt_alert_div").style.display = "none";
 			document.getElementById("batt_alert").disabled = true;
 		} else {
+            document.getElementById("ble_warning_div").style.display = "none";
 			document.getElementById("mqtt_en").disabled = false;
 			document.getElementById("batt_alert").disabled = false;
 		}
@@ -2692,8 +2704,10 @@ function loadAutoTable(jsonData) {
 			}
 			if(obj.ble_status == "enable") {
 				document.getElementById("ble_status").selectedIndex = "0";
+                document.getElementById("ble_warning_div").style.display = "block";
 			} else if(obj.ble_status == "disable") {
 				document.getElementById("ble_status").selectedIndex = "1";
+                document.getElementById("ble_warning_div").style.display = "none";
 			}
 			if(obj.sleep_status == "enable") {
 				document.getElementById("sleep_status").selectedIndex = "0";
