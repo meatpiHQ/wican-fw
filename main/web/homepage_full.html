@@ -1109,7 +1109,7 @@
                     <td>Vehicle Profiles:</td>
                     <td>
                         <form id="car_data_form" enctype="multipart/form-data">
-                            <input id="car_data_file" name="car_data_file" type="file" onchange="sendCARDataFile();submit_enable();" />
+                            <input id="car_data_file" name="car_data_file" type="file" onchange="loadLocalCarModels();submit_enable();" />
                         </form>
                     </td>
                 </tr>
@@ -1811,56 +1811,154 @@
             addBtn.disabled = count >= 5 || document.getElementById('wifi_mode').value === 'SmartConnect';
         }
 
-		function sendCARDataFile() {
+		function loadLocalCarModels() {
 			const fileInput = document.getElementById("car_data_file");
-			const maxFileSize = 200 * 1024; 
 
 			if (fileInput.files.length == 0) {
                 showNotification("No files selected!", "red");
-				alert("No files selected!");
-			} else {
-				const file = fileInput.files[0];
+				return;
+			}
 
-				if (file.size > maxFileSize) {
-                    showNotification("File size exceeds 200KB!", "red");
-					alert("File size exceeds 200KB!");
-					return;
+			const file = fileInput.files[0];
+
+			const reader = new FileReader();
+			reader.onload = async function(event) {
+				try {
+                    const jsonData = JSON.parse(event.target.result);
+                    let data;
+                    
+                    // Check if it's a single car format (like Zeekr) with car_model property
+                    if (jsonData.car_model && jsonData.pids) {
+                        showNotification("Single car format detected. Fetching parameter definitions...", "blue");
+                        
+                        try {
+                            // Fetch params.json to get parameter definitions
+                            const paramsResponse = await fetch('https://raw.githubusercontent.com/meatpiHQ/wican-fw/refs/heads/main/.vehicle_profiles/params.json');
+                            const paramsData = await paramsResponse.json();
+                            
+                            // Convert single car format to vehicle_profiles.json format
+                            const convertedCar = convertSingleCarFormat(jsonData, paramsData);
+                            data = { cars: [convertedCar] };
+                            
+                            showNotification("Single car format converted successfully!", "green");
+                        } catch (fetchError) {
+                            console.warn('Failed to fetch params.json, using basic conversion:', fetchError);
+                            // Fallback: basic conversion without parameter enrichment
+                            data = { cars: [convertSingleCarBasic(jsonData)] };
+                            showNotification("Car model loaded (basic format - no internet connection)", "yellow");
+                        }
+                    } else {
+                        // Existing multi-car format
+                        data = jsonData.car_model ? { cars: [jsonData] } : jsonData;
+                    }
+                    
+                    latest_car_models = data;
+                    const carModels = [];
+                    carModels.push("Not Selected");
+                    
+                    if (data && Array.isArray(data.cars)) {
+                        data.cars.forEach(car => {
+                            if (car.car_model) {
+                                carModels.push(car.car_model);
+                            }
+                        });
+                    }
+                    
+                    console.log(carModels);
+                    var mod = { "supported": carModels };
+                    loadCarModels(mod);
+                    enableAutoStoreButton();
+                    
+                    if (!jsonData.car_model || !jsonData.pids) {
+                        showNotification("Car models loaded successfully!", "green");
+                    }
+				} catch (e) {
+                    showNotification("Invalid JSON file!", "red");
+                    console.error('JSON parse error:', e);
+				}
+			};
+			reader.readAsText(file);
+		}
+
+		function convertSingleCarFormat(singleCarData, paramsData) {
+			// Convert from Zeekr-style format to vehicle_profiles.json format
+			const convertedCar = {
+				car_model: singleCarData.car_model,
+				init: singleCarData.init,
+				pids: []
+			};
+
+			singleCarData.pids.forEach(pidEntry => {
+				const newPidEntry = {
+					pid: pidEntry.pid,
+					parameters: []
+				};
+
+				if (pidEntry.pid_init) {
+					newPidEntry.pid_init = pidEntry.pid_init;
 				}
 
-				const reader = new FileReader();
-				reader.onload = function(event) {
-					try {
-                        const jsonData = JSON.parse(event.target.result);
-                        const formattedData = jsonData.car_model ? { cars: [jsonData] } : jsonData;
-                        const unformattedJson = JSON.stringify(formattedData).replace(/\s+/g, '');
-                        
-                        const form = document.getElementById('car_data_form');
-                        const formData = new FormData(form);
-                        formData.set('car_data_file', new Blob([unformattedJson], {type: 'application/json'}));
-                        latest_car_models = null;
-                        
-                        fetch('/upload/car_data.json', {
-                            method: 'POST',
-                            body: formData
-                        })
-						.then(response => response.text())
-						.then(data => {
-							console.log('Success:', data);
-                            showNotification(data, "green");
-							setTimeout(() => {
-								window.location.reload();
-							}, 1000);
-						})
-						.catch(error => {
-							console.error('Error:', error);
-						});
-					} catch (e) {
-                        showNotification("Invalid JSON file!", "red");
-						alert("The selected file is not a valid JSON file!");
-					}
+				// Convert parameters from object format to array format
+				if (pidEntry.parameters && typeof pidEntry.parameters === 'object') {
+					Object.keys(pidEntry.parameters).forEach(paramName => {
+						const expression = pidEntry.parameters[paramName];
+						const paramDef = paramsData[paramName] || {};
+						
+						const parameter = {
+							name: paramName,
+							expression: expression,
+							unit: paramDef.settings?.unit || "",
+							class: paramDef.settings?.class || "none"
+						};
+
+						newPidEntry.parameters.push(parameter);
+					});
+				}
+
+				convertedCar.pids.push(newPidEntry);
+			});
+
+			return convertedCar;
+		}
+
+		function convertSingleCarBasic(singleCarData) {
+			// Basic conversion without parameter enrichment (fallback)
+			const convertedCar = {
+				car_model: singleCarData.car_model,
+				init: singleCarData.init,
+				pids: []
+			};
+
+			singleCarData.pids.forEach(pidEntry => {
+				const newPidEntry = {
+					pid: pidEntry.pid,
+					parameters: []
 				};
-				reader.readAsText(file);
-			}
+
+				if (pidEntry.pid_init) {
+					newPidEntry.pid_init = pidEntry.pid_init;
+				}
+
+				// Convert parameters from object format to array format (basic)
+				if (pidEntry.parameters && typeof pidEntry.parameters === 'object') {
+					Object.keys(pidEntry.parameters).forEach(paramName => {
+						const expression = pidEntry.parameters[paramName];
+						
+						const parameter = {
+							name: paramName,
+							expression: expression,
+							unit: "",
+							class: "none"
+						};
+
+						newPidEntry.parameters.push(parameter);
+					});
+				}
+
+				convertedCar.pids.push(newPidEntry);
+			});
+
+			return convertedCar;
 		}
 
         function addRowAutoTable() {
