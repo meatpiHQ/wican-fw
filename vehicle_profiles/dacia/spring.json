@@ -1,0 +1,13 @@
+{
+  "car_model": "Dacia: Spring/CITY K-ZE",
+  "init": "ATSP6;ATST64;ATFCSD300000;ATFCSM1;",
+  "pids": [
+    {
+      "pid": "2290021",
+      "pid_init": "ATSH79B;ATFCSH79B;ATCRA7BB;",
+      "parameters": {
+        "SOC": "B4/2"
+      }
+    }
+  ]
+}
