@@ -1,0 +1,85 @@
+name: Build WiCAN Log Viewer
+
+on:
+  push:
+    paths:
+      - 'tools/wican-log-viewer/**'
+      - '.github/workflows/log-viewer-build.yml'
+  pull_request:
+    paths:
+      - 'tools/wican-log-viewer/**'
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        working-directory: tools/wican-log-viewer
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Build release
+        run: cargo build --release --locked
+
+      - name: Package artifact
+        run: |
+          mkdir -p dist
+          if [ "${{ runner.os }}" = "Windows" ]; then cp target/release/wican-log-viewer.exe dist/; else cp target/release/wican-log-viewer dist/; fi
+          tar -czf wican-log-viewer-${{ runner.os }}.tar.gz -C dist .
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wican-log-viewer-${{ runner.os }}
+          path: tools/wican-log-viewer/wican-log-viewer-${{ runner.os }}.tar.gz
+
+  universal-macos:
+    name: macOS Universal Binary
+    runs-on: macos-latest
+    needs: build
+    if: always()
+    defaults:
+      run:
+        working-directory: tools/wican-log-viewer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Add targets
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Build both architectures
+        run: |
+          cargo build --release --locked --target aarch64-apple-darwin
+          cargo build --release --locked --target x86_64-apple-darwin
+      - name: Create universal binary
+        run: |
+          mkdir -p dist
+          lipo -create \
+            target/aarch64-apple-darwin/release/wican-log-viewer \
+            target/x86_64-apple-darwin/release/wican-log-viewer \
+            -output dist/wican-log-viewer
+          tar -czf wican-log-viewer-macos-universal.tar.gz -C dist wican-log-viewer
+      - name: Upload universal
+        uses: actions/upload-artifact@v4
+        with:
+          name: wican-log-viewer-macos-universal
+          path: tools/wican-log-viewer/wican-log-viewer-macos-universal.tar.gz

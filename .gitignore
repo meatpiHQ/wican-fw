@@ -61,3 +61,23 @@ docs/node_modules
 .vehicle_profiles/node_modules/
 .vscode/
 managed_components/
+
+# Rust (tools/wican-log-viewer)
+tools/wican-log-viewer/target/
+**/target/
+Cargo.lock
+*.rs.bk
+tools/wican-log-viewer/.cargo/
+
+# Rust coverage / profiling
+**/llvm-profdata
+**/llvm-profraw
+*.profraw
+*.profdata
+
+# OS-specific junk inside Rust tool dir
+tools/wican-log-viewer/*.dSYM/
+tools/wican-log-viewer/*.pdb
+tools/wican-log-viewer/*.dll
+tools/wican-log-viewer/*.exe
+
