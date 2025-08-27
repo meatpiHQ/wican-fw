@@ -65,7 +65,6 @@ managed_components/
 # Rust (tools/wican-log-viewer)
 tools/wican-log-viewer/target/
 **/target/
-Cargo.lock
 *.rs.bk
 tools/wican-log-viewer/.cargo/
 
