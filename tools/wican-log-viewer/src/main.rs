@@ -14,6 +14,10 @@ struct Args {
     max_lines: usize,
     #[arg(long, default_value_t=2000, help="Prune batch when over max")] 
     prune_batch: usize,
+    #[arg(long, default_value_t=false, help="Retry binding the UDP port every 2s if it's busy instead of exiting")] 
+    retry: bool,
+    #[arg(long, default_value_t=0, help="Forward received raw lines to this additional localhost UDP port (0=disabled)")]
+    forward: u16,
 }
 
 #[derive(Clone)]
@@ -26,18 +30,36 @@ struct LogLine {
     msg: String,
 }
 
-fn spawn_udp(port: u16, tx: crossbeam_channel::Sender<LogLine>) {
+fn spawn_udp(port: u16, forward_port: u16, tx: crossbeam_channel::Sender<LogLine>, retry: bool) {
     thread::spawn(move || {
-        let bind = ("0.0.0.0", port);
-        let sock = UdpSocket::bind(bind).expect("Failed to bind UDP port");
-        let mut buf = [0u8; 2048];
         loop {
-            if let Ok((n, _src)) = sock.recv_from(&mut buf) {
-                if n == 0 { continue; }
-                let raw = String::from_utf8_lossy(&buf[..n]).trim_end_matches(['\n','\r']).to_string();
-                if raw.is_empty() { continue; }
-                let parsed = parse_line(&raw);
-                let _ = tx.send(parsed);
+            match UdpSocket::bind(("0.0.0.0", port)) {
+                Ok(sock) => {
+                    eprintln!("[udp] listening on 0.0.0.0:{port}");
+                    let forward_sock = if forward_port != 0 { Some(UdpSocket::bind(("0.0.0.0", 0)).expect("forward bind")) } else { None };
+                    let mut buf = [0u8; 2048];
+                    loop {
+                        match sock.recv_from(&mut buf) {
+                            Ok((n, _src)) => {
+                                if n == 0 { continue; }
+                                let raw = String::from_utf8_lossy(&buf[..n]).trim_end_matches(['\n','\r']).to_string();
+                                if raw.is_empty() { continue; }
+                                if let Some(fs) = &forward_sock { let _ = fs.send_to(raw.as_bytes(), ("127.0.0.1", forward_port)); }
+                                let parsed = parse_line(&raw);
+                                let _ = tx.send(parsed);
+                            }
+                            Err(e) => {
+                                eprintln!("[udp] recv error: {e}");
+                                thread::sleep(Duration::from_millis(100));
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[udp] failed to bind port {port}: {e}");
+                    if !retry { eprintln!("[udp] exiting (use --retry to keep trying or choose a different --port)"); return; }
+                    thread::sleep(Duration::from_secs(2));
+                }
             }
         }
     });
@@ -171,7 +193,7 @@ impl eframe::App for App {
 fn main() -> eframe::Result<()> {
     let args = Args::parse();
     let (tx, rx) = unbounded();
-    spawn_udp(args.port, tx);
+    spawn_udp(args.port, args.forward, tx, args.retry);
     let app = App::new(rx, args.max_lines, args.prune_batch);
     let native_options = eframe::NativeOptions::default();
     eframe::run_native("WiCAN Log Viewer", native_options, Box::new(|_cc| Box::new(app)))
