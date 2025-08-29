@@ -57,25 +57,50 @@ async function add_json(jsonPath) {
         .map((l) => l.trim())
         .filter((l) => l.length > 0 && !l.startsWith("#"));
       if (lines.length > 0) {
-        const modelLower = data.car_model ? data.car_model.toLowerCase() : null;
-        let noteLine = null;
-        if (modelLower) {
-          for (const line of lines) {
-            const idx = line.indexOf(":");
-            if (idx !== -1) {
-              const prefix = line.substring(0, idx).trim();
-              if (prefix.toLowerCase() === modelLower) {
-                noteLine = line.substring(idx + 1).trim();
-                break;
-              }
-            }
+        const carModel = data.car_model || "";
+        const normalizedVariants = (() => {
+          const parts = carModel.split(":").map((p) => p.trim()).filter(Boolean);
+          const noColon = carModel.replace(/:/g, "").replace(/\s+/g, " ").trim();
+          const joinedSpace = parts.join(" ");
+          const modelOnly = parts.length > 1 ? parts.slice(1).join(" ") : carModel;
+          return [
+            carModel,
+            carModel.toLowerCase(),
+            noColon,
+            noColon.toLowerCase(),
+            joinedSpace,
+            joinedSpace.toLowerCase(),
+            modelOnly,
+            modelOnly.toLowerCase(),
+          ].filter((v, i, a) => v && a.indexOf(v) === i);
+        })();
+        let noteText = null;
+        for (const line of lines) {
+          const idx = line.indexOf(":");
+          if (idx === -1) {
+            continue;
+          }
+          const prefix = line.substring(0, idx).trim();
+          const prefixNorms = [
+            prefix,
+            prefix.toLowerCase(),
+            prefix.replace(/:/g, "").replace(/\s+/g, " ").trim(),
+            prefix.replace(/:/g, "").replace(/\s+/g, " ").trim().toLowerCase(),
+          ];
+          const matches = prefixNorms.some((p) => normalizedVariants.includes(p));
+          if (matches) {
+            noteText = line.substring(idx + 1).trim();
+            break;
           }
         }
-        if (!noteLine) {
-          noteLine = lines[0];
+        // Fallback: if no direct match, but first line contains a colon, use text after colon; else entire first line.
+        if (!noteText) {
+          const first = lines[0];
+          const idx = first.indexOf(":");
+            noteText = idx !== -1 ? first.substring(idx + 1).trim() : first;
         }
-        if (noteLine) {
-          const cleaned = noteLine.replace(/^#+\s*/, "");
+        if (noteText) {
+          const cleaned = noteText.replace(/^#+\s*/, "");
           data.note = cleaned.startsWith("(") ? cleaned : `(${cleaned})`;
         }
       }
