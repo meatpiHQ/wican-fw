@@ -4,16 +4,37 @@
   "pids": [
     {
       "pid": "22031E",
-      "pid_init": "ATSH7E0",
+      "pid_init": "ATFCSM0;ATAR;ATSH704;ATFCSM1;ATSH7E0;",
       "parameters": {
         "SOC": "[B4:B5]/10"
       }
     },
     {
       "pid": "2201011",
-      "pid_init": "ATFCSM1;ATCRA784",
+      "pid_init": "ATFCSM0;ATAR;ATSH704;ATFCSM1;ATCRA784;",
       "parameters": {
         "ODOMETER": "[B4:B6]"
+      }
+    },
+    {
+      "pid": "22011A",
+      "pid_init": "ATFCSM0;ATAR;ATSH704;ATFCSM1;ATCRA784;",
+      "parameters": {
+        "SOH": "B0*33.33"
+      }
+    },
+    {
+      "pid": "2211011",
+      "pid_init": "ATFCSM0;ATAR;ATSH704;ATFCSM1;ATCRA784;",
+      "parameters": {
+        "HV_V": "(B4*256+B5)/10.0"
+      }
+    },
+    {
+      "pid": "2203281",
+      "pid_init": "ATSP6;ATFCSH704;ATFCSD300000;ATSH7E0;;",
+      "parameters": {
+        "BATT_TEMP": "[B0:B7]/8380000000000000"
       }
     }
   ]
