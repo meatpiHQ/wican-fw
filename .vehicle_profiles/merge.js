@@ -49,7 +49,9 @@ async function add_json(jsonPath) {
   try {
     const dir = path.dirname(jsonPath);
     try {
-      const raw = await readFile(path.join(dir, "README.md"), { encoding: "utf8" });
+      const raw = await readFile(path.join(dir, "README.md"), {
+        encoding: "utf8",
+      });
       const lines = raw
         .split(/\r?\n/)
         .map((l) => l.trim())
@@ -105,7 +107,9 @@ const resultString = JSON.stringify(result);
 // result = JSON.stringify(result, null, 2);
 await writeFile(target, resultString);
 
-const displayCars = result.cars.filter((car) => car.car_model !== "AAA: Generic");
+const displayCars = result.cars.filter(
+  (car) => car.car_model !== "AAA: Generic",
+);
 let supportedVehiclesListContent = `<!--
 
 ================================================================
