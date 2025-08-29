@@ -1,5 +1,9 @@
 name: PR Workflow for Vehicle Profiles
 
+permissions:
+  contents: read
+  pull-requests: write
+
 on:
   pull_request:
     paths:
