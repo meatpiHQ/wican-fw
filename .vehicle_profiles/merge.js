@@ -1,6 +1,7 @@
 import { glob } from "glob";
 import { readFile, writeFile } from "fs/promises";
 import editJsonFile from "edit-json-file";
+import path from "path";
 
 const source_folder = "../vehicle_profiles";
 const target = "../vehicle_profiles.json";
@@ -22,10 +23,10 @@ let result = {
   cars: [],
 };
 
-async function add_json(path) {
-  let data = JSON.parse(await readFile(path));
+async function add_json(jsonPath) {
+  let data = JSON.parse(await readFile(jsonPath));
   if (!data.pids || typeof data.pids !== "object") {
-    console.warn(`Warning: Skipping file without valid 'pids': ${path}`);
+    console.warn(`Warning: Skipping file without valid 'pids': ${jsonPath}`);
     return;
   }
   Object.keys(data.pids).forEach((key) => {
@@ -39,6 +40,50 @@ async function add_json(path) {
     }
     data.pids[key].parameters = newParams;
   });
+
+  // Attempt to load an optional note from README.md in the same folder.
+  // Rules:
+  //  - Look only at README.md.
+  //  - If a line matches '<exact car_model>: some note', use that note (case-insensitive match on car_model).
+  //  - Else use the first non-empty, non-heading line as a generic note for all models in that folder.
+  try {
+    const dir = path.dirname(jsonPath);
+    try {
+      const raw = await readFile(path.join(dir, "README.md"), { encoding: "utf8" });
+      const lines = raw
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0 && !l.startsWith("#"));
+      if (lines.length > 0) {
+        const modelLower = data.car_model ? data.car_model.toLowerCase() : null;
+        let noteLine = null;
+        if (modelLower) {
+          for (const line of lines) {
+            const idx = line.indexOf(":");
+            if (idx !== -1) {
+              const prefix = line.substring(0, idx).trim();
+              if (prefix.toLowerCase() === modelLower) {
+                noteLine = line.substring(idx + 1).trim();
+                break;
+              }
+            }
+          }
+        }
+        if (!noteLine) {
+          noteLine = lines[0];
+        }
+        if (noteLine) {
+          const cleaned = noteLine.replace(/^#+\s*/, "");
+          data.note = cleaned.startsWith("(") ? cleaned : `(${cleaned})`;
+        }
+      }
+    } catch (_) {
+      // README absent; ignore
+    }
+  } catch (e) {
+    console.warn("Note detection failed for", jsonPath, e.message);
+  }
+
   result.cars.push(data);
 }
 
@@ -60,9 +105,7 @@ const resultString = JSON.stringify(result);
 // result = JSON.stringify(result, null, 2);
 await writeFile(target, resultString);
 
-const models = result.cars
-  .map((car) => car.car_model)
-  .filter((model) => model !== "AAA: Generic");
+const displayCars = result.cars.filter((car) => car.car_model !== "AAA: Generic");
 let supportedVehiclesListContent = `<!--
 
 ================================================================
@@ -76,7 +119,10 @@ WiCAN vehicle profiles are available for the vehicles listed below. These profil
 If your vehicle is a non-electric or hybrid model, you can try scanning standard PIDs using the Automate tab:
 https://meatpihq.github.io/wican-fw/config/automate/usage#standard-pids
 `;
-models.forEach((model) => (supportedVehiclesListContent += `- ${model}\n`));
+displayCars.forEach((car) => {
+  const note = car.note ? ` ${car.note}` : "";
+  supportedVehiclesListContent += `- ${car.car_model}${note}\n`;
+});
 
 const supportedVehiclesListFilepath = await glob(
   "../docs/content/*.Config/*.Automate/*.Supported_Vehicles.md",
