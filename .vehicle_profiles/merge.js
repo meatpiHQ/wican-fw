@@ -41,15 +41,15 @@ async function add_json(jsonPath) {
     data.pids[key].parameters = newParams;
   });
 
-  // Attempt to load an optional note from README.md in the same folder.
+  // Attempt to load an optional note from supported.md in the same folder.
   // Rules:
-  //  - Look only at README.md.
+  //  - Look only at supported.md.
   //  - If a line matches '<exact car_model>: some note', use that note (case-insensitive match on car_model).
   //  - Else use the first non-empty, non-heading line as a generic note for all models in that folder.
   try {
     const dir = path.dirname(jsonPath);
     try {
-      const raw = await readFile(path.join(dir, "README.md"), {
+      const raw = await readFile(path.join(dir, "supported.md"), {
         encoding: "utf8",
       });
       const lines = raw
