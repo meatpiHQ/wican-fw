@@ -59,10 +59,17 @@ async function add_json(jsonPath) {
       if (lines.length > 0) {
         const carModel = data.car_model || "";
         const normalizedVariants = (() => {
-          const parts = carModel.split(":").map((p) => p.trim()).filter(Boolean);
-          const noColon = carModel.replace(/:/g, "").replace(/\s+/g, " ").trim();
+          const parts = carModel
+            .split(":")
+            .map((p) => p.trim())
+            .filter(Boolean);
+          const noColon = carModel
+            .replace(/:/g, "")
+            .replace(/\s+/g, " ")
+            .trim();
           const joinedSpace = parts.join(" ");
-          const modelOnly = parts.length > 1 ? parts.slice(1).join(" ") : carModel;
+          const modelOnly =
+            parts.length > 1 ? parts.slice(1).join(" ") : carModel;
           return [
             carModel,
             carModel.toLowerCase(),
@@ -87,7 +94,9 @@ async function add_json(jsonPath) {
             prefix.replace(/:/g, "").replace(/\s+/g, " ").trim(),
             prefix.replace(/:/g, "").replace(/\s+/g, " ").trim().toLowerCase(),
           ];
-          const matches = prefixNorms.some((p) => normalizedVariants.includes(p));
+          const matches = prefixNorms.some((p) =>
+            normalizedVariants.includes(p),
+          );
           if (matches) {
             noteText = line.substring(idx + 1).trim();
             break;
@@ -97,7 +106,7 @@ async function add_json(jsonPath) {
         if (!noteText) {
           const first = lines[0];
           const idx = first.indexOf(":");
-            noteText = idx !== -1 ? first.substring(idx + 1).trim() : first;
+          noteText = idx !== -1 ? first.substring(idx + 1).trim() : first;
         }
         if (noteText) {
           const cleaned = noteText.replace(/^#+\s*/, "");
