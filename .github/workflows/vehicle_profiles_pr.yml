@@ -44,6 +44,7 @@ jobs:
           echo "Generated file size: $(wc -c < ../vehicle_profiles.json) bytes"
 
       - name: Upload merged vehicle profiles
+        id: upload
         if: success()
         uses: actions/upload-artifact@v4
         with:
@@ -53,10 +54,13 @@ jobs:
       - name: Comment on PR with testing instructions
         if: success()
         uses: actions/github-script@v7
+        env:
+          link: '${{steps.upload.outputs.artifact-url}}'
         with:
           script: |
+            const {link} = process.env;
             const prNumber = context.payload.pull_request.number;
-            const message = `✅ Vehicle profiles merged successfully!\n\nPlease use the merged files from the uploaded artifact (vehicle_profiles.json) for your testing.`;
+            const message = `✅ Vehicle profiles merged successfully!\n\nPlease use the merged files from the uploaded artifact [vehicle_profiles.json](${link}) for your testing.`;
             await github.rest.issues.createComment({
               ...context.repo,
               issue_number: prNumber,
