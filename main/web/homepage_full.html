@@ -1029,35 +1029,18 @@
                     </td>
                 </tr>
                 <tr>
-                    <td>Destination Type:</td>
-                    <td><select id="group_dest_type" name="group_dest_type" onchange="toggleGroupApiToken(); enableAutoStoreButton();submit_enable();">
-                        <option value="Default">Default</option>
-                        <option value="MQTT_Topic">MQTT Topic</option>
-                        <option value="HTTP">HTTP POST</option>
-                        <option value="HTTPS">HTTPS POST</option>
-                        <option value="ABRP_API">ABRP API</option>
-                    </select>
-                    </td>
-                </tr>
-                <tr id="group_api_token_row" style="display:none;">
-                    <td>API Token:</td>
-                    <td>
-                        <input type="text" id="group_api_token" name="group_api_token" placeholder="Bearer token" oninput="enableAutoStoreButton();submit_enable();" />
-                    </td>
-                </tr>
-                <tr>
-                    <td>Destination:</td>
-                    <td>
-                        <input type="text" id="destination" name="destination" disabled oninput="enableAutoStoreButton();submit_enable();">
-                    </td>
-                </tr>
-                <tr>
-                    <td>Cycle Time(ms):</td>
-                    <td>
-                        <input type="text" id="group_cycle" name="group_cycle" value="5000" disabled oninput="enableAutoStoreButton();submit_enable();">
-                    </td>
+                    <td colspan="2" style="padding:4px 0; font-size:0.8rem; color:#555;">Configure one or more destinations below (max 6). Legacy single destination fields are derived from the first entry.</td>
                 </tr>
             </table>
+            <div class="section-title" style="margin-top:1rem;">Destinations</div>
+            <div id="destinations_section" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:6px; padding:0.75rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                    <div style="font-weight:600;">Configured Destinations</div>
+                    <button id="add_destination_btn" class="primary-button" style="padding:4px 10px;" onclick="addDestinationEntry();">Add Destination</button>
+                </div>
+                <div id="destinations_container"></div>
+                <div style="font-size:0.7rem; color:#555; margin-top:0.5rem;">Cycle &ge; 1000 ms (or 0 for event). HTTPS requires a cert set (or 'default' embedded CA). ABRP_API requires a token. To add more certs go to System tab.</div>
+            </div>
             <div class="section-title">Standard PIDs</div>
             <table class="form-table">
                 <tr>
@@ -2422,6 +2405,120 @@ function addCarParameter(rowData = {}) {
     }
 }
 
+// ==== Multi-destination support ====
+window.automateDestinations = [];
+window.certManagerSetsCache = null;
+
+async function fetchCertSetsForDestinations() {
+    if (window.certManagerSetsCache) return window.certManagerSetsCache;
+    try {
+        const r = await fetch('/cert_manager/sets');
+        if (!r.ok) throw new Error('cert sets HTTP '+r.status);
+        const arr = await r.json();
+        if (Array.isArray(arr)) {
+            window.certManagerSetsCache = ['default'].concat(arr.map(s=>s.name).filter(Boolean));
+        } else {
+            window.certManagerSetsCache = ['default'];
+        }
+    } catch(e){
+        console.warn('Failed to load cert sets', e);
+        window.certManagerSetsCache = ['default'];
+    }
+    return window.certManagerSetsCache;
+}
+
+function truncateMiddle(str, max=40){
+    if (!str) return '';
+    if (str.length <= max) return str;
+    const half = Math.floor((max-3)/2);
+    return str.slice(0,half)+'...'+str.slice(-half);
+}
+
+function renderDestinations(){
+    const container = document.getElementById('destinations_container');
+    if(!container) return;
+    container.innerHTML='';
+    if(!Array.isArray(window.automateDestinations)) window.automateDestinations=[];
+    window.automateDestinations.forEach((d,idx)=>{
+        const wrap = document.createElement('div');
+        wrap.className='dest-entry';
+        wrap.style.cssText='border:1px solid #e2e8f0; background:#fff; border-radius:6px; margin-bottom:8px;';
+        const header = document.createElement('div');
+        header.className='dest-header';
+        header.style.cssText='display:flex; align-items:center; justify-content:space-between; cursor:pointer; padding:6px 8px; background:#f1f5f9; border-radius:6px 6px 0 0;';
+        const left = document.createElement('div');
+        left.style.cssText='display:flex; align-items:center; gap:8px; flex:1;';
+        const collapseBtn = document.createElement('button');
+    const isCollapsed = !!d.collapsed;
+    collapseBtn.textContent = isCollapsed ? '▼' : '▲';
+        collapseBtn.style.cssText='border:none; background:transparent; font-size:0.75rem; cursor:pointer; padding:2px 4px;';
+        const title = document.createElement('div');
+        title.style.cssText='font-weight:600; font-size:0.8rem; flex:1;';
+        title.textContent=`${idx+1}. ${d.type} - ${truncateMiddle(d.destination||'(unset)',50)}`;
+        const enabledLabel = document.createElement('label');
+        enabledLabel.style.cssText='display:flex; align-items:center; gap:4px; font-size:0.7rem;';
+        const enabledChk = document.createElement('input');
+        enabledChk.type='checkbox';
+        enabledChk.checked = d.enabled !== false;
+        enabledChk.onchange = ()=>{ d.enabled = enabledChk.checked; enableAutoStoreButton(); };
+        enabledLabel.appendChild(enabledChk); enabledLabel.appendChild(document.createTextNode('Enabled'));
+        const delBtn = document.createElement('button');
+        delBtn.textContent='Delete';
+        delBtn.style.cssText='background:#dc2626; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.65rem;';
+        delBtn.onclick=(e)=>{ e.stopPropagation(); if(confirm('Delete destination '+(idx+1)+'?')){ window.automateDestinations.splice(idx,1); renderDestinations(); enableAutoStoreButton(); }};
+        left.appendChild(collapseBtn); left.appendChild(title);
+        header.appendChild(left);
+        header.appendChild(enabledLabel);
+        header.appendChild(delBtn);
+    const content = document.createElement('div');
+    content.style.cssText='padding:8px 10px;'+(isCollapsed?'display:none;':'display:block;');
+        content.innerHTML=`<table style="width:100%; border-collapse:collapse; font-size:0.75rem;">
+            <tr><td style="width:110px;">Type:</td><td>
+                <select class="dest-type" style="width:180px;">
+                    <option value="Default" ${d.type==='Default'?'selected':''}>Default</option>
+                    <option value="MQTT_Topic" ${d.type==='MQTT_Topic'?'selected':''}>MQTT Topic</option>
+                    <option value="HTTP" ${d.type==='HTTP'?'selected':''}>HTTP POST</option>
+                    <option value="HTTPS" ${d.type==='HTTPS'?'selected':''}>HTTPS POST</option>
+                    <option value="ABRP_API" ${d.type==='ABRP_API'?'selected':''}>ABRP API</option>
+                </select>
+            </td></tr>
+            <tr><td>Destination:</td><td><input type="text" class="dest-url" value="${(d.destination||'').replace(/"/g,'&quot;')}" placeholder="URL / topic" style="width:100%;"/></td></tr>
+            <tr><td>Cycle (ms):</td><td><input type="number" class="dest-cycle" value="${d.cycle}" min="0" style="width:120px;"/></td></tr>
+            <tr class="row-api-token" ${(d.type==='ABRP_API'||d.type==='HTTP'||d.type==='HTTPS')?'':'style="display:none;"'}><td>API Token:</td><td><input type="text" class="dest-api-token" value="${(d.api_token||'').replace(/"/g,'&quot;')}" placeholder="Bearer / API Token (optional for HTTP/HTTPS)" style="width:100%;"/></td></tr>
+            <tr class="row-cert-set" ${d.type==='HTTPS'?'':'style="display:none;"'}><td>Cert Set:</td><td><select class="dest-cert-set" style="width:180px;"></select></td></tr>
+        </table>`;
+        function toggleCollapse(e){
+            e.stopPropagation();
+            const currentlyHidden = content.style.display==='none';
+            const newHidden = !currentlyHidden; // we will toggle
+            content.style.display = newHidden ? 'none' : 'block';
+            collapseBtn.textContent = newHidden ? '▼' : '▲';
+            d.collapsed = newHidden; // persist state
+        }
+        header.onclick=toggleCollapse; collapseBtn.onclick=toggleCollapse;
+        wrap.appendChild(header); wrap.appendChild(content); container.appendChild(wrap);
+        const typeSel = content.querySelector('.dest-type');
+        const urlIn = content.querySelector('.dest-url');
+        const cycleIn = content.querySelector('.dest-cycle');
+        const apiRow = content.querySelector('.row-api-token');
+        const apiIn = content.querySelector('.dest-api-token');
+        const certRow = content.querySelector('.row-cert-set');
+        const certSel = content.querySelector('.dest-cert-set');
+    const bind = ()=>{ enableAutoStoreButton(); d.type=typeSel.value; d.destination=urlIn.value.trim(); d.cycle=parseInt(cycleIn.value)||0; d.api_token=apiIn?apiIn.value.trim():''; d.cert_set=certSel?certSel.value:'default'; title.textContent=`${idx+1}. ${d.type} - ${truncateMiddle(d.destination||'(unset)',50)}`; apiRow.style.display=(d.type==='ABRP_API'||d.type==='HTTP'||d.type==='HTTPS')?'table-row':'none'; certRow.style.display=(d.type==='HTTPS')?'table-row':'none'; };
+        typeSel.onchange=bind; urlIn.oninput=bind; cycleIn.oninput=bind; if(apiIn) apiIn.oninput=bind; if(certSel) certSel.onchange=bind;
+        fetchCertSetsForDestinations().then(list=>{ if(certSel){ certSel.innerHTML=list.map(n=>`<option value="${n}" ${d.cert_set===n?'selected':''}>${n}</option>`).join(''); d.cert_set = certSel.value; }});
+    });
+    document.getElementById('add_destination_btn').disabled = window.automateDestinations.length>=6;
+}
+
+function addDestinationEntry(){
+    if(!Array.isArray(window.automateDestinations)) window.automateDestinations=[];
+    if(window.automateDestinations.length>=6){ showNotification('Maximum 6 destinations', 'red'); return; }
+    window.automateDestinations.push({type:'Default', destination:'', cycle:5000, api_token:'', cert_set:'default', enabled:true});
+    renderDestinations();
+    enableAutoStoreButton();
+}
+
 function loadAutoTable(jsonData) {
         try {
             console.log("Raw jsonData:", jsonData);
@@ -2448,13 +2545,38 @@ function loadAutoTable(jsonData) {
             setElementValue("car_specific", data.car_specific, 'disable');
             setElementValue("ha_discovery", 'disable');
             setElementValue("grouping", data.grouping, 'disable');
-            setElementValue("group_cycle", data.cycle, '5000');
-            setElementValue("destination", data.destination, '');
+            // Legacy cycle/destination will be migrated into destinations[0].
             setElementValue("car_model", data.car_model, '');
             setElementValue("standard_pids", data.standard_pids, 'disable');
             setElementValue("ecu_protocol", data.ecu_protocol, '6');
-            setElementValue("group_dest_type", data.group_dest_type, 'Default');
-            setElementValue("group_api_token", data.group_api_token, '');
+            // group_dest_type & group_api_token migrated via destinations array.
+
+            // Destinations migration
+            window.automateDestinations = [];
+            if (Array.isArray(data.destinations) && data.destinations.length) {
+                data.destinations.slice(0,6).forEach(d => {
+                    window.automateDestinations.push({
+                        type: d.type || 'Default',
+                        destination: d.destination || '',
+                        cycle: (typeof d.cycle==='number'? d.cycle : parseInt(d.cycle)||5000),
+                        api_token: d.api_token || '',
+                        cert_set: d.cert_set || 'default',
+                        enabled: (d.enabled===false)?false:true
+                    });
+                });
+            } else {
+                window.automateDestinations.push({
+                    type: data.group_dest_type || 'Default',
+                    destination: data.destination || '',
+                    cycle: (typeof data.cycle==='number'? data.cycle : parseInt(data.cycle)||5000),
+                    api_token: data.group_api_token || '',
+                    cert_set: 'default',
+                    enabled: true
+                });
+            }
+            // Collapse all destinations on initial load
+            window.automateDestinations.forEach(d=>{ d.collapsed = true; });
+            renderDestinations();
             
             if (data.pids && Array.isArray(data.pids)) {
                 data.pids.forEach((pidData, index) => {
@@ -2549,12 +2671,7 @@ function loadAutoTable(jsonData) {
 
             const initialisationValue = document.getElementById("initialisation")?.value || '';
             const groupingValue = document.getElementById("grouping")?.value || 'disable';
-            const groupDestTypeValue = document.getElementById("group_dest_type")?.value || 'Default';
             const ha_discoveryValue = document.getElementById("ha_discovery")?.value || 'disable';
-            const group_api_token_value = document.getElementById("group_api_token")?.value || '';
-            const destinationValue = document.getElementById("destination")?.value || '';
-            const cycleField = document.getElementById("group_cycle");
-            const cycleValue = cycleField?.value || '5000';
             const carSpecificValue = document.getElementById("car_specific")?.value || 'disable';
             const carModelField = document.getElementById("car_model");
             const standard_pidsValue = document.getElementById("standard_pids")?.value || 'disable';
@@ -2603,9 +2720,15 @@ function loadAutoTable(jsonData) {
 
 
 
-            if (!cycleField.disabled && (!/^\d+$/.test(cycleValue) || parseInt(cycleValue) < 1000)) {
-                showNotification("Cycle must be a number greater than 1000", "red");
-                return false;
+            // Validate destinations
+            if (!Array.isArray(window.automateDestinations) || window.automateDestinations.length===0){
+                showNotification('At least one destination required','red'); return false; }
+            for (let i=0;i<window.automateDestinations.length;i++){
+                const d = window.automateDestinations[i];
+                if (!Number.isInteger(d.cycle)) { showNotification(`Destination ${i+1} cycle invalid`,'red'); return false; }
+                if (d.cycle!==0 && d.cycle<1000){ showNotification(`Destination ${i+1} cycle must be >=1000 or 0`,'red'); return false; }
+                if (d.type==='ABRP_API' && !d.api_token){ showNotification(`Destination ${i+1} requires API token`,'red'); return false; }
+                if (d.type==='HTTPS' && !d.cert_set){ showNotification(`Destination ${i+1} select cert set`,'red'); return false; }
             }
 
             if(entries?.length) {
@@ -2667,9 +2790,9 @@ function loadAutoTable(jsonData) {
             const jsonData = {
                 initialisation: initialisationValue,
                 grouping: groupingValue,
-                group_dest_type: groupDestTypeValue,
-                destination: destinationValue,
-                cycle: cycleValue,
+                group_dest_type: window.automateDestinations[0]?.type || 'Default',
+                destination: window.automateDestinations[0]?.destination || '',
+                cycle: window.automateDestinations[0]?.cycle ?? 5000,
                 car_specific: carSpecificValue,
                 ha_discovery: ha_discoveryValue,
                 car_model: carModelValue,
@@ -2677,7 +2800,8 @@ function loadAutoTable(jsonData) {
                 std_pids: std_pid_data,
                 standard_pids: standard_pidsValue,
                 ecu_protocol: ecu_protocolValue,
-                group_api_token: group_api_token_value
+                group_api_token: window.automateDestinations[0]?.api_token || '',
+                destinations: window.automateDestinations
             };
 
             await fetch('store_auto_data', {
