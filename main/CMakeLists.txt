@@ -65,6 +65,7 @@ set(requires
     unity
     cmdline
     zorxx__multipart-parser
+    debug_logs
 )
 
 # Register the component

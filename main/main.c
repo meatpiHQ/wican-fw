@@ -73,6 +73,7 @@
 #include "wc_timer.h"
 #include "filesystem.h"
 #include "safemode.h"
+#include "debug_logs.h"
 
 #define TAG 		__func__
 #define USB_ID_PIN					39
