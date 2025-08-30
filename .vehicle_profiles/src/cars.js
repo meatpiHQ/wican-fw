@@ -1,6 +1,7 @@
 import { glob } from "glob";
 import { readFile, writeFile } from "fs/promises";
 import { get_params } from "./params.js"
+import { exit } from "process";
 
 const PARAMS_TO_IGNORE = [
     'note',
@@ -36,20 +37,16 @@ export async function process_cars(){
 async function write_cars(cars){
   //Encode and decode to create a copy not linked to original
   cars = JSON.parse(JSON.stringify(cars));
-
   //Clean params to not write to file
-  Object.getOwnPropertyNames(cars).forEach(car => {
-    Object.getOwnPropertyNames(cars[car]).forEach(field => {
+  cars.forEach(car => {
+    Object.getOwnPropertyNames(car).forEach(field => {
       if(PARAMS_TO_IGNORE.includes(field)){
-        delete cars[car][field]
+        delete car[field]
       }
     })
   })
 
-  let data = {
-    result: {cars},
-  }
-  const resultString = JSON.stringify(data);
+  const resultString = JSON.stringify({cars});
   //Use below line instead for generating pretty json
   // result = JSON.stringify(result, null, 2);
   await writeFile(PROFILE_TARGET, resultString);
