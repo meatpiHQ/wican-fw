@@ -1,5 +1,7 @@
 {
   "car_model": "AAA: Generic",
+  "comment": "Generic car as a starting point for any ICE car",
+  "add_to_docs": false,
   "init": "ATSP6;",
   "pids": [
     {
