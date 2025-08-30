@@ -199,6 +199,7 @@ When you're curious about whether your vehicle is supported or how it behaves wi
 - **Search GitHub issues** for your vehicle’s make and model.
 - Many users share firsthand experiences, common pitfalls, and working configurations.
 
+# Supported Vehicles
 `;
 displayCars.forEach((car) => {
   const note = car.note ? ` ${car.note}` : "";
