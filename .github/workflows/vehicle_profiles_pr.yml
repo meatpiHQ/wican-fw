@@ -63,7 +63,7 @@ jobs:
         with:
           script: |
             const prNumber = context.payload.pull_request.number;
-            const message = `✅ Vehicle profiles merged successfully!\n\nPlease use the merged files from the uploaded artifact [vehicle_profiles.json](${process.env.link}) for your testing.`;
+            const message = `✅ Vehicle profiles merged successfully!\n\nPlease download and test the updated [vehicle_profiles.json](${process.env.link}).`;
             await github.rest.issues.createComment({
               ...context.repo,
               issue_number: prNumber,
