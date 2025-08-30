@@ -66,6 +66,7 @@ set(requires
     cmdline
     zorxx__multipart-parser
     debug_logs
+    cert_manager
 )
 
 # Register the component

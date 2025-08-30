@@ -86,6 +86,7 @@
 #include "sdcard.h"
 #include "obd2_standard_pids.h"
 #include "wifi_mgr.h"
+#include "cert_manager.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
@@ -3176,8 +3177,7 @@ static void register_server_uris(void)
 	httpd_register_uri_handler(server, &obd_logger_ws);
 	httpd_register_uri_handler(server, &db_download_uri);
 	httpd_register_uri_handler(server, &db_files_uri);
-	//last uri /*
-	httpd_register_uri_handler(server, &get_uri_common);
+	// NOTE: catch-all wildcard handler moved to after cert manager handlers to avoid shadowing
 }
 //static char* device_config = NULL;
 static uint8_t esp_fatfs_flag = 0;
@@ -3229,6 +3229,8 @@ static httpd_handle_t config_server_init(void)
 	if(esp_fatfs_flag == 0) 
 	{
 		filesystem_init();
+		// Initialize certificate manager storage (creates /certs if missing)
+		cert_manager_init();
 		// Handle config.json
 		FILE* f = fopen(FS_MOUNT_POINT"/config.json", "r");
 		if (f == NULL)
@@ -3307,15 +3309,19 @@ static httpd_handle_t config_server_init(void)
                          vrestartTimerCallback
                        );
 
-    // Start the httpd server
-	config.max_uri_handlers = 24;
+	// Start the httpd server (reserve extra slots for cert manager endpoints)
+	config.max_uri_handlers = 32;
 	config.stack_size = (10*1024);
 	config.max_open_sockets = 15;
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
-    if (httpd_start(&server, &config) == ESP_OK)
+	if (httpd_start(&server, &config) == ESP_OK)
     {
         // Set URI handlers
 		register_server_uris();
+		// Register certificate manager endpoints (before wildcard catch-all so they match first)
+		cert_manager_register_handlers(server);
+		// Now register catch-all wildcard
+		httpd_register_uri_handler(server, &get_uri_common);
 		ESP_LOGI(TAG, "Server started successfully");
 		
         #if CONFIG_EXAMPLE_BASIC_AUTH
@@ -3335,7 +3341,9 @@ void config_server_restart(void)
     {
         // Set URI handlers
         ESP_LOGI(TAG, "Registering URI handlers");
-        register_server_uris();
+		register_server_uris();
+		cert_manager_register_handlers(server);
+		httpd_register_uri_handler(server, &get_uri_common);
 		ESP_LOGI(TAG, "Server restarted successfully");
         return;
     }
