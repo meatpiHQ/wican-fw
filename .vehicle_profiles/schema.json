@@ -5,6 +5,18 @@
       "description": "Name of car model, should include Make and Model(s)",
       "type": "string"
     },
+    "note": {
+      "description": "Used for note on docs",
+      "type": "string"
+    },
+    "comment": {
+      "description": "Used for any internal notes/comments needed for profile",
+      "type": "string"
+    },
+    "add_to_docs": {
+      "description": "Can be set to false to not add to docs, typically for generic cars",
+      "type": "boolean"
+    },
     "init": {
       "description": "Init String, don't forget the final ;",
       "type": "string"
@@ -15,7 +27,9 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["pid"],
+        "required": [
+          "pid"
+        ],
         "properties": {
           "pid": {
             "description": "The PID for this group of parameters",
@@ -109,6 +123,7 @@
       }
     }
   },
+  "additionalProperties": false,
   "title": "WiCan Vehicle Profile",
   "type": "object"
 }
