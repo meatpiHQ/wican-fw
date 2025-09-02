@@ -1891,9 +1891,9 @@ all_pids_t* load_all_pids(void){
             all_pids->std_ecu_protocol = ecu_protocol_item ? strdup_psram(ecu_protocol_item->valuestring) : NULL;
             all_pids->ha_discovery_en = ha_discovery_item ? (strcmp(ha_discovery_item->valuestring, "enable") == 0) : false;
 
-            if(cycle_item->valuestring && strlen(cycle_item->valuestring) > 0)
+            if(cycle_item && cycle_item->valuestring && strlen(cycle_item->valuestring) > 0)
                 all_pids->cycle = atoi(cycle_item->valuestring);
-            else if(cycle_item->valueint)
+            else if(cycle_item && cycle_item->valueint)
                 all_pids->cycle = cycle_item->valueint;
             else
                 all_pids->cycle = 10000;
@@ -1976,9 +1976,9 @@ all_pids_t* load_all_pids(void){
                                 }
                             }
 
-                            if(cycle_item2->valuestring && strlen(cycle_item2->valuestring) > 0)
+                            if(cycle_item2 && cycle_item2->valuestring && strlen(cycle_item2->valuestring) > 0)
                                 gd->cycle = (uint32_t)atoi(cycle_item2->valuestring);
-                            else if(cycle_item2->valueint)
+                            else if(cycle_item2 && cycle_item2->valueint)
                                 gd->cycle = (uint32_t)cycle_item2->valueint;
                             else
                                 gd->cycle = 10000;
@@ -2084,9 +2084,9 @@ all_pids_t* load_all_pids(void){
                         }
                     }
 
-                    if(period_item->valuestring && strlen(period_item->valuestring) > 0)
+                    if(period_item && period_item->valuestring && strlen(period_item->valuestring) > 0)
                         curr_pid->period = atoi(period_item->valuestring);
-                    else if(period_item->valueint)
+                    else if(period_item && period_item->valueint)
                         curr_pid->period = (uint32_t)period_item->valueint;
                     else
                         curr_pid->period = 10000; // Default to 10 seconds if not specified
