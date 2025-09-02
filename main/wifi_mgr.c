@@ -1051,7 +1051,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                 
             case WIFI_EVENT_STA_CONNECTED:
                 ESP_LOGI(TAG, "STA connected");
-                dev_status_set_sta_connected();
+                
                 break;
                 
             case WIFI_EVENT_STA_DISCONNECTED:
@@ -1143,7 +1143,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         
         xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT | WIFI_STA_GOT_IP_BIT);
         xEventGroupClearBits(wifi_event_group, WIFI_DISCONNECTED_BIT);
-        
+        dev_status_set_sta_connected();
         if (user_callbacks.sta_connected) {
             user_callbacks.sta_connected();
         }
