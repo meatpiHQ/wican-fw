@@ -1014,7 +1014,7 @@
                 <tr>
                     <td>MQTT HA Discovery:</td>
                     <td>
-                        <select id="ha_discovery" name="ha_discovery" onchange="toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
+                        <select id="ha_discovery" name="ha_discovery" onchange="toggleSendToFields(); enableAutoStoreButton();submit_enable();">
                             <option value="disable">Disable</option>
                         </select>
                     </td>
@@ -1022,7 +1022,7 @@
                 <tr>
                     <td>Grouping:</td>
                     <td>
-                        <select id="grouping" name="grouping" onchange="toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
+                        <select id="grouping" name="grouping" onchange="toggleSendToFields(); enableAutoStoreButton();submit_enable();">
                             <option value="disable">Disable</option>
                             <option value="enable">Enable</option>
                         </select>
@@ -1084,7 +1084,7 @@
                 <tr>
                     <td>Vehicle Specific:</td>
                     <td>
-                        <select id="car_specific" name="car_specific" onchange="toggleCarModel(); toggleDestinationAndCycle(); enableAutoStoreButton();submit_enable();">
+                        <select id="car_specific" name="car_specific" onchange="toggleCarModel(); enableAutoStoreButton();submit_enable();">
                             <option value="disable">Disable</option>
                             <option value="enable">Enable</option>
                         </select>
@@ -1551,7 +1551,6 @@
                 console.error("Invalid data format or missing 'supported' property.");
             }
 			toggleCarModel();
-			toggleDestinationAndCycle();
 			toggleSendToFields();
             toggleStandardPIDOptions();
             toggleSmartConnectConfig();
@@ -1757,23 +1756,6 @@
             }
             // Trigger validation when changing drive connection type
             submit_enable();
-        }
-
-        function toggleDestinationAndCycle() {
-			const grouping = document.getElementById("grouping").value;
-			const destinationField = document.getElementById("destination");
-			const cycleField = document.getElementById("group_cycle");
-            const groupDestTypeFeild = document.getElementById("group_dest_type");
-			
-			if (grouping === "enable") {
-				destinationField.disabled = false;
-				cycleField.disabled = false;
-                groupDestTypeFeild.disabled = false;
-			} else {
-				destinationField.disabled = true;
-				cycleField.disabled = true;
-                groupDestTypeFeild.disabled = true;
-			}
         }
 
         function toggleGroupApiToken() {
@@ -2628,7 +2610,6 @@ function loadAutoTable(jsonData) {
                     }
 
                     if (typeof toggleCarModel === 'function') toggleCarModel();
-                    if (typeof toggleDestinationAndCycle === 'function') toggleDestinationAndCycle();
                     if (typeof toggleSendToFields === 'function') toggleSendToFields();
                     if (typeof toggleGroupApiToken === 'function') toggleGroupApiToken();
                     if (typeof toggleStandardPIDOptions === 'function') toggleStandardPIDOptions();
@@ -2819,11 +2800,6 @@ function loadAutoTable(jsonData) {
             showNotification(error.message, "red");
             return false;
         }
-    }
-
-    function toggleDestinationField() {
-        const groupingValue = document.getElementById("grouping").value;
-        toggleDestinationAndCycle();  
     }
 
     function toggleSendToFields() {
@@ -3307,7 +3283,6 @@ function loadAutoTable(jsonData) {
                 loadCarModels(modifiedObj);
             } else {
                 toggleCarModel();
-                toggleDestinationAndCycle();
                 toggleSendToFields();
                 toggleStandardPIDOptions();
             }
