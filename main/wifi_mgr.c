@@ -80,7 +80,7 @@ static bool wifi_mgr_ssid_present(const wifi_ap_record_t* ap_records, uint16_t a
 // Internal: Scan and choose primary or first available fallback, then connect
 static void wifi_mgr_scan_select_and_connect(void) {
     // Only relevant when STA is part of the current mode
-    if (!(wifi_config.mode == WIFI_MGR_MODE_STA || wifi_config.mode == WIFI_MGR_MODE_APSTA || wifi_config.mode == WIFI_MGR_MODE_AUTO)) {
+    if (!(wifi_config.mode == WIFI_MGR_MODE_STA || wifi_config.mode == WIFI_MGR_MODE_APSTA)) {
         esp_wifi_connect();
         return;
     }
@@ -470,12 +470,14 @@ esp_err_t wifi_mgr_enable(void) {
     switch (wifi_config.mode) {
         case WIFI_MGR_MODE_STA:
             ret = esp_wifi_set_mode(WIFI_MODE_STA);
+            if(sta_netif){
+                esp_netif_set_default_netif(sta_netif);
+            }
             break;
         case WIFI_MGR_MODE_AP:
             ret = esp_wifi_set_mode(WIFI_MODE_AP);
             break;
         case WIFI_MGR_MODE_APSTA:
-        case WIFI_MGR_MODE_AUTO:
             ret = esp_wifi_set_mode(WIFI_MODE_APSTA);
             break;
         default:
@@ -489,7 +491,7 @@ esp_err_t wifi_mgr_enable(void) {
     }
     
     // Configure STA if needed
-    if (wifi_config.mode == WIFI_MGR_MODE_STA || wifi_config.mode == WIFI_MGR_MODE_APSTA || wifi_config.mode == WIFI_MGR_MODE_AUTO) {
+    if (wifi_config.mode == WIFI_MGR_MODE_STA || wifi_config.mode == WIFI_MGR_MODE_APSTA) {
         wifi_config_t sta_config = {
             .sta = {
                 .threshold.authmode = wifi_config.sta_auth_mode,
@@ -510,7 +512,7 @@ esp_err_t wifi_mgr_enable(void) {
     }
     
     // Configure AP if needed
-    if (wifi_config.mode == WIFI_MGR_MODE_AP || wifi_config.mode == WIFI_MGR_MODE_APSTA || wifi_config.mode == WIFI_MGR_MODE_AUTO) {
+    if (wifi_config.mode == WIFI_MGR_MODE_AP || wifi_config.mode == WIFI_MGR_MODE_APSTA) {
         wifi_config_t ap_config = {
             .ap = {
                 .channel = wifi_config.ap_channel,
@@ -554,7 +556,7 @@ esp_err_t wifi_mgr_enable(void) {
     xEventGroupSetBits(wifi_event_group, WIFI_INIT_BIT | WIFI_ENABLED_BIT);
     
     // Create reconnect task if STA auto-reconnect is enabled
-    if ((wifi_config.mode == WIFI_MGR_MODE_STA || wifi_config.mode == WIFI_MGR_MODE_APSTA || wifi_config.mode == WIFI_MGR_MODE_AUTO) 
+    if ((wifi_config.mode == WIFI_MGR_MODE_STA || wifi_config.mode == WIFI_MGR_MODE_APSTA) 
         && wifi_config.sta_auto_reconnect && reconnect_task_handle == NULL) {
         
         xTaskCreate(wifi_reconnect_task, "wifi_reconnect", 4096, NULL, 5, &reconnect_task_handle);
@@ -709,9 +711,8 @@ esp_err_t wifi_mgr_set_sta_config(const char* ssid, const char* password, wifi_a
     // If WiFi is already enabled and in STA mode, update the running config
     if (wifi_status.enabled && 
         (wifi_status.current_mode == WIFI_MGR_MODE_STA || 
-         wifi_status.current_mode == WIFI_MGR_MODE_APSTA || 
-         wifi_status.current_mode == WIFI_MGR_MODE_AUTO)) {
-        
+         wifi_status.current_mode == WIFI_MGR_MODE_APSTA)) {
+
         ESP_LOGI(TAG, "Updating running STA configuration...");
         
         wifi_config_t sta_config = {
@@ -1068,7 +1069,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                 }
                 
                 // Only switch back to APSTA if we're actually in STA mode and not in a mode transition
-                if (wifi_config.mode == WIFI_MGR_MODE_AUTO && wifi_config.ap_auto_disable) {
+                if (wifi_config.mode == WIFI_MGR_MODE_APSTA && wifi_config.ap_auto_disable) {
                     wifi_mode_t current_mode;
                     if (esp_wifi_get_mode(&current_mode) == ESP_OK && current_mode == WIFI_MODE_STA) {
                         // Add a small delay to avoid rapid mode switching
@@ -1146,14 +1147,17 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         if (user_callbacks.sta_connected) {
             user_callbacks.sta_connected();
         }
-        
-        // Auto-disable AP if in AUTO mode
-        if (wifi_config.mode == WIFI_MGR_MODE_AUTO && wifi_config.ap_auto_disable) {
+
+        // Auto-disable AP if in APSTA mode
+        if (wifi_config.mode == WIFI_MGR_MODE_APSTA && wifi_config.ap_auto_disable) {
             wifi_mode_t current_mode;
             if (esp_wifi_get_mode(&current_mode) == ESP_OK && current_mode == WIFI_MODE_APSTA) {
                 ESP_LOGI(TAG, "Auto-disabling AP mode");
                 // Don't stop WiFi completely - just change mode to preserve STA connection
                 esp_err_t ret = esp_wifi_set_mode(WIFI_MODE_STA);
+                if(sta_netif){
+                    esp_netif_set_default_netif(sta_netif);
+                }
                 if (ret != ESP_OK) {
                     ESP_LOGE(TAG, "Failed to switch to STA mode: %s", esp_err_to_name(ret));
                 }
@@ -1161,7 +1165,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         }
 
         // If AP is enabled (APSTA/AUTO mode), ap_auto_disable is false, and STA is connected, update AP channel to match STA
-        if ((wifi_config.mode == WIFI_MGR_MODE_APSTA || wifi_config.mode == WIFI_MGR_MODE_AUTO)
+        if ((wifi_config.mode == WIFI_MGR_MODE_APSTA)
             && !wifi_config.ap_auto_disable) {
             wifi_mode_t current_mode;
             static wifi_config_t ap_cfg;

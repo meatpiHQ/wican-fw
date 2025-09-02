@@ -51,7 +51,7 @@
     .ap_channel = 6, \
     .ap_max_connections = 4, \
     .ap_auth_mode = WIFI_AUTH_WPA2_PSK, \
-    .mode = WIFI_MGR_MODE_AUTO, \
+    .mode = WIFI_MGR_MODE_APSTA, \
     .ap_auto_disable = true, \
     .power_save_mode = WIFI_PS_NONE \
 }
@@ -62,7 +62,6 @@ typedef enum {
     WIFI_MGR_MODE_STA,
     WIFI_MGR_MODE_AP,
     WIFI_MGR_MODE_APSTA,
-    WIFI_MGR_MODE_AUTO      // Auto-disable AP when STA connects
 } wifi_mgr_mode_t;
 
 // WiFi Manager configuration structure
