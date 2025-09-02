@@ -464,10 +464,6 @@
             <span data-lucide="zap" style="width: 18px; height: 18px; margin-right: 8px;"></span>
             <b>Automate</b>
         </button>
-        <button class="tablinks" onclick="openTab(event, 'dashboard_tab')">
-            <span data-lucide="bar-chart-3" style="width: 18px; height: 18px; margin-right: 8px;"></span>
-            <b>Dashboard</b>
-        </button>
         <button class="tablinks" onclick="openTab(event, 'power_saving_tab')">
             <span data-lucide="battery" style="width: 18px; height: 18px; margin-right: 8px;"></span>
             <b>Power Saving</b>
@@ -475,6 +471,10 @@
         <button class="tablinks" onclick="openTab(event, 'logger')">
             <span data-lucide="file-text" style="width: 18px; height: 18px; margin-right: 8px;"></span>
             <b>Logger Settings</b>
+        </button>
+        <button class="tablinks" onclick="openTab(event, 'dashboard_tab')">
+            <span data-lucide="bar-chart-3" style="width: 18px; height: 18px; margin-right: 8px;"></span>
+            <b>Dashboard</b>
         </button>
         <button class="tablinks" onclick="openTab(event, 'monitor')">
             <span data-lucide="monitor" style="width: 18px; height: 18px; margin-right: 8px;"></span>
@@ -2451,7 +2451,8 @@ function renderDestinations(){
         const collapseBtn = document.createElement('button');
     const isCollapsed = !!d.collapsed;
     collapseBtn.textContent = isCollapsed ? '▼' : '▲';
-        collapseBtn.style.cssText='border:none; background:transparent; font-size:0.75rem; cursor:pointer; padding:2px 4px;';
+    // Match collapsible arrow color with other automate tab collapsibles
+    collapseBtn.style.cssText='border:none; background:transparent; font-size:0.75rem; cursor:pointer; padding:2px 4px; color:#334155;';
         const title = document.createElement('div');
         title.style.cssText='font-weight:600; font-size:0.8rem; flex:1;';
         title.textContent=`${idx+1}. ${d.type} - ${truncateMiddle(d.destination||'(unset)',50)}`;
@@ -2464,7 +2465,7 @@ function renderDestinations(){
         enabledLabel.appendChild(enabledChk); enabledLabel.appendChild(document.createTextNode('Enabled'));
         const delBtn = document.createElement('button');
         delBtn.textContent='Delete';
-        delBtn.style.cssText='background:#dc2626; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.65rem;';
+    delBtn.style.cssText='background:#dc2626; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.65rem; margin-left:12px;';
         delBtn.onclick=(e)=>{ e.stopPropagation(); if(confirm('Delete destination '+(idx+1)+'?')){ window.automateDestinations.splice(idx,1); renderDestinations(); enableAutoStoreButton(); }};
         left.appendChild(collapseBtn); left.appendChild(title);
         header.appendChild(left);
@@ -2790,9 +2791,6 @@ function loadAutoTable(jsonData) {
             const jsonData = {
                 initialisation: initialisationValue,
                 grouping: groupingValue,
-                group_dest_type: window.automateDestinations[0]?.type || 'Default',
-                destination: window.automateDestinations[0]?.destination || '',
-                cycle: window.automateDestinations[0]?.cycle ?? 5000,
                 car_specific: carSpecificValue,
                 ha_discovery: ha_discoveryValue,
                 car_model: carModelValue,
