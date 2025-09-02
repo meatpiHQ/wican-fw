@@ -628,7 +628,7 @@ static esp_err_t wifi_scan_handler(httpd_req_t *req)
 
 static esp_err_t get_uri_handler(httpd_req_t *req)
 {
-    char *uri = req->uri;
+	const char *uri = req->uri; // make const to avoid discarding qualifier
 	const uint32_t chunk_size = 1024 * 64;
     ESP_LOGI(TAG, "Request URI: %s", uri);
     
