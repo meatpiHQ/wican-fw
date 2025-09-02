@@ -1,4 +1,5 @@
 {
+  "additionalProperties": false,
   "description": "Data about various models of cars and their settings",
   "properties": {
     "car_model": {
@@ -27,9 +28,7 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": [
-          "pid"
-        ],
+        "required": ["pid"],
         "properties": {
           "pid": {
             "description": "The PID for this group of parameters",
@@ -123,7 +122,6 @@
       }
     }
   },
-  "additionalProperties": false,
   "title": "WiCan Vehicle Profile",
   "type": "object"
 }
