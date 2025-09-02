@@ -2152,9 +2152,6 @@
                             <option value="Default" ${rowData.Type === 'Default' ? 'selected' : ''}>Default</option>
                             <option value="MQTT_Topic" ${rowData.Type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
                             <option value="MQTT_WallBox" ${rowData.Type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
-                            <option value="HTTP" ${rowData.Type === 'HTTP' ? 'selected' : ''}>HTTP</option>
-                            <option value="HTTPS" ${rowData.Type === 'HTTPS' ? 'selected' : ''}>HTTPS</option>
-                            <option value="ABRP_API" ${rowData.Type === 'ABRP_API' ? 'selected' : ''}>ABRP_API</option>
                         </select></td>
                     </tr>
                     <tr>
@@ -2249,9 +2246,6 @@ function addSelectedPID(rowData = {}) {
                             <option value="Default" ${rowData.Type === 'Default' ? 'selected' : ''}>Default</option>
                             <option value="MQTT_Topic" ${rowData.Type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
                             <option value="MQTT_WallBox" ${rowData.Type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
-                            <option value="HTTP" ${rowData.Type === 'HTTP' ? 'selected' : ''}>HTTP</option>
-                            <option value="HTTPS" ${rowData.Type === 'HTTPS' ? 'selected' : ''}>HTTPS</option>
-                            <option value="ABRP_API" ${rowData.Type === 'ABRP_API' ? 'selected' : ''}>ABRP_API</option>
                         </select></td>
                     </tr>
                     <tr>
@@ -2357,9 +2351,6 @@ function addCarParameter(rowData = {}) {
                             <option value="Default" ${rowData.type === 'Default' ? 'selected' : ''}>Default</option>
                             <option value="MQTT_Topic" ${rowData.type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
                             <option value="MQTT_WallBox" ${rowData.type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
-                            <option value="HTTP" ${rowData.type === 'HTTP' ? 'selected' : ''}>HTTP</option>
-                            <option value="HTTPS" ${rowData.type === 'HTTPS' ? 'selected' : ''}>HTTPS</option>
-                            <option value="ABRP_API" ${rowData.type === 'ABRP_API' ? 'selected' : ''}>ABRP_API</option>
                         </select></td>
                     </tr>
                     <tr>
@@ -2475,7 +2466,7 @@ function renderDestinations(){
     content.style.cssText='padding:8px 10px;'+(isCollapsed?'display:none;':'display:block;');
         content.innerHTML=`<table style="width:100%; border-collapse:collapse; font-size:0.75rem;">
             <tr><td style="width:110px;">Type:</td><td>
-                <select class="dest-type" style="width:180px;">
+                <select class="dest-type" style="width:180px; box-sizing:border-box;">
                     <option value="Default" ${d.type==='Default'?'selected':''}>Default</option>
                     <option value="MQTT_Topic" ${d.type==='MQTT_Topic'?'selected':''}>MQTT Topic</option>
                     <option value="HTTP" ${d.type==='HTTP'?'selected':''}>HTTP POST</option>
@@ -2483,9 +2474,9 @@ function renderDestinations(){
                     <option value="ABRP_API" ${d.type==='ABRP_API'?'selected':''}>ABRP API</option>
                 </select>
             </td></tr>
-            <tr><td>Destination:</td><td><input type="text" class="dest-url" value="${(d.destination||'').replace(/"/g,'&quot;')}" placeholder="URL / topic" style="width:100%;"/></td></tr>
-            <tr><td>Cycle (ms):</td><td><input type="number" class="dest-cycle" value="${d.cycle}" min="0" style="width:120px;"/></td></tr>
-            <tr class="row-api-token" ${(d.type==='ABRP_API'||d.type==='HTTP'||d.type==='HTTPS')?'':'style="display:none;"'}><td>API Token:</td><td><input type="text" class="dest-api-token" value="${(d.api_token||'').replace(/"/g,'&quot;')}" placeholder="Bearer / API Token (optional for HTTP/HTTPS)" style="width:100%;"/></td></tr>
+            <tr><td style="width:110px;">Cycle (ms):</td><td><input type="number" class="dest-cycle" value="${d.cycle}" min="0" style="width:180px; box-sizing:border-box;"/></td></tr>
+            <tr><td>Destination:</td><td><input type="text" class="dest-url" value="${(d.destination||'').replace(/"/g,'&quot;')}" placeholder="URL / topic" maxlength="1024" style="width:100%; box-sizing:border-box;"/></td></tr>
+            <tr class="row-api-token" ${(d.type==='ABRP_API'||d.type==='HTTP'||d.type==='HTTPS')?'':'style="display:none;"'}><td>API Token:</td><td><input type="text" class="dest-api-token" value="${(d.api_token||'').replace(/"/g,'&quot;')}" placeholder="Bearer / API Token (optional for HTTP/HTTPS)" maxlength="512" style="width:100%;"/></td></tr>
             <tr class="row-cert-set" ${d.type==='HTTPS'?'':'style="display:none;"'}><td>Cert Set:</td><td><select class="dest-cert-set" style="width:180px;"></select></td></tr>
         </table>`;
         function toggleCollapse(e){
@@ -2728,7 +2719,9 @@ function loadAutoTable(jsonData) {
                 const d = window.automateDestinations[i];
                 if (!Number.isInteger(d.cycle)) { showNotification(`Destination ${i+1} cycle invalid`,'red'); return false; }
                 if (d.cycle!==0 && d.cycle<1000){ showNotification(`Destination ${i+1} cycle must be >=1000 or 0`,'red'); return false; }
+                if (d.destination && d.destination.length > 1024){ showNotification(`Destination ${i+1} URL/topic >1024 chars`,'red'); return false; }
                 if (d.type==='ABRP_API' && !d.api_token){ showNotification(`Destination ${i+1} requires API token`,'red'); return false; }
+                if (d.api_token && d.api_token.length > 512){ showNotification(`Destination ${i+1} API token >512 chars`,'red'); return false; }
                 if (d.type==='HTTPS' && !d.cert_set){ showNotification(`Destination ${i+1} select cert set`,'red'); return false; }
             }
 
