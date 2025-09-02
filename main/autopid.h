@@ -52,8 +52,24 @@ typedef enum
     DEST_DEFAULT,
     DEST_MQTT_TOPIC,
     DEST_MQTT_WALLBOX,
+    DEST_HTTP,
+    DEST_HTTPS,
+    DEST_ABRP_API,
     DEST_MAX
 }destination_type_t;
+
+// Group destination entry (multi-destination support)
+typedef struct {
+    destination_type_t type;    // Destination type
+    char *destination;          // URL / topic / etc.
+    uint32_t cycle;             // Publish cycle (ms) or 0 for event based
+    char *api_token;            // Optional API/Bearer token (HTTP/HTTPS/ABRP)
+    char *cert_set;             // Certificate set name for HTTPS ("default" for built-in)
+    bool enabled;               // Whether this destination is active
+    int64_t publish_timer;   // Internal: next publish expiration timer (0 = not scheduled / immediate)
+    uint32_t consec_failures;   // Internal: consecutive failure counter
+    uint32_t backoff_ms;        // Internal: current backoff delay extension (ms)
+} group_destination_t;
 
 typedef struct 
 {
@@ -94,6 +110,9 @@ typedef struct
     char* grouping;
     destination_type_t group_destination_type;
     char* group_destination;    //"destination"
+    // Multi-destination support
+    group_destination_t *destinations;   // Array of destinations (nullable)
+    uint32_t destinations_count;         // Number of entries in destinations
     bool pid_std_en;
     bool pid_custom_en;
     bool pid_specific_en;
@@ -117,4 +136,5 @@ bool autopid_get_ecu_status(void);
 char* autopid_get_config(void);
 esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint32_t available_pids_size) ;
 char *autopid_get_value_by_name(char* name);
+void autopid_publish_all_destinations(void); // New multi-destination publisher
 #endif

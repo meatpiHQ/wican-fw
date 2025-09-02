@@ -42,6 +42,9 @@
 #include "obd_logger.h"
 #include "hw_config.h"
 #include "dev_status.h"
+#include "https_client_mgr.h"
+#include "cert_manager.h"
+#include <time.h>
 
 // #define TAG __func__
 #define TAG "AUTO_PID"
@@ -103,6 +106,18 @@ char* formatNumberPrecision(double num)
         }
     }
     return buf;
+}
+// strdup_psram
+static char* strdup_psram(const char* s)
+{
+    if (!s) return NULL;
+
+    size_t len = strlen(s) + 1;
+    char* copy = heap_caps_malloc(len, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    if (!copy) return NULL;
+
+    memcpy(copy, s, len);
+    return copy;
 }
 
 // Recursively limit decimal precision in the JSON structure
@@ -675,6 +690,244 @@ bool autopid_get_ecu_status(void)
 	else return false;
 }
 
+
+// Map destination_type_t to string for logging
+static const char* dest_type_str(destination_type_t t){
+    switch(t){
+        case DEST_MQTT_TOPIC: return "MQTT_Topic";
+        case DEST_MQTT_WALLBOX: return "MQTT_WallBox";
+        case DEST_HTTP: return "HTTP";
+        case DEST_HTTPS: return "HTTPS";
+        case DEST_ABRP_API: return "ABRP_API";
+        default: return "Default";
+    }
+}
+
+// Build ABRP payload wrapper if needed
+static char* build_abrp_payload(const char *raw_json, const char *car_model){
+    if(!raw_json) return NULL;
+    // Format: {"tlm":<raw_json>[,"car_model":"..." ]}
+    size_t raw_len = strlen(raw_json);
+    size_t car_len = car_model? strlen(car_model):0;
+    size_t extra = car_model? (car_len + 14):0; // ,"car_model":""
+    size_t total = raw_len + extra + 10; // wrapper overhead
+    char *buf = heap_caps_malloc(total, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    if(!buf) return NULL;
+    if(car_model && car_len){
+        snprintf(buf, total, "{\"tlm\":%s,\"car_model\":\"%s\"}", raw_json, car_model);
+    }else{
+        snprintf(buf, total, "{\"tlm\":%s}", raw_json);
+    }
+    return buf;
+}
+
+
+
+/// @brief 
+/// @param  
+
+
+void autopid_publish_all_destinations(void){
+    if(!all_pids){
+        ESP_LOGE(TAG, "autopid_publish_all_destinations: all_pids NULL");
+        return;
+    }
+    if(strcmp("enable", all_pids->grouping) != 0){
+        return; // grouping disabled
+    }
+
+    // Get snapshot JSON (caller must free)
+    char *raw_json = autopid_data_read();
+    if(!raw_json){
+        ESP_LOGW(TAG, "No autopid data to publish");
+        return;
+    }
+
+    // Current time not directly needed with wc_timer; timers store absolute expiry in us
+
+    // Legacy single destination path if no multi-destinations parsed
+    // if(all_pids->destinations_count == 0){
+    //     if(all_pids->group_destination_type == DEST_MQTT_TOPIC){
+    //         if(all_pids->group_destination && strlen(all_pids->group_destination)>0){
+    //             mqtt_publish(all_pids->group_destination, raw_json, 0, 0, 1);
+    //         }else{
+    //             mqtt_publish(config_server_get_mqtt_rx_topic(), raw_json, 0, 0, 1);
+    //         }
+    //     }
+    //     free(raw_json);
+    //     return;
+    // }
+
+    for(uint32_t i=0;i<all_pids->destinations_count;i++){
+        group_destination_t *gd = &all_pids->destinations[i];
+        if(!gd->enabled) continue;
+
+        // Determine base cycle and current backoff adjusted cycle
+        uint32_t base_cycle = gd->cycle > 0 ? gd->cycle : all_pids->cycle;
+        uint32_t effective_cycle = base_cycle;
+        if(gd->backoff_ms && gd->backoff_ms > base_cycle){
+            effective_cycle = gd->backoff_ms; // apply backoff delay
+        }
+        // If we have an effective cycle (>0) use publish_timer; if timer not set (0) schedule immediate publish
+        if(effective_cycle > 0){
+            if(gd->publish_timer != 0 && !wc_timer_is_expired(&gd->publish_timer)){
+                // Not yet time
+                continue;
+            }
+        }
+
+        const char *dest = gd->destination? gd->destination: "";
+        switch(gd->type){
+            case DEST_MQTT_TOPIC:
+            case DEST_DEFAULT: // treat as MQTT default topic
+                if(dest[0] != '\0'){
+                    mqtt_publish(dest, raw_json, 0, 0, 1);
+                }else{
+                    mqtt_publish(config_server_get_mqtt_rx_topic(), raw_json, 0, 0, 1);
+                }
+                ESP_LOGI(TAG, "Published MQTT (%s) to %s", dest_type_str(gd->type), dest[0]? dest: config_server_get_mqtt_rx_topic());
+                break;
+            case DEST_MQTT_WALLBOX: {
+                // For now replicate same JSON publish (future: custom format)
+                if(dest[0] != '\0'){
+                    mqtt_publish(dest, raw_json, 0, 0, 1);
+                }else{
+                    mqtt_publish(config_server_get_mqtt_rx_topic(), raw_json, 0, 0, 1);
+                }
+                ESP_LOGI(TAG, "Published MQTT WallBox to %s", dest[0]? dest: config_server_get_mqtt_rx_topic());
+                break; }
+            case DEST_HTTP:
+            case DEST_HTTPS:
+            case DEST_ABRP_API: {
+                // Build URL (ABRP adds token as query param if provided)
+                char *url = NULL;
+                if((gd->type == DEST_ABRP_API || gd->type == DEST_HTTP || gd->type == DEST_HTTPS) && gd->api_token && strlen(gd->api_token)>0){
+                    const char *sep = strchr(dest,'?')? "&":"?";
+                    url = heap_caps_malloc(strlen(dest)+strlen(gd->api_token)+16, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+                    if(url) sprintf(url, "%s%stoken=%s", dest, sep, gd->api_token);
+                }else{
+                    url = dest[0]? strdup_psram(dest): NULL;
+                }
+                if(!url){
+                    ESP_LOGW(TAG, "Destination %u missing URL", i); break; }
+
+                // Build body (ABRP wrapper) use JSON body for all
+                char *body = NULL;
+                if(gd->type == DEST_ABRP_API){
+                    body = build_abrp_payload(raw_json, all_pids->vehicle_model);
+                }else{
+                    body = strdup_psram(raw_json);
+                }
+                if(!body){
+                    ESP_LOGE(TAG, "Failed to allocate body"); free(url); break; }
+
+                https_client_mgr_config_t cfg = {0};
+                cfg.url = url;
+                // Log destination URL plus current system time (epoch + ISO8601 UTC) for TLS timing diagnostics
+                time_t _now = 0; time(&_now);
+                struct tm _utc; gmtime_r(&_now, &_utc);
+                char _tbuf[32]; strftime(_tbuf, sizeof(_tbuf), "%Y-%m-%dT%H:%M:%SZ", &_utc);
+                ESP_LOGI(TAG, "HTTP(S) dest %u URL: %s (epoch=%ld utc=%s)", i, url, (long)_now, _tbuf);
+                cfg.timeout_ms = 10000;
+                if(gd->type == DEST_HTTPS || gd->type == DEST_ABRP_API){
+                    // HTTPS: attempt cert set if provided and not default
+                    if(gd->cert_set && strcmp(gd->cert_set, "default")!=0){
+                        size_t ca_len=0, cli_len=0, key_len=0;
+                        const char *ca = cert_manager_get_set_ca_ptr(gd->cert_set, &ca_len);
+                        const char *cli = cert_manager_get_set_client_cert_ptr(gd->cert_set, &cli_len);
+                        const char *key = cert_manager_get_set_client_key_ptr(gd->cert_set, &key_len);
+                        if(ca){ 
+                            cfg.cert_pem = ca; cfg.cert_len = ca_len; 
+                            ESP_LOGI(TAG, "Using CA cert from set '%s'", gd->cert_set);
+                        }
+                        else { 
+                            cfg.use_crt_bundle = true; 
+                            ESP_LOGW(TAG, "No CA cert in set '%s', using built-in bundle", gd->cert_set);
+                        }
+                        if(cli && key){ 
+                            cfg.client_cert_pem = cli; cfg.client_cert_len = cli_len; cfg.client_key_pem = key; cfg.client_key_len = key_len; 
+                            ESP_LOGI(TAG, "Using client cert+key from set '%s'", gd->cert_set);
+                        }
+                        else { /* optional */ }
+                    }else{
+                        cfg.use_crt_bundle = true; // use built-in bundle
+                        ESP_LOGW(TAG, "No CA cert in set '%s', using built-in bundle", gd->cert_set);
+                    }
+                }else{
+                    // HTTP (non TLS): set bundle flag false
+                }
+
+                // Build headers
+                const char *headers[4] = {0};
+                char *auth_hdr = NULL;
+                headers[0] = "Content-Type: application/json";
+                int h_idx = 1;
+                if(gd->api_token && strlen(gd->api_token)>0 && gd->type != DEST_ABRP_API){
+                    auth_hdr = heap_caps_malloc(strlen(gd->api_token)+32, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+                    if(auth_hdr){ sprintf(auth_hdr, "Authorization: Bearer %s", gd->api_token); headers[h_idx++] = auth_hdr; }
+                }
+                headers[h_idx] = NULL;
+
+                https_client_mgr_response_t resp = {0};
+                // If host is raw IPv4 address, skip CN verification to allow self-signed IP certs
+                if(url){
+                    const char *host_start = strstr(url, "://");
+                    host_start = host_start ? host_start + 3 : url;
+                    // host ends at '/' or end
+                    char host_buf[64] = {0};
+                    size_t hi=0;
+                    while(host_start[hi] && host_start[hi] != '/' && host_start[hi] != ':' && hi < sizeof(host_buf)-1){ host_buf[hi] = host_start[hi]; hi++; }
+                    bool is_ip = true;
+                    for(size_t k=0;k<hi;k++){ if( (host_buf[k] < '0' || host_buf[k] > '9') && host_buf[k] != '.') { is_ip = false; break; } }
+                    if(is_ip){ cfg.skip_common_name = true; }
+                }
+
+                esp_err_t err = https_client_mgr_request(&cfg, HTTPS_METHOD_POST, body, strlen(body), headers, &resp);
+                if(err == ESP_OK){
+                    ESP_LOGI(TAG, "HTTP(S) dest %u status %d success=%d", i, resp.status_code, resp.is_success);
+                    if(resp.is_success){
+                        gd->consec_failures = 0;
+                        gd->backoff_ms = 0;
+                    } else {
+                        gd->consec_failures++;
+                    }
+                }else{
+                    ESP_LOGE(TAG, "HTTP(S) dest %u request failed: %s", i, esp_err_to_name(err));
+                    gd->consec_failures++;
+                }
+                // Backoff logic: after 3 failures, double backoff up to 2x base_cycle (or 60s min cap)
+                if(gd->consec_failures >= 3){
+                    uint32_t min_cap = 60000; // 60s cap baseline
+                    uint32_t next = (gd->backoff_ms? gd->backoff_ms : base_cycle);
+                    if(next < min_cap) next = next * 2; // exponential until min_cap
+                    if(next < min_cap) next = min_cap; // ensure floor
+                    // limit to 2 * base_cycle if that is bigger than min_cap
+                    uint32_t max_backoff = base_cycle * 2;
+                    if(max_backoff < min_cap) max_backoff = min_cap; // keep at least min_cap
+                    if(next > max_backoff) next = max_backoff;
+                    gd->backoff_ms = next;
+                }
+                https_client_mgr_free_response(&resp);
+                if(auth_hdr) free(auth_hdr);
+                free(body);
+                free(url);
+                break; }
+            default:
+                break;
+        }
+        // Reschedule timer if periodic
+        if(effective_cycle > 0){
+            wc_timer_set(&gd->publish_timer, effective_cycle); // schedule next expiry
+        }else{
+            gd->publish_timer = 0; // event-based; remains immediate until triggered differently
+        }
+        // Yield a bit after network operations
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+
+    free(raw_json);
+}
+
 char* autopid_get_config(void)
 {
     static char *response_str;
@@ -971,9 +1224,9 @@ void parse_elm327_response(char *buffer, response_t *response) {
                 
                 // Allocate space and copy data for lowest header frame
                 if (lowest_header_data == NULL) {
-                    lowest_header_data = (uint8_t*)malloc(current_length);
+                    lowest_header_data = (uint8_t*)heap_caps_malloc(current_length, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
                 } else {
-                    lowest_header_data = (uint8_t*)realloc(lowest_header_data, current_length);
+                    lowest_header_data = (uint8_t*)heap_caps_realloc(lowest_header_data, current_length, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
                 }
                 
                 // Parse and store the data bytes for this frame
@@ -1196,6 +1449,12 @@ static void autopid_task(void *pvParameters)
     static char default_init[] = "ati\rate0\rath1\ratl0\rats1\ratm0\ratst96\r";
     wc_timer_t ecu_check_timer;
     wc_timer_t group_cycle_timer;
+    static bool autopid_data_grouping_en = false;
+
+    if (strcmp("enable", all_pids->grouping) == 0)
+    {
+        autopid_data_grouping_en = true;
+    }
 
     ESP_LOGI(TAG, "Autopid Task Started");
     
@@ -1245,7 +1504,7 @@ static void autopid_task(void *pvParameters)
             // Allocate new memory for the protocol string
             char protocol_str[16];
             snprintf(protocol_str, sizeof(protocol_str), "ATTP%01X\r", auto_protocol_number);
-            all_pids->standard_init = strdup(protocol_str);
+            all_pids->standard_init = strdup_psram(protocol_str);
         }else{
             ESP_LOGE(TAG, "Failed to get protocol number");
         }
@@ -1255,6 +1514,10 @@ static void autopid_task(void *pvParameters)
 
     ESP_LOGI(TAG, "Autopid Start loop");
     ESP_LOGI(TAG, "Total PIDs: %lu", all_pids->pid_count);
+
+    // Initialize timers
+    wc_timer_set(&ecu_check_timer, 2000);
+    wc_timer_set(&group_cycle_timer, all_pids->cycle);
 
     while(1) 
     {
@@ -1489,11 +1752,10 @@ static void autopid_task(void *pvParameters)
         xSemaphoreGive(all_pids->mutex);
         vTaskDelay(pdMS_TO_TICKS(10));
 
-        if (strcmp("enable", all_pids->grouping) == 0 && all_pids->group_destination_type == DEST_MQTT_TOPIC && wc_timer_is_expired(&group_cycle_timer))
+        if (autopid_data_grouping_en)
         {
-            wc_timer_set(&group_cycle_timer, all_pids->cycle);
-            
-            autopid_data_publish();
+            autopid_publish_all_destinations();
+            // wc_timer_set(&group_cycle_timer, all_pids->cycle);
         }
 
         if (wc_timer_is_expired(&ecu_check_timer)) {
@@ -1604,11 +1866,13 @@ all_pids_t* load_all_pids(void){
             cJSON* cycle_item = cJSON_GetObjectItem(root, "cycle");
             cJSON* standard_pids_item = cJSON_GetObjectItem(root, "standard_pids");
             cJSON* specific_pids_item = cJSON_GetObjectItem(root, "car_specific");
-            cJSON* group_destination_item = cJSON_GetObjectItem(root, "destination");
-            cJSON* group_dest_type_item = cJSON_GetObjectItem(root, "group_dest_type");
+            cJSON* group_destination_item = cJSON_GetObjectItem(root, "destination"); // legacy single destination
+            cJSON* group_dest_type_item = cJSON_GetObjectItem(root, "group_dest_type"); // legacy single type
+            cJSON* destinations_array = cJSON_GetObjectItem(root, "destinations");      // new multi-destination array
+            cJSON* group_api_token_item = cJSON_GetObjectItem(root, "group_api_token"); // legacy api token
 
             if (init_item && init_item->valuestring) {
-                all_pids->custom_init = strdup(init_item->valuestring);
+                all_pids->custom_init = strdup_psram(init_item->valuestring);
                 if (all_pids->custom_init) {
                     // Replace semicolons with carriage returns
                     for (size_t j = 0; j < strlen(all_pids->custom_init); j++) {
@@ -1622,17 +1886,147 @@ all_pids_t* load_all_pids(void){
                 all_pids->custom_init = NULL;
             }
 
-            all_pids->grouping = (grouping_item && grouping_item->valuestring && strlen(grouping_item->valuestring) > 1) ? strdup(grouping_item->valuestring) : strdup("disable");
-            all_pids->vehicle_model = car_model_item ? strdup(car_model_item->valuestring) : NULL;
-            all_pids->std_ecu_protocol = ecu_protocol_item ? strdup(ecu_protocol_item->valuestring) : NULL;
+            all_pids->grouping = (grouping_item && grouping_item->valuestring && strlen(grouping_item->valuestring) > 1) ? strdup_psram(grouping_item->valuestring) : strdup_psram("disable");
+            all_pids->vehicle_model = car_model_item ? strdup_psram(car_model_item->valuestring) : NULL;
+            all_pids->std_ecu_protocol = ecu_protocol_item ? strdup_psram(ecu_protocol_item->valuestring) : NULL;
             all_pids->ha_discovery_en = ha_discovery_item ? (strcmp(ha_discovery_item->valuestring, "enable") == 0) : false;
-            all_pids->cycle = cycle_item ? atoi(cycle_item->valuestring) : 10000;
+
+            if(cycle_item->valuestring && strlen(cycle_item->valuestring) > 0)
+                all_pids->cycle = atoi(cycle_item->valuestring);
+            else if(cycle_item->valueint)
+                all_pids->cycle = cycle_item->valueint;
+            else
+                all_pids->cycle = 10000;
+
             all_pids->pid_std_en = standard_pids_item ? (strcmp(standard_pids_item->valuestring, "enable") == 0) : false;
             all_pids->pid_specific_en = specific_pids_item ? (strcmp(specific_pids_item->valuestring, "enable") == 0) : false;
-            all_pids->group_destination = group_destination_item ? strdup(group_destination_item->valuestring) : NULL;
-            all_pids->group_destination_type = group_dest_type_item && group_dest_type_item->valuestring ?
-                            (strcmp(group_dest_type_item->valuestring, "MQTT_Topic") == 0 ? DEST_MQTT_TOPIC :
-                            DEST_DEFAULT) : DEST_DEFAULT;
+            all_pids->group_destination = group_destination_item ? strdup_psram(group_destination_item->valuestring) : NULL;
+            // Map legacy group_dest_type to enum (for backward compatibility)
+            if(group_dest_type_item && group_dest_type_item->valuestring){
+                const char *t = group_dest_type_item->valuestring;
+                if(strcmp(t, "MQTT_Topic") == 0){
+                    all_pids->group_destination_type = DEST_MQTT_TOPIC;
+                }else if(strcmp(t, "MQTT_WallBox") == 0){
+                    all_pids->group_destination_type = DEST_MQTT_WALLBOX;
+                }else if(strcmp(t, "HTTP") == 0){
+                    all_pids->group_destination_type = DEST_HTTP;
+                }else if(strcmp(t, "HTTPS") == 0){
+                    all_pids->group_destination_type = DEST_HTTPS;
+                }else if(strcmp(t, "ABRP_API") == 0){
+                    all_pids->group_destination_type = DEST_ABRP_API;
+                }else{
+                    all_pids->group_destination_type = DEST_DEFAULT;
+                }
+            }else{
+                all_pids->group_destination_type = DEST_DEFAULT;
+            }
+
+            // Parse new destinations array (up to a reasonable max, e.g. 6)
+            all_pids->destinations = NULL;
+            all_pids->destinations_count = 0;
+            if(destinations_array && cJSON_IsArray(destinations_array)){
+                int count = cJSON_GetArraySize(destinations_array);
+                if(count > 0){
+                    all_pids->destinations = calloc(count, sizeof(group_destination_t));
+                    if(all_pids->destinations){
+                        all_pids->destinations_count = count;
+                        for(int di=0; di<count; di++){
+                            cJSON *d = cJSON_GetArrayItem(destinations_array, di);
+                            if(!d) continue;
+                            group_destination_t *gd = &all_pids->destinations[di];
+                            cJSON *type_item = cJSON_GetObjectItem(d, "type");
+                            cJSON *dest_item = cJSON_GetObjectItem(d, "destination");
+                            cJSON *cycle_item2 = cJSON_GetObjectItem(d, "cycle");
+                            cJSON *api_token_item = cJSON_GetObjectItem(d, "api_token");
+                            cJSON *cert_set_item = cJSON_GetObjectItem(d, "cert_set");
+                            cJSON *enabled_item = cJSON_GetObjectItem(d, "enabled");
+
+                            // type mapping
+                            const char *type_str = type_item && cJSON_IsString(type_item)? type_item->valuestring: "Default";
+                            if(strcmp(type_str, "MQTT_Topic") == 0){
+                                gd->type = DEST_MQTT_TOPIC;
+                            }else if(strcmp(type_str, "MQTT_WallBox") == 0){
+                                gd->type = DEST_MQTT_WALLBOX;
+                            }else if(strcmp(type_str, "HTTP") == 0){
+                                gd->type = DEST_HTTP;
+                            }else if(strcmp(type_str, "HTTPS") == 0){
+                                gd->type = DEST_HTTPS;
+                            }else if(strcmp(type_str, "ABRP_API") == 0){
+                                gd->type = DEST_ABRP_API;
+                            }else{
+                                gd->type = DEST_DEFAULT;
+                            }
+
+                            gd->destination = dest_item && cJSON_IsString(dest_item)? strdup_psram(dest_item->valuestring): NULL;
+
+                            // Ensure scheme prefix for HTTP/HTTPS destinations if missing
+                            if (gd->destination && (gd->type == DEST_HTTP || gd->type == DEST_HTTPS)) {
+                                bool has_http  = (strncmp(gd->destination, "http://", 7)  == 0);
+                                bool has_https = (strncmp(gd->destination, "https://", 8) == 0);
+                                if (!has_http && !has_https) {
+                                    const char *prefix = (gd->type == DEST_HTTPS) ? "https://" : "http://";
+                                    size_t new_len = strlen(prefix) + strlen(gd->destination) + 1;
+                                    char *with_prefix = (char*)malloc(new_len);
+                                    if (with_prefix) {
+                                        strcpy(with_prefix, prefix);
+                                        strcat(with_prefix, gd->destination);
+                                        free(gd->destination);
+                                        gd->destination = with_prefix;
+                                    }
+                                }
+                            }
+
+                            if(cycle_item2->valuestring && strlen(cycle_item2->valuestring) > 0)
+                                gd->cycle = (uint32_t)atoi(cycle_item2->valuestring);
+                            else if(cycle_item2->valueint)
+                                gd->cycle = (uint32_t)cycle_item2->valueint;
+                            else
+                                gd->cycle = 10000;
+
+                            gd->api_token = api_token_item && cJSON_IsString(api_token_item)? strdup_psram(api_token_item->valuestring): NULL;
+                            gd->cert_set = cert_set_item && cJSON_IsString(cert_set_item)? strdup_psram(cert_set_item->valuestring): strdup_psram("default");
+                            gd->enabled = enabled_item && cJSON_IsBool(enabled_item)? cJSON_IsTrue(enabled_item): true;
+                            gd->publish_timer = 0; // immediate eligibility
+                            gd->consec_failures = 0;
+                            gd->backoff_ms = 0;
+                        }
+                        // If legacy single destination fields exist but array was empty previously, we keep them separate.
+                    }
+                }
+            }else{
+                // No new destinations array: fabricate one from legacy fields if present
+                if(all_pids->group_destination || group_dest_type_item){
+                    all_pids->destinations = calloc(1, sizeof(group_destination_t));
+                    if(all_pids->destinations){
+                        all_pids->destinations_count = 1;
+                        all_pids->destinations[0].type = all_pids->group_destination_type;
+                        all_pids->destinations[0].destination = all_pids->group_destination ? strdup_psram(all_pids->group_destination) : NULL;
+                        // Ensure scheme prefix for legacy single HTTP/HTTPS destination if missing
+                        if (all_pids->destinations[0].destination && (all_pids->destinations[0].type == DEST_HTTP || all_pids->destinations[0].type == DEST_HTTPS)) {
+                            bool has_http  = (strncmp(all_pids->destinations[0].destination, "http://", 7)  == 0);
+                            bool has_https = (strncmp(all_pids->destinations[0].destination, "https://", 8) == 0);
+                            if (!has_http && !has_https) {
+                                const char *prefix = (all_pids->destinations[0].type == DEST_HTTPS) ? "https://" : "http://";
+                                size_t new_len = strlen(prefix) + strlen(all_pids->destinations[0].destination) + 1;
+                                char *with_prefix = (char*)malloc(new_len);
+                                if (with_prefix) {
+                                    strcpy(with_prefix, prefix);
+                                    strcat(with_prefix, all_pids->destinations[0].destination);
+                                    free(all_pids->destinations[0].destination);
+                                    all_pids->destinations[0].destination = with_prefix;
+                                }
+                            }
+                        }
+                        all_pids->destinations[0].cycle = all_pids->cycle;
+                        all_pids->destinations[0].api_token = group_api_token_item && group_api_token_item->valuestring ? strdup_psram(group_api_token_item->valuestring) : NULL;
+                        all_pids->destinations[0].cert_set = strdup_psram("default");
+                        all_pids->destinations[0].enabled = true;
+                        all_pids->destinations[0].publish_timer = 0;
+                        all_pids->destinations[0].consec_failures = 0;
+                        all_pids->destinations[0].backoff_ms = 0;
+                    }
+                }
+            }
             
             // Load custom pids
             cJSON* pids = cJSON_GetObjectItem(root, "pids");
@@ -1690,17 +2084,23 @@ all_pids_t* load_all_pids(void){
                         }
                     }
 
-                    curr_pid->period = period_item ? atoi(period_item->valuestring) : 10000;
-                    curr_pid->rxheader = rxheader_item ? strdup(rxheader_item->valuestring) : NULL;
+                    if(period_item->valuestring && strlen(period_item->valuestring) > 0)
+                        curr_pid->period = atoi(period_item->valuestring);
+                    else if(period_item->valueint)
+                        curr_pid->period = (uint32_t)period_item->valueint;
+                    else
+                        curr_pid->period = 10000; // Default to 10 seconds if not specified
+
+                    curr_pid->rxheader = rxheader_item ? strdup_psram(rxheader_item->valuestring) : NULL;
                     curr_pid->pid_type = PID_CUSTOM;
 
                     curr_pid->parameters_count = 1;
                     curr_pid->parameters = (parameter_t*)calloc(1, sizeof(parameter_t));
                     if (curr_pid->parameters) {
-                        curr_pid->parameters->name = name_item ? strdup(name_item->valuestring) : NULL;
-                        curr_pid->parameters->expression = expr_item ? strdup(expr_item->valuestring) : NULL;
+                        curr_pid->parameters->name = name_item ? strdup_psram(name_item->valuestring) : NULL;
+                        curr_pid->parameters->expression = expr_item ? strdup_psram(expr_item->valuestring) : NULL;
                         curr_pid->parameters->period = period_item ? atoi(period_item->valuestring) : 0;
-                        curr_pid->parameters->destination = send_to_item ? strdup(send_to_item->valuestring) : NULL;
+                        curr_pid->parameters->destination = send_to_item ? strdup_psram(send_to_item->valuestring) : NULL;
                         curr_pid->parameters->timer = 0;
                         curr_pid->parameters->value = FLT_MAX;
                         curr_pid->parameters->min = (min_value_item && strlen(min_value_item->valuestring) > 0) ? atof(min_value_item->valuestring) : FLT_MAX;
@@ -1712,9 +2112,9 @@ all_pids_t* load_all_pids(void){
                         curr_pid->parameters->sensor_type = sensor_type_item ? 
                             (strcmp(sensor_type_item->valuestring, "binary") == 0 ? BINARY_SENSOR : SENSOR) : SENSOR;
                         curr_pid->parameters->unit = unit_item && unit_item->valuestring ? 
-                            strdup(unit_item->valuestring) : strdup("none");
+                            strdup_psram(unit_item->valuestring) : strdup_psram("none");
                         curr_pid->parameters->class = class_item && class_item->valuestring ? 
-                            strdup(class_item->valuestring) : strdup("none");
+                            strdup_psram(class_item->valuestring) : strdup_psram("none");
                     }
                     
                     pid_index++;
@@ -1744,9 +2144,9 @@ all_pids_t* load_all_pids(void){
                         cJSON* sensor_type_item = cJSON_GetObjectItem(pid, "sensor_type");
                         cJSON* rxheader_item = cJSON_GetObjectItem(pid, "ReceiveHeader");
 
-                        curr_pid->parameters->name = name_item ? strdup(name_item->valuestring) : NULL;
+                        curr_pid->parameters->name = name_item ? strdup_psram(name_item->valuestring) : NULL;
                         curr_pid->parameters->period = period_item ? atoi(period_item->valuestring) : 10000;
-                        curr_pid->parameters->destination = send_to_item ? strdup(send_to_item->valuestring) : NULL;
+                        curr_pid->parameters->destination = send_to_item ? strdup_psram(send_to_item->valuestring) : NULL;
                         curr_pid->parameters->destination_type = type_item && type_item->valuestring ? 
                             (strcmp(type_item->valuestring, "MQTT_Topic") == 0 ? DEST_MQTT_TOPIC :
                             strcmp(type_item->valuestring, "MQTT_WallBox") == 0 ? DEST_MQTT_WALLBOX :
@@ -1758,7 +2158,7 @@ all_pids_t* load_all_pids(void){
                         curr_pid->parameters->sensor_type = sensor_type_item ? 
                             (strcmp(sensor_type_item->valuestring, "binary") == 0 ? BINARY_SENSOR : SENSOR) : SENSOR;
                             
-                        curr_pid->rxheader = rxheader_item ? strdup(rxheader_item->valuestring) : NULL;
+                        curr_pid->rxheader = rxheader_item ? strdup_psram(rxheader_item->valuestring) : NULL;
 
                         if (all_pids->std_ecu_protocol)
                         {
@@ -1792,11 +2192,11 @@ all_pids_t* load_all_pids(void){
                                 snprintf(std_init_buf, sizeof(std_init_buf), "ATTP%s\rATSH%s\rATCRA\r",
                                                             all_pids->std_ecu_protocol, sh_value);                        
                             }
-                            all_pids->standard_init = strdup(std_init_buf);
+                            all_pids->standard_init = strdup_psram(std_init_buf);
                         }
                         else
                         {
-                            all_pids->standard_init = strdup("ATTP0\r  ");
+                            all_pids->standard_init = strdup_psram("ATTP0\r  ");
                         }
 
                         if(curr_pid->parameters->name != NULL && strlen(curr_pid->parameters->name) > 0)
@@ -1813,8 +2213,8 @@ all_pids_t* load_all_pids(void){
                                     ESP_LOGI(TAG, "    [%d] Name: %s, Unit: %s", i, pid_info->params[i].name, pid_info->params[i].unit);
                                     if(strcmp(pid_info->params[i].name, strchr(curr_pid->parameters->name, '-') + 1) == 0)
                                     {
-                                        curr_pid->parameters->class = strdup(pid_info->params[i].class);
-                                        curr_pid->parameters->unit = strdup(pid_info->params[i].unit);
+                                        curr_pid->parameters->class = strdup_psram(pid_info->params[i].class);
+                                        curr_pid->parameters->unit = strdup_psram(pid_info->params[i].unit);
                                         char pid_hex[3];
                                         strncpy(pid_hex, curr_pid->parameters->name, 2);
                                         pid_hex[2] = '\0';
@@ -1853,9 +2253,9 @@ all_pids_t* load_all_pids(void){
                 if (car) {
                     cJSON* init_item = cJSON_GetObjectItem(car, "init");
                     if (init_item && init_item->valuestring) {
-                        all_pids->specific_init = strdup(init_item->valuestring);
+                        all_pids->specific_init = strdup_psram(init_item->valuestring);
                         if (init_item && init_item->valuestring) {
-                            all_pids->specific_init = strdup(init_item->valuestring);
+                            all_pids->specific_init = strdup_psram(init_item->valuestring);
                             if (all_pids->specific_init) {
                                 // First replace semicolons with carriage returns
                                 for (size_t j = 0; j < strlen(all_pids->specific_init); j++) {
@@ -1939,18 +2339,18 @@ all_pids_t* load_all_pids(void){
                                 cJSON_ArrayForEach(param, params) 
                                 {
                                     cJSON* name_item = cJSON_GetObjectItem(param, "name");
-                                    curr_pid->parameters[param_index].name = name_item ? strdup(name_item->valuestring) : NULL;
+                                    curr_pid->parameters[param_index].name = name_item ? strdup_psram(name_item->valuestring) : NULL;
 
                                     cJSON* expr_item = cJSON_GetObjectItem(param, "expression");
-                                    curr_pid->parameters[param_index].expression = expr_item ? strdup(expr_item->valuestring) : NULL;
+                                    curr_pid->parameters[param_index].expression = expr_item ? strdup_psram(expr_item->valuestring) : NULL;
 
                                     cJSON* unit_item = cJSON_GetObjectItem(param, "unit");
                                     curr_pid->parameters[param_index].unit = unit_item && unit_item->valuestring ? 
-                                        strdup(unit_item->valuestring) : strdup("none");
+                                        strdup_psram(unit_item->valuestring) : strdup_psram("none");
 
                                     cJSON* class_item = cJSON_GetObjectItem(param, "class");
                                     curr_pid->parameters[param_index].class = class_item && class_item->valuestring ? 
-                                        strdup(class_item->valuestring) : strdup("none");
+                                        strdup_psram(class_item->valuestring) : strdup_psram("none");
 
                                     cJSON* sensor_type_item = cJSON_GetObjectItem(param, "sensor_type");
                                     curr_pid->parameters[param_index].sensor_type = sensor_type_item ? 
@@ -1966,7 +2366,7 @@ all_pids_t* load_all_pids(void){
                                     curr_pid->parameters[param_index].period = period_item ? atof(period_item->valuestring) : FLT_MAX;
 
                                     cJSON* send_to_item = cJSON_GetObjectItem(param, "send_to");
-                                    curr_pid->parameters[param_index].destination = send_to_item ? strdup(send_to_item->valuestring) : strdup("none");
+                                    curr_pid->parameters[param_index].destination = send_to_item ? strdup_psram(send_to_item->valuestring) : strdup_psram("none");
 
                                     cJSON* destination_type_item = cJSON_GetObjectItem(param, "type");      //destination_type
                                     curr_pid->parameters[param_index].destination_type = 
@@ -2036,7 +2436,7 @@ static void autopid_init_obd_logger(uint32_t log_period)
                 param->unit ? param->unit : "", param->period);
     
             // Add parameter to list
-            params[param_count].name = strdup(param->name);
+            params[param_count].name = strdup_psram(param->name);
             params[param_count].type = "NUMERIC";
             params[param_count].metadata = metadata;
             param_count++;
