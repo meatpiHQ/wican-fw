@@ -74,6 +74,7 @@
 #include "filesystem.h"
 #include "safemode.h"
 #include "debug_logs.h"
+#include "sync_sys_time.h"
 
 #define TAG 		__func__
 #define USB_ID_PIN					39
@@ -637,6 +638,7 @@ void app_main(void)
 	}
 	imu_init(I2C_MASTER_NUM, I2C_MASTER_SDA_IO, I2C_MASTER_SCL_IO, IMU_INT_GPIO_NUM, imu_threshold);
 	rtcm_init(I2C_MASTER_NUM);
+	rtcm_sync_system_time_from_rtc();
 	// rtcm_set_time(0x23, 0x32, 0x00);  // 12:30:00 in BCD
 	// rtcm_set_date(0x24, 0x12, 0x27, 0x06);  // 2024-01-20 Saturday(6) in BCD	
 	#endif
@@ -1085,8 +1087,14 @@ void app_main(void)
 	// esp_log_level_set("BLE", ESP_LOG_INFO);
 	// esp_log_level_set("WiFi_Manager", ESP_LOG_INFO);
 	// esp_log_level_set("WiFi_NETWORK", ESP_LOG_INFO);
-
-	
+	// esp_log_level_set("AUTO_PID", ESP_LOG_INFO);
+	// esp_log_level_set("AUTO_PID", ESP_LOG_INFO);
+	// esp_log_level_set("HTTPS_CLIENT_MGR", ESP_LOG_INFO);
+	// esp_log_level_set("cert_manager", ESP_LOG_INFO);
+	// esp_log_level_set("esp-tls", ESP_LOG_VERBOSE);
+	// esp_log_level_set("mbedtls", ESP_LOG_VERBOSE);
+	// esp_log_level_set("TRANSPORT_BASE", ESP_LOG_VERBOSE);
+	// esp_log_level_set("SYNC_SYS_TIME", ESP_LOG_INFO);
 	
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
@@ -1115,5 +1123,8 @@ void app_main(void)
 	{
 		free(internal_buf);
 	}
+	
+	// Initialize time synchronization task
+	sync_sys_time_init();
 }
 

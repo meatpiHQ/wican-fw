@@ -36,6 +36,7 @@ set(srcs
     "filesystem.c"
     "safemode.c"
     "multipart_upload.c"
+    "sync_sys_time.c"
 )
 
 # Define required components
