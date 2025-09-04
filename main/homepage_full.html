@@ -670,7 +670,18 @@
                         </td>
                     </tr>
                 </table>
-
+                <!-- BLE Warning Section -->
+                <div id="ble_warning_div" style="display: none; margin: 8px 0;">
+                    <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 8px; padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                            <span data-lucide="alert-triangle" style="font-size: 16px; margin-right: 8px;"></span>
+                            <strong style="color: #92400e; font-size: 14px;">BLE Connection Warning</strong>
+                        </div>
+                        <div style="color: #78350f; font-size: 13px; line-height: 1.4;">
+                            When BLE connects, WiFi AP is disabled. To restore WiFi AP: disconnect BLE and power cycle device.
+                        </div>
+                    </div>
+                </div>
                 <div id="mqtt_en_div">
                     <div class="divider"></div>
                     <div class="section-title">MQTT</div>
@@ -876,7 +887,7 @@
                     <td>Vehicle Profiles:</td>
                     <td>
                         <form id="car_data_form" enctype="multipart/form-data">
-                            <input id="car_data_file" name="car_data_file" type="file" onchange="sendCARDataFile();submit_enable();" />
+                            <input id="car_data_file" name="car_data_file" type="file" onchange="loadLocalCarModels();submit_enable();" />
                         </form>
                     </td>
                 </tr>
@@ -1300,60 +1311,73 @@
             }
         }
 
-		function sendCARDataFile() {
+		function loadLocalCarModels() {
 			const fileInput = document.getElementById("car_data_file");
-			const maxFileSize = 200 * 1024; // 200KB in bytes
 
 			if (fileInput.files.length == 0) {
                 showNotification("No files selected!", "red");
-				alert("No files selected!");
-			} else {
-				const file = fileInput.files[0];
-
-				if (file.size > maxFileSize) {
-                    showNotification("File size exceeds 200KB!", "red");
-					alert("File size exceeds 200KB!");
-					return;
-				}
-
-				const reader = new FileReader();
-				reader.onload = function(event) {
-					try {
-                        const jsonData = JSON.parse(event.target.result);
-                        // If single car format, wrap it in cars array
-                        const formattedData = jsonData.car_model ? { cars: [jsonData] } : jsonData;
-                        // Remove all whitespace and formatting
-                        const unformattedJson = JSON.stringify(formattedData).replace(/\s+/g, '');
-                        
-                        const form = document.getElementById('car_data_form');
-                        const formData = new FormData(form);
-                        formData.set('car_data_file', new Blob([unformattedJson], {type: 'application/json'}));
-                        latest_car_models = null;
-                        
-                        fetch('/upload/car_data.json', {
-                            method: 'POST',
-                            body: formData
-                        })
-						.then(response => response.text())
-						.then(data => {
-							console.log('Success:', data);
-                            showNotification(data, "green");
-							setTimeout(() => {
-								window.location.reload();
-							}, 1000);
-						})
-						.catch(error => {
-							console.error('Error:', error);
-						});
-					} catch (e) {
-                        showNotification("Invalid JSON file!", "red");
-						alert("The selected file is not a valid JSON file!");
-					}
-				};
-
-				// Read the file as text
-				reader.readAsText(file);
+				return;
 			}
+
+			const file = fileInput.files[0];
+
+			const reader = new FileReader();
+			reader.onload = async function(event) {
+				try {
+                    const jsonData = JSON.parse(event.target.result);
+                    let data;
+                    
+                    // Check if it's a single car format (like Zeekr) with car_model property
+                    if (jsonData.car_model && jsonData.pids) {
+                        showNotification("Single car format detected. Fetching parameter definitions...", "blue");
+                        
+                        try {
+                            // Fetch params.json to get parameter definitions
+                            const paramsResponse = await fetch('https://raw.githubusercontent.com/meatpiHQ/wican-fw/refs/heads/main/.vehicle_profiles/params.json');
+                            const paramsData = await paramsResponse.json();
+                            
+                            // Convert single car format to vehicle_profiles.json format
+                            const convertedCar = convertSingleCarFormat(jsonData, paramsData);
+                            data = { cars: [convertedCar] };
+                            
+                            showNotification("Single car format converted successfully!", "green");
+                        } catch (fetchError) {
+                            console.warn('Failed to fetch params.json, using basic conversion:', fetchError);
+                            // Fallback: basic conversion without parameter enrichment
+                            data = { cars: [convertSingleCarBasic(jsonData)] };
+                            showNotification("Car model loaded (basic format - no internet connection)", "yellow");
+                        }
+                    } else {
+                        // Existing multi-car format
+                        data = jsonData.car_model ? { cars: [jsonData] } : jsonData;
+                    }
+                    
+                    latest_car_models = data;
+                    const carModels = [];
+                    carModels.push("Not Selected");
+                    
+                    if (data && Array.isArray(data.cars)) {
+                        data.cars.forEach(car => {
+                            if (car.car_model) {
+                                carModels.push(car.car_model);
+                            }
+                        });
+                    }
+                    
+                    console.log(carModels);
+                    var mod = { "supported": carModels };
+                    loadCarModels(mod);
+                    enableAutoStoreButton();
+                    
+                    if (!jsonData.car_model || !jsonData.pids) {
+                        showNotification("Car models loaded successfully!", "green");
+                    }
+				} catch (e) {
+                    showNotification("Invalid JSON file!", "red");
+                    console.error('JSON parse error:', e);
+				}
+			};
+			reader.readAsText(file);
 		}
 
         function addRowAutoTable() {
@@ -2145,7 +2169,7 @@ function loadAutoTable(jsonData) {
 			document.getElementById("ble_status").selectedIndex = "1";
 		}
 		if(document.getElementById("ble_status").selectedIndex == "0") {
-			alert("Warrning!\\r\\n\\r\\nWhen BLE is connected the WiFi AP WiCAN_xxxxxx will be disabled.\\r\\nTo re-ennable the WiFi AP Turn OFF BLE on your phone or device, then power cycle WiCAN. If you connect to WiFi AP ssid WiCAN_xxxxxx, the BLE will automatically be disabled.");
+			document.getElementById("ble_warning_div").style.display = "block";
 			document.getElementById("mqtt_en").value = "disable";
 			document.getElementById("mqtt_en_div").style.display = "none";
 			document.getElementById("mqtt_en").disabled = true;
@@ -2153,6 +2177,7 @@ function loadAutoTable(jsonData) {
 			document.getElementById("batt_alert_div").style.display = "none";
 			document.getElementById("batt_alert").disabled = true;
 		} else {
+            document.getElementById("ble_warning_div").style.display = "none";
 			document.getElementById("mqtt_en").disabled = false;
 			document.getElementById("batt_alert").disabled = false;
 		}
@@ -2679,8 +2704,10 @@ function loadAutoTable(jsonData) {
 			}
 			if(obj.ble_status == "enable") {
 				document.getElementById("ble_status").selectedIndex = "0";
+                document.getElementById("ble_warning_div").style.display = "block";
 			} else if(obj.ble_status == "disable") {
 				document.getElementById("ble_status").selectedIndex = "1";
+                document.getElementById("ble_warning_div").style.display = "none";
 			}
 			if(obj.sleep_status == "enable") {
 				document.getElementById("sleep_status").selectedIndex = "0";

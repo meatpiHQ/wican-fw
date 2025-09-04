@@ -1,8 +1,9 @@
-<!--
-================================================================
-THIS FILE WAS GENERATED! DO NOT UPDATE OR YOUR CHANGES ARE LOST!
-================================================================
+# <!--
+
+# THIS FILE WAS GENERATED! DO NOT UPDATE OR YOUR CHANGES ARE LOST!
+
 -->
+
 # ⚠️ Important Note
 
 **Disclaimer:**  
@@ -14,7 +15,9 @@ Before ordering a **WiCAN adapter**, please review the following important notes
 ---
 
 ### 1. **WiCAN PRO Recommended**
+
 We **highly recommend** ordering the **WiCAN PRO** version because:
+
 - It features an **advanced OBD chip**, improving compatibility with a wider range of vehicles.
 - You’ll receive **access to the latest features** and **firmware updates**.
 - It offers **better long-term support** compared to the standard WiCAN **because of memory limitations on the original WiCAN hardware**.
@@ -22,6 +25,7 @@ We **highly recommend** ordering the **WiCAN PRO** version because:
 ---
 
 ### 2. **Vehicle Alarm Triggers**
+
 On some vehicles, leaving an **OBD adapter** connected and **polling the ECU** while the car is **off** may **trigger the vehicle’s alarm**.
 
 - This behavior is **controlled by the vehicle’s firmware**.
@@ -47,59 +51,10 @@ You can try scanning available **standard PIDs** using the **Automate** tab:
 ---
 
 ### 💡 Tip for Vehicle-Specific Info
+
 When you're curious about whether your vehicle is supported or how it behaves with WiCAN:
+
 - **Search GitHub issues** for your vehicle’s make and model.
 - Many users share firsthand experiences, common pitfalls, and working configurations.
 
 # Supported Vehicles
-- Audi: PQ25/PQ26/PQ35/PQ46/MQB
-- BMW: 528i (**Only supported in [WiCAN PRO](https://www.crowdsupply.com/meatpi-electronics/wican-pro) version**)
-- BMW: i3 (**Only supported in [WiCAN PRO](https://www.crowdsupply.com/meatpi-electronics/wican-pro) version**)
-- BYD: Atto 3
-- BYD: Dolphin/Shark
-- BYD: Seal
-- Chevrolet: Bolt
-- Chevrolet: Volt/Ampera
-- Citroen: C-Zero
-- Dacia: Spring/CITY K-ZE
-- Fiat: 600e
-- Fiat: e-Ulysse
-- Genesis: GV60/GV70 EV/G80 Electrified
-- GWM: Ora Good Cat/Funky Cat/ES11/Haomao/Ora 03
-- Honda: Clarity-2018
-- Honda: Prologue
-- Hyundai: Ioniq2017
-- Hyundai: Ioniq5/Ioniq6/Kona
-- Jaguar: I-PACE
-- KGM: Torres EVX
-- Kia/Hyundai: Niro/Soul/Kona
-- Kia: Niro EV
-- Kia: Niro PHEV
-- Maxus: T90/EUNIC5/EUNIC6/EUNIC9/EV30/EG10/eDeliver3/eDeliver9
-- MG: MG5/Marvel/ZS
-- Mitsubishi: iMiEV/Outlander-PHEV
-- Mitsubishi: Outlander-PHEV 2023
-- Nissan : Ariya
-- Nissan : leaf-ze1
-- Opel: Ampere-E
-- Opel: EOBD (2004 - present)
-- Peugeot: e-208
-- Peugeot: iON
-- Porsche: Taycan
-- RAM: Promaster 3500 (2019)
-- Renault Zoe Ph2 (2020-)
-- Renault Zoe R110/R90
-- Renault: Ariya/Scenic EV E-TECH/Renault 5 E-TECH/Renault 4 E-TECH/Megane E-TECH GSR2 2024/Master EV E-TECH
-- Renault: Kangoo Z.E
-- Renault: Twizy
-- Smart: #1
-- Smart: EQ
-- Toyota: Rav4
-- Volvo: XC40
-- Volvo: XC40 BEV
-- Volvo: XC60 PHEV
-- VW: e-Golf
-- VW: e-Up
-- VW: ID
-- Xpeng: G6
-- Zeekr: 001
