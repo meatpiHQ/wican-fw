@@ -268,6 +268,12 @@ static esp_bd_addr_t remote_bd_addr;
 TaskHandle_t xble_handle = NULL;
 static uint8_t conn_led = 0;
 static EventGroupHandle_t s_ble_event_group = NULL;
+// Indicates link completed authenticated & encrypted pairing
+static volatile bool ble_secured = false;
+// Allows runtime control over whether we accept/ initiate pairing/bonding
+static volatile bool ble_pairing_allowed = true; 
+// Store last remote address to initiate encryption later if user enables pairing mid-connection
+static esp_bd_addr_t ble_last_remote_bda = {0};
 
 
 //static uint8_t *ext_adv_raw_data;
@@ -471,8 +477,6 @@ static const esp_gatts_attr_db_t fff0_attr_db[FFF0_IDX_NB] = {
       ESP_GATT_PERM_READ,
       sizeof(uint16_t), sizeof(uint16_t),
       (uint8_t *)&GATTS_SERVICE_UUID_FFF0}},
-
-    // FFF1 Declaration (notify + indicate)
     [IDX_CHAR_FFF1_DECL] =
     {{ESP_GATT_AUTO_RSP},
      {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid,
@@ -482,16 +486,14 @@ static const esp_gatts_attr_db_t fff0_attr_db[FFF0_IDX_NB] = {
     [IDX_CHAR_FFF1_VAL] =
     {{ESP_GATT_AUTO_RSP},
      {ESP_UUID_LEN_16, (uint8_t *)&(uint16_t){GATTS_CHAR_UUID_FFF1},
-      ESP_GATT_PERM_READ,
+      ESP_GATT_PERM_READ_ENC_MITM,
       20, sizeof(char_value_dummy), (uint8_t *)char_value_dummy}},
     [IDX_CHAR_FFF1_CCCD] =
     {{ESP_GATT_AUTO_RSP},
      {ESP_UUID_LEN_16, (uint8_t *)&client_char_config_uuid,
-      ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
+      ESP_GATT_PERM_READ_ENC_MITM | ESP_GATT_PERM_WRITE_ENC_MITM,
       sizeof(uint16_t), sizeof(heart_measurement_ccc),
       (uint8_t *)heart_measurement_ccc}},
-
-    // FFF2 Declaration (write + write-without-response)
     [IDX_CHAR_FFF2_DECL] =
     {{ESP_GATT_AUTO_RSP},
      {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid,
@@ -501,10 +503,8 @@ static const esp_gatts_attr_db_t fff0_attr_db[FFF0_IDX_NB] = {
     [IDX_CHAR_FFF2_VAL] =
     {{ESP_GATT_AUTO_RSP},
      {ESP_UUID_LEN_16, (uint8_t *)&(uint16_t){GATTS_CHAR_UUID_FFF2},
-      ESP_GATT_PERM_WRITE,
+      ESP_GATT_PERM_WRITE_ENC_MITM,
       20, 0, NULL}},
-
-    // CLI OUT (notify/indicate) under FFF0 using 128-bit UUID
     [IDX_CHAR_CLI_OUT_DECL] =
     {{ESP_GATT_AUTO_RSP},
      {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid,
@@ -513,15 +513,13 @@ static const esp_gatts_attr_db_t fff0_attr_db[FFF0_IDX_NB] = {
     [IDX_CHAR_CLI_OUT_VAL] =
     {{ESP_GATT_AUTO_RSP},
      {ESP_UUID_LEN_128, (uint8_t *)CMD_OUT_CHAR_UUID,
-      ESP_GATT_PERM_READ,
+      ESP_GATT_PERM_READ_ENC_MITM,
       BLE_SEND_BUF_SIZE, sizeof(char_value_dummy), (uint8_t *)char_value_dummy}},
     [IDX_CHAR_CLI_OUT_CCCD] =
     {{ESP_GATT_AUTO_RSP},
      {ESP_UUID_LEN_16, (uint8_t *)&client_char_config_uuid,
-      ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
+      ESP_GATT_PERM_READ_ENC_MITM | ESP_GATT_PERM_WRITE_ENC_MITM,
       sizeof(uint16_t), sizeof(heart_measurement_ccc), (uint8_t *)heart_measurement_ccc}},
-
-    // CLI IN (write | write NR) under FFF0 using 128-bit UUID
     [IDX_CHAR_CLI_IN_DECL] =
     {{ESP_GATT_AUTO_RSP},
      {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ,
@@ -529,7 +527,7 @@ static const esp_gatts_attr_db_t fff0_attr_db[FFF0_IDX_NB] = {
     [IDX_CHAR_CLI_IN_VAL] =
     {{ESP_GATT_AUTO_RSP},
      {ESP_UUID_LEN_128, (uint8_t *)CMD_IN_CHAR_UUID,
-      ESP_GATT_PERM_WRITE,
+      ESP_GATT_PERM_WRITE_ENC_MITM,
       BLE_CMDLINE_MAX, 0, NULL}},
 };
 
@@ -769,7 +767,13 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
     case ESP_GAP_BLE_SEC_REQ_EVT:
         /* send the positive(true) security response to the peer device to accept the security request.
         If not accept the security request, should send the security response with negative(false) accept value*/
-        esp_ble_gap_security_rsp(param->ble_security.ble_req.bd_addr, true);
+        if(ble_pairing_allowed) {
+            esp_ble_gap_security_rsp(param->ble_security.ble_req.bd_addr, true);
+            ESP_LOGI(GATTS_TABLE_TAG, "Security request accepted (pairing allowed)");
+        } else {
+            esp_ble_gap_security_rsp(param->ble_security.ble_req.bd_addr, false);
+            ESP_LOGW(GATTS_TABLE_TAG, "Security request rejected (pairing disabled)");
+        }
         break;
     case ESP_GAP_BLE_PASSKEY_NOTIF_EVT:  ///the app will receive this evt when the IO  has Output capability and the peer device IO has Input capability.
         ///show the passkey number to the user to input it in the peer device.
@@ -793,6 +797,8 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
             ESP_LOGI(GATTS_TABLE_TAG, "auth mode = %s",esp_auth_req_to_str(param->ble_security.auth_cmpl.auth_mode));
         }
         show_bonded_devices();
+        // set ble_secured based on success
+        ble_secured = param->ble_security.auth_cmpl.success;
         break;
     }
     case ESP_GAP_BLE_REMOVE_BOND_DEV_COMPLETE_EVT: {
@@ -841,7 +847,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
             esp_ble_gap_set_device_name((const char*)dev_name);
             esp_ble_gap_config_local_icon (ESP_BLE_APPEARANCE_GENERIC_COMPUTER);
             //generate a resolvable random address
-            esp_ble_gap_config_local_privacy(false);
+            esp_ble_gap_config_local_privacy(true);
             esp_ble_gatts_create_attr_tab(device_info_attr_db, gatts_if,
                                     DEVICE_INFO_IDX_NB, DEV_INFO_SVC_INST_ID);
             break;
@@ -853,6 +859,10 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
             ESP_LOG_BUFFER_HEX(GATTS_TABLE_TAG, param->write.value, param->write.len);
 
             if (param->write.handle == fff0_profile_handle_table[IDX_CHAR_CLI_IN_VAL]) {
+                if(!ble_secured) {
+                    ESP_LOGW(GATTS_TABLE_TAG, "CLI write rejected: link not securely paired yet");
+                    break;
+                }
                 // Handle Prepare Write (long write) by accumulating into input buffer
                 if (param->write.is_prep) {
                     size_t end = (size_t)param->write.offset + (size_t)param->write.len;
@@ -1002,13 +1012,19 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
             spp_conn_id = param->connect.conn_id;
             spp_gatts_if = gatts_if;
             is_connected = true;
+            ble_secured = false; // will be set true after AUTH_CMPL
+            memcpy(ble_last_remote_bda, param->connect.remote_bda, sizeof(esp_bd_addr_t));
             xEventGroupSetBits(s_ble_event_group, BLE_CONNECTED_BIT);
             dev_status_set_bits(DEV_BLE_CONNECTED_BIT);
             #if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
             gpio_set_level(conn_led, 0);
             #endif
-            /* start security connect with peer device when receive the connect event sent by the master */
-            esp_ble_set_encryption(param->connect.remote_bda, ESP_BLE_SEC_ENCRYPT_MITM);
+            /* Only initiate encryption automatically if pairing currently allowed */
+            if(ble_pairing_allowed){
+                esp_ble_set_encryption(param->connect.remote_bda, ESP_BLE_SEC_ENCRYPT_MITM);
+            } else {
+                ESP_LOGI(GATTS_TABLE_TAG, "Pairing disabled: not initiating encryption on connect");
+            }
 
             // Route console output to BLE and print prompt
             cmdline_set_ble_output_func(ble_cmdline_output);
@@ -1020,6 +1036,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event,
             wifi_mgr_enable();
             config_server_restart();
             is_connected = false;
+            ble_secured = false;
             xEventGroupClearBits(s_ble_event_group, BLE_CONNECTED_BIT);
             dev_status_clear_bits(DEV_BLE_CONNECTED_BIT);
             #if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
@@ -1317,7 +1334,7 @@ void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t conn
         strcpy((char*)dev_name, (char*)uid);
         conn_led = connected_led;
         ble_pass_key = passkey;
-        ESP_LOGW(GATTS_TABLE_TAG, "ble passkey: %lu", ble_pass_key);
+    // Passkey not logged to avoid exposing pairing secret
     }
     memset(serial_number, 0, sizeof(serial_number));
     memcpy(serial_number, dev_name+7, strlen((char*)dev_name)-7);
@@ -1450,7 +1467,7 @@ void ble_enable(void)
     uint8_t key_size = 16;
     uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
     uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
-    uint8_t auth_option = ESP_BLE_ONLY_ACCEPT_SPECIFIED_AUTH_DISABLE;
+    uint8_t auth_option = ESP_BLE_ONLY_ACCEPT_SPECIFIED_AUTH_ENABLE;
     uint8_t oob_support = ESP_BLE_OOB_DISABLE;
 
     esp_ble_gap_set_security_param(ESP_BLE_SM_CLEAR_STATIC_PASSKEY, &ble_pass_key, sizeof(uint32_t));
@@ -1512,4 +1529,28 @@ void ble_disable(void)
     esp_bt_controller_deinit();
     dev_status_clear_bits(DEV_BLE_ENABLED_BIT);
     dev_status_clear_bits(DEV_BLE_CONNECTED_BIT);
+}
+
+void ble_pairing_enable(void)
+{
+    ble_pairing_allowed = true;
+    ESP_LOGI(GATTS_TABLE_TAG, "Pairing ENABLED");
+    // If already connected and not yet secured, proactively start encryption
+    if(is_connected && !ble_secured) {
+        if(ble_last_remote_bda[0] || ble_last_remote_bda[1] || ble_last_remote_bda[2] || ble_last_remote_bda[3] || ble_last_remote_bda[4] || ble_last_remote_bda[5]) {
+            esp_err_t r = esp_ble_set_encryption(ble_last_remote_bda, ESP_BLE_SEC_ENCRYPT_MITM);
+            ESP_LOGI(GATTS_TABLE_TAG, "Requested encryption after enabling pairing (err=%s)", esp_err_to_name(r));
+        }
+    }
+}
+
+void ble_pairing_disable(void)
+{
+    ble_pairing_allowed = false;
+    ESP_LOGI(GATTS_TABLE_TAG, "Pairing DISABLED");
+}
+
+bool ble_pairing_is_enabled(void)
+{
+    return ble_pairing_allowed;
 }

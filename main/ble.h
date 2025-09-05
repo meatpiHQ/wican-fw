@@ -27,4 +27,8 @@ void ble_send(uint8_t* buf, uint8_t buf_len);
 bool ble_tx_ready(void);
 void ble_disable(void);
 void ble_enable(void);
+// Runtime control of pairing/bonding availability
+void ble_pairing_enable(void);
+void ble_pairing_disable(void);
+bool ble_pairing_is_enabled(void);
 #endif
