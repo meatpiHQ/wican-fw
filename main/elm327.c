@@ -42,6 +42,7 @@
 #include "types.h"
 #include "elm327.h"
 #include "dev_status.h"
+#include "driver/rtc_io.h"
 
 // #define TAG 		__func__
 #define TAG         "ELM327"
@@ -1370,6 +1371,8 @@ static int uart_read_until_pattern(uart_port_t uart_num, char* buffer, size_t bu
 
 static void elm327_powerpin_commands(void)
 {
+	bool hardreset_needed = 0;
+
 	ESP_LOGI(TAG, "Setting PPSW to 00");
 	if(xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(ELM327_CMD_MUTEX_TIMOUT)) == pdTRUE)
 	{
@@ -1412,8 +1415,8 @@ static void elm327_powerpin_commands(void)
 			{
 				ESP_LOGE(TAG, "Failed to set PPSW to 00");
 			}
-			vTaskDelay(pdMS_TO_TICKS(100));
-			elm327_hardreset_chip();
+			
+			hardreset_needed = true;
 		}
 		
 		xSemaphoreGive(xuart1_semaphore);
@@ -1422,6 +1425,11 @@ static void elm327_powerpin_commands(void)
 	else
 	{
 		ESP_LOGE(TAG, "%s: Failed to take UART semaphore", __func__);
+	}
+	if(hardreset_needed)
+	{
+		vTaskDelay(pdMS_TO_TICKS(100));
+		elm327_hardreset_chip();
 	}
 }
 
@@ -2108,6 +2116,20 @@ esp_err_t elm327_sleep(void)
 			ret = ESP_FAIL;
 		}
 		uart_flush_input(UART_NUM_1);
+
+		gpio_sleep_set_pull_mode(OBD_SLEEP_PIN, GPIO_PULLDOWN_ONLY);
+		gpio_set_level(OBD_SLEEP_PIN, 0);
+		gpio_pulldown_en(OBD_SLEEP_PIN);
+		rtc_gpio_pulldown_en(OBD_SLEEP_PIN);
+		gpio_hold_en(OBD_SLEEP_PIN);
+
+		
+		gpio_sleep_set_pull_mode(OBD_READY_PIN, GPIO_PULLDOWN_ONLY);
+		rtc_gpio_pulldown_en(OBD_READY_PIN);
+		gpio_pulldown_en(OBD_READY_PIN);
+		gpio_hold_en(OBD_READY_PIN);
+		gpio_deep_sleep_hold_en();
+
 		// xQueueReset(uart1_queue);
 		xSemaphoreGive(xuart1_semaphore);
 	}

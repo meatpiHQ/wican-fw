@@ -664,7 +664,11 @@ void app_main(void)
 	gpio_reset_pin(OBD_READY_PIN);
 	gpio_set_direction(OBD_READY_PIN, GPIO_MODE_INPUT);
 	gpio_pulldown_en(OBD_READY_PIN);
-	
+
+	gpio_reset_pin(OBD_SLEEP_PIN);
+	gpio_set_direction(OBD_SLEEP_PIN, GPIO_MODE_OUTPUT);
+	gpio_set_level(OBD_SLEEP_PIN, 1);
+	gpio_pulldown_en(OBD_SLEEP_PIN);
 	// gpio_reset_pin(USB_ESP_MODE_EN);
 	// gpio_set_direction(USB_ESP_MODE_EN, GPIO_MODE_OUTPUT);
 	// gpio_set_level(USB_ESP_MODE_EN, 1);
