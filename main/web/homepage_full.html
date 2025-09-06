@@ -1502,32 +1502,56 @@
     <script>
         async function checkFirmwareUpdate() {
             try {
-                const currentVersion = document.getElementById('fw_version')?.textContent?.trim();
+                const currentRaw = document.getElementById('fw_version')?.textContent?.trim();
+                if (!currentRaw) return;
+
+                // Helpers: extract numeric version and compare a.b.c parts
+                const extractVersion = (str) => {
+                    if (!str) return null;
+                    const m = String(str).match(/(\d+)(?:\.(\d+))?(?:\.(\d+))?/);
+                    return m ? [m[1], m[2] || '0', m[3] || '0'].join('.') : null;
+                };
+                const cmpVersions = (a, b) => {
+                    const ap = a.split('.').map(n => parseInt(n, 10) || 0);
+                    const bp = b.split('.').map(n => parseInt(n, 10) || 0);
+                    const len = Math.max(ap.length, bp.length);
+                    for (let i = 0; i < len; i++) {
+                        const ai = ap[i] || 0;
+                        const bi = bp[i] || 0;
+                        if (ai > bi) return 1;
+                        if (ai < bi) return -1;
+                    }
+                    return 0;
+                };
+
+                const currentVersion = extractVersion(currentRaw);
                 if (!currentVersion) return;
 
                 const response = await fetch('https://api.github.com/repos/meatpiHQ/wican-fw/releases');
                 if (!response.ok) return;
                 const releases = await response.json();
                 const proRelease = releases.find(rel =>
-                    (rel.name && rel.name.toUpperCase().includes('PRO')) ||
-                    (rel.tag_name && rel.tag_name.toUpperCase().includes('P'))
+                    (rel?.name && rel.name.toUpperCase().includes('PRO')) ||
+                    (rel?.tag_name && rel.tag_name.toUpperCase().includes('P'))
                 );
                 if (!proRelease) return;
 
-                const match = proRelease.name.match(/v(\d+\.\d+)/i);
-                const latestVersion = match ? match[1] : null;
+                const latestRaw = (proRelease.tag_name || proRelease.name || '').toString();
+                const latestVersion = extractVersion(latestRaw);
                 if (!latestVersion) return;
 
-                if (currentVersion.replace(/[^\d.]/g, '') !== latestVersion) {
+                // Only notify if latest > current
+                if (cmpVersions(latestVersion, currentVersion) === 1) {
                     const notice = document.getElementById('firmware-update-notice');
                     if (notice) {
                         const url = proRelease.html_url || 'https://github.com/meatpiHQ/wican-fw/releases';
-                        let versionText = ` <span style='color:#b45309'>(v${latestVersion})</span>`;
+                        const versionText = ` <span style='color:#b45309'>(v${latestVersion})</span>`;
                         notice.innerHTML = `<span style=\"font-weight: 600;\">New firmware available!</span><br><a id=\"firmware-update-link\" href=\"${url}\" target=\"_blank\" style=\"color: #2563eb; text-decoration: underline;\">Download</a>${versionText}`;
                         notice.style.display = 'block';
                     }
                 }
             } catch (e) {
+                // Silent fail to avoid impacting UI if GitHub is unreachable
             }
         }
         // document.addEventListener('DOMContentLoaded', checkFirmwareUpdate);
