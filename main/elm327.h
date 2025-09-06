@@ -24,7 +24,8 @@
 
 #include "driver/twai.h"
 
-#define OBD_FW_VER		"V2.3.18"
+#define OBD_FW_VER_V18      "V2.3.18"
+#define OBD_FW_VER_V22		"V2.3.22"
 
 typedef void (*response_callback_t)(char*, uint32_t, QueueHandle_t *q, char* cmd_str);
 

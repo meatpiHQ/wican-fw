@@ -1316,7 +1316,7 @@ void elm327_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q), QueueH
 // #define DESIRED_BAUD_RATE 115200
 // #define DEFAULT_BAUD_RATE 2000000
 #define UART_BUFFER_SIZE 				128
-
+#define ELM327_CMD_BUFFER_SIZE 			256
 #define ELM327_UPDATE_BUF_SIZE 			512
 #define ELM327_UPDATE_MAX_LINE_LENGTH 	256
 #define ELM327_UPDATE_TIMEOUT_MS 		5000
@@ -1357,11 +1357,73 @@ static QueueHandle_t elm327_cmd_queue;
 QueueHandle_t uart1_queue = NULL;
 static SemaphoreHandle_t xuart1_semaphore = NULL;
 
-extern const unsigned char obd_fw_start[] asm("_binary_V2_3_18_txt_start");
-extern const unsigned char obd_fw_end[]   asm("_binary_V2_3_18_txt_end");
+// extern const unsigned char obd_fw_start[] asm("_binary_V2_3_18_txt_start");
+// extern const unsigned char obd_fw_end[]   asm("_binary_V2_3_18_txt_end");
+// V2.3.22
+extern const unsigned char obd_fw_start[] asm("_binary_V2_3_22_txt_start");
+extern const unsigned char obd_fw_end[]   asm("_binary_V2_3_22_txt_end");
+
+static char *update_resp_buf = NULL;
 
 static int uart_read_until_pattern(uart_port_t uart_num, char* buffer, size_t buffer_size, 
                                  const char* end_pattern, int total_timeout_ms) ;
+
+static void elm327_powerpin_commands(void)
+{
+	ESP_LOGI(TAG, "Setting PPSW to 00");
+	if(xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(ELM327_CMD_MUTEX_TIMOUT)) == pdTRUE)
+	{
+		char* rx_buffer = (char*)heap_caps_malloc(ELM327_CMD_BUFFER_SIZE, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+		if(rx_buffer == NULL)
+		{
+			ESP_LOGE(TAG, "Failed to allocate memory for rx_buffer");
+			xSemaphoreGive(xuart1_semaphore);
+			return;
+		}
+		bzero(rx_buffer, ELM327_CMD_BUFFER_SIZE);
+		uart_flush_input(UART_NUM_1);
+
+		// VTVERS
+		uart_write_bytes(UART_NUM_1, "VTVERS\r", strlen("VTVERS\r"));
+		uart_read_until_pattern(UART_NUM_1, rx_buffer, ELM327_CMD_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
+		if (strstr(rx_buffer, OBD_FW_VER_V22) == NULL)
+		{
+			xSemaphoreGive(xuart1_semaphore);
+			free(rx_buffer);
+			return;
+		}
+
+		uart_write_bytes(UART_NUM_1, "VTPPSWS\r", strlen("VTPPSWS\r"));
+		uart_read_until_pattern(UART_NUM_1, rx_buffer, ELM327_CMD_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
+		if(strstr(rx_buffer, "00") != NULL)
+		{
+			ESP_LOGI(TAG, "PPSW is already 00");
+		}
+		else
+		{
+			ESP_LOGW(TAG, "PPSW is not 00");
+			uart_write_bytes(UART_NUM_1, "VTPPSW\r", strlen("VTPPSW\r"));
+			uart_read_until_pattern(UART_NUM_1, rx_buffer, ELM327_CMD_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
+			if (strstr(rx_buffer, "OK") != NULL)
+			{
+				ESP_LOGI(TAG, "PPSW set to 00");
+			}
+			else
+			{
+				ESP_LOGE(TAG, "Failed to set PPSW to 00");
+			}
+			vTaskDelay(pdMS_TO_TICKS(100));
+			elm327_hardreset_chip();
+		}
+		
+		xSemaphoreGive(xuart1_semaphore);
+		free(rx_buffer);
+	}
+	else
+	{
+		ESP_LOGE(TAG, "%s: Failed to take UART semaphore", __func__);
+	}
+}
 
 /* Function Implementations */
 int8_t elm327_process_cmd(uint8_t *cmd, uint32_t len, QueueHandle_t *q, 
@@ -1821,7 +1883,7 @@ void elm327_lock(void)
 
 void elm327_hardreset_chip(void)
 {
-    static char rsp_buffer[100];
+    char *rsp_buffer = (char *)heap_caps_malloc(UART_BUFFER_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     uint32_t rsp_len;
 	if (xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(ELM327_CMD_MUTEX_TIMOUT)) == pdTRUE)
 	{
@@ -1838,7 +1900,7 @@ void elm327_hardreset_chip(void)
 		{
 			uart_write_bytes(UART_NUM_1, "ATZ\r", strlen("ATZ\r"));
 		}
-		memset(rsp_buffer, 0, sizeof(rsp_buffer));
+		memset(rsp_buffer, 0, UART_BUFFER_SIZE);
         int len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, UART_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS+300);
 		if(len > 0)
 		{
@@ -1850,6 +1912,10 @@ void elm327_hardreset_chip(void)
 			ESP_LOGE(TAG, "Hardreset failed");
 		}
 		uart_flush_input(UART_NUM_1);
+		if(xuart1_semaphore == NULL)
+		{
+			ESP_LOGE(TAG, "xuart1_semaphore is NULL");
+		}
 		xSemaphoreGive(xuart1_semaphore);
 	}
 	else
@@ -2171,126 +2237,175 @@ static int get_one_record(const uint8_t* data, int size, int index, char* record
 
 esp_err_t elm327_send_update_command(const char* cmd, char** response, size_t* response_size, int timeout_ms) 
 {
-    esp_err_t ret = ESP_FAIL;
-    size_t alloc_size = ELM327_UPDATE_BUF_SIZE;
-    *response = malloc(alloc_size);
-    if (!*response)
-	{
-        ESP_LOGE(TAG, "Failed to allocate response buffer");
-        return ESP_ERR_NO_MEM;
-    }
+	int len = 0;
+	uint8_t byte_data = 0;
+	const size_t cmd_len = strlen(cmd);
+	bool echo_seen = false;
+	bool overflow = false;
+	esp_err_t ret = ESP_FAIL;
 
-    uart_flush(UART_NUM_1);
-    
-    ESP_LOGD(TAG, "Sending: %s", cmd);
-    int written = uart_write_bytes(UART_NUM_1, cmd, strlen(cmd));
-    if (written < 0)
+	if(update_resp_buf == NULL)
 	{
-        ESP_LOGE(TAG, "Failed to write command");
-        goto cleanup;
-    }
-    
-    int len = 0;
-    uint8_t byte_data;
-    int64_t start_time = esp_timer_get_time() / 1000;
-    
-    while (true)
+		return ESP_ERR_NO_MEM;
+	}
+	// Clear buffer and set out pointers
+	memset(update_resp_buf, 0, ELM327_UPDATE_BUF_SIZE);
+	*response = update_resp_buf;
+	*response_size = 0;
+
+	// Flush any stale RX data before sending a new command
+	uart_flush_input(UART_NUM_1);
+
+	ESP_LOGD(TAG, "Sending: %s", cmd);
+	int written = uart_write_bytes(UART_NUM_1, cmd, cmd_len);
+	if (written < 0)
 	{
-        if ((esp_timer_get_time() / 1000 - start_time) >= timeout_ms)
-		{
-            ESP_LOGE(TAG, "Command timeout");
-            ret = ESP_ERR_TIMEOUT;
-            goto cleanup;
-        }
+		ESP_LOGE(TAG, "Failed to write command");
+		return ESP_FAIL;
+	}
+	// Ensure bytes are pushed out before we start reading a response
+	(void)uart_wait_tx_done(UART_NUM_1, pdMS_TO_TICKS(50));
 
-        if (uart_read_bytes(UART_NUM_1, &byte_data, 1, pdMS_TO_TICKS(100)) != 1)
+	const int64_t start_time = esp_timer_get_time() / 1000;
+	while (true)
+	{
+		if ((esp_timer_get_time() / 1000 - start_time) >= timeout_ms)
 		{
-            continue;
-        }
+			ESP_LOGE(TAG, "Command timeout");
+			ret = ESP_ERR_TIMEOUT;
+			break;
+		}
 
-        // Check if buffer needs to grow
-        if (len >= alloc_size - 1)
+		if (uart_read_bytes(UART_NUM_1, &byte_data, 1, pdMS_TO_TICKS(100)) != 1)
 		{
-            alloc_size *= 2;
-            char* new_buf = realloc(*response, alloc_size);
-            if (!new_buf)
+			continue;
+		}
+
+		// Store into buffer if space available
+		if (len < ELM327_UPDATE_BUF_SIZE - 1)
+		{
+			update_resp_buf[len] = (char)byte_data;
+		}
+		else
+		{
+			// Overflow protection: mark and keep reading until terminator
+			overflow = true;
+		}
+
+		// Detect and skip echo: if the accumulated bytes equal the command, drop them
+		if (!echo_seen)
+		{
+			int cmp_len = len + 1; // include current byte
+			if (cmp_len <= (int)cmd_len && strncmp(update_resp_buf, cmd, cmp_len) == 0)
 			{
-                ESP_LOGE(TAG, "Failed to reallocate buffer");
-                ret = ESP_ERR_NO_MEM;
-                goto cleanup;
-            }
-            *response = new_buf;
-        }
+				if (cmp_len == (int)cmd_len)
+				{
+					// Full echo seen, reset buffer
+					len = 0;
+					memset(update_resp_buf, 0, ELM327_UPDATE_BUF_SIZE);
+					echo_seen = true;
+					continue;
+				}
+				// Keep collecting until full echo matched
+				len++;
+				continue;
+			}
+			else if (cmp_len <= (int)cmd_len)
+			{
+				// Not matching echo, keep as part of response
+			}
+		}
 
-        (*response)[len] = (char)byte_data;
-        
-        // Skip command echo
-        if (len == strlen(cmd)-1 && strncmp(*response, cmd, len+1) == 0)
+		// Early-exit for VTDLED: OK followed by CR
+		if (strstr(cmd, "VTDLED") && len >= 1)
 		{
-            len = 0;
-            continue;
-        }
-        
-        if (byte_data == '>') {
-            (*response)[++len] = '\0';
-            break;
-        }
-        
-        if (byte_data != 0) {
-            len++;
-        }
-    }
+			if (byte_data == '\r' && strstr(update_resp_buf, "OK"))
+			{
+				len++;
+				update_resp_buf[len] = '\0';
+				ret = ESP_OK;
+				break;
+			}
+		}
 
-    *response_size = len;
-    ESP_LOGD(TAG, "Response: %s", *response);
-    
-    if (strstr(*response, "OK") || strstr(*response, "MIC3624"))
-	{
-        ret = ESP_OK;
-    }
-	else if (strstr(*response, "?"))
-	{
-        ret = ESP_ERR_NOT_FOUND;
-    }
-	else
-	{
-        ESP_LOGW(TAG, "Unexpected response");
-        ret = ESP_FAIL;
-    }
-    
-    return ret;
+		if (byte_data == '>')
+		{
+			len++;
+			update_resp_buf[len] = '\0';
+			break;
+		}
 
-cleanup:
-    free(*response);
-    *response = NULL;
-    return ret;
+		if (byte_data != 0)
+		{
+			len++;
+		}
+	}
+
+	*response_size = (size_t)len;
+
+	if (overflow)
+	{
+		ESP_LOGE(TAG, "Response buffer overflow (size=%d). Truncated.", len);
+		ret = ESP_ERR_INVALID_SIZE;
+	}
+
+	if (ret != ESP_ERR_TIMEOUT && ret != ESP_ERR_INVALID_SIZE)
+	{
+		// Classify response content
+		if (strstr(update_resp_buf, "OK") || strstr(update_resp_buf, "MIC3624"))
+		{
+			ret = ESP_OK;
+		}
+		else if (strstr(update_resp_buf, "?"))
+		{
+			ret = ESP_ERR_NOT_FOUND;
+		}
+		else
+		{
+			ESP_LOGW(TAG, "Unexpected response: %s", update_resp_buf);
+			ret = ESP_FAIL;
+		}
+	}
+
+	if (strstr(cmd, "VTDLED"))
+	{
+		ESP_LOGW(TAG, "VTDLED command sent");
+		ESP_LOG_BUFFER_HEXDUMP(TAG, (const void*)update_resp_buf, len, ESP_LOG_INFO);
+	}
+
+	return ret;
 }
 
 esp_err_t elm327_check_obd_device() 
 {
-    char* response = NULL;
-    size_t response_size = 0;
+	char* response = NULL;
+	size_t response_size = 0;
     device_status.in_normal_state = false;
 	device_status.need_update = false;
-	
+
+	if(update_resp_buf == NULL)
+	{
+		return ESP_ERR_NO_MEM;
+	}
+
     esp_err_t ret = elm327_send_update_command("VTVERS\r", &response, &response_size, ELM327_UPDATE_TIMEOUT_MS);
 	
-    if (response)
+	if (response)
 	{
 		ESP_LOG_BUFFER_HEXDUMP(TAG, response, strlen(response), ESP_LOG_INFO);
-        if (ret != ESP_OK)
+		if (ret != ESP_OK)
 		{
-            if (ret == ESP_ERR_NOT_FOUND)
+			if (ret == ESP_ERR_NOT_FOUND)
 			{
-                device_status.device_type = 0xFF;
-                ret = ESP_OK;
-            }
-        }
+				device_status.device_type = 0xFF;
+				ret = ESP_OK;
+			}
+		}
 		else if (strncmp(response, "MIC3624", 7) == 0)
 		{
-            device_status.in_normal_state = true;
-            device_status.device_type = 0x3624;
-			if(strstr(response, OBD_FW_VER) != NULL)
+			device_status.in_normal_state = true;
+			device_status.device_type = 0x3624;
+			if (strstr(response, OBD_FW_VER_V22) != NULL)
 			{
 				ESP_LOGI(TAG, "ELM327 OBD Firmware is already up to date.");
 			}
@@ -2298,40 +2413,42 @@ esp_err_t elm327_check_obd_device()
 			{
 				device_status.need_update = true;
 			}
-			
-            ret = ESP_OK;
-        }
+
+			ret = ESP_OK;
+		}
 		else
 		{
-            ESP_LOGE(TAG, "Unknown device");
-            ret = ESP_FAIL;
-        }
-        free(response);
-    }
+			ESP_LOGE(TAG, "Unknown device");
+			ret = ESP_FAIL;
+		}
+	}
     
     return ret;
 }
 
 static void elm327_disable_wake_commands(void)
 {
+	ESP_LOGI(TAG, "Disabling wake commands");
 	if(xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(ELM327_CMD_MUTEX_TIMOUT)) == pdTRUE)
 	{
-		char* rx_buffer = malloc(256);
+		char* rx_buffer = (char*)heap_caps_malloc(ELM327_CMD_BUFFER_SIZE, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
 		if(rx_buffer == NULL)
 		{
 			ESP_LOGE(TAG, "Failed to allocate memory for rx_buffer");
 			xSemaphoreGive(xuart1_semaphore);
 			return;
 		}
-		bzero(rx_buffer, 256);
+		bzero(rx_buffer, ELM327_CMD_BUFFER_SIZE);
 		uart_flush_input(UART_NUM_1);
 		//make sure chip goes to sleep
 		uart_write_bytes(UART_NUM_1, "ATPP 0F SV 95\r", strlen("ATPP 0F SV 95\r"));
-		uart_read_until_pattern(UART_NUM_1, rx_buffer, UART_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
-		bzero(rx_buffer, 256);
+		uart_read_until_pattern(UART_NUM_1, rx_buffer, ELM327_CMD_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
+		bzero(rx_buffer, ELM327_CMD_BUFFER_SIZE);
 		vTaskDelay(pdMS_TO_TICKS(100));
 		uart_write_bytes(UART_NUM_1, "ATPP 0F ON\r", strlen("ATPP 0F ON\r"));
-		uart_read_until_pattern(UART_NUM_1, rx_buffer, UART_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
+		uart_read_until_pattern(UART_NUM_1, rx_buffer, ELM327_CMD_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
+		ESP_LOGI(TAG, "Wake commands disabled");
+		ESP_LOG_BUFFER_HEXDUMP(TAG, (const void*)rx_buffer, strlen(rx_buffer), ESP_LOG_INFO);
 		vTaskDelay(pdMS_TO_TICKS(100));
 		xSemaphoreGive(xuart1_semaphore);
 		free(rx_buffer);
@@ -2353,22 +2470,22 @@ esp_err_t elm327_update_obd(bool force_update)
 	if(xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(ELM327_CMD_MUTEX_TIMOUT)) == pdTRUE)
     {
 		ret = elm327_check_obd_device();
-		if (ret != ESP_OK)
+
+		if(device_status.need_update == false && force_update == false && device_status.in_normal_state == true)
 		{
 			xSemaphoreGive(xuart1_semaphore);
 			return ret;
 		}
 
-		if(device_status.need_update == false && force_update == false)
+		if(device_status.in_normal_state == false)
 		{
-			xSemaphoreGive(xuart1_semaphore);
-			return ret;
+			ESP_LOGE(TAG, "Device is not in normal state, attempting to update");
 		}
 
 		ESP_LOGW(TAG, "MIC3624 Start update");
 		
-		char* response;
-		size_t response_size;
+		char* response = NULL;
+		size_t response_size = 0;
 		
 		// Enter update mode
 		ret = elm327_send_update_command("VTDLMIC3422\r", &response, &response_size, ELM327_UPDATE_TIMEOUT_MS);
@@ -2377,13 +2494,13 @@ esp_err_t elm327_update_obd(bool force_update)
 			xSemaphoreGive(xuart1_semaphore);
 			return ret;
 		}
-		free(response);
-
+		// Response buffer is static; do not free
+		response = NULL;
 		led_fast_blink(LED_RED, 255, true);
 
 		uint32_t line_count = 0;
 		bool update_complete = false;
-		char line[ELM327_UPDATE_MAX_LINE_LENGTH];
+		static char line[ELM327_UPDATE_MAX_LINE_LENGTH];
 		
 		// Process embedded firmware data
 		while (current_ptr < end_ptr)
@@ -2424,19 +2541,13 @@ esp_err_t elm327_update_obd(bool force_update)
 				break;
 			}
 
-			// Prepare and send command
-			char* cmd = malloc(len + 8);  // "VTDLDT" + line + \r + \0
-			if (!cmd)
+			// Prepare and send command using stack buffer, no dynamic allocation
 			{
-				ret = ESP_ERR_NO_MEM;
-				break;
+				char cmd[ELM327_UPDATE_MAX_LINE_LENGTH + 8]; // "VTDLDT" + line + \r + \0
+				memset(cmd, 0, sizeof(cmd));
+				snprintf(cmd, sizeof(cmd), "VTDLDT%.*s\r", (int)len, line);
+				ret = elm327_send_update_command(cmd, &response, &response_size, ELM327_UPDATE_TIMEOUT_MS);
 			}
-			
-			snprintf(cmd, len + 8, "VTDLDT%s\r", line);
-			ret = elm327_send_update_command(cmd, &response, &response_size, ELM327_UPDATE_TIMEOUT_MS);
-			free(cmd);
-			if (response) free(response);
-			
 			if (ret != ESP_OK)
 			{
 				ESP_LOGE(TAG, "Failed at line %lu", line_count);
@@ -2449,12 +2560,41 @@ esp_err_t elm327_update_obd(bool force_update)
 		// End update if everything was successful
 		if (ret == ESP_OK && update_complete)
 		{
-			ret = elm327_send_update_command("VTDLED\r", &response, &response_size, ELM327_UPDATE_TIMEOUT_MS);
-			if (response) free(response);
 			vTaskDelay(pdMS_TO_TICKS(2000));
+			ESP_LOGI(TAG, "Finalizing update with command VTDLED...");
+			// Retry up to 3 times to finalize
+			ret = ESP_FAIL; // ensure we enter the loop
+			for (uint8_t attempt = 1; attempt <= 3; ++attempt)
+			{
+				response = NULL;
+				esp_err_t r = elm327_send_update_command("VTDLED\r", &response, &response_size, ELM327_UPDATE_TIMEOUT_MS);
+				if (r == ESP_OK)
+				{
+					ret = r;
+					ESP_LOGI(TAG, "VTDLED succeeded on attempt %u", attempt);
+					break;
+				}
+				ret = r;
+				ESP_LOGW(TAG, "VTDLED attempt %u failed: %s", attempt, esp_err_to_name(r));
+				vTaskDelay(pdMS_TO_TICKS(200));
+			}
+			if (ret != ESP_OK)
+			{
+				ESP_LOGE(TAG, "Failed to finalize update after retries");
+			}
+			vTaskDelay(pdMS_TO_TICKS(100));
 		}
 		
 		ESP_LOGW(TAG, "ELM327 chip update DONE!");
+		uart_set_baudrate(UART_NUM_1, DESIRED_BAUD_RATE);
+		vTaskDelay(pdMS_TO_TICKS(2000));
+
+		gpio_set_level(OBD_RESET_PIN, 0);
+		vTaskDelay(pdMS_TO_TICKS(5));
+		gpio_set_level(OBD_RESET_PIN, 1);
+
+		uart_flush_input(UART_NUM_1);
+		vTaskDelay(pdMS_TO_TICKS(2000));
 
 		xSemaphoreGive(xuart1_semaphore);
 	}
@@ -2462,11 +2602,14 @@ esp_err_t elm327_update_obd(bool force_update)
 	{
 		ESP_LOGE(TAG, "%s: Failed to take semaphore", __func__);
 	}
-    elm327_hardreset_chip();
 
+    elm327_hardreset_chip();
+	vTaskDelay(pdMS_TO_TICKS(2000));
 	elm327_disable_wake_commands();
-	led_fast_blink(LED_RED, 0, false);
 	
+	led_fast_blink(LED_RED, 0, false);
+	ESP_LOGI(TAG, "ELM327 chip update DONE! Rebooting...");
+
 	return ret;
 }
 
@@ -2479,34 +2622,26 @@ esp_err_t elm327_update_obd_from_file(const char* filename)
         return ESP_FAIL;
     }
 
-    // Allocate line buffer
-    char* line = malloc(ELM327_UPDATE_MAX_LINE_LENGTH);
-    if (!line)
-	{
-        fclose(file);
-        return ESP_ERR_NO_MEM;
-    }
+	// Stack line buffer (no dynamic memory)
+	char line[ELM327_UPDATE_MAX_LINE_LENGTH];
 
-    esp_err_t ret = elm327_check_obd_device();
-    if (ret != ESP_OK)
+	esp_err_t ret = elm327_check_obd_device();
+	if (ret != ESP_OK)
 	{
-        free(line);
-        fclose(file);
-        return ret;
-    }
+		fclose(file);
+		return ret;
+	}
 	ESP_LOGW(TAG, "MIC3624 Start update");
     char* response;
     size_t response_size;
     
     // Enter update mode
-    ret = elm327_send_update_command("VTDLMIC3422\r", &response, &response_size, ELM327_UPDATE_TIMEOUT_MS);
-    if (ret != ESP_OK)
+	ret = elm327_send_update_command("VTDLMIC3422\r", &response, &response_size, ELM327_UPDATE_TIMEOUT_MS);
+	if (ret != ESP_OK)
 	{
-        free(line);
-        fclose(file);
-        return ret;
-    }
-    free(response);
+		fclose(file);
+		return ret;
+	}
 
 	led_fast_blink(LED_RED, 255, true);
 
@@ -2514,7 +2649,7 @@ esp_err_t elm327_update_obd_from_file(const char* filename)
     bool update_complete = false;
 
     // Process file
-    while (fgets(line, ELM327_UPDATE_MAX_LINE_LENGTH, file))
+	while (fgets(line, sizeof(line), file))
 	{
         size_t len = strlen(line);
         line_count++;
@@ -2538,17 +2673,12 @@ esp_err_t elm327_update_obd_from_file(const char* filename)
             break;
         }
 
-        // Prepare and send command
-        char* cmd = malloc(len + 8);  // "VTDLDT" + line + \r + \0
-        if (!cmd)
+		// Prepare and send command (stack buffer, no dynamic memory)
 		{
-            ret = ESP_ERR_NO_MEM;
-            break;
-        }
-        snprintf(cmd, len + 8, "VTDLDT%s\r", line);
-        ret = elm327_send_update_command(cmd, &response, &response_size, ELM327_UPDATE_TIMEOUT_MS);
-        free(cmd);
-        if (response) free(response);
+			char cmd[ELM327_UPDATE_MAX_LINE_LENGTH + 8];
+			snprintf(cmd, sizeof(cmd), "VTDLDT%.*s\r", (int)len, line);
+			ret = elm327_send_update_command(cmd, &response, &response_size, ELM327_UPDATE_TIMEOUT_MS);
+		}
         
         if (ret != ESP_OK)
 		{
@@ -2560,14 +2690,31 @@ esp_err_t elm327_update_obd_from_file(const char* filename)
     }
 
     // Cleanup
-    free(line);
     fclose(file);
 
     // End update if everything was successful
     if (ret == ESP_OK && update_complete)
 	{
-        ret = elm327_send_update_command("VTDLED\r", &response, &response_size, ELM327_UPDATE_TIMEOUT_MS);
-        if (response) free(response);
+		ESP_LOGI(TAG, "Finalizing update with command VTDLED...");
+		// Retry finalize up to 3 times
+		for (uint8_t attempt = 1; attempt <= 3 && ret != ESP_OK; ++attempt)
+		{
+			esp_err_t r = elm327_send_update_command("VTDLED\r", &response, &response_size, ELM327_UPDATE_TIMEOUT_MS);
+			ret = r;
+			if (r != ESP_OK)
+			{
+				ESP_LOGW(TAG, "VTDLED attempt %u failed: %s", attempt, esp_err_to_name(r));
+				vTaskDelay(pdMS_TO_TICKS(200));
+			}
+		}
+		if (ret == ESP_OK)
+		{
+			ESP_LOGI(TAG, "Update finalized successfully");
+		}
+		else
+		{
+			ESP_LOGE(TAG, "Failed to finalize update");
+		}
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
 
@@ -2644,6 +2791,13 @@ void elm327_init(response_callback_t rsp_callback, QueueHandle_t *rx_queue, void
     elm327_can_log = can_log;
 	elm327_response = rsp_callback;
 
+	if(update_resp_buf == NULL)
+	{
+		update_resp_buf = (char *)heap_caps_malloc(ELM327_UPDATE_BUF_SIZE, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+		memset(update_resp_buf, 0, ELM327_UPDATE_BUF_SIZE);
+	}
+
+
     elm327_cmd_queue = xQueueCreate(ELM327_CMD_QUEUE_SIZE, sizeof(elm327_commands_t));
 	if (elm327_cmd_queue == NULL){
 		ESP_LOGE(TAG, "Failed to create queue");
@@ -2681,7 +2835,7 @@ void elm327_init(response_callback_t rsp_callback, QueueHandle_t *rx_queue, void
 	// elm327_update_obd_from_file("/sdcard/MIC3624_v2.3.10.txt");
 	// elm327_update_obd_from_file("/sdcard/MIC3624_v2.3.18.txt");
 	elm327_update_obd(false);
-
+	elm327_powerpin_commands();
 	static uint8_t status_not_ready_count = 0;
 	while(elm327_chip_get_status() != ELM327_READY)
 	{

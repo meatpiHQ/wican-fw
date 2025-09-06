@@ -94,6 +94,7 @@ idf_component_register(
         "web/src/lucide_icons.js"
         "web/src/dashboard_live.js"
         "web/safemode.html"
-        "obd_fw/V2.3.18.txt"
+        # "obd_fw/V2.3.18.txt"
+        "obd_fw/V2.3.22.txt"
         "logo.txt"
 )
