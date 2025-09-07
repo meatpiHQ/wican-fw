@@ -1,7 +1,9 @@
-# <!--
+---
+title: "Supported Vehicles"
+---
 
+<!--
 # THIS FILE WAS GENERATED! DO NOT UPDATE OR YOUR CHANGES ARE LOST!
-
 -->
 
 # ⚠️ Important Note
