@@ -15,7 +15,6 @@ set(srcs
     "wc_uart.c"
     "mqtt.c"
     "sleep_mode.c"
-    "autopid.c"
     "expression_parser.c"
     "led.c"
     "obd.c"
@@ -68,6 +67,7 @@ set(requires
     zorxx__multipart-parser
     debug_logs
     cert_manager
+    autopid
 )
 
 # Register the component
@@ -79,7 +79,6 @@ idf_component_register(
         "ftp.c"
         "elm327.c"
         "obd.c"
-        "autopid.c"
         "wusb3801.c"
         "${srcs}"
         INCLUDE_DIRS "." 

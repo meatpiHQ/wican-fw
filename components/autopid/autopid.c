@@ -24,6 +24,7 @@
 #include "freertos/event_groups.h"
 #include "esp_log.h"
 #include <string.h>
+#include <strings.h>
 #include "driver/twai.h"
 #include "esp_timer.h"
 #include "esp_system.h" 
@@ -703,22 +704,138 @@ static const char* dest_type_str(destination_type_t t){
     }
 }
 
-// Build ABRP payload wrapper if needed
+// URL encode a string for form data transmission
+static char* url_encode_string(const char *input) {
+    if (!input) return NULL;
+    
+    size_t input_len = strlen(input);
+    size_t encoded_len = input_len * 3 + 1; // worst case for URL encoding
+    char *encoded = heap_caps_malloc(encoded_len, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    if (!encoded) return NULL;
+    
+    size_t j = 0;
+    for (size_t k = 0; k < input_len && j < encoded_len - 1; k++) {
+        char c = input[k];
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+           c == '-' || c == '_' || c == '.' || c == '~') {
+            encoded[j++] = c;
+        } else {
+            if (j < encoded_len - 3) {
+                sprintf(&encoded[j], "%%%02X", (unsigned char)c);
+                j += 3;
+            }
+        }
+    }
+    encoded[j] = '\0';
+    
+    return encoded;
+}
+
+// Helper to copy/map a value from src to tlm with type normalization for ABRP
+static void abrp_add_mapped(cJSON *src, cJSON *tlm, const char *from_key, const char *to_key)
+{
+    if(!src || !tlm || !from_key || !to_key) return;
+    cJSON *it = cJSON_GetObjectItemCaseSensitive(src, from_key);
+    if(!it) return;
+    if(cJSON_IsNumber(it)){
+        cJSON_AddNumberToObject(tlm, to_key, it->valuedouble);
+    }else if(cJSON_IsBool(it)){
+        cJSON_AddNumberToObject(tlm, to_key, cJSON_IsTrue(it) ? 1 : 0);
+    }else if(cJSON_IsString(it) && it->valuestring){
+        const char *s = it->valuestring;
+        if(strcasecmp(s, "on") == 0){ cJSON_AddNumberToObject(tlm, to_key, 1); }
+        else if(strcasecmp(s, "off") == 0){ cJSON_AddNumberToObject(tlm, to_key, 0); }
+        else {
+            char *endp = NULL; double val = strtod(s, &endp);
+            if(endp && endp != s){ cJSON_AddNumberToObject(tlm, to_key, val); }
+            else { cJSON_AddStringToObject(tlm, to_key, s); }
+        }
+    }
+}
+
+// Build ABRP telemetry data: creates flat telemetry object (not wrapped) for URL encoding
 static char* build_abrp_payload(const char *raw_json, const char *car_model){
     if(!raw_json) return NULL;
-    // Format: {"tlm":<raw_json>[,"car_model":"..." ]}
-    size_t raw_len = strlen(raw_json);
-    size_t car_len = car_model? strlen(car_model):0;
-    size_t extra = car_model? (car_len + 14):0; // ,"car_model":""
-    size_t total = raw_len + extra + 10; // wrapper overhead
-    char *buf = heap_caps_malloc(total, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-    if(!buf) return NULL;
-    if(car_model && car_len){
-        snprintf(buf, total, "{\"tlm\":%s,\"car_model\":\"%s\"}", raw_json, car_model);
-    }else{
-        snprintf(buf, total, "{\"tlm\":%s}", raw_json);
+
+    // Parse incoming telemetry snapshot; if parsing fails, return NULL
+    cJSON *src = cJSON_Parse(raw_json);
+    if(!src){
+        ESP_LOGE(TAG, "Failed to parse raw JSON for ABRP telemetry");
+        return NULL;
     }
-    return buf;
+
+    // Mapping between internal names and ABRP keys
+    typedef struct { const char *from; const char *to; } param_map_t;
+    static const param_map_t param_map[] = {
+        { "SOC",            "soc" },
+        { "HV_W",           "power" },
+        { "SPEED",          "speed" },
+        { "CHARGING",       "is_charging" },
+        { "CHARGING_DC",    "is_dcfc" },
+        { "PARK_BRAKE",     "is_parked" },
+        { "HV_CAPACITY_KWH","capacity" },
+        { "HV_CAPACITY_R",  "soe" },
+        { "SOH",            "soh" },
+        { "TMP_A",          "ext_temp" },
+        { "BATT_TEMP",      "batt_temp" },
+        { "HV_V",           "voltage" },
+        { "HV_A",           "current" },
+        { "ODOMETER",       "odometer" },
+        { "RANGE",          "est_battery_range" },
+        { "T_CAB",          "cabin_temp" },
+        { "TYRE_P_FL",      "tire_pressure_fl" },
+        { "TYRE_P_FR",      "tire_pressure_fr" },
+        { "TYRE_P_RL",      "tire_pressure_rl" },
+        { "TYRE_P_RR",      "tire_pressure_rr" },
+    };
+
+    // Destination tlm object
+    cJSON *tlm = cJSON_CreateObject();
+    if(!tlm){ cJSON_Delete(src); return NULL; }
+
+    // Apply mapping
+    for(size_t i=0;i<sizeof(param_map)/sizeof(param_map[0]);i++){
+    abrp_add_mapped(src, tlm, param_map[i].from, param_map[i].to);
+    }
+
+    // Pass-through commonly accepted ABRP extras if already present
+    const char *passthrough_keys[] = { "lat", "lon", "elevation" };
+    for(size_t i=0;i<sizeof(passthrough_keys)/sizeof(passthrough_keys[0]);i++){
+        const char *k = passthrough_keys[i];
+        if(!cJSON_GetObjectItemCaseSensitive(tlm, k)){
+            cJSON *it = cJSON_GetObjectItemCaseSensitive(src, k);
+            if(it){
+                if(cJSON_IsNumber(it)) cJSON_AddNumberToObject(tlm, k, it->valuedouble);
+                else if(cJSON_IsString(it) && it->valuestring){
+                    char *endp=NULL; double v=strtod(it->valuestring,&endp);
+                    if(endp && endp!=it->valuestring) cJSON_AddNumberToObject(tlm, k, v);
+                    else cJSON_AddStringToObject(tlm, k, it->valuestring);
+                }
+            }
+        }
+    }
+
+    // Ensure utc present (seconds since epoch)
+    if(!cJSON_GetObjectItemCaseSensitive(tlm, "utc")){
+        time_t now = 0; time(&now);
+        cJSON_AddNumberToObject(tlm, "utc", (double)now);
+    }
+    // Ensure car_model inside tlm if provided and absent
+    // if(car_model && *car_model && !cJSON_GetObjectItemCaseSensitive(tlm, "car_model")){
+    //     cJSON_AddStringToObject(tlm, "car_model", car_model);
+    // }
+
+    // Return tlm object directly (not wrapped) for URL encoding as tlm parameter
+    char *printed = cJSON_PrintUnformatted(tlm);
+    char *buf_psram = NULL;
+    if(printed){
+        buf_psram = heap_caps_malloc(strlen(printed)+1, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+        if(buf_psram){ strcpy(buf_psram, printed); }
+        free(printed);
+    }
+    cJSON_Delete(tlm);
+    cJSON_Delete(src);
+    return buf_psram; // may be NULL if allocation failed
 }
 
 
@@ -797,24 +914,137 @@ void autopid_publish_all_destinations(void){
                 ESP_LOGI(TAG, "Published MQTT WallBox to %s", dest[0]? dest: config_server_get_mqtt_rx_topic());
                 break; }
             case DEST_HTTP:
-            case DEST_HTTPS:
-            case DEST_ABRP_API: {
-                // Build URL (ABRP adds token as query param if provided)
-                char *url = NULL;
-                if((gd->type == DEST_ABRP_API || gd->type == DEST_HTTP || gd->type == DEST_HTTPS) && gd->api_token && strlen(gd->api_token)>0){
-                    const char *sep = strchr(dest,'?')? "&":"?";
-                    url = heap_caps_malloc(strlen(dest)+strlen(gd->api_token)+16, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-                    if(url) sprintf(url, "%s%stoken=%s", dest, sep, gd->api_token);
-                }else{
-                    url = dest[0]? strdup_psram(dest): NULL;
-                }
+            case DEST_HTTPS: {
+                // Build URL for standard HTTP/HTTPS endpoints
+                char *url = dest[0]? strdup_psram(dest): NULL;
                 if(!url){
                     ESP_LOGW(TAG, "Destination %u missing URL", i); break; }
 
-                // Build body (ABRP wrapper) use JSON body for all
+                // Use raw JSON body for standard HTTP/HTTPS
+                char *body = strdup_psram(raw_json);
+                if(!body){
+                    ESP_LOGE(TAG, "Failed to allocate body"); free(url); break; }
+
+                https_client_mgr_config_t cfg = {0};
+                cfg.url = url;
+                cfg.timeout_ms = 10000;
+                
+                // Detect scheme from URL
+                bool is_https_url = (strncasecmp(url, "https://", 8) == 0);
+                if(is_https_url){
+                    // HTTPS: use cert set if provided and not default, otherwise use built-in bundle
+                    if(gd->cert_set && strcmp(gd->cert_set, "default") != 0){
+                        size_t ca_len = 0, cli_len = 0, key_len = 0;
+                        const char *ca = cert_manager_get_set_ca_ptr(gd->cert_set, &ca_len);
+                        const char *cli = cert_manager_get_set_client_cert_ptr(gd->cert_set, &cli_len);
+                        const char *key = cert_manager_get_set_client_key_ptr(gd->cert_set, &key_len);
+                        if(ca){ 
+                            cfg.cert_pem = ca; cfg.cert_len = ca_len; 
+                            ESP_LOGI(TAG, "Using CA cert from set '%s' for HTTPS", gd->cert_set);
+                        } else { 
+                            cfg.use_crt_bundle = true; 
+                            ESP_LOGW(TAG, "No CA cert in set '%s', using built-in bundle for HTTPS", gd->cert_set);
+                        }
+                        if(cli && key){ 
+                            cfg.client_cert_pem = cli; cfg.client_cert_len = cli_len; 
+                            cfg.client_key_pem = key; cfg.client_key_len = key_len; 
+                            ESP_LOGI(TAG, "Using client cert+key from set '%s' for HTTPS", gd->cert_set);
+                        }
+                    } else {
+                        cfg.use_crt_bundle = true; // use built-in bundle for default/no cert set
+                        ESP_LOGI(TAG, "Using built-in certificate bundle for HTTPS");
+                    }
+                }
+
+                // Build headers for standard HTTP/HTTPS (JSON content)
+                const char *headers[4] = {0};
+                char *auth_hdr = NULL;
+                int h_idx = 0;
+                
+                headers[h_idx++] = "Content-Type: application/json";
+                
+                if(gd->api_token && strlen(gd->api_token) > 0){
+                    auth_hdr = heap_caps_malloc(strlen(gd->api_token)+32, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+                    if(auth_hdr){ 
+                        sprintf(auth_hdr, "Authorization: Bearer %s", gd->api_token); 
+                        headers[h_idx++] = auth_hdr; 
+                    }
+                }
+                headers[h_idx] = NULL;
+
+                // For HTTPS, if host is raw IPv4 address, skip CN verification to allow self-signed IP certs
+                if(url){
+                    const char *host_start = strstr(url, "://");
+                    host_start = host_start ? host_start + 3 : url;
+                    // host ends at '/' or end
+                    char host_buf[64] = {0};
+                    size_t hi=0;
+                    while(host_start[hi] && host_start[hi] != '/' && host_start[hi] != ':' && hi < sizeof(host_buf)-1){ host_buf[hi] = host_start[hi]; hi++; }
+                    bool is_ip = true;
+                    for(size_t k=0;k<hi;k++){ if( (host_buf[k] < '0' || host_buf[k] > '9') && host_buf[k] != '.') { is_ip = false; break; } }
+                    if(is_ip){ cfg.skip_common_name = true; }
+                }
+
+                https_client_mgr_response_t resp = {0};
+                esp_err_t err = https_client_mgr_request(&cfg, HTTPS_METHOD_POST, body, strlen(body), headers, &resp);
+                
+                bool ok = (err == ESP_OK && resp.is_success);
+                if(ok){
+                    ESP_LOGI(TAG, "HTTP(S) dest %u status %d success", i, resp.status_code);
+                    gd->consec_failures = 0;
+                    gd->backoff_ms = 0;
+                } else {
+                    ESP_LOGE(TAG, "HTTP(S) dest %u request failed: %s", i, esp_err_to_name(err));
+                    gd->consec_failures++;
+                    // Apply backoff logic (same as ABRP)
+                    if(gd->consec_failures >= 3){
+                        uint32_t min_cap = 60000;
+                        uint32_t next = (gd->backoff_ms? gd->backoff_ms : base_cycle);
+                        if(next < min_cap) next = next * 2;
+                        if(next < min_cap) next = min_cap;
+                        uint32_t max_backoff = base_cycle * 2;
+                        if(max_backoff < min_cap) max_backoff = min_cap;
+                        if(next > max_backoff) next = max_backoff;
+                        gd->backoff_ms = next;
+                    }
+                }
+
+                https_client_mgr_free_response(&resp);
+                if(auth_hdr) free(auth_hdr);
+                free(body);
+                free(url);
+                break; }
+            case DEST_ABRP_API: {
+                // Build URL (ABRP uses form data in body, not URL parameters)
+                char *url = dest[0]? strdup_psram(dest): NULL;
+                if(!url){
+                    ESP_LOGW(TAG, "Destination %u missing URL", i); break; }
+
+                // Build body: ABRP uses URL-encoded form data, others use JSON
                 char *body = NULL;
                 if(gd->type == DEST_ABRP_API){
-                    body = build_abrp_payload(raw_json, all_pids->vehicle_model);
+                    char *tlm_data = build_abrp_payload(raw_json, all_pids->vehicle_model);
+                    if(!tlm_data){
+                        ESP_LOGE(TAG, "Failed to build ABRP telemetry data"); free(url); break; }
+                    
+                    // URL encode the telemetry JSON for form data
+                    char *encoded_tlm = url_encode_string(tlm_data);
+                    if(!encoded_tlm){
+                        ESP_LOGE(TAG, "Failed to URL encode telemetry data"); free(tlm_data); free(url); break; }
+                    
+                    // Build form data body: token=xxx&tlm=encoded_json
+                    size_t body_len = (gd->api_token ? strlen(gd->api_token) : 0) + strlen(encoded_tlm) + 32;
+                    body = heap_caps_malloc(body_len, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+                    if(body){
+                        if(gd->api_token && strlen(gd->api_token) > 0){
+                            snprintf(body, body_len, "token=%s&tlm=%s", gd->api_token, encoded_tlm);
+                        }else{
+                            snprintf(body, body_len, "tlm=%s", encoded_tlm);
+                        }
+                    }
+                    
+                    free(encoded_tlm);
+                    free(tlm_data);
                 }else{
                     body = strdup_psram(raw_json);
                 }
@@ -829,39 +1059,42 @@ void autopid_publish_all_destinations(void){
                 char _tbuf[32]; strftime(_tbuf, sizeof(_tbuf), "%Y-%m-%dT%H:%M:%SZ", &_utc);
                 ESP_LOGI(TAG, "HTTP(S) dest %u URL: %s (epoch=%ld utc=%s)", i, url, (long)_now, _tbuf);
                 cfg.timeout_ms = 10000;
-                if(gd->type == DEST_HTTPS || gd->type == DEST_ABRP_API){
-                    // HTTPS: attempt cert set if provided and not default
-                    if(gd->cert_set && strcmp(gd->cert_set, "default")!=0){
-                        size_t ca_len=0, cli_len=0, key_len=0;
-                        const char *ca = cert_manager_get_set_ca_ptr(gd->cert_set, &ca_len);
-                        const char *cli = cert_manager_get_set_client_cert_ptr(gd->cert_set, &cli_len);
-                        const char *key = cert_manager_get_set_client_key_ptr(gd->cert_set, &key_len);
-                        if(ca){ 
-                            cfg.cert_pem = ca; cfg.cert_len = ca_len; 
-                            ESP_LOGI(TAG, "Using CA cert from set '%s'", gd->cert_set);
-                        }
-                        else { 
-                            cfg.use_crt_bundle = true; 
-                            ESP_LOGW(TAG, "No CA cert in set '%s', using built-in bundle", gd->cert_set);
-                        }
-                        if(cli && key){ 
-                            cfg.client_cert_pem = cli; cfg.client_cert_len = cli_len; cfg.client_key_pem = key; cfg.client_key_len = key_len; 
-                            ESP_LOGI(TAG, "Using client cert+key from set '%s'", gd->cert_set);
-                        }
-                        else { /* optional */ }
-                    }else{
-                        cfg.use_crt_bundle = true; // use built-in bundle
-                        ESP_LOGW(TAG, "No CA cert in set '%s', using built-in bundle", gd->cert_set);
-                    }
-                }else{
-                    // HTTP (non TLS): set bundle flag false
-                }
-
+                // ABRP API is always HTTPS - configure certificates appropriately
+                // if(gd->cert_set && strcmp(gd->cert_set, "default") != 0){
+                //     size_t ca_len = 0, cli_len = 0, key_len = 0;
+                //     const char *ca = cert_manager_get_set_ca_ptr(gd->cert_set, &ca_len);
+                //     const char *cli = cert_manager_get_set_client_cert_ptr(gd->cert_set, &cli_len);
+                //     const char *key = cert_manager_get_set_client_key_ptr(gd->cert_set, &key_len);
+                //     if(ca){ 
+                //         cfg.cert_pem = ca; cfg.cert_len = ca_len; 
+                //         ESP_LOGI(TAG, "Using CA cert from set '%s' for ABRP", gd->cert_set);
+                //     } else { 
+                //         cfg.use_crt_bundle = true; 
+                //         ESP_LOGW(TAG, "No CA cert in set '%s', using built-in bundle for ABRP", gd->cert_set);
+                //     }
+                //     if(cli && key){ 
+                //         cfg.client_cert_pem = cli; cfg.client_cert_len = cli_len; 
+                //         cfg.client_key_pem = key; cfg.client_key_len = key_len; 
+                //         ESP_LOGI(TAG, "Using client cert+key from set '%s' for ABRP", gd->cert_set);
+                //     }
+                // } else {
+                //     cfg.use_crt_bundle = true; // use built-in bundle for default/no cert set
+                //     ESP_LOGI(TAG, "Using built-in certificate bundle for ABRP");
+                // }
+                cfg.use_crt_bundle = true; // ABRP always uses HTTPS with cert bundle by default
                 // Build headers
                 const char *headers[4] = {0};
                 char *auth_hdr = NULL;
-                headers[0] = "Content-Type: application/json";
-                int h_idx = 1;
+                int h_idx = 0;
+                
+                // Set Content-Type based on destination type
+                if(gd->type == DEST_ABRP_API){
+                    headers[h_idx++] = "Content-Type: application/x-www-form-urlencoded";
+                }else{
+                    headers[h_idx++] = "Content-Type: application/json";
+                }
+                
+                // Add authorization header for non-ABRP requests (ABRP uses token in form data)
                 if(gd->api_token && strlen(gd->api_token)>0 && gd->type != DEST_ABRP_API){
                     auth_hdr = heap_caps_malloc(strlen(gd->api_token)+32, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
                     if(auth_hdr){ sprintf(auth_hdr, "Authorization: Bearer %s", gd->api_token); headers[h_idx++] = auth_hdr; }
@@ -869,7 +1102,7 @@ void autopid_publish_all_destinations(void){
                 headers[h_idx] = NULL;
 
                 https_client_mgr_response_t resp = {0};
-                // If host is raw IPv4 address, skip CN verification to allow self-signed IP certs
+                // For ABRP (always HTTPS), if host is raw IPv4 address, skip CN verification to allow self-signed IP certs
                 if(url){
                     const char *host_start = strstr(url, "://");
                     host_start = host_start ? host_start + 3 : url;
@@ -883,16 +1116,39 @@ void autopid_publish_all_destinations(void){
                 }
 
                 esp_err_t err = https_client_mgr_request(&cfg, HTTPS_METHOD_POST, body, strlen(body), headers, &resp);
+                bool ok = false;
                 if(err == ESP_OK){
                     ESP_LOGI(TAG, "HTTP(S) dest %u status %d success=%d", i, resp.status_code, resp.is_success);
-                    if(resp.is_success){
-                        gd->consec_failures = 0;
-                        gd->backoff_ms = 0;
-                    } else {
-                        gd->consec_failures++;
+                    if(gd->type == DEST_ABRP_API){
+                        // ABRP returns HTTP 200 even on logical errors; inspect JSON {status, result}
+                        if(resp.data && resp.data_len > 0){
+                            cJSON *jr = cJSON_Parse(resp.data);
+                            if(jr){
+                                cJSON *st = cJSON_GetObjectItemCaseSensitive(jr, "status");
+                                const char *st_str = cJSON_IsString(st) ? st->valuestring : NULL;
+                                ok = (st_str && (strcmp(st_str, "ok")==0));
+                                ESP_LOGI(TAG, "ABRP status: %s", st_str? st_str : "<none>");
+                                cJSON_Delete(jr);
+                            }else{
+                                ESP_LOGW(TAG, "ABRP response not JSON parseable");
+                                ok = false;
+                            }
+                        }else{
+                            ESP_LOGW(TAG, "ABRP empty response body");
+                            ok = false;
+                        }
+                    }else{
+                        ok = resp.is_success;
                     }
                 }else{
                     ESP_LOGE(TAG, "HTTP(S) dest %u request failed: %s", i, esp_err_to_name(err));
+                    ok = false;
+                }
+
+                if(ok){
+                    gd->consec_failures = 0;
+                    gd->backoff_ms = 0;
+                } else {
                     gd->consec_failures++;
                 }
                 // Backoff logic: after 3 failures, double backoff up to 2x base_cycle (or 60s min cap)
@@ -1774,6 +2030,7 @@ static void autopid_task(void *pvParameters)
 }
 
 // Helper function to replace all occurrences of "ATSP" with "ATTP" in a string
+//TODO: Check if protocol number is already set dont set it 
 static void replace_atsp_with_attp(char *str) {
     if (!str) return;
     
@@ -1960,11 +2217,11 @@ all_pids_t* load_all_pids(void){
                             gd->destination = dest_item && cJSON_IsString(dest_item)? strdup_psram(dest_item->valuestring): NULL;
 
                             // Ensure scheme prefix for HTTP/HTTPS destinations if missing
-                            if (gd->destination && (gd->type == DEST_HTTP || gd->type == DEST_HTTPS)) {
+                            if (gd->destination && (gd->type == DEST_HTTP || gd->type == DEST_HTTPS || gd->type == DEST_ABRP_API)) {
                                 bool has_http  = (strncmp(gd->destination, "http://", 7)  == 0);
                                 bool has_https = (strncmp(gd->destination, "https://", 8) == 0);
                                 if (!has_http && !has_https) {
-                                    const char *prefix = (gd->type == DEST_HTTPS) ? "https://" : "http://";
+                                    const char *prefix = (gd->type == DEST_HTTPS || gd->type == DEST_ABRP_API) ? "https://" : "http://";
                                     size_t new_len = strlen(prefix) + strlen(gd->destination) + 1;
                                     char *with_prefix = (char*)malloc(new_len);
                                     if (with_prefix) {
@@ -1984,7 +2241,11 @@ all_pids_t* load_all_pids(void){
                                 gd->cycle = 10000;
 
                             gd->api_token = api_token_item && cJSON_IsString(api_token_item)? strdup_psram(api_token_item->valuestring): NULL;
-                            gd->cert_set = cert_set_item && cJSON_IsString(cert_set_item)? strdup_psram(cert_set_item->valuestring): strdup_psram("default");
+                            if(gd->type != DEST_ABRP_API){
+                                gd->cert_set = cert_set_item && cJSON_IsString(cert_set_item)? strdup_psram(cert_set_item->valuestring): strdup_psram("default");
+                            }else{
+                                gd->cert_set = strdup_psram("default"); 
+                            }
                             gd->enabled = enabled_item && cJSON_IsBool(enabled_item)? cJSON_IsTrue(enabled_item): true;
                             gd->publish_timer = 0; // immediate eligibility
                             gd->consec_failures = 0;
@@ -2408,7 +2669,7 @@ static void autopid_init_obd_logger(uint32_t log_period)
         max_params += all_pids->pids[i].parameters_count;
     }
     
-    params = malloc(sizeof(obd_param_entry_t) * max_params);
+    params = heap_caps_malloc(sizeof(obd_param_entry_t) * max_params, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
     if (!params) {
         ESP_LOGE(TAG, "Failed to allocate memory for OBD logger parameters");
         return;
@@ -2422,7 +2683,7 @@ static void autopid_init_obd_logger(uint32_t log_period)
             parameter_t *param = &pid->parameters[j];
             
             // Create metadata JSON
-            char *metadata = malloc(1024*4);
+            char *metadata = heap_caps_malloc(1024*4, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
             if (!metadata) {
                 continue;
             }
@@ -2642,19 +2903,19 @@ void autopid_init(char* id, bool enable_logging, uint32_t logging_period)
 
     static StackType_t *autopid_task_stack;
     static StaticTask_t autopid_task_buffer;
-    
+    static const size_t autopid_task_stack_size = (1024*10);
     // Allocate stack memory in PSRAM
-    autopid_task_stack = heap_caps_malloc(5000 * sizeof(StackType_t), MALLOC_CAP_SPIRAM);
+    autopid_task_stack = heap_caps_malloc(autopid_task_stack_size, MALLOC_CAP_SPIRAM);
     if(autopid_task_stack == NULL)
     {
         ESP_LOGE(TAG, "Failed to allocate autopid_task stack in PSRAM");
         return;
     }
-    memset(autopid_task_stack, 0, 5000 * sizeof(StackType_t));
+    memset(autopid_task_stack, 0, autopid_task_stack_size);
     // Check if memory allocation was successful
     if (autopid_task_stack != NULL){
         // Create task with static allocation
-        xTaskCreateStatic(autopid_task, "autopid_task", 5000, (void *)AF_INET, 5, 
+        xTaskCreateStatic(autopid_task, "autopid_task", autopid_task_stack_size, (void *)AF_INET, 5, 
                          autopid_task_stack, &autopid_task_buffer);
     }
     else 
