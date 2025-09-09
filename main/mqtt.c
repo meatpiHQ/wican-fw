@@ -635,21 +635,6 @@ void mqtt_publish(char *topic, char *data, int len, int qos, int retain)
 void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
 {
     xmqtt_semaphore = xSemaphoreCreateMutex();
-    esp_mqtt_client_config_t mqtt_cfg = {
-		// .session.protocol_ver = MQTT_PROTOCOL_V_5,
-		.broker.address.uri = config_server_get_mqtt_url(),
-		.broker.address.port = config_server_get_mqtt_port(),
-		.credentials.username = config_server_get_mqtt_user(),
-		.credentials.authentication.password = config_server_get_mmqtt_pass(),
-		.network.disable_auto_reconnect = false,
-		.session.keepalive = 30,
-		.session.last_will.topic = mqtt_status_topic,
-        .session.last_will.retain = 1,
-		.session.last_will.msg = "{\"status\": \"offline\"}",
-		.network.reconnect_timeout_ms = 5000,
-		.buffer.size = MQTT_TX_RX_BUF_SIZE,
-		.buffer.out_size = MQTT_OUT_BUF_SIZE,
-    };
     xmqtt_tx_queue = xtx_queue;
     mqtt_led = connected_led;
     device_id = id;
@@ -674,6 +659,26 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
     mqtt_rsp_topic[0] = '\0';
     mqtt_battery_topic[0] = '\0';
 
+    // Initialize topic strings BEFORE using them in MQTT config
+    strcpy(mqtt_sub_topic, config_server_get_mqtt_tx_topic());
+    strcpy(mqtt_status_topic, config_server_get_mqtt_status_topic());
+
+    esp_mqtt_client_config_t mqtt_cfg = {
+		// .session.protocol_ver = MQTT_PROTOCOL_V_5,
+		.broker.address.uri = config_server_get_mqtt_url(),
+		.broker.address.port = config_server_get_mqtt_port(),
+		.credentials.username = config_server_get_mqtt_user(),
+		.credentials.authentication.password = config_server_get_mmqtt_pass(),
+		.network.disable_auto_reconnect = false,
+		.session.keepalive = 30,
+		.session.last_will.topic = mqtt_status_topic,
+        .session.last_will.retain = 1,
+		.session.last_will.msg = "{\"status\": \"offline\"}",
+		.network.reconnect_timeout_ms = 5000,
+		.buffer.size = MQTT_TX_RX_BUF_SIZE,
+		.buffer.out_size = MQTT_OUT_BUF_SIZE,
+    };
+
     // uint32_t keep_alive = 0;
     // if(config_server_get_keep_alive(&keep_alive) != -1)
     // {
@@ -684,10 +689,6 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
     //     mqtt_cfg.session.keepalive = 30;
     // }
     // ESP_LOGI(TAG, "MQTT Keep Alive: %d", mqtt_cfg.session.keepalive);
-
-    strcpy(mqtt_sub_topic, config_server_get_mqtt_tx_topic());
-    
-    strcpy(mqtt_status_topic, config_server_get_mqtt_status_topic());
     sprintf(mqtt_cmd_topic, "wican/%s/cmd",device_id);
     sprintf(mqtt_rsp_topic, "wican/%s/cmd",device_id);
     sprintf(mqtt_battery_topic, "wican/%s/battery",device_id);
@@ -699,9 +700,9 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
 
     static StackType_t *mqtt_task_stack;
     static StaticTask_t mqtt_task_buffer;
-    
-    mqtt_task_stack = heap_caps_malloc(1024*6, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-    
+    static const uint32_t mqtt_task_stack_size = 1024*6;
+    mqtt_task_stack = heap_caps_malloc(mqtt_task_stack_size, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+
     if (mqtt_task_stack == NULL)
     {
         ESP_LOGE(TAG, "Failed to allocate MQTT task stack memory");
@@ -712,7 +713,7 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
     TaskHandle_t mqtt_task_handle = xTaskCreateStatic(
         mqtt_task,
         "mqtt_task",
-        1024*6,
+        mqtt_task_stack_size,
         (void*)AF_INET,
         5,
         mqtt_task_stack,
