@@ -1,40 +1,59 @@
 {
   "car_model": "Xpeng: G6",
-  "init": "ATSP6;ATFCSH704;ATFCSD300000;ATFCSM1;",
+  "init": "ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH704;ATCRA784;ATFCSH704;ATFCSM1",
   "pids": [
     {
-      "pid": "22031E",
-      "pid_init": "ATFCSM0;ATAR;ATSH704;ATFCSM1;ATSH7E0;",
+      "pid": "2211091",
       "parameters": {
         "SOC": "[B4:B5]/10"
       }
     },
     {
       "pid": "2201011",
-      "pid_init": "ATFCSM0;ATAR;ATSH704;ATFCSM1;ATCRA784;",
       "parameters": {
-        "ODOMETER": "[B4:B6]"
+        "ODOMETER": "[B5:B6]"
       }
     },
     {
-      "pid": "22011A",
-      "pid_init": "ATFCSM0;ATAR;ATSH704;ATFCSM1;ATCRA784;",
+      "pid": "22011A1",
       "parameters": {
-        "SOH": "B0*33.33"
+        "SOH": "[B4:B5]/10"
+      }
+    },
+    {
+      "pid": "2211031",
+      "parameters": {
+        "HV_A": "(B4*256+B5)*0.5-1600"
       }
     },
     {
       "pid": "2211011",
-      "pid_init": "ATFCSM0;ATAR;ATSH704;ATFCSM1;ATCRA784;",
       "parameters": {
-        "HV_V": "(B4*256+B5)/10.0"
+        "HV_V": "[B4:B5]/10"
       }
     },
     {
-      "pid": "2203281",
-      "pid_init": "ATSP6;ATFCSH704;ATFCSD300000;ATSH7E0;;",
+      "pid": "2211071",
       "parameters": {
-        "BATT_TEMP": "[B0:B7]/8380000000000000"
+        "HV_T_MAX": "B4-40"
+      }
+    },
+    {
+      "pid": "2211081",
+      "parameters": {
+        "HV_T_MIN": "B4-40"
+      }
+    },
+    {
+      "pid": "2211051",
+      "parameters": {
+        "HV_C_V_MAX": "[B4:B5]/1000"
+      }
+    },
+    {
+      "pid": "2211061",
+      "parameters": {
+        "HV_C_V_MN": "[B4:B5]/1000"
       }
     }
   ]
