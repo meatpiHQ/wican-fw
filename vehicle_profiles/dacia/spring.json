@@ -8,6 +8,13 @@
       "parameters": {
         "SOC": "B4/2"
       }
+    },
+    {
+      "pid": "2290031",
+      "pid_init": "ATSH79B;ATFCSH79B;ATCRA7BB;",
+      "parameters": {
+        "SOH": "B4/2"
+      }
     }
   ]
 }
