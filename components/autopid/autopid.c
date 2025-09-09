@@ -880,7 +880,7 @@ void autopid_publish_all_destinations(void){
         if(!gd->enabled) continue;
 
         // Determine base cycle and current backoff adjusted cycle
-        uint32_t base_cycle = gd->cycle > 0 ? gd->cycle : all_pids->cycle;
+        uint32_t base_cycle = gd->cycle > 0 ? gd->cycle : 10000;
         uint32_t effective_cycle = base_cycle;
         if(gd->backoff_ms && gd->backoff_ms > base_cycle){
             effective_cycle = gd->backoff_ms; // apply backoff delay
@@ -927,8 +927,8 @@ void autopid_publish_all_destinations(void){
 
                 https_client_mgr_config_t cfg = {0};
                 cfg.url = url;
-                cfg.timeout_ms = 10000;
-                
+                cfg.timeout_ms = 2000;
+
                 // Detect scheme from URL
                 bool is_https_url = (strncasecmp(url, "https://", 8) == 0);
                 if(is_https_url){
@@ -998,7 +998,7 @@ void autopid_publish_all_destinations(void){
                     gd->consec_failures++;
                     // Apply backoff logic (same as ABRP)
                     if(gd->consec_failures >= 3){
-                        uint32_t min_cap = 60000;
+                        uint32_t min_cap = 30000;
                         uint32_t next = (gd->backoff_ms? gd->backoff_ms : base_cycle);
                         if(next < min_cap) next = next * 2;
                         if(next < min_cap) next = min_cap;
@@ -1058,7 +1058,7 @@ void autopid_publish_all_destinations(void){
                 struct tm _utc; gmtime_r(&_now, &_utc);
                 char _tbuf[32]; strftime(_tbuf, sizeof(_tbuf), "%Y-%m-%dT%H:%M:%SZ", &_utc);
                 ESP_LOGI(TAG, "HTTP(S) dest %u URL: %s (epoch=%ld utc=%s)", i, url, (long)_now, _tbuf);
-                cfg.timeout_ms = 10000;
+                cfg.timeout_ms = 2000;
                 // ABRP API is always HTTPS - configure certificates appropriately
                 // if(gd->cert_set && strcmp(gd->cert_set, "default") != 0){
                 //     size_t ca_len = 0, cli_len = 0, key_len = 0;
@@ -1773,7 +1773,7 @@ static void autopid_task(void *pvParameters)
 
     // Initialize timers
     wc_timer_set(&ecu_check_timer, 2000);
-    wc_timer_set(&group_cycle_timer, all_pids->cycle);
+    // wc_timer_set(&group_cycle_timer, all_pids->cycle);
 
     while(1) 
     {
@@ -2008,7 +2008,7 @@ static void autopid_task(void *pvParameters)
         xSemaphoreGive(all_pids->mutex);
         vTaskDelay(pdMS_TO_TICKS(10));
 
-        if (autopid_data_grouping_en)
+        if (autopid_data_grouping_en && dev_status_is_sta_connected())
         {
             autopid_publish_all_destinations();
             // wc_timer_set(&group_cycle_timer, all_pids->cycle);
