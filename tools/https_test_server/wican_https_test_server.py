@@ -18,7 +18,8 @@ Self-signed certificate auto-generated into test_certs/ (needs openssl) unless -
 import argparse, json, os, random, ssl, subprocess, sys, threading, time, shutil
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from urllib.parse import urlparse, parse_qs, unquote
+from urllib.parse import urlparse, parse_qs, parse_qsl, unquote
+
 
 LOCK = threading.Lock()
 STATS = {'requests':0,'total_ok':0,'total_errors':0,'path_hits':{},'start_time':time.time()}
@@ -29,6 +30,48 @@ ABRP_KEYS = { 'utc','soc','soh','speed','lat','lon','elevation','is_charging','p
 
 def log(msg):
     if CONFIG.get('verbose'): print(f"[HTTPS_TEST] {msg}")
+
+def log_request_url(method, path, query_string='', headers=None, body=None):
+    if not CONFIG.get('verbose'): return
+    
+    # Construct the full URL
+    scheme = 'https' if not CONFIG.get('plain_http', False) else 'http'
+    host = CONFIG.get('host', '127.0.0.1')
+    port = CONFIG.get('port', 8443)
+    
+    # Use localhost for 127.0.0.1 and 0.0.0.0 for better curl compatibility
+    if host in ['127.0.0.1', '0.0.0.0']:
+        host = 'localhost'
+    
+    url = f"{scheme}://{host}:{port}{path}"
+    if query_string:
+        url += f"?{query_string}"
+    
+    log(f"Received {method}: {url}")
+    
+    # Log curl command for easy reproduction
+    curl_cmd = f"curl -X {method}"
+    if not CONFIG.get('plain_http', False):
+        curl_cmd += " -k"  # ignore SSL certificate issues
+    
+    # Add headers
+    if headers:
+        for header, value in headers.items():
+            if header.lower() not in ['host', 'content-length', 'connection']:
+                curl_cmd += f" -H \"{header}: {value}\""
+    
+    # Add body for POST requests
+    if method == 'POST' and body:
+        try:
+            body_str = body.decode('utf-8') if isinstance(body, bytes) else str(body)
+            if len(body_str) > 200:  # Truncate long bodies
+                body_str = body_str[:200] + "..."
+            curl_cmd += f" -d '{body_str}'"
+        except:
+            curl_cmd += " -d '[binary data]'"
+    
+    curl_cmd += f" \"{url}\""
+    log(f"Curl equivalent: {curl_cmd}")
 
 def update_stats(path, ok):
     with LOCK:
@@ -68,8 +111,17 @@ class RequestHandler(BaseHTTPRequestHandler):
             try: return json.loads(raw.decode() or '{}')
             except Exception: return {}
         return {}
+    def _parse_form_data(self, raw):
+        if not raw: return {}
+        if 'application/x-www-form-urlencoded' in (self.headers.get('Content-Type','')):
+            try: 
+                form_str = raw.decode('utf-8')
+                return dict(parse_qsl(form_str))
+            except Exception: return {}
+        return {}
     def do_GET(self):
         p = urlparse(self.path)
+        log_request_url('GET', p.path, p.query, dict(self.headers))
         if p.path=='/metrics':
             with LOCK: data=dict(STATS); data['uptime_s']=round(time.time()-STATS['start_time'],2)
             self._send_json(200,data); update_stats(p.path,True); return
@@ -86,6 +138,7 @@ class RequestHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         p=urlparse(self.path); raw=self._read_body();
         if raw is None: update_stats(p.path,False); return
+        log_request_url('POST', p.path, p.query, dict(self.headers), raw)
         if CONFIG.get('log_bodies'):
             try:
                 preview = raw[:512].decode(errors='replace')
@@ -95,6 +148,11 @@ class RequestHandler(BaseHTTPRequestHandler):
         auth=self.headers.get('Authorization'); bearer=None
         if auth and auth.lower().startswith('bearer '): bearer=auth.split(' ',1)[1].strip()
         qs=parse_qs(p.query); qtok=(qs.get('token') or [''])[0]; webhook=p.path.startswith('/api/webhook/')
+        
+        # Parse form data for token extraction
+        form_data = self._parse_form_data(raw)
+        form_token = form_data.get('token', '')
+        
         if p.path=='/inject_error':
             body=self._parse_json(raw); changed={}
             if 'fail_rate' in body:
@@ -107,10 +165,27 @@ class RequestHandler(BaseHTTPRequestHandler):
                 if d is not None and 0<=d<=60000: RUNTIME['delay_ms']=d; changed['delay_ms']=d
             self._send_json(200, {'updated':changed,'current':RUNTIME}); update_stats(p.path,True); return
         if self._maybe_fail_or_delay(): update_stats(p.path,False); return
-        if not self._check_token(p.path, qtok, bearer, webhook): update_stats(p.path,False); return self._auth_failed()
+        # Check token from query, bearer header, or form data
+        token_candidate = qtok or bearer or form_token
+        if not self._check_token(p.path, token_candidate, None, webhook): update_stats(p.path,False); return self._auth_failed()
         if p.path=='/1/tlm/send':
-            body=self._parse_json(raw)
-            telemetry=body.get('tlm') if isinstance(body.get('tlm'),dict) else {k:v for k,v in body.items() if k in ABRP_KEYS}
+            telemetry = {}
+            
+            # Handle form data (ABRP format)
+            if form_data and 'tlm' in form_data:
+                try:
+                    # Parse URL-encoded telemetry JSON
+                    tlm_json = unquote(form_data['tlm'])
+                    telemetry = json.loads(tlm_json)
+                    log(f"Parsed form telemetry: {telemetry}")
+                except Exception as e:
+                    log(f"Failed to parse form telemetry: {e}")
+                    telemetry = {}
+            else:
+                # Handle JSON body (legacy format)
+                body=self._parse_json(raw)
+                telemetry=body.get('tlm') if isinstance(body.get('tlm'),dict) else {k:v for k,v in body.items() if k in ABRP_KEYS}
+            
             if 'utc' not in telemetry: telemetry['utc']=int(time.time())
             self._send_json(200, {'status':'ok','received':telemetry,'utc':int(time.time())}); update_stats(p.path,True); return
         if p.path.startswith('/api/events/'):
