@@ -15,7 +15,7 @@ Usage:
 
 Self-signed certificate auto-generated into test_certs/ (needs openssl) unless --plain-http.
 """
-import argparse, json, os, random, ssl, subprocess, sys, threading, time, shutil
+import argparse, json, os, random, ssl, subprocess, sys, threading, time, shutil, base64
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs, parse_qsl, unquote
@@ -99,12 +99,87 @@ class RequestHandler(BaseHTTPRequestHandler):
         body = json.dumps(obj).encode(); self.send_response(code)
         self.send_header('Content-Type','application/json'); self.send_header('Content-Length', str(len(body)))
         self.end_headers(); self.wfile.write(body)
-    def _auth_failed(self): self._send_json(401, {'error':'unauthorized'})
-    def _check_token(self, path, qtok, btoken, webhook):
-        if not CONFIG.get('require_token'): return True
-        if webhook: return True
-        exp = CONFIG.get('expected_token'); cand = qtok or btoken
-        return bool(exp and cand==exp)
+    def _auth_failed(self, reason='unauthorized'):
+        self._send_json(401, {'error': reason})
+
+    def _decode_basic(self, auth_header):
+        # Returns (user, pass) or (None, None)
+        try:
+            if not auth_header or not auth_header.lower().startswith('basic '):
+                return (None, None)
+            b64 = auth_header.split(' ', 1)[1].strip()
+            raw = base64.b64decode(b64).decode('utf-8')
+            if ':' in raw:
+                u, p = raw.split(':', 1)
+                return (u, p)
+        except Exception:
+            return (None, None)
+        return (None, None)
+
+    def _check_auth(self, path, query_dict, headers_dict, body_bytes, webhook):
+        # Bearer or token-in-query/body
+        auth_hdr = headers_dict.get('Authorization') or headers_dict.get('authorization')
+        bearer = None
+        if auth_hdr and auth_hdr.lower().startswith('bearer '):
+            bearer = auth_hdr.split(' ', 1)[1].strip()
+
+        qtok = (query_dict.get('token') or [''])[0]
+        form_token = ''
+        # Parse form body only once if needed
+        content_type = headers_dict.get('Content-Type', headers_dict.get('content-type', ''))
+        if 'application/x-www-form-urlencoded' in content_type and body_bytes:
+            try:
+                form_token = dict(parse_qsl(body_bytes.decode('utf-8'))).get('token', '')
+            except Exception:
+                form_token = ''
+
+        # Basic
+        basic_user, basic_pass = self._decode_basic(auth_hdr)
+
+        # API key header
+        api_key_header_name = CONFIG.get('api_key_header_name')
+        api_key_header_expected = CONFIG.get('expected_api_key_header')
+        header_ok = True
+        if api_key_header_name and api_key_header_expected is not None:
+            # header names are case-insensitive
+            hdr_val = None
+            for k, v in headers_dict.items():
+                if k.lower() == api_key_header_name.lower():
+                    hdr_val = v; break
+            header_ok = (hdr_val == api_key_header_expected)
+
+        # API key query
+        api_key_query_name = CONFIG.get('api_key_query_name')
+        api_key_query_expected = CONFIG.get('expected_api_key_query')
+        query_ok = True
+        if api_key_query_name and api_key_query_expected is not None:
+            qv = (query_dict.get(api_key_query_name) or [''])
+            qv = qv[0] if qv else ''
+            query_ok = (qv == api_key_query_expected)
+
+        # Token requirement
+        token_ok = True
+        if CONFIG.get('require_token') and not webhook:
+            exp = CONFIG.get('expected_token')
+            cand = qtok or bearer or form_token
+            token_ok = bool(exp and cand == exp)
+
+        # Basic requirement
+        basic_ok = True
+        if CONFIG.get('require_basic'):
+            bu = CONFIG.get('basic_user'); bp = CONFIG.get('basic_pass')
+            basic_ok = bool(basic_user == bu and basic_pass == bp)
+
+        # Final decision: all configured checks must pass
+        if not token_ok:
+            self._auth_failed('missing_or_invalid_token'); return False
+        if not header_ok:
+            self._auth_failed('missing_or_invalid_api_key_header'); return False
+        if not query_ok:
+            self._auth_failed('missing_or_invalid_api_key_query'); return False
+        if not basic_ok:
+            self._auth_failed('missing_or_invalid_basic_auth'); return False
+        return True
     def _parse_json(self, raw):
         if not raw: return {}
         if 'application/json' in (self.headers.get('Content-Type','')):
@@ -128,16 +203,19 @@ class RequestHandler(BaseHTTPRequestHandler):
         if p.path=='/config':
             cfg={k:v for k,v in CONFIG.items() if k!='expected_token'}; self._send_json(200,cfg); update_stats(p.path,True); return
         if p.path=='/1/tlm/send':
-            qs=parse_qs(p.query); token=(qs.get('token') or [''])[0]; tlm_raw=(qs.get('tlm') or [''])[0]
+            qs=parse_qs(p.query); tlm_raw=(qs.get('tlm') or [''])[0]
             if self._maybe_fail_or_delay(): update_stats(p.path,False); return
-            if not self._check_token(p.path, token, None, False): update_stats(p.path,False); return self._auth_failed()
+            if not self._check_auth(p.path, qs, dict(self.headers), b'', False): update_stats(p.path,False); return
             try: telemetry=json.loads(unquote(tlm_raw)) if tlm_raw else {}
             except Exception: telemetry={}
             self._send_json(200, {'status':'ok','received':telemetry,'utc':int(time.time())}); update_stats(p.path,True); return
         self._send_json(404, {'error':'not found'}); update_stats(p.path,False)
     def do_POST(self):
-        p=urlparse(self.path); raw=self._read_body();
-        if raw is None: update_stats(p.path,False); return
+        p = urlparse(self.path)
+        raw = self._read_body()
+        if raw is None:
+            update_stats(p.path, False)
+            return
         log_request_url('POST', p.path, p.query, dict(self.headers), raw)
         if CONFIG.get('log_bodies'):
             try:
@@ -145,32 +223,47 @@ class RequestHandler(BaseHTTPRequestHandler):
             except Exception:
                 preview = str(raw[:64])
             log(f"BODY {p.path} ({len(raw)} bytes): {preview}{' ...' if len(raw)>512 else ''}")
-        auth=self.headers.get('Authorization'); bearer=None
-        if auth and auth.lower().startswith('bearer '): bearer=auth.split(' ',1)[1].strip()
-        qs=parse_qs(p.query); qtok=(qs.get('token') or [''])[0]; webhook=p.path.startswith('/api/webhook/')
-        
-        # Parse form data for token extraction
+
+        qs = parse_qs(p.query)
+        webhook = p.path.startswith('/api/webhook/')
+
+        # Parse form data for token extraction (for ABRP tlm)
         form_data = self._parse_form_data(raw)
-        form_token = form_data.get('token', '')
-        
-        if p.path=='/inject_error':
-            body=self._parse_json(raw); changed={}
+
+        if p.path == '/inject_error':
+            body = self._parse_json(raw)
+            changed = {}
             if 'fail_rate' in body:
-                try: fr=float(body['fail_rate']);
-                except ValueError: fr=None
-                if fr is not None and 0<=fr<=1: RUNTIME['fail_rate']=fr; changed['fail_rate']=fr
+                try:
+                    fr = float(body['fail_rate'])
+                except ValueError:
+                    fr = None
+                if fr is not None and 0 <= fr <= 1:
+                    RUNTIME['fail_rate'] = fr
+                    changed['fail_rate'] = fr
             if 'delay_ms' in body:
-                try: d=int(body['delay_ms']);
-                except ValueError: d=None
-                if d is not None and 0<=d<=60000: RUNTIME['delay_ms']=d; changed['delay_ms']=d
-            self._send_json(200, {'updated':changed,'current':RUNTIME}); update_stats(p.path,True); return
-        if self._maybe_fail_or_delay(): update_stats(p.path,False); return
-        # Check token from query, bearer header, or form data
-        token_candidate = qtok or bearer or form_token
-        if not self._check_token(p.path, token_candidate, None, webhook): update_stats(p.path,False); return self._auth_failed()
-        if p.path=='/1/tlm/send':
+                try:
+                    d = int(body['delay_ms'])
+                except ValueError:
+                    d = None
+                if d is not None and 0 <= d <= 60000:
+                    RUNTIME['delay_ms'] = d
+                    changed['delay_ms'] = d
+            self._send_json(200, {'updated': changed, 'current': RUNTIME})
+            update_stats(p.path, True)
+            return
+
+        if self._maybe_fail_or_delay():
+            update_stats(p.path, False)
+            return
+
+        # Unified auth checks
+        if not self._check_auth(p.path, qs, dict(self.headers), raw, webhook):
+            update_stats(p.path, False)
+            return
+
+        if p.path == '/1/tlm/send':
             telemetry = {}
-            
             # Handle form data (ABRP format)
             if form_data and 'tlm' in form_data:
                 try:
@@ -183,21 +276,37 @@ class RequestHandler(BaseHTTPRequestHandler):
                     telemetry = {}
             else:
                 # Handle JSON body (legacy format)
-                body=self._parse_json(raw)
-                telemetry=body.get('tlm') if isinstance(body.get('tlm'),dict) else {k:v for k,v in body.items() if k in ABRP_KEYS}
-            
-            if 'utc' not in telemetry: telemetry['utc']=int(time.time())
-            self._send_json(200, {'status':'ok','received':telemetry,'utc':int(time.time())}); update_stats(p.path,True); return
+                body = self._parse_json(raw)
+                telemetry = body.get('tlm') if isinstance(body.get('tlm'), dict) else {k: v for k, v in body.items() if k in ABRP_KEYS}
+
+            if 'utc' not in telemetry:
+                telemetry['utc'] = int(time.time())
+            self._send_json(200, {'status': 'ok', 'received': telemetry, 'utc': int(time.time())})
+            update_stats(p.path, True)
+            return
+
         if p.path.startswith('/api/events/'):
-            event=p.path.split('/api/events/',1)[1] or 'unknown'; payload=self._parse_json(raw)
-            self._send_json(200, {'event':event,'received':payload,'ts':int(time.time())}); update_stats(p.path,True); return
+            event = p.path.split('/api/events/', 1)[1] or 'unknown'
+            payload = self._parse_json(raw)
+            self._send_json(200, {'event': event, 'received': payload, 'ts': int(time.time())})
+            update_stats(p.path, True)
+            return
+
         if webhook:
-            hook=p.path.split('/api/webhook/',1)[1]; payload=self._parse_json(raw)
-            self._send_json(200, {'webhook':hook,'received':payload,'ts':int(time.time())}); update_stats(p.path,True); return
-        if p.path=='/generic':
-            payload=self._parse_json(raw)
-            self._send_json(200, {'ok':True,'received':payload,'ts':int(time.time())}); update_stats(p.path,True); return
-        self._send_json(404, {'error':'not found'}); update_stats(p.path,False)
+            hook = p.path.split('/api/webhook/', 1)[1]
+            payload = self._parse_json(raw)
+            self._send_json(200, {'webhook': hook, 'received': payload, 'ts': int(time.time())})
+            update_stats(p.path, True)
+            return
+
+        if p.path == '/generic':
+            payload = self._parse_json(raw)
+            self._send_json(200, {'ok': True, 'received': payload, 'ts': int(time.time())})
+            update_stats(p.path, True)
+            return
+
+        self._send_json(404, {'error': 'not found'})
+        update_stats(p.path, False)
 
 def _gen_cert_with_cryptography(cert_path, key_path):
     try:
@@ -250,7 +359,22 @@ def ensure_cert(cert_path, key_path):
     return _gen_cert_with_cryptography(cert_path, key_path)
 
 def run_server(a):
-    CONFIG.update({'host':a.host,'port':a.port,'require_token':a.require_token,'expected_token':a.expected_token,'verbose':a.verbose,'log_bodies':a.log_bodies})
+    CONFIG.update({
+        'host': a.host,
+        'port': a.port,
+        'plain_http': a.plain_http,
+        'require_token': a.require_token,
+        'expected_token': a.expected_token,
+        'require_basic': a.require_basic,
+        'basic_user': a.basic_user,
+        'basic_pass': a.basic_pass,
+        'api_key_header_name': a.api_key_header_name,
+        'expected_api_key_header': a.expected_api_key_header,
+        'api_key_query_name': a.api_key_query_name,
+        'expected_api_key_query': a.expected_api_key_query,
+        'verbose': a.verbose,
+        'log_bodies': a.log_bodies,
+    })
     RUNTIME['fail_rate']=a.fail_rate; RUNTIME['delay_ms']=a.delay_ms
     httpd=HTTPServer((a.host,a.port), RequestHandler); proto='HTTP'
     if not a.plain_http:
@@ -275,6 +399,15 @@ def parse_args():
     # Accept both kebab-case and snake_case for convenience
     p.add_argument('--expected-token','--expected_token',dest='expected_token',default=None,
                    help='Expected token value when --require-token is set')
+    # Basic auth controls
+    p.add_argument('--require-basic', action='store_true', help='Require HTTP Basic auth')
+    p.add_argument('--basic-user', default=None, help='Expected Basic auth username')
+    p.add_argument('--basic-pass', default=None, help='Expected Basic auth password')
+    # API key controls
+    p.add_argument('--api-key-header-name', default=None, help='Header name to check for API key (e.g., x-api-key)')
+    p.add_argument('--expected-api-key-header', default=None, help='Expected API key header value')
+    p.add_argument('--api-key-query-name', default=None, help='Query parameter name for API key (e.g., api_key)')
+    p.add_argument('--expected-api-key-query', default=None, help='Expected API key query value')
     p.add_argument('--delay-ms',type=int,default=0); p.add_argument('--fail-rate',type=float,default=0.0)
     p.add_argument('--plain-http',action='store_true'); p.add_argument('--verbose',action='store_true')
     p.add_argument('--log-bodies',action='store_true', help='Log raw POST bodies (first 512 bytes)')

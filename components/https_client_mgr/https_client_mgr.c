@@ -30,12 +30,14 @@
  #include "esp_system.h"
  #include "esp_http_client.h"
  #include "https_client_mgr.h"
+ #include "mbedtls/base64.h"
  
  static const char *TAG = "HTTPS_CLIENT_MGR";
  
  #define DEFAULT_TIMEOUT_MS 10000
  #define MAX_HTTP_RECV_BUFFER (1024*8)  
  #define MAX_HTTP_OUTPUT_BUFFER 2048
+ #define BASE64_ENC_OUT_LEN(n) ((((n) + 2) / 3) * 4)
  
  /**
   * @brief Helper function to read HTTP response data
@@ -53,7 +55,7 @@
      }
      
      // Allocate memory for response data
-     response->data = malloc(content_length + 1);
+    response->data = heap_caps_malloc(content_length + 1, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
      if (!response->data) {
          ESP_LOGE(TAG, "Failed to allocate memory for response data");
          return ESP_ERR_NO_MEM;
@@ -68,7 +70,7 @@
          // Check if buffer needs to be expanded
          if (response->data_len + MAX_HTTP_RECV_BUFFER > buffer_size) {
              buffer_size *= 2;
-             char *new_buffer = realloc(response->data, buffer_size);
+             char *new_buffer = heap_caps_realloc(response->data, buffer_size, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
              if (!new_buffer) {
                  ESP_LOGE(TAG, "Failed to reallocate response buffer");
                  free(response->data);
@@ -119,6 +121,75 @@
      // for future expansion
      return ESP_OK;
  }
+
+/**
+ * @brief Append query parameters to a URL (simple helper; assumes input URL length < 1024)
+ */
+static char *append_query_params(const char *base_url,
+                                 const https_client_mgr_query_kv_t *params,
+                                 size_t count)
+{
+    if (!base_url || !params || count == 0) {
+        return strdup(base_url ? base_url : "");
+    }
+
+    size_t base_len = strlen(base_url);
+    size_t cap = base_len + 1 + count * 64; // rough estimate
+    char *out = heap_caps_malloc(cap, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    if (!out) return NULL;
+    strcpy(out, base_url);
+
+    bool has_q = (strchr(base_url, '?') != NULL);
+    for (size_t i = 0; i < count; ++i) {
+        const char *k = params[i].key ? params[i].key : "";
+        const char *v = params[i].value ? params[i].value : "";
+        size_t need = strlen(out) + 1 + strlen(k) + 1 + strlen(v) + 1; // +sep +k + '=' + v + '\0'
+        if (need > cap) {
+            cap = need + 64;
+            char *tmp = heap_caps_realloc(out, cap, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+            if (!tmp) { free(out); return NULL; }
+            out = tmp;
+        }
+        strcat(out, has_q ? "&" : "?");
+        has_q = true;
+        strcat(out, k);
+        strcat(out, "=");
+        strcat(out, v);
+    }
+    return out;
+}
+
+/**
+ * @brief Build Basic auth header value into provided buffer as "Basic <base64>"
+ */
+static esp_err_t build_basic_auth_value(const char *user, const char *pass,
+                                        char out[256])
+{
+    if (!user) user = "";
+    if (!pass) pass = "";
+    size_t up_len = strlen(user) + 1 + strlen(pass);
+    char *tmp = heap_caps_malloc(up_len + 1, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    if (!tmp) return ESP_ERR_NO_MEM;
+    sprintf(tmp, "%s:%s", user, pass);
+
+    size_t enc_len = BASE64_ENC_OUT_LEN(up_len);
+    char *enc = heap_caps_malloc(enc_len + 1, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    if (!enc) { free(tmp); return ESP_ERR_NO_MEM; }
+
+    int outlen = 0;
+    // Use ESP-IDF base64 encoder
+    esp_err_t err = mbedtls_base64_encode((unsigned char *)enc, enc_len + 1,
+                                          (size_t *)&outlen,
+                                          (const unsigned char *)tmp,
+                                          up_len) == 0 ? ESP_OK : ESP_FAIL;
+    if (err == ESP_OK) {
+        enc[outlen] = '\0';
+        snprintf(out, 256, "Basic %s", enc);
+    }
+    free(tmp);
+    free(enc);
+    return err;
+}
  
  /**
   * @brief Perform an HTTPS request with advanced configuration
@@ -258,6 +329,142 @@
      
      return ESP_OK;
  }
+
+/**
+ * @brief Perform an HTTPS request with generic authentication helpers.
+ */
+esp_err_t https_client_mgr_request_with_auth(const https_client_mgr_config_t *config,
+                                             https_client_mgr_method_t method,
+                                             const char *data,
+                                             size_t data_len,
+                                             const char *content_type,
+                                             const https_client_mgr_auth_t *auth,
+                                             const char **extra_headers,
+                                             https_client_mgr_response_t *response)
+{
+    if (!config || !config->url || !response) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Build URL with query params if needed
+    char *temp_url = NULL;
+    https_client_mgr_query_kv_t stack_params[8];
+    size_t param_count = 0;
+
+    if (auth) {
+        if (auth->api_key && auth->api_key_query_name && param_count < 8) {
+            stack_params[param_count++] = (https_client_mgr_query_kv_t){ auth->api_key_query_name, auth->api_key };
+        }
+        if (auth->extra_query && auth->extra_query_count > 0) {
+            size_t copy_n = auth->extra_query_count;
+            if (param_count + copy_n > 8) copy_n = 8 - param_count;
+            for (size_t i = 0; i < copy_n; ++i) {
+                stack_params[param_count++] = auth->extra_query[i];
+            }
+        }
+    }
+
+    if (param_count > 0) {
+        temp_url = append_query_params(config->url, stack_params, param_count);
+        if (!temp_url) return ESP_ERR_NO_MEM;
+    }
+
+    https_client_mgr_config_t cfg = *config; // copy
+    if (temp_url) cfg.url = temp_url;
+
+    // Build headers list dynamically
+    // We may add up to: Content-Type, API key header, Authorization (Bearer/Basic), Custom signer header
+    const int MAX_AUTO_HEADERS = 6;
+    const char **headers = calloc(MAX_AUTO_HEADERS + 8 /*user*/, sizeof(char *));
+    if (!headers) { if (temp_url) free(temp_url); return ESP_ERR_NO_MEM; }
+    int h = 0;
+
+    // Content-Type if provided
+    char *content_header = NULL;
+    if (content_type) {
+        size_t len = strlen(content_type) + 15;
+        content_header = heap_caps_malloc(len, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+        if (!content_header) { free(headers); if (temp_url) free(temp_url); return ESP_ERR_NO_MEM; }
+        snprintf(content_header, len, "Content-Type: %s", content_type);
+        headers[h++] = content_header;
+    }
+
+    char *api_key_header = NULL;
+    char *auth_header = NULL;
+    char *custom_header = NULL;
+
+    if (auth) {
+        // API key header
+        if (auth->api_key && (!auth->api_key_query_name)) {
+            const char *name = auth->api_key_header_name ? auth->api_key_header_name : "x-api-key";
+            size_t len = strlen(name) + 2 + strlen(auth->api_key) + 1;
+            api_key_header = heap_caps_malloc(len, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+            if (!api_key_header) { goto OOM; }
+            snprintf(api_key_header, len, "%s: %s", name, auth->api_key);
+            headers[h++] = api_key_header;
+        }
+
+        // Authorization header (Bearer or Basic)
+        if (auth->bearer_token) {
+            size_t len = strlen(auth->bearer_token) + strlen("Authorization: Bearer ") + 1;
+            auth_header = heap_caps_malloc(len, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+            if (!auth_header) { goto OOM; }
+            snprintf(auth_header, len, "Authorization: Bearer %s", auth->bearer_token);
+            headers[h++] = auth_header;
+        } else if (auth->basic_username || auth->basic_password) {
+            char val[256];
+            if (build_basic_auth_value(auth->basic_username, auth->basic_password, val) == ESP_OK) {
+                size_t len = strlen(val) + strlen("Authorization: ") + 1;
+                auth_header = heap_caps_malloc(len, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+                if (!auth_header) { goto OOM; }
+                snprintf(auth_header, len, "Authorization: %s", val);
+                headers[h++] = auth_header;
+            }
+        }
+
+        // Custom signer
+        if (auth->custom_signer) {
+            char key[64] = {0};
+            char value[256] = {0};
+            esp_err_t se = auth->custom_signer(method, cfg.url, data, data_len, auth->custom_signer_ctx, key, value);
+            if (se == ESP_OK && key[0] && value[0]) {
+                size_t len = strlen(key) + 2 + strlen(value) + 1;
+                custom_header = heap_caps_malloc(len, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+                if (!custom_header) { goto OOM; }
+                snprintf(custom_header, len, "%s: %s", key, value);
+                headers[h++] = custom_header;
+            }
+        }
+    }
+
+    // Copy extra headers from user
+    if (extra_headers) {
+        for (int i = 0; extra_headers[i] != NULL && h < (MAX_AUTO_HEADERS + 8 - 1); ++i) {
+            headers[h++] = extra_headers[i];
+        }
+    }
+    headers[h] = NULL;
+
+    esp_err_t ret = https_client_mgr_request(&cfg, method, data, data_len, headers, response);
+
+    // Free only what we allocated here (not extra_headers entries)
+    if (content_header) free(content_header);
+    if (api_key_header) free(api_key_header);
+    if (auth_header) free(auth_header);
+    if (custom_header) free(custom_header);
+    free(headers);
+    if (temp_url) free(temp_url);
+    return ret;
+
+OOM:
+    if (content_header) free(content_header);
+    if (api_key_header) free(api_key_header);
+    if (auth_header) free(auth_header);
+    if (custom_header) free(custom_header);
+    free(headers);
+    if (temp_url) free(temp_url);
+    return ESP_ERR_NO_MEM;
+}
  
  /**
   * @brief Perform an HTTPS GET request
@@ -301,7 +508,7 @@
      
      // If content_type is provided, create a Content-Type header
      if (content_type) {
-         char *content_header = malloc(strlen(content_type) + 15); // "Content-Type: " + content_type + null
+         char *content_header = heap_caps_malloc(strlen(content_type) + 15, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT); // "Content-Type: " + content_type + null
          if (!content_header) {
              return ESP_ERR_NO_MEM;
          }
@@ -367,7 +574,7 @@ esp_err_t https_client_mgr_download_file(const char *url, const char *save_path,
     ESP_LOGI(TAG, "Content length: %d", content_length);
     
     size_t downloaded_size = 0;
-    char *buffer = malloc(MAX_HTTP_RECV_BUFFER);
+    char *buffer = heap_caps_malloc(MAX_HTTP_RECV_BUFFER, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
     if (!buffer) {
         ESP_LOGE(TAG, "Failed to allocate memory for download buffer");
         esp_http_client_cleanup(client);

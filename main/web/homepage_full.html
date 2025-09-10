@@ -1036,7 +1036,7 @@
             <div id="destinations_section" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:6px; padding:0.75rem;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
                     <div style="font-weight:600;">Configured Destinations</div>
-                    <button id="add_destination_btn" class="primary-button" style="padding:4px 10px;" onclick="addDestinationEntry();">Add Destination</button>
+                    <button id="add_destination_btn" class="primary-button" style="padding:4px 10px;" onclick="addDestinationEntry();submit_enable();">Add Destination</button>
                 </div>
                 <div id="destinations_container"></div>
                 <div style="font-size:0.7rem; color:#555; margin-top:0.5rem;">Cycle &ge; 1000 ms (or 0 for event). HTTPS requires a cert set (or 'default' embedded CA). ABRP_API requires a token. To add more certs go to System tab.</div>
@@ -2482,7 +2482,37 @@ function renderDestinations(){
             </td></tr>
             <tr><td style="width:110px;">Cycle (ms):</td><td><input type="number" class="dest-cycle" value="${d.cycle}" min="0" style="width:180px; box-sizing:border-box;"/></td></tr>
             <tr><td>Destination:</td><td><input type="text" class="dest-url" value="${(d.destination||'').replace(/"/g,'&quot;')}" placeholder="URL / topic" maxlength="1024" style="width:100%; box-sizing:border-box;"/></td></tr>
-            <tr class="row-api-token" ${(d.type==='ABRP_API'||d.type==='HTTP'||d.type==='HTTPS')?'':'style="display:none;"'}><td>API Token:</td><td><input type="text" class="dest-api-token" value="${(d.api_token||'').replace(/"/g,'&quot;')}" placeholder="Bearer / API Token (optional for HTTP/HTTPS)" maxlength="512" style="width:100%;"/></td></tr>
+            <tr class="row-api-token" ${d.type==='ABRP_API'?'':'style="display:none;"'}><td>API Token:</td><td><input type="text" class="dest-api-token" value="${(d.api_token||'').replace(/"/g,'&quot;')}" placeholder="ABRP token" maxlength="512" style="width:100%; box-sizing:border-box;"/></td></tr>
+            <tr class="row-auth" ${((d.type==='HTTP'||d.type==='HTTPS')?'':'style=\"display:none;\"')}><td>Auth:</td><td>
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <select class="auth-type" style="width:200px;">
+                        <option value="none" ${(d.auth?.type||'none')==='none'?'selected':''}>None</option>
+                        <option value="bearer" ${(d.auth?.type)==='bearer'?'selected':''}>Bearer Token</option>
+                        <option value="api_key_header" ${(d.auth?.type)==='api_key_header'?'selected':''}>API Key (Header)</option>
+                        <option value="api_key_query" ${(d.auth?.type)==='api_key_query'?'selected':''}>API Key (Query)</option>
+                        <option value="basic" ${(d.auth?.type)==='basic'?'selected':''}>Basic (User/Pass)</option>
+                    </select>
+                    <div class="row-bearer" style="${(d.auth?.type)==='bearer'?'':'display:none;'}; flex:1;">
+                        <input type="text" class="auth-bearer-token" placeholder="Bearer token" value="${(d.auth?.bearer||d.api_token||'').replace(/"/g,'&quot;')}" style="width:100%;" maxlength="512"/>
+                    </div>
+                    <div class="row-apikey-header" style="${(d.auth?.type)==='api_key_header'?'':'display:none;'}; display:flex; gap:6px; flex:1;">
+                        <input type="text" class="auth-api-header-name" placeholder="Header name (e.g. x-api-key)" value="${(d.auth?.api_key_header_name||'x-api-key').replace(/"/g,'&quot;')}" style="width:220px;" maxlength="64"/>
+                        <input type="text" class="auth-api-key" placeholder="API key value" value="${(d.auth?.api_key||'').replace(/"/g,'&quot;')}" style="flex:1;" maxlength="512"/>
+                    </div>
+                    <div class="row-apikey-query" style="${(d.auth?.type)==='api_key_query'?'':'display:none;'}; display:flex; gap:6px; flex:1;">
+                        <input type="text" class="auth-api-query-name" placeholder="Query name (e.g. api_key)" value="${(d.auth?.api_key_query_name||'').replace(/"/g,'&quot;')}" style="width:220px;" maxlength="64"/>
+                        <input type="text" class="auth-api-key" placeholder="API key value" value="${(d.auth?.api_key||'').replace(/"/g,'&quot;')}" style="flex:1;" maxlength="512"/>
+                    </div>
+                    <div class="row-basic" style="${(d.auth?.type)==='basic'?'':'display:none;'}; display:flex; gap:6px; flex:1;">
+                        <input type="text" class="auth-basic-user" placeholder="Username" value="${(d.auth?.basic_username||'').replace(/"/g,'&quot;')}" style="width:200px;" maxlength="128"/>
+                        <input type="text" class="auth-basic-pass" placeholder="Password" value="${(d.auth?.basic_password||'').replace(/"/g,'&quot;')}" style="width:200px;" maxlength="128"/>
+                    </div>
+                </div>
+            </td></tr>
+            <tr class="row-query-params" ${((d.type==='HTTP'||d.type==='HTTPS')?'':'style=\"display:none;\"')}><td>Query Params:</td><td>
+                <div class="qp-container" style="display:flex; flex-direction:column; gap:6px; margin-bottom:6px;"></div>
+                <button type="button" class="qp-add" style="background:#334155; font-size:0.7rem; padding:4px 8px;">Add param</button>
+            </td></tr>
             <tr class="row-cert-set" ${d.type==='HTTPS'?'':'style="display:none;"'}><td>Cert Set:</td><td><select class="dest-cert-set" style="width:180px;"></select></td></tr>
         </table>`;
         function toggleCollapse(e){
@@ -2500,10 +2530,85 @@ function renderDestinations(){
         const cycleIn = content.querySelector('.dest-cycle');
         const apiRow = content.querySelector('.row-api-token');
         const apiIn = content.querySelector('.dest-api-token');
+        const authRow = content.querySelector('.row-auth');
+        const qpRow = content.querySelector('.row-query-params');
         const certRow = content.querySelector('.row-cert-set');
         const certSel = content.querySelector('.dest-cert-set');
-    const bind = ()=>{ enableAutoStoreButton(); d.type=typeSel.value; d.destination=urlIn.value.trim(); d.cycle=parseInt(cycleIn.value)||0; d.api_token=apiIn?apiIn.value.trim():''; d.cert_set=certSel?certSel.value:'default'; title.textContent=`${idx+1}. ${d.type} - ${truncateMiddle(d.destination||'(unset)',50)}`; apiRow.style.display=(d.type==='ABRP_API'||d.type==='HTTP'||d.type==='HTTPS')?'table-row':'none'; certRow.style.display=(d.type==='HTTPS')?'table-row':'none'; };
+        // Auth controls
+        d.auth = d.auth || { type: 'none' };
+        d.query_params = Array.isArray(d.query_params) ? d.query_params : [];
+        const authTypeSel = content.querySelector('.auth-type');
+        const rowBearer = content.querySelector('.row-bearer');
+        const bearerIn = content.querySelector('.auth-bearer-token');
+        const rowApiHdr = content.querySelector('.row-apikey-header');
+        const apiHeaderNameIn = content.querySelector('.auth-api-header-name');
+        const apiKeyInputs = content.querySelectorAll('.auth-api-key');
+        const rowApiQry = content.querySelector('.row-apikey-query');
+        const apiQueryNameIn = content.querySelector('.auth-api-query-name');
+        const rowBasic = content.querySelector('.row-basic');
+        const basicUserIn = content.querySelector('.auth-basic-user');
+        const basicPassIn = content.querySelector('.auth-basic-pass');
+        const qpContainer = content.querySelector('.qp-container');
+        const qpAddBtn = content.querySelector('.qp-add');
+
+        function updateAuthVisibility(){
+            const t = authTypeSel ? authTypeSel.value : 'none';
+            if(rowBearer) rowBearer.style.display = (t==='bearer')? 'flex':'none';
+            if(rowApiHdr) rowApiHdr.style.display = (t==='api_key_header')? 'flex':'none';
+            if(rowApiQry) rowApiQry.style.display = (t==='api_key_query')? 'flex':'none';
+            if(rowBasic) rowBasic.style.display = (t==='basic')? 'flex':'none';
+        }
+
+        function renderQP(){
+            if(!qpContainer) return;
+            qpContainer.innerHTML = '';
+            d.query_params.forEach((kv, i)=>{
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex; gap:6px; align-items:center;';
+                row.innerHTML = `
+                    <input type="text" class="qp-key" placeholder="key" value="${(kv.key||'').replace(/"/g,'&quot;')}" style="width:160px;" maxlength="64"/>
+                    <input type="text" class="qp-value" placeholder="value" value="${(kv.value||'').replace(/"/g,'&quot;')}" style="flex:1;" maxlength="256"/>
+                    <button type="button" class="qp-del" style="background:#dc2626; padding:4px 8px; color:#fff; font-size:0.7rem;">Remove</button>
+                `;
+                qpContainer.appendChild(row);
+                const keyIn = row.querySelector('.qp-key');
+                const valIn = row.querySelector('.qp-value');
+                const delBtn = row.querySelector('.qp-del');
+                keyIn.oninput = ()=>{ d.query_params[i].key = keyIn.value.trim(); enableAutoStoreButton(); };
+                valIn.oninput = ()=>{ d.query_params[i].value = valIn.value.trim(); enableAutoStoreButton(); };
+                delBtn.onclick = ()=>{ d.query_params.splice(i,1); renderQP(); enableAutoStoreButton(); };
+            });
+        }
+
+        if(qpAddBtn){ qpAddBtn.onclick = (e)=>{ e.preventDefault(); d.query_params.push({key:'', value:''}); renderQP(); enableAutoStoreButton(); }; }
+        renderQP();
+
+        if(authTypeSel){ authTypeSel.onchange = ()=>{ d.auth.type = authTypeSel.value; updateAuthVisibility(); enableAutoStoreButton(); }; }
+        if(bearerIn){ bearerIn.oninput = ()=>{ d.auth.bearer = bearerIn.value.trim(); d.api_token = bearerIn.value.trim(); enableAutoStoreButton(); }; }
+        if(apiHeaderNameIn){ apiHeaderNameIn.oninput = ()=>{ d.auth.api_key_header_name = apiHeaderNameIn.value.trim(); enableAutoStoreButton(); }; }
+        if(apiKeyInputs && apiKeyInputs.length){ apiKeyInputs.forEach(el=>{ el.oninput = ()=>{ d.auth.api_key = el.value.trim(); enableAutoStoreButton(); }; }); }
+        if(apiQueryNameIn){ apiQueryNameIn.oninput = ()=>{ d.auth.api_key_query_name = apiQueryNameIn.value.trim(); enableAutoStoreButton(); }; }
+        if(basicUserIn){ basicUserIn.oninput = ()=>{ d.auth.basic_username = basicUserIn.value.trim(); enableAutoStoreButton(); }; }
+        if(basicPassIn){ basicPassIn.oninput = ()=>{ d.auth.basic_password = basicPassIn.value; enableAutoStoreButton(); }; }
+        updateAuthVisibility();
+
+        const bind = ()=>{
+            enableAutoStoreButton();
+            d.type = typeSel.value;
+            d.destination = urlIn.value.trim();
+            d.cycle = parseInt(cycleIn.value)||0;
+            if(apiIn) d.api_token = apiIn.value.trim();
+            d.cert_set = certSel? (certSel.value || 'default') : 'default';
+            title.textContent = `${idx+1}. ${d.type} - ${truncateMiddle(d.destination||'(unset)',50)}`;
+            apiRow.style.display = (d.type==='ABRP_API')? 'table-row':'none';
+            authRow.style.display = ((d.type==='HTTP'||d.type==='HTTPS')? 'table-row':'none');
+            qpRow.style.display = ((d.type==='HTTP'||d.type==='HTTPS')? 'table-row':'none');
+            certRow.style.display = (d.type==='HTTPS')? 'table-row':'none';
+        };
+
         typeSel.onchange=bind; urlIn.oninput=bind; cycleIn.oninput=bind; if(apiIn) apiIn.oninput=bind; if(certSel) certSel.onchange=bind;
+        // initial toggle
+        bind();
         fetchCertSetsForDestinations().then(list=>{ if(certSel){ certSel.innerHTML=list.map(n=>`<option value="${n}" ${d.cert_set===n?'selected':''}>${n}</option>`).join(''); d.cert_set = certSel.value; }});
     });
     document.getElementById('add_destination_btn').disabled = window.automateDestinations.length>=6;
@@ -2512,7 +2617,7 @@ function renderDestinations(){
 function addDestinationEntry(){
     if(!Array.isArray(window.automateDestinations)) window.automateDestinations=[];
     if(window.automateDestinations.length>=6){ showNotification('Maximum 6 destinations', 'red'); return; }
-    window.automateDestinations.push({type:'Default', destination:'', cycle:5000, api_token:'', cert_set:'default', enabled:true});
+    window.automateDestinations.push({type:'Default', destination:'', cycle:5000, api_token:'', cert_set:'default', enabled:true, auth:{type:'none'}, query_params:[]});
     renderDestinations();
     enableAutoStoreButton();
 }
@@ -2559,7 +2664,9 @@ function loadAutoTable(jsonData) {
                         cycle: (typeof d.cycle==='number'? d.cycle : parseInt(d.cycle)||5000),
                         api_token: d.api_token || '',
                         cert_set: d.cert_set || 'default',
-                        enabled: (d.enabled===false)?false:true
+                        enabled: (d.enabled===false)?false:true,
+                        auth: d.auth || { type: 'none' },
+                        query_params: Array.isArray(d.query_params) ? d.query_params : []
                     });
                 });
             } else {
@@ -2569,7 +2676,9 @@ function loadAutoTable(jsonData) {
                     cycle: (typeof data.cycle==='number'? data.cycle : parseInt(data.cycle)||5000),
                     api_token: data.group_api_token || '',
                     cert_set: 'default',
-                    enabled: true
+                    enabled: true,
+                    auth: { type: 'none' },
+                    query_params: []
                 });
             }
             // Collapse all destinations on initial load

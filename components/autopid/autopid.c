@@ -956,21 +956,53 @@ void autopid_publish_all_destinations(void){
                     }
                 }
 
-                // Build headers for standard HTTP/HTTPS (JSON content)
-                const char *headers[4] = {0};
-                char *auth_hdr = NULL;
-                int h_idx = 0;
-                
-                headers[h_idx++] = "Content-Type: application/json";
-                
-                if(gd->api_token && strlen(gd->api_token) > 0){
-                    auth_hdr = heap_caps_malloc(strlen(gd->api_token)+32, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-                    if(auth_hdr){ 
-                        sprintf(auth_hdr, "Authorization: Bearer %s", gd->api_token); 
-                        headers[h_idx++] = auth_hdr; 
+                // Build auth + content type for standard HTTP/HTTPS (JSON content)
+                https_client_mgr_auth_t auth = {0};
+                // Map extended auth types
+                switch (gd->auth.type) {
+                    case DEST_AUTH_BEARER:
+                        if (gd->auth.bearer && strlen(gd->auth.bearer) > 0) {
+                            auth.bearer_token = gd->auth.bearer;
+                        }
+                        break;
+                    case DEST_AUTH_API_KEY_HEADER:
+                        if (gd->auth.api_key && strlen(gd->auth.api_key) > 0) {
+                            auth.api_key = gd->auth.api_key;
+                            auth.api_key_header_name = gd->auth.api_key_header_name; // may be NULL -> defaults to x-api-key
+                        }
+                        break;
+                    case DEST_AUTH_API_KEY_QUERY:
+                        if (gd->auth.api_key && strlen(gd->auth.api_key) > 0 && gd->auth.api_key_query_name && strlen(gd->auth.api_key_query_name) > 0) {
+                            auth.api_key = gd->auth.api_key;
+                            auth.api_key_query_name = gd->auth.api_key_query_name;
+                        }
+                        break;
+                    case DEST_AUTH_BASIC:
+                        auth.basic_username = gd->auth.basic_username;
+                        auth.basic_password = gd->auth.basic_password;
+                        break;
+                    case DEST_AUTH_NONE:
+                    default:
+                        break;
+                }
+                // Legacy fallback: if no explicit auth configured but api_token exists, use as Bearer
+                if (!auth.bearer_token && gd->api_token && strlen(gd->api_token) > 0 && gd->auth.type == DEST_AUTH_NONE) {
+                    auth.bearer_token = gd->api_token;
+                }
+                // Append any extra query params configured in destination
+                if (gd->query_params && gd->query_params_count > 0) {
+                    // Build a temporary array compatible with https_client_mgr
+                    size_t qp_count = gd->query_params_count;
+                    https_client_mgr_query_kv_t *qp = alloca(sizeof(https_client_mgr_query_kv_t) * qp_count);
+                    if (qp) {
+                        for (size_t qi = 0; qi < qp_count; ++qi) {
+                            qp[qi].key = gd->query_params[qi].key ? gd->query_params[qi].key : "";
+                            qp[qi].value = gd->query_params[qi].value ? gd->query_params[qi].value : "";
+                        }
+                        auth.extra_query = qp;
+                        auth.extra_query_count = qp_count;
                     }
                 }
-                headers[h_idx] = NULL;
 
                 // For HTTPS, if host is raw IPv4 address, skip CN verification to allow self-signed IP certs
                 if(url){
@@ -986,7 +1018,12 @@ void autopid_publish_all_destinations(void){
                 }
 
                 https_client_mgr_response_t resp = {0};
-                esp_err_t err = https_client_mgr_request(&cfg, HTTPS_METHOD_POST, body, strlen(body), headers, &resp);
+                esp_err_t err = https_client_mgr_request_with_auth(&cfg, HTTPS_METHOD_POST,
+                                                                   body, strlen(body),
+                                                                   "application/json",
+                                                                   &auth,
+                                                                   NULL,
+                                                                   &resp);
                 
                 bool ok = (err == ESP_OK && resp.is_success);
                 if(ok){
@@ -1010,7 +1047,6 @@ void autopid_publish_all_destinations(void){
                 }
 
                 https_client_mgr_free_response(&resp);
-                if(auth_hdr) free(auth_hdr);
                 free(body);
                 free(url);
                 break; }
@@ -1082,24 +1118,10 @@ void autopid_publish_all_destinations(void){
                 //     ESP_LOGI(TAG, "Using built-in certificate bundle for ABRP");
                 // }
                 cfg.use_crt_bundle = true; // ABRP always uses HTTPS with cert bundle by default
-                // Build headers
-                const char *headers[4] = {0};
-                char *auth_hdr = NULL;
-                int h_idx = 0;
-                
-                // Set Content-Type based on destination type
-                if(gd->type == DEST_ABRP_API){
-                    headers[h_idx++] = "Content-Type: application/x-www-form-urlencoded";
-                }else{
-                    headers[h_idx++] = "Content-Type: application/json";
-                }
-                
-                // Add authorization header for non-ABRP requests (ABRP uses token in form data)
-                if(gd->api_token && strlen(gd->api_token)>0 && gd->type != DEST_ABRP_API){
-                    auth_hdr = heap_caps_malloc(strlen(gd->api_token)+32, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-                    if(auth_hdr){ sprintf(auth_hdr, "Authorization: Bearer %s", gd->api_token); headers[h_idx++] = auth_hdr; }
-                }
-                headers[h_idx] = NULL;
+                // Build content-type; ABRP expects x-www-form-urlencoded and token in body, not Authorization header
+                const char *content_type = (gd->type == DEST_ABRP_API)
+                                            ? "application/x-www-form-urlencoded"
+                                            : "application/json";
 
                 https_client_mgr_response_t resp = {0};
                 // For ABRP (always HTTPS), if host is raw IPv4 address, skip CN verification to allow self-signed IP certs
@@ -1115,7 +1137,13 @@ void autopid_publish_all_destinations(void){
                     if(is_ip){ cfg.skip_common_name = true; }
                 }
 
-                esp_err_t err = https_client_mgr_request(&cfg, HTTPS_METHOD_POST, body, strlen(body), headers, &resp);
+                // No auth struct here for ABRP unless configured elsewhere; token is already included in body
+                esp_err_t err = https_client_mgr_request_with_auth(&cfg, HTTPS_METHOD_POST,
+                                                                   body, strlen(body),
+                                                                   content_type,
+                                                                   NULL,
+                                                                   NULL,
+                                                                   &resp);
                 bool ok = false;
                 if(err == ESP_OK){
                     ESP_LOGI(TAG, "HTTP(S) dest %u status %d success=%d", i, resp.status_code, resp.is_success);
@@ -1164,7 +1192,6 @@ void autopid_publish_all_destinations(void){
                     gd->backoff_ms = next;
                 }
                 https_client_mgr_free_response(&resp);
-                if(auth_hdr) free(auth_hdr);
                 free(body);
                 free(url);
                 break; }
@@ -2197,6 +2224,8 @@ all_pids_t* load_all_pids(void){
                             cJSON *api_token_item = cJSON_GetObjectItem(d, "api_token");
                             cJSON *cert_set_item = cJSON_GetObjectItem(d, "cert_set");
                             cJSON *enabled_item = cJSON_GetObjectItem(d, "enabled");
+                            cJSON *auth_item = cJSON_GetObjectItem(d, "auth");
+                            cJSON *qp_arr = cJSON_GetObjectItem(d, "query_params");
 
                             // type mapping
                             const char *type_str = type_item && cJSON_IsString(type_item)? type_item->valuestring: "Default";
@@ -2247,6 +2276,63 @@ all_pids_t* load_all_pids(void){
                                 gd->cert_set = strdup_psram("default"); 
                             }
                             gd->enabled = enabled_item && cJSON_IsBool(enabled_item)? cJSON_IsTrue(enabled_item): true;
+                            // Parse optional auth
+                            gd->auth.type = DEST_AUTH_NONE;
+                            if (auth_item && cJSON_IsObject(auth_item)) {
+                                cJSON *atype = cJSON_GetObjectItem(auth_item, "type");
+                                if (atype && cJSON_IsString(atype)) {
+                                    const char *ts = atype->valuestring;
+                                    if (strcmp(ts, "bearer")==0) gd->auth.type = DEST_AUTH_BEARER;
+                                    else if (strcmp(ts, "api_key_header")==0) gd->auth.type = DEST_AUTH_API_KEY_HEADER;
+                                    else if (strcmp(ts, "api_key_query")==0) gd->auth.type = DEST_AUTH_API_KEY_QUERY;
+                                    else if (strcmp(ts, "basic")==0) gd->auth.type = DEST_AUTH_BASIC;
+                                    else gd->auth.type = DEST_AUTH_NONE;
+                                }
+                                cJSON *bearer = cJSON_GetObjectItem(auth_item, "bearer");
+                                if (bearer && cJSON_IsString(bearer) && bearer->valuestring && bearer->valuestring[0])
+                                    gd->auth.bearer = strdup_psram(bearer->valuestring);
+                                cJSON *hn = cJSON_GetObjectItem(auth_item, "api_key_header_name");
+                                if (hn && cJSON_IsString(hn) && hn->valuestring && hn->valuestring[0])
+                                    gd->auth.api_key_header_name = strdup_psram(hn->valuestring);
+                                cJSON *ak = cJSON_GetObjectItem(auth_item, "api_key");
+                                if (ak && cJSON_IsString(ak) && ak->valuestring)
+                                    gd->auth.api_key = strdup_psram(ak->valuestring);
+                                cJSON *qn = cJSON_GetObjectItem(auth_item, "api_key_query_name");
+                                if (qn && cJSON_IsString(qn) && qn->valuestring && qn->valuestring[0])
+                                    gd->auth.api_key_query_name = strdup_psram(qn->valuestring);
+                                cJSON *bu = cJSON_GetObjectItem(auth_item, "basic_username");
+                                if (bu && cJSON_IsString(bu) && bu->valuestring)
+                                    gd->auth.basic_username = strdup_psram(bu->valuestring);
+                                cJSON *bp = cJSON_GetObjectItem(auth_item, "basic_password");
+                                if (bp && cJSON_IsString(bp) && bp->valuestring)
+                                    gd->auth.basic_password = strdup_psram(bp->valuestring);
+                            } else {
+                                // Back-compat: if HTTP/HTTPS and api_token exists, set bearer auth implicitly
+                                if ((gd->type==DEST_HTTP || gd->type==DEST_HTTPS) && gd->api_token && strlen(gd->api_token)>0) {
+                                    gd->auth.type = DEST_AUTH_BEARER;
+                                    gd->auth.bearer = strdup_psram(gd->api_token);
+                                }
+                            }
+                            // Parse optional query params array
+                            if (qp_arr && cJSON_IsArray(qp_arr)) {
+                                int qn = cJSON_GetArraySize(qp_arr);
+                                if (qn > 0) {
+                                    gd->query_params = (dest_query_kv_t*)calloc(qn, sizeof(dest_query_kv_t));
+                                    if (gd->query_params) {
+                                        gd->query_params_count = qn;
+                                        for (int qi=0; qi<qn; ++qi) {
+                                            cJSON *kv = cJSON_GetArrayItem(qp_arr, qi);
+                                            if (!kv || !cJSON_IsObject(kv)) continue;
+                                            cJSON *k = cJSON_GetObjectItem(kv, "key");
+                                            cJSON *v = cJSON_GetObjectItem(kv, "value");
+                                            if (k && cJSON_IsString(k) && k->valuestring)
+                                                gd->query_params[qi].key = strdup_psram(k->valuestring);
+                                            if (v && cJSON_IsString(v) && v->valuestring)
+                                                gd->query_params[qi].value = strdup_psram(v->valuestring);
+                                        }
+                                    }
+                                }
+                            }
                             gd->publish_timer = 0; // immediate eligibility
                             gd->consec_failures = 0;
                             gd->backoff_ms = 0;
@@ -2282,6 +2368,13 @@ all_pids_t* load_all_pids(void){
                         all_pids->destinations[0].api_token = group_api_token_item && group_api_token_item->valuestring ? strdup_psram(group_api_token_item->valuestring) : NULL;
                         all_pids->destinations[0].cert_set = strdup_psram("default");
                         all_pids->destinations[0].enabled = true;
+                        // Legacy auth mapping: if HTTP/HTTPS and api_token provided, treat as Bearer
+                        if ((all_pids->destinations[0].type == DEST_HTTP || all_pids->destinations[0].type == DEST_HTTPS) && all_pids->destinations[0].api_token) {
+                            all_pids->destinations[0].auth.type = DEST_AUTH_BEARER;
+                            all_pids->destinations[0].auth.bearer = strdup_psram(all_pids->destinations[0].api_token);
+                        } else {
+                            all_pids->destinations[0].auth.type = DEST_AUTH_NONE;
+                        }
                         all_pids->destinations[0].publish_timer = 0;
                         all_pids->destinations[0].consec_failures = 0;
                         all_pids->destinations[0].backoff_ms = 0;

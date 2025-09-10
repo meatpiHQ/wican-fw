@@ -58,6 +58,30 @@ typedef enum
     DEST_MAX
 }destination_type_t;
 
+// HTTP(S) auth types supported by https_client_mgr_request_with_auth
+typedef enum {
+    DEST_AUTH_NONE = 0,
+    DEST_AUTH_BEARER,
+    DEST_AUTH_API_KEY_HEADER,
+    DEST_AUTH_API_KEY_QUERY,
+    DEST_AUTH_BASIC
+} destination_auth_type_t;
+
+typedef struct {
+    destination_auth_type_t type;   // Which auth to apply
+    char *bearer;                   // Bearer token
+    char *api_key_header_name;      // Header name for API key, e.g. "x-api-key"
+    char *api_key;                  // API key value (header or query)
+    char *api_key_query_name;       // Query parameter name for API key
+    char *basic_username;           // Basic auth username
+    char *basic_password;           // Basic auth password
+} destination_auth_t;
+
+typedef struct {
+    char *key;
+    char *value;    // Pre-encoded; UI may provide raw, backend can encode later if needed
+} dest_query_kv_t;
+
 // Group destination entry (multi-destination support)
 typedef struct {
     destination_type_t type;    // Destination type
@@ -66,6 +90,10 @@ typedef struct {
     char *api_token;            // Optional API/Bearer token (HTTP/HTTPS/ABRP)
     char *cert_set;             // Certificate set name for HTTPS ("default" for built-in)
     bool enabled;               // Whether this destination is active
+    // Extended HTTP(S) settings
+    destination_auth_t auth;    // Detailed auth configuration for HTTP/HTTPS
+    dest_query_kv_t *query_params;   // Optional extra query parameters
+    uint32_t query_params_count;     // Number of query params
     int64_t publish_timer;   // Internal: next publish expiration timer (0 = not scheduled / immediate)
     uint32_t consec_failures;   // Internal: consecutive failure counter
     uint32_t backoff_ms;        // Internal: current backoff delay extension (ms)

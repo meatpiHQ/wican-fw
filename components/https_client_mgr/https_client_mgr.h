@@ -52,6 +52,51 @@ typedef enum {
 } https_client_mgr_method_t;
 
 /**
+ * @brief Key/Value pair for query parameters
+ */
+typedef struct {
+    const char *key;        /*!< Query parameter key (must be URL-safe or pre-encoded) */
+    const char *value;      /*!< Query parameter value (must be URL-safe or pre-encoded) */
+} https_client_mgr_query_kv_t;
+
+/**
+ * @brief Authentication configuration for HTTPS requests
+ *
+ * All fields are optional; set whichever applies. Multiple mechanisms can be
+ * combined (e.g., x-api-key header + Bearer token + extra query params).
+ */
+typedef struct {
+    // API key in header (e.g., x-api-key: <key>)
+    const char *api_key_header_name;  /*!< Header name for API key, defaults to "x-api-key" if set to NULL while api_key is provided */
+    const char *api_key;              /*!< API key value to put in header */
+
+    // API key in query (e.g., ?api_key=<key>)
+    const char *api_key_query_name;   /*!< Query parameter name for API key (e.g., "api_key"). If provided along with api_key, will be appended to URL */
+
+    // Bearer token (Authorization: Bearer <token>)
+    const char *bearer_token;         /*!< Bearer token string */
+
+    // Basic auth (Authorization: Basic base64(user:pass))
+    const char *basic_username;       /*!< Username for Basic auth */
+    const char *basic_password;       /*!< Password for Basic auth */
+
+    // Extra query parameters to append to URL
+    const https_client_mgr_query_kv_t *extra_query; /*!< Array of extra query params to append to URL */
+    size_t extra_query_count;         /*!< Number of items in extra_query */
+
+    // Custom signer callback to inject a header (e.g., HMAC). The callback should
+    // set out_header_key and out_header_value. Return ESP_OK on success.
+    esp_err_t (*custom_signer)(https_client_mgr_method_t method,
+                               const char *url,
+                               const char *body,
+                               size_t body_len,
+                               void *user_ctx,
+                               char out_header_key[64],
+                               char out_header_value[256]);
+    void *custom_signer_ctx;          /*!< Opaque context passed to custom_signer */
+} https_client_mgr_auth_t;
+
+/**
  * @brief Configuration for HTTPS client
  */
 typedef struct {
@@ -120,6 +165,39 @@ esp_err_t https_client_mgr_post(const char *url, const char *data, size_t data_l
 esp_err_t https_client_mgr_request(const https_client_mgr_config_t *config, https_client_mgr_method_t method,
                               const char *data, size_t data_len, const char **headers,
                               https_client_mgr_response_t *response);
+
+/**
+ * @brief Perform an HTTPS request with generic authentication helpers.
+ *
+ * This builds common auth schemes automatically:
+ * - x-api-key header (or custom header name)
+ * - API key in query (appended to URL)
+ * - Authorization: Bearer <token>
+ * - Authorization: Basic <base64(username:password)>
+ * - Optional custom signer callback to add a signature header
+ * - Optional extra query parameters
+ *
+ * Any headers passed in extra_headers are also included. Content-Type can be
+ * specified explicitly via content_type (recommended for POST/PUT JSON, etc.).
+ *
+ * @param config Base HTTPS client config (url required)
+ * @param method HTTP method
+ * @param data Optional request body
+ * @param data_len Length of request body
+ * @param content_type Content-Type header value to set (e.g., "application/json"), or NULL to use default behavior
+ * @param auth Authentication configuration (may be NULL if none)
+ * @param extra_headers Additional headers as "Key: Value" strings (NULL-terminated array), may be NULL
+ * @param response Output response
+ * @return ESP_OK on success, error code otherwise
+ */
+esp_err_t https_client_mgr_request_with_auth(const https_client_mgr_config_t *config,
+                                             https_client_mgr_method_t method,
+                                             const char *data,
+                                             size_t data_len,
+                                             const char *content_type,
+                                             const https_client_mgr_auth_t *auth,
+                                             const char **extra_headers,
+                                             https_client_mgr_response_t *response);
 
 /**
  * @brief Download a file from an HTTPS URL
