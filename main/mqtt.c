@@ -64,6 +64,9 @@
 #include "dev_status.h"
 #include "wc_timer.h"
 #include "wifi_mgr.h"
+// TLS & Certificate Manager
+#include "cert_manager.h"
+#include "esp_crt_bundle.h"
 
 #define TAG 		"MQTT"
 #define MQTT_TX_RX_BUF_SIZE         (1024*20)
@@ -86,6 +89,8 @@ static uint8_t mqtt_led = 0;
 static QueueHandle_t *xmqtt_tx_queue;
 static uint8_t mqtt_elm327_log = 0;
 static SemaphoreHandle_t xmqtt_semaphore;
+// Persistently allocated MQTT URI override when using TLS
+static char *g_mqtt_uri_override = NULL;
 
 
 typedef struct 
@@ -679,6 +684,81 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
 		.buffer.out_size = MQTT_OUT_BUF_SIZE,
     };
 
+    // Enable TLS (MQTTS) if configured
+    if (config_server_get_mqtt_security_enabled()) {
+        const char *orig_uri = config_server_get_mqtt_url();
+        if (orig_uri) {
+            // Ensure URI uses mqtts:// scheme
+            const char *prefix = "mqtt://";
+            size_t pre_len = strlen(prefix);
+            size_t orig_len = strlen(orig_uri);
+            if (orig_len >= pre_len && strncasecmp(orig_uri, prefix, pre_len) == 0) {
+                // Build mqtts://<rest>
+                size_t rest_len = orig_len - pre_len;
+                size_t new_len = 8 /*mqtts://*/ + rest_len + 1;
+                if (g_mqtt_uri_override) {
+                    heap_caps_free(g_mqtt_uri_override);
+                    g_mqtt_uri_override = NULL;
+                }
+                g_mqtt_uri_override = heap_caps_malloc(new_len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                if (g_mqtt_uri_override) {
+                    strcpy(g_mqtt_uri_override, "mqtts://");
+                    strlcpy(g_mqtt_uri_override + 8, orig_uri + pre_len, new_len - 8);
+                    mqtt_cfg.broker.address.uri = g_mqtt_uri_override;
+                } else {
+                    ESP_LOGE(TAG, "Failed to alloc mqtts URI override");
+                }
+            } else if (orig_len >= 8 && strncasecmp(orig_uri, "mqtts://", 8) == 0) {
+                // Already mqtts
+                mqtt_cfg.broker.address.uri = orig_uri;
+            } else {
+                // Unknown scheme, leave as-is
+                mqtt_cfg.broker.address.uri = orig_uri;
+            }
+        }
+        ESP_LOGI(TAG, "MQTT Broker URI: %s", mqtt_cfg.broker.address.uri);
+        // Certificate selection via Certificate Manager
+        const char *cert_set = config_server_get_mqtt_cert_set();
+        if (cert_set && strcmp(cert_set, "default") != 0) {
+            size_t ca_len = 0, cli_len = 0, key_len = 0;
+            const char *ca  = cert_manager_get_set_ca_ptr(cert_set, &ca_len);
+            const char *cli = cert_manager_get_set_client_cert_ptr(cert_set, &cli_len);
+            const char *key = cert_manager_get_set_client_key_ptr(cert_set, &key_len);
+
+            ESP_LOG_BUFFER_HEXDUMP(TAG, ca, strlen(ca), ESP_LOG_WARN);
+            ESP_LOG_BUFFER_HEXDUMP(TAG, cli, strlen(cli), ESP_LOG_WARN);
+            ESP_LOG_BUFFER_HEXDUMP(TAG, key, strlen(key), ESP_LOG_WARN);
+
+            ESP_LOGI(TAG, "ca str len, ca_len: %d, %d", strlen(ca), ca_len);
+            ESP_LOGI(TAG, "cli str len, cli_len: %d, %d", strlen(cli), cli_len);
+            ESP_LOGI(TAG, "key str len, key_len: %d, %d", strlen(key), key_len);
+            
+            if (ca) {
+                mqtt_cfg.broker.verification.certificate = ca;
+                mqtt_cfg.broker.verification.certificate_len = ca_len;
+                ESP_LOGI(TAG, "MQTTS using CA from cert set '%s'", cert_set);
+            } else {
+                // Fallback to certificate bundle
+                mqtt_cfg.broker.verification.crt_bundle_attach = esp_crt_bundle_attach;
+                ESP_LOGW(TAG, "CA missing in set '%s', using bundle", cert_set);
+            }
+
+            // Optional mTLS
+            if (cli && key) {
+                mqtt_cfg.credentials.authentication.certificate = cli;
+                mqtt_cfg.credentials.authentication.certificate_len = cli_len;
+                mqtt_cfg.credentials.authentication.key = key;
+                mqtt_cfg.credentials.authentication.key_len = key_len;
+                ESP_LOGI(TAG, "MQTTS using client cert+key from cert set '%s'", cert_set);
+            }
+        } else {
+            // Default trust: use built-in certificate bundle
+            mqtt_cfg.broker.verification.crt_bundle_attach = esp_crt_bundle_attach;
+            ESP_LOGI(TAG, "MQTTS using built-in certificate bundle (default)");
+        }
+    }
+    // skip_cert_common_name_check (user-configurable)
+    mqtt_cfg.broker.verification.skip_cert_common_name_check = config_server_get_mqtt_skip_cn_check();
     // uint32_t keep_alive = 0;
     // if(config_server_get_keep_alive(&keep_alive) != -1)
     // {

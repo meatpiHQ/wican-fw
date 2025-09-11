@@ -206,7 +206,7 @@ const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"st
 										\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\
 										\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\
 										\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\
-										\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\",\
+										\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\",\"mqtt_security\":\"none\",\"mqtt_cert_set\": \"default\",\"mqtt_skip_cn\":\"disable\"\
 										\"logger_status\":\"disable\",\"log_filesystem\":\"littlefs\",\"log_storage\":\"sdcard\",\"log_period\":\"10\"}";
 
 // const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\", \"ap_auto_disable\": \"disable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
@@ -1541,6 +1541,9 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	cJSON_AddStringToObject(root, "mqtt_port", device_config.mqtt_port);
 	cJSON_AddStringToObject(root, "mqtt_user", device_config.mqtt_user);
 	cJSON_AddStringToObject(root, "mqtt_pass", device_config.mqtt_pass);
+	cJSON_AddStringToObject(root, "mqtt_cert_set", device_config.mqtt_cert_set);
+	cJSON_AddStringToObject(root, "mqtt_security", device_config.mqtt_security);
+	cJSON_AddStringToObject(root, "mqtt_skip_cn", device_config.mqtt_skip_cn);
 	cJSON_AddStringToObject(root, "mqtt_tx_topic", device_config.mqtt_tx_topic);
 	cJSON_AddStringToObject(root, "mqtt_rx_topic", device_config.mqtt_rx_topic);
 	cJSON_AddStringToObject(root, "mqtt_status_topic", device_config.mqtt_status_topic);
@@ -2625,6 +2628,46 @@ static void config_server_load_cfg(char *cfg)
 
 	strlcpy(device_config.mqtt_pass, key->valuestring, sizeof(device_config.mqtt_pass));
 	ESP_LOGI(TAG, "device_config.mqtt_pass: %s", device_config.mqtt_pass);
+	//*****
+
+	// mqtt_security
+	//*****
+	key = cJSON_GetObjectItem(root,"mqtt_security");
+	if(key == 0 || key->valuestring == NULL || (strlen(key->valuestring) > sizeof(device_config.mqtt_security)))
+	{
+		sprintf(device_config.mqtt_security, "none");
+	}
+	else
+	{
+		strlcpy(device_config.mqtt_security, key->valuestring, sizeof(device_config.mqtt_security));
+	}
+	ESP_LOGI(TAG, "device_config.mqtt_security: %s", device_config.mqtt_security);
+	//*****
+
+	//*****
+	key = cJSON_GetObjectItem(root,"mqtt_cert_set");
+	if(key == 0 || key->valuestring == NULL || (strlen(key->valuestring) > sizeof(device_config.mqtt_cert_set)))
+	{
+		sprintf(device_config.mqtt_cert_set, "default");
+	}
+	else
+	{
+		strlcpy(device_config.mqtt_cert_set, key->valuestring, sizeof(device_config.mqtt_cert_set));
+	}
+	ESP_LOGI(TAG, "device_config.mqtt_cert_set: %s", device_config.mqtt_cert_set);
+	//*****
+
+	//*****
+	key = cJSON_GetObjectItem(root,"mqtt_skip_cn");
+	if(key == 0 || key->valuestring == NULL || (strlen(key->valuestring) > sizeof(device_config.mqtt_skip_cn)))
+	{
+		strlcpy(device_config.mqtt_skip_cn, "disable", sizeof(device_config.mqtt_skip_cn));
+	}
+	else
+	{
+		strlcpy(device_config.mqtt_skip_cn, key->valuestring, sizeof(device_config.mqtt_skip_cn));
+	}
+	ESP_LOGI(TAG, "device_config.mqtt_skip_cn: %s", device_config.mqtt_skip_cn);
 	//*****
 
 	//*****
@@ -3753,6 +3796,31 @@ char *config_server_get_mqtt_user(void)
 char *config_server_get_mmqtt_pass(void)
 {
 	return device_config.mqtt_pass;
+}
+
+char *config_server_get_mqtt_cert_set(void)
+{
+	return device_config.mqtt_cert_set;
+}
+
+bool config_server_get_mqtt_security_enabled(void)
+{
+	if(strcmp(device_config.mqtt_security, "tls") == 0)
+	{
+		return true;
+	}
+
+	return false;
+}
+
+bool config_server_get_mqtt_skip_cn_check(void)
+{
+	// Return true when user selects to skip CN check (i.e., "enable")
+	if (strcmp(device_config.mqtt_skip_cn, "enable") == 0)
+	{
+		return true;
+	}
+	return false;
 }
 
 char *config_server_get_mqtt_tx_topic(void)

@@ -843,7 +843,6 @@
                     </tr>
                 </table>
 
-                <!-- BLE Warning Section -->
                 <div id="ble_warning_div" style="display: none; margin: 8px 0;">
                     <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 8px; padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                         <div style="display: flex; align-items: center; margin-bottom: 6px;">
@@ -925,6 +924,18 @@
                     </tr>
                 </table>
 
+                <div id="mqtt_warning_div" style="display: none; margin: 8px 0;">
+                    <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 8px; padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                            <span data-lucide="alert-triangle" style="font-size: 16px; margin-right: 8px;"></span>
+                            <strong style="color: #92400e; font-size: 14px;">MQTT Connection Warning</strong>
+                        </div>
+                        <div style="color: #78350f; font-size: 13px; line-height: 1.4;">
+                            Do NOT connect to public MQTT brokers. Only use a private/local broker or a trusted cloud service.
+                        </div>
+                    </div>
+                </div>
+
                 <div id="mqtt_en_div">
                     <div class="divider"></div>
                     <div class="section-title">MQTT</div>
@@ -935,7 +946,35 @@
                         </tr>
                         <tr>
                             <td><label for="mqtt_port"><b>MQTT Port:</b></label></td>
-                            <td><input type="number" id="mqtt_port" name="mqtt_port" value="1883" min="1" max="65535" />
+                            <td><input type="number" id="mqtt_port" name="mqtt_port" style="width: 180px;" value="1883" min="1" max="65535" />
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><label for="mqtt_security"><b>Security:</b></label></td>
+                            <td>
+                                <select id="mqtt_security" name="mqtt_security" style="width: 180px;" onchange="toggleMqttTLS();submit_enable();">
+                                    <option value="none" selected>None (MQTT)</option>
+                                    <option value="tls">TLS (MQTTS)</option>
+                                </select>
+                            </td>
+                        </tr>
+                        <tr id="mqtt_cert_set_row" style="display:none;">
+                            <td><label for="mqtt_cert_set"><b>Cert Set:</b></label></td>
+                            <td>
+                                <select id="mqtt_cert_set" name="mqtt_cert_set" style="width: 180px;" onchange="submit_enable();">
+                                    <option value="default">default</option>
+                                </select>
+                                <div style="font-size:0.75rem; color:#6b7280; margin-top:4px;">Manage sets under System → Certificate Manager.</div>
+                            </td>
+                        </tr>
+                        <tr id="mqtt_skip_cn_row" style="display:none;">
+                            <td><label for="mqtt_skip_cn"><b>Skip CN check:</b></label></td>
+                            <td>
+                                <select id="mqtt_skip_cn" name="mqtt_skip_cn" style="width: 180px;" onchange="submit_enable();">
+                                    <option value="disable" selected>Disable</option>
+                                    <option value="enable">Enable</option>
+                                </select>
+                                <div style="font-size:0.75rem; color:#6b7280; margin-top:4px;">When enabled, TLS server certificate common-name/hostname mismatch is ignored.</div>
                             </td>
                         </tr>
                         <tr>
@@ -2424,6 +2463,51 @@ async function fetchCertSetsForDestinations() {
     return window.certManagerSetsCache;
 }
 
+// Populate MQTT cert set dropdown using the same Certificate Manager source as destinations
+async function populateMqttCertSets(){
+    const sel = document.getElementById('mqtt_cert_set');
+    if(!sel) return;
+    try{
+        // Preserve current/desired value before repopulating
+        const prev = sel.value || sel.getAttribute('data-desired') || '';
+        const list = await fetchCertSetsForDestinations();
+        const options = (list||['default']).map(n=>`<option value="${n}">${n}</option>`).join('');
+        sel.innerHTML = options;
+        // Restore selection if available; fallback to default
+        const desired = prev || 'default';
+        if (Array.isArray(list) && list.includes(desired)) {
+            sel.value = desired;
+        } else if (Array.isArray(list) && list.length) {
+            // Keep whatever browser selects (first option), otherwise set default
+            if (!list.includes(sel.value)) sel.value = list[0];
+        } else {
+            sel.value = 'default';
+        }
+    }catch(e){
+        // Fallback to default only
+        sel.innerHTML = '<option value="default">default</option>';
+        sel.value = 'default';
+    }
+}
+
+function toggleMqttTLS(){
+    const secSel = document.getElementById('mqtt_security');
+    const row = document.getElementById('mqtt_cert_set_row');
+    const skipRow = document.getElementById('mqtt_skip_cn_row');
+    if(!secSel || !row) return;
+    const isTLS = (secSel.value === 'tls');
+    row.style.display = isTLS ? 'table-row' : 'none';
+    if (skipRow) skipRow.style.display = isTLS ? 'table-row' : 'none';
+    if(isTLS){
+        populateMqttCertSets();
+        // Nudge port to 8883 if it is at the plain default
+        const portEl = document.getElementById('mqtt_port');
+        if(portEl && (portEl.value === '' || portEl.value === '1883')){
+            portEl.value = '8883';
+        }
+    }
+}
+
 function truncateMiddle(str, max=40){
     if (!str) return '';
     if (str.length <= max) return str;
@@ -3041,6 +3125,7 @@ function loadAutoTable(jsonData) {
             apAutoDisable: document.getElementById("ap_auto_disable"),
             bleWarningDiv: document.getElementById("ble_warning_div"),
             mqttEn: document.getElementById("mqtt_en"),
+            mqttWarningDiv: document.getElementById("mqtt_warning_div"),
             mqttEnDiv: document.getElementById("mqtt_en_div"),
             battAlert: document.getElementById("batt_alert"),
             battAlertDiv: document.getElementById("batt_alert_div"),
@@ -3153,6 +3238,7 @@ function loadAutoTable(jsonData) {
         if (isBleEnabled && !window.bleAlertShown) {
             elements.mqttEn.value = "disable";
             elements.mqttEnDiv.style.display = "none";
+            elements.mqttWarningDiv.style.display = "none";
             elements.mqttEn.disabled = true;
             elements.battAlert.value = "disable";
             elements.battAlertDiv.style.display = "none";
@@ -3287,6 +3373,7 @@ function loadAutoTable(jsonData) {
         // MQTT div visibility
         const mqttEnabled = elements.mqttEn.value === "enable";
         elements.mqttEnDiv.style.display = mqttEnabled ? "block" : "none";
+        elements.mqttWarningDiv.style.display = mqttEnabled ? "block" : "none";
     }
 
     function configurePeriodicWakeup(elements) {
@@ -3511,12 +3598,21 @@ function loadAutoTable(jsonData) {
 		obj["batt_mqtt_user"] = document.getElementById("batt_mqtt_user").value;
 		obj["batt_mqtt_pass"] = document.getElementById("batt_mqtt_pass").value;
 		obj["mqtt_en"] = document.getElementById("mqtt_en").value;
-		let mqtt_txt2 = "mqtt://";
-		let mqtt_url_val2 = mqtt_txt.concat(document.getElementById("mqtt_url").value);
-		obj["mqtt_url"] = mqtt_url_val2;
+        let mqtt_url_val2;
+        if(document.getElementById("mqtt_security").value == "tls"){
+            let mqtt_txt2 = "mqtts://";
+            mqtt_url_val2 = mqtt_txt2.concat(document.getElementById("mqtt_url").value);
+        } else {
+            let mqtt_txt2 = "mqtt://";
+            mqtt_url_val2 = mqtt_txt2.concat(document.getElementById("mqtt_url").value);
+        }
+        obj["mqtt_url"] = mqtt_url_val2;
 		obj["mqtt_port"] = document.getElementById("mqtt_port").value;
 		obj["mqtt_user"] = document.getElementById("mqtt_user").value;
 		obj["mqtt_pass"] = document.getElementById("mqtt_pass").value;
+        obj["mqtt_security"] = document.getElementById("mqtt_security").value;
+        obj["mqtt_cert_set"] = document.getElementById("mqtt_cert_set").value;
+        obj["mqtt_skip_cn"] = document.getElementById("mqtt_skip_cn").value;
 		obj["mqtt_tx_topic"] = document.getElementById("mqtt_tx_topic").value;
 		obj["ap_auto_disable"] = document.getElementById("ap_auto_disable").value;
 		if(document.getElementById("mqtt_tx_en_checkbox").checked){
@@ -3730,9 +3826,9 @@ function loadAutoTable(jsonData) {
         }
     }
 
-	function Load() {
+    async function Load() {
 		const xhttp = new XMLHttpRequest();
-		xhttp.onload = function() {
+    xhttp.onload = async function() {
 			var obj = JSON.parse(this.responseText);
             if(obj.wifi_mode == "APStation") {
 				document.getElementById("wifi_mode").selectedIndex = "1";
@@ -3910,7 +4006,11 @@ function loadAutoTable(jsonData) {
 			document.getElementById("batt_mqtt_user").value = obj.batt_mqtt_user;
 			document.getElementById("batt_mqtt_pass").value = obj.batt_mqtt_pass;
 			document.getElementById("mqtt_en").value = obj.mqtt_en;
-			document.getElementById("mqtt_url").value = obj.mqtt_url.slice(7);
+            if(obj.mqtt_security == "tls"){
+                document.getElementById("mqtt_url").value = obj.mqtt_url.slice(8);
+            } else {
+                document.getElementById("mqtt_url").value = obj.mqtt_url.slice(7);
+            }
 			document.getElementById("mqtt_port").value = obj.mqtt_port;
 			document.getElementById("mqtt_user").value = obj.mqtt_user;
 			document.getElementById("mqtt_pass").value = obj.mqtt_pass;
@@ -3918,6 +4018,25 @@ function loadAutoTable(jsonData) {
 			document.getElementById("mqtt_rx_topic").value = obj.mqtt_rx_topic;
 			document.getElementById("mqtt_status_topic").value = obj.mqtt_status_topic;
 			document.getElementById("mqtt_elm327_log").value = obj.mqtt_elm327_log;
+            // Optional fields for MQTTS (UI only for now)
+            if (obj.mqtt_security){
+                const sec = document.getElementById('mqtt_security');
+                if (sec){ sec.value = obj.mqtt_security; }
+            }
+            // Preserve desired cert set (may be populated asynchronously)
+            {
+                const certSel = document.getElementById('mqtt_cert_set');
+                const desired = obj.mqtt_cert_set || 'default';
+                if (certSel){
+                    certSel.setAttribute('data-desired', desired);
+                    certSel.value = desired; // in case options are already present
+                }
+            }
+
+            // Restore Skip CN selection (default to disable)
+            const skipSel = document.getElementById('mqtt_skip_cn');
+            if (skipSel){ skipSel.value = obj.mqtt_skip_cn || 'disable'; }
+            toggleMqttTLS();
 			if(obj.batt_alert_time == "1") {
 				document.getElementById("batt_alert_time").selectedIndex = "0";
 			} else if(obj.batt_alert_time == "6") {

@@ -145,6 +145,10 @@ typedef struct _device_config
 	char mqtt_port[32];
 	char mqtt_user[64];
 	char mqtt_pass[64];
+	char mqtt_cert_set[64];
+	char mqtt_security[16];
+	// MQTT TLS verification behavior: "enable" to skip CN check, "disable" (default) to verify
+	char mqtt_skip_cn[10];
 	char mqtt_elm327_log[10];
 	char mqtt_tx_topic[64];
 	char mqtt_rx_topic[64];
@@ -232,7 +236,9 @@ int8_t config_server_get_periodic_wakeup(void);
 int8_t config_server_get_wakeup_interval(uint32_t *wakeup_interval);
 int8_t config_server_get_imu_threshold(uint8_t *imu_threshold);
 bool config_server_is_debug_enabled(void);
-
+bool config_server_get_mqtt_security_enabled(void);
+char *config_server_get_mqtt_cert_set(void);
+bool config_server_get_mqtt_skip_cn_check(void);
 // Fallback STA networks accessors
 int config_server_get_sta_fallbacks_count(void);
 const char *config_server_get_sta_fallback_ssid(int index);
