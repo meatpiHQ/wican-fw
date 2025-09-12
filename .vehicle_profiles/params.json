@@ -1,4 +1,11 @@
 {
+  "AC_COMP": {
+    "description": "AC Compressor (ON/OFF)",
+    "settings": {
+      "unit": "",
+      "class": "none"
+    }
+  },
   "AC_C_C": {
     "description": "AC Charging Current",
     "settings": {
@@ -11,13 +18,6 @@
     "settings": {
       "unit": "V",
       "class": "battery"
-    }
-  },
-  "AC_COMP": {
-    "description": "AC Compressor (ON/OFF)",
-    "settings": {
-      "unit": "",
-      "class": "none"
     }
   },
   "AC_P": {
@@ -81,6 +81,13 @@
       "class": "temperature"
     }
   },
+  "DRIVE_MODE": {
+    "description": "Drive Mode",
+    "settings": {
+      "unit": "",
+      "class": "none"
+    }
+  },
   "ENGINE_OIL_PRES": {
     "description": "Engine Oil Pressure",
     "settings": {
@@ -93,13 +100,6 @@
     "settings": {
       "unit": "°C",
       "class": "temperature"
-    }
-  },
-  "DRIVE_MODE": {
-    "description": "Drive Mode",
-    "settings": {
-      "unit": "",
-      "class": "none"
     }
   },
   "ENGINE_RPM": {
@@ -328,15 +328,15 @@
       "class": "power"
     }
   },
-  "INTAKE_AIR_TMP": {
-    "description": "Air intake Temperature",
+  "INTAKE_AIR_TEMP_2": {
+    "description": "Air Intake Temperature 2",
     "settings": {
       "unit": "°C",
       "class": "temperature"
     }
   },
-  "INTAKE_AIR_TEMP_2": {
-    "description": "Air Intake Temperature 2",
+  "INTAKE_AIR_TMP": {
+    "description": "Air intake Temperature",
     "settings": {
       "unit": "°C",
       "class": "temperature"
@@ -378,18 +378,18 @@
       "min": "0"
     }
   },
-  "OIL_LIFE": {
-    "description": "Oil Life",
-    "settings": {
-      "unit": "%",
-      "class": "none"
-    }
-  },
   "OILCH_DIS": {
     "description": "Distance till next oil change",
     "settings": {
       "unit": "km",
       "class": "distance"
+    }
+  },
+  "OIL_LIFE": {
+    "description": "Oil Life",
+    "settings": {
+      "unit": "%",
+      "class": "none"
     }
   },
   "PARK_BRAKE": {
