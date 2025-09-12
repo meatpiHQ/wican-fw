@@ -1,0 +1,5 @@
+{
+  "car_model": "Hyundai: Kona",
+  "init": "ATSH7E4;ATST96;",
+  "extends": "hyundai/ioniq5-6.json"
+}

@@ -1,9 +1,8 @@
 import { glob } from "glob";
 import { readFile, writeFile } from "fs/promises";
 import { get_params } from "./params.js";
-import { exit } from "process";
 
-const PARAMS_TO_IGNORE = ["note", "comment", "add_to_docs"];
+const PARAMS_TO_IGNORE = ["note", "comment", "add_to_docs", "extends"];
 const PROFILE_FOLDER = import.meta.dirname + "/../../vehicle_profiles";
 const PROFILE_TARGET = import.meta.dirname + "/../../vehicle_profiles.json";
 
@@ -42,14 +41,77 @@ async function write_cars(cars) {
     });
   });
 
-  const resultString = JSON.stringify({ cars });
+  const resultString = JSON.stringify({ cars }, null, 2);
   //Use below line instead for generating pretty json
   // result = JSON.stringify(result, null, 2);
   await writeFile(PROFILE_TARGET, resultString);
 }
 
-async function add_json(jsonPath, params, cars) {
-  let data = JSON.parse(await readFile(jsonPath));
+async function add_json(jsonPath, params, allCars) {
+  let cars = [];
+  cars.push(await read_profile(jsonPath));
+  let next = cars[0].extends;
+  while (next !== undefined) {
+    let car = await read_profile(PROFILE_FOLDER + "/" + next);
+    cars.push(car);
+    next = car.extends;
+  }
+
+  if (cars.length === 1) {
+    allCars.push(await process_profile(cars[0], params));
+    return;
+  }
+
+  //Start with original car, but no PIDS
+  //Copy without refrence, so we don't destroy the real first car
+  let car = JSON.parse(JSON.stringify(cars[0]));
+  car.pids = [];
+  while (cars.length > 0) {
+    let newCar = cars.pop();
+    //pids are now optional, extends could be used just to add a 2nd name
+    if (newCar.pids === undefined) {
+      newCar.pids = [];
+    }
+    let newpids = [];
+    //Get new PID's, these are what we want to add/update to profile
+    newCar.pids.forEach((pid) => {
+      newpids = newpids.concat(Object.keys(pid.parameters));
+    });
+
+    //Delete anything we have new versions of
+    car.pids.forEach((pid) => {
+      Object.keys(pid.parameters).forEach((param) => {
+        if (newpids.includes(param)) {
+          delete pid.parameters[param];
+        }
+      });
+    });
+
+    //merge them together
+    let pidtokey = {};
+    car.pids.forEach((pid, key) => {
+      pidtokey[pid.pid] = key;
+    });
+    newCar.pids.forEach((pid) => {
+      if (Object.keys(pidtokey).includes(pid.pid)) {
+        pid.parameters = { ...pid.parameters, ...car.parameters };
+      } else {
+        car.pids.push(pid);
+      }
+    });
+  }
+
+  //Cleanup pids with no params
+  car.pids = car.pids.filter((pid) => Object.keys(pid.parameters).length > 0);
+
+  allCars.push(await process_profile(car, params));
+}
+
+async function read_profile(path) {
+  return JSON.parse(await readFile(path));
+}
+
+async function process_profile(data, params) {
   if (!data.pids || typeof data.pids !== "object") {
     console.warn(`Warning: Skipping file without valid 'pids': ${jsonPath}`);
     return;
@@ -66,7 +128,7 @@ async function add_json(jsonPath, params, cars) {
     data.pids[key].parameters = newParams;
   });
 
-  cars.push(data);
+  return data;
 }
 
 async function save_supported_cars(cars) {
