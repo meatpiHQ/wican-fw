@@ -6,7 +6,7 @@ permissions:
   issues: write
 
 on:
-  pull_request_target:
+  pull_request:
     paths:
       - 'vehicle_profiles/**'
       - '.vehicle_profiles/**'
@@ -20,8 +20,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -57,17 +55,24 @@ jobs:
           name: vehicle_profiles.json
           path: ${{ github.workspace }}/vehicle_profiles.json # Relative to the working-directory
 
-      - name: Comment on PR with testing instructions
-        if: success()
-        uses: actions/github-script@v7
-        env:
-          link: '${{steps.upload.outputs.artifact-url}}'
-        with:
-          script: |
-            const prNumber = context.payload.pull_request.number;
-            const message = `✅ Vehicle profiles merged successfully!\n\nPlease download and test the updated [vehicle_profiles.json](${process.env.link}).`;
-            await github.rest.issues.createComment({
-              ...context.repo,
-              issue_number: prNumber,
-              body: message
-            });
+      # - name: Comment on PR with testing instructions
+      #   if: success()
+      #   uses: actions/github-script@v7
+      #   env:
+      #     link: '${{steps.upload.outputs.artifact-url}}'
+      #   with:
+      #     script: |
+      #       const prNumber = context.payload.pull_request.number;
+      #       const message = `✅ Vehicle profiles merged successfully!\n\nPlease download and test the updated [vehicle_profiles.json](${process.env.link}).`;
+      #       await github.rest.issues.createComment({
+      #         ...context.repo,
+      #         issue_number: prNumber,
+      #         body: message
+      #       });
+
+      - name: Comment test
+        env: 
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          gh pr comment "test"
