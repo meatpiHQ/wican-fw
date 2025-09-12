@@ -1,4 +1,11 @@
 {
+  "AC_COMP": {
+    "description": "AC Compressor (ON/OFF)",
+    "settings": {
+      "unit": "",
+      "class": "none"
+    }
+  },
   "AC_C_C": {
     "description": "AC Charging Current",
     "settings": {
@@ -17,6 +24,13 @@
     "description": "AC Phases Connected",
     "settings": {
       "unit": "",
+      "class": "none"
+    }
+  },
+  "ALT_DUTY": {
+    "description": "Alternator Duty Cycle",
+    "settings": {
+      "unit": "%",
       "class": "none"
     }
   },
@@ -61,10 +75,17 @@
     }
   },
   "COOLANT_TMP": {
-    "description": "Coolant temperature",
+    "description": "Coolant Temperature",
     "settings": {
       "unit": "°C",
       "class": "temperature"
+    }
+  },
+  "DRIVE_MODE": {
+    "description": "Drive Mode",
+    "settings": {
+      "unit": "",
+      "class": "none"
     }
   },
   "ENGINE_OIL_PRES": {
@@ -100,6 +121,34 @@
     "settings": {
       "unit": "kPa",
       "class": "pressure"
+    }
+  },
+  "FUEL_PRESSURE_D": {
+    "description": "Fuel Pressure Desired",
+    "settings": {
+      "unit": "kPa",
+      "class": "pressure"
+    }
+  },
+  "FUEL_PUMP_DUTY": {
+    "description": "Fuel Pump Duty Cycle",
+    "settings": {
+      "unit": "%",
+      "class": "none"
+    }
+  },
+  "FUEL_RATE": {
+    "description": "Fuel Rate",
+    "settings": {
+      "unit": "g/s",
+      "class": "none"
+    }
+  },
+  "FUEL_SYS_STAT": {
+    "description": "Fuel System Status (Open/Closed Loop)",
+    "settings": {
+      "unit": "",
+      "class": "none"
     }
   },
   "GEAR": {
@@ -279,8 +328,15 @@
       "class": "power"
     }
   },
+  "INTAKE_AIR_TEMP_2": {
+    "description": "Air Intake Temperature 2",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature"
+    }
+  },
   "INTAKE_AIR_TMP": {
-    "description": "Air intake temperature",
+    "description": "Air intake Temperature",
     "settings": {
       "unit": "°C",
       "class": "temperature"
@@ -307,6 +363,13 @@
       "class": "none"
     }
   },
+  "OCTANE_RATIO_L": {
+    "description": "Learned Octane Ratio",
+    "settings": {
+      "unit": "%",
+      "class": "none"
+    }
+  },
   "ODOMETER": {
     "description": "Vehicle odometer",
     "settings": {
@@ -320,6 +383,13 @@
     "settings": {
       "unit": "km",
       "class": "distance"
+    }
+  },
+  "OIL_LIFE": {
+    "description": "Oil Life",
+    "settings": {
+      "unit": "%",
+      "class": "none"
     }
   },
   "PARK_BRAKE": {
@@ -498,6 +568,13 @@
       "class": "none"
     }
   },
+  "TRAN_F_TEMP": {
+    "description": "Transmission Fluid TEmp",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature"
+    }
+  },
   "TYRE_P_FL": {
     "description": "Tyre Pressure Front Left",
     "settings": {
@@ -563,6 +640,13 @@
     "settings": {
       "unit": "°C",
       "class": "temperature"
+    }
+  },
+  "WASTEGATE": {
+    "description": "Wastegate Control Solenoid Valve",
+    "settings": {
+      "unit": "%",
+      "class": "none"
     }
   }
 }
