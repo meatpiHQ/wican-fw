@@ -63,7 +63,7 @@ jobs:
         run: |
           # Use GitHub API to create a comment on the PR
           PR_NUMBER=${{ github.event.pull_request.number }}
-          COMMENT=`✅ Vehicle profiles merged successfully!\n\nPlease download and test the updated [vehicle_profiles.json](${process.env.link}).`;
+          COMMENT="test";
           GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
           COMMENT_URL="https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments"
       
