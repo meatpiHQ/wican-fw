@@ -22,6 +22,10 @@
       "description": "Init String, don't forget the final ;",
       "type": "string"
     },
+    "extends": {
+      "description": "Allows 1 profile to extend another",
+      "type": "string"
+    },
     "pids": {
       "description": "Array of PID's and their parameters",
       "type": "array",
