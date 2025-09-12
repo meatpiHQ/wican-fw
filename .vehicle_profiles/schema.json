@@ -1,9 +1,22 @@
 {
+  "additionalProperties": false,
   "description": "Data about various models of cars and their settings",
   "properties": {
     "car_model": {
       "description": "Name of car model, should include Make and Model(s)",
       "type": "string"
+    },
+    "note": {
+      "description": "Used for note on docs",
+      "type": "string"
+    },
+    "comment": {
+      "description": "Used for any internal notes/comments needed for profile",
+      "type": "string"
+    },
+    "add_to_docs": {
+      "description": "Can be set to false to not add to docs, typically for generic cars",
+      "type": "boolean"
     },
     "init": {
       "description": "Init String, don't forget the final ;",
@@ -28,25 +41,18 @@
               "enum": [
                 "AC_C_C",
                 "AC_C_V",
-                "AC_COMP",
                 "AC_P",
-                "ALT_DUTY",
                 "BATT_CAPACITY",
                 "BATT_TEMP",
                 "CHARGER_CONNECTED",
                 "CHARGING",
                 "CHARGING_DC",
                 "COOLANT_TMP",
-                "DRIVE_MODE",
                 "ENGINE_OIL_PRES",
                 "ENGINE_OIL_TEMP",
                 "ENGINE_RPM",
                 "FUEL",
                 "FUEL_PRESSURE",
-                "FUEL_PRESSURE_D",
-                "FUEL_PUMP_DUTY",
-                "FUEL_RATE",
-                "FUEL_SYS_STAT",
                 "GEAR",
                 "HV_A",
                 "HV_AV",
@@ -73,13 +79,10 @@
                 "HV_V",
                 "HV_W",
                 "INTAKE_AIR_TMP",
-                "INTAKE_AIR_TEMP_2",
                 "KWH_CHARGED",
                 "LV_V",
                 "MAF",
-                "OCTANE_RATIO_L",
                 "ODOMETER",
-                "OIL_LIFE",
                 "OILCH_DIS",
                 "PARK_BRAKE",
                 "PCM_Desired_Boost",
@@ -103,7 +106,6 @@
                 "STFT",
                 "THROTTLE",
                 "TMP_A",
-                "TRAN_F_TEMP",
                 "TYRE_P_FL",
                 "TYRE_P_FR",
                 "TYRE_P_RL",
@@ -112,8 +114,7 @@
                 "TYRE_T_FR",
                 "TYRE_T_RL",
                 "TYRE_T_RR",
-                "T_CAB",
-                "WASTEGATE"
+                "T_CAB"
               ]
             }
           }
