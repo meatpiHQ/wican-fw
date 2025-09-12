@@ -534,6 +534,309 @@
       ]
     },
     {
+      "car_model": "Ford: Transit North America 2022",
+      "init": "ATE0;ATL0;ATH0;ATR1;ATST32;ATSP6;ATCAF1;",
+      "pids": [
+        {
+          "pid": "22402B",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "HV_A",
+              "expression": "([B4:B5]-32768)/256",
+              "unit": "A",
+              "class": "current"
+            }
+          ]
+        },
+        {
+          "pid": "224028",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "B4",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22402A",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "HV_V",
+              "expression": "([B4:B5]/256)/10",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "480"
+            }
+          ]
+        },
+        {
+          "pid": "222813",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "TYRE_P_FL",
+              "expression": "[B4:B5]/10",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "222816",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "TYRE_P_RL",
+              "expression": "[B4:B5]/10",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "222814",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "TYRE_P_FR",
+              "expression": "[B4:B5]/10",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "222815",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "TYRE_P_RR",
+              "expression": "[B4:B5]/10",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "22099B",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "AC_COMP",
+              "expression": "B4",
+              "unit": "",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "220598",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "ALT_DUTY",
+              "expression": "B4",
+              "unit": "%",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "222B00",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "PARK_BRAKE",
+              "expression": "B4",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            }
+          ]
+        },
+        {
+          "pid": "220651",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "DRIVE_MODE",
+              "expression": "B4",
+              "unit": "",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "22F405",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "COOLANT_TMP",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "22F423",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "FUEL_PRESSURE",
+              "expression": "[B4:B5]",
+              "unit": "kPa",
+              "class": "pressure"
+            }
+          ]
+        },
+        {
+          "pid": "2203DC",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "FUEL_PRESSURE_D",
+              "expression": "[B4:B5]",
+              "unit": "kPa",
+              "class": "pressure"
+            }
+          ]
+        },
+        {
+          "pid": "220307",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "FUEL_PUMP_DUTY",
+              "expression": "(B4*100)/255",
+              "unit": "%",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "22F49D",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "FUEL_RATE",
+              "expression": "[B4:B5]*2/100",
+              "unit": "g/s",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "22F403",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "FUEL_SYS_STAT",
+              "expression": "B4",
+              "unit": "",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "22F40F",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "INTAKE_AIR_TMP",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2203CA",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "INTAKE_AIR_TEMP_2",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2203E8",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "OCTANE_RATIO_L",
+              "expression": "[B4:B5]/16384",
+              "unit": "%",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "22054B",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "OIL_LIFE",
+              "expression": "B4",
+              "unit": "%",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "221E1C",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "TRAN_F_TEMP",
+              "expression": "[B4:B5]/16",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "221E12",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "GEAR",
+              "expression": "B4",
+              "unit": "none",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "220462",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "WASTEGATE",
+              "expression": "B4*100/128",
+              "unit": "%",
+              "class": "none"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Genesis: GV60/GV70 EV/G80 Electrified",
       "init": "ATSH7E4;ATST96;",
       "pids": [
