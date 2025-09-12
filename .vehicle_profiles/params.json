@@ -530,6 +530,34 @@
       "min": "0"
     }
   },
+  "TYRE_T_FL": {
+    "description": "Tyre Temperature Front Left",
+    "settings": {
+      "class": "temperature",
+      "unit": "°C"
+    }
+  },
+  "TYRE_T_FR": {
+    "description": "Tyre Temperature Front Right",
+    "settings": {
+      "class": "temperature",
+      "unit": "°C"
+    }
+  },
+  "TYRE_T_RL": {
+    "description": "Tyre Temperature Rear Left",
+    "settings": {
+      "class": "temperature",
+      "unit": "°C"
+    }
+  },
+  "TYRE_T_RR": {
+    "description": "Tyre Temperature Rear Right",
+    "settings": {
+      "class": "temperature",
+      "unit": "°C"
+    }
+  },
   "T_CAB": {
     "description": "Cabin Temp",
     "settings": {

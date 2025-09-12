@@ -17,6 +17,13 @@
         "CHARGING": "B14:7",
         "CHARGING_DC": "B14:6"
       }
+    },
+    {
+      "pid": "22B0025",
+      "pid_init": "ATSH7C6;ATFCSH7C6",
+      "parameters": {
+        "ODOMETER": "[B17:B18]"
+      }
     }
   ]
 }

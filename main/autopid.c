@@ -41,6 +41,7 @@
 #include <float.h>
 #include "hw_config.h"
 #include "dev_status.h"
+#include "debug_logs.h"
 
 #define TAG __func__
 
@@ -229,6 +230,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
     if (response == NULL)
     {
         ESP_LOGE(TAG, "Failed to allocate memory for response");
+    DEBUG_LOGE(TAG, "Failed to allocate memory for response");
         return ESP_ERR_NO_MEM;
     }
 
@@ -258,6 +260,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
     if(protocol >= 6 && protocol <= 9) 
     {
         ESP_LOGI(TAG, "Setting protocol %d", protocol);
+    DEBUG_LOGI(TAG, "Setting protocol %d", protocol);
 
         static const char *elm327_config = "ate0\rath1\ratl0\rats1\ratst96\r";
         elm327_process_cmd((uint8_t*)elm327_config, strlen(elm327_config), &frame, &autopidQueue);
@@ -265,13 +268,16 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
 
         const char* protocol_cmds = supported_protocols[protocol-6];
         ESP_LOGI(TAG, "Sending protocol commands: %s", protocol_cmds);
+    DEBUG_LOGI(TAG, "Sending protocol commands: %s", protocol_cmds);
         elm327_process_cmd((uint8_t*)protocol_cmds, strlen(protocol_cmds), &frame, &autopidQueue);
         while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS);
         ESP_LOGI(TAG, "Protocol %d set successfully", protocol);
+    DEBUG_LOGI(TAG, "Protocol %d set successfully", protocol);
     }
     else
     {
         ESP_LOGE(TAG, "Invalid protocol number: %d", protocol);
+    DEBUG_LOGE(TAG, "Invalid protocol number: %d", protocol);
         elm327_unlock();
         free(response);
         return ESP_FAIL;
@@ -289,15 +295,19 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
     };
 
     ESP_LOGI(TAG, "Starting PID support command processing");
+    DEBUG_LOGI(TAG, "Starting PID support command processing");
     for (int i = 0; i < sizeof(pid_support_cmds)/sizeof(pid_support_cmds[0]); i++) {
         ESP_LOGI(TAG, "Processing PID support command: %s", pid_support_cmds[i]);
+    DEBUG_LOGI(TAG, "Processing PID support command: %s", pid_support_cmds[i]);
         if (elm327_process_cmd((uint8_t*)pid_support_cmds[i], strlen(pid_support_cmds[i]), &frame, &autopidQueue) != 0) {
             ESP_LOGW(TAG, "Failed to process PID support command: %s", pid_support_cmds[i]);
+            DEBUG_LOGW(TAG, "Failed to process PID support command: %s", pid_support_cmds[i]);
             continue;
         }
 
     if (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS) {
         ESP_LOGI(TAG, "Raw response length: %lu", response->length);
+    DEBUG_LOGI(TAG, "Raw response length: %lu", response->length);
         ESP_LOG_BUFFER_HEX(TAG, response->data, response->length);
 
 
@@ -313,6 +323,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
                             merged_frame[6];
             
             ESP_LOGI(TAG, "Merged frame bitmap: 0x%08lx", supported_pids);
+            DEBUG_LOGI(TAG, "Merged frame bitmap: 0x%08lx", supported_pids);
 
                 for (int bit = 0; bit < 32; bit++) {
                     if (supported_pids & (1 << (31 - bit))) {
@@ -325,6 +336,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
                             // If the PID has multiple parameters
                             if (pid_info->num_params > 1 && pid_info->params) {
                                 ESP_LOGI(TAG, "Processing multi-parameter PID: %02X", pid);
+                                DEBUG_LOGI(TAG, "Processing multi-parameter PID: %02X", pid);
                                 // Add each parameter as a separate entry
                                 for (int p = 0; p < pid_info->num_params; p++) {
                                     if (pid_info->params[p].name) {
@@ -332,9 +344,12 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
                                                 pid, pid_info->params[p].name);
                                         ESP_LOGI(TAG, "PID %02X parameter %d supported: %s", 
                                                 pid, p + 1, pid_str);
+                    DEBUG_LOGI(TAG, "PID %02X parameter %d supported: %s", 
+                        pid, p + 1, pid_str);
                                         cJSON_AddItemToArray(pid_array, cJSON_CreateString(pid_str));
                                     } else {
                                         ESP_LOGW(TAG, "PID %02X parameter %d has NULL name", pid, p + 1);
+                                        DEBUG_LOGW(TAG, "PID %02X parameter %d has NULL name", pid, p + 1);
                                     }
                                 }
                             } else if (pid_info->params && pid_info->params[0].name) {
@@ -342,28 +357,34 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
                                 snprintf(pid_str, sizeof(pid_str), "%02X-%s", 
                                         pid, pid_info->params[0].name);
                                 ESP_LOGI(TAG, "PID %02X supported: %s", pid, pid_str);
+                                DEBUG_LOGI(TAG, "PID %02X supported: %s", pid, pid_str);
                                 cJSON_AddItemToArray(pid_array, cJSON_CreateString(pid_str));
                             } else {
                                 ESP_LOGW(TAG, "PID %02X has invalid or NULL parameters", pid);
+                                DEBUG_LOGW(TAG, "PID %02X has invalid or NULL parameters", pid);
                             }
                         }                        
                     }
                 }
             } else {
                 ESP_LOGW(TAG, "Response length too short: %lu", response->length);
+                DEBUG_LOGW(TAG, "Response length too short: %lu", response->length);
             }
         } else {
             ESP_LOGW(TAG, "No response received for PID support command: %s", pid_support_cmds[i]);
+            DEBUG_LOGW(TAG, "No response received for PID support command: %s", pid_support_cmds[i]);
         }
     }
 
     ESP_LOGI(TAG, "Adding PIDs to JSON object");
+    DEBUG_LOGI(TAG, "Adding PIDs to JSON object");
     cJSON_AddItemToObject(root, "std_pids", pid_array);
 
     // Convert to string and cleanup
     char *json_str = cJSON_PrintUnformatted(root);
     if (json_str) {
         ESP_LOGI(TAG, "JSON string created, length: %zu", strlen(json_str));
+    DEBUG_LOGI(TAG, "JSON string created, length: %zu", strlen(json_str));
         if (strlen(json_str) < available_pids_size) {
             strncpy(available_pids, json_str, available_pids_size - 1);
             available_pids[available_pids_size - 1] = '\0'; // Ensure null-termination
@@ -371,6 +392,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
             cJSON_Delete(root);
 
             ESP_LOGI(TAG, "Restoring protocol settings");
+            DEBUG_LOGI(TAG, "Restoring protocol settings");
             elm327_process_cmd((uint8_t*)restore_cmd, strlen(restore_cmd), &frame, &autopidQueue);
             while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS);
 
@@ -379,12 +401,15 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
             return ESP_OK;
         }
         ESP_LOGW(TAG, "JSON string too long for buffer");
+    DEBUG_LOGW(TAG, "JSON string too long for buffer");
         free(json_str);
     } else {
         ESP_LOGE(TAG, "Failed to create JSON string");
+    DEBUG_LOGE(TAG, "Failed to create JSON string");
     }
 
     ESP_LOGI(TAG, "Restoring protocol settings");
+    DEBUG_LOGI(TAG, "Restoring protocol settings");
     elm327_process_cmd((uint8_t*)restore_cmd, strlen(restore_cmd), &frame, &autopidQueue);
     while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS);
     
@@ -452,17 +477,20 @@ void autopid_update_values(void)
 {
     if (!all_pids || !all_pids->mutex || !autopid_values || !autopid_values_mutex) {
         ESP_LOGE(TAG, "Invalid pointers for updating autopid values");
+        DEBUG_LOGE(TAG, "Invalid pointers for updating autopid values");
         return;
     }
 
     // Take both mutexes to ensure thread safety
     if (xSemaphoreTake(all_pids->mutex, portMAX_DELAY) != pdTRUE) {
         ESP_LOGE(TAG, "Failed to take all_pids mutex");
+        DEBUG_LOGE(TAG, "Failed to take all_pids mutex");
         return;
     }
 
     if (xSemaphoreTake(autopid_values_mutex, portMAX_DELAY) != pdTRUE) {
         ESP_LOGE(TAG, "Failed to take autopid_values mutex");
+        DEBUG_LOGE(TAG, "Failed to take autopid_values mutex");
         xSemaphoreGive(all_pids->mutex);
         return;
     }
@@ -491,6 +519,8 @@ void autopid_update_values(void)
                     autopid_values[value_index].sensor_type = param->sensor_type;
                     ESP_LOGD(TAG, "Updated autopid_values[%lu]: %s = %.2f", 
                             value_index, param->name, param->value);
+                    DEBUG_LOGD(TAG, "Updated autopid_values[%lu]: %s = %.2f", 
+                value_index, param->name, param->value);
                 }
             }
             value_index++;
@@ -500,7 +530,8 @@ void autopid_update_values(void)
     xSemaphoreGive(autopid_values_mutex);
     xSemaphoreGive(all_pids->mutex);
     
-    ESP_LOGI(TAG, "Updated %lu autopid values from all_pids", value_index);
+    // ESP_LOGI(TAG, "Updated %lu autopid values from all_pids", value_index);
+    // DEBUG_LOGI(TAG, "Updated %lu autopid values from all_pids", value_index);
 }
 
 void autopid_request_data(void)
@@ -509,6 +540,7 @@ void autopid_request_data(void)
         xEventGroupSetBits(xautopid_event_group, AUTOPID_REQUEST_BIT);
     } else {
         ESP_LOGE(TAG, "autopid event group not initialized");
+        DEBUG_LOGE(TAG, "autopid event group not initialized");
     }
 }
 
@@ -519,6 +551,7 @@ char *autopid_data_read(void)
     
     if (!autopid_values || !autopid_values_mutex) {
         ESP_LOGE(TAG, "Invalid autopid_values or mutex");
+        DEBUG_LOGE(TAG, "Invalid autopid_values or mutex");
         return NULL;
     }
 
@@ -557,6 +590,7 @@ char *autopid_data_read(void)
 void autopid_data_publish(void) {
     if (!all_pids || !all_pids->mutex) {
         ESP_LOGE(TAG, "Invalid all_pids or mutex");
+        DEBUG_LOGE(TAG, "Invalid all_pids or mutex");
         return;
     }
 
@@ -585,6 +619,7 @@ void autopid_data_publish(void) {
                     {
                         mqtt_publish(all_pids->group_destination, json_str, 0, 0, 1);
                         ESP_LOGI(TAG, "Published to %s", all_pids->group_destination);
+                        DEBUG_LOGI(TAG, "Published to %s", all_pids->group_destination);
                     }else{
                         mqtt_publish(config_server_get_mqtt_rx_topic(), json_str, 0, 0, 1);
                     }
@@ -592,6 +627,7 @@ void autopid_data_publish(void) {
                 }
             } else {
                 ESP_LOGW(TAG, "No valid parameters found to publish");
+                DEBUG_LOGW(TAG, "No valid parameters found to publish");
             }
 
             cJSON_Delete(root);
@@ -619,12 +655,14 @@ char* autopid_get_config(void)
     // Check if all_pids and mutex are valid
     if (!all_pids || !all_pids->mutex) {
         ESP_LOGE(TAG, "Invalid all_pids or mutex");
+        DEBUG_LOGE(TAG, "Invalid all_pids or mutex");
         return NULL;
     }
 
     // Take mutex with timeout
     if (xSemaphoreTake(all_pids->mutex, portMAX_DELAY) != pdTRUE) {
         ESP_LOGE(TAG, "Failed to take mutex");
+        DEBUG_LOGE(TAG, "Failed to take mutex");
         return NULL;
     }
     
@@ -632,6 +670,7 @@ char* autopid_get_config(void)
     if (!parameters_object)
     {
         ESP_LOGE(TAG, "Failed to create JSON object");
+        DEBUG_LOGE(TAG, "Failed to create JSON object");
         return NULL;
     }
 
@@ -656,6 +695,7 @@ char* autopid_get_config(void)
             if (!parameter_details)
             {
                 ESP_LOGE(TAG, "Failed to create parameter JSON object");
+                DEBUG_LOGE(TAG, "Failed to create parameter JSON object");
                 continue;
             }
             
@@ -959,6 +999,7 @@ static void append_to_buffer(char *buffer, const char *new_data)
     else
     {
         ESP_LOGE(TAG, "Failed add data to buffer");
+    DEBUG_LOGE(TAG, "Failed add data to buffer");
     }
 }
 
@@ -968,6 +1009,7 @@ void autopid_parser(char *str, uint32_t len, QueueHandle_t *q)
     if (str != NULL && strlen(str) != 0)
     {
         ESP_LOGI(TAG, "%s", str);
+    DEBUG_LOGI(TAG, "%s", str);
 
         append_to_buffer(auto_pid_buf, str);
 
@@ -980,6 +1022,7 @@ void autopid_parser(char *str, uint32_t len, QueueHandle_t *q)
                 if (xQueueSend(autopidQueue, &response, pdMS_TO_TICKS(1000)) != pdPASS)
                 {
                     ESP_LOGE(TAG, "Failed to send to queue");
+                    DEBUG_LOGE(TAG, "Failed to send to queue");
                 }
             }
             else
@@ -987,9 +1030,11 @@ void autopid_parser(char *str, uint32_t len, QueueHandle_t *q)
                 sprintf((char*)response.data, "error");
                 response.length = strlen((char*)response.data);
                 ESP_LOGE(TAG, "Error response: %s", auto_pid_buf);
+                DEBUG_LOGE(TAG, "Error response: %s", auto_pid_buf);
                 if (xQueueSend(autopidQueue, &response, pdMS_TO_TICKS(1000)) != pdPASS)
                 {
                     ESP_LOGE(TAG, "Failed to send to queue");
+                    DEBUG_LOGE(TAG, "Failed to send to queue");
                 }
             }
             // Clear the buffer after parsing
@@ -1097,6 +1142,7 @@ static void autopid_task(void *pvParameters)
     wc_timer_t group_cycle_timer;
 
     ESP_LOGI(TAG, "Autopid Task Started");
+    DEBUG_LOGI(TAG, "Autopid Task Started");
     
     vTaskDelay(pdMS_TO_TICKS(100));
     send_commands(default_init, 50);
@@ -1130,16 +1176,20 @@ static void autopid_task(void *pvParameters)
     if(strcmp("enable", all_pids->autopid_polling) == 0)
     {
         ESP_LOGI(TAG, "Autopid polling enabled");
+    DEBUG_LOGI(TAG, "Autopid polling enabled");
         xEventGroupClearBits(xautopid_event_group, AUTOPID_POLLING_DISABLED_BIT);
     }
     else
     {
         ESP_LOGI(TAG, "Autopid polling disabled");
+    DEBUG_LOGI(TAG, "Autopid polling disabled");
         xEventGroupSetBits(xautopid_event_group, AUTOPID_POLLING_DISABLED_BIT);
     }
 
     ESP_LOGI(TAG, "Autopid Start loop");
+    DEBUG_LOGI(TAG, "Autopid Start loop");
     ESP_LOGI(TAG, "Total PIDs: %lu", all_pids->pid_count);
+    DEBUG_LOGI(TAG, "Total PIDs: %lu", all_pids->pid_count);
 
     while(1) 
     {
@@ -1183,6 +1233,8 @@ static void autopid_task(void *pvParameters)
                                 if(all_pids->custom_init && strlen(all_pids->custom_init) > 0) {
                                     ESP_LOGI(TAG, "Sending custom init: %s, length: %d", 
                                             all_pids->custom_init, strlen(all_pids->custom_init));
+                    DEBUG_LOGI(TAG, "Sending custom init: %s, length: %d", 
+                        all_pids->custom_init, strlen(all_pids->custom_init));
                                     send_commands(all_pids->custom_init, 2);
                                 }
                                 break;
@@ -1191,6 +1243,8 @@ static void autopid_task(void *pvParameters)
                                 if(all_pids->standard_init && strlen(all_pids->standard_init) > 0) {
                                     ESP_LOGI(TAG, "Sending standard init: %s, length: %d", 
                                             all_pids->standard_init, strlen(all_pids->standard_init));
+                    DEBUG_LOGI(TAG, "Sending standard init: %s, length: %d", 
+                        all_pids->standard_init, strlen(all_pids->standard_init));
                                     send_commands(all_pids->standard_init, 2);
                                 }
                                 break;
@@ -1199,6 +1253,8 @@ static void autopid_task(void *pvParameters)
                                 if(all_pids->specific_init && strlen(all_pids->specific_init) > 0) {
                                     ESP_LOGI(TAG, "Sending specific init: %s, length: %d", 
                                             all_pids->specific_init, strlen(all_pids->specific_init));
+                    DEBUG_LOGI(TAG, "Sending specific init: %s, length: %d", 
+                        all_pids->specific_init, strlen(all_pids->specific_init));
                                     send_commands(all_pids->specific_init, 2);
                                 }
                                 break;
@@ -1211,6 +1267,7 @@ static void autopid_task(void *pvParameters)
                     }
 
                     ESP_LOGI(TAG, "Processing parameter: %s", param->name);
+                    DEBUG_LOGI(TAG, "Processing parameter: %s", param->name);
                     // Reset timer with parameter period
                     wc_timer_set(&param->timer, param->period);
 
@@ -1227,16 +1284,19 @@ static void autopid_task(void *pvParameters)
                         }
 
                         ESP_LOGI(TAG, "Executing command: %s", curr_pid->cmd);
+                        DEBUG_LOGI(TAG, "Executing command: %s", curr_pid->cmd);
                         if(elm327_process_cmd((uint8_t*)curr_pid->cmd, 
                                             strlen(curr_pid->cmd), 
                                             &tx_msg, 
                                             &autopidQueue) == ESP_OK)
                         {
                             ESP_LOGI(TAG, "Command processed successfully");
+                            DEBUG_LOGI(TAG, "Command processed successfully");
                             
                             if(xQueueReceive(autopidQueue, &elm327_response, pdMS_TO_TICKS(1000)) == pdPASS)
                             {
                                 ESP_LOGI(TAG, "Response received, length: %lu", elm327_response.length);
+                                DEBUG_LOGI(TAG, "Response received, length: %lu", elm327_response.length);
                                 ESP_LOG_BUFFER_HEXDUMP(TAG, elm327_response.data, 1, ESP_LOG_INFO);
                                 if(strstr((char*)elm327_response.data, "error") == NULL)
                                 {
