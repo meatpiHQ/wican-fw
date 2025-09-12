@@ -28,7 +28,7 @@
     }
   },
   "BATT_TEMP": {
-    "description": "Primary Battery Temprature",
+    "description": "Primary Battery Temperature",
     "settings": {
       "unit": "°C",
       "class": "temperature",
@@ -37,7 +37,7 @@
     }
   },
   "CHARGER_CONNECTED": {
-    "decription": "Is the EV charger connected",
+    "description": "Is the EV charger connected",
     "settings": {
       "unit": "",
       "class": "plug",
@@ -61,7 +61,7 @@
     }
   },
   "COOLANT_TMP": {
-    "description": "Coolant temprature",
+    "description": "Coolant temperature",
     "settings": {
       "unit": "°C",
       "class": "temperature"
@@ -117,7 +117,7 @@
     }
   },
   "HV_AV": {
-    "description": "High Voltage Battery Power Avaliable",
+    "description": "High Voltage Battery Power Available",
     "settings": {
       "unit": "kW",
       "class": "battery"
@@ -273,14 +273,14 @@
     }
   },
   "HV_W": {
-    "descrition": "High Voltage Power in watts",
+    "description": "High Voltage Power in watts",
     "settings": {
       "unit": "W",
       "class": "power"
     }
   },
   "INTAKE_AIR_TMP": {
-    "description": "Air intake temprature",
+    "description": "Air intake temperature",
     "settings": {
       "unit": "°C",
       "class": "temperature"
@@ -492,7 +492,7 @@
     }
   },
   "TMP_A": {
-    "description": "Ambient Temprature",
+    "description": "Ambient Temperature",
     "settings": {
       "unit": "°C",
       "class": "none"
