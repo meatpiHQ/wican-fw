@@ -56,17 +56,15 @@ jobs:
           name: vehicle_profiles.json
           path: ${{ github.workspace }}/vehicle_profiles.json # Relative to the working-directory
 
-      - name: Comment on PR with testing instructions
+      - name: Create Comment
         if: success()
-        uses: actions/github-script@v7
         env:
           link: '${{steps.upload.outputs.artifact-url}}'
-        with:
-          script: |
-            const prNumber = context.payload.pull_request.number;
-            const message = `✅ Vehicle profiles merged successfully!\n\nPlease download and test the updated [vehicle_profiles.json](${process.env.link}).`;
-            await github.rest.issues.createComment({
-              ...context.repo,
-              issue_number: prNumber,
-              body: message
-            });
+        run: |
+          # Use GitHub API to create a comment on the PR
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          COMMENT=`✅ Vehicle profiles merged successfully!\n\nPlease download and test the updated [vehicle_profiles.json](${process.env.link}).`;
+          GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+          COMMENT_URL="https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments"
+      
+          curl -s -H "Authorization: token ${GITHUB_TOKEN}" -X POST $COMMENT_URL -d "{\"body\":\"$COMMENT\"}"
