@@ -549,11 +549,11 @@ void safe_mode_check(void)
 		vTaskDelay(pdMS_TO_TICKS(100));
 	}
 }
-#include "vpn_manager.h"
+
 void app_main(void)
 {
 	void* internal_buf = NULL;
-	// internal_buf = heap_caps_malloc(66 * 1024, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+	internal_buf = heap_caps_malloc(75 * 1024, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 	dev_status_init();
 	dev_status_set_bits(DEV_AWAKE_BIT);
 	dev_status_clear_bits(DEV_SLEEP_BIT);
@@ -1129,10 +1129,7 @@ void app_main(void)
     #endif
 
 	cmdline_init();
-	if(internal_buf != NULL)
-	{
-		free(internal_buf);
-	}
+
 	
 	// Initialize time synchronization task
 	sync_sys_time_init();
@@ -1140,6 +1137,9 @@ void app_main(void)
 	// vTaskDelay(pdMS_TO_TICKS(20000));
 	// vpn_manager_request_test_hardcoded();
 	vpn_manager_set_enabled(1);
-
+	if(internal_buf != NULL)
+	{
+		free(internal_buf);
+	}
 }
 
