@@ -32,6 +32,11 @@ esp_err_t vpn_config_load(vpn_config_t *config);
 esp_err_t vpn_config_parse_wg(const char *config_text, vpn_wireguard_config_t *config);
 esp_err_t vpn_config_generate_wg_keys(char *public_key, size_t public_key_size);
 
+// Preload /vpn_config.json into PSRAM once and reuse it (avoids reopening file)
+esp_err_t vpn_config_preload(void);
+// Get a read-only pointer to the cached JSON (NULL if not loaded)
+const char *vpn_config_get_json_ptr(size_t *out_len);
+
 #ifdef __cplusplus
 }
 #endif

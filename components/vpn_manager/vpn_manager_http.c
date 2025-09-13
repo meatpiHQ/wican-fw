@@ -292,7 +292,7 @@ static esp_err_t vpn_store_config_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
 
-    buf = malloc(buf_size + 1);
+    buf = heap_caps_malloc(buf_size + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!buf)
     {
         ESP_LOGE(TAG, "Failed to allocate memory");

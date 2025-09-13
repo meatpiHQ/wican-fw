@@ -27,8 +27,83 @@
 #include <ctype.h>
 #include "include/vpn_manager.h"
 #include "filesystem.h"
+#include <esp_heap_caps.h>
 
 static const char *TAG_CFG = "VPN_CFG";
+
+// PSRAM-backed cache of /vpn_config.json
+static char *s_vpn_cfg_json = NULL;
+static size_t s_vpn_cfg_json_len = 0; // excludes NUL
+
+static esp_err_t vpn_config_cache_set(const char *data, size_t len)
+{
+    // Allocate in PSRAM and copy; always NUL-terminate for safety
+    char *buf = (char *)heap_caps_malloc(len + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!buf)
+    {
+        return ESP_ERR_NO_MEM;
+    }
+    memcpy(buf, data, len);
+    buf[len] = '\0';
+    if (s_vpn_cfg_json)
+    {
+        heap_caps_free(s_vpn_cfg_json);
+    }
+    s_vpn_cfg_json = buf;
+    s_vpn_cfg_json_len = len;
+    return ESP_OK;
+}
+
+esp_err_t vpn_config_preload(void)
+{
+    // If already cached, nothing to do
+    if (s_vpn_cfg_json)
+    {
+        return ESP_OK;
+    }
+    FILE *f = fopen(FS_MOUNT_POINT "/vpn_config.json", "r");
+    if (!f)
+    {
+        return ESP_ERR_NOT_FOUND;
+    }
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (size <= 0)
+    {
+        fclose(f);
+        return ESP_ERR_INVALID_SIZE;
+    }
+    char *tmp = (char *)malloc((size_t)size);
+    if (!tmp)
+    {
+        fclose(f);
+        return ESP_ERR_NO_MEM;
+    }
+    size_t r = fread(tmp, 1, (size_t)size, f);
+    fclose(f);
+    if (r == 0)
+    {
+        free(tmp);
+        return ESP_FAIL;
+    }
+    esp_err_t err = vpn_config_cache_set(tmp, r);
+    free(tmp);
+    if (err == ESP_OK)
+    {
+        ESP_LOGI(TAG_CFG, "vpn_config.json preloaded into PSRAM (%u bytes)", (unsigned)s_vpn_cfg_json_len);
+    }
+    return err;
+}
+
+const char *vpn_config_get_json_ptr(size_t *out_len)
+{
+    if (out_len)
+    {
+        *out_len = s_vpn_cfg_json_len;
+    }
+    return s_vpn_cfg_json;
+}
 
 static void trim_str(char *s)
 {
@@ -138,6 +213,11 @@ esp_err_t vpn_config_save(const vpn_config_t *config)
     size_t len = strlen(json);
     size_t w = fwrite(json, 1, len, f);
     fclose(f);
+    // Update PSRAM cache on successful write
+    if (w > 0)
+    {
+        vpn_config_cache_set(json, len);
+    }
     free(json);
     return (w == 0) ? ESP_FAIL : ESP_OK;
 }
@@ -148,30 +228,21 @@ esp_err_t vpn_config_load(vpn_config_t *config)
     {
         return ESP_ERR_INVALID_ARG;
     }
-    FILE *f = fopen(FS_MOUNT_POINT "/vpn_config.json", "r");
-    if (!f)
+    // Prefer cached JSON if available; otherwise try to preload (and then use cache)
+    const char *json_ptr = s_vpn_cfg_json;
+    if (!json_ptr)
+    {
+        esp_err_t pre = vpn_config_preload();
+        if (pre == ESP_OK)
+        {
+            json_ptr = s_vpn_cfg_json;
+        }
+    }
+    if (!json_ptr)
     {
         return ESP_ERR_NOT_FOUND;
     }
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    if (size <= 0)
-    {
-        fclose(f);
-        return ESP_ERR_INVALID_SIZE;
-    }
-    char *buf = malloc(size + 1);
-    if (!buf)
-    {
-        fclose(f);
-        return ESP_ERR_NO_MEM;
-    }
-    size_t r = fread(buf, 1, size, f);
-    fclose(f);
-    buf[r] = '\0';
-    cJSON *root = cJSON_Parse(buf);
-    free(buf);
+    cJSON *root = cJSON_Parse(json_ptr);
     if (!root)
     {
         return ESP_ERR_INVALID_ARG;

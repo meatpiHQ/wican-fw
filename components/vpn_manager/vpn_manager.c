@@ -28,6 +28,7 @@
 #include <freertos/task.h>
 #include <freertos/timers.h>
 #include <esp_wireguard.h>
+#include <esp_heap_caps.h>
 #include <cJSON.h>
 #include "filesystem.h"
 #include "vpn_wireguard.h"
@@ -65,6 +66,12 @@ static QueueHandle_t s_vpn_cmd_q = NULL;
 static uint32_t s_backoff_ms = 0;
 static uint32_t s_backoff_cap_ms = 60000; // 60s cap
 static uint32_t s_backoff_base_ms = 2000; // 2s start
+
+// Use PSRAM for VPN task stack when available
+#define VPN_TASK_STACK_WORDS  (4096)
+#define VPN_TASK_PRIORITY     (5)
+static StackType_t *s_vpn_task_stack = NULL;   // allocated from PSRAM
+static StaticTask_t s_vpn_task_tcb;            // kept internal (BSS)
 
 static void vpn_task_fn(void *arg);
 static void vpn_backoff_reset(void)
@@ -124,19 +131,55 @@ esp_err_t vpn_manager_init(void)
     }
     if (!s_vpn_task)
     {
-        BaseType_t ok = xTaskCreate(vpn_task_fn, "vpn_task", 4096, NULL, 5, &s_vpn_task);
-        if (ok != pdPASS)
+        // Try to allocate the task stack from PSRAM
+        size_t stack_bytes = VPN_TASK_STACK_WORDS * sizeof(StackType_t);
+        s_vpn_task_stack = (StackType_t *)heap_caps_malloc(stack_bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (s_vpn_task_stack)
         {
-            ESP_LOGE(TAG, "Failed to create VPN task");
+            ESP_LOGI(TAG, "Creating VPN task with PSRAM stack (%u bytes)", (unsigned)stack_bytes);
+            s_vpn_task = xTaskCreateStatic(
+                vpn_task_fn,
+                "vpn_task",
+                VPN_TASK_STACK_WORDS,
+                NULL,
+                VPN_TASK_PRIORITY,
+                s_vpn_task_stack,
+                &s_vpn_task_tcb);
+            if (s_vpn_task == NULL)
+            {
+                ESP_LOGE(TAG, "xTaskCreateStatic failed even with PSRAM stack");
+                // Fallback to normal dynamic create (internal heap)
+                free(s_vpn_task_stack);
+                s_vpn_task_stack = NULL;
+            }
+        }
+
+        if (!s_vpn_task)
+        {
+            ESP_LOGE(TAG, "No PSRAM or failed to allocate PSRAM stack, creating VPN task with internal heap");
             return ESP_ERR_NO_MEM;
         }
     }
 
+        // Load config at startup
+    vpn_config_t loaded = {0};
+    if (vpn_manager_load_config(&loaded) == ESP_OK)
+    {
+        memcpy(&current_config, &loaded, sizeof(current_config));
+        ESP_LOGI(TAG, "VPN config loaded at task start");
+    }
     // Initialize current status
     current_status = VPN_STATUS_DISABLED;
     xEventGroupSetBits(vpn_event_group, VPN_DISCONNECTED_BIT);
 
-    // Load configuration from filesystem
+    // Preload JSON config into PSRAM once (avoids reopening file repeatedly)
+    esp_err_t pre = vpn_config_preload();
+    if (pre != ESP_OK)
+    {
+        ESP_LOGW(TAG, "vpn_config_preload failed: %s", esp_err_to_name(pre));
+    }
+
+    // Load configuration from (cached) JSON
     vpn_config_t loaded_config = {0};
     if (vpn_manager_load_config(&loaded_config) == ESP_OK)
     {
@@ -474,13 +517,6 @@ static void vpn_task_fn(void *arg)
 {
     (void)arg;
     bool test_once = false;
-    // Load config at startup
-    vpn_config_t loaded = {0};
-    if (vpn_manager_load_config(&loaded) == ESP_OK)
-    {
-        memcpy(&current_config, &loaded, sizeof(current_config));
-        ESP_LOGI(TAG, "VPN config loaded at task start");
-    }
 
     const TickType_t tick = pdMS_TO_TICKS(200);
     for (;;)
