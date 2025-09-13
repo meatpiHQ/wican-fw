@@ -1,4 +1,4 @@
- /* This file is part of the WiCAN project.
+/* This file is part of the WiCAN project.
  *
  * Copyright (C) 2022  Meatpi Electronics.
  * Written by Ali Slim <ali@meatpi.com>
@@ -24,3 +24,4 @@
 
 void filesystem_init(void);
 void filesystem_delete_config_files(void);
+void filesystem_delete_all(void); // delete all files and folders under FS_MOUNT_POINT
