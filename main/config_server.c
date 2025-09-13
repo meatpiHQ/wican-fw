@@ -142,6 +142,8 @@ extern const unsigned char dashboard_live_js_start[] asm("_binary_dashboard_live
 extern const unsigned char dashboard_live_js_end[] asm("_binary_dashboard_live_js_end");
 extern const unsigned char lucide_icons_js_start[] asm("_binary_lucide_icons_js_start");
 extern const unsigned char lucide_icons_js_end[] asm("_binary_lucide_icons_js_end");
+extern const unsigned char main_js_start[] asm("_binary_main_js_start");
+extern const unsigned char main_js_end[] asm("_binary_main_js_end");
 
 typedef struct {
     const char *uri;
@@ -158,6 +160,7 @@ static const file_lookup_t file_lookup[] = {
     {"/dashboard.js", "application/javascript", dashboard_js_start, dashboard_js_end, false, NULL, NULL},
 	{"/dashboard_live.js", "application/javascript", dashboard_live_js_start, dashboard_live_js_end, false, NULL, NULL},
 	{"/lucide_icons.js", "application/javascript", lucide_icons_js_start, lucide_icons_js_end, false, NULL, NULL},
+	{"/main.js", "application/javascript", main_js_start, main_js_end, false, NULL, NULL},
 	{"/chartjs-adapter-moment.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/chartjs-adapter-moment.min.js", "https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.0/dist/chartjs-adapter-moment.min.js"},
 	{"/jquery-3.6.0.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/jquery-3.6.0.min.js", "https://code.jquery.com/jquery-3.6.0.min.js"},
 	{"/bootstrap.bundle.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/bootstrap.bundle.min.js", "https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"},
