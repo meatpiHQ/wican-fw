@@ -45,6 +45,16 @@ static wifi_mgr_config_t wifi_config;
 static wifi_mgr_callbacks_t user_callbacks = {0};
 static QueueHandle_t sta_ip_queue = NULL;
 static QueueHandle_t ap_stations_queue = NULL;
+// Ban/blacklist parameters for SSIDs that repeatedly fail authentication
+#ifndef WIFI_MGR_AUTH_FAIL_THRESHOLD
+#define WIFI_MGR_AUTH_FAIL_THRESHOLD 3
+#endif
+#ifndef WIFI_MGR_BAN_DURATION_MS
+#define WIFI_MGR_BAN_DURATION_MS 600000 // 10 minutes
+#endif
+#ifndef WIFI_MGR_MAX_TRACKED_SSIDS
+#define WIFI_MGR_MAX_TRACKED_SSIDS 12 // primary + up to 11 fallbacks
+#endif
 
 // Internal status structure (not exposed to external modules)
 typedef struct {
@@ -56,6 +66,7 @@ typedef struct {
     char sta_ip[16];
     int sta_retry_count;
     uint16_t ap_connected_stations;
+    char last_attempted_ssid[33];
 } wifi_mgr_status_t;
 
 static wifi_mgr_status_t wifi_status = {0};
@@ -65,6 +76,103 @@ static int s_select_seq_cursor = -1;
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
 static void wifi_reconnect_task(void* pvParameters);
 static wifi_country_t country_01 = {.cc = "01", .schan = 1, .nchan = 14, .policy = WIFI_COUNTRY_POLICY_AUTO};
+
+// Per-SSID transient failure state
+typedef struct {
+    char ssid[33];
+    uint8_t auth_fail_count;
+    TickType_t banned_until; // absolute tick when ban expires; 0 => not banned
+} ssid_fail_state_t;
+
+static ssid_fail_state_t s_fail_states[WIFI_MGR_MAX_TRACKED_SSIDS] = {0};
+
+static ssid_fail_state_t* wifi_mgr_fs_find_or_create(const char* ssid) {
+    if (!ssid || !ssid[0]) return NULL;
+    // Look for existing
+    for (int i = 0; i < WIFI_MGR_MAX_TRACKED_SSIDS; ++i) {
+        if (s_fail_states[i].ssid[0] && strcmp(s_fail_states[i].ssid, ssid) == 0) {
+            return &s_fail_states[i];
+        }
+    }
+    // Find empty slot
+    for (int i = 0; i < WIFI_MGR_MAX_TRACKED_SSIDS; ++i) {
+        if (s_fail_states[i].ssid[0] == '\0') {
+            strncpy(s_fail_states[i].ssid, ssid, sizeof(s_fail_states[i].ssid) - 1);
+            s_fail_states[i].ssid[sizeof(s_fail_states[i].ssid) - 1] = '\0';
+            s_fail_states[i].auth_fail_count = 0;
+            s_fail_states[i].banned_until = 0;
+            return &s_fail_states[i];
+        }
+    }
+    return NULL; // no slot
+}
+
+static void wifi_mgr_fs_clear(const char* ssid) {
+    if (!ssid || !ssid[0]) return;
+    for (int i = 0; i < WIFI_MGR_MAX_TRACKED_SSIDS; ++i) {
+        if (s_fail_states[i].ssid[0] && strcmp(s_fail_states[i].ssid, ssid) == 0) {
+            s_fail_states[i].auth_fail_count = 0;
+            s_fail_states[i].banned_until = 0;
+            return;
+        }
+    }
+}
+
+static bool wifi_mgr_fs_should_skip(const char* ssid) {
+    if (!ssid || !ssid[0]) return false;
+    TickType_t now = xTaskGetTickCount();
+    for (int i = 0; i < WIFI_MGR_MAX_TRACKED_SSIDS; ++i) {
+        if (s_fail_states[i].ssid[0] && strcmp(s_fail_states[i].ssid, ssid) == 0) {
+            if (s_fail_states[i].banned_until != 0) {
+                if ((int32_t)(s_fail_states[i].banned_until - now) > 0) {
+                    return true; // still banned
+                } else {
+                    // expired
+                    s_fail_states[i].banned_until = 0;
+                }
+            }
+            return false;
+        }
+    }
+    return false;
+}
+
+static void wifi_mgr_fs_on_auth_failure(const char* ssid) {
+    ssid_fail_state_t* st = wifi_mgr_fs_find_or_create(ssid);
+    if (!st) return;
+    if (st->banned_until) return; // already banned, no need to count more
+    st->auth_fail_count++;
+    if (st->auth_fail_count >= WIFI_MGR_AUTH_FAIL_THRESHOLD) {
+        st->auth_fail_count = 0;
+        st->banned_until = xTaskGetTickCount() + pdMS_TO_TICKS(WIFI_MGR_BAN_DURATION_MS);
+        ESP_LOGW(TAG, "Banning SSID '%s' for %d ms due to repeated auth failures", ssid, WIFI_MGR_BAN_DURATION_MS);
+    } else {
+        ESP_LOGW(TAG, "Auth failure %u/%u for SSID '%s'", st->auth_fail_count, WIFI_MGR_AUTH_FAIL_THRESHOLD, ssid);
+    }
+}
+
+static void wifi_mgr_update_last_attempted_from_current_config(void) {
+    wifi_config_t cur = {0};
+    if (esp_wifi_get_config(WIFI_IF_STA, &cur) == ESP_OK) {
+        snprintf(wifi_status.last_attempted_ssid, sizeof(wifi_status.last_attempted_ssid), "%s", (char*)cur.sta.ssid);
+    } else {
+        wifi_status.last_attempted_ssid[0] = '\0';
+    }
+}
+
+static bool wifi_mgr_reason_is_auth_related(uint8_t reason) {
+    // Conservative set of reasons that commonly indicate bad credentials/handshake issues
+    switch (reason) {
+        case WIFI_REASON_AUTH_EXPIRE:
+        case WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT:
+        case WIFI_REASON_INVALID_PMKID:
+        case WIFI_REASON_MIC_FAILURE:
+        case WIFI_REASON_AUTH_FAIL:
+            return true;
+        default:
+            return false;
+    }
+}
 
 // Helper: check if an SSID exists in the scanned AP list
 static bool wifi_mgr_ssid_present(const wifi_ap_record_t* ap_records, uint16_t ap_count, const char* ssid) {
@@ -140,31 +248,70 @@ static void wifi_mgr_scan_select_and_connect(void) {
         // Sequential attempt: rotate over primary and fallbacks by index
         int total = (wifi_config.sta_ssid[0] ? 1 : 0) + wifi_config.fallback_count;
         if (total <= 0) {
+            wifi_mgr_update_last_attempted_from_current_config();
             esp_wifi_connect();
             return;
         }
-        s_select_seq_cursor = (s_select_seq_cursor + 1) % total;
-        const char* chosen_ssid = NULL;
-        const char* chosen_pass = NULL;
-        wifi_auth_mode_t chosen_auth = WIFI_AUTH_WPA2_PSK;
-        if (wifi_config.sta_ssid[0] && s_select_seq_cursor == 0) {
-            chosen_ssid = wifi_config.sta_ssid;
-            chosen_pass = wifi_config.sta_password;
-            chosen_auth = wifi_config.sta_auth_mode;
-            ESP_LOGI(TAG, "Sequential connect (no scan): primary SSID: %s", chosen_ssid);
-        } else {
-            int fb_index = wifi_config.sta_ssid[0] ? (s_select_seq_cursor - 1) : s_select_seq_cursor;
-            chosen_ssid = wifi_config.fallbacks[fb_index].ssid;
-            chosen_pass = wifi_config.fallbacks[fb_index].password;
-            chosen_auth = wifi_config.fallbacks[fb_index].auth_mode;
-            ESP_LOGI(TAG, "Sequential connect (no scan): fallback[%d] SSID: %s", fb_index, chosen_ssid);
-        }
-        if (chosen_ssid) {
-            if (wifi_mgr_set_sta_config(chosen_ssid, chosen_pass ? chosen_pass : "", chosen_auth) != ESP_OK) {
-                ESP_LOGW(TAG, "Failed to set STA config for sequential connect; using current");
+        for (int i = 0; i < total; ++i) {
+            s_select_seq_cursor = (s_select_seq_cursor + 1) % total;
+            const char* chosen_ssid = NULL;
+            const char* chosen_pass = NULL;
+            wifi_auth_mode_t chosen_auth = WIFI_AUTH_WPA2_PSK;
+            int fb_index = -1;
+            if (wifi_config.sta_ssid[0] && s_select_seq_cursor == 0) {
+                chosen_ssid = wifi_config.sta_ssid;
+                chosen_pass = wifi_config.sta_password;
+                chosen_auth = wifi_config.sta_auth_mode;
+                ESP_LOGI(TAG, "Sequential connect (no scan): primary SSID: %s", chosen_ssid);
+            } else {
+                fb_index = wifi_config.sta_ssid[0] ? (s_select_seq_cursor - 1) : s_select_seq_cursor;
+                chosen_ssid = wifi_config.fallbacks[fb_index].ssid;
+                chosen_pass = wifi_config.fallbacks[fb_index].password;
+                chosen_auth = wifi_config.fallbacks[fb_index].auth_mode;
+                ESP_LOGI(TAG, "Sequential connect (no scan): fallback[%d] SSID: %s", fb_index, chosen_ssid);
+            }
+            if (chosen_ssid && wifi_mgr_fs_should_skip(chosen_ssid)) {
+                ESP_LOGW(TAG, "Skipping banned SSID '%s' in no-scan path", chosen_ssid);
+                continue;
+            }
+            if (chosen_ssid) {
+                if (wifi_mgr_set_sta_config(chosen_ssid, chosen_pass ? chosen_pass : "", chosen_auth) != ESP_OK) {
+                    ESP_LOGW(TAG, "Failed to set STA config for sequential connect; using current");
+                }
+                snprintf(wifi_status.last_attempted_ssid, sizeof(wifi_status.last_attempted_ssid), "%s", chosen_ssid);
+                esp_wifi_connect();
+                return;
             }
         }
-        esp_wifi_connect();
+        // No unbanned candidates; attempt next candidate ignoring ban
+        for (int i = 0; i < total; ++i) {
+            s_select_seq_cursor = (s_select_seq_cursor + 1) % total;
+            const char* chosen_ssid = NULL;
+            const char* chosen_pass = NULL;
+            wifi_auth_mode_t chosen_auth = WIFI_AUTH_WPA2_PSK;
+            int fb_index = -1;
+            if (wifi_config.sta_ssid[0] && s_select_seq_cursor == 0) {
+                chosen_ssid = wifi_config.sta_ssid;
+                chosen_pass = wifi_config.sta_password;
+                chosen_auth = wifi_config.sta_auth_mode;
+                ESP_LOGW(TAG, "No unbanned SSID; retrying primary '%s' despite ban", chosen_ssid);
+            } else {
+                fb_index = wifi_config.sta_ssid[0] ? (s_select_seq_cursor - 1) : s_select_seq_cursor;
+                chosen_ssid = wifi_config.fallbacks[fb_index].ssid;
+                chosen_pass = wifi_config.fallbacks[fb_index].password;
+                chosen_auth = wifi_config.fallbacks[fb_index].auth_mode;
+                ESP_LOGW(TAG, "No unbanned SSID; retrying fallback[%d] '%s' despite ban", fb_index, chosen_ssid);
+            }
+            if (chosen_ssid) {
+                if (wifi_mgr_set_sta_config(chosen_ssid, chosen_pass ? chosen_pass : "", chosen_auth) != ESP_OK) {
+                    ESP_LOGW(TAG, "Failed to set STA config for sequential connect; using current");
+                }
+                snprintf(wifi_status.last_attempted_ssid, sizeof(wifi_status.last_attempted_ssid), "%s", chosen_ssid);
+                esp_wifi_connect();
+                return;
+            }
+        }
+        ESP_LOGW(TAG, "No candidates available to connect in no-scan path");
         return;
     }
 
@@ -208,20 +355,46 @@ static void wifi_mgr_scan_select_and_connect(void) {
     wifi_auth_mode_t chosen_auth = wifi_config.sta_auth_mode;
 
     // Prefer primary if present
-    if (wifi_mgr_ssid_present(ap_records, ap_count, wifi_config.sta_ssid)) {
+    if (wifi_mgr_ssid_present(ap_records, ap_count, wifi_config.sta_ssid) && !wifi_mgr_fs_should_skip(wifi_config.sta_ssid)) {
         chosen_ssid = wifi_config.sta_ssid;
         chosen_pass = wifi_config.sta_password;
         chosen_auth = wifi_config.sta_auth_mode;
         ESP_LOGI(TAG, "Selected primary SSID: %s", chosen_ssid);
     } else {
+        if (wifi_mgr_ssid_present(ap_records, ap_count, wifi_config.sta_ssid) && wifi_mgr_fs_should_skip(wifi_config.sta_ssid)) {
+            ESP_LOGW(TAG, "Primary SSID '%s' is banned currently; will try fallbacks", wifi_config.sta_ssid);
+        }
         // Otherwise pick first available fallback by priority
         for (uint8_t i = 0; i < wifi_config.fallback_count; ++i) {
             if (wifi_mgr_ssid_present(ap_records, ap_count, wifi_config.fallbacks[i].ssid)) {
+                if (wifi_mgr_fs_should_skip(wifi_config.fallbacks[i].ssid)) {
+                    ESP_LOGW(TAG, "Skipping banned fallback[%u] SSID: %s", i, wifi_config.fallbacks[i].ssid);
+                    continue;
+                }
                 chosen_ssid = wifi_config.fallbacks[i].ssid;
                 chosen_pass = wifi_config.fallbacks[i].password;
                 chosen_auth = wifi_config.fallbacks[i].auth_mode;
                 ESP_LOGI(TAG, "Selected fallback[%u] SSID: %s", i, chosen_ssid);
                 break;
+            }
+        }
+        // If still none chosen, allow banned choice: prefer primary if present, else first present fallback
+        if (!chosen_ssid) {
+            if (wifi_mgr_ssid_present(ap_records, ap_count, wifi_config.sta_ssid)) {
+                chosen_ssid = wifi_config.sta_ssid;
+                chosen_pass = wifi_config.sta_password;
+                chosen_auth = wifi_config.sta_auth_mode;
+                ESP_LOGW(TAG, "All candidates banned; selecting primary '%s' anyway", chosen_ssid);
+            } else {
+                for (uint8_t i = 0; i < wifi_config.fallback_count; ++i) {
+                    if (wifi_mgr_ssid_present(ap_records, ap_count, wifi_config.fallbacks[i].ssid)) {
+                        chosen_ssid = wifi_config.fallbacks[i].ssid;
+                        chosen_pass = wifi_config.fallbacks[i].password;
+                        chosen_auth = wifi_config.fallbacks[i].auth_mode;
+                        ESP_LOGW(TAG, "All candidates banned; selecting fallback[%u] '%s' anyway", i, chosen_ssid);
+                        break;
+                    }
+                }
             }
         }
     }
@@ -230,13 +403,20 @@ static void wifi_mgr_scan_select_and_connect(void) {
         // Update running STA config and connect
         if (wifi_mgr_set_sta_config(chosen_ssid, chosen_pass ? chosen_pass : "", chosen_auth) != ESP_OK) {
             ESP_LOGW(TAG, "Failed to set selected STA config; connecting with current config");
+            wifi_mgr_update_last_attempted_from_current_config();
             esp_wifi_connect();
         } else {
+            snprintf(wifi_status.last_attempted_ssid, sizeof(wifi_status.last_attempted_ssid), "%s", chosen_ssid);
             esp_wifi_connect();
         }
     } else {
-        ESP_LOGI(TAG, "No preferred networks present; connecting with current STA config");
-        esp_wifi_connect();
+        ESP_LOGI(TAG, "No preferred networks present; connecting with current STA config if any");
+        wifi_mgr_update_last_attempted_from_current_config();
+        if (wifi_status.last_attempted_ssid[0]) {
+            esp_wifi_connect();
+        } else {
+            ESP_LOGW(TAG, "Current STA config SSID is empty; deferring connect");
+        }
     }
 
     free(ap_records);
@@ -757,7 +937,7 @@ esp_err_t wifi_mgr_sta_connect(void) {
     if (!wifi_status.enabled) {
         return ESP_ERR_INVALID_STATE;
     }
-    
+    wifi_mgr_update_last_attempted_from_current_config();
     return esp_wifi_connect();
 }
 
@@ -1044,6 +1224,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                     if (wifi_config.fallback_count > 0) {
                         wifi_mgr_scan_select_and_connect();
                     } else {
+                        wifi_mgr_update_last_attempted_from_current_config();
                         esp_wifi_connect();
                     }
                 }
@@ -1063,6 +1244,14 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                 xEventGroupClearBits(wifi_event_group, WIFI_CONNECTED_BIT | WIFI_STA_GOT_IP_BIT);
                 xEventGroupSetBits(wifi_event_group, WIFI_DISCONNECTED_BIT);
                 dev_status_clear_sta_connected();
+
+                if (event_data) {
+                    wifi_event_sta_disconnected_t* e = (wifi_event_sta_disconnected_t*)event_data;
+                    ESP_LOGW(TAG, "Disconnect reason: %d, last SSID: '%s'", e->reason, wifi_status.last_attempted_ssid);
+                    if (wifi_status.last_attempted_ssid[0] && wifi_mgr_reason_is_auth_related(e->reason)) {
+                        wifi_mgr_fs_on_auth_failure(wifi_status.last_attempted_ssid);
+                    }
+                }
                 
                 if (user_callbacks.sta_disconnected) {
                     user_callbacks.sta_disconnected();
@@ -1140,6 +1329,10 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         snprintf(wifi_status.sta_ip, sizeof(wifi_status.sta_ip), IPSTR, IP2STR(&event->ip_info.ip));
         // Update queue
         if (sta_ip_queue) xQueueOverwrite(sta_ip_queue, wifi_status.sta_ip);
+        // Clear failure/bans for the successful SSID
+        if (wifi_status.last_attempted_ssid[0]) {
+            wifi_mgr_fs_clear(wifi_status.last_attempted_ssid);
+        }
         
         xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT | WIFI_STA_GOT_IP_BIT);
         xEventGroupClearBits(wifi_event_group, WIFI_DISCONNECTED_BIT);
@@ -1272,7 +1465,13 @@ static void wifi_reconnect_task(void* pvParameters) {
                 wifi_mgr_scan_select_and_connect();
                 ret = ESP_OK; // function itself triggers connect and logs
             } else {
-                ret = esp_wifi_connect();
+                wifi_mgr_update_last_attempted_from_current_config();
+                if (wifi_status.last_attempted_ssid[0] && wifi_mgr_fs_should_skip(wifi_status.last_attempted_ssid)) {
+                    ESP_LOGW(TAG, "Current SSID '%s' is banned; deferring reconnect", wifi_status.last_attempted_ssid);
+                    ret = ESP_OK;
+                } else {
+                    ret = esp_wifi_connect();
+                }
             }
             if (ret != ESP_OK) {
                 ESP_LOGE(TAG, "WiFi connect failed: %s", esp_err_to_name(ret));
