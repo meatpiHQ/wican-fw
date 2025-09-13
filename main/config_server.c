@@ -87,6 +87,7 @@
 #include "obd2_standard_pids.h"
 #include "wifi_mgr.h"
 #include "cert_manager.h"
+#include "vpn_manager.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
@@ -206,7 +207,7 @@ const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"st
 										\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\
 										\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\
 										\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\
-										\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\",\"mqtt_security\":\"none\",\"mqtt_cert_set\": \"default\",\"mqtt_skip_cn\":\"disable\"\
+										\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\",\"mqtt_security\":\"none\",\"mqtt_cert_set\": \"default\",\"mqtt_skip_cn\":\"disable\",\
 										\"logger_status\":\"disable\",\"log_filesystem\":\"littlefs\",\"log_storage\":\"sdcard\",\"log_period\":\"10\"}";
 
 // const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\", \"ap_auto_disable\": \"disable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
@@ -1568,6 +1569,51 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	{
 		cJSON_AddStringToObject(root, "ecu_status", "offline");
 	}
+
+	// Add VPN status information
+	vpn_status_t vpn_status = vpn_manager_get_status();
+	const char *vpn_status_str;
+	switch (vpn_status) 
+	{
+		case VPN_STATUS_DISABLED:
+			vpn_status_str = "disabled";
+			break;
+		case VPN_STATUS_DISCONNECTED:
+			vpn_status_str = "disconnected";
+			break;
+		case VPN_STATUS_CONNECTING:
+			vpn_status_str = "connecting";
+			break;
+		case VPN_STATUS_CONNECTED:
+			vpn_status_str = "connected";
+			break;
+		case VPN_STATUS_ERROR:
+			vpn_status_str = "error";
+			break;
+		default:
+			vpn_status_str = "unknown";
+			break;
+	}
+	cJSON_AddStringToObject(root, "vpn_status", vpn_status_str);
+	
+	// Add VPN IP if connected
+	if (vpn_status == VPN_STATUS_CONNECTED) 
+	{
+		char vpn_ip_str[20] = {0};
+		if (vpn_manager_get_ip_address(vpn_ip_str, sizeof(vpn_ip_str)) == ESP_OK) 
+		{
+			cJSON_AddStringToObject(root, "vpn_ip", vpn_ip_str);
+		}
+		else
+		{
+			cJSON_AddStringToObject(root, "vpn_ip", "");
+		}
+	}
+	else
+	{
+		cJSON_AddStringToObject(root, "vpn_ip", "");
+	}
+
     const char *resp_str = cJSON_PrintUnformatted(root);
 
 	httpd_resp_set_type(req, "application/json");
@@ -3274,6 +3320,8 @@ static httpd_handle_t config_server_init(void)
 		filesystem_init();
 		// Initialize certificate manager storage (creates /certs if missing)
 		cert_manager_init();
+		// Initialize VPN manager
+		vpn_manager_init();
 		// Handle config.json
 		FILE* f = fopen(FS_MOUNT_POINT"/config.json", "r");
 		if (f == NULL)
@@ -3353,7 +3401,7 @@ static httpd_handle_t config_server_init(void)
                        );
 
 	// Start the httpd server (reserve extra slots for cert manager endpoints)
-	config.max_uri_handlers = 32;
+	config.max_uri_handlers = 38;
 	config.stack_size = (10*1024);
 	config.max_open_sockets = 15;
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
@@ -3363,6 +3411,8 @@ static httpd_handle_t config_server_init(void)
 		register_server_uris();
 		// Register certificate manager endpoints (before wildcard catch-all so they match first)
 		cert_manager_register_handlers(server);
+		// Register VPN manager endpoints
+		vpn_manager_register_handlers(server);
 		// Now register catch-all wildcard
 		httpd_register_uri_handler(server, &get_uri_common);
 		ESP_LOGI(TAG, "Server started successfully");
@@ -3386,6 +3436,7 @@ void config_server_restart(void)
         ESP_LOGI(TAG, "Registering URI handlers");
 		register_server_uris();
 		cert_manager_register_handlers(server);
+		vpn_manager_register_handlers(server);
 		httpd_register_uri_handler(server, &get_uri_common);
 		ESP_LOGI(TAG, "Server restarted successfully");
         return;
@@ -3982,7 +4033,7 @@ void config_server_set_ble_config(uint8_t b)
 	{
 		cJSON_SetValuestring(cJSON_GetObjectItem(root,"ble_status"), "disable");
 	}
-	const char *resp_str = cJSON_Print(root);
+	const char *resp_str = cJSON_PrintUnformatted(root);
 	ESP_LOGI(TAG, "resp_str:%s", resp_str);
 	FILE* f = fopen(FS_MOUNT_POINT"/config.json", "w");
 	if (f != NULL)

@@ -75,6 +75,7 @@
 #include "safemode.h"
 #include "debug_logs.h"
 #include "sync_sys_time.h"
+#include "vpn_manager.h"
 
 #define TAG 		__func__
 #define USB_ID_PIN					39
@@ -548,7 +549,7 @@ void safe_mode_check(void)
 		vTaskDelay(pdMS_TO_TICKS(100));
 	}
 }
-
+#include "vpn_manager.h"
 void app_main(void)
 {
 	void* internal_buf = NULL;
@@ -1099,7 +1100,12 @@ void app_main(void)
 	// esp_log_level_set("mbedtls", ESP_LOG_VERBOSE);
 	// esp_log_level_set("TRANSPORT_BASE", ESP_LOG_VERBOSE);
 	// esp_log_level_set("SYNC_SYS_TIME", ESP_LOG_INFO);
-	
+	esp_log_level_set("MQTT", ESP_LOG_INFO);
+	esp_log_level_set("VPN_HTTP", ESP_LOG_INFO);
+	esp_log_level_set("VPN_MANAGER", ESP_LOG_INFO);
+	esp_log_level_set("VPN_WG", ESP_LOG_INFO);
+	esp_log_level_set("VPN_CFG", ESP_LOG_INFO);
+
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
 	#elif HARDWARE_VER == WICAN_PRO
@@ -1130,5 +1136,10 @@ void app_main(void)
 	
 	// Initialize time synchronization task
 	sync_sys_time_init();
+
+	// vTaskDelay(pdMS_TO_TICKS(20000));
+	// vpn_manager_request_test_hardcoded();
+	vpn_manager_set_enabled(1);
+
 }
 

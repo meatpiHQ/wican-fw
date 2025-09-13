@@ -14,6 +14,8 @@ static const char* get_bit_name(EventBits_t bit)
         case DEV_BLE_CONNECTED_BIT:   return "BLE_CONNECTED";
         case DEV_STA_ENABLED_BIT:     return "STA_ENABLED";
         case DEV_AP_ENABLED_BIT:      return "AP_ENABLED";
+    case DEV_TIME_SYNCED_BIT:     return "TIME_SYNCED";
+    case DEV_VPN_ENABLED_BIT:     return "VPN_ENABLED";
         default:                      return "UNKNOWN";
     }
 }
@@ -28,6 +30,8 @@ static void log_bits(const char* action, EventBits_t bits)
     if (bits & DEV_BLE_CONNECTED_BIT)   ESP_LOGI(DEV_STATUS_TAG, "%s: BLE_CONNECTED", action);
     if (bits & DEV_STA_ENABLED_BIT)     ESP_LOGI(DEV_STATUS_TAG, "%s: STA_ENABLED", action);
     if (bits & DEV_AP_ENABLED_BIT)      ESP_LOGI(DEV_STATUS_TAG, "%s: AP_ENABLED", action);
+    if (bits & DEV_TIME_SYNCED_BIT)     ESP_LOGI(DEV_STATUS_TAG, "%s: TIME_SYNCED", action);
+    if (bits & DEV_VPN_ENABLED_BIT)     ESP_LOGI(DEV_STATUS_TAG, "%s: VPN_ENABLED", action);
 }
 
 void dev_status_init(void)

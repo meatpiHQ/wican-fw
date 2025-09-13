@@ -26,6 +26,11 @@ extern "C" {
 #define DEV_HOME_MODE_ENABLED_BIT       BIT12
 #define DEV_DRIVE_MODE_ENABLED_BIT      BIT13
 #define DEV_SMARTCONNECT_ENABLED_BIT    BIT14
+// New bits for system-wide coordination
+// Indicates SNTP/system time is valid and synced (required by VPN/WG)
+#define DEV_TIME_SYNCED_BIT             BIT15
+// Indicates VPN is enabled by application logic (server does not control runtime)
+#define DEV_VPN_ENABLED_BIT             BIT16
 
 // Initialize device status event group
 void dev_status_init(void);
@@ -58,6 +63,11 @@ bool dev_status_is_any_bit_set(EventBits_t bits);
 #define dev_status_set_smartconnect_enabled() dev_status_set_bits(DEV_SMARTCONNECT_ENABLED_BIT)
 #define dev_status_set_mqtt_connected() dev_status_set_bits(DEV_MQTT_CONNECTED_BIT)
 #define dev_status_set_ble_connected()  dev_status_set_bits(DEV_BLE_CONNECTED_BIT)
+// New helpers
+#define dev_status_set_time_synced()    dev_status_set_bits(DEV_TIME_SYNCED_BIT)
+#define dev_status_clear_time_synced()  dev_status_clear_bits(DEV_TIME_SYNCED_BIT)
+#define dev_status_set_vpn_enabled()    dev_status_set_bits(DEV_VPN_ENABLED_BIT)
+#define dev_status_clear_vpn_enabled()  dev_status_clear_bits(DEV_VPN_ENABLED_BIT)
 
 #define dev_status_clear_awake()          dev_status_clear_bits(DEV_AWAKE_BIT)
 #define dev_status_clear_sleep()          dev_status_clear_bits(DEV_SLEEP_BIT)
@@ -82,6 +92,9 @@ bool dev_status_is_any_bit_set(EventBits_t bits);
 #define dev_status_is_smartconnect_enabled() dev_status_is_bit_set(DEV_SMARTCONNECT_ENABLED_BIT)
 #define dev_status_is_mqtt_connected() dev_status_is_bit_set(DEV_MQTT_CONNECTED_BIT)
 #define dev_status_is_ble_connected()  dev_status_is_bit_set(DEV_BLE_CONNECTED_BIT)
+// New checkers
+#define dev_status_is_time_synced()    dev_status_is_bit_set(DEV_TIME_SYNCED_BIT)
+#define dev_status_is_vpn_enabled()    dev_status_is_bit_set(DEV_VPN_ENABLED_BIT)
 
 #ifdef __cplusplus
 }

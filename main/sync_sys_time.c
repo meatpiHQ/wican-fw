@@ -131,6 +131,8 @@ static void sync_sys_time(void *pvParameters)
                 ESP_LOGI(TAG, "Time sync successful: %04d-%02d-%02d %02d:%02d:%02d UTC",
                          timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
                          timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+                // Publish system time synced for other subsystems (e.g., VPN)
+                dev_status_set_time_synced();
                 
                 // Sync RTCM with the newly acquired time
                 esp_err_t rtcm_ret = sync_rtcm_with_system_time();
@@ -164,6 +166,7 @@ static void sync_sys_time(void *pvParameters)
             if (esp_netif_sntp_sync_wait(pdMS_TO_TICKS(10000)) == ESP_OK)
             {
                 ESP_LOGI(TAG, "Periodic time sync successful");
+                dev_status_set_time_synced();
                 
                 // Also sync RTCM during periodic updates
                 esp_err_t rtcm_ret = sync_rtcm_with_system_time();

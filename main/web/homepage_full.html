@@ -488,6 +488,10 @@
             <span data-lucide="cpu" style="width: 18px; height: 18px; margin-right: 8px;"></span>
             <b>System</b>
         </button>
+        <button class="tablinks" onclick="openTab(event, 'vpn_tab')">
+            <span data-lucide="shield" style="width: 18px; height: 18px; margin-right: 8px;"></span>
+            <b>VPN</b>
+        </button>
         <button class="tablinks" onclick="openTab(event, 'about_tab')">
             <span data-lucide="info" style="width: 18px; height: 18px; margin-right: 8px;"></span>
             <b>About</b>
@@ -1504,6 +1508,102 @@
             </div>
             <div style="font-size:0.7rem; color:#666; margin-top:0.75rem;">Single-cert uploads appear as the read-only 'default' set.</div>
         </div>
+
+        <div id="vpn_tab" class="tabcontent">
+            <div class="section-title">VPN Settings</div>
+            <table class="form-table">
+                <tr>
+                    <td>VPN:</td>
+                    <td>
+                        <select name="vpn_enabled" id="vpn_enabled" onchange="toggleVpnConfig(); submit_enable();">
+                            <option value="disable">Disabled</option>
+                            <option value="wireguard">WireGuard</option>
+                        </select>
+                    </td>
+                </tr>
+            </table>
+
+            <div id="wireguard_config" style="display: none;">
+                <div class="divider"></div>
+                <div class="section-title">WireGuard Configuration</div>
+                
+                <div class="section-title" style="font-size: 1.25rem; color: #2563eb; border-bottom: 2px solid #93c5fd; padding-bottom: 0.25rem; display: flex; align-items: center; gap: 8px;">
+                    <span data-lucide="settings" style="width: 20px; height: 20px;"></span>
+                    Interface
+                </div>
+                <table class="form-table">
+                    <tr>
+                        <td>Private Key:</td>
+                        <td>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <input type="text" id="wg_private_key" name="wg_private_key" placeholder="Generated automatically or from config file" readonly style="flex: 1;" />
+                                <button type="button" id="generate_keys_button" onclick="generateWireGuardKeys()">Generate Keys</button>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Public Key:</td>
+                        <td>
+                            <input type="text" id="wg_public_key" name="wg_public_key" placeholder="Will be generated with private key" readonly />
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Address:</td>
+                        <td>
+                            <input type="text" id="wg_address" name="wg_address" placeholder="e.g., 10.2.2.3/32" oninput="submit_enable();" />
+                        </td>
+                    </tr>
+                </table>
+
+                <div class="section-title" style="font-size: 1.25rem; color: #2563eb; border-bottom: 2px solid #93c5fd; padding-bottom: 0.25rem; display: flex; align-items: center; gap: 8px;">
+                    <span data-lucide="users" style="width: 20px; height: 20px;"></span>
+                    Peer
+                </div>
+                <table class="form-table">
+                    <tr>
+                        <td>Public Key:</td>
+                        <td>
+                            <input type="text" id="wg_peer_public_key" name="wg_peer_public_key" placeholder="Server's public key" oninput="submit_enable();" />
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Allowed IPs:</td>
+                        <td>
+                            <input type="text" id="wg_allowed_ips" name="wg_allowed_ips" placeholder="e.g., 0.0.0.0/0" oninput="submit_enable();" />
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Endpoint:</td>
+                        <td>
+                            <input type="text" id="wg_endpoint" name="wg_endpoint" placeholder="e.g., 111.111.11.11:51820" oninput="submit_enable();" />
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Persistent Keepalive:</td>
+                        <td>
+                            <input type="number" id="wg_persistent_keepalive" name="wg_persistent_keepalive" placeholder="25" min="0" max="65535" oninput="submit_enable();" />
+                        </td>
+                    </tr>
+                </table>
+
+                <div class="divider"></div>
+                <div class="section-title">Configuration File</div>
+                <table class="form-table">
+                    <tr>
+                        <td>Load Config File:</td>
+                        <td>
+                            <input type="file" id="wg_config_file" accept=".conf" onchange="loadWireGuardConfig()" />
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Test Connection:</td>
+                        <td>
+                            <button type="button" onclick="testVpnConnection()" id="test_vpn_button">Test Connection</button>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
                
         <div id="about_tab" class="tabcontent">
             <div class="section-title">About</div>
@@ -2441,7 +2541,6 @@ function addCarParameter(rowData = {}) {
     }
 }
 
-// ==== Multi-destination support ====
 window.automateDestinations = [];
 window.certManagerSetsCache = null;
 
@@ -3547,13 +3646,20 @@ function loadAutoTable(jsonData) {
 	}
 
 	async function postConfig() {
-		var obj = {};
+        var obj = {};
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         const storeResult = await storeAutoTableData();
         if (!storeResult) {
             return;
         }
+        
+        const storeVpnResult = await saveVpnConfiguration();
+        if (!storeVpnResult) {
+            return;
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
 		obj["wifi_mode"] = document.getElementById("wifi_mode").value;
 		obj["ap_ch"] = document.getElementById("ap_ch_value").value;
 		obj["sta_ssid"] = document.getElementById("ssid_value").value;
@@ -3650,15 +3756,15 @@ function loadAutoTable(jsonData) {
         } catch (e) {
             console.warn('fallback networks parse error', e);
         }
+
+        // VPN configuration will be sent separately to /vpn/store_config
+        // Don't include it in the main config object
+        
 		var configJSON = JSON.stringify(obj);
+		
+		// Send main configuration first
 		const xhttp = new XMLHttpRequest();
-		xhttp.onload = function() {
-            showNotification(this.responseText, "green");
-            document.getElementById("submit_button").disabled = true;
-		};
-        xhttp.onerror = function() {
-            showNotification("Failed to save configuration", "red");
-        };
+
 
 		xhttp.open("POST", "/store_config");
         xhttp.setRequestHeader("Content-Type", "application/json");
@@ -4105,6 +4211,11 @@ function loadAutoTable(jsonData) {
     // Removed single-cert status refresh
 		xhttp.open("GET", "/load_config");
 		xhttp.send();
+
+        // Fetch VPN config from device and populate UI
+        if (typeof loadVpnFromDevice === 'function') {
+            loadVpnFromDevice().catch(e=>console.warn('VPN load failed', e));
+        }
 		
 		// Initialize SmartConnect configuration visibility
 		toggleSmartConnectConfig();
@@ -4461,9 +4572,6 @@ function loadAutoTable(jsonData) {
         }
     }
 
-    // ================= HTTPS CERT MANAGEMENT =================
-    // Removed refreshHttpsCertStatus (single-cert legacy)
-
     function toggleHttpsCertUploadVisibility(){
         const show = document.getElementById('https_trust_source').value === 'uploaded';
         const tbl = document.getElementById('https_cert_upload_table');
@@ -4506,9 +4614,7 @@ function loadAutoTable(jsonData) {
             btn.value = 'Upload';
         }
     }
-    // =========================================================
 
-    // ================= MULTI CERT MANAGER (BACKEND) ================
     let certManagerSets = []; // {name, has_ca, has_client_cert, has_client_key, readOnly}
 
     function certManagerValidateName(name){
@@ -4581,9 +4687,312 @@ function loadAutoTable(jsonData) {
         finally{ if(btn) btn.disabled=false; }
         nameEl.value=''; caEl.value=''; ccEl.value=''; ckEl.value='';
     }
-    // Called after single-cert status refresh to merge default set
-    // Removed certManagerMergeDefault (legacy single-cert integration)
-    // ====================================================================
+
+    function toggleVpnConfig() 
+    {
+        const vpnEnabled = document.getElementById("vpn_enabled").value;
+        const wireguardConfig = document.getElementById("wireguard_config");
+        
+        if (vpnEnabled === "wireguard") 
+        {
+            wireguardConfig.style.display = "block";
+        } 
+        else 
+        {
+            wireguardConfig.style.display = "none";
+        }
+    }
+
+    async function generateWireGuardKeys() 
+    {
+        try 
+        {
+            const response = await fetch('/vpn/generate_keys', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ vpn_type: 'wireguard' })
+            });
+            
+            if (!response.ok) 
+            {
+                throw new Error('Failed to generate keys');
+            }
+            
+            const data = await response.json();
+            
+            if (data.public_key) 
+            {
+                document.getElementById('wg_public_key').value = data.public_key;
+                document.getElementById('wg_private_key').value = "Generated and stored on device";
+                showNotification("WireGuard keys generated successfully!", "green");
+                submit_enable();
+            } 
+            else 
+            {
+                throw new Error('Invalid response from server');
+            }
+        } 
+        catch (error) 
+        {
+            console.error('Error generating WireGuard keys:', error);
+            showNotification("Failed to generate WireGuard keys: " + error.message, "red");
+        }
+    }
+
+    // Load VPN config from device and populate fields
+    async function loadVpnFromDevice() {
+        try {
+            const resp = await fetch('/vpn/load_config');
+            if (!resp.ok) return;
+            const data = await resp.json();
+            applyVpnConfigToUi(data);
+        } catch (e) {
+            console.warn('Failed to load VPN config', e);
+        }
+    }
+
+    function applyVpnConfigToUi(data){
+        if (!data) return;
+    const wg = data.wireguard || {};
+
+        const tryApply = () => {
+            const enabledEl = document.getElementById('vpn_enabled');
+            const pkEl = document.getElementById('wg_public_key');
+            const peerEl = document.getElementById('wg_peer_public_key');
+            const addrEl = document.getElementById('wg_address');
+            const allowedEl = document.getElementById('wg_allowed_ips');
+            const epEl = document.getElementById('wg_endpoint');
+            const keepEl = document.getElementById('wg_persistent_keepalive');
+            // Require at least enabled selector and public key field to exist
+            if (!enabledEl || !pkEl) return false;
+
+            // Enable/disable section
+            enabledEl.value = (data.enabled && (data.vpn_type === 1 || data.vpn_type === 'wireguard')) ? 'wireguard' : 'disabled';
+            if (typeof toggleVpnConfig === 'function') toggleVpnConfig();
+
+            // Fill fields
+            // Only populate the peer/server public key
+            if (peerEl) peerEl.value = (wg.peer_public_key || '');
+            if (addrEl && wg.address != null) addrEl.value = String(wg.address);
+            if (allowedEl && wg.allowed_ips != null) allowedEl.value = String(wg.allowed_ips);
+            if (epEl && wg.endpoint != null) epEl.value = String(wg.endpoint);
+            if (keepEl && typeof wg.persistent_keepalive !== 'undefined') keepEl.value = String(wg.persistent_keepalive);
+            return true;
+        };
+
+        if (!tryApply()){
+            // Defer until VPN tab content is rendered
+            const container = document.getElementById('vpn_tab');
+            if (container) {
+                const obs = new MutationObserver(() => {
+                    if (tryApply()) { obs.disconnect(); }
+                });
+                obs.observe(container, { childList: true, subtree: true });
+                // Fallback retry once after 1s
+                setTimeout(() => { tryApply(); }, 1000);
+            } else {
+                // Fallback retry once after 1s if container missing
+                setTimeout(() => { tryApply(); }, 1000);
+            }
+        }
+    }
+
+    function loadWireGuardConfig() 
+    {
+        const fileInput = document.getElementById("wg_config_file");
+        
+        if (fileInput.files.length === 0) 
+        {
+            showNotification("No config file selected!", "red");
+            return;
+        }
+        
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+        
+        reader.onload = function(event) 
+        {
+            try 
+            {
+                const configText = event.target.result;
+                parseWireGuardConfig(configText);
+                showNotification("WireGuard config loaded successfully!", "green");
+                submit_enable();
+            } 
+            catch (e) 
+            {
+                console.error('Config parse error:', e);
+                showNotification("Invalid WireGuard config file!", "red");
+            }
+        };
+        
+        reader.readAsText(file);
+    }
+
+    function parseWireGuardConfig(configText) 
+    {
+        console.log('Parsing WireGuard config:', configText);
+        const lines = configText.split('\n');
+        let currentSection = '';
+        let fieldsFound = 0;
+        
+        for (const line of lines) 
+        {
+            const trimmedLine = line.trim();
+            
+            // Skip empty lines and comments
+            if (!trimmedLine || trimmedLine.startsWith('#')) {
+                continue;
+            }
+            
+            if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) 
+            {
+                currentSection = trimmedLine.slice(1, -1).toLowerCase();
+                console.log('Found section:', currentSection);
+                continue;
+            }
+            
+            if (trimmedLine.includes('=')) 
+            {
+                const [key, value] = trimmedLine.split('=').map(s => s.trim());
+                console.log(`Found ${currentSection}.${key} = ${value}`);
+                
+                if (currentSection === 'interface') 
+                {
+                    switch (key.toLowerCase()) 
+                    {
+                        case 'privatekey':
+                            document.getElementById('wg_private_key').value = value;
+                            fieldsFound++;
+                            break;
+                        case 'address':
+                            document.getElementById('wg_address').value = value;
+                            fieldsFound++;
+                            break;
+                    }
+                } 
+                else if (currentSection === 'peer') 
+                {
+                    switch (key.toLowerCase()) 
+                    {
+                        case 'publickey':
+                            document.getElementById('wg_peer_public_key').value = value;
+                            fieldsFound++;
+                            break;
+                        case 'allowedips':
+                            document.getElementById('wg_allowed_ips').value = value;
+                            fieldsFound++;
+                            break;
+                        case 'endpoint':
+                            document.getElementById('wg_endpoint').value = value;
+                            fieldsFound++;
+                            break;
+                        case 'persistentkeepalive':
+                            document.getElementById('wg_persistent_keepalive').value = value;
+                            fieldsFound++;
+                            break;
+                    }
+                }
+            }
+        }
+        
+        console.log(`Parsed config, found ${fieldsFound} fields`);
+        if (fieldsFound === 0) {
+            throw new Error('No valid WireGuard configuration fields found');
+        }
+    }
+
+    async function saveVpnConfiguration() 
+    {
+        console.log('Saving VPN configuration...');
+        
+        const vpnEnabled = document.getElementById("vpn_enabled").value;
+        
+        let vpnConfig = {
+            vpn_enabled: vpnEnabled,
+            vpn_type: vpnEnabled === "wireguard" ? "wireguard" : "disabled"
+        };
+        
+        if (vpnEnabled === "wireguard") 
+        {
+            // Device private key (required)
+            vpnConfig.private_key = document.getElementById("wg_private_key").value;
+            // Peer/server public key (canonical)
+            const peerKey = document.getElementById("wg_peer_public_key").value;
+            vpnConfig.peer_public_key = peerKey;
+            vpnConfig.address = document.getElementById("wg_address").value;
+            vpnConfig.allowed_ips = document.getElementById("wg_allowed_ips").value;
+            vpnConfig.endpoint = document.getElementById("wg_endpoint").value;
+            vpnConfig.persistent_keepalive = parseInt(document.getElementById("wg_persistent_keepalive").value) || 0;
+        }
+        
+        console.log('VPN config to save:', vpnConfig);
+        
+        const response = await fetch('/vpn/store_config', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(vpnConfig)
+        });
+        
+        if (!response.ok) 
+        {
+            throw new Error('Failed to save VPN configuration');
+        }
+        
+        const responseText = await response.text();
+        console.log('VPN config save response:', responseText);
+        
+        return responseText;
+    }
+
+    async function testVpnConnection() 
+    {
+        try 
+        {
+            const button = document.getElementById('test_vpn_button');
+            button.disabled = true;
+            button.textContent = 'Testing...';
+            
+            const response = await fetch('/vpn/test_connection', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) 
+            {
+                throw new Error('Test connection failed');
+            }
+            
+            const data = await response.json();
+            
+            if (data.success) 
+            {
+                showNotification("VPN connection test successful!", "green");
+            } 
+            else 
+            {
+                showNotification("VPN connection test failed: " + (data.error || "Unknown error"), "red");
+            }
+        } 
+        catch (error) 
+        {
+            console.error('Error testing VPN connection:', error);
+            showNotification("VPN connection test failed: " + error.message, "red");
+        } 
+        finally 
+        {
+            const button = document.getElementById('test_vpn_button');
+            button.disabled = false;
+            button.textContent = 'Test Connection';
+        }
+    }
+
     </script>
     
     <!-- Lucide Icons -->
