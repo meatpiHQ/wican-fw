@@ -18,3 +18,25 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifndef VPN_MANAGER_HTTP_H
+#define VPN_MANAGER_HTTP_H
+
+#include <esp_http_server.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/**
+ * @brief Register HTTP handlers for VPN management
+ * 
+ * @param server HTTP server handle
+ * @return esp_err_t ESP_OK on success
+ */
+esp_err_t vpn_manager_register_handlers(httpd_handle_t server);
+#ifdef __cplusplus
+}
+#endif
+
+#endif // VPN_MANAGER_HTTP_H
+

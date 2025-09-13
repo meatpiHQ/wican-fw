@@ -25,7 +25,7 @@
 #include <esp_event.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/event_groups.h>
-#include <esp_http_server.h>
+#include "vpn_manager_http.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -179,14 +179,6 @@ esp_err_t vpn_manager_load_config(vpn_config_t *config);
  * @return esp_err_t ESP_OK if connection test passes
  */
 // Deprecated test removed; use vpn_manager_request_test[_hardcoded]()
-
-/**
- * @brief Register HTTP handlers for VPN management
- * 
- * @param server HTTP server handle
- * @return esp_err_t ESP_OK on success
- */
-esp_err_t vpn_manager_register_handlers(httpd_handle_t server);
 
 /**
  * @brief Get VPN IP address if connected

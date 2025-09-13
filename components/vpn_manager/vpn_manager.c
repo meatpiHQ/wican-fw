@@ -47,13 +47,15 @@ static esp_netif_t *vpn_netif = NULL;
 static TimerHandle_t reconnect_timer = NULL;
 
 // VPN task/command infrastructure
-typedef enum {
+typedef enum
+{
     VPN_CMD_ENABLE,
     VPN_CMD_RELOAD,
     VPN_CMD_TEST
 } vpn_cmd_type_t;
 
-typedef struct {
+typedef struct
+{
     vpn_cmd_type_t type;
     bool enabled; // for VPN_CMD_ENABLE
 } vpn_cmd_msg_t;
@@ -65,13 +67,27 @@ static uint32_t s_backoff_cap_ms = 60000; // 60s cap
 static uint32_t s_backoff_base_ms = 2000; // 2s start
 
 static void vpn_task_fn(void *arg);
-static void vpn_backoff_reset(void) { s_backoff_ms = 0; }
-static void vpn_backoff_bump(void) {
-    if (s_backoff_ms == 0) s_backoff_ms = s_backoff_base_ms; else s_backoff_ms = s_backoff_ms * 2;
-    if (s_backoff_ms > s_backoff_cap_ms) s_backoff_ms = s_backoff_cap_ms;
+static void vpn_backoff_reset(void)
+{
+    s_backoff_ms = 0;
+}
+static void vpn_backoff_bump(void)
+{
+    if (s_backoff_ms == 0)
+    {
+        s_backoff_ms = s_backoff_base_ms;
+    }
+    else
+    {
+        s_backoff_ms = s_backoff_ms * 2;
+    }
+    if (s_backoff_ms > s_backoff_cap_ms)
+    {
+        s_backoff_ms = s_backoff_cap_ms;
+    }
     // add +-15% jitter
     uint32_t jitter = (s_backoff_ms * 15) / 100;
-    s_backoff_ms = s_backoff_ms - (jitter/2) + (esp_random() % (jitter + 1));
+    s_backoff_ms = s_backoff_ms - (jitter / 2) + (esp_random() % (jitter + 1));
 }
 
 // Private function declarations
@@ -82,55 +98,59 @@ static esp_err_t vpn_manager_validate_wireguard_config(const vpn_wireguard_confi
 esp_err_t vpn_manager_init(void)
 {
     esp_err_t ret = ESP_OK;
-    
+
     ESP_LOGI(TAG, "Initializing VPN Manager");
-    
+
     // Create event group
-    if (vpn_event_group == NULL) 
+    if (vpn_event_group == NULL)
     {
         vpn_event_group = xEventGroupCreate();
-        if (vpn_event_group == NULL) 
+        if (vpn_event_group == NULL)
         {
             ESP_LOGE(TAG, "Failed to create VPN event group");
             return ESP_ERR_NO_MEM;
         }
     }
-    
+
     // Create command queue and VPN task
-    if (!s_vpn_cmd_q) {
+    if (!s_vpn_cmd_q)
+    {
         s_vpn_cmd_q = xQueueCreate(8, sizeof(vpn_cmd_msg_t));
-        if (!s_vpn_cmd_q) {
+        if (!s_vpn_cmd_q)
+        {
             ESP_LOGE(TAG, "Failed to create VPN command queue");
             return ESP_ERR_NO_MEM;
         }
     }
-    if (!s_vpn_task) {
+    if (!s_vpn_task)
+    {
         BaseType_t ok = xTaskCreate(vpn_task_fn, "vpn_task", 4096, NULL, 5, &s_vpn_task);
-        if (ok != pdPASS) {
+        if (ok != pdPASS)
+        {
             ESP_LOGE(TAG, "Failed to create VPN task");
             return ESP_ERR_NO_MEM;
         }
     }
-    
+
     // Initialize current status
     current_status = VPN_STATUS_DISABLED;
     xEventGroupSetBits(vpn_event_group, VPN_DISCONNECTED_BIT);
-    
+
     // Load configuration from filesystem
     vpn_config_t loaded_config = {0};
-    if (vpn_manager_load_config(&loaded_config) == ESP_OK) 
+    if (vpn_manager_load_config(&loaded_config) == ESP_OK)
     {
         memcpy(&current_config, &loaded_config, sizeof(vpn_config_t));
         ESP_LOGI(TAG, "Loaded VPN configuration");
-        
+
         // Auto-start if enabled
-        if (current_config.enabled && current_config.type == VPN_TYPE_WIREGUARD) 
+        if (current_config.enabled && current_config.type == VPN_TYPE_WIREGUARD)
         {
             // ESP_LOGI(TAG, "Auto-starting VPN");
             // ret = vpn_manager_start(&current_config);
         }
     }
-    
+
     ESP_LOGI(TAG, "VPN Manager initialized");
     return ret;
 }
@@ -139,65 +159,67 @@ esp_err_t vpn_manager_init(void)
 
 esp_err_t vpn_manager_start(const vpn_config_t *config)
 {
-    if (config == NULL) 
+    if (config == NULL)
     {
         ESP_LOGE(TAG, "VPN config is NULL");
         return ESP_ERR_INVALID_ARG;
     }
-    
+
     ESP_LOGI(TAG, "Starting VPN connection, type: %d", config->type);
-    
+
     // Stop any existing connection
     vpn_manager_stop();
-    
+
     // Copy configuration
     memcpy(&current_config, config, sizeof(vpn_config_t));
-    
+
     current_status = VPN_STATUS_CONNECTING;
     xEventGroupClearBits(vpn_event_group, VPN_CONNECTED_BIT | VPN_DISCONNECTED_BIT | VPN_ERROR_BIT);
     xEventGroupSetBits(vpn_event_group, VPN_CONNECTING_BIT);
-    
+
     esp_err_t ret = ESP_OK;
-    switch (config->type) 
+    switch (config->type)
     {
         case VPN_TYPE_WIREGUARD:
+        {
             // Validate config before attempting to init/connect to avoid NULL strings
+            esp_err_t vret = vpn_manager_validate_wireguard_config(&config->config.wireguard);
+            if (vret != ESP_OK)
             {
-                esp_err_t vret = vpn_manager_validate_wireguard_config(&config->config.wireguard);
-                if (vret != ESP_OK) {
-                    ESP_LOGE(TAG, "WireGuard config invalid; aborting start");
-                    ret = vret;
-                    break;
-                }
+                ESP_LOGE(TAG, "WireGuard config invalid; aborting start");
+                ret = vret;
+                break;
             }
             ret = vpn_wg_init(&config->config.wireguard);
-            if (ret == ESP_OK) {
+            if (ret == ESP_OK)
+            {
                 ret = vpn_wg_start();
             }
             break;
-            
+        }
         case VPN_TYPE_DISABLED:
         default:
             ESP_LOGW(TAG, "Invalid VPN type: %d", config->type);
             ret = ESP_ERR_NOT_SUPPORTED;
             break;
     }
-    
-    if (ret != ESP_OK) 
+
+    if (ret != ESP_OK)
     {
         current_status = VPN_STATUS_ERROR;
         xEventGroupClearBits(vpn_event_group, VPN_CONNECTING_BIT);
         xEventGroupSetBits(vpn_event_group, VPN_ERROR_BIT);
         ESP_LOGE(TAG, "Failed to start VPN: %s", esp_err_to_name(ret));
     }
-    
+
     return ret;
 }
 
 // Ensure all mandatory fields are present/non-empty before starting WireGuard
 static esp_err_t vpn_manager_validate_wireguard_config(const vpn_wireguard_config_t *cfg)
 {
-    if (cfg == NULL) {
+    if (cfg == NULL)
+    {
         ESP_LOGE(TAG, "WG config is NULL");
         return ESP_ERR_INVALID_ARG;
     }
@@ -206,32 +228,47 @@ static esp_err_t vpn_manager_validate_wireguard_config(const vpn_wireguard_confi
     #define EMPTY_OR_NULL(s) ((s)==NULL || (s)[0]=='\0')
 
     bool ok = true;
-    if (EMPTY_OR_NULL(cfg->private_key)) {
-        ESP_LOGE(TAG, "WG private_key is empty"); ok = false;
+    if (EMPTY_OR_NULL(cfg->private_key))
+    {
+        ESP_LOGE(TAG, "WG private_key is empty");
+        ok = false;
     }
-    if (EMPTY_OR_NULL(cfg->public_key)) {
-        ESP_LOGE(TAG, "WG public_key is empty"); ok = false;
+    if (EMPTY_OR_NULL(cfg->public_key))
+    {
+        ESP_LOGE(TAG, "WG public_key is empty");
+        ok = false;
     }
-    if (EMPTY_OR_NULL(cfg->address)) {
-        ESP_LOGE(TAG, "WG address is empty"); ok = false;
+    if (EMPTY_OR_NULL(cfg->address))
+    {
+        ESP_LOGE(TAG, "WG address is empty");
+        ok = false;
     }
     // allowed_ip/mask are used as local tunnel IP/mask by esp_wireguard.
     // Permit empty or 0.0.0.0 if address is provided (we'll derive /32 from address).
     bool allowed_empty = EMPTY_OR_NULL(cfg->allowed_ip) || strcmp(cfg->allowed_ip, "0.0.0.0") == 0;
-    if (allowed_empty && EMPTY_OR_NULL(cfg->address)) {
-        ESP_LOGE(TAG, "WG allowed_ip is empty and no address to derive from"); ok = false;
+    if (allowed_empty && EMPTY_OR_NULL(cfg->address))
+    {
+        ESP_LOGE(TAG, "WG allowed_ip is empty and no address to derive from");
+        ok = false;
     }
-    if (!allowed_empty && EMPTY_OR_NULL(cfg->allowed_ip_mask)) {
-        ESP_LOGE(TAG, "WG allowed_ip_mask is empty"); ok = false;
+    if (!allowed_empty && EMPTY_OR_NULL(cfg->allowed_ip_mask))
+    {
+        ESP_LOGE(TAG, "WG allowed_ip_mask is empty");
+        ok = false;
     }
-    if (EMPTY_OR_NULL(cfg->endpoint)) {
-        ESP_LOGE(TAG, "WG endpoint is empty"); ok = false;
+    if (EMPTY_OR_NULL(cfg->endpoint))
+    {
+        ESP_LOGE(TAG, "WG endpoint is empty");
+        ok = false;
     }
-    if (cfg->port <= 0) {
-        ESP_LOGE(TAG, "WG port is invalid: %d", cfg->port); ok = false;
+    if (cfg->port <= 0)
+    {
+        ESP_LOGE(TAG, "WG port is invalid: %d", cfg->port);
+        ok = false;
     }
 
-    if (!ok) {
+    if (!ok)
+    {
         ESP_LOGE(TAG, "WireGuard configuration is incomplete. Will not start.");
         return ESP_ERR_INVALID_ARG;
     }
@@ -242,24 +279,24 @@ static esp_err_t vpn_manager_validate_wireguard_config(const vpn_wireguard_confi
 esp_err_t vpn_manager_stop(void)
 {
     ESP_LOGI(TAG, "Stopping VPN connection");
-    
+
     esp_err_t ret = ESP_OK;
-    switch (current_config.type) 
+    switch (current_config.type)
     {
         case VPN_TYPE_WIREGUARD:
             ret = vpn_wg_stop();
             vpn_wg_deinit();
             break;
-            
+
         case VPN_TYPE_DISABLED:
         default:
             break;
     }
-    
+
     current_status = VPN_STATUS_DISCONNECTED;
     xEventGroupClearBits(vpn_event_group, VPN_CONNECTED_BIT | VPN_CONNECTING_BIT | VPN_ERROR_BIT);
     xEventGroupSetBits(vpn_event_group, VPN_DISCONNECTED_BIT);
-    
+
     return ret;
 }
 
@@ -274,35 +311,35 @@ vpn_status_t vpn_manager_get_status(void)
 
 esp_err_t vpn_manager_generate_wireguard_keys(char *public_key, size_t public_key_size)
 {
-    if (public_key == NULL || public_key_size < 64) 
+    if (public_key == NULL || public_key_size < 64)
     {
         ESP_LOGE(TAG, "Invalid parameters for key generation");
         return ESP_ERR_INVALID_ARG;
     }
-    
+
     ESP_LOGI(TAG, "Generating WireGuard key pair (delegated)");
     return vpn_config_generate_wg_keys(public_key, public_key_size);
 }
 
 esp_err_t vpn_manager_save_config(const vpn_config_t *config)
 {
-    if (config == NULL) 
+    if (config == NULL)
     {
         ESP_LOGE(TAG, "Config is NULL");
         return ESP_ERR_INVALID_ARG;
     }
-    
+
     return vpn_config_save(config);
 }
 
 esp_err_t vpn_manager_load_config(vpn_config_t *config)
 {
-    if (config == NULL) 
+    if (config == NULL)
     {
         ESP_LOGE(TAG, "Config buffer is NULL");
         return ESP_ERR_INVALID_ARG;
     }
-    
+
     return vpn_config_load(config);
 }
 
@@ -312,23 +349,23 @@ esp_err_t vpn_manager_load_config(vpn_config_t *config)
 
 esp_err_t vpn_manager_get_ip_address(char *ip_str, size_t ip_str_size)
 {
-    if (ip_str == NULL || ip_str_size == 0) 
+    if (ip_str == NULL || ip_str_size == 0)
     {
         return ESP_ERR_INVALID_ARG;
     }
-    
-    if (vpn_netif == NULL || current_status != VPN_STATUS_CONNECTED) 
+
+    if (vpn_netif == NULL || current_status != VPN_STATUS_CONNECTED)
     {
         return ESP_ERR_INVALID_STATE;
     }
-    
+
     esp_netif_ip_info_t ip_info;
     esp_err_t ret = esp_netif_get_ip_info(vpn_netif, &ip_info);
-    if (ret == ESP_OK) 
+    if (ret == ESP_OK)
     {
         snprintf(ip_str, ip_str_size, IPSTR, IP2STR(&ip_info.ip));
     }
-    
+
     return ret;
 }
 
@@ -337,15 +374,20 @@ esp_err_t vpn_manager_get_ip_address(char *ip_str, size_t ip_str_size)
 // Helper function to update VPN status
 static void vpn_manager_update_status(void)
 {
-    if (vpn_wg_is_peer_up()) {
-        if (current_status != VPN_STATUS_CONNECTED) {
+    if (vpn_wg_is_peer_up())
+    {
+        if (current_status != VPN_STATUS_CONNECTED)
+        {
             current_status = VPN_STATUS_CONNECTED;
             xEventGroupClearBits(vpn_event_group, VPN_CONNECTING_BIT | VPN_DISCONNECTED_BIT | VPN_ERROR_BIT);
             xEventGroupSetBits(vpn_event_group, VPN_CONNECTED_BIT);
             ESP_LOGI(TAG, "VPN connected successfully");
         }
-    } else {
-        if (current_status == VPN_STATUS_CONNECTED || current_status == VPN_STATUS_CONNECTING) {
+    }
+    else
+    {
+        if (current_status == VPN_STATUS_CONNECTED || current_status == VPN_STATUS_CONNECTING)
+        {
             current_status = VPN_STATUS_DISCONNECTED;
             xEventGroupClearBits(vpn_event_group, VPN_CONNECTED_BIT | VPN_CONNECTING_BIT);
             xEventGroupSetBits(vpn_event_group, VPN_DISCONNECTED_BIT);
@@ -363,8 +405,16 @@ static void vpn_reconnect_timer_callback(TimerHandle_t xTimer)
 // Public control API implemented via command queue and dev_status bits
 void vpn_manager_set_enabled(bool enabled)
 {
-    if (enabled) dev_status_set_vpn_enabled(); else dev_status_clear_vpn_enabled();
-    if (s_vpn_cmd_q) {
+    if (enabled)
+    {
+        dev_status_set_vpn_enabled();
+    }
+    else
+    {
+        dev_status_clear_vpn_enabled();
+    }
+    if (s_vpn_cmd_q)
+    {
         vpn_cmd_msg_t msg = { .type = VPN_CMD_ENABLE, .enabled = enabled };
         xQueueSend(s_vpn_cmd_q, &msg, 0);
     }
@@ -372,7 +422,8 @@ void vpn_manager_set_enabled(bool enabled)
 
 void vpn_manager_request_reload(void)
 {
-    if (s_vpn_cmd_q) {
+    if (s_vpn_cmd_q)
+    {
         vpn_cmd_msg_t msg = { .type = VPN_CMD_RELOAD };
         xQueueSend(s_vpn_cmd_q, &msg, 0);
     }
@@ -380,7 +431,8 @@ void vpn_manager_request_reload(void)
 
 void vpn_manager_request_test(void)
 {
-    if (s_vpn_cmd_q) {
+    if (s_vpn_cmd_q)
+    {
         vpn_cmd_msg_t msg = { .type = VPN_CMD_TEST };
         xQueueSend(s_vpn_cmd_q, &msg, 0);
     }
@@ -391,11 +443,15 @@ void vpn_manager_request_test_hardcoded(void)
     // Push a RELOAD with temporary hardcoded config then TEST
     // For safety, only if type is WG
     vpn_config_t cfg = {0};
-    if (vpn_manager_load_config(&cfg) != ESP_OK) {
+    if (vpn_manager_load_config(&cfg) != ESP_OK)
+    {
         cfg.type = VPN_TYPE_WIREGUARD;
         cfg.enabled = true;
     }
-    if (cfg.type != VPN_TYPE_WIREGUARD) cfg.type = VPN_TYPE_WIREGUARD;
+    if (cfg.type != VPN_TYPE_WIREGUARD)
+    {
+        cfg.type = VPN_TYPE_WIREGUARD;
+    }
     cfg.enabled = true;
     // Hardcoded values (developer bench). Replace as needed.
     strlcpy(cfg.config.wireguard.private_key, "KEY_HERE", sizeof(cfg.config.wireguard.private_key));
@@ -420,45 +476,57 @@ static void vpn_task_fn(void *arg)
     bool test_once = false;
     // Load config at startup
     vpn_config_t loaded = {0};
-    if (vpn_manager_load_config(&loaded) == ESP_OK) {
+    if (vpn_manager_load_config(&loaded) == ESP_OK)
+    {
         memcpy(&current_config, &loaded, sizeof(current_config));
         ESP_LOGI(TAG, "VPN config loaded at task start");
     }
 
     const TickType_t tick = pdMS_TO_TICKS(200);
-    for (;;) {
+    for (;;)
+    {
         // Drain commands
         vpn_cmd_msg_t msg;
-        while (s_vpn_cmd_q && xQueueReceive(s_vpn_cmd_q, &msg, 0) == pdTRUE) {
-            switch (msg.type) {
+        while (s_vpn_cmd_q && xQueueReceive(s_vpn_cmd_q, &msg, 0) == pdTRUE)
+        {
+            switch (msg.type)
+            {
                 case VPN_CMD_ENABLE:
                     ESP_LOGI(TAG, "CMD ENABLE: %s", msg.enabled ? "on" : "off");
                     // Nothing else; bit already set/cleared by caller
                     // If disabling, stop immediately
-                    if (!msg.enabled) {
+                    if (!msg.enabled)
+                    {
                         vpn_manager_stop();
                         vpn_backoff_reset();
                     }
                     break;
-                case VPN_CMD_RELOAD: {
+                case VPN_CMD_RELOAD:
+                {
                     vpn_config_t cfg = {0};
-                    if (vpn_manager_load_config(&cfg) == ESP_OK) {
+                    if (vpn_manager_load_config(&cfg) == ESP_OK)
+                    {
                         current_config = cfg;
                         ESP_LOGI(TAG, "Config reloaded (type=%d, enabled=%d)", cfg.type, (int)cfg.enabled);
                         // If connected and type/params changed, restart
-                        if (current_status == VPN_STATUS_CONNECTED || current_status == VPN_STATUS_CONNECTING) {
+                        if (current_status == VPN_STATUS_CONNECTED || current_status == VPN_STATUS_CONNECTING)
+                        {
                             vpn_manager_stop();
                             vpn_backoff_reset();
                         }
-                    } else {
+                    }
+                    else
+                    {
                         ESP_LOGW(TAG, "Config reload failed");
                     }
-                } break;
+                }
+                break;
                 case VPN_CMD_TEST:
                     ESP_LOGI(TAG, "CMD TEST: will attempt one-shot connect when gated");
                     test_once = true;
                     vpn_backoff_reset();
-                    if (current_status == VPN_STATUS_CONNECTED) {
+                    if (current_status == VPN_STATUS_CONNECTED)
+                    {
                         // Force re-handshake
                         vpn_manager_stop();
                     }
@@ -470,8 +538,10 @@ static void vpn_task_fn(void *arg)
         bool prereqs = dev_status_are_bits_set(DEV_VPN_ENABLED_BIT | DEV_STA_CONNECTED_BIT | DEV_TIME_SYNCED_BIT);
         bool blockers = dev_status_is_any_bit_set(DEV_AP_ENABLED_BIT | DEV_SLEEP_BIT);
 
-        if (!prereqs || blockers) {
-            if (current_status == VPN_STATUS_CONNECTED || current_status == VPN_STATUS_CONNECTING) {
+        if (!prereqs || blockers)
+        {
+            if (current_status == VPN_STATUS_CONNECTED || current_status == VPN_STATUS_CONNECTING)
+            {
                 ESP_LOGI(TAG, "Gating lost or blocker set; stopping VPN");
                 vpn_manager_stop();
             }
@@ -481,32 +551,53 @@ static void vpn_task_fn(void *arg)
         }
 
         // Attempt connect if needed
-        if (current_status != VPN_STATUS_CONNECTED && current_status != VPN_STATUS_CONNECTING) {
-            if (s_backoff_ms == 0 || test_once) {
-                if (current_config.type == VPN_TYPE_WIREGUARD) {
+        if (current_status != VPN_STATUS_CONNECTED && current_status != VPN_STATUS_CONNECTING)
+        {
+            if (s_backoff_ms == 0 || test_once)
+            {
+                if (current_config.type == VPN_TYPE_WIREGUARD)
+                {
                     esp_err_t vret = vpn_manager_validate_wireguard_config(&current_config.config.wireguard);
-                    if (vret != ESP_OK) {
+                    if (vret != ESP_OK)
+                    {
                         // Invalid config: do not retry until reload
                         ESP_LOGE(TAG, "Invalid WG config; waiting for reload");
                         // Sleep a bit to avoid tight loop
                         vTaskDelay(pdMS_TO_TICKS(2000));
-                    } else {
+                    }
+                    else
+                    {
                         ESP_LOGI(TAG, "Connecting VPN...");
                         esp_err_t sret = vpn_manager_start(&current_config);
-                        if (sret != ESP_OK) {
+                        if (sret != ESP_OK)
+                        {
                             ESP_LOGW(TAG, "Connect failed: %s", esp_err_to_name(sret));
-                            if (!test_once) vpn_backoff_bump();
-                            else test_once = false; // single attempt
-                        } else {
+                            if (!test_once)
+                            {
+                                vpn_backoff_bump();
+                            }
+                            else
+                            {
+                                test_once = false; // single attempt
+                            }
+                        }
+                        else
+                        {
                             vpn_backoff_reset();
-                            if (test_once) test_once = false;
+                            if (test_once)
+                            {
+                                test_once = false;
+                            }
                         }
                     }
                 }
             }
-        } else if (current_status == VPN_STATUS_CONNECTED) {
+        }
+        else if (current_status == VPN_STATUS_CONNECTED)
+        {
             // Monitor link; if peer down, trigger reconnect with backoff
-            if (!vpn_wg_is_peer_up()) {
+            if (!vpn_wg_is_peer_up())
+            {
                 ESP_LOGW(TAG, "Peer down; restarting VPN with backoff");
                 vpn_manager_stop();
                 vpn_backoff_bump();
@@ -514,14 +605,19 @@ static void vpn_task_fn(void *arg)
         }
 
         // Handle backoff countdown while still responsive to commands
-        if (s_backoff_ms > 0) {
+        if (s_backoff_ms > 0)
+        {
             uint32_t step = 200;
-            if (s_backoff_ms < step) step = s_backoff_ms;
+            if (s_backoff_ms < step)
+            {
+                step = s_backoff_ms;
+            }
             vTaskDelay(pdMS_TO_TICKS(step));
             s_backoff_ms -= step;
-        } else {
+        }
+        else
+        {
             vTaskDelay(tick);
         }
     }
 }
-
