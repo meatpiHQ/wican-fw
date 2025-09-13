@@ -1,6 +1,4 @@
-
-
-    async function checkFirmwareUpdate() {
+async function checkFirmwareUpdate() {
         try {
             const currentRaw = document.getElementById('fw_version')?.textContent?.trim();
             if (!currentRaw) return;
@@ -1569,9 +1567,11 @@ function openTab(evt, tabName) {
         loadDashboard();
     } else if (tabName === 'system_tab') {
         if (typeof certManagerLoad === 'function') certManagerLoad();
+    } else if (tabName === 'vpn_tab') {
+        // Refresh status so the badge reflects the latest state
+        try { checkStatus(); } catch(_) {}
     }
 }
-
 function sta_enable() {}
 
 // Helper function to get DOM elements efficiently
@@ -1859,7 +1859,6 @@ function configurePeriodicWakeup(elements) {
     }
 }
 document.getElementById("defaultOpen").click();
-
 function checkStatus() {
     const xhttp = new XMLHttpRequest();
     xhttp.onload = function() {
@@ -1904,6 +1903,18 @@ function checkStatus() {
             document.getElementById("mqtt_en_div").style.display = "block";
         } else if(document.getElementById("mqtt_en").value == "disable") {
             document.getElementById("mqtt_en_div").style.display = "none";
+        }
+        // Update VPN text and badge
+        const vpnText = obj.vpn_status || 'N/A';
+        const vpnTextEl = document.getElementById('vpn_status');
+        if (vpnTextEl) vpnTextEl.innerHTML = vpnText;
+        const badge = document.getElementById('vpn_status_badge');
+        if (badge) {
+            const isConnected = /connected|up|active/i.test(vpnText);
+            badge.textContent = isConnected ? 'Connected' : 'Disconnected';
+            badge.classList.remove('status-connected','status-disconnected');
+            badge.classList.add(isConnected ? 'status-connected' : 'status-disconnected');
+            badge.title = vpnText;
         }
         checkFirmwareUpdate();
     };
@@ -2494,6 +2505,7 @@ xhttp.onload = async function() {
         document.getElementById("mqtt_rx_topic").value = obj.mqtt_rx_topic;
         document.getElementById("mqtt_status_topic").value = obj.mqtt_status_topic;
         document.getElementById("mqtt_elm327_log").value = obj.mqtt_elm327_log;
+        document.getElementById("vpn_status").innerHTML = obj.vpn_status || "N/A";
         // Optional fields for MQTTS (UI only for now)
         if (obj.mqtt_security){
             const sec = document.getElementById('mqtt_security');
@@ -3122,49 +3134,66 @@ async function loadVpnFromDevice() {
         console.warn('Failed to load VPN config', e);
     }
 }
+function tryApplyVPN(data) {
+    if (!data) return false;
+    const wg = data.wireguard || {};
+    const enabledEl = document.getElementById('vpn_enabled');
+    const peerEl = document.getElementById('wg_peer_public_key');
+    const addrEl = document.getElementById('wg_address');
+    const allowedEl = document.getElementById('wg_allowed_ips');
+    const epEl = document.getElementById('wg_endpoint');
+    const keepEl = document.getElementById('wg_persistent_keepalive');
 
-function applyVpnConfigToUi(data){
-    if (!data) return;
-const wg = data.wireguard || {};
+    if (!enabledEl) {
+        return false;
+    }
+    // Enable/disable section
+    const isWG = data.enabled && (String(data.vpn_type).toLowerCase() === 'wireguard' || data.vpn_type === 1);
+    // Match HTML option values: 'disable' | 'wireguard'
+    const desired = isWG ? 'wireguard' : 'disable';
+    enabledEl.value = desired;
+    // Fallback in case options not yet populated or value mismatch
+    if (enabledEl.value !== desired) {
+        enabledEl.selectedIndex = 0; // default to Disabled
+    }
+    if (typeof toggleVpnConfig === 'function') {
+        toggleVpnConfig();
+    }
+    // Fill fields
+    if (peerEl) { peerEl.value = String(wg.peer_public_key || '').trim(); }
+    if (addrEl) { addrEl.value = wg.address != null ? String(wg.address).trim() : ''; }
+    if (allowedEl) { allowedEl.value = wg.allowed_ips != null ? String(wg.allowed_ips).trim() : ''; }
+    if (epEl) { epEl.value = wg.endpoint != null ? String(wg.endpoint).trim() : ''; }
+    if (keepEl) { const n = Number(wg.persistent_keepalive); keepEl.value = Number.isFinite(n) ? String(n) : '0'; }
+    return true;
+}
+function applyVpnConfigToUi(data) {
+    if (!data) {
+        return;
+    }
+    const wg = data.wireguard || {};
 
-    const tryApply = () => {
-        const enabledEl = document.getElementById('vpn_enabled');
-        const pkEl = document.getElementById('wg_public_key');
-        const peerEl = document.getElementById('wg_peer_public_key');
-        const addrEl = document.getElementById('wg_address');
-        const allowedEl = document.getElementById('wg_allowed_ips');
-        const epEl = document.getElementById('wg_endpoint');
-        const keepEl = document.getElementById('wg_persistent_keepalive');
-        // Require at least enabled selector and public key field to exist
-        if (!enabledEl || !pkEl) return false;
-
-        // Enable/disable section
-        enabledEl.value = (data.enabled && (data.vpn_type === 1 || data.vpn_type === 'wireguard')) ? 'wireguard' : 'disabled';
-        if (typeof toggleVpnConfig === 'function') toggleVpnConfig();
-
-        // Fill fields
-        // Only populate the peer/server public key
-        if (peerEl) peerEl.value = (wg.peer_public_key || '');
-        if (addrEl && wg.address != null) addrEl.value = String(wg.address);
-        if (allowedEl && wg.allowed_ips != null) allowedEl.value = String(wg.allowed_ips);
-        if (epEl && wg.endpoint != null) epEl.value = String(wg.endpoint);
-        if (keepEl && typeof wg.persistent_keepalive !== 'undefined') keepEl.value = String(wg.persistent_keepalive);
-        return true;
-    };
-
-    if (!tryApply()){
-        // Defer until VPN tab content is rendered
+    if (!tryApplyVPN(data)) {
         const container = document.getElementById('vpn_tab');
         if (container) {
-            const obs = new MutationObserver(() => {
-                if (tryApply()) { obs.disconnect(); }
-            });
-            obs.observe(container, { childList: true, subtree: true });
-            // Fallback retry once after 1s
-            setTimeout(() => { tryApply(); }, 1000);
+            if (container.dataset.vpnObserverAttached !== '1') {
+                container.dataset.vpnObserverAttached = '1';
+                const obs = new MutationObserver(() => {
+                    if (tryApplyVPN(data)) {
+                        obs.disconnect();
+                        delete container.dataset.vpnObserverAttached;
+                    }
+                });
+                obs.observe(container, { childList: true, subtree: true });
+                setTimeout(() => {
+                    tryApplyVPN(data);
+                    obs.disconnect();
+                    delete container.dataset.vpnObserverAttached;
+                }, 8000);
+            }
+            setTimeout(() => { tryApplyVPN(data); }, 1000);
         } else {
-            // Fallback retry once after 1s if container missing
-            setTimeout(() => { tryApply(); }, 1000);
+            setTimeout(() => { tryApplyVPN(data); }, 1000);
         }
     }
 }
@@ -3226,7 +3255,10 @@ function parseWireGuardConfig(configText)
         
         if (trimmedLine.includes('=')) 
         {
-            const [key, value] = trimmedLine.split('=').map(s => s.trim());
+            // Only split on the first '=' to preserve '=' in values
+            const eqIdx = trimmedLine.indexOf('=');
+            const key = trimmedLine.slice(0, eqIdx).trim();
+            const value = trimmedLine.slice(eqIdx + 1).trim();
             console.log(`Found ${currentSection}.${key} = ${value}`);
             
             if (currentSection === 'interface') 
@@ -3360,5 +3392,8 @@ async function testVpnConnection()
         const button = document.getElementById('test_vpn_button');
         button.disabled = false;
         button.textContent = 'Test Connection';
+        // Refresh status badge after test attempt
+        try { checkStatus(); } catch(_) {}
     }
 }
+document.getElementById("defaultOpen").click();

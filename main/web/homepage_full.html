@@ -594,6 +594,12 @@
                     </td>
                 </tr>
                 <tr>
+                    <td>VPN Status:</td>
+                    <td>
+                        <div id="vpn_status">Disconnected&nbsp;</div>
+                    </td>
+                </tr>
+                <tr>
                     <td><input id="check_status_button" name="check_status_button" type="button" onclick="checkStatus()"
                             value="Check status" /></td>
                     <td>&nbsp;</td>
@@ -1510,7 +1516,10 @@
         </div>
 
         <div id="vpn_tab" class="tabcontent">
-            <div class="section-title">VPN Settings</div>
+            <div class="section-title" style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+                <span>VPN Settings</span>
+                <span id="vpn_status_badge" class="status-indicator status-disconnected" title="VPN status">Disconnected</span>
+            </div>
             <table class="form-table">
                 <tr>
                     <td>VPN:</td>
