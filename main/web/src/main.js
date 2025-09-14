@@ -1910,10 +1910,32 @@ function checkStatus() {
         if (vpnTextEl) vpnTextEl.innerHTML = vpnText;
         const badge = document.getElementById('vpn_status_badge');
         if (badge) {
-            const isConnected = /connected|up|active/i.test(vpnText);
-            badge.textContent = isConnected ? 'Connected' : 'Disconnected';
+            const status = String(vpnText || '').toLowerCase();
+            let label = 'Disconnected';
+            let klass = 'status-disconnected';
+            if (status === 'connected') {
+                label = 'Connected';
+                klass = 'status-connected';
+            } else if (status === 'connecting') {
+                label = 'Connecting';
+                klass = 'status-disconnected';
+            } else if (status === 'disabled') {
+                label = 'Disabled';
+                klass = 'status-disconnected';
+            } else if (status === 'error') {
+                label = 'Error';
+                klass = 'status-disconnected';
+            } else if (status === 'unknown' || status === '') {
+                label = 'Unknown';
+                klass = 'status-disconnected';
+            } else if (status === 'disconnected') {
+                label = 'Disconnected';
+                klass = 'status-disconnected';
+            }
+
+            badge.textContent = label;
             badge.classList.remove('status-connected','status-disconnected');
-            badge.classList.add(isConnected ? 'status-connected' : 'status-disconnected');
+            badge.classList.add(klass);
             badge.title = vpnText;
         }
         checkFirmwareUpdate();
