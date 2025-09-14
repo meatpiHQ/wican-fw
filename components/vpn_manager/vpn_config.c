@@ -496,13 +496,44 @@ esp_err_t vpn_config_parse_wg(const char *config_text, vpn_wireguard_config_t *c
     return ESP_OK;
 }
 
+#include "vpn_keygen.h"
+
 esp_err_t vpn_config_generate_wg_keys(char *public_key, size_t public_key_size)
 {
-    if (!public_key || public_key_size < 64)
+    if (public_key == NULL || public_key_size < 64)
     {
         return ESP_ERR_INVALID_ARG;
     }
-    ESP_LOGW(TAG_CFG, "Key generation not implemented - esp_wireguard lacks API");
-    strlcpy(public_key, "Key generation not available", public_key_size);
-    return ESP_ERR_NOT_SUPPORTED;
+
+    // Generate Base64 private/public keys
+    char priv_b64[64] = {0};
+    char pub_b64[64] = {0};
+    esp_err_t err = vpn_keygen_generate_wireguard_keys(priv_b64, sizeof(priv_b64), pub_b64, sizeof(pub_b64));
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG_CFG, "WireGuard keygen failed: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    // Load existing config, update private key, save back
+    vpn_config_t cfg = {0};
+    if (vpn_config_load(&cfg) != ESP_OK)
+    {
+        // Initialize minimal WG config if none exists
+        cfg.type = VPN_TYPE_WIREGUARD;
+        cfg.enabled = false;
+    }
+    strlcpy(cfg.config.wireguard.private_key, priv_b64, sizeof(cfg.config.wireguard.private_key));
+    // Do not overwrite peer_public_key here. Only return our public.
+
+    esp_err_t save_r = vpn_config_save(&cfg);
+    if (save_r != ESP_OK)
+    {
+        ESP_LOGW(TAG_CFG, "Failed to persist private key: %s", esp_err_to_name(save_r));
+        // Still return the public key so UI can proceed; but surface error upstream
+        // Fall through to return save_r so HTTP layer can show error
+    }
+
+    strlcpy(public_key, pub_b64, public_key_size);
+    return save_r == ESP_OK ? ESP_OK : save_r;
 }
