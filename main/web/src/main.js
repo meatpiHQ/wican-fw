@@ -3341,8 +3341,11 @@ async function saveVpnConfiguration()
     
     if (vpnEnabled === "wireguard") 
     {
-        // Device private key (required)
-        vpnConfig.private_key = document.getElementById("wg_private_key").value;
+        // Device private key: do NOT send the UI placeholder back; let device preserve stored key
+        const priv = document.getElementById("wg_private_key").value;
+        if (priv && priv !== "Generated and stored on device") {
+            vpnConfig.private_key = priv;
+        }
         // Peer/server public key (canonical)
         const peerKey = document.getElementById("wg_peer_public_key").value;
         vpnConfig.peer_public_key = peerKey;

@@ -28,6 +28,8 @@
 #include <cJSON.h>
 
 static const char *TAG = "VPN_HTTP";
+// UI placeholder string used in read-only private key field
+static const char *WG_PRIV_PLACEHOLDER = "Generated and stored on device";
 
 // Simple in-place trim for C-strings
 static void trim_str(char *s)
@@ -43,6 +45,24 @@ static void trim_str(char *s)
         if (c==' '||c=='\t'||c=='\r'||c=='\n') { s[--len]='\0'; }
         else break;
     }
+}
+
+// Heuristic check for a WireGuard key (base64 of 32 bytes -> typically 44 chars)
+static bool looks_like_wg_b64_key(const char *s)
+{
+    if (!s) return false;
+    size_t n = strlen(s);
+    if (n < 40 || n > 64) return false; // accept a reasonable range
+    for (size_t i = 0; i < n; ++i)
+    {
+        char c = s[i];
+        bool ok = (c >= 'A' && c <= 'Z') ||
+                  (c >= 'a' && c <= 'z') ||
+                  (c >= '0' && c <= '9') ||
+                  (c == '+') || (c == '/') || (c == '=');
+        if (!ok) return false;
+    }
+    return true;
 }
 
 // HTTP handler function declarations
@@ -328,6 +348,9 @@ static esp_err_t vpn_store_config_handler(httpd_req_t *req)
     }
 
     vpn_config_t config = (vpn_config_t){0};
+    // Load existing config so we can preserve device private key if UI sends placeholder
+    vpn_config_t existing = {0};
+    esp_err_t have_existing = vpn_manager_load_config(&existing);
 
     cJSON *vpn_enabled = cJSON_GetObjectItem(json, "vpn_enabled");
     ESP_LOGI(TAG, "vpn_enabled field: %s", vpn_enabled && cJSON_IsString(vpn_enabled) ? vpn_enabled->valuestring : "(not present)");
@@ -357,7 +380,25 @@ static esp_err_t vpn_store_config_handler(httpd_req_t *req)
         if (cJSON_IsString(item) && item->valuestring[0] != '\0')
         {
             char tmp[80]; strlcpy(tmp, item->valuestring, sizeof(tmp)); trim_str(tmp);
-            strlcpy(config.config.wireguard.private_key, tmp, sizeof(config.config.wireguard.private_key));
+            if (strcmp(tmp, WG_PRIV_PLACEHOLDER) == 0)
+            {
+                ESP_LOGI(TAG, "Private key placeholder received; preserving existing key if available");
+            }
+            else if (looks_like_wg_b64_key(tmp))
+            {
+                strlcpy(config.config.wireguard.private_key, tmp, sizeof(config.config.wireguard.private_key));
+                ESP_LOGI(TAG, "Accepted new private key (base64)");
+            }
+            else
+            {
+                ESP_LOGW(TAG, "Private key string doesn't look like a WireGuard key; ignoring");
+            }
+        }
+        // If not provided or ignored, preserve existing stored key
+        if (config.config.wireguard.private_key[0] == '\0' && have_existing == ESP_OK)
+        {
+            strlcpy(config.config.wireguard.private_key, existing.config.wireguard.private_key,
+                    sizeof(config.config.wireguard.private_key));
         }
 
         // Peer/server public key (canonical: peer_public_key)
@@ -366,7 +407,15 @@ static esp_err_t vpn_store_config_handler(httpd_req_t *req)
         if (cJSON_IsString(item))
         {
             char tmp[80]; strlcpy(tmp, item->valuestring, sizeof(tmp)); trim_str(tmp);
-            strlcpy(config.config.wireguard.public_key, tmp, sizeof(config.config.wireguard.public_key));
+            if (looks_like_wg_b64_key(tmp))
+            {
+                strlcpy(config.config.wireguard.public_key, tmp, sizeof(config.config.wireguard.public_key));
+            }
+            else
+            {
+                ESP_LOGW(TAG, "Peer public key doesn't look like base64; keeping as-is");
+                strlcpy(config.config.wireguard.public_key, tmp, sizeof(config.config.wireguard.public_key));
+            }
         }
 
         // Interface address: store canonical IP without CIDR suffix
