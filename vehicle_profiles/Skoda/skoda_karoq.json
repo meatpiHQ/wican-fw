@@ -6,7 +6,7 @@
       "pid": "2210E0",
       "pid_init": "ATSH7E0;",
       "parameters": {
-        "Odometer": "[B8:B11]"
+        "ODOMETER": "[B8:B11]"
       }
     }
   ]
