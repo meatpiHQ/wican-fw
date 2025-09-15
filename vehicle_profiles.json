@@ -3040,6 +3040,25 @@
       ]
     },
     {
+      "car_model": "Skoda: Karoq",
+      "init": "ATSP6;",
+      "pids": [
+        {
+          "pid": "2210E0",
+          "pid_init": "ATSH7E0;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B8:B11]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Smart: #1",
       "init": "ATST64;ATSH7DF;ATSP7;",
       "pids": [
