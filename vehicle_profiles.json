@@ -324,6 +324,25 @@
       ]
     },
     {
+      "car_model": "Chrysler: Pacifica 2015+",
+      "init": "ATSP6;ATST96;",
+      "pids": [
+        {
+          "pid": "015B2",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "B3/2.55",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Citroen: C-Zero",
       "init": "ATSP6;ATFCSH761;ATFCSD300000;ATFCSM1;ATSH761;ATCRA762;",
       "pids": [
