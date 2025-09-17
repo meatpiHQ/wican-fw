@@ -1,0 +1,12 @@
+{
+  "car_model": "Chrysler: Pacifica 2015+",
+  "init": "ATSP6;ATST96;",
+  "pids": [
+    {
+      "pid": "015B2",
+      "parameters": {
+        "SOC": "B3/2.55"
+      }
+    }
+  ]
+}
