@@ -88,14 +88,14 @@ esp_err_t vpn_wg_init(const vpn_wireguard_config_t *cfg)
     s_wg_cfg.fw_mark = 0;
 
     // Log all config parameters
-    ESP_LOGI(TAG_WG, "WireGuard config:");
-    ESP_LOGI(TAG_WG, "  private_key: %s", EMPTY_OR_NULL(s_wg_cfg.private_key) ? "<empty>" : s_wg_cfg.private_key);
-    ESP_LOGI(TAG_WG, "  public_key: %s", EMPTY_OR_NULL(s_wg_cfg.public_key) ? "<empty>" : s_wg_cfg.public_key);
-    ESP_LOGI(TAG_WG, "  allowed_ip: %s", EMPTY_OR_NULL(s_wg_cfg.allowed_ip) ? "<empty>" : s_wg_cfg.allowed_ip);
-    ESP_LOGI(TAG_WG, "  allowed_ip_mask: %s", EMPTY_OR_NULL(s_wg_cfg.allowed_ip_mask) ? "<empty>" : s_wg_cfg.allowed_ip_mask);
-    ESP_LOGI(TAG_WG, "  endpoint: %s", EMPTY_OR_NULL(s_wg_cfg.endpoint) ? "<empty>" : s_wg_cfg.endpoint);
-    ESP_LOGI(TAG_WG, "  port: %d", s_wg_cfg.port);
-    ESP_LOGI(TAG_WG, "  persistent_keepalive: %d", s_wg_cfg.persistent_keepalive);
+    ESP_LOGD(TAG_WG, "WireGuard config:");
+    ESP_LOGD(TAG_WG, "  private_key: %s", EMPTY_OR_NULL(s_wg_cfg.private_key) ? "<empty>" : s_wg_cfg.private_key);
+    ESP_LOGD(TAG_WG, "  public_key: %s", EMPTY_OR_NULL(s_wg_cfg.public_key) ? "<empty>" : s_wg_cfg.public_key);
+    ESP_LOGD(TAG_WG, "  allowed_ip: %s", EMPTY_OR_NULL(s_wg_cfg.allowed_ip) ? "<empty>" : s_wg_cfg.allowed_ip);
+    ESP_LOGD(TAG_WG, "  allowed_ip_mask: %s", EMPTY_OR_NULL(s_wg_cfg.allowed_ip_mask) ? "<empty>" : s_wg_cfg.allowed_ip_mask);
+    ESP_LOGD(TAG_WG, "  endpoint: %s", EMPTY_OR_NULL(s_wg_cfg.endpoint) ? "<empty>" : s_wg_cfg.endpoint);
+    ESP_LOGD(TAG_WG, "  port: %d", s_wg_cfg.port);
+    ESP_LOGD(TAG_WG, "  persistent_keepalive: %d", s_wg_cfg.persistent_keepalive);
 
     s_wg_ctx.config = &s_wg_cfg;
     s_wg_ctx.netif = NULL; // let library create
