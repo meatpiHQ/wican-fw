@@ -41,6 +41,7 @@ static esp_netif_t* ap_netif = NULL;
 static esp_netif_t* sta_netif = NULL;
 static TaskHandle_t reconnect_task_handle = NULL;
 static EventGroupHandle_t wifi_event_group = NULL;
+static StaticEventGroup_t wifi_event_group_buffer;
 static wifi_mgr_config_t wifi_config;
 static wifi_mgr_callbacks_t user_callbacks = {0};
 static QueueHandle_t sta_ip_queue = NULL;
@@ -452,7 +453,7 @@ esp_err_t wifi_mgr_init(wifi_mgr_config_t* config) {
     }
     
     // Create event group
-    wifi_event_group = xEventGroupCreate();
+    wifi_event_group = xEventGroupCreateStatic(&wifi_event_group_buffer);
     if (wifi_event_group == NULL) {
         ESP_LOGE(TAG, "Failed to create event group");
         return ESP_ERR_NO_MEM;

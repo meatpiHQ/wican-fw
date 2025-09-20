@@ -74,6 +74,7 @@
 #define MQTT_BATTERY_TIMER_MS        (1000*60*10)
 
 static EventGroupHandle_t s_mqtt_event_group = NULL;
+static StaticEventGroup_t mqtt_event_group_buffer;
 #define MQTT_CONNECTED_BIT 			BIT0
 #define PUB_SUCCESS_BIT     		BIT1
 static esp_mqtt_client_handle_t client = NULL;
@@ -775,7 +776,7 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
     ESP_LOGI(TAG, "device_id: %s, mqtt_cfg.uri: %s", device_id, mqtt_cfg.broker.address.uri);
     mqtt_elm327_log = config_server_mqtt_elm327_log();
 	mqtt_load_filter();
-    s_mqtt_event_group = xEventGroupCreate();
+    s_mqtt_event_group = xEventGroupCreateStatic(&mqtt_event_group_buffer);
     client = esp_mqtt_client_init(&mqtt_cfg);
 
     static StackType_t *mqtt_task_stack;

@@ -59,6 +59,7 @@ static char* auto_pid_buf;
 static QueueHandle_t autopidQueue;
 static char* device_id;
 static EventGroupHandle_t xautopid_event_group = NULL;
+static StaticEventGroup_t xautopid_event_group_buffer;
 static all_pids_t* all_pids = NULL;
 static response_t elm327_response;
 static autopid_data_t autopid_data;
@@ -2875,7 +2876,8 @@ void autopid_init(char* id, bool enable_logging, uint32_t logging_period)
     
     if(xautopid_event_group == NULL)
     {
-        xautopid_event_group = xEventGroupCreate();
+        // Create a static event group for autopid
+        xautopid_event_group = xEventGroupCreateStatic(&xautopid_event_group_buffer);
     }
 
     #if HARDWARE_VER == WICAN_PRO

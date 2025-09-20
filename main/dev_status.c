@@ -2,6 +2,7 @@
 
 static const char *DEV_STATUS_TAG = "DEV_STATUS";
 static EventGroupHandle_t s_dev_status_event_group = NULL;
+static StaticEventGroup_t s_dev_status_event_group_buffer;
 
 // Helper function to get bit name for logging
 static const char* get_bit_name(EventBits_t bit)
@@ -37,7 +38,7 @@ static void log_bits(const char* action, EventBits_t bits)
 void dev_status_init(void)
 {
     if (s_dev_status_event_group == NULL) {
-        s_dev_status_event_group = xEventGroupCreate();
+        s_dev_status_event_group = xEventGroupCreateStatic(&s_dev_status_event_group_buffer);
         if (s_dev_status_event_group == NULL) {
             ESP_LOGE(DEV_STATUS_TAG, "Failed to create device status event group");
         } else {

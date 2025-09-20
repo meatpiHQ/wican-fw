@@ -93,6 +93,7 @@
 #define WS_CONNECTED_BIT			BIT1
 TaskHandle_t xwebsocket_handle = NULL;
 static EventGroupHandle_t xServerEventGroup = NULL;
+static StaticEventGroup_t server_event_group_buffer;
 static QueueHandle_t xip_Queue = NULL;
 
 static QueueHandle_t *xTX_Queue, *xRX_Queue;
@@ -3307,7 +3308,7 @@ static httpd_handle_t config_server_init(void)
 		}
 		memset(server_data.scratch, 0, SCRATCH_BUFSIZE);
 		
-		xServerEventGroup = xEventGroupCreate();
+		xServerEventGroup = xEventGroupCreateStatic(&server_event_group_buffer);
     	config_server_wifi_connected(0);
     }
 

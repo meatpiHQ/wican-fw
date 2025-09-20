@@ -41,6 +41,7 @@ static const char *TAG = "VPN_MANAGER";
 
 // Global variables
 static EventGroupHandle_t vpn_event_group = NULL;
+static StaticEventGroup_t s_vpn_event_group_bss;
 static vpn_config_t current_config = {0};
 static vpn_status_t current_status = VPN_STATUS_DISABLED;
 static esp_netif_t *vpn_netif = NULL;
@@ -111,7 +112,7 @@ esp_err_t vpn_manager_init(void)
     // Create event group
     if (vpn_event_group == NULL)
     {
-        vpn_event_group = xEventGroupCreate();
+        vpn_event_group = xEventGroupCreateStatic(&s_vpn_event_group_bss);
         if (vpn_event_group == NULL)
         {
             ESP_LOGE(TAG, "Failed to create VPN event group");

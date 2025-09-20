@@ -36,6 +36,7 @@
 #include "hw_config.h"
 
 static EventGroupHandle_t s_can_event_group = NULL;
+static StaticEventGroup_t xCanEventGroupBuffer;
 #define CAN_ENABLE_BIT 		BIT0
 
 #define TAG 		__func__
@@ -275,7 +276,7 @@ void can_init(uint8_t bitrate)
 {
 	if(s_can_event_group == NULL)
 	{
-		s_can_event_group = xEventGroupCreate();
+		s_can_event_group = xEventGroupCreateStatic(&xCanEventGroupBuffer);
 		xCAN_EN_Timer= xTimerCreate
 						   ( /* Just a text name, not used by the RTOS
 							 kernel. */

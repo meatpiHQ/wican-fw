@@ -268,6 +268,7 @@ static esp_bd_addr_t remote_bd_addr;
 TaskHandle_t xble_handle = NULL;
 static uint8_t conn_led = 0;
 static EventGroupHandle_t s_ble_event_group = NULL;
+static StaticEventGroup_t ble_event_group_buffer;
 // Indicates link completed authenticated & encrypted pairing
 static volatile bool ble_secured = false;
 // Allows runtime control over whether we accept/ initiate pairing/bonding
@@ -1350,7 +1351,7 @@ void ble_init(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t conn
 
     if(s_ble_event_group == NULL)
     {
-        s_ble_event_group = xEventGroupCreate();
+        s_ble_event_group = xEventGroupCreateStatic(&ble_event_group_buffer);
     }
 
     if(ble_cmdline_inbuf == NULL)

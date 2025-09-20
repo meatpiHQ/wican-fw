@@ -51,6 +51,7 @@ static uint32_t server_port = 0;
 static int sock = -1;
 int listen_sock;
 static EventGroupHandle_t xSocketEventGroup;
+static StaticEventGroup_t xSocketEventGroupBuffer;
 static QueueHandle_t *xTX_Queue, *xRX_Queue;
 static SemaphoreHandle_t xTCP_Socket_Semaphore;
 static uint8_t conn_led = 0;
@@ -437,7 +438,7 @@ int8_t tcp_server_init(uint32_t port, QueueHandle_t *xTXp_Queue, QueueHandle_t *
 	xRX_Queue = xRXp_Queue;
 	conn_led = connected_led;
 	xTCP_Socket_Semaphore = xSemaphoreCreateMutex();
-	xSocketEventGroup = xEventGroupCreate();
+	xSocketEventGroup = xEventGroupCreateStatic(&xSocketEventGroupBuffer);
 	xEventGroupSetBits( xSocketEventGroup, PORT_CLOSED_BIT );
 	xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
 	udp_enable = udp_en;

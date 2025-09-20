@@ -84,6 +84,7 @@ static uint32_t logger_period = 0;
 static uint32_t obd_logger_params_count = 0;
 static obd_logger_get_params_cb_t obd_logger_get_params = NULL;
 static EventGroupHandle_t obd_logger_event_group = NULL;
+static StaticEventGroup_t obd_logger_event_group_buffer;
 
 /**
  * @brief Enable OBD logging
@@ -1073,8 +1074,7 @@ esp_err_t odb_logger_init(obd_logger_t *obd_logger)
         return ESP_FAIL;
     }
 
-    // Create event group for enable/disable control
-    obd_logger_event_group = xEventGroupCreate();
+    obd_logger_event_group = xEventGroupCreateStatic(&obd_logger_event_group_buffer);
     if (obd_logger_event_group == NULL)
     {
         ESP_LOGE(TAG, "Failed to create event group");
