@@ -27,6 +27,8 @@
 #include "wc_timer.h"
 #include "rtc.h"
 #include "dev_status.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 
 #define TAG "imu"
 #define STATIONARY_TIME_MS      3000
@@ -35,6 +37,12 @@ static icm42670_t dev = {0};
 static QueueHandle_t imu_motion_evt_queue = NULL;
 static QueueHandle_t activity_state_queue = NULL;
 static uint8_t imu_wom_threshold = 8; // Default threshold value
+// Static storage for imu_motion_evt_queue (length 10, item size uint32_t)
+static StaticQueue_t imu_motion_evt_queue_struct;
+static uint8_t imu_motion_evt_queue_storage[10 * sizeof(uint32_t)];
+// Static storage for activity_state_queue (length 1, item size activity_state_t)
+static StaticQueue_t activity_state_queue_struct;
+static uint8_t activity_state_queue_storage[1 * sizeof(activity_state_t)];
 
 void IRAM_ATTR imu_isr_handler(void* arg)
 {
@@ -73,7 +81,7 @@ static void imu_motion_task(void *pvParameters)
     wc_timer_set(&motion_timer, 0);  // Initialize to expired
 
 
-    activity_state_queue = xQueueCreate(1, sizeof(activity_state_t));
+    activity_state_queue = xQueueCreateStatic(1, sizeof(activity_state_t), activity_state_queue_storage, &activity_state_queue_struct);
     if (activity_state_queue == NULL)
     {
         ESP_LOGE(TAG, "Failed to create activity state queue");
@@ -157,7 +165,7 @@ esp_err_t imu_init(i2c_port_t i2c_num, gpio_num_t sda_gpio, gpio_num_t scl_gpio,
     
     gpio_config(&io_conf);
 
-    imu_motion_evt_queue = xQueueCreate(10, sizeof(uint32_t));
+    imu_motion_evt_queue = xQueueCreateStatic(10, sizeof(uint32_t), imu_motion_evt_queue_storage, &imu_motion_evt_queue_struct);
 
     gpio_install_isr_service(0);
     gpio_isr_handler_add(IMU_INT_GPIO_NUM, imu_isr_handler, (void *)IMU_INT_GPIO_NUM);

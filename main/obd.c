@@ -30,6 +30,8 @@
 #include "elm327.h"
 #include "config_server.h"
 #include "hw_config.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 
 /* Defines and Constants */
 // #define TAG                     __func__
@@ -42,6 +44,8 @@
 
 /* Global Variables */
 static QueueHandle_t battery_voltage_queue;
+static StaticQueue_t battery_voltage_queue_struct;
+static uint8_t battery_voltage_queue_storage[sizeof(float)];
 
 /* Helper Functions for Parsing */
 static int parse_on_off(const char* str)
@@ -359,7 +363,7 @@ void obd_init(void)
 {
     ESP_LOGI(TAG, "Initializing OBD");
 
-    battery_voltage_queue = xQueueCreate(1, sizeof(float));
+    battery_voltage_queue = xQueueCreateStatic(1, sizeof(float), battery_voltage_queue_storage, &battery_voltage_queue_struct);
 
     float obd_voltage = 0;
 

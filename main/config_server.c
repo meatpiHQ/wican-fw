@@ -28,6 +28,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
+#include "freertos/queue.h"
 #include <nvs_flash.h>
 #include <sys/param.h>
 #include "nvs_flash.h"
@@ -95,6 +96,8 @@ TaskHandle_t xwebsocket_handle = NULL;
 static EventGroupHandle_t xServerEventGroup = NULL;
 static StaticEventGroup_t server_event_group_buffer;
 static QueueHandle_t xip_Queue = NULL;
+static StaticQueue_t xip_queue_struct;
+static uint8_t xip_queue_storage[20];
 
 static QueueHandle_t *xTX_Queue, *xRX_Queue;
 
@@ -3314,7 +3317,7 @@ static httpd_handle_t config_server_init(void)
 
     if(xip_Queue == NULL)
     {
-    	xip_Queue = xQueueCreate(1, 20);
+		xip_Queue = xQueueCreateStatic(1, 20, xip_queue_storage, &xip_queue_struct);
     }
 
 	

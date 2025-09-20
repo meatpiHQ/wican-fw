@@ -29,6 +29,7 @@
 #include "nvs_flash.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "esp_attr.h" // for EXT_RAM_ATTR
 #include <string.h>
 #include <stdlib.h>
 #include "lwip/sockets.h"
@@ -46,6 +47,11 @@ static wifi_mgr_config_t wifi_config;
 static wifi_mgr_callbacks_t user_callbacks = {0};
 static QueueHandle_t sta_ip_queue = NULL;
 static QueueHandle_t ap_stations_queue = NULL;
+// Static queue storage in PSRAM
+static StaticQueue_t sta_ip_queue_struct;
+static uint8_t sta_ip_queue_storage[1 * sizeof(char[16])];
+static StaticQueue_t ap_stations_queue_struct;
+static uint8_t ap_stations_queue_storage[1 * sizeof(uint16_t)];
 // Ban/blacklist parameters for SSIDs that repeatedly fail authentication
 #ifndef WIFI_MGR_AUTH_FAIL_THRESHOLD
 #define WIFI_MGR_AUTH_FAIL_THRESHOLD 3
@@ -459,9 +465,19 @@ esp_err_t wifi_mgr_init(wifi_mgr_config_t* config) {
         return ESP_ERR_NO_MEM;
     }
     
-    // Create status queues
-    sta_ip_queue = xQueueCreate(1, sizeof(char[16]));
-    ap_stations_queue = xQueueCreate(1, sizeof(uint16_t));
+    // Create status queues (static, backed by PSRAM)
+    sta_ip_queue = xQueueCreateStatic(
+        1,                     // uxQueueLength
+        sizeof(char[16]),      // uxItemSize
+        sta_ip_queue_storage,  // pucQueueStorageBuffer
+        &sta_ip_queue_struct   // pxQueueBuffer
+    );
+    ap_stations_queue = xQueueCreateStatic(
+        1,                            // uxQueueLength
+        sizeof(uint16_t),             // uxItemSize
+        ap_stations_queue_storage,    // pucQueueStorageBuffer
+        &ap_stations_queue_struct     // pxQueueBuffer
+    );
 
     if (sta_ip_queue == NULL || ap_stations_queue == NULL) {
         ESP_LOGE(TAG, "Failed to create status queues");

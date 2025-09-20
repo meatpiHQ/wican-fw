@@ -115,6 +115,9 @@ static float sleep_voltage = 13.1f;
 static uint8_t enable_sleep = 0;
 static QueueHandle_t voltage_queue = NULL;
 static esp_adc_cal_characteristics_t adc1_chars;
+// Static queue storage for voltage_queue (queue length = 1, item size = sizeof(float))
+static StaticQueue_t voltage_queue_struct;
+static uint8_t voltage_queue_storage[sizeof(float)];
 
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
@@ -563,7 +566,7 @@ int8_t sleep_mode_init(uint8_t enable, float sleep_volt)
 	sleep_voltage = sleep_volt;
 	ESP_LOGW(TAG, "sleep_volt: %2.2f", sleep_volt);
 	s_mqtt_event_group = xEventGroupCreate();
-	voltage_queue = xQueueCreate(1, sizeof( float) );
+    voltage_queue = xQueueCreateStatic(1, sizeof(float), voltage_queue_storage, &voltage_queue_struct);
 	xTaskCreate(adc_task, "adc_task", 4096, (void*)AF_INET, 5, NULL);
 
 	return 1;
@@ -599,6 +602,12 @@ static adc_cali_handle_t cali_handle = NULL;
 static bool do_calibration = false;
 static QueueHandle_t voltage_queue = NULL;
 static QueueHandle_t sleep_state_queue = NULL;
+// Static queue storage for voltage_queue (queue length = 1, item size = sizeof(float))
+static StaticQueue_t voltage_queue_struct;
+static uint8_t voltage_queue_storage[sizeof(float)];
+// Static queue storage for sleep_state_queue (queue length = 1, item size = sizeof(sleep_state_info_t))
+static StaticQueue_t sleep_state_queue_struct;
+static uint8_t sleep_state_queue_storage[sizeof(sleep_state_info_t)];
 
 static void calibration_init(void)
 {
@@ -859,9 +868,9 @@ void light_sleep_task(void *pvParameters)
         wakeup_interval *= 60000; //change min to ms
     }
 
-    // Create queues
-    voltage_queue = xQueueCreate(1, sizeof(float));
-    sleep_state_queue = xQueueCreate(1, sizeof(sleep_state_info_t));
+    // Create queues (static allocation)
+    voltage_queue = xQueueCreateStatic(1, sizeof(float), voltage_queue_storage, &voltage_queue_struct);
+    sleep_state_queue = xQueueCreateStatic(1, sizeof(sleep_state_info_t), sleep_state_queue_storage, &sleep_state_queue_struct);
 
     // Initialize ADC
     // calibration_init();

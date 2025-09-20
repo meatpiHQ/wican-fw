@@ -27,6 +27,7 @@
 #include <esp_netif.h>
 #include <freertos/task.h>
 #include <freertos/timers.h>
+#include <freertos/queue.h>
 #include <esp_wireguard.h>
 #include <esp_heap_caps.h>
 #include <cJSON.h>
@@ -64,6 +65,8 @@ typedef struct
 
 static TaskHandle_t s_vpn_task = NULL;
 static QueueHandle_t s_vpn_cmd_q = NULL;
+static StaticQueue_t s_vpn_cmd_q_struct;
+static uint8_t s_vpn_cmd_q_storage[8 * sizeof(vpn_cmd_msg_t)];
 static uint32_t s_backoff_ms = 0;
 static uint32_t s_backoff_cap_ms = 60000; // 60s cap
 static uint32_t s_backoff_base_ms = 2000; // 2s start
@@ -123,7 +126,7 @@ esp_err_t vpn_manager_init(void)
     // Create command queue and VPN task
     if (!s_vpn_cmd_q)
     {
-        s_vpn_cmd_q = xQueueCreate(8, sizeof(vpn_cmd_msg_t));
+        s_vpn_cmd_q = xQueueCreateStatic(8, sizeof(vpn_cmd_msg_t), s_vpn_cmd_q_storage, &s_vpn_cmd_q_struct);
         if (!s_vpn_cmd_q)
         {
             ESP_LOGE(TAG, "Failed to create VPN command queue");

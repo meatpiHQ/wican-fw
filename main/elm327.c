@@ -1355,6 +1355,8 @@ typedef struct
 
 /* Global Variables */
 static QueueHandle_t elm327_cmd_queue;
+static StaticQueue_t elm327_cmd_queue_struct;
+static uint8_t elm327_cmd_queue_storage[ELM327_CMD_QUEUE_SIZE * sizeof(elm327_commands_t)];
 QueueHandle_t uart1_queue = NULL;
 static SemaphoreHandle_t xuart1_semaphore = NULL;
 
@@ -2820,7 +2822,7 @@ void elm327_init(response_callback_t rsp_callback, QueueHandle_t *rx_queue, void
 	}
 
 
-    elm327_cmd_queue = xQueueCreate(ELM327_CMD_QUEUE_SIZE, sizeof(elm327_commands_t));
+    elm327_cmd_queue = xQueueCreateStatic(ELM327_CMD_QUEUE_SIZE, sizeof(elm327_commands_t), elm327_cmd_queue_storage, &elm327_cmd_queue_struct);
 	if (elm327_cmd_queue == NULL){
 		ESP_LOGE(TAG, "Failed to create queue");
 	}
