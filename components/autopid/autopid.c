@@ -64,6 +64,8 @@ static all_pids_t* all_pids = NULL;
 static response_t elm327_response;
 static autopid_data_t autopid_data;
 static QueueHandle_t protocolnumberQueue = NULL;
+// Cached configuration JSON (built once after all_pids is loaded)
+static char *autopid_config_json = NULL;
 
 #if HARDWARE_VER == WICAN_PRO
 static char* elm327_autopid_cmd_buffer;
@@ -918,11 +920,81 @@ void autopid_publish_all_destinations(void){
             case DEST_HTTPS: {
                 // Build URL for standard HTTP/HTTPS endpoints
                 char *url = dest[0]? strdup_psram(dest): NULL;
+                static bool settings_sent = false;
+
                 if(!url){
                     ESP_LOGW(TAG, "Destination %u missing URL", i); break; }
+                
+                char *body = NULL;
+                char *current_autopid_data = NULL;
+                char *current_config_data = NULL;
+                char *current_status_data = NULL;
 
-                // Use raw JSON body for standard HTTP/HTTPS
-                char *body = strdup_psram(raw_json);
+                if(settings_sent == true){
+                    // Wrap telemetry under "autopid_data" for standard HTTP/HTTPS after initial settings
+                    cJSON *root_obj = cJSON_CreateObject();
+                    if (root_obj) {
+                        cJSON *auto_obj = NULL;
+                        if (raw_json) {
+                            auto_obj = cJSON_Parse(raw_json);
+                        }
+                        if (!auto_obj) auto_obj = cJSON_CreateObject();
+                        cJSON_AddItemToObject(root_obj, "autopid_data", auto_obj);
+
+                        char *printed = cJSON_PrintUnformatted(root_obj);
+                        if (printed) {
+                            body = strdup_psram(printed);
+                            free(printed);
+                        }
+                        cJSON_Delete(root_obj);
+                    }
+                } else {
+                    // Use settings JSON body for standard HTTP/HTTPS
+                    current_status_data = config_server_get_status_json();
+                    current_config_data = autopid_get_config();
+                    current_autopid_data = strdup_psram(raw_json);
+
+                    cJSON *root_obj = cJSON_CreateObject();
+                    if (root_obj) {
+                        cJSON *cfg_obj = NULL;
+                        cJSON *sts_obj = NULL;
+                        cJSON *auto_obj = NULL;
+
+                        if (current_config_data) {
+                            cfg_obj = cJSON_Parse(current_config_data);
+                        }
+                        if (!cfg_obj) cfg_obj = cJSON_CreateObject();
+
+                        if (current_status_data) {
+                            sts_obj = cJSON_Parse(current_status_data);
+                        }
+                        if (!sts_obj) sts_obj = cJSON_CreateObject();
+
+                        if (current_autopid_data) {
+                            auto_obj = cJSON_Parse(current_autopid_data);
+                        }
+                        if (!auto_obj) auto_obj = cJSON_CreateObject();
+
+                        cJSON_AddItemToObject(root_obj, "config", cfg_obj);
+                        cJSON_AddItemToObject(root_obj, "status", sts_obj);
+                        cJSON_AddItemToObject(root_obj, "autopid_data", auto_obj);
+
+                        char *printed = cJSON_PrintUnformatted(root_obj);
+                        if (printed) {
+                            body = strdup_psram(printed);
+                            free(printed);
+                        }
+                        cJSON_Delete(root_obj);
+                    }
+
+                    if (current_autopid_data) { 
+                        free(current_autopid_data); current_autopid_data = NULL; 
+                    }
+                    if (current_status_data) { 
+                        free(current_status_data); current_status_data = NULL; 
+                    }
+                }
+
                 if(!body){
                     ESP_LOGE(TAG, "Failed to allocate body"); free(url); break; }
 
@@ -1031,6 +1103,8 @@ void autopid_publish_all_destinations(void){
                     ESP_LOGI(TAG, "HTTP(S) dest %u status %d success", i, resp.status_code);
                     gd->consec_failures = 0;
                     gd->backoff_ms = 0;
+                    // After initial successful settings push, switch to sending raw telemetry only
+                    if (!settings_sent) { settings_sent = true; }
                 } else {
                     ESP_LOGE(TAG, "HTTP(S) dest %u request failed: %s", i, esp_err_to_name(err));
                     gd->consec_failures++;
@@ -1214,71 +1288,59 @@ void autopid_publish_all_destinations(void){
 
 char* autopid_get_config(void)
 {
-    static char *response_str;
+    // Return cached JSON. If not yet generated, attempt a lazy build once.
+    if (autopid_config_json == NULL) {
+        // Build lazily if possible (defensive in case init wasn't called yet)
+        if (!all_pids || !all_pids->mutex) {
+            ESP_LOGE(TAG, "autopid_get_config: all_pids not ready");
+            return NULL;
+        }
 
-    // Check if all_pids and mutex are valid
-    if (!all_pids || !all_pids->mutex) {
-        ESP_LOGE(TAG, "Invalid all_pids or mutex");
-        return NULL;
-    }
+        // Build under mutex and cache
+        if (xSemaphoreTake(all_pids->mutex, portMAX_DELAY) == pdTRUE) {
+            cJSON *parameters_object = cJSON_CreateObject();
+            if (!parameters_object) {
+                ESP_LOGE(TAG, "Failed to create JSON object");
+                xSemaphoreGive(all_pids->mutex);
+                return NULL;
+            }
 
-    // Take mutex with timeout
-    if (xSemaphoreTake(all_pids->mutex, portMAX_DELAY) != pdTRUE) {
-        ESP_LOGE(TAG, "Failed to take mutex");
-        return NULL;
-    }
-    
-    cJSON *parameters_object = cJSON_CreateObject();
-    if (!parameters_object)
-    {
-        ESP_LOGE(TAG, "Failed to create JSON object");
-        xSemaphoreGive(all_pids->mutex);
-        return NULL;
-    }
+            for (int i = 0; i < all_pids->pid_count; i++) {
+                for (int j = 0; j < all_pids->pids[i].parameters_count; j++) {
+                    parameter_t *param = &all_pids->pids[i].parameters[j];
+                    if ((all_pids->pids[i].pid_type == PID_STD && !all_pids->pid_std_en) ||
+                        (all_pids->pids[i].pid_type == PID_CUSTOM && !all_pids->pid_custom_en) ||
+                        (all_pids->pids[i].pid_type == PID_SPECIFIC && !all_pids->pid_specific_en)) {
+                        continue;
+                    }
+                    if (!param || !param->name) continue;
 
-    // Iterate through all PIDs
-    for (int i = 0; i < all_pids->pid_count; i++)
-    {
-        // For each PID, iterate through its parameters
-        for (int j = 0; j < all_pids->pids[i].parameters_count; j++)
-        {
-            parameter_t *param = &all_pids->pids[i].parameters[j];
-            
-            if((all_pids->pids[i].pid_type == PID_STD && !all_pids->pid_std_en) ||
-            (all_pids->pids[i].pid_type == PID_CUSTOM && !all_pids->pid_custom_en) ||
-            (all_pids->pids[i].pid_type == PID_SPECIFIC && !all_pids->pid_specific_en))
-            {
-                continue;
+                    cJSON *parameter_details = cJSON_CreateObject();
+                    if (!parameter_details) {
+                        ESP_LOGE(TAG, "Failed to create parameter JSON object");
+                        continue;
+                    }
+                    if (param->class) {
+                        cJSON_AddStringToObject(parameter_details, "class", param->class);
+                    }
+                    if (param->unit) {
+                        cJSON_AddStringToObject(parameter_details, "unit", param->unit);
+                    }
+                    cJSON_AddItemToObject(parameters_object, param->name, parameter_details);
+                }
             }
-            // Skip if parameter name is NULL
-            if (!param || !param->name) continue;
-            
-            cJSON *parameter_details = cJSON_CreateObject();
-            if (!parameter_details)
-            {
-                ESP_LOGE(TAG, "Failed to create parameter JSON object");
-                continue;
+
+            char *json_tmp = cJSON_PrintUnformatted(parameters_object);
+            if (json_tmp) {
+                // Move to PSRAM-managed buffer
+                autopid_config_json = strdup_psram(json_tmp);
+                free(json_tmp);
             }
-            
-            // Add class and unit if they exist
-            if (param->class)
-            {
-                cJSON_AddStringToObject(parameter_details, "class", param->class);
-            }
-            if (param->unit)
-            {
-                cJSON_AddStringToObject(parameter_details, "unit", param->unit);
-            }
-            
-            cJSON_AddItemToObject(parameters_object, param->name, parameter_details);
+            cJSON_Delete(parameters_object);
+            xSemaphoreGive(all_pids->mutex);
         }
     }
-
-    // Convert to string and send response
-    response_str = cJSON_PrintUnformatted(parameters_object);
-    cJSON_Delete(parameters_object);
-    xSemaphoreGive(all_pids->mutex);
-    return response_str;
+    return autopid_config_json;
 }
 
 // void autopid_pub_discovery(void)
@@ -2970,6 +3032,8 @@ void autopid_init(char* id, bool enable_logging, uint32_t logging_period)
         ESP_LOGE(TAG, "No PIDs found in car_data.json or auto_pid.json");
         return;
     }
+    // Build and cache config JSON once after loading all_pids
+    (void)autopid_get_config();
     // autopid_load_config(config_str);
     // // char *desired_car_model = "Toyota Camry";
     // if(car.car_specific_en && car.selected_car_model != NULL)d
