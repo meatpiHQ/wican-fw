@@ -553,7 +553,7 @@ void safe_mode_check(void)
 void app_main(void)
 {
 	void* internal_buf = NULL;
-	internal_buf = heap_caps_malloc(75 * 1024, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+	// internal_buf = heap_caps_malloc(75 * 1024, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 	dev_status_init();
 	dev_status_set_bits(DEV_AWAKE_BIT);
 	dev_status_clear_bits(DEV_SLEEP_BIT);
@@ -905,7 +905,10 @@ void app_main(void)
 
 	if(config_server_mqtt_en_config())
 	{
-		xmsg_mqtt_rx_queue = xQueueCreate(32, sizeof(mqtt_can_message_t) );
+		static mqtt_can_message_t* xmsg_mqtt_rx_queue_Storage;
+		static StaticQueue_t xmsg_mqtt_rx_queue_Buffer;
+		xmsg_mqtt_rx_queue_Storage = (mqtt_can_message_t *)heap_caps_malloc(32 * sizeof(mqtt_can_message_t), MALLOC_CAP_SPIRAM);
+		xmsg_mqtt_rx_queue = xQueueCreateStatic(32, sizeof(mqtt_can_message_t), (uint8_t *)xmsg_mqtt_rx_queue_Storage, &xmsg_mqtt_rx_queue_Buffer);
 		#if HARDWARE_VER == WICAN_PRO
 		// if(protocol != AUTO_PID && protocol != OBD_ELM327)
 		{
