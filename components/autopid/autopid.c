@@ -1789,18 +1789,28 @@ static void publish_parameter_mqtt(parameter_t *param) {
     }
 }
 
+static void autopid_publish_task(void *pvParameters)
+{
+    ESP_LOGI(TAG, "Autopid Publish Task Started");
+    for(;;)
+    {
+        // Only publish when autopid is enabled and STA is connected
+        if (dev_status_is_autopid_enabled() && dev_status_is_sta_connected())
+        {
+            // Grouping must remain enabled at runtime
+            if (all_pids && all_pids->grouping && strcmp("enable", all_pids->grouping) == 0)
+            {
+                autopid_publish_all_destinations();
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
 
 static void autopid_task(void *pvParameters)
 {
     static char default_init[] = "ati\rate0\rath1\ratl0\rats1\ratm0\ratst96\r";
     wc_timer_t ecu_check_timer;
-    wc_timer_t group_cycle_timer;
-    static bool autopid_data_grouping_en = false;
-
-    if (strcmp("enable", all_pids->grouping) == 0)
-    {
-        autopid_data_grouping_en = true;
-    }
 
     ESP_LOGI(TAG, "Autopid Task Started");
     
@@ -1863,7 +1873,6 @@ static void autopid_task(void *pvParameters)
 
     // Initialize timers
     wc_timer_set(&ecu_check_timer, 2000);
-    // wc_timer_set(&group_cycle_timer, all_pids->cycle);
 
     while(1) 
     {
@@ -2097,12 +2106,6 @@ static void autopid_task(void *pvParameters)
         // elm327_unlock();
         xSemaphoreGive(all_pids->mutex);
         vTaskDelay(pdMS_TO_TICKS(10));
-
-        if (autopid_data_grouping_en && dev_status_is_sta_connected())
-        {
-            autopid_publish_all_destinations();
-            // wc_timer_set(&group_cycle_timer, all_pids->cycle);
-        }
 
         if (wc_timer_is_expired(&ecu_check_timer)) {
             if (all_parameters_failed(all_pids)) {
@@ -3082,6 +3085,30 @@ void autopid_init(char* id, bool enable_logging, uint32_t logging_period)
         // Handle memory allocation failure
         ESP_LOGE(TAG, "Failed to allocate autopid_task stack in PSRAM");
     }
+
+    if (strcmp("enable", all_pids->grouping) == 0)
+    {
+        static StackType_t *autopid_publish_task_stack;
+        static StaticTask_t autopid_publish_task_buffer;
+        static const size_t autopid_publish_task_stack_size = (1024*8);
+        // Allocate stack memory in PSRAM
+        autopid_publish_task_stack = heap_caps_malloc(autopid_publish_task_stack_size, MALLOC_CAP_SPIRAM);
+        if(autopid_publish_task_stack == NULL)
+        {
+            ESP_LOGE(TAG, "Failed to allocate autopid_publish_task stack in PSRAM");
+        }
+        else
+        {
+            memset(autopid_publish_task_stack, 0, autopid_publish_task_stack_size);
+            if (xTaskCreateStatic(autopid_publish_task, "autopid_publish_task", autopid_publish_task_stack_size,
+                                    NULL, 5, autopid_publish_task_stack, &autopid_publish_task_buffer) != NULL) {
+                ESP_LOGI(TAG, "Autopid publish task created");
+            } else {
+                ESP_LOGE(TAG, "Failed to create autopid_publish_task");
+            }
+        }
+    }
+
 
     if(dev_status_is_smartconnect_enabled())
     {
