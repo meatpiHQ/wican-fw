@@ -244,3 +244,4 @@ int config_server_get_sta_fallbacks_count(void);
 const char *config_server_get_sta_fallback_ssid(int index);
 const char *config_server_get_sta_fallback_pass(int index);
 wifi_security_t config_server_get_sta_fallback_security(int index);
+char *config_server_get_status_json(void);

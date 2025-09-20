@@ -89,6 +89,7 @@
 #include "wifi_mgr.h"
 #include "cert_manager.h"
 #include "vpn_manager.h"
+#include "dev_status.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
@@ -1093,7 +1094,7 @@ static esp_err_t load_car_config_handler(httpd_req_t *req)
         ESP_LOGI(TAG, "Sending response: %s", response_str);
         httpd_resp_set_type(req, "application/json");
         httpd_resp_send(req, response_str, HTTPD_RESP_USE_STRLEN);
-        free(response_str);  // Free the allocated string
+		// Do not free: response_str is a cached global string
     } else {
         ESP_LOGE(TAG, "Failed to generate JSON response");
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to generate JSON");
@@ -1453,29 +1454,20 @@ static esp_err_t store_car_data_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-static esp_err_t check_status_handler(httpd_req_t *req)
+char *config_server_get_status_json(void)
 {
-
 	char ip_str[20] = {0};
 
 	const char *ip = wifi_mgr_get_sta_ip();
 	strlcpy(ip_str, ip ? ip : "", sizeof(ip_str));
 	cJSON *root = cJSON_CreateObject();
-	static char fver[16];
-	static char hver[32];
-    const esp_partition_t *running = esp_ota_get_running_partition();
-    static esp_app_desc_t running_app_info;
+	char fver[16];
+	char hver[32];
+
+    esp_app_desc_t* running_app_info = dev_status_get_running_app_info();
 	uint32_t firmware_ver_minor = 0, firmware_ver_major = 0;
 
-    if (esp_ota_get_partition_description(running, &running_app_info) != ESP_OK)
-    {
-    	running_app_info.version[0] = '1';
-        ESP_LOGE(TAG, "Error getting partition_description");
-
-    }
-
-
-	if (sscanf(running_app_info.version, "v%ld.%ld", &firmware_ver_major, &firmware_ver_minor) == 2) 
+	if (sscanf(running_app_info->version, "v%ld.%ld", &firmware_ver_major, &firmware_ver_minor) == 2) 
 	{
 		ESP_LOGI(TAG, "Firmware version: %ld.%ld", firmware_ver_major, firmware_ver_minor);
 	} 
@@ -1556,17 +1548,6 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 	cJSON_AddStringToObject(root, "mqtt_rx_topic", device_config.mqtt_rx_topic);
 	cJSON_AddStringToObject(root, "mqtt_status_topic", device_config.mqtt_status_topic);
 	cJSON_AddStringToObject(root, "device_id", device_id);
-	cJSON_AddStringToObject(root, "sta_security", device_config.sta_security);
-	cJSON_AddStringToObject(root, "home_ssid", device_config.home_ssid);
-	cJSON_AddStringToObject(root, "home_password", device_config.home_password);
-	cJSON_AddStringToObject(root, "home_security", device_config.home_security);
-	cJSON_AddStringToObject(root, "home_protocol", device_config.home_protocol);
-	cJSON_AddStringToObject(root, "drive_ssid", device_config.drive_ssid);
-	cJSON_AddStringToObject(root, "drive_password", device_config.drive_password);
-	cJSON_AddStringToObject(root, "drive_security", device_config.drive_security);
-	cJSON_AddStringToObject(root, "drive_protocol", device_config.drive_protocol);
-	cJSON_AddStringToObject(root, "drive_connection_type", device_config.drive_connection_type);
-	cJSON_AddStringToObject(root, "drive_mode_timeout", device_config.drive_mode_timeout);
 
 	if(autopid_get_ecu_status())
 	{
@@ -1621,13 +1602,20 @@ static esp_err_t check_status_handler(httpd_req_t *req)
 		cJSON_AddStringToObject(root, "vpn_ip", "");
 	}
 
-    const char *resp_str = cJSON_PrintUnformatted(root);
+    char *resp_str = cJSON_PrintUnformatted(root);
+	cJSON_Delete(root);
+	return resp_str;
+}
+
+static esp_err_t check_status_handler(httpd_req_t *req)
+{
+	char *resp_str = config_server_get_status_json();
 
 	httpd_resp_set_type(req, "application/json");
 	httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
 
     free((void *)resp_str);
-    cJSON_Delete(root);
+    
     return ESP_OK;
 }
 
@@ -2852,7 +2840,7 @@ static void config_server_load_cfg(char *cfg)
 		strlcpy(device_config.sta_security, key->valuestring, sizeof(device_config.sta_security));
 	}
 
-	ESP_LOGI(TAG, "device_config.sta_security: %s", device_config.wakeup_volt);
+	ESP_LOGI(TAG, "device_config.sta_security: %s", device_config.sta_security);
 	//*****
 
 	//***** Parse optional fallback STA networks *****
@@ -3045,7 +3033,7 @@ static void config_server_load_cfg(char *cfg)
 	}
 	else
 	{
-		strlcpy(device_config.sta_security, key->valuestring, sizeof(device_config.sta_security));
+		strlcpy(device_config.log_storage, key->valuestring, sizeof(device_config.log_storage));
 	}
 
 	ESP_LOGI(TAG, "device_config.log_storage: %s", device_config.log_storage);
