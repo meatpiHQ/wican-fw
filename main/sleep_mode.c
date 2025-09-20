@@ -678,6 +678,13 @@ void oneshot_adc_init(void)
     // do_calibration = example_adc_calibration_init(ADC_UNIT, ADC_CHANNEL_3, ADC_ATTEN, &cali_handle);
 }
 
+static void update_battery_voltage(float *new_volt)
+{
+    if (new_volt != NULL) {
+        xQueueOverwrite(voltage_queue, new_volt);
+    }
+}
+
 esp_err_t read_ss_adc_voltage(float *voltage_out)
 {
     if (voltage_out == NULL) {
@@ -883,8 +890,8 @@ void light_sleep_task(void *pvParameters)
              sleep_en, sleep_voltage, wakeup_voltage, sleep_time, periodic_wakeup, wakeup_interval);
 
     // Initialize voltage read timer
-    wc_timer_set(&voltage_read_timer, 3000);
-    vTaskDelay(pdMS_TO_TICKS(5000));
+    wc_timer_set(&voltage_read_timer, 10);
+    vTaskDelay(pdMS_TO_TICKS(1000));
     while (1) 
 	{
         // Read voltage every 3 seconds
@@ -894,6 +901,10 @@ void light_sleep_task(void *pvParameters)
             // ret = read_adc_voltage(&battery_voltage);
             ret = read_ss_adc_voltage(&battery_voltage);
             wc_timer_set(&voltage_read_timer, 3000);
+            if(ret == ESP_OK)
+            {
+                update_battery_voltage(&battery_voltage);
+            }
         }
 
         if (ret == ESP_OK && sleep_en == 1) 
@@ -1070,23 +1081,16 @@ esp_err_t sleep_mode_get_state(sleep_state_info_t *state_info)
     return ESP_OK;
 }
 
-// int8_t sleep_mode_get_voltage(float *val)
-// {
-// 	if(voltage_queue != NULL)
-// 	{
-// 		if(xQueuePeek( voltage_queue, val, 0 ))
-// 		{
-// 			return 1;
-// 		}
-// 		else return -1;
-// 	}
-// 	return -1;
-// }
-
 esp_err_t sleep_mode_get_voltage(float *val)
 {
-	// return obd_get_voltage(val);
-    return read_ss_adc_voltage(val);
+    if (voltage_queue != NULL)
+    {
+        if (xQueuePeek(voltage_queue, val, 0) == pdTRUE)
+        {
+            return ESP_OK;
+        }
+    }
+    return ESP_ERR_NOT_FOUND;
 }
 
 void sleep_mode_print_wakeup_reason(void)
