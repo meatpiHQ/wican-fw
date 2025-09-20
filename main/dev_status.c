@@ -1,8 +1,43 @@
+/*
+ * This file is part of the WiCAN project.
+ *
+ * Copyright (C) 2022  Meatpi Electronics.
+ * Written by Ali Slim <ali@meatpi.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "dev_status.h"
+#include "esp_partition.h"
+#include "esp_ota_ops.h"
 
 static const char *DEV_STATUS_TAG = "DEV_STATUS";
 static EventGroupHandle_t s_dev_status_event_group = NULL;
 static StaticEventGroup_t s_dev_status_event_group_buffer;
+static const esp_partition_t *dev_status_running_partition = NULL;
+static esp_app_desc_t dev_status_running_app_info;
+
+
+const esp_partition_t *dev_status_get_running_partition(void)
+{
+    return dev_status_running_partition;
+}
+
+esp_app_desc_t *dev_status_get_running_app_info(void)
+{
+    return &dev_status_running_app_info;
+}
 
 // Helper function to get bit name for logging
 static const char* get_bit_name(EventBits_t bit)
@@ -44,6 +79,20 @@ void dev_status_init(void)
         } else {
             ESP_LOGI(DEV_STATUS_TAG, "Device status event group initialized");
         }
+    }
+    dev_status_running_partition = esp_ota_get_running_partition();
+
+    if(esp_ota_get_partition_description(dev_status_running_partition, &dev_status_running_app_info) != ESP_OK) {
+        ESP_LOGE(DEV_STATUS_TAG, "Error getting partition_description");
+        memset(&dev_status_running_app_info, 0, sizeof(dev_status_running_app_info));
+        dev_status_running_app_info.version[0] = '1';
+        dev_status_running_app_info.version[1] = '\0';
+    } else {
+        ESP_LOGI(DEV_STATUS_TAG, "Running Partition: %s", dev_status_running_partition->label);
+        ESP_LOGI(DEV_STATUS_TAG, "App Version: %s", dev_status_running_app_info.version);
+        ESP_LOGI(DEV_STATUS_TAG, "Project Name: %s", dev_status_running_app_info.project_name);
+        ESP_LOGI(DEV_STATUS_TAG, "Build Time: %s %s", dev_status_running_app_info.date, dev_status_running_app_info.time);
+        ESP_LOGI(DEV_STATUS_TAG, "IDF Version: %s", dev_status_running_app_info.idf_ver);
     }
 }
 

@@ -1,3 +1,23 @@
+/*
+ * This file is part of the WiCAN project.
+ *
+ * Copyright (C) 2022  Meatpi Electronics.
+ * Written by Ali Slim <ali@meatpi.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #ifndef DEV_STATUS_H
 #define DEV_STATUS_H
 
@@ -5,6 +25,8 @@
 #include "freertos/event_groups.h"
 #include "esp_log.h"
 #include <stdbool.h>
+#include "esp_partition.h"
+#include "esp_app_desc.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,6 +56,10 @@ extern "C" {
 
 // Initialize device status event group
 void dev_status_init(void);
+
+// Getters for running partition and app info
+const esp_partition_t *dev_status_get_running_partition(void);
+esp_app_desc_t *dev_status_get_running_app_info(void);
 
 // Generic set/clear functions
 void dev_status_set_bits(EventBits_t bits_to_set);
