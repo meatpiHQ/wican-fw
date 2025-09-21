@@ -62,7 +62,7 @@ static EventGroupHandle_t xautopid_event_group = NULL;
 static StaticEventGroup_t xautopid_event_group_buffer;
 static all_pids_t* all_pids = NULL;
 static response_t elm327_response;
-static autopid_data_t autopid_data;
+static autopid_data_t autopid_data = {.json_str = NULL, .mutex = NULL};
 static QueueHandle_t protocolnumberQueue = NULL;
 // Cached configuration JSON (built once after all_pids is loaded)
 static char *autopid_config_json = NULL;
@@ -292,10 +292,14 @@ static void merge_response_frames(uint8_t* data, uint32_t length, uint8_t* merge
 
 esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint32_t available_pids_size) 
 {
+    if(all_pids == NULL || all_pids->mutex == NULL) 
+    {
+        ESP_LOGE(TAG, "all_pids not initialized");
+        return ESP_ERR_INVALID_STATE;
+    }
+
     response_t *response = NULL;
     uint32_t supported_pids = 0;
-    cJSON *root = cJSON_CreateObject();
-    cJSON *pid_array = cJSON_CreateArray();
     uint8_t selected_protocol = 0;
     static const char *supported_protocols[] = {"ATTP0\r",               // Protocol 0 
                                                 "ATTP6\rATSH7DF\rATCRA\r",      // Protocol 6
@@ -313,16 +317,20 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
         selected_protocol = 0;
     }
 
-    response = (response_t *)malloc(sizeof(response_t)); 
+    response = (response_t *)heap_caps_malloc(sizeof(response_t), MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT); 
     memset(response, 0, sizeof(response_t));
 
     if (response == NULL)
     {
         ESP_LOGE(TAG, "Failed to allocate memory for response");
+        
         return ESP_ERR_NO_MEM;
     }
 
     xSemaphoreTake(all_pids->mutex, portMAX_DELAY);
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON *pid_array = cJSON_CreateArray();
     
     if((protocol >= 6 && protocol <= 9) || protocol == 0) 
     {
@@ -579,7 +587,7 @@ char *autopid_data_read(void)
     static char *json_str = NULL;
     
     if (!autopid_data.mutex) {
-        ESP_LOGE(TAG, "Invalid mutex");
+        ESP_LOGE(TAG, "Invalid mutex, autopid_data not initialized");
         return NULL;
     }
 
@@ -602,8 +610,8 @@ char *autopid_get_value_by_name(char* name)
     //json_str must be freed by the caller
     char *result_json = NULL;
     
-    if (!autopid_data.mutex) {
-        ESP_LOGE(TAG, "Invalid mutex");
+    if (autopid_data.mutex == NULL) {
+        ESP_LOGE(TAG, "Invalid mutex, autopid_data not initialized");
         return NULL;
     } else if (name == NULL || strlen(name) == 0) {
         ESP_LOGE(TAG, "Invalid name");
