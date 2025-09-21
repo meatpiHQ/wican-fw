@@ -2096,7 +2096,7 @@ static esp_err_t scan_available_pids_handler(httpd_req_t *req)
     char param[32];
     uint8_t protocol_num = 6; // Default protocol
 
-    if(config_server_protocol() != AUTO_PID && config_server_get_drive_protocol() != AUTO_PID && config_server_get_home_protocol() != AUTO_PID)
+    if(!dev_status_is_autopid_enabled())
     {
         httpd_resp_set_type(req, "application/json");
 		const char *resp_str = "{\"text\":\"Go to Settings -> CAN and set Protocol to AutoPID then click Submit Changes\"}";
