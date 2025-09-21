@@ -1060,7 +1060,7 @@
         <div id="automate" class="tabcontent">
             <div class="section-title">Automate</div>
             <table class="form-table">
-                <tr>
+                <tr style="display:none;"></tr>
                     <td>MQTT HA Discovery:</td>
                     <td>
                         <select id="ha_discovery" name="ha_discovery" onchange="toggleSendToFields(); enableAutoStoreButton();submit_enable();">
@@ -1068,6 +1068,17 @@
                         </select>
                     </td>
                 </tr>
+                <div id="autopid_warning_div" style="display: none; margin: 8px 0;">
+                    <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 8px; padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                            <span data-lucide="alert-triangle" style="font-size: 16px; margin-right: 8px;"></span>
+                            <strong style="color: #92400e; font-size: 14px;">AutoPID Warning</strong>
+                        </div>
+                        <div style="color: #78350f; font-size: 13px; line-height: 1.4;">
+                            AutoPID is not Enabled, you must go to Settings → CAN → Protocol , select AutoPID and press Submit changes to use this feature.
+                        </div>
+                    </div>
+                </div>
                 <tr>
                     <td>Grouping:</td>
                     <td>

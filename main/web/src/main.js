@@ -1893,6 +1893,11 @@ function checkStatus() {
         document.getElementById("hw_version").innerHTML = obj.hw_version;
         document.getElementById("git_version").innerHTML = obj.git_version;
         document.getElementById("protocol").value = obj.protocol;
+        if(obj.protocol != "auto_pid") {
+            document.getElementById("autopid_warning_div").style.display = "block";
+        }else {
+            document.getElementById("autopid_warning_div").style.display = "none";
+        }
         document.getElementById("batt_voltage").innerHTML = obj.batt_voltage;
         if(document.getElementById("batt_alert").value == "enable") {
             document.getElementById("batt_alert_div").style.display = "none";
