@@ -639,6 +639,7 @@ void app_main(void)
 	}
 	imu_init(I2C_MASTER_NUM, I2C_MASTER_SDA_IO, I2C_MASTER_SCL_IO, IMU_INT_GPIO_NUM, imu_threshold);
 	rtcm_init(I2C_MASTER_NUM);
+	wusb3801_init(I2C_MASTER_NUM);
 	rtcm_sync_system_time_from_rtc();
 	// rtcm_set_time(0x23, 0x32, 0x00);  // 12:30:00 in BCD
 	// rtcm_set_date(0x24, 0x12, 0x27, 0x06);  // 2024-01-20 Saturday(6) in BCD	
@@ -902,7 +903,6 @@ void app_main(void)
 	}
 	#endif
 	
-
 	if(config_server_mqtt_en_config())
 	{
 		static mqtt_can_message_t* xmsg_mqtt_rx_queue_Storage;
@@ -1035,7 +1035,8 @@ void app_main(void)
         //     }
         // }
     }
-	wc_mdns_init((char*)uid, hardware_version, firmware_version);
+
+	
 // Declare static stack and task buffers
 	static StackType_t *can_rx_task_stack, *can_tx_task_stack, *obd_rx_task_stack;
 	static StaticTask_t can_rx_task_buffer, can_tx_task_buffer, obd_rx_task_buffer;
@@ -1061,10 +1062,17 @@ void app_main(void)
 		return;
 	}
 
+	// Initialize time synchronization task
+	sync_sys_time_init();
 
+	vpn_manager_set_enabled(1);
+	if(internal_buf != NULL)
+	{
+		free(internal_buf);
+	}
 
+	wc_mdns_init((char*)uid, hardware_version, firmware_version);
 	
-	wusb3801_init(I2C_MASTER_NUM);
 	// xEventTask = xEventGroupCreate();
 	// xTaskCreate(ftp_task, "FTP", 1024*6, NULL, 2, NULL);
 	// xEventGroupWaitBits( xEventTask,
@@ -1133,17 +1141,5 @@ void app_main(void)
     #endif
 
 	cmdline_init();
-
-	
-	// Initialize time synchronization task
-	sync_sys_time_init();
-
-	// vTaskDelay(pdMS_TO_TICKS(20000));
-	// vpn_manager_request_test_hardcoded();
-	vpn_manager_set_enabled(1);
-	if(internal_buf != NULL)
-	{
-		free(internal_buf);
-	}
 }
 
