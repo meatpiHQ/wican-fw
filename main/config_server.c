@@ -2099,7 +2099,7 @@ static esp_err_t scan_available_pids_handler(httpd_req_t *req)
     if(config_server_protocol() != AUTO_PID && config_server_get_drive_protocol() != AUTO_PID && config_server_get_home_protocol() != AUTO_PID)
     {
         httpd_resp_set_type(req, "application/json");
-        const char *resp_str = "{\"text\":\"Set protocol to AutoPid and reboot to be able to scan\"}";
+		const char *resp_str = "{\"text\":\"Go to Settings -> CAN and set Protocol to AutoPID then click Submit Changes\"}";
         httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
         return ESP_OK;
     }
