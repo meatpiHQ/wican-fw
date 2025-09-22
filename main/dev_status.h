@@ -48,6 +48,7 @@ extern "C" {
 #define DEV_HOME_MODE_ENABLED_BIT       BIT12
 #define DEV_DRIVE_MODE_ENABLED_BIT      BIT13
 #define DEV_SMARTCONNECT_ENABLED_BIT    BIT14
+#define DEV_STA_AP_OVERLAP_BIT          BIT15
 // New bits for system-wide coordination
 // Indicates SNTP/system time is valid and synced (required by VPN/WG)
 #define DEV_TIME_SYNCED_BIT             BIT15
