@@ -105,7 +105,7 @@ async function checkFirmwareUpdate() {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(rtcData)
+            body: JSON.stringify(rtcData, null, 0)
         })
         .then(response => response.text())
         .then(data => {
@@ -1362,24 +1362,24 @@ async function storeAutoTableData() {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ cars: [carData] })
+            body: JSON.stringify({ cars: [carData] }, null, 0)
         }).then(response => response.text())
         .then(data => console.log('Success:', data))
         .catch(error => console.error('Error:', error));
 
-
-
         // Validate destinations
-        if (!Array.isArray(window.automateDestinations) || window.automateDestinations.length===0){
-            showNotification('At least one destination required','red'); return false; }
-        for (let i=0;i<window.automateDestinations.length;i++){
-            const d = window.automateDestinations[i];
-            if (!Number.isInteger(d.cycle)) { showNotification(`Destination ${i+1} cycle invalid`,'red'); return false; }
-            if (d.cycle!==0 && d.cycle<1000){ showNotification(`Destination ${i+1} cycle must be >=1000 or 0`,'red'); return false; }
-            if (d.destination && d.destination.length > 1024){ showNotification(`Destination ${i+1} URL/topic >1024 chars`,'red'); return false; }
-            if (d.type==='ABRP_API' && !d.api_token){ showNotification(`Destination ${i+1} requires API token`,'red'); return false; }
-            if (d.api_token && d.api_token.length > 512){ showNotification(`Destination ${i+1} API token >512 chars`,'red'); return false; }
-            if (d.type==='HTTPS' && !d.cert_set){ showNotification(`Destination ${i+1} select cert set`,'red'); return false; }
+        if(groupingValue === 'enable') {
+            if (!Array.isArray(window.automateDestinations) || window.automateDestinations.length===0){
+                showNotification('At least one destination required','red'); return false; }
+            for (let i=0;i<window.automateDestinations.length;i++){
+                const d = window.automateDestinations[i];
+                if (!Number.isInteger(d.cycle)) { showNotification(`Destination ${i+1} cycle invalid`,'red'); return false; }
+                if (d.cycle!==0 && d.cycle<1000){ showNotification(`Destination ${i+1} cycle must be >=1000 or 0`,'red'); return false; }
+                if (d.destination && d.destination.length > 1024){ showNotification(`Destination ${i+1} URL/topic >1024 chars`,'red'); return false; }
+                if (d.type==='ABRP_API' && !d.api_token){ showNotification(`Destination ${i+1} requires API token`,'red'); return false; }
+                if (d.api_token && d.api_token.length > 512){ showNotification(`Destination ${i+1} API token >512 chars`,'red'); return false; }
+                if (d.type==='HTTPS' && !d.cert_set){ showNotification(`Destination ${i+1} select cert set`,'red'); return false; }
+            }
         }
 
         if(entries?.length) {
@@ -1457,7 +1457,7 @@ async function storeAutoTableData() {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(jsonData)
+            body: JSON.stringify(jsonData, null, 0)
         })
         .then(response => response.text())
         .then(result => {
@@ -1605,7 +1605,8 @@ function getElements() {
         portType: document.getElementById("port_type"),
         mqttElm327Log: document.getElementById("mqtt_elm327_log"),
         periodicWakeup: document.getElementById("periodic_wakeup"),
-        wakeupEveryRow: document.getElementById("wakeup_every_row")
+        wakeupEveryRow: document.getElementById("wakeup_every_row"),
+        sta_ble_info: document.getElementById("sta_ble_info")
     };
 }
 
@@ -1622,8 +1623,8 @@ function validatePort(value) {
 }
 
 // Helper function to disable submit button with error message
-function disableSubmitWithError(message) {
-    showNotification(message, "red");
+function disableSubmitWithError(message, duration = 5000) {
+    showNotification(message, "red", duration);
     return false;
 }
 
@@ -1676,6 +1677,7 @@ function configureWifiModeSettings(elements, wifiMode) {
         elements.bleStatus.value = "enable";
         elements.bleStatus.selectedIndex = 0;
         elements.blePassValue.disabled = false;
+        elements.sta_ble_info.style.display = "block";
     } 
     else if (isSmartConnect) {
         elements.bleStatus.disabled = true;
@@ -1685,6 +1687,7 @@ function configureWifiModeSettings(elements, wifiMode) {
         elements.bleStatus.value = "disable";
         elements.bleStatus.selectedIndex = 1;
         elements.blePassValue.disabled = true;
+        elements.sta_ble_info.style.display = "none";
     }
 }
 
@@ -1716,38 +1719,39 @@ function validateForm(elements, wifiMode) {
     const apPassLen = elements.apPassValue.value.length;
     const passLen = elements.passValue.value.length;
     if ((apPassLen < 8 || apPassLen > 63) || (passLen < 8 || passLen > 63)) {
-        return disableSubmitWithError("AP/Station password length, min=8 max=63");
+        return disableSubmitWithError("AP/Station password length, min=8 max=63", 5000);
     }
 
     if (elements.apPassValue.value === "@meatpi#") {
-        return disableSubmitWithError("AP password MUST be changed from default");
+        return disableSubmitWithError("AP password MUST be changed from default", 50000);
     }
     
     // SSID validation
     if (!validateLength(elements.ssidValue.value, 1, 32)) {
-        return disableSubmitWithError("AP/Station SSID length, min=1 max=32");
+        return disableSubmitWithError("AP/Station SSID length, min=1 max=32", 5000);
     }
+
     
     // MQTT topics validation - only validate if MQTT is enabled
     const isMqttEnabled = elements.mqttEn.value === "enable";
     if (isMqttEnabled) {
         if (!validateLength(elements.mqttTxTopic.value, 1, 64)) {
-            return disableSubmitWithError("MQTT TX Topic length, min=1 max=64");
+            return disableSubmitWithError("MQTT TX Topic length, min=1 max=64", 5000);
         }
         if (!validateLength(elements.mqttRxTopic.value, 1, 64)) {
-            return disableSubmitWithError("MQTT RX Topic length, min=1 max=64");
+            return disableSubmitWithError("MQTT RX Topic length, min=1 max=64", 5000);
         }
         if (!validateLength(elements.mqttStatusTopic.value, 1, 64)) {
-            return disableSubmitWithError("MQTT Status Topic length, min=1 max=64");
+            return disableSubmitWithError("MQTT Status Topic length, min=1 max=64", 5000);
         }
     }
     
     // Port validation
     if (!validatePort(elements.tcpPortValue.value)) {
-        return disableSubmitWithError("TCP Port value, min=1 max=65535");
+        return disableSubmitWithError("TCP Port value, min=1 max=65535", 5000);
     }
     if (!validatePort(elements.battAlertPort.value)) {
-        return disableSubmitWithError("Battery Alert Port value, min=1 max=65535");
+        return disableSubmitWithError("Battery Alert Port value, min=1 max=65535", 5000);
     }
     
     // BLE passkey validation - only validate if BLE is enabled
@@ -1755,23 +1759,23 @@ function validateForm(elements, wifiMode) {
     if (isBleEnabled) {
         const blePass = elements.blePassValue.value;
         if (blePass.length !== 6 || blePass.charAt(0) === "0") {
-            return disableSubmitWithError("BLE Passkey: 6 digits required, first digit cannot be 0");
+            return disableSubmitWithError("BLE Passkey: 6 digits required, first digit cannot be 0", 5000);
         }
 
         if (blePass === "123456") {
-            return disableSubmitWithError("BLE Passkey MUST be changed from default");
+            return disableSubmitWithError("BLE Passkey MUST be changed from default", 50000);
         }
     }
     
     // Sleep voltage validation
     const sleepVolt = parseFloat(elements.sleepVolt.value);
     if (sleepVolt < 12 || sleepVolt > 15) {
-        return disableSubmitWithError("Sleep Voltage Value, min=12.0 max=15.0");
+        return disableSubmitWithError("Sleep Voltage Value, min=12.0 max=15.0", 5000);
     }
     
     // Sleep disable agreement validation
     if (elements.sleepStatus.value === "disable" && elements.sleepDisableAgree.value === "no") {
-        return disableSubmitWithError("You must agree to disable sleep mode");
+        return disableSubmitWithError("You must agree to disable sleep mode", 5000);
     }
     
     // SmartConnect validation
@@ -1790,11 +1794,11 @@ function validateSmartConnect() {
     const drivePassword = document.getElementById("drive_password").value.trim();
     
     if (!homeSSID || !homePassword) {
-        return disableSubmitWithError("SmartConnect: Home SSID and Password are required");
+        return disableSubmitWithError("SmartConnect: Home SSID and Password are required", 5000);
     }
     
     if (driveConnectionType === "wifi" && (!driveSSID || !drivePassword)) {
-        return disableSubmitWithError("SmartConnect: Drive SSID and Password are required when WiFi is selected");
+        return disableSubmitWithError("SmartConnect: Drive SSID and Password are required when WiFi is selected", 5000);
     }
     
     return true;
@@ -1897,6 +1901,11 @@ function checkStatus() {
             document.getElementById("autopid_warning_div").style.display = "block";
         }else {
             document.getElementById("autopid_warning_div").style.display = "none";
+        }
+        if(obj.subnet_overlap == "yes" && obj.ap_auto_disable != "enable") {
+            document.getElementById("apconfig_warning_div").style.display = "block";
+        } else {
+            document.getElementById("apconfig_warning_div").style.display = "none";
         }
         document.getElementById("batt_voltage").innerHTML = obj.batt_voltage;
         if(document.getElementById("batt_alert").value == "enable") {
@@ -2042,7 +2051,7 @@ function loadautoPID() {
 function postCANFLT() {
     var obj = {};
     obj["can_flt"] = canData;
-    var canfltJSON = JSON.stringify(obj);
+    var canfltJSON = JSON.stringify(obj, null, 0);
     const xhttp = new XMLHttpRequest();
     xhttp.onload = function() {
         showNotification(this.responseText, "green");
@@ -2168,7 +2177,7 @@ async function postConfig() {
     // VPN configuration will be sent separately to /vpn/store_config
     // Don't include it in the main config object
     
-    var configJSON = JSON.stringify(obj);
+    var configJSON = JSON.stringify(obj, null, 0);
     
     // Send main configuration first
     const xhttp = new XMLHttpRequest();
@@ -2206,7 +2215,7 @@ function send_system_command(command) {
         "command": command
     };
     xhttp.open("POST", "/system_commands");
-    xhttp.send(JSON.stringify(data));
+    xhttp.send(JSON.stringify(data, null, 0));
 }
 
 async function downloadCfg() {
@@ -2248,7 +2257,7 @@ async function downloadCfg() {
             throw new Error('No data was successfully fetched from any endpoint');
         }
         
-        const dataStr = JSON.stringify(combinedData, null, 2);
+        const dataStr = JSON.stringify(combinedData, null, 0);
         const blob = new Blob([dataStr], { type: 'application/json' });
         const url = window.URL.createObjectURL(blob);
         
@@ -2300,7 +2309,7 @@ async function uploadCfg() {
                                 headers: {
                                     'Content-Type': 'application/json',
                                 },
-                                body: JSON.stringify(jsonData[key])
+                                body: JSON.stringify(jsonData[key], null, 0)
                             });
 
                             if (!response.ok) {
@@ -2889,13 +2898,19 @@ async function scanWifiNetworks() {
         }
         
         const data = await response.text();
-        
+
         // Clear existing options
         networksList.innerHTML = '<option value="">Select a network...</option>';
-        
+
         if (data && data !== "NONE") {
             try {
                 const scanResult = JSON.parse(data);
+
+                // Check for error response from server
+                if (scanResult.error) {
+                    throw new Error(scanResult.error);
+                }
+
                 if (scanResult.networks && Array.isArray(scanResult.networks)) {
                     // Filter out networks with empty SSID and sort by signal strength
                     const validNetworks = scanResult.networks
@@ -2935,7 +2950,7 @@ async function scanWifiNetworks() {
                 }
             } catch (parseError) {
                 console.error('Parse error:', parseError);
-                showNotification("Failed to parse scan results", "red");
+                showNotification("WiFi Scan failed " + parseError, "red");
             }
         } else {
             showNotification("No networks found", "yellow");
@@ -3121,7 +3136,7 @@ async function generateWireGuardKeys()
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ vpn_type: 'wireguard' })
+            body: JSON.stringify({ vpn_type: 'wireguard' }, null, 0)
         });
         
         if (!response.ok) 
@@ -3367,7 +3382,7 @@ async function saveVpnConfiguration()
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify(vpnConfig)
+        body: JSON.stringify(vpnConfig, null, 0)
     });
     
     if (!response.ok) 
