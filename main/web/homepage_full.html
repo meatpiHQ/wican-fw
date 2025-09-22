@@ -622,6 +622,12 @@
                             </select>
                         </td>
                     </tr>
+                    <tr style="height: 8px;">
+                        <td style="padding-top:0px; padding-bottom:0px;"></td>
+                        <td style="padding-top:0px; padding-bottom:0px;">
+                            <div id="sta_ble_info" style="display:none;color:#6b7280; font-size: 12px; margin-top: 0px;">Device AP will be disabled. Press and hold the button for 5 seconds to re-enable.</div>
+                        </td>
+                    </tr>
                     <tr>
                         <td>AP Channel:</td>
                         <td>
@@ -658,6 +664,14 @@
                             </select>
                         </td>
                     </tr>
+                    <div id="apconfig_warning_div" style="display: none; margin: 8px 0;">
+                        <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 8px; padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                            <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                                <span data-lucide="alert-triangle" style="font-size: 16px; margin-right: 8px;"></span>
+                                <strong style="color: #92400e; font-size: 14px;">Warning: IP subnet conflict detected, recommended to Enable Auto-Disable AP</strong>
+                            </div>
+                        </div>
+                    </div>
                 </table>
 
                 <!-- SmartConnect Configuration -->
@@ -1656,7 +1670,6 @@
         </div>
         <input id="submit_button" name="submit_button" type="button" onclick="postConfig()" value="Submit Changes" disabled />
     </div>
-    
     <script src="/main.js"></script>
     <script src="/lucide_icons.js"></script>
 </body>
