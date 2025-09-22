@@ -13,14 +13,15 @@
 #include "freertos/event_groups.h"
 
 // Event group bits for external status monitoring
-#define WIFI_CONNECTED_BIT      BIT0
-#define WIFI_FAIL_BIT          BIT1
-#define WIFI_DISCONNECTED_BIT  BIT2
-#define WIFI_INIT_BIT          BIT3
-#define WIFI_CONNECT_IDLE_BIT  BIT4
-#define WIFI_AP_STARTED_BIT    BIT5
-#define WIFI_ENABLED_BIT        BIT6
-#define WIFI_STA_GOT_IP_BIT    BIT7
+#define WIFI_CONNECTED_BIT          BIT0
+#define WIFI_FAIL_BIT               BIT1
+#define WIFI_DISCONNECTED_BIT       BIT2
+#define WIFI_INIT_BIT               BIT3
+#define WIFI_CONNECT_IDLE_BIT       BIT4
+#define WIFI_AP_STARTED_BIT         BIT5
+#define WIFI_ENABLED_BIT            BIT6
+#define WIFI_STA_GOT_IP_BIT         BIT7
+#define WIFI_STA_AP_OVERLAP_BIT     BIT8
 
 #define WIFI_MGR_MAX_FALLBACKS 5
 

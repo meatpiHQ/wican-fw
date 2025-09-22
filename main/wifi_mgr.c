@@ -1258,7 +1258,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                 memset(wifi_status.sta_ip, 0, sizeof(wifi_status.sta_ip));
                 // Update queue with empty IP
                 if (sta_ip_queue) xQueueOverwrite(sta_ip_queue, wifi_status.sta_ip);
-                xEventGroupClearBits(wifi_event_group, WIFI_CONNECTED_BIT | WIFI_STA_GOT_IP_BIT);
+                xEventGroupClearBits(wifi_event_group, WIFI_CONNECTED_BIT | WIFI_STA_GOT_IP_BIT | WIFI_STA_AP_OVERLAP_BIT);
                 xEventGroupSetBits(wifi_event_group, WIFI_DISCONNECTED_BIT);
                 dev_status_clear_sta_connected();
 
@@ -1306,6 +1306,8 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                 // Update queue
                 if (ap_stations_queue) xQueueOverwrite(ap_stations_queue, &wifi_status.ap_connected_stations);
                 xEventGroupClearBits(wifi_event_group, WIFI_AP_STARTED_BIT);
+                // Clear overlap indicator when AP stops
+                xEventGroupClearBits(wifi_event_group, WIFI_STA_AP_OVERLAP_BIT);
                 dev_status_clear_ap_enabled();
                 break;
                 
@@ -1394,6 +1396,28 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                                 ESP_LOGE(TAG, "Failed to update AP channel: %s", esp_err_to_name(ret));
                             }
                         }
+                    }
+                }
+            }
+
+            // Also check if AP and STA are on overlapping IP ranges and set/clear WIFI_STA_AP_OVERLAP_BIT
+            if (ap_netif != NULL) {
+                esp_netif_ip_info_t ap_ip_info;
+                if (esp_netif_get_ip_info(ap_netif, &ap_ip_info) == ESP_OK) {
+                    uint32_t sta_ip = event->ip_info.ip.addr;
+                    uint32_t sta_mask = event->ip_info.netmask.addr;
+                    uint32_t ap_ip = ap_ip_info.ip.addr;
+                    uint32_t ap_mask = ap_ip_info.netmask.addr;
+                    // Overlap if either subnet contains the other's IP (for contiguous masks)
+                    bool overlap = (((ap_ip & sta_mask) == (sta_ip & sta_mask)) ||
+                                     ((sta_ip & ap_mask) == (ap_ip & ap_mask)));
+                    if (overlap) {
+                        xEventGroupSetBits(wifi_event_group, WIFI_STA_AP_OVERLAP_BIT);
+                        dev_status_set_bits(DEV_STA_AP_OVERLAP_BIT);
+                        ESP_LOGW(TAG, "STA/AP subnet overlap detected");
+                    } else {
+                        xEventGroupClearBits(wifi_event_group, WIFI_STA_AP_OVERLAP_BIT);
+                        dev_status_clear_bits(DEV_STA_AP_OVERLAP_BIT);
                     }
                 }
             }
