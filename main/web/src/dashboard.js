@@ -355,7 +355,7 @@ async function updateChart() {
             // Extract data from all relevant databases that are already loaded
             for (const [filename, dbData] of Object.entries(loadedDatabases)) {
                 if (window.combinedParameters[paramId]?.databases.includes(filename)) {
-                    const query = "SELECT timestamp, value FROM param_data WHERE param_id = ? ORDER BY timestamp";
+                    const query = "SELECT timestamp, value FROM param_data WHERE param_id = ? AND timestamp > 0 ORDER BY timestamp";
                     
                     try {
                         const stmt = dbData.instance.prepare(query);
