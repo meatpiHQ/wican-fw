@@ -76,6 +76,7 @@
 #include "debug_logs.h"
 #include "sync_sys_time.h"
 #include "vpn_manager.h"
+#include "config_mode.h"
 
 #define TAG 		__func__
 #define USB_ID_PIN					39
@@ -657,7 +658,7 @@ void app_main(void)
 
     gpio_reset_pin(OBD_LED_EN_PIN);
     gpio_set_direction(OBD_LED_EN_PIN, GPIO_MODE_OUTPUT);
-    gpio_set_level(OBD_LED_EN_PIN, 1);
+    gpio_set_level(OBD_LED_EN_PIN, 0);
 
     gpio_reset_pin(OBD_RESET_PIN);
     gpio_set_direction(OBD_RESET_PIN, GPIO_MODE_OUTPUT_OD);
@@ -1070,7 +1071,7 @@ void app_main(void)
 	{
 		free(internal_buf);
 	}
-
+	config_mode_init();
 	wc_mdns_init((char*)uid, hardware_version, firmware_version);
 	
 	// xEventTask = xEventGroupCreate();
@@ -1090,7 +1091,7 @@ void app_main(void)
 	// esp_log_level_set("rtcm", ESP_LOG_INFO);
 	// esp_log_level_set("console", ESP_LOG_INFO);
 	// esp_log_level_set("usb", ESP_LOG_INFO);
-	esp_log_level_set("read_ss_adc_voltage", ESP_LOG_NONE);	
+	// esp_log_level_set("read_ss_adc_voltage", ESP_LOG_NONE);	
 	// esp_log_level_set("HEAP", ESP_LOG_NONE);
 	// esp_log_level_set("autopid_find_standard_pid", ESP_LOG_INFO);
 	// esp_log_level_set("SLEEP_MODE", ESP_LOG_NONE);
