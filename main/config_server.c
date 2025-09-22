@@ -235,10 +235,10 @@ void config_server_reboot(void)
 /* Max length a file path can have on storage */
 #define FILE_PATH_MAX (ESP_VFS_PATH_MAX + CONFIG_SPIFFS_OBJ_NAME_LEN)
 /* Scratch buffer size */
-#define SCRATCH_BUFSIZE  (1024*100)
+#define SCRATCH_BUFSIZE  (1024*64)
 
-#define MAX_FILE_SIZE   (2000*1024) // 200 KB
-#define MAX_FILE_SIZE_STR "200KB"
+#define MAX_FILE_SIZE   (2000*1024) // 2000 KB
+#define MAX_FILE_SIZE_STR "2000KB"
 
 struct file_server_data {
     /* Base path of file storage */
@@ -623,14 +623,25 @@ static esp_err_t create_dir_recursively(const char* path) {
 
 static esp_err_t wifi_scan_handler(httpd_req_t *req)
 {
+    if(config_server_get_ble_config() == 1){
+        ESP_LOGW(TAG, "BLE is enabled, disable BLE to perform WiFi scan");
+        const char *ble_error_response = "{\"error\":\"Go to Settings -> BLE, disable it and Submit Changes to perform WiFi scan\"}";
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, ble_error_response, strlen(ble_error_response));
+        return ESP_OK;
+    }
+
     char *scan_results = wifi_mgr_scan_networks();
+
     if (scan_results != NULL) {
         httpd_resp_set_type(req, "application/json");
         httpd_resp_send(req, scan_results, strlen(scan_results));
-        free(scan_results); // Free the allocated memory
+        free(scan_results);
     } else {
-        // Handle error case
-        httpd_resp_send_500(req);
+        ESP_LOGE(TAG, "WiFi scan failed");
+        const char *scan_error_response = "{\"error\":\"WiFi scan failed\"}";
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, scan_error_response, strlen(scan_error_response));
     }
     return ESP_OK;
 }
@@ -787,6 +798,7 @@ static esp_err_t store_config_handler(httpd_req_t *req)
     size_t buf_size = req->content_len;
     bool response_sent = false;
 
+    ESP_LOGI(TAG, "store_config_handler called");
     // Validate content type
     char content_type[32];
     if (httpd_req_get_hdr_value_str(req, "Content-Type", content_type, sizeof(content_type)) == ESP_OK) {
@@ -805,7 +817,7 @@ static esp_err_t store_config_handler(httpd_req_t *req)
     }
 
     // Allocate memory
-    buf = (char *)malloc(buf_size + 1);  // +1 for null terminator
+    buf = (char *)heap_caps_malloc(buf_size + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);  // +1 for null terminator
     if (!buf) {
         ESP_LOGE(TAG, "Failed to allocate memory for config data");
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
@@ -1247,6 +1259,8 @@ static esp_err_t logo_handler(httpd_req_t *req)
 
 static esp_err_t store_auto_data_handler(httpd_req_t *req)
 {
+	ESP_LOGI(TAG, "store_auto_data_handler called");
+
     if (!req)
 	{
         return ESP_ERR_INVALID_ARG;
@@ -1349,6 +1363,7 @@ static esp_err_t store_car_data_handler(httpd_req_t *req)
     int received = 0;
     const char *filepath = FS_MOUNT_POINT"/car_data.json";
     
+	ESP_LOGI(TAG, "store_car_data_handler called");
     // Validate content length
     if (total_len <= 0 || total_len > MAX_FILE_SIZE) {
         ESP_LOGE(TAG, "Invalid content length: %d", total_len);
@@ -1548,6 +1563,7 @@ char *config_server_get_status_json(void)
 	cJSON_AddStringToObject(root, "mqtt_rx_topic", device_config.mqtt_rx_topic);
 	cJSON_AddStringToObject(root, "mqtt_status_topic", device_config.mqtt_status_topic);
 	cJSON_AddStringToObject(root, "device_id", device_id);
+	cJSON_AddStringToObject(root, "subnet_overlap", dev_status_is_bit_set(DEV_STA_AP_OVERLAP_BIT) ? "yes" : "no");
 
 	if(autopid_get_ecu_status())
 	{
@@ -2096,7 +2112,7 @@ static esp_err_t scan_available_pids_handler(httpd_req_t *req)
     char param[32];
     uint8_t protocol_num = 6; // Default protocol
 
-    if(!dev_status_is_autopid_enabled())
+    if(config_server_protocol() != AUTO_PID)
     {
         httpd_resp_set_type(req, "application/json");
 		const char *resp_str = "{\"text\":\"Go to Settings -> CAN and set Protocol to AutoPID then click Submit Changes\"}";
@@ -3291,7 +3307,7 @@ static httpd_handle_t config_server_init(void)
 	config.uri_match_fn = httpd_uri_match_wildcard;
     if(xServerEventGroup == NULL)
     {
-		server_data.scratch = malloc(SCRATCH_BUFSIZE);
+		server_data.scratch = heap_caps_malloc(SCRATCH_BUFSIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 		if(server_data.scratch == NULL)
 		{
 			ESP_LOGE(TAG, "Failed to allocate memory for server data");
