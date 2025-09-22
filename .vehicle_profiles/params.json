@@ -92,14 +92,16 @@
     "description": "Engine Oil Pressure",
     "settings": {
       "unit": "KPa",
-      "class": "pressure"
+      "class": "pressure",
+      "state_class": "measurement"
     }
   },
   "ENGINE_OIL_TEMP": {
     "description": "Engine Oil Temperature",
     "settings": {
       "unit": "°C",
-      "class": "temperature"
+      "class": "temperature",
+      "state_class": "measurement"
     }
   },
   "ENGINE_RPM": {
@@ -459,6 +461,7 @@
     "settings": {
       "unit": "°C",
       "class": "temperature",
+      "state_class": "measurement",
       "min": "-40",
       "max": "200"
     }
@@ -483,7 +486,8 @@
     "description": "Current Range",
     "settings": {
       "unit": "km",
-      "class": "distance"
+      "class": "distance",
+      "state_class": "measurement"
     }
   },
   "READY": {
@@ -506,6 +510,7 @@
     "settings": {
       "unit": "%",
       "class": "battery",
+      "state_class": "measurement",
       "min": "0",
       "max": "100"
     }

@@ -14,6 +14,7 @@ typedef struct {
     uint8_t bit_start;
     uint8_t bit_length;
     const char* class;  // std_parameter_t classification
+    const char* state_class;  // optional Home Assistant state class
 } std_parameter_t;
 
 // Structure for a single std_pid_t
@@ -556,7 +557,8 @@ static const std_parameter_t pid_31_params[] = {
         .max = 65535.0f,
         .bit_start = 31,
         .bit_length = 16,
-        .class = "duration"
+        .class = "duration",
+        .state_class = "total_increasing"
     },
 };
 
@@ -584,7 +586,8 @@ static const std_parameter_t pid_33_params[] = {
         .max = 65535.0f,
         .bit_start = 31,
         .bit_length = 16,
-        .class = "distance"
+        .class = "distance",
+        .state_class = "total_increasing"
     },
 };
 
@@ -882,7 +885,8 @@ static const std_parameter_t pid_48_params[] = {
         .max = 255.0f,
         .bit_start = 31,
         .bit_length = 8,
-        .class = "none"
+        .class = "none",
+        .state_class = "total_increasing"
     },
 };
 
@@ -896,7 +900,8 @@ static const std_parameter_t pid_49_params[] = {
         .max = 65535.0f,
         .bit_start = 31,
         .bit_length = 16,
-        .class = "distance"
+        .class = "distance",
+        .state_class = "total_increasing"
     },
 };
 
@@ -1376,7 +1381,8 @@ static const std_parameter_t pid_77_params[] = {
         .max = 65535.0f,
         .bit_start = 31,
         .bit_length = 16,
-        .class = "duration"
+        .class = "duration",
+        .state_class = "total_increasing"
     },
 };
 
@@ -1390,7 +1396,8 @@ static const std_parameter_t pid_78_params[] = {
         .max = 65535.0f,
         .bit_start = 31,
         .bit_length = 16,
-        .class = "duration"
+        .class = "duration",
+        .state_class = "total_increasing"
     },
 };
 
@@ -2230,7 +2237,8 @@ static const std_parameter_t pid_127_params[] = {
         .max = 0.0f,
         .bit_start = 0,
         .bit_length = 0,
-        .class = "duration"
+        .class = "duration",
+        .state_class = "total_increasing"
     },
 };
 
@@ -2258,7 +2266,8 @@ static const std_parameter_t pid_129_params[] = {
         .max = 0.0f,
         .bit_start = 0,
         .bit_length = 0,
-        .class = "duration"
+        .class = "duration",
+        .state_class = "total_increasing"
     },
 };
 
@@ -2272,7 +2281,8 @@ static const std_parameter_t pid_130_params[] = {
         .max = 0.0f,
         .bit_start = 0,
         .bit_length = 0,
-        .class = "duration"
+        .class = "duration",
+        .state_class = "total_increasing"
     },
 };
 
@@ -2370,7 +2380,8 @@ static const std_parameter_t pid_137_params[] = {
         .max = 0.0f,
         .bit_start = 0,
         .bit_length = 0,
-        .class = "duration"
+        .class = "duration",
+        .state_class = "total_increasing"
     },
 };
 
@@ -2384,7 +2395,8 @@ static const std_parameter_t pid_138_params[] = {
         .max = 0.0f,
         .bit_start = 0,
         .bit_length = 0,
-        .class = "duration"
+        .class = "duration",
+        .state_class = "total_increasing"
     },
 };
 
@@ -2734,7 +2746,8 @@ static const std_parameter_t pid_166_params[] = {
         .max = 429000000.0f,
         .bit_start = 31,
         .bit_length = 32,
-        .class = "distance"
+        .class = "distance",
+        .state_class = "total_increasing"
     },
 };
 

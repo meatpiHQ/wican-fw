@@ -62,6 +62,7 @@ typedef struct
     char *expression;
     char *unit;
     char *class;
+    char *state_class;    // optional: Home Assistant state class
     uint32_t period; 
     float min;
     float max;

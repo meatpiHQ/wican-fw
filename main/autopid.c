@@ -699,7 +699,7 @@ char* autopid_get_config(void)
                 continue;
             }
             
-            // Add class and unit if they exist
+            // Add class, unit and state_class if they exist
             if (param->class)
             {
                 cJSON_AddStringToObject(parameter_details, "class", param->class);
@@ -707,6 +707,10 @@ char* autopid_get_config(void)
             if (param->unit)
             {
                 cJSON_AddStringToObject(parameter_details, "unit", param->unit);
+            }
+            if (param->state_class)
+            {
+                cJSON_AddStringToObject(parameter_details, "state_class", param->state_class);
             }
             
             cJSON_AddItemToObject(parameters_object, param->name, parameter_details);
@@ -1627,6 +1631,12 @@ all_pids_t* load_all_pids(void){
                             strdup(unit_item->valuestring) : strdup("none");
                         curr_pid->parameters->class = class_item && class_item->valuestring ? 
                             strdup(class_item->valuestring) : strdup("none");
+                        {
+                            cJSON* state_class_item = cJSON_GetObjectItem(pid, "state_class");
+                            curr_pid->parameters->state_class = (state_class_item && state_class_item->valuestring)
+                                ? strdup(state_class_item->valuestring)
+                                : NULL;
+                        }
                     }
                     
                     pid_index++;
@@ -1718,6 +1728,11 @@ all_pids_t* load_all_pids(void){
                                     {
                                         curr_pid->parameters->class = strdup(pid_info->params[i].class);
                                         curr_pid->parameters->unit = strdup(pid_info->params[i].unit);
+                                        if (pid_info->params[i].state_class && strlen(pid_info->params[i].state_class) > 0) {
+                                            curr_pid->parameters->state_class = strdup(pid_info->params[i].state_class);
+                                        } else {
+                                            curr_pid->parameters->state_class = NULL;
+                                        }
                                         char pid_hex[3];
                                         strncpy(pid_hex, curr_pid->parameters->name, 2);
                                         pid_hex[2] = '\0';
@@ -1848,6 +1863,13 @@ all_pids_t* load_all_pids(void){
                                     cJSON* class_item = cJSON_GetObjectItem(param, "class");
                                     curr_pid->parameters[param_index].class = class_item && class_item->valuestring ? 
                                         strdup(class_item->valuestring) : strdup("none");
+
+                                    {
+                                        cJSON* state_class_item = cJSON_GetObjectItem(param, "state_class");
+                                        curr_pid->parameters[param_index].state_class = (state_class_item && state_class_item->valuestring)
+                                            ? strdup(state_class_item->valuestring)
+                                            : NULL;
+                                    }
 
                                     cJSON* sensor_type_item = cJSON_GetObjectItem(param, "sensor_type");
                                     curr_pid->parameters[param_index].sensor_type = sensor_type_item ? 
