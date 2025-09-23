@@ -1287,7 +1287,7 @@
       ]
     },
     {
-      "car_model": "Hyundai: Ioniq5/Ioniq6/Kona",
+      "car_model": "Hyundai: Ioniq5/Ioniq6",
       "init": "ATSH7E4;ATST96;",
       "pids": [
         {
