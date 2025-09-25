@@ -1,5 +1,18 @@
 {
   "car_model": "Hyundai: Kona",
   "init": "ATSH7E4;ATST96;",
-  "extends": "hyundai/ioniq5-6.json"
+  "extends": "hyundai/ioniq5-6.json",
+  "pids": [
+    {
+      "pid": "remove",
+      "parameters": {
+        "REGEN_MAX": "",
+        "POWER_MAX": "",
+        "HV_A": "",
+        "HV_W": "",
+        "KWH_CHARGED": "",
+        "ODOMETER": ""
+      }
+    }
+  ]
 }
