@@ -2113,7 +2113,7 @@ static void autopid_task(void *pvParameters)
         autopid_data_update(all_pids);
         // elm327_unlock();
         xSemaphoreGive(all_pids->mutex);
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(100));
 
         if (wc_timer_is_expired(&ecu_check_timer)) {
             if (all_parameters_failed(all_pids)) {
