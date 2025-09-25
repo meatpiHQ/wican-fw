@@ -101,6 +101,14 @@ async function add_json(jsonPath, params, allCars) {
     });
   }
 
+  car.pids.forEach((pid_key) => {
+    Object.keys(car.pids[pid_key].parameters).forEach((param) => {
+      if(car.pids[pid_key].parameters[param] == ""){
+        delete car.pids[pid_key].parameters[param]
+      }
+    });
+  });
+
   //Cleanup pids with no params
   car.pids = car.pids.filter((pid) => Object.keys(pid.parameters).length > 0);
 
@@ -119,8 +127,6 @@ async function process_profile(data, params) {
   Object.keys(data.pids).forEach((key) => {
     let newParams = [];
     for (const [param, exp] of Object.entries(data.pids[key].parameters)) {
-      //Don't add params with no exp
-      if(exp == "") continue;
       newParams.push({
         name: param,
         expression: exp,
