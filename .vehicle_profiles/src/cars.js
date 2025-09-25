@@ -119,6 +119,8 @@ async function process_profile(data, params) {
   Object.keys(data.pids).forEach((key) => {
     let newParams = [];
     for (const [param, exp] of Object.entries(data.pids[key].parameters)) {
+      //Don't add params with no exp
+      if(exp == "") continue;
       newParams.push({
         name: param,
         expression: exp,
