@@ -1825,9 +1825,6 @@ static void autopid_task(void *pvParameters)
     wc_timer_t ecu_check_timer;
 
     ESP_LOGI(TAG, "Autopid Task Started");
-    
-    vTaskDelay(pdMS_TO_TICKS(100));
-    send_commands(default_init, 50);
 
     // while(config_server_mqtt_en_config() == 1 && !mqtt_connected())
     // {
@@ -1880,6 +1877,8 @@ static void autopid_task(void *pvParameters)
         ESP_LOGI(TAG, "Protocol number: %u", auto_protocol_number);
     }
 
+    vTaskDelay(pdMS_TO_TICKS(150));
+    send_commands(default_init, 50);
     ESP_LOGI(TAG, "Autopid Start loop");
     ESP_LOGI(TAG, "Total PIDs: %lu", all_pids->pid_count);
 
