@@ -3781,6 +3781,11 @@ int8_t config_server_get_alert_volt(float *alert_volt)
 
 int8_t config_server_mqtt_en_config(void)
 {
+	if(config_server_get_ble_config() == 1 && config_server_get_wifi_mode() == AP_MODE)
+	{
+		ESP_LOGW(TAG, "BLE enabled and WiFi in AP mode, disabling MQTT");
+		return 0;
+	}
 	if(strcmp(device_config.mqtt_en, "enable") == 0)
 	{
 		return 1;
