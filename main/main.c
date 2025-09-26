@@ -963,24 +963,22 @@ void app_main(void)
 		port = 35000;
 	}
 
-	if(protocol != AUTO_PID)
+
+	if(config_server_get_port_type() == UDP_PORT)
+	{	
+		#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
+		tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, 1);
+		#elif HARDWARE_VER == WICAN_PRO
+		tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, 0, 1);
+		#endif
+	}
+	else
 	{
-		if(config_server_get_port_type() == UDP_PORT)
-		{	
-			#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
-			tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, 1);
-			#elif HARDWARE_VER == WICAN_PRO
-			tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, 0, 1);
-			#endif
-		}
-		else
-		{
-			#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
-			tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, 0);
-			#elif HARDWARE_VER == WICAN_PRO
-			tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, 0, 0);
-			#endif
-		}
+		#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
+		tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, 0);
+		#elif HARDWARE_VER == WICAN_PRO
+		tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, 0, 0);
+		#endif
 	}
 
 	if(config_server_get_ble_config())
