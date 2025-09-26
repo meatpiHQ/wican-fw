@@ -164,5 +164,6 @@ bool autopid_get_ecu_status(void);
 char* autopid_get_config(void);
 esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint32_t available_pids_size) ;
 char *autopid_get_value_by_name(char* name);
-void autopid_publish_all_destinations(void); // New multi-destination publisher
+void autopid_publish_all_destinations(void);
+void autopid_app_reset_timer(void);
 #endif

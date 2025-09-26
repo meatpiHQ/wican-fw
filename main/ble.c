@@ -1179,7 +1179,13 @@ static void ble_task(void *pvParameters)
                                     pdFALSE,
                                     portMAX_DELAY);
 
-
+                if(!ble_connected())
+                {
+                    // connection lost while waiting
+                    xQueueReceive(*xBle_TX_Queue, ( void * ) &tx_buffer, 0);
+                    vTaskDelay(pdMS_TO_TICKS(100));
+                    continue;
+                }
 
                 while(!ble_tx_ready())
                 {

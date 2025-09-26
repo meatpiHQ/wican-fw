@@ -66,6 +66,8 @@ static autopid_data_t autopid_data = {.json_str = NULL, .mutex = NULL};
 static QueueHandle_t protocolnumberQueue = NULL;
 // Cached configuration JSON (built once after all_pids is loaded)
 static char *autopid_config_json = NULL;
+static StaticTimer_t autopid_bit_set_timer_buffer;
+static TimerHandle_t autopid_bit_set_timer_handle = NULL;
 
 #if HARDWARE_VER == WICAN_PRO
 static char* elm327_autopid_cmd_buffer;
@@ -1888,6 +1890,8 @@ static void autopid_task(void *pvParameters)
     {
         static pid_type_t previous_pid_type = PID_MAX;
 
+        dev_status_wait_for_bits(DEV_AUTOPID_ELM327_APP_BIT, portMAX_DELAY);
+
         if(dev_status_is_sleeping())
         {
             ESP_LOGI(TAG, "Device is sleeping, waiting for wakeup");
@@ -2107,6 +2111,7 @@ static void autopid_task(void *pvParameters)
                         autopid_data_update(all_pids);
                         //pause 100ms between pid requests
                         xSemaphoreGive(all_pids->mutex);
+                        dev_status_wait_for_bits(DEV_AUTOPID_ELM327_APP_BIT, portMAX_DELAY);
                         vTaskDelay(pdMS_TO_TICKS(105));
                         xSemaphoreTake(all_pids->mutex, portMAX_DELAY);
                     }
@@ -2946,6 +2951,27 @@ void print_pids(all_pids_t* all_pids) {
     }
 }
 
+void autopid_app_reset_timer(void)
+{
+    if(autopid_bit_set_timer_handle != NULL)
+    {
+        if(xTimerReset(autopid_bit_set_timer_handle, 0) != pdPASS)
+        {
+            ESP_LOGE(TAG, "Failed to reset autopid bit set timer");
+        }
+        else
+        {
+            ESP_LOGI(TAG, "Autopid bit set timer reset");
+        }
+    }
+}
+
+static void autopid_app_setbit_timer_callback(TimerHandle_t xTimer)
+{
+	ESP_LOGI(TAG, "Timer callback called every 10 seconds");
+	dev_status_set_bits(DEV_AUTOPID_ELM327_APP_BIT);
+}
+
 void autopid_init(char* id, bool enable_logging, uint32_t logging_period)
 {
     device_id = id;
@@ -3134,5 +3160,23 @@ void autopid_init(char* id, bool enable_logging, uint32_t logging_period)
     {
         dev_status_set_autopid_enabled();
         ESP_LOGI(TAG, "Autopid enabled");
+    }
+    dev_status_set_bits(DEV_AUTOPID_ELM327_APP_BIT);
+
+    // Create a FreeRTOS static timer to call a function every 10 seconds
+    if (autopid_bit_set_timer_handle == NULL) {
+        autopid_bit_set_timer_handle = xTimerCreateStatic(
+            "autopid_bit_set_timer",         // Timer name
+            pdMS_TO_TICKS(10000),            // Period: 10 seconds
+            pdTRUE,                          // Auto-reload
+            NULL,                            // Timer ID
+            autopid_app_setbit_timer_callback,               // Callback function
+            &autopid_bit_set_timer_buffer                 // Static buffer
+        );
+        if (autopid_bit_set_timer_handle != NULL) {
+            xTimerStart(autopid_bit_set_timer_handle, 0);
+        } else {
+            ESP_LOGE(TAG, "Failed to create static timer");
+        }        
     }
 }

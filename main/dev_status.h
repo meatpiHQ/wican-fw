@@ -49,11 +49,9 @@ extern "C" {
 #define DEV_DRIVE_MODE_ENABLED_BIT      BIT13
 #define DEV_SMARTCONNECT_ENABLED_BIT    BIT14
 #define DEV_STA_AP_OVERLAP_BIT          BIT15
-// New bits for system-wide coordination
-// Indicates SNTP/system time is valid and synced (required by VPN/WG)
-#define DEV_TIME_SYNCED_BIT             BIT15
-// Indicates VPN is enabled by application logic (server does not control runtime)
-#define DEV_VPN_ENABLED_BIT             BIT16
+#define DEV_TIME_SYNCED_BIT             BIT16
+#define DEV_VPN_ENABLED_BIT             BIT17
+#define DEV_AUTOPID_ELM327_APP_BIT      BIT18
 
 // Initialize device status event group
 void dev_status_init(void);

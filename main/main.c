@@ -315,6 +315,10 @@ static void can_tx_task(void *pvParameters)
 			static uint32_t cmd_buffer_len = 0;
 			static int64_t last_cmd_time = 0;
 			// memset(elm327_cmd_buffer, 0, sizeof(elm327_cmd_buffer));
+
+			// set DEV_EXTERNAL_ELM327_APP_BIT on incomming request
+			dev_status_clear_bits(DEV_AUTOPID_ELM327_APP_BIT);
+			autopid_app_reset_timer();	//timer will set the bit again after 10 seconds of inactivity
 			if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI)
 			{
 				elm327_process_cmd(msg_ptr, temp_len, &xMsg_Tx_Queue, elm327_cmd_buffer, &cmd_buffer_len, &last_cmd_time, &send_to_host);
@@ -322,6 +326,7 @@ static void can_tx_task(void *pvParameters)
 			else if(ucTCP_RX_Buffer.dev_channel == DEV_BLE)
 			{
 				elm327_send_cmd(msg_ptr, temp_len);
+				// ESP_LOG_BUFFER_HEXDUMP("can_tx_task", msg_ptr, temp_len, ESP_LOG_INFO);
 				// elm327_process_cmd(msg_ptr, temp_len, &xmsg_ble_tx_queue, elm327_cmd_buffer, &cmd_buffer_len, &last_cmd_time, &send_to_host);
 				// elm327_run_command((char*)msg_ptr, temp_len, 1000, &xmsg_ble_tx_queue, &send_to_host);
 			}
@@ -428,9 +433,10 @@ static void can_rx_task(void *pvParameters)
 					{
 						xQueueSend( xMsg_Tx_Queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
 					}
-					if(ble_connected())
+					if(ble_connected() && protocol != OBD_ELM327 && protocol != AUTO_PID)
 					{
 						xQueueSend( xmsg_ble_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
+						ESP_LOG_BUFFER_HEXDUMP(TAG, ucTCP_TX_Buffer.ucElement, ucTCP_TX_Buffer.usLen, ESP_LOG_INFO);
 					}
 					else if(HARDWARE_VER == WICAN_USB_V100)
 					{
@@ -514,6 +520,7 @@ static void obd_rx_task(void *pvParameters)
 		if(ble_connected())
 		{
 			xQueueSend( xmsg_ble_tx_queue, ( void * ) &ucBLE_TX_Buffer, pdMS_TO_TICKS(0) );
+			ESP_LOG_BUFFER_HEXDUMP(TAG, ucBLE_TX_Buffer.ucElement, ucBLE_TX_Buffer.usLen, ESP_LOG_INFO);
 		}
 	}
 }
@@ -854,8 +861,8 @@ void app_main(void)
 	
     elm327_uart_rx_queue_storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
 	xmsg_obd_rx_queue = xQueueCreateStatic(32, xdev_buffer_size, (uint8_t *)elm327_uart_rx_queue_storage, &elm327_uart_rx_queue_buffer);
-
-	elm327_init( &send_to_host, &xmsg_obd_rx_queue, NULL);
+	// elm327_init( &send_to_host, &xmsg_obd_rx_queue, NULL); //not needed
+	elm327_init( &send_to_host, &xmsg_ble_tx_queue, NULL);
 	if(protocol == AUTO_PID)
 	{
 		// can_set_bitrate(can_datarate);
@@ -1085,6 +1092,9 @@ void app_main(void)
 	{
 		esp_log_level_set("*", ESP_LOG_NONE);
 	}
+	// esp_log_level_set("can_tx_task", ESP_LOG_INFO);
+	// esp_log_level_set("can_rx_task", ESP_LOG_INFO);
+	// esp_log_level_set("obd_rx_task", ESP_LOG_INFO);
 	// esp_log_level_set("*", ESP_LOG_ERROR);
 	// esp_log_level_set("HEAP", ESP_LOG_INFO);
 	// esp_log_level_set("imu", ESP_LOG_INFO);
