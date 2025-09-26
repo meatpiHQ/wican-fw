@@ -3781,10 +3781,6 @@ int8_t config_server_get_alert_volt(float *alert_volt)
 
 int8_t config_server_mqtt_en_config(void)
 {
-	if(config_server_get_ble_config())
-	{
-		return 0;
-	}
 	if(strcmp(device_config.mqtt_en, "enable") == 0)
 	{
 		return 1;
@@ -3793,7 +3789,7 @@ int8_t config_server_mqtt_en_config(void)
 	{
 		return 0;
 	}
-	return -1;
+	return 0;
 }
 
 int8_t config_server_mqtt_tx_en_config(void)

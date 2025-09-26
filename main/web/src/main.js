@@ -1700,16 +1700,12 @@ function handleBleStatus(elements) {
     elements.blePassValue.disabled = !isBleEnabled;
     
     if (isBleEnabled && !window.bleAlertShown) {
-        elements.mqttEn.value = "disable";
-        elements.mqttEnDiv.style.display = "none";
         elements.mqttWarningDiv.style.display = "none";
-        elements.mqttEn.disabled = true;
         elements.battAlert.value = "disable";
         elements.battAlertDiv.style.display = "none";
         elements.battAlert.disabled = true;
         window.bleAlertShown = true;
     } else if (!isBleEnabled) {
-        elements.mqttEn.disabled = false;
         elements.battAlert.disabled = true;
     }
 }
