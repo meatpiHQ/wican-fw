@@ -69,7 +69,7 @@ static void debug_logs_udp_send(const char *data, size_t len)
         if (s_send_err < 8 || (s_send_err & 0xFF) == 0)
         {
             // Lightweight diagnostic to UART so user sees failures
-            printf("[dbg_logs] send fail err=%d total_err=%lu\n", errno, (unsigned long)s_send_err);
+            // printf("[dbg_logs] send fail err=%d total_err=%lu\n", errno, (unsigned long)s_send_err);
         }
     }
     else
