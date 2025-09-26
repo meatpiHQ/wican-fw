@@ -544,8 +544,8 @@ static void mqtt_load_filter(void)
     }
 
     mqtt_canflt_size = cJSON_GetArraySize(can_flt);
-    mqtt_canflt_values = (CANFilter *)malloc(mqtt_canflt_size * sizeof(CANFilter));
-
+    mqtt_canflt_values = (CANFilter *)heap_caps_malloc(mqtt_canflt_size * sizeof(CANFilter), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    memset(mqtt_canflt_values, 0, mqtt_canflt_size * sizeof(CANFilter));
     if (mqtt_canflt_values == NULL) 
     {
         cJSON_Delete(root);
@@ -726,9 +726,9 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
             const char *cli = cert_manager_get_set_client_cert_ptr(cert_set, &cli_len);
             const char *key = cert_manager_get_set_client_key_ptr(cert_set, &key_len);
 
-            ESP_LOG_BUFFER_HEXDUMP(TAG, ca, strlen(ca), ESP_LOG_WARN);
-            ESP_LOG_BUFFER_HEXDUMP(TAG, cli, strlen(cli), ESP_LOG_WARN);
-            ESP_LOG_BUFFER_HEXDUMP(TAG, key, strlen(key), ESP_LOG_WARN);
+            // ESP_LOG_BUFFER_HEXDUMP(TAG, ca, strlen(ca), ESP_LOG_WARN);
+            // ESP_LOG_BUFFER_HEXDUMP(TAG, cli, strlen(cli), ESP_LOG_WARN);
+            // ESP_LOG_BUFFER_HEXDUMP(TAG, key, strlen(key), ESP_LOG_WARN);
 
             ESP_LOGI(TAG, "ca str len, ca_len: %d, %d", strlen(ca), ca_len);
             ESP_LOGI(TAG, "cli str len, cli_len: %d, %d", strlen(cli), cli_len);
