@@ -1545,8 +1545,8 @@ void elm327_send_cmd(uint8_t* cmd, uint32_t cmd_len)
 			}
 
 			if (atz_seg) {
-				static const char replace_cmd[] = "ATWC\r";
-				ESP_LOGI(TAG, "Replaced ATZ command with ATWC");
+				static const char replace_cmd[] = "ATWS\r";
+				ESP_LOGI(TAG, "Replaced ATZ command with ATWS");
 				uart_write_bytes(UART_NUM_1, (const uint8_t*)replace_cmd, sizeof(replace_cmd) - 1);
 			} else {
 				// write original segment including its delimiters
@@ -1968,10 +1968,25 @@ esp_err_t elm327_get_protocol_number(uint8_t *protocol_number)
 	{
 		uart_flush_input(UART_NUM_1);
 		xQueueReset(uart1_queue);
-		
-		// Step 1: Set automatic protocol with ATTP0
-		uart_write_bytes(UART_NUM_1, "ATTP0\r", strlen("ATTP0\r"));
+
+		//Step 1: Send ATZ to reset device
+		uart_write_bytes(UART_NUM_1, "ATWS\r", strlen("ATWS\r"));
 		int len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, 512, "\r>", UART_TIMEOUT_MS+300);
+		
+		if (len > 0) {
+			ESP_LOGI(TAG, "ATWS response:");
+			ESP_LOG_BUFFER_HEXDUMP(TAG, rsp_buffer, len, ESP_LOG_INFO);
+			if (strstr(rsp_buffer, "ELM327") == NULL) {
+				ESP_LOGW(TAG, "ATWS did not return ELM327, continuing anyway");
+			}
+		} else {
+			ESP_LOGE(TAG, "No response to ATWS command");
+			ret = ESP_ERR_TIMEOUT;
+			goto cleanup;
+		}
+		// Step 2: Set automatic protocol with ATTP0
+		uart_write_bytes(UART_NUM_1, "ATTP0\r", strlen("ATTP0\r"));
+		len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, 512, "\r>", UART_TIMEOUT_MS+300);
 		
 		if (len > 0) {
 			ESP_LOGI(TAG, "ATTP0 response:");

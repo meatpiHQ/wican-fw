@@ -301,7 +301,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
     response_t *response = NULL;
     uint32_t supported_pids = 0;
     uint8_t selected_protocol = 0;
-    static const char *supported_protocols[] = {"ATTP0\r",               // Protocol 0 
+    static const char *supported_protocols[] = {"ATTP0\rATCRA\r",               // Protocol 0 
                                                 "ATTP6\rATSH7DF\rATCRA\r",      // Protocol 6
                                                 "ATTP7\rATSH18DB33F1\rATCRA\r", // Protocol 7
                                                 "ATTP8\rATSH7DF\rATCRA\r",      // Protocol 8
@@ -336,7 +336,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
     {
         ESP_LOGI(TAG, "Setting protocol %d", protocol);
 
-        static const char *elm327_config = "atm0\rate0\rath1\ratl0\rats1\ratst96\r";
+        static const char *elm327_config = "atws\ratm0\rate0\rath1\ratl0\rats1\ratst96\r";
         // elm327_process_cmd((uint8_t*)elm327_config, strlen(elm327_config), &frame, &autopidQueue);
         // while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS);
         elm327_process_cmd((uint8_t*)elm327_config , strlen(elm327_config), &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, NULL);
@@ -356,7 +356,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
         return ESP_FAIL;
     }
     
-    xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000));
+    xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(100));
 
     const char *pid_support_cmds[] = {
         "0100\r",  // PIDs 0x01-0x20
@@ -367,14 +367,16 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
         "01A0\r",  // PIDs 0xA1-0xC0
     };
 
-	uint8_t proto_number = 0;
+	// uint8_t proto_number = 0;
 
-    if(protocol == 0){
-        if(elm327_get_protocol_number(&proto_number) == ESP_OK){
-            ESP_LOGI(TAG, "Protocol number: %u", proto_number);
-            autopid_set_protocol_number(proto_number);
-        }
-    }
+    // if(protocol == 0){
+    //     if(elm327_get_protocol_number(&proto_number) == ESP_OK){
+    //         ESP_LOGI(TAG, "Protocol number: %u", proto_number);
+    //         autopid_set_protocol_number(proto_number);
+    //     }else{
+    //         ESP_LOGW(TAG, "Failed to get protocol number");
+    //     }
+    // }
 
     while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(100)) == pdPASS);
     ESP_LOGI(TAG, "Starting PID support command processing");
@@ -2101,6 +2103,12 @@ static void autopid_task(void *pvParameters)
                         {
                             ESP_LOGE(TAG, "Failed to process command: %s", curr_pid->cmd);
                         }
+                        // Update pid data
+                        autopid_data_update(all_pids);
+                        //pause 100ms between pid requests
+                        xSemaphoreGive(all_pids->mutex);
+                        vTaskDelay(pdMS_TO_TICKS(105));
+                        xSemaphoreTake(all_pids->mutex, portMAX_DELAY);
                     }
                     else 
                     {
@@ -2110,7 +2118,6 @@ static void autopid_task(void *pvParameters)
             }
         }
 
-        autopid_data_update(all_pids);
         // elm327_unlock();
         xSemaphoreGive(all_pids->mutex);
         vTaskDelay(pdMS_TO_TICKS(100));
