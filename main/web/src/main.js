@@ -2064,15 +2064,17 @@ function postCANFLT() {
 
 async function postConfig() {
     var obj = {};
+    document.getElementById("submit_button").disabled = true;
     await new Promise(resolve => setTimeout(resolve, 1000));
-    
     const storeResult = await storeAutoTableData();
     if (!storeResult) {
+        document.getElementById("submit_button").disabled = false;
         return;
     }
     
     const storeVpnResult = await saveVpnConfiguration();
     if (!storeVpnResult) {
+        document.getElementById("submit_button").disabled = false;  
         return;
     }
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -2172,6 +2174,7 @@ async function postConfig() {
         obj["sta_fallbacks"] = fallbacks.slice(0, 5);
     } catch (e) {
         console.warn('fallback networks parse error', e);
+        document.getElementById("submit_button").disabled = false;
     }
 
     // VPN configuration will be sent separately to /vpn/store_config
@@ -2185,6 +2188,14 @@ async function postConfig() {
 
     xhttp.open("POST", "/store_config");
     xhttp.setRequestHeader("Content-Type", "application/json");
+    xhttp.onreadystatechange = function() {
+        if (xhttp.readyState === 4 && xhttp.status >= 200 && xhttp.status < 300) {
+            // POST was successful, reload after 8 seconds
+            setTimeout(function() {
+                window.location.reload();
+            }, 8000);
+        }
+    };
     xhttp.send(configJSON);
 }
 
