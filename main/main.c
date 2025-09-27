@@ -613,7 +613,6 @@ void app_main(void)
 
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-	printf("Project Version: %d\n", HARDWARE_VER);
     gpio_config_t io_conf = {};
     //disable interrupt
     io_conf.intr_type = GPIO_INTR_DISABLE;
@@ -957,12 +956,6 @@ void app_main(void)
 	wifi_network_init(ap_ssid);
 
 	int32_t port = config_server_get_port();
-
-	if(port == -1)
-	{
-		port = 35000;
-	}
-
 
 	if(config_server_get_port_type() == UDP_PORT)
 	{	

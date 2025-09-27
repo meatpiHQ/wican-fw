@@ -575,7 +575,9 @@ int32_t config_server_get_port(void)
 	{
 		return port_val;
 	}
-	return -1;
+
+	ESP_LOGE(TAG, "Invalid port number in config");
+	return 35000;
 }
 
 // Create directories recursively if they don't exist
