@@ -101,6 +101,14 @@ async function add_json(jsonPath, params, allCars) {
     });
   }
 
+  car.pids.forEach((pid_key) => {
+    Object.keys(car.pids[pid_key].parameters).forEach((param) => {
+      if(car.pids[pid_key].parameters[param] == ""){
+        delete car.pids[pid_key].parameters[param]
+      }
+    });
+  });
+
   //Cleanup pids with no params
   car.pids = car.pids.filter((pid) => Object.keys(pid.parameters).length > 0);
 
