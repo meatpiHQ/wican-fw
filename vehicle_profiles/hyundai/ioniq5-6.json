@@ -43,6 +43,12 @@
       "parameters": {
         "ODOMETER": "[B17:B18]"
       }
+    },
+    {
+      "pid": "220100",
+      "parameters": {
+        "TMP_A": "(B12/2)-40"
+      }
     }
   ]
 }
