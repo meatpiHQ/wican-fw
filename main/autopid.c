@@ -230,7 +230,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
     if (response == NULL)
     {
         ESP_LOGE(TAG, "Failed to allocate memory for response");
-    DEBUG_LOGE(TAG, "Failed to allocate memory for response");
+        DEBUG_LOGE(TAG, "Failed to allocate memory for response");
         return ESP_ERR_NO_MEM;
     }
 
