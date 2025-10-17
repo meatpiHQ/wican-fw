@@ -217,12 +217,28 @@ class RequestHandler(BaseHTTPRequestHandler):
             update_stats(p.path, False)
             return
         log_request_url('POST', p.path, p.query, dict(self.headers), raw)
-        if CONFIG.get('log_bodies'):
+        if CONFIG.get('log_bodies') or CONFIG.get('log_bodies_full'):
+            full = CONFIG.get('log_bodies_full')
+            body_text = ''
             try:
-                preview = raw[:512].decode(errors='replace')
+                # Attempt pretty JSON if content-type indicates JSON
+                ctype = (self.headers.get('Content-Type','') or '').lower()
+                if 'application/json' in ctype:
+                    try:
+                        parsed = json.loads(raw.decode('utf-8', errors='replace') or '{}')
+                        body_text = json.dumps(parsed, indent=2, sort_keys=True)
+                    except Exception:
+                        body_text = raw.decode('utf-8', errors='replace')
+                else:
+                    body_text = raw.decode('utf-8', errors='replace')
             except Exception:
-                preview = str(raw[:64])
-            log(f"BODY {p.path} ({len(raw)} bytes): {preview}{' ...' if len(raw)>512 else ''}")
+                body_text = str(raw[:64])
+
+            if not full and len(body_text) > 512:
+                display = body_text[:512] + ' ...'
+            else:
+                display = body_text
+            log(f"BODY {p.path} ({len(raw)} bytes){' FULL' if full else ''}:\n{display}")
 
         qs = parse_qs(p.query)
         webhook = p.path.startswith('/api/webhook/')
@@ -374,6 +390,7 @@ def run_server(a):
         'expected_api_key_query': a.expected_api_key_query,
         'verbose': a.verbose,
         'log_bodies': a.log_bodies,
+        'log_bodies_full': a.log_bodies_full,
     })
     RUNTIME['fail_rate']=a.fail_rate; RUNTIME['delay_ms']=a.delay_ms
     httpd=HTTPServer((a.host,a.port), RequestHandler); proto='HTTP'
@@ -410,7 +427,8 @@ def parse_args():
     p.add_argument('--expected-api-key-query', default=None, help='Expected API key query value')
     p.add_argument('--delay-ms',type=int,default=0); p.add_argument('--fail-rate',type=float,default=0.0)
     p.add_argument('--plain-http',action='store_true'); p.add_argument('--verbose',action='store_true')
-    p.add_argument('--log-bodies',action='store_true', help='Log raw POST bodies (first 512 bytes)')
+    p.add_argument('--log-bodies',action='store_true', help='Log raw POST bodies (first 512 bytes, pretty-prints JSON)')
+    p.add_argument('--log-bodies-full',action='store_true', help='Log complete POST bodies without truncation (pretty-prints JSON)')
     return p.parse_args()
 
 if __name__=='__main__': run_server(parse_args())
