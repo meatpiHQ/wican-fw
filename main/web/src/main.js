@@ -1461,7 +1461,7 @@ async function storeAutoTableData() {
         })
         .then(response => response.text())
         .then(result => {
-            showNotification("Settings saved successfully", "green");
+            showNotification("Settings saved successfully. Rebooting...", "green", 10000);
             document.querySelector(".store").disabled = true;
             document.getElementById("custom_pid_store").disabled = true;
         })
