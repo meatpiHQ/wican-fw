@@ -357,7 +357,7 @@ static void enable_drive_mode(void)
                 wifi_config.sta_auth_mode = WIFI_AUTH_WPA2_PSK;
                 break;
             case WIFI_WPA3_PSK:
-                wifi_config.sta_auth_mode = WIFI_AUTH_WPA3_PSK;
+                wifi_config.sta_auth_mode = WIFI_AUTH_WPA2_WPA3_PSK;
                 break;
             default:
                 wifi_config.sta_auth_mode = WIFI_AUTH_WPA2_PSK;
@@ -438,7 +438,7 @@ static void enable_home_mode(void)
                     wifi_config.sta_auth_mode = WIFI_AUTH_WPA2_PSK;
                     break;
                 case WIFI_WPA3_PSK:
-                    wifi_config.sta_auth_mode = WIFI_AUTH_WPA3_PSK;
+                    wifi_config.sta_auth_mode = WIFI_AUTH_WPA2_WPA3_PSK;
                     break;
                 default:
                     wifi_config.sta_auth_mode = WIFI_AUTH_WPA2_PSK;

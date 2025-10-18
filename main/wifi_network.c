@@ -116,7 +116,7 @@ void wifi_network_init(char* ap_ssid_uid)
             wifi_config.sta_auth_mode = WIFI_AUTH_WPA2_PSK;
             break;
         case WIFI_WPA3_PSK:
-            wifi_config.sta_auth_mode = WIFI_AUTH_WPA3_PSK;
+            wifi_config.sta_auth_mode = WIFI_AUTH_WPA2_WPA3_PSK;
             break;
         default:
             wifi_config.sta_auth_mode = WIFI_AUTH_WPA2_PSK;
@@ -169,7 +169,7 @@ void wifi_network_init(char* ap_ssid_uid)
                 }
                 switch (f_sec) {
                     case WIFI_OPEN: wifi_config.fallbacks[wifi_config.fallback_count].auth_mode = WIFI_AUTH_OPEN; break;
-                    case WIFI_WPA3_PSK: wifi_config.fallbacks[wifi_config.fallback_count].auth_mode = WIFI_AUTH_WPA3_PSK; break;
+                    case WIFI_WPA3_PSK: wifi_config.fallbacks[wifi_config.fallback_count].auth_mode = WIFI_AUTH_WPA2_WPA3_PSK; break;
                     case WIFI_WPA2_PSK: default: wifi_config.fallbacks[wifi_config.fallback_count].auth_mode = WIFI_AUTH_WPA2_PSK; break;
                 }
                 wifi_config.fallback_count++;
