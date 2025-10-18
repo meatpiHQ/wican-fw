@@ -1375,7 +1375,7 @@ static void elm327_powerpin_commands(void)
 {
 	bool hardreset_needed = 0;
 
-	ESP_LOGI(TAG, "Setting PPSW to 00");
+	ESP_LOGI(TAG, "Setting PPSW to 10");
 	if(xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(ELM327_CMD_MUTEX_TIMOUT)) == pdTRUE)
 	{
 		char* rx_buffer = (char*)heap_caps_malloc(ELM327_CMD_BUFFER_SIZE, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
@@ -1400,22 +1400,22 @@ static void elm327_powerpin_commands(void)
 
 		uart_write_bytes(UART_NUM_1, "VTPPSWS\r", strlen("VTPPSWS\r"));
 		uart_read_until_pattern(UART_NUM_1, rx_buffer, ELM327_CMD_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
-		if(strstr(rx_buffer, "00") != NULL)
+		if(strstr(rx_buffer, "10") != NULL)
 		{
-			ESP_LOGI(TAG, "PPSW is already 00");
+			ESP_LOGI(TAG, "PPSW is already 10");
 		}
 		else
 		{
-			ESP_LOGW(TAG, "PPSW is not 00");
-			uart_write_bytes(UART_NUM_1, "VTPPSW\r", strlen("VTPPSW\r"));
+			ESP_LOGW(TAG, "PPSW is not 10, setting to 10");
+			uart_write_bytes(UART_NUM_1, "VTPPSW10\r", strlen("VTPPSW10\r"));
 			uart_read_until_pattern(UART_NUM_1, rx_buffer, ELM327_CMD_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
 			if (strstr(rx_buffer, "OK") != NULL)
 			{
-				ESP_LOGI(TAG, "PPSW set to 00");
+				ESP_LOGI(TAG, "PPSW set to 10 successfully");
 			}
 			else
 			{
-				ESP_LOGE(TAG, "Failed to set PPSW to 00");
+				ESP_LOGE(TAG, "Failed to set PPSW to 10");
 			}
 			
 			hardreset_needed = true;
@@ -1895,6 +1895,7 @@ void elm327_hardreset_chip(void)
 {
     char *rsp_buffer = (char *)heap_caps_malloc(UART_BUFFER_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     uint32_t rsp_len;
+	ESP_LOGW(TAG, "Performing hard reset of ELM327 chip");
 	if (xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(ELM327_CMD_MUTEX_TIMOUT)) == pdTRUE)
 	{
 		vTaskDelay(pdMS_TO_TICKS(500));
