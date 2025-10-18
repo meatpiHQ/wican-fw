@@ -597,6 +597,8 @@ int8_t sleep_mode_init(uint8_t enable, float sleep_volt)
 #define ADC_GET_CHANNEL(p_data)   ((p_data)->type2.channel)
 #define ADC_GET_DATA(p_data)      ((p_data)->type2.data)
 
+#define CRITICAL_VOLTAGE  11.80f
+
 static adc_oneshot_unit_handle_t adc_handle;
 static adc_cali_handle_t cali_handle = NULL;
 static bool do_calibration = false;
@@ -957,7 +959,7 @@ void light_sleep_task(void *pvParameters)
                         current_state = STATE_WAKE_PENDING;
                         wc_timer_set(&wakeup_timer, 1000); // 2 second timer for stable voltage
                     }
-                    else if(periodic_wakeup && wc_timer_is_expired(&periodic_wakeup_timer))
+                    else if(battery_voltage > CRITICAL_VOLTAGE && periodic_wakeup && wc_timer_is_expired(&periodic_wakeup_timer))
                     {
                         ESP_LOGI(TAG, "Periodic wakeup timer expired, returning to normal mode");
                         // current_state = STATE_NORMAL;
