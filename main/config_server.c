@@ -90,6 +90,7 @@
 #include "cert_manager.h"
 #include "vpn_manager.h"
 #include "dev_status.h"
+#include "esp_heap_caps.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
@@ -794,170 +795,260 @@ static esp_err_t index_handler(httpd_req_t *req)
 
 static esp_err_t store_config_handler(httpd_req_t *req)
 {
-    esp_err_t ret_val = ESP_OK;
-    char *buf = NULL;
-    FILE *f = NULL;
-    size_t buf_size = req->content_len;
-    bool response_sent = false;
+	ESP_LOGI(TAG, "store_config_handler called: content_len=%d", req ? req->content_len : -1);
 
-    ESP_LOGI(TAG, "store_config_handler called");
-    // Validate content type
-    char content_type[32];
-    if (httpd_req_get_hdr_value_str(req, "Content-Type", content_type, sizeof(content_type)) == ESP_OK) {
-        if (strncmp(content_type, "application/json", 16) != 0) {
-            ESP_LOGE(TAG, "Invalid content type: %s", content_type);
-            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Content type must be application/json");
-            return ESP_FAIL;
-        }
-    }
+	esp_err_t ret_val = ESP_OK;
+	bool response_sent = false;
+	FILE *f = NULL;
 
-    // Check content length
-    if (buf_size <= 0 || buf_size > MAX_FILE_SIZE) {
-        ESP_LOGE(TAG, "Invalid content length: %d", buf_size);
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid content length");
-        return ESP_FAIL;
-    }
+	if (req == NULL)
+	{
+		return ESP_ERR_INVALID_ARG;
+	}
 
-    // Allocate memory
-    buf = (char *)heap_caps_malloc(buf_size + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);  // +1 for null terminator
-    if (!buf) {
-        ESP_LOGE(TAG, "Failed to allocate memory for config data");
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
-        return ESP_ERR_NO_MEM;
-    }
-	memset(buf, 0, buf_size + 1);
+	// Validate content type
+	char content_type[32];
+	if (httpd_req_get_hdr_value_str(req, "Content-Type", content_type, sizeof(content_type)) == ESP_OK)
+	{
+		if (strncmp(content_type, "application/json", 16) != 0)
+		{
+			ESP_LOGE(TAG, "Invalid content type: %s", content_type);
+			httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Content type must be application/json");
+			return ESP_FAIL;
+		}
+	}
 
-    // Receive data
-    int received = httpd_req_recv(req, buf, buf_size);
-    if (received <= 0) {
-        ESP_LOGE(TAG, "Failed to receive data: %d", received);
-        ret_val = ESP_FAIL;
-        goto cleanup;
-    }
+	// Check content length
+	int total_len = req->content_len;
+	if (total_len <= 0 || total_len > MAX_FILE_SIZE)
+	{
+		ESP_LOGE(TAG, "Invalid content length: %d (max %s)", total_len, MAX_FILE_SIZE_STR);
+		httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid content length");
+		return ESP_FAIL;
+	}
 
-    // Null terminate and validate JSON
-    buf[received] = '\0';
-    cJSON *json = cJSON_Parse(buf);
-    if (!json) {
-        ESP_LOGE(TAG, "Invalid JSON format");
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON format");
-        response_sent = true;
-        ret_val = ESP_FAIL;
-        goto cleanup;
-    }
-    cJSON_Delete(json);
+	// Allocate memory in PSRAM for the full payload (+1 for NUL)
+	char *buf = (char *)heap_caps_malloc(total_len + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+	if (buf == NULL)
+	{
+		ESP_LOGE(TAG, "Failed to allocate %d bytes in PSRAM for config payload", total_len + 1);
+		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
+		return ESP_ERR_NO_MEM;
+	}
+	memset(buf, 0, total_len + 1);
 
-    // Open file
-    f = fopen(FS_MOUNT_POINT"/config.json", "w");
-    if (!f) {
-        ESP_LOGE(TAG, "Failed to open config file for writing");
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to save configuration");
-        response_sent = true;
-        ret_val = ESP_FAIL;
-        goto cleanup;
-    }
+	// Receive the data in chunks
+	int received = 0;
+	while (received < total_len)
+	{
+		int to_read = MIN(4096, total_len - received);
+		int r = httpd_req_recv(req, buf + received, to_read);
 
-    // Write to file
-    size_t written = fwrite(buf, 1, received, f);
-    if (written != received) {
-        ESP_LOGE(TAG, "Failed to write configuration: %d/%d bytes written", written, received);
-        ret_val = ESP_FAIL;
-        goto cleanup;
-    }
+		if (r < 0)
+		{
+			if (r == HTTPD_SOCK_ERR_TIMEOUT)
+			{
+				continue; // retry on timeout
+			}
+			ESP_LOGE(TAG, "Receive error: %d after %d/%d bytes", r, received, total_len);
+			ret_val = ESP_FAIL;
+			break;
+		}
+		if (r == 0)
+		{
+			ESP_LOGE(TAG, "Connection closed unexpectedly after %d/%d bytes", received, total_len);
+			ret_val = ESP_FAIL;
+			break;
+		}
 
-    // Send success response
-    const char *resp_str = "Configuration saved! Rebooting...";
-    httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
-    response_sent = true;
+		received += r;
+		ESP_LOGD(TAG, "Received chunk: %d bytes (total %d/%d)", r, received, total_len);
+	}
 
-    // Trigger reboot
-    config_server_reboot();
+	if (ret_val != ESP_OK)
+	{
+		free(buf);
+		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive data");
+		return ESP_FAIL;
+	}
 
-cleanup:
-    if (f) {
-        fclose(f);
-    }
-    if (buf) {
-        free(buf);
-    }
-    
-    if (ret_val != ESP_OK && !response_sent) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to process request");
-    }
-    
-    return ret_val;
+	// Null-terminate and validate JSON
+	buf[received] = '\0';
+	cJSON *json = cJSON_Parse(buf);
+	if (!json)
+	{
+		const char *err_ptr = cJSON_GetErrorPtr();
+		ESP_LOGE(TAG, "Invalid JSON format%s%s",
+				 err_ptr ? " near: " : "",
+				 err_ptr ? err_ptr : "");
+		httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON format");
+		free(buf);
+		return ESP_FAIL;
+	}
+	cJSON_Delete(json);
+
+	// Open file
+	f = fopen(FS_MOUNT_POINT "/config.json", "w");
+	if (!f)
+	{
+		ESP_LOGE(TAG, "Failed to open %s for writing", FS_MOUNT_POINT "/config.json");
+		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to save configuration");
+		free(buf);
+		return ESP_FAIL;
+	}
+
+	// Write to file
+	size_t written = fwrite(buf, 1, (size_t)received, f);
+	if (written != (size_t)received)
+	{
+		ESP_LOGE(TAG, "Failed to write configuration: %zu/%d bytes written", written, received);
+		fclose(f);
+		free(buf);
+		return ESP_FAIL;
+	}
+	fclose(f);
+
+	// Send success response
+	const char *resp_str = "Configuration saved! Rebooting...";
+	httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
+	response_sent = true;
+
+	// Trigger reboot
+	config_server_reboot();
+
+	free(buf);
+	return ESP_OK;
 }
 
 static esp_err_t store_canflt_handler(httpd_req_t *req)
 {
-    char *buf = NULL;
-    size_t buf_size = req->content_len;
+	ESP_LOGI(TAG, "store_canflt_handler called: content_len=%d", req ? req->content_len : -1);
 
-    if (buf_size <= 0)
-    {
-        return ESP_FAIL; // Invalid content length
-    }
+	if (req == NULL)
+	{
+		return ESP_ERR_INVALID_ARG;
+	}
 
-    buf = (char *)malloc(buf_size);
-    if (!buf)
-    {
-        return ESP_ERR_NO_MEM; // Memory allocation failure
-    }
-	memset(buf, 0, buf_size + 1);
+	// Validate content type
+	char content_type[32];
+	if (httpd_req_get_hdr_value_str(req, "Content-Type", content_type, sizeof(content_type)) == ESP_OK)
+	{
+		if (strncmp(content_type, "application/json", 16) != 0)
+		{
+			ESP_LOGE(TAG, "Invalid content type for CAN filter: %s", content_type);
+			httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Content type must be application/json");
+			return ESP_FAIL;
+		}
+	}
 
-    int ret = httpd_req_recv(req, buf, buf_size);
+	// Validate content length
+	int total_len = req->content_len;
+	if (total_len <= 0 || total_len > MAX_FILE_SIZE)
+	{
+		ESP_LOGE(TAG, "Invalid CAN filter content length: %d (max %s)", total_len, MAX_FILE_SIZE_STR);
+		httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid content length");
+		return ESP_FAIL;
+	}
 
-    if (ret <= 0)
-    {
-        if (ret == HTTPD_SOCK_ERR_TIMEOUT)
-        {
-            // Retry receiving if timeout occurred
-            free(buf);
-            return ESP_FAIL;
-        }
-        // Handle read error
-        free(buf);
-        return ESP_FAIL;
-    }
+	// Allocate buffer in PSRAM (+1 for NUL)
+	char *buf = (char *)heap_caps_malloc(total_len + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+	if (buf == NULL)
+	{
+		ESP_LOGE(TAG, "Failed to allocate %d bytes in PSRAM for CAN filter", total_len + 1);
+		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
+		return ESP_ERR_NO_MEM;
+	}
+	memset(buf, 0, total_len + 1);
 
-    FILE *f = fopen(FS_MOUNT_POINT"/mqtt_canfilt.json", "w");
-    if (f)
-    {
-        // Write the received data into the file
-        fwrite(buf, 1, buf_size, f);
-        fclose(f);
-    }
-    else
-    {
-        // Handle file open error
-        free(buf);
-        return ESP_FAIL;
-    }
+	// Receive in chunks
+	int received = 0;
+	while (received < total_len)
+	{
+		int to_read = MIN(4096, total_len - received);
+		int r = httpd_req_recv(req, buf + received, to_read);
+		if (r < 0)
+		{
+			if (r == HTTPD_SOCK_ERR_TIMEOUT)
+			{
+				continue; // retry
+			}
+			ESP_LOGE(TAG, "CAN filter receive error: %d after %d/%d bytes", r, received, total_len);
+			free(buf);
+			httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive data");
+			return ESP_FAIL;
+		}
+		if (r == 0)
+		{
+			ESP_LOGE(TAG, "CAN filter connection closed after %d/%d bytes", received, total_len);
+			free(buf);
+			httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Connection closed unexpectedly");
+			return ESP_FAIL;
+		}
+		received += r;
+		ESP_LOGD(TAG, "CAN filter chunk: %d (total %d/%d)", r, received, total_len);
+	}
+	buf[received] = '\0';
 
-    // Free dynamically allocated memory
-    free(buf);
+	// Optionally validate JSON quickly (keeps handler consistent with others)
+	cJSON *json = cJSON_Parse(buf);
+	if (!json)
+	{
+		const char *err_ptr = cJSON_GetErrorPtr();
+		ESP_LOGE(TAG, "Invalid CAN filter JSON%s%s",
+				 err_ptr ? " near: " : "",
+				 err_ptr ? err_ptr : "");
+		free(buf);
+		httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON format");
+		return ESP_FAIL;
+	}
+	cJSON_Delete(json);
 
+	// Write exactly received bytes
+	const char *path = FS_MOUNT_POINT "/mqtt_canfilt.json";
+	FILE *f = fopen(path, "w");
+	if (!f)
+	{
+		ESP_LOGE(TAG, "Failed to open %s for writing", path);
+		free(buf);
+		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open file for writing");
+		return ESP_FAIL;
+	}
+	size_t written = fwrite(buf, 1, (size_t)received, f);
+	fclose(f);
+	if (written != (size_t)received)
+	{
+		ESP_LOGE(TAG, "Failed to write CAN filter: %zu/%d bytes", written, received);
+		free(buf);
+		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to write data to file");
+		return ESP_FAIL;
+	}
+
+	// Update cached mqtt_canflt_file safely (no mutex here; consider adding if concurrent access is expected)
 	free(mqtt_canflt_file);
 	mqtt_canflt_file = NULL;
-	FILE* f1 = fopen(FS_MOUNT_POINT"/mqtt_canfilt.json", "r");
+	FILE *f1 = fopen(path, "r");
 	if (f1 != NULL)
 	{
 		fseek(f1, 0, SEEK_END);
-		int32_t filesize = ftell(f1);
+		long filesize = ftell(f1);
 		fseek(f1, 0, SEEK_SET);
-		mqtt_canflt_file = malloc(filesize+1);
-		memset(mqtt_canflt_file, 0, filesize + 1);
-		ESP_LOGI(__func__, "mqtt_canflt_file File size: %ld", filesize);
-		fseek(f1, 0, SEEK_SET);
-		fread(mqtt_canflt_file, sizeof(char), filesize, f1);
-		mqtt_canflt_file[filesize] = 0;
-		fseek(f1, 0, SEEK_SET);
-		ESP_LOGI(TAG, "mqtt_canfilt.json: %s", mqtt_canflt_file);
+		mqtt_canflt_file = malloc((size_t)filesize + 1);
+		if (mqtt_canflt_file)
+		{
+			memset(mqtt_canflt_file, 0, (size_t)filesize + 1);
+			size_t rr = fread(mqtt_canflt_file, 1, (size_t)filesize, f1);
+			mqtt_canflt_file[rr] = '\0';
+			ESP_LOGI(TAG, "mqtt_canfilt.json (%zu bytes): %s", rr, mqtt_canflt_file);
+		}
+		fclose(f1);
 	}
-    const char *resp_str = "CAN filter saved! Filter will take effect after submit.";
-    httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
 
-    return ESP_OK;
+	free(buf);
+
+	const char *resp_str = "CAN filter saved! Filter will take effect after submit.";
+	httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
+	ESP_LOGI(TAG, "store_canflt_handler completed successfully: written=%d bytes", received);
+	return ESP_OK;
 }
 
 static esp_err_t load_canflt_handler(httpd_req_t *req)
@@ -1261,102 +1352,123 @@ static esp_err_t logo_handler(httpd_req_t *req)
 
 static esp_err_t store_auto_data_handler(httpd_req_t *req)
 {
-	ESP_LOGI(TAG, "store_auto_data_handler called");
+	ESP_LOGI(TAG, "store_auto_data_handler called: content_len=%d", req ? req->content_len : -1);
 
-    if (!req)
+	if (req == NULL)
 	{
-        return ESP_ERR_INVALID_ARG;
-    }
+		return ESP_ERR_INVALID_ARG;
+	}
 
-    char *buf = NULL;
-    size_t buf_size = req->content_len;
-    esp_err_t ret = ESP_OK;
+	int total_len = req->content_len;
 
-    // Validate content length
-    if (buf_size <= 0 || buf_size > MAX_FILE_SIZE)
+	// Validate content length
+	if (total_len <= 0 || total_len > MAX_FILE_SIZE)
 	{
-        ESP_LOGE(TAG, "Invalid content length: %d", buf_size);
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid content length");
-        return ESP_FAIL;
-    }
+		ESP_LOGE(TAG, "Invalid content length: %d (max %s)", total_len, MAX_FILE_SIZE_STR);
+		httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid content length");
+		return ESP_FAIL;
+	}
 
-    // Allocate buffer with extra byte for null termination
-    buf = (char *)calloc(1, buf_size + 1);
-    if (!buf)
+	// Allocate buffer for entire JSON content in PSRAM (+1 for null terminator)
+	char *json_buffer = (char *)heap_caps_malloc(total_len + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+	if (json_buffer == NULL)
 	{
-        ESP_LOGE(TAG, "Memory allocation failed for size %d", buf_size + 1);
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
-        return ESP_ERR_NO_MEM;
-    }
+		ESP_LOGE(TAG, "Failed to allocate %d bytes in PSRAM for JSON buffer", total_len + 1);
+		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
+		return ESP_ERR_NO_MEM;
+	}
 
-    // Receive data with timeout handling
-    int received = httpd_req_recv(req, buf, buf_size);
-    if (received <= 0)
+	int received = 0;
+	esp_err_t ret_val = ESP_OK;
+
+	// Receive all data in chunks; retry on timeout
+	while (received < total_len)
 	{
-        ESP_LOGE(TAG, "Failed to receive data: %d", received);
-        ret = ESP_FAIL;
-        goto cleanup;
-    }
+		int to_read = MIN(4096, total_len - received);
+		int r = httpd_req_recv(req, json_buffer + received, to_read);
 
-    // Validate received data length
-    if (received != buf_size)
+		if (r < 0)
+		{
+			if (r == HTTPD_SOCK_ERR_TIMEOUT)
+			{
+				continue; // retry on timeout
+			}
+			ESP_LOGE(TAG, "Receive error: %d after %d/%d bytes", r, received, total_len);
+			ret_val = ESP_FAIL;
+			break;
+		}
+
+		if (r == 0)
+		{
+			ESP_LOGE(TAG, "Connection closed unexpectedly after %d/%d bytes", received, total_len);
+			ret_val = ESP_FAIL;
+			break;
+		}
+
+		received += r;
+		ESP_LOGD(TAG, "Received chunk: %d bytes (total %d/%d)", r, received, total_len);
+	}
+
+	if (ret_val != ESP_OK)
 	{
-        ESP_LOGE(TAG, "Incomplete data received: %d/%d", received, buf_size);
-        ret = ESP_FAIL;
-        goto cleanup;
-    }
+		free(json_buffer);
+		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive data");
+		return ESP_FAIL;
+	}
 
-    buf[received] = '\0';
-    
-    // Validate JSON format
-    cJSON *json = cJSON_Parse(buf);
-    if (!json)
+	// Null-terminate the JSON string
+	json_buffer[received] = '\0';
+
+	// Validate JSON format
+	cJSON *json = cJSON_Parse(json_buffer);
+	if (json == NULL)
 	{
-        ESP_LOGE(TAG, "Invalid JSON format");
-        ret = ESP_FAIL;
-        goto cleanup;
-    }
-    cJSON_Delete(json);
+		const char *err_ptr = cJSON_GetErrorPtr();
+		if (err_ptr)
+		{
+			ESP_LOGE(TAG, "Invalid JSON format near: %.32s", err_ptr);
+		}
+		else
+		{
+			ESP_LOGE(TAG, "Invalid JSON format (no error pointer)");
+		}
+		free(json_buffer);
+		httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON format");
+		return ESP_FAIL;
+	}
+	cJSON_Delete(json);
 
-    ESP_LOGI(TAG, "Auto Table json: %s", buf);
+	ESP_LOGI(TAG, "Validated JSON payload, size=%d bytes", received);
 
-    // Open file with error handling
-    FILE *f = fopen(FS_MOUNT_POINT"/auto_pid.json", "w");
-    if (!f)
+	// Write to file
+	FILE *f = fopen(FS_MOUNT_POINT "/auto_pid.json", "w");
+	if (f == NULL)
 	{
-        ESP_LOGE(TAG, "Failed to open file for writing");
-        ret = ESP_FAIL;
-        goto cleanup;
-    }
+		ESP_LOGE(TAG, "Failed to open %s for writing", FS_MOUNT_POINT "/auto_pid.json");
+		free(json_buffer);
+		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open file for writing");
+		return ESP_FAIL;
+	}
 
-    // Write data with size verification
-    size_t written = fwrite(buf, 1, received, f);
-    if (written != received) 
+	size_t written = fwrite(json_buffer, 1, (size_t)received, f);
+	if (written != (size_t)received)
 	{
-        ESP_LOGE(TAG, "File write failed: %d/%d bytes", written, received);
-        fclose(f);
-        ret = ESP_FAIL;
-        goto cleanup;
-    }
+		ESP_LOGE(TAG, "File write failed: %zu/%d bytes", written, received);
+		fclose(f);
+		free(json_buffer);
+		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to write data to file");
+		return ESP_FAIL;
+	}
 
-    fclose(f);
+	fclose(f);
+	free(json_buffer);
 
-    // Send success response
-    const char *resp_str = "Auto PID table will take effect after submit.";
-    httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
+	// Send success response
+	const char *resp_str = "Auto PID table will take effect after submit.";
+	httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
+	ESP_LOGI(TAG, "store_auto_data_handler completed successfully: written=%d bytes", received);
 
-cleanup:
-    if (buf)
-	{
-        free(buf);
-    }
-    
-    if (ret != ESP_OK)
-	{
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to store data");
-    }
-
-    return ret;
+	return ESP_OK;
 }
 
 static esp_err_t store_car_data_handler(httpd_req_t *req)
@@ -1374,7 +1486,7 @@ static esp_err_t store_car_data_handler(httpd_req_t *req)
     }
 
     // Allocate buffer for entire JSON content
-    char *json_buffer = malloc(total_len + 1);
+    char *json_buffer = heap_caps_malloc(total_len + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!json_buffer) {
         ESP_LOGE(TAG, "Failed to allocate JSON buffer");
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
@@ -1384,7 +1496,7 @@ static esp_err_t store_car_data_handler(httpd_req_t *req)
 	memset(json_buffer, 0, total_len + 1);
 
     // Receive all data first
-    char *temp_buffer = malloc(1024);
+    char *temp_buffer = heap_caps_malloc(1024, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!temp_buffer) {
         ESP_LOGE(TAG, "Failed to allocate temp buffer");
         free(json_buffer);
