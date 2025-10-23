@@ -175,6 +175,25 @@
       ]
     },
     {
+      "car_model": "BMW: M340d",
+      "init": "ATST96;ATSP6;",
+      "pids": [
+        {
+          "pid": "22D10D2",
+          "pid_init": "ATAT0;ATCEA60;ATTAF1;ATCERF1;ATFCSH6F1;ATSH6F1;ATFCSD60300000;ATFCSM1;ATCRA660;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B13:B15]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "BYD: Atto 3",
       "init": "ATAT1;ATST96;ATSH7E7;ATFCSH7E7;ATFCSD300000;ATFCSM1;",
       "pids": [
