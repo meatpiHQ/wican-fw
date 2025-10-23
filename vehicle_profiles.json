@@ -2709,6 +2709,54 @@
       ]
     },
     {
+      "car_model": "Opel: Astra",
+      "init": "ATSP6;ATST96;ATSH79B;ATFCSH79B;ATFCSD300000;ATFCSM1;",
+      "pids": [
+        {
+          "pid": "22D4101",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "[B4:B5]/512",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D8601",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "SOH",
+              "expression": "[B5:B6]/16",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "105"
+            }
+          ]
+        },
+        {
+          "pid": "22D8151",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_V",
+              "expression": "[B4:B5]/16",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "480"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Opel: EOBD (2004 - present)",
       "init": "ATSP6;ATST96;",
       "pids": [
