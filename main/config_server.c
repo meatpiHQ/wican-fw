@@ -1658,6 +1658,22 @@ char *config_server_get_status_json(void)
 	cJSON_AddStringToObject(root, "log_period", device_config.log_period);
 	cJSON_AddStringToObject(root, "log_storage", device_config.log_storage);
 	cJSON_AddStringToObject(root, "imu_threshold", device_config.imu_threshold);
+	if(gpio_get_level(OBD_READY_PIN) == 1)
+	{
+		cJSON_AddStringToObject(root, "obd_chip_status", "Sleep");
+	}
+	else
+	{
+		cJSON_AddStringToObject(root, "obd_chip_status", "Ready");
+	}
+	char uptime_str[32];
+	dev_status_format_uptime(uptime_str, sizeof(uptime_str));
+	if(uptime_str[0] == '\0')
+	{
+		strlcpy(uptime_str, "N/A", sizeof(uptime_str));
+	}
+	uptime_str[sizeof(uptime_str) - 1] = '\0';
+	cJSON_AddStringToObject(root, "uptime", uptime_str);
 
 	char volt[8]= {0};
 	float tmp = 0;

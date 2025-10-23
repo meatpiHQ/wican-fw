@@ -1948,6 +1948,8 @@ function checkStatus() {
             badge.classList.add(klass);
             badge.title = vpnText;
         }
+        document.getElementById("obd_chip_status").innerHTML = obj.obd_chip_status || "N/A";
+        document.getElementById("uptime").innerHTML = obj.uptime || "N/A";
         checkFirmwareUpdate();
     };
     xhttp.open("GET", "/check_status");

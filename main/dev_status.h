@@ -25,6 +25,7 @@
 #include "freertos/event_groups.h"
 #include "esp_log.h"
 #include <stdbool.h>
+#include <stddef.h>
 #include "esp_partition.h"
 #include "esp_app_desc.h"
 
@@ -59,6 +60,13 @@ void dev_status_init(void);
 // Getters for running partition and app info
 const esp_partition_t *dev_status_get_running_partition(void);
 esp_app_desc_t *dev_status_get_running_app_info(void);
+
+// Returns a static buffer with human-readable uptime since boot.
+// Format: "HH:MM:SS" or "<d>d HH:MM:SS" when days > 0.
+const char* dev_status_get_uptime_string(void);
+
+// Returns number of characters written (excluding null), or 0 on error/insufficient buffer.
+size_t dev_status_format_uptime(char* buf, size_t buf_len);
 
 // Generic set/clear functions
 void dev_status_set_bits(EventBits_t bits_to_set);

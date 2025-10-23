@@ -21,6 +21,8 @@
 #include "dev_status.h"
 #include "esp_partition.h"
 #include "esp_ota_ops.h"
+#include "esp_timer.h"
+#include <stdio.h>
 
 static const char *DEV_STATUS_TAG = "DEV_STATUS";
 static EventGroupHandle_t s_dev_status_event_group = NULL;
@@ -158,4 +160,55 @@ bool dev_status_are_bits_set(EventBits_t bits)
 bool dev_status_is_any_bit_set(EventBits_t bits)
 {
     return (dev_status_get_bits() & bits) != 0;  // ANY of the specified bits is set
+}
+
+size_t dev_status_format_uptime(char *buf, size_t buf_len)
+{
+    if (!buf || buf_len == 0)
+    {
+        return 0;
+    }
+
+    int64_t us = esp_timer_get_time(); // microseconds since boot
+    uint64_t total_seconds = (uint64_t)(us / 1000000ULL);
+
+    uint32_t days = (uint32_t)(total_seconds / 86400ULL);
+    total_seconds %= 86400ULL;
+    uint32_t hours = (uint32_t)(total_seconds / 3600ULL);
+    total_seconds %= 3600ULL;
+    uint32_t minutes = (uint32_t)(total_seconds / 60ULL);
+    uint32_t seconds = (uint32_t)(total_seconds % 60ULL);
+
+    int written;
+    if (days > 0)
+    {
+        written = snprintf(buf, buf_len, "%lud %02lu:%02lu:%02lu", days, hours, minutes, seconds);
+    }
+    else
+    {
+        written = snprintf(buf, buf_len, "%02lu:%02lu:%02lu", hours, minutes, seconds);
+    }
+
+    if (written < 0)
+    {
+        // encoding/formatting error
+        if (buf_len > 0)
+            buf[0] = '\0';
+        return 0;
+    }
+
+    // If truncated, ensure NUL-termination and report number actually stored
+    if ((size_t)written >= buf_len)
+    {
+        buf[buf_len - 1] = '\0';
+        return buf_len - 1;
+    }
+    return (size_t)written;
+}
+
+const char *dev_status_get_uptime_string(void)
+{
+    static char buf[32];
+    dev_status_format_uptime(buf, sizeof(buf));
+    return buf;
 }
