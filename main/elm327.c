@@ -1903,12 +1903,14 @@ void elm327_hardreset_chip(void)
 		// xQueueReset(uart1_queue);
 		if(gpio_get_level(OBD_READY_PIN) == 1)
 		{
+			ESP_LOGW(TAG, "OBD_READY_PIN is high, performing hardware reset");
 			gpio_set_level(OBD_RESET_PIN, 0);
 			vTaskDelay(pdMS_TO_TICKS(5));
 			gpio_set_level(OBD_RESET_PIN, 1);
 		}
 		else
 		{
+			ESP_LOGI(TAG, "OBD_READY_PIN is low, sending ATZ command instead of hardware reset");
 			uart_write_bytes(UART_NUM_1, "ATZ\r", strlen("ATZ\r"));
 		}
 		memset(rsp_buffer, 0, UART_BUFFER_SIZE);
