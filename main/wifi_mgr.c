@@ -692,6 +692,11 @@ esp_err_t wifi_mgr_enable(void) {
         wifi_config_t sta_config = {
             .sta = {
                 .threshold.authmode = wifi_config.sta_auth_mode,
+                .rm_enabled = 1,
+                .btm_enabled = 1,
+                .scan_method = WIFI_ALL_CHANNEL_SCAN,
+                .sort_method = WIFI_CONNECT_AP_BY_SIGNAL,
+                .bssid_set = false,
                 .pmf_cfg = {
                     .capable = true,
                     .required = false
@@ -915,6 +920,11 @@ esp_err_t wifi_mgr_set_sta_config(const char* ssid, const char* password, wifi_a
         wifi_config_t sta_config = {
             .sta = {
                 .threshold.authmode = auth_mode,
+                .rm_enabled = 1,
+                .btm_enabled = 1,
+                .scan_method = WIFI_ALL_CHANNEL_SCAN,
+                .sort_method = WIFI_CONNECT_AP_BY_SIGNAL,
+                .bssid_set = false,
                 .pmf_cfg = {
                     .capable = true,
                     .required = false
