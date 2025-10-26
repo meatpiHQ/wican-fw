@@ -933,6 +933,7 @@ void light_sleep_task(void *pvParameters)
 					{
                         ESP_LOGI(TAG, "Low voltage timeout expired, entering sleep mode");
                         current_state = STATE_SLEEPING;
+                        gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
                         dev_status_clear_bits(DEV_AWAKE_BIT);
                         dev_status_set_bits(DEV_SLEEP_BIT);
                         elm327_sleep();
