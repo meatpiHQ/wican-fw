@@ -43,6 +43,20 @@
       "parameters": {
         "ODOMETER": "[B17:B18]"
       }
+    },
+    {
+      "pid": "22C00B6",
+      "pid_init": "ATSH7A0;",
+      "parameters": {
+        "TYRE_P_FL": "B10*0.2",
+        "TYRE_P_FR": "B15*0.2",
+        "TYRE_P_RL": "B21*0.2",
+        "TYRE_P_RR": "B27*0.2",
+        "TYRE_T_FL": "B11-50",
+        "TYRE_T_FR": "B17-50",
+        "TYRE_T_RL": "B22-50",
+        "TYRE_T_RR": "B28-50"
+      }
     }
   ]
 }
