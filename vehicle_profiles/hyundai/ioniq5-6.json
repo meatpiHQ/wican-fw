@@ -23,7 +23,7 @@
         "HV_C_V_MAX_NO": "B33",
         "HV_C_V_MIN": "B34/50",
         "HV_C_V_MIN_NO": "B35",
-        "LV_V": "B38*0.1",
+        "LV_V": "B46*0.1",
         "KWH_CHARGED": "([B49:B50]*65536 + [B51:B52])/10"
       }
     },
@@ -43,6 +43,16 @@
       "parameters": {
         "ODOMETER": "[B17:B18]"
       }
-    }
+    },
+    {
+      "pid": "22C00B6",
+      "pid_init": "ATSH7A0",
+      "parameters": {
+        "TPMS_FL": "(B10/10)*2",
+        "TPMS_FR": "(B15/10)*2",
+        "TPMS_RL": "(B21/10)*2",
+        "TPMS_RR": "(B27/10)*2",
+      }
+    }   
   ]
 }
