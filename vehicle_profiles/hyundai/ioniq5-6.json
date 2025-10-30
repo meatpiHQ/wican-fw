@@ -8,9 +8,9 @@
         "SOC": "B10/2",
         "REGEN_MAX": "[B11:B12]/100",
         "POWER_MAX": "[B13:B14]/100",
-        "HV_A": "(65536-([B17:B18]))/10",
+        "HV_A": "((S17*256)+B18)/10",
         "HV_V": "[B19:B20]/10",
-        "HV_W": "([B19:B20]/10)*((65536-([B17:B18]))/10)",
+        "HV_W": "([B19:B20]/10)*((S17*256)+B18)/10",
         "HV_T_MAX": "B21",
         "HV_T_MIN": "B22",
         "HV_T_1": "B23",
@@ -42,6 +42,28 @@
       "pid_init": "ATSH7C6;ATFCSH7C6",
       "parameters": {
         "ODOMETER": "[B17:B18]"
+      }
+    },
+    {
+      "pid": "22C00B6",
+      "pid_init": "ATSH7A0;",
+      "parameters": {
+        "TYRE_P_FL": "B10*0.2",
+        "TYRE_P_FR": "B15*0.2",
+        "TYRE_P_RL": "B21*0.2",
+        "TYRE_P_RR": "B27*0.2",
+        "TYRE_T_FL": "B11-50",
+        "TYRE_T_FR": "B17-50",
+        "TYRE_T_RL": "B22-50",
+        "TYRE_T_RR": "B28-50"
+      }
+    },
+    {
+      "pid": "2201006",
+      "pid_init": "ATSH7B3;",
+      "parameters": {
+        "TMP_A": "(B12/2)-40",
+        "T_CAB": "(B11/2)-40"
       }
     }
   ]
