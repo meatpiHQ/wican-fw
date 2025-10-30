@@ -1334,7 +1334,7 @@
             },
             {
               "name": "HV_A",
-              "expression": "(65536-([B17:B18]))/10",
+              "expression": "((S17*256)+B18)/10",
               "unit": "A",
               "class": "current"
             },
@@ -1348,7 +1348,7 @@
             },
             {
               "name": "HV_W",
-              "expression": "([B19:B20]/10)*((65536-([B17:B18]))/10)",
+              "expression": "([B19:B20]/10)*((S17*256)+B18)/10",
               "unit": "W",
               "class": "power"
             },
@@ -1485,6 +1485,82 @@
               "class": "distance",
               "unit": "km",
               "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "22C00B6",
+          "pid_init": "ATSH7A0;",
+          "parameters": [
+            {
+              "name": "TYRE_P_FL",
+              "expression": "B10*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_P_FR",
+              "expression": "B15*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_P_RL",
+              "expression": "B21*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_P_RR",
+              "expression": "B27*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_T_FL",
+              "expression": "B11-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_T_FR",
+              "expression": "B17-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_T_RL",
+              "expression": "B22-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_T_RR",
+              "expression": "B28-50",
+              "class": "temperature",
+              "unit": "°C"
+            }
+          ]
+        },
+        {
+          "pid": "2201006",
+          "pid_init": "ATSH7B3;",
+          "parameters": [
+            {
+              "name": "TMP_A",
+              "expression": "(B12/2)-40",
+              "unit": "°C",
+              "class": "none"
+            },
+            {
+              "name": "T_CAB",
+              "expression": "(B11/2)-40",
+              "unit": "°C",
+              "class": "temperature"
             }
           ]
         }
@@ -1691,7 +1767,7 @@
             },
             {
               "name": "HV_A",
-              "expression": "(65536-([B17:B18]))/10",
+              "expression": "((S17*256)+B18)/10",
               "unit": "A",
               "class": "current"
             },
@@ -1705,7 +1781,7 @@
             },
             {
               "name": "HV_W",
-              "expression": "([B19:B20]/10)*((65536-([B17:B18]))/10)",
+              "expression": "([B19:B20]/10)*((S17*256)+B18)/10",
               "unit": "W",
               "class": "power"
             },
@@ -1842,6 +1918,82 @@
               "class": "distance",
               "unit": "km",
               "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "22C00B6",
+          "pid_init": "ATSH7A0;",
+          "parameters": [
+            {
+              "name": "TYRE_P_FL",
+              "expression": "B10*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_P_FR",
+              "expression": "B15*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_P_RL",
+              "expression": "B21*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_P_RR",
+              "expression": "B27*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_T_FL",
+              "expression": "B11-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_T_FR",
+              "expression": "B17-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_T_RL",
+              "expression": "B22-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_T_RR",
+              "expression": "B28-50",
+              "class": "temperature",
+              "unit": "°C"
+            }
+          ]
+        },
+        {
+          "pid": "2201006",
+          "pid_init": "ATSH7B3;",
+          "parameters": [
+            {
+              "name": "TMP_A",
+              "expression": "(B12/2)-40",
+              "unit": "°C",
+              "class": "none"
+            },
+            {
+              "name": "T_CAB",
+              "expression": "(B11/2)-40",
+              "unit": "°C",
+              "class": "temperature"
             }
           ]
         }
