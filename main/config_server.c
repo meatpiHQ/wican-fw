@@ -1939,7 +1939,7 @@ static void config_server_load_cfg(char *cfg)
 	{
 		uint32_t sleep_time = atoi(device_config.sleep_time);
 
-		if(sleep_time > 30 && sleep_time < 1)
+		if(sleep_time > 30)
 		{
 			strcpy(device_config.sleep_time, "2");
 		}
@@ -2386,7 +2386,7 @@ int8_t config_server_get_sleep_time(uint32_t *sleep_time)
     }
     
     // Validate range
-    if (slp_t < 1 || slp_t > 30)
+    if (slp_t > 30)
 	{
         return -1;
     }

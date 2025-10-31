@@ -397,7 +397,8 @@ static void adc_task(void *pvParameters)
 						sleep_state = RUN_STATE;
 					}
 
-					if((esp_timer_get_time() - sleep_detect_time) > sleep_time)
+					if(sleep_time == 0 ||
+						(esp_timer_get_time() - sleep_detect_time) > sleep_time)
 					{
 						sleep_state = SLEEP_STATE;
 	//    	    		wifi_network_deinit();
