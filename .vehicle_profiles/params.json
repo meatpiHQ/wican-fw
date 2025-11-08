@@ -74,6 +74,13 @@
       "type": "binary_sensor"
     }
   },
+  "CHARGER_DC_PWR": {
+    "description": "Battery Charger DC Power",
+    "settings": {
+      "unit": "kW",
+      "class": "power"
+    }
+  },
   "COOLANT_TMP": {
     "description": "Coolant Temperature",
     "settings": {
@@ -86,6 +93,14 @@
     "settings": {
       "unit": "",
       "class": "none"
+    }
+  },
+  "DIST_SINCE_FULL_CHARGE": {
+    "description": "Distance Traveled Since Last Full Charge",
+    "settings": {
+      "unit": "km",
+      "class": "distance",
+      "min": "0"
     }
   },
   "ENGINE_OIL_PRES": {
