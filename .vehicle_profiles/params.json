@@ -58,6 +58,13 @@
       "type": "binary_sensor"
     }
   },
+  "CHARGER_DC_PWR": {
+    "description": "Battery Charger DC Power",
+    "settings": {
+      "unit": "kW",
+      "class": "power"
+    }
+  },
   "CHARGING": {
     "description": "Is EV Charging",
     "settings": {
@@ -74,25 +81,11 @@
       "type": "binary_sensor"
     }
   },
-  "CHARGER_DC_PWR": {
-    "description": "Battery Charger DC Power",
-    "settings": {
-      "unit": "kW",
-      "class": "power"
-    }
-  },
   "COOLANT_TMP": {
     "description": "Coolant Temperature",
     "settings": {
       "unit": "°C",
       "class": "temperature"
-    }
-  },
-  "DRIVE_MODE": {
-    "description": "Drive Mode",
-    "settings": {
-      "unit": "",
-      "class": "none"
     }
   },
   "DIST_SINCE_FULL_CHARGE": {
@@ -101,6 +94,13 @@
       "unit": "km",
       "class": "distance",
       "min": "0"
+    }
+  },
+  "DRIVE_MODE": {
+    "description": "Drive Mode",
+    "settings": {
+      "unit": "",
+      "class": "none"
     }
   },
   "ENGINE_OIL_PRES": {
