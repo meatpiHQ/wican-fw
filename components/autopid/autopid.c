@@ -46,6 +46,8 @@
 #include "https_client_mgr.h"
 #include "cert_manager.h"
 #include <time.h>
+#include "ble.h"
+#include "wifi_mgr.h"
 
 // #define TAG __func__
 #define TAG "AUTO_PID"
@@ -1885,6 +1887,12 @@ static void autopid_task(void *pvParameters)
     // Initialize timers
     wc_timer_set(&ecu_check_timer, 2000);
 
+    while (!wifi_mgr_is_sta_connected() &&
+           !mqtt_connected() &&
+           !ble_connected()) {
+        vTaskDelay(pdMS_TO_TICKS(2000));
+    }
+
     while(1) 
     {
         static pid_type_t previous_pid_type = PID_MAX;
@@ -1910,6 +1918,13 @@ static void autopid_task(void *pvParameters)
             send_commands(default_init, 50);
             vTaskDelay(pdMS_TO_TICKS(100));
         }
+
+        while (!wifi_mgr_is_sta_connected() &&
+               !mqtt_connected() &&
+               !ble_connected()) {
+            vTaskDelay(pdMS_TO_TICKS(2000));
+        }
+
         // elm327_lock();
         xSemaphoreTake(all_pids->mutex, portMAX_DELAY);
         
@@ -1930,6 +1945,12 @@ static void autopid_task(void *pvParameters)
             {
                 parameter_t *param = &curr_pid->parameters[p];
                 
+                if (!wifi_mgr_is_sta_connected() &&
+                    !mqtt_connected() &&
+                    !ble_connected()) {
+                    continue;
+                }
+
                 // Check parameter timer
                 if(wc_timer_is_expired(&param->timer)) 
                 {
