@@ -1060,6 +1060,87 @@
       ]
     },
     {
+      "car_model": "GMC: Sierra EV",
+      "init": "ATSP6;ATST64;",
+      "pids": [
+        {
+          "pid": "2227C6",
+          "pid_init": "ATSH14DACBF1;ATCRA142AF1CB;",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "[B4:B5]/655.35",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "2227AF",
+          "pid_init": "ATSH14DACBF1;ATCRA142AF1CB;",
+          "parameters": [
+            {
+              "name": "HV_CAPACITY_R",
+              "expression": "[B4:B5]/100",
+              "unit": "kWh",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "220046",
+          "pid_init": "ATSH14DACBF1;ATCRA142AF1CB;",
+          "parameters": [
+            {
+              "name": "TMP_A",
+              "expression": "(B4-40)*1.8+32",
+              "unit": "°C",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "2227C7",
+          "pid_init": "ATSH14DACBF1;ATCRA142AF1CB;",
+          "parameters": [
+            {
+              "name": "RANGE",
+              "expression": "[B4:B6]/103",
+              "unit": "km",
+              "class": "distance"
+            }
+          ]
+        },
+        {
+          "pid": "225401",
+          "pid_init": "ATSH14DACBF1;ATCRA142AF1CB;",
+          "parameters": [
+            {
+              "name": "CHARGER_DC_PWR",
+              "expression": "[B4:B5]/4350",
+              "unit": "kW",
+              "class": "power"
+            }
+          ]
+        },
+        {
+          "pid": "2227C0",
+          "pid_init": "ATSH14DACBF1;ATCRA142AF1CB;",
+          "parameters": [
+            {
+              "name": "DIST_SINCE_FULL_CHARGE",
+              "expression": "[B4:B6]/16.09344",
+              "unit": "km",
+              "class": "distance",
+              "min": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "GWM: Ora Good Cat/Funky Cat/ES11/Haomao/Ora 03",
       "init": "ATSP6;ATAT1;",
       "pids": [
