@@ -93,6 +93,34 @@ typedef struct {
 
 static ssid_fail_state_t s_fail_states[WIFI_MGR_MAX_TRACKED_SSIDS] = {0};
 
+static esp_err_t wifi_mgr_apply_sta_runtime_config(const char* ssid, const char* password, wifi_auth_mode_t auth_mode) {
+    if (ssid == NULL || !ssid[0]) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    wifi_config_t sta_config = {0};
+    sta_config.sta.threshold.authmode = auth_mode;
+    sta_config.sta.rm_enabled = 1;
+    sta_config.sta.btm_enabled = 1;
+    sta_config.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+    sta_config.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
+    sta_config.sta.bssid_set = false;
+    sta_config.sta.pmf_cfg.capable = true;
+    sta_config.sta.pmf_cfg.required = false;
+
+    strncpy((char*)sta_config.sta.ssid, ssid, sizeof(sta_config.sta.ssid) - 1);
+    sta_config.sta.ssid[sizeof(sta_config.sta.ssid) - 1] = '\0';
+
+    if (password != NULL) {
+        strncpy((char*)sta_config.sta.password, password, sizeof(sta_config.sta.password) - 1);
+        sta_config.sta.password[sizeof(sta_config.sta.password) - 1] = '\0';
+    } else {
+        sta_config.sta.password[0] = '\0';
+    }
+
+    return esp_wifi_set_config(WIFI_IF_STA, &sta_config);
+}
+
 static ssid_fail_state_t* wifi_mgr_fs_find_or_create(const char* ssid) {
     if (!ssid || !ssid[0]) return NULL;
     // Look for existing
@@ -282,7 +310,7 @@ static void wifi_mgr_scan_select_and_connect(void) {
                 continue;
             }
             if (chosen_ssid) {
-                if (wifi_mgr_set_sta_config(chosen_ssid, chosen_pass ? chosen_pass : "", chosen_auth) != ESP_OK) {
+                if (wifi_mgr_apply_sta_runtime_config(chosen_ssid, chosen_pass ? chosen_pass : "", chosen_auth) != ESP_OK) {
                     ESP_LOGW(TAG, "Failed to set STA config for sequential connect; using current");
                 }
                 snprintf(wifi_status.last_attempted_ssid, sizeof(wifi_status.last_attempted_ssid), "%s", chosen_ssid);
@@ -310,7 +338,7 @@ static void wifi_mgr_scan_select_and_connect(void) {
                 ESP_LOGW(TAG, "No unbanned SSID; retrying fallback[%d] '%s' despite ban", fb_index, chosen_ssid);
             }
             if (chosen_ssid) {
-                if (wifi_mgr_set_sta_config(chosen_ssid, chosen_pass ? chosen_pass : "", chosen_auth) != ESP_OK) {
+                if (wifi_mgr_apply_sta_runtime_config(chosen_ssid, chosen_pass ? chosen_pass : "", chosen_auth) != ESP_OK) {
                     ESP_LOGW(TAG, "Failed to set STA config for sequential connect; using current");
                 }
                 snprintf(wifi_status.last_attempted_ssid, sizeof(wifi_status.last_attempted_ssid), "%s", chosen_ssid);
@@ -408,7 +436,7 @@ static void wifi_mgr_scan_select_and_connect(void) {
 
     if (chosen_ssid) {
         // Update running STA config and connect
-        if (wifi_mgr_set_sta_config(chosen_ssid, chosen_pass ? chosen_pass : "", chosen_auth) != ESP_OK) {
+        if (wifi_mgr_apply_sta_runtime_config(chosen_ssid, chosen_pass ? chosen_pass : "", chosen_auth) != ESP_OK) {
             ESP_LOGW(TAG, "Failed to set selected STA config; connecting with current config");
             wifi_mgr_update_last_attempted_from_current_config();
             esp_wifi_connect();
