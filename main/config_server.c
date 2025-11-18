@@ -1583,7 +1583,7 @@ static esp_err_t store_car_data_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-char *config_server_get_status_json(void)
+char *config_server_get_status_json(bool remove_sensitive_info)
 {
 	char ip_str[20] = {0};
 
@@ -1607,21 +1607,27 @@ char *config_server_get_status_json(void)
 	cJSON_AddStringToObject(root, "wifi_mode", device_config.wifi_mode);
 	cJSON_AddStringToObject(root, "ap_ch", device_config.ap_ch);
 	cJSON_AddStringToObject(root, "ap_auto_disable", device_config.ap_auto_disable);
-	cJSON_AddStringToObject(root, "sta_ssid", device_config.sta_ssid);
-	cJSON_AddStringToObject(root, "sta_pass", device_config.sta_pass);
-	cJSON_AddStringToObject(root, "sta_security", device_config.sta_security);
-	cJSON_AddStringToObject(root, "home_ssid", device_config.home_ssid);
-	cJSON_AddStringToObject(root, "home_password", device_config.home_password);
-	cJSON_AddStringToObject(root, "home_security", device_config.home_security);
+	if(!remove_sensitive_info)
+	{
+		cJSON_AddStringToObject(root, "sta_ssid", device_config.sta_ssid);
+		cJSON_AddStringToObject(root, "sta_pass", device_config.sta_pass);
+		cJSON_AddStringToObject(root, "sta_security", device_config.sta_security);
+		cJSON_AddStringToObject(root, "home_ssid", device_config.home_ssid);
+		cJSON_AddStringToObject(root, "home_password", device_config.home_password);
+		cJSON_AddStringToObject(root, "home_security", device_config.home_security);
+		cJSON_AddStringToObject(root, "drive_ssid", device_config.drive_ssid);
+		cJSON_AddStringToObject(root, "drive_password", device_config.drive_password);
+		cJSON_AddStringToObject(root, "drive_security", device_config.drive_security);
+	}
 	cJSON_AddStringToObject(root, "home_protocol", device_config.home_protocol);
-	cJSON_AddStringToObject(root, "drive_ssid", device_config.drive_ssid);
-	cJSON_AddStringToObject(root, "drive_password", device_config.drive_password);
-	cJSON_AddStringToObject(root, "drive_security", device_config.drive_security);
 	cJSON_AddStringToObject(root, "drive_protocol", device_config.drive_protocol);
 	cJSON_AddStringToObject(root, "drive_connection_type", device_config.drive_connection_type);
 	cJSON_AddStringToObject(root, "drive_mode_timeout", device_config.drive_mode_timeout);
 	cJSON_AddStringToObject(root, "sta_status", (wifi_mgr_is_sta_connected()?"Connected":"Not Connected"));
-	cJSON_AddStringToObject(root, "sta_ip", ip_str);
+	if(!remove_sensitive_info)
+	{
+		cJSON_AddStringToObject(root, "sta_ip", ip_str);
+	}
 	cJSON_AddStringToObject(root, "mdns", wc_mdns_get_hostname());
 	cJSON_AddStringToObject(root, "ble_status", device_config.ble_status);
 	cJSON_AddStringToObject(root, "ble_power", device_config.ble_power);
@@ -1643,16 +1649,19 @@ char *config_server_get_status_json(void)
 	cJSON_AddStringToObject(root, "wakeup_interval", device_config.wakeup_interval);
 
 	cJSON_AddStringToObject(root, "batt_alert", device_config.batt_alert);
-	cJSON_AddStringToObject(root, "batt_alert_ssid", device_config.batt_alert_ssid);
-	cJSON_AddStringToObject(root, "batt_alert_pass", device_config.batt_alert_pass);
-	cJSON_AddStringToObject(root, "batt_alert_volt", device_config.batt_alert_volt);
+	if(!remove_sensitive_info)
+	{
+		cJSON_AddStringToObject(root, "batt_alert_ssid", device_config.batt_alert_ssid);
+		cJSON_AddStringToObject(root, "batt_alert_pass", device_config.batt_alert_pass);
+		cJSON_AddStringToObject(root, "batt_alert_url", device_config.batt_alert_url);
+		cJSON_AddStringToObject(root, "batt_alert_port", device_config.batt_alert_port);
+		cJSON_AddStringToObject(root, "batt_mqtt_user", device_config.batt_mqtt_user);
+		cJSON_AddStringToObject(root, "batt_mqtt_pass", device_config.batt_mqtt_pass);
+	}
 	cJSON_AddStringToObject(root, "batt_alert_protocol", device_config.batt_alert_protocol);
-	cJSON_AddStringToObject(root, "batt_alert_url", device_config.batt_alert_url);
-	cJSON_AddStringToObject(root, "batt_alert_port", device_config.batt_alert_port);
+	cJSON_AddStringToObject(root, "batt_alert_volt", device_config.batt_alert_volt);
 	cJSON_AddStringToObject(root, "batt_alert_topic", device_config.batt_alert_topic);
 	cJSON_AddStringToObject(root, "batt_alert_time", device_config.batt_alert_time);
-	cJSON_AddStringToObject(root, "batt_mqtt_user", device_config.batt_mqtt_user);
-	cJSON_AddStringToObject(root, "batt_mqtt_pass", device_config.batt_mqtt_pass);
 	cJSON_AddStringToObject(root, "logger_status", device_config.logger_status);
 	cJSON_AddStringToObject(root, "log_filesystem", device_config.log_filesystem);
 	cJSON_AddStringToObject(root, "log_period", device_config.log_period);
@@ -1682,13 +1691,18 @@ char *config_server_get_status_json(void)
 	cJSON_AddStringToObject(root, "batt_voltage", volt);
 
 	cJSON_AddStringToObject(root, "mqtt_en", device_config.mqtt_en);
-	cJSON_AddStringToObject(root, "mqtt_url", device_config.mqtt_url);
-	cJSON_AddStringToObject(root, "mqtt_port", device_config.mqtt_port);
-	cJSON_AddStringToObject(root, "mqtt_user", device_config.mqtt_user);
-	cJSON_AddStringToObject(root, "mqtt_pass", device_config.mqtt_pass);
-	cJSON_AddStringToObject(root, "mqtt_cert_set", device_config.mqtt_cert_set);
-	cJSON_AddStringToObject(root, "mqtt_security", device_config.mqtt_security);
-	cJSON_AddStringToObject(root, "mqtt_skip_cn", device_config.mqtt_skip_cn);
+	if(!remove_sensitive_info)
+	{
+		cJSON_AddStringToObject(root, "mqtt_url", device_config.mqtt_url);
+		cJSON_AddStringToObject(root, "mqtt_port", device_config.mqtt_port);
+		cJSON_AddStringToObject(root, "mqtt_user", device_config.mqtt_user);
+		cJSON_AddStringToObject(root, "mqtt_pass", device_config.mqtt_pass);
+	
+
+		cJSON_AddStringToObject(root, "mqtt_cert_set", device_config.mqtt_cert_set);
+		cJSON_AddStringToObject(root, "mqtt_security", device_config.mqtt_security);
+		cJSON_AddStringToObject(root, "mqtt_skip_cn", device_config.mqtt_skip_cn);
+	}
 	cJSON_AddStringToObject(root, "mqtt_tx_topic", device_config.mqtt_tx_topic);
 	cJSON_AddStringToObject(root, "mqtt_rx_topic", device_config.mqtt_rx_topic);
 	cJSON_AddStringToObject(root, "mqtt_status_topic", device_config.mqtt_status_topic);
@@ -1755,7 +1769,7 @@ char *config_server_get_status_json(void)
 
 static esp_err_t check_status_handler(httpd_req_t *req)
 {
-	char *resp_str = config_server_get_status_json();
+	char *resp_str = config_server_get_status_json(false);
 
 	httpd_resp_set_type(req, "application/json");
 	httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);

@@ -962,7 +962,7 @@ void autopid_publish_all_destinations(void){
                     }
                 } else {
                     // Use settings JSON body for standard HTTP/HTTPS
-                    current_status_data = config_server_get_status_json();
+                    current_status_data = config_server_get_status_json(true);
                     current_config_data = autopid_get_config();
                     current_autopid_data = strdup_psram(raw_json);
 
