@@ -2365,7 +2365,7 @@ all_pids_t* load_all_pids(void){
                             }else{
                                 gd->cert_set = strdup_psram("default"); 
                             }
-                            gd->enabled = enabled_item && cJSON_IsBool(enabled_item)? cJSON_IsTrue(enabled_item): true;
+                            gd->enabled = enabled_item && cJSON_IsBool(enabled_item)? cJSON_IsTrue(enabled_item): false;
                             // Parse optional auth
                             gd->auth.type = DEST_AUTH_NONE;
                             if (auth_item && cJSON_IsObject(auth_item)) {
@@ -2423,11 +2423,29 @@ all_pids_t* load_all_pids(void){
                                     }
                                 }
                             }
+                            // Normalize cycle: treat 0 as default 10000 ms
+                            if (gd->cycle == 0) gd->cycle = 10000;
                             gd->publish_timer = 0; // immediate eligibility
                             gd->consec_failures = 0;
                             gd->backoff_ms = 0;
                         }
                         // If legacy single destination fields exist but array was empty previously, we keep them separate.
+                        // Compact array: keep only entries with valid destination and enabled
+                        uint32_t write_idx = 0;
+                        for (uint32_t read_idx = 0; read_idx < all_pids->destinations_count; ++read_idx) {
+                            group_destination_t *src = &all_pids->destinations[read_idx];
+                            if (src->enabled && src->destination && strlen(src->destination) > 0) {
+                                if (write_idx != read_idx) {
+                                    all_pids->destinations[write_idx] = *src;
+                                    // Clear the old slot to avoid duplicate frees in destructor
+                                    memset(src, 0, sizeof(group_destination_t));
+                                }
+                                write_idx++;
+                            } else {
+                                // Leave invalid entries zeroed for safety; ownership stays with compacted copy
+                            }
+                        }
+                        all_pids->destinations_count = write_idx;
                     }
                 }
             }else{
@@ -2458,10 +2476,13 @@ all_pids_t* load_all_pids(void){
                                 }
                             }
                         }
-                        all_pids->destinations[0].cycle = all_pids->cycle;
+                        all_pids->destinations[0].cycle = all_pids->cycle; 
+                        if (all_pids->destinations[0].cycle == 0) {
+                            all_pids->destinations[0].cycle = 10000;
+                        }
                         all_pids->destinations[0].api_token = group_api_token_item && group_api_token_item->valuestring ? strdup_psram(group_api_token_item->valuestring) : NULL;
                         all_pids->destinations[0].cert_set = strdup_psram("default");
-                        all_pids->destinations[0].enabled = true;
+                        all_pids->destinations[0].enabled = false;
                         // Legacy auth mapping: if HTTP/HTTPS and api_token provided, treat as Bearer
                         if ((all_pids->destinations[0].type == DEST_HTTP || all_pids->destinations[0].type == DEST_HTTPS) && all_pids->destinations[0].api_token) {
                             all_pids->destinations[0].auth.type = DEST_AUTH_BEARER;
@@ -2472,6 +2493,10 @@ all_pids_t* load_all_pids(void){
                         all_pids->destinations[0].publish_timer = 0;
                         all_pids->destinations[0].consec_failures = 0;
                         all_pids->destinations[0].backoff_ms = 0;
+                        // If legacy destination invalid, reduce count to zero
+                        if (!all_pids->destinations[0].destination || strlen(all_pids->destinations[0].destination) == 0) {
+                            all_pids->destinations_count = 0;
+                        }
                     }
                 }
             }
