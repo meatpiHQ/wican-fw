@@ -46,6 +46,7 @@
 #include "https_client_mgr.h"
 #include "cert_manager.h"
 #include <time.h>
+#include "ha_webhooks.h"
 
 // #define TAG __func__
 #define TAG "AUTO_PID"
@@ -2206,7 +2207,7 @@ all_pids_t* load_all_pids(void){
     total_pids = car_data_pids + auto_pids;
     
     ESP_LOGI(TAG, "Allocating memory for %d pids...", total_pids);
-    all_pids_t* all_pids = (all_pids_t*)calloc(1, sizeof(all_pids_t));
+    all_pids_t* all_pids = (all_pids_t*)heap_caps_calloc(1, sizeof(all_pids_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
     if (!all_pids) return NULL;
     
     if(total_pids == 0) {
@@ -2214,7 +2215,7 @@ all_pids_t* load_all_pids(void){
         return all_pids;
     }
 
-    all_pids->pids = (pid_data_t*)calloc(total_pids, sizeof(pid_data_t));
+    all_pids->pids = (pid_data_t*)heap_caps_calloc(total_pids, sizeof(pid_data_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
     if (!all_pids->pids) {
         free(all_pids);
         return NULL;
@@ -2296,7 +2297,11 @@ all_pids_t* load_all_pids(void){
             if(destinations_array && cJSON_IsArray(destinations_array)){
                 int count = cJSON_GetArraySize(destinations_array);
                 if(count > 0){
-                    all_pids->destinations = calloc(count, sizeof(group_destination_t));
+                    all_pids->destinations = (group_destination_t*)heap_caps_calloc(
+                        count,
+                        sizeof(group_destination_t),
+                        MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM
+                    );
                     if(all_pids->destinations){
                         all_pids->destinations_count = count;
                         for(int di=0; di<count; di++){
@@ -2337,7 +2342,7 @@ all_pids_t* load_all_pids(void){
                                 if (!has_http && !has_https) {
                                     const char *prefix = (gd->type == DEST_HTTPS || gd->type == DEST_ABRP_API) ? "https://" : "http://";
                                     size_t new_len = strlen(prefix) + strlen(gd->destination) + 1;
-                                    char *with_prefix = (char*)malloc(new_len);
+                                    char *with_prefix = (char*)heap_caps_malloc(new_len, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
                                     if (with_prefix) {
                                         strcpy(with_prefix, prefix);
                                         strcat(with_prefix, gd->destination);
@@ -2402,7 +2407,7 @@ all_pids_t* load_all_pids(void){
                             if (qp_arr && cJSON_IsArray(qp_arr)) {
                                 int qn = cJSON_GetArraySize(qp_arr);
                                 if (qn > 0) {
-                                    gd->query_params = (dest_query_kv_t*)calloc(qn, sizeof(dest_query_kv_t));
+                                    gd->query_params = (dest_query_kv_t*)heap_caps_calloc(qn, sizeof(dest_query_kv_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
                                     if (gd->query_params) {
                                         gd->query_params_count = qn;
                                         for (int qi=0; qi<qn; ++qi) {
@@ -2428,7 +2433,11 @@ all_pids_t* load_all_pids(void){
             }else{
                 // No new destinations array: fabricate one from legacy fields if present
                 if(all_pids->group_destination || group_dest_type_item){
-                    all_pids->destinations = calloc(1, sizeof(group_destination_t));
+                    all_pids->destinations = (group_destination_t*)heap_caps_calloc(
+                        1,
+                        sizeof(group_destination_t),
+                        MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM
+                    );
                     if(all_pids->destinations){
                         all_pids->destinations_count = 1;
                         all_pids->destinations[0].type = all_pids->group_destination_type;
@@ -2440,7 +2449,7 @@ all_pids_t* load_all_pids(void){
                             if (!has_http && !has_https) {
                                 const char *prefix = (all_pids->destinations[0].type == DEST_HTTPS) ? "https://" : "http://";
                                 size_t new_len = strlen(prefix) + strlen(all_pids->destinations[0].destination) + 1;
-                                char *with_prefix = (char*)malloc(new_len);
+                                char *with_prefix = (char*)heap_caps_malloc(new_len, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
                                 if (with_prefix) {
                                     strcpy(with_prefix, prefix);
                                     strcat(with_prefix, all_pids->destinations[0].destination);
@@ -2493,7 +2502,7 @@ all_pids_t* load_all_pids(void){
                         all_pids->pid_custom_en = true;
                     }
                     
-                    curr_pid->cmd = pid_item ? (char*)malloc(strlen(pid_item->valuestring) + 2) : NULL;
+                    curr_pid->cmd = pid_item ? (char*)heap_caps_malloc(strlen(pid_item->valuestring) + 2, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM) : NULL;
                     if (curr_pid->cmd && pid_item && strlen(pid_item->valuestring) > 1)
                     {
                         strcpy(curr_pid->cmd, pid_item->valuestring);
@@ -2505,7 +2514,7 @@ all_pids_t* load_all_pids(void){
                         size_t init_len = strlen(init_item->valuestring);
                         
                         if (init_len > 0) {
-                            curr_pid->init = (char*)malloc(init_len + 2);
+                            curr_pid->init = (char*)heap_caps_malloc(init_len + 2, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
                             if (curr_pid->init) {
                                 strncpy(curr_pid->init, init_item->valuestring, init_len);
                                 curr_pid->init[init_len] = '\0';
@@ -2534,7 +2543,7 @@ all_pids_t* load_all_pids(void){
                     curr_pid->pid_type = PID_CUSTOM;
 
                     curr_pid->parameters_count = 1;
-                    curr_pid->parameters = (parameter_t*)calloc(1, sizeof(parameter_t));
+                    curr_pid->parameters = (parameter_t*)heap_caps_calloc(1, sizeof(parameter_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
                     if (curr_pid->parameters) {
                         curr_pid->parameters->name = name_item ? strdup_psram(name_item->valuestring) : NULL;
                         curr_pid->parameters->expression = expr_item ? strdup_psram(expr_item->valuestring) : NULL;
@@ -2574,7 +2583,7 @@ all_pids_t* load_all_pids(void){
                     const char *sh_value = "";
 
                     curr_pid->parameters_count = 1;
-                    curr_pid->parameters = (parameter_t*)calloc(1, sizeof(parameter_t));
+                    curr_pid->parameters = (parameter_t*)heap_caps_calloc(1, sizeof(parameter_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
                     if (curr_pid->parameters) {
                         cJSON* name_item = cJSON_GetObjectItem(pid, "Name");
                         cJSON* period_item = cJSON_GetObjectItem(pid, "Period");
@@ -2658,7 +2667,7 @@ all_pids_t* load_all_pids(void){
                                         strncpy(pid_hex, curr_pid->parameters->name, 2);
                                         pid_hex[2] = '\0';
 
-                                        curr_pid->cmd = malloc(8); // "01XX1\r\0" needs 8 bytes
+                                        curr_pid->cmd = heap_caps_malloc(8, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM); // "01XX1\r\0" needs 8 bytes
                                         if(curr_pid->cmd) {
                                             sprintf(curr_pid->cmd, "01%s\r", pid_hex);
                                         }
@@ -2726,7 +2735,7 @@ all_pids_t* load_all_pids(void){
                                 size_t init_len = strlen(init_item->valuestring);
                                 
                                 if (init_len > 0) {
-                                    curr_pid->init = (char*)malloc(init_len + 2);
+                                    curr_pid->init = (char*)heap_caps_malloc(init_len + 2, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
                                     if (curr_pid->init) {
                                         strncpy(curr_pid->init, init_item->valuestring, init_len);
                                         curr_pid->init[init_len] = '\0';
@@ -2751,7 +2760,7 @@ all_pids_t* load_all_pids(void){
                                 size_t cmd_len = strlen(pid_item->valuestring);
 
                                 if (cmd_len > 0) {
-                                    curr_pid->cmd = (char*)malloc(cmd_len + 2);
+                                    curr_pid->cmd = (char*)heap_caps_malloc(cmd_len + 2, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
                                     if (curr_pid->cmd) {
                                         strncpy(curr_pid->cmd, pid_item->valuestring, cmd_len);
                                         curr_pid->cmd[cmd_len] = '\r';
@@ -2769,7 +2778,7 @@ all_pids_t* load_all_pids(void){
                             {
                                 int param_count = cJSON_GetArraySize(params);
                                 curr_pid->parameters_count = param_count;  // Set the count
-                                curr_pid->parameters = (parameter_t*)calloc(param_count, sizeof(parameter_t));
+                                curr_pid->parameters = (parameter_t*)heap_caps_calloc(param_count, sizeof(parameter_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
                                 curr_pid->parameters->period = all_pids->cycle;
                                 curr_pid->parameters->timer = 0;
                                 curr_pid->parameters->value = FLT_MAX;
