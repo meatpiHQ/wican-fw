@@ -1077,6 +1077,7 @@ content.style.cssText='padding:8px 10px;'+(isCollapsed?'display:none;':'display:
     const qpRow = content.querySelector('.row-query-params');
     const certRow = content.querySelector('.row-cert-set');
     const certSel = content.querySelector('.dest-cert-set');
+    const initialCertSet = d.cert_set || 'default';
     // Auth controls
     d.auth = d.auth || { type: 'none' };
     d.query_params = Array.isArray(d.query_params) ? d.query_params : [];
@@ -1141,7 +1142,9 @@ content.style.cssText='padding:8px 10px;'+(isCollapsed?'display:none;':'display:
         d.destination = urlIn.value.trim();
         d.cycle = parseInt(cycleIn.value)||0;
         if(apiIn) d.api_token = apiIn.value.trim();
-        d.cert_set = certSel? (certSel.value || 'default') : 'default';
+        if(certSel && certSel.options.length > 0){
+            d.cert_set = certSel.value || 'default';
+        }
         title.textContent = `${idx+1}. ${d.type} - ${truncateMiddle(d.destination||'(unset)',50)}`;
         apiRow.style.display = (d.type==='ABRP_API')? 'table-row':'none';
         authRow.style.display = ((d.type==='HTTP'||d.type==='HTTPS')? 'table-row':'none');
@@ -1152,7 +1155,14 @@ content.style.cssText='padding:8px 10px;'+(isCollapsed?'display:none;':'display:
     typeSel.onchange=bind; urlIn.oninput=bind; cycleIn.oninput=bind; if(apiIn) apiIn.oninput=bind; if(certSel) certSel.onchange=bind;
     // initial toggle
     bind();
-    fetchCertSetsForDestinations().then(list=>{ if(certSel){ certSel.innerHTML=list.map(n=>`<option value="${n}" ${d.cert_set===n?'selected':''}>${n}</option>`).join(''); d.cert_set = certSel.value; }});
+    fetchCertSetsForDestinations().then(list=>{
+        if(!certSel) return;
+        const safeList = Array.isArray(list) && list.length ? list : ['default'];
+        const desired = (d.cert_set && safeList.includes(d.cert_set)) ? d.cert_set : (safeList.includes(initialCertSet) ? initialCertSet : safeList[0]);
+        certSel.innerHTML = safeList.map(n=>`<option value="${n}" ${desired===n?'selected':''}>${n}</option>`).join('');
+        certSel.value = desired;
+        d.cert_set = certSel.value || 'default';
+    });
 });
 document.getElementById('add_destination_btn').disabled = window.automateDestinations.length>=6;
 }
