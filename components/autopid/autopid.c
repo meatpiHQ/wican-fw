@@ -1825,7 +1825,10 @@ static void autopid_webhook_task(void *pvParameters)
     ESP_LOGI(TAG, "Autopid Webhook Task Started");
     
     uint32_t last_post_time = 0;
-    static bool settings_sent = false;
+    static bool __placeholder_flag__ = false; // true: send full data; false: send only changed values
+    static char *prev_autopid_snapshot = NULL; // previous snapshot for diffing when sending only changes
+    static char *prev_config_snapshot = NULL;   // previous config for diffing
+    static char *prev_status_snapshot = NULL;   // previous status for diffing
     
     for(;;)
     {
@@ -1851,94 +1854,291 @@ static void autopid_webhook_task(void *pvParameters)
                         if (url)
                         {
                             char *body = NULL;
-                            char *current_autopid_data = NULL;
                             char *current_config_data = NULL;
                             char *current_status_data = NULL;
+                            char *current_autopid_data = NULL;
 
-                            if (settings_sent == true)
+                            // Always send settings-style JSON: {config, status, autopid_data}
+                            current_status_data = config_server_get_status_json(true);
+                            current_config_data = autopid_get_config();
+                            current_autopid_data = strdup_psram(raw_json);
+
+                            cJSON *root_obj = cJSON_CreateObject();
+                            if (root_obj)
                             {
-                                // Wrap telemetry under "autopid_data" after initial settings
-                                cJSON *root_obj = cJSON_CreateObject();
-                                if (root_obj)
-                                {
-                                    cJSON *auto_obj = NULL;
-                                    if (raw_json)
-                                    {
-                                        auto_obj = cJSON_Parse(raw_json);
-                                    }
-                                    if (!auto_obj) auto_obj = cJSON_CreateObject();
-                                    cJSON_AddItemToObject(root_obj, "autopid_data", auto_obj);
+                                cJSON *cfg_obj = NULL;
+                                cJSON *sts_obj = NULL;
+                                cJSON *auto_obj = NULL;
 
-                                    char *printed = cJSON_PrintUnformatted(root_obj);
-                                    if (printed)
-                                    {
-                                        body = strdup_psram(printed);
-                                        free(printed);
-                                    }
-                                    cJSON_Delete(root_obj);
-                                }
-                            }
-                            else
-                            {
-                                // Send full settings JSON on first post
-                                current_status_data = config_server_get_status_json(true);
-                                current_config_data = autopid_get_config();
-                                current_autopid_data = strdup_psram(raw_json);
-
-                                cJSON *root_obj = cJSON_CreateObject();
-                                if (root_obj)
-                                {
-                                    cJSON *cfg_obj = NULL;
-                                    cJSON *sts_obj = NULL;
-                                    cJSON *auto_obj = NULL;
-
-                                    if (current_config_data)
-                                    {
-                                        cfg_obj = cJSON_Parse(current_config_data);
-                                    }
-                                    if (!cfg_obj) cfg_obj = cJSON_CreateObject();
-
-                                    if (current_status_data)
-                                    {
-                                        sts_obj = cJSON_Parse(current_status_data);
-                                    }
-                                    if (!sts_obj) sts_obj = cJSON_CreateObject();
-
-                                    if (current_autopid_data)
-                                    {
-                                        auto_obj = cJSON_Parse(current_autopid_data);
-                                    }
-                                    if (!auto_obj) auto_obj = cJSON_CreateObject();
-
-                                    cJSON_AddItemToObject(root_obj, "config", cfg_obj);
-                                    cJSON_AddItemToObject(root_obj, "status", sts_obj);
-                                    cJSON_AddItemToObject(root_obj, "autopid_data", auto_obj);
-
-                                    char *printed = cJSON_PrintUnformatted(root_obj);
-                                    if (printed)
-                                    {
-                                        body = strdup_psram(printed);
-                                        free(printed);
-                                    }
-                                    cJSON_Delete(root_obj);
-                                }
-
-                                if (current_autopid_data)
-                                {
-                                    free(current_autopid_data);
-                                    current_autopid_data = NULL;
-                                }
-                                if (current_status_data)
-                                {
-                                    free(current_status_data);
-                                    current_status_data = NULL;
-                                }
+                                // Build config (full or diff)
+                                cJSON *curr_cfg_src = NULL;
                                 if (current_config_data)
                                 {
-                                    free(current_config_data);
-                                    current_config_data = NULL;
+                                    curr_cfg_src = cJSON_Parse(current_config_data);
                                 }
+                                if (!curr_cfg_src) curr_cfg_src = cJSON_CreateObject();
+                                if (__placeholder_flag__)
+                                {
+                                    cfg_obj = cJSON_Duplicate(curr_cfg_src, true);
+                                }
+                                else
+                                {
+                                    cJSON *cfg_diff = cJSON_CreateObject();
+                                    if (!cfg_diff) cfg_diff = cJSON_CreateObject();
+                                    cJSON *prev_cfg_src = NULL;
+                                    if (prev_config_snapshot)
+                                    {
+                                        prev_cfg_src = cJSON_Parse(prev_config_snapshot);
+                                    }
+                                    cJSON *it = NULL;
+                                    cJSON_ArrayForEach(it, curr_cfg_src)
+                                    {
+                                        const char *key = it->string; if (!key) continue;
+                                        bool changed = true;
+                                        if (prev_cfg_src)
+                                        {
+                                            cJSON *prev_it = cJSON_GetObjectItemCaseSensitive(prev_cfg_src, key);
+                                            if (prev_it)
+                                            {
+                                                if (cJSON_IsString(it) && cJSON_IsString(prev_it))
+                                                {
+                                                    const char *cs = it->valuestring ? it->valuestring : "";
+                                                    const char *ps = prev_it->valuestring ? prev_it->valuestring : "";
+                                                    changed = (strcmp(cs, ps) != 0);
+                                                }
+                                                else if (cJSON_IsNumber(it) && cJSON_IsNumber(prev_it))
+                                                {
+                                                    changed = (it->valuedouble != prev_it->valuedouble);
+                                                }
+                                                else if (cJSON_IsBool(it) && cJSON_IsBool(prev_it))
+                                                {
+                                                    int cv = cJSON_IsTrue(it) ? 1 : 0;
+                                                    int pv = cJSON_IsTrue(prev_it) ? 1 : 0;
+                                                    changed = (cv != pv);
+                                                }
+                                                else
+                                                {
+                                                    // Different types -> consider changed
+                                                    changed = true;
+                                                }
+                                            }
+                                        }
+                                        if (changed)
+                                        {
+                                            if (cJSON_IsString(it) && it->valuestring)
+                                                cJSON_AddStringToObject(cfg_diff, key, it->valuestring);
+                                            else if (cJSON_IsNumber(it))
+                                                cJSON_AddNumberToObject(cfg_diff, key, it->valuedouble);
+                                            else if (cJSON_IsBool(it))
+                                                cJSON_AddBoolToObject(cfg_diff, key, cJSON_IsTrue(it));
+                                        }
+                                    }
+                                    cfg_obj = cfg_diff;
+                                    if (prev_cfg_src) cJSON_Delete(prev_cfg_src);
+                                    if (prev_config_snapshot) { free(prev_config_snapshot); prev_config_snapshot = NULL; }
+                                    prev_config_snapshot = strdup_psram(current_config_data);
+                                }
+                                if (curr_cfg_src) cJSON_Delete(curr_cfg_src);
+
+                                // Build status (full or diff)
+                                cJSON *curr_sts_src = NULL;
+                                if (current_status_data)
+                                {
+                                    curr_sts_src = cJSON_Parse(current_status_data);
+                                }
+                                if (!curr_sts_src) curr_sts_src = cJSON_CreateObject();
+                                if (__placeholder_flag__)
+                                {
+                                    sts_obj = cJSON_Duplicate(curr_sts_src, true);
+                                }
+                                else
+                                {
+                                    cJSON *sts_diff = cJSON_CreateObject();
+                                    if (!sts_diff) sts_diff = cJSON_CreateObject();
+                                    cJSON *prev_sts_src = NULL;
+                                    if (prev_status_snapshot)
+                                    {
+                                        prev_sts_src = cJSON_Parse(prev_status_snapshot);
+                                    }
+                                    cJSON *it2 = NULL;
+                                    cJSON_ArrayForEach(it2, curr_sts_src)
+                                    {
+                                        const char *key = it2->string; if (!key) continue;
+                                        bool changed = true;
+                                        if (prev_sts_src)
+                                        {
+                                            cJSON *prev_it = cJSON_GetObjectItemCaseSensitive(prev_sts_src, key);
+                                            if (prev_it)
+                                            {
+                                                if (cJSON_IsString(it2) && cJSON_IsString(prev_it))
+                                                {
+                                                    const char *cs = it2->valuestring ? it2->valuestring : "";
+                                                    const char *ps = prev_it->valuestring ? prev_it->valuestring : "";
+                                                    changed = (strcmp(cs, ps) != 0);
+                                                }
+                                                else if (cJSON_IsNumber(it2) && cJSON_IsNumber(prev_it))
+                                                {
+                                                    changed = (it2->valuedouble != prev_it->valuedouble);
+                                                }
+                                                else if (cJSON_IsBool(it2) && cJSON_IsBool(prev_it))
+                                                {
+                                                    int cv = cJSON_IsTrue(it2) ? 1 : 0;
+                                                    int pv = cJSON_IsTrue(prev_it) ? 1 : 0;
+                                                    changed = (cv != pv);
+                                                }
+                                                else
+                                                {
+                                                    changed = true;
+                                                }
+                                            }
+                                        }
+                                        if (changed)
+                                        {
+                                            if (cJSON_IsString(it2) && it2->valuestring)
+                                                cJSON_AddStringToObject(sts_diff, key, it2->valuestring);
+                                            else if (cJSON_IsNumber(it2))
+                                                cJSON_AddNumberToObject(sts_diff, key, it2->valuedouble);
+                                            else if (cJSON_IsBool(it2))
+                                                cJSON_AddBoolToObject(sts_diff, key, cJSON_IsTrue(it2));
+                                        }
+                                    }
+                                    sts_obj = sts_diff;
+                                    if (prev_sts_src) cJSON_Delete(prev_sts_src);
+                                    if (prev_status_snapshot) { free(prev_status_snapshot); prev_status_snapshot = NULL; }
+                                    prev_status_snapshot = strdup_psram(current_status_data);
+                                }
+                                if (curr_sts_src) cJSON_Delete(curr_sts_src);
+
+                                // Build autopid_data (full or only changed depending on __placeholder_flag__)
+                                cJSON *curr_auto_src = NULL;
+                                if (current_autopid_data)
+                                {
+                                    curr_auto_src = cJSON_Parse(current_autopid_data);
+                                }
+                                if (!curr_auto_src) curr_auto_src = cJSON_CreateObject();
+
+                                if (__placeholder_flag__)
+                                {
+                                    // Send full autopid_data
+                                    auto_obj = cJSON_Duplicate(curr_auto_src, true);
+                                }
+                                else
+                                {
+                                    // Send only changed values compared to previous snapshot
+                                    cJSON *diff_obj = cJSON_CreateObject();
+                                    if (!diff_obj) diff_obj = cJSON_CreateObject();
+
+                                    cJSON *prev_src = NULL;
+                                    if (prev_autopid_snapshot)
+                                    {
+                                        prev_src = cJSON_Parse(prev_autopid_snapshot);
+                                    }
+                                    // Iterate current keys and compare to previous
+                                    cJSON *it = NULL;
+                                    cJSON_ArrayForEach(it, curr_auto_src)
+                                    {
+                                        const char *key = it->string;
+                                        if (!key) continue;
+                                        double curr_val = 0;
+                                        bool has_curr = false;
+                                        if (cJSON_IsNumber(it)) { curr_val = it->valuedouble; has_curr = true; }
+                                        else if (cJSON_IsString(it) && it->valuestring) { has_curr = true; }
+                                        else if (cJSON_IsBool(it)) { curr_val = cJSON_IsTrue(it) ? 1.0 : 0.0; has_curr = true; }
+                                        if (!has_curr) continue;
+
+                                        bool changed = true;
+                                        if (prev_src)
+                                        {
+                                            cJSON *prev_it = cJSON_GetObjectItemCaseSensitive(prev_src, key);
+                                            if (prev_it)
+                                            {
+                                                if (cJSON_IsNumber(it) && cJSON_IsNumber(prev_it))
+                                                {
+                                                    double prev_val = prev_it->valuedouble;
+                                                    changed = (curr_val != prev_val);
+                                                }
+                                                else if (cJSON_IsString(it) && cJSON_IsString(prev_it))
+                                                {
+                                                    const char *cs = it->valuestring ? it->valuestring : "";
+                                                    const char *ps = prev_it->valuestring ? prev_it->valuestring : "";
+                                                    changed = (strcmp(cs, ps) != 0);
+                                                }
+                                                else if (cJSON_IsBool(it) && cJSON_IsBool(prev_it))
+                                                {
+                                                    int cv = cJSON_IsTrue(it) ? 1 : 0;
+                                                    int pv = cJSON_IsTrue(prev_it) ? 1 : 0;
+                                                    changed = (cv != pv);
+                                                }
+                                            }
+                                        }
+
+                                        if (changed)
+                                        {
+                                            if (cJSON_IsNumber(it))
+                                            {
+                                                cJSON_AddNumberToObject(diff_obj, key, it->valuedouble);
+                                            }
+                                            else if (cJSON_IsString(it) && it->valuestring)
+                                            {
+                                                cJSON_AddStringToObject(diff_obj, key, it->valuestring);
+                                            }
+                                            else if (cJSON_IsBool(it))
+                                            {
+                                                cJSON_AddBoolToObject(diff_obj, key, cJSON_IsTrue(it));
+                                            }
+                                        }
+                                    }
+
+                                    auto_obj = diff_obj;
+                                    if (prev_src) cJSON_Delete(prev_src);
+                                    if (prev_autopid_snapshot) { free(prev_autopid_snapshot); prev_autopid_snapshot = NULL; }
+                                    prev_autopid_snapshot = strdup_psram(current_autopid_data);
+                                }
+                                if (curr_auto_src) cJSON_Delete(curr_auto_src);
+
+                                // Only add sections that have data (non-empty objects)
+                                if (cfg_obj && cJSON_GetArraySize(cfg_obj) > 0)
+                                {
+                                    cJSON_AddItemToObject(root_obj, "config", cfg_obj);
+                                }
+                                else if (cfg_obj)
+                                {
+                                    cJSON_Delete(cfg_obj);
+                                }
+
+                                if (sts_obj && cJSON_GetArraySize(sts_obj) > 0)
+                                {
+                                    cJSON_AddItemToObject(root_obj, "status", sts_obj);
+                                }
+                                else if (sts_obj)
+                                {
+                                    cJSON_Delete(sts_obj);
+                                }
+
+                                if (auto_obj && cJSON_GetArraySize(auto_obj) > 0)
+                                {
+                                    cJSON_AddItemToObject(root_obj, "autopid_data", auto_obj);
+                                }
+                                else if (auto_obj)
+                                {
+                                    cJSON_Delete(auto_obj);
+                                }
+
+                                char *printed = cJSON_PrintUnformatted(root_obj);
+                                if (printed)
+                                {
+                                    body = strdup_psram(printed);
+                                    free(printed);
+                                }
+                                cJSON_Delete(root_obj);
                             }
+
+                            // Free only buffers we allocated locally.
+                            // current_autopid_data is a strdup_psram of raw_json → safe to free.
+                            if (current_autopid_data) { free(current_autopid_data); current_autopid_data = NULL; }
+                            // current_status_data is returned heap buffer by config_server_get_status_json(true) → safe to free.
+                            if (current_status_data) { free(current_status_data); current_status_data = NULL; }
+                            // current_config_data comes from autopid_get_config() and is a cached global → DO NOT free here.
 
                             if (body)
                             {
@@ -1991,12 +2191,8 @@ static void autopid_webhook_task(void *pvParameters)
                                 if (ok)
                                 {
                                     ESP_LOGI(TAG, "Webhook POST success, status %d", resp.status_code);
+                                    // printf("body: %s\n", body);
                                     last_post_time = current_time;
-                                    // After initial successful settings push, switch to sending raw telemetry only
-                                    if (!settings_sent)
-                                    {
-                                        settings_sent = true;
-                                    }
                                 }
                                 else
                                 {
@@ -3389,7 +3585,7 @@ void autopid_init(char* id, bool enable_logging, uint32_t logging_period)
     // Create webhook task
     static StackType_t *autopid_webhook_task_stack;
     static StaticTask_t autopid_webhook_task_buffer;
-    static const size_t autopid_webhook_task_stack_size = (1024*6);
+    static const size_t autopid_webhook_task_stack_size = (1024*20);
     // Allocate stack memory in PSRAM
     autopid_webhook_task_stack = heap_caps_malloc(autopid_webhook_task_stack_size, MALLOC_CAP_SPIRAM);
     if(autopid_webhook_task_stack == NULL)
