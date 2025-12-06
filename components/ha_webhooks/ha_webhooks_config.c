@@ -32,6 +32,7 @@ static const char *TAG = "HA_WEBHOOK_CFG";
 // PSRAM-backed cache and mutex for thread-safe access
 static ha_webhook_config_t *s_cfg_psram = NULL;
 static SemaphoreHandle_t s_cfg_mutex = NULL;
+static SemaphoreHandle_t s_file_mutex = NULL; // Protects filesystem access
 
 static inline void lock_cfg(void)
 {
@@ -43,6 +44,18 @@ static inline void unlock_cfg(void)
 {
     if (s_cfg_mutex)
         xSemaphoreGive(s_cfg_mutex);
+}
+
+static inline void lock_file(void)
+{
+    if (s_file_mutex)
+        xSemaphoreTake(s_file_mutex, portMAX_DELAY);
+}
+
+static inline void unlock_file(void)
+{
+    if (s_file_mutex)
+        xSemaphoreGive(s_file_mutex);
 }
 
 /**
@@ -85,11 +98,13 @@ esp_err_t ha_webhook_load_config(ha_webhook_config_t *cfg)
         return ESP_ERR_INVALID_ARG;
     }
 
+    lock_file();
     memset(cfg, 0, sizeof(*cfg));
     FILE *f = fopen(FS_MOUNT_POINT "/ha_webhook.json", "r");
     if (!f)
     {
         ESP_LOGW(TAG, "Config file not found: %s/ha_webhook.json", FS_MOUNT_POINT);
+        unlock_file();
         return ESP_ERR_NOT_FOUND;
     }
     fseek(f, 0, SEEK_END);
@@ -100,6 +115,7 @@ esp_err_t ha_webhook_load_config(ha_webhook_config_t *cfg)
     {
         ESP_LOGE(TAG, "Config file is empty or invalid size: %ld", size);
         fclose(f);
+        unlock_file();
         return ESP_ERR_INVALID_SIZE;
     }
 
@@ -110,6 +126,7 @@ esp_err_t ha_webhook_load_config(ha_webhook_config_t *cfg)
     {
         ESP_LOGE(TAG, "Failed to allocate memory for config file (%ld bytes)", size);
         fclose(f);
+        unlock_file();
         return ESP_ERR_NO_MEM;
     }
 
@@ -120,6 +137,7 @@ esp_err_t ha_webhook_load_config(ha_webhook_config_t *cfg)
     {
         ESP_LOGE(TAG, "Failed to read config file");
         free(buf);
+        unlock_file();
         return ESP_FAIL;
     }
 
@@ -130,6 +148,7 @@ esp_err_t ha_webhook_load_config(ha_webhook_config_t *cfg)
     if (!root)
     {
         ESP_LOGE(TAG, "Failed to parse JSON config");
+        unlock_file();
         return ESP_ERR_INVALID_ARG;
     }
     cJSON *it;
@@ -184,6 +203,7 @@ esp_err_t ha_webhook_load_config(ha_webhook_config_t *cfg)
     }
 
     cJSON_Delete(root);
+    unlock_file();
     ESP_LOGI(TAG, "Webhook configuration loaded successfully");
     return ESP_OK;
 }
@@ -202,10 +222,12 @@ esp_err_t ha_webhook_save_config(const ha_webhook_config_t *cfg)
              cfg->url, cfg->enabled ? "yes" : "no",
              cfg->status[0] ? cfg->status : "unknown", cfg->retries);
 
+    lock_file();
     cJSON *root = cJSON_CreateObject();
     if (!root)
     {
         ESP_LOGE(TAG, "Failed to create JSON object");
+        unlock_file();
         return ESP_ERR_NO_MEM;
     }
 
@@ -222,6 +244,7 @@ esp_err_t ha_webhook_save_config(const ha_webhook_config_t *cfg)
     if (!json)
     {
         ESP_LOGE(TAG, "Failed to serialize JSON");
+        unlock_file();
         return ESP_ERR_NO_MEM;
     }
 
@@ -232,6 +255,7 @@ esp_err_t ha_webhook_save_config(const ha_webhook_config_t *cfg)
     {
         ESP_LOGE(TAG, "Failed to open config file for writing");
         free(json);
+        unlock_file();
         return ESP_ERR_NOT_FOUND;
     }
 
@@ -243,9 +267,11 @@ esp_err_t ha_webhook_save_config(const ha_webhook_config_t *cfg)
     if (w == 0)
     {
         ESP_LOGE(TAG, "Failed to write config to file");
+        unlock_file();
         return ESP_FAIL;
     }
 
+    unlock_file();
     ESP_LOGI(TAG, "Webhook configuration saved successfully (%zu bytes)", w);
     return ESP_OK;
 }
@@ -258,6 +284,16 @@ esp_err_t ha_webhooks_init(void)
         if (!s_cfg_mutex)
         {
             ESP_LOGE(TAG, "Failed to create config mutex");
+            return ESP_ERR_NO_MEM;
+        }
+    }
+
+    if (!s_file_mutex)
+    {
+        s_file_mutex = xSemaphoreCreateMutex();
+        if (!s_file_mutex)
+        {
+            ESP_LOGE(TAG, "Failed to create file mutex");
             return ESP_ERR_NO_MEM;
         }
     }

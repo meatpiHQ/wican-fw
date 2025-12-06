@@ -1086,6 +1086,43 @@
         <div id="automate" class="tabcontent">
             <div class="section-title">Automate</div>
             <table class="form-table">
+                <tr>
+                    <td>Data Grouping:</td>
+                    <td>
+                        <select id="grouping" name="grouping" onchange="toggleSendToFields(); enableAutoStoreButton();submit_enable();">
+                            <option value="disable">Disable</option>
+                            <option value="enable">Enable</option>
+                        </select>
+                    </td>
+                </tr>
+            </table>
+            
+            <div class="section-title" style="margin-top:1rem;">Home Assistant</div>
+            <table class="form-table">
+                <tr>
+                    <td>WebHook URL:</td>
+                    <td>
+                        <input type="text" id="webhook_url" name="webhook_url" readonly style="background-color:#f5f5f5; cursor:not-allowed;">
+                    </td>
+                </tr>
+                <tr>
+                    <td>WebHook Interval (s):</td>
+                    <td>
+                        <input type="text" id="webhook_interval" name="webhook_interval" readonly style="background-color:#f5f5f5; cursor:not-allowed;">
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="2" style="font-size:0.7rem; color:#555; margin-top:0.5rem;">WebHook configuration is set in the Home Assistant integration.</td>
+                </tr>
+                <tr>
+                    <td>WebHook Data Mode:</td>
+                    <td>
+                        <select id="webhook_data_mode" name="webhook_data_mode" onchange="enableAutoStoreButton();submit_enable();">
+                            <option value="full">Full Data (All Fields)</option>
+                            <option value="changed">Changed Values Only</option>
+                        </select>
+                    </td>
+                </tr>
                 <tr style="display:none;">
                     <td>MQTT HA Discovery:</td>
                     <td>
@@ -1094,30 +1131,21 @@
                         </select>
                     </td>
                 </tr>
-                <div id="autopid_warning_div" style="display: none; margin: 8px 0;">
-                    <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 8px; padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                        <div style="display: flex; align-items: center; margin-bottom: 6px;">
-                            <span data-lucide="alert-triangle" style="font-size: 16px; margin-right: 8px;"></span>
-                            <strong style="color: #92400e; font-size: 14px;">AutoPID Warning</strong>
-                        </div>
-                        <div style="color: #78350f; font-size: 13px; line-height: 1.4;">
-                            AutoPID is not Enabled, you must go to Settings → CAN → Protocol , select AutoPID and press Submit changes to use this feature.
-                        </div>
-                    </div>
-                </div>
-                <tr>
-                    <td>Grouping:</td>
-                    <td>
-                        <select id="grouping" name="grouping" onchange="toggleSendToFields(); enableAutoStoreButton();submit_enable();">
-                            <option value="disable">Disable</option>
-                            <option value="enable">Enable</option>
-                        </select>
-                    </td>
-                </tr>
                 <tr>
                     <td colspan="2" style="padding:4px 0; font-size:0.8rem; color:#555;">Configure one or more destinations below (max 6). Legacy single destination fields are derived from the first entry.</td>
                 </tr>
             </table>
+            <div id="autopid_warning_div" style="display: none; margin: 8px 0;">
+                <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 8px; padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                        <span data-lucide="alert-triangle" style="font-size: 16px; margin-right: 8px;"></span>
+                        <strong style="color: #92400e; font-size: 14px;">AutoPID Warning</strong>
+                    </div>
+                    <div style="color: #78350f; font-size: 13px; line-height: 1.4;">
+                        AutoPID is not Enabled, you must go to Settings → CAN → Protocol , select AutoPID and press Submit changes to use this feature.
+                    </div>
+                </div>
+            </div>
             <div class="section-title" style="margin-top:1rem;">Destinations</div>
             <div id="destinations_section" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:6px; padding:0.75rem;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">

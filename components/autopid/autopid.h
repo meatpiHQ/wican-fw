@@ -136,6 +136,7 @@ typedef struct
     char* specific_init;
     char* selected_car_model;
     char* grouping;
+    char* webhook_data_mode;  // "full" or "changed"
     destination_type_t group_destination_type;
     char* group_destination;    //"destination"
     // Multi-destination support

@@ -1201,6 +1201,7 @@ function loadAutoTable(jsonData) {
         setElementValue("car_specific", data.car_specific, 'disable');
         setElementValue("ha_discovery", 'disable');
         setElementValue("grouping", data.grouping, 'disable');
+        setElementValue("webhook_data_mode", data.webhook_data_mode, 'changed');
         // Legacy cycle/destination will be migrated into destinations[0].
         setElementValue("car_model", data.car_model, '');
         setElementValue("standard_pids", data.standard_pids, 'disable');
@@ -1330,6 +1331,7 @@ async function storeAutoTableData() {
 
         const initialisationValue = document.getElementById("initialisation")?.value || '';
         const groupingValue = document.getElementById("grouping")?.value || 'disable';
+        const webhook_data_mode = document.getElementById("webhook_data_mode")?.value || 'changed';
         const ha_discoveryValue = document.getElementById("ha_discovery")?.value || 'disable';
         const carSpecificValue = document.getElementById("car_specific")?.value || 'disable';
         const carModelField = document.getElementById("car_model");
@@ -1451,6 +1453,7 @@ async function storeAutoTableData() {
         const jsonData = {
             initialisation: initialisationValue,
             grouping: groupingValue,
+            webhook_data_mode: webhook_data_mode,
             car_specific: carSpecificValue,
             ha_discovery: ha_discoveryValue,
             car_model: carModelValue,
@@ -1964,6 +1967,34 @@ function checkStatus() {
     };
     xhttp.open("GET", "/check_status");
     xhttp.send();
+}
+
+function loadWebhookConfig() {
+    fetch('/api/webhook')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to fetch webhook config');
+            }
+            return response.json();
+        })
+        .then(config => {
+            const urlField = document.getElementById("webhook_url");
+            const intervalField = document.getElementById("webhook_interval");
+
+            if (urlField) {
+                urlField.value = config.enabled && config.url ? config.url : "Not configured";
+            }
+            if (intervalField) {
+                intervalField.value = config.enabled && config.interval ? config.interval.toString() : "Not configured";
+            }
+        })
+        .catch(error => {
+            console.log('Webhook config not available:', error);
+            const urlField = document.getElementById("webhook_url");
+            const intervalField = document.getElementById("webhook_interval");
+            if (urlField) urlField.value = "Not configured";
+            if (intervalField) intervalField.value = "Not configured";
+        });
 }
 
 function loadCANFLT() {
@@ -2608,6 +2639,7 @@ xhttp.onload = async function() {
         loadCANFLT();
         loadautoPIDCarData();
         loadautoPID();
+        loadWebhookConfig();
 
         // Load fallback networks if present
         try {

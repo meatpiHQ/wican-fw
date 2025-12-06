@@ -1823,18 +1823,22 @@ static void autopid_publish_task(void *pvParameters)
 static void autopid_webhook_task(void *pvParameters)
 {
     ESP_LOGI(TAG, "Autopid Webhook Task Started");
-    
+
     uint32_t last_post_time = 0;
-    static bool __placeholder_flag__ = false; // true: send full data; false: send only changed values
     static char *prev_autopid_snapshot = NULL; // previous snapshot for diffing when sending only changes
     static char *prev_config_snapshot = NULL;   // previous config for diffing
     static char *prev_status_snapshot = NULL;   // previous status for diffing
-    
+
     for(;;)
     {
         // Only post when autopid is enabled and STA is connected
         if (dev_status_is_autopid_enabled() && dev_status_is_sta_connected())
         {
+            // Read webhook_data_mode setting from config
+            bool send_full_data = false;
+            if (all_pids && all_pids->webhook_data_mode) {
+                send_full_data = (strcmp(all_pids->webhook_data_mode, "full") == 0);
+            }
             ha_webhook_config_t webhook_cfg = {0};
             esp_err_t err = ha_webhooks_get_config(&webhook_cfg);
             
@@ -1877,7 +1881,7 @@ static void autopid_webhook_task(void *pvParameters)
                                     curr_cfg_src = cJSON_Parse(current_config_data);
                                 }
                                 if (!curr_cfg_src) curr_cfg_src = cJSON_CreateObject();
-                                if (__placeholder_flag__)
+                                if (send_full_data)
                                 {
                                     cfg_obj = cJSON_Duplicate(curr_cfg_src, true);
                                 }
@@ -1947,7 +1951,7 @@ static void autopid_webhook_task(void *pvParameters)
                                     curr_sts_src = cJSON_Parse(current_status_data);
                                 }
                                 if (!curr_sts_src) curr_sts_src = cJSON_CreateObject();
-                                if (__placeholder_flag__)
+                                if (send_full_data)
                                 {
                                     sts_obj = cJSON_Duplicate(curr_sts_src, true);
                                 }
@@ -2017,7 +2021,7 @@ static void autopid_webhook_task(void *pvParameters)
                                 }
                                 if (!curr_auto_src) curr_auto_src = cJSON_CreateObject();
 
-                                if (__placeholder_flag__)
+                                if (send_full_data)
                                 {
                                     // Send full autopid_data
                                     auto_obj = cJSON_Duplicate(curr_auto_src, true);
@@ -2628,6 +2632,7 @@ all_pids_t* load_all_pids(void){
         if (root) {
             cJSON* init_item = cJSON_GetObjectItem(root, "initialisation");
             cJSON* grouping_item = cJSON_GetObjectItem(root, "grouping");
+            cJSON* webhook_data_mode_item = cJSON_GetObjectItem(root, "webhook_data_mode");
             cJSON* car_model_item = cJSON_GetObjectItem(root, "car_model");
             cJSON* ecu_protocol_item = cJSON_GetObjectItem(root, "ecu_protocol");
             cJSON* ha_discovery_item = cJSON_GetObjectItem(root, "ha_discovery");
@@ -2655,6 +2660,7 @@ all_pids_t* load_all_pids(void){
             }
 
             all_pids->grouping = (grouping_item && grouping_item->valuestring && strlen(grouping_item->valuestring) > 1) ? strdup_psram(grouping_item->valuestring) : strdup_psram("disable");
+            all_pids->webhook_data_mode = (webhook_data_mode_item && webhook_data_mode_item->valuestring && strlen(webhook_data_mode_item->valuestring) > 1) ? strdup_psram(webhook_data_mode_item->valuestring) : strdup_psram("changed");
             all_pids->vehicle_model = car_model_item ? strdup_psram(car_model_item->valuestring) : NULL;
             all_pids->std_ecu_protocol = ecu_protocol_item ? strdup_psram(ecu_protocol_item->valuestring) : NULL;
             all_pids->ha_discovery_en = ha_discovery_item ? (strcmp(ha_discovery_item->valuestring, "enable") == 0) : false;
