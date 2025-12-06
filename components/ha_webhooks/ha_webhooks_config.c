@@ -24,8 +24,26 @@
 #include <esp_err.h>
 #include <esp_log.h>
 #include "filesystem.h"
+#include <freertos/semphr.h>
+#include <esp_heap_caps.h>
 
 static const char *TAG = "HA_WEBHOOK_CFG";
+
+// PSRAM-backed cache and mutex for thread-safe access
+static ha_webhook_config_t *s_cfg_psram = NULL;
+static SemaphoreHandle_t s_cfg_mutex = NULL;
+
+static inline void lock_cfg(void)
+{
+    if (s_cfg_mutex)
+        xSemaphoreTake(s_cfg_mutex, portMAX_DELAY);
+}
+
+static inline void unlock_cfg(void)
+{
+    if (s_cfg_mutex)
+        xSemaphoreGive(s_cfg_mutex);
+}
 
 /**
  * @brief Trim leading and trailing whitespace from a string
@@ -229,5 +247,81 @@ esp_err_t ha_webhook_save_config(const ha_webhook_config_t *cfg)
     }
 
     ESP_LOGI(TAG, "Webhook configuration saved successfully (%zu bytes)", w);
+    return ESP_OK;
+}
+
+esp_err_t ha_webhooks_init(void)
+{
+    if (!s_cfg_mutex)
+    {
+        s_cfg_mutex = xSemaphoreCreateMutex();
+        if (!s_cfg_mutex)
+        {
+            ESP_LOGE(TAG, "Failed to create config mutex");
+            return ESP_ERR_NO_MEM;
+        }
+    }
+
+    if (!s_cfg_psram)
+    {
+        s_cfg_psram = (ha_webhook_config_t *)heap_caps_malloc(sizeof(ha_webhook_config_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!s_cfg_psram)
+        {
+            ESP_LOGE(TAG, "Failed to allocate PSRAM for config");
+            return ESP_ERR_NO_MEM;
+        }
+        memset(s_cfg_psram, 0, sizeof(*s_cfg_psram));
+    }
+
+    ha_webhook_config_t tmp = {0};
+    esp_err_t r = ha_webhook_load_config(&tmp);
+
+    lock_cfg();
+    // If file not found, keep defaults in PSRAM
+    if (r == ESP_OK)
+    {
+        *s_cfg_psram = tmp;
+    }
+    unlock_cfg();
+
+    ESP_LOGI(TAG, "HA webhooks PSRAM cache initialized");
+    return r == ESP_OK ? ESP_OK : r;
+}
+
+esp_err_t ha_webhooks_get_config(ha_webhook_config_t *out)
+{
+    if (!out)
+        return ESP_ERR_INVALID_ARG;
+    
+    // Cache must be initialized before use
+    // Do NOT call ha_webhook_load_config here as this may be called from PSRAM tasks
+    // which cannot safely access flash for file I/O
+    if (!s_cfg_psram || !s_cfg_mutex)
+    {
+        ESP_LOGE(TAG, "Config cache not initialized - call ha_webhooks_init() first");
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    lock_cfg();
+    *out = *s_cfg_psram;
+    unlock_cfg();
+    return ESP_OK;
+}
+
+esp_err_t ha_webhooks_set_config(const ha_webhook_config_t *cfg)
+{
+    if (!cfg)
+        return ESP_ERR_INVALID_ARG;
+
+    esp_err_t r = ha_webhook_save_config(cfg);
+    if (r != ESP_OK)
+        return r;
+
+    lock_cfg();
+    if (s_cfg_psram)
+        *s_cfg_psram = *cfg;
+    unlock_cfg();
+
+    ESP_LOGI(TAG, "PSRAM cache updated after save");
     return ESP_OK;
 }

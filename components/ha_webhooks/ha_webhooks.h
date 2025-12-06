@@ -90,6 +90,39 @@ esp_err_t ha_webhook_save_config(const ha_webhook_config_t *cfg);
  */
 esp_err_t ha_webhooks_register_handlers(httpd_handle_t server);
 
+/**
+ * @brief Initialize PSRAM-backed webhook config cache
+ *
+ * Loads configuration from filesystem and stores a copy in PSRAM.
+ * Creates internal mutex for thread-safe access. Call once at startup.
+ *
+ * @return ESP_OK on success, error from load if filesystem read fails
+ */
+esp_err_t ha_webhooks_init(void);
+
+/**
+ * @brief Get the current webhook configuration from PSRAM cache
+ *
+ * Copies the cached configuration into the provided destination.
+ * Thread-safe.
+ *
+ * @param[out] out Destination pointer to receive a copy of the config
+ * @return ESP_OK on success, ESP_ERR_INVALID_ARG if out is NULL
+ */
+esp_err_t ha_webhooks_get_config(ha_webhook_config_t *out);
+
+/**
+ * @brief Update configuration: persist to file and refresh PSRAM cache
+ *
+ * Writes the given configuration to the filesystem, then updates the
+ * PSRAM-backed cache so all tasks can safely read the latest config.
+ * Thread-safe.
+ *
+ * @param[in] cfg New configuration to persist and cache
+ * @return ESP_OK on success, error from save operation otherwise
+ */
+esp_err_t ha_webhooks_set_config(const ha_webhook_config_t *cfg);
+
 #ifdef __cplusplus
 }
 #endif

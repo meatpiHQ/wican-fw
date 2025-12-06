@@ -142,9 +142,9 @@ static esp_err_t webhook_post_handler(httpd_req_t *req)
 
     ESP_LOGI(TAG, "Setting webhook URL: %s", url->valuestring);
 
-    // Load existing config to determine if changes are needed
+    // Load current cached config to determine if changes are needed
     ha_webhook_config_t old_cfg = {0};
-    esp_err_t have = ha_webhook_load_config(&old_cfg);
+    esp_err_t have = ha_webhooks_get_config(&old_cfg);
     bool first_set = (have != ESP_OK || old_cfg.url[0] == '\0');
 
     // Prepare new configuration, preserving fields not controlled here
@@ -160,11 +160,11 @@ static esp_err_t webhook_post_handler(httpd_req_t *req)
     ESP_LOGI(TAG, "Webhook %s, enabled: %s", first_set ? "created" : (changed ? "updated" : "unchanged"),
              cfg.enabled ? "yes" : "no");
 
-    // Only save if configuration changed
+    // Only save + update cache if configuration changed
     esp_err_t s = ESP_OK;
     if (changed || first_set)
     {
-        s = ha_webhook_save_config(&cfg);
+        s = ha_webhooks_set_config(&cfg);
     }
     cJSON_Delete(root);
 
@@ -196,7 +196,7 @@ static esp_err_t webhook_get_handler(httpd_req_t *req)
     ESP_LOGI(TAG, "GET /api/webhook");
 
     ha_webhook_config_t cfg = {0};
-    esp_err_t r = ha_webhook_load_config(&cfg);
+    esp_err_t r = ha_webhooks_get_config(&cfg);
 
     cJSON *resp = cJSON_CreateObject();
 
@@ -241,9 +241,9 @@ static esp_err_t webhook_delete_handler(httpd_req_t *req)
 {
     ESP_LOGI(TAG, "DELETE /api/webhook - removing webhook configuration");
 
-    // Load existing config and only persist if a change is required
+    // Load existing cached config and only persist if a change is required
     ha_webhook_config_t old_cfg = {0};
-    esp_err_t have = ha_webhook_load_config(&old_cfg);
+    esp_err_t have = ha_webhooks_get_config(&old_cfg);
 
     ha_webhook_config_t cfg = old_cfg;
     strlcpy(cfg.url, "", sizeof(cfg.url));
@@ -258,7 +258,7 @@ static esp_err_t webhook_delete_handler(httpd_req_t *req)
 
     if (changed)
     {
-        esp_err_t s = ha_webhook_save_config(&cfg);
+        esp_err_t s = ha_webhooks_set_config(&cfg);
         if (s != ESP_OK)
         {
             ESP_LOGE(TAG, "Failed to save cleared webhook configuration");
