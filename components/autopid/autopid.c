@@ -2229,6 +2229,7 @@ static void autopid_task(void *pvParameters)
                                                 ESP_LOGI(TAG, "Parameter %s result: %.2f", 
                                                         param->name, result);
                                                 param->value = result;
+                                                all_pids->last_successful_pid_time = time(NULL);
                                                 publish_parameter_mqtt(param);
                                             }
                                         }
@@ -2281,6 +2282,7 @@ static void autopid_task(void *pvParameters)
                                                                         param->value, 
                                                                         pid_info->params[p].unit);
                                                         param->value = roundf(param->value * 100.0) / 100.0;
+                                                        all_pids->last_successful_pid_time = time(NULL);
                                                         publish_parameter_mqtt(param);
                                                         break;
                                                     }
@@ -2407,6 +2409,8 @@ all_pids_t* load_all_pids(void){
     ESP_LOGI(TAG, "Allocating memory for %d pids...", total_pids);
     all_pids_t* all_pids = (all_pids_t*)heap_caps_calloc(1, sizeof(all_pids_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
     if (!all_pids) return NULL;
+    
+    all_pids->last_successful_pid_time = 0;
     
     if(total_pids == 0) {
         ESP_LOGE(TAG, "No PIDs found in car_data.json or auto_pid.json");

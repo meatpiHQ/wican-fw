@@ -148,6 +148,7 @@ typedef struct
     char* vehicle_model;
     bool ha_discovery_en;
     uint32_t cycle;     //To be removed when std pid gets its own period
+    time_t last_successful_pid_time;  // Timestamp in seconds since epoch of last successful PID response
     SemaphoreHandle_t mutex;
 }all_pids_t;
 
