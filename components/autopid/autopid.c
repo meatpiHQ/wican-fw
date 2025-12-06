@@ -1820,6 +1820,204 @@ static void autopid_publish_task(void *pvParameters)
     }
 }
 
+static void autopid_webhook_task(void *pvParameters)
+{
+    ESP_LOGI(TAG, "Autopid Webhook Task Started");
+    
+    uint32_t last_post_time = 0;
+    static bool settings_sent = false;
+    
+    for(;;)
+    {
+        // Only post when autopid is enabled and STA is connected
+        if (dev_status_is_autopid_enabled() && dev_status_is_sta_connected())
+        {
+            ha_webhook_config_t webhook_cfg = {0};
+            esp_err_t err = ha_webhooks_get_config(&webhook_cfg);
+            
+            if (err == ESP_OK && webhook_cfg.enabled && webhook_cfg.url[0] != '\0')
+            {
+                uint32_t current_time = xTaskGetTickCount() / configTICK_RATE_HZ;
+                uint32_t interval_sec = webhook_cfg.interval > 0 ? webhook_cfg.interval : 60;
+                
+                // Check if it's time to post
+                if ((current_time - last_post_time) >= interval_sec)
+                {
+                    // Get current autopid data
+                    char *raw_json = autopid_data_read();
+                    if (raw_json)
+                    {
+                        char *url = strdup_psram(webhook_cfg.url);
+                        if (url)
+                        {
+                            char *body = NULL;
+                            char *current_autopid_data = NULL;
+                            char *current_config_data = NULL;
+                            char *current_status_data = NULL;
+
+                            if (settings_sent == true)
+                            {
+                                // Wrap telemetry under "autopid_data" after initial settings
+                                cJSON *root_obj = cJSON_CreateObject();
+                                if (root_obj)
+                                {
+                                    cJSON *auto_obj = NULL;
+                                    if (raw_json)
+                                    {
+                                        auto_obj = cJSON_Parse(raw_json);
+                                    }
+                                    if (!auto_obj) auto_obj = cJSON_CreateObject();
+                                    cJSON_AddItemToObject(root_obj, "autopid_data", auto_obj);
+
+                                    char *printed = cJSON_PrintUnformatted(root_obj);
+                                    if (printed)
+                                    {
+                                        body = strdup_psram(printed);
+                                        free(printed);
+                                    }
+                                    cJSON_Delete(root_obj);
+                                }
+                            }
+                            else
+                            {
+                                // Send full settings JSON on first post
+                                current_status_data = config_server_get_status_json(true);
+                                current_config_data = autopid_get_config();
+                                current_autopid_data = strdup_psram(raw_json);
+
+                                cJSON *root_obj = cJSON_CreateObject();
+                                if (root_obj)
+                                {
+                                    cJSON *cfg_obj = NULL;
+                                    cJSON *sts_obj = NULL;
+                                    cJSON *auto_obj = NULL;
+
+                                    if (current_config_data)
+                                    {
+                                        cfg_obj = cJSON_Parse(current_config_data);
+                                    }
+                                    if (!cfg_obj) cfg_obj = cJSON_CreateObject();
+
+                                    if (current_status_data)
+                                    {
+                                        sts_obj = cJSON_Parse(current_status_data);
+                                    }
+                                    if (!sts_obj) sts_obj = cJSON_CreateObject();
+
+                                    if (current_autopid_data)
+                                    {
+                                        auto_obj = cJSON_Parse(current_autopid_data);
+                                    }
+                                    if (!auto_obj) auto_obj = cJSON_CreateObject();
+
+                                    cJSON_AddItemToObject(root_obj, "config", cfg_obj);
+                                    cJSON_AddItemToObject(root_obj, "status", sts_obj);
+                                    cJSON_AddItemToObject(root_obj, "autopid_data", auto_obj);
+
+                                    char *printed = cJSON_PrintUnformatted(root_obj);
+                                    if (printed)
+                                    {
+                                        body = strdup_psram(printed);
+                                        free(printed);
+                                    }
+                                    cJSON_Delete(root_obj);
+                                }
+
+                                if (current_autopid_data)
+                                {
+                                    free(current_autopid_data);
+                                    current_autopid_data = NULL;
+                                }
+                                if (current_status_data)
+                                {
+                                    free(current_status_data);
+                                    current_status_data = NULL;
+                                }
+                                if (current_config_data)
+                                {
+                                    free(current_config_data);
+                                    current_config_data = NULL;
+                                }
+                            }
+
+                            if (body)
+                            {
+                                https_client_mgr_config_t cfg = {0};
+                                cfg.url = url;
+                                cfg.timeout_ms = 5000;
+                                
+                                // Detect scheme from URL
+                                bool is_https_url = (strncasecmp(url, "https://", 8) == 0);
+                                if (is_https_url)
+                                {
+                                    // Use built-in certificate bundle for HTTPS
+                                    cfg.use_crt_bundle = true;
+                                    ESP_LOGI(TAG, "Using built-in certificate bundle for webhook HTTPS");
+                                    
+                                    // For HTTPS, if host is raw IPv4 address, skip CN verification
+                                    const char *host_start = strstr(url, "://");
+                                    host_start = host_start ? host_start + 3 : url;
+                                    char host_buf[64] = {0};
+                                    size_t hi = 0;
+                                    while(host_start[hi] && host_start[hi] != '/' && host_start[hi] != ':' && hi < sizeof(host_buf)-1)
+                                    {
+                                        host_buf[hi] = host_start[hi];
+                                        hi++;
+                                    }
+                                    bool is_ip = true;
+                                    for(size_t k = 0; k < hi; k++)
+                                    {
+                                        if ((host_buf[k] < '0' || host_buf[k] > '9') && host_buf[k] != '.')
+                                        {
+                                            is_ip = false;
+                                            break;
+                                        }
+                                    }
+                                    if (is_ip)
+                                    {
+                                        cfg.skip_common_name = true;
+                                    }
+                                }
+                                
+                                https_client_mgr_response_t resp = {0};
+                                esp_err_t post_err = https_client_mgr_request_with_auth(&cfg, HTTPS_METHOD_POST,
+                                                                                        body, strlen(body),
+                                                                                        "application/json",
+                                                                                        NULL,
+                                                                                        NULL,
+                                                                                        &resp);
+                                
+                                bool ok = (post_err == ESP_OK && resp.is_success);
+                                if (ok)
+                                {
+                                    ESP_LOGI(TAG, "Webhook POST success, status %d", resp.status_code);
+                                    last_post_time = current_time;
+                                    // After initial successful settings push, switch to sending raw telemetry only
+                                    if (!settings_sent)
+                                    {
+                                        settings_sent = true;
+                                    }
+                                }
+                                else
+                                {
+                                    ESP_LOGE(TAG, "Webhook POST failed: %s", esp_err_to_name(post_err));
+                                }
+                                
+                                https_client_mgr_free_response(&resp);
+                                free(body);
+                            }
+                            free(url);
+                        }
+                        free(raw_json);
+                    }
+                }
+            }
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(1000)); // Check every second
+    }
+}
+
 static void autopid_task(void *pvParameters)
 {
     static char default_init[] = "ati\rate0\rath1\ratl0\rats1\ratm0\ratst96\r";
@@ -3180,6 +3378,28 @@ void autopid_init(char* id, bool enable_logging, uint32_t logging_period)
             } else {
                 ESP_LOGE(TAG, "Failed to create autopid_publish_task");
             }
+        }
+    }
+
+    ha_webhooks_init();
+    // Create webhook task
+    static StackType_t *autopid_webhook_task_stack;
+    static StaticTask_t autopid_webhook_task_buffer;
+    static const size_t autopid_webhook_task_stack_size = (1024*6);
+    // Allocate stack memory in PSRAM
+    autopid_webhook_task_stack = heap_caps_malloc(autopid_webhook_task_stack_size, MALLOC_CAP_SPIRAM);
+    if(autopid_webhook_task_stack == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to allocate autopid_webhook_task stack in PSRAM");
+    }
+    else
+    {
+        memset(autopid_webhook_task_stack, 0, autopid_webhook_task_stack_size);
+        if (xTaskCreateStatic(autopid_webhook_task, "autopid_webhook_task", autopid_webhook_task_stack_size,
+                                NULL, 5, autopid_webhook_task_stack, &autopid_webhook_task_buffer) != NULL) {
+            ESP_LOGI(TAG, "Autopid webhook task created");
+        } else {
+            ESP_LOGE(TAG, "Failed to create autopid_webhook_task");
         }
     }
 
