@@ -1685,6 +1685,11 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	uptime_str[sizeof(uptime_str) - 1] = '\0';
 	cJSON_AddStringToObject(root, "uptime", uptime_str);
 
+	// Add timestamp (Unix epoch in seconds)
+	time_t now;
+	time(&now);
+	cJSON_AddNumberToObject(root, "timestamp", (double)now);
+
 	char volt[8]= {0};
 	float tmp = 0;
 	sleep_mode_get_voltage(&tmp);
