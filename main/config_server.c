@@ -91,6 +91,7 @@
 #include "vpn_manager.h"
 #include "dev_status.h"
 #include "esp_heap_caps.h"
+#include "ha_webhooks.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
@@ -3568,6 +3569,7 @@ static httpd_handle_t config_server_init(void)
 		cert_manager_register_handlers(server);
 		// Register VPN manager endpoints
 		vpn_manager_register_handlers(server);
+		ha_webhooks_register_handlers(server);
 		// Now register catch-all wildcard
 		httpd_register_uri_handler(server, &get_uri_common);
 		ESP_LOGI(TAG, "Server started successfully");
@@ -3592,6 +3594,7 @@ void config_server_restart(void)
 		register_server_uris();
 		cert_manager_register_handlers(server);
 		vpn_manager_register_handlers(server);
+		ha_webhooks_register_handlers(server);
 		httpd_register_uri_handler(server, &get_uri_common);
 		ESP_LOGI(TAG, "Server restarted successfully");
         return;

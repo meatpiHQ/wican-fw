@@ -70,6 +70,7 @@ set(requires
     cert_manager
     vpn_manager
     autopid
+    ha_webhooks
 )
 
 # Register the component

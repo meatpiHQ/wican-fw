@@ -34,15 +34,28 @@ dependencies:
       type: service
     version: 1.8.2
   espressif/usb_host_cdc_acm:
-    component_hash: 72cd608e75ac356dd617239edcb4b9a0a63bdce7eae0c64c7715db5108bce578
+    component_hash: 0ca1a47f3b568ad539f2db7938aaa2a64f3017bd50a5ee9b410d2f9d7425ecef
     dependencies:
     - name: idf
       require: private
       version: '>=4.4'
+    - name: espressif/usb
+      registry_url: https://components.espressif.com
+      require: public
+      rules:
+      - if: idf_version >=6.0
+      - if: target not in ["linux"]
+      version: ^1.0.0
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 2.1.0
+    targets:
+    - esp32s2
+    - esp32s3
+    - esp32p4
+    - esp32h4
+    - linux
+    version: 2.1.1
   espressif/usb_host_cp210x_vcp:
     component_hash: d8f33825476a6ebb2c5c12dc69f94a0bcd0fa418d1370af886a20bdc31cce952
     dependencies:
@@ -146,6 +159,6 @@ direct_dependencies:
 - nopnop2002/sqlite3
 - trombik/esp_wireguard
 - zorxx/multipart-parser
-manifest_hash: 94057c24f4678a31dd39bbbd9f2946c5559223803ed525c184dd73a081204688
+manifest_hash: 03b11d64ea75d95d865ee0d6bbbfa8f7821a9ba99ee157e56490b63a91ce5d6d
 target: esp32s3
 version: 2.0.0
