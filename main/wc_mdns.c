@@ -35,19 +35,32 @@ char* wc_mdns_get_hostname(void)
 
 void wc_mdns_init(char *id, char* hv, char* fv)
 {
-	sprintf(mdns_host_name, "wican_%s", id);
+    // Get MAC address
+    uint8_t mac[6];
+    char mac_str[18];
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    sprintf(mac_str, "%02X:%02X:%02X:%02X:%02X:%02X", 
+            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    
+    sprintf(mdns_host_name, "wican_%s", id);
     sprintf(wican_hostname, "wican_%s.local", id);
     ESP_LOGI(TAG, "Host Name: %s", wican_hostname);
+    ESP_LOGI(TAG, "MAC Address: %s", mac_str);
+    
     mdns_init();
     mdns_hostname_set(mdns_host_name);
     mdns_instance_name_set("wican web server");
 
     mdns_txt_item_t serviceTxtData[] = {
-		{"fimrware", fv},
-		{"hardware", hv},
+        {"mac", mac_str},           // for stable unique ID
+        {"device_id", id},          // device serial/ID
+        {"firmware", fv},           // "fimrware" -> "firmware"
+        {"hardware", hv},
+        {"version", fv},            // lias for consistency
         {"path", "/"}
     };
 
-    ESP_ERROR_CHECK_WITHOUT_ABORT(mdns_service_add("WiCAN-WebServer", "_http", "_tcp", 80, serviceTxtData,
-                                     sizeof(serviceTxtData) / sizeof(serviceTxtData[0])));
+    // Change service type to _wican for better discovery
+    ESP_ERROR_CHECK_WITHOUT_ABORT(mdns_service_add("WiCAN-WebServer", "_wican", "_tcp", 80, 
+                                     serviceTxtData, sizeof(serviceTxtData) / sizeof(serviceTxtData[0])));
 }
