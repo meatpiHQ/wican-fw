@@ -1060,6 +1060,25 @@
       ]
     },
     {
+      "car_model": "GMC: Sierra 2004+",
+      "init": "ATSP6;ATST64;",
+      "pids": [
+        {
+          "pid": "1ADF",
+          "pid_init": "ATSH7DF;ATCRA7E8;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B3:B5]*4",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "GMC: Sierra EV",
       "init": "ATSP6;ATST64;",
       "pids": [
