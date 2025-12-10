@@ -1,0 +1,13 @@
+{
+  "car_model": "GMC: Sierra 2004+",
+  "init": "ATSP6;ATST64;",
+  "pids": [
+    {
+      "pid": "1ADF",
+      "pid_init": "ATSH7DF;ATCRA7E8;",
+      "parameters": {
+        "ODOMETER": "[B3:B5]*4"
+      }
+    }
+  ]
+}
