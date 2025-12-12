@@ -2128,6 +2128,22 @@ static void autopid_webhook_task(void *pvParameters)
                                     cJSON_Delete(auto_obj);
                                 }
 
+                                // Add mock GPS data
+                                cJSON *gps = cJSON_CreateObject();
+                                if (gps)
+                                {
+                                    cJSON_AddNumberToObject(gps, "latitude", 37.7749);
+                                    cJSON_AddNumberToObject(gps, "longitude", -122.4194);
+                                    cJSON_AddNumberToObject(gps, "accuracy", 10);
+                                    cJSON_AddNumberToObject(gps, "altitude", 25.5);
+                                    cJSON_AddNumberToObject(gps, "speed", 15.3);
+                                    cJSON_AddNumberToObject(gps, "heading", 180);
+                                    cJSON_AddItemToObject(root_obj, "gps", gps);
+                                }
+
+                                // Normalize precision across payload
+                                limitJsonDecimalPrecision(root_obj);
+
                                 char *printed = cJSON_PrintUnformatted(root_obj);
                                 if (printed)
                                 {
