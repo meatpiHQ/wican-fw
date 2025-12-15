@@ -73,6 +73,7 @@
 #include "wifi_network.h"
 #include "esp_vfs.h"
 #include "esp_ota_ops.h"
+#include "multipart_upload.h"
 #include "can.h"
 #include "ble.h"
 #include "sleep_mode.h"
@@ -1905,11 +1906,164 @@ static esp_err_t ws_handler(httpd_req_t *req)
     return ret;
 }
 
+typedef struct {
+	esp_ota_handle_t update_handle;
+	const esp_partition_t *update_partition;
+	bool started;
+	bool completed;
+	size_t total_size;
+	esp_err_t err;
+} ota_upload_ctx_t;
+
+static bool ota_on_part_begin(const multipart_part_info_t *info, void *user_ctx)
+{
+	ota_upload_ctx_t *ctx = (ota_upload_ctx_t *)user_ctx;
+	if (!ctx || ctx->started) return false;
+
+	// Accept the first file-like part
+	if (!info) return false;
+	if (info->filename[0] == '\0' && strcasecmp(info->content_type, "application/octet-stream") != 0)
+	{
+		return false;
+	}
+
+	ESP_LOGI(TAG, "OTA multipart part: name='%s' filename='%s' ctype='%s'", info->name, info->filename, info->content_type);
+
+	const esp_partition_t *running = esp_ota_get_running_partition();
+	const esp_partition_t *configured = esp_ota_get_boot_partition();
+	if (configured != running)
+	{
+		ESP_LOGW(TAG, "Configured OTA boot partition at offset 0x%08lx, but running from offset 0x%08lx",
+				 configured->address, running->address);
+	}
+
+	ctx->update_partition = esp_ota_get_next_update_partition(NULL);
+	if (!ctx->update_partition)
+	{
+		ctx->err = ESP_FAIL;
+		return false;
+	}
+
+	ESP_LOGI(TAG, "Writing OTA to partition subtype %d at offset 0x%lx",
+			 ctx->update_partition->subtype, ctx->update_partition->address);
+
+	ctx->err = esp_ota_begin(ctx->update_partition, OTA_SIZE_UNKNOWN, &ctx->update_handle);
+	if (ctx->err != ESP_OK)
+	{
+		ESP_LOGE(TAG, "esp_ota_begin failed (%s)", esp_err_to_name(ctx->err));
+		return false;
+	}
+
+	ctx->started = true;
+	return true;
+}
+
+static esp_err_t ota_on_part_data(const char *data, size_t len, void *user_ctx)
+{
+	ota_upload_ctx_t *ctx = (ota_upload_ctx_t *)user_ctx;
+	if (!ctx || !ctx->started) return ESP_FAIL;
+	if (len == 0) return ESP_OK;
+
+	ctx->err = esp_ota_write(ctx->update_handle, data, len);
+	if (ctx->err != ESP_OK)
+	{
+		ESP_LOGE(TAG, "esp_ota_write failed (%s)", esp_err_to_name(ctx->err));
+		return ctx->err;
+	}
+	ctx->total_size += len;
+	return ESP_OK;
+}
+
+static void ota_on_part_end(void *user_ctx)
+{
+	ota_upload_ctx_t *ctx = (ota_upload_ctx_t *)user_ctx;
+	if (!ctx) return;
+	ctx->completed = true;
+}
+
+static void ota_on_finished(void *user_ctx)
+{
+	ota_upload_ctx_t *ctx = (ota_upload_ctx_t *)user_ctx;
+	if (!ctx || !ctx->started) return;
+
+	ctx->err = esp_ota_end(ctx->update_handle);
+	if (ctx->err != ESP_OK)
+	{
+		ESP_LOGE(TAG, "esp_ota_end failed (%s)", esp_err_to_name(ctx->err));
+		return;
+	}
+
+	ctx->err = esp_ota_set_boot_partition(ctx->update_partition);
+	if (ctx->err != ESP_OK)
+	{
+		ESP_LOGE(TAG, "esp_ota_set_boot_partition failed (%s)", esp_err_to_name(ctx->err));
+		return;
+	}
+}
+
+typedef struct {
+	FILE *fd;
+	const char *path;
+	size_t total_size;
+	esp_err_t err;
+	bool started;
+} file_upload_ctx_t;
+
+static bool file_on_part_begin(const multipart_part_info_t *info, void *user_ctx)
+{
+	file_upload_ctx_t *ctx = (file_upload_ctx_t *)user_ctx;
+	if (!ctx || ctx->started) return false;
+	if (!info) return false;
+	if (info->filename[0] == '\0') return false; // only accept file parts
+
+	ctx->fd = fopen(ctx->path, "w");
+	if (!ctx->fd)
+	{
+		ESP_LOGE(TAG, "Failed to open %s for writing", ctx->path);
+		ctx->err = ESP_FAIL;
+		return false;
+	}
+	ctx->started = true;
+	ESP_LOGI(TAG, "File multipart part: name='%s' filename='%s' -> %s", info->name, info->filename, ctx->path);
+	return true;
+}
+
+static esp_err_t file_on_part_data(const char *data, size_t len, void *user_ctx)
+{
+	file_upload_ctx_t *ctx = (file_upload_ctx_t *)user_ctx;
+	if (!ctx || !ctx->fd) return ESP_FAIL;
+	if (len == 0) return ESP_OK;
+	if (fwrite(data, 1, len, ctx->fd) != len)
+	{
+		ESP_LOGE(TAG, "File write failed");
+		ctx->err = ESP_FAIL;
+		return ESP_FAIL;
+	}
+	ctx->total_size += len;
+	return ESP_OK;
+}
+
+static void file_on_part_end(void *user_ctx)
+{
+	file_upload_ctx_t *ctx = (file_upload_ctx_t *)user_ctx;
+	if (!ctx) return;
+	if (ctx->fd)
+	{
+		fclose(ctx->fd);
+		ctx->fd = NULL;
+	}
+}
+
+static void file_on_finished(void *user_ctx)
+{
+	(void)user_ctx;
+}
+
 /* Handler to upload a file onto the server */
 static esp_err_t upload_post_handler(httpd_req_t *req)
 {
     char filepath[FILE_PATH_MAX];
-    uint32_t total_size = 0;
+	uint32_t total_size = 0;
 
     if(config_server_get_ble_config())
     {
@@ -1948,162 +2102,49 @@ static esp_err_t upload_post_handler(httpd_req_t *req)
 
     ESP_LOGI(TAG, "Receiving file : %s...", filename);
 
-    /* Retrieve the pointer to scratch buffer for temporary storage */
-    char *buf = ((struct file_server_data *)req->user_ctx)->scratch;
-    int received = 0;
+	ota_upload_ctx_t ctx = {0};
+	ctx.err = ESP_OK;
 
-    /* Content length of the request gives
-     * the size of the file being uploaded */
-    int remaining = req->content_len;
+	multipart_upload_handlers_t handlers = {
+		.on_part_begin = ota_on_part_begin,
+		.on_part_data = ota_on_part_data,
+		.on_part_end = ota_on_part_end,
+		.on_finished = ota_on_finished,
+	};
 
-    ///
-    esp_err_t err;
-    /* update handle : set by esp_ota_begin(), must be freed via esp_ota_end() */
-    esp_ota_handle_t update_handle = 0 ;
-    const esp_partition_t *update_partition = NULL;
+	multipart_upload_config_t mp_cfg = multipart_upload_default_config();
+	mp_cfg.rx_buf_size = 4096;
 
-    ESP_LOGI(TAG, "Starting OTA");
+	esp_err_t mp_err = multipart_upload_handle(req, &handlers, &ctx, &mp_cfg);
+	if (mp_err != ESP_OK || ctx.err != ESP_OK || !ctx.started)
+	{
+		if (ctx.started && ctx.err != ESP_OK)
+		{
+			esp_ota_abort(ctx.update_handle);
+		}
+		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA upload failed");
+		return ESP_FAIL;
+	}
 
-    const esp_partition_t *configured = esp_ota_get_boot_partition();
-    const esp_partition_t *running = esp_ota_get_running_partition();
+	total_size = (uint32_t)ctx.total_size;
+	ESP_LOGI(TAG, "OTA upload complete: %lu bytes", (unsigned long)total_size);
 
-    if (configured != running) {
-        ESP_LOGW(TAG, "Configured OTA boot partition at offset 0x%08lx, but running from offset 0x%08lx",
-                 configured->address, running->address);
-        ESP_LOGW(TAG, "(This can happen if either the OTA boot data or preferred boot image become corrupted somehow.)");
-    }
-    ESP_LOGI(TAG, "Running partition type %d subtype %d (offset 0x%08lx)",
-             running->type, running->subtype, running->address);
-
-    update_partition = esp_ota_get_next_update_partition(NULL);
-    assert(update_partition != NULL);
-    ESP_LOGI(TAG, "Writing to partition subtype %d at offset 0x%lx",
-             update_partition->subtype, update_partition->address);
-    err = esp_ota_begin(update_partition, OTA_SIZE_UNKNOWN, &update_handle);
-    if (err != ESP_OK)
-    {
-        ESP_LOGE(TAG, "esp_ota_begin failed (%s)", esp_err_to_name(err));
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "esp_ota_begin failed");
-        return ESP_FAIL;
-    }
-
-	char *ret = 0;
-	char *boundary_start = 0;
-	char *boundary_end = 0;
-	uint8_t count = 0;
-
-    while (remaining > 0)
-    {
-//        ESP_LOGI(TAG, "Remaining size : %d", remaining);
-        /* Receive the file part by part into a buffer */
-        if ((received = httpd_req_recv(req, buf, MIN(remaining, SCRATCH_BUFSIZE))) <= 0)
-        {
-            if (received == HTTPD_SOCK_ERR_TIMEOUT)
-            {
-                /* Retry if timeout occurred */
-                continue;
-            }
-
-
-            ESP_LOGE(TAG, "File reception failed!");
-            /* Respond with 500 Internal Server Error */
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive file");
-            return ESP_FAIL;
-        }
-
-        if(boundary_start == 0)
-        {
-        	boundary_start = buf;
-        	ret = memchr(boundary_start, '\n', 200);
-        	boundary_end = ret + 1;
-        	remaining -= ((boundary_end - boundary_start) + 1 + 2 + 1);//ignore boundary at end of file
-        	//TODO: Better way to do this ??
-        	while(1)
-        	{
-        		if(((ret[0] == 'T') && (ret[1] == 'y') && (ret[2] == 'p') && (ret[3] == 'e') &&
-        		        			(ret[4] == ':')))
-        		{
-        			break;
-        		}
-        		ret++;
-        	}
-    		ret = memchr(ret, '\n', 200);
-    		buf = ret + 3;
-    		remaining -= (buf - boundary_start);
-    		ESP_LOGI(TAG, "Real Remaining size : %d", remaining);
-    		
-    		received -= (buf - boundary_start);
-        }
-        total_size += received;
-        /* Write buffer content to file on storage */
-        if (received && (ESP_OK != esp_ota_write( update_handle, (const void *)buf, received)))
-        {
-            ESP_LOGE(TAG, "File write failed!");
-            esp_ota_abort(update_handle);
-            /* Respond with 500 Internal Server Error */
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to write file to storage");
-            return ESP_FAIL;
-        }
-
-        if(count < 3)
-        {
-        	count++;
-        }
-        /* Keep track of remaining size of
-         * the file left to be uploaded */
-        remaining -= received;
-        vTaskDelay(5 / portTICK_PERIOD_MS);
-    }
-
-    /* Close file upon upload completion */
-    ESP_LOGI(TAG, "File reception complete: %lu", total_size);
-
-    if ((received = httpd_req_recv(req, buf, SCRATCH_BUFSIZE)) <= 0)
-    {
-        ESP_LOGE(TAG, "File reception failed!");
-        esp_ota_abort(update_handle);
-        /* Respond with 500 Internal Server Error */
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive file");
-        return ESP_FAIL;
-     }
-
-    err = esp_ota_end(update_handle);
-    if (err != ESP_OK)
-    {
-        if (err == ESP_ERR_OTA_VALIDATE_FAILED)
-        {
-            ESP_LOGE(TAG, "Image validation failed, image is corrupted");
-        }
-        ESP_LOGE(TAG, "esp_ota_end failed (%s)!", esp_err_to_name(err));
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "esp_ota_end failed");
-        return ESP_FAIL;
-    }
-
-    err = esp_ota_set_boot_partition(update_partition);
-    if (err != ESP_OK)
-    {
-        ESP_LOGE(TAG, "esp_ota_set_boot_partition failed (%s)!", esp_err_to_name(err));
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "esp_ota_set_boot_partition failed");
-        return ESP_FAIL;
-    }
-
-	config_server_reboot();
-    // xTimerStart( xrestartTimer, 0 );
-
-    /* Redirect onto root to see the updated file list */
-    httpd_resp_set_status(req, "303 See Other");
-    httpd_resp_set_hdr(req, "Location", "/");
+	httpd_resp_set_status(req, "303 See Other");
+	httpd_resp_set_hdr(req, "Location", "/");
 #ifdef CONFIG_EXAMPLE_HTTPD_CONN_CLOSE_HEADER
-    httpd_resp_set_hdr(req, "Connection", "close");
+	httpd_resp_set_hdr(req, "Connection", "close");
 #endif
-    httpd_resp_sendstr(req, "File uploaded successfully");
-    return ESP_OK;
+	httpd_resp_sendstr(req, "File uploaded successfully");
+
+	// Reboot after responding
+	config_server_reboot();
+	return ESP_OK;
 }
 
 static esp_err_t upload_car_data_handler(httpd_req_t *req)
 {
     char filepath[FILE_PATH_MAX];
-    uint32_t total_size = 0;
+	uint32_t total_size = 0;
 
     /* Skip leading "/upload" from URI to get filename */
     /* Note sizeof() counts NULL termination hence the -1 */
@@ -2122,115 +2163,42 @@ static esp_err_t upload_car_data_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
 
-    /* File cannot be larger than a limit */
-    if (req->content_len > MAX_FILE_SIZE)
-    {
-        ESP_LOGE(TAG, "File too large : %d bytes", req->content_len);
-        /* Respond with 400 Bad Request */
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
-                            "File size must be less than "
-                            MAX_FILE_SIZE_STR "!");
-        /* Return failure to close underlying connection else the
-         * incoming file content will keep the socket busy */
-        return ESP_FAIL;
-    }
+	// For multipart + chunked, req->content_len may be unknown (0). Enforce size during streaming instead.
 
-    ESP_LOGI(TAG, "Receiving file : %s...", filename);
+	ESP_LOGI(TAG, "Receiving file : %s...", filename);
 
-    /* Retrieve the pointer to scratch buffer for temporary storage */
-    char *buf = ((struct file_server_data *)req->user_ctx)->scratch;
-    int received = 0;
+	file_upload_ctx_t ctx = {0};
+	ctx.path = filepath;
+	ctx.err = ESP_OK;
 
-    /* Content length of the request gives
-     * the size of the file being uploaded */
-    int remaining = req->content_len;
-	char *ret = 0;
-	char *boundary_start = 0;
-	char *boundary_end = 0;
-	uint8_t count = 0;
+	multipart_upload_handlers_t handlers = {
+		.on_part_begin = file_on_part_begin,
+		.on_part_data = file_on_part_data,
+		.on_part_end = file_on_part_end,
+		.on_finished = file_on_finished,
+	};
 
+	multipart_upload_config_t mp_cfg = multipart_upload_default_config();
+	mp_cfg.rx_buf_size = 4096;
 
-	FILE *fd = fopen(filepath, "w");
-    if (fd == NULL)
-    {
-        ESP_LOGE(TAG, "Failed to create file : %s", filepath);
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to create file");
-        return ESP_FAIL;
-    }
-	// remaining
-    while (remaining > 0)
-    {
-//        ESP_LOGI(TAG, "Remaining size : %d", remaining);
-        /* Receive the file part by part into a buffer */
-        if ((received = httpd_req_recv(req, buf, MIN(remaining, SCRATCH_BUFSIZE))) <= 0)
-        {
-            if (received == HTTPD_SOCK_ERR_TIMEOUT)
-            {
-                /* Retry if timeout occurred */
-                continue;
-            }
+	esp_err_t mp_err = multipart_upload_handle(req, &handlers, &ctx, &mp_cfg);
+	if (ctx.fd)
+	{
+		fclose(ctx.fd);
+		ctx.fd = NULL;
+	}
 
+	if (mp_err != ESP_OK || ctx.err != ESP_OK || !ctx.started)
+	{
+		unlink(filepath);
+		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Upload failed");
+		return ESP_FAIL;
+	}
 
-            ESP_LOGE(TAG, "File reception failed!");
-            fclose(fd);
-            unlink(filepath);
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive file");
-            return ESP_FAIL;
-        }
-
-        if(boundary_start == 0)
-        {
-        	boundary_start = buf;
-        	ret = memchr(boundary_start, '\n', 200);
-        	boundary_end = ret + 1;
-        	remaining -= ((boundary_end - boundary_start) + 1 + 2 + 1);//ignore boundary at end of file
-        	//TODO: Better way to do this ??
-        	while(1)
-        	{
-        		if(((ret[0] == 'T') && (ret[1] == 'y') && (ret[2] == 'p') && (ret[3] == 'e') &&
-        		        			(ret[4] == ':')))
-        		{
-        			break;
-        		}
-        		ret++;
-        	}
-    		ret = memchr(ret, '\n', 200);
-    		buf = ret + 3;
-    		remaining -= (buf - boundary_start);
-    		ESP_LOGI(TAG, "Real Remaining size : %d", remaining);
-    		
-    		received -= (buf - boundary_start);
-        }
-        total_size += received;
-        /* Write buffer content to file on storage */
-        if (received > 0)
-        {
-            if (fwrite(buf, 1, received, fd) != received)
-            {
-                ESP_LOGE(TAG, "File write failed!");
-                fclose(fd);
-                unlink(filepath);
-                httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to write file to storage");
-                return ESP_FAIL;
-            }
-        }
-
-        if(count < 3)
-        {
-        	count++;
-        }
-        /* Keep track of remaining size of
-         * the file left to be uploaded */
-        remaining -= received;
-        vTaskDelay(5 / portTICK_PERIOD_MS);
-    }
-
-
-    fclose(fd);
-
-    ESP_LOGI(TAG, "File reception complete: %lu", total_size);
-    httpd_resp_sendstr(req, "File uploaded successfully");
-    return ESP_OK;
+	total_size = (uint32_t)ctx.total_size;
+	ESP_LOGI(TAG, "File reception complete: %lu", (unsigned long)total_size);
+	httpd_resp_sendstr(req, "File uploaded successfully");
+	return ESP_OK;
 }
 
 esp_err_t autopid_data_handler(httpd_req_t *req)
