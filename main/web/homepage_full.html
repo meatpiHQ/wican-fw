@@ -377,6 +377,37 @@
             margin: 0.1rem;
         }
 
+        .ota-progress {
+            width: 100%;
+            height: 14px;
+            background-color: var(--gray-200);
+            border: 1px solid var(--gray-300);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .ota-progress-fill {
+            height: 100%;
+            width: 0%;
+            background-color: var(--primary-color);
+            transition: width 0.2s ease;
+        }
+
+        .ota-progress-fill.is-success {
+            background-color: #059669;
+        }
+
+        .ota-progress-fill.is-error {
+            background-color: #dc2626;
+        }
+
+        .ota-progress-text {
+            margin-top: 6px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--gray-600);
+        }
+
         @media (max-width: 768px) {
             .system-button {
                 min-width: 110px;
@@ -1527,6 +1558,14 @@
                     <tr>
                         <td><input id="ota_file" name="ota_file" type="file" accept=".bin" /></td>
                         <td><input id="ota_submit_button" type="button" value="Update" onclick="otaClick()" class="system-button" /></td>
+                    </tr>
+                    <tr id="ota_progress_row" style="display: none;">
+                        <td colspan="2">
+                            <div class="ota-progress">
+                                <div id="ota_progress_fill" class="ota-progress-fill" style="width: 0%;"></div>
+                            </div>
+                            <div id="ota_progress_text" class="ota-progress-text">0%</div>
+                        </td>
                     </tr>
                 </table>
             </form>

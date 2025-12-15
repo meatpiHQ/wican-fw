@@ -2239,16 +2239,180 @@ async function postConfig() {
 }
 
 function otaClick() {
-    if(document.getElementById("ota_file").files.length == 0) {
+    const fileInput = document.getElementById("ota_file");
+    const submitButton = document.getElementById("ota_submit_button");
+    const otaForm = document.getElementById("ota_form");
+
+    const progressRow = document.getElementById("ota_progress_row");
+    const progressFill = document.getElementById("ota_progress_fill");
+    const progressText = document.getElementById("ota_progress_text");
+
+    const setProgressVisible = (visible) => {
+        if (progressRow) {
+            progressRow.style.display = visible ? "" : "none";
+        }
+    };
+
+    const setProgress = (percent, text) => {
+        if (progressFill) {
+            const clamped = Math.max(0, Math.min(100, Number(percent) || 0));
+            progressFill.style.width = clamped + "%";
+        }
+        if (progressText) {
+            progressText.textContent = text;
+        }
+    };
+
+    const setProgressState = (state) => {
+        if (!progressFill) return;
+        progressFill.classList.remove("is-success", "is-error");
+        if (state === "success") progressFill.classList.add("is-success");
+        if (state === "error") progressFill.classList.add("is-error");
+    };
+
+    if (!fileInput || fileInput.files.length === 0) {
         showNotification("No files selected!", "red");
         alert("No files selected!");
-    } else {
-        document.getElementById("ota_submit_button").disabled = true;
-        showNotification("Updating please wait...", "green");
-        setTimeout(function() {
-            document.getElementById("ota_form").submit();
-        }, 5000);
+        return;
     }
+
+    if (!otaForm) {
+        showNotification("OTA form not found", "red");
+        if (submitButton) submitButton.disabled = false;
+        return;
+    }
+
+    if (submitButton) submitButton.disabled = true;
+    setProgressVisible(true);
+    setProgressState("normal");
+    setProgress(0, "Starting upload...");
+    showNotification("Uploading firmware...", "green");
+
+    const formData = new FormData(otaForm);
+    const xhr = new XMLHttpRequest();
+    const uploadUrl = otaForm.getAttribute("action") || "/upload/ota.bin";
+    xhr.open("POST", uploadUrl);
+
+    // Large uploads + slow links can take time; timeout mainly protects against a dead connection.
+    xhr.timeout = 10 * 60 * 1000;
+
+    let uploadCompleted = false;
+    let totalBytes = 0;
+    let loadedBytes = 0;
+    let lastProgressAt = Date.now();
+    let stallTimer = null;
+
+    const cleanupTimers = () => {
+        if (stallTimer) {
+            clearInterval(stallTimer);
+            stallTimer = null;
+        }
+    };
+
+    const failAndUnlock = (message) => {
+        cleanupTimers();
+        setProgressState("error");
+        showNotification(message, "red");
+        // Keep whatever progress we have (helps indicate where it died).
+        const percent = totalBytes > 0 ? Math.round((loadedBytes / totalBytes) * 100) : 0;
+        setProgress(percent, message);
+        if (submitButton) submitButton.disabled = false;
+    };
+
+    const startPostUploadWait = () => {
+        cleanupTimers();
+        setProgressState("success");
+        setProgress(100, "Upload complete. Waiting 15 seconds...");
+        showNotification("Upload complete. Waiting 15 seconds...", "green");
+
+        let remaining = 15;
+        const timer = setInterval(function () {
+            remaining -= 1;
+            if (remaining <= 0) {
+                clearInterval(timer);
+                setProgress(100, "Reconnecting...");
+                // Device usually reboots after OTA; reload after delay.
+                window.location.reload();
+                return;
+            }
+            setProgress(100, `Upload complete. Waiting ${remaining} seconds...`);
+        }, 1000);
+    };
+
+    xhr.upload.onprogress = function (event) {
+        if (!event.lengthComputable) {
+            setProgress(0, "Uploading...");
+            return;
+        }
+        const percent = Math.round((event.loaded / event.total) * 100);
+        totalBytes = event.total;
+        loadedBytes = event.loaded;
+        lastProgressAt = Date.now();
+        if (percent >= 100 || (totalBytes > 0 && loadedBytes >= totalBytes)) uploadCompleted = true;
+        setProgress(percent, `Upload: ${percent}%`);
+    };
+
+    xhr.upload.onload = function () {
+        // Upload data fully handed off to the network stack/server.
+        uploadCompleted = true;
+        setProgress(100, "Upload sent. Finalizing...");
+    };
+
+    // If Wi-Fi drops mid-upload, browsers can sometimes hang without calling onerror immediately.
+    // Light stall detection: if progress doesn't change for 15s during an active upload, warn/fail.
+    stallTimer = setInterval(function () {
+        if (uploadCompleted) return;
+        if (totalBytes > 0 && loadedBytes > 0 && loadedBytes < totalBytes) {
+            const stalledForMs = Date.now() - lastProgressAt;
+            if (stalledForMs > 15000) {
+                const offlineHint = (typeof navigator !== 'undefined' && navigator.onLine === false)
+                    ? " (browser is offline)"
+                    : "";
+                try { xhr.abort(); } catch (e) { /* ignore */ }
+                failAndUnlock("Update failed: connection lost during upload" + offlineHint + ". Reconnect and try again.");
+            }
+        }
+    }, 1000);
+
+    xhr.onerror = function () {
+        // If the device reboots right after receiving the image, the browser may see a disconnect.
+        if (uploadCompleted) {
+            startPostUploadWait();
+            return;
+        }
+        const offlineHint = (typeof navigator !== 'undefined' && navigator.onLine === false)
+            ? " (browser is offline)"
+            : "";
+        failAndUnlock("Update failed: network error" + offlineHint + ". Reconnect and try again.");
+    };
+
+    xhr.onabort = function () {
+        if (uploadCompleted) {
+            startPostUploadWait();
+            return;
+        }
+        failAndUnlock("Update aborted. If Wi-Fi dropped or the device was unplugged, reconnect and try again.");
+    };
+
+    xhr.ontimeout = function () {
+        if (uploadCompleted) {
+            startPostUploadWait();
+            return;
+        }
+        failAndUnlock("Update timed out. Check Wi-Fi/device connection and try again.");
+    };
+
+    xhr.onreadystatechange = function () {
+        if (xhr.readyState !== 4) return;
+
+        if ((xhr.status >= 200 && xhr.status < 300) || (xhr.status === 0 && uploadCompleted)) {
+            startPostUploadWait();
+        } else {
+            failAndUnlock(`Update failed (HTTP ${xhr.status}). Try again after reconnecting.`);
+        }
+    };
+
+    xhr.send(formData);
 }
 
 function reboot() {
