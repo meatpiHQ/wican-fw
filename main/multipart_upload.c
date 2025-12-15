@@ -22,6 +22,7 @@
 #include <string.h>
 #include <strings.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include "esp_log.h"
 #include "multipart_parser.h"
 
@@ -30,6 +31,197 @@
 #endif
 
 static const char *TAG_MP = "MP-UPLOAD";
+
+typedef enum {
+    DC_READ_SIZE = 0,
+    DC_READ_DATA,
+    DC_READ_DATA_CRLF,
+    DC_READ_TRAILERS,
+    DC_DONE,
+    DC_ERROR,
+} dechunk_state_t;
+
+typedef struct {
+    dechunk_state_t state;
+    size_t chunk_remaining;
+    bool in_ext;
+    char size_buf[16];
+    size_t size_len;
+    size_t trailer_line_len;
+} dechunker_t;
+
+static void dechunker_init(dechunker_t *dc)
+{
+    if (!dc) return;
+    memset(dc, 0, sizeof(*dc));
+    dc->state = DC_READ_SIZE;
+}
+
+// Consume chunked-encoding bytes from `in` and write decoded body bytes to `out`.
+// Advances *in_used by number of input bytes consumed. Returns number of output bytes written.
+static size_t dechunker_consume(dechunker_t *dc,
+                                const char *in,
+                                size_t in_len,
+                                size_t *in_used,
+                                char *out,
+                                size_t out_cap)
+{
+    if (!dc || !in || !in_used || !out || out_cap == 0) return 0;
+
+    size_t produced = 0;
+    size_t i = 0;
+    while (i < in_len)
+    {
+        char c = in[i];
+
+        if (dc->state == DC_READ_SIZE)
+        {
+            // Chunk-size line: 1A3[;ext...]\r\n
+            if (c == '\r')
+            {
+                i++;
+                continue;
+            }
+            if (c == '\n')
+            {
+                dc->size_buf[MIN(dc->size_len, sizeof(dc->size_buf) - 1)] = '\0';
+                if (dc->size_len == 0)
+                {
+                    dc->state = DC_ERROR;
+                    break;
+                }
+                char *endp = NULL;
+                unsigned long sz = strtoul(dc->size_buf, &endp, 16);
+                (void)endp;
+                dc->chunk_remaining = (size_t)sz;
+                dc->size_len = 0;
+                dc->in_ext = false;
+
+                if (dc->chunk_remaining == 0)
+                {
+                    dc->state = DC_READ_TRAILERS;
+                    dc->trailer_line_len = 0;
+                }
+                else
+                {
+                    dc->state = DC_READ_DATA;
+                }
+                i++;
+                continue;
+            }
+            if (c == ';')
+            {
+                dc->in_ext = true;
+                i++;
+                continue;
+            }
+            if (!dc->in_ext)
+            {
+                if (isxdigit((unsigned char)c))
+                {
+                    if (dc->size_len < sizeof(dc->size_buf) - 1)
+                    {
+                        dc->size_buf[dc->size_len++] = c;
+                    }
+                    else
+                    {
+                        dc->state = DC_ERROR;
+                        break;
+                    }
+                }
+                else if (c == ' ' || c == '\t')
+                {
+                    // ignore
+                }
+                else
+                {
+                    dc->state = DC_ERROR;
+                    break;
+                }
+            }
+            // ignore extension bytes until EOL
+            i++;
+            continue;
+        }
+
+        if (dc->state == DC_READ_DATA)
+        {
+            size_t avail = in_len - i;
+            size_t want = dc->chunk_remaining;
+            size_t can_take = avail < want ? avail : want;
+            size_t space = out_cap - produced;
+            if (can_take > space) can_take = space;
+            if (can_take == 0)
+            {
+                // output buffer full; stop here
+                break;
+            }
+
+            memcpy(out + produced, in + i, can_take);
+            produced += can_take;
+            dc->chunk_remaining -= can_take;
+            i += can_take;
+
+            if (dc->chunk_remaining == 0)
+            {
+                dc->state = DC_READ_DATA_CRLF;
+            }
+            continue;
+        }
+
+        if (dc->state == DC_READ_DATA_CRLF)
+        {
+            // Expect CRLF (or LF); be lenient and ignore CR
+            if (c == '\r')
+            {
+                i++;
+                continue;
+            }
+            if (c == '\n')
+            {
+                dc->state = DC_READ_SIZE;
+                dc->size_len = 0;
+                dc->in_ext = false;
+                i++;
+                continue;
+            }
+            // Unexpected
+            dc->state = DC_ERROR;
+            break;
+        }
+
+        if (dc->state == DC_READ_TRAILERS)
+        {
+            // Read optional trailer headers until blank line
+            if (c == '\r')
+            {
+                i++;
+                continue;
+            }
+            if (c == '\n')
+            {
+                if (dc->trailer_line_len == 0)
+                {
+                    dc->state = DC_DONE;
+                    i++;
+                    continue;
+                }
+                dc->trailer_line_len = 0;
+                i++;
+                continue;
+            }
+            dc->trailer_line_len++;
+            i++;
+            continue;
+        }
+
+        // DONE/ERROR: stop consuming
+        break;
+    }
+
+    *in_used += i;
+    return produced;
+}
 
 // simple case-insensitive substring search
 static const char* ci_strstr(const char *hay, const char *needle)
@@ -52,6 +244,21 @@ static const char* ci_strstr(const char *hay, const char *needle)
         if (i == nlen) return p;
     }
     return NULL;
+}
+
+static bool request_is_chunked(httpd_req_t *req)
+{
+    size_t te_len = httpd_req_get_hdr_value_len(req, "Transfer-Encoding");
+    if (te_len == 0 || te_len > 128) return false;
+    char *te = (char*)malloc(te_len + 1);
+    if (!te) return false;
+    bool is_chunked = false;
+    if (httpd_req_get_hdr_value_str(req, "Transfer-Encoding", te, te_len + 1) == ESP_OK)
+    {
+        if (ci_strstr(te, "chunked")) is_chunked = true;
+    }
+    free(te);
+    return is_chunked;
 }
 
 // naive subsequence search for binary data
@@ -298,6 +505,17 @@ esp_err_t multipart_upload_handle(httpd_req_t *req,
     char *rx = (char*)malloc(rx_size);
     if (!rx) return ESP_ERR_NO_MEM;
 
+    bool is_chunked = request_is_chunked(req);
+    char *raw_rx = NULL;
+    dechunker_t dc;
+    if (is_chunked)
+    {
+        raw_rx = (char*)malloc(rx_size);
+        if (!raw_rx) { free(rx); return ESP_ERR_NO_MEM; }
+        dechunker_init(&dc);
+        ESP_LOGI(TAG_MP, "Request uses chunked transfer encoding");
+    }
+
     esp_err_t result = ESP_FAIL;
 
     // build parser settings
@@ -338,41 +556,81 @@ esp_err_t multipart_upload_handle(httpd_req_t *req,
     ictx.handlers = handlers;
     ictx.user_ctx = user_ctx;
 
-    int remaining = req->content_len;
-
-    // Always read the first chunk to get the exact boundary line from the body (like the reference example)
-    int first_len = httpd_req_recv(req, rx, MIN(remaining, (int)rx_size));
-    if (first_len <= 0)
-    {
-        if (first_len == HTTPD_SOCK_ERR_TIMEOUT)
-        {
-            first_len = httpd_req_recv(req, rx, MIN(remaining, (int)rx_size));
-        }
-        if (first_len <= 0)
-        {
-            ESP_LOGE(TAG_MP, "Receive error (first chunk)");
-            goto cleanup;
-        }
-    }
-    remaining -= first_len;
-
-    char body_boundary[256];
-    bool have_body_boundary = extract_boundary_from_first_line(rx, (size_t)first_len, body_boundary, sizeof(body_boundary));
-
+    // Determine boundary to use.
+    // Best practice: use Content-Type boundary. If missing, fall back to reading first body line.
     const char *boundary_to_use = NULL;
-    if (have_body_boundary)
-    {
-        boundary_to_use = body_boundary;
-        ESP_LOGI(TAG_MP, "Boundary from body: %s", boundary_to_use);
-    }
-    else if (have_boundary)
+    char body_boundary[256];
+    size_t initial_len = 0;
+
+    if (have_boundary)
     {
         boundary_to_use = boundary;
-        ESP_LOGI(TAG_MP, "Boundary from header (fallback): %s", boundary_to_use);
+        ESP_LOGI(TAG_MP, "Boundary from header: %s", boundary_to_use);
     }
     else
     {
-        ESP_LOGE(TAG_MP, "No boundary found in body or header");
+        // Pre-read some body bytes (decoded if chunked) to extract boundary from first line.
+        // We'll feed these bytes into the parser after init.
+        while (initial_len < rx_size && boundary_to_use == NULL)
+        {
+            int r = httpd_req_recv(req, is_chunked ? raw_rx : rx, (int)rx_size);
+            if (r <= 0)
+            {
+                if (r == HTTPD_SOCK_ERR_TIMEOUT) continue;
+                ESP_LOGE(TAG_MP, "Receive error while extracting boundary");
+                goto cleanup;
+            }
+
+            if (!is_chunked)
+            {
+                // We read directly into rx; keep only what we got.
+                // If boundary line is split across reads, this fallback may fail; prefer header boundary.
+                initial_len = MIN((size_t)r, rx_size);
+            }
+            else
+            {
+                size_t in_used = 0;
+                while (in_used < (size_t)r && initial_len < rx_size)
+                {
+                    size_t before = in_used;
+                    size_t out = dechunker_consume(&dc, raw_rx + in_used, (size_t)r - in_used, &in_used, rx + initial_len, rx_size - initial_len);
+                    if (dc.state == DC_ERROR)
+                    {
+                        ESP_LOGE(TAG_MP, "Chunked decode error while extracting boundary");
+                        goto cleanup;
+                    }
+                    if (out > 0)
+                    {
+                        initial_len += out;
+                        break;
+                    }
+                    if (in_used == before) break;
+                }
+            }
+
+            if (initial_len > 0)
+            {
+                bool have_body_boundary = extract_boundary_from_first_line(rx, initial_len, body_boundary, sizeof(body_boundary));
+                if (have_body_boundary)
+                {
+                    boundary_to_use = body_boundary;
+                    ESP_LOGI(TAG_MP, "Boundary from body: %s", boundary_to_use);
+                }
+            }
+
+            // If we consumed everything and still don't have boundary, keep looping a bit.
+            // If rx is full and still no boundary, abort.
+            if (initial_len >= rx_size && boundary_to_use == NULL)
+            {
+                ESP_LOGE(TAG_MP, "Failed to extract boundary from body (buffer too small)");
+                goto cleanup;
+            }
+        }
+    }
+
+    if (!boundary_to_use)
+    {
+        ESP_LOGE(TAG_MP, "No boundary found in Content-Type or body");
         goto cleanup;
     }
 
@@ -384,50 +642,115 @@ esp_err_t multipart_upload_handle(httpd_req_t *req,
     }
     multipart_parser_set_data(ictx.parser, &ictx);
 
-    ESP_LOGI(TAG_MP, "Opening line preview: %.40s", rx);
-    if (first_len >= 4)
+    // Feed any initial bytes we already read while extracting boundary.
+    if (initial_len > 0)
     {
-        ESP_LOGI(TAG_MP, "Hex: %02X %02X %02X %02X", (unsigned char)rx[0], (unsigned char)rx[1], (unsigned char)rx[2], (unsigned char)rx[3]);
+        size_t parsed_init = multipart_parser_execute(ictx.parser, rx, initial_len);
+        if (parsed_init != initial_len)
+        {
+            int pos = find_bytes(rx, initial_len, boundary_to_use, strlen(boundary_to_use));
+            if (pos > 0)
+            {
+                ESP_LOGW(TAG_MP, "Boundary not at start, resync at %d", pos);
+                size_t parsed2 = multipart_parser_execute(ictx.parser, rx + pos, initial_len - (size_t)pos);
+                if (parsed2 != initial_len - (size_t)pos)
+                {
+                    ESP_LOGE(TAG_MP, "Parser error in initial chunk after resync");
+                    goto cleanup;
+                }
+            }
+            else
+            {
+                ESP_LOGE(TAG_MP, "Parser error in initial chunk: parsed %u of %u", (unsigned)parsed_init, (unsigned)initial_len);
+                goto cleanup;
+            }
+        }
     }
 
-    size_t parsed_first = multipart_parser_execute(ictx.parser, rx, (size_t)first_len);
-    if (parsed_first != (size_t)first_len)
+    // Continue reading and feeding data
+    if (!is_chunked)
     {
-        // Try simple resync if boundary wasn't at byte 0 (rare but possible)
-        int pos = find_bytes(rx, (size_t)first_len, boundary_to_use, strlen(boundary_to_use));
-        if (pos > 0)
+        int remaining = req->content_len;
+        if (remaining > 0)
         {
-            ESP_LOGW(TAG_MP, "Boundary not at start, resync at %d", pos);
-            size_t parsed2 = multipart_parser_execute(ictx.parser, rx + pos, (size_t)first_len - (size_t)pos);
-            if (parsed2 != (size_t)first_len - (size_t)pos)
+            while (remaining > 0)
             {
-                ESP_LOGE(TAG_MP, "Parser error in first chunk after resync");
-                goto cleanup;
+                int want = MIN(remaining, (int)rx_size);
+                int r = httpd_req_recv(req, rx, want);
+                if (r <= 0)
+                {
+                    if (r == HTTPD_SOCK_ERR_TIMEOUT) continue;
+                    ESP_LOGE(TAG_MP, "Receive error while reading body");
+                    goto cleanup;
+                }
+                remaining -= r;
+                size_t parsed = multipart_parser_execute(ictx.parser, rx, (size_t)r);
+                if (parsed != (size_t)r)
+                {
+                    ESP_LOGE(TAG_MP, "Parser error: parsed %u of %u", (unsigned)parsed, (unsigned)r);
+                    goto cleanup;
+                }
             }
         }
         else
         {
-            ESP_LOGE(TAG_MP, "Parser error in first chunk: parsed %u of %u", (unsigned)parsed_first, (unsigned)first_len);
-            goto cleanup;
+            // Unknown length (no Content-Length). Read until recv returns 0.
+            for (;;)
+            {
+                int r = httpd_req_recv(req, rx, (int)rx_size);
+                if (r <= 0)
+                {
+                    if (r == HTTPD_SOCK_ERR_TIMEOUT) continue;
+                    break;
+                }
+                size_t parsed = multipart_parser_execute(ictx.parser, rx, (size_t)r);
+                if (parsed != (size_t)r)
+                {
+                    ESP_LOGE(TAG_MP, "Parser error: parsed %u of %u", (unsigned)parsed, (unsigned)r);
+                    goto cleanup;
+                }
+            }
         }
     }
-
-    // Continue with the remaining body
-    while (remaining > 0)
+    else
     {
-        int r = httpd_req_recv(req, rx, MIN(remaining, (int)rx_size));
-        if (r <= 0)
+        // Chunked: decode and feed until dechunker reaches DONE
+        while (dc.state != DC_DONE)
         {
-            if (r == HTTPD_SOCK_ERR_TIMEOUT) continue;
-            ESP_LOGE(TAG_MP, "Receive error");
-            goto cleanup;
-        }
-        remaining -= r;
-        size_t parsed = multipart_parser_execute(ictx.parser, rx, (size_t)r);
-        if (parsed != (size_t)r)
-        {
-            ESP_LOGE(TAG_MP, "Parser error: parsed %u of %u", (unsigned)parsed, (unsigned)r);
-            goto cleanup;
+            int r = httpd_req_recv(req, raw_rx, (int)rx_size);
+            if (r <= 0)
+            {
+                if (r == HTTPD_SOCK_ERR_TIMEOUT) continue;
+                ESP_LOGE(TAG_MP, "Receive error while reading chunked body");
+                goto cleanup;
+            }
+
+            size_t in_used = 0;
+            while (in_used < (size_t)r)
+            {
+                size_t out_len = 0;
+                size_t before = in_used;
+                out_len = dechunker_consume(&dc, raw_rx + in_used, (size_t)r - in_used, &in_used, rx, rx_size);
+                if (dc.state == DC_ERROR)
+                {
+                    ESP_LOGE(TAG_MP, "Chunked decode error");
+                    goto cleanup;
+                }
+                if (out_len > 0)
+                {
+                    size_t parsed = multipart_parser_execute(ictx.parser, rx, out_len);
+                    if (parsed != out_len)
+                    {
+                        ESP_LOGE(TAG_MP, "Parser error (chunked): parsed %u of %u", (unsigned)parsed, (unsigned)out_len);
+                        goto cleanup;
+                    }
+                }
+                if (in_used == before)
+                {
+                    // Avoid infinite loop
+                    break;
+                }
+            }
         }
     }
 
@@ -442,5 +765,6 @@ esp_err_t multipart_upload_handle(httpd_req_t *req,
 cleanup:
     if (ictx.parser) multipart_parser_free(ictx.parser);
     free(rx);
+    if (raw_rx) free(raw_rx);
     return result;
 }
