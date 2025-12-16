@@ -117,6 +117,11 @@ static char ap_ssid[33] = {0};
 static char hardware_version[16];
 static char firmware_version[10];
 
+static bool debug_logs_network_ready_sta(void)
+{
+	return dev_status_is_sta_connected();
+}
+
 static void log_can_to_mqtt(twai_message_t *frame, uint8_t type)
 {
 	static mqtt_can_message_t mqtt_msg;
@@ -871,7 +876,12 @@ void app_main(void)
     elm327_uart_rx_queue_storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
 	xmsg_obd_rx_queue = xQueueCreateStatic(32, xdev_buffer_size, (uint8_t *)elm327_uart_rx_queue_storage, &elm327_uart_rx_queue_buffer);
 	// elm327_init( &send_to_host, &xmsg_obd_rx_queue, NULL); //not needed
-	elm327_init( &send_to_host, &xmsg_ble_tx_queue, NULL);
+	bool elm327_udp_log = config_server_elm327_udp_log() == 1 ? true : false;
+	elm327_init(&send_to_host, &xmsg_ble_tx_queue, NULL, elm327_udp_log);
+	if(elm327_udp_log)
+	{
+		debug_logs_init(debug_logs_network_ready_sta, true);
+	}
 	if(protocol == AUTO_PID)
 	{
 		// can_set_bitrate(can_datarate);

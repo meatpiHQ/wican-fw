@@ -150,6 +150,7 @@ typedef struct _device_config
 	// MQTT TLS verification behavior: "enable" to skip CN check, "disable" (default) to verify
 	char mqtt_skip_cn[10];
 	char mqtt_elm327_log[10];
+	char elm327_udp_log[10];
 	char mqtt_tx_topic[64];
 	char mqtt_rx_topic[64];
 	char mqtt_status_topic[64];
@@ -218,6 +219,7 @@ char *config_server_get_mqtt_user(void);
 char *config_server_get_mmqtt_pass(void);
 char *config_server_get_mqtt_canflt(void);
 int8_t config_server_mqtt_elm327_log(void);
+int8_t config_server_elm327_udp_log(void);
 char *config_server_get_mqtt_tx_topic(void);
 char *config_server_get_mqtt_rx_topic(void);
 char *config_server_get_mqtt_status_topic(void);

@@ -16,7 +16,7 @@ extern "C" {
 #endif
 
 #ifndef DEBUG_LOGS_MAX_MESSAGE
-#define DEBUG_LOGS_MAX_MESSAGE 256
+#define DEBUG_LOGS_MAX_MESSAGE (10*1024)
 #endif
 
 #ifndef DEBUG_LOGS_UDP_PORT

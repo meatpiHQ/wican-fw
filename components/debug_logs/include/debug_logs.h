@@ -33,8 +33,14 @@ void debug_logs_vlog(debug_log_level_t level, const char *tag, const char *fmt, 
 // Lightweight raw message enqueue (already formatted line)
 bool debug_logs_send_line(const char *line); // returns false if dropped
 
+// Raw ASCII payload enqueue (sent exactly as provided as UDP payload; no prefix/newline added)
+bool debug_logs_send_raw(const char *data, size_t len); // returns false if dropped/partially dropped
+
 // ISR-safe variant (will attempt to enqueue from ISR)
 bool debug_logs_send_line_isr(const char *line, BaseType_t *pxHigherPriorityTaskWoken);
+
+// ISR-safe raw ASCII payload enqueue (sent exactly as provided as UDP payload; no prefix/newline added)
+bool debug_logs_send_raw_isr(const char *data, size_t len, BaseType_t *pxHigherPriorityTaskWoken);
 
 // Optional runtime destination override (IPv4 string + port). Returns 0 on success.
 int debug_logs_set_udp_destination(const char *ipv4, uint16_t port);

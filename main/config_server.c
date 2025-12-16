@@ -217,7 +217,7 @@ const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"st
 								\"ble_status\":\"disable\",\"ble_power\":\"9\",\"sleep_status\":\"enable\",\"periodic_wakeup\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"sleep_time\":\"5\",\"wakeup_interval\":\"90\",\"batt_alert\":\"disable\",\
 										\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\
 										\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\
-										\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\
+								\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"elm327_udp_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\
 										\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\",\"mqtt_security\":\"none\",\"mqtt_cert_set\": \"default\",\"mqtt_skip_cn\":\"disable\",\
 										\"logger_status\":\"disable\",\"log_filesystem\":\"littlefs\",\"log_storage\":\"sdcard\",\"log_period\":\"10\"}";
 
@@ -1669,6 +1669,7 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	cJSON_AddStringToObject(root, "log_period", device_config.log_period);
 	cJSON_AddStringToObject(root, "log_storage", device_config.log_storage);
 	cJSON_AddStringToObject(root, "imu_threshold", device_config.imu_threshold);
+	cJSON_AddStringToObject(root, "elm327_udp_log", device_config.elm327_udp_log);
 	if(gpio_get_level(OBD_READY_PIN) == 1)
 	{
 		cJSON_AddStringToObject(root, "obd_chip_status", "Sleep");
@@ -3274,6 +3275,20 @@ static void config_server_load_cfg(char *cfg)
 	//*****
 
 	//*****
+	// elm327_udp_log (optional; default disabled)
+	key = cJSON_GetObjectItem(root,"elm327_udp_log");
+	if(key == 0 || key->valuestring == NULL || (strlen(key->valuestring) > sizeof(device_config.elm327_udp_log)))
+	{
+		strlcpy(device_config.elm327_udp_log, "disable", sizeof(device_config.elm327_udp_log));
+	}
+	else
+	{
+		strlcpy(device_config.elm327_udp_log, key->valuestring, sizeof(device_config.elm327_udp_log));
+	}
+	ESP_LOGI(TAG, "device_config.elm327_udp_log: %s", device_config.elm327_udp_log);
+	//*****
+
+	//*****
 	key = cJSON_GetObjectItem(root,"debug");
 	if(key == 0 || key->valuestring == NULL || (strlen(key->valuestring) == 0))
 	{
@@ -3950,6 +3965,19 @@ int8_t config_server_mqtt_elm327_log(void)
 		return 1;
 	}
 	else if(strcmp(device_config.mqtt_elm327_log, "disable") == 0)
+	{
+		return 0;
+	}
+	return -1;
+}
+
+int8_t config_server_elm327_udp_log(void)
+{
+	if(strcmp(device_config.elm327_udp_log, "enable") == 0)
+	{
+		return 1;
+	}
+	else if(strcmp(device_config.elm327_udp_log, "disable") == 0)
 	{
 		return 0;
 	}

@@ -1304,6 +1304,7 @@ void elm327_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q), QueueH
 #include "esp_timer.h"
 #include "led.h"
 #include "hw_config.h"
+#include "debug_logs.h"
 
 /* Defines and Constants */
 #define BUF_SIZE 						(1024)
@@ -1371,6 +1372,200 @@ static char *update_resp_buf = NULL;
 static int uart_read_until_pattern(uart_port_t uart_num, char* buffer, size_t buffer_size, 
                                  const char* end_pattern, int total_timeout_ms) ;
 
+#define ELM327_UART_LOG_BUF_SZ (10*1024)
+static char *s_elm_tx_buf = NULL;
+static size_t s_elm_tx_len = 0;
+static char *s_elm_rx_buf = NULL;
+static size_t s_elm_rx_len = 0;
+static char* emit_line_buf = NULL;
+static bool elm327_udp_log_enabled = false;
+
+static void elm327_trim_trailing_spaces(char *buf, size_t *len)
+{
+	while (*len > 0 && buf[*len - 1] == ' ')
+	{
+		(*len)--;
+	}
+	buf[*len] = 0;
+}
+
+static void elm327_emit_line(const char *prefix, const char *payload, bool add_prompt)
+{
+	if (!elm327_udp_log_enabled)
+	{
+		return;
+	}
+
+	char *out = emit_line_buf;
+	if (!out)
+	{
+		return;
+	}
+	if (!payload)
+	{
+		payload = "";
+	}
+	const size_t cap = (size_t)ELM327_UART_LOG_BUF_SZ;
+	out[0] = 0;
+	(void)strlcpy(out, prefix ? prefix : "", cap);
+	(void)strlcat(out, payload, cap);
+	if (add_prompt)
+	{
+		(void)strlcat(out, (payload[0] ? " >" : ">"), cap);
+	}
+	debug_logs_log(DEBUG_LOG_LEVEL_INFO, "ELM327_UART", "%s", out);
+}
+
+static void elm327_uart_log_tx_bytes(uart_port_t uart_num, const uint8_t *data, int len)
+{
+	(void)uart_num;
+	if (!data || len <= 0)
+	{
+		return;
+	}
+	if (!s_elm_tx_buf)
+	{
+		return;
+	}
+	for (int i = 0; i < len; i++)
+	{
+		uint8_t c = data[i];
+		if (c == '\r')
+		{
+			s_elm_tx_buf[s_elm_tx_len] = 0;
+			elm327_trim_trailing_spaces(s_elm_tx_buf, &s_elm_tx_len);
+			// If command length is odd and ends with a digit, drop that suffix.
+			// (Some clients append an expected-response count as the last digit.)
+			if ((s_elm_tx_len & 1U) == 1U)
+			{
+				char last = s_elm_tx_buf[s_elm_tx_len - 1];
+				if (last >= '0' && last <= '9')
+				{
+					s_elm_tx_len--;
+					s_elm_tx_buf[s_elm_tx_len] = 0;
+					elm327_trim_trailing_spaces(s_elm_tx_buf, &s_elm_tx_len);
+				}
+			}
+			if (s_elm_tx_len > 0)
+			{
+				elm327_emit_line("ELM TX: ", s_elm_tx_buf, false);
+			}
+			s_elm_tx_len = 0;
+			continue;
+		}
+		if (c == '\n')
+		{
+			continue;
+		}
+		if (c == '\t')
+		{
+			c = ' ';
+		}
+		if (c < 32 || c > 126)
+		{
+			c = '?';
+		}
+
+		if (s_elm_tx_len + 1 >= ELM327_UART_LOG_BUF_SZ)
+		{
+			s_elm_tx_buf[s_elm_tx_len] = 0;
+			elm327_trim_trailing_spaces(s_elm_tx_buf, &s_elm_tx_len);
+			if (s_elm_tx_len > 0)
+			{
+				elm327_emit_line("ELM TX: ", s_elm_tx_buf, false);
+			}
+			s_elm_tx_len = 0;
+		}
+		s_elm_tx_buf[s_elm_tx_len++] = (char)c;
+		s_elm_tx_buf[s_elm_tx_len] = 0;
+	}
+}
+
+static void elm327_uart_log_rx_bytes(uart_port_t uart_num, const uint8_t *data, int len)
+{
+	(void)uart_num;
+	if (!data || len <= 0)
+	{
+		return;
+	}
+	if (!s_elm_rx_buf)
+	{
+		return;
+	}
+	for (int i = 0; i < len; i++)
+	{
+		uint8_t c = data[i];
+		if (c == '>')
+		{
+			s_elm_rx_buf[s_elm_rx_len] = 0;
+			elm327_trim_trailing_spaces(s_elm_rx_buf, &s_elm_rx_len);
+			if (s_elm_rx_len > 0)
+			{
+				elm327_emit_line("ELM RX: ", s_elm_rx_buf, false);
+			}
+			elm327_emit_line("ELM RX: ", "", true);
+			s_elm_rx_len = 0;
+			continue;
+		}
+		if (c == '\r' || c == '\n' || c == '\t')
+		{
+			// Treat line breaks as a single space separator
+			if (s_elm_rx_len > 0 && s_elm_rx_buf[s_elm_rx_len - 1] != ' ')
+			{
+				if (s_elm_rx_len + 1 < ELM327_UART_LOG_BUF_SZ)
+				{
+					s_elm_rx_buf[s_elm_rx_len++] = ' ';
+					s_elm_rx_buf[s_elm_rx_len] = 0;
+				}
+			}
+			continue;
+		}
+		if (c < 32 || c > 126)
+		{
+			c = '?';
+		}
+
+		if (s_elm_rx_len + 1 >= ELM327_UART_LOG_BUF_SZ)
+		{
+			s_elm_rx_buf[s_elm_rx_len] = 0;
+			elm327_trim_trailing_spaces(s_elm_rx_buf, &s_elm_rx_len);
+			if (s_elm_rx_len > 0)
+			{
+				elm327_emit_line("ELM RX: ", s_elm_rx_buf, false);
+			}
+			s_elm_rx_len = 0;
+		}
+		s_elm_rx_buf[s_elm_rx_len++] = (char)c;
+		s_elm_rx_buf[s_elm_rx_len] = 0;
+	}
+}
+
+static int elm327_uart_write_bytes(uart_port_t uart_num, const void *src, size_t size)
+{
+	int written = uart_write_bytes(uart_num, src, size);
+	if(elm327_udp_log_enabled)	//if log to udp enabled place holder here
+	{
+		if (written > 0 && src)
+		{
+			elm327_uart_log_tx_bytes(uart_num, (const uint8_t*)src, written);
+		}
+	}
+	return written;
+}
+
+static int elm327_uart_read_bytes(uart_port_t uart_num, void *buf, size_t size, TickType_t ticks_to_wait)
+{
+	int r = uart_read_bytes(uart_num, buf, size, ticks_to_wait);
+	if(elm327_udp_log_enabled)	//if log to udp enabled place holder here
+	{
+		if (r > 0 && buf)
+		{
+			elm327_uart_log_rx_bytes(uart_num, (const uint8_t*)buf, r);
+		}
+	} 
+	return r;
+}
+
 static void elm327_powerpin_commands(void)
 {
 	bool hardreset_needed = 0;
@@ -1389,7 +1584,7 @@ static void elm327_powerpin_commands(void)
 		uart_flush_input(UART_NUM_1);
 
 		// VTVERS
-		uart_write_bytes(UART_NUM_1, "VTVERS\r", strlen("VTVERS\r"));
+		elm327_uart_write_bytes(UART_NUM_1, "VTVERS\r", strlen("VTVERS\r"));
 		uart_read_until_pattern(UART_NUM_1, rx_buffer, ELM327_CMD_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
 		if (strstr(rx_buffer, OBD_FW_VER_V22) == NULL)
 		{
@@ -1398,7 +1593,7 @@ static void elm327_powerpin_commands(void)
 			return;
 		}
 
-		uart_write_bytes(UART_NUM_1, "VTPPSWS\r", strlen("VTPPSWS\r"));
+		elm327_uart_write_bytes(UART_NUM_1, "VTPPSWS\r", strlen("VTPPSWS\r"));
 		uart_read_until_pattern(UART_NUM_1, rx_buffer, ELM327_CMD_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
 		if(strstr(rx_buffer, "10") != NULL)
 		{
@@ -1407,7 +1602,7 @@ static void elm327_powerpin_commands(void)
 		else
 		{
 			ESP_LOGW(TAG, "PPSW is not 10, setting to 10");
-			uart_write_bytes(UART_NUM_1, "VTPPSW10\r", strlen("VTPPSW10\r"));
+			elm327_uart_write_bytes(UART_NUM_1, "VTPPSW10\r", strlen("VTPPSW10\r"));
 			uart_read_until_pattern(UART_NUM_1, rx_buffer, ELM327_CMD_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
 			if (strstr(rx_buffer, "OK") != NULL)
 			{
@@ -1468,13 +1663,20 @@ int8_t elm327_process_cmd(uint8_t *cmd, uint32_t len, QueueHandle_t *q,
 
             elm327_commands_t *command_data;
 			// command_data = (elm327_commands_t*) malloc(sizeof(elm327_commands_t));
-			command_data = (elm327_commands_t*) heap_caps_aligned_alloc(16,sizeof(elm327_commands_t), MALLOC_CAP_SPIRAM);
+			command_data = (elm327_commands_t*) heap_caps_aligned_alloc(16, sizeof(elm327_commands_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+			if (command_data == NULL)
+			{
+				ESP_LOGE(TAG, "Failed to allocate memory for command_data");
+				*cmd_buffer_len = 0;
+				return -1;
+			}
 			memset(command_data, 0, sizeof(elm327_commands_t));
             // command_data->command = (char*) malloc(*cmd_buffer_len + 1);
-			command_data->command = (char*) heap_caps_aligned_alloc(16,*cmd_buffer_len + 1, MALLOC_CAP_SPIRAM);
+			command_data->command = (char*) heap_caps_aligned_alloc(16, *cmd_buffer_len + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
             if (command_data->command == NULL)
             {
                 ESP_LOGE(TAG, "Failed to allocate memory for command");
+				free(command_data);
                 *cmd_buffer_len = 0;
                 return -1;
             }
@@ -1547,14 +1749,14 @@ void elm327_send_cmd(uint8_t* cmd, uint32_t cmd_len)
 			if (atz_seg) {
 				static const char replace_cmd[] = "ATWS\r";
 				ESP_LOGI(TAG, "Replaced ATZ command with ATWS");
-				uart_write_bytes(UART_NUM_1, (const uint8_t*)replace_cmd, sizeof(replace_cmd) - 1);
+				elm327_uart_write_bytes(UART_NUM_1, (const uint8_t*)replace_cmd, sizeof(replace_cmd) - 1);
 			} else {
 				// write original segment including its delimiters
 				if (seg_start < seg_end) {
-					uart_write_bytes(UART_NUM_1, (const uint8_t*)&cmd[seg_start], seg_end - seg_start);
+					elm327_uart_write_bytes(UART_NUM_1, (const uint8_t*)&cmd[seg_start], seg_end - seg_start);
 				}
 				if (delim_len) {
-					uart_write_bytes(UART_NUM_1, (const uint8_t*)&cmd[seg_end], delim_len);
+					elm327_uart_write_bytes(UART_NUM_1, (const uint8_t*)&cmd[seg_end], delim_len);
 				}
 			}
 
@@ -1579,7 +1781,13 @@ static void uart1_event_task(void *pvParameters)
     size_t response_len = 0;
     uart_event_t event;
 
-	uart_read_buf = (uint8_t *)heap_caps_aligned_alloc(4, ELM327_MAX_CMD_LEN, MALLOC_CAP_SPIRAM);
+	uart_read_buf = (uint8_t *)heap_caps_aligned_alloc(4, ELM327_MAX_CMD_LEN, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+	if (!uart_read_buf)
+	{
+		ESP_LOGE(TAG, "Failed to allocate uart_read_buf");
+		vTaskDelete(NULL);
+		return;
+	}
 	memset(uart_read_buf, 0, ELM327_MAX_CMD_LEN);
 
     while (1) 
@@ -1589,7 +1797,7 @@ static void uart1_event_task(void *pvParameters)
         {
 			sleep_state_info_t sleep_state;
 			sleep_mode_get_state(&sleep_state);
-			memset(uart_read_buf, 0, sizeof(uart_read_buf));
+			memset(uart_read_buf, 0, ELM327_MAX_CMD_LEN);
             if ((elm327_chip_get_status() == ELM327_READY) && (sleep_state.state != STATE_SLEEPING) && xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(ELM327_CMD_MUTEX_TIMOUT)) == pdTRUE)
             {
                 // uart_flush(UART_NUM_1);
@@ -1602,10 +1810,10 @@ static void uart1_event_task(void *pvParameters)
                 // while (xQueueReceive(uart1_queue, &event, 0) == pdTRUE) 
                 // {
                 //     ESP_LOGW(TAG, "Discarding UART event: %d", event.type);
-				// 	uart_read_bytes(UART_NUM_1, uart_read_buf, sizeof(uart_read_buf), 0);
+				// 	elm327_uart_read_bytes(UART_NUM_1, uart_read_buf, sizeof(uart_read_buf), 0);
                 // }
                 
-                // uart_read_bytes(UART_NUM_1, uart_read_buf, sizeof(uart_read_buf), 0);
+                // elm327_uart_read_bytes(UART_NUM_1, uart_read_buf, sizeof(uart_read_buf), 0);
 				uart_flush_input(UART_NUM_1);
 				xQueueReset(uart1_queue);
 
@@ -1618,7 +1826,7 @@ static void uart1_event_task(void *pvParameters)
 					// {
 					// 	strcpy(last_command, elm327_command.command);
 					// }
-                    uart_write_bytes(UART_NUM_1, "ATWS\r", strlen("ATWS\r"));
+                    elm327_uart_write_bytes(UART_NUM_1, "ATWS\r", strlen("ATWS\r"));
 					tx_wait_ret = uart_wait_tx_done(UART_NUM_1, pdMS_TO_TICKS(100));
 					if(tx_wait_ret != ESP_OK )
 					{
@@ -1629,7 +1837,7 @@ static void uart1_event_task(void *pvParameters)
                 }
 				// else if(elm327_command.command[0] == '\r' && elm327_command.command[1] == 0)
 				// {
-				// 	uart_write_bytes(UART_NUM_1, last_command, strlen(last_command));
+				// 	elm327_uart_write_bytes(UART_NUM_1, last_command, strlen(last_command));
 				// 	ESP_LOGI(TAG, "Repeat last command");
 				// 	printf("Repeat last command: \r\n%s\r\n", last_command);
 				// 	printf("-----\r\n");
@@ -1643,7 +1851,7 @@ static void uart1_event_task(void *pvParameters)
 					// {
 					// 	strcpy(last_command, elm327_command.command);
 					// }
-                    uart_write_bytes(UART_NUM_1, elm327_command.command, elm327_command.command_len);
+                    elm327_uart_write_bytes(UART_NUM_1, elm327_command.command, elm327_command.command_len);
 					tx_wait_ret = uart_wait_tx_done(UART_NUM_1, pdMS_TO_TICKS(100));
 					if(tx_wait_ret != ESP_OK )
 					{
@@ -1663,7 +1871,7 @@ static void uart1_event_task(void *pvParameters)
                     {
                         if (event.type == UART_DATA)
                         {
-                            int read_bytes = uart_read_bytes(UART_NUM_1, 
+                            int read_bytes = elm327_uart_read_bytes(UART_NUM_1, 
                                                            uart_read_buf+response_len, 
                                                            event.size, 
                                                            pdMS_TO_TICKS(1));
@@ -1696,8 +1904,8 @@ static void uart1_event_task(void *pvParameters)
                                     {
                                         // if(strstr((char*)uart_read_buf, "STSBR2000000\rOK"))
                                         // {
-                                        //     uart_write_bytes(UART_NUM_1, "\r\r", 2);
-                                        //     uart_write_bytes(UART_NUM_1, "STWBR\r", strlen("STWBR\r"));
+                                        //     elm327_uart_write_bytes(UART_NUM_1, "\r\r", 2);
+                                        //     elm327_uart_write_bytes(UART_NUM_1, "STWBR\r", strlen("STWBR\r"));
                                         // }
 										ESP_LOGI(TAG, "Terminator Received");
                                         terminator_received = true;
@@ -1775,7 +1983,7 @@ static int uart_read_until_pattern(uart_port_t uart_num, char* buffer, size_t bu
     while (total_len < buffer_size - 1) 
 	{  // Leave space for null terminator
         // Read a small chunk
-        int len = uart_read_bytes(uart_num, buffer + total_len, 
+        int len = elm327_uart_read_bytes(uart_num, buffer + total_len, 
                                 buffer_size - total_len - 1, READ_TIMEOUT_MS);
         
         if (len > 0)
@@ -1819,7 +2027,7 @@ bool elm327_set_baudrate(void)
         // uart_set_baudrate(UART_NUM_1, DESIRED_BAUD_RATE);
         ESP_LOGI(TAG, "Trying %d baud", DESIRED_BAUD_RATE);
 
-        uart_write_bytes(UART_NUM_1, "VTVERS\r", 7);
+        elm327_uart_write_bytes(UART_NUM_1, "VTVERS\r", 7);
         
         len = uart_read_until_pattern(UART_NUM_1, rx_buffer, UART_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
         
@@ -1833,7 +2041,7 @@ bool elm327_set_baudrate(void)
             uart_set_baudrate(UART_NUM_1, DEFAULT_BAUD_RATE);
             ESP_LOGI(TAG, "Trying %d baud", DEFAULT_BAUD_RATE);
             
-            uart_write_bytes(UART_NUM_1, "VTVERS\r", 7);
+            elm327_uart_write_bytes(UART_NUM_1, "VTVERS\r", 7);
             len = uart_read_until_pattern(UART_NUM_1, rx_buffer, UART_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
             
             if (len > 2 && rx_buffer[len-2] == '\r' && rx_buffer[len-1] == '>')
@@ -1842,7 +2050,7 @@ bool elm327_set_baudrate(void)
                         DEFAULT_BAUD_RATE, DESIRED_BAUD_RATE);
                 
                 snprintf(command, sizeof(command), "STSBR %d\r", DESIRED_BAUD_RATE);
-                uart_write_bytes(UART_NUM_1, command, strlen(command));
+                elm327_uart_write_bytes(UART_NUM_1, command, strlen(command));
                 len = uart_read_until_pattern(UART_NUM_1, rx_buffer, UART_BUFFER_SIZE - 1, "OK", UART_TIMEOUT_MS);
                 
                 if (len > 0 && strstr(rx_buffer, "OK"))
@@ -1850,7 +2058,7 @@ bool elm327_set_baudrate(void)
                     vTaskDelay(pdMS_TO_TICKS(100));
                     uart_set_baudrate(UART_NUM_1, DESIRED_BAUD_RATE);
                     
-                    uart_write_bytes(UART_NUM_1, "VTVERS\r", 7);
+                    elm327_uart_write_bytes(UART_NUM_1, "VTVERS\r", 7);
                     len = uart_read_until_pattern(UART_NUM_1, rx_buffer, UART_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
                     
                     if (len > 2 && rx_buffer[len-2] == '\r' && rx_buffer[len-1] == '>')
@@ -1858,7 +2066,7 @@ bool elm327_set_baudrate(void)
                         ESP_LOGI(TAG, "Successfully switched to %d baud", DESIRED_BAUD_RATE);
                         success = true;
                         
-                        uart_write_bytes(UART_NUM_1, "STWBR\r", 6);
+                        elm327_uart_write_bytes(UART_NUM_1, "STWBR\r", 6);
                         uart_read_until_pattern(UART_NUM_1, rx_buffer, UART_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
                     }
                     else
@@ -1911,7 +2119,7 @@ void elm327_hardreset_chip(void)
 		else
 		{
 			ESP_LOGI(TAG, "OBD_READY_PIN is low, sending ATZ command instead of hardware reset");
-			uart_write_bytes(UART_NUM_1, "ATZ\r", strlen("ATZ\r"));
+			elm327_uart_write_bytes(UART_NUM_1, "ATZ\r", strlen("ATZ\r"));
 		}
 		memset(rsp_buffer, 0, UART_BUFFER_SIZE);
         int len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, UART_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS+300);
@@ -1973,7 +2181,7 @@ esp_err_t elm327_get_protocol_number(uint8_t *protocol_number)
 		xQueueReset(uart1_queue);
 
 		//Step 1: Send ATZ to reset device
-		uart_write_bytes(UART_NUM_1, "ATWS\r", strlen("ATWS\r"));
+		elm327_uart_write_bytes(UART_NUM_1, "ATWS\r", strlen("ATWS\r"));
 		int len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, 512, "\r>", UART_TIMEOUT_MS+300);
 		
 		if (len > 0) {
@@ -1988,7 +2196,7 @@ esp_err_t elm327_get_protocol_number(uint8_t *protocol_number)
 			goto cleanup;
 		}
 		// Step 2: Set automatic protocol with ATTP0
-		uart_write_bytes(UART_NUM_1, "ATTP0\r", strlen("ATTP0\r"));
+		elm327_uart_write_bytes(UART_NUM_1, "ATTP0\r", strlen("ATTP0\r"));
 		len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, 512, "\r>", UART_TIMEOUT_MS+300);
 		
 		if (len > 0) {
@@ -2009,7 +2217,7 @@ esp_err_t elm327_get_protocol_number(uint8_t *protocol_number)
 		xQueueReset(uart1_queue);
 		
 		// Step 2: Send 0100 to establish protocol
-		uart_write_bytes(UART_NUM_1, "0100\r", strlen("0100\r"));
+		elm327_uart_write_bytes(UART_NUM_1, "0100\r", strlen("0100\r"));
 		len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, 512, "\r>", UART_TIMEOUT_MS+10000);
 		
 		if (len > 0) {
@@ -2035,7 +2243,7 @@ esp_err_t elm327_get_protocol_number(uint8_t *protocol_number)
 		xQueueReset(uart1_queue);
 		
 		// Step 3: Get protocol number with ATDPN
-        uart_write_bytes(UART_NUM_1, "ATDPN\r", strlen("ATDPN\r"));
+        elm327_uart_write_bytes(UART_NUM_1, "ATDPN\r", strlen("ATDPN\r"));
         len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, 512, "\r>", UART_TIMEOUT_MS+300);
 		
 		if (len > 0) {
@@ -2122,7 +2330,7 @@ esp_err_t elm327_sleep(void)
 		ESP_LOGI(TAG, "Got semaphore, preparing to sleep");
 		uart_flush_input(UART_NUM_1);
 		xQueueReset(uart1_queue);
-        uart_write_bytes(UART_NUM_1, "STSLEEP0\r", strlen("STSLEEP0\r"));
+        elm327_uart_write_bytes(UART_NUM_1, "STSLEEP0\r", strlen("STSLEEP0\r"));
         int len = uart_read_until_pattern(UART_NUM_1, rsp_buffer, sizeof(rsp_buffer), "\r>", UART_TIMEOUT_MS+300);
 		if(len > 0 && strstr(rsp_buffer, "OK\r\r>"))
 		{
@@ -2190,12 +2398,12 @@ void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, Q
 			// {
 			// 	strcpy(last_command, elm327_command.command);
 			// }
-			uart_write_bytes(UART_NUM_1, "ATWS\r", strlen("ATWS\r"));
+			elm327_uart_write_bytes(UART_NUM_1, "ATWS\r", strlen("ATWS\r"));
 			uart_wait_tx_done(UART_NUM_1, pdMS_TO_TICKS(100));
 		}
 		else
 		{
-			uart_write_bytes(UART_NUM_1, command, len);
+			elm327_uart_write_bytes(UART_NUM_1, command, len);
 		}
 		
 		while (!terminator_received)
@@ -2204,7 +2412,7 @@ void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, Q
 			{
 				if (event.type == UART_DATA)
 				{
-					int read_bytes = uart_read_bytes(UART_NUM_1, 
+					int read_bytes = elm327_uart_read_bytes(UART_NUM_1, 
 													uart_read_buf, 
 													event.size, 
 													pdMS_TO_TICKS(1));
@@ -2299,7 +2507,7 @@ esp_err_t elm327_send_update_command(const char* cmd, char** response, size_t* r
 	uart_flush_input(UART_NUM_1);
 
 	ESP_LOGD(TAG, "Sending: %s", cmd);
-	int written = uart_write_bytes(UART_NUM_1, cmd, cmd_len);
+	int written = elm327_uart_write_bytes(UART_NUM_1, cmd, cmd_len);
 	if (written < 0)
 	{
 		ESP_LOGE(TAG, "Failed to write command");
@@ -2318,7 +2526,7 @@ esp_err_t elm327_send_update_command(const char* cmd, char** response, size_t* r
 			break;
 		}
 
-		if (uart_read_bytes(UART_NUM_1, &byte_data, 1, pdMS_TO_TICKS(100)) != 1)
+		if (elm327_uart_read_bytes(UART_NUM_1, &byte_data, 1, pdMS_TO_TICKS(100)) != 1)
 		{
 			continue;
 		}
@@ -2483,11 +2691,11 @@ static void elm327_disable_wake_commands(void)
 		bzero(rx_buffer, ELM327_CMD_BUFFER_SIZE);
 		uart_flush_input(UART_NUM_1);
 		//make sure chip goes to sleep
-		uart_write_bytes(UART_NUM_1, "ATPP 0F SV 95\r", strlen("ATPP 0F SV 95\r"));
+		elm327_uart_write_bytes(UART_NUM_1, "ATPP 0F SV 95\r", strlen("ATPP 0F SV 95\r"));
 		uart_read_until_pattern(UART_NUM_1, rx_buffer, ELM327_CMD_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
 		bzero(rx_buffer, ELM327_CMD_BUFFER_SIZE);
 		vTaskDelay(pdMS_TO_TICKS(100));
-		uart_write_bytes(UART_NUM_1, "ATPP 0F ON\r", strlen("ATPP 0F ON\r"));
+		elm327_uart_write_bytes(UART_NUM_1, "ATPP 0F ON\r", strlen("ATPP 0F ON\r"));
 		uart_read_until_pattern(UART_NUM_1, rx_buffer, ELM327_CMD_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
 		ESP_LOGI(TAG, "Wake commands disabled");
 		ESP_LOG_BUFFER_HEXDUMP(TAG, (const void*)rx_buffer, strlen(rx_buffer), ESP_LOG_INFO);
@@ -2788,7 +2996,7 @@ void elm327_read_task(void *pvParameters)
 					switch(event.type) 
 					{
 						case UART_DATA:
-							uart_read_bytes(UART_NUM_1, dtmp.ucElement, event.size, portMAX_DELAY);
+							elm327_uart_read_bytes(UART_NUM_1, dtmp.ucElement, event.size, portMAX_DELAY);
 							
 							if(elm327_response != NULL)
 							{
@@ -2827,11 +3035,16 @@ void elm327_read_task(void *pvParameters)
 }
 
 
-void elm327_init(response_callback_t rsp_callback, QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame, uint8_t type))
+void elm327_init(response_callback_t rsp_callback, QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame, uint8_t type), bool udp_log_enabled)
 {
     xqueue_elm327_uart_rx = rx_queue;
     elm327_can_log = can_log;
 	elm327_response = rsp_callback;
+	elm327_udp_log_enabled = udp_log_enabled;
+	if(elm327_udp_log_enabled)
+	{
+		ESP_LOGW(TAG, "ELM327 UDP logging enabled");
+	}
 
 	if(update_resp_buf == NULL)
 	{
@@ -2839,6 +3052,22 @@ void elm327_init(response_callback_t rsp_callback, QueueHandle_t *rx_queue, void
 		memset(update_resp_buf, 0, ELM327_UPDATE_BUF_SIZE);
 	}
 
+
+	if(s_elm_tx_buf == NULL)
+	{
+		s_elm_tx_buf = (char *)heap_caps_malloc(ELM327_UART_LOG_BUF_SZ, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+		memset(s_elm_tx_buf, 0, ELM327_UART_LOG_BUF_SZ);
+	}
+	if(s_elm_rx_buf == NULL)
+	{
+		s_elm_rx_buf = (char *)heap_caps_malloc(ELM327_UART_LOG_BUF_SZ, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+		memset(s_elm_rx_buf, 0, ELM327_UART_LOG_BUF_SZ);
+	}
+	if(emit_line_buf == NULL)
+	{
+		emit_line_buf = (char *)heap_caps_malloc(ELM327_UART_LOG_BUF_SZ, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+		memset(emit_line_buf, 0, ELM327_UART_LOG_BUF_SZ);
+	}
 
     elm327_cmd_queue = xQueueCreateStatic(ELM327_CMD_QUEUE_SIZE, sizeof(elm327_commands_t), elm327_cmd_queue_storage, &elm327_cmd_queue_struct);
 	if (elm327_cmd_queue == NULL){
@@ -2901,8 +3130,9 @@ void elm327_init(response_callback_t rsp_callback, QueueHandle_t *rx_queue, void
     static StackType_t *uart1_event_task_stack, *elm327_read_task_stack;
     static StaticTask_t uart1_event_task_buffer, elm327_read_task_buffer;
     
-    uart1_event_task_stack = heap_caps_malloc(2048*2, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-    elm327_read_task_stack = heap_caps_malloc(2048*2, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+	// Keep stacks in internal RAM (external/PSRAM stacks can crash if caches are temporarily disabled).
+	uart1_event_task_stack = heap_caps_malloc((2048*2) * sizeof(StackType_t), MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT);
+	elm327_read_task_stack = heap_caps_malloc((2048*2) * sizeof(StackType_t), MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT);
     
     if (uart1_event_task_stack == NULL || elm327_read_task_stack == NULL)
     {
