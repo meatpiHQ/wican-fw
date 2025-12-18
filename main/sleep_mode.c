@@ -343,7 +343,7 @@ static void adc_task(void *pvParameters)
     alert_time *= (3600000000);
     ESP_LOGW(TAG, "%" PRIu64 "\n", alert_time);
 
-    if(config_server_get_alert_volt(&alert_voltage) != -1)
+    if(config_server_get_alert_volt(&alert_voltage) == -1)
     {
     	alert_voltage = 16.0f;
     }
