@@ -381,6 +381,24 @@
       ]
     },
     {
+      "car_model": "Cupra: Seat Leon",
+      "init": "ATSHFC0076;ATSP7;ATCRA17FE0076;ATFCSH17FC0076;ATFCSD300000;ATFCSM1;",
+      "pids": [
+        {
+          "pid": "2210E02",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B10:B11]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Dacia: Spring/CITY K-ZE",
       "init": "ATSP6;ATST64;ATFCSD300000;ATFCSM1;",
       "pids": [
