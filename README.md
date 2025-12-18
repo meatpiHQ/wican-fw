@@ -2,7 +2,13 @@
 
 [www.meatpi.com](https://www.meatpi.com)
 ---
-# [Documentation](https://meatpihq.github.io/wican-fw/) | [Supported Vehicles](https://meatpihq.github.io/wican-fw/config/automate/supported_vehicles) | [Firmware updates](https://github.com/meatpiHQ/wican-fw/releases/) | [Discord server](https://discord.com/invite/2hpHVDmyfw)
+## [Documentation](https://meatpihq.github.io/wican-fw/) | [Supported Vehicles](https://meatpihq.github.io/wican-fw/config/automate/supported_vehicles) | [Firmware updates](https://github.com/meatpiHQ/wican-fw/releases/) | [Discord server](https://discord.com/invite/2hpHVDmyfw)
+
+## **WiCAN PRO Recommended**
+We **highly recommend** ordering the **WiCAN PRO** version because:
+- It features an **advanced OBD chip**, improving compatibility with a wider range of vehicles.
+- You’ll receive **access to the latest features** and **firmware updates**.
+- It offers **better long-term support** compared to the standard WiCAN **because of memory limitations on the original WiCAN hardware**.
 
 ## Order on [**Mouser**](https://www.mouser.com/c/?m=MeatPi) or [**Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics)
 

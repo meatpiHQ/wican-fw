@@ -1,0 +1,13 @@
+{
+  "car_model": "Skoda: Karoq",
+  "init": "ATSP6;",
+  "pids": [
+    {
+      "pid": "2210E0",
+      "pid_init": "ATSH7E0;",
+      "parameters": {
+        "ODOMETER": "[B8:B11]"
+      }
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "car_model": "Opel: Astra",
+  "init": "ATSP6;ATST96;ATSH79B;ATFCSH79B;ATFCSD300000;ATFCSM1;",
+  "extends": "fiat/600e.json"
+}

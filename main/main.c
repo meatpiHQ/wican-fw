@@ -56,6 +56,8 @@
 #include "wc_mdns.h"
 #include "hw_config.h"
 #include "dev_status.h"
+#include "debug_logs.h"
+#include "debug_logs_config.h"
 
 #define TAG 		__func__
 
@@ -78,6 +80,8 @@ static uint8_t uid[16];
 static uint8_t ble_uid[33];
 static char hardware_version[16];
 static char firmware_version[10];
+// Wrapper so we can provide a function pointer for network readiness
+static bool dbg_net_ready(void) { return wifi_network_is_connected(); }
 
 static void log_can_to_mqtt(twai_message_t *frame, uint8_t type)
 {
@@ -623,5 +627,8 @@ void app_main(void)
 //     esp_log_level_set("esp-tls", ESP_LOG_VERBOSE);
 //     esp_log_level_set("transport", ESP_LOG_VERBOSE);
 //     esp_log_level_set("outbox", ESP_LOG_VERBOSE);
+
+	// debug_logs_init(dbg_net_ready);
+	// DEBUG_LOGI("INIT", "debug_logs initialized (UDP %s:%d) waiting for WiFi", DEBUG_LOGS_UDP_DEST_IP, DEBUG_LOGS_UDP_PORT);`
 }
 

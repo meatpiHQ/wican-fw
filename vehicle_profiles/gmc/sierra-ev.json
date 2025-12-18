@@ -1,0 +1,48 @@
+{
+  "car_model": "GMC: Sierra EV",
+  "init": "ATSP6;ATST64;",
+  "pids": [
+    {
+      "pid": "2227C6",
+      "pid_init": "ATSH14DACBF1;ATCRA142AF1CB;",
+      "parameters": {
+        "SOC": "[B4:B5]/655.35"
+      }
+    },
+    {
+      "pid": "2227AF",
+      "pid_init": "ATSH14DACBF1;ATCRA142AF1CB;",
+      "parameters": {
+        "HV_CAPACITY_R": "[B4:B5]/100"
+      }
+    },
+    {
+      "pid": "220046",
+      "pid_init": "ATSH14DACBF1;ATCRA142AF1CB;",
+      "parameters": {
+        "TMP_A": "(B4-40)*1.8+32"
+      }
+    },
+    {
+      "pid": "2227C7",
+      "pid_init": "ATSH14DACBF1;ATCRA142AF1CB;",
+      "parameters": {
+        "RANGE": "[B4:B6]/103"
+      }
+    },
+    {
+      "pid": "225401",
+      "pid_init": "ATSH14DACBF1;ATCRA142AF1CB;",
+      "parameters": {
+        "CHARGER_DC_PWR": "[B4:B5]/4350"
+      }
+    },
+    {
+      "pid": "2227C0",
+      "pid_init": "ATSH14DACBF1;ATCRA142AF1CB;",
+      "parameters": {
+        "DIST_SINCE_FULL_CHARGE": "[B4:B6]/16.09344"
+      }
+    }
+  ]
+}
