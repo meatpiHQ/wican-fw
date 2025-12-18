@@ -3144,6 +3144,25 @@
       ]
     },
     {
+      "car_model": "Mini Cooper: SE Electric",
+      "init": "ATSP6;ATS0;ATM0;ATAT1;ATCEA07;ATTAF1;ATFCSH6F1;ATSH6F1;ATFCSD07300000;ATFCSM1;ATCRA607;",
+      "pids": [
+        {
+          "pid": "22DDBC3",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "[B11:B12]/10",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Mitsubishi: iMiEV/Outlander-PHEV",
       "init": "ATSP6;ATFCSH761;ATFCSD300000;ATFCSM1;ATSH761;ATCRA762;",
       "pids": [
