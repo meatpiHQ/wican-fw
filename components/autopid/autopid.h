@@ -21,6 +21,9 @@
 #ifndef __AUTO_PID_H__
 #define __AUTO_PID_H__
 
+#include <stdbool.h>
+#include <stdint.h>
+
 #define AUTOPID_BUFFER_SIZE (1024*4)
 #define QUEUE_SIZE 10
 
@@ -127,10 +130,23 @@ typedef struct
     char* rxheader;
 }pid_data_t;
 
+// CAN filter configuration (broadcast frames parsing)
+// Each filter refers to one CAN frame ID that may yield multiple parameters.
+typedef struct
+{
+    uint32_t frame_id;
+    bool is_extended; // inferred: frame_id > 0x7FF
+    parameter_t *parameters;
+    uint32_t parameters_count;
+} can_filter_t;
+
 typedef struct 
 {
     pid_data_t *pids;
     uint32_t pid_count;
+    // CAN filters (broadcast frames)
+    can_filter_t *can_filters;
+    uint32_t can_filters_count;
     char* custom_init;
     char* standard_init;
     char* specific_init;
