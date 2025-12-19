@@ -1434,18 +1434,6 @@ static void elm327_uart_log_tx_bytes(uart_port_t uart_num, const uint8_t *data, 
 		{
 			s_elm_tx_buf[s_elm_tx_len] = 0;
 			elm327_trim_trailing_spaces(s_elm_tx_buf, &s_elm_tx_len);
-			// If command length is odd and ends with a digit, drop that suffix.
-			// (Some clients append an expected-response count as the last digit.)
-			if ((s_elm_tx_len & 1U) == 1U)
-			{
-				char last = s_elm_tx_buf[s_elm_tx_len - 1];
-				if (last >= '0' && last <= '9')
-				{
-					s_elm_tx_len--;
-					s_elm_tx_buf[s_elm_tx_len] = 0;
-					elm327_trim_trailing_spaces(s_elm_tx_buf, &s_elm_tx_len);
-				}
-			}
 			if (s_elm_tx_len > 0)
 			{
 				elm327_emit_line("ELM TX: ", s_elm_tx_buf, false);
