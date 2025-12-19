@@ -28,6 +28,7 @@
 #define APSTA_MODE			1
 #define SMARTCONNECT_MODE	2
 #define BLESTA_MODE         3
+#define STA_MODE            4
 
 #define CAN_5K				0
 #define CAN_10K				1

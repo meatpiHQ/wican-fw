@@ -295,6 +295,10 @@ int8_t config_server_get_wifi_mode(void)
 	{
 		return BLESTA_MODE;
 	}
+	else if(strcmp(device_config.wifi_mode, "Station") == 0)
+	{
+		return STA_MODE;
+	}
 	else if(strcmp(device_config.wifi_mode, "SmartConnect") == 0)
 	{
 		return SMARTCONNECT_MODE;

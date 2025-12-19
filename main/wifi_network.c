@@ -82,6 +82,10 @@ void wifi_network_init(char* ap_ssid_uid)
         wifi_config = (wifi_mgr_config_t)WIFI_MGR_DEFAULT_CONFIG();
         wifi_config.mode = WIFI_MGR_MODE_STA; // STA only, BLE handled elsewhere
         ESP_LOGI(TAG, "Configuring BLE+STA mode (STA-only WiFi)");
+    } else if (wifi_mode == STA_MODE) {
+        wifi_config = (wifi_mgr_config_t)WIFI_MGR_DEFAULT_CONFIG();
+        wifi_config.mode = WIFI_MGR_MODE_STA; // STA only
+        ESP_LOGI(TAG, "Configuring Station-only mode (STA-only WiFi)");
     } else {
         // Default to AUTO mode
         wifi_config = (wifi_mgr_config_t)WIFI_MGR_AUTO_CONFIG();
@@ -179,7 +183,7 @@ void wifi_network_init(char* ap_ssid_uid)
     }
     
     ESP_LOGI(TAG, "  WiFi Configuration from Config Server:");
-    ESP_LOGI(TAG, "   - WiFi Mode: %d (AP=0, APSTA=1, SMARTCONNECT=2)", wifi_mode);
+    ESP_LOGI(TAG, "   - WiFi Mode: %d (AP=0, APSTA=1, SMARTCONNECT=2, BLESTA=3, STA=4)", wifi_mode);
     ESP_LOGI(TAG, "   - Manager Mode: %d (OFF=0, STA=1, AP=2, APSTA=3, AUTO=4)", wifi_config.mode);
     ESP_LOGI(TAG, "   - STA SSID: %s", wifi_config.sta_ssid);
     ESP_LOGI(TAG, "   - STA Auth Mode: %d", wifi_config.sta_auth_mode);

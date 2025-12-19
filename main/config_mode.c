@@ -70,16 +70,14 @@ void config_mode_task(void *pvParameters)
         {
             if (++hold_seconds >= CONFIG_MODE_HOLD_SECONDS)
             {
-                if (dev_status_is_bit_set(DEV_BLE_ENABLED_BIT))
-                {
-                    ESP_LOGI(TAG, "Disabling BLE and entering config mode");
-                    ble_disable();
-                    ESP_LOGI(TAG, "Switching WiFi to AP+STA mode for configuration");
-                    wifi_mgr_set_ap_auto_disable(false);
-                    wifi_mgr_set_mode(WIFI_MGR_MODE_APSTA);
-                    wifi_mgr_enable();
-                    in_config_mode = true;
-                }
+                ESP_LOGI(TAG, "Disabling BLE and entering config mode");
+                ble_disable();
+                ESP_LOGI(TAG, "Switching WiFi to AP+STA mode for configuration");
+                wifi_mgr_set_ap_auto_disable(false);
+                wifi_mgr_set_mode(WIFI_MGR_MODE_APSTA);
+                wifi_mgr_enable();
+                in_config_mode = true;
+
                 hold_seconds = 0; // Avoid repeated triggers while holding
             }
         }
