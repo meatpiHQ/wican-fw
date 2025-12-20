@@ -24,7 +24,7 @@
 #include "autopid.h"
 
 // Internal config loader used by autopid.c
-all_pids_t* load_all_pids(void);
+autopid_config_t* load_autopid_config(void);
 
 
 #endif // __AUTO_PID_CONFIG_H__

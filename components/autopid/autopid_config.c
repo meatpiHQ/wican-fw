@@ -342,9 +342,9 @@ static int count_auto_pid_pids(void)
     return count;
 }
 
-static void parse_auto_pid_json(all_pids_t *all_pids, int *pid_index)
+static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index)
 {
-    if (!all_pids || !pid_index)
+    if (!autopid_config || !pid_index)
         return;
 
     cJSON *root = load_json_root_from_mount("auto_pid.json");
@@ -369,60 +369,60 @@ static void parse_auto_pid_json(all_pids_t *all_pids, int *pid_index)
 
     if (init_item && init_item->valuestring)
     {
-        all_pids->custom_init = normalize_init_string(init_item->valuestring);
+        autopid_config->custom_init = normalize_init_string(init_item->valuestring);
     }
     else
     {
-        all_pids->custom_init = NULL;
+        autopid_config->custom_init = NULL;
     }
 
-    all_pids->grouping = (grouping_item && grouping_item->valuestring && strlen(grouping_item->valuestring) > 1) ? strdup_psram(grouping_item->valuestring) : strdup_psram("disable");
-    all_pids->webhook_data_mode = (webhook_data_mode_item && webhook_data_mode_item->valuestring && strlen(webhook_data_mode_item->valuestring) > 1) ? strdup_psram(webhook_data_mode_item->valuestring) : strdup_psram("changed");
-    all_pids->vehicle_model = car_model_item ? strdup_psram(car_model_item->valuestring) : NULL;
-    all_pids->std_ecu_protocol = ecu_protocol_item ? strdup_psram(ecu_protocol_item->valuestring) : NULL;
-    all_pids->ha_discovery_en = ha_discovery_item ? (strcmp(ha_discovery_item->valuestring, "enable") == 0) : false;
+    autopid_config->grouping = (grouping_item && grouping_item->valuestring && strlen(grouping_item->valuestring) > 1) ? strdup_psram(grouping_item->valuestring) : strdup_psram("disable");
+    autopid_config->webhook_data_mode = (webhook_data_mode_item && webhook_data_mode_item->valuestring && strlen(webhook_data_mode_item->valuestring) > 1) ? strdup_psram(webhook_data_mode_item->valuestring) : strdup_psram("changed");
+    autopid_config->vehicle_model = car_model_item ? strdup_psram(car_model_item->valuestring) : NULL;
+    autopid_config->std_ecu_protocol = ecu_protocol_item ? strdup_psram(ecu_protocol_item->valuestring) : NULL;
+    autopid_config->ha_discovery_en = ha_discovery_item ? (strcmp(ha_discovery_item->valuestring, "enable") == 0) : false;
 
     if (cycle_item && cycle_item->valuestring && strlen(cycle_item->valuestring) > 0)
-        all_pids->cycle = atoi(cycle_item->valuestring);
+        autopid_config->cycle = atoi(cycle_item->valuestring);
     else if (cycle_item && cycle_item->valueint)
-        all_pids->cycle = cycle_item->valueint;
+        autopid_config->cycle = cycle_item->valueint;
     else
-        all_pids->cycle = 10000;
+        autopid_config->cycle = 10000;
 
-    all_pids->pid_std_en = standard_pids_item ? (strcmp(standard_pids_item->valuestring, "enable") == 0) : false;
-    all_pids->pid_specific_en = specific_pids_item ? (strcmp(specific_pids_item->valuestring, "enable") == 0) : false;
-    all_pids->group_destination = group_destination_item ? strdup_psram(group_destination_item->valuestring) : NULL;
+    autopid_config->pid_std_en = standard_pids_item ? (strcmp(standard_pids_item->valuestring, "enable") == 0) : false;
+    autopid_config->pid_specific_en = specific_pids_item ? (strcmp(specific_pids_item->valuestring, "enable") == 0) : false;
+    autopid_config->group_destination = group_destination_item ? strdup_psram(group_destination_item->valuestring) : NULL;
     // Map legacy group_dest_type to enum (for backward compatibility)
     if (group_dest_type_item && group_dest_type_item->valuestring)
     {
-        all_pids->group_destination_type = destination_type_from_string(group_dest_type_item->valuestring);
+        autopid_config->group_destination_type = destination_type_from_string(group_dest_type_item->valuestring);
     }
     else
     {
-        all_pids->group_destination_type = DEST_DEFAULT;
+        autopid_config->group_destination_type = DEST_DEFAULT;
     }
 
     // Parse new destinations array (up to a reasonable max, e.g. 6)
-    all_pids->destinations = NULL;
-    all_pids->destinations_count = 0;
+    autopid_config->destinations = NULL;
+    autopid_config->destinations_count = 0;
     if (destinations_array && cJSON_IsArray(destinations_array))
     {
         int count = cJSON_GetArraySize(destinations_array);
         if (count > 0)
         {
-            all_pids->destinations = (group_destination_t *)heap_caps_calloc(
+            autopid_config->destinations = (group_destination_t *)heap_caps_calloc(
                 count,
                 sizeof(group_destination_t),
                 MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
-            if (all_pids->destinations)
+            if (autopid_config->destinations)
             {
-                all_pids->destinations_count = count;
+                autopid_config->destinations_count = count;
                 for (int di = 0; di < count; di++)
                 {
                     cJSON *d = cJSON_GetArrayItem(destinations_array, di);
                     if (!d)
                         continue;
-                    group_destination_t *gd = &all_pids->destinations[di];
+                    group_destination_t *gd = &autopid_config->destinations[di];
                     cJSON *type_item = cJSON_GetObjectItem(d, "type");
                     cJSON *dest_item = cJSON_GetObjectItem(d, "destination");
                     cJSON *cycle_item2 = cJSON_GetObjectItem(d, "cycle");
@@ -558,78 +558,78 @@ static void parse_auto_pid_json(all_pids_t *all_pids, int *pid_index)
 
                 // Compact array: keep only entries with valid destination and enabled
                 uint32_t write_idx = 0;
-                for (uint32_t read_idx = 0; read_idx < all_pids->destinations_count; ++read_idx)
+                for (uint32_t read_idx = 0; read_idx < autopid_config->destinations_count; ++read_idx)
                 {
-                    group_destination_t *src = &all_pids->destinations[read_idx];
+                    group_destination_t *src = &autopid_config->destinations[read_idx];
                     if (src->enabled && src->destination && strlen(src->destination) > 0)
                     {
                         if (write_idx != read_idx)
                         {
-                            all_pids->destinations[write_idx] = *src;
+                            autopid_config->destinations[write_idx] = *src;
                             memset(src, 0, sizeof(group_destination_t));
                         }
                         write_idx++;
                     }
                 }
-                all_pids->destinations_count = write_idx;
+                autopid_config->destinations_count = write_idx;
             }
         }
     }
     else
     {
         // No new destinations array: fabricate one from legacy fields if present
-        if (all_pids->group_destination || group_dest_type_item)
+        if (autopid_config->group_destination || group_dest_type_item)
         {
-            all_pids->destinations = (group_destination_t *)heap_caps_calloc(
+            autopid_config->destinations = (group_destination_t *)heap_caps_calloc(
                 1,
                 sizeof(group_destination_t),
                 MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
-            if (all_pids->destinations)
+            if (autopid_config->destinations)
             {
-                all_pids->destinations_count = 1;
-                all_pids->destinations[0].type = all_pids->group_destination_type;
-                all_pids->destinations[0].destination = all_pids->group_destination ? strdup_psram(all_pids->group_destination) : NULL;
-                if (all_pids->destinations[0].destination && (all_pids->destinations[0].type == DEST_HTTP || all_pids->destinations[0].type == DEST_HTTPS))
+                autopid_config->destinations_count = 1;
+                autopid_config->destinations[0].type = autopid_config->group_destination_type;
+                autopid_config->destinations[0].destination = autopid_config->group_destination ? strdup_psram(autopid_config->group_destination) : NULL;
+                if (autopid_config->destinations[0].destination && (autopid_config->destinations[0].type == DEST_HTTP || autopid_config->destinations[0].type == DEST_HTTPS))
                 {
-                    bool has_http = (strncmp(all_pids->destinations[0].destination, "http://", 7) == 0);
-                    bool has_https = (strncmp(all_pids->destinations[0].destination, "https://", 8) == 0);
+                    bool has_http = (strncmp(autopid_config->destinations[0].destination, "http://", 7) == 0);
+                    bool has_https = (strncmp(autopid_config->destinations[0].destination, "https://", 8) == 0);
                     if (!has_http && !has_https)
                     {
-                        const char *prefix = (all_pids->destinations[0].type == DEST_HTTPS) ? "https://" : "http://";
-                        size_t new_len = strlen(prefix) + strlen(all_pids->destinations[0].destination) + 1;
+                        const char *prefix = (autopid_config->destinations[0].type == DEST_HTTPS) ? "https://" : "http://";
+                        size_t new_len = strlen(prefix) + strlen(autopid_config->destinations[0].destination) + 1;
                         char *with_prefix = (char *)heap_caps_malloc(new_len, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
                         if (with_prefix)
                         {
                             strcpy(with_prefix, prefix);
-                            strcat(with_prefix, all_pids->destinations[0].destination);
-                            free(all_pids->destinations[0].destination);
-                            all_pids->destinations[0].destination = with_prefix;
+                            strcat(with_prefix, autopid_config->destinations[0].destination);
+                            free(autopid_config->destinations[0].destination);
+                            autopid_config->destinations[0].destination = with_prefix;
                         }
                     }
                 }
-                all_pids->destinations[0].cycle = all_pids->cycle;
-                if (all_pids->destinations[0].cycle == 0)
+                autopid_config->destinations[0].cycle = autopid_config->cycle;
+                if (autopid_config->destinations[0].cycle == 0)
                 {
-                    all_pids->destinations[0].cycle = 10000;
+                    autopid_config->destinations[0].cycle = 10000;
                 }
-                all_pids->destinations[0].api_token = group_api_token_item && group_api_token_item->valuestring ? strdup_psram(group_api_token_item->valuestring) : NULL;
-                all_pids->destinations[0].cert_set = strdup_psram("default");
-                all_pids->destinations[0].enabled = false;
-                if ((all_pids->destinations[0].type == DEST_HTTP || all_pids->destinations[0].type == DEST_HTTPS) && all_pids->destinations[0].api_token)
+                autopid_config->destinations[0].api_token = group_api_token_item && group_api_token_item->valuestring ? strdup_psram(group_api_token_item->valuestring) : NULL;
+                autopid_config->destinations[0].cert_set = strdup_psram("default");
+                autopid_config->destinations[0].enabled = false;
+                if ((autopid_config->destinations[0].type == DEST_HTTP || autopid_config->destinations[0].type == DEST_HTTPS) && autopid_config->destinations[0].api_token)
                 {
-                    all_pids->destinations[0].auth.type = DEST_AUTH_BEARER;
-                    all_pids->destinations[0].auth.bearer = strdup_psram(all_pids->destinations[0].api_token);
+                    autopid_config->destinations[0].auth.type = DEST_AUTH_BEARER;
+                    autopid_config->destinations[0].auth.bearer = strdup_psram(autopid_config->destinations[0].api_token);
                 }
                 else
                 {
-                    all_pids->destinations[0].auth.type = DEST_AUTH_NONE;
+                    autopid_config->destinations[0].auth.type = DEST_AUTH_NONE;
                 }
-                all_pids->destinations[0].publish_timer = 0;
-                all_pids->destinations[0].consec_failures = 0;
-                all_pids->destinations[0].backoff_ms = 0;
-                if (!all_pids->destinations[0].destination || strlen(all_pids->destinations[0].destination) == 0)
+                autopid_config->destinations[0].publish_timer = 0;
+                autopid_config->destinations[0].consec_failures = 0;
+                autopid_config->destinations[0].backoff_ms = 0;
+                if (!autopid_config->destinations[0].destination || strlen(autopid_config->destinations[0].destination) == 0)
                 {
-                    all_pids->destinations_count = 0;
+                    autopid_config->destinations_count = 0;
                 }
             }
         }
@@ -642,7 +642,7 @@ static void parse_auto_pid_json(all_pids_t *all_pids, int *pid_index)
         cJSON *pid;
         cJSON_ArrayForEach(pid, pids)
         {
-            pid_data_t *curr_pid = &all_pids->pids[idx];
+            pid_data_t *curr_pid = &autopid_config->pids[idx];
 
             cJSON *init_item2 = cJSON_GetObjectItem(pid, "Init");
             cJSON *pid_item = cJSON_GetObjectItem(pid, "PID");
@@ -651,7 +651,7 @@ static void parse_auto_pid_json(all_pids_t *all_pids, int *pid_index)
 
             if (cJSON_GetArraySize(pids) > 0)
             {
-                all_pids->pid_custom_en = true;
+                autopid_config->pid_custom_en = true;
             }
 
             curr_pid->cmd = pid_item ? (char *)heap_caps_malloc(strlen(pid_item->valuestring) + 2, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM) : NULL;
@@ -707,7 +707,7 @@ static void parse_auto_pid_json(all_pids_t *all_pids, int *pid_index)
         cJSON *pid;
         cJSON_ArrayForEach(pid, std_pids)
         {
-            pid_data_t *curr_pid = &all_pids->pids[idx];
+            pid_data_t *curr_pid = &autopid_config->pids[idx];
             curr_pid->pid_type = PID_STD;
 
             char std_init_buf[64];
@@ -743,12 +743,12 @@ static void parse_auto_pid_json(all_pids_t *all_pids, int *pid_index)
 
                 curr_pid->rxheader = rxheader_item ? strdup_psram(rxheader_item->valuestring) : NULL;
 
-                if (all_pids->std_ecu_protocol)
+                if (autopid_config->std_ecu_protocol)
                 {
-                    is_protocol_68 = (strcmp(all_pids->std_ecu_protocol, "6") == 0 ||
-                                      strcmp(all_pids->std_ecu_protocol, "8") == 0);
-                    is_protocol_79 = (strcmp(all_pids->std_ecu_protocol, "7") == 0 ||
-                                      strcmp(all_pids->std_ecu_protocol, "9") == 0);
+                    is_protocol_68 = (strcmp(autopid_config->std_ecu_protocol, "6") == 0 ||
+                                      strcmp(autopid_config->std_ecu_protocol, "8") == 0);
+                    is_protocol_79 = (strcmp(autopid_config->std_ecu_protocol, "7") == 0 ||
+                                      strcmp(autopid_config->std_ecu_protocol, "9") == 0);
                 }
 
                 if (is_protocol_68)
@@ -765,18 +765,18 @@ static void parse_auto_pid_json(all_pids_t *all_pids, int *pid_index)
                     if (curr_pid->rxheader != NULL && strlen(curr_pid->rxheader) > 0)
                     {
                         snprintf(std_init_buf, sizeof(std_init_buf), "ATTP%s\rATSH%s\rATCRA%s\r",
-                                 all_pids->std_ecu_protocol, sh_value, curr_pid->rxheader);
+                                 autopid_config->std_ecu_protocol, sh_value, curr_pid->rxheader);
                     }
                     else
                     {
                         snprintf(std_init_buf, sizeof(std_init_buf), "ATTP%s\rATSH%s\rATCRA\r",
-                                 all_pids->std_ecu_protocol, sh_value);
+                                 autopid_config->std_ecu_protocol, sh_value);
                     }
-                    all_pids->standard_init = strdup_psram(std_init_buf);
+                    autopid_config->standard_init = strdup_psram(std_init_buf);
                 }
                 else
                 {
-                    all_pids->standard_init = strdup_psram("ATTP0\r  ");
+                    autopid_config->standard_init = strdup_psram("ATTP0\r  ");
                 }
 
                 if (curr_pid->parameters->name != NULL && strlen(curr_pid->parameters->name) > 0)
@@ -813,9 +813,9 @@ static void parse_auto_pid_json(all_pids_t *all_pids, int *pid_index)
     cJSON_Delete(root);
 }
 
-static void parse_car_data_json(all_pids_t *all_pids, int *pid_index)
+static void parse_car_data_json(autopid_config_t *autopid_config, int *pid_index)
 {
-    if (!all_pids || !pid_index)
+    if (!autopid_config || !pid_index)
         return;
 
     cJSON *root = load_json_root_from_mount("car_data.json");
@@ -833,8 +833,8 @@ static void parse_car_data_json(all_pids_t *all_pids, int *pid_index)
             cJSON *init_item = cJSON_GetObjectItem(car, "init");
             if (init_item && cJSON_IsString(init_item) && init_item->valuestring)
             {
-                all_pids->specific_init = normalize_init_string(init_item->valuestring);
-                ESP_LOGI(TAG, "car_data init='%s' -> specific_init=%p", init_item->valuestring, (void *)all_pids->specific_init);
+                autopid_config->specific_init = normalize_init_string(init_item->valuestring);
+                ESP_LOGI(TAG, "car_data init='%s' -> specific_init=%p", init_item->valuestring, (void *)autopid_config->specific_init);
             }
             else
             {
@@ -847,10 +847,10 @@ static void parse_car_data_json(all_pids_t *all_pids, int *pid_index)
                 int filter_count = cJSON_GetArraySize(can_filters);
                 if (filter_count > 0)
                 {
-                    all_pids->can_filters = (can_filter_t *)heap_caps_calloc(filter_count, sizeof(can_filter_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
-                    if (all_pids->can_filters)
+                    autopid_config->can_filters = (can_filter_t *)heap_caps_calloc(filter_count, sizeof(can_filter_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
+                    if (autopid_config->can_filters)
                     {
-                        all_pids->can_filters_count = (uint32_t)filter_count;
+                        autopid_config->can_filters_count = (uint32_t)filter_count;
                         for (int fi = 0; fi < filter_count; fi++)
                         {
                             cJSON *filter = cJSON_GetArrayItem(can_filters, fi);
@@ -862,8 +862,8 @@ static void parse_car_data_json(all_pids_t *all_pids, int *pid_index)
                             uint32_t frame_id = 0;
                             if (parse_frame_id(cJSON_GetObjectItem(filter, "frame_id"), &frame_id))
                             {
-                                all_pids->can_filters[fi].frame_id = frame_id;
-                                all_pids->can_filters[fi].is_extended = (frame_id > 0x7FF);
+                                autopid_config->can_filters[fi].frame_id = frame_id;
+                                autopid_config->can_filters[fi].is_extended = (frame_id > 0x7FF);
                             }
 
                             cJSON *params = cJSON_GetObjectItem(filter, "parameters");
@@ -872,9 +872,9 @@ static void parse_car_data_json(all_pids_t *all_pids, int *pid_index)
                                 int param_count = cJSON_GetArraySize(params);
                                 if (param_count > 0)
                                 {
-                                    all_pids->can_filters[fi].parameters_count = (uint32_t)param_count;
-                                    all_pids->can_filters[fi].parameters = (parameter_t *)heap_caps_calloc(param_count, sizeof(parameter_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
-                                    if (all_pids->can_filters[fi].parameters)
+                                    autopid_config->can_filters[fi].parameters_count = (uint32_t)param_count;
+                                    autopid_config->can_filters[fi].parameters = (parameter_t *)heap_caps_calloc(param_count, sizeof(parameter_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
+                                    if (autopid_config->can_filters[fi].parameters)
                                     {
                                         cJSON *param;
                                         int pi = 0;
@@ -887,7 +887,7 @@ static void parse_car_data_json(all_pids_t *all_pids, int *pid_index)
                                             }
 
                                             parse_parameter_object(
-                                                &all_pids->can_filters[fi].parameters[pi],
+                                                &autopid_config->can_filters[fi].parameters[pi],
                                                 param,
                                                 "name",
                                                 "expression",
@@ -905,7 +905,7 @@ static void parse_car_data_json(all_pids_t *all_pids, int *pid_index)
                                     }
                                     else
                                     {
-                                        all_pids->can_filters[fi].parameters_count = 0;
+                                        autopid_config->can_filters[fi].parameters_count = 0;
                                     }
                                 }
                             }
@@ -920,7 +920,7 @@ static void parse_car_data_json(all_pids_t *all_pids, int *pid_index)
                 cJSON *pid;
                 cJSON_ArrayForEach(pid, pids)
                 {
-                    pid_data_t *curr_pid = &all_pids->pids[idx];
+                    pid_data_t *curr_pid = &autopid_config->pids[idx];
                     cJSON *pid_item = cJSON_GetObjectItem(pid, "pid");
                     cJSON *pid_init_item = cJSON_GetObjectItem(pid, "pid_init");
 
@@ -979,7 +979,7 @@ static void parse_car_data_json(all_pids_t *all_pids, int *pid_index)
                                 "type");
                             if (curr_pid->parameters[param_index].period == 0)
                             {
-                                curr_pid->parameters[param_index].period = all_pids->cycle;
+                                curr_pid->parameters[param_index].period = autopid_config->cycle;
                             }
                             param_index++;
                         }
@@ -995,7 +995,7 @@ static void parse_car_data_json(all_pids_t *all_pids, int *pid_index)
     cJSON_Delete(root);
 }
 
-all_pids_t *load_all_pids(void)
+autopid_config_t *load_autopid_config(void)
 {
     int total_pids = 0;
     int car_data_pids = 0;
@@ -1007,34 +1007,34 @@ all_pids_t *load_all_pids(void)
     total_pids = car_data_pids + auto_pids;
 
     ESP_LOGI(TAG, "Allocating memory for %d pids...", total_pids);
-    all_pids_t *all_pids = (all_pids_t *)heap_caps_calloc(1, sizeof(all_pids_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
-    if (!all_pids)
+    autopid_config_t *autopid_config = (autopid_config_t *)heap_caps_calloc(1, sizeof(autopid_config_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
+    if (!autopid_config)
         return NULL;
 
-    all_pids->last_successful_pid_time = 0;
-    all_pids->can_filters = NULL;
-    all_pids->can_filters_count = 0;
+    autopid_config->last_successful_pid_time = 0;
+    autopid_config->can_filters = NULL;
+    autopid_config->can_filters_count = 0;
 
     if (total_pids == 0)
     {
         ESP_LOGE(TAG, "No PIDs found in car_data.json or auto_pid.json");
-        return all_pids;
+        return autopid_config;
     }
 
-    all_pids->pids = (pid_data_t *)heap_caps_calloc(total_pids, sizeof(pid_data_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
-    if (!all_pids->pids)
+    autopid_config->pids = (pid_data_t *)heap_caps_calloc(total_pids, sizeof(pid_data_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
+    if (!autopid_config->pids)
     {
-        free(all_pids);
+        free(autopid_config);
         return NULL;
     }
     int pid_index = 0;
 
     ESP_LOGI(TAG, "Loading auto_pid.json pids...");
-    parse_auto_pid_json(all_pids, &pid_index);
+    parse_auto_pid_json(autopid_config, &pid_index);
 
-    parse_car_data_json(all_pids, &pid_index);
+    parse_car_data_json(autopid_config, &pid_index);
 
-    all_pids->pid_count = total_pids;
+    autopid_config->pid_count = total_pids;
 
-    return all_pids;
+    return autopid_config;
 }
