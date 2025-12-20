@@ -564,39 +564,77 @@ async function scanAvailablePIDs() {
 }
 
 const pidEntryStyles = `
+    .pid-entry,
+    .std-pid-entry,
+    .specific-pid-entry,
+    .custom-canfilter-entry,
+    .specific-canfilter-entry {
+        border: 1px solid #e2e8f0;
+        background: #fff;
+        border-radius: 6px;
+        margin-bottom: 8px;
+    }
+
     .pid-header {
         display: flex;
-        justify-content: space-between;
         align-items: center;
-        margin-bottom: 0.5rem;
-        margin-top: 0.5rem;
-        border: 2px solid var(--gray-300);
-        border-radius: 8px;
+        justify-content: space-between;
+        cursor: pointer;
+        padding: 6px 8px;
+        background: #f1f5f9;
+        border-radius: 6px 6px 0 0;
+        margin: 0;
+    }
+
+    .header-left {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .pid-title {
+        font-weight: 600;
+        font-size: 0.8rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1;
     }
     
     .header-right {
         display: flex;
         gap: 0.5rem;
+        align-items: center;
     }
     
     .collapse-btn {
-        background: none;
         border: none;
+        background: transparent;
+        font-size: 0.75rem;
         cursor: pointer;
-        font-size: 1.2rem;
-        padding: 0.25rem 0.5rem;
-        color: var(--gray-700);
+        padding: 2px 4px;
+        color: #334155;
     }
     
     .pid-content {
-        display: flex;
-        flex-direction: column;
-        gap: 1.5rem;
-        transition: height 0.3s ease;
+        padding: 8px 10px;
     }
     
     .pid-content.hidden {
         display: none;
+    }
+
+    .delete-btn {
+        background: #dc2626;
+        color: #fff;
+        border: none;
+        padding: 4px 8px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.65rem;
+        margin-left: 12px;
     }
 `;
 function addCollapsibleRow(rowData = {}) {
