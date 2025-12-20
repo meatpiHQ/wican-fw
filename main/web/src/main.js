@@ -1944,6 +1944,10 @@ function openTab(evt, tabName) {
     }
     document.getElementById(tabName).style.display = "block";
     evt.currentTarget.className += " active";
+
+    if (tabName === 'automate') {
+        try { ensureAutomateSubTabInitialized(); } catch(_) {}
+    }
     
     if (tabName === 'dashboard_tab') {
         loadDashboard();
@@ -1953,6 +1957,28 @@ function openTab(evt, tabName) {
         // Refresh status so the badge reflects the latest state
         try { checkStatus(); } catch(_) {}
     }
+}
+
+function openAutomateSubTab(evt, tabName) {
+    var i, tabcontent, tablinks;
+    tabcontent = document.getElementsByClassName("automate-subtabcontent");
+    for (i = 0; i < tabcontent.length; i++) {
+        tabcontent[i].style.display = "none";
+    }
+    tablinks = document.getElementsByClassName("automate-subtablinks");
+    for (i = 0; i < tablinks.length; i++) {
+        tablinks[i].className = tablinks[i].className.replace(" active", "");
+    }
+    var panel = document.getElementById(tabName);
+    if (panel) panel.style.display = "block";
+    if (evt && evt.currentTarget) evt.currentTarget.className += " active";
+}
+
+function ensureAutomateSubTabInitialized() {
+    var defaultButton = document.getElementById('automateSubDefaultOpen');
+    if (!defaultButton) return;
+    if (defaultButton.className.indexOf('active') !== -1) return;
+    defaultButton.click();
 }
 function sta_enable() {}
 

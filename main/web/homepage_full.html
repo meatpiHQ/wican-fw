@@ -10,6 +10,8 @@
             --primary-color: #24478f;
             --primary-light: #c2d1f0;
             --primary-dark: #1a3266;
+            --success-color: #059669;
+            --danger-color: #dc2626;
             --background-color: #f0f2f5;
             --white: #ffffff;
             --gray-100: #f7f7f7;
@@ -98,6 +100,41 @@
             background-color: var(--white);
             box-shadow: var(--shadow-md);
             margin-bottom: 1.5rem;
+        }
+
+        .automate-subtabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-top: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .automate-subtablinks {
+            border: 1px solid var(--gray-200);
+            background-color: var(--white);
+            color: var(--gray-700);
+            padding: 0.7rem 1.1rem;
+            min-height: 40px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+        .automate-subtablinks:hover {
+            background-color: var(--gray-100);
+            color: var(--primary-color);
+        }
+
+        .automate-subtablinks.active {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+            color: var(--white);
+        }
+
+        .automate-subtabcontent {
+            display: none;
         }
 
         .description-text {
@@ -199,6 +236,48 @@
             color: var(--primary-color);
             padding-bottom: 0.5rem;
             border-bottom: 2px solid var(--primary-light);
+        }
+
+        .section-title-row {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 1rem;
+            margin: 0 0 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--primary-light);
+        }
+
+        .section-title--no-underline {
+            margin: 0;
+            padding-bottom: 0;
+            border-bottom: 0;
+        }
+
+        .section-title-actions {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        #automate .success-button {
+            background-color: var(--success-color);
+            filter: none;
+        }
+
+        #automate .success-button:hover {
+            background-color: var(--success-color);
+            filter: brightness(0.92);
+        }
+
+        #automate .delete-btn {
+            background-color: var(--danger-color);
+            filter: none;
+        }
+
+        #automate .delete-btn:hover {
+            background-color: var(--danger-color);
+            filter: brightness(0.92);
         }
 
         .divider {
@@ -1178,119 +1257,139 @@
                     </div>
                 </div>
             </div>
-            <div class="section-title" style="margin-top:1rem;">Destinations</div>
+            <div class="section-title" style="margin-top:1rem;">User Destinations</div>
             <div id="destinations_section" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:6px; padding:0.75rem;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
                     <div style="font-weight:600;">Configured Destinations</div>
-                    <button id="add_destination_btn" class="primary-button" style="padding:4px 10px;" onclick="addDestinationEntry();submit_enable();">Add Destination</button>
+                    <button id="add_destination_btn" class="primary-button success-button" style="padding:4px 10px;" onclick="addDestinationEntry();submit_enable();">Add Destination</button>
                 </div>
                 <div id="destinations_container"></div>
                 <div style="font-size:0.7rem; color:#555; margin-top:0.5rem;">Cycle &ge; 1000 ms (or 0 for event). HTTPS requires a cert set (or 'default' embedded CA). ABRP_API requires a token. To add more certs go to System tab.</div>
             </div>
-            <div class="section-title">Standard PIDs</div>
-            <table class="form-table">
-                <tr>
-                    <td>Standard PIDs:</td>
-                    <td>
-                        <select id="standard_pids" name="standard_pids" onchange="toggleStandardPIDOptions();enableAutoStoreButton();submit_enable();">
-                            <option value="disable">Disable</option>
-                            <option value="enable">Enable</option>
-                        </select>
-                    </td>
-                </tr>
-                <tr>
-                    <td>ECU Protocol:</td>
-                    <td>
-                        <select id="ecu_protocol" name="ecu_protocol" onchange="enableAutoStoreButton();submit_enable();">
-                            <option value="0">0- Automatic</option>
-                            <option value="6">6- ISO 15765-4 (CAN 11bit/500K)</option>
-                            <option value="7">7- ISO 15765-4 (CAN 29bit/500K)</option>
-                            <option value="8">8- ISO 15765-4 (CAN 11bit/250K)</option>
-                            <option value="9">9- ISO 15765-4 (CAN 29bit/250K)</option>
-                        </select>
-                    </td>
-                </tr>
-                <tr>
-                    <td>Available PIDs:</td>
-                    <td style="display: flex; align-items: center; gap: 5px;">
-                        <select id="available_pids" name="available_pids" disabled 
-                                onchange="enableAutoStoreButton();submit_enable();" style="flex: 1;">
-                        </select>
-                        <button id="add_pid_button" onclick="addSelectedPID()" disabled style="margin-left: 5px;">Add PID</button>
-                        <button id="scan_pids_button" onclick="scanAvailablePIDs()" style="margin-left: 5px;">Scan PIDs</button>
-                    </td>
-                </tr>
-                
-            </table>
-            <div id="standard_pids_table">
-                <div class="std-pid-entries"></div>
+            <div class="section-title" style="margin-top:1rem;">Automate Parameters</div>
+            <div class="automate-subtabs">
+                <button class="automate-subtablinks" id="automateSubDefaultOpen" onclick="openAutomateSubTab(event, 'automate_std')">Standard PIDs</button>
+                <button class="automate-subtablinks" onclick="openAutomateSubTab(event, 'automate_vehicle')">Vehicle Specific</button>
+                <button class="automate-subtablinks" onclick="openAutomateSubTab(event, 'automate_custom')">User Custom</button>
             </div>
-            <div class="section-title">Vehicle Specific</div>
-            <table class="form-table">
-                <tr>
-                    <td>Vehicle Specific:</td>
-                    <td>
-                        <select id="car_specific" name="car_specific" onchange="toggleCarModel(); enableAutoStoreButton();submit_enable();">
-                            <option value="disable">Disable</option>
-                            <option value="enable">Enable</option>
-                        </select>
-                    </td>
-                </tr>
-                <tr>
-                    <td>Vehicle Model:</td>
-                    <td style="display: flex; align-items: center; gap: 5px;">
-                        <select id="car_model" name="car_model" onchange="enableAutoStoreButton();submit_enable();" style="flex: 1;"></select>
-                        <button onclick="fetchVehicleProfiles()" style="margin-left: 5px;">Get Latest</button>
-                    </td>
-                </tr>
-                <tr>
-                    <td>Vehicle Profiles:</td>
-                    <td>
-                        <form id="car_data_form" enctype="multipart/form-data">
-                            <input id="car_data_file" name="car_data_file" type="file" onchange="loadLocalCarModels();submit_enable();" />
-                        </form>
-                    </td>
-                </tr>
-                <tr>
-                    <td>Specific Initialisation:</td>
-                    <td>
-                        <input type="text" id="specific_init" name="specific_init" oninput="enableAutoStoreButton()">
-                    </td>
-                </tr>
-            </table>
-
-            <div id="specific_pids_table">
-                <div class="specific-pid-entries"></div>
+            <div id="automate_std" class="automate-subtabcontent">
+                <div class="section-title">Standard PIDs</div>
+                <table class="form-table">
+                    <tr>
+                        <td>Standard PIDs:</td>
+                        <td>
+                            <select id="standard_pids" name="standard_pids" onchange="toggleStandardPIDOptions();enableAutoStoreButton();submit_enable();">
+                                <option value="disable">Disable</option>
+                                <option value="enable">Enable</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>ECU Protocol:</td>
+                        <td>
+                            <select id="ecu_protocol" name="ecu_protocol" onchange="enableAutoStoreButton();submit_enable();">
+                                <option value="0">0- Automatic</option>
+                                <option value="6">6- ISO 15765-4 (CAN 11bit/500K)</option>
+                                <option value="7">7- ISO 15765-4 (CAN 29bit/500K)</option>
+                                <option value="8">8- ISO 15765-4 (CAN 11bit/250K)</option>
+                                <option value="9">9- ISO 15765-4 (CAN 29bit/250K)</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Available PIDs:</td>
+                        <td style="display: flex; align-items: center; gap: 5px;">
+                            <select id="available_pids" name="available_pids" disabled 
+                                    onchange="enableAutoStoreButton();submit_enable();" style="flex: 1;">
+                            </select>
+                            <button id="add_pid_button" onclick="addSelectedPID()" disabled style="margin-left: 5px;">Add PID</button>
+                            <button id="scan_pids_button" onclick="scanAvailablePIDs()" class="success-button" style="margin-left: 5px;">Scan PIDs</button>
+                        </td>
+                    </tr>
+                    
+                </table>
+                <div id="standard_pids_table">
+                    <div class="std-pid-entries"></div>
+                </div>
             </div>
 
-            <div class="section-title" style="margin-top:1rem;">Vehicle Specific Filters</div>
-            <div id="specific_filters_table">
-                <div class="specific-canfilter-entries"></div>
+            <div id="automate_vehicle" class="automate-subtabcontent">
+                <div class="section-title">Vehicle Specific</div>
+                <table class="form-table">
+                    <tr>
+                        <td>Vehicle Specific:</td>
+                        <td>
+                            <select id="car_specific" name="car_specific" onchange="toggleCarModel(); enableAutoStoreButton();submit_enable();">
+                                <option value="disable">Disable</option>
+                                <option value="enable">Enable</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Vehicle Model:</td>
+                        <td style="display: flex; align-items: center; gap: 5px;">
+                            <select id="car_model" name="car_model" onchange="enableAutoStoreButton();submit_enable();" style="flex: 1;"></select>
+                            <button onclick="fetchVehicleProfiles()" style="margin-left: 5px;">Get Latest</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Vehicle Profiles:</td>
+                        <td>
+                            <form id="car_data_form" enctype="multipart/form-data">
+                                <input id="car_data_file" name="car_data_file" type="file" onchange="loadLocalCarModels();submit_enable();" />
+                            </form>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Specific Initialisation:</td>
+                        <td>
+                            <input type="text" id="specific_init" name="specific_init" oninput="enableAutoStoreButton()">
+                        </td>
+                    </tr>
+                </table>
+
+                <div id="specific_pids_table">
+                    <div class="specific-pid-entries"></div>
+                </div>
+
+                <div class="section-title" style="margin-top:1rem;">Vehicle Specific Filters</div>
+                <div id="specific_filters_table">
+                    <div class="specific-canfilter-entries"></div>
+                </div>
             </div>
 
+            <div id="automate_custom" class="automate-subtabcontent">
+                <div class="section-title-row">
+                    <div class="section-title section-title--no-underline">Custom PIDs</div>
+                    <div class="section-title-actions">
+                        <button onclick="addRowAutoTable()" class="primary-button success-button">New PID</button>
+                    </div>
+                </div>
+                <table class="form-table">
+                    <tr>
+                        <td>Custom Initialisation:</td>
+                        <td>
+                            <input type="text" id="initialisation" name="initialisation" oninput="enableAutoStoreButton()">
+                        </td>
+                    </tr>
+                </table>
 
-            <div class="section-title">Custom PIDs</div>
-            <table class="form-table">
-                <tr>
-                    <td>Custom Initialisation:</td>
-                    <td>
-                        <input type="text" id="initialisation" name="initialisation" oninput="enableAutoStoreButton()">
-                    </td>
-                </tr>
-            </table>
+                <div id="automate_table">
+                    <div class="pid-entries"></div>
+                </div>
 
-            <div id="automate_table">
-                <div class="pid-entries"></div>
+                <div class="section-title-row" style="margin-top:1rem;">
+                    <div class="section-title section-title--no-underline">Custom Filters</div>
+                    <div class="section-title-actions">
+                        <button type="button" onclick="addCustomFilterRow();submit_enable();" class="primary-button success-button">New Filter</button>
+                    </div>
+                </div>
+                <div id="custom_filters_table">
+                    <div class="custom-canfilter-entries"></div>
+                </div>
             </div>
-
-            <div class="section-title" style="margin-top:1rem;">Custom Filters</div>
-            <div id="custom_filters_table">
-                <div class="custom-canfilter-entries"></div>
-            </div>
-            
+            <div class="section-title" style="margin-top:1rem;"> </div>
             <div class="button-group">
-                <button onclick="addRowAutoTable()" class="primary-button">New PID</button>
-                <button type="button" onclick="addCustomFilterRow();submit_enable();" class="primary-button">New Filter</button>
                 <button id="custom_pid_store" onclick="storeAutoTableData()" class="store" disabled>Store</button>
             </div>
         </div>
