@@ -637,6 +637,16 @@ function addCollapsibleRow(rowData = {}) {
                         placeholder="Enter expression"></td>
                 </tr>
                 <tr>
+                    <td>Unit:</td>
+                    <td><input type="text" class="unit-input" value="${rowData.Unit || ''}" 
+                        placeholder="e.g. V, °C, kPa"></td>
+                </tr>
+                <tr>
+                    <td>Class:</td>
+                    <td><input type="text" class="class-input" value="${rowData.Class || ''}" 
+                        placeholder="e.g. voltage, temp"></td>
+                </tr>
+                <tr>
                     <td>Min Value:</td>
                     <td><input type="number" class="min-value-input" value="${rowData.MinValue || ''}" 
                         step="0.01" placeholder="Minimum value"></td>
@@ -899,6 +909,266 @@ if (rowData.name) {
     container.appendChild(entry);
     enableAutoStoreButton();
 }
+}
+
+function normalizeFrameIdInputToNumber(v) {
+    if (v === null || v === undefined) return null;
+    const s = String(v).trim();
+    if (!s) return null;
+
+    let n;
+    if (/^0x[0-9a-f]+$/i.test(s)) {
+        n = parseInt(s, 16);
+    } else if (/^[0-9]+$/.test(s)) {
+        n = parseInt(s, 10);
+    } else if (/^[0-9a-f]+$/i.test(s)) {
+        // Allow hex without 0x
+        n = parseInt(s, 16);
+    } else {
+        return null;
+    }
+    if (!Number.isFinite(n) || n < 0) return null;
+    return n;
+}
+
+function formatFrameIdForUi(n) {
+    if (typeof n !== 'number' || !Number.isFinite(n)) return '';
+    return '0x' + n.toString(16).toUpperCase();
+}
+
+function addCustomCanFilterEntry(rowData = {}) {
+    const container = document.querySelector('.custom-canfilter-entries');
+    if (!container) return;
+
+    const frameIdValue = (rowData.frame_id !== undefined && rowData.frame_id !== null)
+        ? (typeof rowData.frame_id === 'number' ? formatFrameIdForUi(rowData.frame_id) : String(rowData.frame_id))
+        : '';
+    const p = rowData.parameter || (Array.isArray(rowData.parameters) ? rowData.parameters[0] : {}) || {};
+
+    const entry = document.createElement('div');
+    entry.className = 'custom-canfilter-entry';
+
+    const safe = (v)=>String(v ?? '').replace(/"/g,'&quot;');
+    const titleText = `${frameIdValue || 'Frame'} - ${(p.name || rowData.name || 'New Parameter')}`;
+
+    entry.innerHTML = `
+        <div class="pid-header">
+            <div class="header-left">
+                <button type="button" class="collapse-btn">▼</button>
+                <span class="pid-title">${safe(titleText)}</span>
+            </div>
+            <div class="header-right">
+                <button type="button" class="delete-btn">Delete</button>
+            </div>
+        </div>
+        <div class="pid-content" style="display: none;">
+            <table class="compact-form-table">
+                <tr>
+                    <td>Frame ID:</td>
+                    <td><input type="text" class="frame-id-input" value="${safe(frameIdValue)}" placeholder="0x7E8 or 2024"></td>
+                </tr>
+                <tr>
+                    <td>Name:</td>
+                    <td><input type="text" class="name-input" value="${safe(p.name || rowData.name || 'New Parameter')}" placeholder="Parameter Name"></td>
+                </tr>
+                <tr>
+                    <td>Expression:</td>
+                    <td><input type="text" class="expression-input" value="${safe(p.expression)}" placeholder="Expression"></td>
+                </tr>
+                <tr>
+                    <td>Unit:</td>
+                    <td><input type="text" class="unit-input" value="${safe(p.unit)}" placeholder="Unit"></td>
+                </tr>
+                <tr>
+                    <td>Class:</td>
+                    <td><input type="text" class="class-input" value="${safe(p.class)}" placeholder="Class"></td>
+                </tr>
+                <tr>
+                    <td>Min Value:</td>
+                    <td><input type="number" class="min-input" value="${safe(p.min)}" step="0.01" placeholder="Min"></td>
+                </tr>
+                <tr>
+                    <td>Max Value:</td>
+                    <td><input type="number" class="max-input" value="${safe(p.max)}" step="0.01" placeholder="Max"></td>
+                </tr>
+                <tr>
+                    <td>Period(ms):</td>
+                    <td><input type="number" class="period-input" value="${safe(p.period || '5000')}" min="100" max="60000"></td>
+                </tr>
+                <tr>
+                    <td>Destination Type:</td>
+                    <td><select class="type-select">
+                        <option value="Default" ${(p.type === 'Default' || !p.type) ? 'selected' : ''}>Default</option>
+                        <option value="MQTT_Topic" ${p.type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
+                        <option value="MQTT_WallBox" ${p.type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
+                    </select></td>
+                </tr>
+                <tr>
+                    <td>Destination:</td>
+                    <td><input type="text" class="send-to-input" value="${safe(p.send_to)}" placeholder="Destination"></td>
+                </tr>
+            </table>
+        </div>
+    `;
+
+    const style = document.createElement('style');
+    style.textContent = pidEntryStyles;
+    document.head.appendChild(style);
+
+    const header = entry.querySelector('.pid-header');
+    const deleteBtn = entry.querySelector('.delete-btn');
+    const collapseBtn = entry.querySelector('.collapse-btn');
+    const content = entry.querySelector('.pid-content');
+    const titleEl = entry.querySelector('.pid-title');
+
+    deleteBtn.addEventListener('click', () => {
+        entry.remove();
+        enableAutoStoreButton();
+    });
+
+    const toggleCollapse = (e) => {
+        e.stopPropagation();
+        const isHidden = content.style.display === 'none';
+        content.style.display = isHidden ? 'block' : 'none';
+        collapseBtn.textContent = isHidden ? '▲' : '▼';
+    };
+    header.addEventListener('click', toggleCollapse);
+    collapseBtn.addEventListener('click', toggleCollapse);
+
+    const updateTitle = () => {
+        const fid = entry.querySelector('.frame-id-input')?.value?.trim() || 'Frame';
+        const nm = entry.querySelector('.name-input')?.value?.trim() || 'New Parameter';
+        titleEl.textContent = `${fid} - ${nm}`;
+    };
+
+    entry.querySelectorAll('input, select').forEach(input => {
+        input.addEventListener('input', () => { updateTitle(); enableAutoStoreButton(); });
+        input.addEventListener('change', () => { updateTitle(); enableAutoStoreButton(); });
+    });
+
+    container.appendChild(entry);
+    enableAutoStoreButton();
+}
+
+function addVehicleSpecificCanFilterEntry(rowData = {}) {
+    const container = document.querySelector('.specific-canfilter-entries');
+    if (!container) return;
+
+    const frameIdValue = (rowData.frame_id !== undefined && rowData.frame_id !== null)
+        ? (typeof rowData.frame_id === 'number' ? formatFrameIdForUi(rowData.frame_id) : String(rowData.frame_id))
+        : '';
+    const p = rowData.parameter || (Array.isArray(rowData.parameters) ? rowData.parameters[0] : {}) || {};
+
+    const entry = document.createElement('div');
+    entry.className = 'specific-canfilter-entry';
+
+    const safe = (v)=>String(v ?? '').replace(/"/g,'&quot;');
+    const titleText = `${frameIdValue || 'Frame'} - ${(p.name || rowData.name || 'New Parameter')}`;
+
+    entry.innerHTML = `
+        <div class="pid-header">
+            <div class="header-left">
+                <button type="button" class="collapse-btn">▼</button>
+                <span class="pid-title">${safe(titleText)}</span>
+            </div>
+            <div class="header-right">
+                <button type="button" class="delete-btn">Delete</button>
+            </div>
+        </div>
+        <div class="pid-content" style="display: none;">
+            <table class="compact-form-table">
+                <tr>
+                    <td>Frame ID:</td>
+                    <td><input type="text" class="frame-id-input" value="${safe(frameIdValue)}" placeholder="0x7E8 or 2024"></td>
+                </tr>
+                <tr>
+                    <td>Name:</td>
+                    <td><input type="text" class="name-input" value="${safe(p.name || rowData.name || 'New Parameter')}" placeholder="Parameter Name"></td>
+                </tr>
+                <tr>
+                    <td>Expression:</td>
+                    <td><input type="text" class="expression-input" value="${safe(p.expression)}" placeholder="Expression"></td>
+                </tr>
+                <tr>
+                    <td>Unit:</td>
+                    <td><input type="text" class="unit-input" value="${safe(p.unit)}" placeholder="Unit"></td>
+                </tr>
+                <tr>
+                    <td>Class:</td>
+                    <td><input type="text" class="class-input" value="${safe(p.class)}" placeholder="Class"></td>
+                </tr>
+                <tr>
+                    <td>Min Value:</td>
+                    <td><input type="number" class="min-input" value="${safe(p.min)}" step="0.01" placeholder="Min"></td>
+                </tr>
+                <tr>
+                    <td>Max Value:</td>
+                    <td><input type="number" class="max-input" value="${safe(p.max)}" step="0.01" placeholder="Max"></td>
+                </tr>
+                <tr>
+                    <td>Period(ms):</td>
+                    <td><input type="number" class="period-input" value="${safe(p.period || '5000')}" min="100" max="60000"></td>
+                </tr>
+                <tr>
+                    <td>Destination Type:</td>
+                    <td><select class="type-select">
+                        <option value="Default" ${(p.type === 'Default' || !p.type) ? 'selected' : ''}>Default</option>
+                        <option value="MQTT_Topic" ${p.type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
+                        <option value="MQTT_WallBox" ${p.type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
+                    </select></td>
+                </tr>
+                <tr>
+                    <td>Destination:</td>
+                    <td><input type="text" class="send-to-input" value="${safe(p.send_to)}" placeholder="Destination"></td>
+                </tr>
+            </table>
+        </div>
+    `;
+
+    const style = document.createElement('style');
+    style.textContent = pidEntryStyles;
+    document.head.appendChild(style);
+
+    const header = entry.querySelector('.pid-header');
+    const deleteBtn = entry.querySelector('.delete-btn');
+    const collapseBtn = entry.querySelector('.collapse-btn');
+    const content = entry.querySelector('.pid-content');
+    const titleEl = entry.querySelector('.pid-title');
+
+    deleteBtn.addEventListener('click', () => {
+        entry.remove();
+        enableAutoStoreButton();
+    });
+
+    const toggleCollapse = (e) => {
+        e.stopPropagation();
+        const isHidden = content.style.display === 'none';
+        content.style.display = isHidden ? 'block' : 'none';
+        collapseBtn.textContent = isHidden ? '▲' : '▼';
+    };
+    header.addEventListener('click', toggleCollapse);
+    collapseBtn.addEventListener('click', toggleCollapse);
+
+    const updateTitle = () => {
+        const fid = entry.querySelector('.frame-id-input')?.value?.trim() || 'Frame';
+        const nm = entry.querySelector('.name-input')?.value?.trim() || 'New Parameter';
+        titleEl.textContent = `${fid} - ${nm}`;
+    };
+
+    entry.querySelectorAll('input, select').forEach(input => {
+        input.addEventListener('input', () => { updateTitle(); enableAutoStoreButton(); });
+        input.addEventListener('change', () => { updateTitle(); enableAutoStoreButton(); });
+    });
+
+    container.appendChild(entry);
+    enableAutoStoreButton();
+}
+
+function addCustomFilterRow() {
+    addCustomCanFilterEntry({
+        frame_id: '',
+        parameter: { name: 'New Parameter', expression: '', unit: '', class: '', period: '5000', min: '', max: '', type: 'Default', send_to: '' }
+    });
 }
 
 window.automateDestinations = [];
@@ -1180,6 +1450,10 @@ function loadAutoTable(jsonData) {
         console.log("Raw jsonData:", jsonData);
         const data = jsonData;
 
+        // Reset custom filters UI to avoid duplicates on reload
+        const customFilterContainer = document.querySelector('.custom-canfilter-entries');
+        if (customFilterContainer) customFilterContainer.innerHTML = '';
+
         const initialisationElement = document.getElementById("initialisation");
         if (initialisationElement) {
             initialisationElement.value = data.initialisation || '';
@@ -1247,12 +1521,42 @@ function loadAutoTable(jsonData) {
                     Init: pidData.Init || '',
                     PID: pidData.PID || '',
                     Expression: pidData.Expression || '',
+                    Unit: pidData.Unit || pidData.unit || '',
+                    Class: pidData.Class || pidData.class || '',
                     MinValue: pidData.MinValue || '',
                     MaxValue: pidData.MaxValue || '',
                     Period: pidData.Period || '',
                     Type: pidData.Type || 'Default',
                     Send_to: pidData.Send_to || ''
                 });
+            });
+        }
+
+        // Custom CAN filters (stored in auto_pid.json as top-level can_filters)
+        if (Array.isArray(data.can_filters)) {
+            data.can_filters.forEach(f => {
+                const fid = (f && f.frame_id !== undefined) ? f.frame_id : null;
+                const params = (f && Array.isArray(f.parameters)) ? f.parameters : [];
+                if (params.length) {
+                    params.forEach(param => {
+                        addCustomCanFilterEntry({
+                            frame_id: fid,
+                            parameter: {
+                                name: param.name,
+                                expression: param.expression,
+                                unit: param.unit,
+                                class: param.class,
+                                period: param.period,
+                                type: param.type,
+                                min: param.min,
+                                max: param.max,
+                                send_to: param.send_to
+                            }
+                        });
+                    });
+                } else if (fid !== null) {
+                    addCustomCanFilterEntry({ frame_id: fid, parameter: { name: 'New Parameter', period: '5000', type: 'Default', send_to: '' } });
+                }
             });
         }
 
@@ -1325,6 +1629,7 @@ async function storeAutoTableData() {
     try {
         const custom_pid_data = [];
         const std_pid_data = [];
+        const custom_can_filters = [];
 
         const entries = document.querySelectorAll('.pid-entry');
         const standardEntries = document.querySelectorAll('.std-pid-entry');
@@ -1345,7 +1650,8 @@ async function storeAutoTableData() {
         let carData = {
             car_model: carModelValue,
             init: document.getElementById("specific_init").value,
-            pids: []
+            pids: [],
+            can_filters: []
         };
 
         const specificPidEntries = document.querySelectorAll('.specific-pid-entry');
@@ -1368,7 +1674,37 @@ async function storeAutoTableData() {
                 };
             });
         }
-        
+
+        // Vehicle Specific CAN filters (from car profile)
+        const specificFilterEntries = document.querySelectorAll('.specific-canfilter-entry');
+        if (specificFilterEntries.length > 0) {
+            const grouped = new Map();
+            specificFilterEntries.forEach(entry => {
+                const fidRaw = entry.querySelector('.frame-id-input')?.value || '';
+                const fidNum = normalizeFrameIdInputToNumber(fidRaw);
+                const frameIdOut = (fidNum !== null) ? fidNum : String(fidRaw).trim();
+                if (!frameIdOut) {
+                    throw new Error('Vehicle specific filter frame_id is required');
+                }
+                const key = (fidNum !== null) ? `n:${fidNum}` : `s:${String(fidRaw).trim().toLowerCase()}`;
+                if (!grouped.has(key)) {
+                    grouped.set(key, { frame_id: frameIdOut, parameters: [] });
+                }
+                grouped.get(key).parameters.push({
+                    name: entry.querySelector('.name-input')?.value || '',
+                    expression: entry.querySelector('.expression-input')?.value || '',
+                    unit: entry.querySelector('.unit-input')?.value || '',
+                    class: entry.querySelector('.class-input')?.value || '',
+                    period: entry.querySelector('.period-input')?.value || '',
+                    min: entry.querySelector('.min-input')?.value || '',
+                    max: entry.querySelector('.max-input')?.value || '',
+                    type: entry.querySelector('.type-select')?.value || 'Default',
+                    send_to: entry.querySelector('.send-to-input')?.value || ''
+                });
+            });
+            carData.can_filters = Array.from(grouped.values());
+        }
+
         fetch('/store_car_data', {
             method: 'POST',
             headers: {
@@ -1401,6 +1737,8 @@ async function storeAutoTableData() {
                     Init: entry.querySelector('.init-input')?.value || '',
                     PID: entry.querySelector('.pid-input')?.value || '',
                     Expression: entry.querySelector('.expression-input')?.value || '',
+                    Unit: entry.querySelector('.unit-input')?.value || '',
+                    Class: entry.querySelector('.class-input')?.value || '',
                     MinValue: entry.querySelector('.min-value-input')?.value || '',
                     MaxValue: entry.querySelector('.max-value-input')?.value || '',
                     Period: entry.querySelector('.period-input')?.value || '',
@@ -1449,6 +1787,36 @@ async function storeAutoTableData() {
                 std_pid_data.push(stdPIDData);
             });
         }            
+
+        // Custom CAN filters (group by frame_id)
+        const customFilterEntries = document.querySelectorAll('.custom-canfilter-entry');
+        if (customFilterEntries.length > 0) {
+            const grouped = new Map();
+            customFilterEntries.forEach(entry => {
+                const fidRaw = entry.querySelector('.frame-id-input')?.value || '';
+                const fidNum = normalizeFrameIdInputToNumber(fidRaw);
+                const frameIdOut = (fidNum !== null) ? fidNum : String(fidRaw).trim();
+                if (!frameIdOut) {
+                    throw new Error('Custom filter frame_id is required');
+                }
+                const key = (fidNum !== null) ? `n:${fidNum}` : `s:${String(fidRaw).trim().toLowerCase()}`;
+                if (!grouped.has(key)) {
+                    grouped.set(key, { frame_id: frameIdOut, parameters: [] });
+                }
+                grouped.get(key).parameters.push({
+                    name: entry.querySelector('.name-input')?.value || '',
+                    expression: entry.querySelector('.expression-input')?.value || '',
+                    unit: entry.querySelector('.unit-input')?.value || '',
+                    class: entry.querySelector('.class-input')?.value || '',
+                    period: entry.querySelector('.period-input')?.value || '',
+                    min: entry.querySelector('.min-input')?.value || '',
+                    max: entry.querySelector('.max-input')?.value || '',
+                    type: entry.querySelector('.type-select')?.value || 'Default',
+                    send_to: entry.querySelector('.send-to-input')?.value || ''
+                });
+            });
+            custom_can_filters.push(...Array.from(grouped.values()));
+        }
         
         const jsonData = {
             initialisation: initialisationValue,
@@ -1459,6 +1827,7 @@ async function storeAutoTableData() {
             car_model: carModelValue,
             pids: custom_pid_data,
             std_pids: std_pid_data,
+            can_filters: custom_can_filters,
             standard_pids: standard_pidsValue,
             ecu_protocol: ecu_protocolValue,
             group_api_token: window.automateDestinations[0]?.api_token || '',
@@ -2050,6 +2419,14 @@ function loadautoPIDCarData() {
         if(this.responseText != "NONE") {
             var obj = JSON.parse(this.responseText);
             const carModels = [];
+
+            // Clear existing rows to avoid duplicates on reload
+            const pidContainer = document.querySelector('.specific-pid-entries');
+            if (pidContainer) pidContainer.innerHTML = '';
+
+            const filterContainer = document.querySelector('.specific-canfilter-entries');
+            if (filterContainer) filterContainer.innerHTML = '';
+
             if (obj && Array.isArray(obj.cars)) {
                 obj.cars.forEach(car => {
                     if (car.car_model) {
@@ -2079,6 +2456,34 @@ function loadautoPIDCarData() {
                             }
                         });
                     }
+
+                    if (Array.isArray(car.can_filters)) {
+                        car.can_filters.forEach(f => {
+                            const fid = (f && f.frame_id !== undefined) ? f.frame_id : null;
+                            const params = (f && Array.isArray(f.parameters)) ? f.parameters : [];
+                            if (params.length) {
+                                params.forEach(param => {
+                                    addVehicleSpecificCanFilterEntry({
+                                        frame_id: fid,
+                                        parameter: {
+                                            name: param.name,
+                                            expression: param.expression,
+                                            unit: param.unit,
+                                            class: param.class,
+                                            period: param.period,
+                                            type: param.type,
+                                            min: param.min,
+                                            max: param.max,
+                                            send_to: param.send_to
+                                        }
+                                    });
+                                });
+                            } else if (fid !== null) {
+                                addVehicleSpecificCanFilterEntry({ frame_id: fid, parameter: { name: 'New Parameter', period: '5000', type: 'Default', send_to: '' } });
+                            }
+                        });
+                    }
+
                 });
             }
             var modifiedObj = { "supported": carModels };

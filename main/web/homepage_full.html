@@ -1263,6 +1263,11 @@
                 <div class="specific-pid-entries"></div>
             </div>
 
+            <div class="section-title" style="margin-top:1rem;">Vehicle Specific Filters</div>
+            <div id="specific_filters_table">
+                <div class="specific-canfilter-entries"></div>
+            </div>
+
 
             <div class="section-title">Custom PIDs</div>
             <table class="form-table">
@@ -1273,13 +1278,19 @@
                     </td>
                 </tr>
             </table>
-            
+
             <div id="automate_table">
                 <div class="pid-entries"></div>
             </div>
+
+            <div class="section-title" style="margin-top:1rem;">Custom Filters</div>
+            <div id="custom_filters_table">
+                <div class="custom-canfilter-entries"></div>
+            </div>
             
             <div class="button-group">
-                <button onclick="addRowAutoTable()" class="primary-button">New</button>
+                <button onclick="addRowAutoTable()" class="primary-button">New PID</button>
+                <button type="button" onclick="addCustomFilterRow();submit_enable();" class="primary-button">New Filter</button>
                 <button id="custom_pid_store" onclick="storeAutoTableData()" class="store" disabled>Store</button>
             </div>
         </div>
