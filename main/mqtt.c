@@ -613,7 +613,7 @@ static void mqtt_load_filter(void)
     cJSON_Delete(root);
 }
 
-void mqtt_publish(char *topic, char *data, int len, int qos, int retain)
+void mqtt_publish(const char *topic, const char *data, int len, int qos, int retain)
 {
     int data_len = len;
 

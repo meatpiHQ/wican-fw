@@ -43,6 +43,7 @@
 #include "elm327.h"
 #include "dev_status.h"
 #include "driver/rtc_io.h"
+#include "wc_timer.h"
 
 // #define TAG 		__func__
 #define TAG         "ELM327"
@@ -2356,15 +2357,96 @@ esp_err_t elm327_sleep(void)
 	return ret;
 }
 
-void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, QueueHandle_t *response_q, response_callback_t response_callback)
+static bool is_hex_char(char c)
+{
+	return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
+}
+
+static bool is_likely_can_frame_line(const char *line, size_t len)
+{
+	if (!line || len == 0)
+		return false;
+
+	// Trim leading whitespace
+	size_t s = 0;
+	while (s < len && (line[s] == ' ' || line[s] == '\t'))
+		s++;
+	if (s >= len)
+		return false;
+
+	// Find first space separating header and data
+	size_t sp = s;
+	while (sp < len && line[sp] != ' ' && line[sp] != '\t')
+		sp++;
+	if (sp <= s || sp >= len)
+		return false;
+
+	// Header length is typically 3 (11-bit) or 8 (29-bit), but allow a bit of slack.
+	size_t header_len = sp - s;
+	if (header_len < 2 || header_len > 8)
+		return false;
+	for (size_t i = s; i < sp; i++)
+	{
+		if (!is_hex_char(line[i]))
+			return false;
+	}
+
+	// Skip whitespace after header
+	size_t d = sp;
+	while (d < len && (line[d] == ' ' || line[d] == '\t'))
+		d++;
+	if (d + 1 >= len)
+		return false;
+
+	// Need at least one data byte (two hex chars)
+	return is_hex_char(line[d]) && is_hex_char(line[d + 1]);
+}
+
+static bool elm327_scan_for_prompt(const uint8_t *buf, int len, bool *last_was_cr)
+{
+	if (!buf || len <= 0 || !last_was_cr)
+		return false;
+	for (int i = 0; i < len; i++)
+	{
+		uint8_t b = buf[i];
+		if (*last_was_cr && b == (uint8_t)'>')
+			return true;
+		*last_was_cr = (b == (uint8_t)'\r');
+	}
+	return false;
+}
+
+void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, QueueHandle_t *response_q, response_callback_t response_callback, bool stop_after_first_frame)
 {
 	if (xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(ELM327_CMD_MUTEX_TIMOUT)) == pdTRUE)
     {
 		uint32_t len;
 		bool terminator_received = false;
 		uart_event_t event;
-		static uint8_t uart_read_buf[2048];
+		static uint8_t *uart_read_buf = NULL;
+		static size_t uart_read_buf_size = 0;
+		bool last_was_cr = false;
+		bool use_timeout = (timeout > 0);
+		wc_timer_t timeout_timer = 0;
+		bool is_atma = false;
+		bool atma_stop_sent = false;
+		bool atma_frame_seen = false;
+		char line_buf[96];
+		size_t line_len = 0;
 		
+		if(uart_read_buf == NULL)
+		{
+			uart_read_buf_size = (size_t)ELM327_MAX_CMD_LEN;
+			uart_read_buf = (uint8_t *)heap_caps_malloc(uart_read_buf_size + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+			if (!uart_read_buf)
+			{
+				ESP_LOGE(TAG, "Failed to allocate uart_read_buf");
+				xSemaphoreGive(xuart1_semaphore);
+				return;
+			}
+			memset(uart_read_buf, 0, uart_read_buf_size + 1);
+		}
+
 		if(command_len == 0)
 		{
 			len = strlen(command);
@@ -2372,6 +2454,29 @@ void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, Q
 		else
 		{
 			len = command_len;
+		}
+
+		// Detect ATMA (monitor-all) command: it does not normally return a prompt until a key is sent.
+		// We use this to send a CR on timeout to stop monitoring.
+		{
+			// Simple case-insensitive scan ignoring spaces
+			char c0 = 0, c1 = 0, c2 = 0, c3 = 0;
+			uint32_t i = 0;
+			// find 'A'
+			while (i < len && (command[i] == ' ' || command[i] == '\t')) i++;
+			if (i < len) c0 = command[i++];
+			while (i < len && (command[i] == ' ' || command[i] == '\t')) i++;
+			if (i < len) c1 = command[i++];
+			while (i < len && (command[i] == ' ' || command[i] == '\t')) i++;
+			if (i < len) c2 = command[i++];
+			while (i < len && (command[i] == ' ' || command[i] == '\t')) i++;
+			if (i < len) c3 = command[i++];
+			// Normalize to lower-case
+			if (c0 >= 'A' && c0 <= 'Z') c0 = (char)(c0 - 'A' + 'a');
+			if (c1 >= 'A' && c1 <= 'Z') c1 = (char)(c1 - 'A' + 'a');
+			if (c2 >= 'A' && c2 <= 'Z') c2 = (char)(c2 - 'A' + 'a');
+			if (c3 >= 'A' && c3 <= 'Z') c3 = (char)(c3 - 'A' + 'a');
+			is_atma = (c0 == 'a' && c1 == 't' && c2 == 'm' && c3 == 'a');
 		}
 		uart_flush_input(UART_NUM_1);
 		xQueueReset(uart1_queue);
@@ -2393,32 +2498,160 @@ void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, Q
 		{
 			elm327_uart_write_bytes(UART_NUM_1, command, len);
 		}
+
+		// Start timeout window after command TX.
+		if (use_timeout)
+		{
+			wc_timer_set(&timeout_timer, timeout);
+		}
 		
 		while (!terminator_received)
 		{
-			if (xQueueReceive(uart1_queue, (void*)&event, pdMS_TO_TICKS(ELM327_CMD_TIMEOUT_MS)) == pdTRUE)
+			// If ATMA is configured to stop after first frame, and we've seen a frame, stop ASAP.
+			if (is_atma && stop_after_first_frame && atma_frame_seen && !atma_stop_sent)
+			{
+				elm327_uart_write_bytes(UART_NUM_1, "\r", 1);
+				(void)uart_wait_tx_done(UART_NUM_1, pdMS_TO_TICKS(50));
+				atma_stop_sent = true;
+				// After requesting stop, keep draining until prompt for a short grace window.
+				wc_timer_t grace_timer = 0;
+				wc_timer_set(&grace_timer, 200);
+				while (!terminator_received && !wc_timer_is_expired(&grace_timer))
+				{
+					if (xQueueReceive(uart1_queue, (void*)&event, pdMS_TO_TICKS(20)) == pdTRUE)
+					{
+						if (event.type == UART_DATA)
+						{
+							uint32_t remaining = event.size;
+							while (remaining > 0 && !terminator_received)
+							{
+								uint32_t to_read = remaining;
+								if (to_read > uart_read_buf_size)
+									to_read = (uint32_t)uart_read_buf_size;
+								int read_bytes = elm327_uart_read_bytes(UART_NUM_1, uart_read_buf, to_read, pdMS_TO_TICKS(1));
+								if (read_bytes <= 0)
+									break;
+								uart_read_buf[read_bytes] = '\0';
+								if (response_callback != NULL)
+								{
+									response_callback((char*)uart_read_buf, read_bytes, response_q, command);
+								}
+								if (elm327_scan_for_prompt(uart_read_buf, read_bytes, &last_was_cr))
+								{
+									terminator_received = true;
+									break;
+								}
+								remaining -= (uint32_t)read_bytes;
+							}
+						}
+					}
+				}
+				break;
+			}
+
+			if (use_timeout)
+			{
+				if (wc_timer_is_expired(&timeout_timer))
+				{
+					// Timeout reached. For ATMA, send CR to stop monitor mode.
+					if (is_atma)
+					{
+						elm327_uart_write_bytes(UART_NUM_1, "\r", 1);
+						(void)uart_wait_tx_done(UART_NUM_1, pdMS_TO_TICKS(50));
+						atma_stop_sent = true;
+						// Give a short grace period to receive the prompt
+						wc_timer_t grace_timer = 0;
+						wc_timer_set(&grace_timer, 200);
+						while (!terminator_received && !wc_timer_is_expired(&grace_timer))
+						{
+							if (xQueueReceive(uart1_queue, (void*)&event, pdMS_TO_TICKS(20)) == pdTRUE)
+							{
+								if (event.type == UART_DATA)
+								{
+									uint32_t remaining = event.size;
+									while (remaining > 0 && !terminator_received)
+									{
+										uint32_t to_read = remaining;
+										if (to_read > uart_read_buf_size)
+											to_read = (uint32_t)uart_read_buf_size;
+										int read_bytes = elm327_uart_read_bytes(UART_NUM_1, uart_read_buf, to_read, pdMS_TO_TICKS(1));
+										if (read_bytes <= 0)
+											break;
+										uart_read_buf[read_bytes] = '\0';
+										if (response_callback != NULL)
+										{
+											response_callback((char*)uart_read_buf, read_bytes, response_q, command);
+										}
+										if (elm327_scan_for_prompt(uart_read_buf, read_bytes, &last_was_cr))
+										{
+											terminator_received = true;
+											break;
+										}
+										remaining -= (uint32_t)read_bytes;
+									}
+								}
+							}
+						}
+					}
+					break;
+				}
+			}
+
+			int queue_wait_ms = use_timeout ? 20 : ELM327_CMD_TIMEOUT_MS;
+			if (xQueueReceive(uart1_queue, (void*)&event, pdMS_TO_TICKS(queue_wait_ms)) == pdTRUE)
 			{
 				if (event.type == UART_DATA)
 				{
-					int read_bytes = elm327_uart_read_bytes(UART_NUM_1, 
-													uart_read_buf, 
-													event.size, 
-													pdMS_TO_TICKS(1));
-					if (read_bytes > 0)
+					uint32_t remaining = event.size;
+					while (remaining > 0 && !terminator_received)
 					{
+						uint32_t to_read = remaining;
+						if (to_read > uart_read_buf_size)
+							to_read = (uint32_t)uart_read_buf_size;
+						int read_bytes = elm327_uart_read_bytes(UART_NUM_1, uart_read_buf, to_read, pdMS_TO_TICKS(1));
+						if (read_bytes <= 0)
+							break;
+						uart_read_buf[read_bytes] = '\0';
+
+						// For ATMA stop-after-first-frame mode, detect the first frame line.
+						if (is_atma && stop_after_first_frame && !atma_frame_seen)
+						{
+							for (int i = 0; i < read_bytes; i++)
+							{
+								char b = (char)uart_read_buf[i];
+								if (b == '\r' || b == '\n')
+								{
+									if (line_len > 0)
+									{
+										if (is_likely_can_frame_line(line_buf, line_len))
+										{
+											atma_frame_seen = true;
+										}
+									}
+									line_len = 0;
+								}
+								else
+								{
+									if (line_len + 1 < sizeof(line_buf))
+									{
+										line_buf[line_len++] = b;
+									}
+								}
+							}
+						}
+
 						if(response_callback != NULL)
 						{
-							response_callback((char*)uart_read_buf, 
-														read_bytes, 
-														response_q,
-														command);
+							response_callback((char*)uart_read_buf, read_bytes, response_q, command);
 						}
-						
-						if(strstr((char*) uart_read_buf, "\r>"))
+
+						if (elm327_scan_for_prompt(uart_read_buf, read_bytes, &last_was_cr))
 						{
 							terminator_received = true;
 							break;
 						}
+
+						remaining -= (uint32_t)read_bytes;
 					}
 				}
 			}

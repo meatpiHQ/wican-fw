@@ -36,5 +36,5 @@ typedef struct
 
 void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue);
 int mqtt_connected(void);
-void mqtt_publish(char *topic, char *data, int len, int qos, int retain);
+void mqtt_publish(const char *topic, const char *data, int len, int qos, int retain);
 #endif

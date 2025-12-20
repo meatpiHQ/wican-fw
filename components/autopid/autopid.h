@@ -136,6 +136,9 @@ typedef struct
 {
     uint32_t frame_id;
     bool is_extended; // inferred: frame_id > 0x7FF
+    // True if this filter came from car_data.json (vehicle profile);
+    // false if it came from auto_pid.json (custom filters).
+    bool is_vehicle_specific;
     parameter_t *parameters;
     uint32_t parameters_count;
 } can_filter_t;

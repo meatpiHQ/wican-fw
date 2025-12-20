@@ -193,6 +193,9 @@ static destination_type_t json_destination_type(const cJSON *obj, const char *ke
     return s ? destination_type_from_string(s) : default_value;
 }
 
+// Forward declarations for CAN filters parsing/merge (implemented later in file)
+static void autopid_cfg_append_can_filters_from_array(autopid_config_t *cfg, const cJSON *can_filters_arr, bool is_vehicle_specific);
+
 static sensor_type_t json_sensor_type(const cJSON *obj, const char *key, sensor_type_t default_value)
 {
     if (!obj || !key)
@@ -362,6 +365,7 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
     cJSON *cycle_item = cJSON_GetObjectItem(root, "cycle");
     cJSON *standard_pids_item = cJSON_GetObjectItem(root, "standard_pids");
     cJSON *specific_pids_item = cJSON_GetObjectItem(root, "car_specific");
+    cJSON *can_filters_item = cJSON_GetObjectItem(root, "can_filters");
     cJSON *group_destination_item = cJSON_GetObjectItem(root, "destination");   // legacy single destination
     cJSON *group_dest_type_item = cJSON_GetObjectItem(root, "group_dest_type"); // legacy single type
     cJSON *destinations_array = cJSON_GetObjectItem(root, "destinations");      // new multi-destination array
@@ -809,8 +813,130 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
         }
     }
 
+    // Parse optional custom CAN filters (top-level can_filters)
+    // Note: filters from car_data.json are loaded later and appended.
+    // IMPORTANT: do this once per config load (not once per PID entry).
+    if (can_filters_item && cJSON_IsArray(can_filters_item))
+    {
+        autopid_cfg_append_can_filters_from_array(autopid_config, can_filters_item, false);
+    }
+
     *pid_index = idx;
     cJSON_Delete(root);
+}
+
+// ---- CAN filters parsing/merge helpers ----
+// These are file-local helpers but need to be callable from parse_auto_pid_json above.
+// We expose them via a private symbol to avoid re-ordering large parts of this file.
+
+static void parse_can_filter_object(can_filter_t *out, const cJSON *filter)
+{
+    if (!out || !filter || !cJSON_IsObject(filter))
+    {
+        return;
+    }
+
+    uint32_t frame_id = 0;
+    if (!parse_frame_id(cJSON_GetObjectItem((cJSON *)filter, "frame_id"), &frame_id))
+    {
+        return;
+    }
+
+    out->frame_id = frame_id;
+    out->is_extended = (frame_id > 0x7FF);
+
+    cJSON *params = cJSON_GetObjectItem((cJSON *)filter, "parameters");
+    if (!params || !cJSON_IsArray(params))
+    {
+        return;
+    }
+
+    int param_count = cJSON_GetArraySize(params);
+    if (param_count <= 0)
+    {
+        return;
+    }
+
+    out->parameters_count = (uint32_t)param_count;
+    out->parameters = (parameter_t *)heap_caps_calloc((size_t)param_count, sizeof(parameter_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
+    if (!out->parameters)
+    {
+        out->parameters_count = 0;
+        return;
+    }
+
+    cJSON *param = NULL;
+    int pi = 0;
+    cJSON_ArrayForEach(param, params)
+    {
+        if (!param || !cJSON_IsObject(param) || pi >= param_count)
+        {
+            pi++;
+            continue;
+        }
+
+        parse_parameter_object(
+            &out->parameters[pi],
+            param,
+            "name",
+            "expression",
+            "unit",
+            "class",
+            "sensor_type",
+            "min",
+            "max",
+            "period",
+            "send_to",
+            "type");
+
+        if (out->parameters[pi].period == 0)
+        {
+            out->parameters[pi].period = 5000;
+        }
+
+        pi++;
+    }
+}
+
+static void autopid_cfg_append_can_filters_from_array(autopid_config_t *cfg, const cJSON *can_filters_arr, bool is_vehicle_specific)
+{
+    if (!cfg || !can_filters_arr || !cJSON_IsArray(can_filters_arr))
+    {
+        return;
+    }
+
+    int add_count = cJSON_GetArraySize((cJSON *)can_filters_arr);
+    if (add_count <= 0)
+    {
+        return;
+    }
+
+    uint32_t old_count = cfg->can_filters_count;
+    uint32_t new_count = old_count + (uint32_t)add_count;
+
+    can_filter_t *new_arr = (can_filter_t *)heap_caps_calloc((size_t)new_count, sizeof(can_filter_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
+    if (!new_arr)
+    {
+        return;
+    }
+
+    // Shallow-copy old entries (struct holds pointers); we don't free nested pointers.
+    if (cfg->can_filters && old_count > 0)
+    {
+        memcpy(new_arr, cfg->can_filters, sizeof(can_filter_t) * old_count);
+        free(cfg->can_filters);
+    }
+
+    // Parse appended entries into tail
+    for (int i = 0; i < add_count; i++)
+    {
+        cJSON *filter = cJSON_GetArrayItem((cJSON *)can_filters_arr, i);
+        parse_can_filter_object(&new_arr[old_count + (uint32_t)i], filter);
+        new_arr[old_count + (uint32_t)i].is_vehicle_specific = is_vehicle_specific;
+    }
+
+    cfg->can_filters = new_arr;
+    cfg->can_filters_count = new_count;
 }
 
 static void parse_car_data_json(autopid_config_t *autopid_config, int *pid_index)
@@ -844,74 +970,7 @@ static void parse_car_data_json(autopid_config_t *autopid_config, int *pid_index
             cJSON *can_filters = cJSON_GetObjectItem(car, "can_filters");
             if (can_filters && cJSON_IsArray(can_filters))
             {
-                int filter_count = cJSON_GetArraySize(can_filters);
-                if (filter_count > 0)
-                {
-                    autopid_config->can_filters = (can_filter_t *)heap_caps_calloc(filter_count, sizeof(can_filter_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
-                    if (autopid_config->can_filters)
-                    {
-                        autopid_config->can_filters_count = (uint32_t)filter_count;
-                        for (int fi = 0; fi < filter_count; fi++)
-                        {
-                            cJSON *filter = cJSON_GetArrayItem(can_filters, fi);
-                            if (!filter || !cJSON_IsObject(filter))
-                            {
-                                continue;
-                            }
-
-                            uint32_t frame_id = 0;
-                            if (parse_frame_id(cJSON_GetObjectItem(filter, "frame_id"), &frame_id))
-                            {
-                                autopid_config->can_filters[fi].frame_id = frame_id;
-                                autopid_config->can_filters[fi].is_extended = (frame_id > 0x7FF);
-                            }
-
-                            cJSON *params = cJSON_GetObjectItem(filter, "parameters");
-                            if (params && cJSON_IsArray(params))
-                            {
-                                int param_count = cJSON_GetArraySize(params);
-                                if (param_count > 0)
-                                {
-                                    autopid_config->can_filters[fi].parameters_count = (uint32_t)param_count;
-                                    autopid_config->can_filters[fi].parameters = (parameter_t *)heap_caps_calloc(param_count, sizeof(parameter_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
-                                    if (autopid_config->can_filters[fi].parameters)
-                                    {
-                                        cJSON *param;
-                                        int pi = 0;
-                                        cJSON_ArrayForEach(param, params)
-                                        {
-                                            if (!param || !cJSON_IsObject(param))
-                                            {
-                                                pi++;
-                                                continue;
-                                            }
-
-                                            parse_parameter_object(
-                                                &autopid_config->can_filters[fi].parameters[pi],
-                                                param,
-                                                "name",
-                                                "expression",
-                                                "unit",
-                                                "class",
-                                                "sensor_type",
-                                                "min",
-                                                "max",
-                                                "period",
-                                                "send_to",
-                                                "type");
-
-                                            pi++;
-                                        }
-                                    }
-                                    else
-                                    {
-                                        autopid_config->can_filters[fi].parameters_count = 0;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                autopid_cfg_append_can_filters_from_array(autopid_config, can_filters, true);
             }
 
             cJSON *pids = cJSON_GetObjectItem(car, "pids");

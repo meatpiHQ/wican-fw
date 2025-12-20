@@ -578,6 +578,27 @@ static void autopid_data_update(autopid_config_t *pids)
                     }
                 }
             }
+
+            // Add CAN-filter (broadcast) parameters
+            for (uint32_t fi = 0; fi < pids->can_filters_count; fi++)
+            {
+                can_filter_t *f = &pids->can_filters[fi];
+                for (uint32_t pi = 0; pi < f->parameters_count; pi++)
+                {
+                    parameter_t *param = &f->parameters[pi];
+                    if (param->name && param->value != FLT_MAX)
+                    {
+                        if (param->sensor_type == BINARY_SENSOR)
+                        {
+                            cJSON_AddStringToObject(root, param->name, param->value > 0 ? "on" : "off");
+                        }
+                        else
+                        {
+                            cJSON_AddNumberToObject(root, param->name, param->value);
+                        }
+                    }
+                }
+            }
             limitJsonDecimalPrecision(root);
             autopid_data.json_str = cJSON_PrintUnformatted(root);
             cJSON_Delete(root);
@@ -684,6 +705,27 @@ void autopid_data_publish(void)
                 for (uint32_t j = 0; j < curr_pid->parameters_count; j++)
                 {
                     parameter_t *param = &curr_pid->parameters[j];
+                    if (param->name && param->value != FLT_MAX)
+                    {
+                        if (param->sensor_type == BINARY_SENSOR)
+                        {
+                            cJSON_AddStringToObject(root, param->name, param->value > 0 ? "on" : "off");
+                        }
+                        else
+                        {
+                            cJSON_AddNumberToObject(root, param->name, param->value);
+                        }
+                    }
+                }
+            }
+
+            // Add CAN-filter (broadcast) parameters
+            for (uint32_t fi = 0; fi < autopid_config->can_filters_count; fi++)
+            {
+                can_filter_t *f = &autopid_config->can_filters[fi];
+                for (uint32_t pi = 0; pi < f->parameters_count; pi++)
+                {
+                    parameter_t *param = &f->parameters[pi];
                     if (param->name && param->value != FLT_MAX)
                     {
                         if (param->sensor_type == BINARY_SENSOR)
@@ -1603,6 +1645,32 @@ char *autopid_get_config(void)
                 }
             }
 
+            // Include CAN-filter (broadcast) parameter metadata
+            for (uint32_t fi = 0; fi < autopid_config->can_filters_count; fi++)
+            {
+                can_filter_t *f = &autopid_config->can_filters[fi];
+                for (uint32_t pi = 0; pi < f->parameters_count; pi++)
+                {
+                    parameter_t *param = &f->parameters[pi];
+                    if (!param || !param->name)
+                        continue;
+
+                    cJSON *parameter_details = cJSON_CreateObject();
+                    if (!parameter_details)
+                        continue;
+
+                    if (param->class)
+                    {
+                        cJSON_AddStringToObject(parameter_details, "class", param->class);
+                    }
+                    if (param->unit)
+                    {
+                        cJSON_AddStringToObject(parameter_details, "unit", param->unit);
+                    }
+                    cJSON_AddItemToObject(parameters_object, param->name, parameter_details);
+                }
+            }
+
             char *json_tmp = cJSON_PrintUnformatted(parameters_object);
             if (json_tmp)
             {
@@ -1615,6 +1683,109 @@ char *autopid_get_config(void)
         }
     }
     return autopid_config_json;
+}
+
+// Forward declarations (used by CAN-filter helpers below)
+static void send_commands(char *commands, uint32_t delay_ms);
+static void publish_parameter_mqtt(parameter_t *param);
+
+static void send_can_filter_cmd(uint32_t frame_id)
+{
+    // ATCRA expects 3 hex digits for 11-bit, 8 hex digits for 29-bit.
+    char cmd[20];
+    if (frame_id <= 0x7FF)
+    {
+        snprintf(cmd, sizeof(cmd), "ATCRA%03lX\r", (unsigned long)frame_id);
+    }
+    else
+    {
+        snprintf(cmd, sizeof(cmd), "ATCRA%08lX\r", (unsigned long)frame_id);
+    }
+    send_commands(cmd, 2);
+}
+
+static void bytes_to_hex_str(char *out, size_t out_size, const uint8_t *data, size_t data_len)
+{
+    if (!out || out_size == 0)
+        return;
+    out[0] = '\0';
+    if (!data || data_len == 0)
+        return;
+
+    size_t w = 0;
+    for (size_t i = 0; i < data_len; i++)
+    {
+        if (w + 3 >= out_size)
+            break;
+        int n = snprintf(out + w, out_size - w, "%02X", (unsigned)data[i]);
+        if (n <= 0)
+            break;
+        w += (size_t)n;
+        if (i + 1 < data_len)
+        {
+            if (w + 2 >= out_size)
+                break;
+            out[w++] = ' ';
+            out[w] = '\0';
+        }
+    }
+}
+
+static void process_can_filter_frame(can_filter_t *f, const response_t *rsp)
+{
+    if (!f || !rsp)
+        return;
+    if (rsp->length == 0)
+        return;
+
+    // Debug log raw response bytes for this filter (enable DEBUG log level to see)
+    {
+        const uint32_t max_log_bytes = 32;
+        uint32_t n = rsp->length;
+        if (n > max_log_bytes)
+            n = max_log_bytes;
+        char hex[3 * max_log_bytes + 1];
+        bytes_to_hex_str(hex, sizeof(hex), rsp->data, n);
+        ESP_LOGD(TAG, "CANFLT 0x%lX rsp_len=%lu data[%lu]=%s", (unsigned long)f->frame_id,
+                 (unsigned long)rsp->length, (unsigned long)n, hex);
+    }
+
+    for (uint32_t pi = 0; pi < f->parameters_count; pi++)
+    {
+        parameter_t *param = &f->parameters[pi];
+        if (!param || !param->expression)
+            continue;
+        if (!wc_timer_is_expired(&param->timer))
+            continue;
+
+        // Reset timer with parameter period
+        wc_timer_set(&param->timer, (param->period == 0) ? 5000 : param->period);
+
+        double result = 0;
+        if (evaluate_expression((uint8_t *)param->expression, (uint8_t *)rsp->data, 0, &result))
+        {
+            if (param->min != FLT_MAX && result < param->min)
+            {
+                continue;
+            }
+            if (param->max != FLT_MAX && result > param->max)
+            {
+                continue;
+            }
+
+            param->failed = false;
+            param->value = (float)(round(result * 100.0) / 100.0);
+            ESP_LOGD(TAG, "CANFLT 0x%lX param=%s result=%.2f", (unsigned long)f->frame_id,
+                     param->name ? param->name : "(null)", (double)param->value);
+            publish_parameter_mqtt(param);
+        }
+        else
+        {
+            param->failed = true;
+            ESP_LOGD(TAG, "CANFLT 0x%lX param=%s eval_failed", (unsigned long)f->frame_id,
+                     param->name ? param->name : "(null)");
+        }
+    }
 }
 
 void parse_elm327_response(char *buffer, response_t *response)
@@ -1854,6 +2025,44 @@ static void append_to_buffer(char *buffer, const char *new_data)
     }
 }
 
+static bool autopid_buf_is_only_stopped(const char *buf)
+{
+    if (!buf)
+        return true;
+
+    const char *p = buf;
+    while (*p)
+    {
+        // Skip whitespace and separators
+        while (*p == '\r' || *p == '\n' || *p == ' ' || *p == '\t')
+            p++;
+        if (*p == '\0')
+            break;
+
+        // Find end of token/line
+        const char *start = p;
+        while (*p && *p != '\r' && *p != '\n')
+            p++;
+        size_t len = (size_t)(p - start);
+
+        // Trim trailing spaces
+        while (len > 0 && (start[len - 1] == ' ' || start[len - 1] == '\t'))
+            len--;
+
+        if (len == 0)
+            continue;
+
+        // ELM/STN chips often emit a lone "STOPPED" line when ATMA is terminated.
+        if (!((len == 7 && strncmp(start, "STOPPED", 7) == 0) ||
+              (len == 7 && strncmp(start, "stopped", 7) == 0)))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 void autopid_parser(char *str, uint32_t len, QueueHandle_t *q, char *cmd_str)
 {
     static response_t response;
@@ -1865,6 +2074,13 @@ void autopid_parser(char *str, uint32_t len, QueueHandle_t *q, char *cmd_str)
 
         if (strchr(str, '>') != NULL)
         {
+            // If we only got the ATMA terminator, ignore it.
+            if (autopid_buf_is_only_stopped(auto_pid_buf))
+            {
+                auto_pid_buf[0] = '\0';
+                return;
+            }
+
             if (strstr(str, "NO DATA") == NULL && strstr(str, "ERROR") == NULL)
             {
                 // Parse the accumulated buffer
@@ -1894,7 +2110,6 @@ static void send_commands(char *commands, uint32_t delay_ms)
 {
     char *cmd_start = commands;
     char *cmd_end;
-    twai_message_t tx_msg;
 
     while ((cmd_end = strchr(cmd_start, '\r')) != NULL)
     {
@@ -1908,7 +2123,7 @@ static void send_commands(char *commands, uint32_t delay_ms)
         {
 #if HARDWARE_VER == WICAN_PRO
             // elm327_process_cmd((uint8_t *)str_send, cmd_len, &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, autopid_parser);
-            elm327_run_command((char *)str_send, cmd_len, 1000, &autopidQueue, NULL);
+            elm327_run_command((char *)str_send, cmd_len, 1000, &autopidQueue, NULL, false);
 #else
             twai_message_t tx_msg;
             elm327_process_cmd((uint8_t *)str_send, cmd_len, &tx_msg, &autopidQueue);
@@ -2487,6 +2702,7 @@ static void autopid_task(void *pvParameters)
 {
     static char default_init[] = "ati\rate0\rath1\ratl0\rats1\ratm0\ratst96\r";
     wc_timer_t ecu_check_timer;
+    static response_t monitor_rsp;
 
     ESP_LOGI(TAG, "Autopid Task Started");
 
@@ -2806,6 +3022,79 @@ static void autopid_task(void *pvParameters)
         // elm327_unlock();
         xSemaphoreGive(autopid_config->mutex);
         vTaskDelay(pdMS_TO_TICKS(100));
+
+        // CAN filters monitor window (broadcast frames)
+        // We time-slice ATMA per filter using ATCRA, then force init resend next cycle
+        // to restore any RX filter required for normal PID responses.
+        // CAN filters can come from either:
+        // - custom filters in auto_pid.json (should still run even if Vehicle Specific PIDs are disabled)
+        // - vehicle-profile filters in car_data.json (should be gated by Vehicle Specific PIDs toggle)
+        if (autopid_config->can_filters_count > 0 && dev_status_is_autopid_enabled() && !dev_status_is_sleeping())
+        {
+            // Ensure we don't mix with pending PID responses
+            while (xQueueReceive(autopidQueue, &monitor_rsp, 0) == pdPASS)
+                ;
+
+            xSemaphoreTake(autopid_config->mutex, portMAX_DELAY);
+
+            bool did_monitor = false;
+            for (uint32_t fi = 0; fi < autopid_config->can_filters_count; fi++)
+            {
+                can_filter_t *f = &autopid_config->can_filters[fi];
+                if (f->is_vehicle_specific && !autopid_config->pid_specific_en)
+                {
+                    continue;
+                }
+                if (f->frame_id == 0 || f->parameters_count == 0)
+                {
+                    continue;
+                }
+
+                // Only monitor if at least one param is due
+                bool any_due = false;
+                for (uint32_t pi = 0; pi < f->parameters_count; pi++)
+                {
+                    if (wc_timer_is_expired(&f->parameters[pi].timer))
+                    {
+                        any_due = true;
+                        break;
+                    }
+                }
+                if (!any_due)
+                {
+                    continue;
+                }
+
+                send_can_filter_cmd(f->frame_id);
+
+                // Run ATMA for a bounded time slice; response_callback uses autopid_parser
+                // which will enqueue one or more response_t frames into autopidQueue.
+                // Stop as soon as we see the first frame line (faster than waiting the full timeout).
+                elm327_run_command("ATMA\r", 0, 1100, &autopidQueue, autopid_parser, true);
+
+                did_monitor = true;
+
+                // Process all captured frames as belonging to the currently-selected filter (ATCRA)
+                while (xQueueReceive(autopidQueue, &monitor_rsp, 0) == pdPASS)
+                {
+                    process_can_filter_frame(f, &monitor_rsp);
+                }
+            }
+
+            if (did_monitor)
+            {
+                // Clear receive address filter after monitoring
+                send_commands("ATCRA\r", 2);
+
+                // Update combined JSON snapshot including CAN-filter params
+                autopid_data_update(autopid_config);
+
+                // Force init resend for next request cycle (monitoring changes ATCRA)
+                previous_pid_type = PID_MAX;
+            }
+
+            xSemaphoreGive(autopid_config->mutex);
+        }
 
         if (wc_timer_is_expired(&ecu_check_timer))
         {
