@@ -487,6 +487,36 @@
             color: var(--gray-600);
         }
 
+        .compact-form-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        .compact-form-table td {
+            padding: 3px;
+            vertical-align: middle;
+            font-size: 0.85rem;
+        }
+
+        .compact-form-table td:first-child {
+            width: 180px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .compact-form-table input,
+        .compact-form-table select {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 2px 5px;
+            height: 24px;
+            font-size: 0.85rem;
+            border: 1px solid var(--gray-300);
+            border-radius: 4px;
+        }
+
         @media (max-width: 768px) {
             .system-button {
                 min-width: 110px;
@@ -517,6 +547,14 @@
             .compact-form-table {
                 width: 100%;
                 border-collapse: collapse;
+                table-layout: auto;
+            }
+
+            .compact-form-table td:first-child {
+                width: auto;
+                white-space: normal;
+                overflow: visible;
+                text-overflow: clip;
             }
 
             .compact-form-table td {
@@ -527,7 +565,8 @@
 
             .compact-form-table input,
             .compact-form-table select {
-                width: 95%;
+                width: 100%;
+                box-sizing: border-box;
                 padding: 2px 5px;
                 height: 24px;
                 font-size: 0.85rem;
@@ -1314,10 +1353,10 @@
             </div>
 
             <div id="automate_vehicle" class="automate-subtabcontent">
-                <div class="section-title">Vehicle Specific</div>
+                <div class="section-title">Vehicle Specific PIDs</div>
                 <table class="form-table">
                     <tr>
-                        <td>Vehicle Specific:</td>
+                        <td>Vehicle Specific PIDs:</td>
                         <td>
                             <select id="car_specific" name="car_specific" onchange="toggleCarModel(); enableAutoStoreButton();submit_enable();">
                                 <option value="disable">Disable</option>
@@ -1329,7 +1368,7 @@
                         <td>Vehicle Model:</td>
                         <td style="display: flex; align-items: center; gap: 5px;">
                             <select id="car_model" name="car_model" onchange="enableAutoStoreButton();submit_enable();" style="flex: 1;"></select>
-                            <button onclick="fetchVehicleProfiles()" style="margin-left: 5px;">Get Latest</button>
+                            <button onclick="fetchVehicleProfiles()" class="success-button" style="margin-left: 5px;">Get Latest</button>
                         </td>
                     </tr>
                     <tr>
@@ -1390,7 +1429,7 @@
             </div>
             <div class="section-title" style="margin-top:1rem;"> </div>
             <div class="button-group">
-                <button id="custom_pid_store" onclick="storeAutoTableData()" class="store" disabled>Store</button>
+                <button id="custom_pid_store" onclick="storeAutoTableData()" class="store success-button" disabled>Store</button>
             </div>
         </div>
 
