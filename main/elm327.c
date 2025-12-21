@@ -2416,7 +2416,115 @@ static bool elm327_scan_for_prompt(const uint8_t *buf, int len, bool *last_was_c
 	return false;
 }
 
-void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, QueueHandle_t *response_q, response_callback_t response_callback, bool stop_after_first_frame)
+static bool elm327_is_hex_n(const char *s, size_t n)
+{
+	if (!s || n == 0)
+		return false;
+	for (size_t i = 0; i < n; i++)
+	{
+		char c = s[i];
+		bool is_hex = (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
+		if (!is_hex)
+			return false;
+	}
+	return true;
+}
+
+static bool elm327_atma_line_matches_frame_id(const char *line, size_t line_len, uint32_t frame_id)
+{
+	if (!line || line_len == 0)
+		return false;
+	if (frame_id == 0)
+		return true;
+
+	// Trim leading spaces
+	while (line_len > 0 && (*line == ' ' || *line == '\t'))
+	{
+		line++;
+		line_len--;
+	}
+	// Trim trailing spaces
+	while (line_len > 0 && (line[line_len - 1] == ' ' || line[line_len - 1] == '\t'))
+		line_len--;
+	if (line_len == 0)
+		return false;
+
+	const char *p = line;
+	const char *end = line + line_len;
+
+	// token 1
+	while (p < end && (*p == ' ' || *p == '\t'))
+		p++;
+	const char *t1 = p;
+	while (p < end && *p != ' ' && *p != '\t')
+		p++;
+	size_t t1_len = (size_t)(p - t1);
+	if (t1_len == 0)
+		return false;
+
+	// Case A: contiguous header in token1: 2..8 hex chars ("FF", "123", "000008C0")
+	if (t1_len >= 2 && t1_len <= 8 && elm327_is_hex_n(t1, t1_len))
+	{
+		char tmp[9] = {0};
+		memcpy(tmp, t1, t1_len);
+		uint32_t hdr = (uint32_t)strtoul(tmp, NULL, 16);
+		return hdr == frame_id;
+	}
+
+	// Case B: split header bytes: "00 00 08 C0" (extended) or "00 FF" (standard)
+	if (t1_len == 2 && elm327_is_hex_n(t1, 2))
+	{
+		// token 2
+		while (p < end && (*p == ' ' || *p == '\t'))
+			p++;
+		const char *t2 = p;
+		while (p < end && *p != ' ' && *p != '\t')
+			p++;
+		size_t t2_len = (size_t)(p - t2);
+
+		// token 3
+		while (p < end && (*p == ' ' || *p == '\t'))
+			p++;
+		const char *t3 = p;
+		while (p < end && *p != ' ' && *p != '\t')
+			p++;
+		size_t t3_len = (size_t)(p - t3);
+
+		// token 4
+		while (p < end && (*p == ' ' || *p == '\t'))
+			p++;
+		const char *t4 = p;
+		while (p < end && *p != ' ' && *p != '\t')
+			p++;
+		size_t t4_len = (size_t)(p - t4);
+
+		// Try extended 4-byte header first
+		if (t2_len == 2 && t3_len == 2 && t4_len == 2 &&
+			elm327_is_hex_n(t2, 2) && elm327_is_hex_n(t3, 2) && elm327_is_hex_n(t4, 2))
+		{
+			uint8_t b1 = (uint8_t)strtoul((char[3]){t1[0], t1[1], 0}, NULL, 16);
+			uint8_t b2 = (uint8_t)strtoul((char[3]){t2[0], t2[1], 0}, NULL, 16);
+			uint8_t b3 = (uint8_t)strtoul((char[3]){t3[0], t3[1], 0}, NULL, 16);
+			uint8_t b4 = (uint8_t)strtoul((char[3]){t4[0], t4[1], 0}, NULL, 16);
+			uint32_t hdr32 = ((uint32_t)b1 << 24) | ((uint32_t)b2 << 16) | ((uint32_t)b3 << 8) | (uint32_t)b4;
+			if (hdr32 == frame_id)
+				return true;
+		}
+
+		// Try 2-byte header for standard
+		if (t2_len == 2 && elm327_is_hex_n(t2, 2))
+		{
+			uint8_t b1 = (uint8_t)strtoul((char[3]){t1[0], t1[1], 0}, NULL, 16);
+			uint8_t b2 = (uint8_t)strtoul((char[3]){t2[0], t2[1], 0}, NULL, 16);
+			uint32_t hdr16 = ((uint32_t)b1 << 8) | (uint32_t)b2;
+			return hdr16 == frame_id;
+		}
+	}
+
+	return false;
+}
+
+void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, QueueHandle_t *response_q, response_callback_t response_callback, bool stop_after_first_frame, uint32_t expected_frame_id)
 {
 	if (xSemaphoreTake(xuart1_semaphore, pdMS_TO_TICKS(ELM327_CMD_MUTEX_TIMOUT)) == pdTRUE)
     {
@@ -2457,7 +2565,8 @@ void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, Q
 		}
 
 		// Detect ATMA (monitor-all) command: it does not normally return a prompt until a key is sent.
-		// We use this to send a CR on timeout to stop monitoring.
+		// IMPORTANT: to stop ATMA, send a non-CR key (e.g. space). Sending '\r' can trigger
+		// "repeat last command" behavior on some ELM/STN chips and may re-enter ATMA.
 		{
 			// Simple case-insensitive scan ignoring spaces
 			char c0 = 0, c1 = 0, c2 = 0, c3 = 0;
@@ -2510,7 +2619,8 @@ void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, Q
 			// If ATMA is configured to stop after first frame, and we've seen a frame, stop ASAP.
 			if (is_atma && stop_after_first_frame && atma_frame_seen && !atma_stop_sent)
 			{
-				elm327_uart_write_bytes(UART_NUM_1, "\r", 1);
+				// Use space (0x20) to stop ATMA without repeating the last command.
+				elm327_uart_write_bytes(UART_NUM_1, " ", 1);
 				(void)uart_wait_tx_done(UART_NUM_1, pdMS_TO_TICKS(50));
 				atma_stop_sent = true;
 				// After requesting stop, keep draining until prompt for a short grace window.
@@ -2553,10 +2663,11 @@ void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, Q
 			{
 				if (wc_timer_is_expired(&timeout_timer))
 				{
-					// Timeout reached. For ATMA, send CR to stop monitor mode.
+					// Timeout reached. For ATMA, send a key (space) to stop monitor mode.
 					if (is_atma)
 					{
-						elm327_uart_write_bytes(UART_NUM_1, "\r", 1);
+						// Use space (0x20) to stop ATMA without repeating the last command.
+						elm327_uart_write_bytes(UART_NUM_1, " ", 1);
 						(void)uart_wait_tx_done(UART_NUM_1, pdMS_TO_TICKS(50));
 						atma_stop_sent = true;
 						// Give a short grace period to receive the prompt
@@ -2613,7 +2724,7 @@ void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, Q
 							break;
 						uart_read_buf[read_bytes] = '\0';
 
-						// For ATMA stop-after-first-frame mode, detect the first frame line.
+						// For ATMA stop-after-first-frame mode, detect the first matching frame line.
 						if (is_atma && stop_after_first_frame && !atma_frame_seen)
 						{
 							for (int i = 0; i < read_bytes; i++)
@@ -2625,7 +2736,10 @@ void elm327_run_command(char* command, uint32_t command_len, uint32_t timeout, Q
 									{
 										if (is_likely_can_frame_line(line_buf, line_len))
 										{
-											atma_frame_seen = true;
+											if (expected_frame_id == 0 || elm327_atma_line_matches_frame_id(line_buf, line_len, expected_frame_id))
+											{
+												atma_frame_seen = true;
+											}
 										}
 									}
 									line_len = 0;

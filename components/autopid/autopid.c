@@ -1692,6 +1692,32 @@ static void publish_parameter_mqtt(parameter_t *param);
 
 static void send_can_filter_cmd(uint32_t frame_id)
 {
+    // Ensure current CAN protocol matches frame-id width before setting ATCRA.
+    // For ISO15765 CAN:
+    // - 6: 11-bit 500k, 7: 29-bit 500k
+    // - 8: 11-bit 250k, 9: 29-bit 250k
+    // If we're on a CAN protocol family, keep it consistent with the filter ID.
+    int32_t current_protocol_number = -1;
+    (void)autopid_get_protocol_number(&current_protocol_number);
+    bool is_extended = (frame_id > 0x7FF);
+
+    int32_t desired_protocol_number = -1;
+    if (current_protocol_number == 6 || current_protocol_number == 7)
+    {
+        desired_protocol_number = is_extended ? 7 : 6;
+    }
+    else if (current_protocol_number == 8 || current_protocol_number == 9)
+    {
+        desired_protocol_number = is_extended ? 9 : 8;
+    }
+
+    if (desired_protocol_number != -1 && desired_protocol_number != current_protocol_number)
+    {
+        char proto_cmd[10];
+        snprintf(proto_cmd, sizeof(proto_cmd), "ATTP%01lX\r", (unsigned long)desired_protocol_number);
+        send_commands(proto_cmd, 2);
+    }
+
     // ATCRA expects 3 hex digits for 11-bit, 8 hex digits for 29-bit.
     char cmd[20];
     if (frame_id <= 0x7FF)
@@ -1747,7 +1773,7 @@ static void process_can_filter_frame(can_filter_t *f, const response_t *rsp)
             n = max_log_bytes;
         char hex[3 * max_log_bytes + 1];
         bytes_to_hex_str(hex, sizeof(hex), rsp->data, n);
-        ESP_LOGD(TAG, "CANFLT 0x%lX rsp_len=%lu data[%lu]=%s", (unsigned long)f->frame_id,
+        ESP_LOGI(TAG, "CANFLT 0x%lX rsp_len=%lu data[%lu]=%s", (unsigned long)f->frame_id,
                  (unsigned long)rsp->length, (unsigned long)n, hex);
     }
 
@@ -1776,14 +1802,14 @@ static void process_can_filter_frame(can_filter_t *f, const response_t *rsp)
 
             param->failed = false;
             param->value = (float)(round(result * 100.0) / 100.0);
-            ESP_LOGD(TAG, "CANFLT 0x%lX param=%s result=%.2f", (unsigned long)f->frame_id,
+            ESP_LOGI(TAG, "CANFLT 0x%lX param=%s result=%.2f", (unsigned long)f->frame_id,
                      param->name ? param->name : "(null)", (double)param->value);
             publish_parameter_mqtt(param);
         }
         else
         {
             param->failed = true;
-            ESP_LOGD(TAG, "CANFLT 0x%lX param=%s eval_failed", (unsigned long)f->frame_id,
+            ESP_LOGE(TAG, "CANFLT 0x%lX param=%s eval_failed", (unsigned long)f->frame_id,
                      param->name ? param->name : "(null)");
         }
     }
@@ -2064,6 +2090,254 @@ static bool autopid_buf_is_only_stopped(const char *buf)
     return true;
 }
 
+// -----------------------
+// ATMA (monitor-all) parsing
+// -----------------------
+
+static uint32_t autopid_atma_expected_frame_id = 0;
+static bool autopid_atma_filter_enabled = false;
+
+static void autopid_atma_set_expected_frame_id(uint32_t frame_id)
+{
+    autopid_atma_expected_frame_id = frame_id;
+    autopid_atma_filter_enabled = (frame_id != 0);
+}
+
+static bool autopid_is_hex_n(const char *s, size_t n)
+{
+    if (!s || n == 0)
+        return false;
+    for (size_t i = 0; i < n; i++)
+    {
+        if (!isxdigit((unsigned char)s[i]))
+            return false;
+    }
+    return true;
+}
+
+static bool autopid_hex_byte(const char *s, uint8_t *out)
+{
+    if (!s || !out)
+        return false;
+    if (!autopid_is_hex_n(s, 2))
+        return false;
+    char tmp[3] = {s[0], s[1], 0};
+    char *endptr = NULL;
+    long v = strtol(tmp, &endptr, 16);
+    if (endptr == tmp)
+        return false;
+    if (v < 0 || v > 255)
+        return false;
+    *out = (uint8_t)v;
+    return true;
+}
+
+static bool autopid_atma_parse_line(const char *line, size_t line_len, uint32_t *out_header, response_t *out_rsp)
+{
+    if (!line || line_len == 0 || !out_header || !out_rsp)
+        return false;
+
+    // Trim leading/trailing whitespace
+    while (line_len > 0 && (line[0] == ' ' || line[0] == '\t'))
+    {
+        line++;
+        line_len--;
+    }
+    while (line_len > 0 && (line[line_len - 1] == ' ' || line[line_len - 1] == '\t'))
+        line_len--;
+    if (line_len == 0)
+        return false;
+
+    // Ignore prompt / terminator lines
+    if (line_len == 1 && line[0] == '>')
+        return false;
+    if (line_len >= 7 && (strncasecmp(line, "STOPPED", 7) == 0))
+        return false;
+    if (line_len >= 5 && (strncasecmp(line, "ERROR", 5) == 0))
+        return false;
+    if (line_len >= 7 && (strncasecmp(line, "NO DATA", 7) == 0))
+        return false;
+
+    // Tokenize by whitespace (in-place not allowed, so we scan)
+    const char *p = line;
+    const char *end = line + line_len;
+
+    // Read first token
+    while (p < end && (*p == ' ' || *p == '\t'))
+        p++;
+    const char *t1 = p;
+    while (p < end && *p != ' ' && *p != '\t')
+        p++;
+    size_t t1_len = (size_t)(p - t1);
+    if (t1_len == 0)
+        return false;
+
+    uint32_t header = 0;
+    bool header_ok = false;
+
+    // Case 1: header is contiguous hex: "123" (11-bit) or "000008C0" (29-bit)
+    if ((t1_len == 3 || t1_len == 8) && autopid_is_hex_n(t1, t1_len))
+    {
+        char tmp[9] = {0};
+        memcpy(tmp, t1, t1_len);
+        header = (uint32_t)strtoul(tmp, NULL, 16);
+        header_ok = true;
+    }
+    else if (t1_len == 2 && autopid_is_hex_n(t1, 2))
+    {
+        // Case 2: header is split into bytes: "00 00 08 C0" (extended)
+        // or (less common) "01 23" (standard with leading zero).
+        uint8_t b1 = 0, b2 = 0, b3 = 0, b4 = 0;
+        const char *t2 = NULL, *t3 = NULL, *t4 = NULL;
+        size_t t2_len = 0, t3_len = 0, t4_len = 0;
+
+        // token 2
+        while (p < end && (*p == ' ' || *p == '\t'))
+            p++;
+        t2 = p;
+        while (p < end && *p != ' ' && *p != '\t')
+            p++;
+        t2_len = (size_t)(p - t2);
+
+        // token 3
+        while (p < end && (*p == ' ' || *p == '\t'))
+            p++;
+        t3 = p;
+        while (p < end && *p != ' ' && *p != '\t')
+            p++;
+        t3_len = (size_t)(p - t3);
+
+        // token 4
+        while (p < end && (*p == ' ' || *p == '\t'))
+            p++;
+        t4 = p;
+        while (p < end && *p != ' ' && *p != '\t')
+            p++;
+        t4_len = (size_t)(p - t4);
+
+        // Try 4-byte extended header first (only accept if it matches expected filter when enabled)
+        if (t2_len == 2 && t3_len == 2 && t4_len == 2 &&
+            autopid_hex_byte(t1, &b1) && autopid_hex_byte(t2, &b2) &&
+            autopid_hex_byte(t3, &b3) && autopid_hex_byte(t4, &b4))
+        {
+            uint32_t hdr32 = ((uint32_t)b1 << 24) | ((uint32_t)b2 << 16) | ((uint32_t)b3 << 8) | (uint32_t)b4;
+            if (!autopid_atma_filter_enabled || hdr32 == autopid_atma_expected_frame_id)
+            {
+                header = hdr32;
+                header_ok = true;
+            }
+        }
+
+        // If not a matching 4-byte header, try 2-byte standard header (only if it matches expected)
+        if (!header_ok && t2_len == 2)
+        {
+            if (autopid_hex_byte(t1, &b1) && autopid_hex_byte(t2, &b2))
+            {
+                uint32_t hdr16 = ((uint32_t)b1 << 8) | (uint32_t)b2;
+                if ((!autopid_atma_filter_enabled && hdr16 <= 0x7FF) ||
+                    (autopid_atma_filter_enabled && hdr16 == autopid_atma_expected_frame_id))
+                {
+                    header = hdr16;
+                    header_ok = true;
+                }
+            }
+        }
+    }
+
+    if (!header_ok)
+        return false;
+
+    // Filter out unrelated frames (important when frames are buffered before ATCRA takes effect)
+    if (autopid_atma_filter_enabled && header != autopid_atma_expected_frame_id)
+        return false;
+
+    // Parse remaining tokens as data bytes
+    memset(out_rsp, 0, sizeof(*out_rsp));
+    out_rsp->priority_data = NULL;
+    out_rsp->priority_data_len = 0;
+
+    uint32_t out_idx = 0;
+    while (p < end)
+    {
+        while (p < end && (*p == ' ' || *p == '\t'))
+            p++;
+        const char *bt = p;
+        while (p < end && *p != ' ' && *p != '\t')
+            p++;
+        size_t bt_len = (size_t)(p - bt);
+        if (bt_len == 0)
+            continue;
+        if (bt_len == 1 && bt[0] == '>')
+            break;
+        if (bt_len != 2 || !autopid_is_hex_n(bt, 2))
+            continue;
+        if (out_idx >= sizeof(out_rsp->data))
+            break;
+        uint8_t b = 0;
+        if (!autopid_hex_byte(bt, &b))
+            continue;
+        out_rsp->data[out_idx++] = b;
+    }
+
+    out_rsp->length = out_idx;
+    if (out_rsp->length == 0)
+        return false;
+
+    *out_header = header;
+    return true;
+}
+
+static char autopid_atma_line_buf[192];
+static size_t autopid_atma_line_pos = 0;
+
+static void autopid_atma_parser_reset(void)
+{
+    autopid_atma_line_pos = 0;
+    autopid_atma_line_buf[0] = '\0';
+}
+
+void autopid_atma_parser(char *str, uint32_t len, QueueHandle_t *q, char *cmd_str)
+{
+    (void)cmd_str;
+    if (!str || len == 0 || !q)
+        return;
+
+    for (uint32_t i = 0; i < len; i++)
+    {
+        char c = str[i];
+        if (c == '\r' || c == '\n')
+        {
+            if (autopid_atma_line_pos > 0)
+            {
+                // Process one complete line
+                uint32_t header = 0;
+                response_t rsp;
+                if (autopid_atma_parse_line(autopid_atma_line_buf, autopid_atma_line_pos, &header, &rsp))
+                {
+                    if (xQueueSend(*q, &rsp, pdMS_TO_TICKS(20)) != pdPASS)
+                    {
+                        // Drop if queue is full; monitoring is time-sliced.
+                    }
+                }
+                autopid_atma_line_pos = 0;
+            }
+        }
+        else
+        {
+            if (autopid_atma_line_pos + 1 < sizeof(autopid_atma_line_buf))
+            {
+                autopid_atma_line_buf[autopid_atma_line_pos++] = c;
+                autopid_atma_line_buf[autopid_atma_line_pos] = '\0';
+            }
+            else
+            {
+                // Line too long; reset to avoid runaway.
+                autopid_atma_line_pos = 0;
+            }
+        }
+    }
+}
+
 void autopid_parser(char *str, uint32_t len, QueueHandle_t *q, char *cmd_str)
 {
     static response_t response;
@@ -2227,7 +2501,7 @@ static void send_commands(char *commands, uint32_t delay_ms)
         {
 #if HARDWARE_VER == WICAN_PRO
             // elm327_process_cmd((uint8_t *)str_send, cmd_len, &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, autopid_parser);
-            elm327_run_command((char *)str_send, cmd_len, 1000, &autopidQueue, NULL, false);
+            elm327_run_command((char *)str_send, cmd_len, 1000, &autopidQueue, NULL, false, 0);
 #else
             twai_message_t tx_msg;
             elm327_process_cmd((uint8_t *)str_send, cmd_len, &tx_msg, &autopidQueue);
@@ -3168,14 +3442,19 @@ static void autopid_task(void *pvParameters)
                 {
                     continue;
                 }
-
+                ESP_LOGI(TAG, "Monitoring CAN filter frame_id=0x%X", f->frame_id);
                 send_can_filter_cmd(f->frame_id);
 
                 // Run ATMA for a bounded time slice; response_callback uses autopid_parser
                 // which will enqueue one or more response_t frames into autopidQueue.
                 // Stop as soon as we see the first frame line (faster than waiting the full timeout).
-                elm327_run_command("ATMA\r", 0, 1100, &autopidQueue, autopid_parser, true);
-
+                ESP_LOGI(TAG, "Running ATMA for CAN filter monitoring");
+                send_commands("ATCAF0\r" , 2);
+                autopid_atma_parser_reset();
+                autopid_atma_set_expected_frame_id(f->frame_id);
+                elm327_run_command("ATMA\r", 0, 1100, &autopidQueue, autopid_atma_parser, true, f->frame_id);
+                autopid_atma_set_expected_frame_id(0);
+                send_commands("ATCAF1\r" , 2);
                 did_monitor = true;
 
                 // Process all captured frames as belonging to the currently-selected filter (ATCRA)
