@@ -23,6 +23,7 @@
 #include "freertos/queue.h"
 #include "freertos/event_groups.h"
 #include "esp_log.h"
+#include <ctype.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,20 +60,45 @@ static char *strdup_psram(const char *s)
     return copy;
 }
 
-// Helper function to replace all occurrences of "ATSP" with "ATTP" in a string
+// Helper function to replace all occurrences of "ATSP" with "ATTP" in a string.
+// Normalizes case and tolerates whitespace, e.g. "atsp6", "AT SP 6", "At s p6".
 static void replace_atsp_with_attp(char *str)
 {
     if (!str)
         return;
 
-    char *atsp_pos = strstr(str, "ATSP");
-    while (atsp_pos != NULL)
+    for (size_t i = 0; str[i] != '\0'; i++)
     {
-        // Replace SP with TP
-        atsp_pos[2] = 'T';
-        atsp_pos[3] = 'P';
-        // Look for the next occurrence
-        atsp_pos = strstr(atsp_pos + 4, "ATSP");
+        unsigned char c0 = (unsigned char)str[i];
+        if (tolower(c0) != 'a')
+            continue;
+
+        unsigned char c1 = (unsigned char)str[i + 1];
+        if (c1 == 0 || tolower(c1) != 't')
+            continue;
+
+        size_t j = i + 2;
+        while (str[j] != '\0' && isspace((unsigned char)str[j]))
+            j++;
+
+        if (str[j] == '\0' || tolower((unsigned char)str[j]) != 's')
+            continue;
+
+        size_t k = j + 1;
+        while (str[k] != '\0' && isspace((unsigned char)str[k]))
+            k++;
+
+        if (str[k] == '\0' || tolower((unsigned char)str[k]) != 'p')
+            continue;
+
+        // Force canonical form "ATTP" (preserve any spacing in-between)
+        str[i] = 'A';
+        str[i + 1] = 'T';
+        str[j] = 'T';
+        str[k] = 'P';
+
+        // Continue scanning after the matched 'P'
+        i = k;
     }
 }
 

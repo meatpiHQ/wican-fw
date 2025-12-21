@@ -23,6 +23,7 @@
 #include "freertos/queue.h"
 #include "freertos/event_groups.h"
 #include "esp_log.h"
+#include <ctype.h>
 #include <string.h>
 #include <strings.h>
 #include "driver/twai.h"
@@ -2106,8 +2107,90 @@ void autopid_parser(char *str, uint32_t len, QueueHandle_t *q, char *cmd_str)
     }
 }
 
+// Detect protocol change commands (ATSPx / ATTPx), case-insensitive and tolerant to whitespace.
+// Examples: "ATSP6\r", "at sp 6\r", "AT TP 7\r".
+static bool try_parse_protocol_cmd(const char *cmd, int32_t *out_protocol)
+{
+    if (!cmd || !out_protocol)
+        return false;
+
+    const unsigned char *p = (const unsigned char *)cmd;
+    while (*p && isspace(*p))
+        p++;
+
+    if (tolower(p[0]) != 'a' || tolower(p[1]) != 't')
+        return false;
+
+    p += 2;
+    while (*p && isspace(*p))
+        p++;
+
+    if (tolower(*p) == 's')
+    {
+        p++;
+        while (*p && isspace(*p))
+            p++;
+        if (tolower(*p) != 'p')
+            return false;
+        p++;
+    }
+    else if (tolower(*p) == 't')
+    {
+        // ATTP: accept both "ATTP" and whitespace-separated forms like "AT TP".
+        // After the first 'T', we allow either immediate/space-separated 'P' (TP)
+        // or another 'T' then 'P' (TTP).
+        p++;
+        while (*p && isspace(*p))
+            p++;
+        if (tolower(*p) == 'p')
+        {
+            p++;
+        }
+        else
+        {
+            if (tolower(*p) != 't')
+                return false;
+            p++;
+            while (*p && isspace(*p))
+                p++;
+            if (tolower(*p) != 'p')
+                return false;
+            p++;
+        }
+    }
+    else
+    {
+        return false;
+    }
+
+    while (*p && isspace(*p))
+        p++;
+
+    if (!isxdigit(*p))
+        return false;
+
+    char hex_buf[3] = {0};
+    int hi = 0;
+    while (*p && isxdigit(*p) && hi < 2)
+    {
+        hex_buf[hi++] = (char)*p;
+        p++;
+    }
+
+    char *endptr = NULL;
+    long v = strtol(hex_buf, &endptr, 16);
+    if (endptr == hex_buf)
+        return false;
+
+    *out_protocol = (int32_t)v;
+    return true;
+}
+
 static void send_commands(char *commands, uint32_t delay_ms)
 {
+    if (!commands)
+        return;
+
     char *cmd_start = commands;
     char *cmd_end;
 
@@ -2117,7 +2200,28 @@ static void send_commands(char *commands, uint32_t delay_ms)
         char str_send[cmd_len + 1];               // +1 for null terminator
         strncpy(str_send, cmd_start, cmd_len);
         str_send[cmd_len] = '\0'; // Null-terminate the command string
-        if ((strstr(str_send, "ath0") == NULL && strstr(str_send, "ATH0") == NULL && strstr(str_send, "at h0") == NULL && strstr(str_send, "AT H0") == NULL) &&
+
+        // Keep protocol tracking in sync if init strings switch protocol.
+        int32_t new_protocol_number = -1;
+        bool skip_send = false;
+        if (try_parse_protocol_cmd(str_send, &new_protocol_number))
+        {
+            int32_t current_protocol_number = -1;
+            if (autopid_get_protocol_number(&current_protocol_number) == ESP_OK &&
+                current_protocol_number == new_protocol_number)
+            {
+                // Already in the requested protocol; avoid re-sending the command.
+                skip_send = true;
+            }
+            else
+            {
+                // Update tracking early so downstream logic (header length etc.) stays consistent.
+                autopid_set_protocol_number(new_protocol_number);
+            }
+        }
+
+        if (!skip_send &&
+            (strstr(str_send, "ath0") == NULL && strstr(str_send, "ATH0") == NULL && strstr(str_send, "at h0") == NULL && strstr(str_send, "AT H0") == NULL) &&
             (strstr(str_send, "ats0") == NULL && strstr(str_send, "ATS0") == NULL && strstr(str_send, "at s0") == NULL && strstr(str_send, "AT s0") == NULL) &&
             (strstr(str_send, "ate1") == NULL && strstr(str_send, "ATE1") == NULL && strstr(str_send, "at e1") == NULL && strstr(str_send, "AT E1") == NULL))
         {
