@@ -2,7 +2,7 @@
 
 [www.meatpi.com](https://www.meatpi.com)
 ---
-## [Documentation](https://meatpihq.github.io/wican-fw/) | [Supported Vehicles](https://meatpihq.github.io/wican-fw/config/automate/supported_vehicles) | [Firmware updates](https://github.com/meatpiHQ/wican-fw/releases/) | [Discord server](https://discord.com/invite/2hpHVDmyfw)
+### [Documentation](https://meatpihq.github.io/wican-fw/) | [Supported Vehicles](https://meatpihq.github.io/wican-fw/config/automate/supported_vehicles) | [Firmware updates](https://github.com/meatpiHQ/wican-fw/releases/) | [Discord server](https://discord.com/invite/2hpHVDmyfw) | [Reddit](https://www.reddit.com/r/wican/)
 
 ## **WiCAN PRO Recommended**
 We **highly recommend** ordering the **WiCAN PRO** version because:
