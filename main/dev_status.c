@@ -80,6 +80,7 @@ void dev_status_init(void)
             ESP_LOGE(DEV_STATUS_TAG, "Failed to create device status event group");
         } else {
             ESP_LOGI(DEV_STATUS_TAG, "Device status event group initialized");
+            xEventGroupClearBits(s_dev_status_event_group, DEV_STATUS_ALL_BITS);
         }
     }
     dev_status_running_partition = esp_ota_get_running_partition();
@@ -111,6 +112,14 @@ void dev_status_clear_bits(EventBits_t bits_to_clear)
     if (s_dev_status_event_group != NULL) {
         xEventGroupClearBits(s_dev_status_event_group, bits_to_clear);
         log_bits("CLEAR", bits_to_clear);
+    }
+}
+
+void dev_status_clear_all_bits(void)
+{
+    if (s_dev_status_event_group != NULL) {
+        xEventGroupClearBits(s_dev_status_event_group, DEV_STATUS_ALL_BITS);
+        ESP_LOGI(DEV_STATUS_TAG, "CLEAR: ALL_BITS");
     }
 }
 

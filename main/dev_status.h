@@ -54,6 +54,10 @@ extern "C" {
 #define DEV_VPN_ENABLED_BIT             BIT17
 #define DEV_AUTOPID_ELM327_APP_BIT      BIT18
 
+// Mask for "all bits" in a FreeRTOS event group.
+// Only the lower 24 bits are available for application use; the upper 8 are reserved by the kernel.
+#define DEV_STATUS_ALL_BITS ((EventBits_t)0x00FFFFFFU)
+
 // Initialize device status event group
 void dev_status_init(void);
 
@@ -71,6 +75,7 @@ size_t dev_status_format_uptime(char* buf, size_t buf_len);
 // Generic set/clear functions
 void dev_status_set_bits(EventBits_t bits_to_set);
 void dev_status_clear_bits(EventBits_t bits_to_clear);
+void dev_status_clear_all_bits(void);
 
 // Wait for specific bits to be set
 EventBits_t dev_status_wait_for_bits(EventBits_t bits_to_wait_for, TickType_t timeout);
