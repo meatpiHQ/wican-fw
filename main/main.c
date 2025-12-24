@@ -633,6 +633,14 @@ void app_main(void)
     //configure GPIO with the given settings
     gpio_config(&io_conf);
 
+	gpio_reset_pin(USB_ESP_MODE_EN);
+	gpio_sleep_set_pull_mode(USB_ESP_MODE_EN, GPIO_PULLDOWN_ONLY);
+	gpio_pulldown_en(USB_ESP_MODE_EN);
+	rtc_gpio_pulldown_en(USB_ESP_MODE_EN);
+	gpio_hold_en(USB_ESP_MODE_EN);
+	gpio_set_direction(USB_ESP_MODE_EN, GPIO_MODE_OUTPUT);
+	gpio_set_level(USB_ESP_MODE_EN, 0);
+
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 	gpio_set_level(CONNECTED_LED_GPIO_NUM, 1);
 	gpio_set_level(ACTIVE_LED_GPIO_NUM, 1);
