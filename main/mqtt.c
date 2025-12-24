@@ -110,6 +110,13 @@ typedef struct
 static CANFilter *mqtt_canflt_values = NULL;
 static uint32_t mqtt_canflt_size = 0;
 
+static void log_error_if_nonzero(const char *message, int error_code)
+{
+    if (error_code != 0) {
+        ESP_LOGE(TAG, "%s: 0x%x", message, error_code);
+    }
+}
+
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
@@ -121,6 +128,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     {
 		case MQTT_EVENT_CONNECTED:
 			ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
+			dev_status_set_bits(DEV_MQTT_CONNECTED_BIT);
             if(config_server_mqtt_tx_en_config())
             {
                 esp_mqtt_client_subscribe(client, mqtt_sub_topic, 0);
@@ -157,6 +165,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 			break;
 		case MQTT_EVENT_DISCONNECTED:
 			ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
+            dev_status_clear_bits(DEV_MQTT_CONNECTED_BIT);
 			xEventGroupClearBits(s_mqtt_event_group, MQTT_CONNECTED_BIT);
 			gpio_set_level(mqtt_led, 1);
 	//        esp_mqtt_client_stop(client);
@@ -178,14 +187,16 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 //			printf("DATA=%.*s\r\n", event->data_len, event->data);
 			break;
 		case MQTT_EVENT_ERROR:
-			ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
-	//        if (event->error_handle->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
-	//            log_error_if_nonzero("reported from esp-tls", event->error_handle->esp_tls_last_esp_err);
-	//            log_error_if_nonzero("reported from tls stack", event->error_handle->esp_tls_stack_err);
-	//            log_error_if_nonzero("captured as transport's socket errno",  event->error_handle->esp_transport_sock_errno);
-	//            ESP_LOGI(TAG, "Last errno string (%s)", strerror(event->error_handle->esp_transport_sock_errno));
-	//
-	//        }
+            ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
+            if (event->error_handle) {
+                if (event->error_handle->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
+                    log_error_if_nonzero("reported from esp-tls", event->error_handle->esp_tls_last_esp_err);
+                    log_error_if_nonzero("reported from tls stack", event->error_handle->esp_tls_stack_err);
+                    log_error_if_nonzero("captured as transport's socket errno",  event->error_handle->esp_transport_sock_errno);
+                    ESP_LOGI(TAG, "Last errno (%d): %s", event->error_handle->esp_transport_sock_errno,
+                             strerror(event->error_handle->esp_transport_sock_errno));
+                }
+            }
 			break;
 		default:
 			ESP_LOGI(TAG, "Other event id:%d", event->event_id);
@@ -209,7 +220,8 @@ static void mqtt_parse_data(void *handler_args, esp_event_base_t base, int32_t e
     cJSON *frame = NULL;
     esp_mqtt_event_handle_t event = event_data;
     
-    if ((mqtt_elm327_log == 0) && strncmp(event->topic, mqtt_sub_topic, strlen(mqtt_sub_topic)) == 0)
+    if ((mqtt_elm327_log == 0) && event->topic && (event->topic_len == (int)strlen(mqtt_sub_topic)) &&
+        (memcmp(event->topic, mqtt_sub_topic, event->topic_len) == 0))
     {
         root = cJSON_Parse(event->data);
 
@@ -289,7 +301,8 @@ static void mqtt_parse_data(void *handler_args, esp_event_base_t base, int32_t e
             can_send(&can_frame, 1);
         }
     }
-    else if (strncmp(event->topic, mqtt_cmd_topic, strlen(mqtt_cmd_topic)) == 0)
+    else if (event->topic && (event->topic_len == (int)strlen(mqtt_cmd_topic)) &&
+             (memcmp(event->topic, mqtt_cmd_topic, event->topic_len) == 0))
     {
         static char cmd_response[32] = {0};
 
@@ -370,27 +383,32 @@ static int8_t mqtt_canflt_find_id(uint32_t id, uint8_t start_index)
 #define JSON_BUF_SIZE		2048
 static void mqtt_task(void *pvParameters)
 {
-	static char json_buffer[JSON_BUF_SIZE] = {0};
-	static char tmp[150];
+	char json_buffer[JSON_BUF_SIZE] = {0};
+	char tmp[150];
 	mqtt_can_message_t tx_frame;
-	static char mqtt_topic[64];
-    static char mqtt_elm327_topic[64];
-	static uint64_t can_data = 0;
+	char mqtt_topic[64];
+    char mqtt_elm327_topic[64];
+	uint64_t can_data = 0;
 
 	// sprintf(mqtt_topic, "wican/%s/can/rx", device_id);
     strcpy(mqtt_topic, config_server_get_mqtt_rx_topic());
     sprintf(mqtt_elm327_topic, "wican/%s/elm327", device_id);
 
-	while(!wifi_mgr_is_sta_connected())
-	{
-		vTaskDelay(pdMS_TO_TICKS(1000));
+    // Don't hard-block MQTT startup on STA connectivity.
+    // The MQTT client has auto-reconnect enabled, so it can start early and connect once WiFi is up.
+    while (!wifi_mgr_is_enabled())
+    {
+        vTaskDelay(pdMS_TO_TICKS(250));
         dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
-	}
+    }
 
 	esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
 	esp_mqtt_client_register_event(client, MQTT_EVENT_DATA, mqtt_parse_data, NULL);
-	esp_mqtt_client_start(client);
-
+    esp_err_t start_err = esp_mqtt_client_start(client);
+    if (start_err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_mqtt_client_start failed: %s", esp_err_to_name(start_err));
+    }
+    ESP_LOGI(TAG, "MQTT client task started");
 	while(1)
 	{
 		xQueuePeek(*xmqtt_tx_queue, ( void * ) &tx_frame, portMAX_DELAY);
@@ -640,6 +658,7 @@ void mqtt_publish(const char *topic, const char *data, int len, int qos, int ret
 
 void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
 {
+    dev_status_clear_bits(DEV_MQTT_CONNECTED_BIT);
     xmqtt_semaphore = xSemaphoreCreateMutex();
     xmqtt_tx_queue = xtx_queue;
     mqtt_led = connected_led;
@@ -668,25 +687,31 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
     // Initialize topic strings BEFORE using them in MQTT config
     strcpy(mqtt_sub_topic, config_server_get_mqtt_tx_topic());
     strcpy(mqtt_status_topic, config_server_get_mqtt_status_topic());
+    esp_mqtt_client_config_t mqtt_cfg;
 
-    esp_mqtt_client_config_t mqtt_cfg = {
-		// .session.protocol_ver = MQTT_PROTOCOL_V_5,
-		.broker.address.uri = config_server_get_mqtt_url(),
-		.broker.address.port = config_server_get_mqtt_port(),
-		.credentials.username = config_server_get_mqtt_user(),
-		.credentials.authentication.password = config_server_get_mmqtt_pass(),
-		.network.disable_auto_reconnect = false,
-		.session.keepalive = 30,
-		.session.last_will.topic = mqtt_status_topic,
-        .session.last_will.retain = 1,
-		.session.last_will.msg = "{\"status\": \"offline\"}",
-		.network.reconnect_timeout_ms = 5000,
-		.buffer.size = MQTT_TX_RX_BUF_SIZE,
-		.buffer.out_size = MQTT_OUT_BUF_SIZE,
-    };
+    memset(&mqtt_cfg, 0, sizeof(mqtt_cfg));
+
+    // mqtt_cfg.session.protocol_ver = MQTT_PROTOCOL_V_5;
+    mqtt_cfg.broker.address.uri = config_server_get_mqtt_url();
+    mqtt_cfg.broker.address.port = config_server_get_mqtt_port();
+
+    mqtt_cfg.credentials.username = config_server_get_mqtt_user();
+    mqtt_cfg.credentials.authentication.password = config_server_get_mmqtt_pass();
+
+    mqtt_cfg.network.disable_auto_reconnect = false;
+    mqtt_cfg.network.reconnect_timeout_ms = 5000;
+
+    mqtt_cfg.session.keepalive = 30;
+    mqtt_cfg.session.last_will.topic = mqtt_status_topic;
+    mqtt_cfg.session.last_will.retain = 1;
+    mqtt_cfg.session.last_will.msg = "{\"status\": \"offline\"}";
+
+    mqtt_cfg.buffer.size = MQTT_TX_RX_BUF_SIZE;
+    mqtt_cfg.buffer.out_size = MQTT_OUT_BUF_SIZE;
 
     // Enable TLS (MQTTS) if configured
     if (config_server_get_mqtt_security_enabled()) {
+        ESP_LOGI(TAG, "MQTTS enabled, configuring TLS settings");
         const char *orig_uri = config_server_get_mqtt_url();
         if (orig_uri) {
             // Ensure URI uses mqtts:// scheme
@@ -757,9 +782,10 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
             mqtt_cfg.broker.verification.crt_bundle_attach = esp_crt_bundle_attach;
             ESP_LOGI(TAG, "MQTTS using built-in certificate bundle (default)");
         }
+        // skip_cert_common_name_check (user-configurable)
+        mqtt_cfg.broker.verification.skip_cert_common_name_check = config_server_get_mqtt_skip_cn_check();
     }
-    // skip_cert_common_name_check (user-configurable)
-    mqtt_cfg.broker.verification.skip_cert_common_name_check = config_server_get_mqtt_skip_cn_check();
+
     // uint32_t keep_alive = 0;
     // if(config_server_get_keep_alive(&keep_alive) != -1)
     // {
@@ -771,18 +797,22 @@ void mqtt_init(char* id, uint8_t connected_led, QueueHandle_t *xtx_queue)
     // }
     // ESP_LOGI(TAG, "MQTT Keep Alive: %d", mqtt_cfg.session.keepalive);
     sprintf(mqtt_cmd_topic, "wican/%s/cmd",device_id);
-    sprintf(mqtt_rsp_topic, "wican/%s/cmd",device_id);
+    sprintf(mqtt_rsp_topic, "wican/%s/rsp",device_id);
     sprintf(mqtt_battery_topic, "wican/%s/battery",device_id);
     ESP_LOGI(TAG, "device_id: %s, mqtt_cfg.uri: %s", device_id, mqtt_cfg.broker.address.uri);
     mqtt_elm327_log = config_server_mqtt_elm327_log();
 	mqtt_load_filter();
     s_mqtt_event_group = xEventGroupCreateStatic(&mqtt_event_group_buffer);
     client = esp_mqtt_client_init(&mqtt_cfg);
+    if (client == NULL) {
+        ESP_LOGE(TAG, "esp_mqtt_client_init failed (client == NULL)");
+        return;
+    }
 
     static StackType_t *mqtt_task_stack;
     static StaticTask_t mqtt_task_buffer;
-    static const uint32_t mqtt_task_stack_size = 1024*6;
-    mqtt_task_stack = heap_caps_malloc(mqtt_task_stack_size, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    static const uint32_t mqtt_task_stack_size = 1024*15;
+    mqtt_task_stack = heap_caps_malloc(mqtt_task_stack_size * sizeof(StackType_t), MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
 
     if (mqtt_task_stack == NULL)
     {
