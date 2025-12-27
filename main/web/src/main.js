@@ -2624,6 +2624,7 @@ async function postConfig() {
 
     obj["wifi_mode"] = document.getElementById("wifi_mode").value;
     obj["ap_ch"] = document.getElementById("ap_ch_value").value;
+    obj["webhook_en"] = document.getElementById("webhook_en")?.value || "enable";
     obj["sta_ssid"] = document.getElementById("ssid_value").value;
     obj["sta_pass"] = document.getElementById("pass_value").value;
     obj["sta_security"] = document.getElementById("sta_security").value;
@@ -3095,6 +3096,14 @@ xhttp.onload = async function() {
         // Load drive mode timeout value and update display
         document.getElementById("drive_mode_timeout").value = obj.drive_mode_timeout || "60";
         document.getElementById("drive_mode_timeout_value").textContent = obj.drive_mode_timeout || "60";
+
+        // WebHook enable/disable (defaults to enabled for backward compatibility)
+        const webhookEnEl = document.getElementById("webhook_en");
+        if (webhookEnEl) {
+            const webhookModeFromCfg = obj.webhook_en || "enable";
+            const hasWebhookOption = Array.from(webhookEnEl.options || []).some(o => o && o.value === webhookModeFromCfg);
+            webhookEnEl.value = hasWebhookOption ? webhookModeFromCfg : "enable";
+        }
         
         if(obj.ap_auto_disable == "enable") {
             document.getElementById("ap_auto_disable").selectedIndex = "0";

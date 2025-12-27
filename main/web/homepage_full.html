@@ -1268,6 +1268,15 @@
             <div class="section-title" style="margin-top:1rem;">Home Assistant</div>
             <table class="form-table">
                 <tr>
+                    <td>WebHook:</td>
+                    <td>
+                        <select id="webhook_en" name="webhook_en" onchange="submit_enable();">
+                            <option value="enable">Enable</option>
+                            <option value="disable">Disable</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
                     <td>WebHook URL:</td>
                     <td>
                         <input type="text" id="webhook_url" name="webhook_url" readonly style="background-color:#f5f5f5; cursor:not-allowed;">

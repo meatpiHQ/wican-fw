@@ -3850,29 +3850,38 @@ void autopid_init(char *id, bool enable_logging, uint32_t logging_period)
         }
     }
 
+    // Always init HA webhook config cache when AutoPID starts
     ha_webhooks_init();
-    // Create webhook task
-    static StackType_t *autopid_webhook_task_stack;
-    static StaticTask_t autopid_webhook_task_buffer;
-    static const size_t autopid_webhook_task_stack_size = (1024 * 20);
-    // Allocate stack memory in PSRAM
-    autopid_webhook_task_stack = heap_caps_malloc(autopid_webhook_task_stack_size, MALLOC_CAP_SPIRAM);
-    if (autopid_webhook_task_stack == NULL)
+
+    // Create webhook task only if enabled in device config
+    if (config_server_get_webhook_en())
     {
-        ESP_LOGE(TAG, "Failed to allocate autopid_webhook_task stack in PSRAM");
-    }
-    else
-    {
-        memset(autopid_webhook_task_stack, 0, autopid_webhook_task_stack_size);
-        if (xTaskCreateStatic(autopid_webhook_task, "autopid_webhook_task", autopid_webhook_task_stack_size,
-                              NULL, 5, autopid_webhook_task_stack, &autopid_webhook_task_buffer) != NULL)
+        static StackType_t *autopid_webhook_task_stack;
+        static StaticTask_t autopid_webhook_task_buffer;
+        static const size_t autopid_webhook_task_stack_size = (1024 * 20);
+        // Allocate stack memory in PSRAM
+        autopid_webhook_task_stack = heap_caps_malloc(autopid_webhook_task_stack_size, MALLOC_CAP_SPIRAM);
+        if (autopid_webhook_task_stack == NULL)
         {
-            ESP_LOGI(TAG, "Autopid webhook task created");
+            ESP_LOGE(TAG, "Failed to allocate autopid_webhook_task stack in PSRAM");
         }
         else
         {
-            ESP_LOGE(TAG, "Failed to create autopid_webhook_task");
+            memset(autopid_webhook_task_stack, 0, autopid_webhook_task_stack_size);
+            if (xTaskCreateStatic(autopid_webhook_task, "autopid_webhook_task", autopid_webhook_task_stack_size,
+                                  NULL, 5, autopid_webhook_task_stack, &autopid_webhook_task_buffer) != NULL)
+            {
+                ESP_LOGI(TAG, "Autopid webhook task created");
+            }
+            else
+            {
+                ESP_LOGE(TAG, "Failed to create autopid_webhook_task");
+            }
         }
+    }
+    else
+    {
+        ESP_LOGI(TAG, "Webhook disabled in config, not starting autopid_webhook_task");
     }
 
     if (dev_status_is_smartconnect_enabled())

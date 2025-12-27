@@ -210,7 +210,7 @@ static char can_datarate_str[11][7] = {
 								"1000K",
 };
 
-const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\
+const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"webhook_en\":\"enable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\
 										\"home_ssid\":\"MeatPi\",\"home_password\":\"TomatoSauce\",\"home_security\":\"wpa3\",\"home_protocol\":\"elm327\",\
 										\"drive_ssid\":\"MeatPi\",\"drive_password\":\"TomatoSauce\",\"drive_security\":\"wpa3\",\"drive_protocol\":\"elm327\",\"drive_connection_type\":\"wifi\",\"drive_mode_timeout\":\"60\",\
 										\"can_datarate\":\"500K\",\
@@ -316,6 +316,16 @@ int8_t config_server_get_ap_ch(void)
 		return ch_val;
 	}
 	return -1;
+}
+
+int8_t config_server_get_webhook_en(void)
+{
+	// Backward-compatible default: enabled unless explicitly set to "disable"
+	if (strcmp(device_config.webhook_en, "disable") == 0)
+	{
+		return 0;
+	}
+	return 1;
 }
 
 char *config_server_get_sta_ssid(void)
@@ -2464,7 +2474,7 @@ static void config_server_load_cfg(char *cfg)
 		device_config.sta_fallbacks[i].pass[0] = '\0';
 		strlcpy(device_config.sta_fallbacks[i].security, "wpa3", sizeof(device_config.sta_fallbacks[i].security));
 	}
-
+	
 	key = cJSON_GetObjectItem(root,"wifi_mode");
 	if(key == 0)
 	{
@@ -3324,6 +3334,23 @@ static void config_server_load_cfg(char *cfg)
 	{
 		ESP_LOGI(TAG, "Debug mode disabled");
 	}
+	//*****
+
+	//*****
+	strlcpy(device_config.webhook_en, "enable", sizeof(device_config.webhook_en));
+	key = cJSON_GetObjectItem(root, "webhook_en");
+	if (key)
+	{
+		if (cJSON_IsString(key) && key->valuestring && strlen(key->valuestring) > 0)
+		{
+			strlcpy(device_config.webhook_en, key->valuestring, sizeof(device_config.webhook_en));
+		}
+		else if (cJSON_IsBool(key))
+		{
+			strlcpy(device_config.webhook_en, cJSON_IsTrue(key) ? "enable" : "disable", sizeof(device_config.webhook_en));
+		}
+	}
+	ESP_LOGI(TAG, "device_config.webhook_en: %s", device_config.webhook_en);
 	//*****
 
 	cJSON_Delete(root);

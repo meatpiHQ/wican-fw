@@ -140,6 +140,7 @@ typedef struct _device_config
 	char batt_mqtt_user[64];
 	char batt_mqtt_pass[64];
 	char mqtt_en[10];
+	char webhook_en[10];
 	char mqtt_tx_en[10];
 	char mqtt_rx_en[10];
 	char mqtt_url[256];
@@ -168,6 +169,7 @@ void config_server_start(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, u
 void config_server_stop(void);
 int8_t config_server_get_wifi_mode(void);
 int8_t config_server_get_ap_ch(void);
+int8_t config_server_get_webhook_en(void);
 char *config_server_get_sta_ssid(void);
 char *config_server_get_sta_pass(void);
 char *config_server_get_home_ssid(void);
