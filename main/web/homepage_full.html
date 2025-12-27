@@ -329,6 +329,74 @@
             color: #991b1b;
         }
 
+        /* Webhook stats (compact) */
+        .webhook-stats {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .webhook-stats-top {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .webhook-meta {
+            color: var(--gray-600);
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .webhook-stats-bottom {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            min-width: 0;
+        }
+
+        .webhook-error-preview {
+            max-width: 520px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 0.85rem;
+            color: var(--danger-color);
+            font-weight: 500;
+            min-width: 0;
+            flex: 1;
+        }
+
+        .webhook-details-btn {
+            padding: 0.25rem 0.6rem;
+            font-size: 0.8rem;
+            background-color: var(--gray-100);
+            color: var(--primary-color);
+            border: 1px solid var(--gray-300);
+            border-radius: 999px;
+        }
+
+        .webhook-details-btn:hover {
+            background-color: var(--gray-200);
+        }
+
+        .webhook-details-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .webhook-error-box {
+            font-size: 0.85rem;
+            color: var(--gray-700);
+            border: 1px solid var(--gray-300);
+            background: var(--gray-100);
+            border-radius: 8px;
+            padding: 0.6rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
         input[type="file"] {
             padding: 0.5rem;
             border: 1px dashed var(--gray-400);
@@ -1298,6 +1366,25 @@
                             <option value="full">Full Data (All Fields)</option>
                             <option value="changed">Changed Values Only</option>
                         </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td>WebHook Stats:</td>
+                    <td>
+                        <div class="webhook-stats">
+                            <div class="webhook-stats-top">
+                                <span id="webhook_stat_success" class="status-indicator status-connected">OK: 0</span>
+                                <span id="webhook_stat_fail" class="status-indicator status-disconnected">Fail: 0</span>
+                                <span id="webhook_stat_status" class="webhook-meta">Status: -</span>
+                                <span id="webhook_stat_last_post" class="webhook-meta">Last: -</span>
+                            </div>
+                            <div id="webhook_error_row" class="webhook-stats-bottom">
+                                <span class="webhook-meta">Last error:</span>
+                                <span id="webhook_last_error" class="webhook-error-preview" title=""></span>
+                                <button id="webhook_error_details_btn" type="button" onclick="toggleWebhookErrorDetails();" class="webhook-details-btn">Details</button>
+                            </div>
+                            <div id="webhook_error_details" class="webhook-error-box" style="display:none;"></div>
+                        </div>
                     </td>
                 </tr>
                 <tr style="display:none;">

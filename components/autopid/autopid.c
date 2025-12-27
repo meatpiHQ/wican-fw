@@ -2630,9 +2630,40 @@ static void autopid_publish_task(void *pvParameters)
     }
 }
 
+// -----------------------
+// Webhook runtime stats helpers
+// -----------------------
+
+static void webhook_format_utc(char out[32])
+{
+    if (!out)
+        return;
+    out[0] = '\0';
+    time_t now;
+    time(&now);
+    struct tm utc;
+    gmtime_r(&now, &utc);
+    strftime(out, 32, "%Y-%m-%dT%H:%M:%SZ", &utc);
+}
+
+static void webhook_sanitize_snippet(char *s)
+{
+    if (!s)
+        return;
+    for (char *p = s; *p; p++)
+    {
+        unsigned char c = (unsigned char)*p;
+        if (c == '\r' || c == '\n' || c == '\t')
+            *p = ' ';
+        else if (c < 0x20)
+            *p = ' ';
+    }
+}
+
 static void autopid_webhook_task(void *pvParameters)
 {
     ESP_LOGI(TAG, "Autopid Webhook Task Started");
+
 
     uint32_t last_post_time = 0;
     static char *prev_autopid_snapshot = NULL; // previous snapshot for diffing when sending only changes
@@ -3082,6 +3113,53 @@ static void autopid_webhook_task(void *pvParameters)
                                 {
                                     ESP_LOGE(TAG, "Webhook POST failed: %s", esp_err_to_name(post_err));
                                 }
+
+                                // Update runtime webhook stats in cache (no filesystem write)
+                                // NOTE: This task uses a PSRAM stack, so it must not touch file I/O.
+                                ha_webhook_config_t upd = webhook_cfg;
+                                if (ok)
+                                {
+                                    upd.success_count++;
+                                    upd.retries = 0;
+                                    strlcpy(upd.status, "ok", sizeof(upd.status));
+                                    webhook_format_utc(upd.last_post);
+                                    upd.last_error[0] = '\0';
+                                    upd.last_error_time[0] = '\0';
+                                }
+                                else
+                                {
+                                    upd.fail_count++;
+                                    upd.retries++;
+                                    strlcpy(upd.status, "failed", sizeof(upd.status));
+                                    webhook_format_utc(upd.last_error_time);
+
+                                    char snippet[96] = {0};
+                                    if (resp.data && resp.data_len > 0)
+                                    {
+                                        size_t n = (size_t)resp.data_len;
+                                        if (n > (sizeof(snippet) - 1))
+                                            n = (sizeof(snippet) - 1);
+                                        memcpy(snippet, resp.data, n);
+                                        snippet[n] = '\0';
+                                        webhook_sanitize_snippet(snippet);
+                                    }
+
+                                    if (post_err != ESP_OK)
+                                    {
+                                        if (snippet[0])
+                                            snprintf(upd.last_error, sizeof(upd.last_error), "esp_err=%s; resp=%s", esp_err_to_name(post_err), snippet);
+                                        else
+                                            snprintf(upd.last_error, sizeof(upd.last_error), "esp_err=%s", esp_err_to_name(post_err));
+                                    }
+                                    else
+                                    {
+                                        if (snippet[0])
+                                            snprintf(upd.last_error, sizeof(upd.last_error), "http=%d; resp=%s", resp.status_code, snippet);
+                                        else
+                                            snprintf(upd.last_error, sizeof(upd.last_error), "http=%d", resp.status_code);
+                                    }
+                                }
+                                (void)ha_webhooks_update_cache(&upd);
 
                                 https_client_mgr_free_response(&resp);
                                 free(body);

@@ -238,6 +238,9 @@ esp_err_t ha_webhook_save_config(const ha_webhook_config_t *cfg)
     cJSON_AddNumberToObject(root, "retries", cfg->retries);
     cJSON_AddNumberToObject(root, "interval", cfg->interval);
 
+    // Note: runtime webhook stats are intentionally not persisted.
+    // (success_count, fail_count, last_error_time, last_error)
+
     char *json = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
 
@@ -359,5 +362,22 @@ esp_err_t ha_webhooks_set_config(const ha_webhook_config_t *cfg)
     unlock_cfg();
 
     ESP_LOGI(TAG, "PSRAM cache updated after save");
+    return ESP_OK;
+}
+
+esp_err_t ha_webhooks_update_cache(const ha_webhook_config_t *cfg)
+{
+    if (!cfg)
+        return ESP_ERR_INVALID_ARG;
+
+    if (!s_cfg_psram || !s_cfg_mutex)
+    {
+        ESP_LOGE(TAG, "Config cache not initialized - call ha_webhooks_init() first");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    lock_cfg();
+    *s_cfg_psram = *cfg;
+    unlock_cfg();
     return ESP_OK;
 }

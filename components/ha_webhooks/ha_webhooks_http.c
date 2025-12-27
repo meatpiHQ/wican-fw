@@ -179,6 +179,12 @@ static esp_err_t webhook_post_handler(httpd_req_t *req)
     cJSON_AddBoolToObject(resp, "enabled", cfg.enabled);
     cJSON_AddNumberToObject(resp, "interval", cfg.interval);
 
+    // Runtime stats (may be zeroed if device hasn't posted yet)
+    cJSON_AddNumberToObject(resp, "success_count", cfg.success_count);
+    cJSON_AddNumberToObject(resp, "fail_count", cfg.fail_count);
+    cJSON_AddStringToObject(resp, "last_error_time", cfg.last_error_time[0] ? cfg.last_error_time : "");
+    cJSON_AddStringToObject(resp, "last_error", cfg.last_error[0] ? cfg.last_error : "");
+
     return send_json(req, resp, first_set ? 201 : 200);
 }
 
@@ -212,6 +218,11 @@ static esp_err_t webhook_get_handler(httpd_req_t *req)
         cJSON_AddStringToObject(resp, "status", cfg.status[0] ? cfg.status : "unknown");
         cJSON_AddNumberToObject(resp, "retries", cfg.retries);
         cJSON_AddNumberToObject(resp, "interval", cfg.interval);
+
+        cJSON_AddNumberToObject(resp, "success_count", cfg.success_count);
+        cJSON_AddNumberToObject(resp, "fail_count", cfg.fail_count);
+        cJSON_AddStringToObject(resp, "last_error_time", cfg.last_error_time[0] ? cfg.last_error_time : "");
+        cJSON_AddStringToObject(resp, "last_error", cfg.last_error[0] ? cfg.last_error : "");
     }
     else
     {
@@ -223,6 +234,11 @@ static esp_err_t webhook_get_handler(httpd_req_t *req)
         cJSON_AddStringToObject(resp, "status", "disabled");
         cJSON_AddNumberToObject(resp, "retries", 0);
         cJSON_AddNumberToObject(resp, "interval", 0);
+
+        cJSON_AddNumberToObject(resp, "success_count", 0);
+        cJSON_AddNumberToObject(resp, "fail_count", 0);
+        cJSON_AddStringToObject(resp, "last_error_time", "");
+        cJSON_AddStringToObject(resp, "last_error", "");
     }
 
     return send_json(req, resp, 200);
@@ -251,10 +267,17 @@ static esp_err_t webhook_delete_handler(httpd_req_t *req)
     cfg.last_post[0] = '\0';
     strlcpy(cfg.status, "disabled", sizeof(cfg.status));
     cfg.retries = 0;
+    cfg.success_count = 0;
+    cfg.fail_count = 0;
+    cfg.last_error_time[0] = '\0';
+    cfg.last_error[0] = '\0';
 
     bool changed = (old_cfg.url[0] != '\0') || (old_cfg.enabled != false) ||
                    (old_cfg.last_post[0] != '\0') || (strcmp(old_cfg.status, "disabled") != 0) ||
-                   (old_cfg.retries != 0) || (old_cfg.interval != 0) || (have != ESP_OK);
+                   (old_cfg.retries != 0) || (old_cfg.interval != 0) ||
+                   (old_cfg.success_count != 0) || (old_cfg.fail_count != 0) ||
+                   (old_cfg.last_error_time[0] != '\0') || (old_cfg.last_error[0] != '\0') ||
+                   (have != ESP_OK);
 
     if (changed)
     {

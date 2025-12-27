@@ -2438,6 +2438,11 @@ function checkStatus() {
 }
 
 function loadWebhookConfig() {
+    // Periodic refresh so stats update without reloading the page
+    if (!window._webhookStatsTimer) {
+        window._webhookStatsTimer = setInterval(loadWebhookConfig, 5000);
+    }
+
     fetch('/api/webhook')
         .then(response => {
             if (!response.ok) {
@@ -2449,12 +2454,56 @@ function loadWebhookConfig() {
             const urlField = document.getElementById("webhook_url");
             const intervalField = document.getElementById("webhook_interval");
 
+            // Stats elements (may not exist on older pages)
+            const okEl = document.getElementById("webhook_stat_success");
+            const failEl = document.getElementById("webhook_stat_fail");
+            const statusEl = document.getElementById("webhook_stat_status");
+            const lastPostEl = document.getElementById("webhook_stat_last_post");
+            const lastErrEl = document.getElementById("webhook_last_error");
+            const detailsEl = document.getElementById("webhook_error_details");
+            const errorRowEl = document.getElementById("webhook_error_row");
+            const detailsBtnEl = document.getElementById("webhook_error_details_btn");
+
             if (urlField) {
                 urlField.value = config.enabled && config.url ? config.url : "Not configured";
             }
             if (intervalField) {
                 intervalField.value = config.enabled && config.interval ? config.interval.toString() : "Not configured";
             }
+
+            const successCount = Number(config.success_count || 0);
+            const failCount = Number(config.fail_count || 0);
+            const statusText = (config && config.status) ? String(config.status) : (config.enabled ? 'unknown' : 'disabled');
+            const lastPost = (config && config.last_post) ? String(config.last_post) : '';
+            const lastErr = (config && config.last_error) ? String(config.last_error) : '';
+            const lastErrTime = (config && config.last_error_time) ? String(config.last_error_time) : '';
+
+            const fullErrText = lastErr ? ((lastErrTime ? (lastErrTime + ' ') : '') + lastErr) : '';
+            window._webhookLastErrorText = fullErrText;
+
+            if (okEl) okEl.textContent = `OK: ${successCount}`;
+            if (failEl) failEl.textContent = `Fail: ${failCount}`;
+            if (statusEl) {
+                statusEl.textContent = `Status: ${statusText || '-'}`;
+                const s = String(statusText || '').toLowerCase();
+                if (s === 'ok') statusEl.style.color = 'var(--success-color)';
+                else if (s === 'failed' || s === 'error') statusEl.style.color = 'var(--danger-color)';
+                else statusEl.style.color = 'var(--gray-600)';
+            }
+            if (lastPostEl) lastPostEl.textContent = `Last: ${lastPost || '-'}`;
+
+            if (lastErrEl) {
+                lastErrEl.textContent = fullErrText || '';
+                lastErrEl.title = fullErrText || '';
+            }
+            if (detailsEl) {
+                detailsEl.textContent = fullErrText || 'No error recorded.';
+            }
+
+            const hasErr = !!fullErrText;
+            if (errorRowEl) errorRowEl.style.display = hasErr ? 'flex' : 'none';
+            if (detailsBtnEl) detailsBtnEl.disabled = !hasErr;
+            if (!hasErr && detailsEl) detailsEl.style.display = 'none';
         })
         .catch(error => {
             console.log('Webhook config not available:', error);
@@ -2462,7 +2511,41 @@ function loadWebhookConfig() {
             const intervalField = document.getElementById("webhook_interval");
             if (urlField) urlField.value = "Not configured";
             if (intervalField) intervalField.value = "Not configured";
+
+            const okEl = document.getElementById("webhook_stat_success");
+            const failEl = document.getElementById("webhook_stat_fail");
+            const statusEl = document.getElementById("webhook_stat_status");
+            const lastPostEl = document.getElementById("webhook_stat_last_post");
+            const lastErrEl = document.getElementById("webhook_last_error");
+            const detailsEl = document.getElementById("webhook_error_details");
+            const errorRowEl = document.getElementById("webhook_error_row");
+            const detailsBtnEl = document.getElementById("webhook_error_details_btn");
+
+            if (okEl) okEl.textContent = "OK: 0";
+            if (failEl) failEl.textContent = "Fail: 0";
+            if (statusEl) statusEl.textContent = "Status: -";
+            if (lastPostEl) lastPostEl.textContent = "Last: -";
+            if (lastErrEl) {
+                lastErrEl.textContent = "";
+                lastErrEl.title = "";
+            }
+            if (detailsEl) detailsEl.textContent = "No error recorded.";
+            if (errorRowEl) errorRowEl.style.display = 'none';
+            if (detailsBtnEl) detailsBtnEl.disabled = true;
+            if (detailsEl) detailsEl.style.display = 'none';
         });
+}
+
+function toggleWebhookErrorDetails() {
+    const detailsEl = document.getElementById('webhook_error_details');
+    if (!detailsEl) return;
+    const isHidden = (detailsEl.style.display === 'none' || detailsEl.style.display === '');
+    if (isHidden) {
+        detailsEl.textContent = window._webhookLastErrorText || 'No error recorded.';
+        detailsEl.style.display = 'block';
+    } else {
+        detailsEl.style.display = 'none';
+    }
 }
 
 function loadCANFLT() {
