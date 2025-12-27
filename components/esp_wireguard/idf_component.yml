@@ -1,0 +1,8 @@
+description: WireGuard Implementation for ESP-IDF
+license: BSD-3-Clause
+repository: git://github.com/trombik/esp_wireguard.git
+repository_info:
+  commit_sha: 9217c5be0836e908005301ad2c2d42009e560c0e
+  path: .
+url: https://github.com/trombik/esp_wireguard
+version: 0.9.0

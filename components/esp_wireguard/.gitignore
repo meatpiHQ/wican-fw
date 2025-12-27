@@ -1,0 +1,5 @@
+*.swp
+/examples/*/build
+/examples/*/sdkconfig
+/examples/*/sdkconfig.*
+/examples/*/.vagrant/

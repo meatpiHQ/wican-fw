@@ -34,11 +34,11 @@ dependencies:
       type: service
     version: 1.8.2
   espressif/usb_host_cdc_acm:
-    component_hash: 0ca1a47f3b568ad539f2db7938aaa2a64f3017bd50a5ee9b410d2f9d7425ecef
+    component_hash: 4fc5789ef080e3038d8e09598807000f44d045cff5cc1267d9d4dfe0e4e775fb
     dependencies:
     - name: idf
       require: private
-      version: '>=4.4'
+      version: '>=5.0'
     - name: espressif/usb
       registry_url: https://components.espressif.com
       require: public
@@ -55,7 +55,7 @@ dependencies:
     - esp32p4
     - esp32h4
     - linux
-    version: 2.1.1
+    version: 2.2.0
   espressif/usb_host_cp210x_vcp:
     component_hash: d8f33825476a6ebb2c5c12dc69f94a0bcd0fa418d1370af886a20bdc31cce952
     dependencies:
@@ -133,13 +133,6 @@ dependencies:
       path: components/esp32-idf-sqlite3/
       type: git
     version: 8c38efacd2d9225295e2abcc85f565c9b65bb1e0
-  trombik/esp_wireguard:
-    component_hash: 06b514516c241f27493b7589d3d4a79f424713609891168e4e65f529f1980922
-    dependencies: []
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 0.9.0
   zorxx/multipart-parser:
     component_hash: a80b98bbdd530829b5a4df54cd8332a265ef4d310392562cf37d4cac548c5fd2
     dependencies: []
@@ -157,8 +150,7 @@ direct_dependencies:
 - joltwallet/littlefs
 - meatpihq/usb_host_ch34x_vcp
 - nopnop2002/sqlite3
-- trombik/esp_wireguard
 - zorxx/multipart-parser
-manifest_hash: 03b11d64ea75d95d865ee0d6bbbfa8f7821a9ba99ee157e56490b63a91ce5d6d
+manifest_hash: fea349af0598d79dcf7b5775ee0a9f6dd1ee7a0a3c9147a3a4dcad7dedac3de3
 target: esp32s3
 version: 2.0.0

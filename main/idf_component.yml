@@ -17,4 +17,3 @@ dependencies:
     version: '>=4.1.0'
   eil/i2cdev: ^1.5.1
   zorxx/multipart-parser: '*'
-  trombik/esp_wireguard: ^0.9.0

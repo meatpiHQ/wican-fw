@@ -1,0 +1,33 @@
+menu "WireGuard"
+
+choice WIREGUARD_ESP_ADAPTER_SELECTION
+    prompt "TCP/IP adapter to use"
+    default WIREGUARD_ESP_NETIF
+    config WIREGUARD_ESP_TCPIP_ADAPTER
+        bool "TCP/IP Adapter (pre esp-idf v4.1, ESP8266 RTOS SDK)"
+    config WIREGUARD_ESP_NETIF
+        bool "ESP-NETIF"
+endchoice
+
+config WIREGUARD_MAX_PEERS
+    int "Max number of peers"
+    default 1
+
+config WIREGUARD_MAX_SRC_IPS
+	int "Max number of SRC IP addresses"
+	default 2
+
+config MAX_INITIATIONS_PER_SECOND
+    int "Per device limit on accepting (valid) initiation requests"
+    default 2
+    help
+        Per device limit on accepting (valid) initiation requests - per peer.
+choice WIREGUARD_x25519_IMPLEMENTATION
+    prompt "x25519 implementation to use"
+    default WIREGUARD_x25519_IMPLEMENTATION_DEFAULT
+    config WIREGUARD_x25519_IMPLEMENTATION_DEFAULT
+        bool "Default (originally from wireguard-lwip)"
+    config WIREGUARD_x25519_IMPLEMENTATION_NACL
+        bool "NaCL"
+endchoice
+endmenu
