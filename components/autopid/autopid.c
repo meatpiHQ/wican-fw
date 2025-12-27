@@ -2661,6 +2661,11 @@ static void autopid_webhook_task(void *pvParameters)
                 // Check if it's time to post
                 if ((current_time - last_post_time) >= interval_sec)
                 {
+                    // IMPORTANT: update the schedule on attempt, not only on success.
+                    // Otherwise if the endpoint is down we will retry every loop (1s) forever,
+                    // which can starve other network traffic.
+                    last_post_time = current_time;
+
                     // Get current autopid data
                     char *raw_json = autopid_data_read();
                     if (raw_json)
@@ -3072,7 +3077,6 @@ static void autopid_webhook_task(void *pvParameters)
                                 {
                                     ESP_LOGI(TAG, "Webhook POST success, status %d", resp.status_code);
                                     // printf("body: %s\n", body);
-                                    last_post_time = current_time;
                                 }
                                 else
                                 {
