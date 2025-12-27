@@ -31,6 +31,7 @@
  #include "esp_http_client.h"
  #include "https_client_mgr.h"
  #include "mbedtls/base64.h"
+ #include "esp_heap_caps.h"
  
  static const char *TAG = "HTTPS_CLIENT_MGR";
  
@@ -201,6 +202,16 @@ static esp_err_t build_basic_auth_value(const char *user, const char *pass,
      if (!config || !config->url || !response) {
          return ESP_ERR_INVALID_ARG;
      }
+
+    // Ensure caller always receives a predictable state even on early errors.
+    response->data = NULL;
+    response->data_len = 0;
+    response->status_code = 0;
+    response->is_success = false;
+
+#if defined(CONFIG_HEAP_POISONING_LIGHT) || defined(CONFIG_HEAP_POISONING_COMPREHENSIVE)
+    heap_caps_check_integrity_all(true);
+#endif
      
      // Configure HTTP client
      esp_http_client_config_t http_config = {
@@ -310,6 +321,9 @@ static esp_err_t build_basic_auth_value(const char *user, const char *pass,
      if (err != ESP_OK) {
          ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
          esp_http_client_cleanup(client);
+#if defined(CONFIG_HEAP_POISONING_LIGHT) || defined(CONFIG_HEAP_POISONING_COMPREHENSIVE)
+          heap_caps_check_integrity_all(true);
+#endif
          return err;
      }
      
@@ -318,11 +332,18 @@ static esp_err_t build_basic_auth_value(const char *user, const char *pass,
      if (err != ESP_OK) {
          ESP_LOGE(TAG, "Failed to read HTTP response");
          esp_http_client_cleanup(client);
+#if defined(CONFIG_HEAP_POISONING_LIGHT) || defined(CONFIG_HEAP_POISONING_COMPREHENSIVE)
+          heap_caps_check_integrity_all(true);
+#endif
          return err;
      }
      
      // Clean up
      esp_http_client_cleanup(client);
+
+#if defined(CONFIG_HEAP_POISONING_LIGHT) || defined(CONFIG_HEAP_POISONING_COMPREHENSIVE)
+    heap_caps_check_integrity_all(true);
+#endif
      
      ESP_LOGI(TAG, "Request completed, status code: %d, response size: %d bytes", 
               response->status_code, response->data_len);
@@ -345,6 +366,16 @@ esp_err_t https_client_mgr_request_with_auth(const https_client_mgr_config_t *co
     if (!config || !config->url || !response) {
         return ESP_ERR_INVALID_ARG;
     }
+
+    // Keep output deterministic on all error paths.
+    response->data = NULL;
+    response->data_len = 0;
+    response->status_code = 0;
+    response->is_success = false;
+
+#if defined(CONFIG_HEAP_POISONING_LIGHT) || defined(CONFIG_HEAP_POISONING_COMPREHENSIVE)
+    heap_caps_check_integrity_all(true);
+#endif
 
     // Build URL with query params if needed
     char *temp_url = NULL;
@@ -535,7 +566,7 @@ esp_err_t https_client_mgr_download_file(const char *url, const char *save_path,
     if (!url || !save_path) {
         return ESP_ERR_INVALID_ARG;
     }
-    esp_log_level_set("HTTP_CLIENT", ESP_LOG_VERBOSE);
+    // esp_log_level_set("HTTP_CLIENT", ESP_LOG_VERBOSE);
     // Open the output file
     FILE *f = fopen(save_path, "wb");
     if (!f) {

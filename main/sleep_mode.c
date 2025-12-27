@@ -1162,7 +1162,6 @@ void sleep_mode_init(void)
         if (sleep_task_handle == NULL)
         {
             ESP_LOGE(TAG, "Failed to create light sleep task");
-            heap_caps_free(light_sleep_task_stack);
             return;
         }
 	}

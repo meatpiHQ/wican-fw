@@ -432,12 +432,17 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
         autopid_config->group_destination_type = DEST_DEFAULT;
     }
 
-    // Parse new destinations array (up to a reasonable max, e.g. 6)
+    // Parse new destinations array (capped)
     autopid_config->destinations = NULL;
     autopid_config->destinations_count = 0;
     if (destinations_array && cJSON_IsArray(destinations_array))
     {
         int count = cJSON_GetArraySize(destinations_array);
+        if (count > AUTOPID_MAX_DESTINATIONS)
+        {
+            ESP_LOGW(TAG, "Destinations count %d exceeds max %d; truncating", count, AUTOPID_MAX_DESTINATIONS);
+            count = AUTOPID_MAX_DESTINATIONS;
+        }
         if (count > 0)
         {
             autopid_config->destinations = (group_destination_t *)heap_caps_calloc(
@@ -556,6 +561,11 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
                     if (qp_arr && cJSON_IsArray(qp_arr))
                     {
                         int qn = cJSON_GetArraySize(qp_arr);
+                        if (qn > AUTOPID_MAX_DEST_QUERY_PARAMS)
+                        {
+                            ESP_LOGW(TAG, "Query params count %d exceeds max %d; truncating", qn, AUTOPID_MAX_DEST_QUERY_PARAMS);
+                            qn = AUTOPID_MAX_DEST_QUERY_PARAMS;
+                        }
                         if (qn > 0)
                         {
                             gd->query_params = (dest_query_kv_t *)heap_caps_calloc(qn, sizeof(dest_query_kv_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
@@ -603,6 +613,19 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
                     }
                 }
                 autopid_config->destinations_count = write_idx;
+
+                ESP_LOGI(TAG, "Configured destinations loaded: %u", (unsigned)autopid_config->destinations_count);
+                for (uint32_t di = 0; di < autopid_config->destinations_count; ++di)
+                {
+                    group_destination_t *gd = &autopid_config->destinations[di];
+                    ESP_LOGI(TAG,
+                             "Dest[%u]: type=%d cycle=%u qp_count=%u has_dest=%d",
+                             (unsigned)di,
+                             (int)gd->type,
+                             (unsigned)gd->cycle,
+                             (unsigned)gd->query_params_count,
+                             (gd->destination && gd->destination[0]) ? 1 : 0);
+                }
             }
         }
     }

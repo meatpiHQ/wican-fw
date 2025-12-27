@@ -27,6 +27,10 @@
 #define AUTOPID_BUFFER_SIZE (1024*4)
 #define QUEUE_SIZE 10
 
+// Safety caps for user-configurable destinations (prevents stack/heap abuse via config JSON)
+#define AUTOPID_MAX_DESTINATIONS 6
+#define AUTOPID_MAX_DEST_QUERY_PARAMS 16
+
 typedef struct {
     uint8_t data[AUTOPID_BUFFER_SIZE];
     uint32_t length;
@@ -93,6 +97,9 @@ typedef struct {
     char *api_token;            // Optional API/Bearer token (HTTP/HTTPS/ABRP)
     char *cert_set;             // Certificate set name for HTTPS ("default" for built-in)
     bool enabled;               // Whether this destination is active
+    // Stats (runtime only)
+    uint32_t success_count;      // Number of successful publishes
+    uint32_t fail_count;         // Number of failed publishes
     // Extended HTTP(S) settings
     destination_auth_t auth;    // Detailed auth configuration for HTTP/HTTPS
     dest_query_kv_t *query_params;   // Optional extra query parameters
@@ -184,6 +191,7 @@ void autopid_init(char* id, bool enable_logging, uint32_t logging_period);
 char *autopid_data_read(void);
 bool autopid_get_ecu_status(void);
 char* autopid_get_config(void);
+char *autopid_get_destinations_stats_json(void);
 esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint32_t available_pids_size) ;
 char *autopid_get_value_by_name(char* name);
 void autopid_publish_all_destinations(void);

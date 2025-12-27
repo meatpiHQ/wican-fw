@@ -1310,7 +1310,17 @@ collapseBtn.style.cssText='border:none; background:transparent; font-size:0.75re
     enabledChk.type='checkbox';
     enabledChk.checked = d.enabled !== false;
     enabledChk.onchange = ()=>{ d.enabled = enabledChk.checked; enableAutoStoreButton(); };
-    enabledLabel.appendChild(enabledChk); enabledLabel.appendChild(document.createTextNode('Enabled'));
+    // Runtime publish stats (OK/Fail) - shown before Enabled checkbox
+    const statsSpan = document.createElement('span');
+    statsSpan.className = 'dest-stats';
+    statsSpan.dataset.idx = String(idx);
+    statsSpan.style.cssText = 'margin-right:8px; color:#475569; font-size:0.7rem; white-space:nowrap;';
+    const ok0 = Number(d.success_count || 0);
+    const fail0 = Number(d.fail_count || 0);
+    statsSpan.textContent = `OK: ${ok0} Fail: ${fail0}`;
+    enabledLabel.appendChild(statsSpan);
+    enabledLabel.appendChild(enabledChk);
+    enabledLabel.appendChild(document.createTextNode('Enabled'));
     const delBtn = document.createElement('button');
     delBtn.textContent='Delete';
 delBtn.style.cssText='background:#dc2626; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.65rem; margin-left:12px;';
@@ -1475,6 +1485,40 @@ content.style.cssText='padding:8px 10px;'+(isCollapsed?'display:none;':'display:
 document.getElementById('add_destination_btn').disabled = window.automateDestinations.length>=6;
 }
 
+async function refreshDestinationStats(){
+    if (window._destStatsInFlight) return;
+    window._destStatsInFlight = true;
+    try{
+        const r = await fetch('/api/destinations_stats');
+        if(!r.ok) throw new Error('HTTP '+r.status);
+        const js = await r.json();
+        const arr = Array.isArray(js?.destinations) ? js.destinations : [];
+        // Update model and DOM (without re-rendering)
+        arr.forEach((s, i)=>{
+            const ok = Number(s?.success || 0);
+            const fail = Number(s?.fail || 0);
+            if (Array.isArray(window.automateDestinations) && window.automateDestinations[i]) {
+                window.automateDestinations[i].success_count = ok;
+                window.automateDestinations[i].fail_count = fail;
+            }
+            const el = document.querySelector(`.dest-stats[data-idx="${i}"]`);
+            if (el) el.textContent = `OK: ${ok} Fail: ${fail}`;
+        });
+    }catch(e){
+        // silently ignore; endpoint may not exist on older FW
+        // console.log('dest stats fetch failed', e);
+    }finally{
+        window._destStatsInFlight = false;
+    }
+}
+
+function ensureDestinationStatsRefresh(){
+    if (window._destStatsTimer) return;
+    // Refresh periodically so users can see failures/successes live.
+    window._destStatsTimer = setInterval(refreshDestinationStats, 5000);
+    refreshDestinationStats();
+}
+
 function addDestinationEntry(){
 if(!Array.isArray(window.automateDestinations)) window.automateDestinations=[];
 if(window.automateDestinations.length>=6){ showNotification('Maximum 6 destinations', 'red'); return; }
@@ -1532,7 +1576,9 @@ function loadAutoTable(jsonData) {
                     cert_set: d.cert_set || 'default',
                     enabled: (d.enabled===false)?false:true,
                     auth: d.auth || { type: 'none' },
-                    query_params: Array.isArray(d.query_params) ? d.query_params : []
+                    query_params: Array.isArray(d.query_params) ? d.query_params : [],
+                    success_count: Number(d.success_count || 0),
+                    fail_count: Number(d.fail_count || 0)
                 });
             });
         } else {
@@ -1544,12 +1590,15 @@ function loadAutoTable(jsonData) {
                 cert_set: 'default',
                 enabled: true,
                 auth: { type: 'none' },
-                query_params: []
+                query_params: [],
+                success_count: 0,
+                fail_count: 0
             });
         }
         // Collapse all destinations on initial load
         window.automateDestinations.forEach(d=>{ d.collapsed = true; });
         renderDestinations();
+        ensureDestinationStatsRefresh();
         
         if (data.pids && Array.isArray(data.pids)) {
             data.pids.forEach((pidData, index) => {

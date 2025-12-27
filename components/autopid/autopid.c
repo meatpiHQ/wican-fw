@@ -49,6 +49,7 @@
 #include <time.h>
 #include "ha_webhooks.h"
 #include "autopid_config.h"
+#include "esp_heap_caps.h"
 
 // #define TAG __func__
 #define TAG "AUTO_PID"
@@ -1058,28 +1059,38 @@ void autopid_publish_all_destinations(void)
         {
         case DEST_MQTT_TOPIC:
         case DEST_DEFAULT: // treat as MQTT default topic
-            if (dest[0] != '\0')
+        {
+            bool can_publish = (config_server_mqtt_en_config() == 1) && (mqtt_connected() != 0);
+            const char *topic = (dest[0] != '\0') ? dest : config_server_get_mqtt_rx_topic();
+            if (can_publish)
             {
-                mqtt_publish(dest, raw_json, 0, 0, 1);
+                mqtt_publish(topic, raw_json, 0, 0, 1);
+                gd->success_count++;
+                ESP_LOGI(TAG, "Published MQTT (%s) to %s", dest_type_str(gd->type), topic);
             }
             else
             {
-                mqtt_publish(config_server_get_mqtt_rx_topic(), raw_json, 0, 0, 1);
+                gd->fail_count++;
+                ESP_LOGW(TAG, "MQTT publish skipped (not connected/disabled) (%s) to %s", dest_type_str(gd->type), topic);
             }
-            ESP_LOGI(TAG, "Published MQTT (%s) to %s", dest_type_str(gd->type), dest[0] ? dest : config_server_get_mqtt_rx_topic());
             break;
+        }
         case DEST_MQTT_WALLBOX:
         {
             // For now replicate same JSON publish (future: custom format)
-            if (dest[0] != '\0')
+            bool can_publish = (config_server_mqtt_en_config() == 1) && (mqtt_connected() != 0);
+            const char *topic = (dest[0] != '\0') ? dest : config_server_get_mqtt_rx_topic();
+            if (can_publish)
             {
-                mqtt_publish(dest, raw_json, 0, 0, 1);
+                mqtt_publish(topic, raw_json, 0, 0, 1);
+                gd->success_count++;
+                ESP_LOGI(TAG, "Published MQTT WallBox to %s", topic);
             }
             else
             {
-                mqtt_publish(config_server_get_mqtt_rx_topic(), raw_json, 0, 0, 1);
+                gd->fail_count++;
+                ESP_LOGW(TAG, "MQTT WallBox publish skipped (not connected/disabled) to %s", topic);
             }
-            ESP_LOGI(TAG, "Published MQTT WallBox to %s", dest[0] ? dest : config_server_get_mqtt_rx_topic());
             break;
         }
         case DEST_HTTP:
@@ -1091,6 +1102,7 @@ void autopid_publish_all_destinations(void)
             if (!url)
             {
                 ESP_LOGW(TAG, "Destination %u missing URL", i);
+                gd->fail_count++;
                 break;
             }
 
@@ -1187,6 +1199,7 @@ void autopid_publish_all_destinations(void)
             {
                 ESP_LOGE(TAG, "Failed to allocate body");
                 free(url);
+                gd->fail_count++;
                 break;
             }
 
@@ -1274,9 +1287,15 @@ void autopid_publish_all_destinations(void)
             // Append any extra query params configured in destination
             if (gd->query_params && gd->query_params_count > 0)
             {
-                // Build a temporary array compatible with https_client_mgr
+                // Build a temporary array compatible with https_client_mgr.
+                // DO NOT use alloca(): user config can make this huge and corrupt memory.
                 size_t qp_count = gd->query_params_count;
-                https_client_mgr_query_kv_t *qp = alloca(sizeof(https_client_mgr_query_kv_t) * qp_count);
+                if (qp_count > AUTOPID_MAX_DEST_QUERY_PARAMS)
+                {
+                    qp_count = AUTOPID_MAX_DEST_QUERY_PARAMS;
+                }
+
+                https_client_mgr_query_kv_t *qp = heap_caps_calloc(qp_count, sizeof(https_client_mgr_query_kv_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
                 if (qp)
                 {
                     for (size_t qi = 0; qi < qp_count; ++qi)
@@ -1286,6 +1305,10 @@ void autopid_publish_all_destinations(void)
                     }
                     auth.extra_query = qp;
                     auth.extra_query_count = qp_count;
+                }
+                else
+                {
+                    ESP_LOGW(TAG, "Failed to allocate query params array (count=%u)", (unsigned)qp_count);
                 }
             }
 
@@ -1333,11 +1356,13 @@ void autopid_publish_all_destinations(void)
                 gd->backoff_ms = 0;
                 // After initial successful settings push for this destination, switch to telemetry-only
                 gd->settings_sent = true;
+                gd->success_count++;
             }
             else
             {
                 ESP_LOGE(TAG, "HTTP(S) dest %u request failed: %s", i, esp_err_to_name(err));
                 gd->consec_failures++;
+                gd->fail_count++;
                 // Apply backoff logic (same as ABRP)
                 if (gd->consec_failures >= 3)
                 {
@@ -1357,6 +1382,12 @@ void autopid_publish_all_destinations(void)
             }
 
             https_client_mgr_free_response(&resp);
+            if (auth.extra_query)
+            {
+                free((void *)auth.extra_query);
+                auth.extra_query = NULL;
+                auth.extra_query_count = 0;
+            }
             free(body);
             free(url);
             break;
@@ -1368,6 +1399,7 @@ void autopid_publish_all_destinations(void)
             if (!url)
             {
                 ESP_LOGW(TAG, "Destination %u missing URL", i);
+                gd->fail_count++;
                 break;
             }
 
@@ -1380,6 +1412,7 @@ void autopid_publish_all_destinations(void)
                 {
                     ESP_LOGE(TAG, "Failed to build ABRP telemetry data");
                     free(url);
+                    gd->fail_count++;
                     break;
                 }
 
@@ -1390,6 +1423,7 @@ void autopid_publish_all_destinations(void)
                     ESP_LOGE(TAG, "Failed to URL encode telemetry data");
                     free(tlm_data);
                     free(url);
+                    gd->fail_count++;
                     break;
                 }
 
@@ -1419,6 +1453,7 @@ void autopid_publish_all_destinations(void)
             {
                 ESP_LOGE(TAG, "Failed to allocate body");
                 free(url);
+                gd->fail_count++;
                 break;
             }
 
@@ -1542,10 +1577,12 @@ void autopid_publish_all_destinations(void)
             {
                 gd->consec_failures = 0;
                 gd->backoff_ms = 0;
+                gd->success_count++;
             }
             else
             {
                 gd->consec_failures++;
+                gd->fail_count++;
             }
             // Backoff logic: after 3 failures, double backoff up to 2x base_cycle (or 60s min cap)
             if (gd->consec_failures >= 3)
@@ -1585,7 +1622,59 @@ void autopid_publish_all_destinations(void)
         vTaskDelay(pdMS_TO_TICKS(5));
     }
 
+#if defined(CONFIG_HEAP_POISONING_LIGHT) || defined(CONFIG_HEAP_POISONING_COMPREHENSIVE)
+    // If heap corruption is happening during destination publishing, catch it here
+    // (closer to the root cause) rather than later in unrelated code (e.g., WiFi RX).
+    heap_caps_check_integrity_all(true);
+#endif
+
     free(raw_json);
+}
+
+char *autopid_get_destinations_stats_json(void)
+{
+    if (!autopid_config || !autopid_config->mutex)
+    {
+        // Keep response shape stable even if not ready
+        char *fallback = strdup("{\"destinations\":[]}");
+        return fallback;
+    }
+
+    char *printed = NULL;
+    if (xSemaphoreTake(autopid_config->mutex, pdMS_TO_TICKS(2000)) == pdTRUE)
+    {
+        cJSON *root = cJSON_CreateObject();
+        cJSON *arr = cJSON_CreateArray();
+        if (root && arr)
+        {
+            for (uint32_t i = 0; i < autopid_config->destinations_count; i++)
+            {
+                group_destination_t *gd = &autopid_config->destinations[i];
+                cJSON *o = cJSON_CreateObject();
+                if (!o)
+                    continue;
+                cJSON_AddNumberToObject(o, "success", (double)gd->success_count);
+                cJSON_AddNumberToObject(o, "fail", (double)gd->fail_count);
+                cJSON_AddItemToArray(arr, o);
+            }
+            cJSON_AddItemToObject(root, "destinations", arr);
+            printed = cJSON_PrintUnformatted(root);
+        }
+        else
+        {
+            if (arr)
+                cJSON_Delete(arr);
+        }
+        if (root)
+            cJSON_Delete(root);
+        xSemaphoreGive(autopid_config->mutex);
+    }
+
+    if (!printed)
+    {
+        printed = strdup("{\"destinations\":[]}");
+    }
+    return printed; // caller must free()
 }
 
 char *autopid_get_config(void)
@@ -2595,6 +2684,8 @@ static void autopid_publish_task(void *pvParameters)
 {
     ESP_LOGI(TAG, "Autopid Publish Task Started");
     wc_timer_t skip_log_timer = 0;
+
+    vTaskDelay(pdMS_TO_TICKS(5000)); // Initial delay to allow system stabilization
     for (;;)
     {
         // Only publish when autopid is enabled and STA is connected
@@ -2670,6 +2761,7 @@ static void autopid_webhook_task(void *pvParameters)
     static char *prev_config_snapshot = NULL;  // previous config for diffing
     static char *prev_status_snapshot = NULL;  // previous status for diffing
 
+    vTaskDelay(pdMS_TO_TICKS(5000)); // Initial delay to allow system stabilization
     for (;;)
     {
         // Only post when autopid is enabled and STA is connected
@@ -3182,6 +3274,7 @@ static void autopid_task(void *pvParameters)
     wc_timer_t ecu_check_timer;
     static response_t monitor_rsp;
 
+    vTaskDelay(pdMS_TO_TICKS(1000)); // Initial delay to allow system stabilization
     ESP_LOGI(TAG, "Autopid Task Started");
 
     // while(config_server_mqtt_en_config() == 1 && !mqtt_connected())

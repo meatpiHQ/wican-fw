@@ -1225,6 +1225,21 @@ static esp_err_t load_car_config_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+static esp_err_t destinations_stats_handler(httpd_req_t *req)
+{
+	char *response_str = autopid_get_destinations_stats_json();
+	if (response_str)
+	{
+		httpd_resp_set_type(req, "application/json");
+		httpd_resp_send(req, response_str, HTTPD_RESP_USE_STRLEN);
+		free(response_str);
+		return ESP_OK;
+	}
+
+	httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to generate JSON");
+	return ESP_OK;
+}
+
 
 static esp_err_t system_reboot_handler(httpd_req_t *req)
 {
@@ -2358,6 +2373,13 @@ static const httpd_uri_t load_car_config_uri = {
      * context to demonstrate it's usage */
     .user_ctx  = NULL
 };
+
+static const httpd_uri_t destinations_stats_uri = {
+	.uri       = "/api/destinations_stats",
+	.method    = HTTP_GET,
+	.handler   = destinations_stats_handler,
+	.user_ctx  = NULL
+};
 static const httpd_uri_t check_status_uri = {
     .uri       = "/check_status",
     .method    = HTTP_GET,
@@ -3445,6 +3467,7 @@ static void register_server_uris(void)
 	httpd_register_uri_handler(server, &upload_car_data);
 	httpd_register_uri_handler(server, &autopid_data);
 	httpd_register_uri_handler(server, &load_car_config_uri);
+	httpd_register_uri_handler(server, &destinations_stats_uri);
 	httpd_register_uri_handler(server, &store_car_data_uri);
 	httpd_register_uri_handler(server, &system_commands);
 	httpd_register_uri_handler(server, &scan_available_pids_uri);
