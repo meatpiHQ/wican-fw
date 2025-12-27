@@ -68,7 +68,7 @@ static QueueHandle_t s_vpn_cmd_q = NULL;
 static StaticQueue_t s_vpn_cmd_q_struct;
 static uint8_t s_vpn_cmd_q_storage[8 * sizeof(vpn_cmd_msg_t)];
 static uint32_t s_backoff_ms = 0;
-static uint32_t s_backoff_cap_ms = 60000; // 60s cap
+static uint32_t s_backoff_cap_ms = 15000; // 15s cap
 static uint32_t s_backoff_base_ms = 2000; // 2s start
 
 // Use PSRAM for VPN task stack when available
