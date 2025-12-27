@@ -3880,20 +3880,22 @@ void autopid_init(char *id, bool enable_logging, uint32_t logging_period)
 
     static StackType_t *autopid_task_stack;
     static StaticTask_t autopid_task_buffer;
-    static const size_t autopid_task_stack_size = (1024 * 10);
+    // Note: xTaskCreateStatic() expects stack depth in words, not bytes.
+    static const size_t autopid_task_stack_depth_words = (1024 * 10) / sizeof(StackType_t);
+    static const size_t autopid_task_stack_size_bytes = autopid_task_stack_depth_words * sizeof(StackType_t);
     // Allocate stack memory in PSRAM
-    autopid_task_stack = heap_caps_malloc(autopid_task_stack_size, MALLOC_CAP_SPIRAM);
+    autopid_task_stack = heap_caps_malloc(autopid_task_stack_size_bytes, MALLOC_CAP_SPIRAM);
     if (autopid_task_stack == NULL)
     {
         ESP_LOGE(TAG, "Failed to allocate autopid_task stack in PSRAM");
         return;
     }
-    memset(autopid_task_stack, 0, autopid_task_stack_size);
+    memset(autopid_task_stack, 0, autopid_task_stack_size_bytes);
     // Check if memory allocation was successful
     if (autopid_task_stack != NULL)
     {
         // Create task with static allocation
-        xTaskCreateStatic(autopid_task, "autopid_task", autopid_task_stack_size, (void *)AF_INET, 5,
+        xTaskCreateStatic(autopid_task, "autopid_task", (uint32_t)autopid_task_stack_depth_words, (void *)AF_INET, 5,
                           autopid_task_stack, &autopid_task_buffer);
     }
     else
@@ -3906,17 +3908,19 @@ void autopid_init(char *id, bool enable_logging, uint32_t logging_period)
     {
         static StackType_t *autopid_publish_task_stack;
         static StaticTask_t autopid_publish_task_buffer;
-        static const size_t autopid_publish_task_stack_size = (1024 * 8);
+        // Note: xTaskCreateStatic() expects stack depth in words, not bytes.
+        static const size_t autopid_publish_task_stack_depth_words = (1024 * 8) / sizeof(StackType_t);
+        static const size_t autopid_publish_task_stack_size_bytes = autopid_publish_task_stack_depth_words * sizeof(StackType_t);
         // Allocate stack memory in PSRAM
-        autopid_publish_task_stack = heap_caps_malloc(autopid_publish_task_stack_size, MALLOC_CAP_SPIRAM);
+        autopid_publish_task_stack = heap_caps_malloc(autopid_publish_task_stack_size_bytes, MALLOC_CAP_SPIRAM);
         if (autopid_publish_task_stack == NULL)
         {
             ESP_LOGE(TAG, "Failed to allocate autopid_publish_task stack in PSRAM");
         }
         else
         {
-            memset(autopid_publish_task_stack, 0, autopid_publish_task_stack_size);
-            if (xTaskCreateStatic(autopid_publish_task, "autopid_publish_task", autopid_publish_task_stack_size,
+            memset(autopid_publish_task_stack, 0, autopid_publish_task_stack_size_bytes);
+            if (xTaskCreateStatic(autopid_publish_task, "autopid_publish_task", (uint32_t)autopid_publish_task_stack_depth_words,
                                   NULL, 5, autopid_publish_task_stack, &autopid_publish_task_buffer) != NULL)
             {
                 ESP_LOGI(TAG, "Autopid publish task created");
@@ -3936,17 +3940,19 @@ void autopid_init(char *id, bool enable_logging, uint32_t logging_period)
     {
         static StackType_t *autopid_webhook_task_stack;
         static StaticTask_t autopid_webhook_task_buffer;
-        static const size_t autopid_webhook_task_stack_size = (1024 * 20);
+        // Note: xTaskCreateStatic() expects stack depth in words, not bytes.
+        static const size_t autopid_webhook_task_stack_depth_words = (1024 * 20) / sizeof(StackType_t);
+        static const size_t autopid_webhook_task_stack_size_bytes = autopid_webhook_task_stack_depth_words * sizeof(StackType_t);
         // Allocate stack memory in PSRAM
-        autopid_webhook_task_stack = heap_caps_malloc(autopid_webhook_task_stack_size, MALLOC_CAP_SPIRAM);
+        autopid_webhook_task_stack = heap_caps_malloc(autopid_webhook_task_stack_size_bytes, MALLOC_CAP_SPIRAM);
         if (autopid_webhook_task_stack == NULL)
         {
             ESP_LOGE(TAG, "Failed to allocate autopid_webhook_task stack in PSRAM");
         }
         else
         {
-            memset(autopid_webhook_task_stack, 0, autopid_webhook_task_stack_size);
-            if (xTaskCreateStatic(autopid_webhook_task, "autopid_webhook_task", autopid_webhook_task_stack_size,
+            memset(autopid_webhook_task_stack, 0, autopid_webhook_task_stack_size_bytes);
+            if (xTaskCreateStatic(autopid_webhook_task, "autopid_webhook_task", (uint32_t)autopid_webhook_task_stack_depth_words,
                                   NULL, 5, autopid_webhook_task_stack, &autopid_webhook_task_buffer) != NULL)
             {
                 ESP_LOGI(TAG, "Autopid webhook task created");

@@ -23,6 +23,20 @@ typedef struct
     char line[DEBUG_LOG_MAX_LINE];
 } debug_log_msg_t;
 
+// ISR-safe staging message.
+// Keep this SMALL because it lives in internal RAM (static) and is touched from ISR context.
+// The full-size messages live in the normal pool (prefer PSRAM).
+#ifndef DEBUG_LOGS_ISR_MAX_LINE
+#define DEBUG_LOGS_ISR_MAX_LINE 256
+#endif
+
+typedef struct
+{
+    uint16_t len;
+    uint8_t level;
+    char line[DEBUG_LOGS_ISR_MAX_LINE];
+} debug_log_isr_msg_t;
+
 // NOTE:
 // DEBUG_LOG_MAX_LINE is large (default 10KB). Do NOT place debug_log_msg_t on the caller's stack.
 // To avoid stack overflows/corruption (which can manifest as Cache/MMU faults), we use a fixed
@@ -35,10 +49,10 @@ static TaskHandle_t s_dbg_task_handle = NULL;
 
 // Normal (task-context) pool + index queues
 #if ( configSUPPORT_STATIC_ALLOCATION == 1 )
-static StaticQueue_t s_free_queue_struct;
-static StaticQueue_t s_pending_queue_struct;
-static uint8_t s_free_queue_storage[DEBUG_LOGS_QUEUE_LEN * sizeof(uint8_t)];
-static uint8_t s_pending_queue_storage[DEBUG_LOGS_QUEUE_LEN * sizeof(uint8_t)];
+static StaticQueue_t *s_free_queue_struct = NULL;
+static StaticQueue_t *s_pending_queue_struct = NULL;
+static uint8_t *s_free_queue_storage = NULL;
+static uint8_t *s_pending_queue_storage = NULL;
 static debug_log_msg_t *s_pool = NULL; // allocated at init (prefer PSRAM)
 #endif
 
@@ -51,11 +65,11 @@ static debug_log_msg_t *s_pool = NULL; // allocated at init (prefer PSRAM)
 #if ( configSUPPORT_STATIC_ALLOCATION == 1 ) && ( DEBUG_LOGS_ISR_POOL_LEN > 0 )
 static QueueHandle_t s_isr_free_queue = NULL;
 static QueueHandle_t s_isr_pending_queue = NULL;
-static StaticQueue_t s_isr_free_queue_struct;
-static StaticQueue_t s_isr_pending_queue_struct;
-static uint8_t s_isr_free_queue_storage[DEBUG_LOGS_ISR_POOL_LEN * sizeof(uint8_t)];
-static uint8_t s_isr_pending_queue_storage[DEBUG_LOGS_ISR_POOL_LEN * sizeof(uint8_t)];
-static debug_log_msg_t s_isr_pool[DEBUG_LOGS_ISR_POOL_LEN];
+static StaticQueue_t *s_isr_free_queue_struct = NULL;
+static StaticQueue_t *s_isr_pending_queue_struct = NULL;
+static uint8_t *s_isr_free_queue_storage = NULL;
+static uint8_t *s_isr_pending_queue_storage = NULL;
+static debug_log_isr_msg_t *s_isr_pool = NULL;
 #endif
 static int s_udp_sock = -1;
 static struct sockaddr_in s_dest_addr;
@@ -141,7 +155,7 @@ static void debug_logs_task(void *arg)
         {
             if (idx < DEBUG_LOGS_ISR_POOL_LEN)
             {
-                debug_log_msg_t *p = &s_isr_pool[idx];
+                debug_log_isr_msg_t *p = &s_isr_pool[idx];
                 if (s_network_ready)
                 {
                     if (s_network_ready())
@@ -193,7 +207,7 @@ static void debug_logs_task(void *arg)
 
 // Internal storage for optional static task (TCB always in internal RAM BSS; stack may be in PSRAM)
 #if ( configSUPPORT_STATIC_ALLOCATION == 1 )
-static StaticTask_t s_dbg_task_tcb;
+static StaticTask_t *s_dbg_task_tcb = NULL;
 static StackType_t *s_dbg_task_stack = NULL; // allocated at init if PSRAM requested
 #endif
 
@@ -203,6 +217,63 @@ void debug_logs_init(bool (*network_ready_fn)(void), bool use_psram_stack)
     {
         return;
     }
+
+    // Allocate small internal-only structures dynamically to avoid permanent .bss usage.
+    // These must remain in INTERNAL RAM (ISR-safe + FreeRTOS requirements).
+#if ( configSUPPORT_STATIC_ALLOCATION == 1 )
+    const size_t free_q_bytes = (size_t)DEBUG_LOGS_QUEUE_LEN * sizeof(uint8_t);
+    const size_t isr_q_bytes = (size_t)DEBUG_LOGS_ISR_POOL_LEN * sizeof(uint8_t);
+
+    if (!s_free_queue_struct)
+    {
+        s_free_queue_struct = (StaticQueue_t*)heap_caps_malloc(sizeof(StaticQueue_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (s_free_queue_struct) memset(s_free_queue_struct, 0, sizeof(StaticQueue_t));
+    }
+    if (!s_pending_queue_struct)
+    {
+        s_pending_queue_struct = (StaticQueue_t*)heap_caps_malloc(sizeof(StaticQueue_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (s_pending_queue_struct) memset(s_pending_queue_struct, 0, sizeof(StaticQueue_t));
+    }
+    if (!s_free_queue_storage)
+    {
+        s_free_queue_storage = (uint8_t*)heap_caps_malloc(free_q_bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (s_free_queue_storage) memset(s_free_queue_storage, 0, free_q_bytes);
+    }
+    if (!s_pending_queue_storage)
+    {
+        s_pending_queue_storage = (uint8_t*)heap_caps_malloc(free_q_bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (s_pending_queue_storage) memset(s_pending_queue_storage, 0, free_q_bytes);
+    }
+
+#if ( DEBUG_LOGS_ISR_POOL_LEN > 0 )
+    if (!s_isr_free_queue_struct)
+    {
+        s_isr_free_queue_struct = (StaticQueue_t*)heap_caps_malloc(sizeof(StaticQueue_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (s_isr_free_queue_struct) memset(s_isr_free_queue_struct, 0, sizeof(StaticQueue_t));
+    }
+    if (!s_isr_pending_queue_struct)
+    {
+        s_isr_pending_queue_struct = (StaticQueue_t*)heap_caps_malloc(sizeof(StaticQueue_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (s_isr_pending_queue_struct) memset(s_isr_pending_queue_struct, 0, sizeof(StaticQueue_t));
+    }
+    if (!s_isr_free_queue_storage)
+    {
+        s_isr_free_queue_storage = (uint8_t*)heap_caps_malloc(isr_q_bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (s_isr_free_queue_storage) memset(s_isr_free_queue_storage, 0, isr_q_bytes);
+    }
+    if (!s_isr_pending_queue_storage)
+    {
+        s_isr_pending_queue_storage = (uint8_t*)heap_caps_malloc(isr_q_bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (s_isr_pending_queue_storage) memset(s_isr_pending_queue_storage, 0, isr_q_bytes);
+    }
+    if (!s_isr_pool)
+    {
+        const size_t isr_pool_bytes = (size_t)DEBUG_LOGS_ISR_POOL_LEN * sizeof(debug_log_isr_msg_t);
+        s_isr_pool = (debug_log_isr_msg_t*)heap_caps_malloc(isr_pool_bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (s_isr_pool) memset(s_isr_pool, 0, isr_pool_bytes);
+    }
+#endif
+#endif
 
 #if ( configSUPPORT_STATIC_ALLOCATION == 1 )
     // Allocate pool (prefer PSRAM). This is where the large 10KB messages live.
@@ -225,8 +296,12 @@ void debug_logs_init(bool (*network_ready_fn)(void), bool use_psram_stack)
     }
 
     // Create index queues in internal RAM
-    s_free_queue = xQueueCreateStatic(DEBUG_LOGS_QUEUE_LEN, sizeof(uint8_t), s_free_queue_storage, &s_free_queue_struct);
-    s_pending_queue = xQueueCreateStatic(DEBUG_LOGS_QUEUE_LEN, sizeof(uint8_t), s_pending_queue_storage, &s_pending_queue_struct);
+    if (!s_free_queue_struct || !s_pending_queue_struct || !s_free_queue_storage || !s_pending_queue_storage)
+    {
+        return;
+    }
+    s_free_queue = xQueueCreateStatic(DEBUG_LOGS_QUEUE_LEN, sizeof(uint8_t), s_free_queue_storage, s_free_queue_struct);
+    s_pending_queue = xQueueCreateStatic(DEBUG_LOGS_QUEUE_LEN, sizeof(uint8_t), s_pending_queue_storage, s_pending_queue_struct);
     if (!s_free_queue || !s_pending_queue)
     {
         return;
@@ -242,8 +317,17 @@ void debug_logs_init(bool (*network_ready_fn)(void), bool use_psram_stack)
     // Create ISR staging queues in internal RAM
     if (!s_isr_free_queue)
     {
-        s_isr_free_queue = xQueueCreateStatic(DEBUG_LOGS_ISR_POOL_LEN, sizeof(uint8_t), s_isr_free_queue_storage, &s_isr_free_queue_struct);
-        s_isr_pending_queue = xQueueCreateStatic(DEBUG_LOGS_ISR_POOL_LEN, sizeof(uint8_t), s_isr_pending_queue_storage, &s_isr_pending_queue_struct);
+        if (!s_isr_free_queue_struct || !s_isr_pending_queue_struct || !s_isr_free_queue_storage || !s_isr_pending_queue_storage || !s_isr_pool)
+        {
+            // If staging init failed, disable ISR path (it will safely drop)
+            s_isr_free_queue = NULL;
+            s_isr_pending_queue = NULL;
+        }
+        else
+        {
+            s_isr_free_queue = xQueueCreateStatic(DEBUG_LOGS_ISR_POOL_LEN, sizeof(uint8_t), s_isr_free_queue_storage, s_isr_free_queue_struct);
+            s_isr_pending_queue = xQueueCreateStatic(DEBUG_LOGS_ISR_POOL_LEN, sizeof(uint8_t), s_isr_pending_queue_storage, s_isr_pending_queue_struct);
+        }
         if (s_isr_free_queue && s_isr_pending_queue)
         {
             for (uint8_t i = 0; i < (uint8_t)DEBUG_LOGS_ISR_POOL_LEN; i++)
@@ -267,7 +351,9 @@ void debug_logs_init(bool (*network_ready_fn)(void), bool use_psram_stack)
     s_dest_addr.sin_addr.s_addr = inet_addr(DEBUG_LOGS_UDP_DEST_IP);
     debug_logs_udp_open();
 
-    const uint32_t stack_words = (40*1024); // original size
+    // ESP-IDF expects task stack size in *words*, not bytes.
+    // Keep the intended size (~40KB) while avoiding an accidental 160KB allocation.
+    const uint32_t stack_words = (40 * 1024) / sizeof(StackType_t);
 
 #if ( configSUPPORT_STATIC_ALLOCATION == 1 )
     if (use_psram_stack)
@@ -279,6 +365,20 @@ void debug_logs_init(bool (*network_ready_fn)(void), bool use_psram_stack)
         }
         if (s_dbg_task_stack)
         {
+            if (!s_dbg_task_tcb)
+            {
+                s_dbg_task_tcb = (StaticTask_t*)heap_caps_malloc(sizeof(StaticTask_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+                if (s_dbg_task_tcb)
+                {
+                    memset(s_dbg_task_tcb, 0, sizeof(StaticTask_t));
+                }
+            }
+            if (!s_dbg_task_tcb)
+            {
+                heap_caps_free(s_dbg_task_stack);
+                s_dbg_task_stack = NULL;
+            }
+
             TaskHandle_t h = xTaskCreateStaticPinnedToCore(
                 debug_logs_task,
                 "dbg_logs",
@@ -286,7 +386,7 @@ void debug_logs_init(bool (*network_ready_fn)(void), bool use_psram_stack)
                 NULL,
                 4,
                 s_dbg_task_stack,
-                &s_dbg_task_tcb,
+                s_dbg_task_tcb,
                 tskNO_AFFINITY);
             if (h)
             {
@@ -296,6 +396,11 @@ void debug_logs_init(bool (*network_ready_fn)(void), bool use_psram_stack)
             // If creation failed, free and fall back
             heap_caps_free(s_dbg_task_stack);
             s_dbg_task_stack = NULL;
+            if (s_dbg_task_tcb)
+            {
+                heap_caps_free(s_dbg_task_tcb);
+                s_dbg_task_tcb = NULL;
+            }
         }
     }
 #endif
@@ -440,12 +545,12 @@ bool debug_logs_send_line_isr(const char *line, BaseType_t *pxHigherPriorityTask
         return false; // no free buffer
     }
 
-    size_t len = strnlen(line, DEBUG_LOG_MAX_LINE - 1);
-    debug_log_msg_t *msg = &s_isr_pool[idx];
+    size_t len = strnlen(line, DEBUG_LOGS_ISR_MAX_LINE - 1);
+    debug_log_isr_msg_t *msg = &s_isr_pool[idx];
     msg->level = DEBUG_LOG_LEVEL_INFO;
-    if (len >= DEBUG_LOG_MAX_LINE - 1)
+    if (len >= DEBUG_LOGS_ISR_MAX_LINE - 1)
     {
-        len = DEBUG_LOG_MAX_LINE - 2;
+        len = DEBUG_LOGS_ISR_MAX_LINE - 2;
     }
     memcpy(msg->line, line, len);
     if (len == 0 || line[len-1] != '\n')
@@ -491,9 +596,9 @@ bool debug_logs_send_raw_isr(const char *data, size_t len, BaseType_t *pxHigherP
     while (len > 0)
     {
         size_t chunk = len;
-        if (chunk > DEBUG_LOG_MAX_LINE)
+        if (chunk > DEBUG_LOGS_ISR_MAX_LINE)
         {
-            chunk = DEBUG_LOG_MAX_LINE;
+            chunk = DEBUG_LOGS_ISR_MAX_LINE;
         }
 
         uint8_t idx;
@@ -503,7 +608,7 @@ bool debug_logs_send_raw_isr(const char *data, size_t len, BaseType_t *pxHigherP
             break;
         }
 
-        debug_log_msg_t *msg = &s_isr_pool[idx];
+        debug_log_isr_msg_t *msg = &s_isr_pool[idx];
         msg->level = DEBUG_LOG_LEVEL_INFO;
         msg->len = (uint16_t)chunk;
         memcpy(msg->line, p, chunk);

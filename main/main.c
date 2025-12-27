@@ -633,13 +633,13 @@ void app_main(void)
     //configure GPIO with the given settings
     gpio_config(&io_conf);
 
-	gpio_reset_pin(USB_ESP_MODE_EN);
-	gpio_sleep_set_pull_mode(USB_ESP_MODE_EN, GPIO_PULLDOWN_ONLY);
-	gpio_pulldown_en(USB_ESP_MODE_EN);
-	rtc_gpio_pulldown_en(USB_ESP_MODE_EN);
-	gpio_hold_en(USB_ESP_MODE_EN);
-	gpio_set_direction(USB_ESP_MODE_EN, GPIO_MODE_OUTPUT);
-	gpio_set_level(USB_ESP_MODE_EN, 0);
+	// gpio_reset_pin(USB_ESP_MODE_EN);
+	// gpio_sleep_set_pull_mode(USB_ESP_MODE_EN, GPIO_PULLDOWN_ONLY);
+	// gpio_pulldown_en(USB_ESP_MODE_EN);
+	// rtc_gpio_pulldown_en(USB_ESP_MODE_EN);
+	// gpio_hold_en(USB_ESP_MODE_EN);
+	// gpio_set_direction(USB_ESP_MODE_EN, GPIO_MODE_OUTPUT);
+	// gpio_set_level(USB_ESP_MODE_EN, 0);
 
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 	gpio_set_level(CONNECTED_LED_GPIO_NUM, 1);
@@ -1067,20 +1067,22 @@ void app_main(void)
 // Declare static stack and task buffers
 	static StackType_t *can_rx_task_stack, *can_tx_task_stack, *obd_rx_task_stack;
 	static StaticTask_t can_rx_task_buffer, can_tx_task_buffer, obd_rx_task_buffer;
-	static const int can_task_stack_size = (1024*6);
+	// Note: xTaskCreateStatic() expects stack depth in words, not bytes.
+	static const int can_task_stack_depth_words = (1024 * 6);
+	static const size_t can_task_stack_size_bytes = ((size_t)can_task_stack_depth_words) * sizeof(StackType_t);
 
 	// Allocate stack memory in PSRAM
-	can_rx_task_stack = heap_caps_malloc(can_task_stack_size, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-	can_tx_task_stack = heap_caps_malloc(can_task_stack_size, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-	obd_rx_task_stack = heap_caps_malloc(can_task_stack_size, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+	can_rx_task_stack = heap_caps_malloc(can_task_stack_size_bytes, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+	can_tx_task_stack = heap_caps_malloc(can_task_stack_size_bytes, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+	obd_rx_task_stack = heap_caps_malloc(can_task_stack_size_bytes, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
 
 	if (can_rx_task_stack != NULL && can_tx_task_stack != NULL && obd_rx_task_stack != NULL) 
 	{
-		xTaskCreateStatic(can_rx_task, "can_rx_task", can_task_stack_size, (void*)AF_INET, 5, 
+		xTaskCreateStatic(can_rx_task, "can_rx_task", can_task_stack_depth_words, (void*)AF_INET, 5, 
 						can_rx_task_stack, &can_rx_task_buffer);
-		xTaskCreateStatic(can_tx_task, "can_tx_task", can_task_stack_size, (void*)AF_INET, 5, 
+		xTaskCreateStatic(can_tx_task, "can_tx_task", can_task_stack_depth_words, (void*)AF_INET, 5, 
 						can_tx_task_stack, &can_tx_task_buffer);
-		xTaskCreateStatic(obd_rx_task, "obd_rx_task", can_task_stack_size, (void*)AF_INET, 5, 
+		xTaskCreateStatic(obd_rx_task, "obd_rx_task", can_task_stack_depth_words, (void*)AF_INET, 5, 
 						obd_rx_task_stack, &obd_rx_task_buffer);
 	} 
 	else 
@@ -1135,7 +1137,7 @@ void app_main(void)
 	// esp_log_level_set("WiFi_NETWORK", ESP_LOG_INFO);
 	// esp_log_level_set("AUTO_PID", ESP_LOG_INFO);
 	// esp_log_level_set("AUTO_PID", ESP_LOG_INFO);
-	esp_log_level_set("HTTPS_CLIENT_MGR", ESP_LOG_INFO);
+	// esp_log_level_set("HTTPS_CLIENT_MGR", ESP_LOG_INFO);
 	// esp_log_level_set("cert_manager", ESP_LOG_INFO);
 	// esp_log_level_set("esp-tls", ESP_LOG_VERBOSE);
 	// esp_log_level_set("mbedtls", ESP_LOG_VERBOSE);
