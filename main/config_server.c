@@ -88,6 +88,7 @@
 #include "sdcard.h"
 #include "obd2_standard_pids.h"
 #include "wifi_mgr.h"
+#include "dev_status.h"
 #include "cert_manager.h"
 #include "vpn_manager.h"
 #include "dev_status.h"
@@ -1695,6 +1696,18 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	time_t now;
 	time(&now);
 	cJSON_AddNumberToObject(root, "timestamp", (double)now);
+
+	// Time sync status (used by VPN gating + DNS resolution stability)
+	cJSON_AddBoolToObject(root, "time_synced", dev_status_is_time_synced());
+
+	// STA DNS servers
+	{
+		char dns_main[48] = {0};
+		char dns_backup[48] = {0};
+		wifi_mgr_get_sta_dns(dns_main, sizeof(dns_main), dns_backup, sizeof(dns_backup));
+		cJSON_AddStringToObject(root, "dns_main", dns_main[0] ? dns_main : "N/A");
+		cJSON_AddStringToObject(root, "dns_backup", dns_backup[0] ? dns_backup : "N/A");
+	}
 
 	char volt[8]= {0};
 	float tmp = 0;

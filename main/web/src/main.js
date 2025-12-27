@@ -2349,6 +2349,14 @@ function checkStatus() {
         document.getElementById("sta_status").innerHTML = obj.sta_status;
         document.getElementById("ap_channel_status").innerHTML = obj.ap_ch;
         document.getElementById("sta_ip").innerHTML = obj.sta_ip;
+
+        const dnsMainEl = document.getElementById("dns_main_status");
+        if (dnsMainEl) dnsMainEl.innerHTML = (obj.dns_main || "N/A");
+        const dnsBackupEl = document.getElementById("dns_backup_status");
+        if (dnsBackupEl) dnsBackupEl.innerHTML = (obj.dns_backup || "N/A");
+        const timeSyncedEl = document.getElementById("time_synced_status");
+        if (timeSyncedEl) timeSyncedEl.innerHTML = (obj.time_synced ? "Yes" : "No");
+
         document.getElementById("mdns").innerHTML = obj.mdns;
         document.getElementById("can_bitrate_status").innerHTML = obj.can_datarate;
         if(obj.can_mode == "normal") {
@@ -4159,6 +4167,159 @@ async function testVpnConnection()
         button.textContent = 'Test Connection';
         // Refresh status badge after test attempt
         try { checkStatus(); } catch(_) {}
+    }
+}
+
+function vpnDbgSet(id, text)
+{
+    const el = document.getElementById(id);
+    if (el) el.textContent = (text === undefined || text === null || text === '') ? '-' : String(text);
+}
+
+function vpnDbgExtractHost(endpoint)
+{
+    if (!endpoint) return '';
+    let s = String(endpoint).trim();
+    if (!s) return '';
+
+    // Strip scheme if user pasted one
+    const schemeIdx = s.indexOf('://');
+    if (schemeIdx >= 0) s = s.slice(schemeIdx + 3);
+
+    // IPv6 bracket form: [::1]:51820
+    if (s.startsWith('['))
+    {
+        const end = s.indexOf(']');
+        if (end > 1) return s.slice(1, end);
+        return s;
+    }
+
+    // Split optional :port only if port is numeric
+    const lastColon = s.lastIndexOf(':');
+    if (lastColon > 0)
+    {
+        const tail = s.slice(lastColon + 1);
+        if (/^\d+$/.test(tail))
+        {
+            return s.slice(0, lastColon);
+        }
+    }
+    return s;
+}
+
+async function vpnDebugRefresh()
+{
+    try
+    {
+        const btn = document.getElementById('vpn_dbg_refresh_btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Refreshing...'; }
+
+        const r = await fetch('/vpn/debug');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+
+        const prereqs = d.gating_prereqs_ok ? 'OK' : 'NOT OK';
+        const blockers = d.gating_blockers_present ? 'YES' : 'NO';
+        vpnDbgSet('vpn_dbg_gating', `prereqs=${prereqs}, blockers=${blockers} (vpn_enabled=${d.vpn_enabled_bit ? 'yes' : 'no'}, sta_connected=${d.sta_connected ? 'yes' : 'no'}, time_synced=${d.time_synced ? 'yes' : 'no'}, ap_enabled=${d.ap_enabled ? 'yes' : 'no'}, sleeping=${d.sleeping ? 'yes' : 'no'})`);
+
+        const vpnLine = `${d.vpn_status || 'unknown'}${d.vpn_ip ? ' (ip ' + d.vpn_ip + ')' : ''}`;
+        vpnDbgSet('vpn_dbg_status', vpnLine);
+
+        const staLine = `${d.sta_connected ? 'connected' : 'not connected'}${d.sta_ip ? ' (ip ' + d.sta_ip + ')' : ''}${d.sta_gw ? ', gw ' + d.sta_gw : ''}`;
+        vpnDbgSet('vpn_dbg_sta', staLine);
+
+        const dnsLine = `${d.dns_main ? 'main ' + d.dns_main : 'main -'}${d.dns_backup ? ', backup ' + d.dns_backup : ', backup -'}`;
+        vpnDbgSet('vpn_dbg_dns', dnsLine);
+
+        const rawEl = document.getElementById('vpn_dbg_raw');
+        if (rawEl) rawEl.textContent = JSON.stringify(d, null, 2);
+    }
+    catch (e)
+    {
+        console.error('vpnDebugRefresh failed', e);
+        vpnDbgSet('vpn_dbg_raw', 'Error: ' + (e && e.message ? e.message : String(e)));
+        try { showNotification('VPN debug refresh failed: ' + e.message, 'red'); } catch (_) {}
+    }
+    finally
+    {
+        const btn = document.getElementById('vpn_dbg_refresh_btn');
+        if (btn) { btn.disabled = false; btn.textContent = 'Refresh'; }
+    }
+}
+
+async function vpnDebugResolveHost(host, outputId)
+{
+    if (!host)
+    {
+        vpnDbgSet(outputId, '-');
+        return;
+    }
+    const r = await fetch('/vpn/resolve?host=' + encodeURIComponent(host));
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    if (!d.success)
+    {
+        vpnDbgSet(outputId, `${host}: DNS failed (gai=${d.gai_error})`);
+        return;
+    }
+    const addrs = Array.isArray(d.addrs) ? d.addrs.join(', ') : '-';
+    vpnDbgSet(outputId, `${host}: ${addrs || '-'}`);
+}
+
+async function vpnDebugResolveEndpoint()
+{
+    try
+    {
+        const btn = document.getElementById('vpn_dbg_resolve_ep_btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Resolving...'; }
+
+        const endpoint = document.getElementById('wg_endpoint') ? document.getElementById('wg_endpoint').value : '';
+        const host = vpnDbgExtractHost(endpoint);
+        if (!host)
+        {
+            vpnDbgSet('vpn_dbg_resolve', 'Endpoint host is empty');
+            return;
+        }
+        await vpnDebugResolveHost(host, 'vpn_dbg_resolve');
+    }
+    catch (e)
+    {
+        console.error('vpnDebugResolveEndpoint failed', e);
+        vpnDbgSet('vpn_dbg_resolve', 'Error: ' + (e && e.message ? e.message : String(e)));
+    }
+    finally
+    {
+        const btn = document.getElementById('vpn_dbg_resolve_ep_btn');
+        if (btn) { btn.disabled = false; btn.textContent = 'Resolve Endpoint'; }
+    }
+}
+
+async function vpnDebugResolveNtp()
+{
+    try
+    {
+        const btn = document.getElementById('vpn_dbg_resolve_ntp_btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Resolving...'; }
+
+        // These are the servers used by sync_sys_time.c
+        const lines = [];
+        await vpnDebugResolveHost('time.windows.com', 'vpn_dbg_ntp_resolve');
+        const first = document.getElementById('vpn_dbg_ntp_resolve') ? document.getElementById('vpn_dbg_ntp_resolve').textContent : '';
+        lines.push(first);
+        await vpnDebugResolveHost('pool.ntp.org', 'vpn_dbg_ntp_resolve');
+        const second = document.getElementById('vpn_dbg_ntp_resolve') ? document.getElementById('vpn_dbg_ntp_resolve').textContent : '';
+        lines.push(second);
+        vpnDbgSet('vpn_dbg_ntp_resolve', lines.filter(Boolean).join(' | '));
+    }
+    catch (e)
+    {
+        console.error('vpnDebugResolveNtp failed', e);
+        vpnDbgSet('vpn_dbg_ntp_resolve', 'Error: ' + (e && e.message ? e.message : String(e)));
+    }
+    finally
+    {
+        const btn = document.getElementById('vpn_dbg_resolve_ntp_btn');
+        if (btn) { btn.disabled = false; btn.textContent = 'Resolve NTP'; }
     }
 }
 document.getElementById("defaultOpen").click();

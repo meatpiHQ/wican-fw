@@ -192,13 +192,15 @@ void sync_sys_time_init(void)
 {
     static StackType_t *sync_sys_time_stack;
     static StaticTask_t sync_sys_time_buffer;
-    static const int sync_sys_time_stack_size = (1024 * 6);
-
-    sync_sys_time_stack = heap_caps_malloc(sync_sys_time_stack_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    // xTaskCreateStatic expects stack depth in words, while heap_caps_malloc expects bytes.
+    static const uint32_t sync_sys_time_stack_words = (1024U * 6U);
+    const size_t sync_sys_time_stack_bytes = (size_t)sync_sys_time_stack_words * sizeof(StackType_t);
+    dev_status_clear_time_synced();
+    sync_sys_time_stack = heap_caps_malloc(sync_sys_time_stack_bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 
     if (sync_sys_time_stack != NULL)
     {
-        xTaskCreateStatic(sync_sys_time, "sync_sys_time", sync_sys_time_stack_size, NULL, 3,
+        xTaskCreateStatic(sync_sys_time, "sync_sys_time", sync_sys_time_stack_words, NULL, 3,
                           sync_sys_time_stack, &sync_sys_time_buffer);
         ESP_LOGI(TAG, "Time sync task created successfully");
     }

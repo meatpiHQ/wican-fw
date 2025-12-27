@@ -30,9 +30,12 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_attr.h" // for EXT_RAM_ATTR
+#include "esp_netif.h"
 #include <string.h>
 #include <stdlib.h>
 #include "lwip/sockets.h"
+#include "lwip/ip4_addr.h"
+#include "lwip/inet.h"
 #include <cJSON.h>
 #include "wifi_mgr.h"
 #include "dev_status.h"
@@ -1108,6 +1111,49 @@ EventGroupHandle_t wifi_mgr_get_event_group(void) {
     return wifi_event_group;
 }
 
+esp_err_t wifi_mgr_get_sta_dns(char *dns_main, size_t dns_main_len, char *dns_backup, size_t dns_backup_len)
+{
+    if (dns_main && dns_main_len) dns_main[0] = '\0';
+    if (dns_backup && dns_backup_len) dns_backup[0] = '\0';
+
+    if (!sta_netif)
+    {
+        if (dns_main && dns_main_len) strlcpy(dns_main, "N/A", dns_main_len);
+        if (dns_backup && dns_backup_len) strlcpy(dns_backup, "N/A", dns_backup_len);
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    esp_netif_dns_info_t dns = {0};
+    if (dns_main && dns_main_len)
+    {
+        if (esp_netif_get_dns_info(sta_netif, ESP_NETIF_DNS_MAIN, &dns) == ESP_OK &&
+            dns.ip.type == ESP_IPADDR_TYPE_V4)
+        {
+            snprintf(dns_main, dns_main_len, IPSTR, IP2STR(&dns.ip.u_addr.ip4));
+        }
+        else
+        {
+            strlcpy(dns_main, "N/A", dns_main_len);
+        }
+    }
+
+    memset(&dns, 0, sizeof(dns));
+    if (dns_backup && dns_backup_len)
+    {
+        if (esp_netif_get_dns_info(sta_netif, ESP_NETIF_DNS_BACKUP, &dns) == ESP_OK &&
+            dns.ip.type == ESP_IPADDR_TYPE_V4)
+        {
+            snprintf(dns_backup, dns_backup_len, IPSTR, IP2STR(&dns.ip.u_addr.ip4));
+        }
+        else
+        {
+            strlcpy(dns_backup, "N/A", dns_backup_len);
+        }
+    }
+
+    return ESP_OK;
+}
+
 /**
  * Scan for available networks
  */
@@ -1396,6 +1442,39 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         dev_status_set_sta_connected();
         if (user_callbacks.sta_connected) {
             user_callbacks.sta_connected();
+        }
+
+        // If DHCP did not provide a backup DNS server, set a public fallback.
+        // This improves resilience against flaky router DNS setups.
+        if (sta_netif)
+        {
+            esp_netif_dhcp_status_t dhcpc_status;
+            if (esp_netif_dhcpc_get_status(sta_netif, &dhcpc_status) == ESP_OK && dhcpc_status == ESP_NETIF_DHCP_STARTED)
+            {
+                esp_netif_dns_info_t dns_bak = {0};
+                if (esp_netif_get_dns_info(sta_netif, ESP_NETIF_DNS_BACKUP, &dns_bak) == ESP_OK)
+                {
+                    bool backup_missing = (dns_bak.ip.type == IPADDR_TYPE_V4 && dns_bak.ip.u_addr.ip4.addr == 0);
+                    if (backup_missing)
+                    {
+                        esp_netif_dns_info_t dns_set = {0};
+                        dns_set.ip.type = IPADDR_TYPE_V4;
+                        // Cast is intentional: esp_ip4_addr_t and lwIP ip4_addr_t are layout-compatible.
+                        if (ip4addr_aton("1.1.1.1", (ip4_addr_t *)&dns_set.ip.u_addr.ip4))
+                        {
+                            esp_err_t dr = esp_netif_set_dns_info(sta_netif, ESP_NETIF_DNS_BACKUP, &dns_set);
+                            if (dr == ESP_OK)
+                            {
+                                ESP_LOGI(TAG, "DHCP backup DNS missing; set fallback backup DNS to 1.1.1.1");
+                            }
+                            else
+                            {
+                                ESP_LOGW(TAG, "Failed to set fallback backup DNS: %s", esp_err_to_name(dr));
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Auto-disable AP if in APSTA mode

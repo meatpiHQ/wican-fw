@@ -137,6 +137,11 @@ bool wifi_mgr_is_enabled(void);
 char* wifi_mgr_get_sta_ip(void);
 uint16_t wifi_mgr_get_ap_connected_stations(void);
 
+// DNS helpers (STA)
+// Fills output buffers with IPv4 DNS strings (e.g. "1.1.1.1").
+// Writes "N/A" when DNS is unavailable.
+esp_err_t wifi_mgr_get_sta_dns(char *dns_main, size_t dns_main_len, char *dns_backup, size_t dns_backup_len);
+
 // Event group access for external status monitoring
 EventGroupHandle_t wifi_mgr_get_event_group(void);
 

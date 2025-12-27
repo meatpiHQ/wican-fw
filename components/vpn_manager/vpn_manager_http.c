@@ -23,9 +23,17 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <esp_log.h>
 #include <esp_http_server.h>
+#include <esp_netif.h>
 #include <cJSON.h>
+#include "dev_status.h"
+
+#include "lwip/netdb.h"
+#include "lwip/sockets.h"
+#include "lwip/inet.h"
+#include "lwip/ip_addr.h"
 
 static const char *TAG = "VPN_HTTP";
 // UI placeholder string used in read-only private key field
@@ -71,6 +79,8 @@ static esp_err_t vpn_load_config_handler(httpd_req_t *req);
 static esp_err_t vpn_store_config_handler(httpd_req_t *req);
 static esp_err_t vpn_test_connection_handler(httpd_req_t *req);
 static esp_err_t vpn_status_handler(httpd_req_t *req);
+static esp_err_t vpn_debug_handler(httpd_req_t *req);
+static esp_err_t vpn_resolve_handler(httpd_req_t *req);
 
 // Unified router handler
 static esp_err_t vpn_router_handler(httpd_req_t *req)
@@ -82,31 +92,49 @@ static esp_err_t vpn_router_handler(httpd_req_t *req)
     if (*p == '\0')
         return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "missing segment");
 
+    // Strip query string from the segment (e.g., "/vpn/resolve?host=..." -> "resolve")
+    char seg[32] = {0};
+    size_t seg_len = strcspn(p, "?");
+    if (seg_len >= sizeof(seg))
+        seg_len = sizeof(seg) - 1;
+    memcpy(seg, p, seg_len);
+    seg[seg_len] = '\0';
+
     // Route to appropriate handler based on path and method
-    if (strcmp(p, "generate_keys") == 0)
+    if (strcmp(seg, "generate_keys") == 0)
     {
         if (req->method == HTTP_POST)
             return vpn_generate_keys_handler(req);
     }
-    else if (strcmp(p, "load_config") == 0)
+    else if (strcmp(seg, "load_config") == 0)
     {
         if (req->method == HTTP_GET)
             return vpn_load_config_handler(req);
     }
-    else if (strcmp(p, "store_config") == 0)
+    else if (strcmp(seg, "store_config") == 0)
     {
         if (req->method == HTTP_POST)
             return vpn_store_config_handler(req);
     }
-    else if (strcmp(p, "test_connection") == 0)
+    else if (strcmp(seg, "test_connection") == 0)
     {
         if (req->method == HTTP_POST)
             return vpn_test_connection_handler(req);
     }
-    else if (strcmp(p, "status") == 0)
+    else if (strcmp(seg, "status") == 0)
     {
         if (req->method == HTTP_GET)
             return vpn_status_handler(req);
+    }
+    else if (strcmp(seg, "debug") == 0)
+    {
+        if (req->method == HTTP_GET)
+            return vpn_debug_handler(req);
+    }
+    else if (strcmp(seg, "resolve") == 0)
+    {
+        if (req->method == HTTP_GET)
+            return vpn_resolve_handler(req);
     }
 
     return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "route");
@@ -665,5 +693,249 @@ static esp_err_t vpn_status_handler(httpd_req_t *req)
     httpd_resp_send(req, json_string, strlen(json_string));
     free(json_string);
 
+    return ESP_OK;
+}
+
+static esp_err_t vpn_debug_handler(httpd_req_t *req)
+{
+    cJSON *response = cJSON_CreateObject();
+    if (response == NULL)
+    {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to create response");
+        return ESP_FAIL;
+    }
+
+    // VPN status
+    vpn_status_t vpn_status = vpn_manager_get_status();
+    const char *vpn_status_str = "unknown";
+    switch (vpn_status)
+    {
+        case VPN_STATUS_DISABLED: vpn_status_str = "disabled"; break;
+        case VPN_STATUS_DISCONNECTED: vpn_status_str = "disconnected"; break;
+        case VPN_STATUS_CONNECTING: vpn_status_str = "connecting"; break;
+        case VPN_STATUS_CONNECTED: vpn_status_str = "connected"; break;
+        case VPN_STATUS_ERROR: vpn_status_str = "error"; break;
+    }
+    cJSON_AddStringToObject(response, "vpn_status", vpn_status_str);
+    cJSON_AddNumberToObject(response, "vpn_status_code", vpn_status);
+
+    if (vpn_status == VPN_STATUS_CONNECTED)
+    {
+        char ip_str[32] = {0};
+        if (vpn_manager_get_ip_address(ip_str, sizeof(ip_str)) == ESP_OK)
+        {
+            cJSON_AddStringToObject(response, "vpn_ip", ip_str);
+        }
+    }
+
+    // Config summary (no private key)
+    vpn_config_t cfg = {0};
+    if (vpn_manager_load_config(&cfg) == ESP_OK)
+    {
+        cJSON_AddNumberToObject(response, "vpn_type", cfg.type);
+        cJSON_AddBoolToObject(response, "vpn_enabled", cfg.enabled);
+        if (cfg.type == VPN_TYPE_WIREGUARD)
+        {
+            cJSON_AddStringToObject(response, "wg_endpoint", cfg.config.wireguard.endpoint);
+            cJSON_AddNumberToObject(response, "wg_port", cfg.config.wireguard.port);
+        }
+    }
+
+    // Dev status bits + gating
+    EventBits_t bits = dev_status_get_bits();
+    cJSON_AddNumberToObject(response, "dev_status_bits", (uint32_t)bits);
+    bool sta_connected = (bits & DEV_STA_CONNECTED_BIT) != 0;
+    bool time_synced = (bits & DEV_TIME_SYNCED_BIT) != 0;
+    bool vpn_enabled = (bits & DEV_VPN_ENABLED_BIT) != 0;
+    bool ap_enabled = (bits & DEV_AP_ENABLED_BIT) != 0;
+    bool sleeping = (bits & DEV_SLEEP_BIT) != 0;
+    cJSON_AddBoolToObject(response, "sta_connected", sta_connected);
+    cJSON_AddBoolToObject(response, "time_synced", time_synced);
+    cJSON_AddBoolToObject(response, "vpn_enabled_bit", vpn_enabled);
+    cJSON_AddBoolToObject(response, "ap_enabled", ap_enabled);
+    cJSON_AddBoolToObject(response, "sleeping", sleeping);
+
+    bool prereqs = dev_status_are_bits_set(DEV_VPN_ENABLED_BIT | DEV_STA_CONNECTED_BIT | DEV_TIME_SYNCED_BIT);
+    bool blockers = dev_status_is_any_bit_set(DEV_AP_ENABLED_BIT | DEV_SLEEP_BIT);
+    cJSON_AddBoolToObject(response, "gating_prereqs_ok", prereqs);
+    cJSON_AddBoolToObject(response, "gating_blockers_present", blockers);
+
+    // STA IP + DNS
+    esp_netif_t *sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (sta_netif)
+    {
+        // DHCP client status (useful proxy for "did this come from DHCP")
+        esp_netif_dhcp_status_t dhcpc_status;
+        if (esp_netif_dhcpc_get_status(sta_netif, &dhcpc_status) == ESP_OK)
+        {
+            const char *dhcpc_str = "unknown";
+            switch (dhcpc_status)
+            {
+                case ESP_NETIF_DHCP_INIT: dhcpc_str = "init"; break;
+                case ESP_NETIF_DHCP_STARTED: dhcpc_str = "started"; break;
+                case ESP_NETIF_DHCP_STOPPED: dhcpc_str = "stopped"; break;
+                default: break;
+            }
+            cJSON_AddStringToObject(response, "dhcpc_status", dhcpc_str);
+            cJSON_AddNumberToObject(response, "dhcpc_status_code", dhcpc_status);
+        }
+
+        esp_netif_ip_info_t ip_info;
+        if (esp_netif_get_ip_info(sta_netif, &ip_info) == ESP_OK)
+        {
+            char ip[16] = {0};
+            char gw[16] = {0};
+            char netmask[16] = {0};
+            snprintf(ip, sizeof(ip), IPSTR, IP2STR(&ip_info.ip));
+            snprintf(gw, sizeof(gw), IPSTR, IP2STR(&ip_info.gw));
+            snprintf(netmask, sizeof(netmask), IPSTR, IP2STR(&ip_info.netmask));
+            cJSON_AddStringToObject(response, "sta_ip", ip);
+            cJSON_AddStringToObject(response, "sta_gw", gw);
+            cJSON_AddStringToObject(response, "sta_netmask", netmask);
+        }
+
+        esp_netif_dns_info_t dns;
+        if (esp_netif_get_dns_info(sta_netif, ESP_NETIF_DNS_MAIN, &dns) == ESP_OK)
+        {
+            if (dns.ip.type == IPADDR_TYPE_V4)
+            {
+                char d[16] = {0};
+                snprintf(d, sizeof(d), IPSTR, IP2STR(&dns.ip.u_addr.ip4));
+                cJSON_AddStringToObject(response, "dns_main", d);
+            }
+            else if (dns.ip.type == IPADDR_TYPE_V6)
+            {
+                char d[INET6_ADDRSTRLEN] = {0};
+                if (inet_ntop(AF_INET6, &dns.ip.u_addr.ip6, d, sizeof(d)) != NULL)
+                {
+                    cJSON_AddStringToObject(response, "dns_main_v6", d);
+                }
+            }
+        }
+        if (esp_netif_get_dns_info(sta_netif, ESP_NETIF_DNS_BACKUP, &dns) == ESP_OK)
+        {
+            if (dns.ip.type == IPADDR_TYPE_V4)
+            {
+                char d[16] = {0};
+                snprintf(d, sizeof(d), IPSTR, IP2STR(&dns.ip.u_addr.ip4));
+                cJSON_AddStringToObject(response, "dns_backup", d);
+            }
+            else if (dns.ip.type == IPADDR_TYPE_V6)
+            {
+                char d[INET6_ADDRSTRLEN] = {0};
+                if (inet_ntop(AF_INET6, &dns.ip.u_addr.ip6, d, sizeof(d)) != NULL)
+                {
+                    cJSON_AddStringToObject(response, "dns_backup_v6", d);
+                }
+            }
+        }
+    }
+
+    char *json_string = cJSON_PrintUnformatted(response);
+    cJSON_Delete(response);
+    if (json_string == NULL)
+    {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to serialize response");
+        return ESP_FAIL;
+    }
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, json_string, strlen(json_string));
+    free(json_string);
+    return ESP_OK;
+}
+
+static esp_err_t vpn_resolve_handler(httpd_req_t *req)
+{
+    char host[128] = {0};
+    char query[192] = {0};
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK)
+    {
+        (void)httpd_query_key_value(query, "host", host, sizeof(host));
+    }
+
+    // Basic validation
+    if (host[0] == '\0')
+    {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing host");
+        return ESP_FAIL;
+    }
+
+    // Strip any trailing :port for convenience (IPv4 hostname/IP only)
+    char *colon = strrchr(host, ':');
+    if (colon && colon[1] != '\0')
+    {
+        bool all_digits = true;
+        for (char *p = colon + 1; *p; ++p)
+        {
+            if (*p < '0' || *p > '9') { all_digits = false; break; }
+        }
+        if (all_digits)
+        {
+            *colon = '\0';
+        }
+    }
+
+    cJSON *response = cJSON_CreateObject();
+    if (!response)
+    {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no mem");
+        return ESP_FAIL;
+    }
+    cJSON_AddStringToObject(response, "host", host);
+
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_DGRAM;
+
+    struct addrinfo *res = NULL;
+    int gai = getaddrinfo(host, NULL, &hints, &res);
+    if (gai != 0 || res == NULL)
+    {
+        cJSON_AddBoolToObject(response, "success", false);
+        cJSON_AddNumberToObject(response, "gai_error", gai);
+        char *js = cJSON_PrintUnformatted(response);
+        cJSON_Delete(response);
+        if (!js)
+        {
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "serialize");
+            return ESP_FAIL;
+        }
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, js, strlen(js));
+        free(js);
+        return ESP_OK;
+    }
+
+    cJSON_AddBoolToObject(response, "success", true);
+    cJSON *arr = cJSON_CreateArray();
+    if (arr)
+    {
+        int count = 0;
+        for (struct addrinfo *ai = res; ai && count < 6; ai = ai->ai_next)
+        {
+            if (ai->ai_family != AF_INET || ai->ai_addr == NULL) continue;
+            struct sockaddr_in *sa = (struct sockaddr_in *)ai->ai_addr;
+            char ip[INET_ADDRSTRLEN] = {0};
+            if (inet_ntop(AF_INET, &sa->sin_addr, ip, sizeof(ip)) != NULL)
+            {
+                cJSON_AddItemToArray(arr, cJSON_CreateString(ip));
+                count++;
+            }
+        }
+        cJSON_AddItemToObject(response, "addrs", arr);
+    }
+    freeaddrinfo(res);
+
+    char *json_string = cJSON_PrintUnformatted(response);
+    cJSON_Delete(response);
+    if (!json_string)
+    {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "serialize");
+        return ESP_FAIL;
+    }
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, json_string, strlen(json_string));
+    free(json_string);
     return ESP_OK;
 }

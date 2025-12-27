@@ -707,6 +707,24 @@
                     </td>
                 </tr>
                 <tr>
+                    <td>DNS Main:</td>
+                    <td>
+                        <div id="dns_main_status">N/A&nbsp;</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>DNS Backup:</td>
+                    <td>
+                        <div id="dns_backup_status">N/A&nbsp;</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Time Synced:</td>
+                    <td>
+                        <div id="time_synced_status">No&nbsp;</div>
+                    </td>
+                </tr>
+                <tr>
                     <td>mDNS:</td>
                     <td>
                         <div id="mdns">&nbsp;</div>
@@ -1820,15 +1838,14 @@
                         <td>Private Key:</td>
                         <td>
                             <div style="display: flex; gap: 8px; align-items: center;">
-                                <input type="text" id="wg_private_key" name="wg_private_key" placeholder="Generated automatically or from config file" readonly style="flex: 1;" />
-                                <button type="button" id="generate_keys_button" onclick="generateWireGuardKeys()">Generate Keys</button>
+                                <input type="text" id="wg_private_key" name="wg_private_key" placeholder="Loaded from config file" readonly style="flex: 1;" />
                             </div>
                         </td>
                     </tr>
                     <tr>
                         <td>Public Key:</td>
                         <td>
-                            <input type="text" id="wg_public_key" name="wg_public_key" placeholder="Will be generated with private key" readonly />
+                            <input type="text" id="wg_public_key" name="wg_public_key" placeholder="Loaded from config file" readonly />
                         </td>
                     </tr>
                     <tr>
@@ -1883,6 +1900,49 @@
                         <td>Test Connection:</td>
                         <td>
                             <button type="button" onclick="testVpnConnection()" id="test_vpn_button">Test Connection</button>
+                        </td>
+                    </tr>
+                </table>
+
+                <div class="divider"></div>
+                <div class="section-title">VPN Debug</div>
+                <table class="form-table">
+                    <tr>
+                        <td>Actions:</td>
+                        <td style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                            <button type="button" onclick="vpnDebugRefresh()" id="vpn_dbg_refresh_btn">Refresh</button>
+                            <button type="button" onclick="vpnDebugResolveEndpoint()" id="vpn_dbg_resolve_ep_btn">Resolve Endpoint</button>
+                            <button type="button" onclick="vpnDebugResolveNtp()" id="vpn_dbg_resolve_ntp_btn">Resolve NTP</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Gating:</td>
+                        <td><div id="vpn_dbg_gating">-</div></td>
+                    </tr>
+                    <tr>
+                        <td>VPN Status:</td>
+                        <td><div id="vpn_dbg_status">-</div></td>
+                    </tr>
+                    <tr>
+                        <td>Station (STA):</td>
+                        <td><div id="vpn_dbg_sta">-</div></td>
+                    </tr>
+                    <tr>
+                        <td>DNS Servers:</td>
+                        <td><div id="vpn_dbg_dns">-</div></td>
+                    </tr>
+                    <tr>
+                        <td>Endpoint Resolve:</td>
+                        <td><div id="vpn_dbg_resolve">-</div></td>
+                    </tr>
+                    <tr>
+                        <td>NTP Resolve:</td>
+                        <td><div id="vpn_dbg_ntp_resolve">-</div></td>
+                    </tr>
+                    <tr>
+                        <td>Raw:</td>
+                        <td>
+                            <pre id="vpn_dbg_raw" style="margin:0; font-weight:normal; white-space:pre-wrap; word-break:break-word; max-height:220px; overflow:auto; background:var(--gray-100); border:1px solid var(--gray-300); border-radius:6px; padding:10px;">-</pre>
                         </td>
                     </tr>
                 </table>
