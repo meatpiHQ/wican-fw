@@ -584,6 +584,7 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
                     gd->publish_timer = 0; // immediate eligibility
                     gd->consec_failures = 0;
                     gd->backoff_ms = 0;
+                    gd->settings_sent = false;
                 }
 
                 // Compact array: keep only entries with valid destination and enabled
@@ -657,6 +658,7 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
                 autopid_config->destinations[0].publish_timer = 0;
                 autopid_config->destinations[0].consec_failures = 0;
                 autopid_config->destinations[0].backoff_ms = 0;
+                autopid_config->destinations[0].settings_sent = false;
                 if (!autopid_config->destinations[0].destination || strlen(autopid_config->destinations[0].destination) == 0)
                 {
                     autopid_config->destinations_count = 0;

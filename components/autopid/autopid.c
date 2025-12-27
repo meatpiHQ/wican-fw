@@ -1087,7 +1087,6 @@ void autopid_publish_all_destinations(void)
         {
             // Build URL for standard HTTP/HTTPS endpoints
             char *url = dest[0] ? strdup_psram(dest) : NULL;
-            static bool settings_sent = false;
 
             if (!url)
             {
@@ -1100,7 +1099,7 @@ void autopid_publish_all_destinations(void)
             char *current_config_data = NULL;
             char *current_status_data = NULL;
 
-            if (settings_sent == true)
+            if (gd->settings_sent == true)
             {
                 // Wrap telemetry under "autopid_data" for standard HTTP/HTTPS after initial settings
                 cJSON *root_obj = cJSON_CreateObject();
@@ -1193,7 +1192,8 @@ void autopid_publish_all_destinations(void)
 
             https_client_mgr_config_t cfg = {0};
             cfg.url = url;
-            cfg.timeout_ms = 2000;
+            // Startup network + DNS + TLS can be slow; use a slightly larger timeout.
+            cfg.timeout_ms = 5000;
 
             // Detect scheme from URL
             bool is_https_url = (strncasecmp(url, "https://", 8) == 0);
@@ -1331,11 +1331,8 @@ void autopid_publish_all_destinations(void)
                 ESP_LOGI(TAG, "HTTP(S) dest %u status %d success", i, resp.status_code);
                 gd->consec_failures = 0;
                 gd->backoff_ms = 0;
-                // After initial successful settings push, switch to sending raw telemetry only
-                if (!settings_sent)
-                {
-                    settings_sent = true;
-                }
+                // After initial successful settings push for this destination, switch to telemetry-only
+                gd->settings_sent = true;
             }
             else
             {
@@ -2597,6 +2594,7 @@ static void publish_parameter_mqtt(parameter_t *param)
 static void autopid_publish_task(void *pvParameters)
 {
     ESP_LOGI(TAG, "Autopid Publish Task Started");
+    wc_timer_t skip_log_timer = 0;
     for (;;)
     {
         // Only publish when autopid is enabled and STA is connected
@@ -2606,6 +2604,26 @@ static void autopid_publish_task(void *pvParameters)
             if (autopid_config && autopid_config->grouping && strcmp("enable", autopid_config->grouping) == 0)
             {
                 autopid_publish_all_destinations();
+            }
+            else
+            {
+                // Helpful visibility: if grouping toggles off at runtime, publish task becomes a no-op.
+                if (skip_log_timer == 0 || wc_timer_is_expired(&skip_log_timer))
+                {
+                    wc_timer_set(&skip_log_timer, 5000);
+                    ESP_LOGW(TAG, "Publish skipped: grouping disabled or config missing");
+                }
+            }
+        }
+        else
+        {
+            // Rate-limited visibility into the most common reasons publishing appears to "stop".
+            if (skip_log_timer == 0 || wc_timer_is_expired(&skip_log_timer))
+            {
+                wc_timer_set(&skip_log_timer, 5000);
+                ESP_LOGW(TAG, "Publish skipped: autopid_enabled=%d sta_connected=%d",
+                         dev_status_is_autopid_enabled() ? 1 : 0,
+                         dev_status_is_sta_connected() ? 1 : 0);
             }
         }
         vTaskDelay(pdMS_TO_TICKS(100));

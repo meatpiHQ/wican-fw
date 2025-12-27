@@ -100,6 +100,7 @@ typedef struct {
     int64_t publish_timer;   // Internal: next publish expiration timer (0 = not scheduled / immediate)
     uint32_t consec_failures;   // Internal: consecutive failure counter
     uint32_t backoff_ms;        // Internal: current backoff delay extension (ms)
+    bool settings_sent;         // Internal: for HTTP/HTTPS, whether initial {config,status,autopid_data} was sent successfully
 } group_destination_t;
 
 typedef struct 
