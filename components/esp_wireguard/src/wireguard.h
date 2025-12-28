@@ -173,6 +173,7 @@ struct wireguard_peer {
 };
 
 struct wireguard_device {
+	uint32_t magic;
 	// Maybe have a "Device private" member to abstract these?
 	struct netif *netif;
 	struct udp_pcb *udp_pcb;
@@ -193,7 +194,10 @@ struct wireguard_device {
  	struct wireguard_peer peers[WIREGUARD_MAX_PEERS];
 
 	bool valid;
+	volatile bool shutting_down;
 };
+
+#define WIREGUARD_DEVICE_MAGIC 0x57474943u /* 'WGIC' */
 
 #define MESSAGE_INVALID					0
 #define MESSAGE_HANDSHAKE_INITIATION	1

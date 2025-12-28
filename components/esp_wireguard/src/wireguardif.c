@@ -883,8 +883,9 @@ static void wireguardif_tmr(void *arg) {
 	struct wireguard_device *device = (struct wireguard_device *)arg;
 	struct wireguard_peer *peer;
 	int x;
-	// Reschedule this timer
-	sys_timeout(WIREGUARDIF_TIMER_MSECS, wireguardif_tmr, device);
+	if (!device || device->shutting_down || device->magic != WIREGUARD_DEVICE_MAGIC) {
+		return;
+	}
 
 	// Check periodic things
 	bool link_up = false;
@@ -922,7 +923,24 @@ static void wireguardif_tmr(void *arg) {
 
 	if (!link_up) {
 		// Clear the IF-UP flag on netif
-		netif_set_link_down(device->netif);
+		// If device->netif gets corrupted (use-after-free / heap stomp), calling into lwIP will crash.
+		// Avoid dereferencing obviously-invalid pointers and stop rescheduling so the root cause can be found.
+		if ((device->netif != NULL) && ((uintptr_t)device->netif > 0x10000u)) {
+			netif_set_link_down(device->netif);
+		} else {
+			ESP_LOGE(TAG, "wireguardif_tmr: invalid netif pointer=%p; stopping timer", device->netif);
+			device->shutting_down = true;
+			device->magic = 0;
+#if defined(CONFIG_HEAP_POISONING_LIGHT) || defined(CONFIG_HEAP_POISONING_COMPREHENSIVE)
+			heap_caps_check_integrity_all(true);
+#endif
+			return;
+		}
+	}
+
+	// Reschedule this timer (do this last to avoid shutdown race)
+	if (!device->shutting_down && device->magic == WIREGUARD_DEVICE_MAGIC) {
+		sys_timeout(WIREGUARDIF_TIMER_MSECS, wireguardif_tmr, device);
 	}
 }
 
@@ -987,8 +1005,10 @@ err_t wireguardif_init(struct netif *netif) {
 				if (result == ERR_OK) {
 					device = (struct wireguard_device *)mem_calloc(1, sizeof(struct wireguard_device));
 					if (device) {
+						device->magic = WIREGUARD_DEVICE_MAGIC;
 						device->netif = netif;
 						device->underlying_netif = underlying_netif;
+						device->shutting_down = false;
 						udp_bind_netif(udp, underlying_netif);
 
 						device->udp_pcb = udp;
@@ -1061,9 +1081,16 @@ void wireguardif_peer_init(struct wireguardif_peer *peer) {
 
 void wireguardif_shutdown(struct netif *netif) {
 	LWIP_ASSERT("netif != NULL", (netif != NULL));
-	LWIP_ASSERT("state != NULL", (netif->state != NULL));
+	if (!netif || !netif->state) {
+		return;
+	}
 
 	struct wireguard_device *device = (struct wireguard_device *)netif->state;
+	if (device->magic != WIREGUARD_DEVICE_MAGIC) {
+		return;
+	}
+	device->shutting_down = true;
+	device->magic = 0;
 	// Disable timer.
 	sys_untimeout(wireguardif_tmr, device);
 	// remove UDP context.
@@ -1076,9 +1103,23 @@ void wireguardif_shutdown(struct netif *netif) {
 
 void wireguardif_fini(struct netif *netif) {
 	LWIP_ASSERT("netif != NULL", (netif != NULL));
-	LWIP_ASSERT("state != NULL", (netif->state != NULL));
+	if (!netif || !netif->state) {
+		return;
+	}
 
 	struct wireguard_device *device = (struct wireguard_device *)netif->state;
+
+	// Ensure periodic timer and UDP PCB are stopped even if caller forgot shutdown.
+	device->shutting_down = true;
+	device->magic = 0;
+	sys_untimeout(wireguardif_tmr, device);
+	if (device->udp_pcb) {
+		udp_disconnect(device->udp_pcb);
+		udp_remove(device->udp_pcb);
+		device->udp_pcb = NULL;
+	}
+	device->netif = NULL;
+	device->underlying_netif = NULL;
 
 	// remove device context.
 	mem_free(device);
