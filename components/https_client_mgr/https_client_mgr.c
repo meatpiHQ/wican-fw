@@ -76,7 +76,7 @@
              while (buffer_size < needed) {
                  if (buffer_size > (SIZE_MAX / 2)) {
                      ESP_LOGE(TAG, "Response too large");
-                     free(response->data);
+                    heap_caps_free(response->data);
                      response->data = NULL;
                      return ESP_ERR_NO_MEM;
                  }
@@ -85,7 +85,7 @@
              char *new_buffer = heap_caps_realloc(response->data, buffer_size, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
              if (!new_buffer) {
                  ESP_LOGE(TAG, "Failed to reallocate response buffer");
-                 free(response->data);
+                heap_caps_free(response->data);
                  response->data = NULL;
                  return ESP_ERR_NO_MEM;
              }
@@ -159,7 +159,7 @@ static char *append_query_params(const char *base_url,
         if (need > cap) {
             cap = need + 64;
             char *tmp = heap_caps_realloc(out, cap, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-            if (!tmp) { free(out); return NULL; }
+            if (!tmp) { heap_caps_free(out); return NULL; }
             out = tmp;
         }
         strcat(out, has_q ? "&" : "?");
@@ -186,7 +186,7 @@ static esp_err_t build_basic_auth_value(const char *user, const char *pass,
 
     size_t enc_len = BASE64_ENC_OUT_LEN(up_len);
     char *enc = heap_caps_malloc(enc_len + 1, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-    if (!enc) { free(tmp); return ESP_ERR_NO_MEM; }
+    if (!enc) { heap_caps_free(tmp); return ESP_ERR_NO_MEM; }
 
     int outlen = 0;
     // Use ESP-IDF base64 encoder
@@ -198,8 +198,8 @@ static esp_err_t build_basic_auth_value(const char *user, const char *pass,
         enc[outlen] = '\0';
         snprintf(out, 256, "Basic %s", enc);
     }
-    free(tmp);
-    free(enc);
+    heap_caps_free(tmp);
+    heap_caps_free(enc);
     return err;
 }
  
@@ -326,6 +326,11 @@ static esp_err_t build_basic_auth_value(const char *user, const char *pass,
      }
      
      ESP_LOGI(TAG, "Sending request to %s", config->url);
+
+#if defined(CONFIG_HEAP_POISONING_LIGHT) || defined(CONFIG_HEAP_POISONING_COMPREHENSIVE)
+    // Tripwire: if heap was corrupted earlier, catch it before mbedTLS starts allocating.
+    heap_caps_check_integrity_all(true);
+#endif
      
      // Perform request
      esp_err_t err = esp_http_client_perform(client);
@@ -490,21 +495,21 @@ esp_err_t https_client_mgr_request_with_auth(const https_client_mgr_config_t *co
     esp_err_t ret = https_client_mgr_request(&cfg, method, data, data_len, headers, response);
 
     // Free only what we allocated here (not extra_headers entries)
-    if (content_header) free(content_header);
-    if (api_key_header) free(api_key_header);
-    if (auth_header) free(auth_header);
-    if (custom_header) free(custom_header);
+    if (content_header) heap_caps_free(content_header);
+    if (api_key_header) heap_caps_free(api_key_header);
+    if (auth_header) heap_caps_free(auth_header);
+    if (custom_header) heap_caps_free(custom_header);
     free(headers);
-    if (temp_url) free(temp_url);
+    if (temp_url) heap_caps_free(temp_url);
     return ret;
 
 OOM:
-    if (content_header) free(content_header);
-    if (api_key_header) free(api_key_header);
-    if (auth_header) free(auth_header);
-    if (custom_header) free(custom_header);
+    if (content_header) heap_caps_free(content_header);
+    if (api_key_header) heap_caps_free(api_key_header);
+    if (auth_header) heap_caps_free(auth_header);
+    if (custom_header) heap_caps_free(custom_header);
     free(headers);
-    if (temp_url) free(temp_url);
+    if (temp_url) heap_caps_free(temp_url);
     return ESP_ERR_NO_MEM;
 }
  
@@ -562,7 +567,7 @@ OOM:
      
      // Free allocated memory for the content-type header
      if (content_type) {
-         free((void*)headers[0]);
+         heap_caps_free((void*)headers[0]);
      }
      
      return ret;
@@ -629,7 +634,7 @@ esp_err_t https_client_mgr_download_file(const char *url, const char *save_path,
     while ((read_len = esp_http_client_read(client, buffer, MAX_HTTP_RECV_BUFFER)) > 0) {
         if (fwrite(buffer, 1, read_len, f) != read_len) {
             ESP_LOGE(TAG, "Failed to write to file");
-            free(buffer);
+            heap_caps_free(buffer);
             esp_http_client_cleanup(client);
             fclose(f);
             remove(save_path);  // Remove the file if writing fails
@@ -643,7 +648,7 @@ esp_err_t https_client_mgr_download_file(const char *url, const char *save_path,
         }
     }
     
-    free(buffer);
+    heap_caps_free(buffer);
     esp_http_client_cleanup(client);
     fclose(f);
     
@@ -685,7 +690,7 @@ void https_client_mgr_free_response(https_client_mgr_response_t *response)
 {
     if (response) {
         if (response->data) {
-            free(response->data);
+            heap_caps_free(response->data);
             response->data = NULL;
         }
         response->data_len = 0;
