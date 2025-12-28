@@ -575,7 +575,7 @@ static void vpn_task_fn(void *arg)
         }
 
         // Gating conditions
-        bool prereqs = dev_status_are_bits_set(DEV_VPN_ENABLED_BIT | DEV_STA_CONNECTED_BIT | DEV_TIME_SYNCED_BIT);
+        bool prereqs = dev_status_are_bits_set(DEV_VPN_ENABLED_BIT | DEV_STA_CONNECTED_BIT);
         bool blockers = dev_status_is_any_bit_set(DEV_AP_ENABLED_BIT | DEV_SLEEP_BIT);
 
         if (!prereqs || blockers)

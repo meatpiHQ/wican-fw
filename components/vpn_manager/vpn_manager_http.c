@@ -755,6 +755,8 @@ static esp_err_t vpn_debug_handler(httpd_req_t *req)
     cJSON_AddBoolToObject(response, "ap_enabled", ap_enabled);
     cJSON_AddBoolToObject(response, "sleeping", sleeping);
 
+    // Soft prerequisite: keep TIME_SYNCED in the reported gating status for UX/debug
+    // (actual VPN task is not gated by TIME_SYNCED)
     bool prereqs = dev_status_are_bits_set(DEV_VPN_ENABLED_BIT | DEV_STA_CONNECTED_BIT | DEV_TIME_SYNCED_BIT);
     bool blockers = dev_status_is_any_bit_set(DEV_AP_ENABLED_BIT | DEV_SLEEP_BIT);
     cJSON_AddBoolToObject(response, "gating_prereqs_ok", prereqs);
