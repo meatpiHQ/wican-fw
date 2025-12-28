@@ -65,12 +65,23 @@
      // Read response data
      response->data_len = 0;
      int read_len;
-     size_t buffer_size = content_length + 1;
-     
+     size_t buffer_size = (size_t)content_length + 1;
+
      do {
-         // Check if buffer needs to be expanded
-         if (response->data_len + MAX_HTTP_RECV_BUFFER > buffer_size) {
-             buffer_size *= 2;
+         // Ensure the buffer can accommodate a full next read plus NUL.
+         // esp_http_client_read() may return up to the requested size.
+         size_t needed = response->data_len + MAX_HTTP_RECV_BUFFER + 1;
+         if (needed > buffer_size) {
+             // Grow until large enough (single doubling is not sufficient when MAX_HTTP_RECV_BUFFER is large).
+             while (buffer_size < needed) {
+                 if (buffer_size > (SIZE_MAX / 2)) {
+                     ESP_LOGE(TAG, "Response too large");
+                     free(response->data);
+                     response->data = NULL;
+                     return ESP_ERR_NO_MEM;
+                 }
+                 buffer_size *= 2;
+             }
              char *new_buffer = heap_caps_realloc(response->data, buffer_size, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
              if (!new_buffer) {
                  ESP_LOGE(TAG, "Failed to reallocate response buffer");
@@ -80,13 +91,13 @@
              }
              response->data = new_buffer;
          }
-         
-         read_len = esp_http_client_read(client, 
-                                        response->data + response->data_len, 
+
+         read_len = esp_http_client_read(client,
+                                        response->data + response->data_len,
                                         MAX_HTTP_RECV_BUFFER);
-         
+
          if (read_len > 0) {
-             response->data_len += read_len;
+             response->data_len += (size_t)read_len;
          }
      } while (read_len > 0);
      
