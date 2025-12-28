@@ -89,12 +89,18 @@ static bool wireguardif_can_send_initiation(struct wireguard_peer *peer) {
 
 static err_t wireguardif_peer_output(struct netif *netif, struct pbuf *q, struct wireguard_peer *peer) {
 	struct wireguard_device *device = (struct wireguard_device *)netif->state;
+	if (!device || !device->udp_pcb || !device->underlying_netif) {
+		return ERR_IF;
+	}
 	// Send to last know port, not the connect port
 	//TODO: Support DSCP and ECN - lwip requires this set on PCB globally, not per packet
 	return udp_sendto_if(device->udp_pcb, q, &peer->ip, peer->port, device->underlying_netif);
 }
 
 static err_t wireguardif_device_output(struct wireguard_device *device, struct pbuf *q, const ip_addr_t *ipaddr, u16_t port) {
+	if (!device || !device->udp_pcb || !device->underlying_netif) {
+		return ERR_IF;
+	}
 	return udp_sendto_if(device->udp_pcb, q, ipaddr, port, device->underlying_netif);
 }
 
@@ -1075,7 +1081,7 @@ void wireguardif_fini(struct netif *netif) {
 	struct wireguard_device *device = (struct wireguard_device *)netif->state;
 
 	// remove device context.
-	free(device);
+	mem_free(device);
 	netif->state = NULL;
 }
 // vim: noexpandtab
