@@ -401,7 +401,8 @@ static void mqtt_task(void *pvParameters)
         vTaskDelay(pdMS_TO_TICKS(250));
         dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
     }
-
+    dev_status_wait_for_bits(DEV_STA_CONNECTED_BIT, portMAX_DELAY);
+    
 	esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
 	esp_mqtt_client_register_event(client, MQTT_EVENT_DATA, mqtt_parse_data, NULL);
     esp_err_t start_err = esp_mqtt_client_start(client);
