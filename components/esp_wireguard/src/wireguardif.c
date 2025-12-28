@@ -292,6 +292,11 @@ static void wireguardif_process_data_message(struct wireguard_device *device, st
 			src = &data_hdr->enc_packet[0];
 			src_len = data_len;
 
+			// Defensive: malformed packets must not cause size underflow or overreads.
+			if (src_len < WIREGUARD_AUTHTAG_LEN) {
+				return;
+			}
+
 			// We don't know the unpadded size until we have decrypted the packet and validated/inspected the IP header
 			pbuf = pbuf_alloc(PBUF_TRANSPORT, src_len - WIREGUARD_AUTHTAG_LEN, PBUF_RAM);
 			if (pbuf) {
@@ -554,7 +559,22 @@ void wireguardif_network_rx(void *arg, struct udp_pcb *pcb, struct pbuf *p, cons
 	struct wireguard_device *device = (struct wireguard_device *)arg;
 	struct wireguard_peer *peer;
 	uint8_t *data = p->payload;
-	size_t len = p->len; // This buf, not chained ones
+	size_t len = p->tot_len; // Full UDP datagram length (may be chained)
+	uint8_t *linear = NULL;
+
+	// IMPORTANT: UDP pbufs may be chained. This module assumes contiguous packet data
+	// (casts p->payload to WireGuard message structs and decrypts directly from it).
+	// If we use p->payload from a chained pbuf, we can read past the first segment and
+	// corrupt heap/state, which later manifests as TLSF malloc assertions.
+	if (p->tot_len != p->len) {
+		linear = (uint8_t *)mem_malloc(len);
+		if (!linear) {
+			pbuf_free(p);
+			return;
+		}
+		pbuf_copy_partial(p, linear, len, 0);
+		data = linear;
+	}
 
 	struct message_handshake_initiation *msg_initiation;
 	struct message_handshake_response *msg_response;
@@ -622,6 +642,9 @@ void wireguardif_network_rx(void *arg, struct udp_pcb *pcb, struct pbuf *p, cons
 	}
 	// Release data!
 	pbuf_free(p);
+	if (linear) {
+		mem_free(linear);
+	}
 }
 
 static err_t wireguard_start_handshake(struct netif *netif, struct wireguard_peer *peer) {
