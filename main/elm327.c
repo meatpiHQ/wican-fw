@@ -29,6 +29,8 @@
 #include "nvs_flash.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "esp_attr.h" // for EXT_RAM_ATTR
+#include "esp_heap_caps.h"
 #include <string.h>
 #include "driver/twai.h"
 #include "slcan.h"
@@ -1358,7 +1360,7 @@ typedef struct
 /* Global Variables */
 static QueueHandle_t elm327_cmd_queue;
 static StaticQueue_t elm327_cmd_queue_struct;
-static uint8_t elm327_cmd_queue_storage[ELM327_CMD_QUEUE_SIZE * sizeof(elm327_commands_t)];
+static uint8_t *elm327_cmd_queue_storage = NULL;
 QueueHandle_t uart1_queue = NULL;
 static SemaphoreHandle_t xuart1_semaphore = NULL;
 
@@ -3402,6 +3404,28 @@ void elm327_init(response_callback_t rsp_callback, QueueHandle_t *rx_queue, void
 	{
 		emit_line_buf = (char *)heap_caps_malloc(ELM327_UART_LOG_BUF_SZ, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
 		memset(emit_line_buf, 0, ELM327_UART_LOG_BUF_SZ);
+	}
+
+	if (elm327_cmd_queue_storage == NULL)
+	{
+		size_t storage_size = ELM327_CMD_QUEUE_SIZE * sizeof(elm327_commands_t);
+		#if defined(CONFIG_SPIRAM)
+		elm327_cmd_queue_storage = (uint8_t *)heap_caps_malloc(storage_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+		#endif
+		if (elm327_cmd_queue_storage == NULL)
+		{
+			ESP_LOGW(TAG, "Queue storage PSRAM alloc failed; falling back to internal RAM");
+			elm327_cmd_queue_storage = (uint8_t *)heap_caps_malloc(storage_size, MALLOC_CAP_8BIT);
+		}
+		if (elm327_cmd_queue_storage)
+		{
+			memset(elm327_cmd_queue_storage, 0, storage_size);
+		}
+	}
+
+	if (elm327_cmd_queue_storage == NULL)
+	{
+		ESP_LOGE(TAG, "Failed to allocate queue storage");
 	}
 
     elm327_cmd_queue = xQueueCreateStatic(ELM327_CMD_QUEUE_SIZE, sizeof(elm327_commands_t), elm327_cmd_queue_storage, &elm327_cmd_queue_struct);
