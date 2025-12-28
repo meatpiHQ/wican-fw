@@ -2829,6 +2829,11 @@ static void autopid_publish_task(void *pvParameters)
     vTaskDelay(pdMS_TO_TICKS(5000)); // Initial delay to allow system stabilization
     for (;;)
     {
+        if(!dev_status_is_sta_connected())
+        {
+            dev_status_wait_for_bits(DEV_STA_CONNECTED_BIT, portMAX_DELAY);
+            vTaskDelay(pdMS_TO_TICKS(3000));
+        }
         // Only publish when autopid is enabled and STA is connected
         if (dev_status_is_autopid_enabled() && dev_status_is_sta_connected())
         {
@@ -2905,6 +2910,11 @@ static void autopid_webhook_task(void *pvParameters)
     vTaskDelay(pdMS_TO_TICKS(5000)); // Initial delay to allow system stabilization
     for (;;)
     {
+        if(!dev_status_is_sta_connected())
+        {
+            dev_status_wait_for_bits(DEV_STA_CONNECTED_BIT, portMAX_DELAY);
+            vTaskDelay(pdMS_TO_TICKS(3000));
+        }
         // Only post when autopid is enabled and STA is connected
         if (dev_status_is_autopid_enabled() && dev_status_is_sta_connected())
         {

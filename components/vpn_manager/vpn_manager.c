@@ -525,6 +525,11 @@ static void vpn_task_fn(void *arg)
     const TickType_t tick = pdMS_TO_TICKS(200);
     for (;;)
     {
+        if(!dev_status_is_sta_connected())
+        {
+            dev_status_wait_for_bits(DEV_STA_CONNECTED_BIT, portMAX_DELAY);
+            vTaskDelay(pdMS_TO_TICKS(3000));
+        }
         // Drain commands
         vpn_cmd_msg_t msg;
         while (s_vpn_cmd_q && xQueueReceive(s_vpn_cmd_q, &msg, 0) == pdTRUE)
