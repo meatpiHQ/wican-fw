@@ -1287,6 +1287,7 @@ const container = document.getElementById('destinations_container');
 if(!container) return;
 container.innerHTML='';
 if(!Array.isArray(window.automateDestinations)) window.automateDestinations=[];
+const ABRP_DEFAULT_URL = 'https://api.iternio.com/1/tlm/send';
 window.automateDestinations.forEach((d,idx)=>{
     const wrap = document.createElement('div');
     wrap.className='dest-entry';
@@ -1344,6 +1345,7 @@ content.style.cssText='padding:8px 10px;'+(isCollapsed?'display:none;':'display:
         <tr><td style="width:110px;">Cycle (ms):</td><td><input type="number" class="dest-cycle" value="${d.cycle}" min="0" style="width:180px; box-sizing:border-box;"/></td></tr>
         <tr><td>Destination:</td><td><input type="text" class="dest-url" value="${(d.destination||'').replace(/"/g,'&quot;')}" placeholder="URL / topic" maxlength="1024" style="width:100%; box-sizing:border-box;"/></td></tr>
         <tr class="row-api-token" ${d.type==='ABRP_API'?'':'style="display:none;"'}><td>API Token:</td><td><input type="text" class="dest-api-token" value="${(d.api_token||'').replace(/"/g,'&quot;')}" placeholder="ABRP token" maxlength="512" style="width:100%; box-sizing:border-box;"/></td></tr>
+        <tr class="row-abrp-api-key" ${d.type==='ABRP_API'?'':'style="display:none;"'}><td>API Key:</td><td><input type="text" class="dest-abrp-api-key" value="${(d.auth?.api_key||'').replace(/"/g,'&quot;')}" placeholder="ABRP api_key" maxlength="512" style="width:100%; box-sizing:border-box;"/></td></tr>
         <tr class="row-auth" ${((d.type==='HTTP'||d.type==='HTTPS')?'':'style=\"display:none;\"')}><td>Auth:</td><td>
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
                 <select class="auth-type" style="width:200px;">
@@ -1391,6 +1393,8 @@ content.style.cssText='padding:8px 10px;'+(isCollapsed?'display:none;':'display:
     const cycleIn = content.querySelector('.dest-cycle');
     const apiRow = content.querySelector('.row-api-token');
     const apiIn = content.querySelector('.dest-api-token');
+    const abrpKeyRow = content.querySelector('.row-abrp-api-key');
+    const abrpKeyIn = content.querySelector('.dest-abrp-api-key');
     const authRow = content.querySelector('.row-auth');
     const qpRow = content.querySelector('.row-query-params');
     const certRow = content.querySelector('.row-cert-set');
@@ -1460,17 +1464,40 @@ content.style.cssText='padding:8px 10px;'+(isCollapsed?'display:none;':'display:
         d.destination = urlIn.value.trim();
         d.cycle = parseInt(cycleIn.value)||0;
         if(apiIn) d.api_token = apiIn.value.trim();
+
+        // ABRP: store api_key into d.auth in a predictable way.
+        if (d.type === 'ABRP_API') {
+            const k = abrpKeyIn ? abrpKeyIn.value.trim() : '';
+            d.auth = d.auth || { type: 'none' };
+            // Preserve explicit header-mode configs; otherwise default to query api_key=...
+            if (d.auth.type !== 'api_key_header') {
+                d.auth.type = 'api_key_query';
+                d.auth.api_key_query_name = 'api_key';
+            } else {
+                d.auth.api_key_header_name = d.auth.api_key_header_name || 'Authorization';
+            }
+            d.auth.api_key = k;
+        }
+
         if(certSel && certSel.options.length > 0){
             d.cert_set = certSel.value || 'default';
         }
         title.textContent = `${idx+1}. ${d.type} - ${truncateMiddle(d.destination||'(unset)',50)}`;
         apiRow.style.display = (d.type==='ABRP_API')? 'table-row':'none';
+        if (abrpKeyRow) abrpKeyRow.style.display = (d.type==='ABRP_API')? 'table-row':'none';
         authRow.style.display = ((d.type==='HTTP'||d.type==='HTTPS')? 'table-row':'none');
         qpRow.style.display = ((d.type==='HTTP'||d.type==='HTTPS')? 'table-row':'none');
         certRow.style.display = (d.type==='HTTPS')? 'table-row':'none';
     };
 
-    typeSel.onchange=bind; urlIn.oninput=bind; cycleIn.oninput=bind; if(apiIn) apiIn.oninput=bind; if(certSel) certSel.onchange=bind;
+    typeSel.onchange=()=>{
+        // Convenience: when switching to ABRP, prefill the standard telemetry endpoint if empty.
+        if (typeSel.value === 'ABRP_API' && urlIn && urlIn.value.trim() === '') {
+            urlIn.value = ABRP_DEFAULT_URL;
+        }
+        bind();
+    };
+    urlIn.oninput=bind; cycleIn.oninput=bind; if(apiIn) apiIn.oninput=bind; if(abrpKeyIn) abrpKeyIn.oninput=bind; if(certSel) certSel.onchange=bind;
     // initial toggle
     bind();
     fetchCertSetsForDestinations().then(list=>{

@@ -383,7 +383,7 @@ esp_err_t https_client_mgr_request_with_auth(const https_client_mgr_config_t *co
     size_t param_count = 0;
 
     if (auth) {
-        if (auth->api_key && auth->api_key_query_name && param_count < 8) {
+        if (auth->api_key && auth->api_key[0] && auth->api_key_query_name && auth->api_key_query_name[0] && param_count < 8) {
             stack_params[param_count++] = (https_client_mgr_query_kv_t){ auth->api_key_query_name, auth->api_key };
         }
         if (auth->extra_query && auth->extra_query_count > 0) {
@@ -425,8 +425,8 @@ esp_err_t https_client_mgr_request_with_auth(const https_client_mgr_config_t *co
     char *custom_header = NULL;
 
     if (auth) {
-        // API key header
-        if (auth->api_key && (!auth->api_key_query_name)) {
+        // API key header (only when query-name isn't provided)
+        if (auth->api_key && auth->api_key[0] && (!auth->api_key_query_name || !auth->api_key_query_name[0])) {
             const char *name = auth->api_key_header_name ? auth->api_key_header_name : "x-api-key";
             size_t len = strlen(name) + 2 + strlen(auth->api_key) + 1;
             api_key_header = heap_caps_malloc(len, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);

@@ -59,6 +59,23 @@
 #define TEMP_BUFFER_LENGTH 32
 #define ECU_CONNECTED_BIT BIT0
 
+// Backoff tuning (milliseconds)
+// How many consecutive failures before enabling backoff.
+#ifndef AUTOPID_BACKOFF_RETRY_THRESHOLD
+#define AUTOPID_BACKOFF_RETRY_THRESHOLD 15
+#endif
+// Minimum backoff delay once enabled (per destination type).
+#ifndef AUTOPID_BACKOFF_MIN_CAP_HTTP_MS
+#define AUTOPID_BACKOFF_MIN_CAP_HTTP_MS 10000
+#endif
+#ifndef AUTOPID_BACKOFF_MIN_CAP_ABRP_MS
+#define AUTOPID_BACKOFF_MIN_CAP_ABRP_MS 10000
+#endif
+// Maximum backoff relative to the configured cycle (e.g. 2 = 2x cycle).
+#ifndef AUTOPID_BACKOFF_MAX_MULTIPLIER
+#define AUTOPID_BACKOFF_MAX_MULTIPLIER 2
+#endif
+
 static char *auto_pid_buf;
 static QueueHandle_t autopidQueue;
 static char *device_id;
@@ -971,10 +988,11 @@ static char *build_abrp_payload(const char *raw_json, const char *car_model)
         time(&now);
         cJSON_AddNumberToObject(tlm, "utc", (double)now);
     }
-    // Ensure car_model inside tlm if provided and absent
-    // if(car_model && *car_model && !cJSON_GetObjectItemCaseSensitive(tlm, "car_model")){
-    //     cJSON_AddStringToObject(tlm, "car_model", car_model);
-    // }
+    // Match ABRP example payloads: include car_model inside tlm when available.
+    if (car_model && *car_model && !cJSON_GetObjectItemCaseSensitive(tlm, "car_model"))
+    {
+        cJSON_AddStringToObject(tlm, "car_model", car_model);
+    }
 
     // Return tlm object directly (not wrapped) for URL encoding as tlm parameter
     char *printed = cJSON_PrintUnformatted(tlm);
@@ -1364,15 +1382,15 @@ void autopid_publish_all_destinations(void)
                 gd->consec_failures++;
                 gd->fail_count++;
                 // Apply backoff logic (same as ABRP)
-                if (gd->consec_failures >= 3)
+                if (gd->consec_failures >= AUTOPID_BACKOFF_RETRY_THRESHOLD)
                 {
-                    uint32_t min_cap = 30000;
+                    uint32_t min_cap = AUTOPID_BACKOFF_MIN_CAP_HTTP_MS;
                     uint32_t next = (gd->backoff_ms ? gd->backoff_ms : base_cycle);
                     if (next < min_cap)
                         next = next * 2;
                     if (next < min_cap)
                         next = min_cap;
-                    uint32_t max_backoff = base_cycle * 2;
+                    uint32_t max_backoff = base_cycle * AUTOPID_BACKOFF_MAX_MULTIPLIER;
                     if (max_backoff < min_cap)
                         max_backoff = min_cap;
                     if (next > max_backoff)
@@ -1407,6 +1425,14 @@ void autopid_publish_all_destinations(void)
             char *body = NULL;
             if (gd->type == DEST_ABRP_API)
             {
+                if (!gd->api_token || gd->api_token[0] == '\0')
+                {
+                    ESP_LOGW(TAG, "ABRP destination %u missing user token (api_token)", i);
+                    free(url);
+                    gd->fail_count++;
+                    break;
+                }
+
                 char *tlm_data = build_abrp_payload(raw_json, autopid_config->vehicle_model);
                 if (!tlm_data)
                 {
@@ -1427,21 +1453,28 @@ void autopid_publish_all_destinations(void)
                     break;
                 }
 
+                // URL encode token
+                char *encoded_token = url_encode_string(gd->api_token);
+                if (!encoded_token)
+                {
+                    ESP_LOGE(TAG, "Failed to URL encode ABRP token");
+                    free(encoded_tlm);
+                    free(tlm_data);
+                    free(url);
+                    gd->fail_count++;
+                    break;
+                }
+
                 // Build form data body: token=xxx&tlm=encoded_json
-                size_t body_len = (gd->api_token ? strlen(gd->api_token) : 0) + strlen(encoded_tlm) + 32;
+                // (car_model is embedded in tlm JSON when available)
+                size_t body_len = strlen(encoded_token) + strlen(encoded_tlm) + 64;
                 body = heap_caps_malloc(body_len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
                 if (body)
                 {
-                    if (gd->api_token && strlen(gd->api_token) > 0)
-                    {
-                        snprintf(body, body_len, "token=%s&tlm=%s", gd->api_token, encoded_tlm);
-                    }
-                    else
-                    {
-                        snprintf(body, body_len, "tlm=%s", encoded_tlm);
-                    }
+                    snprintf(body, body_len, "token=%s&tlm=%s", encoded_token, encoded_tlm);
                 }
 
+                free(encoded_token);
                 free(encoded_tlm);
                 free(tlm_data);
             }
@@ -1467,7 +1500,8 @@ void autopid_publish_all_destinations(void)
             char _tbuf[32];
             strftime(_tbuf, sizeof(_tbuf), "%Y-%m-%dT%H:%M:%SZ", &_utc);
             ESP_LOGI(TAG, "HTTP(S) dest %u URL: %s (epoch=%ld utc=%s)", i, url, (long)_now, _tbuf);
-            cfg.timeout_ms = 2000;
+            // ABRP requests can involve ARP/DNS/route setup on first send; use a slightly larger timeout.
+            cfg.timeout_ms = 5000;
             // ABRP API is always HTTPS - configure certificates appropriately
             // if(gd->cert_set && strcmp(gd->cert_set, "default") != 0){
             //     size_t ca_len = 0, cli_len = 0, key_len = 0;
@@ -1495,6 +1529,98 @@ void autopid_publish_all_destinations(void)
             const char *content_type = (gd->type == DEST_ABRP_API)
                                            ? "application/x-www-form-urlencoded"
                                            : "application/json";
+
+            // Build auth for ABRP: api_key can be passed as query param (?api_key=...) or
+            // Authorization header with value "APIKEY <key>" (per Iternio Telemetry API).
+            https_client_mgr_auth_t auth = {0};
+            if (gd->type == DEST_ABRP_API)
+            {
+                switch (gd->auth.type)
+                {
+                case DEST_AUTH_API_KEY_QUERY:
+                    if (gd->auth.api_key && gd->auth.api_key[0] && gd->auth.api_key_query_name && gd->auth.api_key_query_name[0])
+                    {
+                        auth.api_key = gd->auth.api_key;
+                        auth.api_key_query_name = gd->auth.api_key_query_name;
+                    }
+                    break;
+                case DEST_AUTH_API_KEY_HEADER:
+                    if (gd->auth.api_key && gd->auth.api_key[0])
+                    {
+                        // If user sets header_name="Authorization" and api_key="<rawkey>", prefix with "APIKEY ".
+                        const char *hn = gd->auth.api_key_header_name;
+                        bool is_authz = (!hn) || (strcasecmp(hn, "Authorization") == 0);
+                        if (is_authz)
+                        {
+                            const char *v = gd->auth.api_key;
+                            bool already_prefixed = (strncasecmp(v, "APIKEY ", 7) == 0);
+                            if (already_prefixed)
+                            {
+                                auth.api_key_header_name = hn ? hn : "Authorization";
+                                auth.api_key = gd->auth.api_key;
+                            }
+                            else
+                            {
+                                // Build "APIKEY <key>" in PSRAM and keep it alive for request.
+                                size_t alen = strlen(gd->auth.api_key) + 8;
+                                char *aval = heap_caps_malloc(alen, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                                if (aval)
+                                {
+                                    snprintf(aval, alen, "APIKEY %s", gd->auth.api_key);
+                                    auth.api_key_header_name = hn ? hn : "Authorization";
+                                    auth.api_key = aval;
+                                }
+                                else
+                                {
+                                    auth.api_key_header_name = hn ? hn : "Authorization";
+                                    auth.api_key = gd->auth.api_key;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // Non-Authorization header name; send as-is.
+                            auth.api_key_header_name = gd->auth.api_key_header_name;
+                            auth.api_key = gd->auth.api_key;
+                        }
+                    }
+                    break;
+                case DEST_AUTH_NONE:
+                default:
+                    break;
+                }
+
+                // Append extra query params if configured
+                if (gd->query_params && gd->query_params_count > 0)
+                {
+                    size_t qp_count = gd->query_params_count;
+                    if (qp_count > AUTOPID_MAX_DEST_QUERY_PARAMS)
+                    {
+                        qp_count = AUTOPID_MAX_DEST_QUERY_PARAMS;
+                    }
+                    https_client_mgr_query_kv_t *qp = heap_caps_calloc(qp_count, sizeof(https_client_mgr_query_kv_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
+                    if (qp)
+                    {
+                        for (size_t qi = 0; qi < qp_count; ++qi)
+                        {
+                            qp[qi].key = gd->query_params[qi].key ? gd->query_params[qi].key : "";
+                            qp[qi].value = gd->query_params[qi].value ? gd->query_params[qi].value : "";
+                        }
+                        auth.extra_query = qp;
+                        auth.extra_query_count = qp_count;
+                    }
+                    else
+                    {
+                        ESP_LOGW(TAG, "Failed to allocate query params array (count=%u)", (unsigned)qp_count);
+                    }
+                }
+
+                // Helpful warning if no api_key configured anywhere
+                if (!auth.api_key && (!strstr(url, "api_key=") && !strstr(url, "apiKey=") && !strstr(url, "apikey=")))
+                {
+                    ESP_LOGW(TAG, "ABRP destination %u has no api_key auth configured (expected query api_key=... or Authorization: APIKEY ...)", i);
+                }
+            }
 
             https_client_mgr_response_t resp = {0};
             // For ABRP (always HTTPS), if host is raw IPv4 address, skip CN verification to allow self-signed IP certs
@@ -1529,7 +1655,7 @@ void autopid_publish_all_destinations(void)
             esp_err_t err = https_client_mgr_request_with_auth(&cfg, HTTPS_METHOD_POST,
                                                                body, strlen(body),
                                                                content_type,
-                                                               NULL,
+                                                               (gd->type == DEST_ABRP_API) ? &auth : NULL,
                                                                NULL,
                                                                &resp);
             bool ok = false;
@@ -1538,7 +1664,9 @@ void autopid_publish_all_destinations(void)
                 ESP_LOGI(TAG, "HTTP(S) dest %u status %d success=%d", i, resp.status_code, resp.is_success);
                 if (gd->type == DEST_ABRP_API)
                 {
-                    // ABRP returns HTTP 200 even on logical errors; inspect JSON {status, result}
+                    // ABRP sometimes returns HTTP 200 even on logical errors.
+                    // Default to HTTP success, but if JSON includes "status", require it to be "ok".
+                    ok = resp.is_success;
                     if (resp.data && resp.data_len > 0)
                     {
                         cJSON *jr = cJSON_Parse(resp.data);
@@ -1546,20 +1674,21 @@ void autopid_publish_all_destinations(void)
                         {
                             cJSON *st = cJSON_GetObjectItemCaseSensitive(jr, "status");
                             const char *st_str = cJSON_IsString(st) ? st->valuestring : NULL;
-                            ok = (st_str && (strcmp(st_str, "ok") == 0));
+                            if (st_str)
+                            {
+                                ok = (strcmp(st_str, "ok") == 0);
+                            }
                             ESP_LOGI(TAG, "ABRP status: %s", st_str ? st_str : "<none>");
                             cJSON_Delete(jr);
                         }
                         else
                         {
-                            ESP_LOGW(TAG, "ABRP response not JSON parseable");
-                            ok = false;
+                            ESP_LOGW(TAG, "ABRP response not JSON parseable; treating HTTP status as outcome");
                         }
                     }
                     else
                     {
-                        ESP_LOGW(TAG, "ABRP empty response body");
-                        ok = false;
+                        ESP_LOGW(TAG, "ABRP empty response body; treating HTTP status as outcome");
                     }
                 }
                 else
@@ -1584,17 +1713,17 @@ void autopid_publish_all_destinations(void)
                 gd->consec_failures++;
                 gd->fail_count++;
             }
-            // Backoff logic: after 3 failures, double backoff up to 2x base_cycle (or 60s min cap)
-            if (gd->consec_failures >= 3)
+            // Backoff logic: after N failures, increase delay up to Mx base_cycle (or min cap)
+            if (gd->consec_failures >= AUTOPID_BACKOFF_RETRY_THRESHOLD)
             {
-                uint32_t min_cap = 60000; // 60s cap baseline
+                uint32_t min_cap = AUTOPID_BACKOFF_MIN_CAP_ABRP_MS;
                 uint32_t next = (gd->backoff_ms ? gd->backoff_ms : base_cycle);
                 if (next < min_cap)
                     next = next * 2; // exponential until min_cap
                 if (next < min_cap)
                     next = min_cap; // ensure floor
-                // limit to 2 * base_cycle if that is bigger than min_cap
-                uint32_t max_backoff = base_cycle * 2;
+                // limit to M * base_cycle if that is bigger than min_cap
+                uint32_t max_backoff = base_cycle * AUTOPID_BACKOFF_MAX_MULTIPLIER;
                 if (max_backoff < min_cap)
                     max_backoff = min_cap; // keep at least min_cap
                 if (next > max_backoff)
@@ -1602,6 +1731,18 @@ void autopid_publish_all_destinations(void)
                 gd->backoff_ms = next;
             }
             https_client_mgr_free_response(&resp);
+            if (auth.extra_query)
+            {
+                free((void *)auth.extra_query);
+                auth.extra_query = NULL;
+                auth.extra_query_count = 0;
+            }
+            // If we allocated an "APIKEY <key>" string above, free it here.
+            if (gd->type == DEST_ABRP_API && auth.api_key && gd->auth.api_key && auth.api_key != gd->auth.api_key)
+            {
+                free((void *)auth.api_key);
+                auth.api_key = NULL;
+            }
             free(body);
             free(url);
             break;

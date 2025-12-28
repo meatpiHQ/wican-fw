@@ -406,7 +406,8 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
         autopid_config->custom_init = NULL;
     }
 
-    autopid_config->grouping = (grouping_item && grouping_item->valuestring && strlen(grouping_item->valuestring) > 1) ? strdup_psram(grouping_item->valuestring) : strdup_psram("disable");
+    autopid_config->grouping = strdup_psram("enable");
+    // autopid_config->grouping = (grouping_item && grouping_item->valuestring && strlen(grouping_item->valuestring) > 1) ? strdup_psram(grouping_item->valuestring) : strdup_psram("disable");
     autopid_config->webhook_data_mode = (webhook_data_mode_item && webhook_data_mode_item->valuestring && strlen(webhook_data_mode_item->valuestring) > 1) ? strdup_psram(webhook_data_mode_item->valuestring) : strdup_psram("changed");
     autopid_config->vehicle_model = car_model_item ? strdup_psram(car_model_item->valuestring) : NULL;
     autopid_config->std_ecu_protocol = ecu_protocol_item ? strdup_psram(ecu_protocol_item->valuestring) : NULL;
