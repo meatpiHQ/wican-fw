@@ -39,11 +39,13 @@
 #include "cmd_led.h"
 #include "cmd_sdcard.h"
 #include "cmd_wifi.h"
+#include "cmd_eth.h"
 #include "cmd_wusb.h"
 #include "cmd_status.h"
 #include "cmd_factoryreset.h"
 #include "cmd_autopid.h"
 #include "cmd_debug.h"
+#include "cmd_ping.h"
 
 #define PROMPT "wican> "
 #define MAX_CMDLINE_LENGTH 256
@@ -75,6 +77,12 @@ typedef struct {
 
 static const cmd_io_t k_uart_io = { .src = CMD_SRC_UART, .tcp = NULL, .ble = NULL };
 static const cmd_io_t *s_current_io = &k_uart_io;
+
+// Optional hook for external components to register additional commands.
+// Implement this symbol in another component to extend the command set.
+__attribute__((weak)) void cmdline_register_extra_commands(void)
+{
+}
 
 static inline void cmdline_set_current_io(const cmd_io_t *io)
 {
@@ -195,8 +203,13 @@ static void register_all_commands(void)
     cmd_led_register();
     cmd_sdcard_register();
     cmd_wifi_register();
+    cmd_eth_register();
     cmd_wusb_register();
     cmd_autopid_register();
+
+    (void)cmd_ping_register();
+
+    cmdline_register_extra_commands();
 }
 
 // New: process command with IO context
