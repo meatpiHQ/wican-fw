@@ -135,6 +135,13 @@ void vpn_manager_request_reload(void);
 void vpn_manager_request_test(void);
 
 /**
+ * @brief Request a one-shot VPN connectivity test using the provided config (not persisted)
+ *
+ * Useful for "Test Connection" in the UI before the user stores changes.
+ */
+esp_err_t vpn_manager_request_test_with_config(const vpn_config_t *config);
+
+/**
  * @brief Request a one-shot VPN connectivity test using hardcoded WG values (dev only)
  */
 void vpn_manager_request_test_hardcoded(void);
@@ -188,6 +195,10 @@ esp_err_t vpn_manager_load_config(vpn_config_t *config);
  * @return esp_err_t ESP_OK if connected and IP retrieved
  */
 esp_err_t vpn_manager_get_ip_address(char *ip_str, size_t ip_str_size);
+
+// Returns true if a connect attempt is currently in progress.
+// elapsed_ms/timeout_ms are optional outputs (set to 0 if not connecting).
+bool vpn_manager_get_connect_timing(uint32_t *elapsed_ms, uint32_t *timeout_ms);
 
 #ifdef __cplusplus
 }

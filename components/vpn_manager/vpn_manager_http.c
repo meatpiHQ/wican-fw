@@ -30,6 +30,10 @@
 #include <cJSON.h>
 #include "dev_status.h"
 
+#include "vpn_wireguard.h"
+
+#include "lwip/netif.h"
+
 #include "lwip/netdb.h"
 #include "lwip/sockets.h"
 #include "lwip/inet.h"
@@ -614,8 +618,205 @@ cleanup:
 
 static esp_err_t vpn_test_connection_handler(httpd_req_t *req)
 {
-    ESP_LOGI(TAG, "VPN test connection request (queued to VPN task)");
-    vpn_manager_request_test();
+    ESP_LOGI(TAG, "VPN test connection request");
+
+    // If caller provided a config payload, test that config (without persisting).
+    if (req->content_len > 0)
+    {
+        if (req->content_len > 8192)
+        {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "payload too large");
+            return ESP_FAIL;
+        }
+
+        // Use regular heap (no SPIRAM requirement) to avoid allocation failures on targets without PSRAM.
+        char *buf = (char *)malloc((size_t)req->content_len + 1);
+        if (!buf)
+        {
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no mem");
+            return ESP_ERR_NO_MEM;
+        }
+        size_t total = 0;
+        while (total < (size_t)req->content_len)
+        {
+            size_t to_read = (size_t)req->content_len - total;
+            int r = httpd_req_recv(req, buf + total, to_read);
+            if (r <= 0)
+            {
+                free(buf);
+                httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "recv failed");
+                return ESP_FAIL;
+            }
+            total += (size_t)r;
+        }
+        buf[total] = '\0';
+
+        cJSON *json = cJSON_Parse(buf);
+        free(buf);
+        if (!json)
+        {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
+            return ESP_FAIL;
+        }
+
+        vpn_config_t config = (vpn_config_t){0};
+        vpn_config_t existing = {0};
+        esp_err_t have_existing = vpn_manager_load_config(&existing);
+
+        cJSON *vpn_enabled = cJSON_GetObjectItem(json, "vpn_enabled");
+        if (cJSON_IsString(vpn_enabled) && strcmp(vpn_enabled->valuestring, "wireguard") == 0)
+        {
+            config.type = VPN_TYPE_WIREGUARD;
+            config.enabled = true;
+        }
+        else
+        {
+            config.type = VPN_TYPE_DISABLED;
+            config.enabled = false;
+        }
+
+        if (config.type == VPN_TYPE_WIREGUARD)
+        {
+            cJSON *item = NULL;
+
+            // Device private key (or placeholder)
+            item = cJSON_GetObjectItem(json, "wg_private_key");
+            if (!cJSON_IsString(item)) item = cJSON_GetObjectItem(json, "private_key");
+            if (cJSON_IsString(item) && item->valuestring[0] != '\0')
+            {
+                char tmp[80]; strlcpy(tmp, item->valuestring, sizeof(tmp)); trim_str(tmp);
+                if (strcmp(tmp, WG_PRIV_PLACEHOLDER) != 0)
+                {
+                    strlcpy(config.config.wireguard.private_key, tmp, sizeof(config.config.wireguard.private_key));
+                }
+            }
+            if (config.config.wireguard.private_key[0] == '\0' && have_existing == ESP_OK)
+            {
+                strlcpy(config.config.wireguard.private_key, existing.config.wireguard.private_key,
+                        sizeof(config.config.wireguard.private_key));
+            }
+
+            // Peer/server public key
+            item = cJSON_GetObjectItem(json, "peer_public_key");
+            if (cJSON_IsString(item))
+            {
+                char tmp[80]; strlcpy(tmp, item->valuestring, sizeof(tmp)); trim_str(tmp);
+                strlcpy(config.config.wireguard.public_key, tmp, sizeof(config.config.wireguard.public_key));
+            }
+
+            // Address (strip CIDR)
+            item = cJSON_GetObjectItem(json, "wg_address");
+            if (!cJSON_IsString(item)) item = cJSON_GetObjectItem(json, "address");
+            if (cJSON_IsString(item))
+            {
+                char addr[64] = {0};
+                strlcpy(addr, item->valuestring, sizeof(addr)); trim_str(addr);
+                char *slash = strchr(addr, '/');
+                if (slash) *slash = '\0';
+                strlcpy(config.config.wireguard.address, addr, sizeof(config.config.wireguard.address));
+            }
+
+            // Allowed IPs (keep raw ip part + computed mask when CIDR)
+            item = cJSON_GetObjectItem(json, "wg_allowed_ips");
+            if (!cJSON_IsString(item)) item = cJSON_GetObjectItem(json, "allowed_ips");
+            if (cJSON_IsString(item))
+            {
+                char cidr[64] = {0};
+                strlcpy(cidr, item->valuestring, sizeof(cidr)); trim_str(cidr);
+                char *slash = strchr(cidr, '/');
+                if (slash)
+                {
+                    *slash = '\0';
+                    strlcpy(config.config.wireguard.allowed_ip, cidr, sizeof(config.config.wireguard.allowed_ip));
+                    int prefix = atoi(slash + 1);
+                    if (prefix < 0) prefix = 0;
+                    if (prefix > 32) prefix = 32;
+                    uint32_t mask = (prefix == 0) ? 0u : (0xFFFFFFFFu << (32 - prefix));
+                    char mask_str[16];
+                    snprintf(mask_str, sizeof(mask_str), "%u.%u.%u.%u",
+                             (unsigned)((mask >> 24) & 0xFF),
+                             (unsigned)((mask >> 16) & 0xFF),
+                             (unsigned)((mask >> 8) & 0xFF),
+                             (unsigned)(mask & 0xFF));
+                    strlcpy(config.config.wireguard.allowed_ip_mask, mask_str, sizeof(config.config.wireguard.allowed_ip_mask));
+                }
+                else
+                {
+                    strlcpy(config.config.wireguard.allowed_ip, cidr, sizeof(config.config.wireguard.allowed_ip));
+                    strlcpy(config.config.wireguard.allowed_ip_mask, "255.255.255.255", sizeof(config.config.wireguard.allowed_ip_mask));
+                }
+            }
+
+            // Endpoint host:port
+            item = cJSON_GetObjectItem(json, "wg_endpoint");
+            if (!cJSON_IsString(item)) item = cJSON_GetObjectItem(json, "endpoint");
+            if (cJSON_IsString(item))
+            {
+                char ep[128] = {0};
+                strlcpy(ep, item->valuestring, sizeof(ep)); trim_str(ep);
+                char *colon = strrchr(ep, ':');
+                if (colon)
+                {
+                    *colon = '\0';
+                    strlcpy(config.config.wireguard.endpoint, ep, sizeof(config.config.wireguard.endpoint));
+                    config.config.wireguard.port = atoi(colon + 1);
+                }
+                else
+                {
+                    strlcpy(config.config.wireguard.endpoint, ep, sizeof(config.config.wireguard.endpoint));
+                    config.config.wireguard.port = 51820;
+                }
+            }
+
+            // Keepalive
+            item = cJSON_GetObjectItem(json, "wg_persistent_keepalive");
+            if (!cJSON_IsNumber(item)) item = cJSON_GetObjectItem(json, "persistent_keepalive");
+            if (cJSON_IsNumber(item))
+            {
+                config.config.wireguard.persistent_keepalive = item->valueint;
+            }
+
+            // Minimal validation for test
+            if (config.config.wireguard.private_key[0] == '\0' ||
+                config.config.wireguard.public_key[0] == '\0' ||
+                config.config.wireguard.address[0] == '\0' ||
+                config.config.wireguard.endpoint[0] == '\0' ||
+                config.config.wireguard.port <= 0)
+            {
+                cJSON_Delete(json);
+                httpd_resp_set_type(req, "application/json");
+                cJSON *resp = cJSON_CreateObject();
+                cJSON_AddBoolToObject(resp, "success", false);
+                cJSON_AddStringToObject(resp, "error", "Invalid WireGuard configuration for test");
+                char *js = cJSON_PrintUnformatted(resp);
+                cJSON_Delete(resp);
+                if (js) { httpd_resp_send(req, js, strlen(js)); free(js); }
+                return ESP_OK;
+            }
+        }
+
+        cJSON_Delete(json);
+
+        ESP_LOGI(TAG, "VPN test: queued test with provided config");
+        esp_err_t qret = vpn_manager_request_test_with_config(&config);
+        if (qret != ESP_OK)
+        {
+            httpd_resp_set_type(req, "application/json");
+            cJSON *resp = cJSON_CreateObject();
+            cJSON_AddBoolToObject(resp, "success", false);
+            cJSON_AddStringToObject(resp, "error", "Failed to queue VPN test");
+            cJSON_AddNumberToObject(resp, "queue_err", qret);
+            char *js = cJSON_PrintUnformatted(resp);
+            cJSON_Delete(resp);
+            if (js) { httpd_resp_send(req, js, strlen(js)); free(js); }
+            return ESP_OK;
+        }
+    }
+    else
+    {
+        ESP_LOGI(TAG, "VPN test: queued test with stored config");
+        vpn_manager_request_test();
+    }
 
     cJSON *response = cJSON_CreateObject();
     if (response == NULL)
@@ -626,6 +827,7 @@ static esp_err_t vpn_test_connection_handler(httpd_req_t *req)
 
     // Asynchronous: acknowledge request
     cJSON_AddBoolToObject(response, "success", true);
+    cJSON_AddBoolToObject(response, "scheduled", true);
     cJSON_AddStringToObject(response, "message", "VPN test scheduled");
 
     char *json_string = cJSON_PrintUnformatted(response);
@@ -719,12 +921,45 @@ static esp_err_t vpn_debug_handler(httpd_req_t *req)
     cJSON_AddStringToObject(response, "vpn_status", vpn_status_str);
     cJSON_AddNumberToObject(response, "vpn_status_code", vpn_status);
 
+    // WireGuard runtime signal
+    cJSON_AddBoolToObject(response, "wg_peer_up", vpn_wg_is_peer_up());
+
+    // Connect timing (helps detect "stuck connecting" scenarios)
+    uint32_t elapsed_ms = 0;
+    uint32_t timeout_ms = 0;
+    bool connecting = vpn_manager_get_connect_timing(&elapsed_ms, &timeout_ms);
+    cJSON_AddBoolToObject(response, "connect_in_progress", connecting);
+    cJSON_AddNumberToObject(response, "connect_timeout_ms", timeout_ms);
+    if (connecting)
+    {
+        cJSON_AddNumberToObject(response, "connect_elapsed_ms", elapsed_ms);
+    }
+
     if (vpn_status == VPN_STATUS_CONNECTED)
     {
         char ip_str[32] = {0};
         if (vpn_manager_get_ip_address(ip_str, sizeof(ip_str)) == ESP_OK)
         {
             cJSON_AddStringToObject(response, "vpn_ip", ip_str);
+        }
+    }
+
+    // lwIP default route (what interface is currently the default)
+    if (netif_default)
+    {
+        char def_if[8] = {0};
+        snprintf(def_if, sizeof(def_if), "%c%c%u", netif_default->name[0], netif_default->name[1], (unsigned)netif_default->num);
+        cJSON_AddStringToObject(response, "lwip_default_netif", def_if);
+
+        char ipbuf[64] = {0};
+        char gwbuf[64] = {0};
+        if (ipaddr_ntoa_r(&netif_default->ip_addr, ipbuf, sizeof(ipbuf)) != NULL)
+        {
+            cJSON_AddStringToObject(response, "lwip_default_ip", ipbuf);
+        }
+        if (ipaddr_ntoa_r(&netif_default->gw, gwbuf, sizeof(gwbuf)) != NULL)
+        {
+            cJSON_AddStringToObject(response, "lwip_default_gw", gwbuf);
         }
     }
 

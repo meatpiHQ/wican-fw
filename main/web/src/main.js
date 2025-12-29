@@ -4299,33 +4299,141 @@ async function testVpnConnection()
         const button = document.getElementById('test_vpn_button');
         button.disabled = true;
         button.textContent = 'Testing...';
-        
-        const response = await fetch('/vpn/test_connection', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
+
+        const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+        async function fetchVpnDebug()
+        {
+            const r = await fetch('/vpn/debug');
+            if (!r.ok) throw new Error('VPN debug HTTP ' + r.status);
+            return await r.json();
+        }
+
+        async function waitForVpnResult(maxWaitMs)
+        {
+            const start = Date.now();
+            while ((Date.now() - start) < maxWaitMs)
+            {
+                const d = await fetchVpnDebug();
+
+                // Success criteria: peer is up and status is connected
+                if (d && d.wg_peer_up && (d.vpn_status === 'connected' || d.vpn_status_code === 3))
+                {
+                    return { ok: true, debug: d };
+                }
+
+                // Hard failure criteria
+                if (d && (d.vpn_status === 'error' || d.vpn_status_code === 4))
+                {
+                    return { ok: false, reason: 'VPN status error', debug: d };
+                }
+
+                // If connect attempt stopped and peer is not up, treat as failure
+                if (d && d.connect_in_progress === false && d.wg_peer_up === false && (d.vpn_status === 'disconnected' || d.vpn_status === 'disabled'))
+                {
+                    return { ok: false, reason: 'VPN not connected', debug: d };
+                }
+
+                await sleep(750);
             }
-        });
+            return { ok: false, reason: 'timeout' };
+        }
+        
+        // Build config from current form so "Test Connection" reflects what the user loaded
+        const vpnConfig = {};
+        const vpnEnabled = document.getElementById("vpn_enabled") ? document.getElementById("vpn_enabled").value : 'disable';
+        vpnConfig.vpn_enabled = vpnEnabled;
+        if (vpnEnabled === 'wireguard')
+        {
+            const priv = document.getElementById("wg_private_key") ? document.getElementById("wg_private_key").value : '';
+            if (priv) vpnConfig.private_key = priv;
+            vpnConfig.peer_public_key = document.getElementById("wg_peer_public_key").value;
+            vpnConfig.address = document.getElementById("wg_address").value;
+            vpnConfig.allowed_ips = document.getElementById("wg_allowed_ips").value;
+            vpnConfig.endpoint = document.getElementById("wg_endpoint").value;
+            vpnConfig.persistent_keepalive = parseInt(document.getElementById("wg_persistent_keepalive").value) || 0;
+        }
+
+        async function postTestOnce()
+        {
+            return await fetch('/vpn/test_connection', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(vpnConfig, null, 0)
+            });
+        }
+
+        let response;
+        try
+        {
+            response = await postTestOnce();
+        }
+        catch (e)
+        {
+            // transient link blip (VPN task may be restarting); retry once
+            await sleep(400);
+            response = await postTestOnce();
+        }
         
         if (!response.ok) 
         {
-            throw new Error('Test connection failed');
+            throw new Error('Test connection failed (HTTP ' + response.status + ')');
         }
         
         const data = await response.json();
-        
-        if (data.success) 
+
+        if (!data || !data.success)
+        {
+            showNotification("VPN connection test failed to start: " + ((data && data.error) ? data.error : "Unknown error"), "red");
+            return;
+        }
+
+        // Poll for a real result (since the backend queues the test)
+        let timeoutMs = 16000;
+        try
+        {
+            const d0 = await fetchVpnDebug();
+            if (d0 && typeof d0.connect_timeout_ms === 'number' && d0.connect_timeout_ms > 0)
+            {
+                timeoutMs = Math.max(2000, Math.min(30000, d0.connect_timeout_ms + 1000));
+            }
+        }
+        catch (_) {}
+
+        const result = await waitForVpnResult(timeoutMs);
+        if (result.ok)
         {
             showNotification("VPN connection test successful!", "green");
-        } 
-        else 
+        }
+        else
         {
-            showNotification("VPN connection test failed: " + (data.error || "Unknown error"), "red");
+            const reason = result.reason ? (": " + result.reason) : "";
+            showNotification("VPN connection test failed" + reason, "red");
         }
     } 
     catch (error) 
     {
         console.error('Error testing VPN connection:', error);
+
+        // If the POST failed at the network layer, check if device is still reachable.
+        if (String(error && error.message).includes('Failed to fetch'))
+        {
+            try
+            {
+                const r = await fetch('/vpn/debug');
+                if (r.ok)
+                {
+                    showNotification("VPN test request failed to send (device reachable). Try again.", "red");
+                    return;
+                }
+            }
+            catch (_) {}
+            showNotification("VPN connection test failed: device unreachable (Failed to fetch)", "red");
+            return;
+        }
+
         showNotification("VPN connection test failed: " + error.message, "red");
     } 
     finally 
@@ -4390,8 +4498,31 @@ async function vpnDebugRefresh()
         const blockers = d.gating_blockers_present ? 'YES' : 'NO';
         vpnDbgSet('vpn_dbg_gating', `prereqs=${prereqs}, blockers=${blockers} (vpn_enabled=${d.vpn_enabled_bit ? 'yes' : 'no'}, sta_connected=${d.sta_connected ? 'yes' : 'no'}, time_synced=${d.time_synced ? 'yes' : 'no'}, ap_enabled=${d.ap_enabled ? 'yes' : 'no'}, sleeping=${d.sleeping ? 'yes' : 'no'})`);
 
-        const vpnLine = `${d.vpn_status || 'unknown'}${d.vpn_ip ? ' (ip ' + d.vpn_ip + ')' : ''}`;
+        const peerUp = (d.wg_peer_up ? 'yes' : 'no');
+        const defIf = d.lwip_default_netif ? d.lwip_default_netif : '-';
+        const defIp = d.lwip_default_ip ? d.lwip_default_ip : '-';
+        const defGw = d.lwip_default_gw ? d.lwip_default_gw : '-';
+        const routeLine = `${defIf} (ip ${defIp}, gw ${defGw})`;
+
+        let timerLine = '-';
+        if (d.connect_in_progress)
+        {
+            const elapsed = (d.connect_elapsed_ms !== undefined) ? d.connect_elapsed_ms : '-';
+            const timeout = (d.connect_timeout_ms !== undefined) ? d.connect_timeout_ms : '-';
+            timerLine = `connecting: ${elapsed}ms / ${timeout}ms`;
+        }
+        else if (d.connect_timeout_ms !== undefined)
+        {
+            timerLine = `timeout=${d.connect_timeout_ms}ms`;
+        }
+
+        const vpnLine = `${d.vpn_status || 'unknown'}${d.vpn_ip ? ' (ip ' + d.vpn_ip + ')' : ''} | peer_up=${peerUp} | ${timerLine} | default=${routeLine}`;
         vpnDbgSet('vpn_dbg_status', vpnLine);
+
+        // Optional extra rows (only visible if HTML contains these ids)
+        vpnDbgSet('vpn_dbg_peer', `peer_up=${peerUp}`);
+        vpnDbgSet('vpn_dbg_timer', timerLine);
+        vpnDbgSet('vpn_dbg_default', routeLine);
 
         const staLine = `${d.sta_connected ? 'connected' : 'not connected'}${d.sta_ip ? ' (ip ' + d.sta_ip + ')' : ''}${d.sta_gw ? ', gw ' + d.sta_gw : ''}`;
         vpnDbgSet('vpn_dbg_sta', staLine);
