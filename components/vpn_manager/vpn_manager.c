@@ -31,6 +31,7 @@
 #include <esp_wireguard.h>
 #include <esp_heap_caps.h>
 #include <cJSON.h>
+#include <esp_timer.h>
 #include "filesystem.h"
 #include "vpn_wireguard.h"
 #include "vpn_config.h"
@@ -46,21 +47,22 @@ static StaticEventGroup_t s_vpn_event_group_bss;
 static vpn_config_t current_config = {0};
 static vpn_status_t current_status = VPN_STATUS_DISABLED;
 static esp_netif_t *vpn_netif = NULL;
-// Legacy reconnect timer no longer used; reconnection handled by VPN task backoff
-static TimerHandle_t reconnect_timer = NULL;
 
 // VPN task/command infrastructure
 typedef enum
 {
     VPN_CMD_ENABLE,
     VPN_CMD_RELOAD,
-    VPN_CMD_TEST
+    VPN_CMD_TEST,
+    VPN_CMD_TEST_CONFIG
 } vpn_cmd_type_t;
 
 typedef struct
 {
     vpn_cmd_type_t type;
     bool enabled; // for VPN_CMD_ENABLE
+    bool has_config; // for VPN_CMD_TEST_CONFIG
+    vpn_config_t config; // for VPN_CMD_TEST_CONFIG
 } vpn_cmd_msg_t;
 
 static TaskHandle_t s_vpn_task = NULL;
@@ -70,6 +72,8 @@ static uint8_t s_vpn_cmd_q_storage[8 * sizeof(vpn_cmd_msg_t)];
 static uint32_t s_backoff_ms = 0;
 static uint32_t s_backoff_cap_ms = 15000; // 15s cap
 static uint32_t s_backoff_base_ms = 2000; // 2s start
+static int64_t s_connect_started_us = 0;
+static int64_t s_connect_timeout_us = 15000000; // 15s
 
 // Use PSRAM for VPN task stack when available
 #define VPN_TASK_STACK_WORDS  (4096)
@@ -102,7 +106,6 @@ static void vpn_backoff_bump(void)
 }
 
 // Private function declarations
-static void vpn_reconnect_timer_callback(TimerHandle_t xTimer);
 static void vpn_manager_update_status(void);
 static esp_err_t vpn_manager_validate_wireguard_config(const vpn_wireguard_config_t *cfg);
 
@@ -220,6 +223,8 @@ esp_err_t vpn_manager_start(const vpn_config_t *config)
     // Copy configuration
     memcpy(&current_config, config, sizeof(vpn_config_t));
 
+    s_connect_started_us = esp_timer_get_time();
+
     current_status = VPN_STATUS_CONNECTING;
     xEventGroupClearBits(vpn_event_group, VPN_CONNECTED_BIT | VPN_DISCONNECTED_BIT | VPN_ERROR_BIT);
     xEventGroupSetBits(vpn_event_group, VPN_CONNECTING_BIT);
@@ -256,6 +261,7 @@ esp_err_t vpn_manager_start(const vpn_config_t *config)
         current_status = VPN_STATUS_ERROR;
         xEventGroupClearBits(vpn_event_group, VPN_CONNECTING_BIT);
         xEventGroupSetBits(vpn_event_group, VPN_ERROR_BIT);
+        s_connect_started_us = 0;
         ESP_LOGE(TAG, "Failed to start VPN: %s", esp_err_to_name(ret));
     }
 
@@ -341,6 +347,7 @@ esp_err_t vpn_manager_stop(void)
     }
 
     current_status = VPN_STATUS_DISCONNECTED;
+    s_connect_started_us = 0;
     xEventGroupClearBits(vpn_event_group, VPN_CONNECTED_BIT | VPN_CONNECTING_BIT | VPN_ERROR_BIT);
     xEventGroupSetBits(vpn_event_group, VPN_DISCONNECTED_BIT);
 
@@ -352,6 +359,35 @@ vpn_status_t vpn_manager_get_status(void)
     // Update status by checking WireGuard connection
     vpn_manager_update_status();
     return current_status;
+}
+
+bool vpn_manager_get_connect_timing(uint32_t *elapsed_ms, uint32_t *timeout_ms)
+{
+    if (timeout_ms)
+    {
+        *timeout_ms = (uint32_t)(s_connect_timeout_us / 1000);
+    }
+
+    if (current_status != VPN_STATUS_CONNECTING || s_connect_started_us == 0)
+    {
+        if (elapsed_ms)
+        {
+            *elapsed_ms = 0;
+        }
+        return false;
+    }
+
+    int64_t now_us = esp_timer_get_time();
+    int64_t delta_us = now_us - s_connect_started_us;
+    if (delta_us < 0)
+    {
+        delta_us = 0;
+    }
+    if (elapsed_ms)
+    {
+        *elapsed_ms = (uint32_t)(delta_us / 1000);
+    }
+    return true;
 }
 
 // Event group handle is now private to manager
@@ -428,12 +464,21 @@ static void vpn_manager_update_status(void)
             current_status = VPN_STATUS_CONNECTED;
             xEventGroupClearBits(vpn_event_group, VPN_CONNECTING_BIT | VPN_DISCONNECTED_BIT | VPN_ERROR_BIT);
             xEventGroupSetBits(vpn_event_group, VPN_CONNECTED_BIT);
+            s_connect_started_us = 0;
+            // Only switch default route when the peer is actually up.
+            esp_err_t sret = vpn_wg_set_default_route();
+            if (sret != ESP_OK)
+            {
+                ESP_LOGW(TAG, "Failed to set WG default route: %s", esp_err_to_name(sret));
+            }
             ESP_LOGI(TAG, "VPN connected successfully");
         }
     }
     else
     {
-        if (current_status == VPN_STATUS_CONNECTED || current_status == VPN_STATUS_CONNECTING)
+        // If we were connected and the peer went down, report disconnected.
+        // Do not force CONNECTING -> DISCONNECTED here; CONNECTING is resolved by timeout logic in the VPN task.
+        if (current_status == VPN_STATUS_CONNECTED)
         {
             current_status = VPN_STATUS_DISCONNECTED;
             xEventGroupClearBits(vpn_event_group, VPN_CONNECTED_BIT | VPN_CONNECTING_BIT);
@@ -441,12 +486,6 @@ static void vpn_manager_update_status(void)
             ESP_LOGI(TAG, "VPN disconnected");
         }
     }
-}
-
-static void vpn_reconnect_timer_callback(TimerHandle_t xTimer)
-{
-    // Unused: reconnection handled in vpn_task_fn()
-    (void)xTimer;
 }
 
 // Public control API implemented via command queue and dev_status bits
@@ -483,6 +522,24 @@ void vpn_manager_request_test(void)
         vpn_cmd_msg_t msg = { .type = VPN_CMD_TEST };
         xQueueSend(s_vpn_cmd_q, &msg, 0);
     }
+}
+
+esp_err_t vpn_manager_request_test_with_config(const vpn_config_t *config)
+{
+    if (!config)
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!s_vpn_cmd_q)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+    vpn_cmd_msg_t msg = {0};
+    msg.type = VPN_CMD_TEST_CONFIG;
+    msg.has_config = true;
+    msg.config = *config;
+    BaseType_t ok = xQueueSend(s_vpn_cmd_q, &msg, 0);
+    return ok == pdTRUE ? ESP_OK : ESP_ERR_TIMEOUT;
 }
 
 void vpn_manager_request_test_hardcoded(void)
@@ -576,6 +633,21 @@ static void vpn_task_fn(void *arg)
                         vpn_manager_stop();
                     }
                     break;
+
+                case VPN_CMD_TEST_CONFIG:
+                    if (msg.has_config)
+                    {
+                        ESP_LOGI(TAG, "CMD TEST_CONFIG: applying provided config for one-shot test (type=%d, enabled=%d)",
+                                msg.config.type, (int)msg.config.enabled);
+                        current_config = msg.config;
+                        test_once = true;
+                        vpn_backoff_reset();
+                        if (current_status == VPN_STATUS_CONNECTED || current_status == VPN_STATUS_CONNECTING)
+                        {
+                            vpn_manager_stop();
+                        }
+                    }
+                    break;
             }
         }
 
@@ -635,6 +707,23 @@ static void vpn_task_fn(void *arg)
                             }
                         }
                     }
+                }
+            }
+        }
+        else if (current_status == VPN_STATUS_CONNECTING)
+        {
+            // Drive state transitions without relying on UI polling.
+            vpn_manager_update_status();
+
+            // If still connecting, enforce a timeout so a bad profile doesn't hijack routing forever.
+            if (current_status == VPN_STATUS_CONNECTING && s_connect_started_us != 0)
+            {
+                int64_t now_us = esp_timer_get_time();
+                if ((now_us - s_connect_started_us) > s_connect_timeout_us)
+                {
+                    ESP_LOGW(TAG, "VPN connect timeout; stopping and backing off");
+                    vpn_manager_stop();
+                    vpn_backoff_bump();
                 }
             }
         }

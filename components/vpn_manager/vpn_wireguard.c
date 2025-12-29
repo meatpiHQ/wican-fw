@@ -151,11 +151,6 @@ esp_err_t vpn_wg_start(void)
         ESP_LOGE(TAG_WG, "connect failed: %s", esp_err_to_name(ret));
         return ret;
     }
-    ret = esp_wireguard_set_default(&s_wg_ctx);
-    if (ret != ESP_OK)
-    {
-        ESP_LOGW(TAG_WG, "set_default failed: %s", esp_err_to_name(ret));
-    }
     ESP_LOGI(TAG_WG, "Started");
     return ESP_OK;
 }
