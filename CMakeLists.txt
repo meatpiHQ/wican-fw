@@ -4,6 +4,18 @@ cmake_minimum_required(VERSION 3.5)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
+# CherryUSB (no Kconfig): compile host + USB-Ethernet class drivers.
+# Runtime selection is handled by the usb_eth_host component.
+set(CONFIG_CHERRYUSB_HOST 1 CACHE INTERNAL "Enable CherryUSB host stack")
+set(CONFIG_CHERRYUSB_HOST_DWC2_ESP 1 CACHE INTERNAL "Use ESP DWC2 host glue")
+set(CONFIG_CHERRYUSB_OSAL "idf" CACHE INTERNAL "Use ESP-IDF OSAL")
+
+# CherryUSB RTL8152 driver selects 16KB RX buffers for some chip versions (e.g., RTL_VER_02).
+# CherryUSB's ESP-IDF default for CONFIG_USBHOST_RTL8152_ETH_MAX_RX_SIZE is 2048 unless overridden.
+# Define it here (project-level) to keep managed_components untouched.
+add_compile_definitions(CONFIG_USBHOST_RTL8152_ETH_MAX_RX_SIZE=16384)
+
+
 set(WICAN_V210 1)
 set(WICAN_V300 2)
 set(WICAN_USB_V100 3)

@@ -1,4 +1,18 @@
 dependencies:
+  cherry-embedded/cherryusb:
+    component_hash: ec3fda70779076a4a996abc52684fcafe4c61b269b722b775562f96c042c08f6
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4.1'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    targets:
+    - esp32s2
+    - esp32s3
+    - esp32p4
+    version: 1.5.2~2
   eil/esp_idf_lib_helpers:
     component_hash: eaee96f02db1bea59d369e53e46fd100331eb9d1d9726416cace4dd01f72698e
     dependencies:
@@ -33,75 +47,10 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.8.2
-  espressif/usb_host_cdc_acm:
-    component_hash: 4fc5789ef080e3038d8e09598807000f44d045cff5cc1267d9d4dfe0e4e775fb
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=5.0'
-    - name: espressif/usb
-      registry_url: https://components.espressif.com
-      require: public
-      rules:
-      - if: idf_version >=6.0
-      - if: target not in ["linux"]
-      version: ^1.0.0
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    targets:
-    - esp32s2
-    - esp32s3
-    - esp32p4
-    - esp32h4
-    - linux
-    version: 2.2.0
-  espressif/usb_host_cp210x_vcp:
-    component_hash: d8f33825476a6ebb2c5c12dc69f94a0bcd0fa418d1370af886a20bdc31cce952
-    dependencies:
-    - name: espressif/usb_host_cdc_acm
-      registry_url: https://components.espressif.com
-      require: public
-      version: ^2.1.0
-    - name: idf
-      require: private
-      version: '>=4.4'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 2.1.0
-  espressif/usb_host_ftdi_vcp:
-    component_hash: a24180724b8d7fdf01b920b6baebd01057d52d1a4ae5bf7ce009963cc24ebb42
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=4.4'
-    - name: espressif/usb_host_cdc_acm
-      registry_url: https://components.espressif.com
-      require: public
-      version: ^2.0.0
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 2.0.0
-  espressif/usb_host_vcp:
-    component_hash: 99b3ad314fa966cb32970e468625672994e259c69c7c668d9c0a13d65993a0e7
-    dependencies:
-    - name: espressif/usb_host_cdc_acm
-      registry_url: https://components.espressif.com
-      require: public
-      version: '>=1.0.4,<3.0.0'
-    - name: idf
-      require: private
-      version: '>=4.4'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 1.0.0~5
   idf:
     source:
       type: idf
-    version: 5.5.1
+    version: 5.5.2
   joltwallet/littlefs:
     component_hash: e1dbe782be5aa58e879fe9f22bee60e5ff68acbfe3793d92a2e730c27374c787
     dependencies:
@@ -112,19 +61,6 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.19.2
-  meatpihq/usb_host_ch34x_vcp:
-    component_hash: a448631fda325ce5f3f1b4bb4707c7cb075c6a4d71ff4026a22ef2191efc9af4
-    dependencies:
-    - name: espressif/usb_host_cdc_acm
-      public: true
-      version: '>=1.0.4,<3.0.0'
-    - name: idf
-      version: '>=4.4'
-    source:
-      git: https://github.com/meatpiHQ/esp-usb.git
-      path: host/class/cdc/usb_host_ch34x_vcp
-      type: git
-    version: c80a574e26b4807816fdcb939218d143841b852c
   nopnop2002/sqlite3:
     component_hash: 3deae8ed52e238e19eb13d2a347f1b2a9efe1d7e04007be6df7b04555a5543f7
     dependencies: []
@@ -141,16 +77,13 @@ dependencies:
       type: service
     version: 1.0.1
 direct_dependencies:
+- cherry-embedded/cherryusb
 - eil/i2cdev
 - espressif/mdns
-- espressif/usb_host_cp210x_vcp
-- espressif/usb_host_ftdi_vcp
-- espressif/usb_host_vcp
 - idf
 - joltwallet/littlefs
-- meatpihq/usb_host_ch34x_vcp
 - nopnop2002/sqlite3
 - zorxx/multipart-parser
-manifest_hash: fea349af0598d79dcf7b5775ee0a9f6dd1ee7a0a3c9147a3a4dcad7dedac3de3
+manifest_hash: ebf393fa07e1f591e31bd37dd80d9dd982e16b9414717d185548a4171c7ba444
 target: esp32s3
 version: 2.0.0

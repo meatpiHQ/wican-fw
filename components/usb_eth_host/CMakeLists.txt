@@ -1,0 +1,22 @@
+idf_component_register(
+    SRCS
+        "usb_eth_host.c"
+        "usb_eth_netif_glue.c"
+        "usb_eth_rtl8152.c"
+        "usb_eth_asix.c"
+        "usb_eth_cdc_ecm.c"
+        "usb_eth_cdc_ncm.c"
+        "usb_eth_rndis.c"
+    INCLUDE_DIRS
+        "include"
+    PRIV_INCLUDE_DIRS
+        "."
+    REQUIRES
+        esp_event
+        esp_netif
+        lwip
+        driver
+    PRIV_REQUIRES
+        freertos
+        cherry-embedded__cherryusb
+)

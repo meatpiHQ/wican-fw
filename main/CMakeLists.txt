@@ -71,6 +71,8 @@ set(requires
     vpn_manager
     autopid
     ha_webhooks
+    usb_eth_host
+    cmd_ping
 )
 
 # Register the component
@@ -78,7 +80,6 @@ idf_component_register(
     SRCS 
         "console.c"
         "rtcm.c"
-        "usb_host.cpp"
         "ftp.c"
         "elm327.c"
         "obd.c"

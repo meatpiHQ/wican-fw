@@ -5,15 +5,9 @@ dependencies:
     path: components/esp32-idf-sqlite3/
     git: https://github.com/nopnop2002/esp32-idf-sqlite3.git
   espressif/mdns: ^1.0.0
-  espressif/usb_host_cp210x_vcp: ^2.0.0
-  espressif/usb_host_ftdi_vcp: ^2.0.0
-  meatpihq/usb_host_ch34x_vcp:
-    git: https://github.com/meatpiHQ/esp-usb.git
-    path: host/class/cdc/usb_host_ch34x_vcp
-    version: ch343
-  espressif/usb_host_vcp: ^1.0.0~5
   # Required IDF version
   idf:
     version: '>=4.1.0'
   eil/i2cdev: ^1.5.1
   zorxx/multipart-parser: '*'
+  cherry-embedded/cherryusb: ^1.5.2~2
