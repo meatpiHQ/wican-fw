@@ -22,6 +22,7 @@
 
 #include "esp_console.h"
 #include "esp_err.h"
+#include <stddef.h>
 #include <stdint.h>
 
 typedef void (*cmdline_output_func_t)(const char *data, size_t len);
@@ -30,7 +31,10 @@ esp_err_t cmdline_init(void);
 esp_err_t cmdline_safemode_init(void);
 void cmdline_set_tcp_output_func(cmdline_output_func_t func);
 void cmdline_set_ble_output_func(cmdline_output_func_t func);
+void cmdline_set_usb_output_func(cmdline_output_func_t func);
 void cmdline_printf(const char *fmt, ...);
 esp_err_t cmdline_run(const char *cmd);
 esp_err_t cmdline_run_on_ble(const char *cmd);
+esp_err_t cmdline_run_on_usb(const char *cmd);
 void cmdline_print_prompt_on_ble(void);
+void cmdline_print_prompt_on_usb(void);

@@ -72,6 +72,7 @@ set(requires
     autopid
     ha_webhooks
     usb_eth_host
+    usb_acm_cli
     cmd_ping
 )
 

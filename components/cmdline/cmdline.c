@@ -46,6 +46,7 @@
 #include "cmd_autopid.h"
 #include "cmd_debug.h"
 #include "cmd_ping.h"
+#include "cmd_espnetlink.h"
 
 #define PROMPT "wican> "
 #define MAX_CMDLINE_LENGTH 256
@@ -61,21 +62,24 @@ static int client_socket = -1;
 static bool is_cmdline_initialized = false;
 static cmdline_output_func_t tcp_output_func = NULL;
 static cmdline_output_func_t ble_output_func = NULL;
+static cmdline_output_func_t usb_output_func = NULL;
 
 // Command source and IO routing context
 typedef enum {
     CMD_SRC_UART = 0,
     CMD_SRC_TCP,
     CMD_SRC_BLE,
+    CMD_SRC_USB,
 } cmd_source_t;
 
 typedef struct {
     cmd_source_t src;
     cmdline_output_func_t tcp; // writer for TCP (may be NULL)
     cmdline_output_func_t ble; // writer for BLE (may be NULL)
+    cmdline_output_func_t usb; // writer for USB (may be NULL)
 } cmd_io_t;
 
-static const cmd_io_t k_uart_io = { .src = CMD_SRC_UART, .tcp = NULL, .ble = NULL };
+static const cmd_io_t k_uart_io = { .src = CMD_SRC_UART, .tcp = NULL, .ble = NULL, .usb = NULL };
 static const cmd_io_t *s_current_io = &k_uart_io;
 
 // Optional hook for external components to register additional commands.
@@ -166,6 +170,15 @@ void cmdline_printf(const char *fmt, ...)
                 printf("%s", buf);
             }
             break;
+        case CMD_SRC_USB:
+            if (s_current_io->usb) {
+                s_current_io->usb(buf, strlen(buf));
+            } else if (usb_output_func) {
+                usb_output_func(buf, strlen(buf));
+            } else {
+                printf("%s", buf);
+            }
+            break;
         case CMD_SRC_UART:
         default:
             printf("%s", buf);
@@ -185,10 +198,22 @@ void cmdline_set_ble_output_func(cmdline_output_func_t func)
     ble_output_func = func;
 }
 
+void cmdline_set_usb_output_func(cmdline_output_func_t func)
+{
+    usb_output_func = func;
+}
+
 void cmdline_print_prompt_on_ble(void)
 {
     if (ble_output_func) {
         ble_output_func(PROMPT, strlen(PROMPT));
+    }
+}
+
+void cmdline_print_prompt_on_usb(void)
+{
+    if (usb_output_func) {
+        usb_output_func(PROMPT, strlen(PROMPT));
     }
 }
 
@@ -208,6 +233,7 @@ static void register_all_commands(void)
     cmd_autopid_register();
 
     (void)cmd_ping_register();
+    (void)cmd_espnetlink_register();
 
     cmdline_register_extra_commands();
 }
@@ -553,4 +579,42 @@ esp_err_t cmdline_init(void)
     register_all_commands();
     
     return esp_console_start_repl(repl);
+}
+
+// Run a command with USB as the active output sink
+esp_err_t cmdline_run_on_usb(const char *cmd)
+{
+    if (cmd == NULL) return ESP_ERR_INVALID_ARG;
+
+    char cmd_copy[MAX_CMDLINE_LENGTH];
+    strncpy(cmd_copy, cmd, MAX_CMDLINE_LENGTH - 1);
+    cmd_copy[MAX_CMDLINE_LENGTH - 1] = '\0';
+
+    size_t cmd_len = strlen(cmd_copy);
+    while (cmd_len > 0 && (cmd_copy[cmd_len - 1] == ' ' ||
+                           cmd_copy[cmd_len - 1] == '\r' ||
+                           cmd_copy[cmd_len - 1] == '\n')) {
+        cmd_copy[--cmd_len] = '\0';
+    }
+    if (cmd_len == 0) return ESP_OK;
+
+    cmd_io_t usb_io = { .src = CMD_SRC_USB, .tcp = NULL, .ble = NULL, .usb = usb_output_func };
+    const cmd_io_t *prev = s_current_io;
+    cmdline_set_current_io(&usb_io);
+
+    int ret = 0;
+    esp_err_t err = esp_console_run(cmd_copy, &ret);
+
+    if (err == ESP_ERR_NOT_FOUND) {
+        cmdline_printf("Command not found\n");
+    } else if (err == ESP_ERR_INVALID_ARG) {
+        cmdline_printf("Invalid arguments\n");
+    } else if (err == ESP_OK && ret != ESP_OK) {
+        cmdline_printf("Command returned non-zero error code\n");
+    } else if (err != ESP_OK) {
+        cmdline_printf("Internal error\n");
+    }
+
+    cmdline_set_current_io(prev);
+    return err;
 }
