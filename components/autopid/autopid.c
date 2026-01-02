@@ -3730,7 +3730,7 @@ static void autopid_task(void *pvParameters)
                         // pause 100ms between pid requests
                         xSemaphoreGive(autopid_config->mutex);
                         dev_status_wait_for_bits(DEV_AUTOPID_ELM327_APP_BIT, portMAX_DELAY);
-                        vTaskDelay(pdMS_TO_TICKS(105));
+                        vTaskDelay(pdMS_TO_TICKS(5));
                         xSemaphoreTake(autopid_config->mutex, portMAX_DELAY);
                     }
                     else
@@ -3743,7 +3743,7 @@ static void autopid_task(void *pvParameters)
 
         // elm327_unlock();
         xSemaphoreGive(autopid_config->mutex);
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(5));
 
         // CAN filters monitor window (broadcast frames)
         // We time-slice ATMA per filter using ATCRA, then force init resend next cycle
