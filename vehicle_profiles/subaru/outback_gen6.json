@@ -1,0 +1,37 @@
+{
+  "car_model": "Subaru Outback 2.5na Gen6",
+  "init": "ATSP6;",
+  "pids": [
+    {
+      "pid": "2210D2",
+      "pid_init": "ATSH7A3;",
+      "parameters": {
+        "CVT_TEMP_C": "B4 - 50"
+      }
+    },
+    {
+      "pid": "221022",
+      "pid_init": "ATSH753;",
+      "parameters": {
+        "TP_FL_KPA": "(B4 / 5) * 6.894757",
+        "TP_FR_KPA": "(B5 / 5) * 6.894757",
+        "TP_RL_KPA": "(B6 / 5) * 6.894757",
+        "TP_RR_KPA": "(B7 / 5) * 6.894757"
+      }
+    },
+    {
+      "pid": "2212ED",
+      "pid_init": "ATSH7A2;",
+      "parameters": {
+        "MAF_AVERAGE_GPS": "([B4:B5] / 100)"
+      }
+    },
+    {
+      "pid": "221322",
+      "pid_init": "ATSH7A2;",
+      "parameters": {
+        "BAT_CHG_DISCHG_CURRENT_A": "(([B4:B7] * 10) / 10000) - 2000"
+      }
+    }
+  ]
+}
