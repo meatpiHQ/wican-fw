@@ -862,7 +862,19 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
                 }
                 else
                 {
-                    autopid_config->standard_init = strdup_psram("ATTP0\r  ");
+                    // For non-CAN / unknown protocols, still honor the configured protocol.
+                    // Keep it minimal: only set protocol via ATTP.
+                    if (autopid_config->std_ecu_protocol &&
+                        autopid_config->std_ecu_protocol[0] != '\0' &&
+                        strcmp(autopid_config->std_ecu_protocol, "0") != 0)
+                    {
+                        snprintf(std_init_buf, sizeof(std_init_buf), "ATTP%s\r", autopid_config->std_ecu_protocol);
+                        autopid_config->standard_init = strdup_psram(std_init_buf);
+                    }
+                    else
+                    {
+                        autopid_config->standard_init = strdup_psram("ATTP0\r");
+                    }
                 }
 
                 if (curr_pid->parameters->name != NULL && strlen(curr_pid->parameters->name) > 0)

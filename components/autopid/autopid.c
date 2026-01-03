@@ -3617,7 +3617,13 @@ static void autopid_task(void *pvParameters)
     // bool *pid_failed = calloc(total_params, sizeof(bool));
     // xSemaphoreGive(autopid_config->mutex);
 
-    if (strcmp(autopid_config->std_ecu_protocol, "0") == 0)
+    // Select ECU protocol.
+    // - If configured as "0": use Auto (query ELM for negotiated protocol)
+    // - Else: force configured protocol via ATTP
+    char early_proto_cmd[16] = {0};
+    bool have_early_proto_cmd = false;
+
+    if (autopid_config->std_ecu_protocol && strcmp(autopid_config->std_ecu_protocol, "0") == 0)
     {
         ESP_LOGI(TAG, "Protocol is Auto");
 
@@ -3637,6 +3643,11 @@ static void autopid_task(void *pvParameters)
             char protocol_str[16];
             snprintf(protocol_str, sizeof(protocol_str), "ATTP%01X\r", auto_protocol_number);
             autopid_config->standard_init = strdup_psram(protocol_str);
+
+            // Also send protocol selection early so CAN filter monitoring works
+            // even before the first PID type switch triggers standard_init.
+            snprintf(early_proto_cmd, sizeof(early_proto_cmd), "ATTP%01X\r", auto_protocol_number);
+            have_early_proto_cmd = true;
         }
         else
         {
@@ -3645,9 +3656,37 @@ static void autopid_task(void *pvParameters)
 
         ESP_LOGI(TAG, "Protocol number: %u", auto_protocol_number);
     }
+    else if (autopid_config->std_ecu_protocol && autopid_config->std_ecu_protocol[0] != '\0')
+    {
+        // Protocol explicitly configured: use ATTP<protocol>.
+        // Accept values like "6", "9", "A" etc (strtol base 16 with optional 0x).
+        char *endptr = NULL;
+        long v = strtol(autopid_config->std_ecu_protocol, &endptr, 16);
+        if (endptr != autopid_config->std_ecu_protocol && v >= 0 && v <= 0xFF)
+        {
+            // Format with 1 hex digit for typical ELM protocols (0..F); allow 2 if needed.
+            if (v <= 0xF)
+                snprintf(early_proto_cmd, sizeof(early_proto_cmd), "ATTP%01lX\r", v);
+            else
+                snprintf(early_proto_cmd, sizeof(early_proto_cmd), "ATTP%02lX\r", v);
+            have_early_proto_cmd = true;
+            ESP_LOGI(TAG, "Protocol is fixed: %s (early cmd: %s)", autopid_config->std_ecu_protocol, early_proto_cmd);
+        }
+        else
+        {
+            ESP_LOGW(TAG, "Invalid std_ecu_protocol: %s", autopid_config->std_ecu_protocol);
+        }
+    }
 
     vTaskDelay(pdMS_TO_TICKS(150));
     send_commands(default_init, 50);
+
+    // Apply protocol selection early (if any). This is important for CAN filter monitoring
+    // and for correct protocol/header-length tracking before the first PID cycle.
+    if (have_early_proto_cmd)
+    {
+        send_commands(early_proto_cmd, 2);
+    }
     ESP_LOGI(TAG, "Autopid Start loop");
     ESP_LOGI(TAG, "Total PIDs: %lu", autopid_config->pid_count);
     ESP_LOGI(TAG, "Total CAN Filters: %lu", autopid_config->can_filters_count);
