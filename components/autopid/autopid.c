@@ -219,6 +219,23 @@ esp_err_t autopid_get_protocol_number(int32_t *protocol_value)
     return ESP_OK;
 }
 
+bool autopid_lock(uint32_t timeout_ms)
+{
+    if (!autopid_config || !autopid_config->mutex)
+        return false;
+
+    TickType_t to = pdMS_TO_TICKS(timeout_ms);
+    return (xSemaphoreTake(autopid_config->mutex, to) == pdTRUE);
+}
+
+void autopid_unlock(void)
+{
+    if (!autopid_config || !autopid_config->mutex)
+        return;
+
+    xSemaphoreGive(autopid_config->mutex);
+}
+
 const std_pid_t *get_pid_from_string(const char *pid_string)
 {
     char pid_hex[3];
@@ -2288,7 +2305,8 @@ static bool autopid_buf_is_only_stopped(const char *buf)
     while (*p)
     {
         // Skip whitespace and separators
-        while (*p == '\r' || *p == '\n' || *p == ' ' || *p == '\t')
+        // Also skip ELM prompt characters '>' that can be appended into the same buffer.
+        while (*p == '\r' || *p == '\n' || *p == ' ' || *p == '\t' || *p == '>')
             p++;
         if (*p == '\0')
             break;
@@ -2300,10 +2318,14 @@ static bool autopid_buf_is_only_stopped(const char *buf)
         size_t len = (size_t)(p - start);
 
         // Trim trailing spaces
-        while (len > 0 && (start[len - 1] == ' ' || start[len - 1] == '\t'))
+        while (len > 0 && (start[len - 1] == ' ' || start[len - 1] == '\t' || start[len - 1] == '>'))
             len--;
 
         if (len == 0)
+            continue;
+
+        // Ignore bare prompt token
+        if (len == 1 && start[0] == '>')
             continue;
 
         // ELM/STN chips often emit a lone "STOPPED" line when ATMA is terminated.
@@ -2695,6 +2717,14 @@ void autopid_parser(char *str, uint32_t len, QueueHandle_t *q, char *cmd_str)
             {
                 // Parse the accumulated buffer
                 parse_elm327_response(auto_pid_buf, &response);
+
+                // If parsing produced no bytes (e.g. STOPPED, SEARCHING..., echoed command),
+                // mark as error so the caller won't try to decode it as a valid PID payload.
+                if (response.length == 0)
+                {
+                    strcpy((char *)response.data, "error");
+                    response.length = strlen((char *)response.data);
+                }
 
                 // Optional: validate that this response matches the PID request we sent.
                 if (autopid_pid_validation_enabled() &&
@@ -3606,7 +3636,7 @@ static void autopid_task(void *pvParameters)
     send_commands(default_init, 50);
     ESP_LOGI(TAG, "Autopid Start loop");
     ESP_LOGI(TAG, "Total PIDs: %lu", autopid_config->pid_count);
-
+    ESP_LOGI(TAG, "Total CAN Filters: %lu", autopid_config->can_filters_count);
     // Initialize timers
     wc_timer_set(&ecu_check_timer, 2000);
 

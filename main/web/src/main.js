@@ -636,7 +636,101 @@ const pidEntryStyles = `
         font-size: 0.65rem;
         margin-left: 12px;
     }
+
+    .test-btn {
+        background: #2563eb;
+        color: #fff;
+        border: none;
+        padding: 4px 8px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.65rem;
+    }
+
+    .test-result {
+        font-size: 0.85rem;
+        max-width: 220px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
 `;
+
+async function runPidTest(kind, entry) {
+    const resultEl = entry.querySelector('.test-result');
+    const buttonEl = entry.querySelector('.test-btn');
+    if (!resultEl || !buttonEl) return;
+
+    const payload = { kind };
+
+    if (kind === 'std') {
+        const name = entry.querySelector('.name-input')?.value || entry.querySelector('.pid-title')?.textContent || '';
+        const protocol = document.getElementById('ecu_protocol')?.value || '';
+        const rxheader = entry.querySelector('.receive-header-input')?.value || '';
+        payload.name = name.trim();
+        payload.protocol = protocol;
+        if (rxheader.trim()) payload.rxheader = rxheader.trim();
+    } else if (kind === 'vehicle') {
+        const init = document.getElementById('specific_init')?.value || '';
+        const pid = entry.querySelector('.pid-input')?.value || '';
+        const pidInit = entry.querySelector('.pid-init-input')?.value || '';
+        const expr = entry.querySelector('.expression-input')?.value || '';
+        if (init.trim()) payload.init = init;
+        payload.pid = pid.trim();
+        if (pidInit.trim()) payload.pid_init = pidInit;
+        payload.expr = expr;
+    } else if (kind === 'custom') {
+        const init = document.getElementById('initialisation')?.value || '';
+        const pid = entry.querySelector('.pid-input')?.value || '';
+        const pidInit = entry.querySelector('.init-input')?.value || '';
+        const expr = entry.querySelector('.expression-input')?.value || '';
+        if (init.trim()) payload.init = init;
+        payload.pid = pid.trim();
+        if (pidInit.trim()) payload.pid_init = pidInit;
+        payload.expr = expr;
+    }
+
+    buttonEl.disabled = true;
+    resultEl.style.display = 'inline-flex';
+    resultEl.classList.add('status-indicator');
+    resultEl.classList.remove('status-connected', 'status-disconnected');
+    resultEl.textContent = 'Testing…';
+
+    try {
+        const res = await fetch('/autopid/test_pid', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data) {
+            resultEl.classList.add('status-disconnected');
+            resultEl.textContent = `Error (${res.status})`;
+            return;
+        }
+        if (data.ok) {
+            resultEl.classList.add('status-connected');
+            resultEl.classList.remove('status-disconnected');
+            let unit = (data.unit || '').trim();
+            if (!unit && kind !== 'std') {
+                unit = (entry.querySelector('.unit-input')?.value || '').trim();
+            }
+            const valueText = (data.value === null || data.value === undefined) ? '' : String(data.value);
+            resultEl.textContent = unit ? `${valueText} ${unit}` : valueText;
+        } else {
+            resultEl.classList.add('status-disconnected');
+            resultEl.classList.remove('status-connected');
+            resultEl.textContent = data.error ? `Error: ${data.error}` : 'Error';
+        }
+    } catch (e) {
+        resultEl.classList.add('status-disconnected');
+        resultEl.classList.remove('status-connected');
+        resultEl.textContent = 'Error';
+    } finally {
+        buttonEl.disabled = false;
+    }
+}
+
 function addCollapsibleRow(rowData = {}) {
     const container = document.querySelector('.pid-entries');
     const entry = document.createElement('div');
@@ -649,6 +743,8 @@ function addCollapsibleRow(rowData = {}) {
                 <span class="pid-title">New PID</span>
             </div>
             <div class="header-right">
+                <span class="test-result status-indicator" style="display:none"></span>
+                <button type="button" class="test-btn">Test</button>
                 <button type="button" class="delete-btn">Delete</button>
             </div>
         </div>
@@ -722,6 +818,7 @@ style.textContent = pidEntryStyles;
 document.head.appendChild(style);
 const header = entry.querySelector('.pid-header');
 const deleteBtn = entry.querySelector('.delete-btn');
+const testBtn = entry.querySelector('.test-btn');
 const collapseBtn = entry.querySelector('.collapse-btn');
 const content = entry.querySelector('.pid-content');
 const parameterTitle = entry.querySelector('.pid-title');
@@ -731,6 +828,11 @@ const pidInput = entry.querySelector('.pid-input');
 deleteBtn.addEventListener('click', () => {
     entry.remove();
     enableAutoStoreButton();
+});
+
+testBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    runPidTest('custom', entry);
 });
 
 const toggleCollapse = (e) => {
@@ -774,6 +876,8 @@ if (selectedPID) {
                 <span class="pid-title">${selectedPID}</span>
             </div>
             <div class="header-right">
+                <span class="test-result status-indicator" style="display:none"></span>
+                <button type="button" class="test-btn">Test</button>
                 <button type="button" class="delete-btn">Delete</button>
             </div>
         </div>
@@ -816,12 +920,18 @@ if (selectedPID) {
     document.head.appendChild(style);
     const header = entry.querySelector('.pid-header');
     const deleteBtn = entry.querySelector('.delete-btn');
+    const testBtn = entry.querySelector('.test-btn');
     const collapseBtn = entry.querySelector('.collapse-btn');
     const content = entry.querySelector('.pid-content');
 
     deleteBtn.addEventListener('click', () => {
         entry.remove();
         enableAutoStoreButton();
+    });
+
+    testBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        runPidTest('std', entry);
     });
 
     const toggleCollapse = (e) => {
@@ -856,6 +966,8 @@ if (rowData.name) {
                 <span class="pid-title">${rowData.name}</span>
             </div>
             <div class="header-right">
+                <span class="test-result status-indicator" style="display:none"></span>
+                <button type="button" class="test-btn">Test</button>
                 <button type="button" class="delete-btn">Delete</button>
             </div>
         </div>
@@ -922,12 +1034,18 @@ if (rowData.name) {
     document.head.appendChild(style);
     const header = entry.querySelector('.pid-header');
     const deleteBtn = entry.querySelector('.delete-btn');
+    const testBtn = entry.querySelector('.test-btn');
     const collapseBtn = entry.querySelector('.collapse-btn');
     const content = entry.querySelector('.pid-content');
 
     deleteBtn.addEventListener('click', () => {
         entry.remove();
         enableAutoStoreButton();
+    });
+
+    testBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        runPidTest('vehicle', entry);
     });
 
     const toggleCollapse = (e) => {

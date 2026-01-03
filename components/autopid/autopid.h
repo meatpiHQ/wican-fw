@@ -24,6 +24,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <esp_err.h>
+
 #define AUTOPID_BUFFER_SIZE (1024*4)
 #define QUEUE_SIZE 10
 
@@ -196,7 +198,19 @@ bool autopid_get_ecu_status(void);
 char* autopid_get_config(void);
 char *autopid_get_destinations_stats_json(void);
 esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint32_t available_pids_size) ;
+
+// Protocol tracking helpers used by AutoPID parsing and related modules.
+esp_err_t autopid_set_protocol_number(int32_t protocol_value);
+esp_err_t autopid_get_protocol_number(int32_t *protocol_value);
+
 char *autopid_get_value_by_name(char* name);
 void autopid_publish_all_destinations(void);
 void autopid_app_reset_timer(void);
+
+// Shared lock for ELM327 access.
+// The AutoPID task uses this mutex to serialize access to the ELM327 interface.
+// Other modules (e.g. AutoPID HTTP test endpoint) should take this lock to
+// prevent interleaved commands/responses.
+bool autopid_lock(uint32_t timeout_ms);
+void autopid_unlock(void);
 #endif
