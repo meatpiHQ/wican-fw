@@ -118,6 +118,7 @@ typedef struct
     char *expression;
     char *unit;
     char *class;
+    bool enabled;
     uint32_t period; 
     float min;
     float max;
@@ -138,6 +139,7 @@ typedef struct
     uint32_t parameters_count;
     pid_type_t pid_type;
     char* rxheader;
+    bool enabled;
 }pid_data_t;
 
 // CAN filter configuration (broadcast frames parsing)

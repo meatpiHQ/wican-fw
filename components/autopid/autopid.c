@@ -598,9 +598,17 @@ static void autopid_data_update(autopid_config_t *pids)
             for (uint32_t i = 0; i < pids->pid_count; i++)
             {
                 pid_data_t *curr_pid = &pids->pids[i];
+                if (!curr_pid->enabled)
+                {
+                    continue;
+                }
                 for (uint32_t j = 0; j < curr_pid->parameters_count; j++)
                 {
                     parameter_t *param = &curr_pid->parameters[j];
+                    if (!param->enabled)
+                    {
+                        continue;
+                    }
                     if (param->name && param->value != FLT_MAX)
                     {
                         if (param->sensor_type == BINARY_SENSOR)
@@ -622,6 +630,10 @@ static void autopid_data_update(autopid_config_t *pids)
                 for (uint32_t pi = 0; pi < f->parameters_count; pi++)
                 {
                     parameter_t *param = &f->parameters[pi];
+                    if (!param->enabled)
+                    {
+                        continue;
+                    }
                     if (param->name && param->value != FLT_MAX)
                     {
                         if (param->sensor_type == BINARY_SENSOR)
@@ -2024,6 +2036,8 @@ static void process_can_filter_frame(can_filter_t *f, const response_t *rsp)
     for (uint32_t pi = 0; pi < f->parameters_count; pi++)
     {
         parameter_t *param = &f->parameters[pi];
+        if (!param->enabled)
+            continue;
         if (!param || !param->expression)
             continue;
         if (!wc_timer_is_expired(&param->timer))
@@ -3680,10 +3694,20 @@ static void autopid_task(void *pvParameters)
                 continue;
             }
 
+            if (!curr_pid->enabled)
+            {
+                continue;
+            }
+
             // Loop through parameters
             for (uint32_t p = 0; p < curr_pid->parameters_count; p++)
             {
                 parameter_t *param = &curr_pid->parameters[p];
+
+                if (!param->enabled)
+                {
+                    continue;
+                }
 
                 // Check parameter timer
                 if (wc_timer_is_expired(&param->timer))
@@ -3925,7 +3949,7 @@ static void autopid_task(void *pvParameters)
                 bool any_due = false;
                 for (uint32_t pi = 0; pi < f->parameters_count; pi++)
                 {
-                    if (wc_timer_is_expired(&f->parameters[pi].timer))
+                    if (f->parameters[pi].enabled && wc_timer_is_expired(&f->parameters[pi].timer))
                     {
                         any_due = true;
                         break;

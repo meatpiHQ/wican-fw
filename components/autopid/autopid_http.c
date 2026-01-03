@@ -25,5 +25,9 @@
 
 esp_err_t autopid_register_handlers(httpd_handle_t server)
 {
-    return autopid_http_register_test_pid(server);
+    esp_err_t r = autopid_http_register_test_pid(server);
+    if (r != ESP_OK)
+        return r;
+
+    return autopid_http_register_test_can_filter(server);
 }

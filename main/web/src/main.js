@@ -731,10 +731,80 @@ async function runPidTest(kind, entry) {
     }
 }
 
+async function runCanFilterTest(kind, entry) {
+    const resultEl = entry.querySelector('.test-result');
+    const buttonEl = entry.querySelector('.test-btn');
+    if (!resultEl || !buttonEl) return;
+
+    const frameIdStr = entry.querySelector('.frame-id-input')?.value || '';
+    const expr = entry.querySelector('.expression-input')?.value || '';
+    const unit = (entry.querySelector('.unit-input')?.value || '').trim();
+
+    const frameIdNum = normalizeFrameIdInputToNumber(frameIdStr);
+    if (frameIdNum === null) {
+        resultEl.style.display = 'inline-flex';
+        resultEl.classList.add('status-indicator', 'status-disconnected');
+        resultEl.classList.remove('status-connected');
+        resultEl.textContent = 'Invalid Frame ID';
+        return;
+    }
+    if (!expr.trim()) {
+        resultEl.style.display = 'inline-flex';
+        resultEl.classList.add('status-indicator', 'status-disconnected');
+        resultEl.classList.remove('status-connected');
+        resultEl.textContent = 'Missing Expression';
+        return;
+    }
+
+    const payload = {
+        kind,
+        frame_id: frameIdNum,
+        expr: expr,
+    };
+
+    buttonEl.disabled = true;
+    resultEl.style.display = 'inline-flex';
+    resultEl.classList.add('status-indicator');
+    resultEl.classList.remove('status-connected', 'status-disconnected');
+    resultEl.textContent = 'Testing…';
+
+    try {
+        const res = await fetch('/autopid/test_can_filter', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data) {
+            resultEl.classList.add('status-disconnected');
+            resultEl.textContent = `Error (${res.status})`;
+            return;
+        }
+        if (data.ok) {
+            resultEl.classList.add('status-connected');
+            resultEl.classList.remove('status-disconnected');
+            const valueText = (data.value === null || data.value === undefined) ? '' : String(data.value);
+            resultEl.textContent = unit ? `${valueText} ${unit}` : valueText;
+        } else {
+            resultEl.classList.add('status-disconnected');
+            resultEl.classList.remove('status-connected');
+            resultEl.textContent = data.error ? `Error: ${data.error}` : 'Error';
+        }
+    } catch (e) {
+        resultEl.classList.add('status-disconnected');
+        resultEl.classList.remove('status-connected');
+        resultEl.textContent = 'Error';
+    } finally {
+        buttonEl.disabled = false;
+    }
+}
+
 function addCollapsibleRow(rowData = {}) {
     const container = document.querySelector('.pid-entries');
     const entry = document.createElement('div');
     entry.className = 'pid-entry';
+
+    const enabledChecked = (rowData.enabled === false || rowData.Enabled === false) ? '' : 'checked';
 
     entry.innerHTML = `
         <div class="pid-header">
@@ -745,6 +815,10 @@ function addCollapsibleRow(rowData = {}) {
             <div class="header-right">
                 <span class="test-result status-indicator" style="display:none"></span>
                 <button type="button" class="test-btn">Test</button>
+                <label class="enabled-label" style="display:flex; align-items:center; gap:4px; font-size:0.7rem;">
+                    <input type="checkbox" class="enabled-chk" ${enabledChecked}>
+                    Enabled
+                </label>
                 <button type="button" class="delete-btn">Delete</button>
             </div>
         </div>
@@ -824,6 +898,12 @@ const content = entry.querySelector('.pid-content');
 const parameterTitle = entry.querySelector('.pid-title');
 const nameInput = entry.querySelector('.name-input');
 const pidInput = entry.querySelector('.pid-input');
+const enabledChk = entry.querySelector('.enabled-chk');
+
+if (enabledChk) {
+    enabledChk.addEventListener('click', (e) => e.stopPropagation());
+    enabledChk.addEventListener('change', enableAutoStoreButton);
+}
 
 deleteBtn.addEventListener('click', () => {
     entry.remove();
@@ -878,6 +958,10 @@ if (selectedPID) {
             <div class="header-right">
                 <span class="test-result status-indicator" style="display:none"></span>
                 <button type="button" class="test-btn">Test</button>
+                <label class="enabled-label" style="display:flex; align-items:center; gap:4px; font-size:0.7rem;">
+                    <input type="checkbox" class="enabled-chk" ${(rowData.enabled === false || rowData.Enabled === false) ? '' : 'checked'}>
+                    Enabled
+                </label>
                 <button type="button" class="delete-btn">Delete</button>
             </div>
         </div>
@@ -923,6 +1007,12 @@ if (selectedPID) {
     const testBtn = entry.querySelector('.test-btn');
     const collapseBtn = entry.querySelector('.collapse-btn');
     const content = entry.querySelector('.pid-content');
+    const enabledChk = entry.querySelector('.enabled-chk');
+
+    if (enabledChk) {
+        enabledChk.addEventListener('click', (e) => e.stopPropagation());
+        enabledChk.addEventListener('change', enableAutoStoreButton);
+    }
 
     deleteBtn.addEventListener('click', () => {
         entry.remove();
@@ -968,6 +1058,10 @@ if (rowData.name) {
             <div class="header-right">
                 <span class="test-result status-indicator" style="display:none"></span>
                 <button type="button" class="test-btn">Test</button>
+                <label class="enabled-label" style="display:flex; align-items:center; gap:4px; font-size:0.7rem;">
+                    <input type="checkbox" class="enabled-chk" ${(rowData.enabled === false || rowData.Enabled === false) ? '' : 'checked'}>
+                    Enabled
+                </label>
                 <button type="button" class="delete-btn">Delete</button>
             </div>
         </div>
@@ -1037,6 +1131,12 @@ if (rowData.name) {
     const testBtn = entry.querySelector('.test-btn');
     const collapseBtn = entry.querySelector('.collapse-btn');
     const content = entry.querySelector('.pid-content');
+    const enabledChk = entry.querySelector('.enabled-chk');
+
+    if (enabledChk) {
+        enabledChk.addEventListener('click', (e) => e.stopPropagation());
+        enabledChk.addEventListener('change', enableAutoStoreButton);
+    }
 
     deleteBtn.addEventListener('click', () => {
         entry.remove();
@@ -1114,6 +1214,12 @@ function addCustomCanFilterEntry(rowData = {}) {
                 <span class="pid-title">${safe(titleText)}</span>
             </div>
             <div class="header-right">
+                <span class="test-result status-indicator" style="display:none"></span>
+                <button type="button" class="test-btn">Test</button>
+                <label class="enabled-label" style="display:flex; align-items:center; gap:4px; font-size:0.7rem;">
+                    <input type="checkbox" class="enabled-chk" ${(p.enabled === false || rowData.enabled === false) ? '' : 'checked'}>
+                    Enabled
+                </label>
                 <button type="button" class="delete-btn">Delete</button>
             </div>
         </div>
@@ -1173,14 +1279,28 @@ function addCustomCanFilterEntry(rowData = {}) {
 
     const header = entry.querySelector('.pid-header');
     const deleteBtn = entry.querySelector('.delete-btn');
+    const testBtn = entry.querySelector('.test-btn');
     const collapseBtn = entry.querySelector('.collapse-btn');
     const content = entry.querySelector('.pid-content');
     const titleEl = entry.querySelector('.pid-title');
+    const enabledChk = entry.querySelector('.enabled-chk');
+
+    if (enabledChk) {
+        enabledChk.addEventListener('click', (e) => e.stopPropagation());
+        enabledChk.addEventListener('change', enableAutoStoreButton);
+    }
 
     deleteBtn.addEventListener('click', () => {
         entry.remove();
         enableAutoStoreButton();
     });
+
+    if (testBtn) {
+        testBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            runCanFilterTest('custom', entry);
+        });
+    }
 
     const toggleCollapse = (e) => {
         e.stopPropagation();
@@ -1228,6 +1348,12 @@ function addVehicleSpecificCanFilterEntry(rowData = {}) {
                 <span class="pid-title">${safe(titleText)}</span>
             </div>
             <div class="header-right">
+                <span class="test-result status-indicator" style="display:none"></span>
+                <button type="button" class="test-btn">Test</button>
+                <label class="enabled-label" style="display:flex; align-items:center; gap:4px; font-size:0.7rem;">
+                    <input type="checkbox" class="enabled-chk" ${(p.enabled === false || rowData.enabled === false) ? '' : 'checked'}>
+                    Enabled
+                </label>
                 <button type="button" class="delete-btn">Delete</button>
             </div>
         </div>
@@ -1287,14 +1413,28 @@ function addVehicleSpecificCanFilterEntry(rowData = {}) {
 
     const header = entry.querySelector('.pid-header');
     const deleteBtn = entry.querySelector('.delete-btn');
+    const testBtn = entry.querySelector('.test-btn');
     const collapseBtn = entry.querySelector('.collapse-btn');
     const content = entry.querySelector('.pid-content');
     const titleEl = entry.querySelector('.pid-title');
+    const enabledChk = entry.querySelector('.enabled-chk');
+
+    if (enabledChk) {
+        enabledChk.addEventListener('click', (e) => e.stopPropagation());
+        enabledChk.addEventListener('change', enableAutoStoreButton);
+    }
 
     deleteBtn.addEventListener('click', () => {
         entry.remove();
         enableAutoStoreButton();
     });
+
+    if (testBtn) {
+        testBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            runCanFilterTest('vehicle', entry);
+        });
+    }
 
     const toggleCollapse = (e) => {
         e.stopPropagation();
@@ -1759,7 +1899,8 @@ function loadAutoTable(jsonData) {
                     MaxValue: pidData.MaxValue || '',
                     Period: pidData.Period || '',
                     Type: pidData.Type || 'Default',
-                    Send_to: pidData.Send_to || ''
+                    Send_to: pidData.Send_to || '',
+                    enabled: pidData.enabled
                 });
             });
         }
@@ -1782,7 +1923,8 @@ function loadAutoTable(jsonData) {
                                 type: param.type,
                                 min: param.min,
                                 max: param.max,
-                                send_to: param.send_to
+                                send_to: param.send_to,
+                                enabled: param.enabled
                             }
                         });
                     });
@@ -1800,7 +1942,8 @@ function loadAutoTable(jsonData) {
                     ReceiveHeader: pidData.ReceiveHeader || '',
                     Period: pidData.Period || '',
                     Type: pidData.Type || 'Default',
-                    Send_to: pidData.Send_to || ''
+                    Send_to: pidData.Send_to || '',
+                    enabled: pidData.enabled
                 });
             });
         }
@@ -1892,6 +2035,7 @@ async function storeAutoTableData() {
                 return {
                     pid: entry.querySelector('.pid-input').value,
                     pid_init: entry.querySelector('.pid-init-input').value,
+                    enabled: entry.querySelector('.enabled-chk')?.checked !== false,
                     parameters: [{
                         name: entry.querySelector('.name-input').value,
                         expression: entry.querySelector('.expression-input').value,
@@ -1931,7 +2075,8 @@ async function storeAutoTableData() {
                     min: entry.querySelector('.min-input')?.value || '',
                     max: entry.querySelector('.max-input')?.value || '',
                     type: entry.querySelector('.type-select')?.value || 'Default',
-                    send_to: entry.querySelector('.send-to-input')?.value || ''
+                    send_to: entry.querySelector('.send-to-input')?.value || '',
+                    enabled: entry.querySelector('.enabled-chk')?.checked !== false
                 });
             });
             carData.can_filters = Array.from(grouped.values());
@@ -1975,7 +2120,8 @@ async function storeAutoTableData() {
                     MaxValue: entry.querySelector('.max-value-input')?.value || '',
                     Period: entry.querySelector('.period-input')?.value || '',
                     Type: entry.querySelector('.type-select')?.value || 'Default',
-                    Send_to: entry.querySelector('.send-to-input')?.value || ''
+                    Send_to: entry.querySelector('.send-to-input')?.value || '',
+                    enabled: entry.querySelector('.enabled-chk')?.checked !== false
                 };
 
                 if (pidData.Name.length === 0 || pidData.Name.length >= 32) {
@@ -2004,7 +2150,8 @@ async function storeAutoTableData() {
                     ReceiveHeader: entry.querySelector('.receive-header-input')?.value || '',
                     Period: entry.querySelector('.period-input')?.value || '',
                     Type: entry.querySelector('.type-select')?.value || 'Default',
-                    Send_to: entry.querySelector('.send-to-input')?.value || ''
+                    Send_to: entry.querySelector('.send-to-input')?.value || '',
+                    enabled: entry.querySelector('.enabled-chk')?.checked !== false
                 };
 
                 if (stdPIDData.Name.length === 0 || stdPIDData.Name.length >= 32) {
@@ -2044,7 +2191,8 @@ async function storeAutoTableData() {
                     min: entry.querySelector('.min-input')?.value || '',
                     max: entry.querySelector('.max-input')?.value || '',
                     type: entry.querySelector('.type-select')?.value || 'Default',
-                    send_to: entry.querySelector('.send-to-input')?.value || ''
+                    send_to: entry.querySelector('.send-to-input')?.value || '',
+                    enabled: entry.querySelector('.enabled-chk')?.checked !== false
                 });
             });
             custom_can_filters.push(...Array.from(grouped.values()));
@@ -2799,7 +2947,8 @@ function loadautoPIDCarData() {
                                         max: param.max,
                                         send_to: param.send_to,
                                         pid: pid.pid,
-                                        pid_init: pid.pid_init
+                                        pid_init: pid.pid_init,
+                                        enabled: pid.enabled
                                     });
                                 });
                             }
@@ -2823,7 +2972,8 @@ function loadautoPIDCarData() {
                                             type: param.type,
                                             min: param.min,
                                             max: param.max,
-                                            send_to: param.send_to
+                                            send_to: param.send_to,
+                                            enabled: param.enabled
                                         }
                                     });
                                 });
@@ -3614,7 +3764,8 @@ xhttp.onload = async function() {
                                 addCarParameter({
                                     ...param,
                                     pid: pid.pid,
-                                    pid_init: pid.pid_init
+                                    pid_init: pid.pid_init,
+                                    enabled: pid.enabled
                                 });
                             });
                         }

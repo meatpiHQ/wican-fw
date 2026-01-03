@@ -244,6 +244,12 @@ static void parse_parameter_object(parameter_t *out_param, const cJSON *param_ob
     if (!out_param || !param_obj)
         return;
 
+    // Default to enabled for backwards compatibility (missing field => enabled)
+    {
+        const cJSON *enabled_item = cJSON_GetObjectItem((cJSON *)param_obj, "enabled");
+        out_param->enabled = (enabled_item && cJSON_IsBool(enabled_item)) ? cJSON_IsTrue(enabled_item) : true;
+    }
+
     out_param->name = json_strdup_key_or_default(param_obj, name_key, "none");
     out_param->expression = json_strdup_key_or_default(param_obj, expr_key, "none");
     out_param->unit = json_strdup_key_or_default(param_obj, unit_key, "none");
@@ -722,6 +728,7 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
             cJSON *pid_item = cJSON_GetObjectItem(pid, "PID");
             cJSON *period_item = cJSON_GetObjectItem(pid, "Period");
             cJSON *rxheader_item = cJSON_GetObjectItem(pid, "header");
+            cJSON *enabled_item = cJSON_GetObjectItem(pid, "enabled");
 
             if (cJSON_GetArraySize(pids) > 0)
             {
@@ -750,6 +757,7 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
 
             curr_pid->rxheader = rxheader_item ? strdup_psram(rxheader_item->valuestring) : NULL;
             curr_pid->pid_type = PID_CUSTOM;
+            curr_pid->enabled = (enabled_item && cJSON_IsBool(enabled_item)) ? cJSON_IsTrue(enabled_item) : true;
 
             curr_pid->parameters_count = 1;
             curr_pid->parameters = (parameter_t *)heap_caps_calloc(1, sizeof(parameter_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
@@ -783,6 +791,10 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
         {
             pid_data_t *curr_pid = &autopid_config->pids[idx];
             curr_pid->pid_type = PID_STD;
+            {
+                cJSON *enabled_item = cJSON_GetObjectItem(pid, "enabled");
+                curr_pid->enabled = (enabled_item && cJSON_IsBool(enabled_item)) ? cJSON_IsTrue(enabled_item) : true;
+            }
 
             char std_init_buf[64];
             int is_protocol_68 = 1;
@@ -1052,6 +1064,9 @@ static void parse_car_data_json(autopid_config_t *autopid_config, int *pid_index
                     pid_data_t *curr_pid = &autopid_config->pids[idx];
                     cJSON *pid_item = cJSON_GetObjectItem(pid, "pid");
                     cJSON *pid_init_item = cJSON_GetObjectItem(pid, "pid_init");
+                    cJSON *enabled_item = cJSON_GetObjectItem(pid, "enabled");
+
+                    curr_pid->enabled = (enabled_item && cJSON_IsBool(enabled_item)) ? cJSON_IsTrue(enabled_item) : true;
 
                     curr_pid->init = NULL;
                     if (pid_init_item && pid_init_item->valuestring)

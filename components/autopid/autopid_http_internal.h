@@ -29,6 +29,7 @@ extern "C" {
 #endif
 
 esp_err_t autopid_http_register_test_pid(httpd_handle_t server);
+esp_err_t autopid_http_register_test_can_filter(httpd_handle_t server);
 
 #ifdef __cplusplus
 }
