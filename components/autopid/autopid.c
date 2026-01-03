@@ -2523,6 +2523,114 @@ static void autopid_atma_parser_reset(void)
     autopid_atma_line_buf[0] = '\0';
 }
 
+// -----------------------
+// PID request/response validation
+// -----------------------
+
+static bool autopid_pid_validation_enabled(void)
+{
+    // Best-effort read; bool is safe to read without a mutex.
+    return (autopid_config && autopid_config->pid_validation_en);
+}
+
+// Extracts up to 3 request bytes from a command string like "0100\r" or "22B002\r".
+// Returns false if the string doesn't look like a PID request (e.g., AT commands).
+static bool autopid_parse_pid_request_bytes(const char *cmd_str, uint8_t out_req[3], size_t *out_req_len)
+{
+    if (!cmd_str || !out_req || !out_req_len)
+        return false;
+
+    // Skip leading whitespace / prompt markers
+    const unsigned char *p = (const unsigned char *)cmd_str;
+    while (*p && (isspace(*p) || *p == '>'))
+        p++;
+
+    // Ignore AT commands
+    if (tolower(p[0]) == 'a' && tolower(p[1]) == 't')
+        return false;
+
+    // Collect hex nibbles, ignoring whitespace
+    char hexbuf[7] = {0}; // up to 6 hex chars = 3 bytes
+    size_t hi = 0;
+    while (*p && hi < 6)
+    {
+        if (isxdigit(*p))
+        {
+            hexbuf[hi++] = (char)*p;
+        }
+        else if (isspace(*p) || *p == '\r' || *p == '\n')
+        {
+            // ok
+        }
+        else
+        {
+            // non-hex, non-space terminates parsing
+            break;
+        }
+        p++;
+    }
+
+    if (hi < 2 || (hi % 2) != 0)
+        return false;
+
+    size_t bytes = hi / 2;
+    if (bytes > 3)
+        bytes = 3;
+
+    for (size_t i = 0; i < bytes; i++)
+    {
+        char tmp[3] = {hexbuf[i * 2], hexbuf[i * 2 + 1], 0};
+        char *endptr = NULL;
+        long v = strtol(tmp, &endptr, 16);
+        if (endptr == tmp || v < 0 || v > 255)
+            return false;
+        out_req[i] = (uint8_t)v;
+    }
+
+    *out_req_len = bytes;
+    return true;
+}
+
+// Validates that response contains the positive-response service byte and echoes the PID/identifier bytes.
+// Works with ISO-TP because the positive response may not be at offset 0 (PCI bytes may precede it).
+static bool autopid_validate_response_for_cmd(const char *cmd_str, const response_t *rsp)
+{
+    if (!cmd_str || !rsp || rsp->length == 0)
+        return true; // don't block on missing context
+
+    uint8_t req[3] = {0};
+    size_t req_len = 0;
+    if (!autopid_parse_pid_request_bytes(cmd_str, req, &req_len) || req_len < 1)
+        return true; // not a PID request we recognize
+
+    uint8_t service = req[0];
+    // Standard positive response for these services is service + 0x40.
+    // Examples:
+    //  01 00 -> 41 00 ...
+    //  21 01 -> 61 01 ...
+    //  22 B0 02 -> 62 B0 02 ...
+    uint8_t pos_service = (uint8_t)(service + 0x40);
+
+    // Build expected sequence: [pos_service] + remaining request bytes (pid/identifier)
+    uint8_t expected[4] = {0};
+    size_t expected_len = 1;
+    expected[0] = pos_service;
+    for (size_t i = 1; i < req_len && expected_len < sizeof(expected); i++)
+        expected[expected_len++] = req[i];
+
+    if (expected_len > rsp->length)
+        return false;
+
+    // Search for the sequence anywhere in the response
+    for (uint32_t i = 0; i + expected_len <= rsp->length; i++)
+    {
+        if (memcmp(&rsp->data[i], expected, expected_len) == 0)
+            return true;
+    }
+
+    return false;
+}
+
 void autopid_atma_parser(char *str, uint32_t len, QueueHandle_t *q, char *cmd_str)
 {
     (void)cmd_str;
@@ -2587,6 +2695,17 @@ void autopid_parser(char *str, uint32_t len, QueueHandle_t *q, char *cmd_str)
             {
                 // Parse the accumulated buffer
                 parse_elm327_response(auto_pid_buf, &response);
+
+                // Optional: validate that this response matches the PID request we sent.
+                if (autopid_pid_validation_enabled() &&
+                    !autopid_validate_response_for_cmd(cmd_str, &response))
+                {
+                    ESP_LOGE(TAG, "PID validation failed. cmd='%s' rsp_len=%lu", cmd_str ? cmd_str : "(null)",
+                             (unsigned long)response.length);
+                    sprintf((char *)response.data, "error");
+                    response.length = strlen((char *)response.data);
+                }
+
                 if (xQueueSend(autopidQueue, &response, pdMS_TO_TICKS(1000)) != pdPASS)
                 {
                     ESP_LOGE(TAG, "Failed to send to queue");

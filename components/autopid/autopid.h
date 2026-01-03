@@ -172,6 +172,9 @@ typedef struct
     bool pid_std_en;
     bool pid_custom_en;
     bool pid_specific_en;
+    // When enabled, validate that each PID request's response matches the request (service + PID bytes)
+    // using the command string (cmd_str) provided by the ELM command runner.
+    bool pid_validation_en;
     char* std_ecu_protocol;
     char* vehicle_model;
     bool ha_discovery_en;

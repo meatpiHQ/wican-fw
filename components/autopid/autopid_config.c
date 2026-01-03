@@ -389,6 +389,7 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
     cJSON *ecu_protocol_item = cJSON_GetObjectItem(root, "ecu_protocol");
     cJSON *ha_discovery_item = cJSON_GetObjectItem(root, "ha_discovery");
     cJSON *cycle_item = cJSON_GetObjectItem(root, "cycle");
+    cJSON *pid_validation_item = cJSON_GetObjectItem(root, "pid_validation");
     cJSON *standard_pids_item = cJSON_GetObjectItem(root, "standard_pids");
     cJSON *specific_pids_item = cJSON_GetObjectItem(root, "car_specific");
     cJSON *can_filters_item = cJSON_GetObjectItem(root, "can_filters");
@@ -422,6 +423,23 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
 
     autopid_config->pid_std_en = standard_pids_item ? (strcmp(standard_pids_item->valuestring, "enable") == 0) : false;
     autopid_config->pid_specific_en = specific_pids_item ? (strcmp(specific_pids_item->valuestring, "enable") == 0) : false;
+
+    // PID response validation (optional)
+    // Supports either string: "enable"/"disable" or boolean: true/false.
+    autopid_config->pid_validation_en = true; // default to enabled
+    if (pid_validation_item)
+    {
+        if (cJSON_IsString(pid_validation_item) && pid_validation_item->valuestring)
+        {
+            autopid_config->pid_validation_en = (strcmp(pid_validation_item->valuestring, "enable") == 0);
+        }
+        else if (cJSON_IsBool(pid_validation_item))
+        {
+            autopid_config->pid_validation_en = cJSON_IsTrue(pid_validation_item);
+        }
+    }
+    autopid_config->pid_validation_en = true; 
+
     autopid_config->group_destination = group_destination_item ? strdup_psram(group_destination_item->valuestring) : NULL;
     // Map legacy group_dest_type to enum (for backward compatibility)
     if (group_dest_type_item && group_dest_type_item->valuestring)
