@@ -18,11 +18,14 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
+#include "esp_heap_caps.h"
+
 #include "elm327.h"
 
 static StaticSemaphore_t test_pid_cmd_done_buf;
 static SemaphoreHandle_t test_pid_cmd_done = NULL;
-static char test_pid_cmd_buffer[256];
+static char *test_pid_cmd_buffer = NULL;
+static size_t test_pid_cmd_buffer_cap = 0;
 static uint32_t test_pid_cmd_buffer_len = 0;
 static int64_t test_pid_last_cmd_time = 0;
 
@@ -30,6 +33,34 @@ static char *test_pid_raw_buf = NULL;
 static size_t test_pid_raw_cap = 0;
 static size_t test_pid_raw_len = 0;
 static bool test_pid_capture_active = false;
+
+static bool test_pid_cmd_buffer_ensure(size_t cap)
+{
+    if (cap == 0)
+        return false;
+
+    if (test_pid_cmd_buffer && test_pid_cmd_buffer_cap >= cap)
+        return true;
+
+    if (test_pid_cmd_buffer)
+    {
+        heap_caps_free(test_pid_cmd_buffer);
+        test_pid_cmd_buffer = NULL;
+        test_pid_cmd_buffer_cap = 0;
+    }
+
+#ifdef CONFIG_SPIRAM
+    test_pid_cmd_buffer = (char *)heap_caps_malloc(cap, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+#else
+    test_pid_cmd_buffer = (char *)heap_caps_malloc(cap, MALLOC_CAP_8BIT);
+#endif
+    if (!test_pid_cmd_buffer)
+        return false;
+
+    test_pid_cmd_buffer_cap = cap;
+    memset(test_pid_cmd_buffer, 0, test_pid_cmd_buffer_cap);
+    return true;
+}
 
 static void test_pid_capture_cb(char *str, uint32_t len, QueueHandle_t *q, char *cmd_str)
 {
@@ -73,8 +104,13 @@ bool autopid_test_pid_raw_ensure(size_t cap)
 
     if (!test_pid_raw_buf || test_pid_raw_cap < cap)
     {
-        free(test_pid_raw_buf);
-        test_pid_raw_buf = (char *)malloc(cap);
+#ifdef CONFIG_SPIRAM
+        heap_caps_free(test_pid_raw_buf);
+        test_pid_raw_buf = (char *)heap_caps_malloc(cap, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+#else
+        heap_caps_free(test_pid_raw_buf);
+        test_pid_raw_buf = (char *)heap_caps_malloc(cap, MALLOC_CAP_8BIT);
+#endif
         test_pid_raw_cap = test_pid_raw_buf ? cap : 0;
         test_pid_raw_len = 0;
         if (test_pid_raw_buf)
@@ -149,12 +185,15 @@ bool autopid_test_pid_send_cmd_sync(const char *cmd, uint32_t timeout_ms, bool c
         cmd_len++;
     }
 
+    if (!test_pid_cmd_buffer_ensure(256))
+        return false;
+
     // IMPORTANT: elm327_process_cmd() copies cmd_buffer_len+1 bytes into a newly
     // allocated command buffer (even though cmd_buffer is not explicitly NUL-terminated).
     // If a previous command was longer, the byte immediately after the current '\r'
     // can contain stale non-zero data, effectively appending garbage to the command.
     // Clearing the buffer ensures the extra byte is 0 and avoids subtle timeouts.
-    memset(test_pid_cmd_buffer, 0, sizeof(test_pid_cmd_buffer));
+    memset(test_pid_cmd_buffer, 0, test_pid_cmd_buffer_cap);
     test_pid_cmd_buffer_len = 0;
 
     if (elm327_process_cmd((uint8_t *)send,

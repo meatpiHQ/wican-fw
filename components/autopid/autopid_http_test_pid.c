@@ -28,6 +28,8 @@
 #include <cJSON.h>
 #include <esp_log.h>
 
+#include "esp_heap_caps.h"
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
@@ -56,7 +58,12 @@ static char *read_json_body(httpd_req_t *req, size_t *out_len)
     if (len > 2048)
         len = 2048;
 
-    char *buf = (char *)malloc(len + 1);
+    char *buf = NULL;
+#ifdef CONFIG_SPIRAM
+    buf = (char *)heap_caps_malloc(len + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+#else
+    buf = (char *)heap_caps_malloc(len + 1, MALLOC_CAP_8BIT);
+#endif
     if (!buf)
         return NULL;
 
@@ -66,7 +73,7 @@ static char *read_json_body(httpd_req_t *req, size_t *out_len)
         int r = httpd_req_recv(req, buf + off, (int)(len - off));
         if (r <= 0)
         {
-            free(buf);
+            heap_caps_free(buf);
             return NULL;
         }
         off += (size_t)r;
@@ -83,7 +90,12 @@ static char *normalize_init_string_heap(const char *src)
         return NULL;
 
     size_t n = strlen(src);
-    char *out = (char *)malloc(n + 1);
+    char *out = NULL;
+#ifdef CONFIG_SPIRAM
+    out = (char *)heap_caps_malloc(n + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+#else
+    out = (char *)heap_caps_malloc(n + 1, MALLOC_CAP_8BIT);
+#endif
     if (!out)
         return NULL;
     memcpy(out, src, n + 1);
@@ -151,7 +163,12 @@ static esp_err_t test_pid_handler(httpd_req_t *req)
     size_t qlen = httpd_req_get_url_query_len(req);
     if (qlen > 0)
     {
-        query = (char *)malloc(qlen + 1);
+        query = NULL;
+    #ifdef CONFIG_SPIRAM
+        query = (char *)heap_caps_malloc(qlen + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    #else
+        query = (char *)heap_caps_malloc(qlen + 1, MALLOC_CAP_8BIT);
+    #endif
         if (!query)
         {
             autopid_unlock();
@@ -161,7 +178,7 @@ static esp_err_t test_pid_handler(httpd_req_t *req)
         }
         if (httpd_req_get_url_query_str(req, query, qlen + 1) != ESP_OK)
         {
-            free(query);
+            heap_caps_free(query);
             query = NULL;
         }
     }
@@ -174,9 +191,9 @@ static esp_err_t test_pid_handler(httpd_req_t *req)
         body_json = cJSON_Parse(body);
         if (!body_json)
         {
-            free(body);
+            heap_caps_free(body);
             if (query)
-                free(query);
+                heap_caps_free(query);
             autopid_unlock();
             xSemaphoreGive(test_pid_lock);
             httpd_resp_set_type(req, "application/json");
@@ -208,9 +225,9 @@ static esp_err_t test_pid_handler(httpd_req_t *req)
         if (!cJSON_IsString(jk) || !jk->valuestring)
         {
             cJSON_Delete(body_json);
-            free(body);
+            heap_caps_free(body);
             if (query)
-                free(query);
+                heap_caps_free(query);
             autopid_unlock();
             xSemaphoreGive(test_pid_lock);
             httpd_resp_set_type(req, "application/json");
@@ -237,12 +254,12 @@ static esp_err_t test_pid_handler(httpd_req_t *req)
             strlcpy(expr, je->valuestring, sizeof(expr));
 
         cJSON_Delete(body_json);
-        free(body);
+        heap_caps_free(body);
         body_json = NULL;
         body = NULL;
         if (query)
         {
-            free(query);
+            heap_caps_free(query);
             query = NULL;
         }
     }
@@ -251,7 +268,7 @@ static esp_err_t test_pid_handler(httpd_req_t *req)
         if (!query || httpd_query_key_value(query, "kind", kind, sizeof(kind)) != ESP_OK)
         {
             if (query)
-                free(query);
+                heap_caps_free(query);
             autopid_unlock();
             xSemaphoreGive(test_pid_lock);
             httpd_resp_set_type(req, "application/json");
@@ -268,7 +285,7 @@ static esp_err_t test_pid_handler(httpd_req_t *req)
         (void)httpd_query_key_value(query, "expr", expr, sizeof(expr));
 
         if (query)
-            free(query);
+            heap_caps_free(query);
     }
 
     if (!autopid_test_pid_raw_ensure(4096))
@@ -492,17 +509,17 @@ static esp_err_t test_pid_handler(httpd_req_t *req)
             ESP_LOGW(TAG, "CUSTOM/VEHICLE test PID timed out waiting for response. pid='%s'", pid_send);
             snprintf(err_msg, sizeof(err_msg), "Timeout");
             if (n_init)
-                free(n_init);
+                heap_caps_free(n_init);
             if (n_row_init)
-                free(n_row_init);
+                heap_caps_free(n_row_init);
             ok = false;
             goto respond;
         }
 
         if (n_init)
-            free(n_init);
+            heap_caps_free(n_init);
         if (n_row_init)
-            free(n_row_init);
+            heap_caps_free(n_row_init);
 
         const char *raw = autopid_test_pid_raw_get();
 

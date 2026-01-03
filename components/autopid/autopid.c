@@ -82,7 +82,6 @@ static char *device_id;
 static EventGroupHandle_t xautopid_event_group = NULL;
 static StaticEventGroup_t xautopid_event_group_buffer;
 static autopid_config_t *autopid_config = NULL;
-static response_t elm327_response;
 static autopid_data_t autopid_data = {.json_str = NULL, .mutex = NULL};
 static QueueHandle_t protocolnumberQueue = NULL;
 // Cached configuration JSON (built once after autopid_config is loaded)
@@ -2711,7 +2710,16 @@ void autopid_atma_parser(char *str, uint32_t len, QueueHandle_t *q, char *cmd_st
 
 void autopid_parser(char *str, uint32_t len, QueueHandle_t *q, char *cmd_str)
 {
-    static response_t response;
+    static response_t *response = NULL;
+
+    if (response == NULL)
+    {
+        response = (response_t *)heap_caps_malloc(sizeof(response_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    }
+
+    if (response == NULL)
+        return;
+
     if (str != NULL && strlen(str) != 0)
     {
         ESP_LOGI(TAG, "%s", str);
@@ -2730,37 +2738,37 @@ void autopid_parser(char *str, uint32_t len, QueueHandle_t *q, char *cmd_str)
             if (strstr(str, "NO DATA") == NULL && strstr(str, "ERROR") == NULL)
             {
                 // Parse the accumulated buffer
-                parse_elm327_response(auto_pid_buf, &response);
+                parse_elm327_response(auto_pid_buf, response);
 
                 // If parsing produced no bytes (e.g. STOPPED, SEARCHING..., echoed command),
                 // mark as error so the caller won't try to decode it as a valid PID payload.
-                if (response.length == 0)
+                if (response->length == 0)
                 {
-                    strcpy((char *)response.data, "error");
-                    response.length = strlen((char *)response.data);
+                    strcpy((char *)response->data, "error");
+                    response->length = strlen((char *)response->data);
                 }
 
                 // Optional: validate that this response matches the PID request we sent.
                 if (autopid_pid_validation_enabled() &&
-                    !autopid_validate_response_for_cmd(cmd_str, &response))
+                    !autopid_validate_response_for_cmd(cmd_str, response))
                 {
                     ESP_LOGE(TAG, "PID validation failed. cmd='%s' rsp_len=%lu", cmd_str ? cmd_str : "(null)",
-                             (unsigned long)response.length);
-                    sprintf((char *)response.data, "error");
-                    response.length = strlen((char *)response.data);
+                             (unsigned long)response->length);
+                    sprintf((char *)response->data, "error");
+                    response->length = strlen((char *)response->data);
                 }
 
-                if (xQueueSend(autopidQueue, &response, pdMS_TO_TICKS(1000)) != pdPASS)
+                if (xQueueSend(autopidQueue, response, pdMS_TO_TICKS(1000)) != pdPASS)
                 {
                     ESP_LOGE(TAG, "Failed to send to queue");
                 }
             }
             else
             {
-                sprintf((char *)response.data, "error");
-                response.length = strlen((char *)response.data);
+                sprintf((char *)response->data, "error");
+                response->length = strlen((char *)response->data);
                 ESP_LOGE(TAG, "Error response: %s", auto_pid_buf);
-                if (xQueueSend(autopidQueue, &response, pdMS_TO_TICKS(1000)) != pdPASS)
+                if (xQueueSend(autopidQueue, response, pdMS_TO_TICKS(1000)) != pdPASS)
                 {
                     ESP_LOGE(TAG, "Failed to send to queue");
                 }
@@ -3586,7 +3594,7 @@ static void autopid_task(void *pvParameters)
 {
     static char default_init[] = "ati\rate0\rath1\ratl0\rats1\ratm0\ratst96\r";
     wc_timer_t ecu_check_timer;
-    static response_t monitor_rsp;
+    response_t monitor_rsp;
 
     vTaskDelay(pdMS_TO_TICKS(1000)); // Initial delay to allow system stabilization
     ESP_LOGI(TAG, "Autopid Task Started");
@@ -3818,7 +3826,10 @@ static void autopid_task(void *pvParameters)
                         if (elm327_process_cmd((uint8_t *)pid_req[i].pid_command, strlen(pid_req[i].pid_command), &tx_msg, &autopidQueue) == ESP_OK)
 #endif
                         {
+                            response_t elm327_response;
                             ESP_LOGI(TAG, "Command processed successfully");
+
+                            memset(&elm327_response, 0, sizeof(elm327_response));
 
                             if (xQueueReceive(autopidQueue, &elm327_response, pdMS_TO_TICKS(12000)) == pdPASS)
                             {
@@ -4336,22 +4347,22 @@ void autopid_init(char *id, bool enable_logging, uint32_t logging_period)
 
     static StackType_t *autopid_task_stack;
     static StaticTask_t autopid_task_buffer;
-    // Note: xTaskCreateStatic() expects stack depth in words, not bytes.
-    static const size_t autopid_task_stack_depth_words = (1024 * 10) / sizeof(StackType_t);
-    static const size_t autopid_task_stack_size_bytes = autopid_task_stack_depth_words * sizeof(StackType_t);
+    // In ESP-IDF FreeRTOS, StackType_t is 1 byte, so stack "depth" units == bytes.
+    _Static_assert(sizeof(StackType_t) == 1, "Expected StackType_t to be 1 byte");
+    static const size_t autopid_task_stack_depth = (1024 * 10) + (2 * sizeof(response_t));
     // Allocate stack memory in PSRAM
-    autopid_task_stack = heap_caps_malloc(autopid_task_stack_size_bytes, MALLOC_CAP_SPIRAM);
+    autopid_task_stack = heap_caps_malloc(autopid_task_stack_depth, MALLOC_CAP_SPIRAM);
     if (autopid_task_stack == NULL)
     {
         ESP_LOGE(TAG, "Failed to allocate autopid_task stack in PSRAM");
         return;
     }
-    memset(autopid_task_stack, 0, autopid_task_stack_size_bytes);
+    memset(autopid_task_stack, 0, autopid_task_stack_depth);
     // Check if memory allocation was successful
     if (autopid_task_stack != NULL)
     {
         // Create task with static allocation
-        xTaskCreateStatic(autopid_task, "autopid_task", (uint32_t)autopid_task_stack_depth_words, (void *)AF_INET, 5,
+        xTaskCreateStatic(autopid_task, "autopid_task", (uint32_t)autopid_task_stack_depth, (void *)AF_INET, 5,
                           autopid_task_stack, &autopid_task_buffer);
     }
     else
@@ -4364,19 +4375,17 @@ void autopid_init(char *id, bool enable_logging, uint32_t logging_period)
     {
         static StackType_t *autopid_publish_task_stack;
         static StaticTask_t autopid_publish_task_buffer;
-        // Note: xTaskCreateStatic() expects stack depth in words, not bytes.
-        static const size_t autopid_publish_task_stack_depth_words = (1024 * 8) / sizeof(StackType_t);
-        static const size_t autopid_publish_task_stack_size_bytes = autopid_publish_task_stack_depth_words * sizeof(StackType_t);
+        static const size_t autopid_publish_task_stack_depth = (1024 * 8);
         // Allocate stack memory in PSRAM
-        autopid_publish_task_stack = heap_caps_malloc(autopid_publish_task_stack_size_bytes, MALLOC_CAP_SPIRAM);
+        autopid_publish_task_stack = heap_caps_malloc(autopid_publish_task_stack_depth, MALLOC_CAP_SPIRAM);
         if (autopid_publish_task_stack == NULL)
         {
             ESP_LOGE(TAG, "Failed to allocate autopid_publish_task stack in PSRAM");
         }
         else
         {
-            memset(autopid_publish_task_stack, 0, autopid_publish_task_stack_size_bytes);
-            if (xTaskCreateStatic(autopid_publish_task, "autopid_publish_task", (uint32_t)autopid_publish_task_stack_depth_words,
+            memset(autopid_publish_task_stack, 0, autopid_publish_task_stack_depth);
+            if (xTaskCreateStatic(autopid_publish_task, "autopid_publish_task", (uint32_t)autopid_publish_task_stack_depth,
                                   NULL, 5, autopid_publish_task_stack, &autopid_publish_task_buffer) != NULL)
             {
                 ESP_LOGI(TAG, "Autopid publish task created");
@@ -4396,19 +4405,17 @@ void autopid_init(char *id, bool enable_logging, uint32_t logging_period)
     {
         static StackType_t *autopid_webhook_task_stack;
         static StaticTask_t autopid_webhook_task_buffer;
-        // Note: xTaskCreateStatic() expects stack depth in words, not bytes.
-        static const size_t autopid_webhook_task_stack_depth_words = (1024 * 20) / sizeof(StackType_t);
-        static const size_t autopid_webhook_task_stack_size_bytes = autopid_webhook_task_stack_depth_words * sizeof(StackType_t);
+        static const size_t autopid_webhook_task_stack_depth = (1024 * 20);
         // Allocate stack memory in PSRAM
-        autopid_webhook_task_stack = heap_caps_malloc(autopid_webhook_task_stack_size_bytes, MALLOC_CAP_SPIRAM);
+        autopid_webhook_task_stack = heap_caps_malloc(autopid_webhook_task_stack_depth, MALLOC_CAP_SPIRAM);
         if (autopid_webhook_task_stack == NULL)
         {
             ESP_LOGE(TAG, "Failed to allocate autopid_webhook_task stack in PSRAM");
         }
         else
         {
-            memset(autopid_webhook_task_stack, 0, autopid_webhook_task_stack_size_bytes);
-            if (xTaskCreateStatic(autopid_webhook_task, "autopid_webhook_task", (uint32_t)autopid_webhook_task_stack_depth_words,
+            memset(autopid_webhook_task_stack, 0, autopid_webhook_task_stack_depth);
+            if (xTaskCreateStatic(autopid_webhook_task, "autopid_webhook_task", (uint32_t)autopid_webhook_task_stack_depth,
                                   NULL, 5, autopid_webhook_task_stack, &autopid_webhook_task_buffer) != NULL)
             {
                 ESP_LOGI(TAG, "Autopid webhook task created");

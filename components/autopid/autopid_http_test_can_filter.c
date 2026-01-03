@@ -27,6 +27,7 @@
 
 #include <cJSON.h>
 #include <esp_log.h>
+#include "esp_heap_caps.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -56,7 +57,12 @@ static char *read_json_body(httpd_req_t *req, size_t *out_len)
     if (len > 1024)
         len = 1024;
 
-    char *buf = (char *)malloc(len + 1);
+    char *buf = NULL;
+#ifdef CONFIG_SPIRAM
+    buf = (char *)heap_caps_malloc(len + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+#else
+    buf = (char *)heap_caps_malloc(len + 1, MALLOC_CAP_8BIT);
+#endif
     if (!buf)
         return NULL;
 
@@ -66,7 +72,7 @@ static char *read_json_body(httpd_req_t *req, size_t *out_len)
         int r = httpd_req_recv(req, buf + off, (int)(len - off));
         if (r <= 0)
         {
-            free(buf);
+            heap_caps_free(buf);
             return NULL;
         }
         off += (size_t)r;
@@ -159,8 +165,13 @@ static bool test_can_raw_ensure(size_t cap)
 
     if (!test_can_raw_buf || test_can_raw_cap < cap)
     {
-        free(test_can_raw_buf);
-        test_can_raw_buf = (char *)malloc(cap);
+    #ifdef CONFIG_SPIRAM
+        heap_caps_free(test_can_raw_buf);
+        test_can_raw_buf = (char *)heap_caps_malloc(cap, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    #else
+        heap_caps_free(test_can_raw_buf);
+        test_can_raw_buf = (char *)heap_caps_malloc(cap, MALLOC_CAP_8BIT);
+    #endif
         test_can_raw_cap = test_can_raw_buf ? cap : 0;
         test_can_raw_len = 0;
         if (test_can_raw_buf)
@@ -486,7 +497,7 @@ static esp_err_t test_can_filter_handler(httpd_req_t *req)
     }
 
     cJSON *json = cJSON_Parse(body);
-    free(body);
+    heap_caps_free(body);
     body = NULL;
 
     if (!json)
