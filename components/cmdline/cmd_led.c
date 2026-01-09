@@ -133,7 +133,7 @@ esp_err_t cmd_led_register(void)
 {
     led_args.id = arg_lit0("i", "id", "Get LED driver device ID");
     led_args.color = arg_lit0("c", "color", "Set LED RGB color using the following <r> <g> <b>");
-    led_args.rgb = arg_intn(NULL, NULL, "<r> <g> <b>", 3, 3, "RGB values (0-255 each)");
+    led_args.rgb = arg_intn(NULL, NULL, "<r> <g> <b>", 0, 3, "RGB values (0-255 each)");
     led_args.blink = arg_lit0("b", "blink", "Blink the selected color channels");
     led_args.end = arg_end(5);
 
