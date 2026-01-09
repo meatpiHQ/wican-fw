@@ -1331,6 +1331,15 @@
                         </select>
                     </td>
                 </tr>
+                <tr>
+                    <td>Disable On Sleep Voltage:</td>
+                    <td>
+                        <select id="disable_on_sleep_voltage" name="disable_on_sleep_voltage" onchange="enableAutoStoreButton();submit_enable();">
+                            <option value="disable" selected>Disable</option>
+                            <option value="enable">Enable</option>
+                        </select>
+                    </td>
+                </tr>
             </table>
             
             <div class="section-title" style="margin-top:1rem;">Home Assistant</div>

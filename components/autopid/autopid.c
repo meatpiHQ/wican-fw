@@ -3706,13 +3706,22 @@ static void autopid_task(void *pvParameters)
         static pid_type_t previous_pid_type = PID_MAX;
 
         dev_status_wait_for_bits(DEV_AUTOPID_ELM327_APP_BIT, portMAX_DELAY);
-
+        
         if (dev_status_is_sleeping())
         {
             ESP_LOGI(TAG, "Device is sleeping, waiting for wakeup");
             obd_logger_disable();
             dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
             ESP_LOGI(TAG, "Device awake, resuming autopid task");
+            obd_logger_enable();
+        }
+
+        if (autopid_config->disable_on_sleep_voltage && !dev_status_is_wake_voltage_ok())
+        {
+            ESP_LOGI(TAG, "Voltage below sleep threshold, pausing autopid until voltage recovers");
+            obd_logger_disable();
+            dev_status_wait_for_bits(DEV_WAKE_VOLTAGE_OK_BIT, portMAX_DELAY);
+            ESP_LOGI(TAG, "Voltage OK, resuming autopid task");
             obd_logger_enable();
         }
 

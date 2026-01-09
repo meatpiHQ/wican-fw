@@ -394,6 +394,7 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
     cJSON *car_model_item = cJSON_GetObjectItem(root, "car_model");
     cJSON *ecu_protocol_item = cJSON_GetObjectItem(root, "ecu_protocol");
     cJSON *ha_discovery_item = cJSON_GetObjectItem(root, "ha_discovery");
+    cJSON *disable_on_sleep_voltage_item = cJSON_GetObjectItem(root, "disable_on_sleep_voltage");
     cJSON *cycle_item = cJSON_GetObjectItem(root, "cycle");
     cJSON *pid_validation_item = cJSON_GetObjectItem(root, "pid_validation");
     cJSON *standard_pids_item = cJSON_GetObjectItem(root, "standard_pids");
@@ -419,6 +420,20 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
     autopid_config->vehicle_model = car_model_item ? strdup_psram(car_model_item->valuestring) : NULL;
     autopid_config->std_ecu_protocol = ecu_protocol_item ? strdup_psram(ecu_protocol_item->valuestring) : NULL;
     autopid_config->ha_discovery_en = ha_discovery_item ? (strcmp(ha_discovery_item->valuestring, "enable") == 0) : false;
+
+    // Backward-compatible default: do NOT disable AutoPID on low voltage unless explicitly enabled.
+    autopid_config->disable_on_sleep_voltage = false;
+    if (disable_on_sleep_voltage_item)
+    {
+        if (cJSON_IsString(disable_on_sleep_voltage_item) && disable_on_sleep_voltage_item->valuestring)
+        {
+            autopid_config->disable_on_sleep_voltage = (strcmp(disable_on_sleep_voltage_item->valuestring, "enable") == 0);
+        }
+        else if (cJSON_IsBool(disable_on_sleep_voltage_item))
+        {
+            autopid_config->disable_on_sleep_voltage = cJSON_IsTrue(disable_on_sleep_voltage_item);
+        }
+    }
 
     if (cycle_item && cycle_item->valuestring && strlen(cycle_item->valuestring) > 0)
         autopid_config->cycle = atoi(cycle_item->valuestring);

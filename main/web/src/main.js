@@ -1842,6 +1842,7 @@ function loadAutoTable(jsonData) {
         setElementValue("car_specific", data.car_specific, 'disable');
         setElementValue("ha_discovery", 'disable');
         setElementValue("grouping", data.grouping, 'disable');
+        setElementValue("disable_on_sleep_voltage", data.disable_on_sleep_voltage, 'disable');
         setElementValue("webhook_data_mode", data.webhook_data_mode, 'changed');
         // Legacy cycle/destination will be migrated into destinations[0].
         setElementValue("car_model", data.car_model, '');
@@ -2011,6 +2012,7 @@ async function storeAutoTableData() {
 
         const initialisationValue = document.getElementById("initialisation")?.value || '';
         const groupingValue = document.getElementById("grouping")?.value || 'disable';
+        const disableOnSleepVoltageValue = document.getElementById("disable_on_sleep_voltage")?.value || 'disable';
         const webhook_data_mode = document.getElementById("webhook_data_mode")?.value || 'changed';
         const ha_discoveryValue = document.getElementById("ha_discovery")?.value || 'disable';
         const carSpecificValue = document.getElementById("car_specific")?.value || 'disable';
@@ -2201,6 +2203,7 @@ async function storeAutoTableData() {
         const jsonData = {
             initialisation: initialisationValue,
             grouping: groupingValue,
+            disable_on_sleep_voltage: disableOnSleepVoltageValue,
             webhook_data_mode: webhook_data_mode,
             car_specific: carSpecificValue,
             ha_discovery: ha_discoveryValue,

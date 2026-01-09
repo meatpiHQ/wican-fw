@@ -53,6 +53,8 @@ extern "C" {
 #define DEV_TIME_SYNCED_BIT             BIT16
 #define DEV_VPN_ENABLED_BIT             BIT17
 #define DEV_AUTOPID_ELM327_APP_BIT      BIT18
+// Indicates that the voltage-based wake condition is met (battery voltage >= configured sleep voltage).
+#define DEV_WAKE_VOLTAGE_OK_BIT         BIT19
 
 // Mask for "all bits" in a FreeRTOS event group.
 // Only the lower 24 bits are available for application use; the upper 8 are reserved by the kernel.
@@ -106,6 +108,9 @@ bool dev_status_is_any_bit_set(EventBits_t bits);
 #define dev_status_clear_time_synced()  dev_status_clear_bits(DEV_TIME_SYNCED_BIT)
 #define dev_status_set_vpn_enabled()    dev_status_set_bits(DEV_VPN_ENABLED_BIT)
 #define dev_status_clear_vpn_enabled()  dev_status_clear_bits(DEV_VPN_ENABLED_BIT)
+// Voltage wake condition helpers
+#define dev_status_set_wake_voltage_ok()    dev_status_set_bits(DEV_WAKE_VOLTAGE_OK_BIT)
+#define dev_status_clear_wake_voltage_ok()  dev_status_clear_bits(DEV_WAKE_VOLTAGE_OK_BIT)
 
 #define dev_status_clear_awake()          dev_status_clear_bits(DEV_AWAKE_BIT)
 #define dev_status_clear_sleep()          dev_status_clear_bits(DEV_SLEEP_BIT)
@@ -133,6 +138,7 @@ bool dev_status_is_any_bit_set(EventBits_t bits);
 // New checkers
 #define dev_status_is_time_synced()    dev_status_is_bit_set(DEV_TIME_SYNCED_BIT)
 #define dev_status_is_vpn_enabled()    dev_status_is_bit_set(DEV_VPN_ENABLED_BIT)
+#define dev_status_is_wake_voltage_ok() dev_status_is_bit_set(DEV_WAKE_VOLTAGE_OK_BIT)
 
 #ifdef __cplusplus
 }
