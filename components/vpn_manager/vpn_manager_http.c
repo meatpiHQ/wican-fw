@@ -23,6 +23,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <stdbool.h>
 #include <esp_log.h>
 #include <esp_http_server.h>
@@ -44,6 +45,46 @@ static const char *TAG = "VPN_HTTP";
 static const char *WG_PRIV_PLACEHOLDER = "Generated and stored on device";
 // UI placeholder string used for preshared key (we don't return the secret)
 static const char *WG_PSK_PLACEHOLDER = "Stored on device";
+
+// Forward decl (helpers below use it)
+static void trim_str(char *s);
+
+static bool looks_like_ipv4_addr(const char *s)
+{
+    if (!s || !*s) return false;
+    int a=0,b=0,c=0,d=0;
+    char tail='\0';
+    if (sscanf(s, "%d.%d.%d.%d%c", &a,&b,&c,&d,&tail) != 4) return false;
+    if (a<0||b<0||c<0||d<0) return false;
+    if (a>255||b>255||c>255||d>255) return false;
+    return true;
+}
+
+static void parse_dns_list_ipv4_json(const char *value, char *out_main, size_t out_main_len, char *out_backup, size_t out_backup_len)
+{
+    if (out_main && out_main_len) out_main[0] = '\0';
+    if (out_backup && out_backup_len) out_backup[0] = '\0';
+    if (!value) return;
+
+    char buf[96];
+    strlcpy(buf, value, sizeof(buf));
+    trim_str(buf);
+    char *saveptr = NULL;
+    for (char *tok = strtok_r(buf, ",", &saveptr); tok; tok = strtok_r(NULL, ",", &saveptr))
+    {
+        trim_str(tok);
+        if (!looks_like_ipv4_addr(tok)) continue;
+        if (out_main && out_main[0] == '\0')
+        {
+            strlcpy(out_main, tok, out_main_len);
+        }
+        else if (out_backup && out_backup[0] == '\0')
+        {
+            strlcpy(out_backup, tok, out_backup_len);
+            break;
+        }
+    }
+}
 
 // Simple in-place trim for C-strings
 static void trim_str(char *s)
@@ -252,6 +293,14 @@ static esp_err_t vpn_load_config_handler(httpd_req_t *req)
                     strlcpy(address_cidr, config.config.wireguard.address, sizeof(address_cidr));
                 }
                 cJSON_AddStringToObject(wg, "address", address_cidr);
+                if (config.config.wireguard.dns_main[0] != '\0')
+                {
+                    cJSON_AddStringToObject(wg, "dns_main", config.config.wireguard.dns_main);
+                    if (config.config.wireguard.dns_backup[0] != '\0')
+                    {
+                        cJSON_AddStringToObject(wg, "dns_backup", config.config.wireguard.dns_backup);
+                    }
+                }
                 // Combine allowed_ip and mask into CIDR format for response (generic mapping)
                 char allowed_ips_cidr[64];
                 int a=0,b=0,c=0,d=0; unsigned int prefix = 32;
@@ -500,6 +549,64 @@ static esp_err_t vpn_store_config_handler(httpd_req_t *req)
         {
             strlcpy(config.config.wireguard.preshared_key, existing.config.wireguard.preshared_key,
                     sizeof(config.config.wireguard.preshared_key));
+        }
+
+        // Optional DNS servers (IPv4 only). If omitted, preserve existing.
+        bool preserve_existing_dns = true;
+        char dns_main[16] = {0};
+        char dns_backup[16] = {0};
+        item = cJSON_GetObjectItem(json, "wg_dns");
+        if (!cJSON_IsString(item)) item = cJSON_GetObjectItem(json, "dns");
+        if (cJSON_IsString(item))
+        {
+            char tmp[96]; strlcpy(tmp, item->valuestring, sizeof(tmp)); trim_str(tmp);
+            if (tmp[0] == '\0')
+            {
+                config.config.wireguard.dns_main[0] = '\0';
+                config.config.wireguard.dns_backup[0] = '\0';
+                preserve_existing_dns = false;
+            }
+            else
+            {
+                parse_dns_list_ipv4_json(tmp, dns_main, sizeof(dns_main), dns_backup, sizeof(dns_backup));
+                if (dns_main[0] != '\0')
+                {
+                    strlcpy(config.config.wireguard.dns_main, dns_main, sizeof(config.config.wireguard.dns_main));
+                    strlcpy(config.config.wireguard.dns_backup, dns_backup, sizeof(config.config.wireguard.dns_backup));
+                    preserve_existing_dns = false;
+                }
+            }
+        }
+        else
+        {
+            // Also accept explicit fields
+            cJSON *d1 = cJSON_GetObjectItem(json, "dns_main");
+            cJSON *d2 = cJSON_GetObjectItem(json, "dns_backup");
+            if (cJSON_IsString(d1) || cJSON_IsString(d2))
+            {
+                preserve_existing_dns = false;
+                if (cJSON_IsString(d1))
+                {
+                    char tmp[32]; strlcpy(tmp, d1->valuestring, sizeof(tmp)); trim_str(tmp);
+                    if (looks_like_ipv4_addr(tmp))
+                    {
+                        strlcpy(config.config.wireguard.dns_main, tmp, sizeof(config.config.wireguard.dns_main));
+                    }
+                }
+                if (cJSON_IsString(d2))
+                {
+                    char tmp[32]; strlcpy(tmp, d2->valuestring, sizeof(tmp)); trim_str(tmp);
+                    if (looks_like_ipv4_addr(tmp))
+                    {
+                        strlcpy(config.config.wireguard.dns_backup, tmp, sizeof(config.config.wireguard.dns_backup));
+                    }
+                }
+            }
+        }
+        if (preserve_existing_dns && have_existing == ESP_OK)
+        {
+            strlcpy(config.config.wireguard.dns_main, existing.config.wireguard.dns_main, sizeof(config.config.wireguard.dns_main));
+            strlcpy(config.config.wireguard.dns_backup, existing.config.wireguard.dns_backup, sizeof(config.config.wireguard.dns_backup));
         }
 
         // Interface address: store canonical IP without CIDR suffix
@@ -789,6 +896,63 @@ static esp_err_t vpn_test_connection_handler(httpd_req_t *req)
             {
                 strlcpy(config.config.wireguard.preshared_key, existing.config.wireguard.preshared_key,
                         sizeof(config.config.wireguard.preshared_key));
+            }
+
+            // Optional DNS (IPv4 only). Accept same fields as store_config; preserve if omitted.
+            bool preserve_existing_dns = true;
+            cJSON *dnsItem = cJSON_GetObjectItem(json, "wg_dns");
+            if (!cJSON_IsString(dnsItem)) dnsItem = cJSON_GetObjectItem(json, "dns");
+            if (cJSON_IsString(dnsItem))
+            {
+                char tmp[96]; strlcpy(tmp, dnsItem->valuestring, sizeof(tmp)); trim_str(tmp);
+                if (tmp[0] == '\0')
+                {
+                    config.config.wireguard.dns_main[0] = '\0';
+                    config.config.wireguard.dns_backup[0] = '\0';
+                    preserve_existing_dns = false;
+                }
+                else
+                {
+                    char d1[16] = {0};
+                    char d2[16] = {0};
+                    parse_dns_list_ipv4_json(tmp, d1, sizeof(d1), d2, sizeof(d2));
+                    if (d1[0] != '\0')
+                    {
+                        strlcpy(config.config.wireguard.dns_main, d1, sizeof(config.config.wireguard.dns_main));
+                        strlcpy(config.config.wireguard.dns_backup, d2, sizeof(config.config.wireguard.dns_backup));
+                        preserve_existing_dns = false;
+                    }
+                }
+            }
+            else
+            {
+                cJSON *d1 = cJSON_GetObjectItem(json, "dns_main");
+                cJSON *d2 = cJSON_GetObjectItem(json, "dns_backup");
+                if (cJSON_IsString(d1) || cJSON_IsString(d2))
+                {
+                    preserve_existing_dns = false;
+                    if (cJSON_IsString(d1))
+                    {
+                        char tmp[32]; strlcpy(tmp, d1->valuestring, sizeof(tmp)); trim_str(tmp);
+                        if (looks_like_ipv4_addr(tmp))
+                        {
+                            strlcpy(config.config.wireguard.dns_main, tmp, sizeof(config.config.wireguard.dns_main));
+                        }
+                    }
+                    if (cJSON_IsString(d2))
+                    {
+                        char tmp[32]; strlcpy(tmp, d2->valuestring, sizeof(tmp)); trim_str(tmp);
+                        if (looks_like_ipv4_addr(tmp))
+                        {
+                            strlcpy(config.config.wireguard.dns_backup, tmp, sizeof(config.config.wireguard.dns_backup));
+                        }
+                    }
+                }
+            }
+            if (preserve_existing_dns && have_existing == ESP_OK)
+            {
+                strlcpy(config.config.wireguard.dns_main, existing.config.wireguard.dns_main, sizeof(config.config.wireguard.dns_main));
+                strlcpy(config.config.wireguard.dns_backup, existing.config.wireguard.dns_backup, sizeof(config.config.wireguard.dns_backup));
             }
 
             // Address (strip CIDR)
