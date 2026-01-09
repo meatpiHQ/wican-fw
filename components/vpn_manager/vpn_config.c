@@ -155,6 +155,7 @@ esp_err_t vpn_config_save(const vpn_config_t *config)
         {
             cJSON_AddStringToObject(wg, "private_key", config->config.wireguard.private_key);
             cJSON_AddStringToObject(wg, "peer_public_key", config->config.wireguard.public_key);
+            cJSON_AddStringToObject(wg, "preshared_key", config->config.wireguard.preshared_key);
             cJSON_AddStringToObject(wg, "address", config->config.wireguard.address);
             // Convert dotted mask to CIDR prefix length
             char allowed_ips_cidr[64];
@@ -275,6 +276,12 @@ esp_err_t vpn_config_load(vpn_config_t *config)
             {
                 strlcpy(config->config.wireguard.public_key, it->valuestring, sizeof(config->config.wireguard.public_key));
                 trim_str(config->config.wireguard.public_key);
+            }
+            it = cJSON_GetObjectItem(wg, "preshared_key");
+            if (cJSON_IsString(it))
+            {
+                strlcpy(config->config.wireguard.preshared_key, it->valuestring, sizeof(config->config.wireguard.preshared_key));
+                trim_str(config->config.wireguard.preshared_key);
             }
             it = cJSON_GetObjectItem(wg, "address");
             if (cJSON_IsString(it))
@@ -432,6 +439,10 @@ esp_err_t vpn_config_parse_wg(const char *config_text, vpn_wireguard_config_t *c
                     if (strcmp(key, "publickey")==0)
                     {
                         strlcpy(config->public_key, value, sizeof(config->public_key));
+                    }
+                    else if (strcmp(key, "presharedkey")==0)
+                    {
+                        strlcpy(config->preshared_key, value, sizeof(config->preshared_key));
                     }
                     else if (strcmp(key, "allowedips")==0)
                     {

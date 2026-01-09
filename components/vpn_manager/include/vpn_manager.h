@@ -59,6 +59,7 @@ typedef struct
 {
     char private_key[64];
     char public_key[64];
+    char preshared_key[64];
     char address[32];
     char allowed_ip[32];
     char allowed_ip_mask[32];

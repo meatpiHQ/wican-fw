@@ -42,6 +42,8 @@
 static const char *TAG = "VPN_HTTP";
 // UI placeholder string used in read-only private key field
 static const char *WG_PRIV_PLACEHOLDER = "Generated and stored on device";
+// UI placeholder string used for preshared key (we don't return the secret)
+static const char *WG_PSK_PLACEHOLDER = "Stored on device";
 
 // Simple in-place trim for C-strings
 static void trim_str(char *s)
@@ -232,6 +234,13 @@ static esp_err_t vpn_load_config_handler(httpd_req_t *req)
                 // Don't send private key for security
                 // Expose only the peer/server public key as peer_public_key
                 cJSON_AddStringToObject(wg, "peer_public_key", config.config.wireguard.public_key);
+                // Don't send preshared key for security; indicate presence instead
+                bool has_psk = (config.config.wireguard.preshared_key[0] != '\0');
+                cJSON_AddBoolToObject(wg, "preshared_key_present", has_psk);
+                if (has_psk)
+                {
+                    cJSON_AddStringToObject(wg, "preshared_key", WG_PSK_PLACEHOLDER);
+                }
                 // UI expects CIDR here; if stored address lacks suffix, show /32 by default
                 char address_cidr[64];
                 if (config.config.wireguard.address[0] != '\0' && strchr(config.config.wireguard.address, '/') == NULL)
@@ -448,6 +457,49 @@ static esp_err_t vpn_store_config_handler(httpd_req_t *req)
                 ESP_LOGW(TAG, "Peer public key doesn't look like base64; keeping as-is");
                 strlcpy(config.config.wireguard.public_key, tmp, sizeof(config.config.wireguard.public_key));
             }
+        }
+
+        // Optional preshared key (wg-easy may use this).
+        // IMPORTANT: if the client explicitly sends an empty string, that means "clear the PSK".
+        // We must NOT re-copy the old PSK from storage in that case.
+        bool preserve_existing_psk = true;
+        item = cJSON_GetObjectItem(json, "wg_preshared_key");
+        if (!cJSON_IsString(item)) item = cJSON_GetObjectItem(json, "preshared_key");
+        ESP_LOGI(TAG, "WireGuard preshared_key: %s", item && cJSON_IsString(item) ? "(provided)" : "(not present)");
+        if (cJSON_IsString(item))
+        {
+            char tmp[80]; strlcpy(tmp, item->valuestring, sizeof(tmp)); trim_str(tmp);
+            if (tmp[0] == '\0')
+            {
+                // Explicit clear
+                config.config.wireguard.preshared_key[0] = '\0';
+                preserve_existing_psk = false;
+                ESP_LOGI(TAG, "Clearing stored preshared key");
+            }
+            else if (strcmp(tmp, WG_PSK_PLACEHOLDER) == 0)
+            {
+                // Placeholder means "keep what you already have"
+                preserve_existing_psk = true;
+                ESP_LOGI(TAG, "Preshared key placeholder received; preserving existing key if available");
+            }
+            else if (looks_like_wg_b64_key(tmp))
+            {
+                strlcpy(config.config.wireguard.preshared_key, tmp, sizeof(config.config.wireguard.preshared_key));
+                preserve_existing_psk = false;
+                ESP_LOGI(TAG, "Accepted preshared key (base64)");
+            }
+            else
+            {
+                // Invalid input: ignore and keep existing
+                preserve_existing_psk = true;
+                ESP_LOGW(TAG, "Preshared key string doesn't look like base64; ignoring");
+            }
+        }
+        // If not provided or ignored, preserve existing stored key
+        if (preserve_existing_psk && config.config.wireguard.preshared_key[0] == '\0' && have_existing == ESP_OK)
+        {
+            strlcpy(config.config.wireguard.preshared_key, existing.config.wireguard.preshared_key,
+                    sizeof(config.config.wireguard.preshared_key));
         }
 
         // Interface address: store canonical IP without CIDR suffix
@@ -702,6 +754,41 @@ static esp_err_t vpn_test_connection_handler(httpd_req_t *req)
             {
                 char tmp[80]; strlcpy(tmp, item->valuestring, sizeof(tmp)); trim_str(tmp);
                 strlcpy(config.config.wireguard.public_key, tmp, sizeof(config.config.wireguard.public_key));
+            }
+
+            // Optional preshared key (wg-easy may use this)
+            bool preserve_existing_psk = true;
+            item = cJSON_GetObjectItem(json, "wg_preshared_key");
+            if (!cJSON_IsString(item)) item = cJSON_GetObjectItem(json, "preshared_key");
+            if (cJSON_IsString(item))
+            {
+                char tmp[80]; strlcpy(tmp, item->valuestring, sizeof(tmp)); trim_str(tmp);
+                if (tmp[0] == '\0')
+                {
+                    // Explicit clear for this test
+                    config.config.wireguard.preshared_key[0] = '\0';
+                    preserve_existing_psk = false;
+                }
+                else if (strcmp(tmp, WG_PSK_PLACEHOLDER) == 0)
+                {
+                    // Placeholder means: use stored key for test
+                    preserve_existing_psk = true;
+                }
+                else if (looks_like_wg_b64_key(tmp))
+                {
+                    strlcpy(config.config.wireguard.preshared_key, tmp, sizeof(config.config.wireguard.preshared_key));
+                    preserve_existing_psk = false;
+                }
+                else
+                {
+                    // Invalid input: ignore and keep existing
+                    preserve_existing_psk = true;
+                }
+            }
+            if (preserve_existing_psk && config.config.wireguard.preshared_key[0] == '\0' && have_existing == ESP_OK)
+            {
+                strlcpy(config.config.wireguard.preshared_key, existing.config.wireguard.preshared_key,
+                        sizeof(config.config.wireguard.preshared_key));
             }
 
             // Address (strip CIDR)

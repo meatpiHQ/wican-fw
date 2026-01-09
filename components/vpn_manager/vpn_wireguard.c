@@ -50,6 +50,10 @@ esp_err_t vpn_wg_init(const vpn_wireguard_config_t *cfg)
     {
         s_wg_cfg.public_key = (char*)cfg->public_key;
     }
+    if (cfg->preshared_key[0])
+    {
+        s_wg_cfg.preshared_key = (char*)cfg->preshared_key;
+    }
     // esp_wireguard uses allowed_ip/mask as LOCAL tunnel IP/mask. If user provided AllowedIPs=0.0.0.0/0,
     // derive local IP from Interface Address instead.
     bool have_allowed = (cfg->allowed_ip[0] && strcmp(cfg->allowed_ip, "0.0.0.0") != 0);

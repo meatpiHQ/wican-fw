@@ -4346,11 +4346,11 @@ function tryApplyVPN(data) {
     const wg = data.wireguard || {};
     const enabledEl = document.getElementById('vpn_enabled');
     const peerEl = document.getElementById('wg_peer_public_key');
+    const pskEl = document.getElementById('wg_preshared_key');
     const addrEl = document.getElementById('wg_address');
     const allowedEl = document.getElementById('wg_allowed_ips');
     const epEl = document.getElementById('wg_endpoint');
     const keepEl = document.getElementById('wg_persistent_keepalive');
-
     if (!enabledEl) {
         return false;
     }
@@ -4368,6 +4368,7 @@ function tryApplyVPN(data) {
     }
     // Fill fields
     if (peerEl) { peerEl.value = String(wg.peer_public_key || '').trim(); }
+    if (pskEl) { pskEl.value = wg.preshared_key != null ? String(wg.preshared_key).trim() : ''; }
     if (addrEl) { addrEl.value = wg.address != null ? String(wg.address).trim() : ''; }
     if (allowedEl) { allowedEl.value = wg.allowed_ips != null ? String(wg.allowed_ips).trim() : ''; }
     if (epEl) { epEl.value = wg.endpoint != null ? String(wg.endpoint).trim() : ''; }
@@ -4443,6 +4444,11 @@ function parseWireGuardConfig(configText)
     const lines = configText.split('\n');
     let currentSection = '';
     let fieldsFound = 0;
+    const pskEl = document.getElementById('wg_preshared_key');
+    if (pskEl)
+    {
+        pskEl.value = '';
+    }
     
     for (const line of lines) 
     {
@@ -4490,6 +4496,13 @@ function parseWireGuardConfig(configText)
                         document.getElementById('wg_peer_public_key').value = value;
                         fieldsFound++;
                         break;
+                    case 'presharedkey':
+                        if (document.getElementById('wg_preshared_key'))
+                        {
+                            document.getElementById('wg_preshared_key').value = value;
+                            fieldsFound++;
+                        }
+                        break;
                     case 'allowedips':
                         document.getElementById('wg_allowed_ips').value = value;
                         fieldsFound++;
@@ -4534,6 +4547,22 @@ async function saveVpnConfiguration()
         // Peer/server public key (canonical)
         const peerKey = document.getElementById("wg_peer_public_key").value;
         vpnConfig.peer_public_key = peerKey;
+
+        // Optional preshared key
+        const pskEl = document.getElementById("wg_preshared_key");
+        if (pskEl)
+        {
+            const psk = (pskEl.value || '').trim();
+            if (psk === '')
+            {
+                // Explicit clear
+                vpnConfig.preshared_key = "";
+            }
+            else if (psk !== "Stored on device")
+            {
+                vpnConfig.preshared_key = psk;
+            }
+        }
         vpnConfig.address = document.getElementById("wg_address").value;
         vpnConfig.allowed_ips = document.getElementById("wg_allowed_ips").value;
         vpnConfig.endpoint = document.getElementById("wg_endpoint").value;
@@ -4617,6 +4646,19 @@ async function testVpnConnection()
             const priv = document.getElementById("wg_private_key") ? document.getElementById("wg_private_key").value : '';
             if (priv) vpnConfig.private_key = priv;
             vpnConfig.peer_public_key = document.getElementById("wg_peer_public_key").value;
+            const pskEl = document.getElementById("wg_preshared_key");
+            if (pskEl)
+            {
+                const psk = (pskEl.value || '').trim();
+                if (psk === '')
+                {
+                    vpnConfig.preshared_key = "";
+                }
+                else if (psk !== "Stored on device")
+                {
+                    vpnConfig.preshared_key = psk;
+                }
+            }
             vpnConfig.address = document.getElementById("wg_address").value;
             vpnConfig.allowed_ips = document.getElementById("wg_allowed_ips").value;
             vpnConfig.endpoint = document.getElementById("wg_endpoint").value;
