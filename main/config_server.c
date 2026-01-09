@@ -97,6 +97,8 @@
 #include "autopid_http.h"
 #include "obd2_standard_pids.h"
 
+#include "ws_router.h"
+
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
 TaskHandle_t xwebsocket_handle = NULL;
@@ -155,6 +157,10 @@ extern const unsigned char lucide_icons_js_start[] asm("_binary_lucide_icons_js_
 extern const unsigned char lucide_icons_js_end[] asm("_binary_lucide_icons_js_end");
 extern const unsigned char main_js_start[] asm("_binary_main_js_start");
 extern const unsigned char main_js_end[] asm("_binary_main_js_end");
+extern const unsigned char ws_client_js_start[] asm("_binary_ws_client_js_start");
+extern const unsigned char ws_client_js_end[] asm("_binary_ws_client_js_end");
+extern const unsigned char terminal_js_start[] asm("_binary_terminal_js_start");
+extern const unsigned char terminal_js_end[] asm("_binary_terminal_js_end");
 
 typedef struct {
     const char *uri;
@@ -172,6 +178,8 @@ static const file_lookup_t file_lookup[] = {
 	{"/dashboard_live.js", "application/javascript", dashboard_live_js_start, dashboard_live_js_end, false, NULL, NULL},
 	{"/lucide_icons.js", "application/javascript", lucide_icons_js_start, lucide_icons_js_end, false, NULL, NULL},
 	{"/main.js", "application/javascript", main_js_start, main_js_end, false, NULL, NULL},
+	{"/ws_client.js", "application/javascript", ws_client_js_start, ws_client_js_end, false, NULL, NULL},
+	{"/terminal.js", "application/javascript", terminal_js_start, terminal_js_end, false, NULL, NULL},
 	{"/chartjs-adapter-moment.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/chartjs-adapter-moment.min.js", "https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.0/dist/chartjs-adapter-moment.min.js"},
 	{"/jquery-3.6.0.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/jquery-3.6.0.min.js", "https://code.jquery.com/jquery-3.6.0.min.js"},
 	{"/bootstrap.bundle.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/bootstrap.bundle.min.js", "https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"},
@@ -1935,6 +1943,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
 //        vTaskResume(xwebsocket_handle);
         // gpio_set_level(ws_led, 0);
         xEventGroupSetBits( xServerEventGroup, WS_CONNECTED_BIT );
+		ws_router_on_open();
         return ESP_OK;
     }
 
@@ -1976,11 +1985,17 @@ static esp_err_t ws_handler(httpd_req_t *req)
 //    ESP_LOGI(TAG, "Packet type: %d", ws_pkt.type);
 
     static xdev_buffer rx_buffer;
-    memcpy(rx_buffer.ucElement, ws_pkt.payload, ws_pkt.len);
-    rx_buffer.dev_channel = DEV_WIFI_WS;
-    rx_buffer.usLen = ws_pkt.len;
+	if (ws_router_handle_frame(req, ws_pkt.payload, ws_pkt.len))
+	{
+		free(buf);
+		return ESP_OK;
+	}
 
-    xQueueSend( *xRX_Queue, ( void * ) &rx_buffer, portMAX_DELAY );
+	memcpy(rx_buffer.ucElement, ws_pkt.payload, ws_pkt.len);
+	rx_buffer.dev_channel = DEV_WIFI_WS;
+	rx_buffer.usLen = ws_pkt.len;
+
+	xQueueSend( *xRX_Queue, ( void * ) &rx_buffer, portMAX_DELAY );
 //    ws_send(rsp_arg, &ws_pkt);
 //    if (ws_pkt.type == HTTPD_WS_TYPE_TEXT &&
 //        strcmp((char*)ws_pkt.payload,"Trigger async") == 0)

@@ -3924,58 +3924,59 @@ function mon_control() {
     var url2 = "http://192.168.31.72/";
     console.log(dr);
     alert("Please reboot device after Monitor, otherwise the device may not function as expected");
-    ws_url = "ws://" + url.substr(7, url.length) + "ws";
-    console.log(ws_url);
+    if (!window.wicanWs) {
+        alert("WebSocket client is not loaded.");
+        return;
+    }
     if(document.getElementById("mon_button").value == "Start") {
-        ws = new WebSocket(ws_url);
-        setTimeout(bindEvents, 1000);
-        ws.addEventListener("open", (event) => {
-            var cmd = "C" + cr + "S" + dr + cr + "O" + cr;
-            console.log("onopen called");
-            ws.send(cmd);
-            window.mon_button_en(0);
-        });
-        ws.addEventListener("close", (event) => {
-            window.mon_button_en(1);
-            console.log("onclose called");
+        window.wicanWs.connect('monitor', {
+            onOpen: function () {
+                var cmd = "C" + cr + "S" + dr + cr + "O" + cr;
+                console.log("monitor ws open");
+                window.wicanWs.sendText(cmd);
+                window.mon_button_en(0);
+            },
+            onClose: function () {
+                window.mon_button_en(1);
+                console.log("monitor ws close");
+            },
+            onMessage: function (evt) {
+                var received_msg = evt.data;
+                if(received_msg[0] == "t") {
+                    var len = (received_msg[4] - "0") * 2;
+                    var data_str = "";
+                    var i;
+                    for(i = 0; i < len; i += 2) {
+                        data_str += received_msg.substr(i + 5, 2) + " ";
+                    }
+                    monitor_add_line(received_msg.substr(1, 3) + "h", "Std", received_msg[4], data_str, 0);
+                } else if(received_msg[0] == "T") {
+                    var len = (received_msg[9] - "0") * 2;
+                    var data_str = "";
+                    var i;
+                    for(i = 0; i < len; i += 2) {
+                        data_str += received_msg.substr(i + 10, 2) + " ";
+                    }
+                    monitor_add_line(received_msg.substr(1, 8) + "h", "Ext", received_msg[9], data_str, 0);
+                } else if(received_msg[0] == "r") {
+                    var len = (received_msg[4] - "0") * 2;
+                    monitor_add_line(received_msg.substr(1, 3) + "h", "RTR-Std", received_msg[4], 0, 0);
+                } else if(received_msg[0] == "R") {
+                    var len = (received_msg[9] - "0") * 2;
+                    monitor_add_line(received_msg.substr(1, 8) + "h", "RTR-Ext", received_msg[9], 0, 0);
+                }
+            },
         });
     } else {
         ws_close();
     }
 }
 
-function bindEvents() {
-    ws.onmessage = function(evt) {
-        var received_msg = evt.data;
-        if(received_msg[0] == "t") {
-            var len = (received_msg[4] - "0") * 2;
-            var data_str = "";
-            var i;
-            for(i = 0; i < len; i += 2) {
-                data_str += received_msg.substr(i + 5, 2) + " ";
-            }
-            monitor_add_line(received_msg.substr(1, 3) + "h", "Std", received_msg[4], data_str, 0);
-        } else if(received_msg[0] == "T") {
-            var len = (received_msg[9] - "0") * 2;
-            var data_str = "";
-            var i;
-            for(i = 0; i < len; i += 2) {
-                data_str += received_msg.substr(i + 10, 2) + " ";
-            }
-            monitor_add_line(received_msg.substr(1, 8) + "h", "Ext", received_msg[9], data_str, 0);
-        } else if(received_msg[0] == "r") {
-            var len = (received_msg[4] - "0") * 2;
-            monitor_add_line(received_msg.substr(1, 3) + "h", "RTR-Std", received_msg[4], 0, 0);
-        } else if(received_msg[0] == "R") {
-            var len = (received_msg[9] - "0") * 2;
-            monitor_add_line(received_msg.substr(1, 8) + "h", "RTR-Ext", received_msg[9], 0, 0);
-        }
-    };
-}
-
 function ws_close() {
-    ws.send("C" + cr);
-    ws.close();
+    if (window.wicanWs && window.wicanWs.isOpen()) {
+        window.wicanWs.sendText("C" + cr);
+        window.wicanWs.close();
+    }
 }
 
 function mon_button_en(b) {

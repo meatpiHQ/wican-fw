@@ -697,6 +697,10 @@
             <span data-lucide="monitor" style="width: 18px; height: 18px; margin-right: 8px;"></span>
             <b>CAN Monitor</b>
         </button>
+        <button class="tablinks" onclick="openTab(event, 'terminal_tab')">
+            <span data-lucide="terminal" style="width: 18px; height: 18px; margin-right: 8px;"></span>
+            <b>Terminal</b>
+        </button>
         <button class="tablinks" onclick="openTab(event, 'advanced_tab')">
             <span data-lucide="settings" style="width: 18px; height: 18px; margin-right: 8px;"></span>
             <b>Advanced</b>
@@ -1610,6 +1614,40 @@
                 <tbody></tbody>
             </table>
         </div>
+
+        <div id="terminal_tab" class="tabcontent">
+            <div class="section-title" style="justify-content:space-between; align-items:center; gap:12px; display:flex">
+                <span>Terminal</span>
+                <span id="terminal_status_badge" class="status-indicator status-disconnected" title="Terminal status">Disconnected</span>
+            </div>
+            <div style="color:#6b7280; font-size: 0.9rem; margin-bottom: 0.75rem;">
+                Terminal uses the device WebSocket. Only one WebSocket purpose can be active at a time.
+            </div>
+
+            <table class="form-table">
+                <tr>
+                    <td>Terminal Type:</td>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <select id="terminal_type" name="terminal_type" style="flex:1;">
+                                <option value="console" selected>Console command line</option>
+                                <option value="elm327" disabled>ELM327 (coming soon)</option>
+                                <option value="uds" disabled>UDS (coming soon)</option>
+                            </select>
+                            <button type="button" id="terminal_connect_btn" style="white-space:nowrap;">Connect</button>
+                        </div>
+                    </td>
+                </tr>
+            </table>
+
+            <div class="divider"></div>
+            <pre id="terminal_output" style="white-space: pre-wrap; word-break: break-word; background: #0b0f14; color: #d1fae5; border: 1px solid #1f2937; border-radius: 6px; padding: 10px; margin: 0; max-height: 360px; overflow: auto; font-weight: 400; font-family: Consolas, 'Courier New', monospace; font-size: 0.9rem; line-height: 1.35;"></pre>
+
+            <div style="display:flex; gap:10px; align-items:center; margin-top: 10px;">
+                <input type="text" id="terminal_input" placeholder="Type a command (e.g. help, status, echo hello)" style="flex: 1; font-family: Consolas, 'Courier New', monospace; background: #0b0f14; color: #d1fae5; border-color: #1f2937;" />
+                <button type="button" id="terminal_send_btn">Send</button>
+            </div>
+        </div>
         <div id="power_saving_tab" class="tabcontent">
             <div class="section-title">Sleep Mode</div>
             <table class="form-table">
@@ -2098,6 +2136,8 @@
         </div>
         <input id="submit_button" name="submit_button" type="button" onclick="postConfig()" value="Submit Changes" disabled />
     </div>
+    <script src="/ws_client.js"></script>
+    <script src="/terminal.js"></script>
     <script src="/main.js"></script>
     <script src="/lucide_icons.js"></script>
 </body>

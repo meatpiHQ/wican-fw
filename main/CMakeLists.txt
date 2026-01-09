@@ -37,6 +37,7 @@ set(srcs
     "multipart_upload.c"
     "sync_sys_time.c"
     "config_mode.c"
+	"ws_router.c"
 )
 
 # Define required components
@@ -95,6 +96,8 @@ idf_component_register(
         "web/src/dashboard.js"
         "web/src/lucide_icons.js"
         "web/src/main.js"
+		"web/src/ws_client.js"
+		"web/src/terminal.js"
         "web/src/dashboard_live.js"
         "web/safemode.html"
         # "obd_fw/V2.3.18.txt"
