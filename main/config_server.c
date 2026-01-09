@@ -213,6 +213,7 @@ static char can_datarate_str[11][7] = {
 };
 
 const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"webhook_en\":\"enable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\
+									\"ap_ssid_en\":\"disable\",\"ap_ssid\":\"\",\
 										\"home_ssid\":\"MeatPi\",\"home_password\":\"TomatoSauce\",\"home_security\":\"wpa3\",\"home_protocol\":\"elm327\",\
 										\"drive_ssid\":\"MeatPi\",\"drive_password\":\"TomatoSauce\",\"drive_security\":\"wpa3\",\"drive_protocol\":\"elm327\",\"drive_connection_type\":\"wifi\",\"drive_mode_timeout\":\"60\",\
 										\"can_datarate\":\"500K\",\
@@ -245,6 +246,9 @@ void config_server_reboot(void)
 
 #define MAX_FILE_SIZE   (2000*1024) // 2000 KB
 #define MAX_FILE_SIZE_STR "2000KB"
+
+#define AP_SSID_MIN_LEN 3
+#define AP_SSID_MAX_LEN 32
 
 struct file_server_data {
     /* Base path of file storage */
@@ -338,6 +342,16 @@ char *config_server_get_sta_ssid(void)
 char *config_server_get_ap_pass(void)
 {
 	return device_config.ap_pass;
+}
+
+int8_t config_server_get_ap_ssid_en(void)
+{
+	return (strcmp(device_config.ap_ssid_en, "enable") == 0) ? 1 : 0;
+}
+
+char *config_server_get_ap_ssid(void)
+{
+	return device_config.ap_ssid;
 }
 
 int config_server_ble_pass(void)
@@ -904,6 +918,37 @@ static esp_err_t store_config_handler(httpd_req_t *req)
 		free(buf);
 		return ESP_FAIL;
 	}
+
+	// Validate optional custom AP SSID (avoid accepting a config that will be rejected on reboot)
+	{
+		bool ap_ssid_enabled = false;
+		cJSON *k = cJSON_GetObjectItem(json, "ap_ssid_en");
+		if (k)
+		{
+			if (cJSON_IsString(k) && k->valuestring)
+			{
+				ap_ssid_enabled = (strcmp(k->valuestring, "enable") == 0);
+			}
+			else if (cJSON_IsBool(k))
+			{
+				ap_ssid_enabled = cJSON_IsTrue(k);
+			}
+		}
+		if (ap_ssid_enabled)
+		{
+			cJSON *v = cJSON_GetObjectItem(json, "ap_ssid");
+			const char *ssid = (v && cJSON_IsString(v) && v->valuestring) ? v->valuestring : NULL;
+			size_t len = ssid ? strlen(ssid) : 0;
+			if (!ssid || len < AP_SSID_MIN_LEN || len > AP_SSID_MAX_LEN)
+			{
+				httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "ap_ssid must be 3-32 characters when enabled");
+				cJSON_Delete(json);
+				free(buf);
+				return ESP_FAIL;
+			}
+		}
+	}
+
 	cJSON_Delete(json);
 
 	// Open file
@@ -1640,6 +1685,8 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 
 	cJSON_AddStringToObject(root, "wifi_mode", device_config.wifi_mode);
 	cJSON_AddStringToObject(root, "ap_ch", device_config.ap_ch);
+	cJSON_AddStringToObject(root, "ap_ssid_en", device_config.ap_ssid_en);
+	cJSON_AddStringToObject(root, "ap_ssid", device_config.ap_ssid);
 	cJSON_AddStringToObject(root, "ap_auto_disable", device_config.ap_auto_disable);
 	if(!remove_sensitive_info)
 	{
@@ -2520,6 +2567,40 @@ static void config_server_load_cfg(char *cfg)
 	}
 	strlcpy(device_config.ap_ch, key->valuestring, sizeof(device_config.ap_ch));
 	ESP_LOGI(TAG, "device_config.ap_ch: %s", device_config.ap_ch);
+
+	// Optional custom AP SSID (backward compatible)
+	strlcpy(device_config.ap_ssid_en, "disable", sizeof(device_config.ap_ssid_en));
+	device_config.ap_ssid[0] = '\0';
+	key = cJSON_GetObjectItem(root, "ap_ssid_en");
+	if (key)
+	{
+		if (cJSON_IsString(key) && key->valuestring)
+		{
+			if (strcmp(key->valuestring, "enable") == 0 || strcmp(key->valuestring, "disable") == 0)
+			{
+				strlcpy(device_config.ap_ssid_en, key->valuestring, sizeof(device_config.ap_ssid_en));
+			}
+		}
+		else if (cJSON_IsBool(key))
+		{
+			strlcpy(device_config.ap_ssid_en, cJSON_IsTrue(key) ? "enable" : "disable", sizeof(device_config.ap_ssid_en));
+		}
+	}
+	ESP_LOGI(TAG, "device_config.ap_ssid_en: %s", device_config.ap_ssid_en);
+	key = cJSON_GetObjectItem(root, "ap_ssid");
+	if (key && cJSON_IsString(key) && key->valuestring)
+	{
+		strlcpy(device_config.ap_ssid, key->valuestring, sizeof(device_config.ap_ssid));
+	}
+	if (strcmp(device_config.ap_ssid_en, "enable") == 0)
+	{
+		size_t ap_ssid_len = strlen(device_config.ap_ssid);
+		if (ap_ssid_len < AP_SSID_MIN_LEN || ap_ssid_len > AP_SSID_MAX_LEN)
+		{
+			ESP_LOGE(TAG, "Invalid ap_ssid length %u", (unsigned)ap_ssid_len);
+			goto config_error;
+		}
+	}
 
 	key = cJSON_GetObjectItem(root,"sta_ssid");
 	if(key == 0)

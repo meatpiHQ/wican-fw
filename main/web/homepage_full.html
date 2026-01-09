@@ -898,6 +898,16 @@
                         </td>
                     </tr>
                     <tr>
+                        <td>AP SSID:</td>
+                        <td>
+                            <div style="display:flex; align-items:center; gap:10px; flex-wrap:nowrap;">
+                                <input type="text" id="ap_ssid_value" name="ap_ssid_value" placeholder="WiCAN_MyCar" minlength="3" maxlength="32" disabled oninput="validateApSsid(); submit_enable();" />
+                                <input type="checkbox" id="ap_ssid_enable" onchange="toggleApSsid(); submit_enable();" style="margin:0;" />
+                            </div>
+                            <div style="color:#6b7280; font-size: 12px; margin-top: 4px;">Min 3, max 32 characters. When disabled, the device uses its default unique SSID.</div>
+                        </td>
+                    </tr>
+                    <tr>
                         <td>AP Password:</td>
                         <td>
                             <input type="text" id="ap_pass_value" name="ap_pass_value" value="Testpass" />

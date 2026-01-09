@@ -40,6 +40,9 @@
 
 #define TAG "WiFi_NETWORK"
 
+#define AP_SSID_MIN_LEN 3
+#define AP_SSID_MAX_LEN 32
+
 void wifi_network_init(char* ap_ssid_uid)
 {
     wifi_mgr_config_t wifi_config;
@@ -50,6 +53,18 @@ void wifi_network_init(char* ap_ssid_uid)
         return;
     }
 	
+    // Determine AP SSID to use (default UID, optional custom override)
+    const char *ap_ssid_to_use = ap_ssid_uid;
+    if (config_server_get_ap_ssid_en()) {
+        const char *cfg = config_server_get_ap_ssid();
+        size_t len = cfg ? strlen(cfg) : 0;
+        if (cfg && len >= AP_SSID_MIN_LEN && len <= AP_SSID_MAX_LEN) {
+            ap_ssid_to_use = cfg;
+        } else {
+            ESP_LOGW(TAG, "Custom AP SSID enabled but invalid; using default UID SSID");
+        }
+    }
+
     // Get WiFi mode from config server
     int8_t wifi_mode = config_server_get_wifi_mode();
     
@@ -57,7 +72,7 @@ void wifi_network_init(char* ap_ssid_uid)
         // SmartConnect mode: Let SmartConnect handle all WiFi management
         ESP_LOGI(TAG, "SmartConnect mode detected - initializing SmartConnect module");
         
-        esp_err_t ret = smartconnect_init(ap_ssid_uid);
+        esp_err_t ret = smartconnect_init(ap_ssid_to_use);
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "Failed to initialize SmartConnect: %s", esp_err_to_name(ret));
         } else {
@@ -136,8 +151,8 @@ void wifi_network_init(char* ap_ssid_uid)
         wifi_config.ap_password[0] = '\0';
     }
     
-    // Set unique AP SSID using device UID
-    snprintf(wifi_config.ap_ssid, sizeof(wifi_config.ap_ssid), "%s", ap_ssid_uid);
+    // Set AP SSID
+    snprintf(wifi_config.ap_ssid, sizeof(wifi_config.ap_ssid), "%s", ap_ssid_to_use);
     
     // Set AP channel
     int8_t ap_channel = config_server_get_ap_ch();

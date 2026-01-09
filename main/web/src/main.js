@@ -3054,6 +3054,26 @@ async function postConfig() {
 
     obj["wifi_mode"] = document.getElementById("wifi_mode").value;
     obj["ap_ch"] = document.getElementById("ap_ch_value").value;
+
+    // Optional custom AP SSID
+    {
+        const enEl = document.getElementById("ap_ssid_enable");
+        const valEl = document.getElementById("ap_ssid_value");
+        const enabled = !!(enEl && enEl.checked);
+        const ssid = (valEl && typeof valEl.value === 'string') ? valEl.value.trim() : "";
+
+        if (enabled) {
+            // Enforce min length client-side (firmware enforces too)
+            if (ssid.length < 3 || ssid.length > 32) {
+                showNotification("AP SSID must be 3–32 characters", "red");
+                document.getElementById("submit_button").disabled = false;
+                return;
+            }
+        }
+
+        obj["ap_ssid_en"] = enabled ? "enable" : "disable";
+        obj["ap_ssid"] = ssid;
+    }
     obj["webhook_en"] = document.getElementById("webhook_en")?.value || "enable";
     obj["sta_ssid"] = document.getElementById("ssid_value").value;
     obj["sta_pass"] = document.getElementById("pass_value").value;
@@ -3172,6 +3192,35 @@ async function postConfig() {
         }
     };
     xhttp.send(configJSON);
+}
+
+function toggleApSsid() {
+    const enEl = document.getElementById("ap_ssid_enable");
+    const valEl = document.getElementById("ap_ssid_value");
+    if (!enEl || !valEl) return;
+    valEl.disabled = !enEl.checked;
+    if (!enEl.checked) {
+        // Keep value, but clear any browser validation UI
+        try { valEl.setCustomValidity(""); } catch(_) {}
+    } else {
+        validateApSsid();
+    }
+}
+
+function validateApSsid() {
+    const enEl = document.getElementById("ap_ssid_enable");
+    const valEl = document.getElementById("ap_ssid_value");
+    if (!enEl || !valEl) return;
+    if (!enEl.checked) {
+        try { valEl.setCustomValidity(""); } catch(_) {}
+        return;
+    }
+    const ssid = (valEl.value || "").trim();
+    if (ssid.length < 3 || ssid.length > 32) {
+        try { valEl.setCustomValidity("AP SSID must be 3–32 characters"); } catch(_) {}
+    } else {
+        try { valEl.setCustomValidity(""); } catch(_) {}
+    }
 }
 
 function otaClick() {
@@ -3541,6 +3590,19 @@ xhttp.onload = async function() {
             document.getElementById("ap_auto_disable").selectedIndex = "1";
         }
 
+        // Custom AP SSID (optional, default disabled)
+        {
+            const enEl = document.getElementById("ap_ssid_enable");
+            const valEl = document.getElementById("ap_ssid_value");
+            if (enEl) {
+                enEl.checked = (obj.ap_ssid_en === "enable");
+            }
+            if (valEl) {
+                valEl.value = obj.ap_ssid || "";
+            }
+            try { toggleApSsid(); } catch(_) {}
+        }
+
         var ch = parseInt(obj.ap_ch);
         ch = ch - 1;
         document.getElementById("ap_ch_value").selectedIndex = ch.toString();
@@ -3798,6 +3860,9 @@ xhttp.onload = async function() {
     
     // Initialize SmartConnect configuration visibility
     toggleSmartConnectConfig();
+
+    // Initialize AP SSID input state
+    try { toggleApSsid(); } catch(_) {}
     
     // Initialize lucide icons
     if (typeof lucide !== 'undefined' && lucide.createIcons) {
