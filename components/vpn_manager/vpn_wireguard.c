@@ -23,6 +23,8 @@
 #include <esp_log.h>
 #include <esp_netif.h>
 #include <esp_wireguard.h>
+#include "lwip/netdb.h"
+#include "lwip/inet.h"
 
 static const char *TAG_WG = "VPN_WG";
 
@@ -30,8 +32,56 @@ static wireguard_ctx_t s_wg_ctx = {0};
 static wireguard_config_t s_wg_cfg = {0};
 static esp_netif_t *s_vpn_netif = NULL; 
 static char s_addr_derived[32] = {0};
+static char s_endpoint_resolved[64] = {0};
 
 #define EMPTY_OR_NULL(s) ((s)==NULL || (s)[0]=='\0')
+
+static bool resolve_ipv4_endpoint(const char *host, char *out_ip, size_t out_ip_len)
+{
+    if (!host || !out_ip || out_ip_len == 0)
+    {
+        return false;
+    }
+
+    // Already an IPv4 literal?
+    struct in_addr a;
+    if (inet_pton(AF_INET, host, &a) == 1)
+    {
+        strlcpy(out_ip, host, out_ip_len);
+        return true;
+    }
+
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_DGRAM;
+
+    struct addrinfo *res = NULL;
+    int gai = getaddrinfo(host, NULL, &hints, &res);
+    if (gai != 0 || res == NULL)
+    {
+        return false;
+    }
+
+    bool ok = false;
+    for (struct addrinfo *ai = res; ai; ai = ai->ai_next)
+    {
+        if (ai->ai_family != AF_INET || ai->ai_addr == NULL)
+        {
+            continue;
+        }
+        struct sockaddr_in *sa = (struct sockaddr_in *)ai->ai_addr;
+        char tmp[INET_ADDRSTRLEN] = {0};
+        if (inet_ntop(AF_INET, &sa->sin_addr, tmp, sizeof(tmp)) != NULL)
+        {
+            strlcpy(out_ip, tmp, out_ip_len);
+            ok = true;
+            break;
+        }
+    }
+    freeaddrinfo(res);
+    return ok;
+}
 
 esp_err_t vpn_wg_init(const vpn_wireguard_config_t *cfg)
 {
@@ -84,7 +134,22 @@ esp_err_t vpn_wg_init(const vpn_wireguard_config_t *cfg)
     }
     if (cfg->endpoint[0])
     {
-        s_wg_cfg.endpoint = (char*)cfg->endpoint;
+        // Resolve IPv4 hostnames to a numeric IP once per init.
+        // This improves compatibility if esp_wireguard doesn't resolve internally.
+        // (IPv4 only; IPv6 endpoint support not implemented here.)
+        if (resolve_ipv4_endpoint(cfg->endpoint, s_endpoint_resolved, sizeof(s_endpoint_resolved)))
+        {
+            if (strcmp(cfg->endpoint, s_endpoint_resolved) != 0)
+            {
+                ESP_LOGI(TAG_WG, "Resolved endpoint %s -> %s", cfg->endpoint, s_endpoint_resolved);
+            }
+            s_wg_cfg.endpoint = (char *)s_endpoint_resolved;
+        }
+        else
+        {
+            ESP_LOGW(TAG_WG, "Failed to resolve endpoint host '%s' (using as-is)", cfg->endpoint);
+            s_wg_cfg.endpoint = (char *)cfg->endpoint;
+        }
     }
     s_wg_cfg.port = cfg->port;
     s_wg_cfg.persistent_keepalive = cfg->persistent_keepalive;
