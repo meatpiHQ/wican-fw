@@ -36,5 +36,5 @@ esp_err_t cmd_status_register(void)
         .hint = NULL,
         .func = &cmd_status,
     };
-    return esp_console_cmd_register(&cmd);
+    return cmdline_cmd_register(&cmd);
 }

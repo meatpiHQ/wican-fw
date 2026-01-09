@@ -98,17 +98,14 @@
 #include "obd2_standard_pids.h"
 
 #include "ws_router.h"
+#include "ws_server.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
-#define WS_CONNECTED_BIT			BIT1
-TaskHandle_t xwebsocket_handle = NULL;
 static EventGroupHandle_t xServerEventGroup = NULL;
 static StaticEventGroup_t server_event_group_buffer;
 static QueueHandle_t xip_Queue = NULL;
 static StaticQueue_t xip_queue_struct;
 static uint8_t xip_queue_storage[20];
-
-static QueueHandle_t *xTX_Queue, *xRX_Queue;
 
 static uint8_t ws_led;
 #define TAG "CONFIG_SERVER"
@@ -1886,133 +1883,6 @@ static esp_err_t check_status_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-/*
- * Structure holding server handle
- * and internal socket fd in order
- * to use out of request send
- */
-typedef  struct _async_resp_arg {
-    httpd_handle_t hd;
-    int fd;
-}async_resp_arg_t;
-static async_resp_arg_t rsp_arg;
-/*
- * async send function, which we put into the httpd work queue
- */
-//static void ws_async_send(void *arg)
-//{
-//    static const char * data = "Async data";
-//    struct async_resp_arg *resp_arg = arg;
-//    httpd_handle_t hd = resp_arg->hd;
-//    int fd = resp_arg->fd;
-//    httpd_ws_frame_t ws_pkt;
-//    memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
-//    ws_pkt.payload = (uint8_t*)data;
-//    ws_pkt.len = strlen(data);
-//    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-//
-//    httpd_ws_send_frame_async(hd, fd, &ws_pkt);
-//    free(resp_arg);
-//}
-//
-//static esp_err_t trigger_async_send(httpd_handle_t handle, httpd_req_t *req)
-//{
-//    struct async_resp_arg *resp_arg = malloc(sizeof(struct async_resp_arg));
-//    resp_arg->hd = req->handle;
-//    resp_arg->fd = httpd_req_to_sockfd(req);
-//    return httpd_queue_work(handle, ws_async_send, resp_arg);
-//}
-
-//static void ws_send(async_resp_arg_t resp, httpd_ws_frame_t *ws_pkt)
-//{
-//	httpd_ws_send_frame_async(resp.hd, resp.fd, ws_pkt);
-//}
-
-/*
- * This handler echos back the received ws data
- * and triggers an async send if certain message received
- */
-static esp_err_t ws_handler(httpd_req_t *req)
-{
-    if (req->method == HTTP_GET)
-    {
-//        ESP_LOGI(TAG, "Handshake done, the new connection was opened");
-        rsp_arg.hd = req->handle;
-        rsp_arg.fd = httpd_req_to_sockfd(req);
-//        tcp_server_suspend();
-//        vTaskResume(xwebsocket_handle);
-        // gpio_set_level(ws_led, 0);
-        xEventGroupSetBits( xServerEventGroup, WS_CONNECTED_BIT );
-		ws_router_on_open();
-        return ESP_OK;
-    }
-
-    httpd_ws_frame_t ws_pkt;
-
-    uint8_t *buf = NULL;
-    memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
-    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-
-    /* Set max_len = 0 to get the frame len */
-    esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
-    if (ret != ESP_OK)
-    {
-        ESP_LOGE(TAG, "httpd_ws_recv_frame failed to get frame len with %d", ret);
-        return ret;
-    }
-//    ESP_LOGI(TAG, "frame len is %d", ws_pkt.len);
-
-    if (ws_pkt.len)
-    {
-        /* ws_pkt.len + 1 is for NULL termination as we are expecting a string */
-        buf = calloc(1, ws_pkt.len + 1);
-        if (buf == NULL)
-        {
-            ESP_LOGE(TAG, "Failed to calloc memory for buf");
-            return ESP_ERR_NO_MEM;
-        }
-        ws_pkt.payload = buf;
-        /* Set max_len = ws_pkt.len to get the frame payload */
-        ret = httpd_ws_recv_frame(req, &ws_pkt, ws_pkt.len);
-        if (ret != ESP_OK)
-        {
-            ESP_LOGE(TAG, "httpd_ws_recv_frame failed with %d", ret);
-            free(buf);
-            return ret;
-        }
-//        ESP_LOGI(TAG, "Got packet with message: %s", ws_pkt.payload);
-    }
-//    ESP_LOGI(TAG, "Packet type: %d", ws_pkt.type);
-
-    static xdev_buffer rx_buffer;
-	if (ws_router_handle_frame(req, ws_pkt.payload, ws_pkt.len))
-	{
-		free(buf);
-		return ESP_OK;
-	}
-
-	memcpy(rx_buffer.ucElement, ws_pkt.payload, ws_pkt.len);
-	rx_buffer.dev_channel = DEV_WIFI_WS;
-	rx_buffer.usLen = ws_pkt.len;
-
-	xQueueSend( *xRX_Queue, ( void * ) &rx_buffer, portMAX_DELAY );
-//    ws_send(rsp_arg, &ws_pkt);
-//    if (ws_pkt.type == HTTPD_WS_TYPE_TEXT &&
-//        strcmp((char*)ws_pkt.payload,"Trigger async") == 0)
-//    {
-//        free(buf);
-//        return trigger_async_send(req->handle, req);
-//    }
-//
-//    ret = httpd_ws_send_frame(req, &ws_pkt);
-//    if (ret != ESP_OK)
-//    {
-//        ESP_LOGE(TAG, "httpd_ws_send_frame failed with %d", ret);
-//    }
-    free(buf);
-    return ret;
-}
-
 typedef struct {
 	esp_ota_handle_t update_handle;
 	const esp_partition_t *update_partition;
@@ -2467,13 +2337,6 @@ static const httpd_uri_t logo_uri = {
     /* Let's pass response string in user
      * context to demonstrate it's usage */
     .user_ctx  = NULL
-};
-static const httpd_uri_t ws = {
-        .uri        = "/ws",
-        .method     = HTTP_GET,
-        .handler    = ws_handler,
-        .user_ctx   = NULL,
-        .is_websocket = true
 };
 static struct file_server_data server_data = {.base_path = FS_MOUNT_POINT""};
 //static struct file_server_data *server_data = NULL;
@@ -3554,7 +3417,7 @@ static void register_server_uris(void)
 	httpd_register_uri_handler(server, &check_status_uri);
 	httpd_register_uri_handler(server, &load_config_uri);
 	httpd_register_uri_handler(server, &logo_uri);
-	httpd_register_uri_handler(server, &ws);
+	ws_server_register_uri(server);
 	httpd_register_uri_handler(server, &file_upload);
 	httpd_register_uri_handler(server, &system_reboot);
 	httpd_register_uri_handler(server, &store_canflt_uri);
@@ -3576,6 +3439,23 @@ static void register_server_uris(void)
 	httpd_register_uri_handler(server, &db_download_uri);
 	httpd_register_uri_handler(server, &db_files_uri);
 	// NOTE: catch-all wildcard handler moved to after cert manager handlers to avoid shadowing
+}
+
+bool config_server_ws_connected(void)
+{
+	return ws_server_is_connected();
+}
+
+static void ws_server_on_open_cb(void *ctx)
+{
+	(void)ctx;
+	ws_router_on_open();
+}
+
+static bool ws_server_handle_frame_cb(httpd_req_t *req, const uint8_t *data, size_t len, void *ctx)
+{
+	(void)ctx;
+	return ws_router_handle_frame(req, data, len);
 }
 //static char* device_config = NULL;
 static uint8_t esp_fatfs_flag = 0;
@@ -3794,87 +3674,20 @@ wifi_security_t config_server_get_sta_fallback_security(int index)
 	if (strcmp(sec, "wpa3") == 0) return WIFI_WPA3_PSK;
 	return WIFI_WPA2_PSK;
 }
-static void websocket_task(void *pvParameters)
-{
-	static xdev_buffer ucTX_Buffer;
-	httpd_ws_frame_t ws_pkt;  
-	ESP_LOGI(TAG, "websocket_task started");
-	while(1)
-	{
-		xQueueReceive(*xTX_Queue, &ucTX_Buffer, portMAX_DELAY);
-
-		memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
-		ws_pkt.payload = (uint8_t*)ucTX_Buffer.ucElement;
-		ws_pkt.len = ucTX_Buffer.usLen;
-		ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-
-	    esp_err_t ret = httpd_ws_send_frame_async(rsp_arg.hd, rsp_arg.fd, &ws_pkt);
-	    if (ret != ESP_OK)
-	    {
-//	    	tcp_server_resume();
-	    	// gpio_set_level(ws_led, 1);
-	    	xEventGroupClearBits( xServerEventGroup, WS_CONNECTED_BIT );
-//	    	vTaskSuspend( NULL );
-
-	        ESP_LOGE(TAG, "httpd_ws_send_frame_async failed  %d", ret);
-	    }
-	}
-
-}
-
-bool config_server_ws_connected(void)
-{
-	EventBits_t ux_bits;
-	if(xServerEventGroup != NULL)
-	{
-		ux_bits = xEventGroupGetBits(xServerEventGroup);
-
-		return (ux_bits & WS_CONNECTED_BIT);
-	}
-	else return 0;
-}
-
 void config_server_start(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t connected_led, char * did)
 {
     if (server == NULL)
     {
         device_id = did;
         ws_led = connected_led;
-        xTX_Queue = xTXp_Queue;
-        xRX_Queue = xRXp_Queue;
         ESP_LOGI(TAG, "Starting webserver");
         server = config_server_init();
-
-        // Allocate stack memory in PSRAM for the websocket task
-        static StackType_t *websocket_task_stack;
-        static StaticTask_t websocket_task_buffer;
-        
-        websocket_task_stack = heap_caps_malloc(4096, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-        
-        if (websocket_task_stack == NULL)
-        {
-            ESP_LOGE(TAG, "Failed to allocate websocket task stack memory");
-            return;
-        }
-        memset(websocket_task_stack, 0, 4096);
-        
-        // Create static task
-        xwebsocket_handle = xTaskCreateStatic(
-            websocket_task,
-            "ws_task",
-            4096,
-            (void*)AF_INET,
-            5,
-            websocket_task_stack,
-            &websocket_task_buffer
-        );
-        
-        if (xwebsocket_handle == NULL)
-        {
-            ESP_LOGE(TAG, "Failed to create websocket task");
-            heap_caps_free(websocket_task_stack);
-            return;
-        }
+		ws_server_hooks_t hooks = {
+			.on_open = ws_server_on_open_cb,
+			.handle_frame = ws_server_handle_frame_cb,
+			.ctx = NULL,
+		};
+		ws_server_start(xTXp_Queue, xRXp_Queue, &hooks);
     }
 }
 

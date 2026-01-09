@@ -52,6 +52,20 @@
 #define RECV_BUF_SIZE (MAX_CMDLINE_LENGTH)
 #define MAX_HISTORY_LINES 50
 
+static int cmd_help(int argc, char **argv);
+static esp_err_t register_help_command(void);
+
+typedef struct {
+    const char *command;
+    const char *help;
+    const char *hint;
+    const void *argtable;
+} cmdline_cmd_info_t;
+
+#define CMDLINE_MAX_REGISTERED_CMDS 48
+static cmdline_cmd_info_t s_registered_cmds[CMDLINE_MAX_REGISTERED_CMDS];
+static size_t s_registered_cmds_count = 0;
+
 static const char* TAG = "CMDLINE";
 static TaskHandle_t tcp_console_task_handle = NULL;
 static int server_socket = -1;
@@ -184,9 +198,40 @@ void cmdline_print_prompt_on_ble(void)
     }
 }
 
+esp_err_t cmdline_cmd_register(const esp_console_cmd_t *cmd)
+{
+    if (cmd == NULL || cmd->command == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Record metadata for `help` output. Strings are expected to be static.
+    for (size_t i = 0; i < s_registered_cmds_count; i++) {
+        if (strcmp(s_registered_cmds[i].command, cmd->command) == 0) {
+            // Already recorded; just register with esp_console.
+            return esp_console_cmd_register(cmd);
+        }
+    }
+
+    if (s_registered_cmds_count < CMDLINE_MAX_REGISTERED_CMDS) {
+        s_registered_cmds[s_registered_cmds_count].command = cmd->command;
+        s_registered_cmds[s_registered_cmds_count].help = cmd->help;
+        s_registered_cmds[s_registered_cmds_count].hint = cmd->hint;
+        s_registered_cmds[s_registered_cmds_count].argtable = cmd->argtable;
+        s_registered_cmds_count++;
+    } else {
+        ESP_LOGW(TAG, "Command registry full; help output may be incomplete");
+    }
+
+    return esp_console_cmd_register(cmd);
+}
+
 static void register_all_commands(void)
 {
-    esp_console_register_help_command();
+    // Don't use esp_console_register_help_command() because its output goes to stdout
+    // (serial) and bypasses our cmdline_printf IO routing used by WebSocket terminal.
+    // We register our own help command.
+    (void)register_help_command();
+
     cmd_version_register();
     cmd_status_register();
     cmd_system_register();
@@ -234,12 +279,6 @@ static void process_command_io(char* cmd, const cmd_io_t *io)
     }
 
     cmdline_set_current_io(prev);
-}
-
-// Backward-compatible wrapper defaults to UART
-static void process_command(char* cmd)
-{
-    process_command_io(cmd, &k_uart_io);
 }
 
 esp_err_t cmdline_run(const char *cmd)
@@ -301,6 +340,43 @@ esp_err_t cmdline_run_on_ble(const char *cmd)
     cmd_io_t ble_io = { .src = CMD_SRC_BLE, .tcp = NULL, .ble = ble_output_func };
     const cmd_io_t *prev = s_current_io;
     cmdline_set_current_io(&ble_io);
+
+    int ret = 0;
+    esp_err_t err = esp_console_run(cmd_copy, &ret);
+
+    if (err == ESP_ERR_NOT_FOUND) {
+        cmdline_printf("Command not found\n");
+    } else if (err == ESP_ERR_INVALID_ARG) {
+        cmdline_printf("Invalid arguments\n");
+    } else if (err == ESP_OK && ret != ESP_OK) {
+        cmdline_printf("Command returned non-zero error code\n");
+    } else if (err != ESP_OK) {
+        cmdline_printf("Internal error\n");
+    }
+
+    cmdline_set_current_io(prev);
+    return err;
+}
+
+esp_err_t cmdline_run_with_output(const char *cmd, cmdline_output_func_t out)
+{
+    if (cmd == NULL) return ESP_ERR_INVALID_ARG;
+
+    char cmd_copy[MAX_CMDLINE_LENGTH];
+    strncpy(cmd_copy, cmd, MAX_CMDLINE_LENGTH - 1);
+    cmd_copy[MAX_CMDLINE_LENGTH - 1] = '\0';
+
+    size_t cmd_len = strlen(cmd_copy);
+    while (cmd_len > 0 && (cmd_copy[cmd_len - 1] == ' ' ||
+                           cmd_copy[cmd_len - 1] == '\r' ||
+                           cmd_copy[cmd_len - 1] == '\n')) {
+        cmd_copy[--cmd_len] = '\0';
+    }
+    if (cmd_len == 0) return ESP_OK;
+
+    cmd_io_t io = { .src = CMD_SRC_TCP, .tcp = out, .ble = NULL };
+    const cmd_io_t *prev = s_current_io;
+    cmdline_set_current_io(&io);
 
     int ret = 0;
     esp_err_t err = esp_console_run(cmd_copy, &ret);
@@ -504,7 +580,8 @@ esp_err_t cmdline_safemode_init(void)
     }
 #endif
 
-    esp_console_register_help_command();
+    // Use our own help implementation (see register_help_command())
+    (void)register_help_command();
     cmd_version_register();
     cmd_factoryreset_register();
     cmd_system_register();
@@ -540,4 +617,93 @@ esp_err_t cmdline_init(void)
     register_all_commands();
     
     return esp_console_start_repl(repl);
+}
+
+static int cmd_help(int argc, char **argv)
+{
+    const cmdline_cmd_info_t *entry = NULL;
+
+    if (argc == 2 && argv != NULL && argv[1] != NULL)
+    {
+        const char *name = argv[1];
+        for (size_t i = 0; i < s_registered_cmds_count; i++)
+        {
+            if (strcmp(s_registered_cmds[i].command, name) == 0)
+            {
+                entry = &s_registered_cmds[i];
+                break;
+            }
+        }
+
+        if (entry == NULL)
+        {
+            cmdline_printf("Unknown command: %s\n", name);
+            cmdline_printf("Try: help\n");
+            return 0;
+        }
+
+        cmdline_printf("%s\n", entry->command);
+        if (entry->help != NULL)
+        {
+            cmdline_printf("  %s\n", entry->help);
+        }
+        if (entry->hint != NULL)
+        {
+            cmdline_printf("  %s\n", entry->hint);
+        }
+        if (entry->hint == NULL && entry->argtable != NULL)
+        {
+            cmdline_printf("  (No hint string; this command uses argtable)\n");
+        }
+        cmdline_printf("OK\n");
+        return 0;
+    }
+
+    if (argc > 2)
+    {
+        cmdline_printf("Usage: help [cmd]\n");
+        return 0;
+    }
+
+    cmdline_printf("Available commands:\n");
+    for (size_t i = 0; i < s_registered_cmds_count; i++)
+    {
+        if (s_registered_cmds[i].help != NULL) {
+            cmdline_printf("  %s - %s\n", s_registered_cmds[i].command, s_registered_cmds[i].help);
+        } else {
+            cmdline_printf("  %s\n", s_registered_cmds[i].command);
+        }
+        if (s_registered_cmds[i].hint != NULL)
+        {
+            cmdline_printf("    %s\n", s_registered_cmds[i].hint);
+        }
+    }
+
+    cmdline_printf("\nTip: help <cmd> for details\n");
+    cmdline_printf("OK\n");
+    return 0;
+}
+
+static esp_err_t register_help_command(void)
+{
+    static bool s_help_registered = false;
+
+    if (s_help_registered)
+    {
+        return ESP_OK;
+    }
+
+    const esp_console_cmd_t cmd = {
+        .command = "help",
+        .help = "List available commands",
+        .hint = "Usage: help [cmd]",
+        .func = &cmd_help,
+    };
+
+    esp_err_t err = cmdline_cmd_register(&cmd);
+    if (err == ESP_OK)
+    {
+        s_help_registered = true;
+    }
+    return err;
 }

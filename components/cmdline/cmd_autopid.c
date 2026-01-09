@@ -151,9 +151,9 @@ esp_err_t cmd_autopid_register(void)
     const esp_console_cmd_t cmd = {
         .command = "autopid",
         .help = "AutoPID data access",
-        .hint = "autopid --data [--pretty] | --name <NAME> [--value-only]",
+        .hint = "Options: -d/--data, -p/--pretty, -n/--name <NAME>, -v/--value-only",
         .func = &cmd_autopid,
         .argtable = &ap_args
     };
-    return esp_console_cmd_register(&cmd);
+    return cmdline_cmd_register(&cmd);
 }

@@ -65,9 +65,9 @@ esp_err_t cmd_wusb_register(void)
     const esp_console_cmd_t cmd = {
         .command = "wusb",
         .help = "WUSB3801 USB-C controller",
-        .hint = "Usage: wusb [-i|-c]",
+        .hint = "Options: -i/--id, -c/--cc",
         .func = &cmd_wusb,
         .argtable = &wusb_args
     };
-    return esp_console_cmd_register(&cmd);
+    return cmdline_cmd_register(&cmd);
 }

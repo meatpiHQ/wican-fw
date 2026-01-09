@@ -72,6 +72,8 @@ set(requires
     vpn_manager
     autopid
     ha_webhooks
+    wican_common
+    ws_server
 )
 
 # Register the component

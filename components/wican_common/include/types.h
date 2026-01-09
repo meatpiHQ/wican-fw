@@ -18,16 +18,17 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
 #ifndef __TYPES_H__
 #define __TYPES_H__
 
+#include <stdint.h>
+
 // #if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
-// #define DEV_BUFFER_LENGTH	128
+// #define DEV_BUFFER_LENGTH 128
 // #elif HARDWARE_VER == WICAN_PRO
-// #define DEV_BUFFER_LENGTH	1024
+// #define DEV_BUFFER_LENGTH 1024
 // #endif
-#define DEV_BUFFER_LENGTH	1024
+#define DEV_BUFFER_LENGTH 1024
 
 typedef enum
 {
@@ -36,14 +37,13 @@ typedef enum
 	DEV_BLE,
 	DEV_UART,
 	DEV_MAX
-}dev_channel_t;
-
+} dev_channel_t;
 
 typedef struct __xdev_buffer
 {
 	int usLen;
 	uint8_t ucElement[DEV_BUFFER_LENGTH];
 	dev_channel_t dev_channel;
-}xdev_buffer;
+} xdev_buffer;
 
 #endif

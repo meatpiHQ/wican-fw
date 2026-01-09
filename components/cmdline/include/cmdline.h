@@ -28,9 +28,15 @@ typedef void (*cmdline_output_func_t)(const char *data, size_t len);
 
 esp_err_t cmdline_init(void);
 esp_err_t cmdline_safemode_init(void);
+
+// Wrapper around esp_console_cmd_register() that also records command metadata
+// (help/hint/argtable) so the custom `help` command can display options.
+esp_err_t cmdline_cmd_register(const esp_console_cmd_t *cmd);
+
 void cmdline_set_tcp_output_func(cmdline_output_func_t func);
 void cmdline_set_ble_output_func(cmdline_output_func_t func);
 void cmdline_printf(const char *fmt, ...);
 esp_err_t cmdline_run(const char *cmd);
+esp_err_t cmdline_run_with_output(const char *cmd, cmdline_output_func_t out);
 esp_err_t cmdline_run_on_ble(const char *cmd);
 void cmdline_print_prompt_on_ble(void);

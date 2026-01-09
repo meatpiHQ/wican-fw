@@ -5,6 +5,10 @@
 
 #include "esp_log.h"
 #include "cJSON.h"
+#include "cmdline.h"
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 #define TAG "WS_ROUTER"
 
@@ -14,6 +18,10 @@ typedef enum {
 } ws_router_mode_t;
 
 static ws_router_mode_t s_mode = WS_ROUTER_MODE_MONITOR;
+
+static SemaphoreHandle_t s_term_mutex;
+static StaticSemaphore_t s_term_mutex_buf;
+static httpd_req_t *s_term_req;
 
 static esp_err_t ws_router_send_json(httpd_req_t *req, const char *json)
 {
@@ -30,62 +38,82 @@ static void ws_router_append_prompt(char *out, size_t out_len)
 	strlcat(out, "wican> ", out_len);
 }
 
-static esp_err_t ws_router_handle_terminal_cmd(httpd_req_t *req, const char *cmd)
+static void ws_router_send_term_out(httpd_req_t *req, const char *data)
 {
-	char reply[512];
-	reply[0] = '\0';
-
-	if (cmd == NULL || cmd[0] == '\0')
-	{
-		ws_router_append_prompt(reply, sizeof(reply));
-		return ws_router_send_json(req, "{\"type\":\"term_out\",\"data\":\"\"}");
-	}
-
-	if (strcmp(cmd, "help") == 0)
-	{
-		snprintf(reply, sizeof(reply),
-				"WiCAN Console (fake)\n"
-				"Commands:\n"
-				"  help\n"
-				"  status\n"
-				"  echo <text>\n"
-				"\n"
-				"Note: This is a stub backend; will be wired to cmdline next.\n");
-		ws_router_append_prompt(reply, sizeof(reply));
-	}
-	else if (strcmp(cmd, "status") == 0)
-	{
-		snprintf(reply, sizeof(reply), "OK\n");
-		ws_router_append_prompt(reply, sizeof(reply));
-	}
-	else if (strncmp(cmd, "echo ", 5) == 0)
-	{
-		snprintf(reply, sizeof(reply), "%s\n", cmd + 5);
-		ws_router_append_prompt(reply, sizeof(reply));
-	}
-	else
-	{
-		snprintf(reply, sizeof(reply), "Unknown command: %s\n", cmd);
-		ws_router_append_prompt(reply, sizeof(reply));
-	}
-
 	cJSON *root = cJSON_CreateObject();
 	if (root == NULL)
 	{
-		return ESP_ERR_NO_MEM;
+		return;
 	}
 	cJSON_AddStringToObject(root, "type", "term_out");
-	cJSON_AddStringToObject(root, "data", reply);
+	cJSON_AddStringToObject(root, "data", (data != NULL) ? data : "");
 	char *json = cJSON_PrintUnformatted(root);
 	cJSON_Delete(root);
 	if (json == NULL)
 	{
+		return;
+	}
+	(void)ws_router_send_json(req, json);
+	free(json);
+}
+
+static void ws_terminal_output_cb(const char *data, size_t len)
+{
+	if (s_term_req == NULL || data == NULL || len == 0)
+	{
+		return;
+	}
+
+	char *tmp = (char *)malloc(len + 1);
+	if (tmp == NULL)
+	{
+		return;
+	}
+	memcpy(tmp, data, len);
+	tmp[len] = '\0';
+
+	ws_router_send_term_out(s_term_req, tmp);
+	free(tmp);
+}
+
+static esp_err_t ws_router_handle_terminal_cmd(httpd_req_t *req, const char *cmd)
+{
+	if (req == NULL)
+	{
+		return ESP_ERR_INVALID_ARG;
+	}
+
+	if (s_term_mutex == NULL)
+	{
+		s_term_mutex = xSemaphoreCreateMutexStatic(&s_term_mutex_buf);
+	}
+	if (s_term_mutex == NULL)
+	{
 		return ESP_ERR_NO_MEM;
 	}
 
-	esp_err_t err = ws_router_send_json(req, json);
-	free(json);
-	return err;
+	if (xSemaphoreTake(s_term_mutex, 0) != pdTRUE)
+	{
+		ws_router_send_term_out(req, "Terminal busy\n");
+		ws_router_send_term_out(req, "wican> ");
+		return ESP_OK;
+	}
+
+	// Empty command => just reprint prompt
+	if (cmd == NULL || cmd[0] == '\0')
+	{
+		ws_router_send_term_out(req, "wican> ");
+		xSemaphoreGive(s_term_mutex);
+		return ESP_OK;
+	}
+
+	s_term_req = req;
+	(void)cmdline_run_with_output(cmd, ws_terminal_output_cb);
+	s_term_req = NULL;
+
+	ws_router_send_term_out(req, "wican> ");
+	xSemaphoreGive(s_term_mutex);
+	return ESP_OK;
 }
 
 void ws_router_on_open(void)

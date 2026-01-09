@@ -131,11 +131,11 @@ esp_err_t cmd_factoryreset_register(void)
     const esp_console_cmd_t cmd = {
         .command = "factoryreset",
         .help = "Perform factory reset - deletes all configuration files and reboots",
-        .hint = "Usage: factoryreset [--confirm]",
+        .hint = "Options: -c/--confirm",
         .func = &cmd_factoryreset,
         .argtable = &factoryreset_args
     };
     
     ESP_LOGI(TAG, "Registering factory reset command");
-    return esp_console_cmd_register(&cmd);
+    return cmdline_cmd_register(&cmd);
 }
