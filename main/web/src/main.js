@@ -4449,6 +4449,12 @@ function parseWireGuardConfig(configText)
     {
         pskEl.value = '';
     }
+
+    // Track imported DNS (IPv4 only) for submit/test payloads.
+    window.wgImportedDns = { main: '', backup: '' };
+
+    // Accumulate AllowedIPs across multiple lines and comma-separated lists.
+    const allowedIps = [];
     
     for (const line of lines) 
     {
@@ -4486,6 +4492,16 @@ function parseWireGuardConfig(configText)
                         document.getElementById('wg_address').value = value;
                         fieldsFound++;
                         break;
+                    case 'dns':
+                        {
+                            // DNS may be comma-separated; keep first two IPv4.
+                            const parts = value.split(',').map(s => s.trim()).filter(Boolean);
+                            const v4 = parts.filter(s => /^\d{1,3}(?:\.\d{1,3}){3}$/.test(s));
+                            window.wgImportedDns.main = v4[0] || '';
+                            window.wgImportedDns.backup = v4[1] || '';
+                            fieldsFound++;
+                        }
+                        break;
                 }
             } 
             else if (currentSection === 'peer') 
@@ -4504,8 +4520,16 @@ function parseWireGuardConfig(configText)
                         }
                         break;
                     case 'allowedips':
-                        document.getElementById('wg_allowed_ips').value = value;
-                        fieldsFound++;
+                        {
+                            // Support multiple lines and comma-separated lists (IPv4 only).
+                            const parts = value.split(',').map(s => s.trim()).filter(Boolean);
+                            for (const p of parts)
+                            {
+                                if (p.includes(':')) continue; // IPv6 not supported here
+                                allowedIps.push(p);
+                            }
+                            fieldsFound++;
+                        }
                         break;
                     case 'endpoint':
                         document.getElementById('wg_endpoint').value = value;
@@ -4518,6 +4542,13 @@ function parseWireGuardConfig(configText)
                 }
             }
         }
+    }
+
+    if (allowedIps.length)
+    {
+        // Legacy model stores a single CIDR. Prefer 0.0.0.0/0 if present.
+        const preferred = allowedIps.find(v => v === '0.0.0.0/0') || allowedIps[0];
+        document.getElementById('wg_allowed_ips').value = preferred;
     }
     
     console.log(`Parsed config, found ${fieldsFound} fields`);
@@ -4566,6 +4597,12 @@ async function saveVpnConfiguration()
         vpnConfig.address = document.getElementById("wg_address").value;
         vpnConfig.allowed_ips = document.getElementById("wg_allowed_ips").value;
         vpnConfig.endpoint = document.getElementById("wg_endpoint").value;
+        // Optional DNS parsed from imported config (IPv4 only)
+        if (window.wgImportedDns && (window.wgImportedDns.main || window.wgImportedDns.backup))
+        {
+            const dns = [window.wgImportedDns.main, window.wgImportedDns.backup].filter(Boolean).join(',');
+            vpnConfig.dns = dns;
+        }
         vpnConfig.persistent_keepalive = parseInt(document.getElementById("wg_persistent_keepalive").value) || 0;
     }
     
@@ -4662,6 +4699,12 @@ async function testVpnConnection()
             vpnConfig.address = document.getElementById("wg_address").value;
             vpnConfig.allowed_ips = document.getElementById("wg_allowed_ips").value;
             vpnConfig.endpoint = document.getElementById("wg_endpoint").value;
+            // Optional DNS parsed from imported config (IPv4 only)
+            if (window.wgImportedDns && (window.wgImportedDns.main || window.wgImportedDns.backup))
+            {
+                const dns = [window.wgImportedDns.main, window.wgImportedDns.backup].filter(Boolean).join(',');
+                vpnConfig.dns = dns;
+            }
             vpnConfig.persistent_keepalive = parseInt(document.getElementById("wg_persistent_keepalive").value) || 0;
         }
 
