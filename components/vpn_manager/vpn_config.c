@@ -135,6 +135,102 @@ static void trim_str(char *s)
     }
 }
 
+static bool looks_like_ipv4(const char *s)
+{
+    if (!s || !*s) return false;
+    int a=0,b=0,c=0,d=0;
+    char tail = '\0';
+    // Accept exact dotted quad only
+    if (sscanf(s, "%d.%d.%d.%d%c", &a, &b, &c, &d, &tail) != 4) return false;
+    if ((a|b|c|d) < 0) return false;
+    if (a>255 || b>255 || c>255 || d>255) return false;
+    return true;
+}
+
+static void parse_dns_list_ipv4(const char *value, char *out_main, size_t out_main_len, char *out_backup, size_t out_backup_len)
+{
+    if (out_main && out_main_len) out_main[0] = '\0';
+    if (out_backup && out_backup_len) out_backup[0] = '\0';
+    if (!value) return;
+
+    char buf[96];
+    strlcpy(buf, value, sizeof(buf));
+    trim_str(buf);
+
+    // Split on commas
+    char *saveptr = NULL;
+    for (char *tok = strtok_r(buf, ",", &saveptr); tok; tok = strtok_r(NULL, ",", &saveptr))
+    {
+        trim_str(tok);
+        if (!looks_like_ipv4(tok)) continue;
+
+        if (out_main && out_main[0] == '\0')
+        {
+            strlcpy(out_main, tok, out_main_len);
+        }
+        else if (out_backup && out_backup[0] == '\0')
+        {
+            strlcpy(out_backup, tok, out_backup_len);
+            break;
+        }
+    }
+}
+
+static void choose_allowed_ips_ipv4(const char *value, char *out_ip, size_t out_ip_len, char *out_mask, size_t out_mask_len)
+{
+    if (out_ip && out_ip_len) out_ip[0] = '\0';
+    if (out_mask && out_mask_len) out_mask[0] = '\0';
+    if (!value) return;
+
+    // We only keep a single IPv4 CIDR (legacy model). Prefer 0.0.0.0/0 if present.
+    char buf[160];
+    strlcpy(buf, value, sizeof(buf));
+    trim_str(buf);
+
+    char chosen[64] = {0};
+
+    char *saveptr = NULL;
+    for (char *tok = strtok_r(buf, ",", &saveptr); tok; tok = strtok_r(NULL, ",", &saveptr))
+    {
+        trim_str(tok);
+        if (!*tok) continue;
+        // IPv4 only: ignore entries with ':' (IPv6)
+        if (strchr(tok, ':')) continue;
+        if (strcmp(tok, "0.0.0.0/0") == 0)
+        {
+            strlcpy(chosen, tok, sizeof(chosen));
+            break;
+        }
+        if (chosen[0] == '\0')
+        {
+            strlcpy(chosen, tok, sizeof(chosen));
+        }
+    }
+
+    if (chosen[0] == '\0') return;
+
+    char *slash = strchr(chosen, '/');
+    if (slash)
+    {
+        *slash = '\0';
+        strlcpy(out_ip, chosen, out_ip_len);
+        int prefix = atoi(slash + 1);
+        if (prefix < 0) prefix = 0;
+        if (prefix > 32) prefix = 32;
+        uint32_t mask = (prefix == 0) ? 0u : (0xFFFFFFFFu << (32 - prefix));
+        snprintf(out_mask, out_mask_len, "%u.%u.%u.%u",
+                 (unsigned)((mask >> 24) & 0xFF),
+                 (unsigned)((mask >> 16) & 0xFF),
+                 (unsigned)((mask >> 8) & 0xFF),
+                 (unsigned)(mask & 0xFF));
+    }
+    else
+    {
+        strlcpy(out_ip, chosen, out_ip_len);
+        strlcpy(out_mask, "255.255.255.255", out_mask_len);
+    }
+}
+
 esp_err_t vpn_config_save(const vpn_config_t *config)
 {
     if (!config)
@@ -156,6 +252,8 @@ esp_err_t vpn_config_save(const vpn_config_t *config)
             cJSON_AddStringToObject(wg, "private_key", config->config.wireguard.private_key);
             cJSON_AddStringToObject(wg, "peer_public_key", config->config.wireguard.public_key);
             cJSON_AddStringToObject(wg, "preshared_key", config->config.wireguard.preshared_key);
+            cJSON_AddStringToObject(wg, "dns_main", config->config.wireguard.dns_main);
+            cJSON_AddStringToObject(wg, "dns_backup", config->config.wireguard.dns_backup);
             cJSON_AddStringToObject(wg, "address", config->config.wireguard.address);
             // Convert dotted mask to CIDR prefix length
             char allowed_ips_cidr[64];
@@ -283,6 +381,18 @@ esp_err_t vpn_config_load(vpn_config_t *config)
                 strlcpy(config->config.wireguard.preshared_key, it->valuestring, sizeof(config->config.wireguard.preshared_key));
                 trim_str(config->config.wireguard.preshared_key);
             }
+            it = cJSON_GetObjectItem(wg, "dns_main");
+            if (cJSON_IsString(it))
+            {
+                strlcpy(config->config.wireguard.dns_main, it->valuestring, sizeof(config->config.wireguard.dns_main));
+                trim_str(config->config.wireguard.dns_main);
+            }
+            it = cJSON_GetObjectItem(wg, "dns_backup");
+            if (cJSON_IsString(it))
+            {
+                strlcpy(config->config.wireguard.dns_backup, it->valuestring, sizeof(config->config.wireguard.dns_backup));
+                trim_str(config->config.wireguard.dns_backup);
+            }
             it = cJSON_GetObjectItem(wg, "address");
             if (cJSON_IsString(it))
             {
@@ -387,6 +497,8 @@ esp_err_t vpn_config_parse_wg(const char *config_text, vpn_wireguard_config_t *c
     }
     char *line = strtok(copy, "\r\n");
     char section[32] = {0};
+    // Accumulate AllowedIPs across lines; legacy model stores one IPv4 CIDR only.
+    char allowed_accum[160] = {0};
     while (line)
     {
         while (*line==' '||*line=='\t')
@@ -433,6 +545,12 @@ esp_err_t vpn_config_parse_wg(const char *config_text, vpn_wireguard_config_t *c
                     {
                         strlcpy(config->address, value, sizeof(config->address));
                     }
+                    else if (strcmp(key, "dns")==0)
+                    {
+                        // DNS may be a comma-separated list; take first two IPv4 entries.
+                        parse_dns_list_ipv4(value, config->dns_main, sizeof(config->dns_main),
+                                            config->dns_backup, sizeof(config->dns_backup));
+                    }
                 }
                 else if (strcmp(section, "peer")==0)
                 {
@@ -446,38 +564,12 @@ esp_err_t vpn_config_parse_wg(const char *config_text, vpn_wireguard_config_t *c
                     }
                     else if (strcmp(key, "allowedips")==0)
                     {
-                        char *slash = strchr(value,'/');
-                        if (slash)
+                        // Accumulate comma-separated lists and multiple lines.
+                        if (allowed_accum[0] != '\0')
                         {
-                            *slash='\0';
-                            strlcpy(config->allowed_ip, value, sizeof(config->allowed_ip));
-                            int prefix = atoi(slash+1);
-                            if (prefix==0)
-                            {
-                                strlcpy(config->allowed_ip_mask,"0.0.0.0",sizeof(config->allowed_ip_mask));
-                            }
-                            else if (prefix==8)
-                            {
-                                strlcpy(config->allowed_ip_mask,"255.0.0.0",sizeof(config->allowed_ip_mask));
-                            }
-                            else if (prefix==16)
-                            {
-                                strlcpy(config->allowed_ip_mask,"255.255.0.0",sizeof(config->allowed_ip_mask));
-                            }
-                            else if (prefix==24)
-                            {
-                                strlcpy(config->allowed_ip_mask,"255.255.255.0",sizeof(config->allowed_ip_mask));
-                            }
-                            else
-                            {
-                                strlcpy(config->allowed_ip_mask,"255.255.255.255",sizeof(config->allowed_ip_mask));
-                            }
+                            strlcat(allowed_accum, ",", sizeof(allowed_accum));
                         }
-                        else
-                        {
-                            strlcpy(config->allowed_ip, value, sizeof(config->allowed_ip));
-                            strlcpy(config->allowed_ip_mask, "255.255.255.255", sizeof(config->allowed_ip_mask));
-                        }
+                        strlcat(allowed_accum, value, sizeof(allowed_accum));
                     }
                     else if (strcmp(key, "endpoint")==0)
                     {
@@ -502,6 +594,12 @@ esp_err_t vpn_config_parse_wg(const char *config_text, vpn_wireguard_config_t *c
             }
         }
         line = strtok(NULL, "\r\n");
+    }
+    if (allowed_accum[0] != '\0')
+    {
+        choose_allowed_ips_ipv4(allowed_accum,
+                                config->allowed_ip, sizeof(config->allowed_ip),
+                                config->allowed_ip_mask, sizeof(config->allowed_ip_mask));
     }
     free(copy);
     return ESP_OK;
