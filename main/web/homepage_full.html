@@ -865,7 +865,7 @@
                     <tr>
                         <td>Mode:</td>
                         <td>
-                            <select name="wifi_mode" id="wifi_mode" onchange="toggleSmartConnectConfig(); submit_enable();">
+                            <select name="wifi_mode" id="wifi_mode" onchange="toggleSmartConnectConfig(); toggleApStationWarning(); submit_enable();">
                                 <option value="AP">AP Mode</option>
                                 <option value="APStation">AP+Station</option>
                                 <option value="BLEStation">BLE+Station</option>
@@ -920,12 +920,23 @@
                     <tr>
                         <td>Auto-Disable AP:</td>
                         <td>
-                            <select name="ap_auto_disable" id="ap_auto_disable" onchange="submit_enable();">
+                            <select name="ap_auto_disable" id="ap_auto_disable" onchange="toggleApStationWarning(); submit_enable();">
                                 <option value="enable">Enable</option>
                                 <option value="disable">Disable</option>
                             </select>
                         </td>
                     </tr>
+                    <div id="apstation_warning_div" style="display: none; margin: 8px 0;">
+                        <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 8px; padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                            <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                                <span data-lucide="alert-triangle" style="font-size: 16px; margin-right: 8px;"></span>
+                                <strong style="color: #92400e; font-size: 14px;">AP+Station Mode Warning</strong>
+                            </div>
+                            <div style="color: #78350f; font-size: 13px; line-height: 1.4;">
+                                AP+Station mode can cause connection issues (e.g., unable to connect to your server). Recommended: Enable Auto-Disable AP, or use Station mode.
+                            </div>
+                        </div>
+                    </div>
                     <div id="apconfig_warning_div" style="display: none; margin: 8px 0;">
                         <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 8px; padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                             <div style="display: flex; align-items: center; margin-bottom: 6px;">
@@ -1346,12 +1357,33 @@
                     </td>
                 </tr>
                 <tr>
-                    <td>Disable On Sleep Voltage:</td>
+                    <td>Low-Voltage Behavior:</td>
                     <td>
-                        <select id="disable_on_sleep_voltage" name="disable_on_sleep_voltage" onchange="enableAutoStoreButton();submit_enable();">
+                        <select id="disable_on_sleep_voltage" name="disable_on_sleep_voltage" onchange="togglePidPollingMinVoltageRow(); enableAutoStoreButton();submit_enable();">
                             <option value="disable" selected>Disable</option>
-                            <option value="enable">Enable</option>
+                            <option value="enable">Pause Automate on low voltage (Sleep Voltage)</option>
+                            <option value="disable_pid_requests">Pause PID polling only (Sleep Voltage)</option>
+                            <option value="automate_threshold">Pause PID polling only (Custom Voltage)</option>
                         </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="2" style="font-size:0.75rem; color:#555; margin-top:0.5rem; line-height:1.4;">
+                        Uses Sleep Voltage, unless “Custom Voltage” is selected. “Pause Automate” stops Automate entirely. “Pause PID polling only” stops PID requests, but CAN filters/monitoring stay active.
+                    </td>
+                </tr>
+                <tr id="pid_polling_min_voltage_row" style="display:none;">
+                    <td>PID Polling Min Voltage:</td>
+                    <td class="slider-container">
+                        <input type="range" 
+                               id="pid_polling_min_voltage" 
+                               name="pid_polling_min_voltage" 
+                               value="13.1" 
+                               min="12.0" 
+                               max="15.0" 
+                               step="0.1"
+                               oninput="document.getElementById('pid_polling_min_voltage_value').textContent = this.value; enableAutoStoreButton(); submit_enable();">
+                        <span id="pid_polling_min_voltage_value">13.1</span>V
                     </td>
                 </tr>
             </table>

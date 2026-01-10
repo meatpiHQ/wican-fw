@@ -241,8 +241,20 @@ async function checkFirmwareUpdate() {
             if (addFbBtn) addFbBtn.disabled = false;
             fbRows.forEach(el => el.disabled = false);
         }
+        try { toggleApStationWarning(); } catch(_) {}
+
         // Trigger validation when switching modes
         submit_enable();
+    }
+
+    function toggleApStationWarning() {
+        const wifiModeEl = document.getElementById("wifi_mode");
+        const apAutoDisableEl = document.getElementById("ap_auto_disable");
+        const div = document.getElementById("apstation_warning_div");
+        if (!wifiModeEl || !apAutoDisableEl || !div) return;
+
+        const shouldShow = (wifiModeEl.value === "APStation") && (apAutoDisableEl.value === "disable");
+        div.style.display = shouldShow ? "block" : "none";
     }
 
     function toggleDriveConfig() {
@@ -1817,6 +1829,13 @@ function loadAutoTable(jsonData) {
         console.log("Raw jsonData:", jsonData);
         const data = jsonData;
 
+        const togglePidPollingMinVoltageRow = () => {
+            const mode = document.getElementById("disable_on_sleep_voltage")?.value || 'disable';
+            const row = document.getElementById("pid_polling_min_voltage_row");
+            if (!row) return;
+            row.style.display = (mode === 'automate_threshold') ? '' : 'none';
+        };
+
         // Reset custom filters UI to avoid duplicates on reload
         const customFilterContainer = document.querySelector('.custom-canfilter-entries');
         if (customFilterContainer) customFilterContainer.innerHTML = '';
@@ -1843,6 +1862,10 @@ function loadAutoTable(jsonData) {
         setElementValue("ha_discovery", 'disable');
         setElementValue("grouping", data.grouping, 'disable');
         setElementValue("disable_on_sleep_voltage", data.disable_on_sleep_voltage, 'disable');
+        setElementValue("pid_polling_min_voltage", data.pid_polling_min_voltage, '13.1');
+        const pidMinVoltEl = document.getElementById("pid_polling_min_voltage");
+        const pidMinVoltValEl = document.getElementById("pid_polling_min_voltage_value");
+        if (pidMinVoltEl && pidMinVoltValEl) pidMinVoltValEl.textContent = pidMinVoltEl.value;
         setElementValue("webhook_data_mode", data.webhook_data_mode, 'changed');
         // Legacy cycle/destination will be migrated into destinations[0].
         setElementValue("car_model", data.car_model, '');
@@ -1980,6 +2003,8 @@ function loadAutoTable(jsonData) {
                 if (typeof toggleSendToFields === 'function') toggleSendToFields();
                 if (typeof toggleGroupApiToken === 'function') toggleGroupApiToken();
                 if (typeof toggleStandardPIDOptions === 'function') toggleStandardPIDOptions();
+
+                togglePidPollingMinVoltageRow();
             } catch (error) {
                 console.error('Error in UI updates:', error);
             }
@@ -1990,6 +2015,13 @@ function loadAutoTable(jsonData) {
         console.error('Error in loadAutoTable:', error);
         showNotification("Error loading table data: " + error.message, "red");
     }
+}
+
+function togglePidPollingMinVoltageRow() {
+    const mode = document.getElementById("disable_on_sleep_voltage")?.value || 'disable';
+    const row = document.getElementById("pid_polling_min_voltage_row");
+    if (!row) return;
+    row.style.display = (mode === 'automate_threshold') ? '' : 'none';
 }
 
 
@@ -2013,6 +2045,11 @@ async function storeAutoTableData() {
         const initialisationValue = document.getElementById("initialisation")?.value || '';
         const groupingValue = document.getElementById("grouping")?.value || 'disable';
         const disableOnSleepVoltageValue = document.getElementById("disable_on_sleep_voltage")?.value || 'disable';
+        const pidPollingMinVoltageValueRaw = document.getElementById("pid_polling_min_voltage")?.value;
+        const pidPollingMinVoltageValue = (() => {
+            const n = parseFloat(pidPollingMinVoltageValueRaw);
+            return Number.isFinite(n) ? n : 13.1;
+        })();
         const webhook_data_mode = document.getElementById("webhook_data_mode")?.value || 'changed';
         const ha_discoveryValue = document.getElementById("ha_discovery")?.value || 'disable';
         const carSpecificValue = document.getElementById("car_specific")?.value || 'disable';
@@ -2204,6 +2241,7 @@ async function storeAutoTableData() {
             initialisation: initialisationValue,
             grouping: groupingValue,
             disable_on_sleep_voltage: disableOnSleepVoltageValue,
+            pid_polling_min_voltage: pidPollingMinVoltageValue,
             webhook_data_mode: webhook_data_mode,
             car_specific: carSpecificValue,
             ha_discovery: ha_discoveryValue,
@@ -3590,6 +3628,8 @@ xhttp.onload = async function() {
             document.getElementById("ap_auto_disable").selectedIndex = "1";
         }
 
+        try { toggleApStationWarning(); } catch(_) {}
+
         // Custom AP SSID (optional, default disabled)
         {
             const enEl = document.getElementById("ap_ssid_enable");
@@ -3841,6 +3881,7 @@ xhttp.onload = async function() {
 
         // Apply mode-dependent enable/disable rules after values are loaded
         try { toggleSmartConnectConfig(); } catch(_) {}
+        try { toggleApStationWarning(); } catch(_) {}
         try { submit_enable(); } catch(_) {}
 
         document.getElementById("store_canflt_button").disabled = true;
@@ -3860,6 +3901,9 @@ xhttp.onload = async function() {
     
     // Initialize SmartConnect configuration visibility
     toggleSmartConnectConfig();
+
+    // Initialize AP+Station warning visibility
+    try { toggleApStationWarning(); } catch(_) {}
 
     // Initialize AP SSID input state
     try { toggleApSsid(); } catch(_) {}
