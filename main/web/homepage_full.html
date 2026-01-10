@@ -1620,10 +1620,6 @@
                 <span>Terminal</span>
                 <span id="terminal_status_badge" class="status-indicator status-disconnected" title="Terminal status">Disconnected</span>
             </div>
-            <div style="color:#6b7280; font-size: 0.9rem; margin-bottom: 0.75rem;">
-                Terminal uses the device WebSocket. Only one WebSocket purpose can be active at a time.
-            </div>
-
             <table class="form-table">
                 <tr>
                     <td>Terminal Type:</td>
@@ -1641,10 +1637,10 @@
             </table>
 
             <div class="divider"></div>
-            <pre id="terminal_output" style="white-space: pre-wrap; word-break: break-word; background: #0b0f14; color: #d1fae5; border: 1px solid #1f2937; border-radius: 6px; padding: 10px; margin: 0; max-height: 360px; overflow: auto; font-weight: 400; font-family: Consolas, 'Courier New', monospace; font-size: 0.9rem; line-height: 1.35;"></pre>
+            <pre id="terminal_output" style="white-space: pre-wrap; word-break: break-word; background: #181818; color: #0CCA7E; border: 1px solid #181818; border-radius: 6px; padding: 10px; margin: 0; height: 360px; overflow: auto; font-weight: 400; font-family: Consolas, 'Courier New', monospace; font-size: 0.9rem; line-height: 1.35;"></pre>
 
             <div style="display:flex; gap:10px; align-items:center; margin-top: 10px;">
-                <input type="text" id="terminal_input" placeholder="Type a command (e.g. help, status, echo hello)" style="flex: 1; font-family: Consolas, 'Courier New', monospace; background: #0b0f14; color: #d1fae5; border-color: #1f2937;" />
+                <input type="text" id="terminal_input" placeholder="Type a command (e.g. help, status, echo hello)" style="flex: 1; font-family: Consolas, 'Courier New', monospace; background: #181818; color: #0CCA7E; border-color: #181818;" />
                 <button type="button" id="terminal_send_btn">Send</button>
             </div>
         </div>
