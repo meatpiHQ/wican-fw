@@ -22,17 +22,58 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "esp_log.h"
 #include "cJSON.h"
 #include "cmdline.h"
-#include "elm327.h"
-#include "dev_status.h"
 
 #include "freertos/FreeRTOS.h"
+#include "freertos/event_groups.h"
+#include "freertos/queue.h"
 #include "freertos/semphr.h"
 
 #define TAG "WS_ROUTER"
+
+// NOTE: ws_router is an application-level router (monitor vs terminal + ELM passthrough).
+// It lives under the ws_server component for code organization, but it still depends on
+// symbols implemented by the main app (dev_status, elm327).
+// To avoid a component dependency on `main`, we forward-declare the small API we need here.
+
+// dev_status (implemented in main/)
+extern bool dev_status_is_bit_set(EventBits_t bit);
+extern void dev_status_set_bits(EventBits_t bits_to_set);
+extern void dev_status_clear_bits(EventBits_t bits_to_clear);
+
+#ifndef DEV_AUTOPID_ENABLED_BIT
+#define DEV_AUTOPID_ENABLED_BIT BIT11
+#endif
+
+static inline bool ws_router_autopid_is_enabled(void)
+{
+	return dev_status_is_bit_set(DEV_AUTOPID_ENABLED_BIT);
+}
+
+static inline void ws_router_autopid_set_enabled(void)
+{
+	dev_status_set_bits(DEV_AUTOPID_ENABLED_BIT);
+}
+
+static inline void ws_router_autopid_clear_enabled(void)
+{
+	dev_status_clear_bits(DEV_AUTOPID_ENABLED_BIT);
+}
+
+// elm327 (implemented in main/)
+typedef void (*response_callback_t)(char *data, uint32_t len, QueueHandle_t *q, char *cmd_str);
+extern void elm327_run_command(
+	char *command,
+	uint32_t command_len,
+	uint32_t timeout,
+	QueueHandle_t *response_q,
+	response_callback_t response_callback,
+	bool stop_after_first_frame,
+	uint32_t expected_frame_id);
 
 typedef enum {
 	WS_ROUTER_MODE_MONITOR = 0,
@@ -129,7 +170,7 @@ static void ws_router_set_terminal_type(ws_terminal_type_t t)
 	{
 		if (s_autopid_was_enabled_before_elm)
 		{
-			dev_status_set_autopid_enabled();
+			ws_router_autopid_set_enabled();
 		}
 		s_autopid_was_enabled_before_elm = false;
 	}
@@ -139,8 +180,8 @@ static void ws_router_set_terminal_type(ws_terminal_type_t t)
 	// Entering elm327: pause AutoPID so it doesn't contend for the ELM chip.
 	if (s_term_type == WS_TERMINAL_TYPE_ELM327)
 	{
-		s_autopid_was_enabled_before_elm = dev_status_is_autopid_enabled();
-		dev_status_clear_autopid_enabled();
+		s_autopid_was_enabled_before_elm = ws_router_autopid_is_enabled();
+		ws_router_autopid_clear_enabled();
 	}
 }
 

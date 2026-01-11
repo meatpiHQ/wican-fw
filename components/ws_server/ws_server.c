@@ -1,3 +1,23 @@
+/*
+ * This file is part of the WiCAN project.
+ *
+ * Copyright (C) 2022  Meatpi Electronics.
+ * Written by Ali Slim <ali@meatpi.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "ws_server.h"
 
 #include <stdlib.h>
@@ -53,6 +73,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
 	httpd_ws_frame_t ws_pkt;
 	uint8_t *buf = NULL;
 	memset(&ws_pkt, 0, sizeof(ws_pkt));
+	// Default to TEXT; httpd_ws_recv_frame() will overwrite type for received frames.
 	ws_pkt.type = HTTPD_WS_TYPE_TEXT;
 
 	esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
@@ -79,6 +100,38 @@ static esp_err_t ws_handler(httpd_req_t *req)
 			free(buf);
 			return ret;
 		}
+	}
+
+	// If control frames are delivered to the application, we must handle them.
+	// Otherwise clients (and intermediaries) may close the connection.
+	if (ws_pkt.type == HTTPD_WS_TYPE_PING)
+	{
+		httpd_ws_frame_t pong;
+		memset(&pong, 0, sizeof(pong));
+		pong.type = HTTPD_WS_TYPE_PONG;
+		pong.payload = ws_pkt.payload;
+		pong.len = ws_pkt.len;
+		(void)httpd_ws_send_frame(req, &pong);
+		free(buf);
+		return ESP_OK;
+	}
+	if (ws_pkt.type == HTTPD_WS_TYPE_PONG)
+	{
+		free(buf);
+		return ESP_OK;
+	}
+
+	// CLOSE frame: mark disconnected and allow higher layers to cleanup.
+	if (ws_pkt.type == HTTPD_WS_TYPE_CLOSE)
+	{
+		EventBits_t prev = xEventGroupGetBits(s_event_group);
+		xEventGroupClearBits(s_event_group, WS_CONNECTED_BIT);
+		if ((prev & WS_CONNECTED_BIT) != 0 && s_hooks.on_close != NULL)
+		{
+			s_hooks.on_close(s_hooks.ctx);
+		}
+		free(buf);
+		return ESP_OK;
 	}
 
 	if (ws_pkt.payload && ws_pkt.len)
@@ -130,7 +183,12 @@ static void websocket_task(void *pvParameters)
 		esp_err_t ret = httpd_ws_send_frame_async(s_ctx.hd, s_ctx.fd, &ws_pkt);
 		if (ret != ESP_OK)
 		{
+			EventBits_t prev = xEventGroupGetBits(s_event_group);
 			xEventGroupClearBits(s_event_group, WS_CONNECTED_BIT);
+			if ((prev & WS_CONNECTED_BIT) != 0 && s_hooks.on_close != NULL)
+			{
+				s_hooks.on_close(s_hooks.ctx);
+			}
 			ESP_LOGE(TAG, "httpd_ws_send_frame_async failed: %d", ret);
 		}
 	}
@@ -144,6 +202,7 @@ esp_err_t ws_server_register_uri(httpd_handle_t http_server)
 		.handler = ws_handler,
 		.user_ctx = NULL,
 		.is_websocket = true,
+		.handle_ws_control_frames = true,
 	};
 
 	if (http_server == NULL)

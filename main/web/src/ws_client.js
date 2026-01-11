@@ -55,13 +55,6 @@
         state.ws = ws;
 
         ws.addEventListener('open', function (event) {
-            if (purpose === 'terminal') {
-                try {
-                    ws.send(JSON.stringify({ ws_mode: 'terminal' }));
-                } catch (_) {
-                }
-            }
-
             if (typeof state.onOpen === 'function') {
                 state.onOpen(event);
             }

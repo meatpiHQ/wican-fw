@@ -97,7 +97,7 @@
 #include "autopid_http.h"
 #include "obd2_standard_pids.h"
 
-#include "ws_router.h"
+#include <ws_router.h>
 #include "ws_server.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
@@ -3452,6 +3452,12 @@ static void ws_server_on_open_cb(void *ctx)
 	ws_router_on_open();
 }
 
+static void ws_server_on_close_cb(void *ctx)
+{
+	(void)ctx;
+	ws_router_on_close();
+}
+
 static bool ws_server_handle_frame_cb(httpd_req_t *req, const uint8_t *data, size_t len, void *ctx)
 {
 	(void)ctx;
@@ -3684,6 +3690,7 @@ void config_server_start(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, u
         server = config_server_init();
 		ws_server_hooks_t hooks = {
 			.on_open = ws_server_on_open_cb,
+			.on_close = ws_server_on_close_cb,
 			.handle_frame = ws_server_handle_frame_cb,
 			.ctx = NULL,
 		};
