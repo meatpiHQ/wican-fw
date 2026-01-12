@@ -555,11 +555,18 @@ static esp_err_t test_pid_handler(httpd_req_t *req)
             req_service = (uint8_t)strtoul(svc_hex, NULL, 16);
         }
         uint8_t pos_service = (req_service <= 0x3F) ? (uint8_t)(req_service + 0x40) : 0;
-        const uint8_t *win = bytes;
         uint32_t win_len = bytes_len;
         if (pos_service != 0)
         {
-            bool found = autopid_test_pid_find_response_window(bytes, bytes_len, pos_service, 0xFF, &win, &win_len);
+            bool found = false;
+            for (uint32_t i = 0; i < bytes_len; i++)
+            {
+                if (bytes[i] == pos_service)
+                {
+                    found = true;
+                    break;
+                }
+            }
             if (!found)
             {
                 snprintf(err_msg, sizeof(err_msg), "No positive response");

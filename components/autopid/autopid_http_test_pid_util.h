@@ -39,12 +39,6 @@ void autopid_test_pid_restore_autopid_safe_elm_state(void);
 
 bool autopid_test_pid_contains_case_insensitive(const char *haystack, const char *needle);
 bool autopid_test_pid_parse_hex_byte_stream(const char *s, uint8_t *out, size_t out_max, uint32_t *out_len);
-bool autopid_test_pid_find_response_window(const uint8_t *bytes,
-                                           uint32_t bytes_len,
-                                           uint8_t positive_service,
-                                           uint8_t pid_byte,
-                                           const uint8_t **out_ptr,
-                                           uint32_t *out_len);
 
 #ifdef __cplusplus
 }
