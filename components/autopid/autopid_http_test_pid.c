@@ -41,6 +41,8 @@
 
 static const char *TAG = "AUTOPID_HTTP";
 
+static const size_t TEST_PID_PADDED_BUF_LEN = (1024*2);
+
 static StaticSemaphore_t test_pid_lock_buf;
 static SemaphoreHandle_t test_pid_lock = NULL;
 
@@ -55,8 +57,8 @@ static char *read_json_body(httpd_req_t *req, size_t *out_len)
         return NULL;
 
     // Hard cap to avoid huge allocations
-    if (len > 2048)
-        len = 2048;
+    if (len > 1024*10)
+        len = 1024*10;
 
     char *buf = NULL;
 #ifdef CONFIG_SPIRAM
@@ -310,6 +312,10 @@ static esp_err_t test_pid_handler(httpd_req_t *req)
     const char *unit = "";
     char err_msg[128] = {0};
 
+    // Optional heap buffer used by custom/vehicle expression evaluation.
+    // Freed in the common cleanup path before returning.
+    uint8_t *padded_eval_buf = NULL;
+
     if (strcmp(kind, "std") == 0)
     {
         if (name[0] == '\0')
@@ -555,6 +561,7 @@ static esp_err_t test_pid_handler(httpd_req_t *req)
             req_service = (uint8_t)strtoul(svc_hex, NULL, 16);
         }
         uint8_t pos_service = (req_service <= 0x3F) ? (uint8_t)(req_service + 0x40) : 0;
+        const uint8_t *win = bytes;
         uint32_t win_len = bytes_len;
         if (pos_service != 0)
         {
@@ -577,18 +584,30 @@ static esp_err_t test_pid_handler(httpd_req_t *req)
 
         // Evaluate against a zero-padded buffer to avoid reading garbage when
         // expressions reference bytes beyond the received response length.
-        uint8_t padded[512];
-        memset(padded, 0, sizeof(padded));
+        padded_eval_buf = NULL;
+#ifdef CONFIG_SPIRAM
+        padded_eval_buf = (uint8_t *)heap_caps_malloc(TEST_PID_PADDED_BUF_LEN, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+#else
+        padded_eval_buf = (uint8_t *)heap_caps_malloc(TEST_PID_PADDED_BUF_LEN, MALLOC_CAP_8BIT);
+#endif
+        if (!padded_eval_buf)
+        {
+            snprintf(err_msg, sizeof(err_msg), "OOM");
+            ok = false;
+            goto respond;
+        }
+
+        memset(padded_eval_buf, 0, TEST_PID_PADDED_BUF_LEN);
         if (win && win_len > 0)
         {
             uint32_t copy_len = win_len;
-            if (copy_len > sizeof(padded))
-                copy_len = sizeof(padded);
-            memcpy(padded, win, copy_len);
+            if (copy_len > TEST_PID_PADDED_BUF_LEN)
+                copy_len = (uint32_t)TEST_PID_PADDED_BUF_LEN;
+            memcpy(padded_eval_buf, win, copy_len);
         }
 
         double result = 0;
-        if (evaluate_expression((uint8_t *)expr, (uint8_t *)padded, 0, &result))
+        if (evaluate_expression((uint8_t *)expr, (uint8_t *)padded_eval_buf, 0, &result))
         {
             result = round(result * 100.0) / 100.0;
             value = result;
@@ -599,6 +618,9 @@ static esp_err_t test_pid_handler(httpd_req_t *req)
             snprintf(err_msg, sizeof(err_msg), "Expression eval failed");
             ok = false;
         }
+
+        heap_caps_free(padded_eval_buf);
+        padded_eval_buf = NULL;
     }
     else
     {
@@ -608,6 +630,12 @@ static esp_err_t test_pid_handler(httpd_req_t *req)
 
 respond:
     {
+        if (padded_eval_buf)
+        {
+            heap_caps_free(padded_eval_buf);
+            padded_eval_buf = NULL;
+        }
+
         cJSON *root = cJSON_CreateObject();
         cJSON_AddBoolToObject(root, "ok", ok);
         if (ok)
