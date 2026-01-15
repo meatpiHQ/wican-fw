@@ -3441,6 +3441,25 @@
       ]
     },
     {
+      "car_model": "Nissan : Patrol/Armada Y62",
+      "init": "ATSP6;ATST96;",
+      "pids": [
+        {
+          "pid": "221201",
+          "pid_init": "ATSH7E0;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B3:B5]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Opel: Ampere-E",
       "init": "ATSP6;ATST96;ATSH7E0;ATSH7E1;ATSH7E4;",
       "pids": [
