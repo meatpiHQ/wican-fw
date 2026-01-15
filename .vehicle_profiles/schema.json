@@ -61,6 +61,7 @@
                 "ENGINE_OIL_TEMP",
                 "ENGINE_RPM",
                 "FUEL",
+                "FUEL_L",
                 "FUEL_PRESSURE",
                 "FUEL_PRESSURE_D",
                 "FUEL_PUMP_DUTY",
