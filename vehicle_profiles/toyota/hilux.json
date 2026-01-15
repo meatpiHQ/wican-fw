@@ -6,7 +6,7 @@
       "pid": "21291",
       "pid_init": "ATSH7C0;",
       "parameters": {
-        "FUEL": "B3/2"
+        "FUEL_L": "B3/2"
       }
     }
   ]
