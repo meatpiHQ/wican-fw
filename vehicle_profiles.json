@@ -3846,7 +3846,7 @@
       ]
     },
     {
-      "car_model": "Renault: Kangoo Z.E",
+      "car_model": "Renault: Kangoo Z.E.",
       "init": "ATSP6;",
       "pids": [
         {
@@ -3854,11 +3854,117 @@
           "parameters": [
             {
               "name": "SOC",
-              "expression": "((B4*256)+B5)/50",
+              "expression": "[B4:B5]*0.02",
               "unit": "%",
               "class": "battery",
               "min": "0",
               "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "223206",
+          "parameters": [
+            {
+              "name": "SOH",
+              "expression": "B4",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "105"
+            }
+          ]
+        },
+        {
+          "pid": "222005",
+          "parameters": [
+            {
+              "name": "LV_V",
+              "expression": "[B4:B5]*0.01",
+              "unit": "V",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "223028",
+          "parameters": [
+            {
+              "name": "LV_A",
+              "expression": "B4*0.01",
+              "unit": "A",
+              "class": "current"
+            }
+          ]
+        },
+        {
+          "pid": "222006",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B4:B6]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "223203",
+          "parameters": [
+            {
+              "name": "HV_V",
+              "expression": "[B4:B5]*0.2",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "480"
+            }
+          ]
+        },
+        {
+          "pid": "223204",
+          "parameters": [
+            {
+              "name": "HV_A",
+              "expression": "([B4:B5]-32768)*0.25",
+              "unit": "A",
+              "class": "current"
+            }
+          ]
+        },
+        {
+          "pid": "222001",
+          "parameters": [
+            {
+              "name": "BATT_TEMP",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "80"
+            }
+          ]
+        },
+        {
+          "pid": "22320C",
+          "parameters": [
+            {
+              "name": "HV_AV",
+              "expression": "[B4:B5]*0.005",
+              "unit": "kW",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "223451",
+          "parameters": [
+            {
+              "name": "RANGE",
+              "expression": "[B4:B5]",
+              "unit": "km",
+              "class": "distance"
             }
           ]
         }
