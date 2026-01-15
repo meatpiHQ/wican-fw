@@ -393,29 +393,42 @@ async function checkFirmwareUpdate() {
             try {
                 const jsonData = JSON.parse(event.target.result);
                 let data;
-                
-                // Check if it's a single car format (like Zeekr) with car_model property
-                if (jsonData.car_model && jsonData.pids) {
-                    showNotification("Single car format detected. Fetching parameter definitions...", "blue");
-                    
+                const isMultiCar = (jsonData && Array.isArray(jsonData.cars));
+                const isSingleCar = (jsonData && jsonData.car_model && Array.isArray(jsonData.pids));
+
+                const looksLikeShorthandSingleProfile = (() => {
+                    if (!isSingleCar) return false;
+                    for (const pid of jsonData.pids) {
+                        if (!pid || pid.parameters === undefined || pid.parameters === null) continue;
+                        if (Array.isArray(pid.parameters)) return false; // already in target format
+                        if (typeof pid.parameters !== 'object') continue;
+                        const values = Object.values(pid.parameters);
+                        // Shorthand single-profile format maps NAME -> "expression" (string)
+                        if (values.some(v => typeof v === 'string')) return true;
+                    }
+                    return false;
+                })();
+
+                if (isMultiCar) {
+                    data = jsonData;
+                } else if (looksLikeShorthandSingleProfile) {
+                    showNotification("Shorthand single-profile detected. Loading parameter metadata...", "blue");
                     try {
-                        // Fetch params.json to get parameter definitions
-                        const paramsResponse = await fetch('https://raw.githubusercontent.com/meatpiHQ/wican-fw/refs/heads/main/.vehicle_profiles/params.json');
+                        const paramsResponse = await fetch('https://raw.githubusercontent.com/meatpiHQ/wican-fw/main/.vehicle_profiles/params.json');
                         const paramsData = await paramsResponse.json();
-                        
-                        // Convert single car format to vehicle_profiles.json format
                         const convertedCar = convertSingleCarFormat(jsonData, paramsData);
                         data = { cars: [convertedCar] };
-                        
-                        showNotification("Single car format converted successfully!", "green");
+                        showNotification("Profile loaded successfully!", "green");
                     } catch (fetchError) {
                         console.warn('Failed to fetch params.json, using basic conversion:', fetchError);
-                        // Fallback: basic conversion without parameter enrichment
                         data = { cars: [convertSingleCarBasic(jsonData)] };
-                        showNotification("Car model loaded (basic format - no internet connection)", "yellow");
+                        showNotification("Couldn't download params.json for parameter metadata. Make sure you're connected to the internet. Loaded profile without metadata.", "yellow");
                     }
+                } else if (isSingleCar) {
+                    // Already in vehicle_profiles.json schema; wrap without conversion
+                    data = { cars: [jsonData] };
                 } else {
-                    // Existing multi-car format
+                    // Existing fallback
                     data = jsonData.car_model ? { cars: [jsonData] } : jsonData;
                 }
                 
@@ -435,6 +448,28 @@ async function checkFirmwareUpdate() {
                 var mod = { "supported": carModels };
                 loadCarModels(mod);
                 enableAutoStoreButton();
+
+                // If a single-car profile was uploaded, auto-enable vehicle-specific mode,
+                // select that model, and trigger the change handler to populate PIDs/filters.
+                try {
+                    if (data && Array.isArray(data.cars) && data.cars.length === 1 && data.cars[0]?.car_model) {
+                        const carSpecificEl = document.getElementById('car_specific');
+                        if (carSpecificEl && carSpecificEl.value === 'disable') {
+                            carSpecificEl.value = 'enable';
+                        }
+                        try { toggleCarModel(); } catch(_) {}
+
+                        const carModelEl = document.getElementById('car_model');
+                        if (carModelEl) {
+                            carModelEl.value = data.cars[0].car_model;
+                            carModelEl.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+
+                        showNotification(`Loaded profile: ${data.cars[0].car_model}`, 'green');
+                    }
+                } catch (e) {
+                    console.warn('Auto-select uploaded car model failed:', e);
+                }
                 
                 if (!jsonData.car_model || !jsonData.pids) {
                     showNotification("Car models loaded successfully!", "green");
@@ -448,11 +483,12 @@ async function checkFirmwareUpdate() {
     }
 
     function convertSingleCarFormat(singleCarData, paramsData) {
-        // Convert from Zeekr-style format to vehicle_profiles.json format
+        // Convert from shorthand single-profile (NAME -> expression map) to vehicle_profiles.json format
         const convertedCar = {
             car_model: singleCarData.car_model,
             init: singleCarData.init,
-            pids: []
+            pids: [],
+            can_filters: Array.isArray(singleCarData.can_filters) ? singleCarData.can_filters : []
         };
 
         singleCarData.pids.forEach(pidEntry => {
@@ -466,16 +502,25 @@ async function checkFirmwareUpdate() {
             }
 
             // Convert parameters from object format to array format
-            if (pidEntry.parameters && typeof pidEntry.parameters === 'object') {
+            // If it's already an array (vehicle_profiles.json schema), keep it as-is.
+            if (Array.isArray(pidEntry.parameters)) {
+                newPidEntry.parameters = pidEntry.parameters;
+            } else if (pidEntry.parameters && typeof pidEntry.parameters === 'object') {
                 Object.keys(pidEntry.parameters).forEach(paramName => {
                     const expression = pidEntry.parameters[paramName];
-                    const paramDef = paramsData[paramName] || {};
-                    
+                    const paramDef = paramsData?.[paramName] || {};
+                    const settings = paramDef.settings || {};
+
                     const parameter = {
                         name: paramName,
                         expression: expression,
-                        unit: paramDef.settings?.unit || "",
-                        class: paramDef.settings?.class || "none"
+                        unit: settings.unit || "",
+                        class: settings.class || "none",
+                        min: settings.min ?? "",
+                        max: settings.max ?? "",
+                        type: settings.type || "Default",
+                        period: "5000",
+                        send_to: ""
                     };
 
                     newPidEntry.parameters.push(parameter);
@@ -493,7 +538,8 @@ async function checkFirmwareUpdate() {
         const convertedCar = {
             car_model: singleCarData.car_model,
             init: singleCarData.init,
-            pids: []
+            pids: [],
+            can_filters: Array.isArray(singleCarData.can_filters) ? singleCarData.can_filters : []
         };
 
         singleCarData.pids.forEach(pidEntry => {
@@ -3855,16 +3901,33 @@ xhttp.onload = async function() {
             renderFallbackNetworks([]);
         }
         document.getElementById("car_model").addEventListener('change', function() {
-            document.querySelector('.specific-pid-entries').innerHTML = '';
+            const pidContainer = document.querySelector('.specific-pid-entries');
+            if (pidContainer) pidContainer.innerHTML = '';
+
+            const filterContainer = document.querySelector('.specific-canfilter-entries');
+            if (filterContainer) filterContainer.innerHTML = '';
             
             const selectedModel = this.value;
+            const specificInitElement = document.getElementById("specific_init");
+            if (specificInitElement) specificInitElement.value = '';
+
+            if (!selectedModel || selectedModel === 'Not Selected') {
+                enableAutoStoreButton();
+                return;
+            }
+
             if (latest_car_models && Array.isArray(latest_car_models.cars)) {
-                const selectedCar = latest_car_models.cars.find(car => car.car_model === selectedModel);
-                const specificInitElement = document.getElementById("specific_init");
-                specificInitElement.value = selectedCar.init;
-                if (selectedCar && selectedCar.pids) {
+                const selectedCar = latest_car_models.cars.find(car => car && car.car_model === selectedModel);
+                if (!selectedCar) {
+                    enableAutoStoreButton();
+                    return;
+                }
+
+                if (specificInitElement) specificInitElement.value = selectedCar.init || '';
+
+                if (selectedCar.pids) {
                     selectedCar.pids.forEach(pid => {
-                        if (pid.parameters) {
+                        if (pid && pid.parameters) {
                             pid.parameters.forEach(param => {
                                 addCarParameter({
                                     ...param,
@@ -3876,7 +3939,37 @@ xhttp.onload = async function() {
                         }
                     });
                 }
+
+                if (Array.isArray(selectedCar.can_filters)) {
+                    selectedCar.can_filters.forEach(f => {
+                        const fid = (f && f.frame_id !== undefined) ? f.frame_id : null;
+                        const params = (f && Array.isArray(f.parameters)) ? f.parameters : [];
+                        if (params.length) {
+                            params.forEach(param => {
+                                addVehicleSpecificCanFilterEntry({
+                                    frame_id: fid,
+                                    parameter: {
+                                        name: param.name,
+                                        expression: param.expression,
+                                        unit: param.unit,
+                                        class: param.class,
+                                        period: param.period,
+                                        type: param.type,
+                                        min: param.min,
+                                        max: param.max,
+                                        send_to: param.send_to,
+                                        enabled: param.enabled
+                                    }
+                                });
+                            });
+                        } else if (fid !== null) {
+                            addVehicleSpecificCanFilterEntry({ frame_id: fid, parameter: { name: 'New Parameter', period: '5000', type: 'Default', send_to: '' } });
+                        }
+                    });
+                }
             }
+
+            enableAutoStoreButton();
         });
 
         // Apply mode-dependent enable/disable rules after values are loaded
