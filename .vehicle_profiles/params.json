@@ -364,6 +364,13 @@
       "class": "battery"
     }
   },
+  "LV_A": {
+    "description": "12v Battery Current",
+    "settings": {
+      "unit": "A",
+      "class": "current"
+    }
+  },
   "LV_V": {
     "description": "12v Battery Voltage",
     "settings": {
