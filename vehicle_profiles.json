@@ -590,6 +590,165 @@
       ]
     },
     {
+      "car_model": "Ford: Focus RS (MK3)",
+      "init": "ATE0;ATL0;ATH0;ATR1;ATST32;ATSP6;ATCAF1;",
+      "pids": [
+        {
+          "pid": "224028",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "B4",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "222813",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "TYRE_P_FL",
+              "expression": "([B4:B5]/10)/2.036",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "222816",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "TYRE_P_RL",
+              "expression": "([B4:B5]/10)/2.036",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "222814",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "TYRE_P_FR",
+              "expression": "([B4:B5]/10)/2.036",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "222815",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "TYRE_P_RR",
+              "expression": "([B4:B5]/10)/2.036",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "22F405",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "COOLANT_TMP",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "22F40F",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "INTAKE_AIR_TMP",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2203CA",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "INTAKE_AIR_TEMP_2",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "22dd01",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B4:B6]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "22dd04",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "T_CAB",
+              "expression": "(B4*10/9)-45",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "224029",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "BATT_TEMP",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "80"
+            }
+          ]
+        },
+        {
+          "pid": "22f42f",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "FUEL",
+              "expression": "(B4/255)*100",
+              "unit": "%",
+              "class": "none"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Ford: Transit North America 2022",
       "init": "ATE0;ATL0;ATH0;ATR1;ATST32;ATSP6;ATCAF1;",
       "pids": [
