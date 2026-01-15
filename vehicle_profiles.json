@@ -175,6 +175,25 @@
       ]
     },
     {
+      "car_model": "BMW: M340d",
+      "init": "ATST96;ATSP6;",
+      "pids": [
+        {
+          "pid": "22D10D2",
+          "pid_init": "ATAT0;ATCEA60;ATTAF1;ATCERF1;ATFCSH6F1;ATSH6F1;ATFCSD60300000;ATFCSM1;ATCRA660;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B13:B15]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "BYD: Atto 3",
       "init": "ATAT1;ATST96;ATSH7E7;ATFCSH7E7;ATFCSD300000;ATFCSM1;",
       "pids": [
@@ -356,6 +375,24 @@
               "class": "battery",
               "min": "0",
               "max": "100"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "car_model": "Cupra: Seat Leon",
+      "init": "ATST96;ATSP7;ATSH17FC0076;ATFCSH17FC0076;ATCRA17FE0076;ATFCSD300000;ATFCSM1;",
+      "pids": [
+        {
+          "pid": "2210E02",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B10:B11]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
             }
           ]
         }
@@ -547,6 +584,165 @@
               "class": "distance",
               "unit": "km",
               "min": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "car_model": "Ford: Focus RS (MK3)",
+      "init": "ATE0;ATL0;ATH0;ATR1;ATST32;ATSP6;ATCAF1;",
+      "pids": [
+        {
+          "pid": "224028",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "B4",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "222813",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "TYRE_P_FL",
+              "expression": "([B4:B5]/10)/2.036",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "222816",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "TYRE_P_RL",
+              "expression": "([B4:B5]/10)/2.036",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "222814",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "TYRE_P_FR",
+              "expression": "([B4:B5]/10)/2.036",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "222815",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "TYRE_P_RR",
+              "expression": "([B4:B5]/10)/2.036",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "22F405",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "COOLANT_TMP",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "22F40F",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "INTAKE_AIR_TMP",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2203CA",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "INTAKE_AIR_TEMP_2",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "22dd01",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B4:B6]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "22dd04",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "T_CAB",
+              "expression": "(B4*10/9)-45",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "224029",
+          "pid_init": "ATSH000726;STCAFCP726,72E;",
+          "parameters": [
+            {
+              "name": "BATT_TEMP",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "80"
+            }
+          ]
+        },
+        {
+          "pid": "22f42f",
+          "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+          "parameters": [
+            {
+              "name": "FUEL",
+              "expression": "(B4/255)*100",
+              "unit": "%",
+              "class": "none"
             }
           ]
         }
@@ -1041,6 +1237,106 @@
       ]
     },
     {
+      "car_model": "GMC: Sierra 2004+",
+      "init": "ATSP6;ATST64;",
+      "pids": [
+        {
+          "pid": "1ADF",
+          "pid_init": "ATSH7DF;ATCRA7E8;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B3:B5]*4",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "car_model": "GMC: Sierra EV",
+      "init": "ATSP6;ATST64;",
+      "pids": [
+        {
+          "pid": "2227C6",
+          "pid_init": "ATSH14DACBF1;ATCRA142AF1CB;",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "[B4:B5]/655.35",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "2227AF",
+          "pid_init": "ATSH14DACBF1;ATCRA142AF1CB;",
+          "parameters": [
+            {
+              "name": "HV_CAPACITY_R",
+              "expression": "[B4:B5]/100",
+              "unit": "kWh",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "220046",
+          "pid_init": "ATSH14DACBF1;ATCRA142AF1CB;",
+          "parameters": [
+            {
+              "name": "TMP_A",
+              "expression": "(B4-40)*1.8+32",
+              "unit": "°C",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "2227C7",
+          "pid_init": "ATSH14DACBF1;ATCRA142AF1CB;",
+          "parameters": [
+            {
+              "name": "RANGE",
+              "expression": "[B4:B6]/103",
+              "unit": "km",
+              "class": "distance"
+            }
+          ]
+        },
+        {
+          "pid": "225401",
+          "pid_init": "ATSH14DACBF1;ATCRA142AF1CB;",
+          "parameters": [
+            {
+              "name": "CHARGER_DC_PWR",
+              "expression": "[B4:B5]/4350",
+              "unit": "kW",
+              "class": "power"
+            }
+          ]
+        },
+        {
+          "pid": "2227C0",
+          "pid_init": "ATSH14DACBF1;ATCRA142AF1CB;",
+          "parameters": [
+            {
+              "name": "DIST_SINCE_FULL_CHARGE",
+              "expression": "[B4:B6]/16.09344",
+              "unit": "km",
+              "class": "distance",
+              "min": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "GWM: Ora Good Cat/Funky Cat/ES11/Haomao/Ora 03",
       "init": "ATSP6;ATAT1;",
       "pids": [
@@ -1315,7 +1611,7 @@
             },
             {
               "name": "HV_A",
-              "expression": "(65536-([B17:B18]))/10",
+              "expression": "((S17*256)+B18)/10",
               "unit": "A",
               "class": "current"
             },
@@ -1329,7 +1625,7 @@
             },
             {
               "name": "HV_W",
-              "expression": "([B19:B20]/10)*((65536-([B17:B18]))/10)",
+              "expression": "([B19:B20]/10)*((S17*256)+B18)/10",
               "unit": "W",
               "class": "power"
             },
@@ -1468,12 +1764,100 @@
               "min": "0"
             }
           ]
+        },
+        {
+          "pid": "22C00B6",
+          "pid_init": "ATSH7A0;",
+          "parameters": [
+            {
+              "name": "TYRE_P_FL",
+              "expression": "B10*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_P_FR",
+              "expression": "B15*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_P_RL",
+              "expression": "B21*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_P_RR",
+              "expression": "B27*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_T_FL",
+              "expression": "B11-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_T_FR",
+              "expression": "B17-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_T_RL",
+              "expression": "B22-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_T_RR",
+              "expression": "B28-50",
+              "class": "temperature",
+              "unit": "°C"
+            }
+          ]
+        },
+        {
+          "pid": "2201006",
+          "pid_init": "ATSH7B3;",
+          "parameters": [
+            {
+              "name": "TMP_A",
+              "expression": "(B12/2)-40",
+              "unit": "°C",
+              "class": "none"
+            },
+            {
+              "name": "T_CAB",
+              "expression": "(B11/2)-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "220100",
+          "pid_init": "ATSH7B3;",
+          "parameters": [
+            {
+              "name": "SPEED",
+              "expression": "B38",
+              "unit": "km/h",
+              "class": "speed"
+            }
+          ]
         }
       ]
     },
     {
-      "car_model": "Hyundai: Kona",
-      "init": "ATSH7E4;ATST96;",
+      "car_model": "Hyundai: Ioniq9",
+      "init": "ATSP6;ATSH7E4;ATST96;ATFCSH7E4;ATFCSD300000;ATFCSM0;",
       "pids": [
         {
           "pid": "2201019",
@@ -1640,6 +2024,178 @@
               "class": "none"
             }
           ]
+        }
+      ]
+    },
+    {
+      "car_model": "Hyundai: Kona",
+      "init": "ATSH7E4;ATST96;",
+      "pids": [
+        {
+          "pid": "2201019",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "B10/2",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            },
+            {
+              "name": "REGEN_MAX",
+              "expression": "[B11:B12]/100",
+              "unit": "kW",
+              "class": "power"
+            },
+            {
+              "name": "POWER_MAX",
+              "expression": "[B13:B14]/100",
+              "unit": "kW",
+              "class": "power"
+            },
+            {
+              "name": "HV_A",
+              "expression": "((S17*256)+B18)/10",
+              "unit": "A",
+              "class": "current"
+            },
+            {
+              "name": "HV_V",
+              "expression": "[B19:B20]/10",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "480"
+            },
+            {
+              "name": "HV_W",
+              "expression": "([B19:B20]/10)*((S17*256)+B18)/10",
+              "unit": "W",
+              "class": "power"
+            },
+            {
+              "name": "HV_T_MAX",
+              "expression": "B21",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_MIN",
+              "expression": "B22",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_1",
+              "expression": "B23",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_2",
+              "expression": "B25",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_3",
+              "expression": "B26",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_4",
+              "expression": "B27",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_5",
+              "expression": "B28",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_I",
+              "expression": "B30",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_C_V_MAX",
+              "expression": "B31/50",
+              "unit": "V",
+              "class": "voltage"
+            },
+            {
+              "name": "HV_C_V_MAX_NO",
+              "expression": "B33",
+              "unit": "none",
+              "class": "none"
+            },
+            {
+              "name": "HV_C_V_MIN",
+              "expression": "B34/50",
+              "unit": "V",
+              "class": "voltage"
+            },
+            {
+              "name": "HV_C_V_MIN_NO",
+              "expression": "B35",
+              "unit": "none",
+              "class": "none"
+            },
+            {
+              "name": "LV_V",
+              "expression": "B38*0.1",
+              "unit": "V",
+              "class": "battery"
+            },
+            {
+              "name": "KWH_CHARGED",
+              "expression": "([B49:B50]*65536 + [B51:B52])/10",
+              "unit": "kwh",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "2201057",
+          "parameters": [
+            {
+              "name": "SOH",
+              "expression": "[B34:B35]/10",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "105"
+            },
+            {
+              "name": "SOC_D",
+              "expression": "B41/2",
+              "unit": "%",
+              "class": "battery"
+            },
+            {
+              "name": "HV_C_D_MIN_NO",
+              "expression": "B39",
+              "unit": "none",
+              "class": "none"
+            },
+            {
+              "name": "HV_C_D_MAX_NO",
+              "expression": "B36",
+              "unit": "none",
+              "class": "none"
+            },
+            {
+              "name": "HV_C_D_MIN",
+              "expression": "[B37:B38]/10",
+              "unit": "%",
+              "class": "none"
+            }
+          ]
         },
         {
           "pid": "22B0025",
@@ -1651,6 +2207,94 @@
               "class": "distance",
               "unit": "km",
               "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "22C00B6",
+          "pid_init": "ATSH7A0;",
+          "parameters": [
+            {
+              "name": "TYRE_P_FL",
+              "expression": "B10*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_P_FR",
+              "expression": "B15*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_P_RL",
+              "expression": "B21*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_P_RR",
+              "expression": "B27*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_T_FL",
+              "expression": "B11-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_T_FR",
+              "expression": "B17-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_T_RL",
+              "expression": "B22-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_T_RR",
+              "expression": "B28-50",
+              "class": "temperature",
+              "unit": "°C"
+            }
+          ]
+        },
+        {
+          "pid": "2201006",
+          "pid_init": "ATSH7B3;",
+          "parameters": [
+            {
+              "name": "TMP_A",
+              "expression": "(B12/2)-40",
+              "unit": "°C",
+              "class": "none"
+            },
+            {
+              "name": "T_CAB",
+              "expression": "(B11/2)-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "220100",
+          "pid_init": "ATSH7B3;",
+          "parameters": [
+            {
+              "name": "SPEED",
+              "expression": "B38",
+              "unit": "km/h",
+              "class": "speed"
             }
           ]
         }
@@ -1892,6 +2536,279 @@
               "class": "battery",
               "min": "0",
               "max": "100"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "car_model": "Kia: EV6",
+      "init": "ATSH7E4;ATST96;",
+      "pids": [
+        {
+          "pid": "2201019",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "B10/2",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            },
+            {
+              "name": "REGEN_MAX",
+              "expression": "[B11:B12]/100",
+              "unit": "kW",
+              "class": "power"
+            },
+            {
+              "name": "POWER_MAX",
+              "expression": "[B13:B14]/100",
+              "unit": "kW",
+              "class": "power"
+            },
+            {
+              "name": "HV_A",
+              "expression": "((S17*256)+B18)/10",
+              "unit": "A",
+              "class": "current"
+            },
+            {
+              "name": "HV_V",
+              "expression": "[B19:B20]/10",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "480"
+            },
+            {
+              "name": "HV_W",
+              "expression": "([B19:B20]/10)*((S17*256)+B18)/10",
+              "unit": "W",
+              "class": "power"
+            },
+            {
+              "name": "HV_T_MAX",
+              "expression": "B21",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_MIN",
+              "expression": "B22",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_1",
+              "expression": "B23",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_2",
+              "expression": "B25",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_3",
+              "expression": "B26",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_4",
+              "expression": "B27",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_5",
+              "expression": "B28",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_I",
+              "expression": "B30",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_C_V_MAX",
+              "expression": "B31/50",
+              "unit": "V",
+              "class": "voltage"
+            },
+            {
+              "name": "HV_C_V_MAX_NO",
+              "expression": "B33",
+              "unit": "none",
+              "class": "none"
+            },
+            {
+              "name": "HV_C_V_MIN",
+              "expression": "B34/50",
+              "unit": "V",
+              "class": "voltage"
+            },
+            {
+              "name": "HV_C_V_MIN_NO",
+              "expression": "B35",
+              "unit": "none",
+              "class": "none"
+            },
+            {
+              "name": "LV_V",
+              "expression": "B38*0.1",
+              "unit": "V",
+              "class": "battery"
+            },
+            {
+              "name": "KWH_CHARGED",
+              "expression": "([B49:B50]*65536 + [B51:B52])/10",
+              "unit": "kwh",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "2201057",
+          "parameters": [
+            {
+              "name": "SOH",
+              "expression": "[B34:B35]/10",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "105"
+            },
+            {
+              "name": "SOC_D",
+              "expression": "B41/2",
+              "unit": "%",
+              "class": "battery"
+            },
+            {
+              "name": "HV_C_D_MIN_NO",
+              "expression": "B39",
+              "unit": "none",
+              "class": "none"
+            },
+            {
+              "name": "HV_C_D_MAX_NO",
+              "expression": "B36",
+              "unit": "none",
+              "class": "none"
+            },
+            {
+              "name": "HV_C_D_MIN",
+              "expression": "[B37:B38]/10",
+              "unit": "%",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "22B0025",
+          "pid_init": "ATSH7C6;ATFCSH7C6",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B17:B18]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "22C00B6",
+          "pid_init": "ATSH7A0;",
+          "parameters": [
+            {
+              "name": "TYRE_P_FL",
+              "expression": "B10*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_P_FR",
+              "expression": "B15*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_P_RL",
+              "expression": "B21*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_P_RR",
+              "expression": "B27*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_T_FL",
+              "expression": "B11-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_T_FR",
+              "expression": "B17-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_T_RL",
+              "expression": "B22-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_T_RR",
+              "expression": "B28-50",
+              "class": "temperature",
+              "unit": "°C"
+            }
+          ]
+        },
+        {
+          "pid": "2201006",
+          "pid_init": "ATSH7B3;",
+          "parameters": [
+            {
+              "name": "TMP_A",
+              "expression": "(B12/2)-40",
+              "unit": "°C",
+              "class": "none"
+            },
+            {
+              "name": "T_CAB",
+              "expression": "(B11/2)-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "220100",
+          "pid_init": "ATSH7B3;",
+          "parameters": [
+            {
+              "name": "SPEED",
+              "expression": "B38",
+              "unit": "km/h",
+              "class": "speed"
             }
           ]
         }
@@ -2404,6 +3321,25 @@
       ]
     },
     {
+      "car_model": "Mini Cooper: SE Electric",
+      "init": "ATSP6;ATS0;ATM0;ATAT1;ATCEA07;ATTAF1;ATFCSH6F1;ATSH6F1;ATFCSD07300000;ATFCSM1;ATCRA607;",
+      "pids": [
+        {
+          "pid": "22DDBC3",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "[B11:B12]/10",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Mitsubishi: iMiEV/Outlander-PHEV",
       "init": "ATSP6;ATFCSH761;ATFCSD300000;ATFCSM1;ATSH761;ATCRA762;",
       "pids": [
@@ -2531,6 +3467,54 @@
               "expression": "[B4:B5]/10",
               "unit": "Ah",
               "class": "battery"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "car_model": "Opel: Astra",
+      "init": "ATSP6;ATST96;ATSH79B;ATFCSH79B;ATFCSD300000;ATFCSM1;",
+      "pids": [
+        {
+          "pid": "22D4101",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "[B4:B5]/512",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D8601",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "SOH",
+              "expression": "[B5:B6]/16",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "105"
+            }
+          ]
+        },
+        {
+          "pid": "22D8151",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_V",
+              "expression": "[B4:B5]/16",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "480"
             }
           ]
         }
@@ -3021,7 +4005,7 @@
       ]
     },
     {
-      "car_model": "Renault: Kangoo Z.E",
+      "car_model": "Renault: Kangoo Z.E.",
       "init": "ATSP6;",
       "pids": [
         {
@@ -3029,11 +4013,117 @@
           "parameters": [
             {
               "name": "SOC",
-              "expression": "((B4*256)+B5)/50",
+              "expression": "[B4:B5]*0.02",
               "unit": "%",
               "class": "battery",
               "min": "0",
               "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "223206",
+          "parameters": [
+            {
+              "name": "SOH",
+              "expression": "B4",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "105"
+            }
+          ]
+        },
+        {
+          "pid": "222005",
+          "parameters": [
+            {
+              "name": "LV_V",
+              "expression": "[B4:B5]*0.01",
+              "unit": "V",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "223028",
+          "parameters": [
+            {
+              "name": "LV_A",
+              "expression": "B4*0.01",
+              "unit": "A",
+              "class": "current"
+            }
+          ]
+        },
+        {
+          "pid": "222006",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B4:B6]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "223203",
+          "parameters": [
+            {
+              "name": "HV_V",
+              "expression": "[B4:B5]*0.2",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "480"
+            }
+          ]
+        },
+        {
+          "pid": "223204",
+          "parameters": [
+            {
+              "name": "HV_A",
+              "expression": "([B4:B5]-32768)*0.25",
+              "unit": "A",
+              "class": "current"
+            }
+          ]
+        },
+        {
+          "pid": "222001",
+          "parameters": [
+            {
+              "name": "BATT_TEMP",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "80"
+            }
+          ]
+        },
+        {
+          "pid": "22320C",
+          "parameters": [
+            {
+              "name": "HV_AV",
+              "expression": "[B4:B5]*0.005",
+              "unit": "kW",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "223451",
+          "parameters": [
+            {
+              "name": "RANGE",
+              "expression": "[B4:B5]",
+              "unit": "km",
+              "class": "distance"
             }
           ]
         }
@@ -3149,6 +4239,24 @@
               "unit": "",
               "class": "plug",
               "type": "binary_sensor"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "car_model": "Toyota: Hilux",
+      "init": "ATST96;ATSP6;",
+      "pids": [
+        {
+          "pid": "21291",
+          "pid_init": "ATSH7C0;",
+          "parameters": [
+            {
+              "name": "FUEL",
+              "expression": "B3/2",
+              "unit": "%",
+              "class": "none"
             }
           ]
         }

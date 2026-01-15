@@ -1,0 +1,13 @@
+{
+  "car_model": "Mini Cooper: SE Electric",
+  "note": "Only supported in WiCAN PRO version",
+  "init": "ATSP6;ATS0;ATM0;ATAT1;ATCEA07;ATTAF1;ATFCSH6F1;ATSH6F1;ATFCSD07300000;ATFCSM1;ATCRA607;",
+  "pids": [
+    {
+      "pid": "22DDBC3",
+      "parameters": {
+        "SOC": "[B11:B12]/10"
+      }
+    }
+  ]
+}

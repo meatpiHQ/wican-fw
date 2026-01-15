@@ -58,6 +58,13 @@
       "type": "binary_sensor"
     }
   },
+  "CHARGER_DC_PWR": {
+    "description": "Battery Charger DC Power",
+    "settings": {
+      "unit": "kW",
+      "class": "power"
+    }
+  },
   "CHARGING": {
     "description": "Is EV Charging",
     "settings": {
@@ -79,6 +86,14 @@
     "settings": {
       "unit": "°C",
       "class": "temperature"
+    }
+  },
+  "DIST_SINCE_FULL_CHARGE": {
+    "description": "Distance Traveled Since Last Full Charge",
+    "settings": {
+      "unit": "km",
+      "class": "distance",
+      "min": "0"
     }
   },
   "DRIVE_MODE": {
@@ -347,6 +362,13 @@
     "settings": {
       "unit": "kwh",
       "class": "battery"
+    }
+  },
+  "LV_A": {
+    "description": "12v Battery Current",
+    "settings": {
+      "unit": "A",
+      "class": "current"
     }
   },
   "LV_V": {

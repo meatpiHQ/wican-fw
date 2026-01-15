@@ -628,7 +628,7 @@ void app_main(void)
 //     esp_log_level_set("transport", ESP_LOG_VERBOSE);
 //     esp_log_level_set("outbox", ESP_LOG_VERBOSE);
 
-	debug_logs_init(dbg_net_ready);
+	// debug_logs_init(dbg_net_ready);
 	// DEBUG_LOGI("INIT", "debug_logs initialized (UDP %s:%d) waiting for WiFi", DEBUG_LOGS_UDP_DEST_IP, DEBUG_LOGS_UDP_PORT);`
 }
 

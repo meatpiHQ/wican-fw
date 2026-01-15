@@ -1,11 +1,65 @@
 {
-  "car_model": "Renault: Kangoo Z.E",
+  "car_model": "Renault: Kangoo Z.E.",
   "init": "ATSP6;",
   "pids": [
     {
       "pid": "222002",
       "parameters": {
-        "SOC": "((B4*256)+B5)/50"
+        "SOC": "[B4:B5]*0.02"
+      }
+    },
+    {
+      "pid": "223206",
+      "parameters": {
+        "SOH": "B4"
+      }
+    },
+    {
+      "pid": "222005",
+      "parameters": {
+        "LV_V": "[B4:B5]*0.01"
+      }
+    },
+    {
+      "pid": "223028",
+      "parameters": {
+        "LV_A": "B4*0.01"
+      }
+    },
+    {
+      "pid": "222006",
+      "parameters": {
+        "ODOMETER": "[B4:B6]"
+      }
+    },
+    {
+      "pid": "223203",
+      "parameters": {
+        "HV_V": "[B4:B5]*0.2"
+      }
+    },
+    {
+      "pid": "223204",
+      "parameters": {
+        "HV_A": "([B4:B5]-32768)*0.25"
+      }
+    },
+    {
+      "pid": "222001",
+      "parameters": {
+        "BATT_TEMP": "B4-40"
+      }
+    },
+    {
+      "pid": "22320C",
+      "parameters": {
+        "HV_AV": "[B4:B5]*0.005"
+      }
+    },
+    {
+      "pid": "223451",
+      "parameters": {
+        "RANGE": "[B4:B5]"
       }
     }
   ]
