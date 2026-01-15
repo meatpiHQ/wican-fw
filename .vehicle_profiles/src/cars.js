@@ -101,15 +101,21 @@ async function add_json(jsonPath, params, allCars) {
     });
   }
 
-  car.pids.forEach((pid_key) => {
-    Object.keys(car.pids[pid_key].parameters).forEach((param) => {
-      if(car.pids[pid_key].parameters[param] == ""){
-        delete car.pids[pid_key].parameters[param]
+
+  // Remove parameters with empty formulas
+  car.pids.forEach((pid) => {
+    Object.keys(pid.parameters).forEach((param) => {
+      if (
+        pid.parameters[param] === '' ||
+        pid.parameters[param] === null ||
+        pid.parameters[param] === undefined
+      ) {
+        delete pid.parameters[param];
       }
     });
   });
 
-  //Cleanup pids with no params
+  // Remove pids with no parameters
   car.pids = car.pids.filter((pid) => Object.keys(pid.parameters).length > 0);
 
   allCars.push(await process_profile(car, params));
