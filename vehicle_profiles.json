@@ -4272,10 +4272,11 @@
           "pid_init": "ATSH7C0;",
           "parameters": [
             {
-              "name": "FUEL",
+              "name": "FUEL_L",
               "expression": "B3/2",
-              "unit": "%",
-              "class": "none"
+              "unit": "L",
+              "class": "none",
+              "min": "0"
             }
           ]
         }
