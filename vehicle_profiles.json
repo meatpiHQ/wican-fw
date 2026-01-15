@@ -3980,6 +3980,24 @@
       ]
     },
     {
+      "car_model": "Toyota: Hilux",
+      "init": "ATST96;ATSP6;",
+      "pids": [
+        {
+          "pid": "21291",
+          "pid_init": "ATSH7C0;",
+          "parameters": [
+            {
+              "name": "FUEL",
+              "expression": "B3/2",
+              "unit": "%",
+              "class": "none"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Toyota: Rav4",
       "init": "ATSP6;",
       "pids": [
