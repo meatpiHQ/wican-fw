@@ -131,6 +131,14 @@
       "class": "none"
     }
   },
+  "FUEL_L": {
+    "description": "Fuel Level (Liters)",
+    "settings": {
+      "unit": "L",
+      "class": "none",
+      "min": "0"
+    }
+  },
   "FUEL_PRESSURE": {
     "description": "Fuel Pressure",
     "settings": {
