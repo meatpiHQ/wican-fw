@@ -94,6 +94,7 @@
                 "INTAKE_AIR_TEMP_2",
                 "INTAKE_AIR_TMP",
                 "KWH_CHARGED",
+                "LV_A",
                 "LV_V",
                 "MAF",
                 "OCTANE_RATIO_L",
