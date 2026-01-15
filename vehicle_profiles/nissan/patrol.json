@@ -1,0 +1,13 @@
+{
+  "car_model": "Nissan : Patrol/Armada Y62",
+  "init": "ATSP6;ATST96;",
+  "pids": [
+    {
+      "pid": "221201",
+      "pid_init": "ATSH7E0;",
+      "parameters": {
+        "ODOMETER": "[B3:B5]"
+      }
+    }
+  ]
+}
