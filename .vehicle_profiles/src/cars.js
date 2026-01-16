@@ -101,12 +101,11 @@ async function add_json(jsonPath, params, allCars) {
     });
   }
 
-
   // Remove parameters with empty formulas
   car.pids.forEach((pid) => {
     Object.keys(pid.parameters).forEach((param) => {
       if (
-        pid.parameters[param] === '' ||
+        pid.parameters[param] === "" ||
         pid.parameters[param] === null ||
         pid.parameters[param] === undefined
       ) {

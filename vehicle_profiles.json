@@ -2043,36 +2043,12 @@
               "max": "100"
             },
             {
-              "name": "REGEN_MAX",
-              "expression": "[B11:B12]/100",
-              "unit": "kW",
-              "class": "power"
-            },
-            {
-              "name": "POWER_MAX",
-              "expression": "[B13:B14]/100",
-              "unit": "kW",
-              "class": "power"
-            },
-            {
-              "name": "HV_A",
-              "expression": "((S17*256)+B18)/10",
-              "unit": "A",
-              "class": "current"
-            },
-            {
               "name": "HV_V",
               "expression": "[B19:B20]/10",
               "unit": "V",
               "class": "voltage",
               "min": "200",
               "max": "480"
-            },
-            {
-              "name": "HV_W",
-              "expression": "([B19:B20]/10)*((S17*256)+B18)/10",
-              "unit": "W",
-              "class": "power"
             },
             {
               "name": "HV_T_MAX",
@@ -2151,12 +2127,6 @@
               "expression": "B38*0.1",
               "unit": "V",
               "class": "battery"
-            },
-            {
-              "name": "KWH_CHARGED",
-              "expression": "([B49:B50]*65536 + [B51:B52])/10",
-              "unit": "kwh",
-              "class": "battery"
             }
           ]
         },
@@ -2194,19 +2164,6 @@
               "expression": "[B37:B38]/10",
               "unit": "%",
               "class": "none"
-            }
-          ]
-        },
-        {
-          "pid": "22B0025",
-          "pid_init": "ATSH7C6;ATFCSH7C6",
-          "parameters": [
-            {
-              "name": "ODOMETER",
-              "expression": "[B17:B18]",
-              "class": "distance",
-              "unit": "km",
-              "min": "0"
             }
           ]
         },
