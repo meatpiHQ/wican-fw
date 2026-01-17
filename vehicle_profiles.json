@@ -3336,6 +3336,26 @@
       ]
     },
     {
+      "car_model": "Mitsubishi: Outlander-PHEV 2025",
+      "init": "ATSP7;ATST96;",
+      "pids": [
+        {
+          "pid": "2201D1",
+          "pid_init": "ATSH18DB33F1;ATCRA18DAF1DB;",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "(B5*0.64)-19.2",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Nissan : Ariya",
       "init": "ATSP7;ATST96;ATFCSH18DADBF1;ATFCSD300000;ATFCSM1;",
       "pids": [
