@@ -1,0 +1,13 @@
+{
+  "car_model": "Mitsubishi: Outlander-PHEV 2025",
+  "init": "ATSP7;ATST96;",
+  "pids": [
+    {
+      "pid": "2201D1",
+      "pid_init": "ATSH18DB33F1;ATCRA18DAF1DB;",
+      "parameters": {
+        "SOC": "(B5*0.64)-19.2"
+      }
+    }
+  ]
+}
