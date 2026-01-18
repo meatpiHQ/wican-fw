@@ -13,7 +13,7 @@
       "pid": "220375",
       "pid_init": "ATSH18DB33F1;ATCRA18DAF1DB;",
       "parameters": {
-        "SOC_REAL": "B5/2"
+        "SOC_D": "B5/2"
       }
     },
     {
