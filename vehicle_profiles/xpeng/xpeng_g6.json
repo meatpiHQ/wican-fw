@@ -1,59 +1,229 @@
 {
   "car_model": "Xpeng: G6",
-  "init": "ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH704;ATCRA784;ATFCSH704;ATFCSM1",
+  "init": "ATZ;ATE0;ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;",
   "pids": [
     {
-      "pid": "2211091",
+      "pid": "220313",
+      "pid_init": "ATZ;ATE0;ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;",
       "parameters": {
-        "SOC": "[B4:B5]/10"
+        "[VCU] Accelerator Pedal Position": "B4/2"
       }
     },
     {
-      "pid": "2201011",
+      "pid": "220328",
+      "pid_init": "ATZ;ATE0;ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;",
       "parameters": {
-        "ODOMETER": "[B5:B6]"
+        "[VCU] Battery coolant temperature": "B4/2-40.0"
       }
     },
     {
-      "pid": "22011A1",
+      "pid": "22031E",
+      "pid_init": "ATZ;ATE0;ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;",
       "parameters": {
-        "SOH": "[B4:B5]/10"
+        "[VCU] Battery SoC": "[B4:B5]/10"
       }
     },
     {
-      "pid": "2211031",
+      "pid": "220321",
+      "pid_init": "ATZ;ATE0;ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;",
       "parameters": {
-        "HV_A": "(B4*256+B5)*0.5-1600"
+        "[VCU] Brake main cylinder pressure": "[B4:B5]/5"
       }
     },
     {
-      "pid": "2211011",
+      "pid": "22031D",
+      "pid_init": "ATZ;ATE0;ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;",
       "parameters": {
-        "HV_V": "[B4:B5]/10"
+        "[VCU] Charging HVIL Status": "B4"
       }
     },
     {
-      "pid": "2211071",
+      "pid": "22031F",
+      "pid_init": "ATZ;ATE0;ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;",
       "parameters": {
-        "HV_T_MAX": "B4-40"
+        "[VCU] Fast charging current value": "[B4:B5]/10-1200.0"
       }
     },
     {
-      "pid": "2211081",
+      "pid": "220322",
+      "pid_init": "ATZ;ATE0;ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;",
       "parameters": {
-        "HV_T_MIN": "B4-40"
+        "[VCU] Fast charging temperature 1": "B4-40.0"
       }
     },
     {
-      "pid": "2211051",
+      "pid": "220323",
+      "pid_init": "ATZ;ATE0;ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;",
       "parameters": {
-        "HV_C_V_MAX": "[B4:B5]/1000"
+        "[VCU] Fast charging temperature 2": "B4-40.0"
       }
     },
     {
-      "pid": "2211061",
+      "pid": "220320",
+      "pid_init": "ATZ;ATE0;ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;",
       "parameters": {
-        "HV_C_V_MIN": "[B4:B5]/1000"
+        "[VCU] Fast charging voltage": "[B4:B5]"
+      }
+    },
+    {
+      "pid": "220317",
+      "pid_init": "ATZ;ATE0;ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;",
+      "parameters": {
+        "[VCU] Front motor speed": "[B4:B5]-5000.0"
+      }
+    },
+    {
+      "pid": "220317",
+      "pid_init": "ATZ;ATE0;ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;",
+      "parameters": {
+        "[VCU] Front motor speed (G6/G9)": "[B4:B5]-16000.0"
+      }
+    },
+    {
+      "pid": "220318",
+      "pid_init": "ATZ;ATE0;ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;",
+      "parameters": {
+        "[VCU] Rear motor speed": "[B4:B5]-5000.0"
+      }
+    },
+    {
+      "pid": "220318",
+      "pid_init": "ATZ;ATE0;ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;",
+      "parameters": {
+        "[VCU] Rear motor speed (G6/G9)": "[B4:B5]-16000.0"
+      }
+    },
+    {
+      "pid": "220319",
+      "pid_init": "ATZ;ATE0;ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;",
+      "parameters": {
+        "[VCU] Front motor torque request": "[B4:B5]/4-500.0"
+      }
+    },
+    {
+      "pid": "22031A",
+      "pid_init": "ATZ;ATE0;ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;",
+      "parameters": {
+        "[VCU] Rear motor torque request": "[B4:B5]/4-500.0"
+      }
+    },
+    {
+      "pid": "220324",
+      "pid_init": "ATZ;ATE0;ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;",
+      "parameters": {
+        "[VCU] Slow charging temperature 1": "B4-40.0"
+      }
+    },
+    {
+      "pid": "220325",
+      "pid_init": "ATZ;ATE0;ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;",
+      "parameters": {
+        "[VCU] Slow charging temperature 2": "B4-40.0"
+      }
+    },
+    {
+      "pid": "220326",
+      "pid_init": "ATZ;ATE0;ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;",
+      "parameters": {
+        "[VCU] Slow charging temperature 3": "B4-40.0"
+      }
+    },
+    {
+      "pid": "220327",
+      "pid_init": "ATZ;ATE0;ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;",
+      "parameters": {
+        "[VCU] Traction motor coolant temperature": "B4/2-40.0"
+      }
+    },
+    {
+      "pid": "221120",
+      "pid_init": "ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;ATSH704;ATCRA784;ATFCSH704;ATFCSM1;",
+      "parameters": {
+        "[BMS] Battery Pack Cumulative charging": "[B4:B7]"
+      }
+    },
+    {
+      "pid": "221121",
+      "pid_init": "ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;ATSH704;ATCRA784;ATFCSH704;ATFCSM1;",
+      "parameters": {
+        "[BMS] Battery Pack Cumulative discharging": "[B4:B7]"
+      }
+    },
+    {
+      "pid": "221107",
+      "pid_init": "ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;ATSH704;ATCRA784;ATFCSH704;ATFCSM1;",
+      "parameters": {
+        "[BMS] Battery Pack Max Temperature": "B4-40.0"
+      }
+    },
+    {
+      "pid": "221108",
+      "pid_init": "ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;ATSH704;ATCRA784;ATFCSH704;ATFCSM1;",
+      "parameters": {
+        "[BMS] Battery Pack Min Temperature": "B4-40.0"
+      }
+    },
+    {
+      "pid": "221105",
+      "pid_init": "ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;ATSH704;ATCRA784;ATFCSH704;ATFCSM1;",
+      "parameters": {
+        "[BMS] Battery Pack Max Voltage": "[B4:B5]/1000"
+      }
+    },
+    {
+      "pid": "221106",
+      "pid_init": "ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;ATSH704;ATCRA784;ATFCSH704;ATFCSM1;",
+      "parameters": {
+        "[BMS] Battery Pack Min Voltage": "[B4:B5]/1000"
+      }
+    },
+    {
+      "pid": "221101",
+      "pid_init": "ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;ATSH704;ATCRA784;ATFCSH704;ATFCSM1;",
+      "parameters": {
+        "[BMS] Battery Pack Total Voltage": "[B4:B5]/10"
+      }
+    },
+    {
+      "pid": "221103",
+      "pid_init": "ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;ATSH704;ATCRA784;ATFCSH704;ATFCSM1;",
+      "parameters": {
+        "[BMS] Battery Pack Total Current": "[B4:B5]/2-1600.0"
+      }
+    },
+    {
+      "pid": "220104",
+      "pid_init": "ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;ATSH704;ATCRA784;ATFCSH704;ATFCSM1;",
+      "parameters": {
+        "[BMS] RES(PID_010D)": "[B4:B5]/100"
+      }
+    },
+    {
+      "pid": "221109",
+      "pid_init": "ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;ATSH704;ATCRA784;ATFCSH704;ATFCSM1;",
+      "parameters": {
+        "[BMS] SoC": "[B4:B5]/10"
+      }
+    },
+    {
+      "pid": "22110A",
+      "pid_init": "ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;ATSH704;ATCRA784;ATFCSH704;ATFCSM1;",
+      "parameters": {
+        "[BMS] SoH": "[B4:B5]/10"
+      }
+    },
+    {
+      "pid": "220102",
+      "pid_init": "ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;ATSH704;ATCRA784;ATFCSH704;ATFCSM1;",
+      "parameters": {
+        "[BMS] 12V Voltage": "B4/10"
+      }
+    },
+    {
+      "pid": "220101",
+      "pid_init": "ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH7E0;ATSH704;ATCRA784;ATFCSH704;ATFCSM1;",
+      "parameters": {
+        "[BMS] Odometer": "[B4:B6]"
       }
     }
   ]
