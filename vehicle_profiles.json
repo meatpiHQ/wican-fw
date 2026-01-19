@@ -3352,6 +3352,32 @@
               "max": "100"
             }
           ]
+        },
+        {
+          "pid": "220375",
+          "pid_init": "ATSH18DB33F1;ATCRA18DAF1DB;",
+          "parameters": [
+            {
+              "name": "SOC_D",
+              "expression": "B5/2",
+              "unit": "%",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "220387",
+          "pid_init": "ATSH18DB33F1;ATCRA18DAF1DB;",
+          "parameters": [
+            {
+              "name": "HV_V",
+              "expression": "B4+B5",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "480"
+            }
+          ]
         }
       ]
     },
