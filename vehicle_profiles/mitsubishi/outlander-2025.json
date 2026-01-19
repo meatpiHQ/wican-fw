@@ -8,6 +8,20 @@
       "parameters": {
         "SOC": "(B5*0.64)-19.2"
       }
+    },
+    {
+      "pid": "220375",
+      "pid_init": "ATSH18DB33F1;ATCRA18DAF1DB;",
+      "parameters": {
+        "SOC_D": "B5/2"
+      }
+    },
+    {
+      "pid": "220387",
+      "pid_init": "ATSH18DB33F1;ATCRA18DAF1DB;",
+      "parameters": {
+        "HV_V": "B4+B5"
+      }
     }
   ]
 }
