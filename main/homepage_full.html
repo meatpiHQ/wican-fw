@@ -240,6 +240,63 @@
             color: #991b1b;
         }
 
+        .webhook-stats {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .webhook-stats-top,
+        .webhook-stats-bottom {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .webhook-meta {
+            font-size: 0.85rem;
+            color: var(--gray-600);
+        }
+
+        .webhook-error-preview {
+            flex: 1;
+            min-width: 180px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: #991b1b;
+        }
+
+        .webhook-details-btn {
+            padding: 0.35rem 0.65rem;
+            border-radius: 999px;
+            background-color: var(--gray-200);
+            color: var(--gray-800);
+            border: 1px solid var(--gray-300);
+            font-size: 0.85rem;
+        }
+
+        .webhook-details-btn:hover {
+            background-color: var(--gray-300);
+        }
+
+        .webhook-details-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .webhook-error-box {
+            border: 1px solid var(--gray-300);
+            border-radius: 8px;
+            background: var(--gray-50);
+            padding: 0.75rem;
+            font-size: 0.85rem;
+            color: var(--gray-800);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
         input[type="file"] {
             padding: 0.5rem;
             border: 1px dashed var(--gray-400);
@@ -781,15 +838,72 @@
 
         <div id="automate" class="tabcontent">
             <div class="section-title">Automate</div>
+
+            <div class="section-title" style="margin-top:1rem;">Home Assistant</div>
             <table class="form-table">
                 <tr>
-                    <td>MQTT HA Discovery:</td>
+                    <td>WebHook:</td>
                     <td>
-                        <select id="ha_discovery" name="ha_discovery" onchange="toggleDestinationAndCycle(); toggleSendToFields(); enableAutoStoreButton();submit_enable();">
+                        <select id="webhook_en" name="webhook_en" onchange="submit_enable();">
+                            <option value="enable">Enable</option>
                             <option value="disable">Disable</option>
                         </select>
                     </td>
                 </tr>
+                <tr>
+                    <td>WebHook URL:</td>
+                    <td>
+                        <input type="text" id="webhook_url" name="webhook_url" readonly style="background-color:#f5f5f5; cursor:not-allowed;">
+                    </td>
+                </tr>
+                <tr>
+                    <td>WebHook Interval (s):</td>
+                    <td>
+                        <input type="text" id="webhook_interval" name="webhook_interval" readonly style="background-color:#f5f5f5; cursor:not-allowed;">
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="2" style="font-size:0.7rem; color:#555; margin-top:0.5rem;">WebHook configuration is set in the Home Assistant integration.</td>
+                </tr>
+                <tr>
+                    <td>WebHook Data Mode:</td>
+                    <td>
+                        <select id="webhook_data_mode" name="webhook_data_mode" onchange="enableAutoStoreButton();submit_enable();">
+                            <option value="full">Full Data (All Fields)</option>
+                            <option value="changed">Changed Values Only</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td>WebHook Stats:</td>
+                    <td>
+                        <div class="webhook-stats">
+                            <div class="webhook-stats-top">
+                                <span id="webhook_stat_success" class="status-indicator status-connected">OK: 0</span>
+                                <span id="webhook_stat_fail" class="status-indicator status-disconnected">Fail: 0</span>
+                                <span id="webhook_stat_status" class="webhook-meta">Status: -</span>
+                                <span id="webhook_stat_last_post" class="webhook-meta">Last: -</span>
+                            </div>
+                            <div id="webhook_error_row" class="webhook-stats-bottom">
+                                <span class="webhook-meta">Last error:</span>
+                                <span id="webhook_last_error" class="webhook-error-preview" title=""></span>
+                                <button id="webhook_error_details_btn" type="button" onclick="toggleWebhookErrorDetails();" class="webhook-details-btn">Details</button>
+                            </div>
+                            <div id="webhook_error_details" class="webhook-error-box" style="display:none;"></div>
+                        </div>
+                    </td>
+                </tr>
+                <tr style="display:none;">
+                    <td>MQTT HA Discovery:</td>
+                    <td>
+                        <select id="ha_discovery" name="ha_discovery" onchange="toggleSendToFields(); enableAutoStoreButton();submit_enable();">
+                            <option value="disable">Disable</option>
+                        </select>
+                    </td>
+                </tr>
+            </table>
+            <div class="section-title" style="margin-top:1rem;">User Destinations</div>
+            <table class="form-table">
                 <tr>
                     <td>Grouping:</td>
                     <td>
@@ -1803,6 +1917,7 @@ function loadAutoTable(jsonData) {
             };
 
             setElementValue("car_specific", data.car_specific, 'disable');
+            setElementValue("webhook_data_mode", data.webhook_data_mode, 'full');
             setElementValue("ha_discovery", 'disable');
             setElementValue("grouping", data.grouping, 'disable');
             setElementValue("autopid_polling", data.autopid_polling, 'enable');
@@ -1912,6 +2027,7 @@ function loadAutoTable(jsonData) {
             const autopid_pollingValue = document.getElementById("autopid_polling")?.value || 'enable';
             const groupDestTypeValue = document.getElementById("group_dest_type")?.value || 'Default';
             const ha_discoveryValue = document.getElementById("ha_discovery")?.value || 'disable';
+            const webhookDataModeValue = document.getElementById("webhook_data_mode")?.value || 'full';
             const destinationValue = document.getElementById("destination")?.value || '';
             const cycleField = document.getElementById("group_cycle");
             const cycleValue = cycleField?.value || '5000';
@@ -2028,6 +2144,7 @@ function loadAutoTable(jsonData) {
             // Prepare data object for sending
             const jsonData = {
                 initialisation: initialisationValue,
+                webhook_data_mode: webhookDataModeValue,
                 grouping: groupingValue,
                 autopid_polling: autopid_pollingValue,
                 group_dest_type: groupDestTypeValue,
@@ -2305,7 +2422,116 @@ function loadAutoTable(jsonData) {
 		xhttp.open("GET", "/check_status");
 		xhttp.send();
 	}
+    function loadWebhookConfig() {
+        // Periodic refresh so stats update without reloading the page
+        if (!window._webhookStatsTimer) {
+            window._webhookStatsTimer = setInterval(loadWebhookConfig, 5000);
+        }
 
+        fetch('/api/webhook')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to fetch webhook config');
+                }
+                return response.json();
+            })
+            .then(config => {
+                const urlField = document.getElementById("webhook_url");
+                const intervalField = document.getElementById("webhook_interval");
+
+                // Stats elements (may not exist on older pages)
+                const okEl = document.getElementById("webhook_stat_success");
+                const failEl = document.getElementById("webhook_stat_fail");
+                const statusEl = document.getElementById("webhook_stat_status");
+                const lastPostEl = document.getElementById("webhook_stat_last_post");
+                const lastErrEl = document.getElementById("webhook_last_error");
+                const detailsEl = document.getElementById("webhook_error_details");
+                const errorRowEl = document.getElementById("webhook_error_row");
+                const detailsBtnEl = document.getElementById("webhook_error_details_btn");
+
+                if (urlField) {
+                    urlField.value = config.enabled && config.url ? config.url : "Not configured";
+                }
+                if (intervalField) {
+                    intervalField.value = config.enabled && config.interval ? config.interval.toString() : "Not configured";
+                }
+
+                const successCount = Number(config.success_count || 0);
+                const failCount = Number(config.fail_count || 0);
+                const statusText = (config && config.status) ? String(config.status) : (config.enabled ? 'unknown' : 'disabled');
+                const lastPost = (config && config.last_post) ? String(config.last_post) : '';
+                const lastErr = (config && config.last_error) ? String(config.last_error) : '';
+                const lastErrTime = (config && config.last_error_time) ? String(config.last_error_time) : '';
+
+                const fullErrText = lastErr ? ((lastErrTime ? (lastErrTime + ' ') : '') + lastErr) : '';
+                window._webhookLastErrorText = fullErrText;
+
+                if (okEl) okEl.textContent = `OK: ${successCount}`;
+                if (failEl) failEl.textContent = `Fail: ${failCount}`;
+                if (statusEl) {
+                    statusEl.textContent = `Status: ${statusText || '-'}`;
+                    const s = String(statusText || '').toLowerCase();
+                    if (s === 'ok') statusEl.style.color = 'var(--success-color)';
+                    else if (s === 'failed' || s === 'error') statusEl.style.color = 'var(--danger-color)';
+                    else statusEl.style.color = 'var(--gray-600)';
+                }
+                if (lastPostEl) lastPostEl.textContent = `Last: ${lastPost || '-'}`;
+
+                if (lastErrEl) {
+                    lastErrEl.textContent = fullErrText || '';
+                    lastErrEl.title = fullErrText || '';
+                }
+                if (detailsEl) {
+                    detailsEl.textContent = fullErrText || 'No error recorded.';
+                }
+
+                const hasErr = !!fullErrText;
+                if (errorRowEl) errorRowEl.style.display = hasErr ? 'flex' : 'none';
+                if (detailsBtnEl) detailsBtnEl.disabled = !hasErr;
+                if (!hasErr && detailsEl) detailsEl.style.display = 'none';
+            })
+            .catch(error => {
+                console.log('Webhook config not available:', error);
+                const urlField = document.getElementById("webhook_url");
+                const intervalField = document.getElementById("webhook_interval");
+                if (urlField) urlField.value = "Not configured";
+                if (intervalField) intervalField.value = "Not configured";
+
+                const okEl = document.getElementById("webhook_stat_success");
+                const failEl = document.getElementById("webhook_stat_fail");
+                const statusEl = document.getElementById("webhook_stat_status");
+                const lastPostEl = document.getElementById("webhook_stat_last_post");
+                const lastErrEl = document.getElementById("webhook_last_error");
+                const detailsEl = document.getElementById("webhook_error_details");
+                const errorRowEl = document.getElementById("webhook_error_row");
+                const detailsBtnEl = document.getElementById("webhook_error_details_btn");
+
+                if (okEl) okEl.textContent = "OK: 0";
+                if (failEl) failEl.textContent = "Fail: 0";
+                if (statusEl) statusEl.textContent = "Status: -";
+                if (lastPostEl) lastPostEl.textContent = "Last: -";
+                if (lastErrEl) {
+                    lastErrEl.textContent = "";
+                    lastErrEl.title = "";
+                }
+                if (detailsEl) detailsEl.textContent = "No error recorded.";
+                if (errorRowEl) errorRowEl.style.display = 'none';
+                if (detailsBtnEl) detailsBtnEl.disabled = true;
+                if (detailsEl) detailsEl.style.display = 'none';
+            });
+    }
+
+    function toggleWebhookErrorDetails() {
+        const detailsEl = document.getElementById('webhook_error_details');
+        if (!detailsEl) return;
+        const isHidden = (detailsEl.style.display === 'none' || detailsEl.style.display === '');
+        if (isHidden) {
+            detailsEl.textContent = window._webhookLastErrorText || 'No error recorded.';
+            detailsEl.style.display = 'block';
+        } else {
+            detailsEl.style.display = 'none';
+        }
+    }
 	function loadCANFLT() {
 		const xhttp = new XMLHttpRequest();
 		xhttp.onload = function() {
@@ -2422,6 +2648,7 @@ function loadAutoTable(jsonData) {
             return;
         }
 		obj["wifi_mode"] = document.getElementById("wifi_mode").value;
+        obj["webhook_en"] = document.getElementById("webhook_en").value;
 		obj["ap_ch"] = document.getElementById("ap_ch_value").value;
 		obj["sta_ssid"] = document.getElementById("ssid_value").value;
 		obj["sta_pass"] = document.getElementById("pass_value").value;
@@ -2678,7 +2905,14 @@ function loadAutoTable(jsonData) {
 			document.getElementById("ap_ch_value").selectedIndex = ch.toString();
 			document.getElementById("ssid_value").value = obj.sta_ssid;
 			document.getElementById("pass_value").value = obj.sta_pass;
-            document.getElementById("sta_security").value = obj.sta_security || "wpa3";			
+            document.getElementById("sta_security").value = obj.sta_security || "wpa3";	
+            
+            const webhookEnEl = document.getElementById("webhook_en");
+            if (webhookEnEl) {
+                const webhookModeFromCfg = obj.webhook_en || "enable";
+                const hasWebhookOption = Array.from(webhookEnEl.options || []).some(o => o && o.value === webhookModeFromCfg);
+                webhookEnEl.value = hasWebhookOption ? webhookModeFromCfg : "enable";
+            }
             if(obj.can_datarate == "5K") {
 				document.getElementById("can_datarate").selectedIndex = "0";
 			} else if(obj.can_datarate == "10K") {
@@ -2809,6 +3043,7 @@ function loadAutoTable(jsonData) {
 			loadCANFLT();
 			loadautoPIDCarData();
             loadautoPID();
+            loadWebhookConfig();
             document.getElementById("car_model").addEventListener('change', function() {
                 // Clear existing entries
                 document.querySelector('.specific-pid-entries').innerHTML = '';
