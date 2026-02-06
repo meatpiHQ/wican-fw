@@ -94,6 +94,7 @@ typedef struct
     char* selected_car_model;
     char* grouping;
     char* autopid_polling;
+    char* webhook_data_mode; // "full" or "diff" (defaults to "full")
     destination_type_t group_destination_type;
     char* group_destination;    //"destination"
     bool pid_std_en;

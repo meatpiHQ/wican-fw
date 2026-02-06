@@ -23,6 +23,7 @@
 #include "freertos/queue.h"
 #include "freertos/event_groups.h"
 #include "esp_log.h"
+#include <stdio.h>
 #include <string.h>
 #include "driver/twai.h"
 #include "esp_timer.h"
@@ -42,8 +43,17 @@
 #include "hw_config.h"
 #include "dev_status.h"
 #include "debug_logs.h"
+#include "ha_webhooks.h"
+#include "wifi_network.h"
+#include "sleep_mode.h"
+#include <time.h>
+#include <ctype.h>
+#include <strings.h>
+#include "lwip/netdb.h"
+#include "lwip/err.h"
+#include <errno.h>
 
-#define TAG __func__
+#define TAG "AUTOPID"
 
 #define TEMP_BUFFER_LENGTH  32
 #define ECU_CONNECTED_BIT			        BIT0
@@ -81,6 +91,375 @@ char* formatNumberPrecision(double num)
         }
     }
     return buf;
+}
+
+static char *strdup_heap(const char *s)
+{
+    if (!s)
+        return NULL;
+    size_t n = strlen(s) + 1;
+    char *out = (char *)malloc(n);
+    if (!out)
+        return NULL;
+    memcpy(out, s, n);
+    return out;
+}
+
+static void webhook_format_utc(char out[32])
+{
+    if (!out)
+        return;
+
+    time_t now = time(NULL);
+    struct tm t;
+    memset(&t, 0, sizeof(t));
+
+    // If time isn't set, still emit something deterministic
+    if (now <= 0)
+    {
+        strlcpy(out, "1970-01-01T00:00:00Z", 32);
+        return;
+    }
+
+    gmtime_r(&now, &t);
+    strftime(out, 32, "%Y-%m-%dT%H:%M:%SZ", &t);
+}
+
+static void webhook_sanitize_snippet(char *s)
+{
+    if (!s)
+        return;
+    for (size_t i = 0; s[i]; i++)
+    {
+        unsigned char c = (unsigned char)s[i];
+        if (c == '\r' || c == '\n' || c == '\t')
+        {
+            s[i] = ' ';
+        }
+        else if (c < 32 || c > 126)
+        {
+            s[i] = ' ';
+        }
+    }
+}
+
+static cJSON *json_object_diff_simple(const cJSON *curr_obj, const cJSON *prev_obj)
+{
+    cJSON *diff = cJSON_CreateObject();
+    if (!diff)
+        return NULL;
+
+    if (!curr_obj || !cJSON_IsObject(curr_obj))
+        return diff;
+
+    const cJSON *it = NULL;
+    cJSON_ArrayForEach(it, curr_obj)
+    {
+        const char *key = it->string;
+        if (!key)
+            continue;
+
+        // Only diff simple scalar types
+        bool is_simple = cJSON_IsString(it) || cJSON_IsNumber(it) || cJSON_IsBool(it);
+        if (!is_simple)
+            continue;
+
+        bool changed = true;
+        if (prev_obj && cJSON_IsObject(prev_obj))
+        {
+            const cJSON *prev_it = cJSON_GetObjectItemCaseSensitive((cJSON *)prev_obj, key);
+            if (prev_it)
+            {
+                if (cJSON_IsString(it) && cJSON_IsString(prev_it))
+                {
+                    const char *cs = it->valuestring ? it->valuestring : "";
+                    const char *ps = prev_it->valuestring ? prev_it->valuestring : "";
+                    changed = (strcmp(cs, ps) != 0);
+                }
+                else if (cJSON_IsNumber(it) && cJSON_IsNumber(prev_it))
+                {
+                    changed = (it->valuedouble != prev_it->valuedouble);
+                }
+                else if (cJSON_IsBool(it) && cJSON_IsBool(prev_it))
+                {
+                    int cv = cJSON_IsTrue(it) ? 1 : 0;
+                    int pv = cJSON_IsTrue(prev_it) ? 1 : 0;
+                    changed = (cv != pv);
+                }
+                else
+                {
+                    changed = true;
+                }
+            }
+        }
+
+        if (changed)
+        {
+            if (cJSON_IsString(it) && it->valuestring)
+                cJSON_AddStringToObject(diff, key, it->valuestring);
+            else if (cJSON_IsNumber(it))
+                cJSON_AddNumberToObject(diff, key, it->valuedouble);
+            else if (cJSON_IsBool(it))
+                cJSON_AddBoolToObject(diff, key, cJSON_IsTrue(it));
+        }
+    }
+
+    return diff;
+}
+
+static cJSON *autopid_build_config_object(void)
+{
+    cJSON *cfg = cJSON_CreateObject();
+    if (!cfg)
+        return NULL;
+
+    if (all_pids)
+    {
+        cJSON_AddNumberToObject(cfg, "cycle", (double)all_pids->cycle);
+        if (all_pids->grouping)
+            cJSON_AddStringToObject(cfg, "grouping", all_pids->grouping);
+        if (all_pids->webhook_data_mode)
+            cJSON_AddStringToObject(cfg, "webhook_data_mode", all_pids->webhook_data_mode);
+        if (all_pids->vehicle_model)
+            cJSON_AddStringToObject(cfg, "car_model", all_pids->vehicle_model);
+        cJSON_AddStringToObject(cfg, "ha_discovery", all_pids->ha_discovery_en ? "enable" : "disable");
+        if (all_pids->autopid_polling)
+            cJSON_AddStringToObject(cfg, "autopid_polling", all_pids->autopid_polling);
+    }
+
+    return cfg;
+}
+
+typedef struct
+{
+    char snippet[96];
+} webhook_http_ctx_t;
+
+static void webhook_printf_post_body(const char *url, const char *body, size_t body_len)
+{
+    if (!url || !body)
+        return;
+
+    // Print URL + full JSON payload in bounded chunks (avoids extremely long single-line prints).
+    printf("WEBHOOK POST url=%s len=%u\n", url, (unsigned)body_len);
+    size_t off = 0;
+    while (off < body_len)
+    {
+        size_t chunk = body_len - off;
+        if (chunk > 256)
+            chunk = 256;
+        printf("%.*s", (int)chunk, body + off);
+        off += chunk;
+    }
+    printf("\n");
+}
+
+static bool webhook_parse_http_url(const char *url, char *host, size_t host_len, int *out_port, char *path, size_t path_len)
+{
+    if (!url || !host || !path || !out_port)
+        return false;
+
+    // HTTP only
+    if (strncasecmp(url, "http://", 7) != 0)
+        return false;
+
+    const char *p = url + 7;
+    // host[:port][/path]
+    const char *host_end = p;
+    while (*host_end && *host_end != '/' && *host_end != ':')
+        host_end++;
+
+    size_t hlen = (size_t)(host_end - p);
+    if (hlen == 0 || hlen >= host_len)
+        return false;
+    memcpy(host, p, hlen);
+    host[hlen] = '\0';
+
+    int port = 80;
+    const char *after_host = host_end;
+    if (*after_host == ':')
+    {
+        after_host++;
+        port = 0;
+        while (*after_host && isdigit((unsigned char)*after_host))
+        {
+            port = (port * 10) + (*after_host - '0');
+            after_host++;
+        }
+        if (port <= 0 || port > 65535)
+            return false;
+    }
+
+    if (*after_host == '\0')
+    {
+        strlcpy(path, "/", path_len);
+    }
+    else if (*after_host == '/')
+    {
+        strlcpy(path, after_host, path_len);
+    }
+    else
+    {
+        // Unexpected character after host/port
+        return false;
+    }
+
+    *out_port = port;
+    return true;
+}
+
+static esp_err_t webhook_post_json(const char *url, const char *body, size_t body_len, int timeout_ms, int *out_status, char *out_snippet, size_t out_snippet_len)
+{
+    if (!url || !body)
+        return ESP_ERR_INVALID_ARG;
+
+    // Always print what we're about to post (requested for debugging).
+    webhook_printf_post_body(url, body, body_len);
+
+    if (out_status)
+        *out_status = -1;
+    if (out_snippet && out_snippet_len)
+        out_snippet[0] = '\0';
+
+    char host[96] = {0};
+    char path[192] = {0};
+    int port = 80;
+    if (!webhook_parse_http_url(url, host, sizeof(host), &port, path, sizeof(path)))
+        return ESP_ERR_INVALID_ARG;
+
+    char port_str[8];
+    snprintf(port_str, sizeof(port_str), "%d", port);
+
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+
+    struct addrinfo *res = NULL;
+    int gai = getaddrinfo(host, port_str, &hints, &res);
+    if (gai != 0 || !res)
+    {
+        if (out_snippet && out_snippet_len)
+        {
+            // Keep message short and always bounded (build uses -Werror=format-truncation)
+            snprintf(out_snippet, out_snippet_len, "getaddrinfo failed gai=%d", gai);
+        }
+        return ESP_FAIL;
+    }
+
+    int sock = -1;
+    int last_errno = 0;
+    struct addrinfo *ai = res;
+    for (; ai; ai = ai->ai_next)
+    {
+        sock = (int)socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+        if (sock < 0)
+            continue;
+
+        struct timeval tv;
+        tv.tv_sec = timeout_ms / 1000;
+        tv.tv_usec = (timeout_ms % 1000) * 1000;
+        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+        setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
+        if (connect(sock, ai->ai_addr, (socklen_t)ai->ai_addrlen) == 0)
+            break;
+
+        last_errno = errno;
+        close(sock);
+        sock = -1;
+    }
+    freeaddrinfo(res);
+
+    if (sock < 0)
+    {
+        if (out_snippet && out_snippet_len)
+        {
+            // Keep message short and always bounded (build uses -Werror=format-truncation)
+            snprintf(out_snippet, out_snippet_len, "connect failed errno=%d", last_errno);
+        }
+        return ESP_FAIL;
+    }
+
+    // Build HTTP request
+    const char *fmt =
+        "POST %s HTTP/1.1\r\n"
+        "Host: %s\r\n"
+        "Content-Type: application/json\r\n"
+        "Connection: close\r\n"
+        "Content-Length: %u\r\n"
+        "\r\n";
+
+    int hdr_len = snprintf(NULL, 0, fmt, path, host, (unsigned)body_len);
+    if (hdr_len <= 0)
+    {
+        close(sock);
+        return ESP_FAIL;
+    }
+
+    size_t req_len = (size_t)hdr_len + body_len;
+    char *req = (char *)malloc(req_len + 1);
+    if (!req)
+    {
+        close(sock);
+        return ESP_ERR_NO_MEM;
+    }
+
+    int w = snprintf(req, (size_t)hdr_len + 1, fmt, path, host, (unsigned)body_len);
+    if (w != hdr_len)
+    {
+        free(req);
+        close(sock);
+        return ESP_FAIL;
+    }
+    memcpy(req + hdr_len, body, body_len);
+    req[req_len] = '\0';
+
+    // Send all
+    size_t sent = 0;
+    while (sent < req_len)
+    {
+        int n = (int)send(sock, req + sent, (int)(req_len - sent), 0);
+        if (n <= 0)
+        {
+            free(req);
+            close(sock);
+            return ESP_FAIL;
+        }
+        sent += (size_t)n;
+    }
+    free(req);
+
+    // Read response (small)
+    char resp[512];
+    int r = (int)recv(sock, resp, sizeof(resp) - 1, 0);
+    close(sock);
+    if (r <= 0)
+        return ESP_FAIL;
+    resp[r] = '\0';
+
+    // Parse status code
+    int status = -1;
+    const char *sp = strstr(resp, "HTTP/");
+    if (sp)
+    {
+        const char *code = strchr(sp, ' ');
+        if (code)
+            status = atoi(code + 1);
+    }
+    if (out_status)
+        *out_status = status;
+
+    // Extract a snippet after headers if possible
+    if (out_snippet && out_snippet_len > 0)
+    {
+        const char *body_start = strstr(resp, "\r\n\r\n");
+        body_start = body_start ? (body_start + 4) : resp;
+        strlcpy(out_snippet, body_start, out_snippet_len);
+        webhook_sanitize_snippet(out_snippet);
+    }
+
+    return ESP_OK;
 }
 
 // Recursively limit decimal precision in the JSON structure
@@ -1511,6 +1890,7 @@ all_pids_t* load_all_pids(void){
             cJSON* init_item = cJSON_GetObjectItem(root, "initialisation");
             cJSON* grouping_item = cJSON_GetObjectItem(root, "grouping");
             cJSON* autopid_polling_item = cJSON_GetObjectItem(root, "autopid_polling");
+            cJSON* webhook_data_mode_item = cJSON_GetObjectItem(root, "webhook_data_mode");
             cJSON* car_model_item = cJSON_GetObjectItem(root, "car_model");
             cJSON* ecu_protocol_item = cJSON_GetObjectItem(root, "ecu_protocol");
             cJSON* ha_discovery_item = cJSON_GetObjectItem(root, "ha_discovery");
@@ -1536,6 +1916,7 @@ all_pids_t* load_all_pids(void){
 
             all_pids->grouping = (grouping_item && grouping_item->valuestring && strlen(grouping_item->valuestring) > 1) ? strdup(grouping_item->valuestring) : strdup("disable");
             all_pids->autopid_polling = (autopid_polling_item && autopid_polling_item->valuestring && strlen(autopid_polling_item->valuestring) > 1) ? strdup(autopid_polling_item->valuestring) : strdup("enable");
+            all_pids->webhook_data_mode = (webhook_data_mode_item && webhook_data_mode_item->valuestring && strlen(webhook_data_mode_item->valuestring) > 0) ? strdup(webhook_data_mode_item->valuestring) : strdup("full");
             all_pids->vehicle_model = car_model_item ? strdup(car_model_item->valuestring) : NULL;
             all_pids->std_ecu_protocol = ecu_protocol_item ? strdup(ecu_protocol_item->valuestring) : NULL;
             all_pids->ha_discovery_en = ha_discovery_item ? (strcmp(ha_discovery_item->valuestring, "enable") == 0) : false;
@@ -1891,6 +2272,279 @@ all_pids_t* load_all_pids(void){
     return all_pids;
 }
 
+static void autopid_webhook_task(void *pvParameters)
+{
+    ESP_LOGI(TAG, "Autopid Webhook Task Started");
+    (void)pvParameters;
+
+    uint64_t last_post_time = 0;
+    uint64_t last_wifi_status_time = 0;
+    char *prev_autopid_snapshot = NULL;
+    char *prev_config_snapshot = NULL;
+    char *prev_status_snapshot = NULL;
+
+    vTaskDelay(pdMS_TO_TICKS(5000));
+
+    for (;;)
+    {
+        // Wait for STA connectivity (do NOT block forever on dev_status bits; wifi_network doesn't set them)
+        if (!wifi_network_is_connected())
+        {
+            uint64_t now = (uint64_t)(esp_timer_get_time() / 1000000ULL);
+            if ((now - last_wifi_status_time) >= 10)
+            {
+                last_wifi_status_time = now;
+
+                ha_webhook_config_t webhook_cfg;
+                memset(&webhook_cfg, 0, sizeof(webhook_cfg));
+                if (ha_webhooks_get_config(&webhook_cfg) == ESP_OK && webhook_cfg.enabled && webhook_cfg.url[0] != '\0')
+                {
+                    ha_webhook_config_t upd = webhook_cfg;
+                    strlcpy(upd.status, "waiting_wifi", sizeof(upd.status));
+                    webhook_format_utc(upd.last_error_time);
+                    strlcpy(upd.last_error, "STA not connected - waiting for WiFi", sizeof(upd.last_error));
+                    (void)ha_webhooks_update_cache(&upd);
+                }
+
+                ESP_LOGW(TAG, "Webhook: STA not connected yet (no route to HA)");
+            }
+
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
+        }
+
+        // Only post in AutoPID protocol mode
+        if (config_server_protocol() == AUTO_PID && wifi_network_is_connected())
+        {
+            bool send_full_data = true;
+            if (all_pids && all_pids->webhook_data_mode)
+                send_full_data = (strcmp(all_pids->webhook_data_mode, "full") == 0);
+
+            ha_webhook_config_t webhook_cfg;
+            memset(&webhook_cfg, 0, sizeof(webhook_cfg));
+            esp_err_t err = ha_webhooks_get_config(&webhook_cfg);
+
+            if (err == ESP_OK && webhook_cfg.enabled && webhook_cfg.url[0] != '\0')
+            {
+                // Enforce HTTP-only
+                if (strncasecmp(webhook_cfg.url, "http://", 7) != 0)
+                {
+                    uint64_t now = (uint64_t)(esp_timer_get_time() / 1000000ULL);
+                    uint32_t interval_sec = (webhook_cfg.interval > 0) ? (uint32_t)webhook_cfg.interval : 60;
+                    if ((now - last_post_time) >= interval_sec)
+                    {
+                        last_post_time = now;
+
+                        ha_webhook_config_t upd = webhook_cfg;
+                        upd.fail_count++;
+                        strlcpy(upd.status, "failed", sizeof(upd.status));
+                        webhook_format_utc(upd.last_error_time);
+                        strlcpy(upd.last_error, "https not supported: use http://", sizeof(upd.last_error));
+                        (void)ha_webhooks_update_cache(&upd);
+                    }
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                    continue;
+                }
+
+                uint64_t now = (uint64_t)(esp_timer_get_time() / 1000000ULL);
+                uint32_t interval_sec = (webhook_cfg.interval > 0) ? (uint32_t)webhook_cfg.interval : 60;
+
+                if ((now - last_post_time) >= interval_sec)
+                {
+                    last_post_time = now;
+
+                    char *raw_json = autopid_data_read();
+                    if (raw_json)
+                    {
+                        char *url = strdup_heap(webhook_cfg.url);
+                        if (url)
+                        {
+                            ESP_LOGI(TAG, "Webhook: posting %s payload to %s", send_full_data ? "full" : "diff", url);
+                            cJSON *root_obj = cJSON_CreateObject();
+                            cJSON *cfg_curr = autopid_build_config_object();
+                            char *status_json = config_server_get_status_json(true /* remove_sensitive_info */);
+                            cJSON *sts_curr = status_json ? cJSON_Parse(status_json) : NULL;
+                            free(status_json);
+                            if (!sts_curr)
+                                sts_curr = cJSON_CreateObject();
+
+                            // Ensure these are always present for webhook payload consumers
+                            if (sts_curr)
+                            {
+                                cJSON_DeleteItemFromObjectCaseSensitive(sts_curr, "autopid_enabled");
+                                cJSON_AddBoolToObject(sts_curr, "autopid_enabled", (config_server_protocol() == AUTO_PID));
+
+                                uint64_t uptime_sec = (uint64_t)(esp_timer_get_time() / 1000000ULL);
+                                cJSON_DeleteItemFromObjectCaseSensitive(sts_curr, "uptime_sec");
+                                cJSON_AddNumberToObject(sts_curr, "uptime_sec", (double)uptime_sec);
+                            }
+                            cJSON *auto_curr = cJSON_Parse(raw_json);
+                            if (!auto_curr)
+                                auto_curr = cJSON_CreateObject();
+
+                            if (root_obj && cfg_curr && sts_curr && auto_curr)
+                            {
+                                // CONFIG
+                                cJSON *cfg_payload = NULL;
+                                if (send_full_data)
+                                {
+                                    cfg_payload = cJSON_Duplicate(cfg_curr, true);
+                                }
+                                else
+                                {
+                                    cJSON *prev = prev_config_snapshot ? cJSON_Parse(prev_config_snapshot) : NULL;
+                                    cfg_payload = json_object_diff_simple(cfg_curr, prev);
+                                    if (prev)
+                                        cJSON_Delete(prev);
+
+                                    char *snap = cJSON_PrintUnformatted(cfg_curr);
+                                    if (snap)
+                                    {
+                                        free(prev_config_snapshot);
+                                        prev_config_snapshot = snap;
+                                    }
+                                }
+
+                                // STATUS
+                                cJSON *sts_payload = NULL;
+                                if (send_full_data)
+                                {
+                                    sts_payload = cJSON_Duplicate(sts_curr, true);
+                                }
+                                else
+                                {
+                                    cJSON *prev = prev_status_snapshot ? cJSON_Parse(prev_status_snapshot) : NULL;
+                                    sts_payload = json_object_diff_simple(sts_curr, prev);
+                                    if (prev)
+                                        cJSON_Delete(prev);
+
+                                    char *snap = cJSON_PrintUnformatted(sts_curr);
+                                    if (snap)
+                                    {
+                                        free(prev_status_snapshot);
+                                        prev_status_snapshot = snap;
+                                    }
+                                }
+
+                                // AUTOPID_DATA
+                                cJSON *auto_payload = NULL;
+                                if (send_full_data)
+                                {
+                                    auto_payload = cJSON_Duplicate(auto_curr, true);
+                                }
+                                else
+                                {
+                                    cJSON *prev = prev_autopid_snapshot ? cJSON_Parse(prev_autopid_snapshot) : NULL;
+                                    auto_payload = json_object_diff_simple(auto_curr, prev);
+                                    if (prev)
+                                        cJSON_Delete(prev);
+
+                                    char *snap = cJSON_PrintUnformatted(auto_curr);
+                                    if (snap)
+                                    {
+                                        free(prev_autopid_snapshot);
+                                        prev_autopid_snapshot = snap;
+                                    }
+                                }
+
+                                if (cfg_payload && cJSON_GetArraySize(cfg_payload) > 0)
+                                    cJSON_AddItemToObject(root_obj, "config", cfg_payload);
+                                else if (cfg_payload)
+                                    cJSON_Delete(cfg_payload);
+
+                                if (sts_payload && cJSON_GetArraySize(sts_payload) > 0)
+                                    cJSON_AddItemToObject(root_obj, "status", sts_payload);
+                                else if (sts_payload)
+                                    cJSON_Delete(sts_payload);
+
+                                if (auto_payload && cJSON_GetArraySize(auto_payload) > 0)
+                                    cJSON_AddItemToObject(root_obj, "autopid_data", auto_payload);
+                                else if (auto_payload)
+                                    cJSON_Delete(auto_payload);
+
+                                // Always include GPS block (mock for now)
+                                cJSON *gps = cJSON_CreateObject();
+                                if (gps)
+                                {
+                                    cJSON_AddNumberToObject(gps, "latitude", 37.7749);
+                                    cJSON_AddNumberToObject(gps, "longitude", -122.4194);
+                                    cJSON_AddNumberToObject(gps, "accuracy", 10);
+                                    cJSON_AddNumberToObject(gps, "altitude", 25.5);
+                                    cJSON_AddNumberToObject(gps, "speed", 15.3);
+                                    cJSON_AddNumberToObject(gps, "heading", 180);
+                                    cJSON_AddItemToObject(root_obj, "gps", gps);
+                                }
+
+                                limitJsonDecimalPrecision(root_obj);
+
+                                char *body = cJSON_PrintUnformatted(root_obj);
+                                if (body)
+                                {
+                                    int status = -1;
+                                    char snippet[96] = {0};
+                                    esp_err_t post_err = webhook_post_json(url, body, strlen(body), 5000, &status, snippet, sizeof(snippet));
+                                    bool ok = (post_err == ESP_OK && status >= 200 && status < 300);
+
+                                    ha_webhook_config_t upd = webhook_cfg;
+                                    if (ok)
+                                    {
+                                        upd.success_count++;
+                                        upd.retries = 0;
+                                        strlcpy(upd.status, "ok", sizeof(upd.status));
+                                        webhook_format_utc(upd.last_post);
+                                        upd.last_error[0] = '\0';
+                                        upd.last_error_time[0] = '\0';
+                                        ESP_LOGI(TAG, "Webhook POST success, status %d", status);
+                                    }
+                                    else
+                                    {
+                                        upd.fail_count++;
+                                        upd.retries++;
+                                        strlcpy(upd.status, "failed", sizeof(upd.status));
+                                        webhook_format_utc(upd.last_error_time);
+                                        if (post_err != ESP_OK)
+                                        {
+                                            if (snippet[0])
+                                                snprintf(upd.last_error, sizeof(upd.last_error), "esp_err=%s; resp=%s", esp_err_to_name(post_err), snippet);
+                                            else
+                                                snprintf(upd.last_error, sizeof(upd.last_error), "esp_err=%s", esp_err_to_name(post_err));
+                                        }
+                                        else
+                                        {
+                                            if (snippet[0])
+                                                snprintf(upd.last_error, sizeof(upd.last_error), "http=%d; resp=%s", status, snippet);
+                                            else
+                                                snprintf(upd.last_error, sizeof(upd.last_error), "http=%d", status);
+                                        }
+                                        ESP_LOGE(TAG, "Webhook POST failed: %s (http=%d)", esp_err_to_name(post_err), status);
+                                    }
+                                    (void)ha_webhooks_update_cache(&upd);
+
+                                    free(body);
+                                }
+                            }
+
+                            if (root_obj)
+                                cJSON_Delete(root_obj);
+                            if (cfg_curr)
+                                cJSON_Delete(cfg_curr);
+                            if (sts_curr)
+                                cJSON_Delete(sts_curr);
+                            if (auto_curr)
+                                cJSON_Delete(auto_curr);
+
+                            free(url);
+                        }
+                        free(raw_json);
+                    }
+                }
+            }
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
+
 void print_pids(all_pids_t* all_pids) {
     const char* pid_type_str[] = {"Standard", "Custom", "Specific"};
     
@@ -1940,7 +2594,7 @@ void autopid_init(char* id)
     // Set request bit  
     xEventGroupSetBits(xautopid_event_group, AUTOPID_REQUEST_BIT);
 
-
+    ha_webhooks_init();
     autopidQueue = xQueueCreate(QUEUE_SIZE, sizeof(response_t));
     if (autopidQueue == NULL)
     {
@@ -2000,7 +2654,9 @@ void autopid_init(char* id)
     autopid_values_count = all_pids->pid_count;
 
 
-
+    
     xTaskCreate(autopid_task, "autopid_task", 5000, (void *)AF_INET, 5, NULL);
+    // Webhook posting runs independently from the polling loop
+    xTaskCreate(autopid_webhook_task, "autopid_webhook_task", 6144, NULL, 4, NULL);
 
 }
