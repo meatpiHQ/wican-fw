@@ -882,7 +882,7 @@
                                 <span id="webhook_stat_success" class="status-indicator status-connected">OK: 0</span>
                                 <span id="webhook_stat_fail" class="status-indicator status-disconnected">Fail: 0</span>
                                 <span id="webhook_stat_status" class="webhook-meta">Status: -</span>
-                                <span id="webhook_stat_last_post" class="webhook-meta">Last: -</span>
+                                <span id="webhook_stat_last_post" class="webhook-meta" style="display:none;">Last: -</span>
                             </div>
                             <div id="webhook_error_row" class="webhook-stats-bottom">
                                 <span class="webhook-meta">Last error:</span>
@@ -2461,9 +2461,16 @@ function loadAutoTable(jsonData) {
                 const statusText = (config && config.status) ? String(config.status) : (config.enabled ? 'unknown' : 'disabled');
                 const lastPost = (config && config.last_post) ? String(config.last_post) : '';
                 const lastErr = (config && config.last_error) ? String(config.last_error) : '';
-                const lastErrTime = (config && config.last_error_time) ? String(config.last_error_time) : '';
 
-                const fullErrText = lastErr ? ((lastErrTime ? (lastErrTime + ' ') : '') + lastErr) : '';
+                // UI request: do not show time/date for last success post or last error.
+                // Strip a leading ISO timestamp if it is present in the error text.
+                const stripLeadingIsoTimestamp = (text) => {
+                    const s = String(text || '').trim();
+                    // Examples: 1970-01-01T02:19:54Z ... OR 2025-12-31T23:59:59.123Z ...
+                    return s.replace(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\s+/, '');
+                };
+
+                const fullErrText = lastErr ? stripLeadingIsoTimestamp(lastErr) : '';
                 window._webhookLastErrorText = fullErrText;
 
                 if (okEl) okEl.textContent = `OK: ${successCount}`;
@@ -2475,7 +2482,8 @@ function loadAutoTable(jsonData) {
                     else if (s === 'failed' || s === 'error') statusEl.style.color = 'var(--danger-color)';
                     else statusEl.style.color = 'var(--gray-600)';
                 }
-                if (lastPostEl) lastPostEl.textContent = `Last: ${lastPost || '-'}`;
+                // Hide/remove last post time/date from the UI.
+                if (lastPostEl) lastPostEl.textContent = '';
 
                 if (lastErrEl) {
                     lastErrEl.textContent = fullErrText || '';
@@ -2509,7 +2517,7 @@ function loadAutoTable(jsonData) {
                 if (okEl) okEl.textContent = "OK: 0";
                 if (failEl) failEl.textContent = "Fail: 0";
                 if (statusEl) statusEl.textContent = "Status: -";
-                if (lastPostEl) lastPostEl.textContent = "Last: -";
+                if (lastPostEl) lastPostEl.textContent = "";
                 if (lastErrEl) {
                     lastErrEl.textContent = "";
                     lastErrEl.title = "";
