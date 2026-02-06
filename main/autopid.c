@@ -235,24 +235,24 @@ typedef struct
     char snippet[96];
 } webhook_http_ctx_t;
 
-static void webhook_printf_post_body(const char *url, const char *body, size_t body_len)
-{
-    if (!url || !body)
-        return;
+// static void webhook_printf_post_body(const char *url, const char *body, size_t body_len)
+// {
+//     if (!url || !body)
+//         return;
 
-    // Print URL + full JSON payload in bounded chunks (avoids extremely long single-line prints).
-    printf("WEBHOOK POST url=%s len=%u\n", url, (unsigned)body_len);
-    size_t off = 0;
-    while (off < body_len)
-    {
-        size_t chunk = body_len - off;
-        if (chunk > 256)
-            chunk = 256;
-        printf("%.*s", (int)chunk, body + off);
-        off += chunk;
-    }
-    printf("\n");
-}
+//     // Print URL + full JSON payload in bounded chunks (avoids extremely long single-line prints).
+//     printf("WEBHOOK POST url=%s len=%u\n", url, (unsigned)body_len);
+//     size_t off = 0;
+//     while (off < body_len)
+//     {
+//         size_t chunk = body_len - off;
+//         if (chunk > 256)
+//             chunk = 256;
+//         printf("%.*s", (int)chunk, body + off);
+//         off += chunk;
+//     }
+//     printf("\n");
+// }
 
 static bool webhook_parse_http_url(const char *url, char *host, size_t host_len, int *out_port, char *path, size_t path_len)
 {
@@ -313,8 +313,7 @@ static esp_err_t webhook_post_json(const char *url, const char *body, size_t bod
     if (!url || !body)
         return ESP_ERR_INVALID_ARG;
 
-    // Always print what we're about to post (requested for debugging).
-    webhook_printf_post_body(url, body, body_len);
+    // webhook_printf_post_body(url, body, body_len);
 
     if (out_status)
         *out_status = -1;
@@ -2463,17 +2462,17 @@ static void autopid_webhook_task(void *pvParameters)
                                     cJSON_Delete(auto_payload);
 
                                 // Always include GPS block (mock for now)
-                                cJSON *gps = cJSON_CreateObject();
-                                if (gps)
-                                {
-                                    cJSON_AddNumberToObject(gps, "latitude", 37.7749);
-                                    cJSON_AddNumberToObject(gps, "longitude", -122.4194);
-                                    cJSON_AddNumberToObject(gps, "accuracy", 10);
-                                    cJSON_AddNumberToObject(gps, "altitude", 25.5);
-                                    cJSON_AddNumberToObject(gps, "speed", 15.3);
-                                    cJSON_AddNumberToObject(gps, "heading", 180);
-                                    cJSON_AddItemToObject(root_obj, "gps", gps);
-                                }
+                                // cJSON *gps = cJSON_CreateObject();
+                                // if (gps)
+                                // {
+                                //     cJSON_AddNumberToObject(gps, "latitude", 37.7749);
+                                //     cJSON_AddNumberToObject(gps, "longitude", -122.4194);
+                                //     cJSON_AddNumberToObject(gps, "accuracy", 10);
+                                //     cJSON_AddNumberToObject(gps, "altitude", 25.5);
+                                //     cJSON_AddNumberToObject(gps, "speed", 15.3);
+                                //     cJSON_AddNumberToObject(gps, "heading", 180);
+                                //     cJSON_AddItemToObject(root_obj, "gps", gps);
+                                // }
 
                                 limitJsonDecimalPrecision(root_obj);
 
