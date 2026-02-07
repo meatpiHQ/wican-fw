@@ -1,0 +1,185 @@
+{
+  "car_model": "Hyundai Ioniq Electric 38kWh (2020-2021)",
+  "init": "ATSP6;ATST96;",
+  "pids": [
+    {
+      "pid": "2201019",
+      "pid_init": "ATSH7E4;ATFCSH7E4;",
+      "parameters": {
+        "SOC_BMS": "B10/2",
+        "Charge_State_Raw": "B15",
+        "Charging_DC": "(B15&64)/64",
+        "Charging_AC": "(B15&32)/32",
+        "HV_Voltage_V": "[B15:B16]/10",
+        "HV_Current_A": "[B17:B18]/10",
+        "Batt_Max_Temp_C": "B21",
+        "Batt_Min_Temp_C": "B22",
+        "Batt_Inlet_Temp_C": "B25",
+        "Cell_V_Max": "B31/50",
+        "Cell_V_Max_No": "B32",
+        "Cell_V_Min": "B34/50",
+        "Cell_V_Min_No": "B35",
+        "Aux_Batt_V": "B38/10",
+        "Isolation_kOhm": "B40*100",
+        "Charged_kWh": "([B49:B50]*65536+[B51:B52])/10",
+        "Discharged_kWh": "([B53:B54]*65536+[B55:B56])/10"
+      }
+    },
+    {
+      "pid": "220101",
+      "pid_init": "ATSH7E4;ATFCSH7E4;",
+      "parameters": {
+        "Capacitor_V": "B8*10"
+      }
+    },
+    {
+      "pid": "220102",
+      "pid_init": "ATSH7E4;ATFCSH7E4;",
+      "parameters": {
+        "Cell_01_V": "B10/50",
+        "Cell_02_V": "B11/50",
+        "Cell_03_V": "B12/50",
+        "Cell_04_V": "B13/50",
+        "Cell_05_V": "B14/50",
+        "Cell_06_V": "B15/50",
+        "Cell_07_V": "B17/50",
+        "Cell_08_V": "B18/50",
+        "Cell_09_V": "B19/50",
+        "Cell_10_V": "B20/50",
+        "Cell_11_V": "B21/50",
+        "Cell_12_V": "B22/50",
+        "Cell_13_V": "B23/50",
+        "Cell_14_V": "B25/50",
+        "Cell_15_V": "B26/50",
+        "Cell_16_V": "B27/50",
+        "Cell_17_V": "B28/50",
+        "Cell_18_V": "B29/50",
+        "Cell_19_V": "B30/50",
+        "Cell_20_V": "B31/50",
+        "Cell_21_V": "B33/50",
+        "Cell_22_V": "B34/50",
+        "Cell_23_V": "B35/50",
+        "Cell_24_V": "B36/50",
+        "Cell_25_V": "B37/50",
+        "Cell_26_V": "B38/50",
+        "Cell_27_V": "B39/50",
+        "Cell_28_V": "B41/50",
+        "Cell_29_V": "B42/50",
+        "Cell_30_V": "B43/50",
+        "Cell_31_V": "B44/50",
+        "Cell_32_V": "B45/50"
+      }
+    },
+    {
+      "pid": "220103",
+      "pid_init": "ATSH7E4;ATFCSH7E4;",
+      "parameters": {
+        "Cell_33_V": "B10/50",
+        "Cell_34_V": "B11/50",
+        "Cell_35_V": "B12/50",
+        "Cell_36_V": "B13/50",
+        "Cell_37_V": "B14/50",
+        "Cell_38_V": "B15/50",
+        "Cell_39_V": "B17/50",
+        "Cell_40_V": "B18/50",
+        "Cell_41_V": "B19/50",
+        "Cell_42_V": "B20/50",
+        "Cell_43_V": "B21/50",
+        "Cell_44_V": "B22/50",
+        "Cell_45_V": "B23/50",
+        "Cell_46_V": "B25/50",
+        "Cell_47_V": "B26/50",
+        "Cell_48_V": "B27/50",
+        "Cell_49_V": "B28/50",
+        "Cell_50_V": "B29/50",
+        "Cell_51_V": "B30/50",
+        "Cell_52_V": "B31/50",
+        "Cell_53_V": "B33/50",
+        "Cell_54_V": "B34/50",
+        "Cell_55_V": "B35/50",
+        "Cell_56_V": "B36/50",
+        "Cell_57_V": "B37/50",
+        "Cell_58_V": "B38/50",
+        "Cell_59_V": "B39/50",
+        "Cell_60_V": "B41/50",
+        "Cell_61_V": "B42/50",
+        "Cell_62_V": "B43/50",
+        "Cell_63_V": "B44/50",
+        "Cell_64_V": "B45/50"
+      }
+    },
+    {
+      "pid": "220104",
+      "pid_init": "ATSH7E4;ATFCSH7E4;",
+      "parameters": {
+        "Cell_65_V": "B10/50",
+        "Cell_66_V": "B11/50",
+        "Cell_67_V": "B12/50",
+        "Cell_68_V": "B13/50",
+        "Cell_69_V": "B14/50",
+        "Cell_70_V": "B15/50",
+        "Cell_71_V": "B17/50",
+        "Cell_72_V": "B18/50",
+        "Cell_73_V": "B19/50",
+        "Cell_74_V": "B20/50",
+        "Cell_75_V": "B21/50",
+        "Cell_76_V": "B22/50",
+        "Cell_77_V": "B23/50",
+        "Cell_78_V": "B25/50",
+        "Cell_79_V": "B26/50",
+        "Cell_80_V": "B27/50",
+        "Cell_81_V": "B28/50",
+        "Cell_82_V": "B29/50",
+        "Cell_83_V": "B30/50",
+        "Cell_84_V": "B31/50",
+        "Cell_85_V": "B33/50",
+        "Cell_86_V": "B34/50",
+        "Cell_87_V": "B35/50",
+        "Cell_88_V": "B36/50"
+      }
+    },
+    {
+      "pid": "2201057",
+      "pid_init": "ATSH7E4;ATFCSH7E4;",
+      "parameters": {
+        "SOH_pct": "[B34:B35]/10",
+        "SOC_Display": "B33/2"
+      }
+    },
+    {
+      "pid": "2201006",
+      "pid_init": "ATSH7B3;ATFCSH7B3;",
+      "parameters": {
+        "Cabin_Temp_C": "B5/2-40"
+      }
+    },
+    {
+      "pid": "2101",
+      "pid_init": "ATSH7E2;ATFCSH7E2;",
+      "parameters": {
+        "Gear_Park": "B10&1",
+        "Gear_Drive": "(B10&8)/8",
+        "Gear_Reverse": "(B10&2)/2",
+        "Regen_Level": "B18",
+        "Inverter_Temp_C": "B23-40"
+      }
+    },
+    {
+      "pid": "22C00B",
+      "pid_init": "ATSH7A0;ATFCSH7A0;",
+      "parameters": {
+        "TPMS_FL_psi": "B5/5",
+        "TPMS_FR_psi": "B10/5",
+        "TPMS_RL_psi": "B14/5",
+        "TPMS_RR_psi": "B19/5"
+      }
+    },
+    {
+      "pid": "22B002",
+      "pid_init": "ATSH7C6;ATFCSH7C6;",
+      "parameters": {
+        "Odometer_km": "[B13:B14]"
+      }
+    }
+  ]
+}
