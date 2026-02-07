@@ -2655,7 +2655,9 @@ void autopid_init(char* id)
 
     
     xTaskCreate(autopid_task, "autopid_task", 5000, (void *)AF_INET, 5, NULL);
-    // Webhook posting runs independently from the polling loop
-    xTaskCreate(autopid_webhook_task, "autopid_webhook_task", 6144, NULL, 4, NULL);
+    if(config_server_get_webhook_en())
+    {
+        xTaskCreate(autopid_webhook_task, "autopid_webhook_task", 6144, NULL, 4, NULL);
+    }
 
 }
