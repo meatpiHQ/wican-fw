@@ -3697,7 +3697,7 @@ static httpd_handle_t config_server_init(void)
 	// Start the httpd server (reserve extra slots for cert manager endpoints)
 	config.max_uri_handlers = 38;
 	config.stack_size = (10*1024);
-	config.max_open_sockets = 15;
+	config.max_open_sockets = 8;
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
 	if (httpd_start(&server, &config) == ESP_OK)
     {

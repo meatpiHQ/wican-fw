@@ -59,6 +59,8 @@ async function checkFirmwareUpdate() {
     });
     let latest_car_models = null;
     let bleAlertShown = false;
+    window.cachedPidGroups = []; // <--- ADD THIS LINE
+
     function loadCarModels(data) {
         const carModelSelect = document.getElementById("car_model");
         if (data && Array.isArray(data.supported)) {
@@ -381,7 +383,19 @@ async function checkFirmwareUpdate() {
             try {
                 const jsonData = JSON.parse(event.target.result);
                 let data;
-                
+
+// --- ADD THIS BLOCK START ---
+        // Capture groups to memory
+        window.cachedPidGroups = [];
+        if (jsonData.cars && jsonData.cars[0] && jsonData.cars[0].pid_groups) {
+            window.cachedPidGroups = jsonData.cars[0].pid_groups;
+            console.log("Cached " + window.cachedPidGroups.length + " PID groups from file.");
+        } else if (jsonData.pid_groups) {
+            // Handle flat format if necessary
+            window.cachedPidGroups = jsonData.pid_groups;
+        }
+        // --- ADD THIS BLOCK END ---
+		
                 // Check if it's a single car format (like Zeekr) with car_model property
                 if (jsonData.car_model && jsonData.pids) {
                     showNotification("Single car format detected. Fetching parameter definitions...", "blue");
@@ -2000,7 +2014,8 @@ function enableAutoStoreButton() {
     }
     document.getElementById("custom_pid_store").disabled = false;
 }
-    
+
+
 async function storeAutoTableData() {
     try {
         const custom_pid_data = [];
@@ -2020,6 +2035,7 @@ async function storeAutoTableData() {
         const standard_pidsValue = document.getElementById("standard_pids")?.value || 'disable';
         const ecu_protocolValue = document.getElementById("ecu_protocol")?.value || '6';
         const carModelValue = carModelField?.value || '';
+        
         if (carSpecificValue== "enable" && (!carModelValue || carModelValue.length === 0 || carModelValue === "Not Selected")) {
             throw new Error("Car model must be selected");
         }
@@ -2028,9 +2044,78 @@ async function storeAutoTableData() {
             car_model: carModelValue,
             init: document.getElementById("specific_init").value,
             pids: [],
-            can_filters: []
+            can_filters: [],
+            pid_groups: [] // Will be populated below
         };
 
+        // --- NEW: Capture Groups Data from UI ---
+        // We look at the 'latest_car_models' to get the structure, then update values from DOM elements
+        if (latest_car_models && Array.isArray(latest_car_models.cars)) {
+            const activeCar = latest_car_models.cars.find(c => c.car_model === carModelValue);
+            
+            if (activeCar && activeCar.pid_groups) {
+                // Deep copy to avoid mutating the original until save is successful
+                let groupsToSave = JSON.parse(JSON.stringify(activeCar.pid_groups));
+                
+                groupsToSave.forEach((group, gIndex) => {
+                    // Capture Group Header fields
+                    const gName = document.getElementById(`g_${gIndex}_name`);
+                    const gCond = document.getElementById(`g_${gIndex}_cond`);
+                    const gInit = document.getElementById(`g_${gIndex}_init`);
+                    const gPeriod = document.getElementById(`g_${gIndex}_period`);
+
+                    if (gName) group.group_name = gName.value;
+                    if (gCond) group.condition = gCond.value;
+                    if (gInit) group.init = gInit.value;
+                    if (gPeriod) group.period = parseInt(gPeriod.value) || 0;
+
+                    // Capture PIDs inside the group
+                    if (group.pids && Array.isArray(group.pids)) {
+                        group.pids.forEach((pid, pIndex) => {
+                            const pName = document.getElementById(`g_${gIndex}_p_${pIndex}_name`);
+                            const pCmd = document.getElementById(`g_${gIndex}_p_${pIndex}_pid`);
+                            const pEn = document.getElementById(`g_${gIndex}_p_${pIndex}_en`); 
+                            const pExpr = document.getElementById(`g_${gIndex}_p_${pIndex}_expr`);
+                            const pMin = document.getElementById(`g_${gIndex}_p_${pIndex}_min`);
+                            const pMax = document.getElementById(`g_${gIndex}_p_${pIndex}_max`);
+                            const pUnit = document.getElementById(`g_${gIndex}_p_${pIndex}_unit`);
+                            const pClass = document.getElementById(`g_${gIndex}_p_${pIndex}_class`);
+                            const pDType = document.getElementById(`g_${gIndex}_p_${pIndex}_dtype`);
+                            const pDest = document.getElementById(`g_${gIndex}_p_${pIndex}_dest`);
+			    const pOnChange = document.getElementById(`g_${gIndex}_p_${pIndex}_onchange`);
+
+                            if (pName) pid.name = pName.value;
+                            if (pCmd) pid.pid = pCmd.value;
+                            if (pEn) pid.enabled = pEn.checked;
+                            if (pExpr) pid.expression = pExpr.value;
+                            if (pMin) pid.min = parseFloat(pMin.value);
+                            if (pMax) pid.max = parseFloat(pMax.value);
+                            if (pUnit) pid.unit = pUnit.value;
+                            if (pClass) pid.class = pClass.value;
+                            if (pDType) pid.destination_type = pDType.value;
+                            if (pDest) pid.destination = pDest.value;
+			    if (pOnChange) pid.onchange = pOnChange.checked;
+
+                            // Update Nested Parameters (if present) for consistency
+                            if (pid.parameters && pid.parameters[0]) {
+                                if(pName) pid.parameters[0].name = pName.value;
+                                if(pExpr) pid.parameters[0].expression = pExpr.value;
+                                if(pMin) pid.parameters[0].min = parseFloat(pMin.value);
+                                if(pMax) pid.parameters[0].max = parseFloat(pMax.value);
+                                if(pUnit) pid.parameters[0].unit = pUnit.value;
+                                if(pClass) pid.parameters[0].class = pClass.value;
+                                if(pDType) pid.parameters[0].destination_type = pDType.value;
+                                if(pDest) pid.parameters[0].destination = pDest.value;
+				if (pOnChange) pid.parameters[0].onchange = pOnChange.checked;
+                            }
+                        });
+                    }
+                });
+                carData.pid_groups = groupsToSave;
+            }
+        }
+
+        // Collect Specific PIDs (Legacy Tab)
         const specificPidEntries = document.querySelectorAll('.specific-pid-entry');
         if (specificPidEntries.length > 0) {
             carData.pids = Array.from(specificPidEntries).map(entry => {
@@ -2053,7 +2138,7 @@ async function storeAutoTableData() {
             });
         }
 
-        // Vehicle Specific CAN filters (from car profile)
+        // Vehicle Specific CAN filters
         const specificFilterEntries = document.querySelectorAll('.specific-canfilter-entry');
         if (specificFilterEntries.length > 0) {
             const grouped = new Map();
@@ -2199,7 +2284,7 @@ async function storeAutoTableData() {
             });
             custom_can_filters.push(...Array.from(grouped.values()));
         }
-        
+
         const jsonData = {
             initialisation: initialisationValue,
             grouping: groupingValue,
@@ -2214,7 +2299,8 @@ async function storeAutoTableData() {
             standard_pids: standard_pidsValue,
             ecu_protocol: ecu_protocolValue,
             group_api_token: window.automateDestinations[0]?.api_token || '',
-            destinations: window.automateDestinations
+            destinations: window.automateDestinations,
+            cars: [carData]
         };
 
         await fetch('store_auto_data', {
@@ -2242,6 +2328,7 @@ async function storeAutoTableData() {
         return false;
     }
 }
+
 
 function toggleSendToFields() {
     const groupingValue = document.getElementById("grouping")?.value || 'disable';
@@ -2912,43 +2999,46 @@ function loadCANFLT() {
     xhttp.send();
 }
 
+
 function loadautoPIDCarData() {
     const xhttp = new XMLHttpRequest();
     xhttp.onload = function() {
-        console.log("Car models:", this.responseText);
+        console.log("Car models loaded:", this.responseText);
         if(this.responseText != "NONE") {
             var obj = JSON.parse(this.responseText);
             const carModels = [];
 
-            // Clear existing rows to avoid duplicates on reload
+            // Clear existing rows
             const pidContainer = document.querySelector('.specific-pid-entries');
             if (pidContainer) pidContainer.innerHTML = '';
 
             const filterContainer = document.querySelector('.specific-canfilter-entries');
             if (filterContainer) filterContainer.innerHTML = '';
 
+            // Initialize global cache if not exists
+            if (!window.cachedPidGroups) window.cachedPidGroups = [];
+
             if (obj && Array.isArray(obj.cars)) {
+                // Cache the full object for dropdown access
+                latest_car_models = obj;
+
                 obj.cars.forEach(car => {
                     if (car.car_model) {
                         carModels.push(car.car_model);
                     }
                     
-                    if (car.pids) {
-                        document.getElementById("specific_init").value = car.init;
-                        car.pids.forEach(pid => {
+                    // 1. Load Init String
+                    if (document.getElementById("specific_init")) {
+                        document.getElementById("specific_init").value = car.init || '';
+                    }
 
+                    // 2. Load Standard (Flat) PIDs
+                    if (car.pids) {
+                        car.pids.forEach(pid => {
                             if (pid.parameters) {
                                 pid.parameters.forEach(param => {
                                     addCarParameter({
-                                        name: param.name,
-                                        expression: param.expression,
-                                        unit: param.unit,
-                                        class: param.class, 
-                                        period: param.period,
-                                        type: param.type,
-                                        min: param.min,
-                                        max: param.max,
-                                        send_to: param.send_to,
+                                        ...param,
                                         pid: pid.pid,
                                         pid_init: pid.pid_init,
                                         enabled: pid.enabled
@@ -2958,6 +3048,15 @@ function loadautoPIDCarData() {
                         });
                     }
 
+                    // 3. [NEW] Load Groups -> Render to Groups Tab
+                    if (car.pid_groups && Array.isArray(car.pid_groups)) {
+                        console.log("Found " + car.pid_groups.length + " Groups. Rendering to Groups Tab...");
+                        renderVehicleGroups(car.pid_groups);
+                    } else {
+                        renderVehicleGroups([]); // Clear if empty
+                    }
+
+                    // 4. Load Filters
                     if (Array.isArray(car.can_filters)) {
                         car.can_filters.forEach(f => {
                             const fid = (f && f.frame_id !== undefined) ? f.frame_id : null;
@@ -2967,15 +3066,7 @@ function loadautoPIDCarData() {
                                     addVehicleSpecificCanFilterEntry({
                                         frame_id: fid,
                                         parameter: {
-                                            name: param.name,
-                                            expression: param.expression,
-                                            unit: param.unit,
-                                            class: param.class,
-                                            period: param.period,
-                                            type: param.type,
-                                            min: param.min,
-                                            max: param.max,
-                                            send_to: param.send_to,
+                                            ...param,
                                             enabled: param.enabled
                                         }
                                     });
@@ -2998,7 +3089,7 @@ function loadautoPIDCarData() {
     };
     xhttp.open("GET", "/load_auto_pid_car_data");
     xhttp.send();
-}
+} 
 
 
 function loadautoPID() {
@@ -3814,30 +3905,57 @@ xhttp.onload = async function() {
         } catch(e) {
             renderFallbackNetworks([]);
         }
-        document.getElementById("car_model").addEventListener('change', function() {
-            document.querySelector('.specific-pid-entries').innerHTML = '';
-            
-            const selectedModel = this.value;
-            if (latest_car_models && Array.isArray(latest_car_models.cars)) {
-                const selectedCar = latest_car_models.cars.find(car => car.car_model === selectedModel);
-                const specificInitElement = document.getElementById("specific_init");
-                specificInitElement.value = selectedCar.init;
-                if (selectedCar && selectedCar.pids) {
-                    selectedCar.pids.forEach(pid => {
-                        if (pid.parameters) {
-                            pid.parameters.forEach(param => {
-                                addCarParameter({
-                                    ...param,
-                                    pid: pid.pid,
-                                    pid_init: pid.pid_init,
-                                    enabled: pid.enabled
-                                });
-                            });
-                        }
+
+document.getElementById("car_model").addEventListener('change', function() {
+    document.querySelector('.specific-pid-entries').innerHTML = ''; 
+    document.querySelector('.specific-canfilter-entries').innerHTML = '';
+    
+    const selectedModel = this.value;
+    if (latest_car_models && Array.isArray(latest_car_models.cars)) {
+        const selectedCar = latest_car_models.cars.find(car => car.car_model === selectedModel);
+        
+        const specificInitElement = document.getElementById("specific_init");
+        if(selectedCar) specificInitElement.value = selectedCar.init || '';
+
+        // 1. Populate Standard List
+        if (selectedCar && selectedCar.pids) {
+            selectedCar.pids.forEach(pid => {
+                if (pid.parameters) {
+                    pid.parameters.forEach(param => {
+                        addCarParameter({
+                            ...param,
+                            pid: pid.pid,
+                            pid_init: pid.pid_init,
+                            enabled: pid.enabled
+                        });
                     });
                 }
-            }
-        });
+            });
+        }
+
+        // 2. Populate Filters
+        if (selectedCar && selectedCar.can_filters) {
+             selectedCar.can_filters.forEach(f => {
+                const fid = (f.frame_id !== undefined) ? f.frame_id : null;
+                const params = (f.parameters) ? f.parameters : [];
+                params.forEach(param => {
+                    addVehicleSpecificCanFilterEntry({
+                        frame_id: fid,
+                        parameter: { ...param, enabled: param.enabled }
+                    });
+                });
+            });
+        }
+
+        // 3. Populate Groups Tab
+        if (selectedCar && selectedCar.pid_groups) {
+            renderVehicleGroups(selectedCar.pid_groups);
+        } else {
+            renderVehicleGroups([]);
+        }
+    }
+});    
+
 
         // Apply mode-dependent enable/disable rules after values are loaded
         try { toggleSmartConnectConfig(); } catch(_) {}
@@ -5014,6 +5132,777 @@ async function vpnDebugResolveEndpoint()
         if (btn) { btn.disabled = false; btn.textContent = 'Resolve Endpoint'; }
     }
 }
+
+
+function toggleSection(elementId, iconId) {
+    const content = document.getElementById(elementId);
+    const icon = document.getElementById(iconId);
+    
+    if (!content) return;
+
+    if (content.style.display === 'none') {
+        content.style.display = 'block';
+        if (icon) icon.innerHTML = '&#9660;'; // Down Arrow
+    } else {
+        content.style.display = 'none';
+        if (icon) icon.innerHTML = '&#9654;'; // Right Arrow
+    }
+}
+
+
+// --- GROUP EDITOR LOGIC ---
+
+// 1. Helper: Save current screen values to memory before modifying structure
+function syncGroupsFromUIToMemory() {
+    const carModelValue = document.getElementById("car_model").value;
+    if (!latest_car_models || !latest_car_models.cars) return null;
+    
+    const activeCar = latest_car_models.cars.find(c => c.car_model === carModelValue);
+    if (!activeCar || !activeCar.pid_groups) return null;
+
+    // Reuse the logic from storeAutoTableData to capture values
+    activeCar.pid_groups.forEach((group, gIndex) => {
+        const gName = document.getElementById(`g_${gIndex}_name`);
+        const gCond = document.getElementById(`g_${gIndex}_cond`);
+        const gInit = document.getElementById(`g_${gIndex}_init`);
+        const gPeriod = document.getElementById(`g_${gIndex}_period`);
+
+        if (gName) group.group_name = gName.value;
+        if (gCond) group.condition = gCond.value;
+        if (gInit) group.init = gInit.value;
+        if (gPeriod) group.period = parseInt(gPeriod.value) || 0;
+
+        if (group.pids) {
+            group.pids.forEach((pid, pIndex) => {
+                const pName = document.getElementById(`g_${gIndex}_p_${pIndex}_name`);
+                const pCmd = document.getElementById(`g_${gIndex}_p_${pIndex}_pid`);
+                const pEn = document.getElementById(`g_${gIndex}_p_${pIndex}_en`);
+                const pExpr = document.getElementById(`g_${gIndex}_p_${pIndex}_expr`);
+                const pMin = document.getElementById(`g_${gIndex}_p_${pIndex}_min`);
+                const pMax = document.getElementById(`g_${gIndex}_p_${pIndex}_max`);
+                const pUnit = document.getElementById(`g_${gIndex}_p_${pIndex}_unit`);
+                const pClass = document.getElementById(`g_${gIndex}_p_${pIndex}_class`);
+                const pDType = document.getElementById(`g_${gIndex}_p_${pIndex}_dtype`);
+                const pDest = document.getElementById(`g_${gIndex}_p_${pIndex}_dest`);
+
+                if (pName) pid.name = pName.value;
+                if (pCmd) pid.pid = pCmd.value;
+                if (pEn) pid.enabled = pEn.checked;
+                if (pExpr) pid.expression = pExpr.value;
+                if (pMin) pid.min = parseFloat(pMin.value);
+                if (pMax) pid.max = parseFloat(pMax.value);
+                if (pUnit) pid.unit = pUnit.value;
+                if (pClass) pid.class = pClass.value;
+                if (pDType) pid.destination_type = pDType.value;
+                if (pDest) pid.destination = pDest.value;
+                
+                // Sync nested parameters if they exist
+                 if (pid.parameters && pid.parameters[0]) {
+                    if(pName) pid.parameters[0].name = pName.value;
+                    if(pExpr) pid.parameters[0].expression = pExpr.value;
+                    if(pMin) pid.parameters[0].min = parseFloat(pMin.value);
+                    if(pMax) pid.parameters[0].max = parseFloat(pMax.value);
+                    if(pUnit) pid.parameters[0].unit = pUnit.value;
+                    if(pClass) pid.parameters[0].class = pClass.value;
+                    if(pDType) pid.parameters[0].destination_type = pDType.value;
+                    if(pDest) pid.parameters[0].destination = pDest.value;
+                }
+            });
+        }
+    });
+    return activeCar;
+}
+
+// 2. Action: Add New Group
+function addNewGroup() {
+    const activeCar = syncGroupsFromUIToMemory();
+    if (!activeCar) return;
+
+    if (!activeCar.pid_groups) activeCar.pid_groups = [];
+    
+    // Add default empty group
+    activeCar.pid_groups.push({
+        group_name: "New Group",
+        condition: "always",
+        period: 1000,
+        init: "",
+        pids: []
+    });
+    
+    renderVehicleGroups(activeCar.pid_groups);
+}
+
+// 3. Action: Delete Group
+function deleteGroup(gIndex) {
+    if(!confirm("Are you sure you want to delete this entire group?")) return;
+    const activeCar = syncGroupsFromUIToMemory();
+    if (!activeCar) return;
+
+    activeCar.pid_groups.splice(gIndex, 1);
+    renderVehicleGroups(activeCar.pid_groups);
+}
+
+// 4. Action: Add New PID (Empty)
+function addPIDToGroup(gIndex) {
+    const activeCar = syncGroupsFromUIToMemory();
+    if (!activeCar) return;
+
+    activeCar.pid_groups[gIndex].pids.push({
+        name: "New PID",
+        pid: "",
+        expression: "A",
+        enabled: true,
+	onchange: false,
+        min: 0, max: 100, unit: "",
+        destination_type: "Default"
+    });
+    
+    renderVehicleGroups(activeCar.pid_groups);
+    // Auto-expand the group so user sees the new PID
+    toggleSection(`content_g_${gIndex}`, `icon_g_${gIndex}`);
+}
+
+// 5. Action: Clone PID
+function clonePID(gIndex, pIndex) {
+    const activeCar = syncGroupsFromUIToMemory();
+    if (!activeCar) return;
+
+    const pidToClone = activeCar.pid_groups[gIndex].pids[pIndex];
+    // Deep copy to prevent reference issues
+    const newPID = JSON.parse(JSON.stringify(pidToClone));
+    newPID.name = newPID.name + " (Copy)";
+    
+    // Insert immediately after original
+    activeCar.pid_groups[gIndex].pids.splice(pIndex + 1, 0, newPID);
+    
+    renderVehicleGroups(activeCar.pid_groups);
+    toggleSection(`content_g_${gIndex}`, `icon_g_${gIndex}`); // Keep open
+}
+
+// 6. Action: Delete PID
+function deletePID(gIndex, pIndex) {
+    if(!confirm("Delete this PID?")) return;
+    const activeCar = syncGroupsFromUIToMemory();
+    if (!activeCar) return;
+
+    activeCar.pid_groups[gIndex].pids.splice(pIndex, 1);
+    
+    renderVehicleGroups(activeCar.pid_groups);
+    toggleSection(`content_g_${gIndex}`, `icon_g_${gIndex}`); // Keep open
+}
+
+
+async function testGroup(gIndex) {
+    const activeCar = syncGroupsFromUIToMemory();
+    if (!activeCar) return;
+
+    const group = activeCar.pid_groups[gIndex];
+    
+    // 1. Open Terminal UI
+    const termDiv = document.getElementById(`term_g_${gIndex}`);
+    const termContent = document.getElementById(`term_content_g_${gIndex}`);
+    if(termDiv) termDiv.style.display = 'block';
+    
+    termContent.innerHTML = `<div>> Initializing group "<b>${group.group_name}</b>"...</div>`;
+    
+    // CRITICAL: Use group init or fallback to global
+    const initString = group.init || document.getElementById("specific_init")?.value || "";
+    termContent.innerHTML += `<div style="color:#94a3b8; font-size:0.85em;">> Init: ${initString}</div>`;
+    termContent.innerHTML += `<div style="border-bottom:1px solid #444; margin-bottom:5px;"></div>`;
+
+    let activeCount = 0;
+
+    // 2. Loop through ALL PIDs
+    for (const pid of group.pids) {
+        if (!pid.enabled) continue;
+        activeCount++;
+
+        const payload = { 
+            kind: 'vehicle',
+            pid: pid.pid,
+            pid_init: "", 
+            expr: pid.expression,
+            init: initString
+        };
+
+        const lineId = `log_${gIndex}_${activeCount}`;
+        termContent.innerHTML += `<div id="${lineId}">> Testing <b>${pid.name}</b> ... <span style="color:#fbbf24;">Sending</span></div>`;
+        termDiv.scrollTop = termDiv.scrollHeight;
+
+        // --- RETRY LOGIC START ---
+        let attempts = 0;
+        let success = false;
+        let responseData = null;
+
+        while(attempts < 3 && !success) {
+            try {
+                // Wait a bit before every attempt to let background tasks finish
+                await new Promise(r => setTimeout(r, 1000));
+
+                const res = await fetch('/autopid/test_pid', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                
+                responseData = await res.json().catch(() => null);
+
+                if (res.ok && responseData) {
+                    if (responseData.error === "AutoPID busy") {
+                        // DEVICE IS BUSY -> WAIT AND RETRY
+                        const lineEl = document.getElementById(lineId);
+                        if(lineEl) lineEl.innerHTML = `> ${pid.name}: <span style="color:#f59e0b;">Device Busy (Retrying ${attempts+1}/3)...</span>`;
+                        await new Promise(r => setTimeout(r, 2000)); // Wait 2 seconds
+                        attempts++;
+                    } else {
+                        success = true; // Success or a different error (like invalid PID)
+                    }
+                } else {
+                    success = true; // Network error, don't retry loop
+                }
+            } catch (e) {
+                success = true; // Stop retrying on net error
+            }
+        }
+        // --- RETRY LOGIC END ---
+
+        const lineEl = document.getElementById(lineId);
+
+        if (!responseData || !responseData.ok) {
+            let errorMsg = responseData ? responseData.error : "Unknown Error";
+            let color = "#ef4444"; // Red
+            
+            // Helpful hints for common errors
+            let hint = "";
+            if (errorMsg === "AutoPID busy") {
+                hint = " (Background tasks running)";
+            } else if (errorMsg && (errorMsg.includes("ERROR") || errorMsg.includes("?"))) {
+                color = "#fbbf24"; // Yellow
+                hint = " (Check Init/Protocol)";
+            }
+
+            if(lineEl) lineEl.innerHTML = `> ${pid.name}: <span style="color:${color};">${errorMsg}</span>${hint}`;
+        } else {
+            // SUCCESS
+            const val = (responseData.value === null) ? 'null' : String(responseData.value);
+            if(lineEl) lineEl.innerHTML = `> ${pid.name}: <span style="color:#34d399;"><b>${val}</b> ${pid.unit || ''}</span>`;
+        }
+    }
+
+    if (activeCount === 0) {
+        termContent.innerHTML += `<div style="color:#ef4444;">> No enabled PIDs found in this group.</div>`;
+    } else {
+        termContent.innerHTML += `<div style="color:#94a3b8; margin-top:5px;">> Group Test Complete.</div>`;
+    }
+    
+    termDiv.scrollTop = termDiv.scrollHeight;
+}
+
+
+// --- DRAG AND DROP STYLES ---
+const dragStyles = `
+    .pid-row-draggable {
+        cursor: grab;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .pid-row-draggable:active {
+        cursor: grabbing;
+    }
+    .pid-row-dragging {
+        opacity: 0.5;
+        background: #e2e8f0 !important;
+        border: 1px dashed #94a3b8 !important;
+    }
+    .group-drop-target {
+        background-color: #dbeafe !important; /* Light blue highlight */
+        border: 2px dashed #3b82f6 !important;
+    }
+`;
+const styleSheet = document.createElement("style");
+styleSheet.innerText = dragStyles;
+document.head.appendChild(styleSheet);
+
+function renderVehicleGroups(groupsData) {
+    const container = document.getElementById('vehicle_groups_container');
+    if (!container) return;
+    container.innerHTML = '';
+
+    // --- BUTTON: Add New Group ---
+    const addGroupBtn = document.createElement('button');
+    addGroupBtn.className = 'primary-button success-button';
+    addGroupBtn.style.cssText = 'margin-bottom: 15px; width: 100%; padding: 10px; display: flex; justify-content: center; align-items: center; gap: 8px;';
+    addGroupBtn.innerHTML = '<span style="font-size:1.2em; font-weight:bold;">+</span> Add New Group';
+    addGroupBtn.onclick = addNewGroup;
+    container.appendChild(addGroupBtn);
+
+    if (!groupsData || groupsData.length === 0) {
+        const emptyMsg = document.createElement('div');
+        emptyMsg.innerHTML = '<div style="padding:20px; text-align:center; color:#666; background:#f9f9f9; border-radius:6px; border:1px dashed #ccc;">No groups defined. Click above to add one.</div>';
+        container.appendChild(emptyMsg);
+        return;
+    }
+
+    groupsData.forEach((group, gIndex) => {
+        const isEven = (gIndex % 2 === 0);
+        const cardBg = isEven ? '#ffffff' : '#f8fafc';
+        const headerBg = isEven ? '#f1f5f9' : '#e2e8f0';
+        const borderColor = isEven ? '#e2e8f0' : '#cbd5e1'; 
+
+        const card = document.createElement('div');
+        card.className = 'group-card'; // Marker for drop target
+        card.dataset.gIndex = gIndex;  // Store index for drop logic
+        card.style.cssText = `border:1px solid ${borderColor}; border-radius:8px; margin-bottom:15px; background:${cardBg}; overflow:hidden; box-shadow: 0 2px 3px rgba(0,0,0,0.05); transition: background-color 0.2s ease;`;
+        
+        // --- DRAG OVER HANDLERS FOR GROUP ---
+        card.addEventListener('dragover', (e) => {
+            e.preventDefault(); // Necessary to allow dropping
+            card.classList.add('group-drop-target');
+            // Auto-expand group on hover if dragging
+            const contentDiv = document.getElementById(`content_g_${gIndex}`);
+            if(contentDiv && contentDiv.style.display === 'none') {
+               toggleSection(`content_g_${gIndex}`, `icon_g_${gIndex}`);
+            }
+        });
+
+        card.addEventListener('dragleave', (e) => {
+            card.classList.remove('group-drop-target');
+        });
+
+        card.addEventListener('drop', (e) => {
+            e.preventDefault();
+            card.classList.remove('group-drop-target');
+            
+            const rawData = e.dataTransfer.getData('text/plain');
+            if (!rawData) return;
+            
+            const dragData = JSON.parse(rawData);
+            const sourceGIndex = dragData.gIndex;
+            const sourcePIndex = dragData.pIndex;
+            const targetGIndex = gIndex;
+
+            // Don't do anything if dropped in same group
+            if (sourceGIndex === targetGIndex) return;
+
+            // Perform the Move
+            const activeCar = syncGroupsFromUIToMemory();
+            if (!activeCar) return;
+
+            // Get the PID object
+            const pidToMove = activeCar.pid_groups[sourceGIndex].pids[sourcePIndex];
+            
+            // Remove from old group
+            activeCar.pid_groups[sourceGIndex].pids.splice(sourcePIndex, 1);
+            
+            // Add to new group
+            if (!activeCar.pid_groups[targetGIndex].pids) {
+                activeCar.pid_groups[targetGIndex].pids = [];
+            }
+            activeCar.pid_groups[targetGIndex].pids.push(pidToMove);
+
+            // Re-render
+            renderVehicleGroups(activeCar.pid_groups);
+            
+            // Ensure the target group is open so user sees the dropped item
+            const contentEl = document.getElementById(`content_g_${targetGIndex}`);
+            const iconEl = document.getElementById(`icon_g_${targetGIndex}`);
+            if(contentEl && contentEl.style.display === 'none') {
+                contentEl.style.display = 'block';
+                if(iconEl) iconEl.innerHTML = '&#9660;';
+            }
+        });
+
+        // --- LEVEL 1: GROUP HEADER ---
+        const header = document.createElement('div');
+        header.style.cssText = `padding:10px; background:${headerBg}; border-bottom:1px solid ${borderColor}; display:flex; flex-direction:column; gap:8px; position:relative;`;
+        
+        // Action Buttons
+        const actionContainer = document.createElement('div');
+        actionContainer.style.cssText = 'position:absolute; top:8px; right:8px; display:flex; gap:6px;';
+
+        const testBtn = document.createElement('button');
+        testBtn.innerHTML = '&#9658;'; 
+        testBtn.title = "Test Group (Send PIDs)";
+        testBtn.style.cssText = 'background:#d1fae5; color:#059669; border:1px solid #a7f3d0; border-radius:4px; cursor:pointer; width:26px; height:26px; display:flex; align-items:center; justify-content:center; padding:0; font-size:14px;';
+        testBtn.onclick = function(e) { e.stopPropagation(); testGroup(gIndex); };
+
+        const delGroupBtn = document.createElement('button');
+        delGroupBtn.innerHTML = '&#10005;'; 
+        delGroupBtn.title = "Delete Group";
+        delGroupBtn.style.cssText = 'background:#fee2e2; color:#dc2626; border:1px solid #fecaca; border-radius:4px; cursor:pointer; width:26px; height:26px; display:flex; align-items:center; justify-content:center; padding:0; font-size:14px;';
+        delGroupBtn.onclick = function(e) { e.stopPropagation(); deleteGroup(gIndex); };
+
+        actionContainer.appendChild(testBtn);
+        actionContainer.appendChild(delGroupBtn);
+        header.appendChild(actionContainer);
+
+        const row1 = document.createElement('div');
+        row1.style.cssText = 'display:flex; align-items:center; flex-wrap:wrap; gap:15px; padding-right:60px;';
+        
+        row1.innerHTML = `
+            <input id="g_${gIndex}_name" value="${group.group_name || 'Group ' + (gIndex+1)}" style="font-weight:700; color:#1e293b; width:200px; border:1px solid #94a3b8; padding:5px; border-radius:4px;" placeholder="Group Name">
+            <div style="display:flex; align-items:center; gap:5px; font-size:0.85rem; color:#475569; font-weight:500;">
+                <span>Cycle:</span>
+                <input id="g_${gIndex}_period" type="number" value="${group.period || 0}" style="width:70px; padding:5px; border:1px solid #cbd5e1; border-radius:4px;">
+                <span>ms</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:5px; margin-left:auto;">
+                <span style="font-size:0.85rem; color:#475569; font-weight:500;">Condition:</span>
+                <select id="g_${gIndex}_cond" style="padding:5px; font-size:0.85rem; border:1px solid #cbd5e1; background:#fff; border-radius:4px;">
+                    <option value="always" ${group.condition === 'always' ? 'selected' : ''}>Always</option>
+                    <option value="engine_running" ${group.condition === 'engine_running' ? 'selected' : ''}>Engine Running</option>
+                    <option value="voltage" ${group.condition === 'voltage' ? 'selected' : ''}>Voltage > 13.2V</option>
+                </select>
+            </div>`;
+
+        const row2 = document.createElement('div');
+        row2.style.cssText = 'display:flex; align-items:center; gap:10px; font-size:0.85rem; color:#475569; width:100%;';
+        row2.innerHTML = `
+            <span style="font-weight:500;">Init:</span>
+            <input id="g_${gIndex}_init" value="${group.init || ''}" placeholder="e.g. atsp6" style="flex:1; padding:5px; border:1px solid #cbd5e1; border-radius:4px; font-family:monospace;">
+        `;
+
+        header.appendChild(row1);
+        header.appendChild(row2);
+        
+        // Terminal Window
+        const termDiv = document.createElement('div');
+        termDiv.id = `term_g_${gIndex}`;
+        termDiv.style.cssText = 'display:none; background:#1e1e1e; color:#10b981; font-family:monospace; font-size:0.8rem; padding:10px; border-bottom:1px solid #333; max-height:150px; overflow-y:auto;';
+        termDiv.innerHTML = `<div style="display:flex; justify-content:space-between; border-bottom:1px solid #333; margin-bottom:5px; padding-bottom:5px; color:#6b7280;">
+            <span>> Console Output</span>
+            <span style="cursor:pointer;" onclick="document.getElementById('term_g_${gIndex}').style.display='none'">[Close]</span>
+        </div><div id="term_content_g_${gIndex}"></div>`;
+
+        // --- LEVEL 2 TRIGGER ---
+        const pidCount = (group.pids && Array.isArray(group.pids)) ? group.pids.length : 0;
+        const toggleBar = document.createElement('div');
+        toggleBar.style.cssText = `padding:6px 10px; background:${isEven?'#f8fafc':'#edf2f7'}; font-size:0.85rem; color:#475569; font-weight:600; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid ${borderColor}; user-select:none;`;
+        
+        const toggleLeft = document.createElement('div');
+        toggleLeft.style.cssText = 'cursor:pointer; display:flex; align-items:center; gap:6px; flex:1;';
+        toggleLeft.innerHTML = `<span id="icon_g_${gIndex}">&#9654;</span> PIDs (${pidCount})`;
+        toggleLeft.onclick = function() { toggleSection(`content_g_${gIndex}`, `icon_g_${gIndex}`); };
+
+        const addPidBtn = document.createElement('button');
+        addPidBtn.innerText = '+ Add PID';
+        addPidBtn.style.cssText = 'padding:2px 8px; font-size:0.75rem; background:#24478f; color:#fff; border:none; border-radius:4px; cursor:pointer;';
+        addPidBtn.onclick = function() { addPIDToGroup(gIndex); };
+
+        toggleBar.appendChild(toggleLeft);
+        toggleBar.appendChild(addPidBtn);
+
+        // --- LEVEL 2 CONTENT ---
+        const content = document.createElement('div');
+        content.id = `content_g_${gIndex}`;
+        content.style.display = 'none'; 
+        content.style.padding = '10px';
+        content.style.backgroundColor = cardBg;
+
+        if (group.pids && Array.isArray(group.pids)) {
+            group.pids.forEach((pid, pIndex) => {
+                // Determine values with fallbacks for flat vs nested structures
+                const pName = pid.name || (pid.parameters && pid.parameters[0]?.name) || '';
+                const pCmd = pid.pid || '';
+                const pExpr = pid.expression || (pid.parameters && pid.parameters[0]?.expression) || '';
+                const pMin = (pid.min !== undefined) ? pid.min : (pid.parameters && pid.parameters[0]?.min !== undefined ? pid.parameters[0].min : '');
+                const pMax = (pid.max !== undefined) ? pid.max : (pid.parameters && pid.parameters[0]?.max !== undefined ? pid.parameters[0].max : '');
+                const pUnit = pid.unit || (pid.parameters && pid.parameters[0]?.unit) || '';
+                const pClass = pid.class || (pid.parameters && pid.parameters[0]?.class) || '';
+                
+                const pDestType = pid.destination_type || pid.type || (pid.parameters && pid.parameters[0]?.destination_type) || (pid.parameters && pid.parameters[0]?.type) || 'Default';
+                const pDest = pid.destination || pid.send_to || (pid.parameters && pid.parameters[0]?.destination) || (pid.parameters && pid.parameters[0]?.send_to) || '';
+		const pOnChange = (pid.onchange !== undefined) ? pid.onchange : false;
+
+                const pEnabled = (pid.enabled !== undefined) ? pid.enabled : true;
+
+                // PID Strip Container (Draggable)
+                const pidRow = document.createElement('div');
+                pidRow.className = 'pid-row-draggable'; // Add class for styling
+                pidRow.draggable = true; // Enable drag API
+                pidRow.style.cssText = 'border:1px solid #e2e8f0; border-radius:6px; margin-bottom:8px; background:#ffffff; box-shadow:0 1px 1px rgba(0,0,0,0.02); overflow:hidden;';
+
+                // --- DRAG HANDLERS FOR PID ---
+                pidRow.addEventListener('dragstart', (e) => {
+                    pidRow.classList.add('pid-row-dragging');
+                    // Store the source indices to know what we are moving
+                    const dragPayload = JSON.stringify({ gIndex: gIndex, pIndex: pIndex });
+                    e.dataTransfer.setData('text/plain', dragPayload);
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+
+                pidRow.addEventListener('dragend', (e) => {
+                    pidRow.classList.remove('pid-row-dragging');
+                });
+
+                const line1 = document.createElement('div');
+                line1.style.cssText = 'display:flex; align-items:center; gap:8px; padding:8px; background:#fff; cursor: grab;'; // Cursor hint
+                
+                // Drag Handle Visual
+                const dragHandle = document.createElement('div');
+                dragHandle.innerHTML = '&#8942;&#8942;'; // Dotted grip icon
+                dragHandle.style.cssText = 'color:#cbd5e1; cursor:grab; font-size:14px; width:15px; text-align:center;';
+                
+                const toggleIcon = document.createElement('div');
+                toggleIcon.style.cssText = 'width:20px; text-align:center; color:#94a3b8; cursor:pointer; font-size: 1.2em;';
+                toggleIcon.id = `icon_g_${gIndex}_p_${pIndex}`;
+                toggleIcon.innerHTML = '&#9654;';
+                toggleIcon.onclick = function() { toggleSection(`details_g_${gIndex}_p_${pIndex}`, `icon_g_${gIndex}_p_${pIndex}`); };
+
+                const nameDiv = document.createElement('div');
+                nameDiv.style.flex = '2';
+                nameDiv.innerHTML = `<input id="g_${gIndex}_p_${pIndex}_name" value="${pName}" placeholder="PID Name" style="width:100%; padding:4px; border:1px solid #cbd5e1; border-radius:4px; font-weight:600; color:#1e293b;">`;
+
+                const pidDiv = document.createElement('div');
+                pidDiv.style.cssText = 'flex:1; min-width:80px;';
+                pidDiv.innerHTML = `<input id="g_${gIndex}_p_${pIndex}_pid" value="${pCmd}" placeholder="PID (Hex)" style="width:100%; padding:4px; border:1px solid #cbd5e1; border-radius:4px; font-family:monospace; color:#475569;">`;
+
+                const actionsDiv = document.createElement('div');
+                actionsDiv.style.cssText = 'display:flex; align-items:center; gap:8px; margin-left:auto; border-left:1px solid #e2e8f0; padding-left:10px;';
+                
+                const enLabel = document.createElement('label');
+                enLabel.htmlFor = `g_${gIndex}_p_${pIndex}_en`;
+                enLabel.style.cssText = "font-size:0.8rem; color:#64748b; cursor:pointer;";
+                enLabel.innerText = "En";
+
+                const enCheck = document.createElement('input');
+                enCheck.type = "checkbox";
+                enCheck.id = `g_${gIndex}_p_${pIndex}_en`;
+                if(pEnabled) enCheck.checked = true;
+                enCheck.style.cursor = "pointer";
+
+                // 2. [NEW] On Change Checkbox
+                // Make sure 'pOnChange' is defined above this block: 
+                // const pOnChange = (pid.onchange !== undefined) ? pid.onchange : false;
+                const chgLabel = document.createElement('label');
+                chgLabel.htmlFor = `g_${gIndex}_p_${pIndex}_onchange`;
+                chgLabel.style.cssText = "font-size:0.8rem; color:#64748b; cursor:pointer; margin-left:4px;";
+                chgLabel.innerText = "Chg";
+                chgLabel.title = "Only send when value changes";
+
+                const chgCheck = document.createElement('input');
+                chgCheck.type = "checkbox";
+                chgCheck.id = `g_${gIndex}_p_${pIndex}_onchange`;
+                if(pOnChange) chgCheck.checked = true;
+                chgCheck.style.cursor = "pointer";
+		
+                const cloneBtn = document.createElement('button');
+                cloneBtn.title = "Clone PID";
+                cloneBtn.innerHTML = '&#10064;'; 
+                cloneBtn.style.cssText = 'background:#eff6ff; color:#2563eb; border:1px solid #dbeafe; border-radius:4px; cursor:pointer; padding:2px 6px; font-size:0.8rem;';
+                cloneBtn.onclick = function() { clonePID(gIndex, pIndex); };
+                
+                const delBtn = document.createElement('button');
+                delBtn.title = "Delete PID";
+                delBtn.innerHTML = '&#128465;'; 
+                delBtn.style.cssText = 'background:#fef2f2; color:#dc2626; border:1px solid #fee2e2; border-radius:4px; cursor:pointer; padding:2px 6px; font-size:0.8rem;';
+                delBtn.onclick = function() { deletePID(gIndex, pIndex); };
+
+                // Append everything in order
+                actionsDiv.appendChild(enLabel);
+                actionsDiv.appendChild(enCheck);
+                
+                // Append the new OnChange controls
+                actionsDiv.appendChild(chgLabel);
+                actionsDiv.appendChild(chgCheck);
+                
+                actionsDiv.appendChild(cloneBtn);
+                actionsDiv.appendChild(delBtn);
+
+                line1.appendChild(dragHandle); // Add handle
+                line1.appendChild(toggleIcon);
+                line1.appendChild(nameDiv);
+                line1.appendChild(pidDiv);
+                line1.appendChild(actionsDiv);
+
+                const details = document.createElement('div');
+                details.id = `details_g_${gIndex}_p_${pIndex}`;
+                details.style.display = 'none'; 
+                details.style.padding = '10px';
+                details.style.borderTop = '1px solid #f1f5f9';
+                details.style.backgroundColor = '#f8fafc';
+
+                const detLine1 = document.createElement('div');
+                detLine1.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:8px;';
+                detLine1.innerHTML = `
+                    <div style="flex:3;">
+                        <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:2px;">Expression</label>
+                        <input id="g_${gIndex}_p_${pIndex}_expr" value="${pExpr}" placeholder="e.g. A*2" style="width:100%; padding:4px; border:1px solid #cbd5e1; border-radius:4px; font-family:monospace;">
+                    </div>
+                    <div style="flex:1; min-width:50px;">
+                        <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:2px;">Min</label>
+                        <input id="g_${gIndex}_p_${pIndex}_min" type="number" value="${pMin}" style="width:100%; padding:4px; border:1px solid #cbd5e1; border-radius:4px;">
+                    </div>
+                    <div style="flex:1; min-width:50px;">
+                        <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:2px;">Max</label>
+                        <input id="g_${gIndex}_p_${pIndex}_max" type="number" value="${pMax}" style="width:100%; padding:4px; border:1px solid #cbd5e1; border-radius:4px;">
+                    </div>
+                     <div style="flex:1; min-width:50px;">
+                        <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:2px;">Unit</label>
+                        <input id="g_${gIndex}_p_${pIndex}_unit" value="${pUnit}" style="width:100%; padding:4px; border:1px solid #cbd5e1; border-radius:4px;">
+                    </div>
+                `;
+
+                const detLine2 = document.createElement('div');
+                detLine2.style.cssText = 'display:flex; align-items:center; gap:8px;';
+                
+                const destTypes = ['Default', 'MQTT_Topic', 'MQTT_WallBox', 'HTTP', 'HTTPS', 'ABRP_API'];
+                let destOptions = '';
+                destTypes.forEach(dt => {
+                    destOptions += `<option value="${dt}" ${pDestType === dt ? 'selected' : ''}>${dt}</option>`;
+                });
+
+                detLine2.innerHTML = `
+                    <div style="flex:1;">
+                        <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:2px;">Class</label>
+                        <input id="g_${gIndex}_p_${pIndex}_class" value="${pClass}" placeholder="e.g. temp" style="width:100%; padding:4px; border:1px solid #cbd5e1; border-radius:4px;">
+                    </div>
+                    <div style="flex:1;">
+                        <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:2px;">Dest. Type</label>
+                        <select id="g_${gIndex}_p_${pIndex}_dtype" style="width:100%; padding:4px; border:1px solid #cbd5e1; border-radius:4px;">
+                            ${destOptions}
+                        </select>
+                    </div>
+                    <div style="flex:2;">
+                        <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:2px;">Destination</label>
+                        <input id="g_${gIndex}_p_${pIndex}_dest" value="${pDest}" placeholder="Topic or URL" style="width:100%; padding:4px; border:1px solid #cbd5e1; border-radius:4px;">
+                    </div>
+                `;
+		
+
+                details.appendChild(detLine1);
+                details.appendChild(detLine2);
+                
+                pidRow.appendChild(line1);
+                pidRow.appendChild(details);
+                content.appendChild(pidRow);
+            });
+        }
+        
+        card.appendChild(header);
+        card.appendChild(termDiv);
+        card.appendChild(toggleBar);
+        card.appendChild(content);
+        container.appendChild(card);
+    });
+
+    if (groupsData.length > 3) {
+        const bottomAddBtn = addGroupBtn.cloneNode(true);
+        bottomAddBtn.onclick = addNewGroup;
+        container.appendChild(bottomAddBtn);
+    }
+}
+
+function downloadActiveProfile() {
+    try {
+        const carModelValue = document.getElementById("car_model")?.value || "Unknown_Car";
+        
+        // 1. Prepare the base structure
+        let carData = {
+            car_model: carModelValue,
+            init: document.getElementById("specific_init")?.value || "",
+            pids: [],
+            can_filters: [],
+            pid_groups: []
+        };
+
+        // 2. Capture Groups (Sync from UI to Memory first)
+        // We reuse the helper we wrote earlier to ensure latest UI edits are captured
+        if (typeof syncGroupsFromUIToMemory === 'function') {
+            const activeCarMem = syncGroupsFromUIToMemory(); // Updates 'latest_car_models' in memory
+            if (activeCarMem && activeCarMem.pid_groups) {
+                // Deep copy to ensure clean export
+                carData.pid_groups = JSON.parse(JSON.stringify(activeCarMem.pid_groups));
+            }
+        }
+
+        // 3. Capture Specific PIDs (Scrape from DOM)
+        const specificPidEntries = document.querySelectorAll('.specific-pid-entry');
+        if (specificPidEntries.length > 0) {
+            carData.pids = Array.from(specificPidEntries).map(entry => {
+                return {
+                    pid: entry.querySelector('.pid-input').value,
+                    pid_init: entry.querySelector('.pid-init-input').value,
+                    enabled: entry.querySelector('.enabled-chk')?.checked !== false,
+                    parameters: [{
+                        name: entry.querySelector('.name-input').value,
+                        expression: entry.querySelector('.expression-input').value,
+                        unit: entry.querySelector('.unit-input').value,
+                        class: entry.querySelector('.class-input').value,
+                        period: entry.querySelector('.period-input').value,
+                        min: entry.querySelector('.min-input').value,
+                        max: entry.querySelector('.max-input').value,
+                        type: entry.querySelector('.type-select').value,
+                        send_to: entry.querySelector('.send-to-input').value,
+                        // Include onchange if the checkbox exists (from previous step)
+                        onchange: entry.querySelector('.enabled-chk')?.closest('.header-right')?.querySelector('input[id*="onchange"]')?.checked || false
+                    }]
+                };
+            });
+        }
+
+        // 4. Capture Vehicle Specific Filters (Scrape from DOM)
+        const specificFilterEntries = document.querySelectorAll('.specific-canfilter-entry');
+        if (specificFilterEntries.length > 0) {
+            // Group by Frame ID logic
+            const grouped = new Map();
+            specificFilterEntries.forEach(entry => {
+                const fidRaw = entry.querySelector('.frame-id-input')?.value || '';
+                const fidNum = normalizeFrameIdInputToNumber(fidRaw);
+                const frameIdOut = (fidNum !== null) ? fidNum : String(fidRaw).trim();
+                
+                if (!frameIdOut) return; // Skip invalid
+
+                const key = (fidNum !== null) ? `n:${fidNum}` : `s:${String(fidRaw).trim().toLowerCase()}`;
+                
+                if (!grouped.has(key)) {
+                    grouped.set(key, { frame_id: frameIdOut, parameters: [] });
+                }
+                
+                grouped.get(key).parameters.push({
+                    name: entry.querySelector('.name-input')?.value || '',
+                    expression: entry.querySelector('.expression-input')?.value || '',
+                    unit: entry.querySelector('.unit-input')?.value || '',
+                    class: entry.querySelector('.class-input')?.value || '',
+                    period: entry.querySelector('.period-input')?.value || '',
+                    min: entry.querySelector('.min-input')?.value || '',
+                    max: entry.querySelector('.max-input')?.value || '',
+                    type: entry.querySelector('.type-select')?.value || 'Default',
+                    send_to: entry.querySelector('.send-to-input')?.value || '',
+                    enabled: entry.querySelector('.enabled-chk')?.checked !== false
+                });
+            });
+            carData.can_filters = Array.from(grouped.values());
+        }
+
+        // 5. Wrap in the standard format
+        const exportObj = {
+            cars: [carData]
+        };
+
+        // 6. Trigger Download
+        const dataStr = JSON.stringify(exportObj, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        
+        // Clean filename: remove spaces/special chars
+        const safeName = carModelValue.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        link.href = url;
+        link.download = `profile_${safeName}.json`;
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+
+        showNotification("Profile downloaded successfully", "green");
+
+    } catch (e) {
+        console.error("Download failed:", e);
+        showNotification("Failed to generate profile: " + e.message, "red");
+    }
+}
+
 
 async function vpnDebugResolveNtp()
 {
