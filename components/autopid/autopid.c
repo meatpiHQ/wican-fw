@@ -3692,8 +3692,8 @@ static void autopid_task(void *pvParameters)
 
         xSemaphoreTake(autopid_config->mutex, portMAX_DELAY);
 
-        // ==========================================================================================
-        // [NEW] GROUP MODE LOGIC
+// ==========================================================================================
+        // [NEW] GROUP MODE LOGIC (SYNCHRONIZED)
         // ==========================================================================================
         if (autopid_config->use_groups) {
             static char *current_active_init = NULL; 
@@ -3701,7 +3701,7 @@ static void autopid_task(void *pvParameters)
             for (uint32_t g = 0; g < autopid_config->group_count; g++) {
                 pid_group_t *group = &autopid_config->groups[g];
                 
-                // 1. Check Condition
+                // 1. Check Condition (Voltage / RPM)
                 bool active = true;
                 if (group->detection_method == DETECTION_VOLTAGE) {
                     active = dev_status_is_wake_voltage_ok();
@@ -3711,7 +3711,22 @@ static void autopid_task(void *pvParameters)
 
                 if (!active) continue;
 
-                // 2. Check Init String (Protocol Switching)
+                // 2. Check Timing (Synchronized Batch Trigger)
+                bool run_batch = false;
+                if (group->period > 0) {
+                    // If group has a period, use the MASTER GROUP TIMER
+                    if (wc_timer_is_expired(&group->timer)) {
+                        run_batch = true;
+                        wc_timer_set(&group->timer, group->period); // Set next wake up immediately to maintain cadence
+                    }
+                } else {
+                    // If period is 0 (or undefined), treat as continuous/individual checks
+                    run_batch = true; 
+                }
+
+                if (!run_batch) continue; // Skip this group if it's not time yet
+
+                // 3. Check Init String (Protocol Switching)
                 if (group->init && strlen(group->init) > 0) {
                     bool need_init = false;
                     if (current_active_init == NULL || strcmp(current_active_init, group->init) != 0) {
@@ -3725,28 +3740,37 @@ static void autopid_task(void *pvParameters)
                     }
                 }
 
-                // 3. Iterate PIDs in Group
+                // 4. Iterate PIDs in Group (Batch Execution)
                 for (uint32_t i = 0; i < group->pid_count; i++) {
                     pid_data_t *curr_pid = group->pids[i];
                     if (!curr_pid || !curr_pid->enabled) continue;
-
-                    // Group Period Override
-                    uint32_t effective_period = (group->period > 0) ? group->period : curr_pid->period;
-                    if (effective_period == 0) effective_period = 1000;
 
                     for (uint32_t p = 0; p < curr_pid->parameters_count; p++) {
                         parameter_t *param = &curr_pid->parameters[p];
                         if (!param->enabled) continue;
 
-                        if (wc_timer_is_expired(&param->timer)) {
+                        // Logic: If group has a period, we force run (because run_batch is true).
+                        // If group period is 0, we fall back to individual timers.
+                        bool execute_now = false;
+                        
+                        if (group->period > 0) {
+                            execute_now = true; 
+                        } else {
+                            if (wc_timer_is_expired(&param->timer)) {
+                                execute_now = true;
+                                wc_timer_set(&param->timer, curr_pid->period > 0 ? curr_pid->period : 1000);
+                            }
+                        }
+
+                        if (execute_now) {
                             execute_pid_parameter(curr_pid, param);
-                            wc_timer_set(&param->timer, effective_period);
                             vTaskDelay(pdMS_TO_TICKS(10)); 
                         }
                     }
                 }
             }
-        } 
+        }
+	
         // ==========================================================================================
         // [LEGACY] FLAT LIST MODE
         // ==========================================================================================
