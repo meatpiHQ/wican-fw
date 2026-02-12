@@ -140,6 +140,7 @@ static sensor_type_t json_sensor_type(const cJSON *obj, const char *key, sensor_
     return (strcmp(s, "binary") == 0) ? BINARY_SENSOR : SENSOR;
 }
 
+
 static void parse_parameter_object(parameter_t *out_param, const cJSON *param_obj,
                                    const char *name_key, const char *expr_key,
                                    const char *unit_key, const char *class_key,
@@ -157,11 +158,9 @@ static void parse_parameter_object(parameter_t *out_param, const cJSON *param_ob
 
     {
         const cJSON *onchange_item = cJSON_GetObjectItem((cJSON *)param_obj, "onchange");
-        // Default to false (Always Send) if missing
         out_param->onchange = (onchange_item && cJSON_IsBool(onchange_item)) ? cJSON_IsTrue(onchange_item) : false;
     }
 
-    
     out_param->name = json_strdup_key_or_default(param_obj, name_key, "none");
     out_param->expression = json_strdup_key_or_default(param_obj, expr_key, "none");
     out_param->unit = json_strdup_key_or_default(param_obj, unit_key, "none");
@@ -172,10 +171,9 @@ static void parse_parameter_object(parameter_t *out_param, const cJSON *param_ob
     out_param->max = json_item_to_float(max_key ? cJSON_GetObjectItem((cJSON *)param_obj, max_key) : NULL, FLT_MAX);
     out_param->period = json_item_to_u32(period_key ? cJSON_GetObjectItem((cJSON *)param_obj, period_key) : NULL, 0);
 
-    // [ROBUST FIX] Destination Parsing
+    // Destination Parsing
     out_param->destination = NULL;
     const char *dest_keys[] = { destination_key, "destination", "Destination", "send_to", "Send_to", NULL };
-    
     for (int i = 0; dest_keys[i]; i++) {
         if (!dest_keys[i]) continue;
         cJSON *item = cJSON_GetObjectItem((cJSON *)param_obj, dest_keys[i]);
@@ -186,7 +184,7 @@ static void parse_parameter_object(parameter_t *out_param, const cJSON *param_ob
     }
     if (!out_param->destination) out_param->destination = strdup_psram("none");
 
-    // [ROBUST FIX] Destination Type Parsing
+    // Destination Type Parsing
     out_param->destination_type = DEST_DEFAULT;
     const char *type_keys[] = { destination_type_key, "type", "Type", "destination_type", NULL };
     bool type_found = false;
@@ -204,25 +202,13 @@ static void parse_parameter_object(parameter_t *out_param, const cJSON *param_ob
     out_param->timer = 0;
     out_param->value = FLT_MAX;
     out_param->failed = false;
+    
+    // Initialize change tracking
+    out_param->last_sent_value = -FLT_MAX; 
 }
 
-// Forward declarations
-static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index);
-static void parse_car_data_json(autopid_config_t *autopid_config, int *pid_index);
-static int count_auto_pid_pids(void);
-static int count_car_data_pids(void);
 
-// Helper: Map JSON condition to Logic
-static detection_method_t detection_method_from_str(const char* str) {
-    if (!str) return DETECTION_ALWAYS;
-    if (strcasecmp(str, "voltage") == 0) return DETECTION_VOLTAGE;
-    if (strcasecmp(str, "engine_running") == 0) return DETECTION_ADAPTIVE_RPM;
-    if (strcasecmp(str, "adaptive_rpm") == 0) return DETECTION_ADAPTIVE_RPM;
-    return DETECTION_ALWAYS;
-}
-
-// Helper: Parse PIDs to Master List (Robust Flat Object Support)
-static int parse_pids_to_master_list(cJSON *pids_array, autopid_config_t *cfg, int start_idx, pid_type_t type) {
+ static int parse_pids_to_master_list(cJSON *pids_array, autopid_config_t *cfg, int start_idx, pid_type_t type) {
     if (!pids_array || !cfg->pids) return 0;
 
     int idx = start_idx;
@@ -266,26 +252,34 @@ static int parse_pids_to_master_list(cJSON *pids_array, autopid_config_t *cfg, i
         curr_pid->pid_type = type;
         curr_pid->enabled = (enabled_item && cJSON_IsBool(enabled_item)) ? cJSON_IsTrue(enabled_item) : true;
 
+        // [CRITICAL FIX] Support Nested "parameters" Array
         cJSON *params = cJSON_GetObjectItem(pid, "parameters");
+        
         if (params && cJSON_IsArray(params)) {
-            // Nested parameters array
+            // Nested parameters array found
             curr_pid->parameters_count = cJSON_GetArraySize(params);
-            curr_pid->parameters = heap_caps_calloc(curr_pid->parameters_count, sizeof(parameter_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
-            int p_idx = 0;
-            cJSON *p;
-            cJSON_ArrayForEach(p, params) {
-                parse_parameter_object(&curr_pid->parameters[p_idx], p, "name", "expression", "unit", "class", "sensor_type", "min", "max", "period", "send_to", "type");
-                p_idx++;
+            if (curr_pid->parameters_count > 0) {
+                curr_pid->parameters = heap_caps_calloc(curr_pid->parameters_count, sizeof(parameter_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
+                int p_idx = 0;
+                cJSON *p;
+                cJSON_ArrayForEach(p, params) {
+                    parse_parameter_object(&curr_pid->parameters[p_idx], p, 
+                        "name", "expression", "unit", "class", "sensor_type", "min", "max", "period", "send_to", "type");
+                    // Inherit PID period if parameter period is missing
+                    if (curr_pid->parameters[p_idx].period == 0) curr_pid->parameters[p_idx].period = curr_pid->period;
+                    p_idx++;
+                }
             }
         } 
         else {
-            // Flat structure: PID object is also the Parameter object
+            // Fallback: Flat Structure (Old Format)
             curr_pid->parameters_count = 1;
             curr_pid->parameters = heap_caps_calloc(1, sizeof(parameter_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
             parse_parameter_object(&curr_pid->parameters[0], pid, 
                 "name", "expression", "unit", "class", "sensor_type", "min", "max", "period", "send_to", "type");
         }
 
+        // Initialize update mode for first parameter
         if (curr_pid->parameters_count > 0) {
             cJSON *update_item = cJSON_GetObjectItem(pid, "update");
             if (update_item && update_item->valuestring) {
@@ -293,7 +287,10 @@ static int parse_pids_to_master_list(cJSON *pids_array, autopid_config_t *cfg, i
             } else {
                 curr_pid->parameters[0].update_mode = strdup_psram("always");
             }
-            curr_pid->parameters[0].last_sent_value = -FLT_MAX;
+            // [CRITICAL] Initialize last_sent_values for ALL parameters
+            for(int k=0; k<curr_pid->parameters_count; k++) {
+                curr_pid->parameters[k].last_sent_value = -FLT_MAX;
+            }
         }
 
         idx++;
@@ -686,20 +683,27 @@ static void parse_car_data_json(autopid_config_t *autopid_config, int *pid_index
 }
 
 
-// ------------------------------------------------------------------------------------------------
-// [FIXED] Load Config with Correct Loop Logic
-// ------------------------------------------------------------------------------------------------
+static detection_method_t detection_method_from_str(const char* str) {
+    if (!str) return DETECTION_ALWAYS;
+    if (strcasecmp(str, "voltage") == 0) return DETECTION_VOLTAGE;
+    if (strcasecmp(str, "engine_running") == 0) return DETECTION_ADAPTIVE_RPM;
+    if (strcasecmp(str, "adaptive_rpm") == 0) return DETECTION_ADAPTIVE_RPM;
+    return DETECTION_ALWAYS;
+}
+
+
 autopid_config_t *load_autopid_config(void)
 {
-    ESP_LOGE(TAG, "!!! STARTING AUTOPID CONFIG LOAD (FINAL FIX) !!!");
+    ESP_LOGI(TAG, "Loading Autopid Config (Linear Mode)");
 
     autopid_config_t *cfg = (autopid_config_t *)heap_caps_calloc(1, sizeof(autopid_config_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
     if (!cfg) return NULL;
     
-    // Load Files
+    // 1. Load Files
     cJSON *root_auto = load_json_root_from_mount("auto_pid.json");
     cJSON *root_car = load_json_root_from_mount("car_data.json");
 
+    // 2. Load Global Settings
     if (root_auto) {
         cJSON *init_item = cJSON_GetObjectItem(root_auto, "initialisation");
         if(init_item && init_item->valuestring) cfg->custom_init = normalize_init_string(init_item->valuestring);
@@ -709,66 +713,54 @@ autopid_config_t *load_autopid_config(void)
         if (grouping && grouping->valuestring) cfg->grouping = strdup_psram(grouping->valuestring);
     }
 
-    // 1. Calculate Total PIDs
-    int auto_pids = count_auto_pid_pids();
-    int car_data_pids = count_car_data_pids();
-    int total_pids = auto_pids + car_data_pids;
-
-    // Check groups in auto_pid.json
+    // 3. Count Totals (Legacy + Grouped PIDs) to Allocate Master List
+    int total_pids = count_auto_pid_pids() + count_car_data_pids();
+    
+    // Helpers to find group objects
     cJSON *groups_auto = root_auto ? cJSON_GetObjectItem(root_auto, "pid_groups") : NULL;
-    if (groups_auto && cJSON_IsArray(groups_auto)) {
-        cJSON *g;
-        cJSON_ArrayForEach(g, groups_auto) {
-            cJSON *gpids = cJSON_GetObjectItem(g, "pids");
-            if(gpids && cJSON_IsArray(gpids)) total_pids += cJSON_GetArraySize(gpids);
-        }
-    }
-
-    // Check groups in car_data.json
     cJSON *groups_car = NULL;
+    
     if (root_car) {
         cJSON *cars = cJSON_GetObjectItem(root_car, "cars");
         if (cars && cJSON_IsArray(cars)) {
             cJSON *active_car = cJSON_GetArrayItem(cars, 0); 
             if (active_car) {
                 groups_car = cJSON_GetObjectItem(active_car, "pid_groups");
+                // Also load specific init
+                cJSON *car_init = cJSON_GetObjectItem(active_car, "init");
+                if (car_init && car_init->valuestring) cfg->specific_init = normalize_init_string(car_init->valuestring);
             }
         }
         if (!groups_car) groups_car = cJSON_GetObjectItem(root_car, "pid_groups");
     }
 
-    if (groups_car && cJSON_IsArray(groups_car)) {
-        cJSON *g;
-        cJSON_ArrayForEach(g, groups_car) {
+    // Count Group PIDs
+    if (groups_auto && cJSON_IsArray(groups_auto)) {
+        cJSON *g; cJSON_ArrayForEach(g, groups_auto) {
             cJSON *gpids = cJSON_GetObjectItem(g, "pids");
-            if(gpids && cJSON_IsArray(gpids)) {
-                total_pids += cJSON_GetArraySize(gpids);
-            }
+            if(gpids) total_pids += cJSON_GetArraySize(gpids);
+        }
+    }
+    if (groups_car && cJSON_IsArray(groups_car)) {
+        cJSON *g; cJSON_ArrayForEach(g, groups_car) {
+            cJSON *gpids = cJSON_GetObjectItem(g, "pids");
+            if(gpids) total_pids += cJSON_GetArraySize(gpids);
         }
     }
 
-    ESP_LOGE(TAG, "Total PIDs to allocate: %d", total_pids);
-
-    // 2. Allocate Master PID List
+    // 4. Allocate Master PID List
     if(total_pids > 0) {
         cfg->pids = heap_caps_calloc(total_pids, sizeof(pid_data_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
     }
-    cfg->pid_count = 0;
+    cfg->pid_count = 0; // Will increment as we fill
 
-    // 3. Load Legacy PIDs
+    // 5. Load Legacy PIDs (Fills cfg->pids starting at index 0)
     int idx = 0;
     parse_auto_pid_json(cfg, &idx); 
     parse_car_data_json(cfg, &idx);
     cfg->pid_count = idx; 
 
-    // 4. Load Groups
-    int group_start_indices[32];
-    int g_i = 0;
-    
-    // Combine group sources [FIX: Explicit size iteration]
-    cJSON *group_sources[2] = { groups_auto, groups_car };
-    
-    // Count total groups first
+    // 6. Load Groups (Linear Allocation)
     int total_group_count = 0;
     if (groups_auto) total_group_count += cJSON_GetArraySize(groups_auto);
     if (groups_car) total_group_count += cJSON_GetArraySize(groups_car);
@@ -779,26 +771,52 @@ autopid_config_t *load_autopid_config(void)
         cfg->group_count = total_group_count;
         cfg->groups = heap_caps_calloc(cfg->group_count, sizeof(pid_group_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
         
-        // [FIX] Loop exactly 2 times, checking for NULL inside
+        int g_i = 0;
+        cJSON *group_sources[2] = { groups_auto, groups_car };
+
         for(int src=0; src < 2; src++) {
-            if (group_sources[src] == NULL) continue; // Skip empty sources but keep going!
+            if (group_sources[src] == NULL) continue;
 
             cJSON *g;
             cJSON_ArrayForEach(g, group_sources[src]) {
-                if (g_i >= 32) break; 
-                group_start_indices[g_i] = cfg->pid_count; 
+                if (g_i >= cfg->group_count) break;
+                pid_group_t *grp = &cfg->groups[g_i];
                 
+                // Parse Group Config
+                cJSON* init = cJSON_GetObjectItem(g, "init");
+                cJSON* cond = cJSON_GetObjectItem(g, "condition");
+                cJSON* period = cJSON_GetObjectItem(g, "period");
+                
+                grp->name = json_strdup_key_or_default(g, "group_name", "Group");
+                grp->init = init ? normalize_init_string(init->valuestring) : NULL;
+                grp->detection_method = detection_method_from_str(json_get_string(cond));
+                grp->period = period ? json_item_to_u32(period, 0) : 0;
+                
+                // Parse PIDs directly into Master List
                 cJSON *gpids = cJSON_GetObjectItem(g, "pids");
                 if (gpids && cJSON_IsArray(gpids)) {
-                    int added = parse_pids_to_master_list(gpids, cfg, cfg->pid_count, PID_CUSTOM);
+                    int start_idx = cfg->pid_count; // Current end of master list
+                    
+                    // Add to master list
+                    int added = parse_pids_to_master_list(gpids, cfg, start_idx, PID_CUSTOM);
                     cfg->pid_count += added;
-                    ESP_LOGE(TAG, "Group %d added %d PIDs", g_i, added);
+                    
+                    // Link immediately
+                    grp->pid_count = added;
+                    if (added > 0) {
+                        grp->pids = heap_caps_calloc(added, sizeof(pid_data_t*), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
+                        for(int k=0; k<added; k++) {
+                            // Point to the exact slots we just filled
+                            grp->pids[k] = &cfg->pids[start_idx + k];
+                        }
+                    }
+                    ESP_LOGI(TAG, "Group %d loaded with %d PIDs", g_i, added);
                 }
                 g_i++;
             }
         }
     } else {
-        // Fallback: Legacy Group Wrapper
+        // Fallback: Legacy Mode
         cfg->use_groups = false;
         if (idx > 0) {  
             cfg->group_count = 1;
@@ -814,48 +832,9 @@ autopid_config_t *load_autopid_config(void)
         }
     }
 
-    // 5. Link Groups (Pointers)
-    if (total_group_count > 0) {
-        g_i = 0;
-        // [FIX] Loop exactly 2 times here too
-        for(int src=0; src < 2; src++) {
-            if (group_sources[src] == NULL) continue;
-
-            cJSON *g;
-            cJSON_ArrayForEach(g, group_sources[src]) {
-                if (g_i >= cfg->group_count) break;
-                pid_group_t *grp = &cfg->groups[g_i];
-                
-                cJSON* init = cJSON_GetObjectItem(g, "init");
-                cJSON* cond = cJSON_GetObjectItem(g, "condition");
-                cJSON* period = cJSON_GetObjectItem(g, "period");
-                
-                grp->name = json_strdup_key_or_default(g, "group_name", "Group");
-                grp->init = init ? normalize_init_string(init->valuestring) : NULL;
-                grp->detection_method = detection_method_from_str(json_get_string(cond));
-                grp->period = period ? json_item_to_u32(period, 0) : 0;
-                
-                cJSON *gpids = cJSON_GetObjectItem(g, "pids");
-                int count = (gpids && cJSON_IsArray(gpids)) ? cJSON_GetArraySize(gpids) : 0;
-                grp->pid_count = count;
-
-                if (count > 0) {
-                    grp->pids = heap_caps_calloc(count, sizeof(pid_data_t*), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
-                    int start_idx = group_start_indices[g_i];
-                    for(int k=0; k<count; k++) {
-                        if (start_idx + k < cfg->pid_count) {
-                            grp->pids[k] = &cfg->pids[start_idx + k]; 
-                        }
-                    }
-                }
-                g_i++;
-            }
-        }
-    }
-
     if (root_auto) cJSON_Delete(root_auto);
     if (root_car) cJSON_Delete(root_car);
     
-    ESP_LOGE(TAG, "!!! CONFIG LOAD COMPLETE. Total PIDs: %ld !!!", cfg->pid_count);
+    ESP_LOGI(TAG, "Config Loaded. Groups: %d, PIDs: %ld", cfg->group_count, cfg->pid_count);
     return cfg;
 }

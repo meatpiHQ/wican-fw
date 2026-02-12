@@ -1827,8 +1827,9 @@ char *autopid_get_destinations_stats_json(void)
     return printed; // caller must free()
 }
 
-// -------------------------------------------------------------------------
-// [UPDATED] Config Exporter (Fixed for Missing Group Fields)
+
+ // -------------------------------------------------------------------------
+// [UPDATED] Config Exporter (Supports Groups + Destination Types)
 // -------------------------------------------------------------------------
 char *autopid_get_config(void)
 {
@@ -1842,133 +1843,136 @@ char *autopid_get_config(void)
 
         if (xSemaphoreTake(autopid_config->mutex, portMAX_DELAY) == pdTRUE)
         {
-            cJSON *parameters_object = cJSON_CreateObject();
-            if (!parameters_object)
+            cJSON *root = cJSON_CreateObject();
+            if (!root)
             {
                 ESP_LOGE(TAG, "Failed to create JSON object");
                 xSemaphoreGive(autopid_config->mutex);
                 return NULL;
             }
 
-            for (int i = 0; i < autopid_config->pid_count; i++)
+            // 1. Export Groups (Primary Data Source for New UI)
+            if (autopid_config->use_groups && autopid_config->group_count > 0)
             {
-                pid_data_t *curr_pid = &autopid_config->pids[i];
-                
-                // Skip disabled types
-                if ((curr_pid->pid_type == PID_STD && !autopid_config->pid_std_en) ||
-                    (curr_pid->pid_type == PID_CUSTOM && !autopid_config->pid_custom_en) ||
-                    (curr_pid->pid_type == PID_SPECIFIC && !autopid_config->pid_specific_en))
+                cJSON *groups_array = cJSON_CreateArray();
+                for (int g = 0; g < autopid_config->group_count; g++)
                 {
-                    continue;
-                }
-
-                for (int j = 0; j < curr_pid->parameters_count; j++)
-                {
-                    parameter_t *param = &curr_pid->parameters[j];
-                    if (!param || !param->name)
-                        continue;
-
-                    cJSON *parameter_details = cJSON_CreateObject();
-                    if (!parameter_details)
-                    {
-                        ESP_LOGE(TAG, "Failed to create parameter JSON object");
-                        continue;
-                    }
-
-                    // 1. PID Command
-                    if (curr_pid->cmd) {
-                        char *clean = strdup_psram(curr_pid->cmd);
-                        if (clean) {
-                            char *cr = strchr(clean, '\r');
-                            if (cr) *cr = 0; 
-                            cJSON_AddStringToObject(parameter_details, "pid", clean);
-                            free(clean);
-                        } else {
-                            cJSON_AddStringToObject(parameter_details, "pid", curr_pid->cmd);
-                        }
-                    }
-
-                    // 2. Core Fields
-                    if (param->expression) cJSON_AddStringToObject(parameter_details, "expression", param->expression);
-                    cJSON_AddNumberToObject(parameter_details, "min", param->min);
-                    cJSON_AddNumberToObject(parameter_details, "max", param->max);
-                    cJSON_AddNumberToObject(parameter_details, "period", curr_pid->period);
+                    pid_group_t *grp = &autopid_config->groups[g];
+                    cJSON *g_obj = cJSON_CreateObject();
                     
-                    // 3. Init String
-                    if (curr_pid->init) {
-                        char *clean = strdup_psram(curr_pid->init);
-                        if (clean) {
-                            char *cr = strchr(clean, '\r');
-                            if (cr) *cr = 0; 
-                            cJSON_AddStringToObject(parameter_details, "init", clean);
-                            free(clean);
-                        } else {
-                            cJSON_AddStringToObject(parameter_details, "init", curr_pid->init);
-                        }
-                    }
-
-                    // 4. [FIX] Destination Fields
-                    if (param->destination) {
-                         cJSON_AddStringToObject(parameter_details, "destination", param->destination);
-                    }
+                    cJSON_AddStringToObject(g_obj, "group_name", grp->name ? grp->name : "Group");
+                    if (grp->init) cJSON_AddStringToObject(g_obj, "init", grp->init);
+                    cJSON_AddNumberToObject(g_obj, "period", grp->period);
                     
-                    // Convert Enum to String for Web UI
-                    const char *dtype_str = "Default";
-                    switch(param->destination_type) {
-                        case DEST_MQTT_TOPIC: dtype_str = "MQTT_Topic"; break;
-                        case DEST_MQTT_WALLBOX: dtype_str = "MQTT_WallBox"; break;
-                        case DEST_HTTP: dtype_str = "HTTP"; break;
-                        case DEST_HTTPS: dtype_str = "HTTPS"; break;
-                        case DEST_ABRP_API: dtype_str = "ABRP_API"; break;
-                        default: dtype_str = "Default"; break;
-                    }
-                    cJSON_AddStringToObject(parameter_details, "destination_type", dtype_str);
+                    // Condition mapping
+                    const char *cond_str = "always";
+                    if (grp->detection_method == DETECTION_VOLTAGE) cond_str = "voltage";
+                    else if (grp->detection_method == DETECTION_ADAPTIVE_RPM) cond_str = "engine_running";
+                    cJSON_AddStringToObject(g_obj, "condition", cond_str);
 
-                    // 5. Optional Fields
-                    if (param->class)
+                    // Add PIDs for this group
+                    cJSON *pids_array = cJSON_CreateArray();
+                    for (int i = 0; i < grp->pid_count; i++)
                     {
-                        cJSON_AddStringToObject(parameter_details, "class", param->class);
+                        pid_data_t *curr_pid = grp->pids[i];
+                        if (!curr_pid) continue;
+
+                        cJSON *p_obj = cJSON_CreateObject();
+                        if (curr_pid->cmd) {
+                            char *clean = strdup_psram(curr_pid->cmd);
+                            if (clean) {
+                                char *cr = strchr(clean, '\r');
+                                if (cr) *cr = 0;
+                                cJSON_AddStringToObject(p_obj, "pid", clean);
+                                free(clean);
+                            }
+                        }
+                        cJSON_AddBoolToObject(p_obj, "enabled", curr_pid->enabled);
+                        if (curr_pid->period > 0) cJSON_AddNumberToObject(p_obj, "period", curr_pid->period);
+
+                        // Add Parameters (Extractors)
+                        cJSON *params_array = cJSON_CreateArray();
+                        for (int j = 0; j < curr_pid->parameters_count; j++)
+                        {
+                            parameter_t *param = &curr_pid->parameters[j];
+                            cJSON *param_details = cJSON_CreateObject();
+                            
+                            cJSON_AddStringToObject(param_details, "name", param->name);
+                            if (param->expression) cJSON_AddStringToObject(param_details, "expression", param->expression);
+                            if (param->unit) cJSON_AddStringToObject(param_details, "unit", param->unit);
+                            if (param->class) cJSON_AddStringToObject(param_details, "class", param->class);
+                            cJSON_AddNumberToObject(param_details, "min", param->min);
+                            cJSON_AddNumberToObject(param_details, "max", param->max);
+                            cJSON_AddBoolToObject(param_details, "enabled", param->enabled);
+                            cJSON_AddBoolToObject(param_details, "onchange", param->onchange);
+
+                            // Destination Type Enum -> String
+                            const char *dtype_str = "Default";
+                            switch(param->destination_type) {
+                                case DEST_MQTT_TOPIC: dtype_str = "MQTT_Topic"; break;
+                                case DEST_MQTT_WALLBOX: dtype_str = "MQTT_WallBox"; break;
+                                case DEST_HTTP: dtype_str = "HTTP"; break;
+                                case DEST_HTTPS: dtype_str = "HTTPS"; break;
+                                case DEST_ABRP_API: dtype_str = "ABRP_API"; break;
+	 			  //case DEST_BLE: dtype_str = "BLE"; break;
+				  //case DEST_SCREEN: dtype_str = "Screen"; break;
+				  //case DEST_LOGGER: dtype_str = "Logger"; break;
+                                default: dtype_str = "Default"; break;
+                            }
+                            cJSON_AddStringToObject(param_details, "destination_type", dtype_str);
+                            
+                            if (param->destination) cJSON_AddStringToObject(param_details, "send_to", param->destination);
+
+                            cJSON_AddItemToArray(params_array, param_details);
+                        }
+                        cJSON_AddItemToObject(p_obj, "parameters", params_array);
+                        cJSON_AddItemToArray(pids_array, p_obj);
                     }
-                    if (param->unit)
-                    {
-                        cJSON_AddStringToObject(parameter_details, "unit", param->unit);
-                    }
-                    cJSON_AddItemToObject(parameters_object, param->name, parameter_details);
+                    cJSON_AddItemToObject(g_obj, "pids", pids_array);
+                    cJSON_AddItemToArray(groups_array, g_obj);
                 }
+                cJSON_AddItemToObject(root, "pid_groups", groups_array);
             }
 
-            // CAN Filters (Legacy)
-            for (uint32_t fi = 0; fi < autopid_config->can_filters_count; fi++)
+            // 2. Export CAN Filters
+            if (autopid_config->can_filters_count > 0)
             {
-                can_filter_t *f = &autopid_config->can_filters[fi];
-                for (uint32_t pi = 0; pi < f->parameters_count; pi++)
+                cJSON *filters_array = cJSON_CreateArray();
+                for (uint32_t fi = 0; fi < autopid_config->can_filters_count; fi++)
                 {
-                    parameter_t *param = &f->parameters[pi];
-                    if (!param || !param->name) continue;
-
-                    cJSON *parameter_details = cJSON_CreateObject();
-                    if (!parameter_details) continue;
-
-                    if (param->class) cJSON_AddStringToObject(parameter_details, "class", param->class);
-                    if (param->unit) cJSON_AddStringToObject(parameter_details, "unit", param->unit);
+                    can_filter_t *f = &autopid_config->can_filters[fi];
+                    cJSON *f_obj = cJSON_CreateObject();
+                    cJSON_AddNumberToObject(f_obj, "frame_id", f->frame_id);
                     
-                    cJSON_AddItemToObject(parameters_object, param->name, parameter_details);
+                    cJSON *f_params = cJSON_CreateArray();
+                    for (uint32_t pi = 0; pi < f->parameters_count; pi++)
+                    {
+                        parameter_t *p = &f->parameters[pi];
+                        cJSON *p_obj = cJSON_CreateObject();
+                        cJSON_AddStringToObject(p_obj, "name", p->name);
+                        cJSON_AddStringToObject(p_obj, "expression", p->expression);
+                        cJSON_AddBoolToObject(p_obj, "enabled", p->enabled);
+                        cJSON_AddItemToArray(f_params, p_obj);
+                    }
+                    cJSON_AddItemToObject(f_obj, "parameters", f_params);
+                    cJSON_AddItemToArray(filters_array, f_obj);
                 }
+                cJSON_AddItemToObject(root, "can_filters", filters_array);
             }
 
-            char *json_tmp = cJSON_PrintUnformatted(parameters_object);
+            char *json_tmp = cJSON_PrintUnformatted(root);
             if (json_tmp)
             {
                 autopid_config_json = strdup_psram(json_tmp);
                 free(json_tmp);
             }
-            cJSON_Delete(parameters_object);
+            cJSON_Delete(root);
             xSemaphoreGive(autopid_config->mutex);
         }
     }
     return autopid_config_json;
 }
-
+ 
 // Forward declarations (used by CAN-filter helpers below)
 static void send_commands(char *commands, uint32_t delay_ms);
 static void publish_parameter_mqtt(parameter_t *param);
@@ -3692,7 +3696,7 @@ static void autopid_task(void *pvParameters)
 
         xSemaphoreTake(autopid_config->mutex, portMAX_DELAY);
 
-// ==========================================================================================
+        // ==========================================================================================
         // [NEW] GROUP MODE LOGIC (SYNCHRONIZED)
         // ==========================================================================================
         if (autopid_config->use_groups) {

@@ -5293,111 +5293,210 @@ function deletePID(gIndex, pIndex) {
 
 
 async function testGroup(gIndex) {
-    const activeCar = syncGroupsFromUIToMemory();
-    if (!activeCar) return;
+    // 1. Force Sync
+    if (typeof syncGroupsFromUIToMemory === 'function') {
+        syncGroupsFromUIToMemory();
+    }
 
-    const group = activeCar.pid_groups[gIndex];
+    // 2. Get Data
+    if (!latest_car_models.pid_groups || !latest_car_models.pid_groups[gIndex]) return;
+    const group = latest_car_models.pid_groups[gIndex];
     
-    // 1. Open Terminal UI
+    // 3. Setup Terminal
     const termDiv = document.getElementById(`term_g_${gIndex}`);
     const termContent = document.getElementById(`term_content_g_${gIndex}`);
     if(termDiv) termDiv.style.display = 'block';
     
-    termContent.innerHTML = `<div>> Initializing group "<b>${group.group_name}</b>"...</div>`;
-    
-    // CRITICAL: Use group init or fallback to global
+    // Clear Content
+    termContent.innerHTML = ''; 
+
+    // Header
+    const tHeader = document.createElement('div');
+    tHeader.innerHTML = `> Initializing group "<b>${group.group_name}</b>"...`;
+    termContent.appendChild(tHeader);
+
     const initString = group.init || document.getElementById("specific_init")?.value || "";
-    termContent.innerHTML += `<div style="color:#94a3b8; font-size:0.85em;">> Init: ${initString}</div>`;
-    termContent.innerHTML += `<div style="border-bottom:1px solid #444; margin-bottom:5px;"></div>`;
+    const tInit = document.createElement('div');
+    tInit.style.cssText = "color:#94a3b8; font-size:0.85em; margin:0; padding:0;";
+    tInit.innerText = `> Init: ${initString}`;
+    termContent.appendChild(tInit);
+
+    const tSep = document.createElement('div');
+    tSep.style.cssText = "border-bottom:1px solid #444; margin-bottom:5px; margin-top:2px;";
+    termContent.appendChild(tSep);
 
     let activeCount = 0;
 
-    // 2. Loop through ALL PIDs
-    for (const pid of group.pids) {
-        if (!pid.enabled) continue;
-        activeCount++;
+    // 4. Loop through PIDs
+    if (group.pids) {
+        for (let i = 0; i < group.pids.length; i++) {
+            const pidData = group.pids[i];
+            if (!pidData.enabled) continue;
+            activeCount++;
 
-        const payload = { 
-            kind: 'vehicle',
-            pid: pid.pid,
-            pid_init: "", 
-            expr: pid.expression,
-            init: initString
-        };
+            // Create Main Container for this PID
+            const pidContainer = document.createElement('div');
+            pidContainer.style.cssText = "margin-bottom:8px; border-bottom:1px dashed #333; padding-bottom:4px;";
+            termContent.appendChild(pidContainer);
 
-        const lineId = `log_${gIndex}_${activeCount}`;
-        termContent.innerHTML += `<div id="${lineId}">> Testing <b>${pid.name}</b> ... <span style="color:#fbbf24;">Sending</span></div>`;
-        termDiv.scrollTop = termDiv.scrollHeight;
+            // 1. PID Title Line
+            const pidTitle = document.createElement('div');
+            pidTitle.style.cssText = "font-weight:bold; color:#fff; margin:0; line-height:1.2;";
+            pidTitle.innerHTML = `> Testing PID ${pidData.pid} <span style="font-size:0.8em; font-weight:normal; color:#aaa;">(${pidData.pid_description || ''})</span>`;
+            pidContainer.appendChild(pidTitle);
 
-        // --- RETRY LOGIC START ---
-        let attempts = 0;
-        let success = false;
-        let responseData = null;
-
-        while(attempts < 3 && !success) {
-            try {
-                // Wait a bit before every attempt to let background tasks finish
-                await new Promise(r => setTimeout(r, 1000));
-
-                const res = await fetch('/autopid/test_pid', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                });
-                
-                responseData = await res.json().catch(() => null);
-
-                if (res.ok && responseData) {
-                    if (responseData.error === "AutoPID busy") {
-                        // DEVICE IS BUSY -> WAIT AND RETRY
-                        const lineEl = document.getElementById(lineId);
-                        if(lineEl) lineEl.innerHTML = `> ${pid.name}: <span style="color:#f59e0b;">Device Busy (Retrying ${attempts+1}/3)...</span>`;
-                        await new Promise(r => setTimeout(r, 2000)); // Wait 2 seconds
-                        attempts++;
-                    } else {
-                        success = true; // Success or a different error (like invalid PID)
-                    }
-                } else {
-                    success = true; // Network error, don't retry loop
-                }
-            } catch (e) {
-                success = true; // Stop retrying on net error
-            }
-        }
-        // --- RETRY LOGIC END ---
-
-        const lineEl = document.getElementById(lineId);
-
-        if (!responseData || !responseData.ok) {
-            let errorMsg = responseData ? responseData.error : "Unknown Error";
-            let color = "#ef4444"; // Red
+            // 2. Results Container (This will hold Raw Hex + Parameters)
+            const resultsDiv = document.createElement('div');
+            resultsDiv.style.cssText = "display:flex; flex-direction:column;"; // Ensure tight stacking
+            pidContainer.appendChild(resultsDiv);
             
-            // Helpful hints for common errors
-            let hint = "";
-            if (errorMsg === "AutoPID busy") {
-                hint = " (Background tasks running)";
-            } else if (errorMsg && (errorMsg.includes("ERROR") || errorMsg.includes("?"))) {
-                color = "#fbbf24"; // Yellow
-                hint = " (Check Init/Protocol)";
+            termDiv.scrollTop = termDiv.scrollHeight;
+
+            // Prepare Parameters
+            let paramsToTest = pidData.parameters;
+            if (!paramsToTest || paramsToTest.length === 0) {
+                paramsToTest = [{ name: "Raw Value", expression: "A", unit: "" }];
             }
 
-            if(lineEl) lineEl.innerHTML = `> ${pid.name}: <span style="color:${color};">${errorMsg}</span>${hint}`;
-        } else {
-            // SUCCESS
-            const val = (responseData.value === null) ? 'null' : String(responseData.value);
-            if(lineEl) lineEl.innerHTML = `> ${pid.name}: <span style="color:#34d399;"><b>${val}</b> ${pid.unit || ''}</span>`;
+            let rawHexHasBeenShown = false;
+
+            // 5. Loop through Parameters
+            for (let pIdx = 0; pIdx < paramsToTest.length; pIdx++) {
+                const param = paramsToTest[pIdx];
+                
+                // Create Line for this Parameter
+                const paramLine = document.createElement('div');
+                paramLine.style.cssText = "padding-left:15px; font-size:0.9em; color:#888; margin:0; line-height:1.4;";
+                paramLine.innerHTML = `- ${param.name || 'Value'}: <span style="color:#fbbf24;">Testing...</span>`;
+                resultsDiv.appendChild(paramLine);
+
+                // --- ASYNC REQUEST ---
+                (async () => {
+                    let success = false;
+                    let attempts = 0;
+                    let responseData = null;
+
+                    while(attempts < 3 && !success) {
+                        try {
+                            await new Promise(r => setTimeout(r, 200)); 
+
+                            const payload = { 
+                                kind: 'vehicle',
+                                pid: pidData.pid,
+                                pid_init: "", 
+                                expr: param.expression || "A", 
+                                init: initString
+                            };
+
+                            const res = await fetch('/autopid/test_pid', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(payload),
+                            });
+                            
+                            responseData = await res.json().catch(() => null);
+
+                            if (res.ok && responseData) {
+                                if (responseData.error === "AutoPID busy") {
+                                    paramLine.innerHTML = `- ${param.name}: <span style="color:#f59e0b;">Busy...</span>`;
+                                    await new Promise(r => setTimeout(r, 1500));
+                                    attempts++;
+                                } else {
+                                    success = true; 
+                                }
+                            } else {
+                                success = true; 
+                            }
+                        } catch (e) {
+                            success = true; 
+                        }
+                    }
+
+                    // Update UI
+                    if (!responseData || !responseData.ok) {
+                        const errorMsg = responseData ? responseData.error : "Error";
+                        paramLine.innerHTML = `- ${param.name}: <span style="color:#ef4444;">${errorMsg}</span>`;
+                    } else {
+                        // Success Value
+                        const val = (responseData.value === null) ? 'null' : String(responseData.value);
+                        paramLine.innerHTML = `- ${param.name}: <span style="color:#34d399; font-weight:bold;">${val}</span> <span style="color:#aaa;">${param.unit || ''}</span>`;
+
+                        // HANDLE RAW HEX
+                        // Only add this line if we have data AND we haven't added it yet
+                        let rawData = responseData.raw || responseData.hex;
+                        if (!rawHexHasBeenShown && rawData) {
+                            rawHexHasBeenShown = true;
+
+			    // Sanitize: Remove '>' and trim whitespace/newlines
+                            rawData = rawData.toString().replace(/>/g, '').trim();
+			    
+                            const rawDiv = document.createElement('div');
+                            rawDiv.style.cssText = "padding-left:15px; font-family:monospace; color:#64748b; font-size:0.8em; margin:0; line-height:1.4;";
+                            rawDiv.innerText = `Raw Hex: ${rawData}`;
+                            
+                            // Insert as the FIRST child of resultsDiv so it sits above all parameters
+                            if (resultsDiv.firstChild) {
+                                resultsDiv.insertBefore(rawDiv, resultsDiv.firstChild);
+                            } else {
+                                resultsDiv.appendChild(rawDiv);
+                            }
+                        }
+                    }
+                })(); 
+            }
         }
     }
 
     if (activeCount === 0) {
-        termContent.innerHTML += `<div style="color:#ef4444;">> No enabled PIDs found in this group.</div>`;
+        const noPidDiv = document.createElement('div');
+        noPidDiv.style.color = "#ef4444";
+        noPidDiv.innerText = "> No enabled PIDs found.";
+        termContent.appendChild(noPidDiv);
     } else {
-        termContent.innerHTML += `<div style="color:#94a3b8; margin-top:5px;">> Group Test Complete.</div>`;
+        const doneDiv = document.createElement('div');
+        doneDiv.style.cssText = "color:#94a3b8; margin-top:5px;";
+        doneDiv.innerText = "> Group Test Complete.";
+        termContent.appendChild(doneDiv);
     }
     
     termDiv.scrollTop = termDiv.scrollHeight;
 }
 
+
+// Add a new empty parameter row
+function addParameter(gIndex, pIndex) {
+    if (!latest_car_models.pid_groups[gIndex].pids[pIndex].parameters) {
+        latest_car_models.pid_groups[gIndex].pids[pIndex].parameters = [];
+    }
+    latest_car_models.pid_groups[gIndex].pids[pIndex].parameters.push({
+        name: "New_Field",
+        expression: "A",
+        unit: "",
+        enabled: true,
+        onchange: false
+    });
+    renderVehicleGroups();
+}
+
+// Clone a specific parameter row
+function cloneParameter(gIndex, pIndex, paramIndex) {
+    const src = latest_car_models.pid_groups[gIndex].pids[pIndex].parameters[paramIndex];
+    // Deep copy
+    const copy = JSON.parse(JSON.stringify(src));
+    copy.name = copy.name + "_copy";
+    
+    // Insert after current
+    latest_car_models.pid_groups[gIndex].pids[pIndex].parameters.splice(paramIndex + 1, 0, copy);
+    renderVehicleGroups();
+}
+
+// Delete a specific parameter row
+function deleteParameter(gIndex, pIndex, paramIndex) {
+    if(confirm("Delete this field?")) {
+        latest_car_models.pid_groups[gIndex].pids[pIndex].parameters.splice(paramIndex, 1);
+        renderVehicleGroups();
+    }
+}
 
 // --- DRAG AND DROP STYLES ---
 const dragStyles = `
@@ -5422,375 +5521,531 @@ const styleSheet = document.createElement("style");
 styleSheet.innerText = dragStyles;
 document.head.appendChild(styleSheet);
 
+
+// ==========================================================================
+//  FULL GROUP EDITOR (Features Restored + Syntax Fixed)
+// ==========================================================================
+
+// Global variable for drag-and-drop
+let dragSrcEl = null;
+
 function renderVehicleGroups(groupsData) {
     const container = document.getElementById('vehicle_groups_container');
-    if (!container) return;
+    if (!container) return; 
     container.innerHTML = '';
 
-    // --- BUTTON: Add New Group ---
-    const addGroupBtn = document.createElement('button');
-    addGroupBtn.className = 'primary-button success-button';
-    addGroupBtn.style.cssText = 'margin-bottom: 15px; width: 100%; padding: 10px; display: flex; justify-content: center; align-items: center; gap: 8px;';
-    addGroupBtn.innerHTML = '<span style="font-size:1.2em; font-weight:bold;">+</span> Add New Group';
-    addGroupBtn.onclick = addNewGroup;
-    container.appendChild(addGroupBtn);
+    // 1. Setup Data
+    if (!latest_car_models) latest_car_models = {};
+    let targetGroups = groupsData;
+    
+    // Logic to find the correct group data
+    if (!targetGroups) {
+        if (latest_car_models.pid_groups) {
+            targetGroups = latest_car_models.pid_groups;
+        } else if (latest_car_models.cars && latest_car_models.cars.length > 0) {
+            targetGroups = latest_car_models.cars[0].pid_groups;
+        }
+    }
+    
+    if (!targetGroups) targetGroups = [];
+    latest_car_models.pid_groups = targetGroups;
 
-    if (!groupsData || groupsData.length === 0) {
-        const emptyMsg = document.createElement('div');
-        emptyMsg.innerHTML = '<div style="padding:20px; text-align:center; color:#666; background:#f9f9f9; border-radius:6px; border:1px dashed #ccc;">No groups defined. Click above to add one.</div>';
-        container.appendChild(emptyMsg);
-        return;
+    // 2. Data Adapter (Standard loops to prevent syntax errors)
+    for (let i = 0; i < latest_car_models.pid_groups.length; i++) {
+        const group = latest_car_models.pid_groups[i];
+        if (group.pids) {
+            for (let j = 0; j < group.pids.length; j++) {
+                const pid = group.pids[j];
+                // Convert flat PIDs to nested parameters if needed
+                if (pid.name !== undefined && !pid.parameters) {
+                    const newParam = {
+                        name: pid.name || "Unknown",
+                        expression: pid.expression || "A",
+                        unit: pid.unit || "",
+                        min: (pid.min != null) ? String(pid.min) : "",
+                        max: (pid.max != null) ? String(pid.max) : "",
+                        class: pid.class || "",
+                        destination_type: pid.destination_type || pid.type || "Default",
+                        send_to: pid.destination || pid.send_to || "",
+                        onchange: (pid.onchange === true),
+                        enabled: (pid.enabled !== false)
+                    };
+                    pid.parameters = [newParam];
+                    
+                    // Cleanup old flat fields
+                    delete pid.name; delete pid.expression; delete pid.unit;
+                    delete pid.min; delete pid.max; delete pid.class;
+                    delete pid.send_to; delete pid.destination_type; 
+                    delete pid.destination; delete pid.type;
+		    
+                }
+            }
+        }
     }
 
-    groupsData.forEach((group, gIndex) => {
-        const isEven = (gIndex % 2 === 0);
-        const cardBg = isEven ? '#ffffff' : '#f8fafc';
-        const headerBg = isEven ? '#f1f5f9' : '#e2e8f0';
-        const borderColor = isEven ? '#e2e8f0' : '#cbd5e1'; 
+    // 3. RENDER LOOP (Iterate Groups)
+    for (let gIndex = 0; gIndex < latest_car_models.pid_groups.length; gIndex++) {
+        const group = latest_car_models.pid_groups[gIndex];
 
-        const card = document.createElement('div');
-        card.className = 'group-card'; // Marker for drop target
-        card.dataset.gIndex = gIndex;  // Store index for drop logic
-        card.style.cssText = `border:1px solid ${borderColor}; border-radius:8px; margin-bottom:15px; background:${cardBg}; overflow:hidden; box-shadow: 0 2px 3px rgba(0,0,0,0.05); transition: background-color 0.2s ease;`;
+        // --- 4 Shades of Blue Logic ---
+        const blueShades = ["#f8fafc", "#f0f9ff", "#e0f2fe", "#dbeafe"]; 
+        const currentBg = blueShades[gIndex % 4];
+
+        const groupDiv = document.createElement('div');
+        groupDiv.className = 'group-container';
+        groupDiv.style.cssText = `border:1px solid #94a3b8; margin-bottom:15px; padding:10px; border-radius:6px; background:${currentBg};`;
         
-        // --- DRAG OVER HANDLERS FOR GROUP ---
-        card.addEventListener('dragover', (e) => {
-            e.preventDefault(); // Necessary to allow dropping
-            card.classList.add('group-drop-target');
-            // Auto-expand group on hover if dragging
-            const contentDiv = document.getElementById(`content_g_${gIndex}`);
-            if(contentDiv && contentDiv.style.display === 'none') {
-               toggleSection(`content_g_${gIndex}`, `icon_g_${gIndex}`);
-            }
+        const isGroupOpen = (group._collapsed !== true); 
+
+        // --- Group Header ---
+        const groupHeader = document.createElement('div');
+        groupHeader.style.cssText = "display:flex; flex-direction:column; gap:8px; padding-bottom:8px; border-bottom:1px solid #e2e8f0; cursor:default;";
+
+        // Header Row 1: Name, Period, Condition, Buttons
+        const headerRow1 = document.createElement('div');
+        headerRow1.style.cssText = "display:flex; justify-content:space-between; align-items:center; width:100%;";
+
+        const r1Left = document.createElement('div');
+        r1Left.style.cssText = "display:flex; align-items:center; gap:10px; flex:1;";
+
+        // Expand Arrow
+        const gArrow = document.createElement('span');
+        gArrow.innerHTML = isGroupOpen ? '&#9660;' : '&#9654;';
+        gArrow.style.cssText = "font-size:0.9rem; color:#64748b; cursor:pointer; width:15px;";
+        gArrow.onclick = () => { group._collapsed = !group._collapsed; renderVehicleGroups(); };
+        r1Left.appendChild(gArrow);
+
+        // Group Name
+        const gNameInput = document.createElement('input');
+        gNameInput.value = group.group_name || `Group ${gIndex + 1}`;
+        gNameInput.placeholder = "Group Name";
+        gNameInput.style.cssText = "font-weight:bold; font-size:1.05rem; border:none; background:transparent; border-bottom:1px dashed #cbd5e1; width:200px;";
+        gNameInput.onchange = (e) => { group.group_name = e.target.value; };
+        r1Left.appendChild(gNameInput);
+
+        // Period Input
+        const periodWrapper = document.createElement('div');
+        periodWrapper.style.cssText = "display:flex; align-items:center; gap:4px; font-size:0.85rem; color:#64748b;";
+        const gPeriodInput = document.createElement('input');
+        gPeriodInput.type = "number";
+        gPeriodInput.value = group.period || 1000;
+        gPeriodInput.style.cssText = "width:60px; padding:2px; border:1px solid #cbd5e1; border-radius:3px; text-align:center;";
+        gPeriodInput.onchange = (e) => { group.period = parseInt(e.target.value); };
+        periodWrapper.appendChild(document.createTextNode("Period:"));
+        periodWrapper.appendChild(gPeriodInput);
+        periodWrapper.appendChild(document.createTextNode("ms"));
+        r1Left.appendChild(periodWrapper);
+
+        headerRow1.appendChild(r1Left);
+
+        // Group Buttons (Play / Delete)
+        const r1Right = document.createElement('div');
+        r1Right.style.cssText = "display:flex; gap:5px;";
+
+        const condSelect = document.createElement('select');
+        // Note: added width:auto so it fits the text
+        condSelect.style.cssText = "width:auto; padding:2px 4px; border:1px solid #cbd5e1; border-radius:3px; font-size:0.85rem; background:rgba(255,255,255,0.8); font-weight:500; color:#334155;";
+        ["always", "voltage", "engine_running"].forEach(opt => {
+            const o = document.createElement('option');
+            o.value = opt;
+            o.text = opt.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+            if ((group.condition || "always") === opt) o.selected = true;
+            condSelect.appendChild(o);
         });
-
-        card.addEventListener('dragleave', (e) => {
-            card.classList.remove('group-drop-target');
-        });
-
-        card.addEventListener('drop', (e) => {
-            e.preventDefault();
-            card.classList.remove('group-drop-target');
-            
-            const rawData = e.dataTransfer.getData('text/plain');
-            if (!rawData) return;
-            
-            const dragData = JSON.parse(rawData);
-            const sourceGIndex = dragData.gIndex;
-            const sourcePIndex = dragData.pIndex;
-            const targetGIndex = gIndex;
-
-            // Don't do anything if dropped in same group
-            if (sourceGIndex === targetGIndex) return;
-
-            // Perform the Move
-            const activeCar = syncGroupsFromUIToMemory();
-            if (!activeCar) return;
-
-            // Get the PID object
-            const pidToMove = activeCar.pid_groups[sourceGIndex].pids[sourcePIndex];
-            
-            // Remove from old group
-            activeCar.pid_groups[sourceGIndex].pids.splice(sourcePIndex, 1);
-            
-            // Add to new group
-            if (!activeCar.pid_groups[targetGIndex].pids) {
-                activeCar.pid_groups[targetGIndex].pids = [];
-            }
-            activeCar.pid_groups[targetGIndex].pids.push(pidToMove);
-
-            // Re-render
-            renderVehicleGroups(activeCar.pid_groups);
-            
-            // Ensure the target group is open so user sees the dropped item
-            const contentEl = document.getElementById(`content_g_${targetGIndex}`);
-            const iconEl = document.getElementById(`icon_g_${targetGIndex}`);
-            if(contentEl && contentEl.style.display === 'none') {
-                contentEl.style.display = 'block';
-                if(iconEl) iconEl.innerHTML = '&#9660;';
-            }
-        });
-
-        // --- LEVEL 1: GROUP HEADER ---
-        const header = document.createElement('div');
-        header.style.cssText = `padding:10px; background:${headerBg}; border-bottom:1px solid ${borderColor}; display:flex; flex-direction:column; gap:8px; position:relative;`;
+        condSelect.onchange = (e) => { group.condition = e.target.value; };
+        r1Right.appendChild(condSelect);
+	
         
-        // Action Buttons
-        const actionContainer = document.createElement('div');
-        actionContainer.style.cssText = 'position:absolute; top:8px; right:8px; display:flex; gap:6px;';
+        const gPlayBtn = document.createElement('button');
+        gPlayBtn.innerHTML = '&#9658;';
+        gPlayBtn.className = 'system-button';
+        gPlayBtn.style.color = "#16a34a";
+        gPlayBtn.onclick = (e) => { e.stopPropagation(); testGroup(gIndex); };
 
-        const testBtn = document.createElement('button');
-        testBtn.innerHTML = '&#9658;'; 
-        testBtn.title = "Test Group (Send PIDs)";
-        testBtn.style.cssText = 'background:#d1fae5; color:#059669; border:1px solid #a7f3d0; border-radius:4px; cursor:pointer; width:26px; height:26px; display:flex; align-items:center; justify-content:center; padding:0; font-size:14px;';
-        testBtn.onclick = function(e) { e.stopPropagation(); testGroup(gIndex); };
+        const gDelBtn = document.createElement('button');
+        gDelBtn.innerHTML = '&#128465;';
+        gDelBtn.className = 'system-button danger';
+        gDelBtn.onclick = (e) => { e.stopPropagation(); deleteGroup(gIndex); };
 
-        const delGroupBtn = document.createElement('button');
-        delGroupBtn.innerHTML = '&#10005;'; 
-        delGroupBtn.title = "Delete Group";
-        delGroupBtn.style.cssText = 'background:#fee2e2; color:#dc2626; border:1px solid #fecaca; border-radius:4px; cursor:pointer; width:26px; height:26px; display:flex; align-items:center; justify-content:center; padding:0; font-size:14px;';
-        delGroupBtn.onclick = function(e) { e.stopPropagation(); deleteGroup(gIndex); };
+        r1Right.appendChild(gPlayBtn);
+        r1Right.appendChild(gDelBtn);
+        headerRow1.appendChild(r1Right);
 
-        actionContainer.appendChild(testBtn);
-        actionContainer.appendChild(delGroupBtn);
-        header.appendChild(actionContainer);
-
-        const row1 = document.createElement('div');
-        row1.style.cssText = 'display:flex; align-items:center; flex-wrap:wrap; gap:15px; padding-right:60px;';
+        // Header Row 2
+        const headerRow2 = document.createElement('div');
+        headerRow2.style.cssText = "display:flex; align-items:center; gap:15px; padding-left:25px; width:100%;";
         
-        row1.innerHTML = `
-            <input id="g_${gIndex}_name" value="${group.group_name || 'Group ' + (gIndex+1)}" style="font-weight:700; color:#1e293b; width:200px; border:1px solid #94a3b8; padding:5px; border-radius:4px;" placeholder="Group Name">
-            <div style="display:flex; align-items:center; gap:5px; font-size:0.85rem; color:#475569; font-weight:500;">
-                <span>Cycle:</span>
-                <input id="g_${gIndex}_period" type="number" value="${group.period || 0}" style="width:70px; padding:5px; border:1px solid #cbd5e1; border-radius:4px;">
-                <span>ms</span>
-            </div>
-            <div style="display:flex; align-items:center; gap:5px; margin-left:auto;">
-                <span style="font-size:0.85rem; color:#475569; font-weight:500;">Condition:</span>
-                <select id="g_${gIndex}_cond" style="padding:5px; font-size:0.85rem; border:1px solid #cbd5e1; background:#fff; border-radius:4px;">
-                    <option value="always" ${group.condition === 'always' ? 'selected' : ''}>Always</option>
-                    <option value="engine_running" ${group.condition === 'engine_running' ? 'selected' : ''}>Engine Running</option>
-                    <option value="voltage" ${group.condition === 'voltage' ? 'selected' : ''}>Voltage > 13.2V</option>
-                </select>
-            </div>`;
+        const pidCount = group.pids ? group.pids.length : 0;
+        const countBadge = document.createElement('span');
+        countBadge.style.cssText = "cursor:pointer; background:rgba(255,255,255,0.6); color:#475569; padding:2px 8px; border-radius:10px; font-size:0.8rem; font-weight:bold; border:1px solid #cbd5e1; min-width:80px; text-align:center;";
+        countBadge.innerText = `${pidCount} PIDs`;
+        countBadge.onclick = (e) => { e.stopPropagation(); group._collapsed = !group._collapsed; renderVehicleGroups(); };
+        headerRow2.appendChild(countBadge);
 
-        const row2 = document.createElement('div');
-        row2.style.cssText = 'display:flex; align-items:center; gap:10px; font-size:0.85rem; color:#475569; width:100%;';
-        row2.innerHTML = `
-            <span style="font-weight:500;">Init:</span>
-            <input id="g_${gIndex}_init" value="${group.init || ''}" placeholder="e.g. atsp6" style="flex:1; padding:5px; border:1px solid #cbd5e1; border-radius:4px; font-family:monospace;">
-        `;
-
-        header.appendChild(row1);
-        header.appendChild(row2);
+        const gInitInput = document.createElement('input');
+        gInitInput.value = group.init || '';
+        gInitInput.placeholder = "Initialization String (e.g. ATTP6; ATZ;)";
         
-        // Terminal Window
+        gInitInput.style.cssText = "width:450px; font-family:monospace; font-size:0.85rem; padding:3px; border:1px solid #cbd5e1; border-radius:3px; color:#334155; background:rgba(255,255,255,0.5);";
+        gInitInput.onchange = (e) => { group.init = e.target.value; };
+        gInitInput.onclick = (e) => e.stopPropagation(); 
+        headerRow2.appendChild(gInitInput);
+
+        // MOVED & JUSTIFIED: Add PID Button
+        const addPidBtn = document.createElement('button');
+        addPidBtn.innerText = "+ Add PID Card";
+        addPidBtn.className = "system-button";
+        addPidBtn.onclick = (e) => { e.stopPropagation(); addPID(gIndex); };
+        headerRow2.appendChild(addPidBtn);
+
+        groupHeader.appendChild(headerRow1);
+        groupHeader.appendChild(headerRow2);
+        groupDiv.appendChild(groupHeader);
+	
+
+        // Test Console Div (Hidden by default)
         const termDiv = document.createElement('div');
         termDiv.id = `term_g_${gIndex}`;
-        termDiv.style.cssText = 'display:none; background:#1e1e1e; color:#10b981; font-family:monospace; font-size:0.8rem; padding:10px; border-bottom:1px solid #333; max-height:150px; overflow-y:auto;';
-        termDiv.innerHTML = `<div style="display:flex; justify-content:space-between; border-bottom:1px solid #333; margin-bottom:5px; padding-bottom:5px; color:#6b7280;">
-            <span>> Console Output</span>
-            <span style="cursor:pointer;" onclick="document.getElementById('term_g_${gIndex}').style.display='none'">[Close]</span>
-        </div><div id="term_content_g_${gIndex}"></div>`;
+        termDiv.style.display = 'none';
+        termDiv.innerHTML = `<div id="term_content_g_${gIndex}" style="background:#1e1e1e; color:#eee; font-family:monospace; padding:10px; max-height:200px; overflow-y:auto;"></div><button style="margin-top:5px;" onclick="this.parentElement.style.display='none'">Close</button>`;
+        groupDiv.appendChild(termDiv);
 
-        // --- LEVEL 2 TRIGGER ---
-        const pidCount = (group.pids && Array.isArray(group.pids)) ? group.pids.length : 0;
-        const toggleBar = document.createElement('div');
-        toggleBar.style.cssText = `padding:6px 10px; background:${isEven?'#f8fafc':'#edf2f7'}; font-size:0.85rem; color:#475569; font-weight:600; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid ${borderColor}; user-select:none;`;
-        
-        const toggleLeft = document.createElement('div');
-        toggleLeft.style.cssText = 'cursor:pointer; display:flex; align-items:center; gap:6px; flex:1;';
-        toggleLeft.innerHTML = `<span id="icon_g_${gIndex}">&#9654;</span> PIDs (${pidCount})`;
-        toggleLeft.onclick = function() { toggleSection(`content_g_${gIndex}`, `icon_g_${gIndex}`); };
+        // --- Group Content (PIDs) ---
+        const groupContent = document.createElement('div');
+        groupContent.id = `g_content_${gIndex}`;
+        groupContent.style.display = isGroupOpen ? "block" : "none";
 
-        const addPidBtn = document.createElement('button');
-        addPidBtn.innerText = '+ Add PID';
-        addPidBtn.style.cssText = 'padding:2px 8px; font-size:0.75rem; background:#24478f; color:#fff; border:none; border-radius:4px; cursor:pointer;';
-        addPidBtn.onclick = function() { addPIDToGroup(gIndex); };
+        if (group.pids) {
+            // LOOP PIDs
+            for (let pIndex = 0; pIndex < group.pids.length; pIndex++) {
+                const pid = group.pids[pIndex];
+                try {
+                    const isPidOpen = (pid._collapsed === false); 
+                    const pidCard = document.createElement('div');
+                    
+                    // Restore Drag and Drop
+                    pidCard.draggable = true;
+                    pidCard.style.cssText = "background:white; border:1px solid #e2e8f0; border-radius:4px; margin-bottom:10px;";
+                    
+                    pidCard.addEventListener('dragstart', (e) => {
+                        dragSrcEl = pidCard;
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/html', pidCard.innerHTML);
+                        pidCard.dataset.gIndex = gIndex;
+                        pidCard.dataset.pIndex = pIndex;
+                        pidCard.style.opacity = '0.4';
+                    });
+                    pidCard.addEventListener('dragend', (e) => { pidCard.style.opacity = '1'; });
+                    pidCard.addEventListener('dragover', (e) => { e.preventDefault(); return false; });
+                    pidCard.addEventListener('drop', (e) => {
+                        e.stopPropagation();
+                        const srcG = parseInt(dragSrcEl.dataset.gIndex);
+                        const srcP = parseInt(dragSrcEl.dataset.pIndex);
+                        if (srcG === gIndex && srcP !== pIndex) {
+                            const item = group.pids.splice(srcP, 1)[0];
+                            group.pids.splice(pIndex, 0, item);
+                            renderVehicleGroups();
+                        }
+                        return false;
+                    });
 
-        toggleBar.appendChild(toggleLeft);
-        toggleBar.appendChild(addPidBtn);
+                    // PID Header
+                    const pidHeader = document.createElement('div');
+                    pidHeader.style.cssText = "display:flex; justify-content:space-between; align-items:center; background:#f1f5f9; padding:8px 12px; border-bottom:1px solid #e2e8f0; cursor:pointer;";
+                    pidHeader.onclick = (e) => {
+                        if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+                        pid._collapsed = !pid._collapsed;
+                        renderVehicleGroups();
+                    };
 
-        // --- LEVEL 2 CONTENT ---
-        const content = document.createElement('div');
-        content.id = `content_g_${gIndex}`;
-        content.style.display = 'none'; 
-        content.style.padding = '10px';
-        content.style.backgroundColor = cardBg;
+                    // PID Header Left (Arrow, Drag, PID Input)
+                    const pidHeaderLeft = document.createElement('div');
+                    pidHeaderLeft.style.cssText = "display:flex; align-items:center; gap:10px;";
+                    
+                    const pidArrow = document.createElement('span');
+                    pidArrow.innerHTML = isPidOpen ? '&#9660;' : '&#9654;';
+                    pidHeaderLeft.appendChild(pidArrow);
 
-        if (group.pids && Array.isArray(group.pids)) {
-            group.pids.forEach((pid, pIndex) => {
-                // Determine values with fallbacks for flat vs nested structures
-                const pName = pid.name || (pid.parameters && pid.parameters[0]?.name) || '';
-                const pCmd = pid.pid || '';
-                const pExpr = pid.expression || (pid.parameters && pid.parameters[0]?.expression) || '';
-                const pMin = (pid.min !== undefined) ? pid.min : (pid.parameters && pid.parameters[0]?.min !== undefined ? pid.parameters[0].min : '');
-                const pMax = (pid.max !== undefined) ? pid.max : (pid.parameters && pid.parameters[0]?.max !== undefined ? pid.parameters[0].max : '');
-                const pUnit = pid.unit || (pid.parameters && pid.parameters[0]?.unit) || '';
-                const pClass = pid.class || (pid.parameters && pid.parameters[0]?.class) || '';
-                
-                const pDestType = pid.destination_type || pid.type || (pid.parameters && pid.parameters[0]?.destination_type) || (pid.parameters && pid.parameters[0]?.type) || 'Default';
-                const pDest = pid.destination || pid.send_to || (pid.parameters && pid.parameters[0]?.destination) || (pid.parameters && pid.parameters[0]?.send_to) || '';
-		const pOnChange = (pid.onchange !== undefined) ? pid.onchange : false;
+                    const dragHandle = document.createElement('span');
+                    dragHandle.innerHTML = '&#9776;';
+                    dragHandle.style.cssText = "cursor:move; color:#94a3b8; font-size:1.1rem; margin-right:5px;";
+                    pidHeaderLeft.appendChild(dragHandle);
 
-                const pEnabled = (pid.enabled !== undefined) ? pid.enabled : true;
+                    pidHeaderLeft.appendChild(document.createTextNode("PID: "));
+                    const pidInput = document.createElement('input');
+                    pidInput.value = pid.pid || '';
+                    pidInput.placeholder = "PID";
+                    pidInput.style.cssText = "font-family:monospace; font-weight:bold; width:140px; padding:3px;";
+                    pidInput.onclick = (e) => e.stopPropagation();
+                    pidInput.onchange = (e) => { pid.pid = e.target.value; };
+                    pidHeaderLeft.appendChild(pidInput);
 
-                // PID Strip Container (Draggable)
-                const pidRow = document.createElement('div');
-                pidRow.className = 'pid-row-draggable'; // Add class for styling
-                pidRow.draggable = true; // Enable drag API
-                pidRow.style.cssText = 'border:1px solid #e2e8f0; border-radius:6px; margin-bottom:8px; background:#ffffff; box-shadow:0 1px 1px rgba(0,0,0,0.02); overflow:hidden;';
+                    const pidDescInput = document.createElement('input');
+                    pidDescInput.value = pid.pid_description || '';
+                    pidDescInput.placeholder = "Description";
+                    pidDescInput.style.cssText = "font-family:sans-serif; width:280px; padding:3px; margin-left:10px; border:1px solid #cbd5e1; border-radius:3px;";
+                    pidDescInput.onclick = (e) => e.stopPropagation();
+                    pidDescInput.onchange = (e) => { pid.pid_description = e.target.value; };
+                    pidHeaderLeft.appendChild(pidDescInput);
 
-                // --- DRAG HANDLERS FOR PID ---
-                pidRow.addEventListener('dragstart', (e) => {
-                    pidRow.classList.add('pid-row-dragging');
-                    // Store the source indices to know what we are moving
-                    const dragPayload = JSON.stringify({ gIndex: gIndex, pIndex: pIndex });
-                    e.dataTransfer.setData('text/plain', dragPayload);
-                    e.dataTransfer.effectAllowed = 'move';
-                });
+		    
+                    // PID Header Right (Enable, Clone, Delete)
+                    const pidHeaderRight = document.createElement('div');
+                    pidHeaderRight.style.cssText = "display:flex; align-items:center; gap:4px;";
+                    
+                    const pidEnWrapper = document.createElement('label');
+                    pidEnWrapper.style.cssText = "display:flex; align-items:center; gap:4px; font-size:0.85rem; cursor:pointer;";
+                    const pidEnCheck = document.createElement('input');
+                    pidEnCheck.type = "checkbox";
+                    pidEnCheck.checked = (pid.enabled !== false);
+                    pidEnCheck.onclick = (e) => e.stopPropagation();
+                    pidEnCheck.onchange = (e) => { pid.enabled = e.target.checked; };
+                    pidEnWrapper.appendChild(pidEnCheck);
+                    pidEnWrapper.appendChild(document.createTextNode("Enable"));
 
-                pidRow.addEventListener('dragend', (e) => {
-                    pidRow.classList.remove('pid-row-dragging');
-                });
+                    const pidCloneBtn = document.createElement('button');
+                    pidCloneBtn.innerHTML = '&#10064;';
+                    pidCloneBtn.className = 'system-button';
+                    pidCloneBtn.onclick = (e) => { e.stopPropagation(); clonePID(gIndex, pIndex); };
+                    
+                    const pidDelBtn = document.createElement('button');
+                    pidDelBtn.innerHTML = '&#128465;';
+                    pidDelBtn.className = 'system-button danger';
+                    pidDelBtn.onclick = (e) => { e.stopPropagation(); deletePID(gIndex, pIndex); };
 
-                const line1 = document.createElement('div');
-                line1.style.cssText = 'display:flex; align-items:center; gap:8px; padding:8px; background:#fff; cursor: grab;'; // Cursor hint
-                
-                // Drag Handle Visual
-                const dragHandle = document.createElement('div');
-                dragHandle.innerHTML = '&#8942;&#8942;'; // Dotted grip icon
-                dragHandle.style.cssText = 'color:#cbd5e1; cursor:grab; font-size:14px; width:15px; text-align:center;';
-                
-                const toggleIcon = document.createElement('div');
-                toggleIcon.style.cssText = 'width:20px; text-align:center; color:#94a3b8; cursor:pointer; font-size: 1.2em;';
-                toggleIcon.id = `icon_g_${gIndex}_p_${pIndex}`;
-                toggleIcon.innerHTML = '&#9654;';
-                toggleIcon.onclick = function() { toggleSection(`details_g_${gIndex}_p_${pIndex}`, `icon_g_${gIndex}_p_${pIndex}`); };
+                    pidHeaderRight.appendChild(pidEnWrapper);
+                    pidHeaderRight.appendChild(pidCloneBtn);
+                    pidHeaderRight.appendChild(pidDelBtn);
 
-                const nameDiv = document.createElement('div');
-                nameDiv.style.flex = '2';
-                nameDiv.innerHTML = `<input id="g_${gIndex}_p_${pIndex}_name" value="${pName}" placeholder="PID Name" style="width:100%; padding:4px; border:1px solid #cbd5e1; border-radius:4px; font-weight:600; color:#1e293b;">`;
+                    pidHeader.appendChild(pidHeaderLeft);
+                    pidHeader.appendChild(pidHeaderRight);
+                    pidCard.appendChild(pidHeader);
 
-                const pidDiv = document.createElement('div');
-                pidDiv.style.cssText = 'flex:1; min-width:80px;';
-                pidDiv.innerHTML = `<input id="g_${gIndex}_p_${pIndex}_pid" value="${pCmd}" placeholder="PID (Hex)" style="width:100%; padding:4px; border:1px solid #cbd5e1; border-radius:4px; font-family:monospace; color:#475569;">`;
+                    // PID Parameters (The nested part you need)
+                    const paramsContainer = document.createElement('div');
+                    paramsContainer.style.padding = "10px";
 
-                const actionsDiv = document.createElement('div');
-                actionsDiv.style.cssText = 'display:flex; align-items:center; gap:8px; margin-left:auto; border-left:1px solid #e2e8f0; padding-left:10px;';
-                
-                const enLabel = document.createElement('label');
-                enLabel.htmlFor = `g_${gIndex}_p_${pIndex}_en`;
-                enLabel.style.cssText = "font-size:0.8rem; color:#64748b; cursor:pointer;";
-                enLabel.innerText = "En";
+		    paramsContainer.style.display = isPidOpen ? "block" : "none";
 
-                const enCheck = document.createElement('input');
-                enCheck.type = "checkbox";
-                enCheck.id = `g_${gIndex}_p_${pIndex}_en`;
-                if(pEnabled) enCheck.checked = true;
-                enCheck.style.cursor = "pointer";
+                    if (!pid.parameters) pid.parameters = [];
 
-                // 2. [NEW] On Change Checkbox
-                // Make sure 'pOnChange' is defined above this block: 
-                // const pOnChange = (pid.onchange !== undefined) ? pid.onchange : false;
-                const chgLabel = document.createElement('label');
-                chgLabel.htmlFor = `g_${gIndex}_p_${pIndex}_onchange`;
-                chgLabel.style.cssText = "font-size:0.8rem; color:#64748b; cursor:pointer; margin-left:4px;";
-                chgLabel.innerText = "Chg";
-                chgLabel.title = "Only send when value changes";
+                    // LOOP PARAMETERS
+                    for (let paramIndex = 0; paramIndex < pid.parameters.length; paramIndex++) {
+                        const param = pid.parameters[paramIndex];
+                        const paramRow = document.createElement('div');
+                        paramRow.style.cssText = "border:1px solid #f1f5f9; background:#fafafa; padding:8px; margin-bottom:8px;";
+                        
+                        // Param Header (Name + Buttons)
+                        const topRow = document.createElement('div');
+                        topRow.style.cssText = "display:flex; justify-content:space-between; margin-bottom:5px; align-items:center;";
+                        
+                        const nameInput = document.createElement('input');
+                        nameInput.value = param.name || '';
+                        nameInput.placeholder = "Field Name";
+                        nameInput.style.cssText = "font-weight:600; width:220px; border:1px solid transparent; background:transparent; border-bottom:1px solid #cbd5e1;";
+                        nameInput.onchange = (e) => { param.name = e.target.value; };
+                        topRow.appendChild(nameInput);
 
-                const chgCheck = document.createElement('input');
-                chgCheck.type = "checkbox";
-                chgCheck.id = `g_${gIndex}_p_${pIndex}_onchange`;
-                if(pOnChange) chgCheck.checked = true;
-                chgCheck.style.cursor = "pointer";
-		
-                const cloneBtn = document.createElement('button');
-                cloneBtn.title = "Clone PID";
-                cloneBtn.innerHTML = '&#10064;'; 
-                cloneBtn.style.cssText = 'background:#eff6ff; color:#2563eb; border:1px solid #dbeafe; border-radius:4px; cursor:pointer; padding:2px 6px; font-size:0.8rem;';
-                cloneBtn.onclick = function() { clonePID(gIndex, pIndex); };
-                
-                const delBtn = document.createElement('button');
-                delBtn.title = "Delete PID";
-                delBtn.innerHTML = '&#128465;'; 
-                delBtn.style.cssText = 'background:#fef2f2; color:#dc2626; border:1px solid #fee2e2; border-radius:4px; cursor:pointer; padding:2px 6px; font-size:0.8rem;';
-                delBtn.onclick = function() { deletePID(gIndex, pIndex); };
+                        const rowActions = document.createElement('div');
+                        rowActions.style.gap = "5px";
+                        rowActions.style.display = "flex";
 
-                // Append everything in order
-                actionsDiv.appendChild(enLabel);
-                actionsDiv.appendChild(enCheck);
-                
-                // Append the new OnChange controls
-                actionsDiv.appendChild(chgLabel);
-                actionsDiv.appendChild(chgCheck);
-                
-                actionsDiv.appendChild(cloneBtn);
-                actionsDiv.appendChild(delBtn);
+                        const onChangeLabel = document.createElement('label');
+                        onChangeLabel.style.cssText = "font-size:0.75rem; display:flex; align-items:center; gap:2px; margin-right:5px; cursor:pointer; color:#475569;";
+                        onChangeLabel.title = "Send only on change";
+                        
+                        const onChangeCheck = document.createElement('input');
+                        onChangeCheck.type = "checkbox";
+                        onChangeCheck.checked = (param.onchange === true);
+                        onChangeCheck.onchange = (e) => { param.onchange = e.target.checked; };
+                        
+                        onChangeLabel.appendChild(onChangeCheck);
+                        onChangeLabel.appendChild(document.createTextNode("OnChg"));
+                        rowActions.appendChild(onChangeLabel);
 
-                line1.appendChild(dragHandle); // Add handle
-                line1.appendChild(toggleIcon);
-                line1.appendChild(nameDiv);
-                line1.appendChild(pidDiv);
-                line1.appendChild(actionsDiv);
+			
+                        const cloneBtn = document.createElement('button');
+                        cloneBtn.innerHTML = '&#10064;';
+                        cloneBtn.className = 'system-button';
+                        cloneBtn.onclick = () => cloneParameter(gIndex, pIndex, paramIndex);
+                        rowActions.appendChild(cloneBtn);
 
-                const details = document.createElement('div');
-                details.id = `details_g_${gIndex}_p_${pIndex}`;
-                details.style.display = 'none'; 
-                details.style.padding = '10px';
-                details.style.borderTop = '1px solid #f1f5f9';
-                details.style.backgroundColor = '#f8fafc';
+                        const delBtn = document.createElement('button');
+                        delBtn.innerHTML = 'x';
+                        delBtn.className = 'system-button danger';
+                        delBtn.onclick = () => deleteParameter(gIndex, pIndex, paramIndex);
+                        rowActions.appendChild(delBtn);
 
-                const detLine1 = document.createElement('div');
-                detLine1.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:8px;';
-                detLine1.innerHTML = `
-                    <div style="flex:3;">
-                        <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:2px;">Expression</label>
-                        <input id="g_${gIndex}_p_${pIndex}_expr" value="${pExpr}" placeholder="e.g. A*2" style="width:100%; padding:4px; border:1px solid #cbd5e1; border-radius:4px; font-family:monospace;">
-                    </div>
-                    <div style="flex:1; min-width:50px;">
-                        <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:2px;">Min</label>
-                        <input id="g_${gIndex}_p_${pIndex}_min" type="number" value="${pMin}" style="width:100%; padding:4px; border:1px solid #cbd5e1; border-radius:4px;">
-                    </div>
-                    <div style="flex:1; min-width:50px;">
-                        <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:2px;">Max</label>
-                        <input id="g_${gIndex}_p_${pIndex}_max" type="number" value="${pMax}" style="width:100%; padding:4px; border:1px solid #cbd5e1; border-radius:4px;">
-                    </div>
-                     <div style="flex:1; min-width:50px;">
-                        <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:2px;">Unit</label>
-                        <input id="g_${gIndex}_p_${pIndex}_unit" value="${pUnit}" style="width:100%; padding:4px; border:1px solid #cbd5e1; border-radius:4px;">
-                    </div>
-                `;
+                        topRow.appendChild(rowActions);
+                        paramRow.appendChild(topRow);
 
-                const detLine2 = document.createElement('div');
-                detLine2.style.cssText = 'display:flex; align-items:center; gap:8px;';
-                
-                const destTypes = ['Default', 'MQTT_Topic', 'MQTT_WallBox', 'HTTP', 'HTTPS', 'ABRP_API'];
-                let destOptions = '';
-                destTypes.forEach(dt => {
-                    destOptions += `<option value="${dt}" ${pDestType === dt ? 'selected' : ''}>${dt}</option>`;
-                });
+                        // Param Details Grid (Restoring the 6 input fields)
+                        const detailsDiv = document.createElement('div');
+                        detailsDiv.style.cssText = "display:grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr; gap:5px; align-items:center;";
 
-                detLine2.innerHTML = `
-                    <div style="flex:1;">
-                        <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:2px;">Class</label>
-                        <input id="g_${gIndex}_p_${pIndex}_class" value="${pClass}" placeholder="e.g. temp" style="width:100%; padding:4px; border:1px solid #cbd5e1; border-radius:4px;">
-                    </div>
-                    <div style="flex:1;">
-                        <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:2px;">Dest. Type</label>
-                        <select id="g_${gIndex}_p_${pIndex}_dtype" style="width:100%; padding:4px; border:1px solid #cbd5e1; border-radius:4px;">
-                            ${destOptions}
-                        </select>
-                    </div>
-                    <div style="flex:2;">
-                        <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:2px;">Destination</label>
-                        <input id="g_${gIndex}_p_${pIndex}_dest" value="${pDest}" placeholder="Topic or URL" style="width:100%; padding:4px; border:1px solid #cbd5e1; border-radius:4px;">
-                    </div>
-                `;
-		
+                        const makeInp = (val, ph, key) => {
+                            const inp = document.createElement('input');
+                            inp.value = (val != null) ? val : '';
+                            inp.placeholder = ph;
+                            inp.style.width = "100%";
+                            inp.style.border = "1px solid #e2e8f0";
+                            inp.style.padding = "3px";
+                            inp.onchange = (e) => { param[key] = e.target.value; };
+                            return inp;
+                        };
 
-                details.appendChild(detLine1);
-                details.appendChild(detLine2);
-                
-                pidRow.appendChild(line1);
-                pidRow.appendChild(details);
-                content.appendChild(pidRow);
-            });
+                        detailsDiv.appendChild(makeInp(param.expression, "Expression", "expression"));
+                        detailsDiv.appendChild(makeInp(param.unit, "Unit", "unit"));
+                        detailsDiv.appendChild(makeInp(param.class, "Class", "class"));
+                        detailsDiv.appendChild(makeInp(param.min, "Min", "min"));
+                        detailsDiv.appendChild(makeInp(param.max, "Max", "max"));
+                        
+                        // Destination Dropdown
+                        const destSelect = document.createElement('select');
+                        destSelect.style.cssText = "width:100%; padding:2px; border:1px solid #e2e8f0;";
+                        ["Default", "MQTT_Topic", "MQTT_WallBox"].forEach(val => {
+                            const opt = document.createElement('option');
+                            opt.value = val;
+                            opt.text = val;
+                            // FIX: Check destination_type OR legacy 'type'
+                            const current = (param.destination_type || param.type || "Default").toLowerCase();
+                            if (current === val.toLowerCase()) opt.selected = true;
+                            destSelect.appendChild(opt);
+                        });
+                        destSelect.onchange = (e) => { param.destination_type = e.target.value; };
+                        detailsDiv.appendChild(destSelect);
+
+                        // Topic Input
+                        detailsDiv.appendChild(makeInp(param.send_to, "Topic/Dest", "send_to"));
+
+                        paramRow.appendChild(detailsDiv);
+                        paramsContainer.appendChild(paramRow);
+                    }
+
+                    // Add Parameter Button
+                    const addParamBtn = document.createElement('button');
+                    addParamBtn.innerText = "+ Add Extraction Field";
+                    addParamBtn.style.cssText = "font-size:0.85rem; color:#2563eb; background:none; border:1px dashed #bfdbfe; padding:4px 8px; width:100%; border-radius:4px; cursor:pointer; margin-top:5px;";
+                    addParamBtn.onclick = () => { addParameter(gIndex, pIndex); };
+                    paramsContainer.appendChild(addParamBtn);
+
+                    pidCard.appendChild(paramsContainer);
+                    groupContent.appendChild(pidCard);
+
+                } catch (err) {
+                    console.error("Error rendering PID:", err);
+                }
+            } // end PID Loop
         }
-        
-        card.appendChild(header);
-        card.appendChild(termDiv);
-        card.appendChild(toggleBar);
-        card.appendChild(content);
-        container.appendChild(card);
-    });
 
-    if (groupsData.length > 3) {
-        const bottomAddBtn = addGroupBtn.cloneNode(true);
-        bottomAddBtn.onclick = addNewGroup;
-        container.appendChild(bottomAddBtn);
+        groupDiv.appendChild(groupContent);
+        container.appendChild(groupDiv);
+    } // end Group Loop
+
+    // Add Group Button
+    const addGroupBtn = document.createElement('button');
+    addGroupBtn.innerText = "+ Create New Vehicle Group";
+    addGroupBtn.className = "system-button";
+    addGroupBtn.style.cssText = "display:block; width:100%; margin-top:20px; padding:15px; border:2px dashed #94a3b8; background-color:#f8fafc; color:#475569; font-weight:bold; cursor:pointer; font-size:1rem; border-radius:6px;";
+    addGroupBtn.onclick = () => addGroup();
+    container.appendChild(addGroupBtn);
+}
+
+
+// --- HELPER FUNCTIONS ---
+
+function addPID(gIndex) {
+    if (!latest_car_models.pid_groups[gIndex].pids) {
+        latest_car_models.pid_groups[gIndex].pids = [];
+    }
+    latest_car_models.pid_groups[gIndex]._collapsed = false;
+
+    latest_car_models.pid_groups[gIndex].pids.push({
+        pid: "",
+	pid_description: "",
+        enabled: true,
+        _collapsed: false, 
+        parameters: [{
+            name: "New_Field",
+            expression: "A",
+            unit: "",
+            enabled: true,
+            onchange: false,
+            destination_type: "Default"
+        }]
+    });
+    renderVehicleGroups();
+}
+
+function addGroup() {
+    if (!latest_car_models) latest_car_models = { pid_groups: [] };
+    if (!latest_car_models.pid_groups) latest_car_models.pid_groups = [];
+
+    latest_car_models.pid_groups.push({
+        group_name: "New Group",
+        condition: "always",
+        period: 1000,
+        pids: []
+    });
+    renderVehicleGroups();
+}
+
+function deleteGroup(gIndex) {
+    if (confirm("Delete this entire group?")) {
+        latest_car_models.pid_groups.splice(gIndex, 1);
+        renderVehicleGroups();
     }
 }
+
+function deletePID(gIndex, pIndex) {
+    if (confirm("Delete this PID?")) {
+        latest_car_models.pid_groups[gIndex].pids.splice(pIndex, 1);
+        renderVehicleGroups();
+    }
+}
+
+function addParameter(gIndex, pIndex) {
+    if (!latest_car_models.pid_groups[gIndex].pids[pIndex].parameters) {
+        latest_car_models.pid_groups[gIndex].pids[pIndex].parameters = [];
+    }
+    latest_car_models.pid_groups[gIndex]._collapsed = false;
+    latest_car_models.pid_groups[gIndex].pids[pIndex]._collapsed = false;
+
+    latest_car_models.pid_groups[gIndex].pids[pIndex].parameters.push({
+        name: "New_Field",
+        expression: "A",
+        unit: "",
+        enabled: true,
+        onchange: false,
+        destination_type: "Default"
+    });
+    renderVehicleGroups();
+}
+
+function deleteParameter(gIndex, pIndex, paramIndex) {
+    if (confirm("Delete this field?")) {
+        latest_car_models.pid_groups[gIndex].pids[pIndex].parameters.splice(paramIndex, 1);
+        renderVehicleGroups();
+    }
+}
+
+function clonePID(gIndex, pIndex) {
+    const src = latest_car_models.pid_groups[gIndex].pids[pIndex];
+    const copy = JSON.parse(JSON.stringify(src));
+    copy.pid = copy.pid + " (Copy)";
+    copy._collapsed = false;
+    latest_car_models.pid_groups[gIndex].pids.push(copy);
+    renderVehicleGroups();
+}
+
+function cloneParameter(gIndex, pIndex, paramIndex) {
+    const src = latest_car_models.pid_groups[gIndex].pids[pIndex].parameters[paramIndex];
+    const copy = JSON.parse(JSON.stringify(src));
+    copy.name = copy.name + "_copy";
+    latest_car_models.pid_groups[gIndex].pids[pIndex].parameters.splice(paramIndex + 1, 0, copy);
+    renderVehicleGroups();
+}
+
 
 function downloadActiveProfile() {
     try {
@@ -5805,17 +6060,14 @@ function downloadActiveProfile() {
             pid_groups: []
         };
 
-        // 2. Capture Groups (Sync from UI to Memory first)
-        // We reuse the helper we wrote earlier to ensure latest UI edits are captured
-        if (typeof syncGroupsFromUIToMemory === 'function') {
-            const activeCarMem = syncGroupsFromUIToMemory(); // Updates 'latest_car_models' in memory
-            if (activeCarMem && activeCarMem.pid_groups) {
-                // Deep copy to ensure clean export
-                carData.pid_groups = JSON.parse(JSON.stringify(activeCarMem.pid_groups));
-            }
+        // 2. Capture Groups (Includes pid_description and all new fields)
+        // Since the UI updates 'latest_car_models' in real-time, we grab it directly.
+        if (latest_car_models && latest_car_models.pid_groups) {
+            // Deep copy to ensure clean JSON export
+            carData.pid_groups = JSON.parse(JSON.stringify(latest_car_models.pid_groups));
         }
 
-        // 3. Capture Specific PIDs (Scrape from DOM)
+        // 3. Capture Legacy "Specific PIDs" (Scrape from DOM)
         const specificPidEntries = document.querySelectorAll('.specific-pid-entry');
         if (specificPidEntries.length > 0) {
             carData.pids = Array.from(specificPidEntries).map(entry => {
@@ -5833,26 +6085,29 @@ function downloadActiveProfile() {
                         max: entry.querySelector('.max-input').value,
                         type: entry.querySelector('.type-select').value,
                         send_to: entry.querySelector('.send-to-input').value,
-                        // Include onchange if the checkbox exists (from previous step)
-                        onchange: entry.querySelector('.enabled-chk')?.closest('.header-right')?.querySelector('input[id*="onchange"]')?.checked || false
+                        // Preserve onchange if present
+                        onchange: false 
                     }]
                 };
             });
         }
 
-        // 4. Capture Vehicle Specific Filters (Scrape from DOM)
+        // 4. Capture CAN Filters (Scrape from DOM)
         const specificFilterEntries = document.querySelectorAll('.specific-canfilter-entry');
         if (specificFilterEntries.length > 0) {
-            // Group by Frame ID logic
             const grouped = new Map();
             specificFilterEntries.forEach(entry => {
                 const fidRaw = entry.querySelector('.frame-id-input')?.value || '';
-                const fidNum = normalizeFrameIdInputToNumber(fidRaw);
-                const frameIdOut = (fidNum !== null) ? fidNum : String(fidRaw).trim();
+                // Use global helper if available, otherwise fallback to raw string
+                let frameIdOut = fidRaw;
+                if (typeof normalizeFrameIdInputToNumber === 'function') {
+                    const fidNum = normalizeFrameIdInputToNumber(fidRaw);
+                    frameIdOut = (fidNum !== null) ? fidNum : String(fidRaw).trim();
+                }
                 
-                if (!frameIdOut) return; // Skip invalid
+                if (!frameIdOut) return; 
 
-                const key = (fidNum !== null) ? `n:${fidNum}` : `s:${String(fidRaw).trim().toLowerCase()}`;
+                const key = String(frameIdOut).toLowerCase();
                 
                 if (!grouped.has(key)) {
                     grouped.set(key, { frame_id: frameIdOut, parameters: [] });
@@ -5874,18 +6129,17 @@ function downloadActiveProfile() {
             carData.can_filters = Array.from(grouped.values());
         }
 
-        // 5. Wrap in the standard format
+        // 5. Construct Final JSON and Download
         const exportObj = {
             cars: [carData]
         };
 
-        // 6. Trigger Download
         const dataStr = JSON.stringify(exportObj, null, 2);
         const blob = new Blob([dataStr], { type: 'application/json' });
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         
-        // Clean filename: remove spaces/special chars
+        // Clean filename
         const safeName = carModelValue.replace(/[^a-z0-9]/gi, '_').toLowerCase();
         link.href = url;
         link.download = `profile_${safeName}.json`;
@@ -5902,7 +6156,6 @@ function downloadActiveProfile() {
         showNotification("Failed to generate profile: " + e.message, "red");
     }
 }
-
 
 async function vpnDebugResolveNtp()
 {
@@ -5933,3 +6186,52 @@ async function vpnDebugResolveNtp()
     }
 }
 document.getElementById("defaultOpen").click();
+
+
+
+(function() {
+    // 1. Remove existing style element if it exists (prevents duplicates)
+    const existingStyle = document.getElementById('wican-custom-styles');
+    if (existingStyle) existingStyle.remove();
+
+    // 2. Define the CSS
+    const cssContent = `
+        /* General Button Style */
+        .system-button {
+            background-color: #fff;
+            border: 1px solid #cbd5e1;
+            color: #475569;
+            padding: 1px 5px;       /* Compact padding */
+            min-width: 35px;        /* Fixes small button width */
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+        .system-button:hover { background-color: #f1f5f9; border-color: #94a3b8; color: #1e293b; }
+        
+        /* Danger Button (Red) */
+        .system-button.danger { color: #dc2626; border-color: #fca5a5; background-color: #fff; }
+        .system-button.danger:hover { background-color: #fef2f2; border-color: #dc2626; color: #b91c1c; }
+        
+        /* Play Button (Greenish hint) */
+        .system-button.play { color: #16a34a; border-color: #86efac; }
+
+        /* Icons inside buttons */
+        .icon-btn { font-size: 1.1rem; line-height: 1; }
+        
+        /* Animations */
+        .group-container, .pid-content { transition: all 0.2s ease-in-out; }
+    `;
+
+    // 3. Inject the CSS
+    const styleSheet = document.createElement("style");
+    styleSheet.id = 'wican-custom-styles';
+    styleSheet.innerText = cssContent;
+    document.head.appendChild(styleSheet);
+})();
