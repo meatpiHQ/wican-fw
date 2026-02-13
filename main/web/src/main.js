@@ -5512,10 +5512,19 @@ const dragStyles = `
         background: #e2e8f0 !important;
         border: 1px dashed #94a3b8 !important;
     }
+
     .group-drop-target {
         background-color: #dbeafe !important; /* Light blue highlight */
         border: 2px dashed #3b82f6 !important;
     }
+    .group-draggable {
+        cursor: grab;
+    }
+    .group-dragging {
+        opacity: 0.4;
+        border: 2px dashed #3b82f6 !important;
+    }
+
 `;
 const styleSheet = document.createElement("style");
 styleSheet.innerText = dragStyles;
@@ -5528,6 +5537,7 @@ document.head.appendChild(styleSheet);
 
 // Global variable for drag-and-drop
 let dragSrcEl = null;
+let dragType = null;
 
 function renderVehicleGroups(groupsData) {
     const container = document.getElementById('vehicle_groups_container');
@@ -5592,9 +5602,41 @@ function renderVehicleGroups(groupsData) {
         const currentBg = blueShades[gIndex % 4];
 
         const groupDiv = document.createElement('div');
-        groupDiv.className = 'group-container';
-        groupDiv.style.cssText = `border:1px solid #94a3b8; margin-bottom:15px; padding:10px; border-radius:6px; background:${currentBg};`;
+        groupDiv.className = 'group-container group-draggable';
+        groupDiv.draggable = true; // Enable Group Dragging
+        //groupDiv.style.cssText = "border:1px solid #cbd5e1; margin-bottom:15px; padding:10px; border-radius:6px; background:${currentBg};";
+	groupDiv.style.cssText = `border:1px solid #94a3b8; margin-bottom:15px; padding:10px; border-radius:6px; background:${currentBg};`;
         
+        // --- GROUP DRAG AND DROP HANDLERS ---
+        groupDiv.addEventListener('dragstart', (e) => {
+            // Only trigger if the group container itself is being dragged, not a PID inside it
+            if (e.target.classList.contains('group-container')) {
+                dragSrcEl = groupDiv;
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('dragType', 'group');
+                e.dataTransfer.setData('sourceIndex', gIndex);
+                groupDiv.classList.add('group-dragging');
+            }
+        });
+
+        groupDiv.addEventListener('dragend', () => groupDiv.classList.remove('group-dragging'));
+        groupDiv.addEventListener('dragover', (e) => { e.preventDefault(); return false; });
+
+        groupDiv.addEventListener('drop', (e) => {
+            e.stopPropagation(); // Prevent PID drop logic from firing
+            const type = e.dataTransfer.getData('dragType');
+            const sourceIdx = parseInt(e.dataTransfer.getData('sourceIndex'));
+            
+            if (type === 'group' && sourceIdx !== gIndex) {
+                const groups = latest_car_models.pid_groups;
+                const movedGroup = groups.splice(sourceIdx, 1)[0];
+                groups.splice(gIndex, 0, movedGroup);
+                renderVehicleGroups();
+            }
+            return false;
+        });
+
+	
         const isGroupOpen = (group._collapsed !== true); 
 
         // --- Group Header ---
@@ -5765,7 +5807,8 @@ function renderVehicleGroups(groupsData) {
                         e.preventDefault();
                         e.stopPropagation();
                         
-                        if (!dragSrcEl) return;
+                        const dragType = e.dataTransfer.getData('type');
+                        if (dragType === 'group') return;
                         
                         const srcG = parseInt(dragSrcEl.dataset.gIndex);
                         const srcP = parseInt(dragSrcEl.dataset.pIndex);
