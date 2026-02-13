@@ -5469,8 +5469,8 @@ function addParameter(gIndex, pIndex) {
         latest_car_models.pid_groups[gIndex].pids[pIndex].parameters = [];
     }
     latest_car_models.pid_groups[gIndex].pids[pIndex].parameters.push({
-        name: "New_Field",
-        expression: "A",
+        name: "",
+        expression: "",
         unit: "",
         enabled: true,
         onchange: false
@@ -5887,7 +5887,7 @@ function renderVehicleGroups(groupsData) {
                             const inp = document.createElement('input');
                             inp.value = (val != null) ? val : '';
                             inp.placeholder = ph;
-                            inp.style.width = "100%";
+                            inp.style.width = "90%";
                             inp.style.border = "1px solid #e2e8f0";
                             inp.style.padding = "3px";
                             inp.onchange = (e) => { param[key] = e.target.value; };
@@ -5915,8 +5915,20 @@ function renderVehicleGroups(groupsData) {
                         destSelect.onchange = (e) => { param.destination_type = e.target.value; };
                         detailsDiv.appendChild(destSelect);
 
+
+                        const makeTopic = (val, ph, key) => {
+                            const inp = document.createElement('input');
+                            inp.value = (val != null) ? val : '';
+                            inp.placeholder = ph;
+                            inp.style.width = "175%";
+                            inp.style.border = "1px solid #e2e8f0";
+                            inp.style.padding = "3px";
+                            inp.onchange = (e) => { param[key] = e.target.value; };
+                            return inp;
+                        };
+			
                         // Topic Input
-                        detailsDiv.appendChild(makeInp(param.send_to, "Topic/Dest", "send_to"));
+                        detailsDiv.appendChild(makeTopic(param.send_to, "Topic/Dest", "send_to"));
 
                         paramRow.appendChild(detailsDiv);
                         paramsContainer.appendChild(paramRow);
@@ -5966,8 +5978,8 @@ function addPID(gIndex) {
         enabled: true,
         _collapsed: false, 
         parameters: [{
-            name: "New_Field",
-            expression: "A",
+            name: "",
+            expression: "",
             unit: "",
             enabled: true,
             onchange: false,
@@ -6012,8 +6024,8 @@ function addParameter(gIndex, pIndex) {
     latest_car_models.pid_groups[gIndex].pids[pIndex]._collapsed = false;
 
     latest_car_models.pid_groups[gIndex].pids[pIndex].parameters.push({
-        name: "New_Field",
-        expression: "A",
+        name: "",
+        expression: "",
         unit: "",
         enabled: true,
         onchange: false,
