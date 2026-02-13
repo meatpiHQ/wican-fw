@@ -5715,6 +5715,30 @@ function renderVehicleGroups(groupsData) {
         groupContent.id = `g_content_${gIndex}`;
         groupContent.style.display = isGroupOpen ? "block" : "none";
 
+
+        groupContent.style.minHeight = "20px"; // Ensure target has height
+        groupContent.addEventListener('dragover', (e) => { e.preventDefault(); groupContent.classList.add('group-drop-target'); });
+        groupContent.addEventListener('dragleave', (e) => { groupContent.classList.remove('group-drop-target'); });
+        groupContent.addEventListener('drop', (e) => {
+            e.preventDefault(); 
+            e.stopPropagation();
+            groupContent.classList.remove('group-drop-target');
+            
+            if (!dragSrcEl) return;
+
+            const srcG = parseInt(dragSrcEl.dataset.gIndex);
+            const srcP = parseInt(dragSrcEl.dataset.pIndex);
+            
+            // Remove from source group (global object)
+            const item = latest_car_models.pid_groups[srcG].pids.splice(srcP, 1)[0];
+            
+            // Add to the end of this group
+            if (!group.pids) group.pids = [];
+            group.pids.push(item);
+            
+            renderVehicleGroups();
+        });
+	
         if (group.pids) {
             // LOOP PIDs
             for (let pIndex = 0; pIndex < group.pids.length; pIndex++) {
@@ -5738,14 +5762,25 @@ function renderVehicleGroups(groupsData) {
                     pidCard.addEventListener('dragend', (e) => { pidCard.style.opacity = '1'; });
                     pidCard.addEventListener('dragover', (e) => { e.preventDefault(); return false; });
                     pidCard.addEventListener('drop', (e) => {
+                        e.preventDefault();
                         e.stopPropagation();
+                        
+                        if (!dragSrcEl) return;
+                        
                         const srcG = parseInt(dragSrcEl.dataset.gIndex);
                         const srcP = parseInt(dragSrcEl.dataset.pIndex);
-                        if (srcG === gIndex && srcP !== pIndex) {
-                            const item = group.pids.splice(srcP, 1)[0];
-                            group.pids.splice(pIndex, 0, item);
-                            renderVehicleGroups();
-                        }
+                        
+                        // Prevent dropping on itself
+                        if (srcG === gIndex && srcP === pIndex) return false;
+
+                        // 1. Remove from Source Group (using Global Reference)
+                        const item = latest_car_models.pid_groups[srcG].pids.splice(srcP, 1)[0];
+                        
+                        // 2. Insert into Destination Group at specific index
+                        if (!group.pids) group.pids = [];
+                        group.pids.splice(pIndex, 0, item);
+                        
+                        renderVehicleGroups();
                         return false;
                     });
 
