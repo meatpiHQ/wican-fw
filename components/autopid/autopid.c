@@ -1861,6 +1861,7 @@ char *autopid_get_config(void)
                     cJSON *g_obj = cJSON_CreateObject();
                     
                     cJSON_AddStringToObject(g_obj, "group_name", grp->name ? grp->name : "Group");
+		    cJSON_AddBoolToObject(g_obj, "enabled", grp->enabled);
                     if (grp->init) cJSON_AddStringToObject(g_obj, "init", grp->init);
                     cJSON_AddNumberToObject(g_obj, "period", grp->period);
                     
@@ -3704,6 +3705,9 @@ static void autopid_task(void *pvParameters)
 
             for (uint32_t g = 0; g < autopid_config->group_count; g++) {
                 pid_group_t *group = &autopid_config->groups[g];
+
+                // Skip if the group is disabled ---
+                if (!group->enabled) continue;		
                 
                 // 1. Check Condition (Voltage / RPM)
                 bool active = true;

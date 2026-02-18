@@ -2063,11 +2063,13 @@ async function storeAutoTableData() {
                     const gCond = document.getElementById(`g_${gIndex}_cond`);
                     const gInit = document.getElementById(`g_${gIndex}_init`);
                     const gPeriod = document.getElementById(`g_${gIndex}_period`);
+		    const gEn = document.getElementById(`g_${gIndex}_en_group`);
 
                     if (gName) group.group_name = gName.value;
                     if (gCond) group.condition = gCond.value;
                     if (gInit) group.init = gInit.value;
                     if (gPeriod) group.period = parseInt(gPeriod.value) || 0;
+		    if (gEn) group.enabled = gEn.checked;
 
                     // Capture PIDs inside the group
                     if (group.pids && Array.isArray(group.pids)) {
@@ -5166,11 +5168,13 @@ function syncGroupsFromUIToMemory() {
         const gCond = document.getElementById(`g_${gIndex}_cond`);
         const gInit = document.getElementById(`g_${gIndex}_init`);
         const gPeriod = document.getElementById(`g_${gIndex}_period`);
+	const gEn = document.getElementById(`g_${gIndex}_en_group`);
 
         if (gName) group.group_name = gName.value;
         if (gCond) group.condition = gCond.value;
         if (gInit) group.init = gInit.value;
         if (gPeriod) group.period = parseInt(gPeriod.value) || 0;
+	if (gEn) group.enabled = gEn.checked;
 
         if (group.pids) {
             group.pids.forEach((pid, pIndex) => {
@@ -5197,7 +5201,7 @@ function syncGroupsFromUIToMemory() {
                 if (pDest) pid.destination = pDest.value;
                 
                 // Sync nested parameters if they exist
-                 if (pid.parameters && pid.parameters[0]) {
+                if (pid.parameters && pid.parameters[0]) {
                     if(pName) pid.parameters[0].name = pName.value;
                     if(pExpr) pid.parameters[0].expression = pExpr.value;
                     if(pMin) pid.parameters[0].min = parseFloat(pMin.value);
@@ -5206,6 +5210,7 @@ function syncGroupsFromUIToMemory() {
                     if(pClass) pid.parameters[0].class = pClass.value;
                     if(pDType) pid.parameters[0].destination_type = pDType.value;
                     if(pDest) pid.parameters[0].destination = pDest.value;
+                    if(pOnChange) pid.parameters[0].onchange = pOnChange.checked;
                 }
             });
         }
@@ -5223,6 +5228,7 @@ function addNewGroup() {
     // Add default empty group
     activeCar.pid_groups.push({
         group_name: "New Group",
+        enabled: true,
         condition: "always",
         period: 1000,
         init: "",
@@ -5661,7 +5667,7 @@ function renderVehicleGroups(groupsData) {
         const gNameInput = document.createElement('input');
         gNameInput.value = group.group_name || `Group ${gIndex + 1}`;
         gNameInput.placeholder = "Group Name";
-        gNameInput.style.cssText = "font-weight:bold; font-size:1.05rem; border:none; background:transparent; border-bottom:1px dashed #cbd5e1; width:200px;";
+        gNameInput.style.cssText = "font-weight:bold; font-size:1.05rem; border:none; background:transparent; border-bottom:1px dashed #cbd5e1; width:300px;";
         gNameInput.onchange = (e) => { group.group_name = e.target.value; };
         r1Left.appendChild(gNameInput);
 
@@ -5696,6 +5702,19 @@ function renderVehicleGroups(groupsData) {
         });
         condSelect.onchange = (e) => { group.condition = e.target.value; };
         r1Right.appendChild(condSelect);
+	
+        // --- ADD THIS BLOCK: Group Enable Checkbox ---
+        const gEnWrapper = document.createElement('label');
+        gEnWrapper.style.cssText = "display:flex; align-items:center; gap:4px; font-size:0.85rem; cursor:pointer; margin-right: 10px; margin-left: 10px;";
+        const gEnCheck = document.createElement('input');
+        gEnCheck.type = "checkbox";
+        gEnCheck.id = `g_${gIndex}_en_group`; // Unique ID for the group
+        gEnCheck.checked = (group.enabled !== false); // Default to true
+        gEnCheck.onclick = (e) => e.stopPropagation();
+        gEnCheck.onchange = (e) => { group.enabled = e.target.checked; enableAutoStoreButton(); };
+        gEnWrapper.appendChild(gEnCheck);
+        gEnWrapper.appendChild(document.createTextNode("Enabled"));
+        r1Right.appendChild(gEnWrapper);
 	
         
         const gPlayBtn = document.createElement('button');
@@ -6073,6 +6092,7 @@ function addGroup() {
 
     latest_car_models.pid_groups.push({
         group_name: "New Group",
+	enabled: true,
         condition: "always",
         period: 1000,
         pids: []

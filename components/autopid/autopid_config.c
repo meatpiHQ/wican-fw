@@ -786,6 +786,7 @@ autopid_config_t *load_autopid_config(void)
                 cJSON* init = cJSON_GetObjectItem(g, "init");
                 cJSON* cond = cJSON_GetObjectItem(g, "condition");
                 cJSON* period = cJSON_GetObjectItem(g, "period");
+		cJSON* enabled_item = cJSON_GetObjectItem(g, "enabled");
                 
                 grp->name = json_strdup_key_or_default(g, "group_name", "Group");
                 grp->init = init ? normalize_init_string(init->valuestring) : NULL;

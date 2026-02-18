@@ -110,7 +110,8 @@ typedef enum {
 
 // [NEW] Group Structure (References Master List)
 typedef struct {
-    char *name;                 
+    char *name;
+    bool enabled;
     char *init;                 
     detection_method_t detection_method; 
     uint32_t period;            
