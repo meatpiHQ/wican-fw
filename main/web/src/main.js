@@ -5188,6 +5188,7 @@ function syncGroupsFromUIToMemory() {
                 const pClass = document.getElementById(`g_${gIndex}_p_${pIndex}_class`);
                 const pDType = document.getElementById(`g_${gIndex}_p_${pIndex}_dtype`);
                 const pDest = document.getElementById(`g_${gIndex}_p_${pIndex}_dest`);
+		const pOnChange = document.getElementById(`g_${gIndex}_p_${pIndex}_onchange`);
 
                 if (pName) pid.name = pName.value;
                 if (pCmd) pid.pid = pCmd.value;
@@ -5199,6 +5200,7 @@ function syncGroupsFromUIToMemory() {
                 if (pClass) pid.class = pClass.value;
                 if (pDType) pid.destination_type = pDType.value;
                 if (pDest) pid.destination = pDest.value;
+		if (pOnChange) pid.onchange = pOnChange.checked;
                 
                 // Sync nested parameters if they exist
                 if (pid.parameters && pid.parameters[0]) {

@@ -789,6 +789,7 @@ autopid_config_t *load_autopid_config(void)
 		cJSON* enabled_item = cJSON_GetObjectItem(g, "enabled");
                 
                 grp->name = json_strdup_key_or_default(g, "group_name", "Group");
+                grp->enabled = (enabled_item && cJSON_IsBool(enabled_item)) ? cJSON_IsTrue(enabled_item) : true;
                 grp->init = init ? normalize_init_string(init->valuestring) : NULL;
                 grp->detection_method = detection_method_from_str(json_get_string(cond));
                 grp->period = period ? json_item_to_u32(period, 0) : 0;
