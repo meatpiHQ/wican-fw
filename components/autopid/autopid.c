@@ -74,6 +74,11 @@
 #define AUTOPID_BACKOFF_MAX_MULTIPLIER 2
 #endif
 
+/* [NEW] Task handle for the asynchronous processing engine */
+static TaskHandle_t autopid_processing_task_handle = NULL;
+static StackType_t *autopid_processing_task_stack = NULL;
+static StaticTask_t autopid_processing_task_buffer;
+
 static char *auto_pid_buf;
 static QueueHandle_t autopidQueue;
 static char *device_id;
@@ -113,6 +118,8 @@ static const uint8_t autopid_protocol_header_length[] = {
 static void send_commands(char *commands, uint32_t delay_ms);
 static void publish_parameter_mqtt(parameter_t *param);
 static void autopid_data_update(autopid_config_t *pids);
+static void autopid_processing_task(void *pvParameters);
+
 
 // --- HELPER: Check for RPM to detect Engine Running (NEW) ---
 static bool is_engine_running(void) {
@@ -3546,7 +3553,20 @@ static void execute_pid_parameter(pid_data_t *curr_pid, parameter_t *param) {
             response_t elm327_response;
             memset(&elm327_response, 0, sizeof(elm327_response));
 
-            if (xQueueReceive(autopidQueue, &elm327_response, pdMS_TO_TICKS(12000)) == pdPASS) {
+            // kww- replace by below if (xQueueReceive(autopidQueue, &elm327_response, pdMS_TO_TICKS(12000)) == pdPASS) {
+
+            /* 1. Drop the lock right before we go to sleep waiting for the car */
+            xSemaphoreGive(autopid_config->mutex);
+
+            /* 2. Wait for the car (this takes 15ms - 50ms) */
+            BaseType_t got_response = xQueueReceive(autopidQueue, &elm327_response, pdMS_TO_TICKS(12000));
+
+            /* 3. Instantly re-take the lock before we process or modify any data */
+            xSemaphoreTake(autopid_config->mutex, portMAX_DELAY);
+            /* --------------------------- */
+
+            if (got_response == pdPASS) {
+	      
                 if (strstr((char *)elm327_response.data, "error") == NULL &&
                     strstr((char *)elm327_response.data, "SEARCHING") == NULL &&
                     strstr((char *)elm327_response.data, "UNABLE TO CONNECT") == NULL) {
@@ -3605,8 +3625,10 @@ static void execute_pid_parameter(pid_data_t *curr_pid, parameter_t *param) {
         } else {
             ESP_LOGE(TAG, "Process Cmd Failed: %s", curr_pid->cmd);
         }
-        
-        autopid_data_update(autopid_config);
+
+	/* [CHANGE] Remove the old synchronous update */
+        // autopid_data_update(autopid_config);
+	
     }
 }
 
@@ -3772,7 +3794,8 @@ static void autopid_task(void *pvParameters)
 
                         if (execute_now) {
                             execute_pid_parameter(curr_pid, param);
-                            vTaskDelay(pdMS_TO_TICKS(10)); 
+                            // vTaskDelay(pdMS_TO_TICKS(10));
+			    vTaskDelay(1);
                         }
                     }
                 }
@@ -3821,6 +3844,11 @@ static void autopid_task(void *pvParameters)
         }
 
         xSemaphoreGive(autopid_config->mutex);
+
+        /* [NEW] Signal processing task NOW, when the mutex is free */
+        if (autopid_processing_task_handle != NULL) {
+            xTaskNotifyGive(autopid_processing_task_handle);
+        }	
         vTaskDelay(pdMS_TO_TICKS(5));
 
         // CAN Filters Logic (Monitor Window)
@@ -4020,7 +4048,7 @@ void autopid_init(char *id, bool enable_logging, uint32_t logging_period)
     if (autopid_task_stack == NULL) { ESP_LOGE(TAG, "Failed to allocate autopid_task stack in PSRAM"); return; }
     memset(autopid_task_stack, 0, autopid_task_stack_depth);
     if (autopid_task_stack != NULL) {
-        xTaskCreateStatic(autopid_task, "autopid_task", (uint32_t)autopid_task_stack_depth, (void *)AF_INET, 5, autopid_task_stack, &autopid_task_buffer);
+        xTaskCreateStatic(autopid_task, "autopid_task", (uint32_t)autopid_task_stack_depth, (void *)AF_INET, 11, autopid_task_stack, &autopid_task_buffer);
     } else { ESP_LOGE(TAG, "Failed to allocate autopid_task stack in PSRAM"); }
 
     if (strcmp("enable", autopid_config->grouping) == 0) {
@@ -4036,6 +4064,23 @@ void autopid_init(char *id, bool enable_logging, uint32_t logging_period)
         }
     }
 
+
+    /* [NEW] Allocate memory and create the Processing Task (Lower Priority: 5) */
+    uint32_t proc_stack_depth = 4096;
+    autopid_processing_task_stack = heap_caps_malloc(proc_stack_depth, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    
+    if (autopid_processing_task_stack != NULL) {
+        autopid_processing_task_handle = xTaskCreateStatic(
+            autopid_processing_task, 
+            "pid_proc_task", 
+            proc_stack_depth, 
+            NULL, 
+            5, // Priority 5 (matches web/system tasks)
+            autopid_processing_task_stack, 
+            &autopid_processing_task_buffer
+        );
+    }
+    
     ha_webhooks_init();
     if (config_server_get_webhook_en()) {
         static StackType_t *autopid_webhook_task_stack;
@@ -4063,5 +4108,29 @@ void autopid_init(char *id, bool enable_logging, uint32_t logging_period)
         autopid_bit_set_timer_handle = xTimerCreateStatic("autopid_bit_set_timer", pdMS_TO_TICKS(10000), pdTRUE, NULL, autopid_app_setbit_timer_callback, &autopid_bit_set_timer_buffer);
         if (autopid_bit_set_timer_handle != NULL) xTimerStart(autopid_bit_set_timer_handle, 0);
         else ESP_LOGE(TAG, "Failed to create static timer");
+    }
+}
+
+/**
+ * @brief This task handles the "heavy lifting" (JSON building and MQTT)
+ * so that the OBD sampler doesn't have to wait for string formatting.
+ */
+static void autopid_processing_task(void *pvParameters) {
+    ESP_LOGI(TAG, "Starting high-speed processing task");
+    
+    for (;;) {
+        // Wait indefinitely for a notification from the sampler task
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+        // Wait indefinitely for the lock to guarantee the JSON is built
+        if (autopid_lock(portMAX_DELAY)) {
+            // 1. Rebuild the global JSON string (the heavy part)
+            autopid_data_update(autopid_config);
+            
+            // 2. Perform any batch publishing logic here
+            // (e.g., check if it's time to send an MQTT packet)
+            
+            autopid_unlock();
+        }
     }
 }

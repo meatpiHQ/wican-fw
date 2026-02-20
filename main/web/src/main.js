@@ -6303,6 +6303,15 @@ document.getElementById("defaultOpen").click();
 
 (function() {
     // 1. Remove existing style element if it exists (prevents duplicates)
+
+    const fileInput = document.getElementById('car_data_file');
+    if (fileInput && fileInput.parentElement) {
+        fileInput.parentElement.style.display = 'flex';
+        fileInput.parentElement.style.flexWrap = 'wrap';
+        fileInput.parentElement.style.gap = '10px';
+        fileInput.parentElement.style.alignItems = 'center';
+    }
+    
     const existingStyle = document.getElementById('wican-custom-styles');
     if (existingStyle) existingStyle.remove();
 
@@ -6339,6 +6348,34 @@ document.getElementById("defaultOpen").click();
         
         /* Animations */
         .group-container, .pid-content { transition: all 0.2s ease-in-out; }
+
+        #car_data_file { margin: 0 !important; max-width: 100%; }
+
+        /* --- SUCCESS BUTTON STYLING --- */
+        .success-button,
+        button[onclick*="downloadActiveProfile"], 
+        button[onclick*="fetchVehicleProfiles"] {
+            background-color: #16a34a !important; /* Bold Green */
+            border: 1px solid #15803d !important;
+            color: #ffffff !important; /* White Text */
+            padding: 6px 14px !important;
+            border-radius: 5px !important;
+            font-size: 0.85rem !important;
+            font-weight: 600 !important;
+            cursor: pointer !important;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1) !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            transition: all 0.2s ease !important;
+        }
+
+        .success-button:hover,
+        button[onclick*="downloadActiveProfile"]:hover, 
+        button[onclick*="fetchVehicleProfiles"]:hover {
+            background-color: #15803d !important; /* Darker Green on Hover */
+            border-color: #166534 !important;
+        }
+
     `;
 
     // 3. Inject the CSS
