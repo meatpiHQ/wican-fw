@@ -2875,23 +2875,23 @@ static void send_commands(char *commands, uint32_t delay_ms)
         str_send[cmd_len] = '\0'; // Null-terminate the command string
 
         // Keep protocol tracking in sync if init strings switch protocol.
-        int32_t new_protocol_number = -1;
-        bool skip_send = false;
-        if (try_parse_protocol_cmd(str_send, &new_protocol_number))
-        {
-            int32_t current_protocol_number = -1;
-            if (autopid_get_protocol_number(&current_protocol_number) == ESP_OK &&
-                current_protocol_number == new_protocol_number)
-            {
-                // Already in the requested protocol; avoid re-sending the command.
-                skip_send = true;
-            }
-            else
-            {
-                // Update tracking early so downstream logic (header length etc.) stays consistent.
-                autopid_set_protocol_number(new_protocol_number);
-            }
-        }
+        // int32_t new_protocol_number = -1;
+        bool skip_send = false; //Note: Don't skip sending for now
+        // if (try_parse_protocol_cmd(str_send, &new_protocol_number))
+        // {
+        //     int32_t current_protocol_number = -1;
+        //     if (autopid_get_protocol_number(&current_protocol_number) == ESP_OK &&
+        //         current_protocol_number == new_protocol_number)
+        //     {
+        //         // Already in the requested protocol; avoid re-sending the command.
+        //         skip_send = true;
+        //     }
+        //     else
+        //     {
+        //         // Update tracking early so downstream logic (header length etc.) stays consistent.
+        //         autopid_set_protocol_number(new_protocol_number);
+        //     }
+        // }
 
         if (!skip_send &&
             (strstr(str_send, "ath0") == NULL && strstr(str_send, "ATH0") == NULL && strstr(str_send, "at h0") == NULL && strstr(str_send, "AT H0") == NULL) &&
