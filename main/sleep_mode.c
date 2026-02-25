@@ -418,6 +418,14 @@ static void adc_task(void *pvParameters)
     	// }
 
     	xQueueOverwrite( voltage_queue, &battery_voltage );
+        if (battery_voltage < sleep_voltage)
+        {
+        	dev_status_clear_bits(DEV_WAKE_VOLTAGE_OK_BIT);
+        }
+        else
+        {
+        	dev_status_set_bits(DEV_WAKE_VOLTAGE_OK_BIT);
+        }
     	if(enable_sleep == 1)
     	{
 			switch(sleep_state)
@@ -906,6 +914,14 @@ void light_sleep_task(void *pvParameters)
             if(ret == ESP_OK)
             {
                 update_battery_voltage(&battery_voltage);
+                if (battery_voltage < sleep_voltage)
+                {
+                    dev_status_clear_bits(DEV_WAKE_VOLTAGE_OK_BIT);
+                }
+                else
+                {
+                    dev_status_set_bits(DEV_WAKE_VOLTAGE_OK_BIT);
+                }
             }
         }
 

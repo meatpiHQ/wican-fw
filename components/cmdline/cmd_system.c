@@ -169,9 +169,9 @@ esp_err_t cmd_system_register(void)
     const esp_console_cmd_t cmd = {
         .command = "system",
         .help = "System control and status",
-        .hint = "Usage: system [-v|-r|-i|-m]",
+        .hint = "Options: -v/--voltage, -r/--reboot, -i/--info, -m/--memory",
         .func = &cmd_system,
         .argtable = &system_args
     };
-    return esp_console_cmd_register(&cmd);
+    return cmdline_cmd_register(&cmd);
 }

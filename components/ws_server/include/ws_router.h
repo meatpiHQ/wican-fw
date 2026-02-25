@@ -18,23 +18,25 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "cmd_status.h"
-#include "cmdline.h"
-#include "esp_console.h"
+#pragma once
 
-static int cmd_status(int argc, char **argv) 
-{
-    cmdline_printf("System Status: OK\n");
-    return 0;
-}
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <esp_http_server.h>
 
-esp_err_t cmd_status_register(void)
-{
-    const esp_console_cmd_t cmd = {
-        .command = "status",
-        .help = "Get system status",
-        .hint = NULL,
-        .func = &cmd_status,
-    };
-    return cmdline_cmd_register(&cmd);
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void ws_router_on_open(void);
+void ws_router_on_close(void);
+bool ws_router_handle_frame(httpd_req_t *req, const uint8_t *payload, size_t len);
+
+// True when the single WS connection is being used for CAN monitor streaming.
+// When false (terminal mode), firmware should avoid pushing raw CAN frames to the WS.
+bool ws_router_is_in_monitor_mode(void);
+
+#ifdef __cplusplus
 }
+#endif

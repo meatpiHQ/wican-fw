@@ -241,8 +241,20 @@ async function checkFirmwareUpdate() {
             if (addFbBtn) addFbBtn.disabled = false;
             fbRows.forEach(el => el.disabled = false);
         }
+        try { toggleApStationWarning(); } catch(_) {}
+
         // Trigger validation when switching modes
         submit_enable();
+    }
+
+    function toggleApStationWarning() {
+        const wifiModeEl = document.getElementById("wifi_mode");
+        const apAutoDisableEl = document.getElementById("ap_auto_disable");
+        const div = document.getElementById("apstation_warning_div");
+        if (!wifiModeEl || !apAutoDisableEl || !div) return;
+
+        const shouldShow = (wifiModeEl.value === "APStation") && (apAutoDisableEl.value === "disable");
+        div.style.display = shouldShow ? "block" : "none";
     }
 
     function toggleDriveConfig() {
@@ -381,29 +393,42 @@ async function checkFirmwareUpdate() {
             try {
                 const jsonData = JSON.parse(event.target.result);
                 let data;
-                
-                // Check if it's a single car format (like Zeekr) with car_model property
-                if (jsonData.car_model && jsonData.pids) {
-                    showNotification("Single car format detected. Fetching parameter definitions...", "blue");
-                    
+                const isMultiCar = (jsonData && Array.isArray(jsonData.cars));
+                const isSingleCar = (jsonData && jsonData.car_model && Array.isArray(jsonData.pids));
+
+                const looksLikeShorthandSingleProfile = (() => {
+                    if (!isSingleCar) return false;
+                    for (const pid of jsonData.pids) {
+                        if (!pid || pid.parameters === undefined || pid.parameters === null) continue;
+                        if (Array.isArray(pid.parameters)) return false; // already in target format
+                        if (typeof pid.parameters !== 'object') continue;
+                        const values = Object.values(pid.parameters);
+                        // Shorthand single-profile format maps NAME -> "expression" (string)
+                        if (values.some(v => typeof v === 'string')) return true;
+                    }
+                    return false;
+                })();
+
+                if (isMultiCar) {
+                    data = jsonData;
+                } else if (looksLikeShorthandSingleProfile) {
+                    showNotification("Shorthand single-profile detected. Loading parameter metadata...", "blue");
                     try {
-                        // Fetch params.json to get parameter definitions
-                        const paramsResponse = await fetch('https://raw.githubusercontent.com/meatpiHQ/wican-fw/refs/heads/main/.vehicle_profiles/params.json');
+                        const paramsResponse = await fetch('https://raw.githubusercontent.com/meatpiHQ/wican-fw/main/.vehicle_profiles/params.json');
                         const paramsData = await paramsResponse.json();
-                        
-                        // Convert single car format to vehicle_profiles.json format
                         const convertedCar = convertSingleCarFormat(jsonData, paramsData);
                         data = { cars: [convertedCar] };
-                        
-                        showNotification("Single car format converted successfully!", "green");
+                        showNotification("Profile loaded successfully!", "green");
                     } catch (fetchError) {
                         console.warn('Failed to fetch params.json, using basic conversion:', fetchError);
-                        // Fallback: basic conversion without parameter enrichment
                         data = { cars: [convertSingleCarBasic(jsonData)] };
-                        showNotification("Car model loaded (basic format - no internet connection)", "yellow");
+                        showNotification("Couldn't download params.json for parameter metadata. Make sure you're connected to the internet. Loaded profile without metadata.", "yellow");
                     }
+                } else if (isSingleCar) {
+                    // Already in vehicle_profiles.json schema; wrap without conversion
+                    data = { cars: [jsonData] };
                 } else {
-                    // Existing multi-car format
+                    // Existing fallback
                     data = jsonData.car_model ? { cars: [jsonData] } : jsonData;
                 }
                 
@@ -423,6 +448,28 @@ async function checkFirmwareUpdate() {
                 var mod = { "supported": carModels };
                 loadCarModels(mod);
                 enableAutoStoreButton();
+
+                // If a single-car profile was uploaded, auto-enable vehicle-specific mode,
+                // select that model, and trigger the change handler to populate PIDs/filters.
+                try {
+                    if (data && Array.isArray(data.cars) && data.cars.length === 1 && data.cars[0]?.car_model) {
+                        const carSpecificEl = document.getElementById('car_specific');
+                        if (carSpecificEl && carSpecificEl.value === 'disable') {
+                            carSpecificEl.value = 'enable';
+                        }
+                        try { toggleCarModel(); } catch(_) {}
+
+                        const carModelEl = document.getElementById('car_model');
+                        if (carModelEl) {
+                            carModelEl.value = data.cars[0].car_model;
+                            carModelEl.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+
+                        showNotification(`Loaded profile: ${data.cars[0].car_model}`, 'green');
+                    }
+                } catch (e) {
+                    console.warn('Auto-select uploaded car model failed:', e);
+                }
                 
                 if (!jsonData.car_model || !jsonData.pids) {
                     showNotification("Car models loaded successfully!", "green");
@@ -436,11 +483,12 @@ async function checkFirmwareUpdate() {
     }
 
     function convertSingleCarFormat(singleCarData, paramsData) {
-        // Convert from Zeekr-style format to vehicle_profiles.json format
+        // Convert from shorthand single-profile (NAME -> expression map) to vehicle_profiles.json format
         const convertedCar = {
             car_model: singleCarData.car_model,
             init: singleCarData.init,
-            pids: []
+            pids: [],
+            can_filters: Array.isArray(singleCarData.can_filters) ? singleCarData.can_filters : []
         };
 
         singleCarData.pids.forEach(pidEntry => {
@@ -454,16 +502,25 @@ async function checkFirmwareUpdate() {
             }
 
             // Convert parameters from object format to array format
-            if (pidEntry.parameters && typeof pidEntry.parameters === 'object') {
+            // If it's already an array (vehicle_profiles.json schema), keep it as-is.
+            if (Array.isArray(pidEntry.parameters)) {
+                newPidEntry.parameters = pidEntry.parameters;
+            } else if (pidEntry.parameters && typeof pidEntry.parameters === 'object') {
                 Object.keys(pidEntry.parameters).forEach(paramName => {
                     const expression = pidEntry.parameters[paramName];
-                    const paramDef = paramsData[paramName] || {};
-                    
+                    const paramDef = paramsData?.[paramName] || {};
+                    const settings = paramDef.settings || {};
+
                     const parameter = {
                         name: paramName,
                         expression: expression,
-                        unit: paramDef.settings?.unit || "",
-                        class: paramDef.settings?.class || "none"
+                        unit: settings.unit || "",
+                        class: settings.class || "none",
+                        min: settings.min ?? "",
+                        max: settings.max ?? "",
+                        type: settings.type || "Default",
+                        period: "5000",
+                        send_to: ""
                     };
 
                     newPidEntry.parameters.push(parameter);
@@ -481,7 +538,8 @@ async function checkFirmwareUpdate() {
         const convertedCar = {
             car_model: singleCarData.car_model,
             init: singleCarData.init,
-            pids: []
+            pids: [],
+            can_filters: Array.isArray(singleCarData.can_filters) ? singleCarData.can_filters : []
         };
 
         singleCarData.pids.forEach(pidEntry => {
@@ -636,11 +694,175 @@ const pidEntryStyles = `
         font-size: 0.65rem;
         margin-left: 12px;
     }
+
+    .test-btn {
+        background: #2563eb;
+        color: #fff;
+        border: none;
+        padding: 4px 8px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.65rem;
+    }
+
+    .test-result {
+        font-size: 0.85rem;
+        max-width: 220px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
 `;
+
+async function runPidTest(kind, entry) {
+    const resultEl = entry.querySelector('.test-result');
+    const buttonEl = entry.querySelector('.test-btn');
+    if (!resultEl || !buttonEl) return;
+
+    const payload = { kind };
+
+    if (kind === 'std') {
+        const name = entry.querySelector('.name-input')?.value || entry.querySelector('.pid-title')?.textContent || '';
+        const protocol = document.getElementById('ecu_protocol')?.value || '';
+        const rxheader = entry.querySelector('.receive-header-input')?.value || '';
+        payload.name = name.trim();
+        payload.protocol = protocol;
+        if (rxheader.trim()) payload.rxheader = rxheader.trim();
+    } else if (kind === 'vehicle') {
+        const init = document.getElementById('specific_init')?.value || '';
+        const pid = entry.querySelector('.pid-input')?.value || '';
+        const pidInit = entry.querySelector('.pid-init-input')?.value || '';
+        const expr = entry.querySelector('.expression-input')?.value || '';
+        if (init.trim()) payload.init = init;
+        payload.pid = pid.trim();
+        if (pidInit.trim()) payload.pid_init = pidInit;
+        payload.expr = expr;
+    } else if (kind === 'custom') {
+        const init = document.getElementById('initialisation')?.value || '';
+        const pid = entry.querySelector('.pid-input')?.value || '';
+        const pidInit = entry.querySelector('.init-input')?.value || '';
+        const expr = entry.querySelector('.expression-input')?.value || '';
+        if (init.trim()) payload.init = init;
+        payload.pid = pid.trim();
+        if (pidInit.trim()) payload.pid_init = pidInit;
+        payload.expr = expr;
+    }
+
+    buttonEl.disabled = true;
+    resultEl.style.display = 'inline-flex';
+    resultEl.classList.add('status-indicator');
+    resultEl.classList.remove('status-connected', 'status-disconnected');
+    resultEl.textContent = 'Testing…';
+
+    try {
+        const res = await fetch('/autopid/test_pid', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data) {
+            resultEl.classList.add('status-disconnected');
+            resultEl.textContent = `Error (${res.status})`;
+            return;
+        }
+        if (data.ok) {
+            resultEl.classList.add('status-connected');
+            resultEl.classList.remove('status-disconnected');
+            let unit = (data.unit || '').trim();
+            if (!unit && kind !== 'std') {
+                unit = (entry.querySelector('.unit-input')?.value || '').trim();
+            }
+            const valueText = (data.value === null || data.value === undefined) ? '' : String(data.value);
+            resultEl.textContent = unit ? `${valueText} ${unit}` : valueText;
+        } else {
+            resultEl.classList.add('status-disconnected');
+            resultEl.classList.remove('status-connected');
+            resultEl.textContent = data.error ? `Error: ${data.error}` : 'Error';
+        }
+    } catch (e) {
+        resultEl.classList.add('status-disconnected');
+        resultEl.classList.remove('status-connected');
+        resultEl.textContent = 'Error';
+    } finally {
+        buttonEl.disabled = false;
+    }
+}
+
+async function runCanFilterTest(kind, entry) {
+    const resultEl = entry.querySelector('.test-result');
+    const buttonEl = entry.querySelector('.test-btn');
+    if (!resultEl || !buttonEl) return;
+
+    const frameIdStr = entry.querySelector('.frame-id-input')?.value || '';
+    const expr = entry.querySelector('.expression-input')?.value || '';
+    const unit = (entry.querySelector('.unit-input')?.value || '').trim();
+
+    const frameIdNum = normalizeFrameIdInputToNumber(frameIdStr);
+    if (frameIdNum === null) {
+        resultEl.style.display = 'inline-flex';
+        resultEl.classList.add('status-indicator', 'status-disconnected');
+        resultEl.classList.remove('status-connected');
+        resultEl.textContent = 'Invalid Frame ID';
+        return;
+    }
+    if (!expr.trim()) {
+        resultEl.style.display = 'inline-flex';
+        resultEl.classList.add('status-indicator', 'status-disconnected');
+        resultEl.classList.remove('status-connected');
+        resultEl.textContent = 'Missing Expression';
+        return;
+    }
+
+    const payload = {
+        kind,
+        frame_id: frameIdNum,
+        expr: expr,
+    };
+
+    buttonEl.disabled = true;
+    resultEl.style.display = 'inline-flex';
+    resultEl.classList.add('status-indicator');
+    resultEl.classList.remove('status-connected', 'status-disconnected');
+    resultEl.textContent = 'Testing…';
+
+    try {
+        const res = await fetch('/autopid/test_can_filter', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data) {
+            resultEl.classList.add('status-disconnected');
+            resultEl.textContent = `Error (${res.status})`;
+            return;
+        }
+        if (data.ok) {
+            resultEl.classList.add('status-connected');
+            resultEl.classList.remove('status-disconnected');
+            const valueText = (data.value === null || data.value === undefined) ? '' : String(data.value);
+            resultEl.textContent = unit ? `${valueText} ${unit}` : valueText;
+        } else {
+            resultEl.classList.add('status-disconnected');
+            resultEl.classList.remove('status-connected');
+            resultEl.textContent = data.error ? `Error: ${data.error}` : 'Error';
+        }
+    } catch (e) {
+        resultEl.classList.add('status-disconnected');
+        resultEl.classList.remove('status-connected');
+        resultEl.textContent = 'Error';
+    } finally {
+        buttonEl.disabled = false;
+    }
+}
+
 function addCollapsibleRow(rowData = {}) {
     const container = document.querySelector('.pid-entries');
     const entry = document.createElement('div');
     entry.className = 'pid-entry';
+
+    const enabledChecked = (rowData.enabled === false || rowData.Enabled === false) ? '' : 'checked';
 
     entry.innerHTML = `
         <div class="pid-header">
@@ -649,6 +871,12 @@ function addCollapsibleRow(rowData = {}) {
                 <span class="pid-title">New PID</span>
             </div>
             <div class="header-right">
+                <span class="test-result status-indicator" style="display:none"></span>
+                <button type="button" class="test-btn">Test</button>
+                <label class="enabled-label" style="display:flex; align-items:center; gap:4px; font-size:0.7rem;">
+                    <input type="checkbox" class="enabled-chk" ${enabledChecked}>
+                    Enabled
+                </label>
                 <button type="button" class="delete-btn">Delete</button>
             </div>
         </div>
@@ -722,15 +950,27 @@ style.textContent = pidEntryStyles;
 document.head.appendChild(style);
 const header = entry.querySelector('.pid-header');
 const deleteBtn = entry.querySelector('.delete-btn');
+const testBtn = entry.querySelector('.test-btn');
 const collapseBtn = entry.querySelector('.collapse-btn');
 const content = entry.querySelector('.pid-content');
 const parameterTitle = entry.querySelector('.pid-title');
 const nameInput = entry.querySelector('.name-input');
 const pidInput = entry.querySelector('.pid-input');
+const enabledChk = entry.querySelector('.enabled-chk');
+
+if (enabledChk) {
+    enabledChk.addEventListener('click', (e) => e.stopPropagation());
+    enabledChk.addEventListener('change', enableAutoStoreButton);
+}
 
 deleteBtn.addEventListener('click', () => {
     entry.remove();
     enableAutoStoreButton();
+});
+
+testBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    runPidTest('custom', entry);
 });
 
 const toggleCollapse = (e) => {
@@ -774,6 +1014,12 @@ if (selectedPID) {
                 <span class="pid-title">${selectedPID}</span>
             </div>
             <div class="header-right">
+                <span class="test-result status-indicator" style="display:none"></span>
+                <button type="button" class="test-btn">Test</button>
+                <label class="enabled-label" style="display:flex; align-items:center; gap:4px; font-size:0.7rem;">
+                    <input type="checkbox" class="enabled-chk" ${(rowData.enabled === false || rowData.Enabled === false) ? '' : 'checked'}>
+                    Enabled
+                </label>
                 <button type="button" class="delete-btn">Delete</button>
             </div>
         </div>
@@ -816,12 +1062,24 @@ if (selectedPID) {
     document.head.appendChild(style);
     const header = entry.querySelector('.pid-header');
     const deleteBtn = entry.querySelector('.delete-btn');
+    const testBtn = entry.querySelector('.test-btn');
     const collapseBtn = entry.querySelector('.collapse-btn');
     const content = entry.querySelector('.pid-content');
+    const enabledChk = entry.querySelector('.enabled-chk');
+
+    if (enabledChk) {
+        enabledChk.addEventListener('click', (e) => e.stopPropagation());
+        enabledChk.addEventListener('change', enableAutoStoreButton);
+    }
 
     deleteBtn.addEventListener('click', () => {
         entry.remove();
         enableAutoStoreButton();
+    });
+
+    testBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        runPidTest('std', entry);
     });
 
     const toggleCollapse = (e) => {
@@ -856,6 +1114,12 @@ if (rowData.name) {
                 <span class="pid-title">${rowData.name}</span>
             </div>
             <div class="header-right">
+                <span class="test-result status-indicator" style="display:none"></span>
+                <button type="button" class="test-btn">Test</button>
+                <label class="enabled-label" style="display:flex; align-items:center; gap:4px; font-size:0.7rem;">
+                    <input type="checkbox" class="enabled-chk" ${(rowData.enabled === false || rowData.Enabled === false) ? '' : 'checked'}>
+                    Enabled
+                </label>
                 <button type="button" class="delete-btn">Delete</button>
             </div>
         </div>
@@ -922,12 +1186,24 @@ if (rowData.name) {
     document.head.appendChild(style);
     const header = entry.querySelector('.pid-header');
     const deleteBtn = entry.querySelector('.delete-btn');
+    const testBtn = entry.querySelector('.test-btn');
     const collapseBtn = entry.querySelector('.collapse-btn');
     const content = entry.querySelector('.pid-content');
+    const enabledChk = entry.querySelector('.enabled-chk');
+
+    if (enabledChk) {
+        enabledChk.addEventListener('click', (e) => e.stopPropagation());
+        enabledChk.addEventListener('change', enableAutoStoreButton);
+    }
 
     deleteBtn.addEventListener('click', () => {
         entry.remove();
         enableAutoStoreButton();
+    });
+
+    testBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        runPidTest('vehicle', entry);
     });
 
     const toggleCollapse = (e) => {
@@ -996,6 +1272,12 @@ function addCustomCanFilterEntry(rowData = {}) {
                 <span class="pid-title">${safe(titleText)}</span>
             </div>
             <div class="header-right">
+                <span class="test-result status-indicator" style="display:none"></span>
+                <button type="button" class="test-btn">Test</button>
+                <label class="enabled-label" style="display:flex; align-items:center; gap:4px; font-size:0.7rem;">
+                    <input type="checkbox" class="enabled-chk" ${(p.enabled === false || rowData.enabled === false) ? '' : 'checked'}>
+                    Enabled
+                </label>
                 <button type="button" class="delete-btn">Delete</button>
             </div>
         </div>
@@ -1055,14 +1337,28 @@ function addCustomCanFilterEntry(rowData = {}) {
 
     const header = entry.querySelector('.pid-header');
     const deleteBtn = entry.querySelector('.delete-btn');
+    const testBtn = entry.querySelector('.test-btn');
     const collapseBtn = entry.querySelector('.collapse-btn');
     const content = entry.querySelector('.pid-content');
     const titleEl = entry.querySelector('.pid-title');
+    const enabledChk = entry.querySelector('.enabled-chk');
+
+    if (enabledChk) {
+        enabledChk.addEventListener('click', (e) => e.stopPropagation());
+        enabledChk.addEventListener('change', enableAutoStoreButton);
+    }
 
     deleteBtn.addEventListener('click', () => {
         entry.remove();
         enableAutoStoreButton();
     });
+
+    if (testBtn) {
+        testBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            runCanFilterTest('custom', entry);
+        });
+    }
 
     const toggleCollapse = (e) => {
         e.stopPropagation();
@@ -1110,6 +1406,12 @@ function addVehicleSpecificCanFilterEntry(rowData = {}) {
                 <span class="pid-title">${safe(titleText)}</span>
             </div>
             <div class="header-right">
+                <span class="test-result status-indicator" style="display:none"></span>
+                <button type="button" class="test-btn">Test</button>
+                <label class="enabled-label" style="display:flex; align-items:center; gap:4px; font-size:0.7rem;">
+                    <input type="checkbox" class="enabled-chk" ${(p.enabled === false || rowData.enabled === false) ? '' : 'checked'}>
+                    Enabled
+                </label>
                 <button type="button" class="delete-btn">Delete</button>
             </div>
         </div>
@@ -1169,14 +1471,28 @@ function addVehicleSpecificCanFilterEntry(rowData = {}) {
 
     const header = entry.querySelector('.pid-header');
     const deleteBtn = entry.querySelector('.delete-btn');
+    const testBtn = entry.querySelector('.test-btn');
     const collapseBtn = entry.querySelector('.collapse-btn');
     const content = entry.querySelector('.pid-content');
     const titleEl = entry.querySelector('.pid-title');
+    const enabledChk = entry.querySelector('.enabled-chk');
+
+    if (enabledChk) {
+        enabledChk.addEventListener('click', (e) => e.stopPropagation());
+        enabledChk.addEventListener('change', enableAutoStoreButton);
+    }
 
     deleteBtn.addEventListener('click', () => {
         entry.remove();
         enableAutoStoreButton();
     });
+
+    if (testBtn) {
+        testBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            runCanFilterTest('vehicle', entry);
+        });
+    }
 
     const toggleCollapse = (e) => {
         e.stopPropagation();
@@ -1559,6 +1875,13 @@ function loadAutoTable(jsonData) {
         console.log("Raw jsonData:", jsonData);
         const data = jsonData;
 
+        const togglePidPollingMinVoltageRow = () => {
+            const mode = document.getElementById("disable_on_sleep_voltage")?.value || 'disable';
+            const row = document.getElementById("pid_polling_min_voltage_row");
+            if (!row) return;
+            row.style.display = (mode === 'automate_threshold') ? '' : 'none';
+        };
+
         // Reset custom filters UI to avoid duplicates on reload
         const customFilterContainer = document.querySelector('.custom-canfilter-entries');
         if (customFilterContainer) customFilterContainer.innerHTML = '';
@@ -1584,6 +1907,11 @@ function loadAutoTable(jsonData) {
         setElementValue("car_specific", data.car_specific, 'disable');
         setElementValue("ha_discovery", 'disable');
         setElementValue("grouping", data.grouping, 'disable');
+        setElementValue("disable_on_sleep_voltage", data.disable_on_sleep_voltage, 'disable');
+        setElementValue("pid_polling_min_voltage", data.pid_polling_min_voltage, '13.1');
+        const pidMinVoltEl = document.getElementById("pid_polling_min_voltage");
+        const pidMinVoltValEl = document.getElementById("pid_polling_min_voltage_value");
+        if (pidMinVoltEl && pidMinVoltValEl) pidMinVoltValEl.textContent = pidMinVoltEl.value;
         setElementValue("webhook_data_mode", data.webhook_data_mode, 'changed');
         // Legacy cycle/destination will be migrated into destinations[0].
         setElementValue("car_model", data.car_model, '');
@@ -1641,7 +1969,8 @@ function loadAutoTable(jsonData) {
                     MaxValue: pidData.MaxValue || '',
                     Period: pidData.Period || '',
                     Type: pidData.Type || 'Default',
-                    Send_to: pidData.Send_to || ''
+                    Send_to: pidData.Send_to || '',
+                    enabled: pidData.enabled
                 });
             });
         }
@@ -1664,7 +1993,8 @@ function loadAutoTable(jsonData) {
                                 type: param.type,
                                 min: param.min,
                                 max: param.max,
-                                send_to: param.send_to
+                                send_to: param.send_to,
+                                enabled: param.enabled
                             }
                         });
                     });
@@ -1682,7 +2012,8 @@ function loadAutoTable(jsonData) {
                     ReceiveHeader: pidData.ReceiveHeader || '',
                     Period: pidData.Period || '',
                     Type: pidData.Type || 'Default',
-                    Send_to: pidData.Send_to || ''
+                    Send_to: pidData.Send_to || '',
+                    enabled: pidData.enabled
                 });
             });
         }
@@ -1718,6 +2049,8 @@ function loadAutoTable(jsonData) {
                 if (typeof toggleSendToFields === 'function') toggleSendToFields();
                 if (typeof toggleGroupApiToken === 'function') toggleGroupApiToken();
                 if (typeof toggleStandardPIDOptions === 'function') toggleStandardPIDOptions();
+
+                togglePidPollingMinVoltageRow();
             } catch (error) {
                 console.error('Error in UI updates:', error);
             }
@@ -1728,6 +2061,13 @@ function loadAutoTable(jsonData) {
         console.error('Error in loadAutoTable:', error);
         showNotification("Error loading table data: " + error.message, "red");
     }
+}
+
+function togglePidPollingMinVoltageRow() {
+    const mode = document.getElementById("disable_on_sleep_voltage")?.value || 'disable';
+    const row = document.getElementById("pid_polling_min_voltage_row");
+    if (!row) return;
+    row.style.display = (mode === 'automate_threshold') ? '' : 'none';
 }
 
 
@@ -1750,6 +2090,12 @@ async function storeAutoTableData() {
 
         const initialisationValue = document.getElementById("initialisation")?.value || '';
         const groupingValue = document.getElementById("grouping")?.value || 'disable';
+        const disableOnSleepVoltageValue = document.getElementById("disable_on_sleep_voltage")?.value || 'disable';
+        const pidPollingMinVoltageValueRaw = document.getElementById("pid_polling_min_voltage")?.value;
+        const pidPollingMinVoltageValue = (() => {
+            const n = parseFloat(pidPollingMinVoltageValueRaw);
+            return Number.isFinite(n) ? n : 13.1;
+        })();
         const webhook_data_mode = document.getElementById("webhook_data_mode")?.value || 'changed';
         const ha_discoveryValue = document.getElementById("ha_discovery")?.value || 'disable';
         const carSpecificValue = document.getElementById("car_specific")?.value || 'disable';
@@ -1774,6 +2120,7 @@ async function storeAutoTableData() {
                 return {
                     pid: entry.querySelector('.pid-input').value,
                     pid_init: entry.querySelector('.pid-init-input').value,
+                    enabled: entry.querySelector('.enabled-chk')?.checked !== false,
                     parameters: [{
                         name: entry.querySelector('.name-input').value,
                         expression: entry.querySelector('.expression-input').value,
@@ -1813,7 +2160,8 @@ async function storeAutoTableData() {
                     min: entry.querySelector('.min-input')?.value || '',
                     max: entry.querySelector('.max-input')?.value || '',
                     type: entry.querySelector('.type-select')?.value || 'Default',
-                    send_to: entry.querySelector('.send-to-input')?.value || ''
+                    send_to: entry.querySelector('.send-to-input')?.value || '',
+                    enabled: entry.querySelector('.enabled-chk')?.checked !== false
                 });
             });
             carData.can_filters = Array.from(grouped.values());
@@ -1857,7 +2205,8 @@ async function storeAutoTableData() {
                     MaxValue: entry.querySelector('.max-value-input')?.value || '',
                     Period: entry.querySelector('.period-input')?.value || '',
                     Type: entry.querySelector('.type-select')?.value || 'Default',
-                    Send_to: entry.querySelector('.send-to-input')?.value || ''
+                    Send_to: entry.querySelector('.send-to-input')?.value || '',
+                    enabled: entry.querySelector('.enabled-chk')?.checked !== false
                 };
 
                 if (pidData.Name.length === 0 || pidData.Name.length >= 32) {
@@ -1886,7 +2235,8 @@ async function storeAutoTableData() {
                     ReceiveHeader: entry.querySelector('.receive-header-input')?.value || '',
                     Period: entry.querySelector('.period-input')?.value || '',
                     Type: entry.querySelector('.type-select')?.value || 'Default',
-                    Send_to: entry.querySelector('.send-to-input')?.value || ''
+                    Send_to: entry.querySelector('.send-to-input')?.value || '',
+                    enabled: entry.querySelector('.enabled-chk')?.checked !== false
                 };
 
                 if (stdPIDData.Name.length === 0 || stdPIDData.Name.length >= 32) {
@@ -1926,7 +2276,8 @@ async function storeAutoTableData() {
                     min: entry.querySelector('.min-input')?.value || '',
                     max: entry.querySelector('.max-input')?.value || '',
                     type: entry.querySelector('.type-select')?.value || 'Default',
-                    send_to: entry.querySelector('.send-to-input')?.value || ''
+                    send_to: entry.querySelector('.send-to-input')?.value || '',
+                    enabled: entry.querySelector('.enabled-chk')?.checked !== false
                 });
             });
             custom_can_filters.push(...Array.from(grouped.values()));
@@ -1935,6 +2286,8 @@ async function storeAutoTableData() {
         const jsonData = {
             initialisation: initialisationValue,
             grouping: groupingValue,
+            disable_on_sleep_voltage: disableOnSleepVoltageValue,
+            pid_polling_min_voltage: pidPollingMinVoltageValue,
             webhook_data_mode: webhook_data_mode,
             car_specific: carSpecificValue,
             ha_discovery: ha_discoveryValue,
@@ -2681,7 +3034,8 @@ function loadautoPIDCarData() {
                                         max: param.max,
                                         send_to: param.send_to,
                                         pid: pid.pid,
-                                        pid_init: pid.pid_init
+                                        pid_init: pid.pid_init,
+                                        enabled: pid.enabled
                                     });
                                 });
                             }
@@ -2705,7 +3059,8 @@ function loadautoPIDCarData() {
                                             type: param.type,
                                             min: param.min,
                                             max: param.max,
-                                            send_to: param.send_to
+                                            send_to: param.send_to,
+                                            enabled: param.enabled
                                         }
                                     });
                                 });
@@ -2783,6 +3138,26 @@ async function postConfig() {
 
     obj["wifi_mode"] = document.getElementById("wifi_mode").value;
     obj["ap_ch"] = document.getElementById("ap_ch_value").value;
+
+    // Optional custom AP SSID
+    {
+        const enEl = document.getElementById("ap_ssid_enable");
+        const valEl = document.getElementById("ap_ssid_value");
+        const enabled = !!(enEl && enEl.checked);
+        const ssid = (valEl && typeof valEl.value === 'string') ? valEl.value.trim() : "";
+
+        if (enabled) {
+            // Enforce min length client-side (firmware enforces too)
+            if (ssid.length < 3 || ssid.length > 32) {
+                showNotification("AP SSID must be 3–32 characters", "red");
+                document.getElementById("submit_button").disabled = false;
+                return;
+            }
+        }
+
+        obj["ap_ssid_en"] = enabled ? "enable" : "disable";
+        obj["ap_ssid"] = ssid;
+    }
     obj["webhook_en"] = document.getElementById("webhook_en")?.value || "enable";
     obj["sta_ssid"] = document.getElementById("ssid_value").value;
     obj["sta_pass"] = document.getElementById("pass_value").value;
@@ -2901,6 +3276,35 @@ async function postConfig() {
         }
     };
     xhttp.send(configJSON);
+}
+
+function toggleApSsid() {
+    const enEl = document.getElementById("ap_ssid_enable");
+    const valEl = document.getElementById("ap_ssid_value");
+    if (!enEl || !valEl) return;
+    valEl.disabled = !enEl.checked;
+    if (!enEl.checked) {
+        // Keep value, but clear any browser validation UI
+        try { valEl.setCustomValidity(""); } catch(_) {}
+    } else {
+        validateApSsid();
+    }
+}
+
+function validateApSsid() {
+    const enEl = document.getElementById("ap_ssid_enable");
+    const valEl = document.getElementById("ap_ssid_value");
+    if (!enEl || !valEl) return;
+    if (!enEl.checked) {
+        try { valEl.setCustomValidity(""); } catch(_) {}
+        return;
+    }
+    const ssid = (valEl.value || "").trim();
+    if (ssid.length < 3 || ssid.length > 32) {
+        try { valEl.setCustomValidity("AP SSID must be 3–32 characters"); } catch(_) {}
+    } else {
+        try { valEl.setCustomValidity(""); } catch(_) {}
+    }
 }
 
 function otaClick() {
@@ -3270,6 +3674,21 @@ xhttp.onload = async function() {
             document.getElementById("ap_auto_disable").selectedIndex = "1";
         }
 
+        try { toggleApStationWarning(); } catch(_) {}
+
+        // Custom AP SSID (optional, default disabled)
+        {
+            const enEl = document.getElementById("ap_ssid_enable");
+            const valEl = document.getElementById("ap_ssid_value");
+            if (enEl) {
+                enEl.checked = (obj.ap_ssid_en === "enable");
+            }
+            if (valEl) {
+                valEl.value = obj.ap_ssid || "";
+            }
+            try { toggleApSsid(); } catch(_) {}
+        }
+
         var ch = parseInt(obj.ap_ch);
         ch = ch - 1;
         document.getElementById("ap_ch_value").selectedIndex = ch.toString();
@@ -3482,31 +3901,80 @@ xhttp.onload = async function() {
             renderFallbackNetworks([]);
         }
         document.getElementById("car_model").addEventListener('change', function() {
-            document.querySelector('.specific-pid-entries').innerHTML = '';
+            const pidContainer = document.querySelector('.specific-pid-entries');
+            if (pidContainer) pidContainer.innerHTML = '';
+
+            const filterContainer = document.querySelector('.specific-canfilter-entries');
+            if (filterContainer) filterContainer.innerHTML = '';
             
             const selectedModel = this.value;
+            const specificInitElement = document.getElementById("specific_init");
+            if (specificInitElement) specificInitElement.value = '';
+
+            if (!selectedModel || selectedModel === 'Not Selected') {
+                enableAutoStoreButton();
+                return;
+            }
+
             if (latest_car_models && Array.isArray(latest_car_models.cars)) {
-                const selectedCar = latest_car_models.cars.find(car => car.car_model === selectedModel);
-                const specificInitElement = document.getElementById("specific_init");
-                specificInitElement.value = selectedCar.init;
-                if (selectedCar && selectedCar.pids) {
+                const selectedCar = latest_car_models.cars.find(car => car && car.car_model === selectedModel);
+                if (!selectedCar) {
+                    enableAutoStoreButton();
+                    return;
+                }
+
+                if (specificInitElement) specificInitElement.value = selectedCar.init || '';
+
+                if (selectedCar.pids) {
                     selectedCar.pids.forEach(pid => {
-                        if (pid.parameters) {
+                        if (pid && pid.parameters) {
                             pid.parameters.forEach(param => {
                                 addCarParameter({
                                     ...param,
                                     pid: pid.pid,
-                                    pid_init: pid.pid_init
+                                    pid_init: pid.pid_init,
+                                    enabled: pid.enabled
                                 });
                             });
                         }
                     });
                 }
+
+                if (Array.isArray(selectedCar.can_filters)) {
+                    selectedCar.can_filters.forEach(f => {
+                        const fid = (f && f.frame_id !== undefined) ? f.frame_id : null;
+                        const params = (f && Array.isArray(f.parameters)) ? f.parameters : [];
+                        if (params.length) {
+                            params.forEach(param => {
+                                addVehicleSpecificCanFilterEntry({
+                                    frame_id: fid,
+                                    parameter: {
+                                        name: param.name,
+                                        expression: param.expression,
+                                        unit: param.unit,
+                                        class: param.class,
+                                        period: param.period,
+                                        type: param.type,
+                                        min: param.min,
+                                        max: param.max,
+                                        send_to: param.send_to,
+                                        enabled: param.enabled
+                                    }
+                                });
+                            });
+                        } else if (fid !== null) {
+                            addVehicleSpecificCanFilterEntry({ frame_id: fid, parameter: { name: 'New Parameter', period: '5000', type: 'Default', send_to: '' } });
+                        }
+                    });
+                }
             }
+
+            enableAutoStoreButton();
         });
 
         // Apply mode-dependent enable/disable rules after values are loaded
         try { toggleSmartConnectConfig(); } catch(_) {}
+        try { toggleApStationWarning(); } catch(_) {}
         try { submit_enable(); } catch(_) {}
 
         document.getElementById("store_canflt_button").disabled = true;
@@ -3526,6 +3994,12 @@ xhttp.onload = async function() {
     
     // Initialize SmartConnect configuration visibility
     toggleSmartConnectConfig();
+
+    // Initialize AP+Station warning visibility
+    try { toggleApStationWarning(); } catch(_) {}
+
+    // Initialize AP SSID input state
+    try { toggleApSsid(); } catch(_) {}
     
     // Initialize lucide icons
     if (typeof lucide !== 'undefined' && lucide.createIcons) {
@@ -3587,58 +4061,59 @@ function mon_control() {
     var url2 = "http://192.168.31.72/";
     console.log(dr);
     alert("Please reboot device after Monitor, otherwise the device may not function as expected");
-    ws_url = "ws://" + url.substr(7, url.length) + "ws";
-    console.log(ws_url);
+    if (!window.wicanWs) {
+        alert("WebSocket client is not loaded.");
+        return;
+    }
     if(document.getElementById("mon_button").value == "Start") {
-        ws = new WebSocket(ws_url);
-        setTimeout(bindEvents, 1000);
-        ws.addEventListener("open", (event) => {
-            var cmd = "C" + cr + "S" + dr + cr + "O" + cr;
-            console.log("onopen called");
-            ws.send(cmd);
-            window.mon_button_en(0);
-        });
-        ws.addEventListener("close", (event) => {
-            window.mon_button_en(1);
-            console.log("onclose called");
+        window.wicanWs.connect('monitor', {
+            onOpen: function () {
+                var cmd = "C" + cr + "S" + dr + cr + "O" + cr;
+                console.log("monitor ws open");
+                window.wicanWs.sendText(cmd);
+                window.mon_button_en(0);
+            },
+            onClose: function () {
+                window.mon_button_en(1);
+                console.log("monitor ws close");
+            },
+            onMessage: function (evt) {
+                var received_msg = evt.data;
+                if(received_msg[0] == "t") {
+                    var len = (received_msg[4] - "0") * 2;
+                    var data_str = "";
+                    var i;
+                    for(i = 0; i < len; i += 2) {
+                        data_str += received_msg.substr(i + 5, 2) + " ";
+                    }
+                    monitor_add_line(received_msg.substr(1, 3) + "h", "Std", received_msg[4], data_str, 0);
+                } else if(received_msg[0] == "T") {
+                    var len = (received_msg[9] - "0") * 2;
+                    var data_str = "";
+                    var i;
+                    for(i = 0; i < len; i += 2) {
+                        data_str += received_msg.substr(i + 10, 2) + " ";
+                    }
+                    monitor_add_line(received_msg.substr(1, 8) + "h", "Ext", received_msg[9], data_str, 0);
+                } else if(received_msg[0] == "r") {
+                    var len = (received_msg[4] - "0") * 2;
+                    monitor_add_line(received_msg.substr(1, 3) + "h", "RTR-Std", received_msg[4], 0, 0);
+                } else if(received_msg[0] == "R") {
+                    var len = (received_msg[9] - "0") * 2;
+                    monitor_add_line(received_msg.substr(1, 8) + "h", "RTR-Ext", received_msg[9], 0, 0);
+                }
+            },
         });
     } else {
         ws_close();
     }
 }
 
-function bindEvents() {
-    ws.onmessage = function(evt) {
-        var received_msg = evt.data;
-        if(received_msg[0] == "t") {
-            var len = (received_msg[4] - "0") * 2;
-            var data_str = "";
-            var i;
-            for(i = 0; i < len; i += 2) {
-                data_str += received_msg.substr(i + 5, 2) + " ";
-            }
-            monitor_add_line(received_msg.substr(1, 3) + "h", "Std", received_msg[4], data_str, 0);
-        } else if(received_msg[0] == "T") {
-            var len = (received_msg[9] - "0") * 2;
-            var data_str = "";
-            var i;
-            for(i = 0; i < len; i += 2) {
-                data_str += received_msg.substr(i + 10, 2) + " ";
-            }
-            monitor_add_line(received_msg.substr(1, 8) + "h", "Ext", received_msg[9], data_str, 0);
-        } else if(received_msg[0] == "r") {
-            var len = (received_msg[4] - "0") * 2;
-            monitor_add_line(received_msg.substr(1, 3) + "h", "RTR-Std", received_msg[4], 0, 0);
-        } else if(received_msg[0] == "R") {
-            var len = (received_msg[9] - "0") * 2;
-            monitor_add_line(received_msg.substr(1, 8) + "h", "RTR-Ext", received_msg[9], 0, 0);
-        }
-    };
-}
-
 function ws_close() {
-    ws.send("C" + cr);
-    ws.close();
+    if (window.wicanWs && window.wicanWs.isOpen()) {
+        window.wicanWs.sendText("C" + cr);
+        window.wicanWs.close();
+    }
 }
 
 function mon_button_en(b) {
@@ -4077,11 +4552,11 @@ function tryApplyVPN(data) {
     const wg = data.wireguard || {};
     const enabledEl = document.getElementById('vpn_enabled');
     const peerEl = document.getElementById('wg_peer_public_key');
+    const pskEl = document.getElementById('wg_preshared_key');
     const addrEl = document.getElementById('wg_address');
     const allowedEl = document.getElementById('wg_allowed_ips');
     const epEl = document.getElementById('wg_endpoint');
     const keepEl = document.getElementById('wg_persistent_keepalive');
-
     if (!enabledEl) {
         return false;
     }
@@ -4099,6 +4574,7 @@ function tryApplyVPN(data) {
     }
     // Fill fields
     if (peerEl) { peerEl.value = String(wg.peer_public_key || '').trim(); }
+    if (pskEl) { pskEl.value = wg.preshared_key != null ? String(wg.preshared_key).trim() : ''; }
     if (addrEl) { addrEl.value = wg.address != null ? String(wg.address).trim() : ''; }
     if (allowedEl) { allowedEl.value = wg.allowed_ips != null ? String(wg.allowed_ips).trim() : ''; }
     if (epEl) { epEl.value = wg.endpoint != null ? String(wg.endpoint).trim() : ''; }
@@ -4174,6 +4650,17 @@ function parseWireGuardConfig(configText)
     const lines = configText.split('\n');
     let currentSection = '';
     let fieldsFound = 0;
+    const pskEl = document.getElementById('wg_preshared_key');
+    if (pskEl)
+    {
+        pskEl.value = '';
+    }
+
+    // Track imported DNS (IPv4 only) for submit/test payloads.
+    window.wgImportedDns = { main: '', backup: '' };
+
+    // Accumulate AllowedIPs across multiple lines and comma-separated lists.
+    const allowedIps = [];
     
     for (const line of lines) 
     {
@@ -4211,6 +4698,16 @@ function parseWireGuardConfig(configText)
                         document.getElementById('wg_address').value = value;
                         fieldsFound++;
                         break;
+                    case 'dns':
+                        {
+                            // DNS may be comma-separated; keep first two IPv4.
+                            const parts = value.split(',').map(s => s.trim()).filter(Boolean);
+                            const v4 = parts.filter(s => /^\d{1,3}(?:\.\d{1,3}){3}$/.test(s));
+                            window.wgImportedDns.main = v4[0] || '';
+                            window.wgImportedDns.backup = v4[1] || '';
+                            fieldsFound++;
+                        }
+                        break;
                 }
             } 
             else if (currentSection === 'peer') 
@@ -4221,9 +4718,24 @@ function parseWireGuardConfig(configText)
                         document.getElementById('wg_peer_public_key').value = value;
                         fieldsFound++;
                         break;
+                    case 'presharedkey':
+                        if (document.getElementById('wg_preshared_key'))
+                        {
+                            document.getElementById('wg_preshared_key').value = value;
+                            fieldsFound++;
+                        }
+                        break;
                     case 'allowedips':
-                        document.getElementById('wg_allowed_ips').value = value;
-                        fieldsFound++;
+                        {
+                            // Support multiple lines and comma-separated lists (IPv4 only).
+                            const parts = value.split(',').map(s => s.trim()).filter(Boolean);
+                            for (const p of parts)
+                            {
+                                if (p.includes(':')) continue; // IPv6 not supported here
+                                allowedIps.push(p);
+                            }
+                            fieldsFound++;
+                        }
                         break;
                     case 'endpoint':
                         document.getElementById('wg_endpoint').value = value;
@@ -4236,6 +4748,13 @@ function parseWireGuardConfig(configText)
                 }
             }
         }
+    }
+
+    if (allowedIps.length)
+    {
+        // Legacy model stores a single CIDR. Prefer 0.0.0.0/0 if present.
+        const preferred = allowedIps.find(v => v === '0.0.0.0/0') || allowedIps[0];
+        document.getElementById('wg_allowed_ips').value = preferred;
     }
     
     console.log(`Parsed config, found ${fieldsFound} fields`);
@@ -4265,9 +4784,31 @@ async function saveVpnConfiguration()
         // Peer/server public key (canonical)
         const peerKey = document.getElementById("wg_peer_public_key").value;
         vpnConfig.peer_public_key = peerKey;
+
+        // Optional preshared key
+        const pskEl = document.getElementById("wg_preshared_key");
+        if (pskEl)
+        {
+            const psk = (pskEl.value || '').trim();
+            if (psk === '')
+            {
+                // Explicit clear
+                vpnConfig.preshared_key = "";
+            }
+            else if (psk !== "Stored on device")
+            {
+                vpnConfig.preshared_key = psk;
+            }
+        }
         vpnConfig.address = document.getElementById("wg_address").value;
         vpnConfig.allowed_ips = document.getElementById("wg_allowed_ips").value;
         vpnConfig.endpoint = document.getElementById("wg_endpoint").value;
+        // Optional DNS parsed from imported config (IPv4 only)
+        if (window.wgImportedDns && (window.wgImportedDns.main || window.wgImportedDns.backup))
+        {
+            const dns = [window.wgImportedDns.main, window.wgImportedDns.backup].filter(Boolean).join(',');
+            vpnConfig.dns = dns;
+        }
         vpnConfig.persistent_keepalive = parseInt(document.getElementById("wg_persistent_keepalive").value) || 0;
     }
     
@@ -4348,9 +4889,28 @@ async function testVpnConnection()
             const priv = document.getElementById("wg_private_key") ? document.getElementById("wg_private_key").value : '';
             if (priv) vpnConfig.private_key = priv;
             vpnConfig.peer_public_key = document.getElementById("wg_peer_public_key").value;
+            const pskEl = document.getElementById("wg_preshared_key");
+            if (pskEl)
+            {
+                const psk = (pskEl.value || '').trim();
+                if (psk === '')
+                {
+                    vpnConfig.preshared_key = "";
+                }
+                else if (psk !== "Stored on device")
+                {
+                    vpnConfig.preshared_key = psk;
+                }
+            }
             vpnConfig.address = document.getElementById("wg_address").value;
             vpnConfig.allowed_ips = document.getElementById("wg_allowed_ips").value;
             vpnConfig.endpoint = document.getElementById("wg_endpoint").value;
+            // Optional DNS parsed from imported config (IPv4 only)
+            if (window.wgImportedDns && (window.wgImportedDns.main || window.wgImportedDns.backup))
+            {
+                const dns = [window.wgImportedDns.main, window.wgImportedDns.backup].filter(Boolean).join(',');
+                vpnConfig.dns = dns;
+            }
             vpnConfig.persistent_keepalive = parseInt(document.getElementById("wg_persistent_keepalive").value) || 0;
         }
 

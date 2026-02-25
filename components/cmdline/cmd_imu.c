@@ -60,9 +60,9 @@ esp_err_t cmd_imu_register(void)
     const esp_console_cmd_t cmd = {
         .command = "imu",
         .help = "IMU control and status",
-        .hint = "Usage: imu [-i]",
+        .hint = "Options: -i/--id",
         .func = &cmd_imu,
         .argtable = &imu_args
     };
-    return esp_console_cmd_register(&cmd);
+    return cmdline_cmd_register(&cmd);
 }

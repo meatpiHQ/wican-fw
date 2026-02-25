@@ -18,23 +18,32 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "cmd_status.h"
-#include "cmdline.h"
-#include "esp_console.h"
+#ifndef __TYPES_H__
+#define __TYPES_H__
 
-static int cmd_status(int argc, char **argv) 
-{
-    cmdline_printf("System Status: OK\n");
-    return 0;
-}
+#include <stdint.h>
 
-esp_err_t cmd_status_register(void)
+// #if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
+// #define DEV_BUFFER_LENGTH 128
+// #elif HARDWARE_VER == WICAN_PRO
+// #define DEV_BUFFER_LENGTH 1024
+// #endif
+#define DEV_BUFFER_LENGTH 1024
+
+typedef enum
 {
-    const esp_console_cmd_t cmd = {
-        .command = "status",
-        .help = "Get system status",
-        .hint = NULL,
-        .func = &cmd_status,
-    };
-    return cmdline_cmd_register(&cmd);
-}
+	DEV_WIFI = 0,
+	DEV_WIFI_WS,
+	DEV_BLE,
+	DEV_UART,
+	DEV_MAX
+} dev_channel_t;
+
+typedef struct __xdev_buffer
+{
+	int usLen;
+	uint8_t ucElement[DEV_BUFFER_LENGTH];
+	dev_channel_t dev_channel;
+} xdev_buffer;
+
+#endif

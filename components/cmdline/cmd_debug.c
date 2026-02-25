@@ -138,9 +138,9 @@ esp_err_t cmd_debug_register(void)
     const esp_console_cmd_t cmd = {
         .command = "debug",
         .help = "Enable/disable debug logging and persist to config.json",
-        .hint = "Usage: debug -e 0|1",
+        .hint = "Options: -e/--enable <0|1>",
         .func = &cmd_debug,
         .argtable = &debug_args
     };
-    return esp_console_cmd_register(&cmd);
+    return cmdline_cmd_register(&cmd);
 }

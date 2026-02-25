@@ -38,6 +38,7 @@
 #include <time.h>
 #include "dev_status.h"
 #include "esp_system.h"
+#include "lwip/ip_addr.h"
 
 static const char *TAG = "VPN_MANAGER";
 
@@ -47,6 +48,66 @@ static StaticEventGroup_t s_vpn_event_group_bss;
 static vpn_config_t current_config = {0};
 static vpn_status_t current_status = VPN_STATUS_DISABLED;
 static esp_netif_t *vpn_netif = NULL;
+
+// DNS override while VPN is connected (IPv4 only)
+static bool s_dns_saved = false;
+static esp_netif_dns_info_t s_prev_dns_main = {0};
+static esp_netif_dns_info_t s_prev_dns_backup = {0};
+
+static void vpn_manager_restore_dns(void)
+{
+    if (!s_dns_saved)
+    {
+        return;
+    }
+    esp_netif_t *sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (sta_netif)
+    {
+        (void)esp_netif_set_dns_info(sta_netif, ESP_NETIF_DNS_MAIN, &s_prev_dns_main);
+        (void)esp_netif_set_dns_info(sta_netif, ESP_NETIF_DNS_BACKUP, &s_prev_dns_backup);
+    }
+    s_dns_saved = false;
+}
+
+static void vpn_manager_apply_dns_from_wg(const vpn_wireguard_config_t *wg)
+{
+    if (!wg || wg->dns_main[0] == '\0')
+    {
+        return;
+    }
+
+    esp_netif_t *sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (!sta_netif)
+    {
+        return;
+    }
+
+    // Save existing DNS once so we can restore on disconnect.
+    if (!s_dns_saved)
+    {
+        if (esp_netif_get_dns_info(sta_netif, ESP_NETIF_DNS_MAIN, &s_prev_dns_main) == ESP_OK)
+        {
+            (void)esp_netif_get_dns_info(sta_netif, ESP_NETIF_DNS_BACKUP, &s_prev_dns_backup);
+            s_dns_saved = true;
+        }
+    }
+
+    esp_netif_dns_info_t dns_main = {0};
+    dns_main.ip.type = IPADDR_TYPE_V4;
+    if (esp_netif_str_to_ip4(wg->dns_main, &dns_main.ip.u_addr.ip4) == ESP_OK)
+    {
+        (void)esp_netif_set_dns_info(sta_netif, ESP_NETIF_DNS_MAIN, &dns_main);
+    }
+
+    // If backup is not provided, use main as backup to avoid leaking to previous DNS.
+    const char *backup = (wg->dns_backup[0] != '\0') ? wg->dns_backup : wg->dns_main;
+    esp_netif_dns_info_t dns_backup = {0};
+    dns_backup.ip.type = IPADDR_TYPE_V4;
+    if (esp_netif_str_to_ip4(backup, &dns_backup.ip.u_addr.ip4) == ESP_OK)
+    {
+        (void)esp_netif_set_dns_info(sta_netif, ESP_NETIF_DNS_BACKUP, &dns_backup);
+    }
+}
 
 // VPN task/command infrastructure
 typedef enum
@@ -333,6 +394,9 @@ esp_err_t vpn_manager_stop(void)
 {
     ESP_LOGI(TAG, "Stopping VPN connection");
 
+    // Restore DNS before tearing down VPN (best-effort)
+    vpn_manager_restore_dns();
+
     esp_err_t ret = ESP_OK;
     switch (current_config.type)
     {
@@ -471,6 +535,8 @@ static void vpn_manager_update_status(void)
             {
                 ESP_LOGW(TAG, "Failed to set WG default route: %s", esp_err_to_name(sret));
             }
+            // Apply DNS override (from WG config) on successful connect.
+            vpn_manager_apply_dns_from_wg(&current_config.config.wireguard);
             ESP_LOGI(TAG, "VPN connected successfully");
         }
     }
@@ -483,6 +549,8 @@ static void vpn_manager_update_status(void)
             current_status = VPN_STATUS_DISCONNECTED;
             xEventGroupClearBits(vpn_event_group, VPN_CONNECTED_BIT | VPN_CONNECTING_BIT);
             xEventGroupSetBits(vpn_event_group, VPN_DISCONNECTED_BIT);
+            // Restore previous DNS when the VPN drops.
+            vpn_manager_restore_dns();
             ESP_LOGI(TAG, "VPN disconnected");
         }
     }

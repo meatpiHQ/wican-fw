@@ -44,6 +44,7 @@
 #include "obd_logger.h"
 #include "hw_config.h"
 #include "dev_status.h"
+#include "sleep_mode.h"
 #include "https_client_mgr.h"
 #include "cert_manager.h"
 #include <time.h>
@@ -82,7 +83,6 @@ static char *device_id;
 static EventGroupHandle_t xautopid_event_group = NULL;
 static StaticEventGroup_t xautopid_event_group_buffer;
 static autopid_config_t *autopid_config = NULL;
-static response_t elm327_response;
 static autopid_data_t autopid_data = {.json_str = NULL, .mutex = NULL};
 static QueueHandle_t protocolnumberQueue = NULL;
 // Cached configuration JSON (built once after autopid_config is loaded)
@@ -217,6 +217,23 @@ esp_err_t autopid_get_protocol_number(int32_t *protocol_value)
 
     ESP_LOGD(TAG, "Retrieved protocol number: %ld", *protocol_value);
     return ESP_OK;
+}
+
+bool autopid_lock(uint32_t timeout_ms)
+{
+    if (!autopid_config || !autopid_config->mutex)
+        return false;
+
+    TickType_t to = pdMS_TO_TICKS(timeout_ms);
+    return (xSemaphoreTake(autopid_config->mutex, to) == pdTRUE);
+}
+
+void autopid_unlock(void)
+{
+    if (!autopid_config || !autopid_config->mutex)
+        return;
+
+    xSemaphoreGive(autopid_config->mutex);
 }
 
 const std_pid_t *get_pid_from_string(const char *pid_string)
@@ -581,9 +598,17 @@ static void autopid_data_update(autopid_config_t *pids)
             for (uint32_t i = 0; i < pids->pid_count; i++)
             {
                 pid_data_t *curr_pid = &pids->pids[i];
+                if (!curr_pid->enabled)
+                {
+                    continue;
+                }
                 for (uint32_t j = 0; j < curr_pid->parameters_count; j++)
                 {
                     parameter_t *param = &curr_pid->parameters[j];
+                    if (!param->enabled)
+                    {
+                        continue;
+                    }
                     if (param->name && param->value != FLT_MAX)
                     {
                         if (param->sensor_type == BINARY_SENSOR)
@@ -605,6 +630,10 @@ static void autopid_data_update(autopid_config_t *pids)
                 for (uint32_t pi = 0; pi < f->parameters_count; pi++)
                 {
                     parameter_t *param = &f->parameters[pi];
+                    if (!param->enabled)
+                    {
+                        continue;
+                    }
                     if (param->name && param->value != FLT_MAX)
                     {
                         if (param->sensor_type == BINARY_SENSOR)
@@ -2007,6 +2036,8 @@ static void process_can_filter_frame(can_filter_t *f, const response_t *rsp)
     for (uint32_t pi = 0; pi < f->parameters_count; pi++)
     {
         parameter_t *param = &f->parameters[pi];
+        if (!param->enabled)
+            continue;
         if (!param || !param->expression)
             continue;
         if (!wc_timer_is_expired(&param->timer))
@@ -2288,7 +2319,8 @@ static bool autopid_buf_is_only_stopped(const char *buf)
     while (*p)
     {
         // Skip whitespace and separators
-        while (*p == '\r' || *p == '\n' || *p == ' ' || *p == '\t')
+        // Also skip ELM prompt characters '>' that can be appended into the same buffer.
+        while (*p == '\r' || *p == '\n' || *p == ' ' || *p == '\t' || *p == '>')
             p++;
         if (*p == '\0')
             break;
@@ -2300,10 +2332,14 @@ static bool autopid_buf_is_only_stopped(const char *buf)
         size_t len = (size_t)(p - start);
 
         // Trim trailing spaces
-        while (len > 0 && (start[len - 1] == ' ' || start[len - 1] == '\t'))
+        while (len > 0 && (start[len - 1] == ' ' || start[len - 1] == '\t' || start[len - 1] == '>'))
             len--;
 
         if (len == 0)
+            continue;
+
+        // Ignore bare prompt token
+        if (len == 1 && start[0] == '>')
             continue;
 
         // ELM/STN chips often emit a lone "STOPPED" line when ATMA is terminated.
@@ -2523,6 +2559,114 @@ static void autopid_atma_parser_reset(void)
     autopid_atma_line_buf[0] = '\0';
 }
 
+// -----------------------
+// PID request/response validation
+// -----------------------
+
+static bool autopid_pid_validation_enabled(void)
+{
+    // Best-effort read; bool is safe to read without a mutex.
+    return (autopid_config && autopid_config->pid_validation_en);
+}
+
+// Extracts up to 3 request bytes from a command string like "0100\r" or "22B002\r".
+// Returns false if the string doesn't look like a PID request (e.g., AT commands).
+static bool autopid_parse_pid_request_bytes(const char *cmd_str, uint8_t out_req[3], size_t *out_req_len)
+{
+    if (!cmd_str || !out_req || !out_req_len)
+        return false;
+
+    // Skip leading whitespace / prompt markers
+    const unsigned char *p = (const unsigned char *)cmd_str;
+    while (*p && (isspace(*p) || *p == '>'))
+        p++;
+
+    // Ignore AT commands
+    if (tolower(p[0]) == 'a' && tolower(p[1]) == 't')
+        return false;
+
+    // Collect hex nibbles, ignoring whitespace
+    char hexbuf[7] = {0}; // up to 6 hex chars = 3 bytes
+    size_t hi = 0;
+    while (*p && hi < 6)
+    {
+        if (isxdigit(*p))
+        {
+            hexbuf[hi++] = (char)*p;
+        }
+        else if (isspace(*p) || *p == '\r' || *p == '\n')
+        {
+            // ok
+        }
+        else
+        {
+            // non-hex, non-space terminates parsing
+            break;
+        }
+        p++;
+    }
+
+    if (hi < 2 || (hi % 2) != 0)
+        return false;
+
+    size_t bytes = hi / 2;
+    if (bytes > 3)
+        bytes = 3;
+
+    for (size_t i = 0; i < bytes; i++)
+    {
+        char tmp[3] = {hexbuf[i * 2], hexbuf[i * 2 + 1], 0};
+        char *endptr = NULL;
+        long v = strtol(tmp, &endptr, 16);
+        if (endptr == tmp || v < 0 || v > 255)
+            return false;
+        out_req[i] = (uint8_t)v;
+    }
+
+    *out_req_len = bytes;
+    return true;
+}
+
+// Validates that response contains the positive-response service byte and echoes the PID/identifier bytes.
+// Works with ISO-TP because the positive response may not be at offset 0 (PCI bytes may precede it).
+static bool autopid_validate_response_for_cmd(const char *cmd_str, const response_t *rsp)
+{
+    if (!cmd_str || !rsp || rsp->length == 0)
+        return true; // don't block on missing context
+
+    uint8_t req[3] = {0};
+    size_t req_len = 0;
+    if (!autopid_parse_pid_request_bytes(cmd_str, req, &req_len) || req_len < 1)
+        return true; // not a PID request we recognize
+
+    uint8_t service = req[0];
+    // Standard positive response for these services is service + 0x40.
+    // Examples:
+    //  01 00 -> 41 00 ...
+    //  21 01 -> 61 01 ...
+    //  22 B0 02 -> 62 B0 02 ...
+    uint8_t pos_service = (uint8_t)(service + 0x40);
+
+    // Build expected sequence: [pos_service] + remaining request bytes (pid/identifier)
+    uint8_t expected[4] = {0};
+    size_t expected_len = 1;
+    expected[0] = pos_service;
+    for (size_t i = 1; i < req_len && expected_len < sizeof(expected); i++)
+        expected[expected_len++] = req[i];
+
+    if (expected_len > rsp->length)
+        return false;
+
+    // Search for the sequence anywhere in the response
+    for (uint32_t i = 0; i + expected_len <= rsp->length; i++)
+    {
+        if (memcmp(&rsp->data[i], expected, expected_len) == 0)
+            return true;
+    }
+
+    return false;
+}
+
 void autopid_atma_parser(char *str, uint32_t len, QueueHandle_t *q, char *cmd_str)
 {
     (void)cmd_str;
@@ -2567,7 +2711,16 @@ void autopid_atma_parser(char *str, uint32_t len, QueueHandle_t *q, char *cmd_st
 
 void autopid_parser(char *str, uint32_t len, QueueHandle_t *q, char *cmd_str)
 {
-    static response_t response;
+    static response_t *response = NULL;
+
+    if (response == NULL)
+    {
+        response = (response_t *)heap_caps_malloc(sizeof(response_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    }
+
+    if (response == NULL)
+        return;
+
     if (str != NULL && strlen(str) != 0)
     {
         ESP_LOGI(TAG, "%s", str);
@@ -2586,18 +2739,37 @@ void autopid_parser(char *str, uint32_t len, QueueHandle_t *q, char *cmd_str)
             if (strstr(str, "NO DATA") == NULL && strstr(str, "ERROR") == NULL)
             {
                 // Parse the accumulated buffer
-                parse_elm327_response(auto_pid_buf, &response);
-                if (xQueueSend(autopidQueue, &response, pdMS_TO_TICKS(1000)) != pdPASS)
+                parse_elm327_response(auto_pid_buf, response);
+
+                // If parsing produced no bytes (e.g. STOPPED, SEARCHING..., echoed command),
+                // mark as error so the caller won't try to decode it as a valid PID payload.
+                if (response->length == 0)
+                {
+                    strcpy((char *)response->data, "error");
+                    response->length = strlen((char *)response->data);
+                }
+
+                // Optional: validate that this response matches the PID request we sent.
+                if (autopid_pid_validation_enabled() &&
+                    !autopid_validate_response_for_cmd(cmd_str, response))
+                {
+                    ESP_LOGE(TAG, "PID validation failed. cmd='%s' rsp_len=%lu", cmd_str ? cmd_str : "(null)",
+                             (unsigned long)response->length);
+                    sprintf((char *)response->data, "error");
+                    response->length = strlen((char *)response->data);
+                }
+
+                if (xQueueSend(autopidQueue, response, pdMS_TO_TICKS(1000)) != pdPASS)
                 {
                     ESP_LOGE(TAG, "Failed to send to queue");
                 }
             }
             else
             {
-                sprintf((char *)response.data, "error");
-                response.length = strlen((char *)response.data);
+                sprintf((char *)response->data, "error");
+                response->length = strlen((char *)response->data);
                 ESP_LOGE(TAG, "Error response: %s", auto_pid_buf);
-                if (xQueueSend(autopidQueue, &response, pdMS_TO_TICKS(1000)) != pdPASS)
+                if (xQueueSend(autopidQueue, response, pdMS_TO_TICKS(1000)) != pdPASS)
                 {
                     ESP_LOGE(TAG, "Failed to send to queue");
                 }
@@ -2703,23 +2875,23 @@ static void send_commands(char *commands, uint32_t delay_ms)
         str_send[cmd_len] = '\0'; // Null-terminate the command string
 
         // Keep protocol tracking in sync if init strings switch protocol.
-        int32_t new_protocol_number = -1;
-        bool skip_send = false;
-        if (try_parse_protocol_cmd(str_send, &new_protocol_number))
-        {
-            int32_t current_protocol_number = -1;
-            if (autopid_get_protocol_number(&current_protocol_number) == ESP_OK &&
-                current_protocol_number == new_protocol_number)
-            {
-                // Already in the requested protocol; avoid re-sending the command.
-                skip_send = true;
-            }
-            else
-            {
-                // Update tracking early so downstream logic (header length etc.) stays consistent.
-                autopid_set_protocol_number(new_protocol_number);
-            }
-        }
+        // int32_t new_protocol_number = -1;
+        bool skip_send = false; //Note: Don't skip sending for now
+        // if (try_parse_protocol_cmd(str_send, &new_protocol_number))
+        // {
+        //     int32_t current_protocol_number = -1;
+        //     if (autopid_get_protocol_number(&current_protocol_number) == ESP_OK &&
+        //         current_protocol_number == new_protocol_number)
+        //     {
+        //         // Already in the requested protocol; avoid re-sending the command.
+        //         skip_send = true;
+        //     }
+        //     else
+        //     {
+        //         // Update tracking early so downstream logic (header length etc.) stays consistent.
+        //         autopid_set_protocol_number(new_protocol_number);
+        //     }
+        // }
 
         if (!skip_send &&
             (strstr(str_send, "ath0") == NULL && strstr(str_send, "ATH0") == NULL && strstr(str_send, "at h0") == NULL && strstr(str_send, "AT H0") == NULL) &&
@@ -3419,11 +3591,51 @@ static void autopid_webhook_task(void *pvParameters)
     }
 }
 
+
+static bool autopid_should_pause_pid_polling(float *out_voltage, const char **out_reason)
+{
+    if (out_voltage)
+        *out_voltage = NAN;
+    if (out_reason)
+        *out_reason = NULL;
+
+    if (!autopid_config)
+        return false;
+
+    // Mode: disable PID requests when below Power Saving -> Sleep Voltage threshold.
+    // Uses dev_status voltage bit (set by sleep_mode task).
+    if (autopid_config->disable_pid_requests_on_sleep_voltage && !dev_status_is_wake_voltage_ok())
+    {
+        if (out_reason)
+            *out_reason = "sleep_voltage";
+        return true;
+    }
+
+    // Mode: disable PID requests when below a custom Automate threshold.
+    if (autopid_config->disable_pid_requests_on_automate_threshold)
+    {
+        float v = 0.0f;
+        if (sleep_mode_get_voltage(&v) == ESP_OK)
+        {
+            if (out_voltage)
+                *out_voltage = v;
+            if (v < autopid_config->pid_polling_min_voltage)
+            {
+                if (out_reason)
+                    *out_reason = "automate_threshold";
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 static void autopid_task(void *pvParameters)
 {
     static char default_init[] = "ati\rate0\rath1\ratl0\rats1\ratm0\ratst96\r";
     wc_timer_t ecu_check_timer;
-    static response_t monitor_rsp;
+    response_t monitor_rsp;
 
     vTaskDelay(pdMS_TO_TICKS(1000)); // Initial delay to allow system stabilization
     ESP_LOGI(TAG, "Autopid Task Started");
@@ -3454,7 +3666,13 @@ static void autopid_task(void *pvParameters)
     // bool *pid_failed = calloc(total_params, sizeof(bool));
     // xSemaphoreGive(autopid_config->mutex);
 
-    if (strcmp(autopid_config->std_ecu_protocol, "0") == 0)
+    // Select ECU protocol.
+    // - If configured as "0": use Auto (query ELM for negotiated protocol)
+    // - Else: force configured protocol via ATTP
+    char early_proto_cmd[16] = {0};
+    bool have_early_proto_cmd = false;
+
+    if (autopid_config->std_ecu_protocol && strcmp(autopid_config->std_ecu_protocol, "0") == 0)
     {
         ESP_LOGI(TAG, "Protocol is Auto");
 
@@ -3474,6 +3692,11 @@ static void autopid_task(void *pvParameters)
             char protocol_str[16];
             snprintf(protocol_str, sizeof(protocol_str), "ATTP%01X\r", auto_protocol_number);
             autopid_config->standard_init = strdup_psram(protocol_str);
+
+            // Also send protocol selection early so CAN filter monitoring works
+            // even before the first PID type switch triggers standard_init.
+            snprintf(early_proto_cmd, sizeof(early_proto_cmd), "ATTP%01X\r", auto_protocol_number);
+            have_early_proto_cmd = true;
         }
         else
         {
@@ -3482,27 +3705,65 @@ static void autopid_task(void *pvParameters)
 
         ESP_LOGI(TAG, "Protocol number: %u", auto_protocol_number);
     }
+    else if (autopid_config->std_ecu_protocol && autopid_config->std_ecu_protocol[0] != '\0')
+    {
+        // Protocol explicitly configured: use ATTP<protocol>.
+        // Accept values like "6", "9", "A" etc (strtol base 16 with optional 0x).
+        char *endptr = NULL;
+        long v = strtol(autopid_config->std_ecu_protocol, &endptr, 16);
+        if (endptr != autopid_config->std_ecu_protocol && v >= 0 && v <= 0xFF)
+        {
+            // Format with 1 hex digit for typical ELM protocols (0..F); allow 2 if needed.
+            if (v <= 0xF)
+                snprintf(early_proto_cmd, sizeof(early_proto_cmd), "ATTP%01lX\r", v);
+            else
+                snprintf(early_proto_cmd, sizeof(early_proto_cmd), "ATTP%02lX\r", v);
+            have_early_proto_cmd = true;
+            ESP_LOGI(TAG, "Protocol is fixed: %s (early cmd: %s)", autopid_config->std_ecu_protocol, early_proto_cmd);
+        }
+        else
+        {
+            ESP_LOGW(TAG, "Invalid std_ecu_protocol: %s", autopid_config->std_ecu_protocol);
+        }
+    }
 
     vTaskDelay(pdMS_TO_TICKS(150));
     send_commands(default_init, 50);
+
+    // Apply protocol selection early (if any). This is important for CAN filter monitoring
+    // and for correct protocol/header-length tracking before the first PID cycle.
+    if (have_early_proto_cmd)
+    {
+        send_commands(early_proto_cmd, 2);
+    }
     ESP_LOGI(TAG, "Autopid Start loop");
     ESP_LOGI(TAG, "Total PIDs: %lu", autopid_config->pid_count);
-
+    ESP_LOGI(TAG, "Total CAN Filters: %lu", autopid_config->can_filters_count);
     // Initialize timers
     wc_timer_set(&ecu_check_timer, 2000);
 
     while (1)
     {
         static pid_type_t previous_pid_type = PID_MAX;
+        static bool pid_polling_paused_prev = false;
 
         dev_status_wait_for_bits(DEV_AUTOPID_ELM327_APP_BIT, portMAX_DELAY);
-
+        
         if (dev_status_is_sleeping())
         {
             ESP_LOGI(TAG, "Device is sleeping, waiting for wakeup");
             obd_logger_disable();
             dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
             ESP_LOGI(TAG, "Device awake, resuming autopid task");
+            obd_logger_enable();
+        }
+
+        if (autopid_config->disable_on_sleep_voltage && !dev_status_is_wake_voltage_ok())
+        {
+            ESP_LOGI(TAG, "Voltage below sleep threshold, pausing autopid until voltage recovers");
+            obd_logger_disable();
+            dev_status_wait_for_bits(DEV_WAKE_VOLTAGE_OK_BIT, portMAX_DELAY);
+            ESP_LOGI(TAG, "Voltage OK, resuming autopid task");
             obd_logger_enable();
         }
 
@@ -3516,86 +3777,129 @@ static void autopid_task(void *pvParameters)
             send_commands(default_init, 50);
             vTaskDelay(pdMS_TO_TICKS(100));
         }
-        // elm327_lock();
-        xSemaphoreTake(autopid_config->mutex, portMAX_DELAY);
 
-        // Loop through all PIDs
-        for (uint32_t i = 0; i < autopid_config->pid_count; i++)
+        // Optional low-voltage behaviors that only pause PID polling (CAN filters/monitoring stays active).
+        float batt_v = NAN;
+        const char *pause_reason = NULL;
+        bool pid_polling_paused = autopid_should_pause_pid_polling(&batt_v, &pause_reason);
+        if (pid_polling_paused != pid_polling_paused_prev)
         {
-            pid_data_t *curr_pid = &autopid_config->pids[i];
-            // Skip if PID type not enabled
-            if ((curr_pid->pid_type == PID_STD && !autopid_config->pid_std_en) ||
-                (curr_pid->pid_type == PID_CUSTOM && !autopid_config->pid_custom_en) ||
-                (curr_pid->pid_type == PID_SPECIFIC && !autopid_config->pid_specific_en))
+            if (pid_polling_paused)
             {
-                continue;
-            }
-
-            // Loop through parameters
-            for (uint32_t p = 0; p < curr_pid->parameters_count; p++)
-            {
-                parameter_t *param = &curr_pid->parameters[p];
-
-                // Check parameter timer
-                if (wc_timer_is_expired(&param->timer))
+                if (pause_reason && strcmp(pause_reason, "automate_threshold") == 0 && !isnan(batt_v))
                 {
-                    // autopid_data_write
-                    if (curr_pid->pid_type != previous_pid_type)
+                    ESP_LOGI(TAG, "PID polling paused (automate_threshold): %.2fV < %.2fV", batt_v, autopid_config->pid_polling_min_voltage);
+                }
+                else if (pause_reason && strcmp(pause_reason, "sleep_voltage") == 0)
+                {
+                    ESP_LOGI(TAG, "PID polling paused (sleep_voltage): below configured sleep voltage");
+                }
+                else
+                {
+                    ESP_LOGI(TAG, "PID polling paused");
+                }
+            }
+            else
+            {
+                ESP_LOGI(TAG, "PID polling resumed");
+                // Force init resend on next due PID to avoid stale ELM state.
+                previous_pid_type = PID_MAX;
+            }
+            pid_polling_paused_prev = pid_polling_paused;
+        }
+
+        // elm327_lock();
+        if (!pid_polling_paused)
+        {
+            xSemaphoreTake(autopid_config->mutex, portMAX_DELAY);
+
+            // Loop through all PIDs
+            for (uint32_t i = 0; i < autopid_config->pid_count; i++)
+            {
+                pid_data_t *curr_pid = &autopid_config->pids[i];
+                // Skip if PID type not enabled
+                if ((curr_pid->pid_type == PID_STD && !autopid_config->pid_std_en) ||
+                    (curr_pid->pid_type == PID_CUSTOM && !autopid_config->pid_custom_en) ||
+                    (curr_pid->pid_type == PID_SPECIFIC && !autopid_config->pid_specific_en))
+                {
+                    continue;
+                }
+
+                if (!curr_pid->enabled)
+                {
+                    continue;
+                }
+
+                // Loop through parameters
+                for (uint32_t p = 0; p < curr_pid->parameters_count; p++)
+                {
+                    parameter_t *param = &curr_pid->parameters[p];
+
+                    if (!param->enabled)
                     {
-                        // Send appropriate initialization based on new PID type
-                        switch (curr_pid->pid_type)
-                        {
-                        case PID_CUSTOM:
-                            if (autopid_config->custom_init && strlen(autopid_config->custom_init) > 0)
-                            {
-                                ESP_LOGI(TAG, "Sending custom init: %s, length: %d",
-                                         autopid_config->custom_init, strlen(autopid_config->custom_init));
-                                send_commands(autopid_config->custom_init, 2);
-                            }
-                            break;
-
-                        case PID_STD:
-                            if (autopid_config->standard_init && strlen(autopid_config->standard_init) > 0)
-                            {
-                                ESP_LOGI(TAG, "Sending standard init: %s, length: %d",
-                                         autopid_config->standard_init, strlen(autopid_config->standard_init));
-                                send_commands(autopid_config->standard_init, 2);
-                            }
-                            break;
-
-                        case PID_SPECIFIC:
-                            if (autopid_config->specific_init && strlen(autopid_config->specific_init) > 0)
-                            {
-                                ESP_LOGI(TAG, "Sending specific init: %s, length: %d",
-                                         autopid_config->specific_init, strlen(autopid_config->specific_init));
-                                send_commands(autopid_config->specific_init, 2);
-                            }
-                            break;
-
-                        case PID_MAX:
-                            break;
-                        }
-
-                        previous_pid_type = curr_pid->pid_type;
+                        continue;
                     }
 
-                    ESP_LOGI(TAG, "Processing parameter: %s", param->name);
-                    // Reset timer with parameter period
-                    wc_timer_set(&param->timer, param->period);
-
-                    if (curr_pid->cmd != NULL && strlen(curr_pid->cmd) > 0)
+                    // Check parameter timer
+                    if (wc_timer_is_expired(&param->timer))
                     {
-                        // twai_message_t tx_msg;
-
-                        if (curr_pid->pid_type == PID_CUSTOM || curr_pid->pid_type == PID_SPECIFIC)
+                        // autopid_data_write
+                        if (curr_pid->pid_type != previous_pid_type)
                         {
-                            if (curr_pid->init != NULL && strlen(curr_pid->init) > 0)
+                            // Send appropriate initialization based on new PID type
+                            switch (curr_pid->pid_type)
                             {
-                                send_commands(curr_pid->init, 2);
+                            case PID_CUSTOM:
+                                if (autopid_config->custom_init && strlen(autopid_config->custom_init) > 0)
+                                {
+                                    ESP_LOGI(TAG, "Sending custom init: %s, length: %d",
+                                             autopid_config->custom_init, strlen(autopid_config->custom_init));
+                                    send_commands(autopid_config->custom_init, 2);
+                                }
+                                break;
+
+                            case PID_STD:
+                                if (autopid_config->standard_init && strlen(autopid_config->standard_init) > 0)
+                                {
+                                    ESP_LOGI(TAG, "Sending standard init: %s, length: %d",
+                                             autopid_config->standard_init, strlen(autopid_config->standard_init));
+                                    send_commands(autopid_config->standard_init, 2);
+                                }
+                                break;
+
+                            case PID_SPECIFIC:
+                                if (autopid_config->specific_init && strlen(autopid_config->specific_init) > 0)
+                                {
+                                    ESP_LOGI(TAG, "Sending specific init: %s, length: %d",
+                                             autopid_config->specific_init, strlen(autopid_config->specific_init));
+                                    send_commands(autopid_config->specific_init, 2);
+                                }
+                                break;
+
+                            case PID_MAX:
+                                break;
                             }
+
+                            previous_pid_type = curr_pid->pid_type;
                         }
 
-                        ESP_LOGI(TAG, "Executing command: %s", curr_pid->cmd);
+                        ESP_LOGI(TAG, "Processing parameter: %s", param->name);
+                        // Reset timer with parameter period
+                        wc_timer_set(&param->timer, param->period);
+
+                        if (curr_pid->cmd != NULL && strlen(curr_pid->cmd) > 0)
+                        {
+                            // twai_message_t tx_msg;
+
+                            if (curr_pid->pid_type == PID_CUSTOM || curr_pid->pid_type == PID_SPECIFIC)
+                            {
+                                if (curr_pid->init != NULL && strlen(curr_pid->init) > 0)
+                                {
+                                    send_commands(curr_pid->init, 2);
+                                }
+                            }
+
+                            ESP_LOGI(TAG, "Executing command: %s", curr_pid->cmd);
 // if(elm327_process_cmd((uint8_t*)curr_pid->cmd,
 //                     strlen(curr_pid->cmd),
 //                     &tx_msg,
@@ -3606,7 +3910,10 @@ static void autopid_task(void *pvParameters)
                         if (elm327_process_cmd((uint8_t *)pid_req[i].pid_command, strlen(pid_req[i].pid_command), &tx_msg, &autopidQueue) == ESP_OK)
 #endif
                         {
+                            response_t elm327_response;
                             ESP_LOGI(TAG, "Command processed successfully");
+
+                            memset(&elm327_response, 0, sizeof(elm327_response));
 
                             if (xQueueReceive(autopidQueue, &elm327_response, pdMS_TO_TICKS(12000)) == pdPASS)
                             {
@@ -3730,7 +4037,7 @@ static void autopid_task(void *pvParameters)
                         // pause 100ms between pid requests
                         xSemaphoreGive(autopid_config->mutex);
                         dev_status_wait_for_bits(DEV_AUTOPID_ELM327_APP_BIT, portMAX_DELAY);
-                        vTaskDelay(pdMS_TO_TICKS(105));
+                        vTaskDelay(pdMS_TO_TICKS(5));
                         xSemaphoreTake(autopid_config->mutex, portMAX_DELAY);
                     }
                     else
@@ -3741,9 +4048,10 @@ static void autopid_task(void *pvParameters)
             }
         }
 
-        // elm327_unlock();
-        xSemaphoreGive(autopid_config->mutex);
-        vTaskDelay(pdMS_TO_TICKS(100));
+            // elm327_unlock();
+            xSemaphoreGive(autopid_config->mutex);
+            vTaskDelay(pdMS_TO_TICKS(5));
+        }
 
         // CAN filters monitor window (broadcast frames)
         // We time-slice ATMA per filter using ATCRA, then force init resend next cycle
@@ -3776,7 +4084,7 @@ static void autopid_task(void *pvParameters)
                 bool any_due = false;
                 for (uint32_t pi = 0; pi < f->parameters_count; pi++)
                 {
-                    if (wc_timer_is_expired(&f->parameters[pi].timer))
+                    if (f->parameters[pi].enabled && wc_timer_is_expired(&f->parameters[pi].timer))
                     {
                         any_due = true;
                         break;
@@ -3825,16 +4133,26 @@ static void autopid_task(void *pvParameters)
 
         if (wc_timer_is_expired(&ecu_check_timer))
         {
-            if (all_parameters_failed(autopid_config))
+            if (!pid_polling_paused)
             {
-                xEventGroupClearBits(xautopid_event_group, ECU_CONNECTED_BIT);
-                ESP_LOGW(TAG, "All parameters failed - ECU disconnected");
-            }
-            else
-            {
-                xEventGroupSetBits(xautopid_event_group, ECU_CONNECTED_BIT);
+                if (all_parameters_failed(autopid_config))
+                {
+                    xEventGroupClearBits(xautopid_event_group, ECU_CONNECTED_BIT);
+                    ESP_LOGW(TAG, "All parameters failed - ECU disconnected");
+                }
+                else
+                {
+                    xEventGroupSetBits(xautopid_event_group, ECU_CONNECTED_BIT);
+                }
             }
             wc_timer_set(&ecu_check_timer, 2000); // Reset timer for next check
+        }
+
+        // If PID polling is paused (e.g., low voltage), yield a bit longer to avoid a tight loop.
+        // Otherwise, still yield minimally to stay watchdog-safe in edge cases (no work due).
+        if (pid_polling_paused)
+        {
+            vTaskDelay(pdMS_TO_TICKS(20));
         }
     }
 }
@@ -4124,22 +4442,22 @@ void autopid_init(char *id, bool enable_logging, uint32_t logging_period)
 
     static StackType_t *autopid_task_stack;
     static StaticTask_t autopid_task_buffer;
-    // Note: xTaskCreateStatic() expects stack depth in words, not bytes.
-    static const size_t autopid_task_stack_depth_words = (1024 * 10) / sizeof(StackType_t);
-    static const size_t autopid_task_stack_size_bytes = autopid_task_stack_depth_words * sizeof(StackType_t);
+    // In ESP-IDF FreeRTOS, StackType_t is 1 byte, so stack "depth" units == bytes.
+    _Static_assert(sizeof(StackType_t) == 1, "Expected StackType_t to be 1 byte");
+    static const size_t autopid_task_stack_depth = (1024 * 10) + (2 * sizeof(response_t));
     // Allocate stack memory in PSRAM
-    autopid_task_stack = heap_caps_malloc(autopid_task_stack_size_bytes, MALLOC_CAP_SPIRAM);
+    autopid_task_stack = heap_caps_malloc(autopid_task_stack_depth, MALLOC_CAP_SPIRAM);
     if (autopid_task_stack == NULL)
     {
         ESP_LOGE(TAG, "Failed to allocate autopid_task stack in PSRAM");
         return;
     }
-    memset(autopid_task_stack, 0, autopid_task_stack_size_bytes);
+    memset(autopid_task_stack, 0, autopid_task_stack_depth);
     // Check if memory allocation was successful
     if (autopid_task_stack != NULL)
     {
         // Create task with static allocation
-        xTaskCreateStatic(autopid_task, "autopid_task", (uint32_t)autopid_task_stack_depth_words, (void *)AF_INET, 5,
+        xTaskCreateStatic(autopid_task, "autopid_task", (uint32_t)autopid_task_stack_depth, (void *)AF_INET, 5,
                           autopid_task_stack, &autopid_task_buffer);
     }
     else
@@ -4152,19 +4470,17 @@ void autopid_init(char *id, bool enable_logging, uint32_t logging_period)
     {
         static StackType_t *autopid_publish_task_stack;
         static StaticTask_t autopid_publish_task_buffer;
-        // Note: xTaskCreateStatic() expects stack depth in words, not bytes.
-        static const size_t autopid_publish_task_stack_depth_words = (1024 * 8) / sizeof(StackType_t);
-        static const size_t autopid_publish_task_stack_size_bytes = autopid_publish_task_stack_depth_words * sizeof(StackType_t);
+        static const size_t autopid_publish_task_stack_depth = (1024 * 8);
         // Allocate stack memory in PSRAM
-        autopid_publish_task_stack = heap_caps_malloc(autopid_publish_task_stack_size_bytes, MALLOC_CAP_SPIRAM);
+        autopid_publish_task_stack = heap_caps_malloc(autopid_publish_task_stack_depth, MALLOC_CAP_SPIRAM);
         if (autopid_publish_task_stack == NULL)
         {
             ESP_LOGE(TAG, "Failed to allocate autopid_publish_task stack in PSRAM");
         }
         else
         {
-            memset(autopid_publish_task_stack, 0, autopid_publish_task_stack_size_bytes);
-            if (xTaskCreateStatic(autopid_publish_task, "autopid_publish_task", (uint32_t)autopid_publish_task_stack_depth_words,
+            memset(autopid_publish_task_stack, 0, autopid_publish_task_stack_depth);
+            if (xTaskCreateStatic(autopid_publish_task, "autopid_publish_task", (uint32_t)autopid_publish_task_stack_depth,
                                   NULL, 5, autopid_publish_task_stack, &autopid_publish_task_buffer) != NULL)
             {
                 ESP_LOGI(TAG, "Autopid publish task created");
@@ -4184,19 +4500,17 @@ void autopid_init(char *id, bool enable_logging, uint32_t logging_period)
     {
         static StackType_t *autopid_webhook_task_stack;
         static StaticTask_t autopid_webhook_task_buffer;
-        // Note: xTaskCreateStatic() expects stack depth in words, not bytes.
-        static const size_t autopid_webhook_task_stack_depth_words = (1024 * 20) / sizeof(StackType_t);
-        static const size_t autopid_webhook_task_stack_size_bytes = autopid_webhook_task_stack_depth_words * sizeof(StackType_t);
+        static const size_t autopid_webhook_task_stack_depth = (1024 * 20);
         // Allocate stack memory in PSRAM
-        autopid_webhook_task_stack = heap_caps_malloc(autopid_webhook_task_stack_size_bytes, MALLOC_CAP_SPIRAM);
+        autopid_webhook_task_stack = heap_caps_malloc(autopid_webhook_task_stack_depth, MALLOC_CAP_SPIRAM);
         if (autopid_webhook_task_stack == NULL)
         {
             ESP_LOGE(TAG, "Failed to allocate autopid_webhook_task stack in PSRAM");
         }
         else
         {
-            memset(autopid_webhook_task_stack, 0, autopid_webhook_task_stack_size_bytes);
-            if (xTaskCreateStatic(autopid_webhook_task, "autopid_webhook_task", (uint32_t)autopid_webhook_task_stack_depth_words,
+            memset(autopid_webhook_task_stack, 0, autopid_webhook_task_stack_depth);
+            if (xTaskCreateStatic(autopid_webhook_task, "autopid_webhook_task", (uint32_t)autopid_webhook_task_stack_depth,
                                   NULL, 5, autopid_webhook_task_stack, &autopid_webhook_task_buffer) != NULL)
             {
                 ESP_LOGI(TAG, "Autopid webhook task created");

@@ -24,6 +24,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <esp_err.h>
+
 #define AUTOPID_BUFFER_SIZE (1024*4)
 #define QUEUE_SIZE 10
 
@@ -116,6 +118,7 @@ typedef struct
     char *expression;
     char *unit;
     char *class;
+    bool enabled;
     uint32_t period; 
     float min;
     float max;
@@ -136,6 +139,7 @@ typedef struct
     uint32_t parameters_count;
     pid_type_t pid_type;
     char* rxheader;
+    bool enabled;
 }pid_data_t;
 
 // CAN filter configuration (broadcast frames parsing)
@@ -172,6 +176,26 @@ typedef struct
     bool pid_std_en;
     bool pid_custom_en;
     bool pid_specific_en;
+    // When enabled, pause Automate/AutoPID when battery voltage is below configured sleep voltage.
+    // Stored in auto_pid.json as: disable_on_sleep_voltage = "enable"/"disable".
+    bool disable_on_sleep_voltage;
+    // Alternative low-voltage mode: when battery voltage is below configured sleep voltage,
+    // disable PID requests (polling) but keep CAN filter monitoring active.
+    // Stored in auto_pid.json as: disable_on_sleep_voltage = "disable_pid_requests".
+    bool disable_pid_requests_on_sleep_voltage;
+
+    // Alternative voltage mode: disable PID requests (polling) when battery voltage is below
+    // a configurable threshold (separate from Power Saving -> Sleep Voltage).
+    // CAN filter monitoring remains active.
+    // Stored in auto_pid.json as: disable_on_sleep_voltage = "automate_threshold".
+    bool disable_pid_requests_on_automate_threshold;
+
+    // Voltage threshold used when disable_pid_requests_on_automate_threshold is enabled.
+    // Stored in auto_pid.json as: pid_polling_min_voltage = <number>.
+    float pid_polling_min_voltage;
+    // When enabled, validate that each PID request's response matches the request (service + PID bytes)
+    // using the command string (cmd_str) provided by the ELM command runner.
+    bool pid_validation_en;
     char* std_ecu_protocol;
     char* vehicle_model;
     bool ha_discovery_en;
@@ -193,7 +217,19 @@ bool autopid_get_ecu_status(void);
 char* autopid_get_config(void);
 char *autopid_get_destinations_stats_json(void);
 esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint32_t available_pids_size) ;
+
+// Protocol tracking helpers used by AutoPID parsing and related modules.
+esp_err_t autopid_set_protocol_number(int32_t protocol_value);
+esp_err_t autopid_get_protocol_number(int32_t *protocol_value);
+
 char *autopid_get_value_by_name(char* name);
 void autopid_publish_all_destinations(void);
 void autopid_app_reset_timer(void);
+
+// Shared lock for ELM327 access.
+// The AutoPID task uses this mutex to serialize access to the ELM327 interface.
+// Other modules (e.g. AutoPID HTTP test endpoint) should take this lock to
+// prevent interleaved commands/responses.
+bool autopid_lock(uint32_t timeout_ms);
+void autopid_unlock(void);
 #endif

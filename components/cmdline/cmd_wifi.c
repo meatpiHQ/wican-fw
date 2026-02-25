@@ -167,9 +167,9 @@ esp_err_t cmd_wifi_register(void)
     const esp_console_cmd_t cmd = {
         .command = "wifi",
         .help = "WiFi connection control and status",
-        .hint = "Usage: wifi [-s|-i]",
+        .hint = "Options: -s/--status, -i/--info",
         .func = &cmd_wifi,
         .argtable = &wifi_args
     };
-    return esp_console_cmd_register(&cmd);
+    return cmdline_cmd_register(&cmd);
 }

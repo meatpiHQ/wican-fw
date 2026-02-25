@@ -244,6 +244,12 @@ static void parse_parameter_object(parameter_t *out_param, const cJSON *param_ob
     if (!out_param || !param_obj)
         return;
 
+    // Default to enabled for backwards compatibility (missing field => enabled)
+    {
+        const cJSON *enabled_item = cJSON_GetObjectItem((cJSON *)param_obj, "enabled");
+        out_param->enabled = (enabled_item && cJSON_IsBool(enabled_item)) ? cJSON_IsTrue(enabled_item) : true;
+    }
+
     out_param->name = json_strdup_key_or_default(param_obj, name_key, "none");
     out_param->expression = json_strdup_key_or_default(param_obj, expr_key, "none");
     out_param->unit = json_strdup_key_or_default(param_obj, unit_key, "none");
@@ -388,7 +394,10 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
     cJSON *car_model_item = cJSON_GetObjectItem(root, "car_model");
     cJSON *ecu_protocol_item = cJSON_GetObjectItem(root, "ecu_protocol");
     cJSON *ha_discovery_item = cJSON_GetObjectItem(root, "ha_discovery");
+    cJSON *disable_on_sleep_voltage_item = cJSON_GetObjectItem(root, "disable_on_sleep_voltage");
+    cJSON *pid_polling_min_voltage_item = cJSON_GetObjectItem(root, "pid_polling_min_voltage");
     cJSON *cycle_item = cJSON_GetObjectItem(root, "cycle");
+    cJSON *pid_validation_item = cJSON_GetObjectItem(root, "pid_validation");
     cJSON *standard_pids_item = cJSON_GetObjectItem(root, "standard_pids");
     cJSON *specific_pids_item = cJSON_GetObjectItem(root, "car_specific");
     cJSON *can_filters_item = cJSON_GetObjectItem(root, "can_filters");
@@ -413,6 +422,53 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
     autopid_config->std_ecu_protocol = ecu_protocol_item ? strdup_psram(ecu_protocol_item->valuestring) : NULL;
     autopid_config->ha_discovery_en = ha_discovery_item ? (strcmp(ha_discovery_item->valuestring, "enable") == 0) : false;
 
+    // Backward-compatible default: do NOT disable AutoPID on low voltage unless explicitly enabled.
+    autopid_config->disable_on_sleep_voltage = false;
+    autopid_config->disable_pid_requests_on_sleep_voltage = false;
+    autopid_config->disable_pid_requests_on_automate_threshold = false;
+    if (disable_on_sleep_voltage_item)
+    {
+        if (cJSON_IsString(disable_on_sleep_voltage_item) && disable_on_sleep_voltage_item->valuestring)
+        {
+            const char *v = disable_on_sleep_voltage_item->valuestring;
+            // Supported values:
+            //  - "disable" (default)
+            //  - "enable" (pause AutoPID entirely on low voltage)
+            //  - "disable_pid_requests" (skip PID requests but keep CAN filters active)
+            //  - "automate_threshold" (skip PID requests below pid_polling_min_voltage; CAN filters remain active)
+            autopid_config->disable_on_sleep_voltage = (strcmp(v, "enable") == 0);
+            autopid_config->disable_pid_requests_on_sleep_voltage = (strcmp(v, "disable_pid_requests") == 0);
+            autopid_config->disable_pid_requests_on_automate_threshold = (strcmp(v, "automate_threshold") == 0);
+        }
+        else if (cJSON_IsBool(disable_on_sleep_voltage_item))
+        {
+            autopid_config->disable_on_sleep_voltage = cJSON_IsTrue(disable_on_sleep_voltage_item);
+            autopid_config->disable_pid_requests_on_sleep_voltage = false;
+            autopid_config->disable_pid_requests_on_automate_threshold = false;
+        }
+    }
+
+    // PID polling minimum voltage (used only for automate_threshold mode)
+    autopid_config->pid_polling_min_voltage = 13.1f;
+    if (pid_polling_min_voltage_item)
+    {
+        float v = autopid_config->pid_polling_min_voltage;
+        if (cJSON_IsNumber(pid_polling_min_voltage_item))
+        {
+            v = (float)pid_polling_min_voltage_item->valuedouble;
+        }
+        else if (cJSON_IsString(pid_polling_min_voltage_item) && pid_polling_min_voltage_item->valuestring)
+        {
+            v = (float)atof(pid_polling_min_voltage_item->valuestring);
+        }
+
+        // Basic sanity clamp: ignore clearly invalid values.
+        if (v >= 9.0f && v <= 18.0f)
+        {
+            autopid_config->pid_polling_min_voltage = v;
+        }
+    }
+
     if (cycle_item && cycle_item->valuestring && strlen(cycle_item->valuestring) > 0)
         autopid_config->cycle = atoi(cycle_item->valuestring);
     else if (cycle_item && cycle_item->valueint)
@@ -422,6 +478,23 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
 
     autopid_config->pid_std_en = standard_pids_item ? (strcmp(standard_pids_item->valuestring, "enable") == 0) : false;
     autopid_config->pid_specific_en = specific_pids_item ? (strcmp(specific_pids_item->valuestring, "enable") == 0) : false;
+
+    // PID response validation (optional)
+    // Supports either string: "enable"/"disable" or boolean: true/false.
+    autopid_config->pid_validation_en = true; // default to enabled
+    if (pid_validation_item)
+    {
+        if (cJSON_IsString(pid_validation_item) && pid_validation_item->valuestring)
+        {
+            autopid_config->pid_validation_en = (strcmp(pid_validation_item->valuestring, "enable") == 0);
+        }
+        else if (cJSON_IsBool(pid_validation_item))
+        {
+            autopid_config->pid_validation_en = cJSON_IsTrue(pid_validation_item);
+        }
+    }
+    autopid_config->pid_validation_en = true; 
+
     autopid_config->group_destination = group_destination_item ? strdup_psram(group_destination_item->valuestring) : NULL;
     // Map legacy group_dest_type to enum (for backward compatibility)
     if (group_dest_type_item && group_dest_type_item->valuestring)
@@ -704,6 +777,7 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
             cJSON *pid_item = cJSON_GetObjectItem(pid, "PID");
             cJSON *period_item = cJSON_GetObjectItem(pid, "Period");
             cJSON *rxheader_item = cJSON_GetObjectItem(pid, "header");
+            cJSON *enabled_item = cJSON_GetObjectItem(pid, "enabled");
 
             if (cJSON_GetArraySize(pids) > 0)
             {
@@ -732,6 +806,7 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
 
             curr_pid->rxheader = rxheader_item ? strdup_psram(rxheader_item->valuestring) : NULL;
             curr_pid->pid_type = PID_CUSTOM;
+            curr_pid->enabled = (enabled_item && cJSON_IsBool(enabled_item)) ? cJSON_IsTrue(enabled_item) : true;
 
             curr_pid->parameters_count = 1;
             curr_pid->parameters = (parameter_t *)heap_caps_calloc(1, sizeof(parameter_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
@@ -765,6 +840,10 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
         {
             pid_data_t *curr_pid = &autopid_config->pids[idx];
             curr_pid->pid_type = PID_STD;
+            {
+                cJSON *enabled_item = cJSON_GetObjectItem(pid, "enabled");
+                curr_pid->enabled = (enabled_item && cJSON_IsBool(enabled_item)) ? cJSON_IsTrue(enabled_item) : true;
+            }
 
             char std_init_buf[64];
             int is_protocol_68 = 1;
@@ -832,7 +911,19 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
                 }
                 else
                 {
-                    autopid_config->standard_init = strdup_psram("ATTP0\r  ");
+                    // For non-CAN / unknown protocols, still honor the configured protocol.
+                    // Keep it minimal: only set protocol via ATTP.
+                    if (autopid_config->std_ecu_protocol &&
+                        autopid_config->std_ecu_protocol[0] != '\0' &&
+                        strcmp(autopid_config->std_ecu_protocol, "0") != 0)
+                    {
+                        snprintf(std_init_buf, sizeof(std_init_buf), "ATTP%s\r", autopid_config->std_ecu_protocol);
+                        autopid_config->standard_init = strdup_psram(std_init_buf);
+                    }
+                    else
+                    {
+                        autopid_config->standard_init = strdup_psram("ATTP0\r");
+                    }
                 }
 
                 if (curr_pid->parameters->name != NULL && strlen(curr_pid->parameters->name) > 0)
@@ -1034,6 +1125,9 @@ static void parse_car_data_json(autopid_config_t *autopid_config, int *pid_index
                     pid_data_t *curr_pid = &autopid_config->pids[idx];
                     cJSON *pid_item = cJSON_GetObjectItem(pid, "pid");
                     cJSON *pid_init_item = cJSON_GetObjectItem(pid, "pid_init");
+                    cJSON *enabled_item = cJSON_GetObjectItem(pid, "enabled");
+
+                    curr_pid->enabled = (enabled_item && cJSON_IsBool(enabled_item)) ? cJSON_IsTrue(enabled_item) : true;
 
                     curr_pid->init = NULL;
                     if (pid_init_item && pid_init_item->valuestring)

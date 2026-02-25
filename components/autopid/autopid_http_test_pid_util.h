@@ -18,23 +18,28 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "cmd_status.h"
-#include "cmdline.h"
-#include "esp_console.h"
+#pragma once
 
-static int cmd_status(int argc, char **argv) 
-{
-    cmdline_printf("System Status: OK\n");
-    return 0;
-}
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
-esp_err_t cmd_status_register(void)
-{
-    const esp_console_cmd_t cmd = {
-        .command = "status",
-        .help = "Get system status",
-        .hint = NULL,
-        .func = &cmd_status,
-    };
-    return cmdline_cmd_register(&cmd);
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+bool autopid_test_pid_raw_ensure(size_t cap);
+void autopid_test_pid_raw_reset(void);
+const char *autopid_test_pid_raw_get(void);
+void autopid_test_pid_raw_snippet(char *dst, size_t dstsz);
+
+bool autopid_test_pid_send_cmd_sync(const char *cmd, uint32_t timeout_ms, bool capture);
+void autopid_test_pid_run_init_sequence(const char *commands, uint32_t per_cmd_timeout_ms);
+void autopid_test_pid_restore_autopid_safe_elm_state(void);
+
+bool autopid_test_pid_contains_case_insensitive(const char *haystack, const char *needle);
+bool autopid_test_pid_parse_hex_byte_stream(const char *s, uint8_t *out, size_t out_max, uint32_t *out_len);
+
+#ifdef __cplusplus
 }
+#endif

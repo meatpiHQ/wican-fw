@@ -79,9 +79,9 @@ esp_err_t cmd_sdcard_register(void)
     const esp_console_cmd_t cmd = {
         .command = "sdcard",
         .help = "SD card control and status",
-        .hint = "Usage: sdcard [-i|-t]",
+        .hint = "Options: -i/--info, -t/--test",
         .func = &cmd_sdcard,
         .argtable = &sdcard_args
     };
-    return esp_console_cmd_register(&cmd);
+    return cmdline_cmd_register(&cmd);
 }

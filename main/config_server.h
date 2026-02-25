@@ -87,6 +87,10 @@ typedef struct _device_config
 {
 	char wifi_mode[65];
 	char ap_ch[65];
+	// Optional custom AP SSID
+	// ap_ssid_en: "enable" or "disable" (default)
+	char ap_ssid_en[10];
+	char ap_ssid[65];
 	char ap_auto_disable[12];
 	char sta_ssid[65];
 	char sta_pass[65];
@@ -193,6 +197,8 @@ int32_t config_server_get_port(void);
 void config_server_set_sta_ip(char* ip);
 void config_server_get_sta_ip(char* ip);
 char *config_server_get_ap_pass(void);
+int8_t config_server_get_ap_ssid_en(void);
+char *config_server_get_ap_ssid(void);
 int8_t config_server_protocol(void);
 int config_server_ble_pass(void);
 int8_t config_server_get_sleep_config(void);

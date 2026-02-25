@@ -74,6 +74,8 @@ set(requires
     usb_eth_host
     usb_acm_cli
     cmd_ping
+    wican_common
+    ws_server
 )
 
 # Register the component
@@ -97,6 +99,8 @@ idf_component_register(
         "web/src/dashboard.js"
         "web/src/lucide_icons.js"
         "web/src/main.js"
+		"web/src/ws_client.js"
+		"web/src/terminal.js"
         "web/src/dashboard_live.js"
         "web/safemode.html"
         # "obd_fw/V2.3.18.txt"
