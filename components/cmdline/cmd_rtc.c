@@ -90,9 +90,9 @@ esp_err_t cmd_rtc_register(void)
     const esp_console_cmd_t cmd = {
         .command = "rtc",
         .help = "RTC module control",
-        .hint = "Usage: rtc [-s|-r|-i]",
+        .hint = "Options: -s/--sync, -r/--read, -i/--id",
         .func = &cmd_rtc,
         .argtable = &rtc_args
     };
-    return esp_console_cmd_register(&cmd);
+    return cmdline_cmd_register(&cmd);
 }

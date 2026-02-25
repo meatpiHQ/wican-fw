@@ -22,23 +22,34 @@
 
 #include <stdbool.h>
 #include <stddef.h>
-#include <stdint.h>
+
+#include "esp_err.h"
+#include "esp_http_server.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-bool autopid_test_pid_raw_ensure(size_t cap);
-void autopid_test_pid_raw_reset(void);
-const char *autopid_test_pid_raw_get(void);
-void autopid_test_pid_raw_snippet(char *dst, size_t dstsz);
+typedef void (*ws_server_on_open_fn)(void *ctx);
+typedef void (*ws_server_on_close_fn)(void *ctx);
+typedef bool (*ws_server_handle_frame_fn)(httpd_req_t *req, const uint8_t *data, size_t len, void *ctx);
 
-bool autopid_test_pid_send_cmd_sync(const char *cmd, uint32_t timeout_ms, bool capture);
-void autopid_test_pid_run_init_sequence(const char *commands, uint32_t per_cmd_timeout_ms);
-void autopid_test_pid_restore_autopid_safe_elm_state(void);
+typedef struct
+{
+	ws_server_on_open_fn on_open;
+	ws_server_on_close_fn on_close;
+	ws_server_handle_frame_fn handle_frame;
+	void *ctx;
+} ws_server_hooks_t;
 
-bool autopid_test_pid_contains_case_insensitive(const char *haystack, const char *needle);
-bool autopid_test_pid_parse_hex_byte_stream(const char *s, uint8_t *out, size_t out_max, uint32_t *out_len);
+esp_err_t ws_server_register_uri(httpd_handle_t http_server);
+
+void ws_server_start(QueueHandle_t *tx_queue, QueueHandle_t *rx_queue, const ws_server_hooks_t *hooks);
+void ws_server_stop(void);
+
+bool ws_server_is_connected(void);
 
 #ifdef __cplusplus
 }

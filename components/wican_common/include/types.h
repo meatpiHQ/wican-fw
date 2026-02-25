@@ -18,28 +18,32 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef __TYPES_H__
+#define __TYPES_H__
 
-#include <stdbool.h>
-#include <stddef.h>
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+// #if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
+// #define DEV_BUFFER_LENGTH 128
+// #elif HARDWARE_VER == WICAN_PRO
+// #define DEV_BUFFER_LENGTH 1024
+// #endif
+#define DEV_BUFFER_LENGTH 1024
 
-bool autopid_test_pid_raw_ensure(size_t cap);
-void autopid_test_pid_raw_reset(void);
-const char *autopid_test_pid_raw_get(void);
-void autopid_test_pid_raw_snippet(char *dst, size_t dstsz);
+typedef enum
+{
+	DEV_WIFI = 0,
+	DEV_WIFI_WS,
+	DEV_BLE,
+	DEV_UART,
+	DEV_MAX
+} dev_channel_t;
 
-bool autopid_test_pid_send_cmd_sync(const char *cmd, uint32_t timeout_ms, bool capture);
-void autopid_test_pid_run_init_sequence(const char *commands, uint32_t per_cmd_timeout_ms);
-void autopid_test_pid_restore_autopid_safe_elm_state(void);
+typedef struct __xdev_buffer
+{
+	int usLen;
+	uint8_t ucElement[DEV_BUFFER_LENGTH];
+	dev_channel_t dev_channel;
+} xdev_buffer;
 
-bool autopid_test_pid_contains_case_insensitive(const char *haystack, const char *needle);
-bool autopid_test_pid_parse_hex_byte_stream(const char *s, uint8_t *out, size_t out_max, uint32_t *out_len);
-
-#ifdef __cplusplus
-}
 #endif

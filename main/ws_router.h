@@ -18,32 +18,25 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#pragma once
 
-#ifndef __TYPES_H__
-#define __TYPES_H__
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <esp_http_server.h>
 
-// #if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
-// #define DEV_BUFFER_LENGTH	128
-// #elif HARDWARE_VER == WICAN_PRO
-// #define DEV_BUFFER_LENGTH	1024
-// #endif
-#define DEV_BUFFER_LENGTH	1024
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-typedef enum
-{
-	DEV_WIFI = 0,
-	DEV_WIFI_WS,
-	DEV_BLE,
-	DEV_UART,
-	DEV_MAX
-}dev_channel_t;
+void ws_router_on_open(void);
+void ws_router_on_close(void);
+bool ws_router_handle_frame(httpd_req_t *req, const uint8_t *payload, size_t len);
 
+// True when the single WS connection is being used for CAN monitor streaming.
+// When false (terminal mode), firmware should avoid pushing raw CAN frames to the WS.
+bool ws_router_is_in_monitor_mode(void);
 
-typedef struct __xdev_buffer
-{
-	int usLen;
-	uint8_t ucElement[DEV_BUFFER_LENGTH];
-	dev_channel_t dev_channel;
-}xdev_buffer;
-
+#ifdef __cplusplus
+}
 #endif

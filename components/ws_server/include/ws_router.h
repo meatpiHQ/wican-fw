@@ -23,22 +23,19 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <esp_http_server.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-bool autopid_test_pid_raw_ensure(size_t cap);
-void autopid_test_pid_raw_reset(void);
-const char *autopid_test_pid_raw_get(void);
-void autopid_test_pid_raw_snippet(char *dst, size_t dstsz);
+void ws_router_on_open(void);
+void ws_router_on_close(void);
+bool ws_router_handle_frame(httpd_req_t *req, const uint8_t *payload, size_t len);
 
-bool autopid_test_pid_send_cmd_sync(const char *cmd, uint32_t timeout_ms, bool capture);
-void autopid_test_pid_run_init_sequence(const char *commands, uint32_t per_cmd_timeout_ms);
-void autopid_test_pid_restore_autopid_safe_elm_state(void);
-
-bool autopid_test_pid_contains_case_insensitive(const char *haystack, const char *needle);
-bool autopid_test_pid_parse_hex_byte_stream(const char *s, uint8_t *out, size_t out_max, uint32_t *out_len);
+// True when the single WS connection is being used for CAN monitor streaming.
+// When false (terminal mode), firmware should avoid pushing raw CAN frames to the WS.
+bool ws_router_is_in_monitor_mode(void);
 
 #ifdef __cplusplus
 }

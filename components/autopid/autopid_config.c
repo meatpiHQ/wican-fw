@@ -140,7 +140,6 @@ static sensor_type_t json_sensor_type(const cJSON *obj, const char *key, sensor_
     return (strcmp(s, "binary") == 0) ? BINARY_SENSOR : SENSOR;
 }
 
-
 static void parse_parameter_object(parameter_t *out_param, const cJSON *param_obj,
                                    const char *name_key, const char *expr_key,
                                    const char *unit_key, const char *class_key,
@@ -419,6 +418,7 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
     cJSON *ecu_protocol_item = cJSON_GetObjectItem(root, "ecu_protocol");
     cJSON *ha_discovery_item = cJSON_GetObjectItem(root, "ha_discovery");
     cJSON *disable_on_sleep_voltage_item = cJSON_GetObjectItem(root, "disable_on_sleep_voltage");
+    cJSON *pid_polling_min_voltage_item = cJSON_GetObjectItem(root, "pid_polling_min_voltage");
     cJSON *cycle_item = cJSON_GetObjectItem(root, "cycle");
     cJSON *pid_validation_item = cJSON_GetObjectItem(root, "pid_validation");
     cJSON *standard_pids_item = cJSON_GetObjectItem(root, "standard_pids");
@@ -432,36 +432,85 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
     if (init_item && init_item->valuestring) autopid_config->custom_init = normalize_init_string(init_item->valuestring);
     autopid_config->grouping = strdup_psram("enable");
     autopid_config->webhook_data_mode = (webhook_data_mode_item && webhook_data_mode_item->valuestring && strlen(webhook_data_mode_item->valuestring) > 1) ? strdup_psram(webhook_data_mode_item->valuestring) : strdup_psram("changed");
-    autopid_config->vehicle_model = (car_model_item && car_model_item->valuestring) ? strdup_psram(car_model_item->valuestring) : NULL;
-    autopid_config->std_ecu_protocol = (ecu_protocol_item && ecu_protocol_item->valuestring) ? strdup_psram(ecu_protocol_item->valuestring) : NULL;
+    
+    autopid_config->vehicle_model = car_model_item ? strdup_psram(car_model_item->valuestring) : NULL;
+    autopid_config->std_ecu_protocol = ecu_protocol_item ? strdup_psram(ecu_protocol_item->valuestring) : NULL;
+    
     autopid_config->ha_discovery_en = false;
     if (ha_discovery_item) {
         if (cJSON_IsString(ha_discovery_item) && ha_discovery_item->valuestring) autopid_config->ha_discovery_en = (strcmp(ha_discovery_item->valuestring, "enable") == 0);
         else if (cJSON_IsBool(ha_discovery_item)) autopid_config->ha_discovery_en = cJSON_IsTrue(ha_discovery_item);
     }
+
+    // Backward-compatible default: do NOT disable AutoPID on low voltage unless explicitly enabled.
     autopid_config->disable_on_sleep_voltage = false;
-    if (disable_on_sleep_voltage_item) {
-        if (cJSON_IsString(disable_on_sleep_voltage_item) && disable_on_sleep_voltage_item->valuestring) autopid_config->disable_on_sleep_voltage = (strcmp(disable_on_sleep_voltage_item->valuestring, "enable") == 0);
-        else if (cJSON_IsBool(disable_on_sleep_voltage_item)) autopid_config->disable_on_sleep_voltage = cJSON_IsTrue(disable_on_sleep_voltage_item);
+    autopid_config->disable_pid_requests_on_sleep_voltage = false;
+    autopid_config->disable_pid_requests_on_automate_threshold = false;
+    if (disable_on_sleep_voltage_item)
+    {
+        if (cJSON_IsString(disable_on_sleep_voltage_item) && disable_on_sleep_voltage_item->valuestring)
+        {
+            const char *v = disable_on_sleep_voltage_item->valuestring;
+            // Supported values:
+            //  - "disable" (default)
+            //  - "enable" (pause AutoPID entirely on low voltage)
+            //  - "disable_pid_requests" (skip PID requests but keep CAN filters active)
+            //  - "automate_threshold" (skip PID requests below pid_polling_min_voltage; CAN filters remain active)
+            autopid_config->disable_on_sleep_voltage = (strcmp(v, "enable") == 0);
+            autopid_config->disable_pid_requests_on_sleep_voltage = (strcmp(v, "disable_pid_requests") == 0);
+            autopid_config->disable_pid_requests_on_automate_threshold = (strcmp(v, "automate_threshold") == 0);
+        }
+        else if (cJSON_IsBool(disable_on_sleep_voltage_item))
+        {
+            autopid_config->disable_on_sleep_voltage = cJSON_IsTrue(disable_on_sleep_voltage_item);
+            autopid_config->disable_pid_requests_on_sleep_voltage = false;
+            autopid_config->disable_pid_requests_on_automate_threshold = false;
+        }
     }
+
+    // PID polling minimum voltage (used only for automate_threshold mode)
+    autopid_config->pid_polling_min_voltage = 13.1f;
+    if (pid_polling_min_voltage_item)
+    {
+        float v = autopid_config->pid_polling_min_voltage;
+        if (cJSON_IsNumber(pid_polling_min_voltage_item))
+        {
+            v = (float)pid_polling_min_voltage_item->valuedouble;
+        }
+        else if (cJSON_IsString(pid_polling_min_voltage_item) && pid_polling_min_voltage_item->valuestring)
+        {
+            v = (float)atof(pid_polling_min_voltage_item->valuestring);
+        }
+
+        // Basic sanity clamp: ignore clearly invalid values.
+        if (v >= 9.0f && v <= 18.0f)
+        {
+            autopid_config->pid_polling_min_voltage = v;
+        }
+    }
+    
     if (cycle_item && cycle_item->valuestring && strlen(cycle_item->valuestring) > 0) autopid_config->cycle = atoi(cycle_item->valuestring);
     else if (cycle_item && cycle_item->valueint) autopid_config->cycle = cycle_item->valueint;
     else autopid_config->cycle = 10000;
+    
     autopid_config->pid_std_en = false;
     if (standard_pids_item) {
         if (cJSON_IsString(standard_pids_item) && standard_pids_item->valuestring) autopid_config->pid_std_en = (strcmp(standard_pids_item->valuestring, "enable") == 0);
         else if (cJSON_IsBool(standard_pids_item)) autopid_config->pid_std_en = cJSON_IsTrue(standard_pids_item);
     }
+    
     autopid_config->pid_specific_en = false;
     if (specific_pids_item) {
         if (cJSON_IsString(specific_pids_item) && specific_pids_item->valuestring) autopid_config->pid_specific_en = (strcmp(specific_pids_item->valuestring, "enable") == 0);
         else if (cJSON_IsBool(specific_pids_item)) autopid_config->pid_specific_en = cJSON_IsTrue(specific_pids_item);
     }
+    
     autopid_config->pid_validation_en = true; 
     if (pid_validation_item) {
         if (cJSON_IsString(pid_validation_item) && pid_validation_item->valuestring) autopid_config->pid_validation_en = (strcmp(pid_validation_item->valuestring, "enable") == 0);
         else if (cJSON_IsBool(pid_validation_item)) autopid_config->pid_validation_en = cJSON_IsTrue(pid_validation_item);
     }
+    
     autopid_config->group_destination = (group_destination_item && group_destination_item->valuestring) ? strdup_psram(group_destination_item->valuestring) : NULL;
     if (group_dest_type_item && group_dest_type_item->valuestring) autopid_config->group_destination_type = destination_type_from_string(group_dest_type_item->valuestring);
     else autopid_config->group_destination_type = DEST_DEFAULT;

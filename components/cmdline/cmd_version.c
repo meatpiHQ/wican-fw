@@ -51,5 +51,5 @@ esp_err_t cmd_version_register(void)
         .hint = NULL,
         .func = &cmd_version,
     };
-    return esp_console_cmd_register(&cmd);
+    return cmdline_cmd_register(&cmd);
 }

@@ -55,6 +55,7 @@
 #include "sleep_mode.h"
 #include "wc_uart.h"
 #include "elm327.h"
+#include <ws_router.h>
 #include "mqtt.h"
 #include "ftp.h"
 #include "autopid.h"
@@ -322,12 +323,16 @@ static void can_tx_task(void *pvParameters)
 			static int64_t last_cmd_time = 0;
 			// memset(elm327_cmd_buffer, 0, sizeof(elm327_cmd_buffer));
 
-			// set DEV_EXTERNAL_ELM327_APP_BIT on incomming request
+			// set DEV_EXTERNAL_ELM327_APP_BIT on incoming request
 			dev_status_clear_bits(DEV_AUTOPID_ELM327_APP_BIT);
 			autopid_app_reset_timer();	//timer will set the bit again after 10 seconds of inactivity
 			if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI)
 			{
 				elm327_process_cmd(msg_ptr, temp_len, &xMsg_Tx_Queue, elm327_cmd_buffer, &cmd_buffer_len, &last_cmd_time, &send_to_host);
+			}
+			else if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI_WS)
+			{
+				elm327_process_cmd(msg_ptr, temp_len, &xmsg_ws_tx_queue, elm327_cmd_buffer, &cmd_buffer_len, &last_cmd_time, &send_to_host);
 			}
 			else if(ucTCP_RX_Buffer.dev_channel == DEV_BLE)
 			{
@@ -340,6 +345,10 @@ static void can_tx_task(void *pvParameters)
 			if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI)
 			{
 				elm327_process_cmd(msg_ptr, temp_len, &tx_msg, &xMsg_Tx_Queue);
+			}
+			else if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI_WS)
+			{
+				elm327_process_cmd(msg_ptr, temp_len, &tx_msg, &xmsg_ws_tx_queue);
 			}
 			else if(ucTCP_RX_Buffer.dev_channel == DEV_BLE)
 			{
@@ -396,14 +405,11 @@ static void can_rx_task(void *pvParameters)
 
         	process_led(1);
 
-        	if(config_server_ws_connected())
-        	{
-        		ucTCP_TX_Buffer.usLen = slcan_parse_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
-				if(config_server_ws_connected())
-				{
-					xQueueSend( xmsg_ws_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
-				}
-        	}
+			if(config_server_ws_connected() && ws_router_is_in_monitor_mode())
+			{
+				ucTCP_TX_Buffer.usLen = slcan_parse_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
+				xQueueSend( xmsg_ws_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
+			}
         	//TODO: optimize, useless ifs
 			if(tcp_port_open() || ble_connected() || HARDWARE_VER == WICAN_USB_V100 || mqtt_connected() || protocol == AUTO_PID )
 			{

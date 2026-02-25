@@ -203,6 +203,30 @@ typedef struct
     bool pid_std_en;
     bool pid_custom_en;
     bool pid_specific_en;
+
+    // When enabled, pause Automate/AutoPID when battery voltage is below configured sleep voltage.
+    // Stored in auto_pid.json as: disable_on_sleep_voltage = "enable"/"disable".
+    bool disable_on_sleep_voltage;
+    
+    // Alternative low-voltage mode: when battery voltage is below configured sleep voltage,
+    // disable PID requests (polling) but keep CAN filter monitoring active.
+    // Stored in auto_pid.json as: disable_on_sleep_voltage = "disable_pid_requests".
+    bool disable_pid_requests_on_sleep_voltage;
+
+    // Alternative voltage mode: disable PID requests (polling) when battery voltage is below
+    // a configurable threshold (separate from Power Saving -> Sleep Voltage).
+    // CAN filter monitoring remains active.
+    // Stored in auto_pid.json as: disable_on_sleep_voltage = "automate_threshold".
+    bool disable_pid_requests_on_automate_threshold;
+
+    // Voltage threshold used when disable_pid_requests_on_automate_threshold is enabled.
+    // Stored in auto_pid.json as: pid_polling_min_voltage = <number>.
+    float pid_polling_min_voltage;
+    
+    // When enabled, validate that each PID request's response matches the request (service + PID bytes)
+    // using the command string (cmd_str) provided by the ELM command runner.
+    bool pid_validation_en;
+
     char* std_ecu_protocol;
     bool ha_discovery_en;
     uint32_t cycle;
@@ -211,8 +235,6 @@ typedef struct
     can_filter_t *can_filters;
     uint32_t can_filters_count;
     char* webhook_data_mode;
-    bool disable_on_sleep_voltage;
-    bool pid_validation_en;
 
     SemaphoreHandle_t mutex;
 } autopid_config_t;

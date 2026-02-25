@@ -140,9 +140,9 @@ esp_err_t cmd_led_register(void)
     const esp_console_cmd_t cmd = {
         .command = "led",
         .help = "LED driver control",
-        .hint = "Usage: led [-i] [-c <r> <g> <b> [-b]]",
+        .hint = "Options: -i/--id, -c/--color <r> <g> <b>, -b/--blink",
         .func = &cmd_led,
         .argtable = &led_args
     };
-    return esp_console_cmd_register(&cmd);
+    return cmdline_cmd_register(&cmd);
 }

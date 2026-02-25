@@ -44,7 +44,6 @@
 #include "obd_logger.h"
 #include "hw_config.h"
 #include "dev_status.h"
-#include "sleep_mode.h"
 #include "https_client_mgr.h"
 #include "cert_manager.h"
 #include <time.h>
@@ -74,11 +73,6 @@
 #ifndef AUTOPID_BACKOFF_MAX_MULTIPLIER
 #define AUTOPID_BACKOFF_MAX_MULTIPLIER 2
 #endif
-
-/* [NEW] Task handle for the asynchronous processing engine */
-static TaskHandle_t autopid_processing_task_handle = NULL;
-static StackType_t *autopid_processing_task_stack = NULL;
-static StaticTask_t autopid_processing_task_buffer;
 
 static char *auto_pid_buf;
 static QueueHandle_t autopidQueue;
@@ -119,8 +113,6 @@ static const uint8_t autopid_protocol_header_length[] = {
 static void send_commands(char *commands, uint32_t delay_ms);
 static void publish_parameter_mqtt(parameter_t *param);
 static void autopid_data_update(autopid_config_t *pids);
-static void autopid_processing_task(void *pvParameters);
-
 
 // --- HELPER: Check for RPM to detect Engine Running (NEW) ---
 static bool is_engine_running(void) {
@@ -2835,151 +2827,6 @@ static void send_commands(char *commands, uint32_t delay_ms)
 
 //////////////////
 
-static void execute_pid_parameter(pid_data_t *curr_pid, parameter_t *param) {
-    if (!curr_pid || !param) return;
-
-    ESP_LOGI(TAG, "Processing parameter: %s", param->name);
-    
-    // Command Processing
-    if (curr_pid->cmd != NULL && strlen(curr_pid->cmd) > 0) {
-        
-        // Handle Inits for Custom/Specific (Legacy path only)
-        if (!autopid_config->use_groups && (curr_pid->pid_type == PID_CUSTOM || curr_pid->pid_type == PID_SPECIFIC)) {
-            if (curr_pid->init != NULL && strlen(curr_pid->init) > 0) {
-                send_commands(curr_pid->init, 2);
-            }
-        }
-
-        ESP_LOGI(TAG, "Executing command: %s", curr_pid->cmd);
-
-        #if HARDWARE_VER == WICAN_PRO
-        if (elm327_process_cmd((uint8_t *)curr_pid->cmd, strlen(curr_pid->cmd), &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, autopid_parser) == ESP_OK)
-        #else
-        twai_message_t tx_msg;
-        if (elm327_process_cmd((uint8_t *)curr_pid->cmd, strlen(curr_pid->cmd), &tx_msg, &autopidQueue) == ESP_OK)
-        #endif
-        {
-            response_t elm327_response;
-            memset(&elm327_response, 0, sizeof(elm327_response));
-
-            // kww- replace by below if (xQueueReceive(autopidQueue, &elm327_response, pdMS_TO_TICKS(12000)) == pdPASS) {
-
-            /* 1. Drop the lock right before we go to sleep waiting for the car */
-            xSemaphoreGive(autopid_config->mutex);
-
-            /* 2. Wait for the car (this takes 15ms - 50ms) */
-            BaseType_t got_response = xQueueReceive(autopidQueue, &elm327_response, pdMS_TO_TICKS(12000));
-
-            /* 3. Instantly re-take the lock before we process or modify any data */
-            xSemaphoreTake(autopid_config->mutex, portMAX_DELAY);
-            /* --------------------------- */
-
-            if (got_response == pdPASS) {
-	      
-                if (strstr((char *)elm327_response.data, "error") == NULL &&
-                    strstr((char *)elm327_response.data, "SEARCHING") == NULL &&
-                    strstr((char *)elm327_response.data, "UNABLE TO CONNECT") == NULL) {
-                    
-                    double result;
-                    param->failed = false;
-                    xEventGroupSetBits(xautopid_event_group, ECU_CONNECTED_BIT);
-
-                    // 1. Custom / Specific PID Logic
-                    if (curr_pid->pid_type == PID_CUSTOM || curr_pid->pid_type == PID_SPECIFIC) {
-                        if (param->expression && evaluate_expression((uint8_t *)param->expression, elm327_response.data, 0, &result)) {
-                            if (param->min != FLT_MAX && result < param->min) {
-                                ESP_LOGW(TAG, "Param %s val %.2f < min %.2f", param->name, result, param->min);
-                            } else if (param->max != FLT_MAX && result > param->max) {
-                                ESP_LOGW(TAG, "Param %s val %.2f > max %.2f", param->name, result, param->max);
-                            } else {
-                                result = round(result * 100.0) / 100.0;
-                                param->value = result;
-                                autopid_config->last_successful_pid_time = time(NULL);
-                                publish_parameter_mqtt(param);
-                            }
-                        }
-                    } 
-                    // 2. Standard PID Logic
-                    else if (curr_pid->pid_type == PID_STD) {
-                        const std_pid_t *pid_info = get_pid_from_string(param->name);
-                        if (pid_info) {
-                            for (int p = 0; p < pid_info->num_params; p++) {
-                                const char *param_name = strchr(param->name, '-');
-                                if (param_name && strcmp(param_name + 1, pid_info->params[p].name) == 0) {
-                                    esp_err_t err;
-                                    if (elm327_response.priority_data != NULL) {
-                                        err = extract_signal_value(elm327_response.priority_data, elm327_response.priority_data_len, &pid_info->params[p], &param->value);
-                                    } else {
-                                        err = extract_signal_value(elm327_response.data, elm327_response.length, &pid_info->params[p], &param->value);
-                                    }
-
-                                    if (err == ESP_OK) {
-                                        param->value = roundf(param->value * 100.0) / 100.0;
-                                        autopid_config->last_successful_pid_time = time(NULL);
-                                        publish_parameter_mqtt(param);
-                                    }
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    param->failed = true;
-                    ESP_LOGE(TAG, "ELM Response Error for %s", curr_pid->cmd);
-                }
-            } else {
-                param->failed = true;
-                ESP_LOGE(TAG, "Queue Timeout for %s", curr_pid->cmd);
-            }
-        } else {
-            ESP_LOGE(TAG, "Process Cmd Failed: %s", curr_pid->cmd);
-        }
-
-	/* [CHANGE] Remove the old synchronous update */
-        // autopid_data_update(autopid_config);
-	
-    }
-}
-
-static bool autopid_should_pause_pid_polling(float *out_voltage, const char **out_reason)
-{
-    if (out_voltage)
-        *out_voltage = NAN;
-    if (out_reason)
-        *out_reason = NULL;
-
-    if (!autopid_config)
-        return false;
-
-    // Mode: disable PID requests when below Power Saving -> Sleep Voltage threshold.
-    // Uses dev_status voltage bit (set by sleep_mode task).
-    if (autopid_config->disable_pid_requests_on_sleep_voltage && !dev_status_is_wake_voltage_ok())
-    {
-        if (out_reason)
-            *out_reason = "sleep_voltage";
-        return true;
-    }
-
-    // Mode: disable PID requests when below a custom Automate threshold.
-    if (autopid_config->disable_pid_requests_on_automate_threshold)
-    {
-        float v = 0.0f;
-        if (sleep_mode_get_voltage(&v) == ESP_OK)
-        {
-            if (out_voltage)
-                *out_voltage = v;
-            if (v < autopid_config->pid_polling_min_voltage)
-            {
-                if (out_reason)
-                    *out_reason = "automate_threshold";
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
 static bool all_parameters_failed(autopid_config_t *autopid_config)
 {
     if (!autopid_config)
@@ -3538,19 +3385,19 @@ static void autopid_webhook_task(void *pvParameters)
                             }
 
                             // Free only buffers we allocated locally.
-                            // current_autopid_data is a strdup_psram of raw_json  safe to free.
+                            // current_autopid_data is a strdup_psram of raw_json ’ safe to free.
                             if (current_autopid_data)
                             {
                                 free(current_autopid_data);
                                 current_autopid_data = NULL;
                             }
-                            // current_status_data is returned heap buffer by config_server_get_status_json(true)  safe to free.
+                            // current_status_data is returned heap buffer by config_server_get_status_json(true) ’ safe to free.
                             if (current_status_data)
                             {
                                 free(current_status_data);
                                 current_status_data = NULL;
                             }
-                            // current_config_data comes from autopid_get_config() and is a cached global  DO NOT free here.
+                            // current_config_data comes from autopid_get_config() and is a cached global ’ DO NOT free here.
 
                             if (body)
                             {
@@ -3672,6 +3519,97 @@ static void autopid_webhook_task(void *pvParameters)
     }
 }
 
+static void execute_pid_parameter(pid_data_t *curr_pid, parameter_t *param) {
+    if (!curr_pid || !param) return;
+
+    ESP_LOGI(TAG, "Processing parameter: %s", param->name);
+    
+    // Command Processing
+    if (curr_pid->cmd != NULL && strlen(curr_pid->cmd) > 0) {
+        
+        // Handle Inits for Custom/Specific (Legacy path only)
+        if (!autopid_config->use_groups && (curr_pid->pid_type == PID_CUSTOM || curr_pid->pid_type == PID_SPECIFIC)) {
+            if (curr_pid->init != NULL && strlen(curr_pid->init) > 0) {
+                send_commands(curr_pid->init, 2);
+            }
+        }
+
+        ESP_LOGI(TAG, "Executing command: %s", curr_pid->cmd);
+
+        #if HARDWARE_VER == WICAN_PRO
+        if (elm327_process_cmd((uint8_t *)curr_pid->cmd, strlen(curr_pid->cmd), &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, autopid_parser) == ESP_OK)
+        #else
+        twai_message_t tx_msg;
+        if (elm327_process_cmd((uint8_t *)curr_pid->cmd, strlen(curr_pid->cmd), &tx_msg, &autopidQueue) == ESP_OK)
+        #endif
+        {
+            response_t elm327_response;
+            memset(&elm327_response, 0, sizeof(elm327_response));
+
+            if (xQueueReceive(autopidQueue, &elm327_response, pdMS_TO_TICKS(12000)) == pdPASS) {
+                if (strstr((char *)elm327_response.data, "error") == NULL &&
+                    strstr((char *)elm327_response.data, "SEARCHING") == NULL &&
+                    strstr((char *)elm327_response.data, "UNABLE TO CONNECT") == NULL) {
+                    
+                    double result;
+                    param->failed = false;
+                    xEventGroupSetBits(xautopid_event_group, ECU_CONNECTED_BIT);
+
+                    // 1. Custom / Specific PID Logic
+                    if (curr_pid->pid_type == PID_CUSTOM || curr_pid->pid_type == PID_SPECIFIC) {
+                        if (param->expression && evaluate_expression((uint8_t *)param->expression, elm327_response.data, 0, &result)) {
+                            if (param->min != FLT_MAX && result < param->min) {
+                                ESP_LOGW(TAG, "Param %s val %.2f < min %.2f", param->name, result, param->min);
+                            } else if (param->max != FLT_MAX && result > param->max) {
+                                ESP_LOGW(TAG, "Param %s val %.2f > max %.2f", param->name, result, param->max);
+                            } else {
+                                result = round(result * 100.0) / 100.0;
+                                param->value = result;
+                                autopid_config->last_successful_pid_time = time(NULL);
+                                publish_parameter_mqtt(param);
+                            }
+                        }
+                    } 
+                    // 2. Standard PID Logic
+                    else if (curr_pid->pid_type == PID_STD) {
+                        const std_pid_t *pid_info = get_pid_from_string(param->name);
+                        if (pid_info) {
+                            for (int p = 0; p < pid_info->num_params; p++) {
+                                const char *param_name = strchr(param->name, '-');
+                                if (param_name && strcmp(param_name + 1, pid_info->params[p].name) == 0) {
+                                    esp_err_t err;
+                                    if (elm327_response.priority_data != NULL) {
+                                        err = extract_signal_value(elm327_response.priority_data, elm327_response.priority_data_len, &pid_info->params[p], &param->value);
+                                    } else {
+                                        err = extract_signal_value(elm327_response.data, elm327_response.length, &pid_info->params[p], &param->value);
+                                    }
+
+                                    if (err == ESP_OK) {
+                                        param->value = roundf(param->value * 100.0) / 100.0;
+                                        autopid_config->last_successful_pid_time = time(NULL);
+                                        publish_parameter_mqtt(param);
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    param->failed = true;
+                    ESP_LOGE(TAG, "ELM Response Error for %s", curr_pid->cmd);
+                }
+            } else {
+                param->failed = true;
+                ESP_LOGE(TAG, "Queue Timeout for %s", curr_pid->cmd);
+            }
+        } else {
+            ESP_LOGE(TAG, "Process Cmd Failed: %s", curr_pid->cmd);
+        }
+        
+        autopid_data_update(autopid_config);
+    }
+}
+
 static void autopid_task(void *pvParameters)
 {
     static char default_init[] = "ati\rate0\rath1\ratl0\rats1\ratm0\ratst96\r";
@@ -3728,12 +3666,7 @@ static void autopid_task(void *pvParameters)
     ESP_LOGI(TAG, "Total CAN Filters: %lu", autopid_config->can_filters_count);
     wc_timer_set(&ecu_check_timer, 2000);
 
-    while (1)
-    {
-        static pid_type_t previous_pid_type = PID_MAX;
-        static bool pid_polling_paused_prev = false;
-        static char *current_active_init = NULL; 
-
+    while (1) {
         dev_status_wait_for_bits(DEV_AUTOPID_ELM327_APP_BIT, portMAX_DELAY);
         
         if (dev_status_is_sleeping()) {
@@ -3762,170 +3695,133 @@ static void autopid_task(void *pvParameters)
             vTaskDelay(pdMS_TO_TICKS(100));
         }
 
-        // Optional low-voltage behaviors that only pause PID polling (CAN filters/monitoring stays active).
-        float batt_v = NAN;
-        const char *pause_reason = NULL;
-        bool pid_polling_paused = autopid_should_pause_pid_polling(&batt_v, &pause_reason);
-        if (pid_polling_paused != pid_polling_paused_prev)
-        {
-            if (pid_polling_paused)
-            {
-                if (pause_reason && strcmp(pause_reason, "automate_threshold") == 0 && !isnan(batt_v))
-                {
-                    ESP_LOGI(TAG, "PID polling paused (automate_threshold): %.2fV < %.2fV", batt_v, autopid_config->pid_polling_min_voltage);
+        xSemaphoreTake(autopid_config->mutex, portMAX_DELAY);
+
+        // ==========================================================================================
+        // [NEW] GROUP MODE LOGIC (SYNCHRONIZED)
+        // ==========================================================================================
+        if (autopid_config->use_groups) {
+            static char *current_active_init = NULL; 
+
+            for (uint32_t g = 0; g < autopid_config->group_count; g++) {
+                pid_group_t *group = &autopid_config->groups[g];
+
+                // Skip if the group is disabled ---
+                if (!group->enabled) continue;		
+                
+                // 1. Check Condition (Voltage / RPM)
+                bool active = true;
+                if (group->detection_method == DETECTION_VOLTAGE) {
+                    active = dev_status_is_wake_voltage_ok();
+                } else if (group->detection_method == DETECTION_ADAPTIVE_RPM) {
+                    active = is_engine_running();
                 }
-                else if (pause_reason && strcmp(pause_reason, "sleep_voltage") == 0)
-                {
-                    ESP_LOGI(TAG, "PID polling paused (sleep_voltage): below configured sleep voltage");
+
+                if (!active) continue;
+
+                // 2. Check Timing (Synchronized Batch Trigger)
+                bool run_batch = false;
+                if (group->period > 0) {
+                    // If group has a period, use the MASTER GROUP TIMER
+                    if (wc_timer_is_expired(&group->timer)) {
+                        run_batch = true;
+                        wc_timer_set(&group->timer, group->period); // Set next wake up immediately to maintain cadence
+                    }
+                } else {
+                    // If period is 0 (or undefined), treat as continuous/individual checks
+                    run_batch = true; 
                 }
-                else
-                {
-                    ESP_LOGI(TAG, "PID polling paused");
-                }
-            }
-            else
-            {
-                ESP_LOGI(TAG, "PID polling resumed");
-                // Force init resend on next due PID to avoid stale ELM state.
-                previous_pid_type = PID_MAX;
-                current_active_init = NULL;
-            }
-            pid_polling_paused_prev = pid_polling_paused;
-        }
 
-        // elm327_lock();
-        if (!pid_polling_paused)
-        {
-            xSemaphoreTake(autopid_config->mutex, portMAX_DELAY);
+                if (!run_batch) continue; // Skip this group if it's not time yet
 
-            // ==========================================================================================
-            // [NEW] GROUP MODE LOGIC (SYNCHRONIZED)
-            // ==========================================================================================
-            if (autopid_config->use_groups) {
-
-                for (uint32_t g = 0; g < autopid_config->group_count; g++) {
-                    pid_group_t *group = &autopid_config->groups[g];
-
-                    // Skip if the group is disabled ---
-                    if (!group->enabled) continue;		
+                // 3. Check Init String (Protocol Switching)
+                if (group->init && strlen(group->init) > 0) {
+                    bool need_init = false;
+                    if (current_active_init == NULL || strcmp(current_active_init, group->init) != 0) {
+                        need_init = true;
+                    }
                     
-                    // 1. Check Condition (Voltage / RPM)
-                    bool active = true;
-                    if (group->detection_method == DETECTION_VOLTAGE) {
-                        active = dev_status_is_wake_voltage_ok();
-                    } else if (group->detection_method == DETECTION_ADAPTIVE_RPM) {
-                        active = is_engine_running();
-                    }
-
-                    if (!active) continue;
-
-                    // 2. Check Timing (Synchronized Batch Trigger)
-                    bool run_batch = false;
-                    if (group->period > 0) {
-                        // If group has a period, use the MASTER GROUP TIMER
-                        if (wc_timer_is_expired(&group->timer)) {
-                            run_batch = true;
-                            wc_timer_set(&group->timer, group->period); // Set next wake up immediately to maintain cadence
-                        }
-                    } else {
-                        // If period is 0 (or undefined), treat as continuous/individual checks
-                        run_batch = true; 
-                    }
-
-                    if (!run_batch) continue; // Skip this group if it's not time yet
-
-                    // 3. Check Init String (Protocol Switching)
-                    if (group->init && strlen(group->init) > 0) {
-                        bool need_init = false;
-                        if (current_active_init == NULL || strcmp(current_active_init, group->init) != 0) {
-                            need_init = true;
-                        }
-                        
-                        if (need_init) {
-                            ESP_LOGI(TAG, "Group '%s' Active - Switching Init: %s", group->name, group->init);
-                            send_commands(group->init, 5);
-                            current_active_init = group->init; 
-                        }
-                    }
-
-                    // 4. Iterate PIDs in Group (Batch Execution)
-                    for (uint32_t i = 0; i < group->pid_count; i++) {
-                        pid_data_t *curr_pid = group->pids[i];
-                        if (!curr_pid || !curr_pid->enabled) continue;
-
-                        for (uint32_t p = 0; p < curr_pid->parameters_count; p++) {
-                            parameter_t *param = &curr_pid->parameters[p];
-                            if (!param->enabled) continue;
-
-                            // Logic: If group has a period, we force run (because run_batch is true).
-                            // If group period is 0, we fall back to individual timers.
-                            bool execute_now = false;
-                            
-                            if (group->period > 0) {
-                                execute_now = true; 
-                            } else {
-                                if (wc_timer_is_expired(&param->timer)) {
-                                    execute_now = true;
-                                    wc_timer_set(&param->timer, curr_pid->period > 0 ? curr_pid->period : 1000);
-                                }
-                            }
-
-                            if (execute_now) {
-                                execute_pid_parameter(curr_pid, param);
-                                vTaskDelay(1);
-                            }
-                        }
+                    if (need_init) {
+                        ESP_LOGI(TAG, "Group '%s' Active - Switching Init: %s", group->name, group->init);
+                        send_commands(group->init, 5);
+                        current_active_init = group->init; 
                     }
                 }
-            }
-            // ==========================================================================================
-            // [LEGACY] FLAT LIST MODE
-            // ==========================================================================================
-            else {
 
-                for (uint32_t i = 0; i < autopid_config->pid_count; i++) {
-                    pid_data_t *curr_pid = &autopid_config->pids[i];
-                    if ((curr_pid->pid_type == PID_STD && !autopid_config->pid_std_en) ||
-                        (curr_pid->pid_type == PID_CUSTOM && !autopid_config->pid_custom_en) ||
-                        (curr_pid->pid_type == PID_SPECIFIC && !autopid_config->pid_specific_en)) continue;
-
-                    if (!curr_pid->enabled) continue;
+                // 4. Iterate PIDs in Group (Batch Execution)
+                for (uint32_t i = 0; i < group->pid_count; i++) {
+                    pid_data_t *curr_pid = group->pids[i];
+                    if (!curr_pid || !curr_pid->enabled) continue;
 
                     for (uint32_t p = 0; p < curr_pid->parameters_count; p++) {
                         parameter_t *param = &curr_pid->parameters[p];
                         if (!param->enabled) continue;
 
-                        if (wc_timer_is_expired(&param->timer)) {
-                            if (curr_pid->pid_type != previous_pid_type) {
-                                switch (curr_pid->pid_type) {
-                                    case PID_CUSTOM: if(autopid_config->custom_init) { ESP_LOGI(TAG, "Custom Init: %s", autopid_config->custom_init); send_commands(autopid_config->custom_init, 2); } break;
-                                    case PID_STD: if(autopid_config->standard_init) { ESP_LOGI(TAG, "Standard Init: %s", autopid_config->standard_init); send_commands(autopid_config->standard_init, 2); } break;
-                                    case PID_SPECIFIC: if(autopid_config->specific_init) { ESP_LOGI(TAG, "Specific Init: %s", autopid_config->specific_init); send_commands(autopid_config->specific_init, 2); } break;
-                                    default: break;
-                                }
-                                previous_pid_type = curr_pid->pid_type;
+                        // Logic: If group has a period, we force run (because run_batch is true).
+                        // If group period is 0, we fall back to individual timers.
+                        bool execute_now = false;
+                        
+                        if (group->period > 0) {
+                            execute_now = true; 
+                        } else {
+                            if (wc_timer_is_expired(&param->timer)) {
+                                execute_now = true;
+                                wc_timer_set(&param->timer, curr_pid->period > 0 ? curr_pid->period : 1000);
                             }
+                        }
 
+                        if (execute_now) {
                             execute_pid_parameter(curr_pid, param);
-                            wc_timer_set(&param->timer, param->period);
-                            
-                            xSemaphoreGive(autopid_config->mutex);
-                            dev_status_wait_for_bits(DEV_AUTOPID_ELM327_APP_BIT, portMAX_DELAY);
-                            vTaskDelay(pdMS_TO_TICKS(5));
-                            xSemaphoreTake(autopid_config->mutex, portMAX_DELAY);
+                            vTaskDelay(pdMS_TO_TICKS(10)); 
                         }
                     }
                 }
             }
-
-            xSemaphoreGive(autopid_config->mutex);
-
-            /* [NEW] Signal processing task NOW, when the mutex is free */
-            if (autopid_processing_task_handle != NULL) {
-                xTaskNotifyGive(autopid_processing_task_handle);
-            }	
-            vTaskDelay(pdMS_TO_TICKS(5));
         }
+	
+        // ==========================================================================================
+        // [LEGACY] FLAT LIST MODE
+        // ==========================================================================================
+        else {
+            static pid_type_t previous_pid_type = PID_MAX;
+
+            for (uint32_t i = 0; i < autopid_config->pid_count; i++) {
+                pid_data_t *curr_pid = &autopid_config->pids[i];
+                if ((curr_pid->pid_type == PID_STD && !autopid_config->pid_std_en) ||
+                    (curr_pid->pid_type == PID_CUSTOM && !autopid_config->pid_custom_en) ||
+                    (curr_pid->pid_type == PID_SPECIFIC && !autopid_config->pid_specific_en)) continue;
+
+                if (!curr_pid->enabled) continue;
+
+                for (uint32_t p = 0; p < curr_pid->parameters_count; p++) {
+                    parameter_t *param = &curr_pid->parameters[p];
+                    if (!param->enabled) continue;
+
+                    if (wc_timer_is_expired(&param->timer)) {
+                        if (curr_pid->pid_type != previous_pid_type) {
+                            switch (curr_pid->pid_type) {
+                                case PID_CUSTOM: if(autopid_config->custom_init) { ESP_LOGI(TAG, "Custom Init: %s", autopid_config->custom_init); send_commands(autopid_config->custom_init, 2); } break;
+                                case PID_STD: if(autopid_config->standard_init) { ESP_LOGI(TAG, "Standard Init: %s", autopid_config->standard_init); send_commands(autopid_config->standard_init, 2); } break;
+                                case PID_SPECIFIC: if(autopid_config->specific_init) { ESP_LOGI(TAG, "Specific Init: %s", autopid_config->specific_init); send_commands(autopid_config->specific_init, 2); } break;
+                                default: break;
+                            }
+                            previous_pid_type = curr_pid->pid_type;
+                        }
+
+                        execute_pid_parameter(curr_pid, param);
+                        wc_timer_set(&param->timer, param->period);
+                        
+                        xSemaphoreGive(autopid_config->mutex);
+                        dev_status_wait_for_bits(DEV_AUTOPID_ELM327_APP_BIT, portMAX_DELAY);
+                        vTaskDelay(pdMS_TO_TICKS(5));
+                        xSemaphoreTake(autopid_config->mutex, portMAX_DELAY);
+                    }
+                }
+            }
+        }
+
+        xSemaphoreGive(autopid_config->mutex);
+        vTaskDelay(pdMS_TO_TICKS(5));
 
         // CAN Filters Logic (Monitor Window)
         if (autopid_config->can_filters_count > 0 && dev_status_is_autopid_enabled() && !dev_status_is_sleeping())
@@ -3965,28 +3861,14 @@ static void autopid_task(void *pvParameters)
             xSemaphoreGive(autopid_config->mutex);
         }
 
-        if (wc_timer_is_expired(&ecu_check_timer))
-        {
-            if (!pid_polling_paused)
-            {
-                if (all_parameters_failed(autopid_config))
-                {
-                    xEventGroupClearBits(xautopid_event_group, ECU_CONNECTED_BIT);
-                    ESP_LOGW(TAG, "All parameters failed - ECU disconnected");
-                }
-                else
-                {
-                    xEventGroupSetBits(xautopid_event_group, ECU_CONNECTED_BIT);
-                }
+        if (wc_timer_is_expired(&ecu_check_timer)) {
+            if (all_parameters_failed(autopid_config)) {
+                xEventGroupClearBits(xautopid_event_group, ECU_CONNECTED_BIT);
+                ESP_LOGW(TAG, "All parameters failed - ECU disconnected");
+            } else {
+                xEventGroupSetBits(xautopid_event_group, ECU_CONNECTED_BIT);
             }
             wc_timer_set(&ecu_check_timer, 2000);
-        }
-
-        // If PID polling is paused (e.g., low voltage), yield a bit longer to avoid a tight loop.
-        // Otherwise, still yield minimally to stay watchdog-safe in edge cases (no work due).
-        if (pid_polling_paused)
-        {
-            vTaskDelay(pdMS_TO_TICKS(20));
         }
     }
 }
@@ -4138,7 +4020,7 @@ void autopid_init(char *id, bool enable_logging, uint32_t logging_period)
     if (autopid_task_stack == NULL) { ESP_LOGE(TAG, "Failed to allocate autopid_task stack in PSRAM"); return; }
     memset(autopid_task_stack, 0, autopid_task_stack_depth);
     if (autopid_task_stack != NULL) {
-        xTaskCreateStatic(autopid_task, "autopid_task", (uint32_t)autopid_task_stack_depth, (void *)AF_INET, 11, autopid_task_stack, &autopid_task_buffer);
+        xTaskCreateStatic(autopid_task, "autopid_task", (uint32_t)autopid_task_stack_depth, (void *)AF_INET, 5, autopid_task_stack, &autopid_task_buffer);
     } else { ESP_LOGE(TAG, "Failed to allocate autopid_task stack in PSRAM"); }
 
     if (strcmp("enable", autopid_config->grouping) == 0) {
@@ -4154,23 +4036,6 @@ void autopid_init(char *id, bool enable_logging, uint32_t logging_period)
         }
     }
 
-
-    /* [NEW] Allocate memory and create the Processing Task (Lower Priority: 5) */
-    uint32_t proc_stack_depth = 4096;
-    autopid_processing_task_stack = heap_caps_malloc(proc_stack_depth, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    
-    if (autopid_processing_task_stack != NULL) {
-        autopid_processing_task_handle = xTaskCreateStatic(
-            autopid_processing_task, 
-            "pid_proc_task", 
-            proc_stack_depth, 
-            NULL, 
-            5, // Priority 5 (matches web/system tasks)
-            autopid_processing_task_stack, 
-            &autopid_processing_task_buffer
-        );
-    }
-    
     ha_webhooks_init();
     if (config_server_get_webhook_en()) {
         static StackType_t *autopid_webhook_task_stack;
@@ -4198,29 +4063,5 @@ void autopid_init(char *id, bool enable_logging, uint32_t logging_period)
         autopid_bit_set_timer_handle = xTimerCreateStatic("autopid_bit_set_timer", pdMS_TO_TICKS(10000), pdTRUE, NULL, autopid_app_setbit_timer_callback, &autopid_bit_set_timer_buffer);
         if (autopid_bit_set_timer_handle != NULL) xTimerStart(autopid_bit_set_timer_handle, 0);
         else ESP_LOGE(TAG, "Failed to create static timer");
-    }
-}
-
-/**
- * @brief This task handles the "heavy lifting" (JSON building and MQTT)
- * so that the OBD sampler doesn't have to wait for string formatting.
- */
-static void autopid_processing_task(void *pvParameters) {
-    ESP_LOGI(TAG, "Starting high-speed processing task");
-    
-    for (;;) {
-        // Wait indefinitely for a notification from the sampler task
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-
-        // Wait indefinitely for the lock to guarantee the JSON is built
-        if (autopid_lock(portMAX_DELAY)) {
-            // 1. Rebuild the global JSON string (the heavy part)
-            autopid_data_update(autopid_config);
-            
-            // 2. Perform any batch publishing logic here
-            // (e.g., check if it's time to send an MQTT packet)
-            
-            autopid_unlock();
-        }
     }
 }
