@@ -163,6 +163,11 @@ static esp_err_t esp_wireguard_netif_create(const wireguard_config_t *config)
         goto fail;
     }
 
+    // Always start with a clean netif struct. If a previous session ended
+    // via netif_remove(), the struct's `next` pointer is left stale; reusing
+    // it without zeroing causes lwIP list corruption and routing failures.
+    memset(&wg_netif_struct, 0, sizeof(wg_netif_struct));
+
     /* Setup the WireGuard device structure */
     wg.private_key = config->private_key;
     wg.listen_port = config->listen_port;
@@ -339,6 +344,14 @@ esp_err_t esp_wireguard_disconnect(wireguard_ctx_t *ctx)
     wireguardif_fini(ctx->netif);
     netif_set_default(ctx->netif_default);
     ctx->netif = NULL;
+
+    // Zero the static netif struct so that the next netif_add() call starts
+    // with a clean slate (no stale `next` pointer, stale `num`, etc.).
+    memset(&wg_netif_struct, 0, sizeof(wg_netif_struct));
+    wg_netif = NULL;
+    // Reset the static peer configuration struct (used by esp_wireguard_peer_init)
+    // so it doesn't carry stale keys/endpoint from a previous session.
+    memset(&peer, 0, sizeof(peer));
 
     err = ESP_OK;
 fail:

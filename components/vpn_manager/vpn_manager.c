@@ -650,9 +650,10 @@ static void vpn_task_fn(void *arg)
     const TickType_t tick = pdMS_TO_TICKS(200);
     for (;;)
     {
-        if(!dev_status_is_sta_connected())
+        if(!dev_status_is_network_connected())
         {
-            dev_status_wait_for_bits(DEV_STA_CONNECTED_BIT, portMAX_DELAY);
+            // Wait for either WiFi STA or USB/wired ETH to obtain an IP address.
+            dev_status_wait_for_any_bits(DEV_NETWORK_CONNECTED_MASK, portMAX_DELAY);
             vTaskDelay(pdMS_TO_TICKS(3000));
         }
         // Drain commands
@@ -719,8 +720,8 @@ static void vpn_task_fn(void *arg)
             }
         }
 
-        // Gating conditions
-        bool prereqs = dev_status_are_bits_set(DEV_VPN_ENABLED_BIT | DEV_STA_CONNECTED_BIT);
+        // Gating conditions: VPN enabled AND at least one upstream path (WiFi STA or USB ETH) is up.
+        bool prereqs = dev_status_is_bit_set(DEV_VPN_ENABLED_BIT) && dev_status_is_network_connected();
         bool blockers = dev_status_is_any_bit_set(DEV_AP_ENABLED_BIT | DEV_SLEEP_BIT);
 
         if (!prereqs || blockers)

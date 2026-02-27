@@ -84,7 +84,7 @@
 #include "usb_acm_cli.h"
 
 #include "lwip/ip4_addr.h"
-
+#define ESPNETLINK_TEST
 #define TAG 		__func__
 #define USB_ID_PIN					39
 #define USB_OTG_PWR_EN				10
@@ -127,6 +127,18 @@ static bool debug_logs_network_ready_sta(void)
 {
 	return dev_status_is_sta_connected();
 }
+
+#if defined(ESPNETLINK_TEST)
+static void usb_eth_on_ip_up(void)
+{
+	dev_status_set_eth_connected();
+}
+
+static void usb_eth_on_ip_lost(void)
+{
+	dev_status_clear_eth_connected();
+}
+#endif /* ESPNETLINK_TEST */
 
 static void log_can_to_mqtt(twai_message_t *frame, uint8_t type)
 {
@@ -992,7 +1004,7 @@ void app_main(void)
 		vehicle_config.voltage_at_ignition = 13.1;  // Default value
 	}
 	vehicle_init(&vehicle_config);
-	wifi_network_init(ap_ssid);
+	// wifi_network_init(ap_ssid);
 
 	int32_t port = config_server_get_port();
 
@@ -1159,17 +1171,19 @@ void app_main(void)
 	// esp_log_level_set("VPN_MANAGER", ESP_LOG_INFO);
 	// esp_log_level_set("VPN_WG", ESP_LOG_INFO);
 	// esp_log_level_set("VPN_CFG", ESP_LOG_INFO);
+	// esp_log_level_set("esp_wireguard", ESP_LOG_INFO);
+	// esp_log_level_set("wireguardif", ESP_LOG_INFO);
 	// esp_log_level_set("WiFi_Manager", ESP_LOG_INFO);
 	// esp_log_level_set("HA_WEBHOOK_CFG", ESP_LOG_INFO);
 	// esp_log_level_set("HA_WEBHOOK_HTTP", ESP_LOG_INFO);
 	#if defined(ESPNETLINK_TEST)
-	esp_log_level_set("usb_eth_cdc_ecm", ESP_LOG_INFO);
-	esp_log_level_set("usb_eth_asix", ESP_LOG_INFO);
-	esp_log_level_set("usb_eth_rtl8152", ESP_LOG_INFO);
-	esp_log_level_set("usb_eth_netif", ESP_LOG_INFO);
-	esp_log_level_set("usb_eth_host", ESP_LOG_INFO);
-	esp_log_level_set("usb_eth_cdc_ncm", ESP_LOG_INFO);
-	esp_log_level_set("usb_acm_cli", ESP_LOG_INFO);
+	// esp_log_level_set("usb_eth_cdc_ecm", ESP_LOG_INFO);
+	// esp_log_level_set("usb_eth_asix", ESP_LOG_INFO);
+	// esp_log_level_set("usb_eth_rtl8152", ESP_LOG_INFO);
+	// esp_log_level_set("usb_eth_netif", ESP_LOG_INFO);
+	// esp_log_level_set("usb_eth_host", ESP_LOG_INFO);
+	// esp_log_level_set("usb_eth_cdc_ncm", ESP_LOG_INFO);
+	// esp_log_level_set("usb_acm_cli", ESP_LOG_INFO);
 	#endif
 
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
@@ -1189,7 +1203,7 @@ void app_main(void)
 	// led_set_pattern_ms(LED_BLUE, &breathing_pattern);
 	// led_set_pattern_ms(LED_GREEN, &breathing_pattern);
 	#if defined(ESPNETLINK_TEST)
-	vTaskDelay(pdMS_TO_TICKS(6000));
+	vTaskDelay(pdMS_TO_TICKS(20000));
 	bool start_usb_acm_cli = false;
 	if (gpio_get_level(USB_ID_PIN) == 0)
 	{
@@ -1214,6 +1228,10 @@ void app_main(void)
 		IP4_ADDR((ip4_addr_t *)&usb_eth_cfg.netif.static_ip.ip, 192, 168, 20, 200);
 		IP4_ADDR((ip4_addr_t *)&usb_eth_cfg.netif.static_ip.netmask, 255, 255, 255, 0);
 		IP4_ADDR((ip4_addr_t *)&usb_eth_cfg.netif.static_ip.gw, 192, 168, 20, 1);
+
+		// Notify VPN manager (and other consumers) when USB ETH gains/loses an IP.
+		usb_eth_cfg.on_eth_ip_up   = usb_eth_on_ip_up;
+		usb_eth_cfg.on_eth_ip_lost = usb_eth_on_ip_lost;
 
 		usb_eth_host_start(&usb_eth_cfg);
 		start_usb_acm_cli = true;

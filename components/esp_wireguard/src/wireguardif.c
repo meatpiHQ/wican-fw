@@ -87,21 +87,44 @@ static bool wireguardif_can_send_initiation(struct wireguard_peer *peer) {
 	return ((peer->last_initiation_tx == 0) || (wireguard_expired(peer->last_initiation_tx, REKEY_TIMEOUT)));
 }
 
+// Walk lwIP's global netif_list to confirm 'candidate' is still registered.
+// Returns candidate if valid, NULL if it has been removed (dangling pointer guard).
+static struct netif *wireguardif_validate_netif(struct netif *candidate) {
+	if (candidate == NULL) {
+		return NULL;
+	}
+	for (struct netif *n = netif_list; n != NULL; n = n->next) {
+		if (n == candidate) {
+			return candidate;
+		}
+	}
+	return NULL;
+}
+
 static err_t wireguardif_peer_output(struct netif *netif, struct pbuf *q, struct wireguard_peer *peer) {
 	struct wireguard_device *device = (struct wireguard_device *)netif->state;
-	if (!device || !device->udp_pcb || !device->underlying_netif) {
+	struct netif *underlying = device ? wireguardif_validate_netif(device->underlying_netif) : NULL;
+	if (!device || !device->udp_pcb || !underlying) {
+		ESP_LOGE(TAG, "wireguardif_peer_output: device=%p udp_pcb=%p underlying=%p (valid=%p)",
+				 device,
+				 device ? device->udp_pcb : NULL,
+				 device ? device->underlying_netif : NULL,
+				 underlying);
 		return ERR_IF;
 	}
-	// Send to last know port, not the connect port
-	//TODO: Support DSCP and ECN - lwip requires this set on PCB globally, not per packet
-	return udp_sendto_if(device->udp_pcb, q, &peer->ip, peer->port, device->underlying_netif);
+	err_t r = udp_sendto_if(device->udp_pcb, q, &peer->ip, peer->port, underlying);
+	if (r != ERR_OK) {
+		ESP_LOGE(TAG, "wireguardif_peer_output: udp_sendto_if -> %d", r);
+	}
+	return r;
 }
 
 static err_t wireguardif_device_output(struct wireguard_device *device, struct pbuf *q, const ip_addr_t *ipaddr, u16_t port) {
-	if (!device || !device->udp_pcb || !device->underlying_netif) {
+	struct netif *underlying = device ? wireguardif_validate_netif(device->underlying_netif) : NULL;
+	if (!device || !device->udp_pcb || !underlying) {
 		return ERR_IF;
 	}
-	return udp_sendto_if(device->udp_pcb, q, ipaddr, port, device->underlying_netif);
+	return udp_sendto_if(device->udp_pcb, q, ipaddr, port, underlying);
 }
 
 static err_t wireguardif_output_to_peer(struct netif *netif, struct pbuf *q, const ip_addr_t *ipaddr, struct wireguard_peer *peer) {
@@ -561,6 +584,8 @@ static bool wireguardif_check_response_message(struct wireguard_device *device, 
 void wireguardif_network_rx(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *addr, u16_t port) {
 	LWIP_ASSERT("wireguardif_network_rx: invalid arg", arg != NULL);
 	LWIP_ASSERT("wireguardif_network_rx: invalid pbuf", p != NULL);
+	ESP_LOGI(TAG, "RX UDP from " IPSTR ":" "%u" " len=%u",
+			 IP2STR(ip_2_ip4(addr)), (unsigned)port, (unsigned)(p ? p->tot_len : 0));
 	// We have received a packet from the base_netif to our UDP port - process this as a possible Wireguard packet
 	struct wireguard_device *device = (struct wireguard_device *)arg;
 	struct wireguard_peer *peer;
@@ -659,7 +684,9 @@ static err_t wireguard_start_handshake(struct netif *netif, struct wireguard_pee
 	struct pbuf *pbuf;
 	struct message_handshake_initiation msg;
 
-	ESP_LOGD(TAG, "starting handshake");
+	ESP_LOGI(TAG, "sending handshake initiation -> " IPSTR ":" "%u" " (local_port=%u)",
+			 IP2STR(ip_2_ip4(&peer->ip)), (unsigned)peer->port,
+			 (unsigned)(device->udp_pcb ? device->udp_pcb->local_port : 0));
 	pbuf = wireguardif_initiate_handshake(device, peer, &msg, &result);
 	if (pbuf) {
 		result = wireguardif_peer_output(netif, pbuf, peer);
@@ -958,15 +985,26 @@ err_t wireguardif_init(struct netif *netif) {
 	struct netif* underlying_netif = NULL;
 	char lwip_netif_name[8] = {0,};
 
-	err = esp_netif_get_netif_impl_name(esp_netif_get_handle_from_ifkey("WIFI_STA_DEF"), lwip_netif_name);
-	if (err != ESP_OK) {
-		ESP_LOGE(TAG, "esp_netif_get_netif_impl_name: %s", esp_err_to_name(err));
-		result = ERR_IF;
-		goto fail;
+	// Try WIFI_STA_DEF first (WiFi station mode). If not available (e.g. USB-ETH
+	// only mode), fall back to the current default netif so WireGuard can use
+	// whichever interface has connectivity.
+	{
+		esp_netif_t *sta_handle = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+		if (sta_handle != NULL) {
+			err = esp_netif_get_netif_impl_name(sta_handle, lwip_netif_name);
+			if (err == ESP_OK) {
+				underlying_netif = netif_find(lwip_netif_name);
+			}
+		}
 	}
-	underlying_netif = netif_find(lwip_netif_name);
 	if (underlying_netif == NULL) {
-		ESP_LOGE(TAG, "netif_find: cannot find WIFI_STA_DEF");
+		// WiFi STA not available – use whatever netif is currently the default
+		// (e.g. USB-ETH / RNDIS).
+		underlying_netif = netif_default;
+		ESP_LOGW(TAG, "WIFI_STA_DEF not available; using netif_default (%p) as underlying netif", underlying_netif);
+	}
+	if (underlying_netif == NULL) {
+		ESP_LOGE(TAG, "No underlying netif available for WireGuard");
 		result = ERR_IF;
 		goto fail;
 	}
@@ -1009,6 +1047,10 @@ err_t wireguardif_init(struct netif *netif) {
 						device->netif = netif;
 						device->underlying_netif = underlying_netif;
 						device->shutting_down = false;
+						ESP_LOGI(TAG, "underlying_netif: %c%c%u ip=" IPSTR,
+								underlying_netif->name[0], underlying_netif->name[1],
+								underlying_netif->num,
+								IP2STR(&underlying_netif->ip_addr.u_addr.ip4));
 						udp_bind_netif(udp, underlying_netif);
 
 						device->udp_pcb = udp;

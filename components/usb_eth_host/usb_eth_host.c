@@ -23,6 +23,7 @@ static usb_eth_host_config_t g_cfg;
 static esp_netif_t *g_last_usb_eth_netif;
 static esp_event_handler_instance_t g_ip_eth_got_ip_inst;
 static esp_event_handler_instance_t g_ip_sta_got_ip_inst;
+static esp_event_handler_instance_t g_ip_eth_lost_ip_inst;
 
 static void usb_eth_host_try_set_default_netif(esp_netif_t *netif)
 {
@@ -55,6 +56,24 @@ static void usb_eth_host_on_eth_got_ip(void *handler_args, esp_event_base_t base
 
     g_last_usb_eth_netif = event->esp_netif;
     usb_eth_host_try_set_default_netif(g_last_usb_eth_netif);
+    if (g_cfg.on_eth_ip_up)
+    {
+        g_cfg.on_eth_ip_up();
+    }
+}
+
+static void usb_eth_host_on_eth_lost_ip(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
+{
+    (void)handler_args;
+    (void)base;
+    (void)event_id;
+    (void)event_data;
+
+    g_last_usb_eth_netif = NULL;
+    if (g_cfg.on_eth_ip_lost)
+    {
+        g_cfg.on_eth_ip_lost();
+    }
 }
 
 static void usb_eth_host_on_sta_got_ip(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
@@ -257,6 +276,7 @@ esp_err_t usb_eth_host_start(const usb_eth_host_config_t *config)
     // Register event handlers so we can prefer USB-Ethernet as the default route when requested.
     // These are best-effort; if registration fails, routing will still work, but may not be preferred.
     (void)esp_event_handler_instance_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, usb_eth_host_on_eth_got_ip, NULL, &g_ip_eth_got_ip_inst);
+    (void)esp_event_handler_instance_register(IP_EVENT, IP_EVENT_ETH_LOST_IP, usb_eth_host_on_eth_lost_ip, NULL, &g_ip_eth_lost_ip_inst);
     (void)esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, usb_eth_host_on_sta_got_ip, NULL, &g_ip_sta_got_ip_inst);
 
     err = usbh_initialize((uint8_t)g_cfg.bus_id, g_cfg.reg_base);
@@ -276,6 +296,7 @@ void usb_eth_host_stop(void)
     usbh_deinitialize((uint8_t)g_cfg.bus_id);
 
     (void)esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_ETH_GOT_IP, g_ip_eth_got_ip_inst);
+    (void)esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_ETH_LOST_IP, g_ip_eth_lost_ip_inst);
     (void)esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, g_ip_sta_got_ip_inst);
     g_last_usb_eth_netif = NULL;
 

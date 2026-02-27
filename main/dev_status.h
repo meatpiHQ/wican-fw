@@ -55,6 +55,10 @@ extern "C" {
 #define DEV_AUTOPID_ELM327_APP_BIT      BIT18
 // Indicates that the voltage-based wake condition is met (battery voltage >= configured sleep voltage).
 #define DEV_WAKE_VOLTAGE_OK_BIT         BIT19
+// Indicates that a USB/wired Ethernet interface (ESPNETLINK) has obtained an IP address.
+#define DEV_ETH_CONNECTED_BIT           BIT20
+// Convenience mask: any upstream network path is available (WiFi STA or wired ETH).
+#define DEV_NETWORK_CONNECTED_MASK      (DEV_STA_CONNECTED_BIT | DEV_ETH_CONNECTED_BIT)
 
 // Mask for "all bits" in a FreeRTOS event group.
 // Only the lower 24 bits are available for application use; the upper 8 are reserved by the kernel.
@@ -108,6 +112,8 @@ bool dev_status_is_any_bit_set(EventBits_t bits);
 #define dev_status_clear_time_synced()  dev_status_clear_bits(DEV_TIME_SYNCED_BIT)
 #define dev_status_set_vpn_enabled()    dev_status_set_bits(DEV_VPN_ENABLED_BIT)
 #define dev_status_clear_vpn_enabled()  dev_status_clear_bits(DEV_VPN_ENABLED_BIT)
+#define dev_status_set_eth_connected()  dev_status_set_bits(DEV_ETH_CONNECTED_BIT)
+#define dev_status_clear_eth_connected() dev_status_clear_bits(DEV_ETH_CONNECTED_BIT)
 // Voltage wake condition helpers
 #define dev_status_set_wake_voltage_ok()    dev_status_set_bits(DEV_WAKE_VOLTAGE_OK_BIT)
 #define dev_status_clear_wake_voltage_ok()  dev_status_clear_bits(DEV_WAKE_VOLTAGE_OK_BIT)
@@ -139,6 +145,8 @@ bool dev_status_is_any_bit_set(EventBits_t bits);
 #define dev_status_is_time_synced()    dev_status_is_bit_set(DEV_TIME_SYNCED_BIT)
 #define dev_status_is_vpn_enabled()    dev_status_is_bit_set(DEV_VPN_ENABLED_BIT)
 #define dev_status_is_wake_voltage_ok() dev_status_is_bit_set(DEV_WAKE_VOLTAGE_OK_BIT)
+#define dev_status_is_eth_connected()  dev_status_is_bit_set(DEV_ETH_CONNECTED_BIT)
+#define dev_status_is_network_connected() dev_status_is_any_bit_set(DEV_NETWORK_CONNECTED_MASK)
 
 #ifdef __cplusplus
 }

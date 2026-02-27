@@ -69,6 +69,11 @@ typedef struct usb_eth_host_config
     usb_eth_host_gpio_t gpio;
 
     usb_eth_host_netif_config_t netif;
+
+    // Optional callbacks fired when the USB ETH interface gains or loses an IP address.
+    // Called from the IP_EVENT handler (system event task context).
+    void (*on_eth_ip_up)(void);
+    void (*on_eth_ip_lost)(void);
 } usb_eth_host_config_t;
 
 esp_err_t usb_eth_host_start(const usb_eth_host_config_t *config);
