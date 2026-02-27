@@ -243,20 +243,8 @@ async function checkFirmwareUpdate() {
             if (addFbBtn) addFbBtn.disabled = false;
             fbRows.forEach(el => el.disabled = false);
         }
-        try { toggleApStationWarning(); } catch(_) {}
-
         // Trigger validation when switching modes
         submit_enable();
-    }
-
-    function toggleApStationWarning() {
-        const wifiModeEl = document.getElementById("wifi_mode");
-        const apAutoDisableEl = document.getElementById("ap_auto_disable");
-        const div = document.getElementById("apstation_warning_div");
-        if (!wifiModeEl || !apAutoDisableEl || !div) return;
-
-        const shouldShow = (wifiModeEl.value === "APStation") && (apAutoDisableEl.value === "disable");
-        div.style.display = shouldShow ? "block" : "none";
     }
 
     function toggleDriveConfig() {
@@ -339,7 +327,6 @@ async function checkFirmwareUpdate() {
         updateAddFallbackButtonState();
     }
 
-
     function addFallbackNetworkRow(data = {}) {
         const container = document.getElementById('fallback_rows');
         if (!container) return;
@@ -348,37 +335,19 @@ async function checkFirmwareUpdate() {
 
         const row = document.createElement('div');
         row.className = 'fallback-row';
-        row.style.display = 'flex';
-        row.style.flexDirection = 'column';
+        row.style.display = 'grid';
+        row.style.gridTemplateColumns = '1fr 1fr 120px auto';
         row.style.gap = '8px';
-        row.style.margin = '10px 0';
-        row.style.padding = '10px';
-        row.style.border = '1px solid var(--gray-300)';
-        row.style.borderRadius = '6px';
-        row.style.background = '#fafafa';
-
-        const isStatic = data.ip_type === 'static';
+        row.style.margin = '6px 0';
 
         row.innerHTML = `
-            <div style="display: grid; grid-template-columns: 1fr 1fr 100px 100px auto; gap: 8px;">
-                <input type="text" class="fb-ssid" placeholder="SSID" value="${(data.ssid||'').replace(/"/g,'&quot;')}" oninput="submit_enable();" />
-                <input type="text" class="fb-pass" placeholder="Password" value="${(data.pass||data.password||'').replace(/"/g,'&quot;')}" oninput="submit_enable();" />
-                <select class="fb-sec" onchange="submit_enable();">
-                    <option value="wpa3" ${((data.security||'wpa3')==='wpa3')?'selected':''}>WPA3</option>
-                    <option value="wpa2" ${((data.security||'wpa3')==='wpa2')?'selected':''}>WPA2</option>
-                </select>
-                <select class="fb-ip-type" onchange="const r = this.closest('.fallback-row').querySelector('.fb-static-opts'); r.style.display = this.value === 'static' ? 'grid' : 'none'; submit_enable();">
-                    <option value="dhcp" ${!isStatic ? 'selected' : ''}>DHCP</option>
-                    <option value="static" ${isStatic ? 'selected' : ''}>Static IP</option>
-                </select>
-                <button type="button" class="fb-remove" style="background:#dc2626;" onclick="removeFallbackRow(this)">X</button>
-            </div>
-            <div class="fb-static-opts" style="display: ${isStatic ? 'grid' : 'none'}; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; margin-top: 4px;">
-                <input type="text" class="fb-ip" placeholder="IP (e.g. 192.168.1.50)" value="${data.static_ip||''}" oninput="submit_enable();" />
-                <input type="text" class="fb-mask" placeholder="Mask (e.g. 255.255.255.0)" value="${data.netmask||''}" oninput="submit_enable();" />
-                <input type="text" class="fb-gw" placeholder="Gateway (192.168.1.1)" value="${data.gateway||''}" oninput="submit_enable();" />
-                <input type="text" class="fb-dns" placeholder="DNS (8.8.8.8)" value="${data.dns||''}" oninput="submit_enable();" />
-            </div>
+            <input type="text" class="fb-ssid" placeholder="SSID" value="${(data.ssid||'').replace(/"/g,'&quot;')}" oninput="submit_enable();" />
+            <input type="text" class="fb-pass" placeholder="Password" value="${(data.pass||data.password||'').replace(/"/g,'&quot;')}" oninput="submit_enable();" />
+            <select class="fb-sec" onchange="submit_enable();">
+                <option value="wpa3" ${((data.security||'wpa3')==='wpa3')?'selected':''}>WPA3</option>
+                <option value="wpa2" ${((data.security||'wpa3')==='wpa2')?'selected':''}>WPA2</option>
+            </select>
+            <button type="button" class="fb-remove" onclick="removeFallbackRow(this)">Remove</button>
         `;
         container.appendChild(row);
         updateAddFallbackButtonState();
@@ -399,8 +368,7 @@ async function checkFirmwareUpdate() {
         addBtn.disabled = count >= 5 || document.getElementById('wifi_mode').value === 'SmartConnect';
     }
 
- 
-function loadLocalCarModels() {
+    function loadLocalCarModels() {
         const fileInput = document.getElementById("car_data_file");
 
         if (fileInput.files.length == 0) {
@@ -416,56 +384,42 @@ function loadLocalCarModels() {
                 const jsonData = JSON.parse(event.target.result);
                 let data;
 
-                const isMultiCar = (jsonData && Array.isArray(jsonData.cars));
-                const isSingleCar = (jsonData && jsonData.car_model && Array.isArray(jsonData.pids));
-
-                const looksLikeShorthandSingleProfile = (() => {
-                    if (!isSingleCar) return false;
-                    for (const pid of jsonData.pids) {
-                        if (!pid || pid.parameters === undefined || pid.parameters === null) continue;
-                        if (Array.isArray(pid.parameters)) return false; // already in target format
-                        if (typeof pid.parameters !== 'object') continue;
-                        const values = Object.values(pid.parameters);
-                        // Shorthand single-profile format maps NAME -> "expression" (string)
-                        if (values.some(v => typeof v === 'string')) return true;
-                    }
-                    return false;
-                })();
-
-                if (isMultiCar) {
-                    data = jsonData;
-                } else if (looksLikeShorthandSingleProfile) {
-                    showNotification("Shorthand single-profile detected. Loading parameter metadata...", "blue");
+// --- ADD THIS BLOCK START ---
+        // Capture groups to memory
+        window.cachedPidGroups = [];
+        if (jsonData.cars && jsonData.cars[0] && jsonData.cars[0].pid_groups) {
+            window.cachedPidGroups = jsonData.cars[0].pid_groups;
+            console.log("Cached " + window.cachedPidGroups.length + " PID groups from file.");
+        } else if (jsonData.pid_groups) {
+            // Handle flat format if necessary
+            window.cachedPidGroups = jsonData.pid_groups;
+        }
+        // --- ADD THIS BLOCK END ---
+		
+                // Check if it's a single car format (like Zeekr) with car_model property
+                if (jsonData.car_model && jsonData.pids) {
+                    showNotification("Single car format detected. Fetching parameter definitions...", "blue");
+                    
                     try {
-                        const paramsResponse = await fetch('https://raw.githubusercontent.com/meatpiHQ/wican-fw/main/.vehicle_profiles/params.json');
+                        // Fetch params.json to get parameter definitions
+                        const paramsResponse = await fetch('https://raw.githubusercontent.com/meatpiHQ/wican-fw/refs/heads/main/.vehicle_profiles/params.json');
                         const paramsData = await paramsResponse.json();
+                        
+                        // Convert single car format to vehicle_profiles.json format
                         const convertedCar = convertSingleCarFormat(jsonData, paramsData);
                         data = { cars: [convertedCar] };
-                        showNotification("Profile loaded successfully!", "green");
+                        
+                        showNotification("Single car format converted successfully!", "green");
                     } catch (fetchError) {
                         console.warn('Failed to fetch params.json, using basic conversion:', fetchError);
+                        // Fallback: basic conversion without parameter enrichment
                         data = { cars: [convertSingleCarBasic(jsonData)] };
-                        showNotification("Couldn't download params.json for parameter metadata. Make sure you're connected to the internet. Loaded profile without metadata.", "yellow");
+                        showNotification("Car model loaded (basic format - no internet connection)", "yellow");
                     }
-                } else if (isSingleCar) {
-                    // Already in vehicle_profiles.json schema; wrap without conversion
-                    data = { cars: [jsonData] };
                 } else {
-                    // Existing fallback
+                    // Existing multi-car format
                     data = jsonData.car_model ? { cars: [jsonData] } : jsonData;
                 }
-
-                // --- ADD THIS BLOCK START (Resolved from HEAD) ---
-                // Capture groups to memory
-                window.cachedPidGroups = [];
-                if (data.cars && data.cars[0] && data.cars[0].pid_groups) {
-                    window.cachedPidGroups = data.cars[0].pid_groups;
-                    console.log("Cached " + window.cachedPidGroups.length + " PID groups from file.");
-                } else if (data.pid_groups) {
-                    // Handle flat format if necessary
-                    window.cachedPidGroups = data.pid_groups;
-                }
-                // --- ADD THIS BLOCK END ---
                 
                 latest_car_models = data;
                 const carModels = [];
@@ -483,28 +437,6 @@ function loadLocalCarModels() {
                 var mod = { "supported": carModels };
                 loadCarModels(mod);
                 enableAutoStoreButton();
-
-                // If a single-car profile was uploaded, auto-enable vehicle-specific mode,
-                // select that model, and trigger the change handler to populate PIDs/filters.
-                try {
-                    if (data && Array.isArray(data.cars) && data.cars.length === 1 && data.cars[0]?.car_model) {
-                        const carSpecificEl = document.getElementById('car_specific');
-                        if (carSpecificEl && carSpecificEl.value === 'disable') {
-                            carSpecificEl.value = 'enable';
-                        }
-                        try { toggleCarModel(); } catch(_) {}
-
-                        const carModelEl = document.getElementById('car_model');
-                        if (carModelEl) {
-                            carModelEl.value = data.cars[0].car_model;
-                            carModelEl.dispatchEvent(new Event('change', { bubbles: true }));
-                        }
-
-                        showNotification(`Loaded profile: ${data.cars[0].car_model}`, 'green');
-                    }
-                } catch (e) {
-                    console.warn('Auto-select uploaded car model failed:', e);
-                }
                 
                 if (!jsonData.car_model || !jsonData.pids) {
                     showNotification("Car models loaded successfully!", "green");
@@ -518,12 +450,11 @@ function loadLocalCarModels() {
     }
 
     function convertSingleCarFormat(singleCarData, paramsData) {
-        // Convert from shorthand single-profile (NAME -> expression map) to vehicle_profiles.json format
+        // Convert from Zeekr-style format to vehicle_profiles.json format
         const convertedCar = {
             car_model: singleCarData.car_model,
             init: singleCarData.init,
-            pids: [],
-            can_filters: Array.isArray(singleCarData.can_filters) ? singleCarData.can_filters : []
+            pids: []
         };
 
         singleCarData.pids.forEach(pidEntry => {
@@ -537,25 +468,16 @@ function loadLocalCarModels() {
             }
 
             // Convert parameters from object format to array format
-            // If it's already an array (vehicle_profiles.json schema), keep it as-is.
-            if (Array.isArray(pidEntry.parameters)) {
-                newPidEntry.parameters = pidEntry.parameters;
-            } else if (pidEntry.parameters && typeof pidEntry.parameters === 'object') {
+            if (pidEntry.parameters && typeof pidEntry.parameters === 'object') {
                 Object.keys(pidEntry.parameters).forEach(paramName => {
                     const expression = pidEntry.parameters[paramName];
-                    const paramDef = paramsData?.[paramName] || {};
-                    const settings = paramDef.settings || {};
-
+                    const paramDef = paramsData[paramName] || {};
+                    
                     const parameter = {
                         name: paramName,
                         expression: expression,
-                        unit: settings.unit || "",
-                        class: settings.class || "none",
-                        min: settings.min ?? "",
-                        max: settings.max ?? "",
-                        type: settings.type || "Default",
-                        period: "5000",
-                        send_to: ""
+                        unit: paramDef.settings?.unit || "",
+                        class: paramDef.settings?.class || "none"
                     };
 
                     newPidEntry.parameters.push(parameter);
@@ -573,8 +495,7 @@ function loadLocalCarModels() {
         const convertedCar = {
             car_model: singleCarData.car_model,
             init: singleCarData.init,
-            pids: [],
-            can_filters: Array.isArray(singleCarData.can_filters) ? singleCarData.can_filters : []
+            pids: []
         };
 
         singleCarData.pids.forEach(pidEntry => {
@@ -1910,13 +1831,6 @@ function loadAutoTable(jsonData) {
         console.log("Raw jsonData:", jsonData);
         const data = jsonData;
 
-        const togglePidPollingMinVoltageRow = () => {
-            const mode = document.getElementById("disable_on_sleep_voltage")?.value || 'disable';
-            const row = document.getElementById("pid_polling_min_voltage_row");
-            if (!row) return;
-            row.style.display = (mode === 'automate_threshold') ? '' : 'none';
-        };
-
         // Reset custom filters UI to avoid duplicates on reload
         const customFilterContainer = document.querySelector('.custom-canfilter-entries');
         if (customFilterContainer) customFilterContainer.innerHTML = '';
@@ -1943,10 +1857,6 @@ function loadAutoTable(jsonData) {
         setElementValue("ha_discovery", 'disable');
         setElementValue("grouping", data.grouping, 'disable');
         setElementValue("disable_on_sleep_voltage", data.disable_on_sleep_voltage, 'disable');
-        setElementValue("pid_polling_min_voltage", data.pid_polling_min_voltage, '13.1');
-        const pidMinVoltEl = document.getElementById("pid_polling_min_voltage");
-        const pidMinVoltValEl = document.getElementById("pid_polling_min_voltage_value");
-        if (pidMinVoltEl && pidMinVoltValEl) pidMinVoltValEl.textContent = pidMinVoltEl.value;
         setElementValue("webhook_data_mode", data.webhook_data_mode, 'changed');
         // Legacy cycle/destination will be migrated into destinations[0].
         setElementValue("car_model", data.car_model, '');
@@ -2084,8 +1994,6 @@ function loadAutoTable(jsonData) {
                 if (typeof toggleSendToFields === 'function') toggleSendToFields();
                 if (typeof toggleGroupApiToken === 'function') toggleGroupApiToken();
                 if (typeof toggleStandardPIDOptions === 'function') toggleStandardPIDOptions();
-
-                togglePidPollingMinVoltageRow();
             } catch (error) {
                 console.error('Error in UI updates:', error);
             }
@@ -2096,13 +2004,6 @@ function loadAutoTable(jsonData) {
         console.error('Error in loadAutoTable:', error);
         showNotification("Error loading table data: " + error.message, "red");
     }
-}
-
-function togglePidPollingMinVoltageRow() {
-    const mode = document.getElementById("disable_on_sleep_voltage")?.value || 'disable';
-    const row = document.getElementById("pid_polling_min_voltage_row");
-    if (!row) return;
-    row.style.display = (mode === 'automate_threshold') ? '' : 'none';
 }
 
 
@@ -2127,11 +2028,6 @@ async function storeAutoTableData() {
         const initialisationValue = document.getElementById("initialisation")?.value || '';
         const groupingValue = document.getElementById("grouping")?.value || 'disable';
         const disableOnSleepVoltageValue = document.getElementById("disable_on_sleep_voltage")?.value || 'disable';
-        const pidPollingMinVoltageValueRaw = document.getElementById("pid_polling_min_voltage")?.value;
-        const pidPollingMinVoltageValue = (() => {
-            const n = parseFloat(pidPollingMinVoltageValueRaw);
-            return Number.isFinite(n) ? n : 13.1;
-        })();
         const webhook_data_mode = document.getElementById("webhook_data_mode")?.value || 'changed';
         const ha_discoveryValue = document.getElementById("ha_discovery")?.value || 'disable';
         const carSpecificValue = document.getElementById("car_specific")?.value || 'disable';
@@ -2167,13 +2063,11 @@ async function storeAutoTableData() {
                     const gCond = document.getElementById(`g_${gIndex}_cond`);
                     const gInit = document.getElementById(`g_${gIndex}_init`);
                     const gPeriod = document.getElementById(`g_${gIndex}_period`);
-		    const gEn = document.getElementById(`g_${gIndex}_en_group`);
 
                     if (gName) group.group_name = gName.value;
                     if (gCond) group.condition = gCond.value;
                     if (gInit) group.init = gInit.value;
                     if (gPeriod) group.period = parseInt(gPeriod.value) || 0;
-		    if (gEn) group.enabled = gEn.checked;
 
                     // Capture PIDs inside the group
                     if (group.pids && Array.isArray(group.pids)) {
@@ -2395,7 +2289,6 @@ async function storeAutoTableData() {
             initialisation: initialisationValue,
             grouping: groupingValue,
             disable_on_sleep_voltage: disableOnSleepVoltageValue,
-            pid_polling_min_voltage: pidPollingMinVoltageValue,
             webhook_data_mode: webhook_data_mode,
             car_specific: carSpecificValue,
             ha_discovery: ha_discoveryValue,
@@ -2889,9 +2782,6 @@ function checkStatus() {
         document.getElementById("ap_channel_status").innerHTML = obj.ap_ch;
         document.getElementById("sta_ip").innerHTML = obj.sta_ip;
 
-        const macEl = document.getElementById("mac_address_value");
-        if (macEl) macEl.innerHTML = obj.mac_address || "N/A";
-	
         const dnsMainEl = document.getElementById("dns_main_status");
         if (dnsMainEl) dnsMainEl.innerHTML = (obj.dns_main || "N/A");
         const dnsBackupEl = document.getElementById("dns_backup_status");
@@ -3355,13 +3245,6 @@ async function postConfig() {
     obj["imu_threshold"] = document.getElementById("imu_threshold").value;
     obj["elm327_udp_log"] = document.getElementById("elm327_udp_log").value;
 
-
-    obj["sta_ip_type"] = document.getElementById("sta_ip_type")?.value || "dhcp";
-    obj["sta_static_ip"] = document.getElementById("sta_static_ip")?.value || "";
-    obj["sta_netmask"] = document.getElementById("sta_netmask")?.value || "";
-    obj["sta_gateway"] = document.getElementById("sta_gateway")?.value || "";
-    obj["sta_dns"] = document.getElementById("sta_dns")?.value || "";
-    
     // Collect fallback networks (max 5)
     try {
         const rows = document.querySelectorAll('#fallback_rows .fallback-row');
@@ -3370,15 +3253,8 @@ async function postConfig() {
             const ssid = r.querySelector('.fb-ssid').value.trim();
             const pass = r.querySelector('.fb-pass').value;
             const sec = r.querySelector('.fb-sec').value;
-            
-            const ip_type = r.querySelector('.fb-ip-type')?.value || "dhcp";
-            const static_ip = r.querySelector('.fb-ip')?.value.trim() || "";
-            const netmask = r.querySelector('.fb-mask')?.value.trim() || "";
-            const gateway = r.querySelector('.fb-gw')?.value.trim() || "";
-            const dns = r.querySelector('.fb-dns')?.value.trim() || "";
-
             if (ssid) {
-                fallbacks.push({ ssid, pass, security: sec, ip_type, static_ip, netmask, gateway, dns });
+                fallbacks.push({ ssid, pass, security: sec });
             }
         });
         obj["sta_fallbacks"] = fallbacks.slice(0, 5);
@@ -3763,11 +3639,9 @@ async function uploadCfg() {
     }
 }
 
-
-
 async function Load() {
     const xhttp = new XMLHttpRequest();
-    xhttp.onload = async function() {
+xhttp.onload = async function() {
         var obj = JSON.parse(this.responseText);
         // Set WiFi mode by value (more robust than selectedIndex)
         const wifiModeEl = document.getElementById("wifi_mode");
@@ -3807,8 +3681,6 @@ async function Load() {
             document.getElementById("ap_auto_disable").selectedIndex = "1";
         }
 
-        try { toggleApStationWarning(); } catch(_) {}
-
         // Custom AP SSID (optional, default disabled)
         {
             const enEl = document.getElementById("ap_ssid_enable");
@@ -3827,18 +3699,7 @@ async function Load() {
         document.getElementById("ap_ch_value").selectedIndex = ch.toString();
         document.getElementById("ssid_value").value = obj.sta_ssid;
         document.getElementById("pass_value").value = obj.sta_pass;
-        document.getElementById("sta_security").value = obj.sta_security || "wpa3";
-
-        if (document.getElementById("sta_ip_type")) {
-            document.getElementById("sta_ip_type").value = obj.sta_ip_type || "dhcp";
-            document.getElementById("sta_static_ip").value = obj.sta_static_ip || "";
-            document.getElementById("sta_netmask").value = obj.sta_netmask || "";
-            document.getElementById("sta_gateway").value = obj.sta_gateway || "";
-            document.getElementById("sta_dns").value = obj.sta_dns || "";
-            if (typeof toggleStaStaticIp === 'function') toggleStaStaticIp();
-        }
-
-	
+        document.getElementById("sta_security").value = obj.sta_security || "wpa3";			
         if(obj.can_datarate == "5K") {
             document.getElementById("can_datarate").selectedIndex = "0";
         } else if(obj.can_datarate == "10K") {
@@ -4045,99 +3906,68 @@ async function Load() {
             renderFallbackNetworks([]);
         }
 
-        // --- MERGED CAR MODEL CHANGE LISTENER ---
-        document.getElementById("car_model").addEventListener('change', function() {
-            const pidContainer = document.querySelector('.specific-pid-entries');
-            if (pidContainer) pidContainer.innerHTML = '';
+document.getElementById("car_model").addEventListener('change', function() {
+    document.querySelector('.specific-pid-entries').innerHTML = ''; 
+    document.querySelector('.specific-canfilter-entries').innerHTML = '';
+    
+    const selectedModel = this.value;
+    if (latest_car_models && Array.isArray(latest_car_models.cars)) {
+        const selectedCar = latest_car_models.cars.find(car => car.car_model === selectedModel);
+        
+        const specificInitElement = document.getElementById("specific_init");
+        if(selectedCar) specificInitElement.value = selectedCar.init || '';
 
-            const filterContainer = document.querySelector('.specific-canfilter-entries');
-            if (filterContainer) filterContainer.innerHTML = '';
-            
-            const selectedModel = this.value;
-            const specificInitElement = document.getElementById("specific_init");
-            if (specificInitElement) specificInitElement.value = '';
-
-            if (!selectedModel || selectedModel === 'Not Selected') {
-                enableAutoStoreButton();
-                return;
-            }
-
-            if (latest_car_models && Array.isArray(latest_car_models.cars)) {
-                const selectedCar = latest_car_models.cars.find(car => car && car.car_model === selectedModel);
-                if (!selectedCar) {
-                    enableAutoStoreButton();
-                    return;
-                }
-
-                if (specificInitElement) specificInitElement.value = selectedCar.init || '';
-
-                if (selectedCar.pids) {
-                    selectedCar.pids.forEach(pid => {
-                        if (pid && pid.parameters) {
-                            pid.parameters.forEach(param => {
-                                addCarParameter({
-                                    ...param,
-                                    pid: pid.pid,
-                                    pid_init: pid.pid_init,
-                                    enabled: pid.enabled
-                                });
-                            });
-                        }
+        // 1. Populate Standard List
+        if (selectedCar && selectedCar.pids) {
+            selectedCar.pids.forEach(pid => {
+                if (pid.parameters) {
+                    pid.parameters.forEach(param => {
+                        addCarParameter({
+                            ...param,
+                            pid: pid.pid,
+                            pid_init: pid.pid_init,
+                            enabled: pid.enabled
+                        });
                     });
                 }
+            });
+        }
 
-                if (Array.isArray(selectedCar.can_filters)) {
-                    selectedCar.can_filters.forEach(f => {
-                        const fid = (f && f.frame_id !== undefined) ? f.frame_id : null;
-                        const params = (f && Array.isArray(f.parameters)) ? f.parameters : [];
-                        if (params.length) {
-                            params.forEach(param => {
-                                addVehicleSpecificCanFilterEntry({
-                                    frame_id: fid,
-                                    parameter: {
-                                        name: param.name,
-                                        expression: param.expression,
-                                        unit: param.unit,
-                                        class: param.class,
-                                        period: param.period,
-                                        type: param.type,
-                                        min: param.min,
-                                        max: param.max,
-                                        send_to: param.send_to,
-                                        enabled: param.enabled
-                                    }
-                                });
-                            });
-                        } else if (fid !== null) {
-                            addVehicleSpecificCanFilterEntry({ frame_id: fid, parameter: { name: 'New Parameter', period: '5000', type: 'Default', send_to: '' } });
-                        }
+        // 2. Populate Filters
+        if (selectedCar && selectedCar.can_filters) {
+             selectedCar.can_filters.forEach(f => {
+                const fid = (f.frame_id !== undefined) ? f.frame_id : null;
+                const params = (f.parameters) ? f.parameters : [];
+                params.forEach(param => {
+                    addVehicleSpecificCanFilterEntry({
+                        frame_id: fid,
+                        parameter: { ...param, enabled: param.enabled }
                     });
-                }
+                });
+            });
+        }
 
-                // -> PRESERVED CUSTOM FEATURE: Render the Groups Tab
-                if (selectedCar.pid_groups) {
-                    renderVehicleGroups(selectedCar.pid_groups);
-                } else {
-                    renderVehicleGroups([]);
-                }
-            }
+        // 3. Populate Groups Tab
+        if (selectedCar && selectedCar.pid_groups) {
+            renderVehicleGroups(selectedCar.pid_groups);
+        } else {
+            renderVehicleGroups([]);
+        }
+    }
+});    
 
-            enableAutoStoreButton();
-        });
 
         // Apply mode-dependent enable/disable rules after values are loaded
         try { toggleSmartConnectConfig(); } catch(_) {}
-        try { toggleApStationWarning(); } catch(_) {}
         try { submit_enable(); } catch(_) {}
 
         document.getElementById("store_canflt_button").disabled = true;
         document.querySelector(".store").disabled = true;
         document.getElementById("submit_button").disabled = true;
     };
-    
     checkStatus();
     // Load HTTPS certificate status after initial config load
-    // Removed single-cert status refresh
+// Removed single-cert status refresh
     xhttp.open("GET", "/load_config");
     xhttp.send();
 
@@ -4149,9 +3979,6 @@ async function Load() {
     // Initialize SmartConnect configuration visibility
     toggleSmartConnectConfig();
 
-    // Initialize AP+Station warning visibility
-    try { toggleApStationWarning(); } catch(_) {}
-
     // Initialize AP SSID input state
     try { toggleApSsid(); } catch(_) {}
     
@@ -4160,7 +3987,6 @@ async function Load() {
         lucide.createIcons();
     }
 }
-
 
 function toggleElm327UdpLogWarning() {
     const sel = document.getElementById("elm327_udp_log");
@@ -4216,59 +4042,58 @@ function mon_control() {
     var url2 = "http://192.168.31.72/";
     console.log(dr);
     alert("Please reboot device after Monitor, otherwise the device may not function as expected");
-    if (!window.wicanWs) {
-        alert("WebSocket client is not loaded.");
-        return;
-    }
+    ws_url = "ws://" + url.substr(7, url.length) + "ws";
+    console.log(ws_url);
     if(document.getElementById("mon_button").value == "Start") {
-        window.wicanWs.connect('monitor', {
-            onOpen: function () {
-                var cmd = "C" + cr + "S" + dr + cr + "O" + cr;
-                console.log("monitor ws open");
-                window.wicanWs.sendText(cmd);
-                window.mon_button_en(0);
-            },
-            onClose: function () {
-                window.mon_button_en(1);
-                console.log("monitor ws close");
-            },
-            onMessage: function (evt) {
-                var received_msg = evt.data;
-                if(received_msg[0] == "t") {
-                    var len = (received_msg[4] - "0") * 2;
-                    var data_str = "";
-                    var i;
-                    for(i = 0; i < len; i += 2) {
-                        data_str += received_msg.substr(i + 5, 2) + " ";
-                    }
-                    monitor_add_line(received_msg.substr(1, 3) + "h", "Std", received_msg[4], data_str, 0);
-                } else if(received_msg[0] == "T") {
-                    var len = (received_msg[9] - "0") * 2;
-                    var data_str = "";
-                    var i;
-                    for(i = 0; i < len; i += 2) {
-                        data_str += received_msg.substr(i + 10, 2) + " ";
-                    }
-                    monitor_add_line(received_msg.substr(1, 8) + "h", "Ext", received_msg[9], data_str, 0);
-                } else if(received_msg[0] == "r") {
-                    var len = (received_msg[4] - "0") * 2;
-                    monitor_add_line(received_msg.substr(1, 3) + "h", "RTR-Std", received_msg[4], 0, 0);
-                } else if(received_msg[0] == "R") {
-                    var len = (received_msg[9] - "0") * 2;
-                    monitor_add_line(received_msg.substr(1, 8) + "h", "RTR-Ext", received_msg[9], 0, 0);
-                }
-            },
+        ws = new WebSocket(ws_url);
+        setTimeout(bindEvents, 1000);
+        ws.addEventListener("open", (event) => {
+            var cmd = "C" + cr + "S" + dr + cr + "O" + cr;
+            console.log("onopen called");
+            ws.send(cmd);
+            window.mon_button_en(0);
+        });
+        ws.addEventListener("close", (event) => {
+            window.mon_button_en(1);
+            console.log("onclose called");
         });
     } else {
         ws_close();
     }
 }
 
+function bindEvents() {
+    ws.onmessage = function(evt) {
+        var received_msg = evt.data;
+        if(received_msg[0] == "t") {
+            var len = (received_msg[4] - "0") * 2;
+            var data_str = "";
+            var i;
+            for(i = 0; i < len; i += 2) {
+                data_str += received_msg.substr(i + 5, 2) + " ";
+            }
+            monitor_add_line(received_msg.substr(1, 3) + "h", "Std", received_msg[4], data_str, 0);
+        } else if(received_msg[0] == "T") {
+            var len = (received_msg[9] - "0") * 2;
+            var data_str = "";
+            var i;
+            for(i = 0; i < len; i += 2) {
+                data_str += received_msg.substr(i + 10, 2) + " ";
+            }
+            monitor_add_line(received_msg.substr(1, 8) + "h", "Ext", received_msg[9], data_str, 0);
+        } else if(received_msg[0] == "r") {
+            var len = (received_msg[4] - "0") * 2;
+            monitor_add_line(received_msg.substr(1, 3) + "h", "RTR-Std", received_msg[4], 0, 0);
+        } else if(received_msg[0] == "R") {
+            var len = (received_msg[9] - "0") * 2;
+            monitor_add_line(received_msg.substr(1, 8) + "h", "RTR-Ext", received_msg[9], 0, 0);
+        }
+    };
+}
+
 function ws_close() {
-    if (window.wicanWs && window.wicanWs.isOpen()) {
-        window.wicanWs.sendText("C" + cr);
-        window.wicanWs.close();
-    }
+    ws.send("C" + cr);
+    ws.close();
 }
 
 function mon_button_en(b) {
@@ -5341,13 +5166,11 @@ function syncGroupsFromUIToMemory() {
         const gCond = document.getElementById(`g_${gIndex}_cond`);
         const gInit = document.getElementById(`g_${gIndex}_init`);
         const gPeriod = document.getElementById(`g_${gIndex}_period`);
-	const gEn = document.getElementById(`g_${gIndex}_en_group`);
 
         if (gName) group.group_name = gName.value;
         if (gCond) group.condition = gCond.value;
         if (gInit) group.init = gInit.value;
         if (gPeriod) group.period = parseInt(gPeriod.value) || 0;
-	if (gEn) group.enabled = gEn.checked;
 
         if (group.pids) {
             group.pids.forEach((pid, pIndex) => {
@@ -5361,7 +5184,6 @@ function syncGroupsFromUIToMemory() {
                 const pClass = document.getElementById(`g_${gIndex}_p_${pIndex}_class`);
                 const pDType = document.getElementById(`g_${gIndex}_p_${pIndex}_dtype`);
                 const pDest = document.getElementById(`g_${gIndex}_p_${pIndex}_dest`);
-		const pOnChange = document.getElementById(`g_${gIndex}_p_${pIndex}_onchange`);
 
                 if (pName) pid.name = pName.value;
                 if (pCmd) pid.pid = pCmd.value;
@@ -5373,10 +5195,9 @@ function syncGroupsFromUIToMemory() {
                 if (pClass) pid.class = pClass.value;
                 if (pDType) pid.destination_type = pDType.value;
                 if (pDest) pid.destination = pDest.value;
-		if (pOnChange) pid.onchange = pOnChange.checked;
                 
                 // Sync nested parameters if they exist
-                if (pid.parameters && pid.parameters[0]) {
+                 if (pid.parameters && pid.parameters[0]) {
                     if(pName) pid.parameters[0].name = pName.value;
                     if(pExpr) pid.parameters[0].expression = pExpr.value;
                     if(pMin) pid.parameters[0].min = parseFloat(pMin.value);
@@ -5385,7 +5206,6 @@ function syncGroupsFromUIToMemory() {
                     if(pClass) pid.parameters[0].class = pClass.value;
                     if(pDType) pid.parameters[0].destination_type = pDType.value;
                     if(pDest) pid.parameters[0].destination = pDest.value;
-                    if(pOnChange) pid.parameters[0].onchange = pOnChange.checked;
                 }
             });
         }
@@ -5403,7 +5223,6 @@ function addNewGroup() {
     // Add default empty group
     activeCar.pid_groups.push({
         group_name: "New Group",
-        enabled: true,
         condition: "always",
         period: 1000,
         init: "",
@@ -5474,170 +5293,106 @@ function deletePID(gIndex, pIndex) {
 
 
 async function testGroup(gIndex) {
-    // 1. Force Sync
-    if (typeof syncGroupsFromUIToMemory === 'function') {
-        syncGroupsFromUIToMemory();
-    }
+    const activeCar = syncGroupsFromUIToMemory();
+    if (!activeCar) return;
 
-    // 2. Get Data
-    if (!latest_car_models.pid_groups || !latest_car_models.pid_groups[gIndex]) return;
-    const group = latest_car_models.pid_groups[gIndex];
+    const group = activeCar.pid_groups[gIndex];
     
-    // 3. Setup Terminal
+    // 1. Open Terminal UI
     const termDiv = document.getElementById(`term_g_${gIndex}`);
     const termContent = document.getElementById(`term_content_g_${gIndex}`);
     if(termDiv) termDiv.style.display = 'block';
     
-    // Clear Content
-    termContent.innerHTML = ''; 
-
-    // Header
-    const tHeader = document.createElement('div');
-    tHeader.innerHTML = `> Initializing group "<b>${group.group_name}</b>"...`;
-    termContent.appendChild(tHeader);
-
+    termContent.innerHTML = `<div>> Initializing group "<b>${group.group_name}</b>"...</div>`;
+    
+    // CRITICAL: Use group init or fallback to global
     const initString = group.init || document.getElementById("specific_init")?.value || "";
-    const tInit = document.createElement('div');
-    tInit.style.cssText = "color:#94a3b8; font-size:0.85em; margin:0; padding:0;";
-    tInit.innerText = `> Init: ${initString}`;
-    termContent.appendChild(tInit);
-
-    const tSep = document.createElement('div');
-    tSep.style.cssText = "border-bottom:1px solid #444; margin-bottom:5px; margin-top:2px;";
-    termContent.appendChild(tSep);
+    termContent.innerHTML += `<div style="color:#94a3b8; font-size:0.85em;">> Init: ${initString}</div>`;
+    termContent.innerHTML += `<div style="border-bottom:1px solid #444; margin-bottom:5px;"></div>`;
 
     let activeCount = 0;
 
-    // 4. Loop through PIDs
-    if (group.pids) {
-        for (let i = 0; i < group.pids.length; i++) {
-            const pidData = group.pids[i];
-            if (!pidData.enabled) continue;
-            activeCount++;
+    // 2. Loop through ALL PIDs
+    for (const pid of group.pids) {
+        if (!pid.enabled) continue;
+        activeCount++;
 
-            // Create Main Container for this PID
-            const pidContainer = document.createElement('div');
-            pidContainer.style.cssText = "margin-bottom:8px; border-bottom:1px dashed #333; padding-bottom:4px;";
-            termContent.appendChild(pidContainer);
+        const payload = { 
+            kind: 'vehicle',
+            pid: pid.pid,
+            pid_init: "", 
+            expr: pid.expression,
+            init: initString
+        };
 
-            // 1. PID Title Line
-            const pidTitle = document.createElement('div');
-            pidTitle.style.cssText = "font-weight:bold; color:#fff; margin:0; line-height:1.2;";
-            pidTitle.innerHTML = `> Testing PID ${pidData.pid} <span style="font-size:0.8em; font-weight:normal; color:#aaa;">(${pidData.pid_description || ''})</span>`;
-            pidContainer.appendChild(pidTitle);
+        const lineId = `log_${gIndex}_${activeCount}`;
+        termContent.innerHTML += `<div id="${lineId}">> Testing <b>${pid.name}</b> ... <span style="color:#fbbf24;">Sending</span></div>`;
+        termDiv.scrollTop = termDiv.scrollHeight;
 
-            // 2. Results Container (This will hold Raw Hex + Parameters)
-            const resultsDiv = document.createElement('div');
-            resultsDiv.style.cssText = "display:flex; flex-direction:column;"; // Ensure tight stacking
-            pidContainer.appendChild(resultsDiv);
-            
-            termDiv.scrollTop = termDiv.scrollHeight;
+        // --- RETRY LOGIC START ---
+        let attempts = 0;
+        let success = false;
+        let responseData = null;
 
-            // Prepare Parameters
-            let paramsToTest = pidData.parameters;
-            if (!paramsToTest || paramsToTest.length === 0) {
-                paramsToTest = [{ name: "Raw Value", expression: "A", unit: "" }];
-            }
+        while(attempts < 3 && !success) {
+            try {
+                // Wait a bit before every attempt to let background tasks finish
+                await new Promise(r => setTimeout(r, 1000));
 
-            let rawHexHasBeenShown = false;
-
-            // 5. Loop through Parameters
-            for (let pIdx = 0; pIdx < paramsToTest.length; pIdx++) {
-                const param = paramsToTest[pIdx];
+                const res = await fetch('/autopid/test_pid', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
                 
-                // Create Line for this Parameter
-                const paramLine = document.createElement('div');
-                paramLine.style.cssText = "padding-left:15px; font-size:0.9em; color:#888; margin:0; line-height:1.4;";
-                paramLine.innerHTML = `- ${param.name || 'Value'}: <span style="color:#fbbf24;">Testing...</span>`;
-                resultsDiv.appendChild(paramLine);
+                responseData = await res.json().catch(() => null);
 
-                // --- ASYNC REQUEST ---
-                (async () => {
-                    let success = false;
-                    let attempts = 0;
-                    let responseData = null;
-
-                    while(attempts < 3 && !success) {
-                        try {
-                            await new Promise(r => setTimeout(r, 200)); 
-
-                            const payload = { 
-                                kind: 'vehicle',
-                                pid: pidData.pid,
-                                pid_init: "", 
-                                expr: param.expression || "A", 
-                                init: initString
-                            };
-
-                            const res = await fetch('/autopid/test_pid', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify(payload),
-                            });
-                            
-                            responseData = await res.json().catch(() => null);
-
-                            if (res.ok && responseData) {
-                                if (responseData.error === "AutoPID busy") {
-                                    paramLine.innerHTML = `- ${param.name}: <span style="color:#f59e0b;">Busy...</span>`;
-                                    await new Promise(r => setTimeout(r, 1500));
-                                    attempts++;
-                                } else {
-                                    success = true; 
-                                }
-                            } else {
-                                success = true; 
-                            }
-                        } catch (e) {
-                            success = true; 
-                        }
-                    }
-
-                    // Update UI
-                    if (!responseData || !responseData.ok) {
-                        const errorMsg = responseData ? responseData.error : "Error";
-                        paramLine.innerHTML = `- ${param.name}: <span style="color:#ef4444;">${errorMsg}</span>`;
+                if (res.ok && responseData) {
+                    if (responseData.error === "AutoPID busy") {
+                        // DEVICE IS BUSY -> WAIT AND RETRY
+                        const lineEl = document.getElementById(lineId);
+                        if(lineEl) lineEl.innerHTML = `> ${pid.name}: <span style="color:#f59e0b;">Device Busy (Retrying ${attempts+1}/3)...</span>`;
+                        await new Promise(r => setTimeout(r, 2000)); // Wait 2 seconds
+                        attempts++;
                     } else {
-                        // Success Value
-                        const val = (responseData.value === null) ? 'null' : String(responseData.value);
-                        paramLine.innerHTML = `- ${param.name}: <span style="color:#34d399; font-weight:bold;">${val}</span> <span style="color:#aaa;">${param.unit || ''}</span>`;
-
-                        // HANDLE RAW HEX
-                        // Only add this line if we have data AND we haven't added it yet
-                        let rawData = responseData.raw || responseData.hex;
-                        if (!rawHexHasBeenShown && rawData) {
-                            rawHexHasBeenShown = true;
-
-			    // Sanitize: Remove '>' and trim whitespace/newlines
-                            rawData = rawData.toString().replace(/>/g, '').trim();
-			    
-                            const rawDiv = document.createElement('div');
-                            rawDiv.style.cssText = "padding-left:15px; font-family:monospace; color:#64748b; font-size:0.8em; margin:0; line-height:1.4;";
-                            rawDiv.innerText = `Raw Hex: ${rawData}`;
-                            
-                            // Insert as the FIRST child of resultsDiv so it sits above all parameters
-                            if (resultsDiv.firstChild) {
-                                resultsDiv.insertBefore(rawDiv, resultsDiv.firstChild);
-                            } else {
-                                resultsDiv.appendChild(rawDiv);
-                            }
-                        }
+                        success = true; // Success or a different error (like invalid PID)
                     }
-                })(); 
+                } else {
+                    success = true; // Network error, don't retry loop
+                }
+            } catch (e) {
+                success = true; // Stop retrying on net error
             }
+        }
+        // --- RETRY LOGIC END ---
+
+        const lineEl = document.getElementById(lineId);
+
+        if (!responseData || !responseData.ok) {
+            let errorMsg = responseData ? responseData.error : "Unknown Error";
+            let color = "#ef4444"; // Red
+            
+            // Helpful hints for common errors
+            let hint = "";
+            if (errorMsg === "AutoPID busy") {
+                hint = " (Background tasks running)";
+            } else if (errorMsg && (errorMsg.includes("ERROR") || errorMsg.includes("?"))) {
+                color = "#fbbf24"; // Yellow
+                hint = " (Check Init/Protocol)";
+            }
+
+            if(lineEl) lineEl.innerHTML = `> ${pid.name}: <span style="color:${color};">${errorMsg}</span>${hint}`;
+        } else {
+            // SUCCESS
+            const val = (responseData.value === null) ? 'null' : String(responseData.value);
+            if(lineEl) lineEl.innerHTML = `> ${pid.name}: <span style="color:#34d399;"><b>${val}</b> ${pid.unit || ''}</span>`;
         }
     }
 
     if (activeCount === 0) {
-        const noPidDiv = document.createElement('div');
-        noPidDiv.style.color = "#ef4444";
-        noPidDiv.innerText = "> No enabled PIDs found.";
-        termContent.appendChild(noPidDiv);
+        termContent.innerHTML += `<div style="color:#ef4444;">> No enabled PIDs found in this group.</div>`;
     } else {
-        const doneDiv = document.createElement('div');
-        doneDiv.style.cssText = "color:#94a3b8; margin-top:5px;";
-        doneDiv.innerText = "> Group Test Complete.";
-        termContent.appendChild(doneDiv);
+        termContent.innerHTML += `<div style="color:#94a3b8; margin-top:5px;">> Group Test Complete.</div>`;
     }
     
     termDiv.scrollTop = termDiv.scrollHeight;
@@ -5650,8 +5405,8 @@ function addParameter(gIndex, pIndex) {
         latest_car_models.pid_groups[gIndex].pids[pIndex].parameters = [];
     }
     latest_car_models.pid_groups[gIndex].pids[pIndex].parameters.push({
-        name: "",
-        expression: "",
+        name: "New_Field",
+        expression: "A",
         unit: "",
         enabled: true,
         onchange: false
@@ -5693,156 +5448,107 @@ const dragStyles = `
         background: #e2e8f0 !important;
         border: 1px dashed #94a3b8 !important;
     }
-
     .group-drop-target {
         background-color: #dbeafe !important; /* Light blue highlight */
         border: 2px dashed #3b82f6 !important;
     }
-    .group-draggable {
-        cursor: grab;
-    }
-    .group-dragging {
-        opacity: 0.4;
-        border: 2px dashed #3b82f6 !important;
-    }
-
 `;
 const styleSheet = document.createElement("style");
 styleSheet.innerText = dragStyles;
 document.head.appendChild(styleSheet);
 
 
-// ==========================================================================
-//  FULL GROUP EDITOR (Features Restored + Syntax Fixed)
-// ==========================================================================
 
-// Global variable for drag-and-drop
+// ==========================================================================
+//  GLOBAL VARIABLE FOR DRAG & DROP
+// ==========================================================================
 let dragSrcEl = null;
-let dragType = null;
 
-function renderVehicleGroups(groupsData) {
+function renderVehicleGroups() {
     const container = document.getElementById('vehicle_groups_container');
     if (!container) return; 
     container.innerHTML = '';
 
-    // 1. Setup Data
-    if (!latest_car_models) latest_car_models = {};
-    let targetGroups = groupsData;
-    
-    // Logic to find the correct group data
-    if (!targetGroups) {
-        if (latest_car_models.pid_groups) {
-            targetGroups = latest_car_models.pid_groups;
-        } else if (latest_car_models.cars && latest_car_models.cars.length > 0) {
-            targetGroups = latest_car_models.cars[0].pid_groups;
-        }
+    // Fix: Move data from nested 'cars' array to where your code expects it
+    if (latest_car_models && latest_car_models.cars && latest_car_models.cars.length > 0 && latest_car_models.cars[0].pid_groups) {
+        latest_car_models.pid_groups = latest_car_models.cars[0].pid_groups;
     }
     
-    if (!targetGroups) targetGroups = [];
-    latest_car_models.pid_groups = targetGroups;
+    if (!latest_car_models) latest_car_models = { pid_groups: [] };
 
-    // 2. Data Adapter (Standard loops to prevent syntax errors)
-    for (let i = 0; i < latest_car_models.pid_groups.length; i++) {
-        const group = latest_car_models.pid_groups[i];
+    // --- [FIX] LOCATE DATA PATH ---
+    // The console logs show the data is inside 'cars[0].pid_groups'.
+    // We point the root 'pid_groups' to that location so the rest of your code works.
+    if (latest_car_models.cars && latest_car_models.cars.length > 0 && latest_car_models.cars[0].pid_groups) {
+        latest_car_models.pid_groups = latest_car_models.cars[0].pid_groups;
+    }
+
+    if (!latest_car_models.pid_groups) latest_car_models.pid_groups = [];
+
+    // --- AUTO-MIGRATION (Old -> New) ---
+    latest_car_models.pid_groups.forEach(group => {
         if (group.pids) {
-            for (let j = 0; j < group.pids.length; j++) {
-                const pid = group.pids[j];
-                // Convert flat PIDs to nested parameters if needed
-                if (pid.name !== undefined && !pid.parameters) {
+            group.pids.forEach(pid => {
+                // If it's a flat PID (from backend), wrap it into parameters array
+                if (!pid.parameters) {
                     const newParam = {
                         name: pid.name || "Unknown",
                         expression: pid.expression || "A",
                         unit: pid.unit || "",
-                        min: (pid.min != null) ? String(pid.min) : "",
-                        max: (pid.max != null) ? String(pid.max) : "",
-                        class: pid.class || "",
-                        destination_type: pid.destination_type || pid.type || "Default",
-                        send_to: pid.destination || pid.send_to || "",
+                        min: pid.min, max: pid.max, class: pid.class || "",
+                        destination_type: pid.destination_type || pid.type || "Default", // Handle both keys
+                        send_to: pid.destination || pid.send_to || "", // Handle both keys
                         onchange: (pid.onchange === true),
                         enabled: (pid.enabled !== false)
                     };
                     pid.parameters = [newParam];
-                    
-                    // Cleanup old flat fields
+                    // Clean up parent object to avoid confusion
                     delete pid.name; delete pid.expression; delete pid.unit;
                     delete pid.min; delete pid.max; delete pid.class;
-                    delete pid.send_to; delete pid.destination_type; 
-                    delete pid.destination; delete pid.type;
-		    
+                    delete pid.send_to; delete pid.onchange; delete pid.type; 
+                    delete pid.destination; delete pid.destination_type;
                 }
-            }
+            });
         }
-    }
+    });
 
-    // 3. RENDER LOOP (Iterate Groups)
-    for (let gIndex = 0; gIndex < latest_car_models.pid_groups.length; gIndex++) {
-        const group = latest_car_models.pid_groups[gIndex];
-
-        // --- 4 Shades of Blue Logic ---
-        const blueShades = ["#f8fafc", "#f0f9ff", "#e0f2fe", "#dbeafe"]; 
-        const currentBg = blueShades[gIndex % 4];
-
+    // --- RENDER LOOP (Your Original Logic) ---
+    latest_car_models.pid_groups.forEach((group, gIndex) => {
+        // 1. Group Container
         const groupDiv = document.createElement('div');
-        groupDiv.className = 'group-container group-draggable';
-        groupDiv.draggable = true; // Enable Group Dragging
-        //groupDiv.style.cssText = "border:1px solid #cbd5e1; margin-bottom:15px; padding:10px; border-radius:6px; background:${currentBg};";
-	groupDiv.style.cssText = `border:1px solid #94a3b8; margin-bottom:15px; padding:10px; border-radius:6px; background:${currentBg};`;
+        groupDiv.className = 'group-container';
+        groupDiv.style.cssText = "border:1px solid #cbd5e1; margin-bottom:15px; padding:10px; border-radius:6px; background:#f8fafc;";
         
-        // --- GROUP DRAG AND DROP HANDLERS ---
-        groupDiv.addEventListener('dragstart', (e) => {
-            // Only trigger if the group container itself is being dragged, not a PID inside it
-            if (e.target.classList.contains('group-container')) {
-                dragSrcEl = groupDiv;
-                e.dataTransfer.effectAllowed = 'move';
-                e.dataTransfer.setData('dragType', 'group');
-                e.dataTransfer.setData('sourceIndex', gIndex);
-                groupDiv.classList.add('group-dragging');
-            }
-        });
-
-        groupDiv.addEventListener('dragend', () => groupDiv.classList.remove('group-dragging'));
-        groupDiv.addEventListener('dragover', (e) => { e.preventDefault(); return false; });
-
-        groupDiv.addEventListener('drop', (e) => {
-            e.stopPropagation(); // Prevent PID drop logic from firing
-            const type = e.dataTransfer.getData('dragType');
-            const sourceIdx = parseInt(e.dataTransfer.getData('sourceIndex'));
-            
-            if (type === 'group' && sourceIdx !== gIndex) {
-                const groups = latest_car_models.pid_groups;
-                const movedGroup = groups.splice(sourceIdx, 1)[0];
-                groups.splice(gIndex, 0, movedGroup);
-                renderVehicleGroups();
-            }
-            return false;
-        });
-
-	
         const isGroupOpen = (group._collapsed !== true); 
 
-        // --- Group Header ---
+
+       // 2. Group Header (Restructured for 2 Lines)
         const groupHeader = document.createElement('div');
         groupHeader.style.cssText = "display:flex; flex-direction:column; gap:8px; padding-bottom:8px; border-bottom:1px solid #e2e8f0; cursor:default;";
 
-        // Header Row 1: Name, Period, Condition, Buttons
+        // --- ROW 1: Name, Period, Condition, Actions ---
         const headerRow1 = document.createElement('div');
         headerRow1.style.cssText = "display:flex; justify-content:space-between; align-items:center; width:100%;";
 
+        // Row 1 Left (Name, Period, Condition)
         const r1Left = document.createElement('div');
         r1Left.style.cssText = "display:flex; align-items:center; gap:10px; flex:1;";
 
-        // Expand Arrow
+        // Main Arrow (Toggles Group)
         const gArrow = document.createElement('span');
         gArrow.innerHTML = isGroupOpen ? '&#9660;' : '&#9654;';
         gArrow.style.cssText = "font-size:0.9rem; color:#64748b; cursor:pointer; width:15px;";
-        gArrow.onclick = () => { group._collapsed = !group._collapsed; renderVehicleGroups(); };
+        gArrow.onclick = () => {
+             group._collapsed = !group._collapsed;
+             renderVehicleGroups();
+        };
         r1Left.appendChild(gArrow);
 
         // Group Name
         const gNameInput = document.createElement('input');
         gNameInput.value = group.group_name || `Group ${gIndex + 1}`;
         gNameInput.placeholder = "Group Name";
-        gNameInput.style.cssText = "font-weight:bold; font-size:1.05rem; border:none; background:transparent; border-bottom:1px dashed #cbd5e1; width:300px;";
+        gNameInput.style.cssText = "font-weight:bold; font-size:1.05rem; border:none; background:transparent; border-bottom:1px dashed #cbd5e1; width:200px;";
         gNameInput.onchange = (e) => { group.group_name = e.target.value; };
         r1Left.appendChild(gNameInput);
 
@@ -5859,399 +5565,399 @@ function renderVehicleGroups(groupsData) {
         periodWrapper.appendChild(document.createTextNode("ms"));
         r1Left.appendChild(periodWrapper);
 
-        headerRow1.appendChild(r1Left);
-
-        // Group Buttons (Play / Delete)
-        const r1Right = document.createElement('div');
-        r1Right.style.cssText = "display:flex; gap:5px;";
-
+        // [THIS IS THE MENU YOU ASKED FOR]
         const condSelect = document.createElement('select');
-        // Note: added width:auto so it fits the text
-        condSelect.style.cssText = "width:auto; padding:2px 4px; border:1px solid #cbd5e1; border-radius:3px; font-size:0.85rem; background:rgba(255,255,255,0.8); font-weight:500; color:#334155;";
+        condSelect.title = "Run Condition";
+        condSelect.style.cssText = "padding:2px 4px; border:1px solid #cbd5e1; border-radius:3px; font-size:0.85rem; background:#fff; margin-left:10px; font-weight:500; color:#334155;";
+        
+        // The 3 items
         ["always", "voltage", "engine_running"].forEach(opt => {
             const o = document.createElement('option');
             o.value = opt;
+            // Make text look nice (e.g. "engine_running" -> "Engine Running")
             o.text = opt.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
             if ((group.condition || "always") === opt) o.selected = true;
             condSelect.appendChild(o);
         });
-        condSelect.onchange = (e) => { group.condition = e.target.value; };
-        r1Right.appendChild(condSelect);
-	
-        // --- ADD THIS BLOCK: Group Enable Checkbox ---
-        const gEnWrapper = document.createElement('label');
-        gEnWrapper.style.cssText = "display:flex; align-items:center; gap:4px; font-size:0.85rem; cursor:pointer; margin-right: 10px; margin-left: 10px;";
-        const gEnCheck = document.createElement('input');
-        gEnCheck.type = "checkbox";
-        gEnCheck.id = `g_${gIndex}_en_group`; // Unique ID for the group
-        gEnCheck.checked = (group.enabled !== false); // Default to true
-        gEnCheck.onclick = (e) => e.stopPropagation();
-        gEnCheck.onchange = (e) => { group.enabled = e.target.checked; enableAutoStoreButton(); };
-        gEnWrapper.appendChild(gEnCheck);
-        gEnWrapper.appendChild(document.createTextNode("Enabled"));
-        r1Right.appendChild(gEnWrapper);
-	
         
+        condSelect.onclick = (e) => e.stopPropagation();
+        condSelect.onchange = (e) => { group.condition = e.target.value; };
+        r1Left.appendChild(condSelect);
+
+        headerRow1.appendChild(r1Left);
+
+        // Row 1 Right (Buttons)
+        const r1Right = document.createElement('div');
+        r1Right.style.cssText = "display:flex; gap:5px;";
+
         const gPlayBtn = document.createElement('button');
         gPlayBtn.innerHTML = '&#9658;';
         gPlayBtn.className = 'system-button';
         gPlayBtn.style.color = "#16a34a";
+        gPlayBtn.title = "Run Group";
         gPlayBtn.onclick = (e) => { e.stopPropagation(); testGroup(gIndex); };
 
         const gDelBtn = document.createElement('button');
         gDelBtn.innerHTML = '&#128465;';
         gDelBtn.className = 'system-button danger';
+        gDelBtn.title = "Delete Group";
         gDelBtn.onclick = (e) => { e.stopPropagation(); deleteGroup(gIndex); };
 
         r1Right.appendChild(gPlayBtn);
         r1Right.appendChild(gDelBtn);
         headerRow1.appendChild(r1Right);
 
-        // Header Row 2
+        // --- ROW 2: PID Count & Init ---
         const headerRow2 = document.createElement('div');
         headerRow2.style.cssText = "display:flex; align-items:center; gap:15px; padding-left:25px; width:100%;";
-        
+
+        // PID Count Badge (Clickable)
         const pidCount = group.pids ? group.pids.length : 0;
         const countBadge = document.createElement('span');
-        countBadge.style.cssText = "cursor:pointer; background:rgba(255,255,255,0.6); color:#475569; padding:2px 8px; border-radius:10px; font-size:0.8rem; font-weight:bold; border:1px solid #cbd5e1; min-width:80px; text-align:center;";
+        countBadge.style.cssText = "cursor:pointer; background:#e2e8f0; color:#475569; padding:2px 8px; border-radius:10px; font-size:0.8rem; font-weight:bold; border:1px solid #cbd5e1; min-width:80px; text-align:center;";
         countBadge.innerText = `${pidCount} PIDs`;
-        countBadge.onclick = (e) => { e.stopPropagation(); group._collapsed = !group._collapsed; renderVehicleGroups(); };
+        countBadge.title = "Click to Expand/Collapse PIDs";
+        countBadge.onclick = (e) => {
+            e.stopPropagation();
+            group._collapsed = !group._collapsed;
+            renderVehicleGroups();
+        };
         headerRow2.appendChild(countBadge);
 
+        // Init String Input
         const gInitInput = document.createElement('input');
         gInitInput.value = group.init || '';
         gInitInput.placeholder = "Initialization String (e.g. ATTP6; ATZ;)";
-        
-        gInitInput.style.cssText = "width:450px; font-family:monospace; font-size:0.85rem; padding:3px; border:1px solid #cbd5e1; border-radius:3px; color:#334155; background:rgba(255,255,255,0.5);";
+        gInitInput.style.cssText = "flex:1; font-family:monospace; font-size:0.85rem; padding:3px; border:1px solid #cbd5e1; border-radius:3px; color:#334155;";
+        gInitInput.onclick = (e) => e.stopPropagation();
         gInitInput.onchange = (e) => { group.init = e.target.value; };
-        gInitInput.onclick = (e) => e.stopPropagation(); 
         headerRow2.appendChild(gInitInput);
-
-        // MOVED & JUSTIFIED: Add PID Button
-        const addPidBtn = document.createElement('button');
-        addPidBtn.innerText = "+ Add PID Card";
-        addPidBtn.className = "system-button";
-        addPidBtn.onclick = (e) => { e.stopPropagation(); addPID(gIndex); };
-        headerRow2.appendChild(addPidBtn);
 
         groupHeader.appendChild(headerRow1);
         groupHeader.appendChild(headerRow2);
         groupDiv.appendChild(groupHeader);
-	
 
-        // Test Console Div (Hidden by default)
+        // --- Test Console ---
         const termDiv = document.createElement('div');
         termDiv.id = `term_g_${gIndex}`;
-        termDiv.style.display = 'none';
-        termDiv.innerHTML = `<div id="term_content_g_${gIndex}" style="background:#1e1e1e; color:#eee; font-family:monospace; padding:10px; max-height:200px; overflow-y:auto;"></div><button style="margin-top:5px;" onclick="this.parentElement.style.display='none'">Close</button>`;
+        termDiv.style.cssText = "display:none; background:#1e1e1e; color:#eee; font-family:monospace; font-size:0.85rem; padding:10px; border-radius:4px; margin-bottom:10px; max-height:200px; overflow-y:auto; border:1px solid #333;";
+        
+        const termContent = document.createElement('div');
+        termContent.id = `term_content_g_${gIndex}`;
+        termDiv.appendChild(termContent);
+
+        const termCloseBtn = document.createElement('button');
+        termCloseBtn.innerText = "Close Console";
+        termCloseBtn.style.cssText = "margin-top:5px; background:#333; color:#fff; border:none; padding:2px 6px; cursor:pointer; font-size:0.75rem;";
+        termCloseBtn.onclick = () => { termDiv.style.display = 'none'; };
+        termDiv.appendChild(termCloseBtn);
+
         groupDiv.appendChild(termDiv);
 
-        // --- Group Content (PIDs) ---
+        // --- Group Content ---
         const groupContent = document.createElement('div');
         groupContent.id = `g_content_${gIndex}`;
-        groupContent.style.display = isGroupOpen ? "block" : "none";
+        groupContent.style.display = isGroupOpen ? "block" : "none"; 
 
-
-        groupContent.style.minHeight = "20px"; // Ensure target has height
-        groupContent.addEventListener('dragover', (e) => { e.preventDefault(); groupContent.classList.add('group-drop-target'); });
-        groupContent.addEventListener('dragleave', (e) => { groupContent.classList.remove('group-drop-target'); });
-        groupContent.addEventListener('drop', (e) => {
-            e.preventDefault(); 
-            e.stopPropagation();
-            groupContent.classList.remove('group-drop-target');
-            
-            if (!dragSrcEl) return;
-
-            const srcG = parseInt(dragSrcEl.dataset.gIndex);
-            const srcP = parseInt(dragSrcEl.dataset.pIndex);
-            
-            // Remove from source group (global object)
-            const item = latest_car_models.pid_groups[srcG].pids.splice(srcP, 1)[0];
-            
-            // Add to the end of this group
-            if (!group.pids) group.pids = [];
-            group.pids.push(item);
-            
-            renderVehicleGroups();
-        });
-	
         if (group.pids) {
-            // LOOP PIDs
-            for (let pIndex = 0; pIndex < group.pids.length; pIndex++) {
-                const pid = group.pids[pIndex];
-                try {
-                    const isPidOpen = (pid._collapsed === false); 
-                    const pidCard = document.createElement('div');
-                    
-                    // Restore Drag and Drop
-                    pidCard.draggable = true;
-                    pidCard.style.cssText = "background:white; border:1px solid #e2e8f0; border-radius:4px; margin-bottom:10px;";
-                    
-                    pidCard.addEventListener('dragstart', (e) => {
-                        dragSrcEl = pidCard;
-                        e.dataTransfer.effectAllowed = 'move';
-                        e.dataTransfer.setData('text/html', pidCard.innerHTML);
-                        pidCard.dataset.gIndex = gIndex;
-                        pidCard.dataset.pIndex = pIndex;
-                        pidCard.style.opacity = '0.4';
-                    });
-                    pidCard.addEventListener('dragend', (e) => { pidCard.style.opacity = '1'; });
-                    pidCard.addEventListener('dragover', (e) => { e.preventDefault(); return false; });
-                    pidCard.addEventListener('drop', (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        
-                        const dragType = e.dataTransfer.getData('type');
-                        if (dragType === 'group') return;
-                        
-                        const srcG = parseInt(dragSrcEl.dataset.gIndex);
-                        const srcP = parseInt(dragSrcEl.dataset.pIndex);
-                        
-                        // Prevent dropping on itself
-                        if (srcG === gIndex && srcP === pIndex) return false;
+            group.pids.forEach((pid, pIndex) => {
+                const isPidOpen = (pid._collapsed === false); 
 
-                        // 1. Remove from Source Group (using Global Reference)
-                        const item = latest_car_models.pid_groups[srcG].pids.splice(srcP, 1)[0];
-                        
-                        // 2. Insert into Destination Group at specific index
-                        if (!group.pids) group.pids = [];
+                const pidCard = document.createElement('div');
+                pidCard.draggable = true;
+                pidCard.style.cssText = "background:white; border:1px solid #e2e8f0; border-radius:4px; margin-bottom:10px; box-shadow:0 1px 2px rgba(0,0,0,0.05);";
+
+                // Drag Events
+                pidCard.addEventListener('dragstart', (e) => {
+                    dragSrcEl = pidCard;
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/html', pidCard.innerHTML);
+                    pidCard.dataset.gIndex = gIndex;
+                    pidCard.dataset.pIndex = pIndex;
+                    pidCard.style.opacity = '0.4';
+                });
+                pidCard.addEventListener('dragend', (e) => { pidCard.style.opacity = '1'; });
+                pidCard.addEventListener('dragover', (e) => { e.preventDefault(); return false; });
+                pidCard.addEventListener('drop', (e) => {
+                    e.stopPropagation();
+                    const srcG = parseInt(dragSrcEl.dataset.gIndex);
+                    const srcP = parseInt(dragSrcEl.dataset.pIndex);
+                    if (srcG === gIndex && srcP !== pIndex) {
+                        const item = group.pids.splice(srcP, 1)[0];
                         group.pids.splice(pIndex, 0, item);
-                        
                         renderVehicleGroups();
-                        return false;
-                    });
+                    }
+                    return false;
+                });
 
-                    // PID Header
-                    const pidHeader = document.createElement('div');
-                    pidHeader.style.cssText = "display:flex; justify-content:space-between; align-items:center; background:#f1f5f9; padding:8px 12px; border-bottom:1px solid #e2e8f0; cursor:pointer;";
-                    pidHeader.onclick = (e) => {
-                        if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
-                        pid._collapsed = !pid._collapsed;
-                        renderVehicleGroups();
+                // --- PID Header ---
+                const pidHeader = document.createElement('div');
+                pidHeader.style.cssText = "display:flex; justify-content:space-between; align-items:center; background:#f1f5f9; padding:8px 12px; border-bottom:1px solid #e2e8f0; cursor:pointer;";
+                
+                pidHeader.onclick = (e) => {
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+                    pid._collapsed = !pid._collapsed;
+                    if (pid._collapsed === undefined) pid._collapsed = false; 
+                    renderVehicleGroups();
+                };
+
+                const pidHeaderLeft = document.createElement('div');
+                pidHeaderLeft.style.cssText = "display:flex; align-items:center; gap:10px;";
+                
+                const pidArrow = document.createElement('span');
+                pidArrow.innerHTML = isPidOpen ? '&#9660;' : '&#9654;';
+                pidArrow.style.cssText = "font-size:0.8rem; color:#64748b; width:15px;";
+                pidHeaderLeft.appendChild(pidArrow);
+
+                const dragHandle = document.createElement('span');
+                dragHandle.innerHTML = '&#9776;';
+                dragHandle.style.cssText = "cursor:move; color:#94a3b8; font-size:1.1rem; margin-right:5px;";
+                pidHeaderLeft.appendChild(dragHandle);
+
+                const pidInput = document.createElement('input');
+                pidInput.value = pid.pid || '';
+                pidInput.placeholder = "PID";
+                pidInput.style.cssText = "font-family:monospace; font-weight:bold; width:140px; padding:3px; border:1px solid #cbd5e1; border-radius:3px;";
+                pidInput.id = `g_${gIndex}_p_${pIndex}_pid`;
+                pidInput.onclick = (e) => e.stopPropagation();
+                pidInput.onchange = (e) => { pid.pid = e.target.value; };
+
+                pidHeaderLeft.appendChild(document.createTextNode("PID: "));
+                pidHeaderLeft.appendChild(pidInput);
+
+                const pidHeaderRight = document.createElement('div');
+                pidHeaderRight.style.cssText = "display:flex; align-items:center; gap:4px;";
+
+                const pidEnWrapper = document.createElement('label');
+                pidEnWrapper.style.cssText = "display:flex; align-items:center; gap:4px; font-size:0.85rem; cursor:pointer;";
+                const pidEnCheck = document.createElement('input');
+                pidEnCheck.type = "checkbox";
+                pidEnCheck.checked = (pid.enabled !== false);
+                pidEnCheck.id = `g_${gIndex}_p_${pIndex}_en`;
+                pidEnCheck.onclick = (e) => e.stopPropagation();
+                pidEnCheck.onchange = (e) => { pid.enabled = e.target.checked; };
+                pidEnWrapper.appendChild(pidEnCheck);
+                pidEnWrapper.appendChild(document.createTextNode("Enable"));
+
+                // --- Standardized Buttons for PID Header ---
+                const pidCloneBtn = document.createElement('button');
+                pidCloneBtn.innerHTML = '&#10064;'; // Clone Icon
+                pidCloneBtn.className = 'system-button'; // Matching Group Header
+                pidCloneBtn.title = "Clone PID";
+                pidCloneBtn.style.padding = "1px 5px"; // Compact vertical padding
+                pidCloneBtn.onclick = (e) => { e.stopPropagation(); clonePID(gIndex, pIndex); };
+
+                const pidDelBtn = document.createElement('button');
+                pidDelBtn.innerHTML = '&#128465;'; // Trash Icon
+                pidDelBtn.className = 'system-button danger'; // Matching Group Header
+                pidDelBtn.title = "Delete PID";
+                pidDelBtn.style.padding = "2px 8px";
+                pidDelBtn.onclick = (e) => { e.stopPropagation(); deletePID(gIndex, pIndex); };
+
+                pidHeaderRight.appendChild(pidEnWrapper);
+                pidHeaderRight.appendChild(pidCloneBtn);
+                pidHeaderRight.appendChild(pidDelBtn);
+
+                pidHeader.appendChild(pidHeaderLeft);
+                pidHeader.appendChild(pidHeaderRight);
+                pidCard.appendChild(pidHeader);
+
+                // --- PID Content ---
+                const paramsContainer = document.createElement('div');
+                paramsContainer.className = 'pid-content';
+                paramsContainer.style.padding = "10px";
+                paramsContainer.style.backgroundColor = "#fff";
+                paramsContainer.style.display = isPidOpen ? "block" : "none";
+
+                if (!pid.parameters) pid.parameters = [];
+
+                pid.parameters.forEach((param, paramIndex) => {
+                    const paramRow = document.createElement('div');
+                    paramRow.style.cssText = "border:1px solid #f1f5f9; background:#fafafa; border-radius:4px; padding:8px; margin-bottom:8px;";
+
+                    // Param Header
+                    const rowHeader = document.createElement('div');
+                    rowHeader.style.cssText = "display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; cursor:pointer;";
+                    
+                    rowHeader.onclick = (e) => {
+                        if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.tagName === 'SELECT') return;
+                        const details = paramRow.querySelector('.param-details');
+                        const icon = rowHeader.querySelector('.param-collapse-icon');
+                        if (details.style.display === 'none') {
+                            details.style.display = 'grid';
+                            icon.innerHTML = '&#9660;';
+                        } else {
+                            details.style.display = 'none';
+                            icon.innerHTML = '&#9654;';
+                        }
                     };
 
-                    // PID Header Left (Arrow, Drag, PID Input)
-                    const pidHeaderLeft = document.createElement('div');
-                    pidHeaderLeft.style.cssText = "display:flex; align-items:center; gap:10px;";
+                    const rowLeft = document.createElement('div');
+                    rowLeft.style.cssText = "display:flex; align-items:center; gap:8px;";
+
+                    const paramCollapseIcon = document.createElement('span');
+                    paramCollapseIcon.className = 'param-collapse-icon';
+                    paramCollapseIcon.innerHTML = '&#9660;'; 
+                    paramCollapseIcon.style.cssText = "font-size:0.75rem; color:#94a3b8; width:12px;";
+                    rowLeft.appendChild(paramCollapseIcon);
+
+                    const nameInput = document.createElement('input');
+                    nameInput.value = param.name || '';
+                    nameInput.placeholder = "Field Name";
+                    nameInput.style.cssText = "font-weight:600; width:220px; border:1px solid transparent; background:transparent; border-bottom:1px solid #cbd5e1;";
+                    nameInput.id = `g_${gIndex}_p_${pIndex}_name`;
+                    nameInput.onchange = (e) => { param.name = e.target.value; };
+                    rowLeft.appendChild(nameInput);
+
+                    const rowActions = document.createElement('div');
+                    rowActions.style.cssText = "display:flex; align-items:center; gap:4px; font-size:0.8rem;";
+
+                    const chgLabel = document.createElement('label');
+                    chgLabel.style.cssText = "display:flex; align-items:center; gap:3px; cursor:pointer;";
+                    const chgCheck = document.createElement('input');
+                    chgCheck.type = "checkbox";
+                    chgCheck.checked = (param.onchange === true);
+                    chgCheck.id = `g_${gIndex}_p_${pIndex}_onchange`;
+                    chgCheck.onchange = (e) => { param.onchange = e.target.checked; };
+                    chgLabel.appendChild(chgCheck);
+                    chgLabel.appendChild(document.createTextNode("Chg"));
+
+                    const enLabel = document.createElement('label');
+                    enLabel.style.cssText = "display:flex; align-items:center; gap:3px; cursor:pointer;";
+                    const enCheck = document.createElement('input');
+                    enCheck.type = "checkbox";
+                    enCheck.checked = (param.enabled !== false);
+                    enCheck.onchange = (e) => { param.enabled = e.target.checked; };
+                    enLabel.appendChild(enCheck);
+                    enLabel.appendChild(document.createTextNode("En"));
+
+                    // --- Standardized Buttons for Extraction Row ---
+                    const cloneParamBtn = document.createElement('button');
+                    cloneParamBtn.innerHTML = '&#10064;';
+                    cloneParamBtn.className = 'system-button';
+                    cloneParamBtn.title = "Clone Field";
+                    cloneParamBtn.style.padding = "0px 4px"; // Smaller row padding
+                    cloneParamBtn.style.fontSize = "0.8rem";
+                    cloneParamBtn.onclick = () => { cloneParameter(gIndex, pIndex, paramIndex); };
+
+                    const delParamBtn = document.createElement('button');
+                    delParamBtn.innerHTML = '&#128465;';
+                    delParamBtn.className = 'system-button danger';
+                    delParamBtn.title = "Delete Field";
+                    delParamBtn.style.padding = "0px 4px";
+                    delParamBtn.style.fontSize = "0.8rem";
+                    delParamBtn.onclick = () => { deleteParameter(gIndex, pIndex, paramIndex); };
+
+                    rowActions.appendChild(chgLabel);
+                    rowActions.appendChild(enLabel);
+                    rowActions.appendChild(cloneParamBtn);
+                    rowActions.appendChild(delParamBtn);
+
+                    rowHeader.appendChild(rowLeft);
+                    rowHeader.appendChild(rowActions);
+                    paramRow.appendChild(rowHeader);
+
+                    // Param Details
+                    const detailsDiv = document.createElement('div');
+                    detailsDiv.className = 'param-details';
+                    detailsDiv.style.cssText = "display:grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr; gap:8px; align-items:center; padding-left:20px;";
+
+                    const createInput = (val, placeholder, key, title, idSuffix) => {
+                        const i = document.createElement('input');
+                        i.value = val !== undefined ? val : '';
+                        i.placeholder = placeholder;
+                        i.title = title || placeholder;
+                        i.style.cssText = "width:100%; padding:3px; font-size:0.85rem; border:1px solid #e2e8f0; border-radius:3px;";
+                        if (idSuffix) i.id = `g_${gIndex}_p_${pIndex}_${idSuffix}`;
+                        i.onchange = (e) => { param[key] = e.target.value; };
+                        return i;
+                    };
+
+                    detailsDiv.appendChild(createInput(param.expression, "Expression", "expression", "Math Expression", "expr"));
+                    detailsDiv.appendChild(createInput(param.unit, "Unit", "unit", "Unit", "unit"));
+                    detailsDiv.appendChild(createInput(param.class, "Class", "class", "Home Assistant Class", "class"));
+                    detailsDiv.appendChild(createInput(param.min, "Min", "min", "Min Value", "min"));
+                    detailsDiv.appendChild(createInput(param.max, "Max", "max", "Max Value", "max"));
                     
-                    const pidArrow = document.createElement('span');
-                    pidArrow.innerHTML = isPidOpen ? '&#9660;' : '&#9654;';
-                    pidHeaderLeft.appendChild(pidArrow);
+                    const destSelect = document.createElement('select');
+                    destSelect.style.cssText = "width:100%; padding:2px; border:1px solid #e2e8f0; font-size:0.85rem;";
+                    destSelect.id = `g_${gIndex}_p_${pIndex}_dtype`;
+		    
 
-                    const dragHandle = document.createElement('span');
-                    dragHandle.innerHTML = '&#9776;';
-                    dragHandle.style.cssText = "cursor:move; color:#94a3b8; font-size:1.1rem; margin-right:5px;";
-                    pidHeaderLeft.appendChild(dragHandle);
-
-                    pidHeaderLeft.appendChild(document.createTextNode("PID: "));
-                    const pidInput = document.createElement('input');
-                    pidInput.value = pid.pid || '';
-                    pidInput.placeholder = "PID";
-                    pidInput.style.cssText = "font-family:monospace; font-weight:bold; width:140px; padding:3px;";
-                    pidInput.onclick = (e) => e.stopPropagation();
-                    pidInput.onchange = (e) => { pid.pid = e.target.value; };
-                    pidHeaderLeft.appendChild(pidInput);
-
-                    const pidDescInput = document.createElement('input');
-                    pidDescInput.value = pid.pid_description || '';
-                    pidDescInput.placeholder = "Description";
-                    pidDescInput.style.cssText = "font-family:sans-serif; width:280px; padding:3px; margin-left:10px; border:1px solid #cbd5e1; border-radius:3px;";
-                    pidDescInput.onclick = (e) => e.stopPropagation();
-                    pidDescInput.onchange = (e) => { pid.pid_description = e.target.value; };
-                    pidHeaderLeft.appendChild(pidDescInput);
+                    ["Default", "MQTT_Topic", "MQTT_WallBox"].forEach(val => {
+                        const opt = document.createElement('option');
+                        opt.value = val;
+                        opt.text = val;
+                        
+                        // Case-Insensitive Match
+                        const current = (param.destination_type || "Default").toLowerCase();
+                        if (current === val.toLowerCase()) {
+                            opt.selected = true;
+                        }
+                        destSelect.appendChild(opt);
+                    });
 
 		    
-                    // PID Header Right (Enable, Clone, Delete)
-                    const pidHeaderRight = document.createElement('div');
-                    pidHeaderRight.style.cssText = "display:flex; align-items:center; gap:4px;";
-                    
-                    const pidEnWrapper = document.createElement('label');
-                    pidEnWrapper.style.cssText = "display:flex; align-items:center; gap:4px; font-size:0.85rem; cursor:pointer;";
-                    const pidEnCheck = document.createElement('input');
-                    pidEnCheck.type = "checkbox";
-                    pidEnCheck.checked = (pid.enabled !== false);
-                    pidEnCheck.onclick = (e) => e.stopPropagation();
-                    pidEnCheck.onchange = (e) => { pid.enabled = e.target.checked; };
-                    pidEnWrapper.appendChild(pidEnCheck);
-                    pidEnWrapper.appendChild(document.createTextNode("Enable"));
+                    destSelect.onchange = (e) => { param.destination_type = e.target.value; };
+                    detailsDiv.appendChild(destSelect);
 
-                    const pidCloneBtn = document.createElement('button');
-                    pidCloneBtn.innerHTML = '&#10064;';
-                    pidCloneBtn.className = 'system-button';
-                    pidCloneBtn.onclick = (e) => { e.stopPropagation(); clonePID(gIndex, pIndex); };
-                    
-                    const pidDelBtn = document.createElement('button');
-                    pidDelBtn.innerHTML = '&#128465;';
-                    pidDelBtn.className = 'system-button danger';
-                    pidDelBtn.onclick = (e) => { e.stopPropagation(); deletePID(gIndex, pIndex); };
+                    const destInput = createInput(param.send_to, "Topic/Dest", "send_to", "MQTT Topic or URL", "dest");
+                    detailsDiv.appendChild(destInput);
 
-                    pidHeaderRight.appendChild(pidEnWrapper);
-                    pidHeaderRight.appendChild(pidCloneBtn);
-                    pidHeaderRight.appendChild(pidDelBtn);
+                    paramRow.appendChild(detailsDiv);
+                    paramsContainer.appendChild(paramRow);
+                });
 
-                    pidHeader.appendChild(pidHeaderLeft);
-                    pidHeader.appendChild(pidHeaderRight);
-                    pidCard.appendChild(pidHeader);
+                const addParamBtn = document.createElement('button');
+                addParamBtn.innerText = "+ Add Extraction Field";
+                addParamBtn.style.cssText = "font-size:0.85rem; color:#2563eb; background:none; border:1px dashed #bfdbfe; padding:4px 8px; width:100%; border-radius:4px; cursor:pointer; margin-top:5px;";
+                addParamBtn.onclick = () => { addParameter(gIndex, pIndex); };
+                paramsContainer.appendChild(addParamBtn);
 
-                    // PID Parameters (The nested part you need)
-                    const paramsContainer = document.createElement('div');
-                    paramsContainer.style.padding = "10px";
-
-		    paramsContainer.style.display = isPidOpen ? "block" : "none";
-
-                    if (!pid.parameters) pid.parameters = [];
-
-                    // LOOP PARAMETERS
-                    for (let paramIndex = 0; paramIndex < pid.parameters.length; paramIndex++) {
-                        const param = pid.parameters[paramIndex];
-                        const paramRow = document.createElement('div');
-                        paramRow.style.cssText = "border:1px solid #f1f5f9; background:#fafafa; padding:8px; margin-bottom:8px;";
-                        
-                        // Param Header (Name + Buttons)
-                        const topRow = document.createElement('div');
-                        topRow.style.cssText = "display:flex; justify-content:space-between; margin-bottom:5px; align-items:center;";
-                        
-                        const nameInput = document.createElement('input');
-                        nameInput.value = param.name || '';
-                        nameInput.placeholder = "Field Name";
-                        nameInput.style.cssText = "font-weight:600; width:220px; border:1px solid transparent; background:transparent; border-bottom:1px solid #cbd5e1;";
-                        nameInput.onchange = (e) => { param.name = e.target.value; };
-                        topRow.appendChild(nameInput);
-
-                        const rowActions = document.createElement('div');
-                        rowActions.style.gap = "5px";
-                        rowActions.style.display = "flex";
-
-                        const onChangeLabel = document.createElement('label');
-                        onChangeLabel.style.cssText = "font-size:0.75rem; display:flex; align-items:center; gap:2px; margin-right:5px; cursor:pointer; color:#475569;";
-                        onChangeLabel.title = "Send only on change";
-                        
-                        const onChangeCheck = document.createElement('input');
-                        onChangeCheck.type = "checkbox";
-                        onChangeCheck.checked = (param.onchange === true);
-                        onChangeCheck.onchange = (e) => { param.onchange = e.target.checked; };
-                        
-                        onChangeLabel.appendChild(onChangeCheck);
-                        onChangeLabel.appendChild(document.createTextNode("OnChg"));
-                        rowActions.appendChild(onChangeLabel);
-
-			
-                        const cloneBtn = document.createElement('button');
-                        cloneBtn.innerHTML = '&#10064;';
-                        cloneBtn.className = 'system-button';
-                        cloneBtn.onclick = () => cloneParameter(gIndex, pIndex, paramIndex);
-                        rowActions.appendChild(cloneBtn);
-
-                        const delBtn = document.createElement('button');
-                        delBtn.innerHTML = 'x';
-                        delBtn.className = 'system-button danger';
-                        delBtn.onclick = () => deleteParameter(gIndex, pIndex, paramIndex);
-                        rowActions.appendChild(delBtn);
-
-                        topRow.appendChild(rowActions);
-                        paramRow.appendChild(topRow);
-
-                        // Param Details Grid (Restoring the 6 input fields)
-                        const detailsDiv = document.createElement('div');
-                        detailsDiv.style.cssText = "display:grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr; gap:5px; align-items:center;";
-
-                        const makeInp = (val, ph, key) => {
-                            const inp = document.createElement('input');
-                            inp.value = (val != null) ? val : '';
-                            inp.placeholder = ph;
-                            inp.style.width = "90%";
-                            inp.style.border = "1px solid #e2e8f0";
-                            inp.style.padding = "3px";
-                            inp.onchange = (e) => { param[key] = e.target.value; };
-                            return inp;
-                        };
-
-                        detailsDiv.appendChild(makeInp(param.expression, "Expression", "expression"));
-                        detailsDiv.appendChild(makeInp(param.unit, "Unit", "unit"));
-                        detailsDiv.appendChild(makeInp(param.class, "Class", "class"));
-                        detailsDiv.appendChild(makeInp(param.min, "Min", "min"));
-                        detailsDiv.appendChild(makeInp(param.max, "Max", "max"));
-                        
-                        // Destination Dropdown
-                        const destSelect = document.createElement('select');
-                        destSelect.style.cssText = "width:100%; padding:2px; border:1px solid #e2e8f0;";
-                        ["Default", "MQTT_Topic", "MQTT_WallBox"].forEach(val => {
-                            const opt = document.createElement('option');
-                            opt.value = val;
-                            opt.text = val;
-                            // FIX: Check destination_type OR legacy 'type'
-                            const current = (param.destination_type || param.type || "Default").toLowerCase();
-                            if (current === val.toLowerCase()) opt.selected = true;
-                            destSelect.appendChild(opt);
-                        });
-                        destSelect.onchange = (e) => { param.destination_type = e.target.value; };
-                        detailsDiv.appendChild(destSelect);
-
-
-                        const makeTopic = (val, ph, key) => {
-                            const inp = document.createElement('input');
-                            inp.value = (val != null) ? val : '';
-                            inp.placeholder = ph;
-                            inp.style.width = "175%";
-                            inp.style.border = "1px solid #e2e8f0";
-                            inp.style.padding = "3px";
-                            inp.onchange = (e) => { param[key] = e.target.value; };
-                            return inp;
-                        };
-			
-                        // Topic Input
-                        detailsDiv.appendChild(makeTopic(param.send_to, "Topic/Dest", "send_to"));
-
-                        paramRow.appendChild(detailsDiv);
-                        paramsContainer.appendChild(paramRow);
-                    }
-
-                    // Add Parameter Button
-                    const addParamBtn = document.createElement('button');
-                    addParamBtn.innerText = "+ Add Extraction Field";
-                    addParamBtn.style.cssText = "font-size:0.85rem; color:#2563eb; background:none; border:1px dashed #bfdbfe; padding:4px 8px; width:100%; border-radius:4px; cursor:pointer; margin-top:5px;";
-                    addParamBtn.onclick = () => { addParameter(gIndex, pIndex); };
-                    paramsContainer.appendChild(addParamBtn);
-
-                    pidCard.appendChild(paramsContainer);
-                    groupContent.appendChild(pidCard);
-
-                } catch (err) {
-                    console.error("Error rendering PID:", err);
-                }
-            } // end PID Loop
+                pidCard.appendChild(paramsContainer);
+                groupContent.appendChild(pidCard);
+            });
         }
 
+        const addPidBtn = document.createElement('button');
+        addPidBtn.innerText = "+ Add New PID Card";
+        addPidBtn.className = "system-button";
+        addPidBtn.style.marginTop = "10px";
+        addPidBtn.onclick = () => { addPID(gIndex); };
+
+        groupContent.appendChild(addPidBtn);
         groupDiv.appendChild(groupContent);
         container.appendChild(groupDiv);
-    } // end Group Loop
+    });
 
-    // Add Group Button
     const addGroupBtn = document.createElement('button');
     addGroupBtn.innerText = "+ Create New Vehicle Group";
     addGroupBtn.className = "system-button";
     addGroupBtn.style.cssText = "display:block; width:100%; margin-top:20px; padding:15px; border:2px dashed #94a3b8; background-color:#f8fafc; color:#475569; font-weight:bold; cursor:pointer; font-size:1rem; border-radius:6px;";
-    addGroupBtn.onclick = () => addGroup();
+    addGroupBtn.onmouseover = () => { addGroupBtn.style.backgroundColor = "#e2e8f0"; };
+    addGroupBtn.onmouseout = () => { addGroupBtn.style.backgroundColor = "#f8fafc"; };
+    addGroupBtn.onclick = () => { addGroup(); };
     container.appendChild(addGroupBtn);
 }
 
-
-// --- HELPER FUNCTIONS ---
-
+// ==========================================================================
+//  HELPER FUNCTIONS (MUST BE DEFINED)
+// ==========================================================================
+// Add PID: Force the new PID to be OPEN
 function addPID(gIndex) {
     if (!latest_car_models.pid_groups[gIndex].pids) {
         latest_car_models.pid_groups[gIndex].pids = [];
     }
+    // Force Group Open
     latest_car_models.pid_groups[gIndex]._collapsed = false;
 
     latest_car_models.pid_groups[gIndex].pids.push({
         pid: "",
-	pid_description: "",
         enabled: true,
-        _collapsed: false, 
+        _collapsed: false, // FORCE OPEN
         parameters: [{
-            name: "",
-            expression: "",
+            name: "New_Field",
+            expression: "A",
             unit: "",
             enabled: true,
             onchange: false,
@@ -6261,17 +5967,20 @@ function addPID(gIndex) {
     renderVehicleGroups();
 }
 
-function addGroup() {
-    if (!latest_car_models) latest_car_models = { pid_groups: [] };
-    if (!latest_car_models.pid_groups) latest_car_models.pid_groups = [];
+function deletePID(gIndex, pIndex) {
+    if (confirm("Delete this PID and all its extraction fields?")) {
+        latest_car_models.pid_groups[gIndex].pids.splice(pIndex, 1);
+        renderVehicleGroups();
+    }
+}
 
-    latest_car_models.pid_groups.push({
-        group_name: "New Group",
-	enabled: true,
-        condition: "always",
-        period: 1000,
-        pids: []
-    });
+// Clone PID: Force Copy to be OPEN
+function clonePID(gIndex, pIndex) {
+    const src = latest_car_models.pid_groups[gIndex].pids[pIndex];
+    const copy = JSON.parse(JSON.stringify(src));
+    copy.pid = copy.pid + " (Copy)";
+    copy._collapsed = false; // FORCE OPEN
+    latest_car_models.pid_groups[gIndex].pids.push(copy);
     renderVehicleGroups();
 }
 
@@ -6282,28 +5991,38 @@ function deleteGroup(gIndex) {
     }
 }
 
-function deletePID(gIndex, pIndex) {
-    if (confirm("Delete this PID?")) {
-        latest_car_models.pid_groups[gIndex].pids.splice(pIndex, 1);
-        renderVehicleGroups();
-    }
-}
-
+// Add Parameter: Force PID to be OPEN
 function addParameter(gIndex, pIndex) {
     if (!latest_car_models.pid_groups[gIndex].pids[pIndex].parameters) {
         latest_car_models.pid_groups[gIndex].pids[pIndex].parameters = [];
     }
+    
+    // Force Group and PID Open
     latest_car_models.pid_groups[gIndex]._collapsed = false;
     latest_car_models.pid_groups[gIndex].pids[pIndex]._collapsed = false;
 
     latest_car_models.pid_groups[gIndex].pids[pIndex].parameters.push({
-        name: "",
-        expression: "",
+        name: "New_Field",
+        expression: "A",
         unit: "",
         enabled: true,
         onchange: false,
         destination_type: "Default"
     });
+    renderVehicleGroups();
+}
+
+// Clone Parameter: Force PID to be OPEN
+function cloneParameter(gIndex, pIndex, paramIndex) {
+    const src = latest_car_models.pid_groups[gIndex].pids[pIndex].parameters[paramIndex];
+    const copy = JSON.parse(JSON.stringify(src));
+    copy.name = copy.name + "_copy";
+    
+    // Force Group and PID Open
+    latest_car_models.pid_groups[gIndex]._collapsed = false;
+    latest_car_models.pid_groups[gIndex].pids[pIndex]._collapsed = false;
+
+    latest_car_models.pid_groups[gIndex].pids[pIndex].parameters.splice(paramIndex + 1, 0, copy);
     renderVehicleGroups();
 }
 
@@ -6314,20 +6033,20 @@ function deleteParameter(gIndex, pIndex, paramIndex) {
     }
 }
 
-function clonePID(gIndex, pIndex) {
-    const src = latest_car_models.pid_groups[gIndex].pids[pIndex];
-    const copy = JSON.parse(JSON.stringify(src));
-    copy.pid = copy.pid + " (Copy)";
-    copy._collapsed = false;
-    latest_car_models.pid_groups[gIndex].pids.push(copy);
-    renderVehicleGroups();
-}
+function addGroup() {
+    // Ensure the structure exists
+    if (!latest_car_models) latest_car_models = { pid_groups: [] };
+    if (!latest_car_models.pid_groups) latest_car_models.pid_groups = [];
 
-function cloneParameter(gIndex, pIndex, paramIndex) {
-    const src = latest_car_models.pid_groups[gIndex].pids[pIndex].parameters[paramIndex];
-    const copy = JSON.parse(JSON.stringify(src));
-    copy.name = copy.name + "_copy";
-    latest_car_models.pid_groups[gIndex].pids[pIndex].parameters.splice(paramIndex + 1, 0, copy);
+    // Push a new Default Group
+    latest_car_models.pid_groups.push({
+        group_name: "New Group",
+        condition: "always", // Default condition
+        period: 1000,        // Default 1 sec
+        pids: []             // Empty list of PIDs
+    });
+
+    // Re-render to show the new card
     renderVehicleGroups();
 }
 
@@ -6345,14 +6064,17 @@ function downloadActiveProfile() {
             pid_groups: []
         };
 
-        // 2. Capture Groups (Includes pid_description and all new fields)
-        // Since the UI updates 'latest_car_models' in real-time, we grab it directly.
-        if (latest_car_models && latest_car_models.pid_groups) {
-            // Deep copy to ensure clean JSON export
-            carData.pid_groups = JSON.parse(JSON.stringify(latest_car_models.pid_groups));
+        // 2. Capture Groups (Sync from UI to Memory first)
+        // We reuse the helper we wrote earlier to ensure latest UI edits are captured
+        if (typeof syncGroupsFromUIToMemory === 'function') {
+            const activeCarMem = syncGroupsFromUIToMemory(); // Updates 'latest_car_models' in memory
+            if (activeCarMem && activeCarMem.pid_groups) {
+                // Deep copy to ensure clean export
+                carData.pid_groups = JSON.parse(JSON.stringify(activeCarMem.pid_groups));
+            }
         }
 
-        // 3. Capture Legacy "Specific PIDs" (Scrape from DOM)
+        // 3. Capture Specific PIDs (Scrape from DOM)
         const specificPidEntries = document.querySelectorAll('.specific-pid-entry');
         if (specificPidEntries.length > 0) {
             carData.pids = Array.from(specificPidEntries).map(entry => {
@@ -6370,29 +6092,26 @@ function downloadActiveProfile() {
                         max: entry.querySelector('.max-input').value,
                         type: entry.querySelector('.type-select').value,
                         send_to: entry.querySelector('.send-to-input').value,
-                        // Preserve onchange if present
-                        onchange: false 
+                        // Include onchange if the checkbox exists (from previous step)
+                        onchange: entry.querySelector('.enabled-chk')?.closest('.header-right')?.querySelector('input[id*="onchange"]')?.checked || false
                     }]
                 };
             });
         }
 
-        // 4. Capture CAN Filters (Scrape from DOM)
+        // 4. Capture Vehicle Specific Filters (Scrape from DOM)
         const specificFilterEntries = document.querySelectorAll('.specific-canfilter-entry');
         if (specificFilterEntries.length > 0) {
+            // Group by Frame ID logic
             const grouped = new Map();
             specificFilterEntries.forEach(entry => {
                 const fidRaw = entry.querySelector('.frame-id-input')?.value || '';
-                // Use global helper if available, otherwise fallback to raw string
-                let frameIdOut = fidRaw;
-                if (typeof normalizeFrameIdInputToNumber === 'function') {
-                    const fidNum = normalizeFrameIdInputToNumber(fidRaw);
-                    frameIdOut = (fidNum !== null) ? fidNum : String(fidRaw).trim();
-                }
+                const fidNum = normalizeFrameIdInputToNumber(fidRaw);
+                const frameIdOut = (fidNum !== null) ? fidNum : String(fidRaw).trim();
                 
-                if (!frameIdOut) return; 
+                if (!frameIdOut) return; // Skip invalid
 
-                const key = String(frameIdOut).toLowerCase();
+                const key = (fidNum !== null) ? `n:${fidNum}` : `s:${String(fidRaw).trim().toLowerCase()}`;
                 
                 if (!grouped.has(key)) {
                     grouped.set(key, { frame_id: frameIdOut, parameters: [] });
@@ -6414,17 +6133,18 @@ function downloadActiveProfile() {
             carData.can_filters = Array.from(grouped.values());
         }
 
-        // 5. Construct Final JSON and Download
+        // 5. Wrap in the standard format
         const exportObj = {
             cars: [carData]
         };
 
+        // 6. Trigger Download
         const dataStr = JSON.stringify(exportObj, null, 2);
         const blob = new Blob([dataStr], { type: 'application/json' });
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         
-        // Clean filename
+        // Clean filename: remove spaces/special chars
         const safeName = carModelValue.replace(/[^a-z0-9]/gi, '_').toLowerCase();
         link.href = url;
         link.download = `profile_${safeName}.json`;
@@ -6441,6 +6161,7 @@ function downloadActiveProfile() {
         showNotification("Failed to generate profile: " + e.message, "red");
     }
 }
+
 
 async function vpnDebugResolveNtp()
 {
@@ -6476,15 +6197,6 @@ document.getElementById("defaultOpen").click();
 
 (function() {
     // 1. Remove existing style element if it exists (prevents duplicates)
-
-    const fileInput = document.getElementById('car_data_file');
-    if (fileInput && fileInput.parentElement) {
-        fileInput.parentElement.style.display = 'flex';
-        fileInput.parentElement.style.flexWrap = 'wrap';
-        fileInput.parentElement.style.gap = '10px';
-        fileInput.parentElement.style.alignItems = 'center';
-    }
-    
     const existingStyle = document.getElementById('wican-custom-styles');
     if (existingStyle) existingStyle.remove();
 
@@ -6521,34 +6233,6 @@ document.getElementById("defaultOpen").click();
         
         /* Animations */
         .group-container, .pid-content { transition: all 0.2s ease-in-out; }
-
-        #car_data_file { margin: 0 !important; max-width: 100%; }
-
-        /* --- SUCCESS BUTTON STYLING --- */
-        .success-button,
-        button[onclick*="downloadActiveProfile"], 
-        button[onclick*="fetchVehicleProfiles"] {
-            background-color: #16a34a !important; /* Bold Green */
-            border: 1px solid #15803d !important;
-            color: #ffffff !important; /* White Text */
-            padding: 6px 14px !important;
-            border-radius: 5px !important;
-            font-size: 0.85rem !important;
-            font-weight: 600 !important;
-            cursor: pointer !important;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1) !important;
-            display: inline-flex !important;
-            align-items: center !important;
-            transition: all 0.2s ease !important;
-        }
-
-        .success-button:hover,
-        button[onclick*="downloadActiveProfile"]:hover, 
-        button[onclick*="fetchVehicleProfiles"]:hover {
-            background-color: #15803d !important; /* Darker Green on Hover */
-            border-color: #166534 !important;
-        }
-
     `;
 
     // 3. Inject the CSS
@@ -6557,9 +6241,3 @@ document.getElementById("defaultOpen").click();
     styleSheet.innerText = cssContent;
     document.head.appendChild(styleSheet);
 })();
-
-   function toggleStaStaticIp() {
-    const type = document.getElementById("sta_ip_type")?.value;
-    const rows = document.querySelectorAll(".sta-static-row");
-    rows.forEach(r => r.style.display = (type === "static") ? "table-row" : "none");
-}

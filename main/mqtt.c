@@ -68,6 +68,9 @@
 #include "cert_manager.h"
 #include "esp_crt_bundle.h"
 
+
+#include "esp_task_wdt.h"
+
 #define TAG 		"MQTT"
 #define MQTT_TX_RX_BUF_SIZE         (1024*20)
 #define MQTT_OUT_BUF_SIZE           (1024*20)
@@ -381,21 +384,21 @@ static int8_t mqtt_canflt_find_id(uint32_t id, uint8_t start_index)
 }
 
 #define JSON_BUF_SIZE		2048
+
 static void mqtt_task(void *pvParameters)
 {
-	char json_buffer[JSON_BUF_SIZE] = {0};
-	char tmp[150];
-	mqtt_can_message_t tx_frame;
-	char mqtt_topic[64];
+    // FIX: Move large buffers to static memory to prevent stack overflow
+    static char json_buffer[JSON_BUF_SIZE];
+    static char tmp[256]; 
+    mqtt_can_message_t tx_frame;
+    char mqtt_topic[64];
     char mqtt_elm327_topic[64];
-	uint64_t can_data = 0;
+    uint64_t can_data = 0;
 
-	// sprintf(mqtt_topic, "wican/%s/can/rx", device_id);
     strcpy(mqtt_topic, config_server_get_mqtt_rx_topic());
-    sprintf(mqtt_elm327_topic, "wican/%s/elm327", device_id);
+    snprintf(mqtt_elm327_topic, sizeof(mqtt_elm327_topic), "wican/%s/elm327", device_id);
 
-    // Don't hard-block MQTT startup on STA connectivity.
-    // The MQTT client has auto-reconnect enabled, so it can start early and connect once WiFi is up.
+    // Initial network sync
     while (!wifi_mgr_is_enabled())
     {
         vTaskDelay(pdMS_TO_TICKS(250));
@@ -403,142 +406,124 @@ static void mqtt_task(void *pvParameters)
     }
     dev_status_wait_for_bits(DEV_STA_CONNECTED_BIT, portMAX_DELAY);
     
-	esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
-	esp_mqtt_client_register_event(client, MQTT_EVENT_DATA, mqtt_parse_data, NULL);
-    esp_err_t start_err = esp_mqtt_client_start(client);
-    if (start_err != ESP_OK) {
-        ESP_LOGE(TAG, "esp_mqtt_client_start failed: %s", esp_err_to_name(start_err));
-    }
+    esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
+    esp_mqtt_client_register_event(client, MQTT_EVENT_DATA, mqtt_parse_data, NULL);
+    esp_mqtt_client_start(client);
     ESP_LOGI(TAG, "MQTT client task started");
-	while(1)
-	{
-		xQueuePeek(*xmqtt_tx_queue, ( void * ) &tx_frame, portMAX_DELAY);
-        dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
-        
-		if(mqtt_connected())
-		{
-			json_buffer[0] = 0;
-            if(tx_frame.type == MQTT_CAN)
+
+    while(1)
+    {
+        // FEED WATCHDOG: At the start of every loop iteration
+        esp_task_wdt_reset();
+
+        // FIX: Increased timeout to 10ms to stop starving the CPU
+        if (xQueueReceive(*xmqtt_tx_queue, (void *)&tx_frame, pdMS_TO_TICKS(10)) == pdPASS)
+        {
+            dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
+            
+            if(mqtt_connected())
             {
-                if(mqtt_canflt_size != 0)
+                json_buffer[0] = 0;
+
+                if(tx_frame.type == MQTT_CAN)
                 {
-                    uint8_t start_index = 0;
-                    int8_t found_index = -1;
-                    static uint64_t value = 0;
-                    static double expression_result = 0;
-                    
-                    xQueueReceive(*xmqtt_tx_queue, ( void * ) &tx_frame, 0);
-
-                    while ((found_index = mqtt_canflt_find_id(tx_frame.frame.identifier, start_index)) != -1)
+                    if(mqtt_canflt_size != 0)
                     {
-                        
+                        uint8_t start_index = 0;
+                        int8_t found_index = -1;
+                        static uint64_t value = 0;
+                        static double expression_result = 0;
 
-                        // Check if expecting PID
-                        if(mqtt_canflt_values[found_index].pid != -1)
+                        // Process all matching filters for this ID
+                        while ((found_index = mqtt_canflt_find_id(tx_frame.frame.identifier, start_index)) != -1)
                         {
-                            if(mqtt_canflt_values[found_index].pid != tx_frame.frame.data[mqtt_canflt_values[found_index].pidi])
+                            // Periodic Watchdog reset for long filter lists
+                            esp_task_wdt_reset();
+
+                            // Check PID filter if applicable
+                            if(mqtt_canflt_values[found_index].pid != -1)
                             {
-                                start_index = found_index + 1;
+                                if(mqtt_canflt_values[found_index].pid != tx_frame.frame.data[mqtt_canflt_values[found_index].pidi])
+                                {
+                                    start_index = found_index + 1;
+                                    continue;
+                                }
+                            }
+
+                            // Cycle timing check
+                            if(esp_timer_get_time() - mqtt_canflt_values[found_index].logtime < (mqtt_canflt_values[found_index].cycle*1000))
+                            {
+                                start_index = found_index + 1; // Continue to next possible filter
                                 continue;
                             }
-                        }
 
-                        if(esp_timer_get_time() - mqtt_canflt_values[found_index].logtime < (mqtt_canflt_values[found_index].cycle*1000))
-                        {
-                            break;
-                        }
-                        mqtt_canflt_values[found_index].logtime = esp_timer_get_time();
-                        for (uint8_t i = 0; i < 8; i++) 
-                        {
-                            can_data = (can_data << 8) | tx_frame.frame.data[i];
-                        }
-
-                        uint64_t start_bit = 64 - mqtt_canflt_values[found_index].start_bit - mqtt_canflt_values[found_index].bit_length;
-                        uint64_t bit_length = mqtt_canflt_values[found_index].bit_length;
-
-                        uint64_t mask = ((1ULL << bit_length) - 1ULL) << start_bit;
-
-                        value = (can_data & mask) >> start_bit;
-
-
-
-                        ESP_LOGI(TAG, "-----------");
-                        ESP_LOGI(TAG, "can_data: %llx, mask: %llx, value: %llx\r\n", can_data, mask, value);
-
-                        if(evaluate_expression((uint8_t *)mqtt_canflt_values[found_index].expression, (uint8_t *)tx_frame.frame.data, (double)value, &expression_result) )
-                        {
-                            ESP_LOGI(TAG, "Expression result: %lf", expression_result);
-
-                            sprintf(json_buffer, "{\"%s\": %lf}", mqtt_canflt_values[found_index].name, expression_result);
-
-                            mqtt_publish(mqtt_topic, json_buffer, 0, 0, 0);
-                        }
-                        else
-                        {
-                            ESP_LOGE(TAG, "evaluate_expression error");
-                        }
-
-                        start_index = found_index + 1;
-                    }
-                }
-                else if(config_server_mqtt_rx_en_config())
-                {
-                    sprintf(json_buffer, "{\"bus\":\"0\",\"type\":\"rx\",\"ts\":%lu,\"frame\":[", (pdTICKS_TO_MS(xTaskGetTickCount())%60000));
-
-                    if(strlen(json_buffer) < (sizeof(json_buffer) -128))
-                    {
-                        while(xQueuePeek(*xmqtt_tx_queue, ( void * ) &tx_frame, 0) == pdTRUE)
-                        {
-                            xQueueReceive(*xmqtt_tx_queue, ( void * ) &tx_frame, 0);
-                            sprintf(tmp, "{\"id\":%lu,\"dlc\":%u,\"rtr\":%s,\"extd\":%s,\"data\":[%u,%u,%u,%u,%u,%u,%u,%u]},",tx_frame.frame.identifier, tx_frame.frame.data_length_code, tx_frame.frame.rtr?"true":"false",
-                                                                                                                        tx_frame.frame.extd?"true":"false",tx_frame.frame.data[0], tx_frame.frame.data[1], tx_frame.frame.data[2], tx_frame.frame.data[3],
-                                                                                                                        tx_frame.frame.data[4], tx_frame.frame.data[5], tx_frame.frame.data[6], tx_frame.frame.data[7]);
-                            strcat((char*)json_buffer, (char*)tmp);
-
-                            if(strlen(json_buffer) > (JSON_BUF_SIZE - 100))
+                            mqtt_canflt_values[found_index].logtime = esp_timer_get_time();
+                            can_data = 0;
+                            for (uint8_t i = 0; i < 8; i++) 
                             {
-                                break;
+                                can_data = (can_data << 8) | tx_frame.frame.data[i];
                             }
+
+                            uint64_t start_bit = 64 - mqtt_canflt_values[found_index].start_bit - mqtt_canflt_values[found_index].bit_length;
+                            uint64_t bit_length = mqtt_canflt_values[found_index].bit_length;
+                            uint64_t mask = ((1ULL << bit_length) - 1ULL) << start_bit;
+                            value = (can_data & mask) >> start_bit;
+
+                            if(evaluate_expression((uint8_t *)mqtt_canflt_values[found_index].expression, (uint8_t *)tx_frame.frame.data, (double)value, &expression_result))
+                            {
+                                snprintf(json_buffer, sizeof(json_buffer), "{\"%s\": %lf}", mqtt_canflt_values[found_index].name, expression_result);
+                                mqtt_publish(mqtt_topic, json_buffer, 0, 0, 0);
+                            }
+                            start_index = found_index + 1;
                         }
-                        json_buffer[strlen(json_buffer)-1] = 0;
                     }
-                    strcat((char*)json_buffer, "]}");
+                    else if(config_server_mqtt_rx_en_config())
+                    {
+                        // Raw CAN-to-MQTT logging logic
+                        snprintf(json_buffer, sizeof(json_buffer), "{\"bus\":\"0\",\"type\":\"rx\",\"ts\":%lu,\"frame\":[", 
+                                (unsigned long)(pdTICKS_TO_MS(xTaskGetTickCount())%60000));
 
-                    mqtt_publish(mqtt_topic, json_buffer, 0, 0, 0);
+                        // Append the frame data
+                        snprintf(tmp, sizeof(tmp), "{\"id\":%lu,\"dlc\":%u,\"rtr\":%s,\"extd\":%s,\"data\":[%u,%u,%u,%u,%u,%u,%u,%u]}",
+                                tx_frame.frame.identifier, tx_frame.frame.data_length_code, 
+                                tx_frame.frame.rtr ? "true" : "false", tx_frame.frame.extd ? "true" : "false",
+                                tx_frame.frame.data[0], tx_frame.frame.data[1], tx_frame.frame.data[2], tx_frame.frame.data[3],
+                                tx_frame.frame.data[4], tx_frame.frame.data[5], tx_frame.frame.data[6], tx_frame.frame.data[7]);
+                        
+                        strncat(json_buffer, tmp, sizeof(json_buffer) - strlen(json_buffer) - 1);
+                        strncat(json_buffer, "]}", sizeof(json_buffer) - strlen(json_buffer) - 1);
+                        mqtt_publish(mqtt_topic, json_buffer, 0, 0, 0);
+                    }
+                }
+                else // Handling MQTT_RX or MQTT_TX (ELM327 Response messages)
+                {
+                    snprintf(json_buffer, sizeof(json_buffer), "{\"bus\":\"0\",\"type\":\"%s\",\"ts\":%lu,\"frame\":[", 
+                             (tx_frame.type == MQTT_RX) ? "rx" : "tx",
+                             (unsigned long)(pdTICKS_TO_MS(xTaskGetTickCount()) % 60000));
+                    
+                    snprintf(tmp, sizeof(tmp), "{\"id\":%lu,\"dlc\":%u,\"rtr\":%s,\"extd\":%s,\"data\":[%u,%u,%u,%u,%u,%u,%u,%u]}",
+                             tx_frame.frame.identifier, tx_frame.frame.data_length_code, 
+                             tx_frame.frame.rtr ? "true" : "false", tx_frame.frame.extd ? "true" : "false",
+                             tx_frame.frame.data[0], tx_frame.frame.data[1], tx_frame.frame.data[2], tx_frame.frame.data[3],
+                             tx_frame.frame.data[4], tx_frame.frame.data[5], tx_frame.frame.data[6], tx_frame.frame.data[7]);
+                    
+                    strncat(json_buffer, tmp, sizeof(json_buffer) - strlen(json_buffer) - 1);
+                    strncat(json_buffer, "]}", sizeof(json_buffer) - strlen(json_buffer) - 1);
+
+                    mqtt_publish(mqtt_elm327_topic, json_buffer, 0, 0, 0);
                 }
             }
-            else
-            {
-                xQueueReceive(*xmqtt_tx_queue, ( void * ) &tx_frame, 0);
-                if(tx_frame.type == MQTT_RX)
-                {
-                    sprintf(json_buffer, "{\"bus\":\"0\",\"type\":\"rx\",\"ts\":%lu,\"frame\":[", (pdTICKS_TO_MS(xTaskGetTickCount())%60000));
-                    ESP_LOGI(TAG, "tx_frame.type: MQTT_RX");
-                }
-                else if(tx_frame.type == MQTT_TX)
-                {
-                    sprintf(json_buffer, "{\"bus\":\"0\",\"type\":\"tx\",\"ts\":%lu,\"frame\":[", (pdTICKS_TO_MS(xTaskGetTickCount())%60000));
-                    ESP_LOGI(TAG, "tx_frame.type: MQTT_TX");
-                }
-                
-                sprintf(tmp, "{\"id\":%lu,\"dlc\":%u,\"rtr\":%s,\"extd\":%s,\"data\":[%u,%u,%u,%u,%u,%u,%u,%u]},",tx_frame.frame.identifier, tx_frame.frame.data_length_code, tx_frame.frame.rtr?"true":"false",
-                                                                                                            tx_frame.frame.extd?"true":"false",tx_frame.frame.data[0], tx_frame.frame.data[1], tx_frame.frame.data[2], tx_frame.frame.data[3],
-                                                                                                            tx_frame.frame.data[4], tx_frame.frame.data[5], tx_frame.frame.data[6], tx_frame.frame.data[7]);
-                strcat((char*)json_buffer, (char*)tmp);
-                json_buffer[strlen(json_buffer)-1] = 0;
-                strcat((char*)json_buffer, "]}");
-
-                mqtt_publish(mqtt_elm327_topic, json_buffer, 0, 0, 0);
-            }
-
-		}
-		else
-		{
-			xQueueReceive(*xmqtt_tx_queue, ( void * ) &tx_frame, 0);
-		}
-		vTaskDelay(pdMS_TO_TICKS(1));
-	}
+        }
+        else
+        {
+            // Optional: Log here if the queue is empty for too long
+        }
+        esp_task_wdt_reset();            // Explicitly feed the watchdog
+        // Final safety delay
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
 }
+
 
 static void mqtt_load_filter(void)
 {

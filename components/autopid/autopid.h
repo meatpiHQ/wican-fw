@@ -23,8 +23,8 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-
-#include <esp_err.h>
+#include "esp_err.h"
+#include "wc_timer.h" 
 
 #define AUTOPID_BUFFER_SIZE (1024*4)
 #define QUEUE_SIZE 10
@@ -46,15 +46,13 @@ typedef enum
     BINARY_SENSOR = 1,
 } sensor_type_t;
 
-////////////////
-
 typedef enum
 {
     PID_STD = 0,
     PID_CUSTOM = 1,
     PID_SPECIFIC = 2,
     PID_MAX
-}pid_type_t;
+} pid_type_t;
 
 typedef enum
 {
@@ -65,7 +63,63 @@ typedef enum
     DEST_HTTPS,
     DEST_ABRP_API,
     DEST_MAX
-}destination_type_t;
+} destination_type_t;
+
+typedef struct 
+{
+    char *name;
+    char *expression;
+    char *unit;
+    char *class;
+    uint32_t period; 
+    float min;
+    float max;
+    sensor_type_t sensor_type;
+    char* destination;
+    destination_type_t destination_type;
+    wc_timer_t timer; 
+    float value;
+    bool failed;
+    bool enabled;
+
+  bool onchange;        // update PID alway or when changes
+    // [NEW] Update on Change Support
+    char *update_mode;       // "always" or "onchange"
+    float last_sent_value;   // Tracks previous value
+} parameter_t;
+
+typedef struct 
+{
+    char* cmd;
+    char* init; 
+    uint32_t period; 
+    parameter_t *parameters;
+    uint32_t parameters_count;
+    pid_type_t pid_type;
+    char* rxheader;
+    bool enabled;
+    wc_timer_t period_timer;
+} pid_data_t;
+
+// [NEW] Detection Methods
+typedef enum {
+    DETECTION_ALWAYS,        
+    DETECTION_VOLTAGE,       
+    DETECTION_ADAPTIVE_RPM   
+} detection_method_t;
+
+// [NEW] Group Structure (References Master List)
+typedef struct {
+    char *name;
+    bool enabled;
+    char *init;                 
+    detection_method_t detection_method; 
+    uint32_t period;            
+    wc_timer_t timer;           
+    pid_data_t **pids;          // Array of POINTERS to the master list
+    uint32_t pid_count;         
+    uint32_t consecutive_errors; 
+} pid_group_t;
 
 // HTTP(S) auth types supported by https_client_mgr_request_with_auth
 typedef enum {
@@ -74,111 +128,86 @@ typedef enum {
     DEST_AUTH_API_KEY_HEADER,
     DEST_AUTH_API_KEY_QUERY,
     DEST_AUTH_BASIC
-} destination_auth_type_t;
+} dest_auth_type_t;
 
 typedef struct {
-    destination_auth_type_t type;   // Which auth to apply
-    char *bearer;                   // Bearer token
-    char *api_key_header_name;      // Header name for API key, e.g. "x-api-key"
-    char *api_key;                  // API key value (header or query)
-    char *api_key_query_name;       // Query parameter name for API key
-    char *basic_username;           // Basic auth username
-    char *basic_password;           // Basic auth password
-} destination_auth_t;
+    dest_auth_type_t type;
+    char *bearer;
+    char *api_key;
+    char *api_key_header_name;
+    char *api_key_query_name;
+    char *basic_username;
+    char *basic_password;
+    struct {
+        char *key;
+        char *value;
+    } *extra_query; 
+    size_t extra_query_count; 
+} dest_auth_config_t;
 
 typedef struct {
     char *key;
-    char *value;    // Pre-encoded; UI may provide raw, backend can encode later if needed
+    char *value;
 } dest_query_kv_t;
 
-// Group destination entry (multi-destination support)
 typedef struct {
-    destination_type_t type;    // Destination type
-    char *destination;          // URL / topic / etc.
-    uint32_t cycle;             // Publish cycle (ms) or 0 for event based
-    char *api_token;            // Optional API/Bearer token (HTTP/HTTPS/ABRP)
-    char *cert_set;             // Certificate set name for HTTPS ("default" for built-in)
-    bool enabled;               // Whether this destination is active
-    // Stats (runtime only)
-    uint32_t success_count;      // Number of successful publishes
-    uint32_t fail_count;         // Number of failed publishes
-    // Extended HTTP(S) settings
-    destination_auth_t auth;    // Detailed auth configuration for HTTP/HTTPS
-    dest_query_kv_t *query_params;   // Optional extra query parameters
-    uint32_t query_params_count;     // Number of query params
-    int64_t publish_timer;   // Internal: next publish expiration timer (0 = not scheduled / immediate)
-    uint32_t consec_failures;   // Internal: consecutive failure counter
-    uint32_t backoff_ms;        // Internal: current backoff delay extension (ms)
-    bool settings_sent;         // Internal: for HTTP/HTTPS, whether initial {config,status,autopid_data} was sent successfully
+    destination_type_t type;
+    char *destination;
+    uint32_t cycle;
+    char *api_token;
+    char *cert_set;
+    bool enabled;
+    dest_auth_config_t auth;
+    dest_query_kv_t *query_params;
+    size_t query_params_count;
+    wc_timer_t publish_timer;
+    uint32_t consec_failures;
+    uint32_t backoff_ms;
+    uint32_t success_count;
+    uint32_t fail_count;
+    bool settings_sent; 
 } group_destination_t;
 
-typedef struct 
-{
-    char *name;
-    char *expression;
-    char *unit;
-    char *class;
-    bool enabled;
-    uint32_t period; 
-    float min;
-    float max;
-    sensor_type_t sensor_type;
-    char* destination;
-    destination_type_t destination_type;
-    int64_t timer;
-    float value;
-    bool failed;
-}parameter_t;
-
-typedef struct 
-{
-    char* cmd;
-    char* init;
-    uint32_t period; 
-    parameter_t *parameters;
-    uint32_t parameters_count;
-    pid_type_t pid_type;
-    char* rxheader;
-    bool enabled;
-}pid_data_t;
-
-// CAN filter configuration (broadcast frames parsing)
-// Each filter refers to one CAN frame ID that may yield multiple parameters.
-typedef struct
-{
+typedef struct {
     uint32_t frame_id;
-    bool is_extended; // inferred: frame_id > 0x7FF
-    // True if this filter came from car_data.json (vehicle profile);
-    // false if it came from auto_pid.json (custom filters).
-    bool is_vehicle_specific;
+    bool is_extended;
     parameter_t *parameters;
     uint32_t parameters_count;
+    bool is_vehicle_specific;
 } can_filter_t;
 
 typedef struct 
 {
-    pid_data_t *pids;
+    // [NEW] Feature Flags & Groups
+    bool use_groups;       
+    pid_group_t *groups;
+    uint32_t group_count;
+
+    // [MASTER LIST] All PIDs live here (Legacy + Grouped)
+    pid_data_t *pids; 
     uint32_t pid_count;
-    // CAN filters (broadcast frames)
-    can_filter_t *can_filters;
-    uint32_t can_filters_count;
+
+    // Global settings
     char* custom_init;
     char* standard_init;
     char* specific_init;
-    char* selected_car_model;
+    char* vehicle_model;
     char* grouping;
-    char* webhook_data_mode;  // "full" or "changed"
+    
+    group_destination_t *destinations;
+    size_t destinations_count;
+    
     destination_type_t group_destination_type;
-    char* group_destination;    //"destination"
-    // Multi-destination support
-    group_destination_t *destinations;   // Array of destinations (nullable)
-    uint32_t destinations_count;         // Number of entries in destinations
+    char* group_destination;
+
     bool pid_std_en;
     bool pid_custom_en;
     bool pid_specific_en;
+
     // When enabled, pause Automate/AutoPID when battery voltage is below configured sleep voltage.
     // Stored in auto_pid.json as: disable_on_sleep_voltage = "enable"/"disable".
     bool disable_on_sleep_voltage;
+    
     // Alternative low-voltage mode: when battery voltage is below configured sleep voltage,
     // disable PID requests (polling) but keep CAN filter monitoring active.
     // Stored in auto_pid.json as: disable_on_sleep_voltage = "disable_pid_requests".
@@ -193,21 +222,27 @@ typedef struct
     // Voltage threshold used when disable_pid_requests_on_automate_threshold is enabled.
     // Stored in auto_pid.json as: pid_polling_min_voltage = <number>.
     float pid_polling_min_voltage;
+    
     // When enabled, validate that each PID request's response matches the request (service + PID bytes)
     // using the command string (cmd_str) provided by the ELM command runner.
     bool pid_validation_en;
+
     char* std_ecu_protocol;
-    char* vehicle_model;
     bool ha_discovery_en;
-    uint32_t cycle;     //To be removed when std pid gets its own period
-    time_t last_successful_pid_time;  // Timestamp in seconds since epoch of last successful PID response
+    uint32_t cycle;
+    time_t last_successful_pid_time;
+    
+    can_filter_t *can_filters;
+    uint32_t can_filters_count;
+    char* webhook_data_mode;
+
     SemaphoreHandle_t mutex;
 } autopid_config_t;
 
 typedef struct 
 {
-    char *json_str;              // Pointer to a dynamically allocated string
-    SemaphoreHandle_t mutex; // Mutex to protect access to the data
+    char *json_str;
+    SemaphoreHandle_t mutex;
 } autopid_data_t;
 
 void autopid_parser(char *str, uint32_t len, QueueHandle_t *q, char* cmd_str);
@@ -216,20 +251,15 @@ char *autopid_data_read(void);
 bool autopid_get_ecu_status(void);
 char* autopid_get_config(void);
 char *autopid_get_destinations_stats_json(void);
-esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint32_t available_pids_size) ;
-
-// Protocol tracking helpers used by AutoPID parsing and related modules.
+esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint32_t available_pids_size);
 esp_err_t autopid_set_protocol_number(int32_t protocol_value);
 esp_err_t autopid_get_protocol_number(int32_t *protocol_value);
-
 char *autopid_get_value_by_name(char* name);
 void autopid_publish_all_destinations(void);
 void autopid_app_reset_timer(void);
 
-// Shared lock for ELM327 access.
-// The AutoPID task uses this mutex to serialize access to the ELM327 interface.
-// Other modules (e.g. AutoPID HTTP test endpoint) should take this lock to
-// prevent interleaved commands/responses.
+// Shared lock for ELM327 access
 bool autopid_lock(uint32_t timeout_ms);
 void autopid_unlock(void);
+
 #endif

@@ -331,3 +331,42 @@ bool autopid_test_pid_parse_hex_byte_stream(const char *s, uint8_t *out, size_t 
 
     return (*out_len > 0);
 }
+
+bool autopid_test_pid_find_response_window(const uint8_t *bytes,
+                                           uint32_t bytes_len,
+                                           uint8_t positive_service,
+                                           uint8_t pid_byte,
+                                           const uint8_t **out_ptr,
+                                           uint32_t *out_len)
+{
+    if (!bytes || bytes_len == 0 || !out_ptr || !out_len)
+        return false;
+
+    for (uint32_t i = 0; i + 1 < bytes_len; i++)
+    {
+        if (bytes[i] == positive_service && (pid_byte == 0xFF || (i + 1 < bytes_len && bytes[i + 1] == pid_byte)))
+        {
+            uint32_t start = i;
+            
+            // Check if it's a Multi-Frame First Frame (PCI starts with 0x10)
+            // The PCI is 2 bytes, so we must back up 2 spaces to capture the full frame.
+            if (i >= 2 && (bytes[i - 2] & 0xF0) == 0x10)
+            {
+                start = i - 2;
+            }
+            // Otherwise, assume Single Frame (1 byte PCI length)
+            else if (i >= 1)
+            {
+                start = i - 1;
+            }
+
+            *out_ptr = &bytes[start];
+            *out_len = bytes_len - start;
+            return true;
+        }
+    }
+
+    *out_ptr = bytes;
+    *out_len = bytes_len;
+    return false;
+}
