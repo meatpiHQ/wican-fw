@@ -73,11 +73,26 @@ typedef struct {
     wifi_auth_mode_t sta_auth_mode;
     bool sta_auto_reconnect;
     int sta_max_retry;          // -1 for infinite retries
+    
+    // Static IP Configuration for Primary Network
+    char sta_ip_type[8];
+    char sta_static_ip[16];
+    char sta_netmask[16];
+    char sta_gateway[16];
+    char sta_dns[16];
+
     // Fallback STA networks (priority by index: 0 = highest)
     struct {
         char ssid[32];
         char password[64];
         wifi_auth_mode_t auth_mode;
+        
+        // Static IP Configuration for Fallback Networks
+        char ip_type[8];
+        char static_ip[16];
+        char netmask[16];
+        char gateway[16];
+        char dns[16];
     } fallbacks[WIFI_MGR_MAX_FALLBACKS];
     uint8_t fallback_count;
     

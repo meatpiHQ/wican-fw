@@ -95,6 +95,14 @@ typedef struct _device_config
 	char sta_ssid[65];
 	char sta_pass[65];
 	char sta_security[8];
+	
+	// --- NEW PRIMARY IP FIELDS ---
+	char sta_ip_type[8];
+	char sta_static_ip[16];
+	char sta_netmask[16];
+	char sta_gateway[16];
+	char sta_dns[16];
+
 	// Backup STA networks (fallbacks)
 	// Parsed from JSON key: "sta_fallbacks" as array of objects
 	//   { "ssid": string (1..32), "pass": string (0..64), "security": "open"|"wpa2"|"wpa3" }
@@ -103,6 +111,12 @@ typedef struct _device_config
 		char ssid[65];
 		char pass[65];
 		char security[8];
+		// --- NEW FALLBACK IP FIELDS ---
+		char ip_type[8];
+		char static_ip[16];
+		char netmask[16];
+		char gateway[16];
+		char dns[16];
 	} sta_fallbacks[5];
 	int sta_fallbacks_count;
 	char home_ssid[65];
@@ -250,9 +264,23 @@ bool config_server_is_debug_enabled(void);
 bool config_server_get_mqtt_security_enabled(void);
 char *config_server_get_mqtt_cert_set(void);
 bool config_server_get_mqtt_skip_cn_check(void);
+
 // Fallback STA networks accessors
 int config_server_get_sta_fallbacks_count(void);
 const char *config_server_get_sta_fallback_ssid(int index);
 const char *config_server_get_sta_fallback_pass(int index);
 wifi_security_t config_server_get_sta_fallback_security(int index);
+
+// IP Configuration accessors
+const char *config_server_get_sta_ip_type(void);
+const char *config_server_get_sta_static_ip(void);
+const char *config_server_get_sta_netmask(void);
+const char *config_server_get_sta_gateway(void);
+const char *config_server_get_sta_dns(void);
+const char *config_server_get_sta_fallback_ip_type(int index);
+const char *config_server_get_sta_fallback_static_ip(int index);
+const char *config_server_get_sta_fallback_netmask(int index);
+const char *config_server_get_sta_fallback_gateway(int index);
+const char *config_server_get_sta_fallback_dns(int index);
+
 char *config_server_get_status_json(bool remove_sensitive_info);

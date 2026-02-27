@@ -24,6 +24,7 @@
 #include <esp_event.h>
 #include <esp_log.h>
 #include <esp_system.h>
+#include "esp_mac.h"
 #include <sys/param.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -1677,6 +1678,19 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	char fver[16];
 	char hver[32];
 
+        // --- NEW: Fetch Device MAC Address ---
+	uint8_t mac[6];
+	char mac_str[18] = {0};
+	if (esp_read_mac(mac, ESP_MAC_WIFI_STA) == ESP_OK) {
+		snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X", 
+				 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+	} else {
+		strlcpy(mac_str, "N/A", sizeof(mac_str));
+	}
+	cJSON_AddStringToObject(root, "mac_address", mac_str);
+	// -------------------------------------
+	
+
     esp_app_desc_t* running_app_info = dev_status_get_running_app_info();
 	uint32_t firmware_ver_minor = 0, firmware_ver_major = 0;
 
@@ -1693,11 +1707,37 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	cJSON_AddStringToObject(root, "ap_ssid_en", device_config.ap_ssid_en);
 	cJSON_AddStringToObject(root, "ap_ssid", device_config.ap_ssid);
 	cJSON_AddStringToObject(root, "ap_auto_disable", device_config.ap_auto_disable);
-	if(!remove_sensitive_info)
+
+        if(!remove_sensitive_info)
 	{
 		cJSON_AddStringToObject(root, "sta_ssid", device_config.sta_ssid);
 		cJSON_AddStringToObject(root, "sta_pass", device_config.sta_pass);
 		cJSON_AddStringToObject(root, "sta_security", device_config.sta_security);
+
+		// --- NEW: Export Primary Static IP Fields ---
+		cJSON_AddStringToObject(root, "sta_ip_type", device_config.sta_ip_type);
+		cJSON_AddStringToObject(root, "sta_static_ip", device_config.sta_static_ip);
+		cJSON_AddStringToObject(root, "sta_netmask", device_config.sta_netmask);
+		cJSON_AddStringToObject(root, "sta_gateway", device_config.sta_gateway);
+		cJSON_AddStringToObject(root, "sta_dns", device_config.sta_dns);
+		
+		// --- NEW: Export Fallback Array to JSON ---
+		cJSON *fallbacks_array = cJSON_CreateArray();
+		for (int i = 0; i < device_config.sta_fallbacks_count; i++) {
+			cJSON *fb_obj = cJSON_CreateObject();
+			cJSON_AddStringToObject(fb_obj, "ssid", device_config.sta_fallbacks[i].ssid);
+			cJSON_AddStringToObject(fb_obj, "pass", device_config.sta_fallbacks[i].pass);
+			cJSON_AddStringToObject(fb_obj, "security", device_config.sta_fallbacks[i].security);
+			cJSON_AddStringToObject(fb_obj, "ip_type", device_config.sta_fallbacks[i].ip_type);
+			cJSON_AddStringToObject(fb_obj, "static_ip", device_config.sta_fallbacks[i].static_ip);
+			cJSON_AddStringToObject(fb_obj, "netmask", device_config.sta_fallbacks[i].netmask);
+			cJSON_AddStringToObject(fb_obj, "gateway", device_config.sta_fallbacks[i].gateway);
+			cJSON_AddStringToObject(fb_obj, "dns", device_config.sta_fallbacks[i].dns);
+			cJSON_AddItemToArray(fallbacks_array, fb_obj);
+		}
+		cJSON_AddItemToObject(root, "sta_fallbacks", fallbacks_array);
+		// ------------------------------------------	
+	  
 		cJSON_AddStringToObject(root, "home_ssid", device_config.home_ssid);
 		cJSON_AddStringToObject(root, "home_password", device_config.home_password);
 		cJSON_AddStringToObject(root, "home_security", device_config.home_security);
@@ -1705,6 +1745,9 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 		cJSON_AddStringToObject(root, "drive_password", device_config.drive_password);
 		cJSON_AddStringToObject(root, "drive_security", device_config.drive_security);
 	}
+
+
+	
 	cJSON_AddStringToObject(root, "home_protocol", device_config.home_protocol);
 	cJSON_AddStringToObject(root, "drive_protocol", device_config.drive_protocol);
 	cJSON_AddStringToObject(root, "drive_connection_type", device_config.drive_connection_type);
@@ -2416,12 +2459,19 @@ static void config_server_load_cfg(char *cfg)
 	}
 	struct stat st;
 
-	// Initialize fallback list to empty before parsing
+        // Initialize fallback list to empty before parsing
 	device_config.sta_fallbacks_count = 0;
 	for (int i = 0; i < 5; ++i) {
 		device_config.sta_fallbacks[i].ssid[0] = '\0';
 		device_config.sta_fallbacks[i].pass[0] = '\0';
 		strlcpy(device_config.sta_fallbacks[i].security, "wpa3", sizeof(device_config.sta_fallbacks[i].security));
+		// --- NEW: Initialize Fallback IPs ---
+		strlcpy(device_config.sta_fallbacks[i].ip_type, "dhcp", sizeof(device_config.sta_fallbacks[i].ip_type));
+		device_config.sta_fallbacks[i].static_ip[0] = '\0';
+		device_config.sta_fallbacks[i].netmask[0] = '\0';
+		device_config.sta_fallbacks[i].gateway[0] = '\0';
+		device_config.sta_fallbacks[i].dns[0] = '\0';
+		// ------------------------------------
 	}
 	
 	key = cJSON_GetObjectItem(root,"wifi_mode");
@@ -2986,6 +3036,25 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	ESP_LOGI(TAG, "device_config.sta_security: %s", device_config.sta_security);
+
+        //***** NEW: Parse Primary Static IP *****
+	key = cJSON_GetObjectItem(root, "sta_ip_type");
+	strlcpy(device_config.sta_ip_type, (key && key->valuestring) ? key->valuestring : "dhcp", sizeof(device_config.sta_ip_type));
+
+	key = cJSON_GetObjectItem(root, "sta_static_ip");
+	strlcpy(device_config.sta_static_ip, (key && key->valuestring) ? key->valuestring : "", sizeof(device_config.sta_static_ip));
+
+	key = cJSON_GetObjectItem(root, "sta_netmask");
+	strlcpy(device_config.sta_netmask, (key && key->valuestring) ? key->valuestring : "", sizeof(device_config.sta_netmask));
+
+	key = cJSON_GetObjectItem(root, "sta_gateway");
+	strlcpy(device_config.sta_gateway, (key && key->valuestring) ? key->valuestring : "", sizeof(device_config.sta_gateway));
+
+	key = cJSON_GetObjectItem(root, "sta_dns");
+	strlcpy(device_config.sta_dns, (key && key->valuestring) ? key->valuestring : "", sizeof(device_config.sta_dns));
+	//****************************************
+
+	
 	//*****
 
 	//***** Parse optional fallback STA networks *****
@@ -3020,6 +3089,24 @@ static void config_server_load_cfg(char *cfg)
 			{
 				strlcpy(device_config.sta_fallbacks[kept].security, "wpa3", sizeof(device_config.sta_fallbacks[kept].security));
 			}
+
+                        // --- NEW: Parse Fallback Static IP Fields ---
+			cJSON *f_ip_type = cJSON_GetObjectItem(item, "ip_type");
+			strlcpy(device_config.sta_fallbacks[kept].ip_type, (f_ip_type && f_ip_type->valuestring) ? f_ip_type->valuestring : "dhcp", sizeof(device_config.sta_fallbacks[kept].ip_type));
+			
+			cJSON *f_static_ip = cJSON_GetObjectItem(item, "static_ip");
+			strlcpy(device_config.sta_fallbacks[kept].static_ip, (f_static_ip && f_static_ip->valuestring) ? f_static_ip->valuestring : "", sizeof(device_config.sta_fallbacks[kept].static_ip));
+			
+			cJSON *f_netmask = cJSON_GetObjectItem(item, "netmask");
+			strlcpy(device_config.sta_fallbacks[kept].netmask, (f_netmask && f_netmask->valuestring) ? f_netmask->valuestring : "", sizeof(device_config.sta_fallbacks[kept].netmask));
+			
+			cJSON *f_gw = cJSON_GetObjectItem(item, "gateway");
+			strlcpy(device_config.sta_fallbacks[kept].gateway, (f_gw && f_gw->valuestring) ? f_gw->valuestring : "", sizeof(device_config.sta_fallbacks[kept].gateway));
+			
+			cJSON *f_dns = cJSON_GetObjectItem(item, "dns");
+			strlcpy(device_config.sta_fallbacks[kept].dns, (f_dns && f_dns->valuestring) ? f_dns->valuestring : "", sizeof(device_config.sta_fallbacks[kept].dns));
+			// --------------------------------------------
+			
 			kept++;
 		}
 		device_config.sta_fallbacks_count = kept;
@@ -4194,3 +4281,30 @@ void config_server_set_ble_config(uint8_t b)
     cJSON_Delete(root);
 }
 
+// ======= Static IP Getters =======
+const char *config_server_get_sta_ip_type(void) { return device_config.sta_ip_type; }
+const char *config_server_get_sta_static_ip(void) { return device_config.sta_static_ip; }
+const char *config_server_get_sta_netmask(void) { return device_config.sta_netmask; }
+const char *config_server_get_sta_gateway(void) { return device_config.sta_gateway; }
+const char *config_server_get_sta_dns(void) { return device_config.sta_dns; }
+
+const char *config_server_get_sta_fallback_ip_type(int index) {
+    if (index < 0 || index >= device_config.sta_fallbacks_count) return "dhcp";
+    return device_config.sta_fallbacks[index].ip_type;
+}
+const char *config_server_get_sta_fallback_static_ip(int index) {
+    if (index < 0 || index >= device_config.sta_fallbacks_count) return "";
+    return device_config.sta_fallbacks[index].static_ip;
+}
+const char *config_server_get_sta_fallback_netmask(int index) {
+    if (index < 0 || index >= device_config.sta_fallbacks_count) return "";
+    return device_config.sta_fallbacks[index].netmask;
+}
+const char *config_server_get_sta_fallback_gateway(int index) {
+    if (index < 0 || index >= device_config.sta_fallbacks_count) return "";
+    return device_config.sta_fallbacks[index].gateway;
+}
+const char *config_server_get_sta_fallback_dns(int index) {
+    if (index < 0 || index >= device_config.sta_fallbacks_count) return "";
+    return device_config.sta_fallbacks[index].dns;
+}

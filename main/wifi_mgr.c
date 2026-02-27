@@ -124,6 +124,51 @@ static esp_err_t wifi_mgr_apply_sta_runtime_config(const char* ssid, const char*
     return esp_wifi_set_config(WIFI_IF_STA, &sta_config);
 }
 
+// -------------------------------------------------------------------------
+// NEW Helper: Apply Static IP to STA Interface
+// -------------------------------------------------------------------------
+static void apply_sta_ip_config(const char *ip_type, const char *ip, const char *netmask, const char *gw, const char *dns_str) {
+    if (!sta_netif) return;
+
+    esp_netif_dhcp_status_t status;
+    esp_netif_dhcpc_get_status(sta_netif, &status);
+
+    if (ip_type && strcmp(ip_type, "static") == 0) {
+        if (status != ESP_NETIF_DHCP_STOPPED) {
+            esp_netif_dhcpc_stop(sta_netif);
+        }
+
+        esp_netif_ip_info_t ip_info;
+        memset(&ip_info, 0, sizeof(ip_info));
+
+        if (ip && ip[0]) ip_info.ip.addr = ipaddr_addr(ip);
+        if (netmask && netmask[0]) ip_info.netmask.addr = ipaddr_addr(netmask);
+        if (gw && gw[0]) ip_info.gw.addr = ipaddr_addr(gw);
+
+        esp_netif_set_ip_info(sta_netif, &ip_info);
+
+        if (dns_str && dns_str[0]) {
+            esp_netif_dns_info_t dns;
+            dns.ip.u_addr.ip4.addr = ipaddr_addr(dns_str);
+            dns.ip.type = IPADDR_TYPE_V4;
+            esp_netif_set_dns_info(sta_netif, ESP_NETIF_DNS_MAIN, &dns);
+        }
+
+        ESP_LOGI(TAG, "Applied Static IP: %s, Mask: %s, GW: %s, DNS: %s", 
+                 ip ? ip : "", netmask ? netmask : "", gw ? gw : "", dns_str ? dns_str : "");
+    } else {
+        if (status != ESP_NETIF_DHCP_STARTED) {
+            // When transitioning from static to DHCP, we should clear the IP info first
+            esp_netif_ip_info_t ip_info;
+            memset(&ip_info, 0, sizeof(ip_info));
+            esp_netif_set_ip_info(sta_netif, &ip_info);
+            esp_netif_dhcpc_start(sta_netif);
+        }
+        ESP_LOGI(TAG, "Applied DHCP Config");
+    }
+}
+// -------------------------------------------------------------------------
+
 static ssid_fail_state_t* wifi_mgr_fs_find_or_create(const char* ssid) {
     if (!ssid || !ssid[0]) return NULL;
     // Look for existing
@@ -233,6 +278,7 @@ static void wifi_mgr_scan_select_and_connect(void) {
 
     // If nothing to choose from (no primary and no fallbacks), just connect
     if ((wifi_config.sta_ssid[0] == '\0') && (wifi_config.fallback_count == 0)) {
+        apply_sta_ip_config(wifi_config.sta_ip_type, wifi_config.sta_static_ip, wifi_config.sta_netmask, wifi_config.sta_gateway, wifi_config.sta_dns);
         esp_wifi_connect();
         return;
     }
@@ -295,17 +341,33 @@ static void wifi_mgr_scan_select_and_connect(void) {
             const char* chosen_ssid = NULL;
             const char* chosen_pass = NULL;
             wifi_auth_mode_t chosen_auth = WIFI_AUTH_WPA2_PSK;
+            const char* chosen_ip_type = "dhcp";
+            const char* chosen_ip = "";
+            const char* chosen_mask = "";
+            const char* chosen_gw = "";
+            const char* chosen_dns = "";
             int fb_index = -1;
+            
             if (wifi_config.sta_ssid[0] && s_select_seq_cursor == 0) {
                 chosen_ssid = wifi_config.sta_ssid;
                 chosen_pass = wifi_config.sta_password;
                 chosen_auth = wifi_config.sta_auth_mode;
+                chosen_ip_type = wifi_config.sta_ip_type;
+                chosen_ip = wifi_config.sta_static_ip;
+                chosen_mask = wifi_config.sta_netmask;
+                chosen_gw = wifi_config.sta_gateway;
+                chosen_dns = wifi_config.sta_dns;
                 ESP_LOGI(TAG, "Sequential connect (no scan): primary SSID: %s", chosen_ssid);
             } else {
                 fb_index = wifi_config.sta_ssid[0] ? (s_select_seq_cursor - 1) : s_select_seq_cursor;
                 chosen_ssid = wifi_config.fallbacks[fb_index].ssid;
                 chosen_pass = wifi_config.fallbacks[fb_index].password;
                 chosen_auth = wifi_config.fallbacks[fb_index].auth_mode;
+                chosen_ip_type = wifi_config.fallbacks[fb_index].ip_type;
+                chosen_ip = wifi_config.fallbacks[fb_index].static_ip;
+                chosen_mask = wifi_config.fallbacks[fb_index].netmask;
+                chosen_gw = wifi_config.fallbacks[fb_index].gateway;
+                chosen_dns = wifi_config.fallbacks[fb_index].dns;
                 ESP_LOGI(TAG, "Sequential connect (no scan): fallback[%d] SSID: %s", fb_index, chosen_ssid);
             }
             if (chosen_ssid && wifi_mgr_fs_should_skip(chosen_ssid)) {
@@ -316,6 +378,7 @@ static void wifi_mgr_scan_select_and_connect(void) {
                 if (wifi_mgr_apply_sta_runtime_config(chosen_ssid, chosen_pass ? chosen_pass : "", chosen_auth) != ESP_OK) {
                     ESP_LOGW(TAG, "Failed to set STA config for sequential connect; using current");
                 }
+                apply_sta_ip_config(chosen_ip_type, chosen_ip, chosen_mask, chosen_gw, chosen_dns);
                 snprintf(wifi_status.last_attempted_ssid, sizeof(wifi_status.last_attempted_ssid), "%s", chosen_ssid);
                 esp_wifi_connect();
                 return;
@@ -327,23 +390,40 @@ static void wifi_mgr_scan_select_and_connect(void) {
             const char* chosen_ssid = NULL;
             const char* chosen_pass = NULL;
             wifi_auth_mode_t chosen_auth = WIFI_AUTH_WPA2_PSK;
+            const char* chosen_ip_type = "dhcp";
+            const char* chosen_ip = "";
+            const char* chosen_mask = "";
+            const char* chosen_gw = "";
+            const char* chosen_dns = "";
             int fb_index = -1;
+            
             if (wifi_config.sta_ssid[0] && s_select_seq_cursor == 0) {
                 chosen_ssid = wifi_config.sta_ssid;
                 chosen_pass = wifi_config.sta_password;
                 chosen_auth = wifi_config.sta_auth_mode;
+                chosen_ip_type = wifi_config.sta_ip_type;
+                chosen_ip = wifi_config.sta_static_ip;
+                chosen_mask = wifi_config.sta_netmask;
+                chosen_gw = wifi_config.sta_gateway;
+                chosen_dns = wifi_config.sta_dns;
                 ESP_LOGW(TAG, "No unbanned SSID; retrying primary '%s' despite ban", chosen_ssid);
             } else {
                 fb_index = wifi_config.sta_ssid[0] ? (s_select_seq_cursor - 1) : s_select_seq_cursor;
                 chosen_ssid = wifi_config.fallbacks[fb_index].ssid;
                 chosen_pass = wifi_config.fallbacks[fb_index].password;
                 chosen_auth = wifi_config.fallbacks[fb_index].auth_mode;
+                chosen_ip_type = wifi_config.fallbacks[fb_index].ip_type;
+                chosen_ip = wifi_config.fallbacks[fb_index].static_ip;
+                chosen_mask = wifi_config.fallbacks[fb_index].netmask;
+                chosen_gw = wifi_config.fallbacks[fb_index].gateway;
+                chosen_dns = wifi_config.fallbacks[fb_index].dns;
                 ESP_LOGW(TAG, "No unbanned SSID; retrying fallback[%d] '%s' despite ban", fb_index, chosen_ssid);
             }
             if (chosen_ssid) {
                 if (wifi_mgr_apply_sta_runtime_config(chosen_ssid, chosen_pass ? chosen_pass : "", chosen_auth) != ESP_OK) {
                     ESP_LOGW(TAG, "Failed to set STA config for sequential connect; using current");
                 }
+                apply_sta_ip_config(chosen_ip_type, chosen_ip, chosen_mask, chosen_gw, chosen_dns);
                 snprintf(wifi_status.last_attempted_ssid, sizeof(wifi_status.last_attempted_ssid), "%s", chosen_ssid);
                 esp_wifi_connect();
                 return;
@@ -391,12 +471,22 @@ static void wifi_mgr_scan_select_and_connect(void) {
     const char* chosen_ssid = NULL;
     const char* chosen_pass = NULL;
     wifi_auth_mode_t chosen_auth = wifi_config.sta_auth_mode;
+    const char* chosen_ip_type = "dhcp";
+    const char* chosen_ip = "";
+    const char* chosen_mask = "";
+    const char* chosen_gw = "";
+    const char* chosen_dns = "";
 
     // Prefer primary if present
     if (wifi_mgr_ssid_present(ap_records, ap_count, wifi_config.sta_ssid) && !wifi_mgr_fs_should_skip(wifi_config.sta_ssid)) {
         chosen_ssid = wifi_config.sta_ssid;
         chosen_pass = wifi_config.sta_password;
         chosen_auth = wifi_config.sta_auth_mode;
+        chosen_ip_type = wifi_config.sta_ip_type;
+        chosen_ip = wifi_config.sta_static_ip;
+        chosen_mask = wifi_config.sta_netmask;
+        chosen_gw = wifi_config.sta_gateway;
+        chosen_dns = wifi_config.sta_dns;
         ESP_LOGI(TAG, "Selected primary SSID: %s", chosen_ssid);
     } else {
         if (wifi_mgr_ssid_present(ap_records, ap_count, wifi_config.sta_ssid) && wifi_mgr_fs_should_skip(wifi_config.sta_ssid)) {
@@ -412,6 +502,11 @@ static void wifi_mgr_scan_select_and_connect(void) {
                 chosen_ssid = wifi_config.fallbacks[i].ssid;
                 chosen_pass = wifi_config.fallbacks[i].password;
                 chosen_auth = wifi_config.fallbacks[i].auth_mode;
+                chosen_ip_type = wifi_config.fallbacks[i].ip_type;
+                chosen_ip = wifi_config.fallbacks[i].static_ip;
+                chosen_mask = wifi_config.fallbacks[i].netmask;
+                chosen_gw = wifi_config.fallbacks[i].gateway;
+                chosen_dns = wifi_config.fallbacks[i].dns;
                 ESP_LOGI(TAG, "Selected fallback[%u] SSID: %s", i, chosen_ssid);
                 break;
             }
@@ -422,6 +517,11 @@ static void wifi_mgr_scan_select_and_connect(void) {
                 chosen_ssid = wifi_config.sta_ssid;
                 chosen_pass = wifi_config.sta_password;
                 chosen_auth = wifi_config.sta_auth_mode;
+                chosen_ip_type = wifi_config.sta_ip_type;
+                chosen_ip = wifi_config.sta_static_ip;
+                chosen_mask = wifi_config.sta_netmask;
+                chosen_gw = wifi_config.sta_gateway;
+                chosen_dns = wifi_config.sta_dns;
                 ESP_LOGW(TAG, "All candidates banned; selecting primary '%s' anyway", chosen_ssid);
             } else {
                 for (uint8_t i = 0; i < wifi_config.fallback_count; ++i) {
@@ -429,6 +529,11 @@ static void wifi_mgr_scan_select_and_connect(void) {
                         chosen_ssid = wifi_config.fallbacks[i].ssid;
                         chosen_pass = wifi_config.fallbacks[i].password;
                         chosen_auth = wifi_config.fallbacks[i].auth_mode;
+                        chosen_ip_type = wifi_config.fallbacks[i].ip_type;
+                        chosen_ip = wifi_config.fallbacks[i].static_ip;
+                        chosen_mask = wifi_config.fallbacks[i].netmask;
+                        chosen_gw = wifi_config.fallbacks[i].gateway;
+                        chosen_dns = wifi_config.fallbacks[i].dns;
                         ESP_LOGW(TAG, "All candidates banned; selecting fallback[%u] '%s' anyway", i, chosen_ssid);
                         break;
                     }
@@ -444,6 +549,7 @@ static void wifi_mgr_scan_select_and_connect(void) {
             wifi_mgr_update_last_attempted_from_current_config();
             esp_wifi_connect();
         } else {
+            apply_sta_ip_config(chosen_ip_type, chosen_ip, chosen_mask, chosen_gw, chosen_dns);
             snprintf(wifi_status.last_attempted_ssid, sizeof(wifi_status.last_attempted_ssid), "%s", chosen_ssid);
             esp_wifi_connect();
         }
@@ -463,6 +569,7 @@ static void wifi_mgr_scan_select_and_connect(void) {
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
+
 /**
  * Initialize WiFi Manager with configuration
  */
@@ -996,6 +1103,7 @@ esp_err_t wifi_mgr_sta_connect(void) {
         return ESP_ERR_INVALID_STATE;
     }
     wifi_mgr_update_last_attempted_from_current_config();
+    apply_sta_ip_config(wifi_config.sta_ip_type, wifi_config.sta_static_ip, wifi_config.sta_netmask, wifi_config.sta_gateway, wifi_config.sta_dns);
     return esp_wifi_connect();
 }
 
@@ -1326,6 +1434,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                         wifi_mgr_scan_select_and_connect();
                     } else {
                         wifi_mgr_update_last_attempted_from_current_config();
+                        apply_sta_ip_config(wifi_config.sta_ip_type, wifi_config.sta_static_ip, wifi_config.sta_netmask, wifi_config.sta_gateway, wifi_config.sta_dns);
                         esp_wifi_connect();
                     }
                 }
@@ -1628,6 +1737,7 @@ static void wifi_reconnect_task(void* pvParameters) {
                     ESP_LOGW(TAG, "Current SSID '%s' is banned; deferring reconnect", wifi_status.last_attempted_ssid);
                     ret = ESP_OK;
                 } else {
+                    apply_sta_ip_config(wifi_config.sta_ip_type, wifi_config.sta_static_ip, wifi_config.sta_netmask, wifi_config.sta_gateway, wifi_config.sta_dns);
                     ret = esp_wifi_connect();
                 }
             }

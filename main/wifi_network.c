@@ -124,6 +124,15 @@ void wifi_network_init(char* ap_ssid_uid)
     } else {
         wifi_config.sta_password[0] = '\0';
     }
+
+    // --- NEW: Map Primary Static IP Config ---
+    const char *sta_ip_type = config_server_get_sta_ip_type();
+    strlcpy(wifi_config.sta_ip_type, sta_ip_type ? sta_ip_type : "dhcp", sizeof(wifi_config.sta_ip_type));
+    strlcpy(wifi_config.sta_static_ip, config_server_get_sta_static_ip(), sizeof(wifi_config.sta_static_ip));
+    strlcpy(wifi_config.sta_netmask, config_server_get_sta_netmask(), sizeof(wifi_config.sta_netmask));
+    strlcpy(wifi_config.sta_gateway, config_server_get_sta_gateway(), sizeof(wifi_config.sta_gateway));
+    strlcpy(wifi_config.sta_dns, config_server_get_sta_dns(), sizeof(wifi_config.sta_dns));
+    // -----------------------------------------
     
     // Set STA security mode
     wifi_security_t sta_security = config_server_get_sta_security();
@@ -177,6 +186,10 @@ void wifi_network_init(char* ap_ssid_uid)
             const char* f_ssid = config_server_get_sta_fallback_ssid(i);
             const char* f_pass = config_server_get_sta_fallback_pass(i);
             wifi_security_t f_sec = config_server_get_sta_fallback_security(i);
+            
+            // --- NEW: Fetch Fallback IP info ---
+            const char* f_ip_type = config_server_get_sta_fallback_ip_type(i);
+            
             if (f_ssid && f_ssid[0]) {
                 strncpy(wifi_config.fallbacks[wifi_config.fallback_count].ssid, f_ssid, sizeof(wifi_config.fallbacks[0].ssid) - 1);
                 wifi_config.fallbacks[wifi_config.fallback_count].ssid[sizeof(wifi_config.fallbacks[0].ssid) - 1] = '\0';
@@ -191,6 +204,15 @@ void wifi_network_init(char* ap_ssid_uid)
                     case WIFI_WPA3_PSK: wifi_config.fallbacks[wifi_config.fallback_count].auth_mode = WIFI_AUTH_WPA2_WPA3_PSK; break;
                     case WIFI_WPA2_PSK: default: wifi_config.fallbacks[wifi_config.fallback_count].auth_mode = WIFI_AUTH_WPA2_PSK; break;
                 }
+
+                // --- NEW: Map Fallback Static IP Config ---
+                strlcpy(wifi_config.fallbacks[wifi_config.fallback_count].ip_type, f_ip_type ? f_ip_type : "dhcp", sizeof(wifi_config.fallbacks[0].ip_type));
+                strlcpy(wifi_config.fallbacks[wifi_config.fallback_count].static_ip, config_server_get_sta_fallback_static_ip(i), sizeof(wifi_config.fallbacks[0].static_ip));
+                strlcpy(wifi_config.fallbacks[wifi_config.fallback_count].netmask, config_server_get_sta_fallback_netmask(i), sizeof(wifi_config.fallbacks[0].netmask));
+                strlcpy(wifi_config.fallbacks[wifi_config.fallback_count].gateway, config_server_get_sta_fallback_gateway(i), sizeof(wifi_config.fallbacks[0].gateway));
+                strlcpy(wifi_config.fallbacks[wifi_config.fallback_count].dns, config_server_get_sta_fallback_dns(i), sizeof(wifi_config.fallbacks[0].dns));
+                // ------------------------------------------
+
                 wifi_config.fallback_count++;
             }
         }
@@ -200,7 +222,7 @@ void wifi_network_init(char* ap_ssid_uid)
     ESP_LOGI(TAG, "  WiFi Configuration from Config Server:");
     ESP_LOGI(TAG, "   - WiFi Mode: %d (AP=0, APSTA=1, SMARTCONNECT=2, BLESTA=3, STA=4)", wifi_mode);
     ESP_LOGI(TAG, "   - Manager Mode: %d (OFF=0, STA=1, AP=2, APSTA=3, AUTO=4)", wifi_config.mode);
-    ESP_LOGI(TAG, "   - STA SSID: %s", wifi_config.sta_ssid);
+    ESP_LOGI(TAG, "   - STA SSID: %s (IP: %s)", wifi_config.sta_ssid, wifi_config.sta_ip_type);
     ESP_LOGI(TAG, "   - STA Auth Mode: %d", wifi_config.sta_auth_mode);
     ESP_LOGI(TAG, "   - AP SSID: %s", wifi_config.ap_ssid);
     ESP_LOGI(TAG, "   - AP Channel: %d", wifi_config.ap_channel);

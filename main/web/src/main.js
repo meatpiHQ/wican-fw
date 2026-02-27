@@ -339,6 +339,7 @@ async function checkFirmwareUpdate() {
         updateAddFallbackButtonState();
     }
 
+
     function addFallbackNetworkRow(data = {}) {
         const container = document.getElementById('fallback_rows');
         if (!container) return;
@@ -347,19 +348,37 @@ async function checkFirmwareUpdate() {
 
         const row = document.createElement('div');
         row.className = 'fallback-row';
-        row.style.display = 'grid';
-        row.style.gridTemplateColumns = '1fr 1fr 120px auto';
+        row.style.display = 'flex';
+        row.style.flexDirection = 'column';
         row.style.gap = '8px';
-        row.style.margin = '6px 0';
+        row.style.margin = '10px 0';
+        row.style.padding = '10px';
+        row.style.border = '1px solid var(--gray-300)';
+        row.style.borderRadius = '6px';
+        row.style.background = '#fafafa';
+
+        const isStatic = data.ip_type === 'static';
 
         row.innerHTML = `
-            <input type="text" class="fb-ssid" placeholder="SSID" value="${(data.ssid||'').replace(/"/g,'&quot;')}" oninput="submit_enable();" />
-            <input type="text" class="fb-pass" placeholder="Password" value="${(data.pass||data.password||'').replace(/"/g,'&quot;')}" oninput="submit_enable();" />
-            <select class="fb-sec" onchange="submit_enable();">
-                <option value="wpa3" ${((data.security||'wpa3')==='wpa3')?'selected':''}>WPA3</option>
-                <option value="wpa2" ${((data.security||'wpa3')==='wpa2')?'selected':''}>WPA2</option>
-            </select>
-            <button type="button" class="fb-remove" onclick="removeFallbackRow(this)">Remove</button>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 100px 100px auto; gap: 8px;">
+                <input type="text" class="fb-ssid" placeholder="SSID" value="${(data.ssid||'').replace(/"/g,'&quot;')}" oninput="submit_enable();" />
+                <input type="text" class="fb-pass" placeholder="Password" value="${(data.pass||data.password||'').replace(/"/g,'&quot;')}" oninput="submit_enable();" />
+                <select class="fb-sec" onchange="submit_enable();">
+                    <option value="wpa3" ${((data.security||'wpa3')==='wpa3')?'selected':''}>WPA3</option>
+                    <option value="wpa2" ${((data.security||'wpa3')==='wpa2')?'selected':''}>WPA2</option>
+                </select>
+                <select class="fb-ip-type" onchange="const r = this.closest('.fallback-row').querySelector('.fb-static-opts'); r.style.display = this.value === 'static' ? 'grid' : 'none'; submit_enable();">
+                    <option value="dhcp" ${!isStatic ? 'selected' : ''}>DHCP</option>
+                    <option value="static" ${isStatic ? 'selected' : ''}>Static IP</option>
+                </select>
+                <button type="button" class="fb-remove" style="background:#dc2626;" onclick="removeFallbackRow(this)">X</button>
+            </div>
+            <div class="fb-static-opts" style="display: ${isStatic ? 'grid' : 'none'}; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; margin-top: 4px;">
+                <input type="text" class="fb-ip" placeholder="IP (e.g. 192.168.1.50)" value="${data.static_ip||''}" oninput="submit_enable();" />
+                <input type="text" class="fb-mask" placeholder="Mask (e.g. 255.255.255.0)" value="${data.netmask||''}" oninput="submit_enable();" />
+                <input type="text" class="fb-gw" placeholder="Gateway (192.168.1.1)" value="${data.gateway||''}" oninput="submit_enable();" />
+                <input type="text" class="fb-dns" placeholder="DNS (8.8.8.8)" value="${data.dns||''}" oninput="submit_enable();" />
+            </div>
         `;
         container.appendChild(row);
         updateAddFallbackButtonState();
@@ -2870,6 +2889,9 @@ function checkStatus() {
         document.getElementById("ap_channel_status").innerHTML = obj.ap_ch;
         document.getElementById("sta_ip").innerHTML = obj.sta_ip;
 
+        const macEl = document.getElementById("mac_address_value");
+        if (macEl) macEl.innerHTML = obj.mac_address || "N/A";
+	
         const dnsMainEl = document.getElementById("dns_main_status");
         if (dnsMainEl) dnsMainEl.innerHTML = (obj.dns_main || "N/A");
         const dnsBackupEl = document.getElementById("dns_backup_status");
@@ -3333,6 +3355,13 @@ async function postConfig() {
     obj["imu_threshold"] = document.getElementById("imu_threshold").value;
     obj["elm327_udp_log"] = document.getElementById("elm327_udp_log").value;
 
+
+    obj["sta_ip_type"] = document.getElementById("sta_ip_type")?.value || "dhcp";
+    obj["sta_static_ip"] = document.getElementById("sta_static_ip")?.value || "";
+    obj["sta_netmask"] = document.getElementById("sta_netmask")?.value || "";
+    obj["sta_gateway"] = document.getElementById("sta_gateway")?.value || "";
+    obj["sta_dns"] = document.getElementById("sta_dns")?.value || "";
+    
     // Collect fallback networks (max 5)
     try {
         const rows = document.querySelectorAll('#fallback_rows .fallback-row');
@@ -3341,8 +3370,15 @@ async function postConfig() {
             const ssid = r.querySelector('.fb-ssid').value.trim();
             const pass = r.querySelector('.fb-pass').value;
             const sec = r.querySelector('.fb-sec').value;
+            
+            const ip_type = r.querySelector('.fb-ip-type')?.value || "dhcp";
+            const static_ip = r.querySelector('.fb-ip')?.value.trim() || "";
+            const netmask = r.querySelector('.fb-mask')?.value.trim() || "";
+            const gateway = r.querySelector('.fb-gw')?.value.trim() || "";
+            const dns = r.querySelector('.fb-dns')?.value.trim() || "";
+
             if (ssid) {
-                fallbacks.push({ ssid, pass, security: sec });
+                fallbacks.push({ ssid, pass, security: sec, ip_type, static_ip, netmask, gateway, dns });
             }
         });
         obj["sta_fallbacks"] = fallbacks.slice(0, 5);
@@ -3791,7 +3827,18 @@ async function Load() {
         document.getElementById("ap_ch_value").selectedIndex = ch.toString();
         document.getElementById("ssid_value").value = obj.sta_ssid;
         document.getElementById("pass_value").value = obj.sta_pass;
-        document.getElementById("sta_security").value = obj.sta_security || "wpa3";			
+        document.getElementById("sta_security").value = obj.sta_security || "wpa3";
+
+        if (document.getElementById("sta_ip_type")) {
+            document.getElementById("sta_ip_type").value = obj.sta_ip_type || "dhcp";
+            document.getElementById("sta_static_ip").value = obj.sta_static_ip || "";
+            document.getElementById("sta_netmask").value = obj.sta_netmask || "";
+            document.getElementById("sta_gateway").value = obj.sta_gateway || "";
+            document.getElementById("sta_dns").value = obj.sta_dns || "";
+            if (typeof toggleStaStaticIp === 'function') toggleStaStaticIp();
+        }
+
+	
         if(obj.can_datarate == "5K") {
             document.getElementById("can_datarate").selectedIndex = "0";
         } else if(obj.can_datarate == "10K") {
@@ -6510,3 +6557,9 @@ document.getElementById("defaultOpen").click();
     styleSheet.innerText = cssContent;
     document.head.appendChild(styleSheet);
 })();
+
+   function toggleStaStaticIp() {
+    const type = document.getElementById("sta_ip_type")?.value;
+    const rows = document.querySelectorAll(".sta-static-row");
+    rows.forEach(r => r.style.display = (type === "static") ? "table-row" : "none");
+}
