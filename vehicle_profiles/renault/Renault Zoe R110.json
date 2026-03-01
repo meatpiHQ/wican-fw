@@ -25,7 +25,7 @@
       "parameters": {
         "ODOMETER": "[B4:B6]"
       }
-    }, 
+    },
     {
       "pid": "222004",
       "parameters": {
