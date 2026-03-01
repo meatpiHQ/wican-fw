@@ -68,6 +68,7 @@
 #include "cert_manager.h"
 #include "esp_crt_bundle.h"
 
+#include "autopid.h"
 
 #include "esp_task_wdt.h"
 
@@ -304,12 +305,20 @@ static void mqtt_parse_data(void *handler_args, esp_event_base_t base, int32_t e
             can_send(&can_frame, 1);
         }
     }
+
     else if (event->topic && (event->topic_len == (int)strlen(mqtt_cmd_topic)) &&
              (memcmp(event->topic, mqtt_cmd_topic, event->topic_len) == 0))
     {
-        static char cmd_response[32] = {0};
+        static char cmd_response[64] = {0}; // Slightly expanded buffer
 
-        root = cJSON_Parse(event->data);
+        /* Ensure we have a null-terminated string for cJSON */
+        char *payload = malloc(event->data_len + 1);
+        if (!payload) goto end;
+        memcpy(payload, event->data, event->data_len);
+        payload[event->data_len] = '\0';
+
+        root = cJSON_Parse(payload);
+        free(payload);
 
         if (root == NULL)
         {
@@ -317,13 +326,43 @@ static void mqtt_parse_data(void *handler_args, esp_event_base_t base, int32_t e
             goto end;
         }
 
+        /* -------------------------------------------------------------
+           [NEW] Handle the 'command' format for On-Demand Diagnostics 
+           (e.g., {"command": "set_group", "group_name": "PCM", "active": true})
+           ------------------------------------------------------------- */
+        cJSON *command = cJSON_GetObjectItem(root, "command");
+        if (command && cJSON_IsString(command) && strcmp(command->valuestring, "set_group") == 0) 
+        {
+            cJSON *group_name = cJSON_GetObjectItem(root, "group_name");
+            cJSON *active = cJSON_GetObjectItem(root, "active");
+
+            if (group_name && cJSON_IsString(group_name) && active && cJSON_IsBool(active)) {
+                bool is_active = cJSON_IsTrue(active);
+                ESP_LOGI(TAG, "MQTT Cmd: Setting group '%s' active: %d", group_name->valuestring, is_active);
+                
+                // Toggle the state in the AutoPID Engine
+                autopid_set_group_mqtt_state(group_name->valuestring, is_active);
+
+                // Send an acknowledgment back to HA
+                snprintf(cmd_response, sizeof(cmd_response), "{\"group\": \"%s\", \"active\": %s}", 
+                         group_name->valuestring, is_active ? "true" : "false");
+                mqtt_publish(mqtt_rsp_topic, cmd_response, strlen(cmd_response), 0, 0);
+            } else {
+                ESP_LOGE(TAG, "MQTT Cmd: set_group missing 'group_name' or 'active' boolean");
+            }
+            goto end;
+        }
+
+        /* -------------------------------------------------------------
+           [EXISTING] Handle Legacy 'cmd' formats (reboot, get_vbatt)
+           ------------------------------------------------------------- */
         cJSON *cmd = cJSON_GetObjectItem(root, "cmd");
 
         if (cmd == NULL || !cJSON_IsString(cmd))
         {
-            ESP_LOGE(TAG, "Missing or invalid 'cmd' value in JSON");
+            ESP_LOGE(TAG, "Missing or invalid 'cmd' or 'command' value in JSON");
             goto end;
-        }
+        }   
 
         if (strcmp(cmd->valuestring, "reboot") == 0)
         {

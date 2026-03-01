@@ -105,7 +105,8 @@ typedef struct
 typedef enum {
     DETECTION_ALWAYS,        
     DETECTION_VOLTAGE,       
-    DETECTION_ADAPTIVE_RPM   
+    DETECTION_ADAPTIVE_RPM,
+    DETECTION_MQTT
 } detection_method_t;
 
 // [NEW] Group Structure (References Master List)
@@ -118,7 +119,9 @@ typedef struct {
     wc_timer_t timer;           
     pid_data_t **pids;          // Array of POINTERS to the master list
     uint32_t pid_count;         
-    uint32_t consecutive_errors; 
+    uint32_t consecutive_errors;
+    bool mqtt_active_flag;
+    wc_timer_t mqtt_active_timer;   // <-- [NEW] Watchdog timer for MQTT activation
 } pid_group_t;
 
 // HTTP(S) auth types supported by https_client_mgr_request_with_auth
@@ -257,6 +260,8 @@ esp_err_t autopid_get_protocol_number(int32_t *protocol_value);
 char *autopid_get_value_by_name(char* name);
 void autopid_publish_all_destinations(void);
 void autopid_app_reset_timer(void);
+void autopid_set_group_mqtt_state(const char* group_name, bool active_state);
+
 
 // Shared lock for ELM327 access
 bool autopid_lock(uint32_t timeout_ms);

@@ -1816,6 +1816,23 @@ char *autopid_get_destinations_stats_json(void)
                 cJSON_AddItemToArray(arr, o);
             }
             cJSON_AddItemToObject(root, "destinations", arr);
+
+            /* ---> NEW CODE START <--- */
+            if (autopid_config->use_groups) 
+            {
+                cJSON *grp_arr = cJSON_CreateArray();
+                if (grp_arr) 
+                {
+                    for (uint32_t g = 0; g < autopid_config->group_count; g++) 
+                    {
+                        // Safely add the boolean flag for each group to the JSON array
+                        cJSON_AddItemToArray(grp_arr, cJSON_CreateBool(autopid_config->groups[g].mqtt_active_flag));
+                    }
+                    cJSON_AddItemToObject(root, "active_groups", grp_arr);
+                }
+            }
+            /* ---> NEW CODE END <--- */
+
             printed = cJSON_PrintUnformatted(root);
         }
         else
@@ -1834,7 +1851,6 @@ char *autopid_get_destinations_stats_json(void)
     }
     return printed; // caller must free()
 }
-
 
  // -------------------------------------------------------------------------
 // [UPDATED] Config Exporter (Supports Groups + Destination Types)
@@ -3816,6 +3832,21 @@ static void autopid_task(void *pvParameters)
                     } else if (group->detection_method == DETECTION_ADAPTIVE_RPM) {
                         active = is_engine_running();
                     }
+                    /* [NEW] Add MQTT Condition Check with Watchdog */
+                    else if (group->detection_method == DETECTION_MQTT) {
+                       if (group->mqtt_active_flag) {
+                           // Check if the 15-minute watchdog has expired
+                           if (wc_timer_is_expired(&group->mqtt_active_timer)) {
+                               ESP_LOGW(TAG, "Group '%s' reached 15-min MQTT timeout. Auto-disabling.", group->name);
+                               group->mqtt_active_flag = false; // Turn it off safely
+                               active = false;
+                           } else {
+                               active = true; // Timer is still good, execute PIDs!
+                           }
+                       } else {
+                           active = false;
+                       }
+                   }	    
 
                     if (!active) continue;
 
@@ -4222,5 +4253,29 @@ static void autopid_processing_task(void *pvParameters) {
             
             autopid_unlock();
         }
+    }
+}
+
+/* [NEW] Function to toggle a group's state via MQTT */
+void autopid_set_group_mqtt_state(const char* group_name, bool active_state) {
+    if (!autopid_config || !autopid_config->use_groups || !group_name) return;
+    
+    if (autopid_lock(100)) {
+        for (uint32_t i = 0; i < autopid_config->group_count; i++) {
+            pid_group_t *grp = &autopid_config->groups[i];
+            if (grp->name && strcmp(grp->name, group_name) == 0) {
+                
+                grp->mqtt_active_flag = active_state;
+                
+                /* [NEW] If turning ON, wind the 15-minute watchdog timer (900,000 ms) */
+                if (active_state) {
+                    wc_timer_set(&grp->mqtt_active_timer, 900000); 
+                }
+                
+                ESP_LOGI(TAG, "Group '%s' MQTT state set to: %s", group_name, active_state ? "ACTIVE" : "IDLE");
+                break; // Found and updated
+            }
+        }
+        autopid_unlock();
     }
 }

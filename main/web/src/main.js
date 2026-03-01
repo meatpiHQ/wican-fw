@@ -1870,7 +1870,8 @@ async function refreshDestinationStats(){
         const r = await fetch('/api/destinations_stats');
         if(!r.ok) throw new Error('HTTP '+r.status);
         const js = await r.json();
-        const arr = Array.isArray(js?.destinations) ? js.destinations : [];
+
+	const arr = Array.isArray(js?.destinations) ? js.destinations : [];
         // Update model and DOM (without re-rendering)
         arr.forEach((s, i)=>{
             const ok = Number(s?.success || 0);
@@ -1882,6 +1883,18 @@ async function refreshDestinationStats(){
             const el = document.querySelector(`.dest-stats[data-idx="${i}"]`);
             if (el) el.textContent = `OK: ${ok} Fail: ${fail}`;
         });
+
+        // --- NEW: Parse Group MQTT Status and update badges ---
+        if (Array.isArray(js?.active_groups)) {
+            js.active_groups.forEach((isActive, gIndex) => {
+                const badge = document.getElementById(`mqtt_badge_g_${gIndex}`);
+                if (badge) {
+                    badge.style.display = isActive ? 'inline-flex' : 'none';
+                }
+            });
+        }
+        // ------------------------------------------------------
+
     }catch(e){
         // silently ignore; endpoint may not exist on older FW
         // console.log('dest stats fetch failed', e);
@@ -5856,6 +5869,7 @@ function renderVehicleGroups(groupsData) {
         gPeriodInput.onchange = (e) => { group.period = parseInt(e.target.value); };
         periodWrapper.appendChild(document.createTextNode("Period:"));
         periodWrapper.appendChild(gPeriodInput);
+
         periodWrapper.appendChild(document.createTextNode("ms"));
         r1Left.appendChild(periodWrapper);
 
@@ -5863,12 +5877,23 @@ function renderVehicleGroups(groupsData) {
 
         // Group Buttons (Play / Delete)
         const r1Right = document.createElement('div');
-        r1Right.style.cssText = "display:flex; gap:5px;";
+        // Note: added align-items:center so the badge lines up perfectly with the dropdown
+        r1Right.style.cssText = "display:flex; gap:5px; align-items:center;"; 
+
+        // --- MOVED: MQTT Active Badge ---
+        const mqttBadge = document.createElement('span');
+        mqttBadge.id = `mqtt_badge_g_${gIndex}`;
+        // Note: Changed margin-left to margin-right to space it slightly away from the dropdown
+        mqttBadge.style.cssText = "display:none; background:#10b981; color:white; font-size:0.7rem; padding:2px 6px; border-radius:6px; margin-right:5px; font-weight:bold; box-shadow:0 0 4px rgba(16, 185, 129, 0.6); align-items:center;";
+        mqttBadge.innerText = "MQTT ON";
+        r1Right.appendChild(mqttBadge);
+        // --------------------------------
 
         const condSelect = document.createElement('select');
-        // Note: added width:auto so it fits the text
-        condSelect.style.cssText = "width:auto; padding:2px 4px; border:1px solid #cbd5e1; border-radius:3px; font-size:0.85rem; background:rgba(255,255,255,0.8); font-weight:500; color:#334155;";
-        ["always", "voltage", "engine_running"].forEach(opt => {
+        condSelect.style.cssText = "width:auto; padding:2px 4px; border:1px solid #cbd5e1; border-radius:3px; font-size:0.85rem; background:rgba(255,255,255,0.8); font-weight:500; color:#334155;";	
+  
+        // --- NEW: Added 'mqtt_on_demand' to the dropdown options ---
+        ["always", "voltage", "engine_running", "mqtt_on_demand"].forEach(opt => {
             const o = document.createElement('option');
             o.value = opt;
             o.text = opt.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());

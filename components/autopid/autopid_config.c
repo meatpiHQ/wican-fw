@@ -737,6 +737,7 @@ static detection_method_t detection_method_from_str(const char* str) {
     if (strcasecmp(str, "voltage") == 0) return DETECTION_VOLTAGE;
     if (strcasecmp(str, "engine_running") == 0) return DETECTION_ADAPTIVE_RPM;
     if (strcasecmp(str, "adaptive_rpm") == 0) return DETECTION_ADAPTIVE_RPM;
+    if (strcasecmp(str, "mqtt_on_demand") == 0) return DETECTION_MQTT;
     return DETECTION_ALWAYS;
 }
 
@@ -842,6 +843,9 @@ autopid_config_t *load_autopid_config(void)
                 grp->init = init ? normalize_init_string(init->valuestring) : NULL;
                 grp->detection_method = detection_method_from_str(json_get_string(cond));
                 grp->period = period ? json_item_to_u32(period, 0) : 0;
+
+		/* [NEW] Explicitly default MQTT flag to false on boot */
+                grp->mqtt_active_flag = false;
                 
                 // Parse PIDs directly into Master List
                 cJSON *gpids = cJSON_GetObjectItem(g, "pids");
