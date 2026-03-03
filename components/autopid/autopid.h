@@ -262,6 +262,7 @@ void autopid_publish_all_destinations(void);
 void autopid_app_reset_timer(void);
 void autopid_set_group_mqtt_state(const char* group_name, bool active_state);
 
+void parse_elm327_response(char *buffer, response_t *response);
 
 // Shared lock for ELM327 access
 bool autopid_lock(uint32_t timeout_ms);

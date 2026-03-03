@@ -1061,6 +1061,12 @@
                     <div class="section-title">Network Configuration</div>
                     <table class="form-table">
                         <tr>
+                            <td>MAC Address:</td>
+                            <td>
+                                <div id="mac_address_value" style="font-family: monospace; font-weight: 600; color: #475569; padding: 0.25rem 0;">N/A</div>
+                            </td>
+                        </tr>
+                        <tr>
                             <td>SSID:</td>
                             <td>
                                 <div class="wifi-scan-container">
@@ -1091,6 +1097,31 @@
                                     <option value="wpa2">WPA2</option>
                                 </select>
                             </td>
+                        </tr>
+                        <tr>
+                            <td>IP Assignment:</td>
+                            <td>
+                                <select id="sta_ip_type" name="sta_ip_type" onchange="toggleStaStaticIp(); submit_enable();">
+                                    <option value="dhcp">DHCP (Default)</option>
+                                    <option value="static">Static IP</option>
+                                </select>
+                            </td>
+                        </tr>
+                        <tr class="sta-static-row" style="display:none;">
+                            <td>Static IP:</td>
+                            <td><input type="text" id="sta_static_ip" name="sta_static_ip" placeholder="192.168.1.50" oninput="submit_enable();"></td>
+                        </tr>
+                        <tr class="sta-static-row" style="display:none;">
+                            <td>Subnet Mask:</td>
+                            <td><input type="text" id="sta_netmask" name="sta_netmask" placeholder="255.255.255.0" oninput="submit_enable();"></td>
+                        </tr>
+                        <tr class="sta-static-row" style="display:none;">
+                            <td>Gateway:</td>
+                            <td><input type="text" id="sta_gateway" name="sta_gateway" placeholder="192.168.1.1" oninput="submit_enable();"></td>
+                        </tr>
+                        <tr class="sta-static-row" style="display:none;">
+                            <td>DNS Server:</td>
+                            <td><input type="text" id="sta_dns" name="sta_dns" placeholder="8.8.8.8" oninput="submit_enable();"></td>
                         </tr>
                     </table>
 
@@ -1475,6 +1506,7 @@
             <div class="automate-subtabs">
                 <button class="automate-subtablinks" id="automateSubDefaultOpen" onclick="openAutomateSubTab(event, 'automate_std')">Standard PIDs</button>
                 <button class="automate-subtablinks" onclick="openAutomateSubTab(event, 'automate_vehicle')">Vehicle Specific</button>
+                <button class="automate-subtablinks" onclick="openAutomateSubTab(event, 'automate_groups')">Vehicle Groups</button>
                 <button class="automate-subtablinks" onclick="openAutomateSubTab(event, 'automate_custom')">User Custom</button>
             </div>
             <div id="automate_std" class="automate-subtabcontent">
@@ -1540,9 +1572,12 @@
                     <tr>
                         <td>Vehicle Profiles:</td>
                         <td>
-                            <form id="car_data_form" enctype="multipart/form-data">
-                                <input id="car_data_file" name="car_data_file" type="file" onchange="loadLocalCarModels();submit_enable();" />
-                            </form>
+                            <div style="display:flex; align-items:center; gap:5px;">
+                                <form id="car_data_form" enctype="multipart/form-data" style="flex-grow:1;">
+                                    <input id="car_data_file" name="car_data_file" type="file" onchange="loadLocalCarModels();submit_enable();" style="width:100%;" />
+                                </form>
+                                <button class="system-button" onclick="downloadActiveProfile()" type="button" style="padding: 0.5rem 1rem;">Save Profile</button>
+                            </div>
                         </td>
                     </tr>
                     <tr>
@@ -1556,14 +1591,23 @@
                 <div id="specific_pids_table">
                     <div class="specific-pid-entries"></div>
                 </div>
-
                 <div class="section-title" style="margin-top:1rem;">Vehicle Specific Filters</div>
                 <div id="specific_filters_table">
                     <div class="specific-canfilter-entries"></div>
                 </div>
             </div>
 
+            <div id="automate_groups" class="automate-subtabcontent">
+                <div class="section-title">Vehicle Groups (Advanced)</div>
+                <div class="description-text" style="margin-bottom: 1rem; color: #555;">
+                    Groups allow conditional logic (e.g. "Engine Running") and adaptive polling rates.
+                    These are loaded from the selected Vehicle Profile.
+                </div>
+                <div id="vehicle_groups_container"></div>
+            </div>
+
             <div id="automate_custom" class="automate-subtabcontent">
+
                 <div class="section-title-row">
                     <div class="section-title section-title--no-underline">Custom PIDs</div>
                     <div class="section-title-actions">

@@ -413,17 +413,38 @@ static esp_err_t test_pid_handler(httpd_req_t *req)
             goto respond;
         }
 
-        uint8_t bytes[128];
-        uint32_t bytes_len = 0;
+
         const char *raw = autopid_test_pid_raw_get();
-        if (!autopid_test_pid_parse_hex_byte_stream(raw, bytes, sizeof(bytes), &bytes_len))
+        
+        // Pass the raw string through the exact same parser the MQTT background task uses
+        response_t parsed_elm_response;
+        memset(&parsed_elm_response, 0, sizeof(parsed_elm_response));
+        parse_elm327_response((char*)raw, &parsed_elm_response);
+
+        // Determine which data buffer has the clean payload
+        uint8_t *clean_data = parsed_elm_response.data;
+        uint32_t clean_len = parsed_elm_response.length;
+        if (parsed_elm_response.priority_data != NULL && parsed_elm_response.priority_data_len > 0) {
+            clean_data = parsed_elm_response.priority_data;
+            clean_len = parsed_elm_response.priority_data_len;
+        }
+
+        if (clean_len == 0 || strstr((char *)clean_data, "error") != NULL)
         {
             snprintf(err_msg, sizeof(err_msg), "No response");
+            if (parsed_elm_response.priority_data != NULL) free(parsed_elm_response.priority_data);
             ok = false;
             goto respond;
         }
 
-        // Require a positive response (41 <pid>) and normalize the buffer layout.
+        uint8_t bytes[128];
+        uint32_t bytes_len = clean_len;
+        if (bytes_len > sizeof(bytes)) bytes_len = sizeof(bytes);
+        memcpy(bytes, clean_data, bytes_len);
+        
+        if (parsed_elm_response.priority_data != NULL) free(parsed_elm_response.priority_data);
+
+        // Require a positive response (41 <pid>) and normalize the buffer layout.	
         // AutoPID's std PID extraction expects data to be aligned such that the
         // first PID data byte is at index 3 (len/service/pid/data...).
         int resp_idx = -1;
@@ -529,32 +550,46 @@ static esp_err_t test_pid_handler(httpd_req_t *req)
 
         const char *raw = autopid_test_pid_raw_get();
 
+        // Pass the raw string through the exact same parser the MQTT background task uses
+        response_t parsed_elm_response;
+        memset(&parsed_elm_response, 0, sizeof(parsed_elm_response));
+        parse_elm327_response((char*)raw, &parsed_elm_response);
+
+        // Determine which data buffer has the clean payload
+        uint8_t *clean_data = parsed_elm_response.data;
+        uint32_t clean_len = parsed_elm_response.length;
+        if (parsed_elm_response.priority_data != NULL && parsed_elm_response.priority_data_len > 0) {
+            clean_data = parsed_elm_response.priority_data;
+            clean_len = parsed_elm_response.priority_data_len;
+        }
+
         // If the adapter responded with a textual error, fail early.
-        // NOTE: "NO DATA" contains hex letters ("DA"), which can trick our hex parser
-        // into producing bytes; that must not be treated as a valid response.
-        if (raw && (autopid_test_pid_contains_case_insensitive(raw, "NO DATA") ||
-                    autopid_test_pid_contains_case_insensitive(raw, "ERROR") ||
-                    autopid_test_pid_contains_case_insensitive(raw, "STOPPED")))
+        if (clean_len == 0 || strstr((char *)clean_data, "error") != NULL ||
+            (raw && (autopid_test_pid_contains_case_insensitive(raw, "NO DATA") ||
+                     autopid_test_pid_contains_case_insensitive(raw, "ERROR") ||
+                     autopid_test_pid_contains_case_insensitive(raw, "STOPPED"))))
         {
             snprintf(err_msg, sizeof(err_msg), "NO DATA");
-            if (autopid_test_pid_contains_case_insensitive(raw, "ERROR"))
+            if (raw && autopid_test_pid_contains_case_insensitive(raw, "ERROR"))
                 snprintf(err_msg, sizeof(err_msg), "ERROR");
-            else if (autopid_test_pid_contains_case_insensitive(raw, "STOPPED"))
+            else if (raw && autopid_test_pid_contains_case_insensitive(raw, "STOPPED"))
                 snprintf(err_msg, sizeof(err_msg), "STOPPED");
+            
+            if (parsed_elm_response.priority_data != NULL) free(parsed_elm_response.priority_data);
             ok = false;
             goto respond;
         }
 
         uint8_t bytes[256];
-        uint32_t bytes_len = 0;
-        if (!autopid_test_pid_parse_hex_byte_stream(raw, bytes, sizeof(bytes), &bytes_len))
-        {
-            snprintf(err_msg, sizeof(err_msg), "No response");
-            ok = false;
-            goto respond;
-        }
+        uint32_t bytes_len = clean_len;
+        if (bytes_len > sizeof(bytes)) bytes_len = sizeof(bytes);
+        memcpy(bytes, clean_data, bytes_len);
+
+        if (parsed_elm_response.priority_data != NULL) free(parsed_elm_response.priority_data);
 
         uint8_t req_service = 0;
+
+	
         if (isxdigit((unsigned char)pid_send[0]) && isxdigit((unsigned char)pid_send[1]))
         {
             char svc_hex[3] = {pid_send[0], pid_send[1], 0};
