@@ -1,0 +1,103 @@
+{
+  "car_model": "Hyundai: Ioniq5/Ioniq6 77kWh",
+  "init": "ATSH7E4;ATST96;",
+  "extends": "hyundai/ioniq5-6.json",
+  "pids": [
+    {
+      "pid": "22010C",
+      "pid_init": "ATSH7E4",
+      "parameters": [
+        {
+          "name": "Cell Voltage 175",
+          "unit": "V",
+          "expr": "B26/50"
+        },
+        {
+          "name": "Cell Voltage 176",
+          "unit": "V",
+          "expr": "B27/50"
+        },
+        {
+          "name": "Cell Voltage 177",
+          "unit": "V",
+          "expr": "B28/50"
+        },
+        {
+          "name": "Cell Voltage 178",
+          "unit": "V",
+          "expr": "B29/50"
+        },
+        {
+          "name": "Cell Voltage 179",
+          "unit": "V",
+          "expr": "B30/50"
+        },
+        {
+          "name": "Cell Voltage 180",
+          "unit": "V",
+          "expr": "B31/50"
+        },
+        {
+          "name": "Cell Voltage 181",
+          "unit": "V",
+          "expr": "B33/50"
+        },
+        {
+          "name": "Cell Voltage 182",
+          "unit": "V",
+          "expr": "B34/50"
+        },
+        {
+          "name": "Cell Voltage 183",
+          "unit": "V",
+          "expr": "B35/50"
+        },
+        {
+          "name": "Cell Voltage 184",
+          "unit": "V",
+          "expr": "B36/50"
+        },
+        {
+          "name": "Cell Voltage 185",
+          "unit": "V",
+          "expr": "B37/50"
+        },
+        {
+          "name": "Cell Voltage 186",
+          "unit": "V",
+          "expr": "B38/50"
+        },
+        {
+          "name": "Cell Voltage 187",
+          "unit": "V",
+          "expr": "B39/50"
+        },
+        {
+          "name": "Cell Voltage 188",
+          "unit": "V",
+          "expr": "B41/50"
+        },
+        {
+          "name": "Cell Voltage 189",
+          "unit": "V",
+          "expr": "B42/50"
+        },
+        {
+          "name": "Cell Voltage 190",
+          "unit": "V",
+          "expr": "B43/50"
+        },
+        {
+          "name": "Cell Voltage 191",
+          "unit": "V",
+          "expr": "B44/50"
+        },
+        {
+          "name": "Cell Voltage 192",
+          "unit": "V",
+          "expr": "B45/50"
+        }
+      ]
+    }
+  ]
+}
