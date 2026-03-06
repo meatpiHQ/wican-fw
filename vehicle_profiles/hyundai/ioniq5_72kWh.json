@@ -1,0 +1,18 @@
+{
+  "car_model": "Hyundai: Ioniq5/Ioniq6 72kWh",
+  "init": "ATSH7E4;ATST96;",
+  "extends": "hyundai/ioniq5-6.json",
+  "pids": [
+    {
+      "pid": "220105",
+      "pid_init": "ATSH7E4",
+      "parameters": [
+        {
+          "name": "Battery Remaining Energy",
+          "unit": "Wh",
+          "expr": "((B37 << 8) + B38) *2"
+        }
+      ]
+    }
+  ]
+}
