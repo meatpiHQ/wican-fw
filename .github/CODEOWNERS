@@ -5,4 +5,9 @@
 .vehicle_profiles/ @jay-oswald
 .github/workflows/vehicle_profiles* @jay-oswald
 
+# accounts associated with individual profiles
+vehicle_profiles/hyundai/ioniq5* @VeSeArr @chris58008 @tylerharvey @electrify56
 vehicle_profiles/hyundai/kona.json @jay-oswald
+
+# tylerharvey owns the Torque port script
+.vehicle_profiles/Torque_to_WiCANjson.py
