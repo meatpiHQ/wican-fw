@@ -10,8 +10,13 @@
         "POWER_MAX": "",
         "HV_A": "",
         "HV_W": "",
-        "KWH_CHARGED": "",
-        "ODOMETER": ""
+        "KWH_CHARGED": ""
+      }
+    },
+    {
+      "pid": "22B0023",
+      "parameters": {
+        "ODOMETER": "[B8:B10]"
       }
     }
   ]
