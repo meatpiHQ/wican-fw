@@ -3685,6 +3685,32 @@
               "min": "0"
             }
           ]
+        },
+        {
+          "pid": "22D8EF1",
+          "pid_init": "ATSH6A2;ATFCSH6A2;ATCRA682;",
+          "parameters": [
+            {
+              "name": "BATT_TEMP",
+              "expression": "B4",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "80"
+            }
+          ]
+        },
+        {
+          "pid": "22D4341",
+          "pid_init": "ATSH6A2;ATFCSH6A2;ATCRA682;",
+          "parameters": [
+            {
+              "name": "TMP_A",
+              "expression": "B4",
+              "unit": "°C",
+              "class": "none"
+            }
+          ]
         }
       ]
     },
@@ -4001,6 +4027,55 @@
               "class": "distance",
               "unit": "km",
               "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "222004",
+          "parameters": [
+            {
+              "name": "HV_V",
+              "expression": "[B3:B4] * 0.5",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "480"
+            }
+          ]
+        },
+        {
+          "pid": "223204",
+          "parameters": [
+            {
+              "name": "HV_A",
+              "expression": "[B4:B5] * 0.25 - 8192",
+              "unit": "A",
+              "class": "current"
+            }
+          ]
+        },
+        {
+          "pid": "22339D",
+          "parameters": [
+            {
+              "name": "CHARGER_CONNECTED",
+              "expression": "B3 & 1",
+              "unit": "",
+              "class": "plug",
+              "type": "binary_sensor"
+            }
+          ]
+        },
+        {
+          "pid": "222001",
+          "parameters": [
+            {
+              "name": "BATT_TEMP",
+              "expression": "B4 - 40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "80"
             }
           ]
         }

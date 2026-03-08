@@ -29,6 +29,20 @@
       "parameters": {
         "ODOMETER": "[B6:B7]"
       }
+    },
+    {
+      "pid": "22D8EF1",
+      "pid_init": "ATSH6A2;ATFCSH6A2;ATCRA682;",
+      "parameters": {
+        "BATT_TEMP": "B4"
+      }
+    },
+    {
+      "pid": "22D4341",
+      "pid_init": "ATSH6A2;ATFCSH6A2;ATCRA682;",
+      "parameters": {
+        "TMP_A": "B4"
+      }
     }
   ]
 }
