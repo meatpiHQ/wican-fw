@@ -358,7 +358,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
     uint32_t supported_pids = 0;
     uint8_t selected_protocol = 0;
     static const char *supported_protocols[] = {
-        "ATTP0\rATCRA\r",               // Protocol 0
+        "ATTP0\r",               // Protocol 0
         "ATTP6\rATSH7DF\rATCRA\r",      // Protocol 6
         "ATTP7\rATSH18DB33F1\rATCRA\r", // Protocol 7
         "ATTP8\rATSH7DF\rATCRA\r",      // Protocol 8
