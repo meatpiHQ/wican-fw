@@ -4,3 +4,5 @@
 # @jay-oswald owns the vehicle_profiles JS + Action
 .vehicle_profiles/ @jay-oswald
 .github/workflows/vehicle_profiles* @jay-oswald
+
+vehicle_profiles/hyundai/kona.json @jay-oswald
