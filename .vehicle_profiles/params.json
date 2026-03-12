@@ -465,10 +465,21 @@
     }
   },
   "KWH_CHARGED": {
-    "description": "Total kWh Charged",
+    "description": "Total kWh Charged (Cumulative Energy Charged)",
     "settings": {
       "unit": "kwh",
-      "class": "battery"
+      "class": "battery",
+      "min": "0",
+      "max": "1000000"
+    }
+  },
+  "KWH_DISCHARGED": {
+    "description": "Total kWH Discharged( Cumulative Energy Discharged)",
+    "settings": {
+      "unit": "kWh",
+      "class": "none",
+      "min": "0",
+      "max": "1000000"
     }
   },
   "LV_A": {
@@ -862,24 +873,6 @@
     "description": "Cumulative Discharge Current",
     "settings": {
       "unit": "Ah",
-      "class": "none",
-      "min": "0",
-      "max": "1000000"
-    }
-  },
-  "CEC": {
-    "description": "Cumulative Energy Charged; identical to KWH_CHARGED?",
-    "settings": {
-      "unit": "kWh",
-      "class": "none",
-      "min": "0",
-      "max": "1000000"
-    }
-  },
-  "CED": {
-    "description": "Cumulative Energy Discharged",
-    "settings": {
-      "unit": "kWh",
       "class": "none",
       "min": "0",
       "max": "1000000"
