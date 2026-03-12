@@ -454,16 +454,40 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
             ESP_LOG_BUFFER_HEX(TAG, response->data, response->length);
 
             // Skip mode byte (0x41) and PID byte
-            if ((strstr((char *)response->data, "error") == NULL) && response->length >= 7)
+            if ((strstr((char *)response->data, "error") == NULL) && response->length >= 6)
             {
-                uint8_t merged_frame[7] = {0};
-                merge_response_frames(response->data, response->length, merged_frame);
+                // Determine frame size by response length.
+                // CAN responses: 7 bytes per frame [PCI, mode, PID, D1, D2, D3, D4].
+                // ISO/KWP responses: 6 bytes per frame [PID, D1, D2, D3, D4, checksum].
+                bool is_can_frame = (response->length >= 7 && response->length % 7 == 0);
 
-                // Extract bitmap from merged frame
-                supported_pids = (merged_frame[3] << 24) |
-                                 (merged_frame[4] << 16) |
-                                 (merged_frame[5] << 8) |
-                                 merged_frame[6];
+                if (is_can_frame)
+                {
+                    // CAN format: merge 7-byte frames via OR, bitmap at offset 3
+                    uint8_t merged_frame[7] = {0};
+                    merge_response_frames(response->data, response->length, merged_frame);
+
+                    supported_pids = (merged_frame[3] << 24) |
+                                     (merged_frame[4] << 16) |
+                                     (merged_frame[5] << 8) |
+                                     merged_frame[6];
+                }
+                else
+                {
+                    // ISO/KWP format: merge 6-byte frames via OR, bitmap at offset 1
+                    uint8_t merged[6] = {0};
+                    for (uint32_t f = 0; f < response->length; f += 6)
+                    {
+                        for (uint8_t b = 0; b < 6 && (f + b) < response->length; b++)
+                        {
+                            merged[b] |= response->data[f + b];
+                        }
+                    }
+                    supported_pids = (merged[1] << 24) |
+                                     (merged[2] << 16) |
+                                     (merged[3] << 8) |
+                                     merged[4];
+                }
 
                 ESP_LOGI(TAG, "Merged frame bitmap: 0x%08lx", supported_pids);
 
