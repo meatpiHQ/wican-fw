@@ -17,7 +17,7 @@
       "pid": "22B0023",
       "pid_init": "ATSH7C6;ATFCSH7C6;",
       "parameters": {
-        "ODOMETER": "[B8:B10]"
+        "ODOMETER": "[B12:B14]"
       }
     }
   ]
