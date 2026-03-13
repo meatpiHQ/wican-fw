@@ -8,6 +8,7 @@ The script will output two files in the directory of <torque_filename>:
 <torque_filename_noext>.params.json is formatted to be merged with ../.vehicle_profiles/params.json
 <torque_filename_noext>.json is formatted to be merged with ./<make>/<model>.json
 This part requires care and should be done manually and/or with help from an LLM. Blindly copy-pasting will likely produce duplicate parameters and should be avoided. There is low likelihood that the ported Torque shortnames map onto existing WiCAN shortnames. Use long names to make the mapping correctly.
+We use params.csv to map params from torque names to WiCAN names. The script will skip adding params entries for any Torque shortname that has a mapping, so the mapping should be updated to include any existing WiCAN params that match Torque shortnames. The mapping is case-insensitive and will ignore spaces in the header, but should otherwise be formatted as "torque,WiCAN" with no extra columns.
 
 This script is tested on Torque PIDs in files from github.com/Esprit1st/Hyundai-Ioniq-5-Torque-Pro-PIDs/ and may need more work to import other files, but should be a good start.
 '''
@@ -17,6 +18,27 @@ import re
 import json
 import sys
 from pathlib import Path
+import csv
+
+
+# Load Torque to WiCAN name mapping from params.csv
+def load_name_mapping(mapping_path):
+    mapping = {}
+    try:
+        with open(mapping_path, newline='') as csvfile:
+            reader = csv.DictReader(csvfile)
+            # Fix: strip spaces from fieldnames to handle 'torque, WiCAN' header
+            if reader.fieldnames:
+                reader.fieldnames = [f.strip() for f in reader.fieldnames]
+            for row in reader:
+                # Also strip keys in row for robustness
+                torque = row.get('torque', row.get('torque', '')).strip().lower()
+                wican = row.get('WiCAN', row.get('WiCAN', '')).strip()
+                if torque:
+                    mapping[torque] = wican
+    except Exception as e:
+        print(f"Warning: Could not load mapping file: {e}")
+    return mapping
 
 class PID_group(object):
 
@@ -25,9 +47,15 @@ class PID_group(object):
         self.parameters = {}
         self.init = []
 
-    def add_parameter(self, line: npt.NDArray[str], params: dict):
+    def add_parameter(self, line, params: dict, name_mapping: dict):
         long_name = re.sub(r"00\d_","",line[0])
-        short_name = format_shortname(line[1])
+        torque_short = line[1]
+        torque_short_lc = torque_short.lower()
+        # Use mapping if available (case-insensitive), else fallback to formatted shortname
+        if torque_short_lc in name_mapping:
+            short_name = name_mapping[torque_short_lc]
+        else:
+            short_name = format_shortname(torque_short)
         init = line[7]
         unit = line[6] 
         expr = line[3]
@@ -37,7 +65,9 @@ class PID_group(object):
         class_ = determine_class(long_name, unit)
         if(unit.casefold() == 'c' or unit.casefold() == 'f'):
             unit = '°'+unit
-        params[short_name] = { "description" : long_name, "settings" : { "unit" : unit, "class" : class_, "min": min_val, "max": max_val}}
+        # Only add to params if not mapped (i.e., not in mapping)
+        if torque_short_lc not in name_mapping:
+            params[short_name] = { "description" : long_name, "settings" : { "unit" : unit, "class" : class_, "min": min_val, "max": max_val}}
         if init not in self.init:
             self.init.append(init)
 
@@ -134,9 +164,14 @@ def replace_double_letters(letters: str, expr: str, offset: int):
     val += frame_type
     return re.sub(rf"\b{letters}\b",f"B{val}",expr)
 
-# fname = '/home/trh/Packages/Hyundai-Ioniq-5-Torque-Pro-PIDs/TorqueIONIQ5AWD74kWh.csv'
+
+# Main script logic
 fname = sys.argv[1]
 pids = np.loadtxt(fname,delimiter=',',dtype='str',comments='~',skiprows=1)
+
+# Try to load mapping from params.csv in the same directory as this script
+mapping_path = str(Path(__file__).parent / 'params.csv')
+name_mapping = load_name_mapping(mapping_path)
 
 pid_groups = []
 params = {}
@@ -150,7 +185,7 @@ for line in pids:
     else:
         group = PID_group(pid)
         pid_groups.append(group)
-    group.add_parameter(line, params)
+    group.add_parameter(line, params, name_mapping)
 
 json_dict = {"pids" : []}
 for group in pid_groups:
