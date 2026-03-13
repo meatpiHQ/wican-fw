@@ -95,6 +95,7 @@
                 "INTAKE_AIR_TEMP_2",
                 "INTAKE_AIR_TMP",
                 "KWH_CHARGED",
+                "KWH_DISCHARGED",
                 "LV_A",
                 "LV_V",
                 "MAF",
