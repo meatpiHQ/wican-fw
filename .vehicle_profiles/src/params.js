@@ -12,6 +12,9 @@ let params = null;
 
 export async function process_params() {
   let params = await get_params();
+  params = sortPackageJson(params);
+  await writeFile(PARAMS_PATH, JSON.stringify(params, null, 2));
+
   let param_array = Object.getOwnPropertyNames(params);
   let schema_file = editJsonFile(SCHEMA_PATH);
 
@@ -20,10 +23,7 @@ export async function process_params() {
     schema_file.set(PARAM_PATH_IN_SCHEMA, param_array);
     schema_file.save();
   }
-
-  params = sortPackageJson(params);
-  await writeFile(PARAMS_PATH, JSON.stringify(params, null, 2));
-
+  
   await save_params_md();
 }
 
