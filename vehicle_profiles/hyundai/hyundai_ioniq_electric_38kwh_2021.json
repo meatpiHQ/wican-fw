@@ -1,0 +1,73 @@
+{
+  "car_model": "Hyundai: Ioniq Electric 38kWh (2020-2021)",
+  "init": "ATSP6;ATST96;",
+  "pids": [
+    {
+      "pid": "2201019",
+      "pid_init": "ATSH7E4;ATFCSH7E4;",
+      "parameters": {
+        "SOC": "B10/2",
+        "CHARGING": "(B15&32)/32",
+        "CHARGING_DC": "(B15&64)/64",
+        "HV_V": "[B19:B20]/10",
+        "HV_A": "[B17:B18]/10",
+        "HV_W": "([B19:B20]/10)*([B17:B18]/10)",
+        "HV_T_MAX": "B22-40",
+        "HV_T_MIN": "B23-40",
+        "HV_T_I": "B26-40",
+        "HV_C_V_MAX": "B31/50",
+        "HV_C_V_MAX_NO": "B30",
+        "HV_C_V_MIN": "B34/50",
+        "HV_C_V_MIN_NO": "B33",
+        "LV_V": "B38/10",
+        "KWH_CHARGED": "([B49:B50]*65536+[B51:B52])/10"
+      }
+    },
+    {
+      "pid": "2201057",
+      "pid_init": "ATSH7E4;ATFCSH7E4;",
+      "parameters": {
+        "SOH": "[B34:B35]/10",
+        "SOC_D": "B33/2",
+        "DRIVE_MODE": "B31"
+      }
+    },
+    {
+      "pid": "2101",
+      "pid_init": "ATSH7E2;ATFCSH7E2;",
+      "parameters": {
+        "GEAR": "B10",
+        "THROTTLE": "B13",
+        "SPEED": "B20*3.97+2.3"
+      }
+    },
+    {
+      "pid": "2201006",
+      "pid_init": "ATSH7B3;ATFCSH7B3;",
+      "parameters": {
+        "T_CAB": "B11/2-40"
+      }
+    },
+    {
+      "pid": "22C00B",
+      "pid_init": "ATSH7A0;ATFCSH7A0;",
+      "parameters": {
+        "TYRE_P_FL": "B10/5",
+        "TYRE_P_FR": "B14/5",
+        "TYRE_P_RL": "B19/5",
+        "TYRE_P_RR": "B23/5",
+        "TYRE_T_FL": "B11-50",
+        "TYRE_T_FR": "B15-50",
+        "TYRE_T_RL": "B20-50",
+        "TYRE_T_RR": "B24-50"
+      }
+    },
+    {
+      "pid": "22B002",
+      "pid_init": "ATSH7C6;ATFCSH7C6;",
+      "parameters": {
+        "ODOMETER": "[B13:B14]"
+      }
+    }
+  ]
+}
