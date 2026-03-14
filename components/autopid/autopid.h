@@ -25,6 +25,7 @@
 #include <stdint.h>
 
 #include <esp_err.h>
+#include <time.h>
 
 #define AUTOPID_BUFFER_SIZE (1024*4)
 #define QUEUE_SIZE 10

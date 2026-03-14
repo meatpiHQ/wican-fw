@@ -21,6 +21,7 @@
 #include "esp_heap_caps.h"
 
 #include "elm327.h"
+#include "autopid.h"
 
 static StaticSemaphore_t test_pid_cmd_done_buf;
 static SemaphoreHandle_t test_pid_cmd_done = NULL;
@@ -264,7 +265,13 @@ void autopid_test_pid_restore_autopid_safe_elm_state(void)
     // IMPORTANT: Do NOT send ATWS/ATZ here.
     // The AutoPID task is running concurrently; resetting the ELM chip from the
     // test endpoint can flip echo/settings and/or disrupt the command runner.
-    autopid_test_pid_run_init_sequence("ate0\rath1\ratl0\rats1\ratm0\ratst96\rATCRA\r", 1200);
+    // ATCRA is CAN-only; skip it for non-CAN protocols (1-5) to avoid '?' errors.
+    int32_t proto = -1;
+    (void)autopid_get_protocol_number(&proto);
+    if (proto >= 6 && proto <= 9)
+        autopid_test_pid_run_init_sequence("ate0\rath1\ratl0\rats1\ratm0\ratst96\rATCRA\r", 1200);
+    else
+        autopid_test_pid_run_init_sequence("ate0\rath1\ratl0\rats1\ratm0\ratst96\r", 1200);
 }
 
 bool autopid_test_pid_contains_case_insensitive(const char *haystack, const char *needle)
