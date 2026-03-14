@@ -1511,6 +1511,247 @@
       ]
     },
     {
+      "car_model": "Hyundai: Ioniq Electric 38kWh (2020-2021)",
+      "init": "ATSP6;ATST96;",
+      "pids": [
+        {
+          "pid": "2201019",
+          "pid_init": "ATSH7E4;ATFCSH7E4;",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "B10/2",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            },
+            {
+              "name": "CHARGING",
+              "expression": "(B15&32)/32",
+              "unit": "",
+              "class": "battery_charging",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "CHARGING_DC",
+              "expression": "(B15&64)/64",
+              "unit": "",
+              "class": "plug",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "HV_V",
+              "expression": "[B19:B20]/10",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "480"
+            },
+            {
+              "name": "HV_A",
+              "expression": "[B17:B18]/10",
+              "unit": "A",
+              "class": "current"
+            },
+            {
+              "name": "HV_W",
+              "expression": "([B19:B20]/10)*([B17:B18]/10)",
+              "unit": "W",
+              "class": "power"
+            },
+            {
+              "name": "HV_T_MAX",
+              "expression": "B22-40",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_MIN",
+              "expression": "B23-40",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_I",
+              "expression": "B26-40",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_C_V_MAX",
+              "expression": "B31/50",
+              "unit": "V",
+              "class": "voltage"
+            },
+            {
+              "name": "HV_C_V_MAX_NO",
+              "expression": "B30",
+              "unit": "none",
+              "class": "none"
+            },
+            {
+              "name": "HV_C_V_MIN",
+              "expression": "B34/50",
+              "unit": "V",
+              "class": "voltage"
+            },
+            {
+              "name": "HV_C_V_MIN_NO",
+              "expression": "B33",
+              "unit": "none",
+              "class": "none"
+            },
+            {
+              "name": "LV_V",
+              "expression": "B38/10",
+              "unit": "V",
+              "class": "battery"
+            },
+            {
+              "name": "KWH_CHARGED",
+              "expression": "([B49:B50]*65536+[B51:B52])/10",
+              "unit": "kwh",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "2201057",
+          "pid_init": "ATSH7E4;ATFCSH7E4;",
+          "parameters": [
+            {
+              "name": "SOH",
+              "expression": "[B34:B35]/10",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "105"
+            },
+            {
+              "name": "SOC_D",
+              "expression": "B33/2",
+              "unit": "%",
+              "class": "battery"
+            },
+            {
+              "name": "DRIVE_MODE",
+              "expression": "B31",
+              "unit": "",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "2101",
+          "pid_init": "ATSH7E2;ATFCSH7E2;",
+          "parameters": [
+            {
+              "name": "GEAR",
+              "expression": "B10",
+              "unit": "none",
+              "class": "none"
+            },
+            {
+              "name": "THROTTLE",
+              "expression": "B13",
+              "unit": "%",
+              "class": "none"
+            },
+            {
+              "name": "SPEED",
+              "expression": "B20*3.97+2.3",
+              "unit": "km/h",
+              "class": "speed"
+            }
+          ]
+        },
+        {
+          "pid": "2201006",
+          "pid_init": "ATSH7B3;ATFCSH7B3;",
+          "parameters": [
+            {
+              "name": "T_CAB",
+              "expression": "B11/2-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "22C00B",
+          "pid_init": "ATSH7A0;ATFCSH7A0;",
+          "parameters": [
+            {
+              "name": "TYRE_P_FL",
+              "expression": "B10/5",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_P_FR",
+              "expression": "B14/5",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_P_RL",
+              "expression": "B19/5",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_P_RR",
+              "expression": "B23/5",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_T_FL",
+              "expression": "B11-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_T_FR",
+              "expression": "B15-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_T_RL",
+              "expression": "B20-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_T_RR",
+              "expression": "B24-50",
+              "class": "temperature",
+              "unit": "°C"
+            }
+          ]
+        },
+        {
+          "pid": "22B002",
+          "pid_init": "ATSH7C6;ATFCSH7C6;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B13:B14]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Hyundai: Ioniq2017",
       "init": "ATSP6;ATSH7E4;ATST96;",
       "pids": [
