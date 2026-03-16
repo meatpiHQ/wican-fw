@@ -4869,6 +4869,82 @@
       ]
     },
     {
+      "car_model": "Subaru Outback 2.5na Gen6",
+      "init": "ATSP6;",
+      "pids": [
+        {
+          "pid": "2210D2",
+          "pid_init": "ATSH7A3;",
+          "parameters": [
+            {
+              "name": "TRAN_F_TEMP",
+              "expression": "B4 - 50",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "221022",
+          "pid_init": "ATSH753;",
+          "parameters": [
+            {
+              "name": "TYRE_P_FL",
+              "expression": "(B4 / 5)",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_P_FR",
+              "expression": "(B5 / 5)",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_P_RL",
+              "expression": "(B6 / 5)",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_P_RR",
+              "expression": "(B7 / 5)",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "2212ED",
+          "pid_init": "ATSH7A2;",
+          "parameters": [
+            {
+              "name": "MAF",
+              "expression": "([B4:B5] / 100)",
+              "unit": "g/s",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "221322",
+          "pid_init": "ATSH7A2;",
+          "parameters": [
+            {
+              "name": "AC_C_C",
+              "expression": "(([B4:B7] * 10) / 10000) - 2000",
+              "unit": "A",
+              "class": "battery"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Toyota: Hilux",
       "init": "ATST96;ATSP6;",
       "pids": [
