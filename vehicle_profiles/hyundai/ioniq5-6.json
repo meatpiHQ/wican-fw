@@ -4,7 +4,7 @@
   "pids": [
     {
       "pid": "220100",
-      "pid_init": "ATSH7B3",
+      "pid_init": "ATSH7B3;",
       "parameters": {
         "SPEED": "B38",
         "TMP_A": "(B12/2)-40",
@@ -13,7 +13,7 @@
     },
     {
       "pid": "220105",
-      "pid_init": "ATSH7E4",
+      "pid_init": "ATSH7E4;",
       "parameters": {
         "AIRBAG": "B30",
         "REGEN_MAX": "((B23<<8)+B25)/100",
@@ -40,7 +40,7 @@
     },
     {
       "pid": "220101",
-      "pid_init": "ATSH7E4",
+      "pid_init": "ATSH7E4;",
       "parameters": {
         "LV_V": "B38*0.1",
         "HV_T_MAX": "(S21)",
@@ -77,14 +77,14 @@
     },
     {
       "pid": "22E011",
-      "pid_init": "ATSH7E5",
+      "pid_init": "ATSH7E5;",
       "parameters": {
         "LV_SOC": "B28"
       }
     },
     {
       "pid": "22C00B",
-      "pid_init": "ATSH7A0",
+      "pid_init": "ATSH7A0;",
       "parameters": {
         "TYRE_P_FL": "B10*0.2",
         "TYRE_P_FR": "B15*0.2",
@@ -98,7 +98,7 @@
     },
     {
       "pid": "22B002",
-      "pid_init": "ATSH7C6",
+      "pid_init": "ATSH7C6;",
       "parameters": {
         "ODOMETER_MI": "[B17:B18]",
         "ODOMETER": "[B12:B14]"
@@ -106,7 +106,7 @@
     },
     {
       "pid": "22F010",
-      "pid_init": "ATSH730",
+      "pid_init": "ATSH730;",
       "parameters": {
         "STEER_ANGLE": "((S20)*256+B19)/10"
       }
