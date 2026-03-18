@@ -28,6 +28,7 @@
 #define WIFI_MGR_DEFAULT_CONFIG() { \
     .sta_ssid = "", \
     .sta_password = "", \
+    .sta_hostname = "", \
     .sta_auth_mode = WIFI_AUTH_WPA2_PSK, \
     .sta_auto_reconnect = true, \
     .sta_max_retry = -1, \
@@ -44,6 +45,7 @@
 #define WIFI_MGR_AUTO_CONFIG() { \
     .sta_ssid = "", \
     .sta_password = "", \
+    .sta_hostname = "", \
     .sta_auth_mode = WIFI_AUTH_WPA2_PSK, \
     .sta_auto_reconnect = true, \
     .sta_max_retry = -1, \
@@ -70,6 +72,7 @@ typedef struct {
     // STA Configuration
     char sta_ssid[32];
     char sta_password[64];
+    char sta_hostname[32];
     wifi_auth_mode_t sta_auth_mode;
     bool sta_auto_reconnect;
     int sta_max_retry;          // -1 for infinite retries
