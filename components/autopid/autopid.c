@@ -3140,25 +3140,22 @@ static void autopid_webhook_task(void *pvParameters)
                     char *raw_json = autopid_data_read();
                     if (raw_json)
                     {
-                        char *url = strdup_psram(webhook_cfg.url);
-                        if (url)
+                        char *body = NULL;
+                        char *current_config_data = NULL;
+                        char *current_status_data = NULL;
+                        char *current_autopid_data = NULL;
+
+                        // Always send settings-style JSON: {config, status, autopid_data}
+                        current_status_data = config_server_get_status_json(true);
+                        current_config_data = autopid_get_config();
+                        current_autopid_data = strdup_psram(raw_json);
+
+                        cJSON *root_obj = cJSON_CreateObject();
+                        if (root_obj)
                         {
-                            char *body = NULL;
-                            char *current_config_data = NULL;
-                            char *current_status_data = NULL;
-                            char *current_autopid_data = NULL;
-
-                            // Always send settings-style JSON: {config, status, autopid_data}
-                            current_status_data = config_server_get_status_json(true);
-                            current_config_data = autopid_get_config();
-                            current_autopid_data = strdup_psram(raw_json);
-
-                            cJSON *root_obj = cJSON_CreateObject();
-                            if (root_obj)
-                            {
-                                cJSON *cfg_obj = NULL;
-                                cJSON *sts_obj = NULL;
-                                cJSON *auto_obj = NULL;
+                            cJSON *cfg_obj = NULL;
+                            cJSON *sts_obj = NULL;
+                            cJSON *auto_obj = NULL;
 
                                 // Build config (full or diff)
                                 cJSON *curr_cfg_src = NULL;
@@ -3495,62 +3492,86 @@ static void autopid_webhook_task(void *pvParameters)
                             }
                             // current_config_data comes from autopid_get_config() and is a cached global → DO NOT free here.
 
-                            if (body)
-                            {
-                                https_client_mgr_config_t cfg = {0};
-                                cfg.url = url;
-                                cfg.timeout_ms = 5000;
+                        if (body)
+                        {
+                                https_client_mgr_response_t last_resp = {0};
+                                esp_err_t post_err = ESP_FAIL;
+                                bool ok = false;
+                                const char *successful_url = NULL;
 
-                                // Detect scheme from URL
-                                bool is_https_url = (strncasecmp(url, "https://", 8) == 0);
-                                if (is_https_url)
+#if HA_WEBHOOK_MAX_URLS > 0
+                                size_t webhook_url_count = webhook_cfg.url_count > 0 ? webhook_cfg.url_count : 1;
+#else
+                                size_t webhook_url_count = 1;
+#endif
+
+                                for (size_t url_index = 0; url_index < webhook_url_count; ++url_index)
                                 {
-                                    // Use built-in certificate bundle for HTTPS
-                                    cfg.use_crt_bundle = true;
-                                    ESP_LOGI(TAG, "Using built-in certificate bundle for webhook HTTPS");
+#if HA_WEBHOOK_MAX_URLS > 0
+                                    const char *target_url = webhook_cfg.url_count > 0 ? webhook_cfg.urls[url_index] : webhook_cfg.url;
+#else
+                                    const char *target_url = webhook_cfg.url;
+#endif
+                                    if (!target_url || target_url[0] == '\0')
+                                        continue;
 
-                                    // For HTTPS, if host is raw IPv4 address, skip CN verification
-                                    const char *host_start = strstr(url, "://");
-                                    host_start = host_start ? host_start + 3 : url;
-                                    char host_buf[64] = {0};
-                                    size_t hi = 0;
-                                    while (host_start[hi] && host_start[hi] != '/' && host_start[hi] != ':' && hi < sizeof(host_buf) - 1)
+                                    https_client_mgr_config_t cfg = {0};
+                                    cfg.url = target_url;
+                                    cfg.timeout_ms = 5000;
+
+                                    // Detect scheme from URL
+                                    bool is_https_url = (strncasecmp(target_url, "https://", 8) == 0);
+                                    if (is_https_url)
                                     {
-                                        host_buf[hi] = host_start[hi];
-                                        hi++;
-                                    }
-                                    bool is_ip = true;
-                                    for (size_t k = 0; k < hi; k++)
-                                    {
-                                        if ((host_buf[k] < '0' || host_buf[k] > '9') && host_buf[k] != '.')
+                                        // Use built-in certificate bundle for HTTPS
+                                        cfg.use_crt_bundle = true;
+                                        ESP_LOGI(TAG, "Using built-in certificate bundle for webhook HTTPS");
+
+                                        // For HTTPS, if host is raw IPv4 address, skip CN verification
+                                        const char *host_start = strstr(target_url, "://");
+                                        host_start = host_start ? host_start + 3 : target_url;
+                                        char host_buf[64] = {0};
+                                        size_t hi = 0;
+                                        while (host_start[hi] && host_start[hi] != '/' && host_start[hi] != ':' && hi < sizeof(host_buf) - 1)
                                         {
-                                            is_ip = false;
-                                            break;
+                                            host_buf[hi] = host_start[hi];
+                                            hi++;
+                                        }
+                                        bool is_ip = true;
+                                        for (size_t k = 0; k < hi; k++)
+                                        {
+                                            if ((host_buf[k] < '0' || host_buf[k] > '9') && host_buf[k] != '.')
+                                            {
+                                                is_ip = false;
+                                                break;
+                                            }
+                                        }
+                                        if (is_ip)
+                                        {
+                                            cfg.skip_common_name = true;
                                         }
                                     }
-                                    if (is_ip)
+
+                                    https_client_mgr_response_t resp = {0};
+                                    post_err = https_client_mgr_request_with_auth(&cfg, HTTPS_METHOD_POST,
+                                                                                  body, strlen(body),
+                                                                                  "application/json",
+                                                                                  NULL,
+                                                                                  NULL,
+                                                                                  &resp);
+
+                                    ok = (post_err == ESP_OK && resp.is_success);
+                                    if (ok)
                                     {
-                                        cfg.skip_common_name = true;
+                                        successful_url = target_url;
+                                        last_resp = resp;
+                                        ESP_LOGI(TAG, "Webhook POST success via %s, status %d", target_url, resp.status_code);
+                                        break;
                                     }
-                                }
 
-                                https_client_mgr_response_t resp = {0};
-                                esp_err_t post_err = https_client_mgr_request_with_auth(&cfg, HTTPS_METHOD_POST,
-                                                                                        body, strlen(body),
-                                                                                        "application/json",
-                                                                                        NULL,
-                                                                                        NULL,
-                                                                                        &resp);
-
-                                bool ok = (post_err == ESP_OK && resp.is_success);
-                                if (ok)
-                                {
-                                    ESP_LOGI(TAG, "Webhook POST success, status %d", resp.status_code);
-                                    // printf("body: %s\n", body);
-                                }
-                                else
-                                {
-                                    ESP_LOGE(TAG, "Webhook POST failed: %s", esp_err_to_name(post_err));
+                                    ESP_LOGE(TAG, "Webhook POST failed via %s: %s", target_url, esp_err_to_name(post_err));
+                                    https_client_mgr_free_response(&last_resp);
+                                    last_resp = resp;
                                 }
 
                                 // Update runtime webhook stats in cache (no filesystem write)
@@ -3564,6 +3585,10 @@ static void autopid_webhook_task(void *pvParameters)
                                     webhook_format_utc(upd.last_post);
                                     upd.last_error[0] = '\0';
                                     upd.last_error_time[0] = '\0';
+                                    if (successful_url)
+                                    {
+                                        ESP_LOGI(TAG, "Webhook delivery completed using %s", successful_url);
+                                    }
                                 }
                                 else
                                 {
@@ -3573,12 +3598,12 @@ static void autopid_webhook_task(void *pvParameters)
                                     webhook_format_utc(upd.last_error_time);
 
                                     char snippet[96] = {0};
-                                    if (resp.data && resp.data_len > 0)
+                                    if (last_resp.data && last_resp.data_len > 0)
                                     {
-                                        size_t n = (size_t)resp.data_len;
+                                        size_t n = (size_t)last_resp.data_len;
                                         if (n > (sizeof(snippet) - 1))
                                             n = (sizeof(snippet) - 1);
-                                        memcpy(snippet, resp.data, n);
+                                        memcpy(snippet, last_resp.data, n);
                                         snippet[n] = '\0';
                                         webhook_sanitize_snippet(snippet);
                                     }
@@ -3593,17 +3618,15 @@ static void autopid_webhook_task(void *pvParameters)
                                     else
                                     {
                                         if (snippet[0])
-                                            snprintf(upd.last_error, sizeof(upd.last_error), "http=%d; resp=%s", resp.status_code, snippet);
+                                            snprintf(upd.last_error, sizeof(upd.last_error), "http=%d; resp=%s", last_resp.status_code, snippet);
                                         else
-                                            snprintf(upd.last_error, sizeof(upd.last_error), "http=%d", resp.status_code);
+                                            snprintf(upd.last_error, sizeof(upd.last_error), "http=%d", last_resp.status_code);
                                     }
                                 }
                                 (void)ha_webhooks_update_cache(&upd);
 
-                                https_client_mgr_free_response(&resp);
-                                free(body);
-                            }
-                            free(url);
+                                https_client_mgr_free_response(&last_resp);
+                            free(body);
                         }
                         free(raw_json);
                     }

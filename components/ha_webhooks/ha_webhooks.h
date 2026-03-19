@@ -21,12 +21,20 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 #include <esp_err.h>
 #include <esp_http_server.h>
 
 #ifdef __cplusplus
 extern "C"
 {
+#endif
+
+// Dual-URL failover is only supported on WiCAN PRO builds.
+#if HARDWARE_VER == WICAN_PRO
+#define HA_WEBHOOK_MAX_URLS 2
+#else
+#define HA_WEBHOOK_MAX_URLS 0
 #endif
 
 /**
@@ -37,6 +45,10 @@ extern "C"
 typedef struct ha_webhook_config
 {
     char url[192];       /**< Webhook URL (HTTP/HTTPS) */
+#if HA_WEBHOOK_MAX_URLS > 0
+    char urls[HA_WEBHOOK_MAX_URLS][192]; /**< Ordered webhook failover URLs */
+    size_t url_count;    /**< Number of configured entries in urls */
+#endif
     bool enabled;        /**< Whether webhook is enabled */
     int interval;        /**< Poll/post interval in seconds (or minutes as defined by usage) */
     char last_post[32];  /**< Timestamp of last successful POST */
