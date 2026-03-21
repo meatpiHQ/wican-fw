@@ -15,10 +15,56 @@ We **highly recommend** ordering the **WiCAN PRO** version because:
 ---
 # WiCAN PRO
 
-### Order on [**Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics/wican-pro)
-
 ![1](https://github.com/user-attachments/assets/ed94e7b2-3d8a-4b1c-a759-c1e7a28d4a67)
 
+<table>
+  <thead>
+    <tr>
+      <th align="left" style="background-color:#0c1322;color:#fff;padding:12px 16px;font-size:15px;">Feature</th>
+      <th align="center" style="background-color:#2563eb;color:#fff;padding:12px 16px;font-size:15px;">WiCAN Pro ⭐</th>
+      <th align="center" style="background-color:#0c1322;color:#fff;padding:12px 16px;font-size:15px;">WiCAN</th>
+      <th align="center" style="background-color:#0c1322;color:#fff;padding:12px 16px;font-size:15px;">OBDLink MX+</th>
+    </tr>
+  </thead>
+  <tbody>
+    <!-- USB & Hardware -->
+    <tr><td colspan="4"><strong>USB &amp; HARDWARE</strong></td></tr>
+    <tr><td>USB Host Interface</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+    <tr><td>Dual USB to Serial</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+    <tr><td>Button</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
+    <tr><td>SD Card Logging</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+    <!-- Connectivity & Software -->
+    <tr><td colspan="4"><strong>CONNECTIVITY &amp; SOFTWARE</strong></td></tr>
+    <tr><td>Interface</td><td align="center">WiFi / BLE / USB</td><td align="center">WiFi / BLE</td><td align="center">Bluetooth</td></tr>
+    <tr><td>WiCAN Firmware</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
+    <tr><td>Wireguard VPN</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+    <tr><td>HTTPS</td><td align="center">✅</td><td align="center">HTTP only</td><td align="center">—</td></tr>
+    <tr><td>MQTTS (Secure MQTT)</td><td align="center">✅</td><td align="center">MQTT only</td><td align="center">—</td></tr>
+    <tr><td>Home Assistant Nabu Casa</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+    <tr><td>Firmware Updates - Access Latest Features</td><td align="center">Full</td><td align="center">Limited</td><td align="center">—</td></tr>
+    <tr><td>Improved Web Interface</td><td align="center">✅</td><td align="center">❌</td><td align="center">—</td></tr>
+    <tr><td>Additional Reverse Engineering Tools</td><td align="center">✅</td><td align="center">❌</td><td align="center">—</td></tr>
+    <tr><td>RealDash CAN Protocol (PIN 6/14)</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
+    <tr><td>slcan / socketCAN (PIN 6/14)</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
+    <!-- Protocols -->
+    <tr><td colspan="4"><strong>PROTOCOLS</strong></td></tr>
+    <tr><td>Medium Speed CAN MS-CAN (PIN 3/11)</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
+    <tr><td>GM High-Speed J1962 (PIN 12/13)</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
+    <tr><td>Single Wire CAN GMLAN (PIN 1)</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
+    <tr><td>SAE J1850-PWM</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
+    <tr><td>SAE J1850-VPW</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
+    <tr><td>ISO 9141-2</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
+    <tr><td>ISO 14230-4 Slow/Fast</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
+    <!-- Instruction Sets -->
+    <tr><td colspan="4"><strong>INSTRUCTION SETS</strong></td></tr>
+    <tr><td>ELM327 Instructions</td><td align="center">v2.3</td><td align="center">Emulation v1.5</td><td align="center">v2.3</td></tr>
+    <tr><td>ELM329 Instructions</td><td align="center">v2.2</td><td align="center">❌</td><td align="center">v2.2</td></tr>
+    <tr><td>STN Instructions</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
+    <tr><td>VT Instructions</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+    <!-- Price -->
+    <tr><td><strong>Price</strong></td><td align="center"><strong>$89</strong></td><td align="center"><strong>$42</strong></td><td align="center"><strong>$139.95</strong></td></tr>
+  </tbody>
+</table>
 
 # WiCAN PRO 4G Module
 
