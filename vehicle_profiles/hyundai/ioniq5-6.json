@@ -57,7 +57,6 @@
         "KWH_CHARGED": "((B49<<24)+(B50<<16)+(B51<<8)+B52)/10",
         "KWH_DISCHARGED": "((B53<<24)+(B54<<16)+(B55<<8)+B57)/10",
         "DM_R_RPM": "((S36)*256)+B37",
-        "DM_F_RPM": "((S38)*256)+B39",
         "CHARGING": "B15:7",
         "CAPACITOR": "((B63<<8)+B35)",
         "RESISTANCE": "([B41:B42])",
