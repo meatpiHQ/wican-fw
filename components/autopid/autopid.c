@@ -814,6 +814,7 @@ void autopid_data_publish(void)
 
             if (root->child)
             {
+                cJSON_AddNumberToObject(root, "timestamp", (double)time(NULL));
                 limitJsonDecimalPrecision(root);
                 char *json_str = cJSON_PrintUnformatted(root);
                 if (json_str)
@@ -1085,6 +1086,18 @@ void autopid_publish_all_destinations(void)
     {
         ESP_LOGW(TAG, "No autopid data to publish");
         return;
+    }
+
+    // Inject timestamp into snapshot JSON
+    {
+        cJSON *ts_root = cJSON_Parse(raw_json);
+        if (ts_root)
+        {
+            cJSON_AddNumberToObject(ts_root, "timestamp", (double)time(NULL));
+            free(raw_json);
+            raw_json = cJSON_PrintUnformatted(ts_root);
+            cJSON_Delete(ts_root);
+        }
     }
 
     // Current time not directly needed with wc_timer; timers store absolute expiry in us
@@ -2987,6 +3000,7 @@ static void publish_parameter_mqtt(parameter_t *param)
             {
                 cJSON_AddNumberToObject(param_json, param->name, param->value);
             }
+            cJSON_AddNumberToObject(param_json, "timestamp", (double)time(NULL));
             limitJsonDecimalPrecision(param_json);
             payload = cJSON_PrintUnformatted(param_json);
             cJSON_Delete(param_json);
