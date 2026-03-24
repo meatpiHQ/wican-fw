@@ -234,27 +234,18 @@ static esp_err_t webhook_post_handler(httpd_req_t *req)
                 return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid urls entry");
             }
 
-            if (i == 0)
-            {
-                if (!url_is_plain_http(entry->valuestring))
-                {
-                    ESP_LOGW(TAG, "urls[0] must use plain HTTP");
-                    cJSON_Delete(root);
-                    return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid local url");
-                }
-            }
-            else if (!url_is_http(entry->valuestring))
+            if (!url_is_http(entry->valuestring))
             {
                 ESP_LOGW(TAG, "urls[%d] must use HTTP or HTTPS", i);
                 cJSON_Delete(root);
-                return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid external url");
+                return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid url entry");
             }
         }
 
         cJSON *primary_entry = cJSON_GetArrayItem(urls, 0);
-        if (!url_is_plain_http(url->valuestring) || !primary_entry || strcmp(url->valuestring, primary_entry->valuestring) != 0)
+        if (!url_is_http(url->valuestring) || !primary_entry || strcmp(url->valuestring, primary_entry->valuestring) != 0)
         {
-            ESP_LOGW(TAG, "url must match urls[0] and use plain HTTP when urls is configured");
+            ESP_LOGW(TAG, "url must match urls[0] and use HTTP or HTTPS when urls is configured");
             cJSON_Delete(root);
             return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "url must match urls[0]");
         }
