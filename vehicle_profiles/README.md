@@ -61,7 +61,9 @@ Every parameter must have a corresponding entry in [params.json](../.vehicle_pro
 }
 
 ```
+
 **Example coresponding entry in params.json:**
+
 ```
   "SOC_BMS": {
     "description": "State of charge according to the BMS.",
