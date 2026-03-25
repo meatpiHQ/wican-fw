@@ -872,7 +872,7 @@
       "max": "1"
     }
   },
-  "HV_CCC": {
+  "HV_AH_CHARGED": {
     "description": "Cumulative Charge Current",
     "settings": {
       "unit": "Ah",
@@ -881,7 +881,7 @@
       "max": "1000000"
     }
   },
-  "HV_CDC": {
+  "HV_AH_DISCHARGED": {
     "description": "Cumulative Discharge Current",
     "settings": {
       "unit": "Ah",
@@ -935,7 +935,7 @@
       "max": "1000000"
     }
   },
-  "CHARGING_R_C": {
+  "CHARGING_R_A": {
     "description": "Requested Charge Current",
     "settings": {
       "unit": "A",
