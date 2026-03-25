@@ -35,6 +35,7 @@
 #include "ble.h"
 #include "dev_status.h"
 #include <cJSON.h>
+#include "hw_config.h"
 #include "wifi_mgr.h"
 #include "smartconnect.h"
 
@@ -42,6 +43,24 @@
 
 #define AP_SSID_MIN_LEN 3
 #define AP_SSID_MAX_LEN 32
+
+static void wifi_network_set_sta_hostname(wifi_mgr_config_t *wifi_config)
+{
+    char device_id[16] = {0};
+
+    if (wifi_config == NULL) {
+        return;
+    }
+
+    if (hw_config_get_device_id(device_id) != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to get device ID for STA hostname");
+        wifi_config->sta_hostname[0] = '\0';
+        return;
+    }
+
+    snprintf(wifi_config->sta_hostname, sizeof(wifi_config->sta_hostname),
+             "wican_%s", device_id);
+}
 
 void wifi_network_init(char* ap_ssid_uid)
 {
@@ -141,6 +160,8 @@ void wifi_network_init(char* ap_ssid_uid)
             wifi_config.sta_auth_mode = WIFI_AUTH_WPA2_PSK;
             break;
     }
+
+        wifi_network_set_sta_hostname(&wifi_config);
     
     // Configure AP settings from config server
     char *ap_pass = config_server_get_ap_pass();
@@ -201,6 +222,7 @@ void wifi_network_init(char* ap_ssid_uid)
     ESP_LOGI(TAG, "   - WiFi Mode: %d (AP=0, APSTA=1, SMARTCONNECT=2, BLESTA=3, STA=4)", wifi_mode);
     ESP_LOGI(TAG, "   - Manager Mode: %d (OFF=0, STA=1, AP=2, APSTA=3, AUTO=4)", wifi_config.mode);
     ESP_LOGI(TAG, "   - STA SSID: %s", wifi_config.sta_ssid);
+    ESP_LOGI(TAG, "   - STA Hostname: %s", wifi_config.sta_hostname[0] ? wifi_config.sta_hostname : "(default)");
     ESP_LOGI(TAG, "   - STA Auth Mode: %d", wifi_config.sta_auth_mode);
     ESP_LOGI(TAG, "   - AP SSID: %s", wifi_config.ap_ssid);
     ESP_LOGI(TAG, "   - AP Channel: %d", wifi_config.ap_channel);

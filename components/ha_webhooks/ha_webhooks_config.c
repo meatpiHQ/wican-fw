@@ -88,6 +88,18 @@ static void trim_str(char *s)
     }
 }
 
+#if HA_WEBHOOK_MAX_URLS > 0
+static void clear_urls(ha_webhook_config_t *cfg)
+{
+    if (!cfg)
+        return;
+
+    for (size_t i = 0; i < HA_WEBHOOK_MAX_URLS; ++i)
+        cfg->urls[i][0] = '\0';
+    cfg->url_count = 0;
+}
+#endif
+
 esp_err_t ha_webhook_load_config(ha_webhook_config_t *cfg)
 {
     ESP_LOGI(TAG, "Loading webhook configuration from filesystem");
@@ -162,6 +174,31 @@ esp_err_t ha_webhook_load_config(ha_webhook_config_t *cfg)
         ESP_LOGD(TAG, "Loaded webhook URL: %s", cfg->url);
     }
 
+#if HA_WEBHOOK_MAX_URLS > 0
+    clear_urls(cfg);
+    it = cJSON_GetObjectItem(root, "urls");
+    if (cJSON_IsArray(it))
+    {
+        size_t idx = 0;
+        cJSON *entry = NULL;
+        cJSON_ArrayForEach(entry, it)
+        {
+            if (idx >= HA_WEBHOOK_MAX_URLS)
+                break;
+            if (!cJSON_IsString(entry) || !entry->valuestring)
+                continue;
+
+            strlcpy(cfg->urls[idx], entry->valuestring, sizeof(cfg->urls[idx]));
+            trim_str(cfg->urls[idx]);
+            if (cfg->urls[idx][0] == '\0')
+                continue;
+            idx++;
+        }
+        cfg->url_count = idx;
+        ESP_LOGD(TAG, "Loaded %u webhook failover URL(s)", (unsigned)cfg->url_count);
+    }
+#endif
+
     // Parse enabled flag
     it = cJSON_GetObjectItem(root, "enabled");
     if (cJSON_IsBool(it))
@@ -232,6 +269,25 @@ esp_err_t ha_webhook_save_config(const ha_webhook_config_t *cfg)
     }
 
     cJSON_AddStringToObject(root, "url", cfg->url);
+#if HA_WEBHOOK_MAX_URLS > 0
+    if (cfg->url_count > 0)
+    {
+        cJSON *urls = cJSON_AddArrayToObject(root, "urls");
+        if (!urls)
+        {
+            cJSON_Delete(root);
+            unlock_file();
+            return ESP_ERR_NO_MEM;
+        }
+
+        for (size_t i = 0; i < cfg->url_count && i < HA_WEBHOOK_MAX_URLS; ++i)
+        {
+            if (cfg->urls[i][0] == '\0')
+                continue;
+            cJSON_AddItemToArray(urls, cJSON_CreateString(cfg->urls[i]));
+        }
+    }
+#endif
     cJSON_AddBoolToObject(root, "enabled", cfg->enabled);
     cJSON_AddStringToObject(root, "last_post", cfg->last_post);
     cJSON_AddStringToObject(root, "status", cfg->status[0] ? cfg->status : "unknown");

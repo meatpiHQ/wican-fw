@@ -2881,6 +2881,7 @@ function loadWebhookConfig() {
         })
         .then(config => {
             const urlField = document.getElementById("webhook_url");
+            const failoverUrlField = document.getElementById("webhook_failover_url");
             const intervalField = document.getElementById("webhook_interval");
 
             // Stats elements (may not exist on older pages)
@@ -2895,6 +2896,10 @@ function loadWebhookConfig() {
 
             if (urlField) {
                 urlField.value = config.enabled && config.url ? config.url : "Not configured";
+            }
+            if (failoverUrlField) {
+                const failoverUrl = Array.isArray(config.urls) && config.urls.length > 1 ? config.urls[1] : "";
+                failoverUrlField.value = config.enabled && failoverUrl ? failoverUrl : "Not configured";
             }
             if (intervalField) {
                 intervalField.value = config.enabled && config.interval ? config.interval.toString() : "Not configured";
@@ -2937,8 +2942,10 @@ function loadWebhookConfig() {
         .catch(error => {
             console.log('Webhook config not available:', error);
             const urlField = document.getElementById("webhook_url");
+            const failoverUrlField = document.getElementById("webhook_failover_url");
             const intervalField = document.getElementById("webhook_interval");
             if (urlField) urlField.value = "Not configured";
+            if (failoverUrlField) failoverUrlField.value = "Not configured";
             if (intervalField) intervalField.value = "Not configured";
 
             const okEl = document.getElementById("webhook_stat_success");

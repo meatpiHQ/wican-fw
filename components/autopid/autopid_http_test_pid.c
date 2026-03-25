@@ -381,25 +381,28 @@ static esp_err_t test_pid_handler(httpd_req_t *req)
         // - Do NOT force auto protocol (ATTP0) mid-run.
         // - Only set protocol if we have a concrete number.
         // - Optionally set receive filter (ATCRA) if provided.
+        // - ATCRA is CAN-only; skip it for non-CAN protocols (1-5) and unknown (0).
         {
             char init_buf[64];
+            bool is_can_proto = (proto >= 6 && proto <= 9);
+
             if (proto > 0)
             {
-                if (rxheader[0] != '\0')
-                    snprintf(init_buf, sizeof(init_buf), "ATTP%d\rATCRA%s\r", proto, rxheader);
+                if (is_can_proto && rxheader[0] != '\0')
+                    snprintf(init_buf, sizeof(init_buf), "ATCRA%s\rATTP%d\r", rxheader, proto);
+                else if (is_can_proto)
+                    snprintf(init_buf, sizeof(init_buf), "ATCRA\rATTP%d\r", proto);
                 else
-                    snprintf(init_buf, sizeof(init_buf), "ATTP%d\rATCRA\r", proto);
+                    snprintf(init_buf, sizeof(init_buf), "ATTP%d\r", proto);
             }
             else
             {
-                // No protocol provided and none detected; avoid changing it.
-                if (rxheader[0] != '\0')
-                    snprintf(init_buf, sizeof(init_buf), "ATCRA%s\r", rxheader);
-                else
-                    snprintf(init_buf, sizeof(init_buf), "ATCRA\r");
+                // Protocol 0 or unknown; skip ATCRA (not safe for non-CAN protocols).
+                init_buf[0] = '\0';
             }
 
-            autopid_test_pid_run_init_sequence(init_buf, 1200);
+            if (init_buf[0] != '\0')
+                autopid_test_pid_run_init_sequence(init_buf, 1200);
         }
 
         char cmd[8];

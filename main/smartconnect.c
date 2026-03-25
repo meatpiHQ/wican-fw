@@ -28,6 +28,7 @@
 #include "sleep_mode.h"
 #include "wifi_network.h"
 #include "wifi_mgr.h"
+#include "hw_config.h"
 #include "dev_status.h"
 #include "vehicle.h"
 #include "ble.h"
@@ -72,6 +73,24 @@ static void enable_drive_mode(void);
 static void enable_home_mode(void);
 static void disable_drive_mode(void);
 static void disable_home_mode(void);
+
+static void smartconnect_set_sta_hostname(wifi_mgr_config_t *wifi_config)
+{
+    char device_id[16] = {0};
+
+    if (wifi_config == NULL) {
+        return;
+    }
+
+    if (hw_config_get_device_id(device_id) != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to get device ID for STA hostname");
+        wifi_config->sta_hostname[0] = '\0';
+        return;
+    }
+
+    snprintf(wifi_config->sta_hostname, sizeof(wifi_config->sta_hostname),
+             "wican_%s", device_id);
+}
 
 /**
  * Auto Connect FreeRTOS Task
@@ -312,6 +331,7 @@ static void enable_drive_mode(void)
         // Configure WiFi for AP-only mode in BLE drive mode
         wifi_mgr_config_t wifi_config = WIFI_MGR_DEFAULT_CONFIG();
         wifi_config.mode = WIFI_MGR_MODE_AP;
+        smartconnect_set_sta_hostname(&wifi_config);
         
         // Configure AP settings using provided SSID UID
         strncpy(wifi_config.ap_ssid, ap_ssid_uid, sizeof(wifi_config.ap_ssid) - 1);
@@ -342,6 +362,7 @@ static void enable_drive_mode(void)
         // Configure WiFi for drive mode (STA only)
         wifi_mgr_config_t wifi_config = WIFI_MGR_DEFAULT_CONFIG();
         wifi_config.mode = WIFI_MGR_MODE_STA;
+        smartconnect_set_sta_hostname(&wifi_config);
         strncpy(wifi_config.sta_ssid, smartconnect_config.drive_ssid, sizeof(wifi_config.sta_ssid) - 1);
         strncpy(wifi_config.sta_password, smartconnect_config.drive_password, sizeof(wifi_config.sta_password) - 1);
         wifi_config.sta_auto_reconnect = true;
@@ -419,6 +440,7 @@ static void enable_home_mode(void)
         
         // Configure WiFi for home mode (AP+STA)
         wifi_mgr_config_t wifi_config = WIFI_MGR_DEFAULT_CONFIG();
+        smartconnect_set_sta_hostname(&wifi_config);
         
         if (strlen(smartconnect_config.home_ssid) > 0) {
             // Configure STA to connect to home network

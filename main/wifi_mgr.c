@@ -212,6 +212,19 @@ static bool wifi_mgr_reason_is_auth_related(uint8_t reason) {
     }
 }
 
+static void wifi_mgr_apply_sta_hostname(void) {
+    if (sta_netif == NULL || wifi_config.sta_hostname[0] == '\0') {
+        return;
+    }
+
+    esp_err_t ret = esp_netif_set_hostname(sta_netif, wifi_config.sta_hostname);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "STA hostname set to: %s", wifi_config.sta_hostname);
+    } else {
+        ESP_LOGW(TAG, "Failed to set STA hostname '%s': %s", wifi_config.sta_hostname, esp_err_to_name(ret));
+    }
+}
+
 // Helper: check if an SSID exists in the scanned AP list
 static bool wifi_mgr_ssid_present(const wifi_ap_record_t* ap_records, uint16_t ap_count, const char* ssid) {
     if (!ssid || !ssid[0] || !ap_records || ap_count == 0) return false;
@@ -541,6 +554,8 @@ esp_err_t wifi_mgr_init(wifi_mgr_config_t* config) {
         vEventGroupDelete(wifi_event_group);
         return ESP_ERR_NO_MEM;
     }
+
+    wifi_mgr_apply_sta_hostname();
     
     // Initialize WiFi
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -720,6 +735,8 @@ esp_err_t wifi_mgr_enable(void) {
     
     // Configure STA if needed
     if (wifi_config.mode == WIFI_MGR_MODE_STA || wifi_config.mode == WIFI_MGR_MODE_APSTA) {
+        wifi_mgr_apply_sta_hostname();
+
         wifi_config_t sta_config = {
             .sta = {
                 .threshold.authmode = wifi_config.sta_auth_mode,
