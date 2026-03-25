@@ -12,13 +12,29 @@ If you would like to add/update a car please make sure it is formatted properly,
 
 **pids**: Parameter ID request
 
-**parameters**: Parameters within a specific PID request. A PID response might contain multiple parameters, such as battery State of Health (SoH) and battery voltage.
+**parameters**: Parameters within a specific PID request. A PID response might contain multiple parameters, such as battery State of Health (SoH) and battery voltage. This object is structured as a set of short name - expression pairs
+
+**short_name**: No whitespace and not necessarily human readable
 
 **expression**: The expression used to calculate the parameter value
+
+Every parameter must have a corresponding entry in [params.json](../.vehicle_profiles/params.json) with the following information:
+
+**short_name**: Identical to the entry in the vehicle profile
+
+**description**: A longer, human-readable descriptive name
+
+**settings**: An object structred as a set with two fields: unit and class
 
 **unit**: The unit of the parameter, e.g., %, °C, or others, see [Home Assistant List](https://www.home-assistant.io/integrations/sensor/#device-class)
 
 **class**: The class of the sensor, see [Home Assistant List](https://www.home-assistant.io/integrations/sensor/#device-class)
+
+**min**: The minimum value of the sensor
+
+**max**: The maximum value of the sensor
+
+**type**: The type of the sensor
 
 **Example:**
 
@@ -28,29 +44,32 @@ If you would like to add/update a car please make sure it is formatted properly,
     "init": "ATSH7E4;ATST96;",
     "pids": [
         {
-            "pid": "2201019",
-            "parameters": {
-                    "name": "SOC_BMS",
-                    "expression": "B10/2",
-                    "unit": "%"
-                },
-                {
-                    "name": "Aux_Batt_Volts",
-                    "expression": "B38*0.1",
-                    "unit": "V"
-                }
-            ]
+          "pid": "2201019",
+          "parameters": {
+                  "SOC_BMS": "B10/2",
+                  "Aux_Batt_Volts": "B38*0.1"
+          }
         },
         {
-            "pid": "2201057",
-            "parameters": {
-                    "name": "SOH",
-                    "expression": "[B34:B35]/10",
-                    "unit": "%"
-                }
-            ]
+          "pid": "2201057",
+          "parameters": {
+                  "SOH": "[B34:B35]/10"
+          }
+
         }
     ]
 }
 
+```
+**Example coresponding entry in params.json:**
+```
+  "SOC_BMS": {
+    "description": "State of charge according to the BMS.",
+    "settings": {
+      "unit": "%",
+      "class": "battery",
+      "min": "0",
+      "max": "100"
+    }
+  }
 ```

@@ -27,6 +27,16 @@
       "class": "none"
     }
   },
+    "AC_PLUG": {
+    "description": "Normal Charge Port",
+    "settings": {
+      "unit": "",
+      "type": "binary_sensor",
+      "class": "none",
+      "min": "0",
+      "max": "1"
+    }
+  },
   "ALT_DUTY": {
     "description": "Alternator Duty Cycle",
     "settings": {
@@ -307,6 +317,105 @@
       "class": "temperature"
     }
   },
+  "HV_T_6": {
+    "description": "HV Battery Temp Sensor 6",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_7": {
+    "description": "HV Battery Temp Sensor 7",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_8": {
+    "description": "HV Battery Temp Sensor 8",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_9": {
+    "description": "HV Battery Temp Sensor 9",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_10": {
+    "description": "HV Battery Temp Sensor 10",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_11": {
+    "description": "HV Battery Temp Sensor 11",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_12": {
+    "description": "HV Battery Temp Sensor 12",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_13": {
+    "description": "HV Battery Temp Sensor 13",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_14": {
+    "description": "HV Battery Temp Sensor 14",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_15": {
+    "description": "HV Battery Temp Sensor 15",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_16": {
+    "description": "HV Battery Temp Sensor 16",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
   "HV_T_A": {
     "description": "Average temp reading from HV Battery",
     "settings": {
@@ -366,10 +475,21 @@
     }
   },
   "KWH_CHARGED": {
-    "description": "Total kWh Charged",
+    "description": "Total kWh Charged (Cumulative Energy Charged)",
     "settings": {
       "unit": "kwh",
-      "class": "battery"
+      "class": "battery",
+      "min": "0",
+      "max": "1000000"
+    }
+  },
+  "KWH_DISCHARGED": {
+    "description": "Total kWH Discharged( Cumulative Energy Discharged)",
+    "settings": {
+      "unit": "kWh",
+      "class": "none",
+      "min": "0",
+      "max": "1000000"
     }
   },
   "LV_A": {
@@ -384,6 +504,15 @@
     "settings": {
       "unit": "V",
       "class": "battery"
+    }
+  },
+  "LV_SOC": {
+    "description": "12v Battery State of Charge",
+    "settings": {
+      "unit": "%",
+      "class": "battery",
+      "min": "0",
+      "max": "100"
     }
   },
   "MAF": {
@@ -405,6 +534,14 @@
     "settings": {
       "class": "distance",
       "unit": "km",
+      "min": "0"
+    }
+  },
+  "ODOMETER_MI": {
+    "description": "Vehicle odometer in miles",
+    "settings": {
+      "class": "distance",
+      "unit": "mi",
       "min": "0"
     }
   },
@@ -677,6 +814,1862 @@
     "settings": {
       "unit": "%",
       "class": "none"
+    }
+  },
+  "AIRBAG": {
+    "description": "Airbag H/wire Duty",
+    "settings": {
+      "unit": "",
+      "class": "none",
+      "min": "50",
+      "max": "100"
+    }
+  },
+  "HV_C_DIFF": {
+    "description": "Battery Cell Voltage Deviation",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "4"
+    }
+  },
+  "HV_H_1": {
+    "description": "Battery Heater 1 Temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "0",
+      "max": "80"
+    }
+  },
+  "HV_KWH_R": {
+    "description": "Battery Remaining Energy",
+    "settings": {
+      "unit": "Wh",
+      "class": "battery",
+      "min": "0",
+      "max": "77000"
+    }
+  },
+  "IGNITION": {
+    "description": "BMS Ignition",
+    "settings": {
+      "unit": "",
+      "type": "binary_sensor",
+      "class": "none",
+      "min": "0",
+      "max": "1"
+    }
+  },
+  "HV_RELAY": {
+    "description": "BMS Main Relay",
+    "settings": {
+      "unit": "",
+      "type": "binary_sensor",
+      "class": "none",
+      "min": "0",
+      "max": "1"
+    }
+  },
+  "HV_AH_CHARGED": {
+    "description": "Cumulative Charge Current",
+    "settings": {
+      "unit": "Ah",
+      "class": "none",
+      "min": "0",
+      "max": "1000000"
+    }
+  },
+  "HV_AH_DISCHARGED": {
+    "description": "Cumulative Discharge Current",
+    "settings": {
+      "unit": "Ah",
+      "class": "none",
+      "min": "0",
+      "max": "1000000"
+    }
+  },
+  "DM_R_RPM": {
+    "description": "Drive Motor Speed Rear",
+    "settings": {
+      "unit": "rpm",
+      "class": "none",
+      "min": "-10100",
+      "max": "10100"
+    }
+  },
+  "DM_F_RPM": {
+    "description": "Drive Motor Speed Front",
+    "settings": {
+      "unit": "rpm",
+      "class": "none",
+      "min": "-10100",
+      "max": "10100"
+    }
+  },
+  "CAPACITOR": {
+    "description": "Inverter Capacitor Voltage",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "840"
+    }
+  },
+  "RESISTANCE": {
+    "description": "Isolation Resistance",
+    "settings": {
+      "unit": "kOhm",
+      "class": "none",
+      "min": "0",
+      "max": "1000"
+    }
+  },
+  "OP_TIME": {
+    "description": "Operating Time",
+    "settings": {
+      "unit": "hours",
+      "class": "none",
+      "min": "0",
+      "max": "1000000"
+    }
+  },
+  "CHARGING_R_A": {
+    "description": "Requested Charge Current",
+    "settings": {
+      "unit": "A",
+      "class": "current",
+      "min": "0",
+      "max": "200"
+    }
+  },
+  "STEER_ANGLE": {
+    "description": "Steering Angle",
+    "settings": {
+      "unit": "deg",
+      "class": "none",
+      "min": "-720",
+      "max": "720"
+    }
+  },
+  "HV_C_V_001": {
+    "description": "Cell Voltage 001",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_002": {
+    "description": "Cell Voltage 002",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_003": {
+    "description": "Cell Voltage 003",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_004": {
+    "description": "Cell Voltage 004",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_005": {
+    "description": "Cell Voltage 005",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_006": {
+    "description": "Cell Voltage 006",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_007": {
+    "description": "Cell Voltage 007",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_008": {
+    "description": "Cell Voltage 008",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_009": {
+    "description": "Cell Voltage 009",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_010": {
+    "description": "Cell Voltage 010",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_011": {
+    "description": "Cell Voltage 011",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_012": {
+    "description": "Cell Voltage 012",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_013": {
+    "description": "Cell Voltage 013",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_014": {
+    "description": "Cell Voltage 014",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_015": {
+    "description": "Cell Voltage 015",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_016": {
+    "description": "Cell Voltage 016",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_017": {
+    "description": "Cell Voltage 017",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_018": {
+    "description": "Cell Voltage 018",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_019": {
+    "description": "Cell Voltage 019",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_020": {
+    "description": "Cell Voltage 020",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_021": {
+    "description": "Cell Voltage 021",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_022": {
+    "description": "Cell Voltage 022",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_023": {
+    "description": "Cell Voltage 023",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_024": {
+    "description": "Cell Voltage 024",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_025": {
+    "description": "Cell Voltage 025",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_026": {
+    "description": "Cell Voltage 026",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_027": {
+    "description": "Cell Voltage 027",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_028": {
+    "description": "Cell Voltage 028",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_029": {
+    "description": "Cell Voltage 029",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_030": {
+    "description": "Cell Voltage 030",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_031": {
+    "description": "Cell Voltage 031",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_032": {
+    "description": "Cell Voltage 032",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_033": {
+    "description": "Cell Voltage 033",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_034": {
+    "description": "Cell Voltage 034",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_035": {
+    "description": "Cell Voltage 035",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_036": {
+    "description": "Cell Voltage 036",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_037": {
+    "description": "Cell Voltage 037",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_038": {
+    "description": "Cell Voltage 038",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_039": {
+    "description": "Cell Voltage 039",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_040": {
+    "description": "Cell Voltage 040",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_041": {
+    "description": "Cell Voltage 041",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_042": {
+    "description": "Cell Voltage 042",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_043": {
+    "description": "Cell Voltage 043",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_044": {
+    "description": "Cell Voltage 044",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_045": {
+    "description": "Cell Voltage 045",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_046": {
+    "description": "Cell Voltage 046",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_047": {
+    "description": "Cell Voltage 047",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_048": {
+    "description": "Cell Voltage 048",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_049": {
+    "description": "Cell Voltage 049",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_050": {
+    "description": "Cell Voltage 050",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_051": {
+    "description": "Cell Voltage 051",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_052": {
+    "description": "Cell Voltage 052",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_053": {
+    "description": "Cell Voltage 053",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_054": {
+    "description": "Cell Voltage 054",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_055": {
+    "description": "Cell Voltage 055",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_056": {
+    "description": "Cell Voltage 056",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_057": {
+    "description": "Cell Voltage 057",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_058": {
+    "description": "Cell Voltage 058",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_059": {
+    "description": "Cell Voltage 059",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_060": {
+    "description": "Cell Voltage 060",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_061": {
+    "description": "Cell Voltage 061",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_062": {
+    "description": "Cell Voltage 062",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_063": {
+    "description": "Cell Voltage 063",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_064": {
+    "description": "Cell Voltage 064",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_065": {
+    "description": "Cell Voltage 065",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_066": {
+    "description": "Cell Voltage 066",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_067": {
+    "description": "Cell Voltage 067",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_068": {
+    "description": "Cell Voltage 068",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_069": {
+    "description": "Cell Voltage 069",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_070": {
+    "description": "Cell Voltage 070",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_071": {
+    "description": "Cell Voltage 071",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_072": {
+    "description": "Cell Voltage 072",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_073": {
+    "description": "Cell Voltage 073",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_074": {
+    "description": "Cell Voltage 074",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_075": {
+    "description": "Cell Voltage 075",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_076": {
+    "description": "Cell Voltage 076",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_077": {
+    "description": "Cell Voltage 077",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_078": {
+    "description": "Cell Voltage 078",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_079": {
+    "description": "Cell Voltage 079",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_080": {
+    "description": "Cell Voltage 080",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_081": {
+    "description": "Cell Voltage 081",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_082": {
+    "description": "Cell Voltage 082",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_083": {
+    "description": "Cell Voltage 083",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_084": {
+    "description": "Cell Voltage 084",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_085": {
+    "description": "Cell Voltage 085",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_086": {
+    "description": "Cell Voltage 086",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_087": {
+    "description": "Cell Voltage 087",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_088": {
+    "description": "Cell Voltage 088",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_089": {
+    "description": "Cell Voltage 089",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_090": {
+    "description": "Cell Voltage 090",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_091": {
+    "description": "Cell Voltage 091",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_092": {
+    "description": "Cell Voltage 092",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_093": {
+    "description": "Cell Voltage 093",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_094": {
+    "description": "Cell Voltage 094",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_095": {
+    "description": "Cell Voltage 095",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_096": {
+    "description": "Cell Voltage 096",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_097": {
+    "description": "Cell Voltage 097",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_098": {
+    "description": "Cell Voltage 098",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_099": {
+    "description": "Cell Voltage 099",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_100": {
+    "description": "Cell Voltage 100",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_101": {
+    "description": "Cell Voltage 101",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_102": {
+    "description": "Cell Voltage 102",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_103": {
+    "description": "Cell Voltage 103",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_104": {
+    "description": "Cell Voltage 104",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_105": {
+    "description": "Cell Voltage 105",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_106": {
+    "description": "Cell Voltage 106",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_107": {
+    "description": "Cell Voltage 107",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_108": {
+    "description": "Cell Voltage 108",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_109": {
+    "description": "Cell Voltage 109",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_110": {
+    "description": "Cell Voltage 110",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_111": {
+    "description": "Cell Voltage 111",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_112": {
+    "description": "Cell Voltage 112",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_113": {
+    "description": "Cell Voltage 113",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_114": {
+    "description": "Cell Voltage 114",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_115": {
+    "description": "Cell Voltage 115",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_116": {
+    "description": "Cell Voltage 116",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_117": {
+    "description": "Cell Voltage 117",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_118": {
+    "description": "Cell Voltage 118",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_119": {
+    "description": "Cell Voltage 119",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_120": {
+    "description": "Cell Voltage 120",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_121": {
+    "description": "Cell Voltage 121",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_122": {
+    "description": "Cell Voltage 122",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_123": {
+    "description": "Cell Voltage 123",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_124": {
+    "description": "Cell Voltage 124",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_125": {
+    "description": "Cell Voltage 125",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_126": {
+    "description": "Cell Voltage 126",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_127": {
+    "description": "Cell Voltage 127",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_128": {
+    "description": "Cell Voltage 128",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_129": {
+    "description": "Cell Voltage 129",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_130": {
+    "description": "Cell Voltage 130",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_131": {
+    "description": "Cell Voltage 131",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_132": {
+    "description": "Cell Voltage 132",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_133": {
+    "description": "Cell Voltage 133",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_134": {
+    "description": "Cell Voltage 134",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_135": {
+    "description": "Cell Voltage 135",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_136": {
+    "description": "Cell Voltage 136",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_137": {
+    "description": "Cell Voltage 137",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_138": {
+    "description": "Cell Voltage 138",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_139": {
+    "description": "Cell Voltage 139",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_140": {
+    "description": "Cell Voltage 140",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_141": {
+    "description": "Cell Voltage 141",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_142": {
+    "description": "Cell Voltage 142",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_143": {
+    "description": "Cell Voltage 143",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_144": {
+    "description": "Cell Voltage 144",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_145": {
+    "description": "Cell Voltage 145",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_146": {
+    "description": "Cell Voltage 146",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_147": {
+    "description": "Cell Voltage 147",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_148": {
+    "description": "Cell Voltage 148",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_149": {
+    "description": "Cell Voltage 149",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_150": {
+    "description": "Cell Voltage 150",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_151": {
+    "description": "Cell Voltage 151",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_152": {
+    "description": "Cell Voltage 152",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_153": {
+    "description": "Cell Voltage 153",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_154": {
+    "description": "Cell Voltage 154",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_155": {
+    "description": "Cell Voltage 155",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_156": {
+    "description": "Cell Voltage 156",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_157": {
+    "description": "Cell Voltage 157",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_168": {
+    "description": "Cell Voltage 168",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_159": {
+    "description": "Cell Voltage 159",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_160": {
+    "description": "Cell Voltage 160",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_161": {
+    "description": "Cell Voltage 161",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_162": {
+    "description": "Cell Voltage 162",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_163": {
+    "description": "Cell Voltage 163",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_164": {
+    "description": "Cell Voltage 164",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_165": {
+    "description": "Cell Voltage 165",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_166": {
+    "description": "Cell Voltage 166",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_167": {
+    "description": "Cell Voltage 167",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_169": {
+    "description": "Cell Voltage 169",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_170": {
+    "description": "Cell Voltage 170",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_171": {
+    "description": "Cell Voltage 171",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_172": {
+    "description": "Cell Voltage 172",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_173": {
+    "description": "Cell Voltage 173",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_174": {
+    "description": "Cell Voltage 174",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_175": {
+    "description": "Cell Voltage 175",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_176": {
+    "description": "Cell Voltage 176",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_177": {
+    "description": "Cell Voltage 177",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_178": {
+    "description": "Cell Voltage 178",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_179": {
+    "description": "Cell Voltage 179",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_180": {
+    "description": "Cell Voltage 180",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_181": {
+    "description": "Cell Voltage 181",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_182": {
+    "description": "Cell Voltage 182",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_183": {
+    "description": "Cell Voltage 183",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_184": {
+    "description": "Cell Voltage 184",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_185": {
+    "description": "Cell Voltage 185",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_186": {
+    "description": "Cell Voltage 186",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_187": {
+    "description": "Cell Voltage 187",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_188": {
+    "description": "Cell Voltage 188",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_189": {
+    "description": "Cell Voltage 189",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_190": {
+    "description": "Cell Voltage 190",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_191": {
+    "description": "Cell Voltage 191",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
+  "HV_C_V_192": {
+    "description": "Cell Voltage 192",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
     }
   }
 }

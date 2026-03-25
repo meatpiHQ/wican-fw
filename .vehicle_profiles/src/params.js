@@ -1,6 +1,7 @@
 import editJsonFile from "edit-json-file";
 import { readFile, writeFile } from "fs/promises";
 import { glob } from "glob";
+import sortPackageJson from 'sort-package-json'
 
 const PARAMS_PATH = import.meta.dirname + "/../params.json";
 const SCHEMA_PATH = import.meta.dirname + "/../schema.json";
@@ -10,7 +11,10 @@ const PARAM_PATH_IN_SCHEMA =
 let params = null;
 
 export async function process_params() {
-  const params = await get_params();
+  let params = await get_params();
+  params = sortPackageJson(params);
+  await writeFile(PARAMS_PATH, JSON.stringify(params, null, 2));
+
   let param_array = Object.getOwnPropertyNames(params);
   let schema_file = editJsonFile(SCHEMA_PATH);
 
@@ -19,7 +23,7 @@ export async function process_params() {
     schema_file.set(PARAM_PATH_IN_SCHEMA, param_array);
     schema_file.save();
   }
-
+  
   await save_params_md();
 }
 

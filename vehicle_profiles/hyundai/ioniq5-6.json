@@ -1,51 +1,88 @@
 {
-  "car_model": "Hyundai: Ioniq5/Ioniq6",
+  "car_model": "Hyundai: Ioniq5/Ioniq6 (2021-2024)",
   "init": "ATSH7E4;ATST96;",
   "pids": [
     {
-      "pid": "2201019",
+      "pid": "220100",
+      "pid_init": "ATSH7B3;",
       "parameters": {
-        "SOC": "B10/2",
-        "REGEN_MAX": "[B11:B12]/100",
-        "POWER_MAX": "[B13:B14]/100",
-        "HV_A": "((S17*256)+B18)/10",
-        "HV_V": "[B19:B20]/10",
-        "HV_W": "([B19:B20]/10)*((S17*256)+B18)/10",
-        "HV_T_MAX": "B21",
-        "HV_T_MIN": "B22",
-        "HV_T_1": "B23",
-        "HV_T_2": "B25",
-        "HV_T_3": "B26",
-        "HV_T_4": "B27",
-        "HV_T_5": "B28",
-        "HV_T_I": "B30",
+        "SPEED": "B38",
+        "TMP_A": "(B12/2)-40",
+        "T_CAB": "(B11/2)-40"
+      }
+    },
+    {
+      "pid": "220105",
+      "pid_init": "ATSH7E4;",
+      "parameters": {
+        "AIRBAG": "B30",
+        "REGEN_MAX": "((B23<<8)+B25)/100",
+        "POWER_MAX": "[B26:B27]/100",
+        "HV_C_DIFF": "B28/50",
+        "HV_H_1": "(S31)",
+        "HV_T_6": "(S15)",
+        "HV_T_7": "(S17)",
+        "HV_T_8": "(S18)",
+        "HV_T_9": "(S19)",
+        "HV_T_10": "(S20)",
+        "HV_T_11": "(S21)",
+        "HV_T_12": "(S22)",
+        "HV_T_13": "(S50)",
+        "HV_T_14": "(S51)",
+        "HV_T_15": "(S52)",
+        "HV_T_16": "(S53)",
+        "HV_KWH_R": "((B37 << 8) + B38) *2",
+        "SOH": "[B34:B35]/10",
+        "SOC_D": "B41/2",
+        "HV_C_D_MIN_NO": "B39",
+        "HV_C_D_MAX_NO": "B36"
+      }
+    },
+    {
+      "pid": "220101",
+      "pid_init": "ATSH7E4;",
+      "parameters": {
+        "LV_V": "B38*0.1",
+        "HV_T_MAX": "(S21)",
+        "HV_T_MIN": "(S22)",
+        "HV_T_1": "(S23)",
+        "HV_T_2": "(S25)",
+        "HV_T_3": "(S26)",
+        "HV_T_4": "(S27)",
+        "HV_T_5": "(S28)",
+        "IGNITION": "B62:2",
+        "HV_RELAY": "B15:0",
+        "HV_AH_CHARGED": "((B39<<24)+(B41<<16)+(B42<<8)+B43)/10",
+        "HV_AH_DISCHARGED": "((B44<<24)+(B45<<16)+(B46<<8)+B47)/10",
+        "KWH_CHARGED": "((B49<<24)+(B50<<16)+(B51<<8)+B52)/10",
+        "KWH_DISCHARGED": "((B53<<24)+(B54<<16)+(B55<<8)+B57)/10",
+        "DM_R_RPM": "((S36)*256)+B37",
+        "CHARGING": "B15:7",
+        "CAPACITOR": "((B63<<8)+B35)",
+        "RESISTANCE": "([B41:B42])",
         "HV_C_V_MAX": "B31/50",
         "HV_C_V_MAX_NO": "B33",
         "HV_C_V_MIN": "B34/50",
         "HV_C_V_MIN_NO": "B35",
-        "LV_V": "B38*0.1",
-        "KWH_CHARGED": "([B49:B50]*65536 + [B51:B52])/10"
+        "AC_PLUG": "B15:5",
+        "OP_TIME": "((B58<<24)+(B59<<16)+(B60<<8)+B61)/3600",
+        "CHARGING_DC": "B15:6",
+        "SOC": "B10/2",
+        "CHARGING_R_A": "([B13:B14])/10",
+        "HV_A": "((S17*256)+B18)/10",
+        "HV_V": "[B19:B20]/10",
+        "HV_W": "([B19:B20]/10)*((S17*256)+B18)/10"
       }
     },
     {
-      "pid": "2201057",
+      "pid": "22E011",
+      "pid_init": "ATSH7E5;",
       "parameters": {
-        "SOH": "[B34:B35]/10",
-        "SOC_D": "B41/2",
-        "HV_C_D_MIN_NO": "B39",
-        "HV_C_D_MAX_NO": "B36",
-        "HV_C_D_MIN": "[B37:B38]/10"
+        "LV_SOC": "B28"
       }
     },
     {
-      "pid": "22B0025",
-      "pid_init": "ATSH7C6;ATFCSH7C6",
-      "parameters": {
-        "ODOMETER": "[B17:B18]"
-      }
-    },
-    {
-      "pid": "22C00B6",
+      "pid": "22C00B",
       "pid_init": "ATSH7A0;",
       "parameters": {
         "TYRE_P_FL": "B10*0.2",
@@ -59,18 +96,18 @@
       }
     },
     {
-      "pid": "2201006",
-      "pid_init": "ATSH7B3;",
+      "pid": "22B002",
+      "pid_init": "ATSH7C6;",
       "parameters": {
-        "TMP_A": "(B12/2)-40",
-        "T_CAB": "(B11/2)-40"
+        "ODOMETER_MI": "[B17:B18]",
+        "ODOMETER": "[B12:B14]"
       }
     },
     {
-      "pid": "220100",
-      "pid_init": "ATSH7B3;",
+      "pid": "22F010",
+      "pid_init": "ATSH730;",
       "parameters": {
-        "SPEED": "B38"
+        "STEER_ANGLE": "((S20)*256+B19)/10"
       }
     }
   ]
