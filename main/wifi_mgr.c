@@ -713,9 +713,6 @@ esp_err_t wifi_mgr_enable(void) {
     switch (wifi_config.mode) {
         case WIFI_MGR_MODE_STA:
             ret = esp_wifi_set_mode(WIFI_MODE_STA);
-            if(sta_netif){
-                esp_netif_set_default_netif(sta_netif);
-            }
             break;
         case WIFI_MGR_MODE_AP:
             ret = esp_wifi_set_mode(WIFI_MODE_AP);
@@ -1501,9 +1498,6 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                 ESP_LOGI(TAG, "Auto-disabling AP mode");
                 // Don't stop WiFi completely - just change mode to preserve STA connection
                 esp_err_t ret = esp_wifi_set_mode(WIFI_MODE_STA);
-                if(sta_netif){
-                    esp_netif_set_default_netif(sta_netif);
-                }
                 if (ret != ESP_OK) {
                     ESP_LOGE(TAG, "Failed to switch to STA mode: %s", esp_err_to_name(ret));
                 }
