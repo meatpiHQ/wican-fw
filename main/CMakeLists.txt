@@ -68,9 +68,11 @@ set(requires
     zorxx__multipart-parser
     debug_logs
     cert_manager
+    connection_manager
     vpn_manager
     autopid
     ha_webhooks
+    usb_host_manager
     usb_eth_host
     usb_acm_cli
     cmd_ping
