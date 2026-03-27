@@ -90,7 +90,10 @@
 #include "wifi_mgr.h"
 #include "dev_status.h"
 #include "cert_manager.h"
+#include "connection_manager.h"
 #include "vpn_manager.h"
+#include "usb_host_manager.h"
+#include "usb_host_manager_http.h"
 #include "dev_status.h"
 #include "esp_heap_caps.h"
 #include "ha_webhooks.h"
@@ -3517,6 +3520,21 @@ static httpd_handle_t config_server_init(void)
 		cert_manager_init();
 		// Initialize VPN manager
 		vpn_manager_init();
+		#if HARDWARE_VER == WICAN_PRO
+		connection_manager_init(&(connection_manager_config_t) {
+			.wifi_sta_ifkey = CONNECTION_MANAGER_DEFAULT_WIFI_STA_IFKEY,
+			.usb_eth_ifkey = CONNECTION_MANAGER_DEFAULT_USB_ETH_IFKEY,
+		});
+		usb_host_manager_init(&(usb_host_manager_platform_config_t) {
+			.usb_id_gpio = 39,
+			.usb_mode_gpio = 11,
+			.usb_vbus_gpio = -1,
+			.usb_vbus_active_high = false,
+			.usb_vbus_on_delay_ms = 0,
+			.bus_id = 0,
+			.reg_base = 0,
+		});
+		#endif
 		// Handle config.json
 		FILE* f = fopen(FS_MOUNT_POINT"/config.json", "r");
 		if (f == NULL)
@@ -3596,7 +3614,7 @@ static httpd_handle_t config_server_init(void)
                        );
 
 	// Start the httpd server (reserve extra slots for cert manager endpoints)
-	config.max_uri_handlers = 38;
+	config.max_uri_handlers = 40;
 	config.stack_size = (10*1024);
 	config.max_open_sockets = 15;
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
@@ -3608,6 +3626,9 @@ static httpd_handle_t config_server_init(void)
 		cert_manager_register_handlers(server);
 		// Register VPN manager endpoints
 		vpn_manager_register_handlers(server);
+		#if HARDWARE_VER == WICAN_PRO
+		usb_host_manager_register_handlers(server);
+		#endif
 		autopid_register_handlers(server);
 		ha_webhooks_register_handlers(server);
 		// Now register catch-all wildcard
@@ -3634,6 +3655,9 @@ void config_server_restart(void)
 		register_server_uris();
 		cert_manager_register_handlers(server);
 		vpn_manager_register_handlers(server);
+		#if HARDWARE_VER == WICAN_PRO
+		usb_host_manager_register_handlers(server);
+		#endif
 		autopid_register_handlers(server);
 		ha_webhooks_register_handlers(server);
 		httpd_register_uri_handler(server, &get_uri_common);
