@@ -1,0 +1,22 @@
+idf_component_register(
+    SRCS
+        "usb_host_manager.c"
+        "usb_host_manager_config.c"
+        "usb_host_manager_http.c"
+    INCLUDE_DIRS
+        "include"
+    PRIV_INCLUDE_DIRS
+        "."
+    REQUIRES
+        connection_manager
+        driver
+        esp_http_server
+        esp_netif
+        freertos
+        json
+        log
+        usb_acm_cli
+        usb_eth_host
+    PRIV_REQUIRES
+        main
+)
