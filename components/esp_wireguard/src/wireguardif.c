@@ -984,30 +984,6 @@ err_t wireguardif_init(struct netif *netif) {
 #if defined(CONFIG_WIREGUARD_ESP_NETIF)
 	struct netif* underlying_netif = NULL;
 	char lwip_netif_name[8] = {0,};
-
-	// Try WIFI_STA_DEF first (WiFi station mode). If not available (e.g. USB-ETH
-	// only mode), fall back to the current default netif so WireGuard can use
-	// whichever interface has connectivity.
-	{
-		esp_netif_t *sta_handle = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-		if (sta_handle != NULL) {
-			err = esp_netif_get_netif_impl_name(sta_handle, lwip_netif_name);
-			if (err == ESP_OK) {
-				underlying_netif = netif_find(lwip_netif_name);
-			}
-		}
-	}
-	if (underlying_netif == NULL) {
-		// WiFi STA not available – use whatever netif is currently the default
-		// (e.g. USB-ETH / RNDIS).
-		underlying_netif = netif_default;
-		ESP_LOGW(TAG, "WIFI_STA_DEF not available; using netif_default (%p) as underlying netif", underlying_netif);
-	}
-	if (underlying_netif == NULL) {
-		ESP_LOGE(TAG, "No underlying netif available for WireGuard");
-		result = ERR_IF;
-		goto fail;
-	}
 #elif defined(CONFIG_WIREGUARD_ESP_TCPIP_ADAPTER)
 	void *underlying_netif = NULL;
 	err = tcpip_adapter_get_netif(TCPIP_ADAPTER_IF_STA, &underlying_netif);
@@ -1029,6 +1005,41 @@ err_t wireguardif_init(struct netif *netif) {
 
 		// The init data is passed into the netif_add call as the 'state' - we will replace this with our private state data
 		init_data = (struct wireguardif_init_data *)netif->state;
+
+#if defined(CONFIG_WIREGUARD_ESP_NETIF)
+		if (init_data->bind_netif != NULL) {
+			underlying_netif = wireguardif_validate_netif(init_data->bind_netif);
+			if (underlying_netif != NULL) {
+				ESP_LOGI(TAG, "Using explicitly bound underlying netif (%p)", underlying_netif);
+			}
+		}
+
+		if (underlying_netif == NULL && netif_default != NULL && netif_default != netif) {
+			underlying_netif = wireguardif_validate_netif(netif_default);
+			if (underlying_netif != NULL) {
+				ESP_LOGI(TAG, "Using current default netif (%p) as WireGuard underlying netif", underlying_netif);
+			}
+		}
+
+		if (underlying_netif == NULL) {
+			esp_netif_t *sta_handle = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+			if (sta_handle != NULL) {
+				err = esp_netif_get_netif_impl_name(sta_handle, lwip_netif_name);
+				if (err == ESP_OK) {
+					underlying_netif = wireguardif_validate_netif(netif_find(lwip_netif_name));
+					if (underlying_netif != NULL) {
+						ESP_LOGW(TAG, "Falling back to WIFI_STA_DEF as WireGuard underlying netif");
+					}
+				}
+			}
+		}
+
+		if (underlying_netif == NULL) {
+			ESP_LOGE(TAG, "No underlying netif available for WireGuard");
+			result = ERR_IF;
+			goto fail;
+		}
+#endif
 
 		// Clear out and set if function is successful
 		netif->state = NULL;
