@@ -3039,13 +3039,13 @@ static void autopid_publish_task(void *pvParameters)
     vTaskDelay(pdMS_TO_TICKS(5000)); // Initial delay to allow system stabilization
     for (;;)
     {
-        if(!dev_status_is_sta_connected())
+        if(!dev_status_is_network_connected())
         {
-            dev_status_wait_for_bits(DEV_STA_CONNECTED_BIT, portMAX_DELAY);
+            dev_status_wait_for_bits(DEV_NETWORK_CONNECTED_MASK, portMAX_DELAY);
             vTaskDelay(pdMS_TO_TICKS(3000));
         }
-        // Only publish when autopid is enabled and STA is connected
-        if (dev_status_is_autopid_enabled() && dev_status_is_sta_connected())
+        // Only publish when autopid is enabled and network is connected
+        if (dev_status_is_autopid_enabled() && dev_status_is_network_connected())
         {
             // Grouping must remain enabled at runtime
             if (autopid_config && autopid_config->grouping && strcmp("enable", autopid_config->grouping) == 0)
@@ -3070,7 +3070,7 @@ static void autopid_publish_task(void *pvParameters)
                 wc_timer_set(&skip_log_timer, 5000);
                 ESP_LOGW(TAG, "Publish skipped: autopid_enabled=%d sta_connected=%d",
                          dev_status_is_autopid_enabled() ? 1 : 0,
-                         dev_status_is_sta_connected() ? 1 : 0);
+                         dev_status_is_network_connected() ? 1 : 0);
             }
         }
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -3120,13 +3120,13 @@ static void autopid_webhook_task(void *pvParameters)
     vTaskDelay(pdMS_TO_TICKS(5000)); // Initial delay to allow system stabilization
     for (;;)
     {
-        if(!dev_status_is_sta_connected())
+        if(!dev_status_is_network_connected())
         {
-            dev_status_wait_for_bits(DEV_STA_CONNECTED_BIT, portMAX_DELAY);
+            dev_status_wait_for_bits(DEV_NETWORK_CONNECTED_MASK, portMAX_DELAY);
             vTaskDelay(pdMS_TO_TICKS(3000));
         }
         // Only post when autopid is enabled and STA is connected
-        if (dev_status_is_autopid_enabled() && dev_status_is_sta_connected())
+        if (dev_status_is_autopid_enabled() && dev_status_is_network_connected())
         {
             // Read webhook_data_mode setting from config
             bool send_full_data = false;
