@@ -8,6 +8,7 @@
 #include "usbh_cdc_acm.h"
 
 #include "esp_err.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 
 #include "freertos/FreeRTOS.h"
@@ -28,6 +29,11 @@ static TaskHandle_t s_task = NULL;
 static volatile bool s_stop = false;
 static StreamBufferHandle_t s_rx_sb = NULL;
 static SemaphoreHandle_t s_tx_lock = NULL;
+static StaticSemaphore_t s_tx_lock_buffer;
+static StaticStreamBuffer_t s_rx_sb_buffer;
+static uint8_t *s_rx_sb_storage = NULL;
+static StackType_t *s_task_stack = NULL;
+static StaticTask_t s_task_tcb;
 
 static struct usbh_cdc_acm *s_acm = NULL;
 static volatile bool s_line_state_pending = false;
@@ -131,6 +137,9 @@ static void usb_acm_cli_task(void *arg)
 
 esp_err_t usb_acm_cli_start(const usb_acm_cli_config_t *cfg)
 {
+    BaseType_t ok;
+    uint32_t stack_depth_words;
+
     if (s_task != NULL)
     {
         return ESP_ERR_INVALID_STATE;
@@ -174,41 +183,71 @@ esp_err_t usb_acm_cli_start(const usb_acm_cli_config_t *cfg)
 
     s_stop = false;
 
-    s_rx_sb = xStreamBufferCreate(s_cfg.rx_buffer_size, 1);
-    if (s_rx_sb == NULL)
+    s_rx_sb_storage = (uint8_t *)heap_caps_malloc(s_cfg.rx_buffer_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (s_rx_sb_storage == NULL)
     {
         return ESP_ERR_NO_MEM;
     }
 
-    s_tx_lock = xSemaphoreCreateMutex();
+    s_rx_sb = xStreamBufferCreateStatic(s_cfg.rx_buffer_size, 1, s_rx_sb_storage, &s_rx_sb_buffer);
+    if (s_rx_sb == NULL)
+    {
+        heap_caps_free(s_rx_sb_storage);
+        s_rx_sb_storage = NULL;
+        return ESP_ERR_NO_MEM;
+    }
+
+    s_tx_lock = xSemaphoreCreateMutexStatic(&s_tx_lock_buffer);
     if (s_tx_lock == NULL)
     {
         vStreamBufferDelete(s_rx_sb);
         s_rx_sb = NULL;
+        heap_caps_free(s_rx_sb_storage);
+        s_rx_sb_storage = NULL;
         return ESP_ERR_NO_MEM;
     }
 
-    BaseType_t ok;
+    s_task_stack = (StackType_t *)heap_caps_malloc(s_cfg.rx_task_stack_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (s_task_stack == NULL)
+    {
+        vStreamBufferDelete(s_rx_sb);
+        s_rx_sb = NULL;
+        s_tx_lock = NULL;
+        heap_caps_free(s_rx_sb_storage);
+        s_rx_sb_storage = NULL;
+        return ESP_ERR_NO_MEM;
+    }
+
+    stack_depth_words = (uint32_t)(s_cfg.rx_task_stack_size / sizeof(StackType_t));
+    if (stack_depth_words == 0)
+    {
+        stack_depth_words = USB_ACM_CLI_DEFAULT_RX_STACK / sizeof(StackType_t);
+    }
+
     if (s_cfg.rx_task_core_id >= 0)
     {
-        ok = xTaskCreatePinnedToCore(
+        s_task = xTaskCreateStaticPinnedToCore(
             usb_acm_cli_task,
             "usb_acm_cli",
-            (uint32_t)(s_cfg.rx_task_stack_size / sizeof(StackType_t)),
+            stack_depth_words,
             NULL,
             s_cfg.rx_task_priority,
-            &s_task,
+            s_task_stack,
+            &s_task_tcb,
             s_cfg.rx_task_core_id);
+        ok = (s_task != NULL) ? pdPASS : errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY;
     }
     else
     {
-        ok = xTaskCreate(
+        s_task = xTaskCreateStatic(
             usb_acm_cli_task,
             "usb_acm_cli",
-            (uint32_t)(s_cfg.rx_task_stack_size / sizeof(StackType_t)),
+            stack_depth_words,
             NULL,
             s_cfg.rx_task_priority,
-            &s_task);
+            s_task_stack,
+            &s_task_tcb);
+        ok = (s_task != NULL) ? pdPASS : errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY;
     }
 
     if (ok != pdPASS)
@@ -216,8 +255,11 @@ esp_err_t usb_acm_cli_start(const usb_acm_cli_config_t *cfg)
         s_task = NULL;
         vStreamBufferDelete(s_rx_sb);
         s_rx_sb = NULL;
-        vSemaphoreDelete(s_tx_lock);
         s_tx_lock = NULL;
+        heap_caps_free(s_rx_sb_storage);
+        s_rx_sb_storage = NULL;
+        heap_caps_free(s_task_stack);
+        s_task_stack = NULL;
         return ESP_ERR_NO_MEM;
     }
 
@@ -233,6 +275,11 @@ esp_err_t usb_acm_cli_stop(void)
 
     s_stop = true;
 
+    while (s_task != NULL)
+    {
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
     s_acm = NULL;
 
     if (s_rx_sb)
@@ -241,10 +288,18 @@ esp_err_t usb_acm_cli_stop(void)
         s_rx_sb = NULL;
     }
 
-    if (s_tx_lock)
+    if (s_rx_sb_storage != NULL)
     {
-        vSemaphoreDelete(s_tx_lock);
-        s_tx_lock = NULL;
+        heap_caps_free(s_rx_sb_storage);
+        s_rx_sb_storage = NULL;
+    }
+
+    s_tx_lock = NULL;
+
+    if (s_task_stack != NULL)
+    {
+        heap_caps_free(s_task_stack);
+        s_task_stack = NULL;
     }
 
     return ESP_OK;
