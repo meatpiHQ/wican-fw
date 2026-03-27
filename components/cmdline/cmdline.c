@@ -44,6 +44,7 @@
 #include "cmd_status.h"
 #include "cmd_factoryreset.h"
 #include "cmd_autopid.h"
+#include "cmd_conn.h"
 #include "cmd_debug.h"
 #include "cmd_ping.h"
 #include "cmd_espnetlink.h"
@@ -274,6 +275,7 @@ static void register_all_commands(void)
     cmd_sdcard_register();
     cmd_wifi_register();
     cmd_eth_register();
+    cmd_conn_register();
     cmd_wusb_register();
     cmd_autopid_register();
 
