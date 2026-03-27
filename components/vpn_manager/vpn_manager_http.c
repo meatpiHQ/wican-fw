@@ -1231,11 +1231,15 @@ static esp_err_t vpn_debug_handler(httpd_req_t *req)
     EventBits_t bits = dev_status_get_bits();
     cJSON_AddNumberToObject(response, "dev_status_bits", (uint32_t)bits);
     bool sta_connected = (bits & DEV_STA_CONNECTED_BIT) != 0;
+    bool usb_connected = (bits & DEV_ETH_CONNECTED_BIT) != 0;
+    bool network_connected = dev_status_is_network_connected();
     bool time_synced = (bits & DEV_TIME_SYNCED_BIT) != 0;
     bool vpn_enabled = (bits & DEV_VPN_ENABLED_BIT) != 0;
     bool ap_enabled = (bits & DEV_AP_ENABLED_BIT) != 0;
     bool sleeping = (bits & DEV_SLEEP_BIT) != 0;
     cJSON_AddBoolToObject(response, "sta_connected", sta_connected);
+    cJSON_AddBoolToObject(response, "usb_connected", usb_connected);
+    cJSON_AddBoolToObject(response, "network_connected", network_connected);
     cJSON_AddBoolToObject(response, "time_synced", time_synced);
     cJSON_AddBoolToObject(response, "vpn_enabled_bit", vpn_enabled);
     cJSON_AddBoolToObject(response, "ap_enabled", ap_enabled);
@@ -1243,10 +1247,20 @@ static esp_err_t vpn_debug_handler(httpd_req_t *req)
 
     // Soft prerequisite: keep TIME_SYNCED in the reported gating status for UX/debug
     // (actual VPN task is not gated by TIME_SYNCED)
-    bool prereqs = dev_status_are_bits_set(DEV_VPN_ENABLED_BIT | DEV_STA_CONNECTED_BIT | DEV_TIME_SYNCED_BIT);
+    bool prereqs = vpn_enabled && network_connected && time_synced;
     bool blockers = dev_status_is_any_bit_set(DEV_AP_ENABLED_BIT | DEV_SLEEP_BIT);
     cJSON_AddBoolToObject(response, "gating_prereqs_ok", prereqs);
     cJSON_AddBoolToObject(response, "gating_blockers_present", blockers);
+
+    esp_netif_t *default_netif = esp_netif_get_default_netif();
+    if (default_netif)
+    {
+        char default_name[8] = {0};
+        if (esp_netif_get_netif_impl_name(default_netif, default_name) == ESP_OK)
+        {
+            cJSON_AddStringToObject(response, "default_netif", default_name);
+        }
+    }
 
     // STA IP + DNS
     esp_netif_t *sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");

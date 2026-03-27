@@ -51,8 +51,25 @@ static esp_netif_t *vpn_netif = NULL;
 
 // DNS override while VPN is connected (IPv4 only)
 static bool s_dns_saved = false;
+static esp_netif_t *s_dns_target_netif = NULL;
 static esp_netif_dns_info_t s_prev_dns_main = {0};
 static esp_netif_dns_info_t s_prev_dns_backup = {0};
+
+static esp_netif_t *vpn_manager_get_dns_target_netif(void)
+{
+    if (s_dns_target_netif != NULL)
+    {
+        return s_dns_target_netif;
+    }
+
+    esp_netif_t *netif = esp_netif_get_default_netif();
+    if (netif != NULL)
+    {
+        return netif;
+    }
+
+    return esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+}
 
 static void vpn_manager_restore_dns(void)
 {
@@ -60,13 +77,14 @@ static void vpn_manager_restore_dns(void)
     {
         return;
     }
-    esp_netif_t *sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-    if (sta_netif)
+    esp_netif_t *dns_netif = vpn_manager_get_dns_target_netif();
+    if (dns_netif)
     {
-        (void)esp_netif_set_dns_info(sta_netif, ESP_NETIF_DNS_MAIN, &s_prev_dns_main);
-        (void)esp_netif_set_dns_info(sta_netif, ESP_NETIF_DNS_BACKUP, &s_prev_dns_backup);
+        (void)esp_netif_set_dns_info(dns_netif, ESP_NETIF_DNS_MAIN, &s_prev_dns_main);
+        (void)esp_netif_set_dns_info(dns_netif, ESP_NETIF_DNS_BACKUP, &s_prev_dns_backup);
     }
     s_dns_saved = false;
+    s_dns_target_netif = NULL;
 }
 
 static void vpn_manager_apply_dns_from_wg(const vpn_wireguard_config_t *wg)
@@ -76,8 +94,8 @@ static void vpn_manager_apply_dns_from_wg(const vpn_wireguard_config_t *wg)
         return;
     }
 
-    esp_netif_t *sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-    if (!sta_netif)
+    esp_netif_t *dns_netif = vpn_manager_get_dns_target_netif();
+    if (!dns_netif)
     {
         return;
     }
@@ -85,9 +103,9 @@ static void vpn_manager_apply_dns_from_wg(const vpn_wireguard_config_t *wg)
     // Save existing DNS once so we can restore on disconnect.
     if (!s_dns_saved)
     {
-        if (esp_netif_get_dns_info(sta_netif, ESP_NETIF_DNS_MAIN, &s_prev_dns_main) == ESP_OK)
+        if (esp_netif_get_dns_info(dns_netif, ESP_NETIF_DNS_MAIN, &s_prev_dns_main) == ESP_OK)
         {
-            (void)esp_netif_get_dns_info(sta_netif, ESP_NETIF_DNS_BACKUP, &s_prev_dns_backup);
+            (void)esp_netif_get_dns_info(dns_netif, ESP_NETIF_DNS_BACKUP, &s_prev_dns_backup);
             s_dns_saved = true;
         }
     }
@@ -96,7 +114,7 @@ static void vpn_manager_apply_dns_from_wg(const vpn_wireguard_config_t *wg)
     dns_main.ip.type = IPADDR_TYPE_V4;
     if (esp_netif_str_to_ip4(wg->dns_main, &dns_main.ip.u_addr.ip4) == ESP_OK)
     {
-        (void)esp_netif_set_dns_info(sta_netif, ESP_NETIF_DNS_MAIN, &dns_main);
+        (void)esp_netif_set_dns_info(dns_netif, ESP_NETIF_DNS_MAIN, &dns_main);
     }
 
     // If backup is not provided, use main as backup to avoid leaking to previous DNS.
@@ -105,7 +123,7 @@ static void vpn_manager_apply_dns_from_wg(const vpn_wireguard_config_t *wg)
     dns_backup.ip.type = IPADDR_TYPE_V4;
     if (esp_netif_str_to_ip4(backup, &dns_backup.ip.u_addr.ip4) == ESP_OK)
     {
-        (void)esp_netif_set_dns_info(sta_netif, ESP_NETIF_DNS_BACKUP, &dns_backup);
+        (void)esp_netif_set_dns_info(dns_netif, ESP_NETIF_DNS_BACKUP, &dns_backup);
     }
 }
 
@@ -529,6 +547,11 @@ static void vpn_manager_update_status(void)
             xEventGroupClearBits(vpn_event_group, VPN_CONNECTING_BIT | VPN_DISCONNECTED_BIT | VPN_ERROR_BIT);
             xEventGroupSetBits(vpn_event_group, VPN_CONNECTED_BIT);
             s_connect_started_us = 0;
+            s_dns_target_netif = esp_netif_get_default_netif();
+            if (s_dns_target_netif == NULL)
+            {
+                s_dns_target_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+            }
             // Only switch default route when the peer is actually up.
             esp_err_t sret = vpn_wg_set_default_route();
             if (sret != ESP_OK)
