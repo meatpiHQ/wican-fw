@@ -165,6 +165,7 @@ void filesystem_delete_config_files(void)
     delete_config_file(FS_MOUNT_POINT"/auto_pid.json");
     delete_config_file(FS_MOUNT_POINT"/mqtt_canfilt.json");
     delete_config_file(FS_MOUNT_POINT"/vpn_config.json");
+    delete_config_file(FS_MOUNT_POINT"/usb_host_config.json");
 
     ESP_LOGI(TAG, "Configuration files deleted");
 }
