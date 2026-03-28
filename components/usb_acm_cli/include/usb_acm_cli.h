@@ -36,6 +36,8 @@ esp_err_t usb_acm_cli_start(const usb_acm_cli_config_t *cfg);
 esp_err_t usb_acm_cli_stop(void);
 
 bool usb_acm_cli_is_connected(void);
+esp_err_t usb_acm_cli_acquire(uint32_t timeout_ms);
+void usb_acm_cli_release(void);
 esp_err_t usb_acm_cli_send_line(const char *line);
 esp_err_t usb_acm_cli_read(uint8_t *buf, size_t buf_len, uint32_t timeout_ms, size_t *out_len);
 

@@ -3,6 +3,7 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "sdkconfig.h"
@@ -29,6 +30,19 @@
 #define USB_HOST_MANAGER_TASK_PRIORITY 5
 #define USB_HOST_MANAGER_CMD_QUEUE_LEN 4
 #define USB_HOST_MANAGER_START_RETRY_MS 3000
+#define USB_HOST_MANAGER_CLI_TASK_STACK_WORDS 4096
+#define USB_HOST_MANAGER_CLI_TASK_PRIORITY 4
+#define USB_HOST_MANAGER_CLI_RESPONSE_MAX 2048
+#define USB_HOST_MANAGER_CLI_RX_CHUNK_SIZE 128
+#define USB_HOST_MANAGER_CLI_BOOTSTRAP_DELAY_MS 750
+#define USB_HOST_MANAGER_CLI_SYNC_TIMEOUT_MS 1000
+#define USB_HOST_MANAGER_CLI_COMMAND_TIMEOUT_MS 5000
+#define USB_HOST_MANAGER_CLI_IDLE_MS 250
+#define USB_HOST_MANAGER_CLI_CONFIG_POLL_MS 60000
+#define USB_HOST_MANAGER_CLI_GPS_POLL_MS 5000
+#define USB_HOST_MANAGER_CLI_LTE_POLL_MS 15000
+#define USB_HOST_MANAGER_CLI_LOCK_TIMEOUT_MS 10
+#define USB_HOST_MANAGER_ESPNETLINK_DEFAULT_TIMEOUT_MS 5000
 
 typedef enum usb_host_manager_cmd_type
 {
@@ -60,6 +74,23 @@ typedef struct usb_host_manager_runtime
     TaskHandle_t task;
     StackType_t *task_stack;
     StaticTask_t task_buffer;
+    TaskHandle_t cli_task;
+    StackType_t *cli_task_stack;
+    StaticTask_t cli_task_buffer;
+    bool cli_prompt_synced;
+    bool cli_session_ready;
+    int64_t cli_ready_after_us;
+    int64_t cli_next_config_poll_us;
+    int64_t cli_next_gps_poll_us;
+    int64_t cli_next_lte_poll_us;
+    char *cli_response_buf;
+    char *cli_payload_buf;
+    char *cli_config_json;
+    size_t cli_config_json_len;
+    char *cli_gps_json;
+    size_t cli_gps_json_len;
+    char *cli_lte_json;
+    size_t cli_lte_json_len;
 } usb_host_manager_runtime_t;
 
 static const char *TAG = "usb_host_mgr";
@@ -67,6 +98,7 @@ static const char *TAG = "usb_host_mgr";
 static usb_host_manager_runtime_t s_usb_host_mgr = { 0 };
 
 static void usb_host_manager_task(void *arg);
+static void usb_host_manager_cli_task(void *arg);
 
 static inline bool usb_host_manager_lock(TickType_t timeout)
 {
@@ -144,6 +176,774 @@ static void usb_host_manager_set_error_locked(const char *msg)
 static void usb_host_manager_update_state_locked(usb_host_manager_state_t state)
 {
     s_usb_host_mgr.status.state = state;
+}
+
+static void usb_host_manager_cli_set_error_locked(const char *msg)
+{
+    if (msg == NULL)
+    {
+        s_usb_host_mgr.status.cli_last_error[0] = '\0';
+        return;
+    }
+
+    strlcpy(s_usb_host_mgr.status.cli_last_error, msg, sizeof(s_usb_host_mgr.status.cli_last_error));
+}
+
+static void usb_host_manager_cli_set_last_command_locked(const char *cmd)
+{
+    if (cmd == NULL)
+    {
+        s_usb_host_mgr.status.cli_last_command[0] = '\0';
+        return;
+    }
+
+    strlcpy(s_usb_host_mgr.status.cli_last_command, cmd, sizeof(s_usb_host_mgr.status.cli_last_command));
+}
+
+static void usb_host_manager_cli_set_last_response_locked(const char *response)
+{
+    if (response == NULL)
+    {
+        s_usb_host_mgr.status.cli_last_response[0] = '\0';
+        return;
+    }
+
+    strlcpy(s_usb_host_mgr.status.cli_last_response, response, sizeof(s_usb_host_mgr.status.cli_last_response));
+}
+
+static void usb_host_manager_cli_cache_clear_locked(char **cache, size_t *cache_len)
+{
+    if (cache == NULL || cache_len == NULL)
+    {
+        return;
+    }
+
+    if (*cache != NULL)
+    {
+        heap_caps_free(*cache);
+        *cache = NULL;
+    }
+
+    *cache_len = 0;
+}
+
+static esp_err_t usb_host_manager_cli_cache_set_locked(char **cache,
+                                                       size_t *cache_len,
+                                                       const char *data)
+{
+    char *buf;
+    size_t len;
+
+    if (cache == NULL || cache_len == NULL)
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (data == NULL || data[0] == '\0')
+    {
+        usb_host_manager_cli_cache_clear_locked(cache, cache_len);
+        return ESP_OK;
+    }
+
+    len = strlen(data);
+    buf = (char *)heap_caps_malloc(len + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (buf == NULL)
+    {
+        return ESP_ERR_NO_MEM;
+    }
+
+    memcpy(buf, data, len + 1);
+    usb_host_manager_cli_cache_clear_locked(cache, cache_len);
+    *cache = buf;
+    *cache_len = len;
+    return ESP_OK;
+}
+
+static char *usb_host_manager_dup_string(const char *src)
+{
+    char *dst;
+    size_t len;
+
+    if (src == NULL)
+    {
+        return NULL;
+    }
+
+    len = strlen(src);
+    dst = (char *)malloc(len + 1);
+    if (dst == NULL)
+    {
+        return NULL;
+    }
+
+    memcpy(dst, src, len + 1);
+    return dst;
+}
+
+static void usb_host_manager_cli_schedule_locked(int64_t now_us)
+{
+    s_usb_host_mgr.cli_next_config_poll_us = now_us;
+    s_usb_host_mgr.cli_next_gps_poll_us = now_us;
+    s_usb_host_mgr.cli_next_lte_poll_us = now_us;
+}
+
+static void usb_host_manager_cli_reset_locked(bool clear_cache)
+{
+    s_usb_host_mgr.cli_prompt_synced = false;
+    s_usb_host_mgr.cli_session_ready = false;
+    s_usb_host_mgr.cli_ready_after_us = 0;
+    s_usb_host_mgr.cli_next_config_poll_us = 0;
+    s_usb_host_mgr.cli_next_gps_poll_us = 0;
+    s_usb_host_mgr.cli_next_lte_poll_us = 0;
+    s_usb_host_mgr.status.cli_last_command[0] = '\0';
+    s_usb_host_mgr.status.cli_last_response[0] = '\0';
+
+    if (clear_cache)
+    {
+        usb_host_manager_cli_cache_clear_locked(&s_usb_host_mgr.cli_config_json, &s_usb_host_mgr.cli_config_json_len);
+        usb_host_manager_cli_cache_clear_locked(&s_usb_host_mgr.cli_gps_json, &s_usb_host_mgr.cli_gps_json_len);
+        usb_host_manager_cli_cache_clear_locked(&s_usb_host_mgr.cli_lte_json, &s_usb_host_mgr.cli_lte_json_len);
+        usb_host_manager_cli_set_error_locked(NULL);
+    }
+}
+
+static bool usb_host_manager_cli_append_normalized(char *dst,
+                                                   size_t dst_size,
+                                                   size_t *dst_len,
+                                                   const uint8_t *src,
+                                                   size_t src_len)
+{
+    size_t i;
+
+    if (dst == NULL || dst_len == NULL || src == NULL || dst_size == 0)
+    {
+        return false;
+    }
+
+    for (i = 0; i < src_len; i++)
+    {
+        if (src[i] == '\r')
+        {
+            continue;
+        }
+
+        if ((*dst_len + 1) >= dst_size)
+        {
+            return false;
+        }
+
+        dst[*dst_len] = (char)src[i];
+        (*dst_len)++;
+    }
+
+    dst[*dst_len] = '\0';
+    return true;
+}
+
+static bool usb_host_manager_cli_buffer_has_prompt(const char *buffer)
+{
+    return (buffer != NULL) && (strstr(buffer, "esp>") != NULL);
+}
+
+static char *usb_host_manager_cli_trim(char *str)
+{
+    char *end;
+
+    if (str == NULL)
+    {
+        return NULL;
+    }
+
+    while (*str == ' ' || *str == '\t')
+    {
+        str++;
+    }
+
+    end = str + strlen(str);
+    while (end > str && (end[-1] == ' ' || end[-1] == '\t'))
+    {
+        end--;
+    }
+
+    *end = '\0';
+    return str;
+}
+
+static const char *usb_host_manager_cli_match_terminal(const char *buffer, bool *success)
+{
+    static const char *ok_suffixes[] = { "OK\nesp> ", "OK\nesp>", "OK\nesp>\n" };
+    static const char *error_suffixes[] = { "ERROR\nesp> ", "ERROR\nesp>", "ERROR\nesp>\n" };
+    const char **suffixes;
+    size_t suffix_count;
+    size_t i;
+    size_t len;
+    size_t suffix_len;
+
+    if (buffer == NULL || success == NULL)
+    {
+        return NULL;
+    }
+
+    len = strlen(buffer);
+
+    suffixes = ok_suffixes;
+    suffix_count = sizeof(ok_suffixes) / sizeof(ok_suffixes[0]);
+    for (i = 0; i < suffix_count; i++)
+    {
+        suffix_len = strlen(suffixes[i]);
+        if (len >= suffix_len && strcmp(buffer + (len - suffix_len), suffixes[i]) == 0)
+        {
+            *success = true;
+            return suffixes[i];
+        }
+    }
+
+    suffixes = error_suffixes;
+    suffix_count = sizeof(error_suffixes) / sizeof(error_suffixes[0]);
+    for (i = 0; i < suffix_count; i++)
+    {
+        suffix_len = strlen(suffixes[i]);
+        if (len >= suffix_len && strcmp(buffer + (len - suffix_len), suffixes[i]) == 0)
+        {
+            *success = false;
+            return suffixes[i];
+        }
+    }
+
+    return NULL;
+}
+
+static void usb_host_manager_cli_extract_payload(char *buffer,
+                                                 const char *cmd,
+                                                 const char *terminal_suffix,
+                                                 char *payload,
+                                                 size_t payload_len)
+{
+    size_t body_len;
+    char *line;
+    char *saveptr;
+    bool first_payload;
+
+    if (buffer == NULL || cmd == NULL || terminal_suffix == NULL || payload == NULL || payload_len == 0)
+    {
+        return;
+    }
+
+    payload[0] = '\0';
+    body_len = strlen(buffer);
+    if (body_len < strlen(terminal_suffix))
+    {
+        return;
+    }
+
+    body_len -= strlen(terminal_suffix);
+    buffer[body_len] = '\0';
+
+    first_payload = true;
+    saveptr = NULL;
+    line = strtok_r(buffer, "\n", &saveptr);
+    while (line != NULL)
+    {
+        char *trimmed;
+
+        trimmed = usb_host_manager_cli_trim(line);
+        if (trimmed[0] == '\0')
+        {
+            line = strtok_r(NULL, "\n", &saveptr);
+            continue;
+        }
+
+        if (strcmp(trimmed, cmd) == 0)
+        {
+            line = strtok_r(NULL, "\n", &saveptr);
+            continue;
+        }
+
+        if (strncmp(trimmed, "esp>", 4) == 0)
+        {
+            if (strncmp(trimmed, "esp> ", 5) == 0 && strcmp(trimmed + 5, cmd) == 0)
+            {
+                line = strtok_r(NULL, "\n", &saveptr);
+                continue;
+            }
+
+            if (strcmp(trimmed, "esp>") == 0 || strcmp(trimmed, "esp> ") == 0)
+            {
+                line = strtok_r(NULL, "\n", &saveptr);
+                continue;
+            }
+        }
+
+        if (!first_payload)
+        {
+            strlcat(payload, "\n", payload_len);
+        }
+
+        strlcat(payload, trimmed, payload_len);
+        first_payload = false;
+        line = strtok_r(NULL, "\n", &saveptr);
+    }
+}
+
+static void usb_host_manager_cli_drain_input_locked(uint32_t quiet_ms)
+{
+    uint8_t tmp[USB_HOST_MANAGER_CLI_RX_CHUNK_SIZE];
+    size_t out_len;
+    int64_t deadline_us;
+
+    deadline_us = esp_timer_get_time() + ((int64_t)quiet_ms * 1000);
+    while (esp_timer_get_time() < deadline_us)
+    {
+        if (usb_acm_cli_read(tmp, sizeof(tmp), 20, &out_len) != ESP_OK)
+        {
+            return;
+        }
+
+        if (out_len == 0)
+        {
+            return;
+        }
+    }
+}
+
+static esp_err_t usb_host_manager_cli_sync_prompt_locked(void)
+{
+    uint8_t tmp[USB_HOST_MANAGER_CLI_RX_CHUNK_SIZE];
+    char *response;
+    size_t response_len;
+    size_t out_len;
+    int64_t start_us;
+
+    response = s_usb_host_mgr.cli_response_buf;
+    if (response == NULL)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    response[0] = '\0';
+    response_len = 0;
+
+    usb_host_manager_cli_drain_input_locked(50);
+    if (usb_acm_cli_send_line("") != ESP_OK)
+    {
+        return ESP_FAIL;
+    }
+
+    start_us = esp_timer_get_time();
+    while ((esp_timer_get_time() - start_us) < ((int64_t)USB_HOST_MANAGER_CLI_SYNC_TIMEOUT_MS * 1000))
+    {
+        if (usb_acm_cli_read(tmp, sizeof(tmp), 100, &out_len) != ESP_OK)
+        {
+            return ESP_FAIL;
+        }
+
+        if (out_len == 0)
+        {
+            continue;
+        }
+
+        if (!usb_host_manager_cli_append_normalized(response,
+                                                    USB_HOST_MANAGER_CLI_RESPONSE_MAX,
+                                                    &response_len,
+                                                    tmp,
+                                                    out_len))
+        {
+            return ESP_ERR_NO_MEM;
+        }
+
+        if (usb_host_manager_lock(pdMS_TO_TICKS(10)))
+        {
+            usb_host_manager_cli_set_last_response_locked(response);
+            usb_host_manager_unlock();
+        }
+
+        if (usb_host_manager_cli_buffer_has_prompt(response))
+        {
+            return ESP_OK;
+        }
+    }
+
+    return ESP_ERR_TIMEOUT;
+}
+
+static esp_err_t usb_host_manager_cli_exec_locked(const char *cmd,
+                                                  uint32_t timeout_ms,
+                                                  bool *success,
+                                                  char *payload,
+                                                  size_t payload_len)
+{
+    uint8_t tmp[USB_HOST_MANAGER_CLI_RX_CHUNK_SIZE];
+    char *response;
+    size_t response_len;
+    size_t out_len;
+    int64_t start_us;
+    const char *terminal_suffix;
+    bool terminal_success;
+
+    if (cmd == NULL || success == NULL || payload == NULL || payload_len == 0)
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    response = s_usb_host_mgr.cli_response_buf;
+    if (response == NULL)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    response[0] = '\0';
+    payload[0] = '\0';
+    response_len = 0;
+    terminal_success = false;
+    usb_host_manager_cli_drain_input_locked(50);
+
+    if (usb_host_manager_lock(pdMS_TO_TICKS(20)))
+    {
+        usb_host_manager_cli_set_last_command_locked(cmd);
+        usb_host_manager_cli_set_last_response_locked(NULL);
+        usb_host_manager_unlock();
+    }
+
+    if (usb_acm_cli_send_line(cmd) != ESP_OK)
+    {
+        return ESP_FAIL;
+    }
+
+    start_us = esp_timer_get_time();
+    while ((esp_timer_get_time() - start_us) < ((int64_t)timeout_ms * 1000))
+    {
+        if (usb_acm_cli_read(tmp, sizeof(tmp), 100, &out_len) != ESP_OK)
+        {
+            return ESP_FAIL;
+        }
+
+        if (out_len == 0)
+        {
+            continue;
+        }
+
+        if (!usb_host_manager_cli_append_normalized(response,
+                                                    USB_HOST_MANAGER_CLI_RESPONSE_MAX,
+                                                    &response_len,
+                                                    tmp,
+                                                    out_len))
+        {
+            return ESP_ERR_NO_MEM;
+        }
+
+        if (usb_host_manager_lock(pdMS_TO_TICKS(10)))
+        {
+            usb_host_manager_cli_set_last_response_locked(response);
+            usb_host_manager_unlock();
+        }
+
+        terminal_suffix = usb_host_manager_cli_match_terminal(response, &terminal_success);
+        if (terminal_suffix != NULL)
+        {
+            *success = terminal_success;
+            usb_host_manager_cli_extract_payload(response, cmd, terminal_suffix, payload, payload_len);
+            return ESP_OK;
+        }
+    }
+
+    return ESP_ERR_TIMEOUT;
+}
+
+static esp_err_t usb_host_manager_cli_execute(const char *cmd,
+                                              uint32_t lock_timeout_ms,
+                                              uint32_t timeout_ms,
+                                              bool update_error_on_busy,
+                                              bool *out_success,
+                                              char **out_payload)
+{
+    bool success;
+    esp_err_t ret;
+    char *payload;
+
+    if (out_success != NULL)
+    {
+        *out_success = false;
+    }
+
+    if (out_payload != NULL)
+    {
+        *out_payload = NULL;
+    }
+
+    if (cmd == NULL || cmd[0] == '\0')
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (!s_usb_host_mgr.initialized || !s_usb_host_mgr.espnetlink_started || !s_usb_host_mgr.config.espnetlink.enable_cli)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (!usb_acm_cli_is_connected())
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    payload = s_usb_host_mgr.cli_payload_buf;
+    if (payload == NULL)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (timeout_ms == 0)
+    {
+        timeout_ms = USB_HOST_MANAGER_ESPNETLINK_DEFAULT_TIMEOUT_MS;
+    }
+
+    ret = usb_acm_cli_acquire(lock_timeout_ms);
+    if (ret != ESP_OK)
+    {
+        if (update_error_on_busy && usb_host_manager_lock(pdMS_TO_TICKS(20)))
+        {
+            usb_host_manager_cli_set_error_locked("CLI busy");
+            usb_host_manager_unlock();
+        }
+        return ret;
+    }
+
+    ret = usb_host_manager_cli_exec_locked(cmd, timeout_ms, &success, payload, USB_HOST_MANAGER_CLI_RESPONSE_MAX);
+    usb_acm_cli_release();
+
+    if (usb_host_manager_lock(pdMS_TO_TICKS(50)))
+    {
+        if (ret == ESP_OK)
+        {
+            s_usb_host_mgr.cli_session_ready = true;
+            s_usb_host_mgr.cli_prompt_synced = true;
+            if (success)
+            {
+                usb_host_manager_cli_set_error_locked(NULL);
+            }
+            else
+            {
+                char err_msg[96];
+
+                snprintf(err_msg, sizeof(err_msg), "%s returned ERROR", cmd);
+                usb_host_manager_cli_set_error_locked(err_msg);
+            }
+        }
+        else
+        {
+            char err_msg[96];
+
+            s_usb_host_mgr.cli_prompt_synced = false;
+            if (ret == ESP_ERR_TIMEOUT)
+            {
+                if (s_usb_host_mgr.status.cli_last_response[0] == '\0')
+                {
+                    snprintf(err_msg, sizeof(err_msg), "%s failed: no response", cmd);
+                }
+                else
+                {
+                    snprintf(err_msg, sizeof(err_msg), "%s failed: incomplete response", cmd);
+                }
+            }
+            else
+            {
+                snprintf(err_msg, sizeof(err_msg), "%s failed: %s", cmd, esp_err_to_name(ret));
+            }
+            usb_host_manager_cli_set_error_locked(err_msg);
+        }
+        usb_host_manager_unlock();
+    }
+
+    if (out_success != NULL)
+    {
+        *out_success = success;
+    }
+
+    if (out_payload != NULL && ret == ESP_OK)
+    {
+        *out_payload = usb_host_manager_dup_string(payload);
+        if (*out_payload == NULL)
+        {
+            return ESP_ERR_NO_MEM;
+        }
+    }
+
+    return ret;
+}
+
+static esp_err_t usb_host_manager_espnetlink_refresh_cache(const char *cmd,
+                                                           char **cache,
+                                                           size_t *cache_len)
+{
+    bool success;
+    esp_err_t ret;
+
+    ret = usb_host_manager_cli_execute(cmd,
+                                       USB_HOST_MANAGER_CLI_LOCK_TIMEOUT_MS,
+                                       USB_HOST_MANAGER_CLI_COMMAND_TIMEOUT_MS,
+                                       false,
+                                       &success,
+                                       NULL);
+    if (ret != ESP_OK || !success)
+    {
+        return ret;
+    }
+
+    if (!usb_host_manager_lock(pdMS_TO_TICKS(50)))
+    {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    ret = usb_host_manager_cli_cache_set_locked(cache, cache_len, s_usb_host_mgr.cli_payload_buf);
+    usb_host_manager_unlock();
+    return ret;
+}
+
+static esp_err_t usb_host_manager_espnetlink_refresh_config_cache(void)
+{
+    return usb_host_manager_espnetlink_refresh_cache("config -l -j",
+                                                     &s_usb_host_mgr.cli_config_json,
+                                                     &s_usb_host_mgr.cli_config_json_len);
+}
+
+static esp_err_t usb_host_manager_espnetlink_refresh_gps_cache(void)
+{
+    return usb_host_manager_espnetlink_refresh_cache("gps -p -j",
+                                                     &s_usb_host_mgr.cli_gps_json,
+                                                     &s_usb_host_mgr.cli_gps_json_len);
+}
+
+static esp_err_t usb_host_manager_espnetlink_refresh_lte_cache(void)
+{
+    return usb_host_manager_espnetlink_refresh_cache("lte -j",
+                                                     &s_usb_host_mgr.cli_lte_json,
+                                                     &s_usb_host_mgr.cli_lte_json_len);
+}
+
+static void usb_host_manager_cli_task(void *arg)
+{
+    (void)arg;
+
+    while (true)
+    {
+        bool cli_available;
+        bool session_ready;
+        bool prompt_synced;
+        int64_t now_us;
+
+        cli_available = false;
+        session_ready = false;
+        prompt_synced = false;
+        now_us = esp_timer_get_time();
+
+        if (usb_host_manager_lock(pdMS_TO_TICKS(50)))
+        {
+            cli_available = s_usb_host_mgr.initialized &&
+                s_usb_host_mgr.espnetlink_started &&
+                s_usb_host_mgr.config.enabled &&
+                s_usb_host_mgr.config.active_device_type == USB_HOST_MANAGER_DEVICE_ESPNETLINK &&
+                s_usb_host_mgr.config.espnetlink.enable_cli &&
+                usb_acm_cli_is_connected();
+
+            if (!cli_available)
+            {
+                usb_host_manager_cli_reset_locked(true);
+                usb_host_manager_unlock();
+                vTaskDelay(pdMS_TO_TICKS(USB_HOST_MANAGER_CLI_IDLE_MS));
+                continue;
+            }
+
+            if (!s_usb_host_mgr.cli_session_ready && s_usb_host_mgr.cli_ready_after_us == 0)
+            {
+                s_usb_host_mgr.cli_ready_after_us = now_us + ((int64_t)USB_HOST_MANAGER_CLI_BOOTSTRAP_DELAY_MS * 1000);
+                usb_host_manager_cli_set_error_locked(NULL);
+            }
+
+            session_ready = s_usb_host_mgr.cli_session_ready;
+            prompt_synced = s_usb_host_mgr.cli_prompt_synced;
+            usb_host_manager_unlock();
+        }
+
+        if (!session_ready)
+        {
+            if (usb_host_manager_lock(pdMS_TO_TICKS(50)))
+            {
+                now_us = esp_timer_get_time();
+                if (s_usb_host_mgr.cli_ready_after_us != 0 && now_us < s_usb_host_mgr.cli_ready_after_us)
+                {
+                    usb_host_manager_unlock();
+                    vTaskDelay(pdMS_TO_TICKS(USB_HOST_MANAGER_CLI_IDLE_MS));
+                    continue;
+                }
+                usb_host_manager_unlock();
+            }
+
+            if (usb_acm_cli_acquire(100) == ESP_OK)
+            {
+                esp_err_t sync_ret;
+
+                sync_ret = usb_host_manager_cli_sync_prompt_locked();
+                usb_acm_cli_release();
+
+                if (usb_host_manager_lock(pdMS_TO_TICKS(50)))
+                {
+                    s_usb_host_mgr.cli_session_ready = true;
+                    s_usb_host_mgr.cli_prompt_synced = (sync_ret == ESP_OK);
+                    usb_host_manager_cli_schedule_locked(esp_timer_get_time());
+                    usb_host_manager_unlock();
+                }
+            }
+            else if (usb_host_manager_lock(pdMS_TO_TICKS(50)))
+            {
+                s_usb_host_mgr.cli_session_ready = true;
+                s_usb_host_mgr.cli_prompt_synced = false;
+                usb_host_manager_cli_schedule_locked(esp_timer_get_time());
+                usb_host_manager_unlock();
+            }
+
+            vTaskDelay(pdMS_TO_TICKS(USB_HOST_MANAGER_CLI_IDLE_MS));
+            continue;
+        }
+
+        if (usb_host_manager_lock(pdMS_TO_TICKS(50)))
+        {
+            now_us = esp_timer_get_time();
+
+            if (now_us >= s_usb_host_mgr.cli_next_config_poll_us)
+            {
+                s_usb_host_mgr.cli_next_config_poll_us = now_us + ((int64_t)USB_HOST_MANAGER_CLI_CONFIG_POLL_MS * 1000);
+                usb_host_manager_unlock();
+                (void)usb_host_manager_espnetlink_refresh_config_cache();
+                continue;
+            }
+
+            if (now_us >= s_usb_host_mgr.cli_next_lte_poll_us)
+            {
+                s_usb_host_mgr.cli_next_lte_poll_us = now_us + ((int64_t)USB_HOST_MANAGER_CLI_LTE_POLL_MS * 1000);
+                usb_host_manager_unlock();
+                (void)usb_host_manager_espnetlink_refresh_lte_cache();
+                continue;
+            }
+
+            if (now_us >= s_usb_host_mgr.cli_next_gps_poll_us)
+            {
+                s_usb_host_mgr.cli_next_gps_poll_us = now_us + ((int64_t)USB_HOST_MANAGER_CLI_GPS_POLL_MS * 1000);
+                usb_host_manager_unlock();
+                (void)usb_host_manager_espnetlink_refresh_gps_cache();
+                continue;
+            }
+
+            usb_host_manager_unlock();
+        }
+
+        if (!prompt_synced)
+        {
+            vTaskDelay(pdMS_TO_TICKS(USB_HOST_MANAGER_CLI_IDLE_MS));
+        }
+        else
+        {
+            vTaskDelay(pdMS_TO_TICKS(USB_HOST_MANAGER_CLI_IDLE_MS));
+        }
+    }
 }
 
 static void usb_host_manager_refresh_ip_locked(void)
@@ -326,6 +1126,13 @@ static esp_err_t usb_host_manager_start_espnetlink(void)
         }
     }
 
+    if (usb_host_manager_lock(pdMS_TO_TICKS(50)))
+    {
+        usb_host_manager_cli_reset_locked(true);
+        s_usb_host_mgr.cli_ready_after_us = esp_timer_get_time() + ((int64_t)USB_HOST_MANAGER_CLI_BOOTSTRAP_DELAY_MS * 1000);
+        usb_host_manager_unlock();
+    }
+
     return ESP_OK;
 }
 
@@ -334,6 +1141,12 @@ static void usb_host_manager_stop_espnetlink(void)
     (void)usb_acm_cli_stop();
     dev_status_clear_eth_connected();
     (void)connection_manager_request_reconcile();
+
+    if (usb_host_manager_lock(pdMS_TO_TICKS(50)))
+    {
+        usb_host_manager_cli_reset_locked(true);
+        usb_host_manager_unlock();
+    }
 
     if (s_usb_host_mgr.platform.usb_mode_gpio >= 0)
     {
@@ -357,6 +1170,8 @@ static void usb_host_manager_update_runtime_status(void)
     s_usb_host_mgr.status.device_started = s_usb_host_mgr.espnetlink_started;
     s_usb_host_mgr.status.cli_enabled = s_usb_host_mgr.config.espnetlink.enable_cli;
     s_usb_host_mgr.status.cli_connected = usb_acm_cli_is_connected();
+    s_usb_host_mgr.status.cli_prompt_synced = s_usb_host_mgr.cli_prompt_synced;
+    s_usb_host_mgr.status.cli_session_ready = s_usb_host_mgr.cli_session_ready;
     s_usb_host_mgr.status.ethernet_connected = dev_status_is_eth_connected();
     strlcpy(s_usb_host_mgr.status.management_ip,
             s_usb_host_mgr.config.espnetlink.management_ip,
@@ -650,6 +1465,114 @@ esp_err_t usb_host_manager_get_status(usb_host_manager_status_t *status)
     return ESP_OK;
 }
 
+esp_err_t usb_host_manager_espnetlink_exec_command(const char *cmd,
+                                                   uint32_t timeout_ms,
+                                                   char **out_payload,
+                                                   bool *out_success)
+{
+    return usb_host_manager_cli_execute(cmd,
+                                        timeout_ms,
+                                        timeout_ms,
+                                        true,
+                                        out_success,
+                                        out_payload);
+}
+
+esp_err_t usb_host_manager_espnetlink_set_config_key(const char *key,
+                                                     const char *value,
+                                                     char **out_payload,
+                                                     bool *out_success)
+{
+    char cmd[160];
+    esp_err_t ret;
+
+    if (key == NULL || key[0] == '\0' || value == NULL)
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    snprintf(cmd, sizeof(cmd), "config set %s %s", key, value);
+    ret = usb_host_manager_espnetlink_exec_command(cmd,
+                                                   USB_HOST_MANAGER_ESPNETLINK_DEFAULT_TIMEOUT_MS,
+                                                   out_payload,
+                                                   out_success);
+    if (ret == ESP_OK && out_success != NULL && *out_success)
+    {
+        (void)usb_host_manager_espnetlink_refresh_config_cache();
+    }
+
+    return ret;
+}
+
+esp_err_t usb_host_manager_espnetlink_get_cached_config_json(char **out_json)
+{
+    if (out_json == NULL)
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    *out_json = NULL;
+    if (!s_usb_host_mgr.initialized)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (!usb_host_manager_lock(pdMS_TO_TICKS(50)))
+    {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    *out_json = usb_host_manager_dup_string(s_usb_host_mgr.cli_config_json);
+    usb_host_manager_unlock();
+    return ESP_OK;
+}
+
+esp_err_t usb_host_manager_espnetlink_get_cached_gps_json(char **out_json)
+{
+    if (out_json == NULL)
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    *out_json = NULL;
+    if (!s_usb_host_mgr.initialized)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (!usb_host_manager_lock(pdMS_TO_TICKS(50)))
+    {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    *out_json = usb_host_manager_dup_string(s_usb_host_mgr.cli_gps_json);
+    usb_host_manager_unlock();
+    return ESP_OK;
+}
+
+esp_err_t usb_host_manager_espnetlink_get_cached_lte_json(char **out_json)
+{
+    if (out_json == NULL)
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    *out_json = NULL;
+    if (!s_usb_host_mgr.initialized)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (!usb_host_manager_lock(pdMS_TO_TICKS(50)))
+    {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    *out_json = usb_host_manager_dup_string(s_usb_host_mgr.cli_lte_json);
+    usb_host_manager_unlock();
+    return ESP_OK;
+}
+
 esp_err_t usb_host_manager_init(const usb_host_manager_platform_config_t *platform_config)
 {
     usb_host_manager_config_t loaded;
@@ -683,15 +1606,28 @@ esp_err_t usb_host_manager_init(const usb_host_manager_platform_config_t *platfo
     ESP_RETURN_ON_FALSE(s_usb_host_mgr.cmd_queue_storage != NULL, ESP_ERR_NO_MEM, TAG, "failed to allocate queue storage");
 
     s_usb_host_mgr.cmd_queue = xQueueCreateStatic(USB_HOST_MANAGER_CMD_QUEUE_LEN,
-                                                   sizeof(usb_host_manager_cmd_t),
-                                                   s_usb_host_mgr.cmd_queue_storage,
-                                                   &s_usb_host_mgr.cmd_queue_buffer);
+                                                  sizeof(usb_host_manager_cmd_t),
+                                                  s_usb_host_mgr.cmd_queue_storage,
+                                                  &s_usb_host_mgr.cmd_queue_buffer);
     ESP_RETURN_ON_FALSE(s_usb_host_mgr.cmd_queue != NULL, ESP_ERR_NO_MEM, TAG, "failed to create queue");
 
     s_usb_host_mgr.task_stack = (StackType_t *)heap_caps_malloc(
         USB_HOST_MANAGER_TASK_STACK_WORDS * sizeof(StackType_t),
         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     ESP_RETURN_ON_FALSE(s_usb_host_mgr.task_stack != NULL, ESP_ERR_NO_MEM, TAG, "failed to allocate task stack");
+
+    s_usb_host_mgr.cli_task_stack = (StackType_t *)heap_caps_malloc(
+        USB_HOST_MANAGER_CLI_TASK_STACK_WORDS * sizeof(StackType_t),
+        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    ESP_RETURN_ON_FALSE(s_usb_host_mgr.cli_task_stack != NULL, ESP_ERR_NO_MEM, TAG, "failed to allocate cli task stack");
+
+    s_usb_host_mgr.cli_response_buf = (char *)heap_caps_malloc(USB_HOST_MANAGER_CLI_RESPONSE_MAX,
+                                                               MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    ESP_RETURN_ON_FALSE(s_usb_host_mgr.cli_response_buf != NULL, ESP_ERR_NO_MEM, TAG, "failed to allocate cli response buffer");
+
+    s_usb_host_mgr.cli_payload_buf = (char *)heap_caps_malloc(USB_HOST_MANAGER_CLI_RESPONSE_MAX,
+                                                              MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    ESP_RETURN_ON_FALSE(s_usb_host_mgr.cli_payload_buf != NULL, ESP_ERR_NO_MEM, TAG, "failed to allocate cli payload buffer");
 
     if (s_usb_host_mgr.platform.usb_id_gpio >= 0)
     {
@@ -714,6 +1650,15 @@ esp_err_t usb_host_manager_init(const usb_host_manager_platform_config_t *platfo
                                             s_usb_host_mgr.task_stack,
                                             &s_usb_host_mgr.task_buffer);
     ESP_RETURN_ON_FALSE(s_usb_host_mgr.task != NULL, ESP_ERR_NO_MEM, TAG, "failed to create task");
+
+    s_usb_host_mgr.cli_task = xTaskCreateStatic(usb_host_manager_cli_task,
+                                                "usb_host_cli",
+                                                USB_HOST_MANAGER_CLI_TASK_STACK_WORDS,
+                                                NULL,
+                                                USB_HOST_MANAGER_CLI_TASK_PRIORITY,
+                                                s_usb_host_mgr.cli_task_stack,
+                                                &s_usb_host_mgr.cli_task_buffer);
+    ESP_RETURN_ON_FALSE(s_usb_host_mgr.cli_task != NULL, ESP_ERR_NO_MEM, TAG, "failed to create cli task");
 
     s_usb_host_mgr.initialized = true;
     s_usb_host_mgr.status.initialized = true;

@@ -30,10 +30,16 @@ static volatile bool s_stop = false;
 static StreamBufferHandle_t s_rx_sb = NULL;
 static SemaphoreHandle_t s_tx_lock = NULL;
 static StaticSemaphore_t s_tx_lock_buffer;
+static SemaphoreHandle_t s_session_lock = NULL;
+static StaticSemaphore_t s_session_lock_buffer;
 static StaticStreamBuffer_t s_rx_sb_buffer;
 static uint8_t *s_rx_sb_storage = NULL;
 static StackType_t *s_task_stack = NULL;
 static StaticTask_t s_task_tcb;
+
+static uint8_t *s_rx_dma_buf = NULL; // Internal SRAM buffer for USB RX DMA
+static uint8_t *s_tx_dma_buf = NULL; // Internal SRAM buffer for USB TX DMA
+#define USB_DMA_BUF_SIZE 64
 
 static struct usbh_cdc_acm *s_acm = NULL;
 static volatile bool s_line_state_pending = false;
@@ -61,11 +67,14 @@ static esp_err_t usb_acm_cli_write_bytes(const uint8_t *data, size_t len)
     while (total < len)
     {
         uint32_t chunk = (uint32_t)(len - total);
-        if (chunk > 512) {
-            chunk = 512;
+        if (chunk > USB_DMA_BUF_SIZE) {
+            chunk = USB_DMA_BUF_SIZE;
         }
 
-        int ret = usbh_cdc_acm_bulk_out_transfer(acm, (uint8_t *)(data + total), chunk, 5000);
+        // Copy to internal SRAM buffer for DMA safety (caller's data may be in PSRAM)
+        memcpy(s_tx_dma_buf, data + total, chunk);
+
+        int ret = usbh_cdc_acm_bulk_out_transfer(acm, s_tx_dma_buf, chunk, 5000);
         if (ret <= 0)
         {
             if (s_tx_lock)
@@ -120,13 +129,13 @@ static void usb_acm_cli_task(void *arg)
             }
         }
 
-        uint8_t tmp[64];
-        int r = usbh_cdc_acm_bulk_in_transfer(acm, tmp, sizeof(tmp), 100);
+        // s_rx_dma_buf is in internal SRAM (DMA-capable), not on the PSRAM stack
+        int r = usbh_cdc_acm_bulk_in_transfer(acm, s_rx_dma_buf, 64, 100);
         if (r > 0)
         {
             if (s_rx_sb)
             {
-                (void)xStreamBufferSend(s_rx_sb, tmp, (size_t)r, 0);
+                (void)xStreamBufferSend(s_rx_sb, s_rx_dma_buf, (size_t)r, 0);
             }
         }
     }
@@ -183,39 +192,47 @@ esp_err_t usb_acm_cli_start(const usb_acm_cli_config_t *cfg)
 
     s_stop = false;
 
+    // USB DMA buffers MUST be in internal SRAM, not PSRAM.
+    // DMA writes to PSRAM are invisible to the CPU due to cache coherency.
+    s_rx_dma_buf = (uint8_t *)heap_caps_malloc(USB_DMA_BUF_SIZE, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+    s_tx_dma_buf = (uint8_t *)heap_caps_malloc(USB_DMA_BUF_SIZE, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+    if (s_rx_dma_buf == NULL || s_tx_dma_buf == NULL)
+    {
+        heap_caps_free(s_rx_dma_buf);
+        s_rx_dma_buf = NULL;
+        heap_caps_free(s_tx_dma_buf);
+        s_tx_dma_buf = NULL;
+        return ESP_ERR_NO_MEM;
+    }
+
     s_rx_sb_storage = (uint8_t *)heap_caps_malloc(s_cfg.rx_buffer_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (s_rx_sb_storage == NULL)
     {
-        return ESP_ERR_NO_MEM;
+        goto fail_free_dma;
     }
 
     s_rx_sb = xStreamBufferCreateStatic(s_cfg.rx_buffer_size, 1, s_rx_sb_storage, &s_rx_sb_buffer);
     if (s_rx_sb == NULL)
     {
-        heap_caps_free(s_rx_sb_storage);
-        s_rx_sb_storage = NULL;
-        return ESP_ERR_NO_MEM;
+        goto fail_free_sb_storage;
     }
 
     s_tx_lock = xSemaphoreCreateMutexStatic(&s_tx_lock_buffer);
     if (s_tx_lock == NULL)
     {
-        vStreamBufferDelete(s_rx_sb);
-        s_rx_sb = NULL;
-        heap_caps_free(s_rx_sb_storage);
-        s_rx_sb_storage = NULL;
-        return ESP_ERR_NO_MEM;
+        goto fail_free_sb;
+    }
+
+    s_session_lock = xSemaphoreCreateMutexStatic(&s_session_lock_buffer);
+    if (s_session_lock == NULL)
+    {
+        goto fail_free_lock;
     }
 
     s_task_stack = (StackType_t *)heap_caps_malloc(s_cfg.rx_task_stack_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (s_task_stack == NULL)
     {
-        vStreamBufferDelete(s_rx_sb);
-        s_rx_sb = NULL;
-        s_tx_lock = NULL;
-        heap_caps_free(s_rx_sb_storage);
-        s_rx_sb_storage = NULL;
-        return ESP_ERR_NO_MEM;
+        goto fail_free_session_lock;
     }
 
     stack_depth_words = (uint32_t)(s_cfg.rx_task_stack_size / sizeof(StackType_t));
@@ -253,17 +270,29 @@ esp_err_t usb_acm_cli_start(const usb_acm_cli_config_t *cfg)
     if (ok != pdPASS)
     {
         s_task = NULL;
-        vStreamBufferDelete(s_rx_sb);
-        s_rx_sb = NULL;
-        s_tx_lock = NULL;
-        heap_caps_free(s_rx_sb_storage);
-        s_rx_sb_storage = NULL;
         heap_caps_free(s_task_stack);
         s_task_stack = NULL;
-        return ESP_ERR_NO_MEM;
+        goto fail_free_session_lock;
     }
 
     return ESP_OK;
+
+fail_free_lock:
+    s_tx_lock = NULL;
+fail_free_session_lock:
+    s_session_lock = NULL;
+fail_free_sb:
+    vStreamBufferDelete(s_rx_sb);
+    s_rx_sb = NULL;
+fail_free_sb_storage:
+    heap_caps_free(s_rx_sb_storage);
+    s_rx_sb_storage = NULL;
+fail_free_dma:
+    heap_caps_free(s_rx_dma_buf);
+    s_rx_dma_buf = NULL;
+    heap_caps_free(s_tx_dma_buf);
+    s_tx_dma_buf = NULL;
+    return ESP_ERR_NO_MEM;
 }
 
 esp_err_t usb_acm_cli_stop(void)
@@ -295,11 +324,24 @@ esp_err_t usb_acm_cli_stop(void)
     }
 
     s_tx_lock = NULL;
+    s_session_lock = NULL;
 
     if (s_task_stack != NULL)
     {
         heap_caps_free(s_task_stack);
         s_task_stack = NULL;
+    }
+
+    if (s_rx_dma_buf != NULL)
+    {
+        heap_caps_free(s_rx_dma_buf);
+        s_rx_dma_buf = NULL;
+    }
+
+    if (s_tx_dma_buf != NULL)
+    {
+        heap_caps_free(s_tx_dma_buf);
+        s_tx_dma_buf = NULL;
     }
 
     return ESP_OK;
@@ -308,6 +350,29 @@ esp_err_t usb_acm_cli_stop(void)
 bool usb_acm_cli_is_connected(void)
 {
     return (s_acm != NULL);
+}
+
+esp_err_t usb_acm_cli_acquire(uint32_t timeout_ms)
+{
+    if (s_session_lock == NULL)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (xSemaphoreTake(s_session_lock, pdMS_TO_TICKS(timeout_ms)) != pdTRUE)
+    {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    return ESP_OK;
+}
+
+void usb_acm_cli_release(void)
+{
+    if (s_session_lock != NULL)
+    {
+        xSemaphoreGive(s_session_lock);
+    }
 }
 
 esp_err_t usb_acm_cli_send_line(const char *line)
@@ -332,8 +397,8 @@ esp_err_t usb_acm_cli_send_line(const char *line)
         }
     }
 
-    const uint8_t eol[2] = { '\r', '\n' };
-    return usb_acm_cli_write_bytes(eol, sizeof(eol));
+    const uint8_t eol = '\r';
+    return usb_acm_cli_write_bytes(&eol, 1);
 }
 
 esp_err_t usb_acm_cli_read(uint8_t *buf, size_t buf_len, uint32_t timeout_ms, size_t *out_len)
@@ -374,14 +439,6 @@ void usbh_cdc_acm_run(struct usbh_cdc_acm *cdc_acm_class)
     if (s_acm == NULL)
     {
         s_acm = cdc_acm_class;
-
-        struct cdc_line_coding lc;
-        memset(&lc, 0, sizeof(lc));
-        lc.dwDTERate = 115200;
-        lc.bDataBits = 8;
-        lc.bParityType = 0;
-        lc.bCharFormat = 0;
-        (void)usbh_cdc_acm_set_line_coding(cdc_acm_class, &lc);
 
         if (s_rx_sb)
         {

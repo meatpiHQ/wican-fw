@@ -16,6 +16,8 @@ static const char *TAG = "usb_host_http";
 static esp_err_t usb_host_manager_get_config_handler(httpd_req_t *req);
 static esp_err_t usb_host_manager_post_config_handler(httpd_req_t *req);
 static esp_err_t usb_host_manager_status_handler(httpd_req_t *req);
+static esp_err_t usb_host_manager_espnetlink_cached_handler(httpd_req_t *req, const char *kind);
+static esp_err_t usb_host_manager_espnetlink_config_set_handler(httpd_req_t *req);
 
 static esp_err_t usb_host_manager_send_json(httpd_req_t *req, cJSON *json)
 {
@@ -116,12 +118,75 @@ static void usb_host_manager_append_config_json(cJSON *root, const usb_host_mana
     }
 }
 
+static esp_err_t usb_host_manager_read_body(httpd_req_t *req, char **out_body)
+{
+    int received;
+    char *body;
+
+    if (req == NULL || out_body == NULL)
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    *out_body = NULL;
+    body = (char *)heap_caps_malloc((size_t)req->content_len + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (body == NULL)
+    {
+        return ESP_ERR_NO_MEM;
+    }
+
+    received = httpd_req_recv(req, body, req->content_len);
+    if (received <= 0)
+    {
+        heap_caps_free(body);
+        return ESP_FAIL;
+    }
+
+    body[received] = '\0';
+    *out_body = body;
+    return ESP_OK;
+}
+
+static esp_err_t usb_host_manager_send_cached_json(httpd_req_t *req, const char *kind, char *json_str)
+{
+    cJSON *root;
+    cJSON *parsed;
+
+    if (json_str == NULL)
+    {
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "cache");
+    }
+
+    root = cJSON_CreateObject();
+    if (root == NULL)
+    {
+        free(json_str);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "json");
+    }
+
+    cJSON_AddBoolToObject(root, "success", true);
+    cJSON_AddStringToObject(root, "kind", kind);
+
+    parsed = cJSON_Parse(json_str);
+    if (parsed != NULL)
+    {
+        cJSON_AddItemToObject(root, "data", parsed);
+    }
+    else
+    {
+        cJSON_AddStringToObject(root, "data", json_str);
+    }
+
+    free(json_str);
+    return usb_host_manager_send_json(req, root);
+}
+
 static esp_err_t usb_host_manager_router_handler(httpd_req_t *req)
 {
     const char *uri;
     const char *segment;
-    char seg[32];
-    size_t seg_len;
+    char path[96];
+    size_t path_len;
 
     uri = req->uri;
     segment = uri + strlen("/usb_host");
@@ -135,16 +200,16 @@ static esp_err_t usb_host_manager_router_handler(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "missing segment");
     }
 
-    seg_len = strcspn(segment, "?");
-    if (seg_len >= sizeof(seg))
+    path_len = strcspn(segment, "?");
+    if (path_len >= sizeof(path))
     {
-        seg_len = sizeof(seg) - 1;
+        path_len = sizeof(path) - 1;
     }
 
-    memcpy(seg, segment, seg_len);
-    seg[seg_len] = '\0';
+    memcpy(path, segment, path_len);
+    path[path_len] = '\0';
 
-    if (strcmp(seg, "config") == 0)
+    if (strcmp(path, "config") == 0)
     {
         if (req->method == HTTP_GET)
         {
@@ -156,15 +221,130 @@ static esp_err_t usb_host_manager_router_handler(httpd_req_t *req)
             return usb_host_manager_post_config_handler(req);
         }
     }
-    else if (strcmp(seg, "status") == 0)
+    else if (strcmp(path, "status") == 0)
     {
         if (req->method == HTTP_GET)
         {
             return usb_host_manager_status_handler(req);
         }
     }
+    else if (strcmp(path, "espnetlink/config") == 0 && req->method == HTTP_GET)
+    {
+        return usb_host_manager_espnetlink_cached_handler(req, "config");
+    }
+    else if (strcmp(path, "espnetlink/gps") == 0 && req->method == HTTP_GET)
+    {
+        return usb_host_manager_espnetlink_cached_handler(req, "gps");
+    }
+    else if (strcmp(path, "espnetlink/lte") == 0 && req->method == HTTP_GET)
+    {
+        return usb_host_manager_espnetlink_cached_handler(req, "lte");
+    }
+    else if (strcmp(path, "espnetlink/config/set") == 0 && req->method == HTTP_POST)
+    {
+        return usb_host_manager_espnetlink_config_set_handler(req);
+    }
 
     return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "route");
+}
+
+static esp_err_t usb_host_manager_espnetlink_cached_handler(httpd_req_t *req, const char *kind)
+{
+    char *json_str;
+    esp_err_t ret;
+
+    json_str = NULL;
+    if (strcmp(kind, "config") == 0)
+    {
+        ret = usb_host_manager_espnetlink_get_cached_config_json(&json_str);
+    }
+    else if (strcmp(kind, "gps") == 0)
+    {
+        ret = usb_host_manager_espnetlink_get_cached_gps_json(&json_str);
+    }
+    else if (strcmp(kind, "lte") == 0)
+    {
+        ret = usb_host_manager_espnetlink_get_cached_lte_json(&json_str);
+    }
+    else
+    {
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "kind");
+    }
+
+    if (ret != ESP_OK)
+    {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(ret));
+    }
+
+    return usb_host_manager_send_cached_json(req, kind, json_str);
+}
+
+static esp_err_t usb_host_manager_espnetlink_config_set_handler(httpd_req_t *req)
+{
+    char *body;
+    char *payload;
+    cJSON *root;
+    cJSON *response;
+    cJSON *key_item;
+    cJSON *value_item;
+    bool success;
+    esp_err_t ret;
+
+    body = NULL;
+    payload = NULL;
+    success = false;
+
+    ret = usb_host_manager_read_body(req, &body);
+    if (ret != ESP_OK)
+    {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "body");
+    }
+
+    root = cJSON_Parse(body);
+    heap_caps_free(body);
+    if (root == NULL)
+    {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "json");
+    }
+
+    key_item = cJSON_GetObjectItemCaseSensitive(root, "key");
+    value_item = cJSON_GetObjectItemCaseSensitive(root, "value");
+    if (!cJSON_IsString(key_item) || key_item->valuestring == NULL ||
+        !cJSON_IsString(value_item) || value_item->valuestring == NULL)
+    {
+        cJSON_Delete(root);
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "key/value");
+    }
+
+    ret = usb_host_manager_espnetlink_set_config_key(key_item->valuestring,
+                                                     value_item->valuestring,
+                                                     &payload,
+                                                     &success);
+    cJSON_Delete(root);
+
+    response = cJSON_CreateObject();
+    if (response == NULL)
+    {
+        free(payload);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "json");
+    }
+
+    cJSON_AddBoolToObject(response, "success", ret == ESP_OK && success);
+    if (payload != NULL && payload[0] != '\0')
+    {
+        cJSON_AddStringToObject(response, "response", payload);
+    }
+    if (ret != ESP_OK)
+    {
+        cJSON_AddStringToObject(response, "error", esp_err_to_name(ret));
+    }
+    else if (!success)
+    {
+        cJSON_AddStringToObject(response, "error", "ERROR");
+    }
+
+    free(payload);
+    return usb_host_manager_send_json(req, response);
 }
 
 static esp_err_t usb_host_manager_get_config_handler(httpd_req_t *req)
@@ -258,19 +438,11 @@ static esp_err_t usb_host_manager_post_config_handler(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "config");
     }
 
-    body = (char *)heap_caps_malloc((size_t)req->content_len + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (body == NULL)
+    if (usb_host_manager_read_body(req, &body) != ESP_OK)
     {
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "alloc");
-    }
-
-    if (httpd_req_recv(req, body, req->content_len) <= 0)
-    {
-        heap_caps_free(body);
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "body");
     }
 
-    body[req->content_len] = '\0';
     root = cJSON_Parse(body);
     heap_caps_free(body);
     if (root == NULL)
@@ -371,6 +543,8 @@ static esp_err_t usb_host_manager_status_handler(httpd_req_t *req)
     cJSON_AddBoolToObject(root, "ethernet_connected", status.ethernet_connected);
     cJSON_AddBoolToObject(root, "cli_enabled", status.cli_enabled);
     cJSON_AddBoolToObject(root, "cli_connected", status.cli_connected);
+    cJSON_AddBoolToObject(root, "cli_prompt_synced", status.cli_prompt_synced);
+    cJSON_AddBoolToObject(root, "cli_session_ready", status.cli_session_ready);
     cJSON_AddStringToObject(root, "state", usb_host_manager_state_to_str(status.state));
     cJSON_AddStringToObject(root, "configured_device_type", usb_host_manager_device_type_to_str(status.configured_device_type));
     cJSON_AddStringToObject(root, "active_device_type", usb_host_manager_device_type_to_str(status.active_device_type));
@@ -378,6 +552,9 @@ static esp_err_t usb_host_manager_status_handler(httpd_req_t *req)
     cJSON_AddStringToObject(root, "netmask", status.netmask);
     cJSON_AddStringToObject(root, "gateway", status.gateway);
     cJSON_AddStringToObject(root, "management_ip", status.management_ip);
+    cJSON_AddStringToObject(root, "cli_last_command", status.cli_last_command);
+    cJSON_AddStringToObject(root, "cli_last_error", status.cli_last_error);
+    cJSON_AddStringToObject(root, "cli_last_response", status.cli_last_response);
     cJSON_AddStringToObject(root, "last_error", status.last_error);
     cJSON_AddStringToObject(root, "expected_vid", "0x303A");
     cJSON_AddStringToObject(root, "expected_pid", "0x4007");

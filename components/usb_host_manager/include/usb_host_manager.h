@@ -84,6 +84,8 @@ typedef struct usb_host_manager_status
     bool ethernet_connected;
     bool cli_enabled;
     bool cli_connected;
+    bool cli_prompt_synced;
+    bool cli_session_ready;
     usb_host_manager_device_type_t configured_device_type;
     usb_host_manager_device_type_t active_device_type;
     usb_host_manager_state_t state;
@@ -91,6 +93,9 @@ typedef struct usb_host_manager_status
     char netmask[16];
     char gateway[16];
     char management_ip[16];
+    char cli_last_command[64];
+    char cli_last_error[96];
+    char cli_last_response[256];
     char last_error[96];
 } usb_host_manager_status_t;
 
@@ -101,6 +106,17 @@ esp_err_t usb_host_manager_save_config(const usb_host_manager_config_t *config);
 esp_err_t usb_host_manager_set_config(const usb_host_manager_config_t *config);
 esp_err_t usb_host_manager_get_config(usb_host_manager_config_t *config);
 esp_err_t usb_host_manager_get_status(usb_host_manager_status_t *status);
+esp_err_t usb_host_manager_espnetlink_exec_command(const char *cmd,
+                                                   uint32_t timeout_ms,
+                                                   char **out_payload,
+                                                   bool *out_success);
+esp_err_t usb_host_manager_espnetlink_set_config_key(const char *key,
+                                                     const char *value,
+                                                     char **out_payload,
+                                                     bool *out_success);
+esp_err_t usb_host_manager_espnetlink_get_cached_config_json(char **out_json);
+esp_err_t usb_host_manager_espnetlink_get_cached_gps_json(char **out_json);
+esp_err_t usb_host_manager_espnetlink_get_cached_lte_json(char **out_json);
 
 const char *usb_host_manager_device_type_to_str(usb_host_manager_device_type_t type);
 const char *usb_host_manager_state_to_str(usb_host_manager_state_t state);

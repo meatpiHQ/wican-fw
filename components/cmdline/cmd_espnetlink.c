@@ -1,5 +1,6 @@
 #include "cmd_espnetlink.h"
 
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -9,8 +10,11 @@
 #include "argtable3/argtable3.h"
 #include "esp_console.h"
 #include "esp_err.h"
+#include "esp_log.h"
 
-#include "usb_acm_cli.h"
+#include "usb_host_manager.h"
+
+static const char *TAG = "espnetlink_cmd";
 
 static struct
 {
@@ -21,16 +25,15 @@ static struct
 
 static int cmd_espnetlink(int argc, char **argv)
 {
+    char *payload;
+    bool success;
+    ESP_LOGI(TAG, "cmd_espnetlink called, argc=%d", argc);
+
     int nerrors = arg_parse(argc, argv, (void **)&s_args);
     if (nerrors != 0)
     {
-        arg_print_errors(stderr, s_args.end, argv[0]);
-        return 1;
-    }
-
-    if (!usb_acm_cli_is_connected())
-    {
-        cmdline_printf("Error: ESPNetLink ACM is not connected (/dev/ttyACM0)\n");
+        cmdline_printf("Error: bad arguments (%d errors)\n", nerrors);
+        cmdline_printf("Usage: espnetlink <cmd...> [-t <timeout_ms>]\n");
         return 1;
     }
 
@@ -89,59 +92,32 @@ static int cmd_espnetlink(int argc, char **argv)
         }
     }
 
-    if (usb_acm_cli_send_line(line) != ESP_OK)
+    ESP_LOGI(TAG, "Sending to ESPNetLink: '%s' (timeout=%"PRIu32"ms)", line, timeout_ms);
+
+    payload = NULL;
+    success = false;
+    esp_err_t send_err = usb_host_manager_espnetlink_exec_command(line, timeout_ms, &payload, &success);
+    if (send_err != ESP_OK)
     {
-        cmdline_printf("Error: failed to send to ESPNetLink\n");
+        cmdline_printf("Error: failed to send to ESPNetLink (%s)\n", esp_err_to_name(send_err));
         return 1;
     }
 
-    // Drain output until we go quiet for a short period, or reach the timeout.
-    const uint32_t max_total_ms = timeout_ms;
-    const uint32_t per_read_timeout_ms = 100;
-    const uint32_t quiet_stop_ms = 500;
-
-    uint32_t elapsed = 0;
-    uint32_t quiet = 0;
-    bool got_any = false;
-
-    uint8_t buf[128];
-
-    while (elapsed < max_total_ms)
+    if (payload != NULL && payload[0] != '\0')
     {
-        size_t out_len = 0;
-        esp_err_t err = usb_acm_cli_read(buf, sizeof(buf), per_read_timeout_ms, &out_len);
-        elapsed += per_read_timeout_ms;
-
-        if (err == ESP_OK && out_len > 0)
-        {
-            got_any = true;
-            quiet = 0;
-
-            char out[129];
-            size_t n = out_len;
-            if (n > (sizeof(out) - 1))
-            {
-                n = sizeof(out) - 1;
-            }
-
-            memcpy(out, buf, n);
-            out[n] = '\0';
-            cmdline_printf("%s", out);
-
-            continue;
-        }
-
-        quiet += per_read_timeout_ms;
-        if (got_any && quiet >= quiet_stop_ms)
-        {
-            break;
-        }
+        cmdline_printf("%s\n", payload);
     }
 
-    if (!got_any)
+    if (!success)
     {
-        cmdline_printf("(no response)\n");
+        cmdline_printf("ERROR\n");
     }
+    else if (payload == NULL || payload[0] == '\0')
+    {
+        cmdline_printf("OK\n");
+    }
+
+    free(payload);
 
     return 0;
 }
