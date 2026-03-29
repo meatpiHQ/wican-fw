@@ -3,48 +3,123 @@
   "init": "ATST96;",
   "pids": [
     {
+      "pid": "220101",
       "pid_init": "ATSH7E4;",
-      "pid": "2201019",
       "parameters": {
         "SOC": "B10/2",
         "REGEN_MAX": "[B11:B12]/100",
         "POWER_MAX": "[B13:B14]/100",
-        "HV_A": "(65536-([B17:B18]))/10",
+        "HV_A": "[S17:S18]/10",
         "HV_V": "[B19:B20]/10",
-        "HV_W": "([B19:B20]/10)*((65536-([B17:B18]))/10)",
-        "HV_T_MAX": "B21",
-        "HV_T_MIN": "B22",
-        "HV_T_1": "B23",
-        "HV_T_2": "B25",
-        "HV_T_3": "B26",
-        "HV_T_4": "B27",
-        "HV_T_I": "B30",
+        "HV_W": "([B19:B20]/10)*([S17:S18]/10)",
+        "HV_T_MAX": "S21",
+        "HV_T_MIN": "S22",
+        "HV_T_1": "S23",
+        "HV_T_2": "S25",
+        "HV_T_3": "S26",
+        "HV_T_4": "S27",
+        "HV_T_I": "S30",
         "HV_C_V_MAX": "B31/50",
         "HV_C_V_MAX_NO": "B33",
         "HV_C_V_MIN": "B34/50",
         "HV_C_V_MIN_NO": "B35",
-        "LV_V": "B38*0.1"
+        "LV_V": "B38*0.1",
+        "KWH_CHARGED": "([B49:B50]*65536 + [B51:B52])/10",
+        "KWH_DISCHARGED": "([B53:B54]*65536 + [B55:B56])/10",
+        "HV_ACTIVE": "B15:7"
       }
     },
     {
+      "pid": "220105",
       "pid_init": "ATSH7E4;",
-      "pid": "2201057",
       "parameters": {
         "SOH": "[B34:B35]/10",
         "SOC_D": "B41/2",
-        "HV_C_D_MIN_NO": "B39",
         "HV_C_D_MAX_NO": "B36",
-        "HV_C_D_MIN": "[B37:B38]/10"
+        "HV_C_D_MIN": "[B37:B38]/10",
+        "HV_C_D_MIN_NO": "B39"
       }
     },
     {
-      "pid_init": "ATSH7E2;",
-      "pid": "21014",
+      "pid": "22BC03",
+      "pid_init": "ATSH770;",
       "parameters": {
-        "GEAR": "B10",
-        "READY": "B26:3",
+        "DOOR_DRV_OPEN": "B10:5",
+        "DOOR_PAS_OPEN": "B10:4",
+        "DOOR_RL_OPEN": "B10:0",
+        "DOOR_RR_OPEN": "B10:2",
+        "TRUNK_OPEN": "B10:7",
+        "IGNITION_ON": "B11:5",
+        "SEATBELT_FL": "B11:1",
+        "SEATBELT_FR": "B11:2",
+        "DOOR_LOCK_RL": "1-B10:1",
+        "DOOR_LOCK_RR": "1-B10:3"
+      }
+    },
+    {
+      "pid": "22B002",
+      "pid_init": "ATSH7C6;ATFCSH7C6;",
+      "parameters": {
+        "ODOMETER_KM": "[B12:B14]"
+      }
+    },
+    {
+      "pid": "220100",
+      "pid_init": "ATSH7B3;",
+      "parameters": {
+        "OUTDOOR_TEMP": "B12/2-40"
+      }
+    },
+    {
+      "pid": "22C101",
+      "pid_init": "ATSH7D1;",
+      "parameters": {
+        "REAL_SPEED_KMH": "B12"
+      }
+    },
+    {
+      "pid": "2101",
+      "pid_init": "ATSH7E2;",
+      "parameters": {
+        "GEAR_PARK": "B10:0",
+        "GEAR_REVERSE": "B10:1",
+        "GEAR_NEUTRAL": "B10:2",
+        "GEAR_DRIVE": "B10:3",
+        "CAR_READY": "B26:3",
         "PARK_BRAKE": "B26:5",
-        "SPEED": "[B19:B20]/100"
+        "VMCU_SPEED_KMH": "[B19:B20]/100"
+      }
+    },
+    {
+      "pid": "22BC04",
+      "pid_init": "ATSH770;",
+      "parameters": {
+        "DOOR_LOCK_FL": "B10:3",
+        "DOOR_LOCK_FR": "B10:2",
+        "HIGH_BEAM": "B13:4"
+      }
+    },
+    {
+      "pid": "22B00E",
+      "pid_init": "ATSH7A0;",
+      "parameters": {
+        "CHARGE_PORT_OPEN": "B10:4"
+      }
+    },
+    {
+      "pid": "2101",
+      "pid_init": "ATSH7E5;",
+      "parameters": {
+        "OBC_TEMP": "B52/2-40",
+        "OBC_AC_V": "B55",
+        "OBC_DC_V": "[B60:B61]/10"
+      }
+    },
+    {
+      "pid": "2103",
+      "pid_init": "ATSH7E5;",
+      "parameters": {
+        "OBC_AC_A": "[B9:B10]/100"
       }
     }
   ]
