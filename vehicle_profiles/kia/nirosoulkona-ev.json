@@ -26,7 +26,7 @@
         "LV_V": "B38*0.1",
         "KWH_CHARGED": "([B49:B50]*65536 + [B51:B52])/10",
         "KWH_DISCHARGED": "([B53:B54]*65536 + [B55:B56])/10",
-        "HV_ACTIVE": "B15:7"
+        "HV_RELAY": "B15:7"
       }
     },
     {
@@ -44,82 +44,57 @@
       "pid": "22BC03",
       "pid_init": "ATSH770;",
       "parameters": {
-        "DOOR_DRV_OPEN": "B10:5",
-        "DOOR_PAS_OPEN": "B10:4",
-        "DOOR_RL_OPEN": "B10:0",
-        "DOOR_RR_OPEN": "B10:2",
-        "TRUNK_OPEN": "B10:7",
-        "IGNITION_ON": "B11:5",
-        "SEATBELT_FL": "B11:1",
-        "SEATBELT_FR": "B11:2",
-        "DOOR_LOCK_RL": "1-B10:1",
-        "DOOR_LOCK_RR": "1-B10:3"
+        "IGNITION": "B11:5"
       }
     },
     {
       "pid": "22B002",
       "pid_init": "ATSH7C6;ATFCSH7C6;",
       "parameters": {
-        "ODOMETER_KM": "[B12:B14]"
+        "ODOMETER": "[B12:B14]"
       }
     },
     {
       "pid": "220100",
       "pid_init": "ATSH7B3;",
       "parameters": {
-        "OUTDOOR_TEMP": "B12/2-40"
+        "TMP_A": "B12/2-40"
       }
     },
     {
       "pid": "22C101",
       "pid_init": "ATSH7D1;",
       "parameters": {
-        "REAL_SPEED_KMH": "B12"
+        "SPEED": "B12"
       }
     },
     {
       "pid": "2101",
       "pid_init": "ATSH7E2;",
       "parameters": {
-        "GEAR_PARK": "B10:0",
-        "GEAR_REVERSE": "B10:1",
-        "GEAR_NEUTRAL": "B10:2",
-        "GEAR_DRIVE": "B10:3",
-        "CAR_READY": "B26:3",
-        "PARK_BRAKE": "B26:5",
-        "VMCU_SPEED_KMH": "[B19:B20]/100"
-      }
-    },
-    {
-      "pid": "22BC04",
-      "pid_init": "ATSH770;",
-      "parameters": {
-        "DOOR_LOCK_FL": "B10:3",
-        "DOOR_LOCK_FR": "B10:2",
-        "HIGH_BEAM": "B13:4"
+        "READY": "B26:3",
+        "GEAR": "B10"
       }
     },
     {
       "pid": "22B00E",
       "pid_init": "ATSH7A0;",
       "parameters": {
-        "CHARGE_PORT_OPEN": "B10:4"
+        "AC_PLUG": "B10:4"
       }
     },
     {
       "pid": "2101",
       "pid_init": "ATSH7E5;",
       "parameters": {
-        "OBC_TEMP": "B52/2-40",
-        "OBC_AC_V": "B55",
-        "OBC_DC_V": "[B60:B61]/10"
+        "AC_C_V": "B55"
       }
     },
     {
       "pid": "2103",
       "pid_init": "ATSH7E5;",
       "parameters": {
-        "OBC_AC_A": "[B9:B10]/100"
+        "AC_C_C": "[B9:B10]/100"
       }
     }
   ]
