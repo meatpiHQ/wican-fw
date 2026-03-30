@@ -58,7 +58,8 @@
       "pid": "220100",
       "pid_init": "ATSH7B3;",
       "parameters": {
-        "TMP_A": "B12/2-40"
+        "TMP_A": "(B12/2)-40",
+        "T_CAB": "(B11/2)-40"
       }
     },
     {
