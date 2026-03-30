@@ -1,5 +1,5 @@
 {
   "car_model": "Hyundai: Kona",
   "init": "ATSP6;ATSH7E4;ATST96;",
-  "extends": "kia/nirosoulkona-ev.json"
+  "extends": "kia/niro.json"
 }
