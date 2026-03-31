@@ -1,0 +1,103 @@
+{
+  "car_model": "Kia: Niro/Soul",
+  "init": "ATST96;",
+  "pids": [
+    {
+      "pid": "2201019",
+      "pid_init": "ATSH7E4;",
+      "parameters": {
+        "SOC": "B10/2",
+        "REGEN_MAX": "[B11:B12]/100",
+        "POWER_MAX": "[B13:B14]/100",
+        "HV_A": "[S17:S18]/10",
+        "HV_V": "[B19:B20]/10",
+        "HV_W": "([B19:B20]/10)*([S17:S18]/10)",
+        "HV_T_MAX": "S21",
+        "HV_T_MIN": "S22",
+        "HV_T_1": "S23",
+        "HV_T_2": "S25",
+        "HV_T_3": "S26",
+        "HV_T_4": "S27",
+        "HV_T_I": "S30",
+        "HV_C_V_MAX": "B31/50",
+        "HV_C_V_MAX_NO": "B33",
+        "HV_C_V_MIN": "B34/50",
+        "HV_C_V_MIN_NO": "B35",
+        "LV_V": "B38*0.1",
+        "KWH_CHARGED": "([B49:B50]*65536 + [B51:B52])/10",
+        "KWH_DISCHARGED": "([B53:B54]*65536 + [B55:B56])/10",
+        "HV_RELAY": "B15:7"
+      }
+    },
+    {
+      "pid": "2201057",
+      "pid_init": "ATSH7E4;",
+      "parameters": {
+        "SOH": "[B34:B35]/10",
+        "SOC_D": "B41/2",
+        "HV_C_D_MAX_NO": "B36",
+        "HV_C_D_MIN": "[B37:B38]/10",
+        "HV_C_D_MIN_NO": "B39"
+      }
+    },
+    {
+      "pid": "22BC03",
+      "pid_init": "ATSH770;",
+      "parameters": {
+        "IGNITION": "B11:5"
+      }
+    },
+    {
+      "pid": "22B002",
+      "pid_init": "ATSH7C6;ATFCSH7C6;",
+      "parameters": {
+        "ODOMETER": "[B12:B14]"
+      }
+    },
+    {
+      "pid": "220100",
+      "pid_init": "ATSH7B3;",
+      "parameters": {
+        "TMP_A": "(B12/2)-40",
+        "T_CAB": "(B11/2)-40"
+      }
+    },
+    {
+      "pid": "22C101",
+      "pid_init": "ATSH7D1;",
+      "parameters": {
+        "SPEED": "B12"
+      }
+    },
+    {
+      "pid": "21014",
+      "pid_init": "ATSH7E2;",
+      "parameters": {
+        "READY": "B26:3",
+        "GEAR": "B10",
+        "PARK_BRAKE": "B26:5"
+      }
+    },
+    {
+      "pid": "22B00E",
+      "pid_init": "ATSH7A0;",
+      "parameters": {
+        "AC_PLUG": "B10:4"
+      }
+    },
+    {
+      "pid": "2101",
+      "pid_init": "ATSH7E5;",
+      "parameters": {
+        "AC_C_V": "B55"
+      }
+    },
+    {
+      "pid": "2103",
+      "pid_init": "ATSH7E5;",
+      "parameters": {
+        "AC_C_C": "[B9:B10]/100"
+      }
+    }
+  ]
+}
