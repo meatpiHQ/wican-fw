@@ -3,7 +3,7 @@
   "init": "ATST96;",
   "pids": [
     {
-      "pid": "220101",
+      "pid": "2201019",
       "pid_init": "ATSH7E4;",
       "parameters": {
         "SOC": "B10/2",
@@ -30,7 +30,7 @@
       }
     },
     {
-      "pid": "220105",
+      "pid": "2201057",
       "pid_init": "ATSH7E4;",
       "parameters": {
         "SOH": "[B34:B35]/10",
@@ -70,11 +70,12 @@
       }
     },
     {
-      "pid": "2101",
+      "pid": "21014",
       "pid_init": "ATSH7E2;",
       "parameters": {
         "READY": "B26:3",
-        "GEAR": "B10"
+        "GEAR": "B10",
+        "PARK_BRAKE": "B26:5"
       }
     },
     {
