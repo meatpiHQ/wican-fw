@@ -29,6 +29,27 @@
       "parameters": {
         "HV_CAPACITY_KWH": "[B4:B5]*50/1000"
       }
+    },
+    {
+      "pid": "2242DB1",
+      "pid_init": "ATSP6;ATFCSH746;ATFCSM1;ATCRA7B0;",
+      "parameters": {
+        "CO2": "B5*100"
+      }
+    },
+    {
+      "pid": "2227C42",
+      "pid_init": "ATSP6;ATFCSH746;ATFCSM1;ATCRA7B0;",
+      "parameters": {
+      "HUMIDITY": "B4"
+      }
+    },
+    {
+      "pid": "222A0B1",
+      "pid_init": "ATSP7;ATSHDB33F1;ATSHFC007B;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSM1;",
+      "parameters": {
+      "BATT_TEMP": "(B4&15)/2"
+      }
     }
   ]
 }
