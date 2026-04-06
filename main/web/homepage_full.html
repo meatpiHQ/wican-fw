@@ -329,6 +329,138 @@
             color: #991b1b;
         }
 
+        .usb-host-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .usb-host-card {
+            border: 1px solid var(--gray-200);
+            border-radius: 10px;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            padding: 1rem;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .usb-host-card .section-title {
+            font-size: 1.1rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .usb-host-kv {
+            display: grid;
+            grid-template-columns: minmax(120px, 180px) 1fr;
+            gap: 0.6rem 0.9rem;
+            align-items: center;
+            font-size: 0.95rem;
+        }
+
+        .usb-host-kv-label {
+            font-weight: 600;
+            color: var(--gray-600);
+        }
+
+        .usb-host-kv-value {
+            min-width: 0;
+            word-break: break-word;
+        }
+
+        .usb-host-status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.25rem;
+        }
+
+        .usb-host-subsection-title {
+            color: var(--primary-color);
+            border-bottom: 1px solid var(--primary-light);
+            margin: 0 0 0.75rem;
+            padding-bottom: 0.35rem;
+            font-size: 0.95rem;
+            font-weight: 700;
+        }
+
+        .usb-host-inline-form {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .usb-host-inline-form input,
+        .usb-host-inline-form select {
+            flex: 1 1 220px;
+            min-width: 180px;
+        }
+
+        .usb-host-json {
+            background: #0f172a;
+            color: #dbeafe;
+            border-radius: 8px;
+            padding: 0.9rem;
+            min-height: 220px;
+            max-height: 360px;
+            overflow: auto;
+            margin: 0;
+            font-size: 0.85rem;
+            line-height: 1.45;
+            white-space: pre-wrap;
+            word-break: break-word;
+            border: 1px solid #1e293b;
+        }
+
+        .usb-host-help {
+            font-size: 0.8rem;
+            color: var(--gray-600);
+            line-height: 1.45;
+        }
+
+        .usb-host-collapsible summary {
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--primary-color);
+            list-style: none;
+            margin-bottom: 0.75rem;
+        }
+
+        .usb-host-collapsible summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .usb-host-collapsible summary::before {
+            content: ">";
+            display: inline-block;
+            margin-right: 0.5rem;
+            transition: transform 0.2s ease;
+        }
+
+        .usb-host-collapsible[open] summary::before {
+            transform: rotate(90deg);
+        }
+
+        .usb-host-placeholder {
+            border: 1px dashed var(--gray-400);
+            border-radius: 10px;
+            padding: 1rem;
+            background-color: var(--gray-100);
+            color: var(--gray-700);
+            line-height: 1.5;
+        }
+
+        .usb-host-response {
+            margin-top: 0.75rem;
+            padding: 0.75rem;
+            border-radius: 8px;
+            background-color: var(--gray-100);
+            border: 1px solid var(--gray-300);
+            color: var(--gray-700);
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
         /* Webhook stats (compact) */
         .webhook-stats {
             display: flex;
@@ -673,6 +805,10 @@
             <span data-lucide="signal" style="width: 18px; height: 18px; margin-right: 8px;"></span>
             <b>Status</b>
         </button>
+        <button class="tablinks" onclick="openTab(event, 'usb_host_tab')">
+            <span data-lucide="usb" style="width: 18px; height: 18px; margin-right: 8px;"></span>
+            <b>USB Host</b>
+        </button>
         <button class="tablinks" onclick="openTab(event, 'wifi_settings')">
             <span data-lucide="settings" style="width: 18px; height: 18px; margin-right: 8px;"></span>
             <b>Settings</b>
@@ -856,6 +992,148 @@
                     <td>&nbsp;</td>
                 </tr>
             </table>
+        </div>
+
+        <div id="usb_host_tab" class="tabcontent">
+            <div class="section-title">USB Host</div>
+            <div class="usb-host-help" style="margin-bottom: 1rem;">
+                USB Host changes are saved only when you press <b>Submit Changes</b>. The APN is stored in USB Host configuration and checked on boot so ESPNetLink is updated only when needed.
+            </div>
+
+            <div class="usb-host-card">
+                <div class="section-title">USB Host</div>
+                <table class="form-table">
+                    <tr>
+                        <td>Enable</td>
+                        <td>
+                            <select id="usb_host_enabled" onchange="usbHostMarkDirty()">
+                                <option value="true">Enable</option>
+                                <option value="false">Disable</option>
+                            </select>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="usb-host-card">
+                <div class="section-title">USB Host Status</div>
+                <div class="usb-host-status-grid">
+                    <div>
+                        <div class="usb-host-subsection-title">General</div>
+                        <div class="usb-host-kv">
+                            <div class="usb-host-kv-label">State</div>
+                            <div id="usb_host_status_state" class="usb-host-kv-value">-</div>
+
+                            <div class="usb-host-kv-label">Device</div>
+                            <div id="usb_host_status_device" class="usb-host-kv-value">-</div>
+
+                            <div class="usb-host-kv-label">Summary</div>
+                            <div id="usb_host_status_summary" class="usb-host-kv-value">-</div>
+
+                            <div class="usb-host-kv-label">Error</div>
+                            <div id="usb_host_status_last_error" class="usb-host-kv-value">-</div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="usb-host-subsection-title">Connectivity</div>
+                        <div class="usb-host-kv">
+                            <div class="usb-host-kv-label">Detected</div>
+                            <div class="usb-host-kv-value"><span id="usb_host_status_detected" class="status-indicator status-disconnected">Not detected</span></div>
+
+                            <div class="usb-host-kv-label">Ethernet</div>
+                            <div class="usb-host-kv-value"><span id="usb_host_status_ethernet" class="status-indicator status-disconnected">Down</span></div>
+
+                            <div class="usb-host-kv-label">CLI</div>
+                            <div class="usb-host-kv-value"><span id="usb_host_status_cli" class="status-indicator status-disconnected">Disconnected</span></div>
+
+                            <div class="usb-host-kv-label">Local IP</div>
+                            <div id="usb_host_status_local_ip" class="usb-host-kv-value">-</div>
+
+                            <div class="usb-host-kv-label">Management IP</div>
+                            <div id="usb_host_status_management_ip" class="usb-host-kv-value">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="usb-host-card">
+                <div class="section-title">ESPNetLink Configuration</div>
+                <table class="form-table">
+                    <tr>
+                        <td>APN</td>
+                        <td><input type="text" id="usb_host_apn_value" placeholder="simbase" oninput="usbHostMarkDirty()" /></td>
+                    </tr>
+                    <tr>
+                        <td colspan="2" class="usb-host-help">
+                            The APN field loads the live ESPNetLink APN when available. When you press <b>Submit Changes</b>, WiCAN stores that APN in USB Host config and applies it on boot only if the device APN differs.
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="usb-host-card">
+                <div class="section-title">ESPNetLink Status</div>
+                <div class="usb-host-grid" style="margin-bottom: 0;">
+                    <div>
+                        <div class="section-title" style="font-size: 1rem; margin-bottom: 0.75rem;">LTE</div>
+                        <div class="usb-host-kv">
+                            <div class="usb-host-kv-label">Stage</div>
+                            <div id="usb_host_lte_stage" class="usb-host-kv-value">-</div>
+
+                            <div class="usb-host-kv-label">Operator</div>
+                            <div id="usb_host_lte_operator" class="usb-host-kv-value">-</div>
+
+                            <div class="usb-host-kv-label">Signal</div>
+                            <div id="usb_host_lte_signal" class="usb-host-kv-value">-</div>
+
+                            <div class="usb-host-kv-label">Network</div>
+                            <div id="usb_host_lte_network" class="usb-host-kv-value">-</div>
+
+                            <div class="usb-host-kv-label">IP</div>
+                            <div id="usb_host_lte_ip" class="usb-host-kv-value">-</div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="section-title" style="font-size: 1rem; margin-bottom: 0.75rem;">GPS</div>
+                        <div class="usb-host-kv">
+                            <div class="usb-host-kv-label">Fix</div>
+                            <div id="usb_host_gps_fix" class="usb-host-kv-value">-</div>
+
+                            <div class="usb-host-kv-label">Satellites</div>
+                            <div id="usb_host_gps_satellites" class="usb-host-kv-value">-</div>
+
+                            <div class="usb-host-kv-label">Sats In View</div>
+                            <div id="usb_host_gps_sats_in_view" class="usb-host-kv-value">-</div>
+
+                            <div class="usb-host-kv-label">Location</div>
+                            <div id="usb_host_gps_location" class="usb-host-kv-value">-</div>
+
+                            <div class="usb-host-kv-label">Speed</div>
+                            <div id="usb_host_gps_speed" class="usb-host-kv-value">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="usb-host-grid">
+                <div class="usb-host-card">
+                    <div class="section-title">ESPNetLink LTE</div>
+                    <details class="usb-host-collapsible">
+                        <summary>Show full LTE data</summary>
+                        <pre id="usb_host_lte_json" class="usb-host-json">No LTE data available yet.</pre>
+                    </details>
+                </div>
+
+                <div class="usb-host-card">
+                    <div class="section-title">ESPNetLink GPS</div>
+                    <details class="usb-host-collapsible">
+                        <summary>Show full GPS data</summary>
+                        <pre id="usb_host_gps_json" class="usb-host-json">No GPS data available yet.</pre>
+                    </details>
+                </div>
+            </div>
         </div>
 
         <div id="wifi_settings" class="tabcontent">

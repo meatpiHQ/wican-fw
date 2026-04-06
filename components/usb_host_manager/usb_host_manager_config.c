@@ -81,6 +81,7 @@ void usb_host_manager_set_default_config(usb_host_manager_config_t *config)
     config->espnetlink.enable_cli = true;
     config->espnetlink.prefer_default_route = true;
     config->espnetlink.ip_mode = USB_HOST_MANAGER_IP_MODE_DHCP;
+    config->espnetlink.desired_apn[0] = '\0';
     strlcpy(config->espnetlink.static_ip, "192.168.7.2", sizeof(config->espnetlink.static_ip));
     strlcpy(config->espnetlink.static_netmask, "255.255.255.0", sizeof(config->espnetlink.static_netmask));
     strlcpy(config->espnetlink.static_gw, "192.168.7.1", sizeof(config->espnetlink.static_gw));
@@ -258,6 +259,7 @@ esp_err_t usb_host_manager_save_config(const usb_host_manager_config_t *config)
     cJSON_AddBoolToObject(espnetlink, "prefer_default_route", config->espnetlink.prefer_default_route);
     cJSON_AddStringToObject(espnetlink, "ip_mode",
                             (config->espnetlink.ip_mode == USB_HOST_MANAGER_IP_MODE_STATIC) ? "static" : "dhcp");
+    usb_host_manager_json_add_string(espnetlink, "apn", config->espnetlink.desired_apn);
     usb_host_manager_json_add_string(espnetlink, "static_ip", config->espnetlink.static_ip);
     usb_host_manager_json_add_string(espnetlink, "static_netmask", config->espnetlink.static_netmask);
     usb_host_manager_json_add_string(espnetlink, "static_gw", config->espnetlink.static_gw);
@@ -405,6 +407,7 @@ esp_err_t usb_host_manager_load_config(usb_host_manager_config_t *config)
                 USB_HOST_MANAGER_IP_MODE_STATIC : USB_HOST_MANAGER_IP_MODE_DHCP;
         }
 
+        usb_host_manager_parse_string(espnetlink, "apn", tmp.espnetlink.desired_apn, sizeof(tmp.espnetlink.desired_apn));
         usb_host_manager_parse_string(espnetlink, "static_ip", tmp.espnetlink.static_ip, sizeof(tmp.espnetlink.static_ip));
         usb_host_manager_parse_string(espnetlink, "static_netmask", tmp.espnetlink.static_netmask, sizeof(tmp.espnetlink.static_netmask));
         usb_host_manager_parse_string(espnetlink, "static_gw", tmp.espnetlink.static_gw, sizeof(tmp.espnetlink.static_gw));

@@ -9,6 +9,7 @@
 #include "sdkconfig.h"
 
 #include "connection_manager.h"
+#include "cJSON.h"
 #include "driver/gpio.h"
 #include "esp_check.h"
 #include "esp_heap_caps.h"
@@ -798,11 +799,193 @@ static esp_err_t usb_host_manager_espnetlink_refresh_cache(const char *cmd,
     return ret;
 }
 
+static bool usb_host_manager_char_equals_ignore_case(char lhs, char rhs)
+{
+    if (lhs >= 'A' && lhs <= 'Z')
+    {
+        lhs = (char)(lhs - 'A' + 'a');
+    }
+
+    if (rhs >= 'A' && rhs <= 'Z')
+    {
+        rhs = (char)(rhs - 'A' + 'a');
+    }
+
+    return lhs == rhs;
+}
+
+static bool usb_host_manager_str_equals_ignore_case(const char *lhs, const char *rhs)
+{
+    size_t i;
+
+    if (lhs == NULL || rhs == NULL)
+    {
+        return false;
+    }
+
+    for (i = 0; lhs[i] != '\0' && rhs[i] != '\0'; ++i)
+    {
+        if (!usb_host_manager_char_equals_ignore_case(lhs[i], rhs[i]))
+        {
+            return false;
+        }
+    }
+
+    return lhs[i] == '\0' && rhs[i] == '\0';
+}
+
+static bool usb_host_manager_json_value_is_true(const cJSON *item)
+{
+    const char *value;
+
+    if (item == NULL)
+    {
+        return false;
+    }
+
+    if (cJSON_IsBool(item))
+    {
+        return cJSON_IsTrue(item);
+    }
+
+    if (cJSON_IsNumber(item))
+    {
+        return item->valueint != 0;
+    }
+
+    if (!cJSON_IsString(item) || item->valuestring == NULL)
+    {
+        return false;
+    }
+
+    value = item->valuestring;
+    return usb_host_manager_str_equals_ignore_case(value, "true") ||
+           usb_host_manager_str_equals_ignore_case(value, "yes") ||
+           usb_host_manager_str_equals_ignore_case(value, "enable") ||
+           usb_host_manager_str_equals_ignore_case(value, "enabled") ||
+           strcmp(value, "1") == 0;
+}
+
 static esp_err_t usb_host_manager_espnetlink_refresh_config_cache(void)
 {
-    return usb_host_manager_espnetlink_refresh_cache("config -l -j",
-                                                     &s_usb_host_mgr.cli_config_json,
-                                                     &s_usb_host_mgr.cli_config_json_len);
+    char desired_apn[sizeof(s_usb_host_mgr.config.espnetlink.desired_apn)];
+    char current_apn[sizeof(s_usb_host_mgr.config.espnetlink.desired_apn)];
+    bool ncm_share_enabled;
+    bool lte_enabled;
+    bool gps_enabled;
+    cJSON *root;
+    cJSON *apn_item;
+    char *config_json;
+    bool success;
+    esp_err_t ret;
+
+    desired_apn[0] = '\0';
+    current_apn[0] = '\0';
+    config_json = NULL;
+    ncm_share_enabled = false;
+    lte_enabled = false;
+    gps_enabled = false;
+
+    ret = usb_host_manager_espnetlink_refresh_cache("config -l -j",
+                                                    &s_usb_host_mgr.cli_config_json,
+                                                    &s_usb_host_mgr.cli_config_json_len);
+    if (ret != ESP_OK)
+    {
+        return ret;
+    }
+
+    if (!usb_host_manager_lock(pdMS_TO_TICKS(50)))
+    {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    strlcpy(desired_apn,
+            s_usb_host_mgr.config.espnetlink.desired_apn,
+            sizeof(desired_apn));
+    config_json = usb_host_manager_dup_string(s_usb_host_mgr.cli_config_json);
+    usb_host_manager_unlock();
+
+    if (config_json == NULL)
+    {
+        return ESP_ERR_NO_MEM;
+    }
+
+    root = cJSON_Parse(config_json);
+    free(config_json);
+    if (root == NULL)
+    {
+        return ESP_ERR_INVALID_RESPONSE;
+    }
+
+    apn_item = cJSON_GetObjectItemCaseSensitive(root, "APN");
+    if (!cJSON_IsString(apn_item) || apn_item->valuestring == NULL)
+    {
+        apn_item = cJSON_GetObjectItemCaseSensitive(root, "apn");
+    }
+
+    if (cJSON_IsString(apn_item) && apn_item->valuestring != NULL)
+    {
+        strlcpy(current_apn, apn_item->valuestring, sizeof(current_apn));
+    }
+
+    ncm_share_enabled = usb_host_manager_json_value_is_true(
+        cJSON_GetObjectItemCaseSensitive(root, "NCM_SHARE"));
+    lte_enabled = usb_host_manager_json_value_is_true(
+        cJSON_GetObjectItemCaseSensitive(root, "LTE_ENABLED"));
+    gps_enabled = usb_host_manager_json_value_is_true(
+        cJSON_GetObjectItemCaseSensitive(root, "GPS_ENABLED"));
+
+    cJSON_Delete(root);
+
+    if (!ncm_share_enabled)
+    {
+        success = false;
+        ret = usb_host_manager_espnetlink_set_config_key("NCM_SHARE", "true", NULL, &success);
+        if (ret != ESP_OK)
+        {
+            return ret;
+        }
+
+        return success ? ESP_OK : ESP_FAIL;
+    }
+
+    if (!lte_enabled)
+    {
+        success = false;
+        ret = usb_host_manager_espnetlink_set_config_key("LTE_ENABLED", "true", NULL, &success);
+        if (ret != ESP_OK)
+        {
+            return ret;
+        }
+
+        return success ? ESP_OK : ESP_FAIL;
+    }
+
+    if (!gps_enabled)
+    {
+        success = false;
+        ret = usb_host_manager_espnetlink_set_config_key("GPS_ENABLED", "true", NULL, &success);
+        if (ret != ESP_OK)
+        {
+            return ret;
+        }
+
+        return success ? ESP_OK : ESP_FAIL;
+    }
+
+    if (desired_apn[0] == '\0' || strcmp(current_apn, desired_apn) == 0)
+    {
+        return ESP_OK;
+    }
+
+    success = false;
+    ret = usb_host_manager_espnetlink_set_config_key("APN", desired_apn, NULL, &success);
+    if (ret != ESP_OK)
+    {
+        return ret;
+    }
+
+    return success ? ESP_OK : ESP_FAIL;
 }
 
 static esp_err_t usb_host_manager_espnetlink_refresh_gps_cache(void)

@@ -49,6 +49,7 @@ typedef struct usb_host_manager_espnetlink_config
     bool enable_cli;
     bool prefer_default_route;
     usb_host_manager_ip_mode_t ip_mode;
+    char desired_apn[64];
     char static_ip[16];
     char static_netmask[16];
     char static_gw[16];

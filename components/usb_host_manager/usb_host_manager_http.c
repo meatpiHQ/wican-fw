@@ -67,6 +67,7 @@ static void usb_host_manager_append_config_json(cJSON *root, const usb_host_mana
         cJSON_AddStringToObject(espnetlink,
                                 "ip_mode",
                                 (config->espnetlink.ip_mode == USB_HOST_MANAGER_IP_MODE_STATIC) ? "static" : "dhcp");
+        cJSON_AddStringToObject(espnetlink, "apn", config->espnetlink.desired_apn);
         cJSON_AddStringToObject(espnetlink, "static_ip", config->espnetlink.static_ip);
         cJSON_AddStringToObject(espnetlink, "static_netmask", config->espnetlink.static_netmask);
         cJSON_AddStringToObject(espnetlink, "static_gw", config->espnetlink.static_gw);
@@ -473,6 +474,7 @@ static esp_err_t usb_host_manager_post_config_handler(httpd_req_t *req)
     {
         (void)usb_host_manager_parse_bool(espnetlink, "enable_cli", &config.espnetlink.enable_cli);
         (void)usb_host_manager_parse_bool(espnetlink, "prefer_default_route", &config.espnetlink.prefer_default_route);
+        usb_host_manager_parse_string(espnetlink, "apn", config.espnetlink.desired_apn, sizeof(config.espnetlink.desired_apn));
         usb_host_manager_parse_string(espnetlink, "static_ip", config.espnetlink.static_ip, sizeof(config.espnetlink.static_ip));
         usb_host_manager_parse_string(espnetlink, "static_netmask", config.espnetlink.static_netmask, sizeof(config.espnetlink.static_netmask));
         usb_host_manager_parse_string(espnetlink, "static_gw", config.espnetlink.static_gw, sizeof(config.espnetlink.static_gw));
