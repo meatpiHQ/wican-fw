@@ -59,6 +59,7 @@
 
 #define TEMP_BUFFER_LENGTH 32
 #define ECU_CONNECTED_BIT BIT0
+#define AUTOPID_POLL_JITTER_MS 100
 
 // Backoff tuning (milliseconds)
 // How many consecutive failures before enabling backoff.
@@ -133,6 +134,55 @@ char *formatNumberPrecision(double num)
         }
     }
     return buf;
+}
+
+static double autopid_round_parameter_value(double value)
+{
+    return round(value * 100.0) / 100.0;
+}
+
+static bool autopid_prepare_parameter_value(parameter_t *param,
+                                            double raw_value,
+                                            float *out_value,
+                                            const char *source)
+{
+    double rounded_value;
+
+    if (!param || !out_value)
+        return false;
+
+    if (!isfinite(raw_value))
+    {
+        ESP_LOGW(TAG, "%s parameter %s produced non-finite value - ignoring",
+                 source ? source : "AUTO_PID",
+                 param->name ? param->name : "(null)");
+        return false;
+    }
+
+    rounded_value = autopid_round_parameter_value(raw_value);
+
+    if (param->min != FLT_MAX && rounded_value < param->min)
+    {
+        ESP_LOGW(TAG, "%s parameter %s value %.2f below min %.2f - ignoring",
+                 source ? source : "AUTO_PID",
+                 param->name ? param->name : "(null)",
+                 rounded_value,
+                 param->min);
+        return false;
+    }
+
+    if (param->max != FLT_MAX && rounded_value > param->max)
+    {
+        ESP_LOGW(TAG, "%s parameter %s value %.2f above max %.2f - ignoring",
+                 source ? source : "AUTO_PID",
+                 param->name ? param->name : "(null)",
+                 rounded_value,
+                 param->max);
+        return false;
+    }
+
+    *out_value = (float)rounded_value;
+    return true;
 }
 // strdup_psram
 static char *strdup_psram(const char *s)
@@ -2086,20 +2136,13 @@ static void process_can_filter_frame(can_filter_t *f, const response_t *rsp)
         double result = 0;
         if (evaluate_expression((uint8_t *)param->expression, (uint8_t *)rsp->data, 0, &result))
         {
-            if (param->min != FLT_MAX && result < param->min)
+            if (autopid_prepare_parameter_value(param, result, &param->value, "CANFLT"))
             {
-                continue;
+                param->failed = false;
+                ESP_LOGI(TAG, "CANFLT 0x%lX param=%s result=%.2f", (unsigned long)f->frame_id,
+                         param->name ? param->name : "(null)", (double)param->value);
+                publish_parameter_mqtt(param);
             }
-            if (param->max != FLT_MAX && result > param->max)
-            {
-                continue;
-            }
-
-            param->failed = false;
-            param->value = (float)(round(result * 100.0) / 100.0);
-            ESP_LOGI(TAG, "CANFLT 0x%lX param=%s result=%.2f", (unsigned long)f->frame_id,
-                     param->name ? param->name : "(null)", (double)param->value);
-            publish_parameter_mqtt(param);
         }
         else
         {
@@ -3947,7 +3990,7 @@ static void autopid_task(void *pvParameters)
                         ESP_LOGI(TAG, "Processing parameter: %s", param->name);
                         // Reset timer with parameter period
                         wc_timer_set(&param->timer, param->period);
-
+                        param->timer += ((int64_t)(esp_random() % ((AUTOPID_POLL_JITTER_MS * 2) + 1)) - AUTOPID_POLL_JITTER_MS) * 1000;
                         if (curr_pid->cmd != NULL && strlen(curr_pid->cmd) > 0)
                         {
                             // twai_message_t tx_msg;
@@ -3998,25 +4041,20 @@ static void autopid_task(void *pvParameters)
                                             evaluate_expression((uint8_t *)param->expression,
                                                                 elm327_response.data, 0, &result))
                                         {
-                                            if (param->min != FLT_MAX && result < param->min)
+                                            param->failed = false;
+                                            if (autopid_prepare_parameter_value(param, result, &param->value, "PID"))
                                             {
-                                                ESP_LOGW(TAG, "Parameter %s value %.2f below min %.2f - ignoring",
-                                                         param->name, result, param->min);
-                                            }
-                                            else if (param->max != FLT_MAX && result > param->max)
-                                            {
-                                                ESP_LOGW(TAG, "Parameter %s value %.2f above max %.2f - ignoring",
-                                                         param->name, result, param->max);
-                                            }
-                                            else
-                                            {
-                                                result = round(result * 100.0) / 100.0;
                                                 ESP_LOGI(TAG, "Parameter %s result: %.2f",
-                                                         param->name, result);
-                                                param->value = result;
+                                                         param->name, param->value);
                                                 autopid_config->last_successful_pid_time = time(NULL);
                                                 publish_parameter_mqtt(param);
                                             }
+                                        }
+                                        else
+                                        {
+                                            param->failed = true;
+                                            ESP_LOGW(TAG, "Parameter %s expression evaluation failed",
+                                                     param->name ? param->name : "(null)");
                                         }
                                     }
                                     else if (curr_pid->pid_type == PID_STD)
@@ -4062,14 +4100,15 @@ static void autopid_task(void *pvParameters)
                                                             ESP_LOGE(TAG, "Failed to extract signal: %s", esp_err_to_name(err));
                                                             break;
                                                         }
-                                                        param->value = roundf(param->value * 100.0) / 100.0;
-                                                        ESP_LOGI(TAG, "Parameter %s result: %.2f %s",
-                                                                 param->name,
-                                                                 param->value,
-                                                                 pid_info->params[p].unit);
-                                                        param->value = roundf(param->value * 100.0) / 100.0;
-                                                        autopid_config->last_successful_pid_time = time(NULL);
-                                                        publish_parameter_mqtt(param);
+                                                        if (autopid_prepare_parameter_value(param, param->value, &param->value, "STD"))
+                                                        {
+                                                            ESP_LOGI(TAG, "Parameter %s result: %.2f %s",
+                                                                     param->name,
+                                                                     param->value,
+                                                                     pid_info->params[p].unit);
+                                                            autopid_config->last_successful_pid_time = time(NULL);
+                                                            publish_parameter_mqtt(param);
+                                                        }
                                                         break;
                                                     }
                                                 }
@@ -4098,7 +4137,7 @@ static void autopid_task(void *pvParameters)
                         // pause 100ms between pid requests
                         xSemaphoreGive(autopid_config->mutex);
                         dev_status_wait_for_bits(DEV_AUTOPID_ELM327_APP_BIT, portMAX_DELAY);
-                        vTaskDelay(pdMS_TO_TICKS(5));
+                        vTaskDelay(pdMS_TO_TICKS(100));
                         xSemaphoreTake(autopid_config->mutex, portMAX_DELAY);
                     }
                     else
@@ -4111,7 +4150,7 @@ static void autopid_task(void *pvParameters)
 
             // elm327_unlock();
             xSemaphoreGive(autopid_config->mutex);
-            vTaskDelay(pdMS_TO_TICKS(5));
+            vTaskDelay(pdMS_TO_TICKS(100));
         }
 
         // CAN filters monitor window (broadcast frames)
