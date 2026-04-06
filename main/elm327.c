@@ -1637,6 +1637,7 @@ int8_t elm327_process_cmd(uint8_t *cmd, uint32_t len, QueueHandle_t *q,
     {
         ESP_LOGW(TAG, "Timeout occurred, resetting command buffer.");
         *cmd_buffer_len = 0;
+		cmd_buffer[0] = '\0';
     }
 
     *last_cmd_time = current_time;
@@ -1646,12 +1647,11 @@ int8_t elm327_process_cmd(uint8_t *cmd, uint32_t len, QueueHandle_t *q,
         if (*cmd_buffer_len < ELM327_MAX_CMD_LEN - 1)
         {
             cmd_buffer[(*cmd_buffer_len)++] = cmd[i];
+			cmd_buffer[*cmd_buffer_len] = '\0';
         }
 
         if (cmd[i] == '\r')
         {
-            // cmd_buffer[*cmd_buffer_len] = '\0';
-
             elm327_commands_t *command_data;
 			// command_data = (elm327_commands_t*) malloc(sizeof(elm327_commands_t));
 			command_data = (elm327_commands_t*) heap_caps_aligned_alloc(16, sizeof(elm327_commands_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -1659,6 +1659,7 @@ int8_t elm327_process_cmd(uint8_t *cmd, uint32_t len, QueueHandle_t *q,
 			{
 				ESP_LOGE(TAG, "Failed to allocate memory for command_data");
 				*cmd_buffer_len = 0;
+				cmd_buffer[0] = '\0';
 				return -1;
 			}
 			memset(command_data, 0, sizeof(elm327_commands_t));
@@ -1669,10 +1670,12 @@ int8_t elm327_process_cmd(uint8_t *cmd, uint32_t len, QueueHandle_t *q,
                 ESP_LOGE(TAG, "Failed to allocate memory for command");
 				free(command_data);
                 *cmd_buffer_len = 0;
+				cmd_buffer[0] = '\0';
                 return -1;
             }
 			memset(command_data->command,0,*cmd_buffer_len + 1);
-            memcpy(command_data->command, cmd_buffer, *cmd_buffer_len + 1);
+			memcpy(command_data->command, cmd_buffer, *cmd_buffer_len);
+			command_data->command[*cmd_buffer_len] = '\0';
             command_data->command_len = *cmd_buffer_len;
             command_data->response_queue = q;
             command_data->response_callback = response_callback;
@@ -1683,10 +1686,12 @@ int8_t elm327_process_cmd(uint8_t *cmd, uint32_t len, QueueHandle_t *q,
                 free(command_data->command);
 				free(command_data);
                 *cmd_buffer_len = 0;
+				cmd_buffer[0] = '\0';
                 return -1;
             }
 
             *cmd_buffer_len = 0;
+			cmd_buffer[0] = '\0';
         }
     }
 
