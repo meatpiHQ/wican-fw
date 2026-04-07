@@ -3773,11 +3773,7 @@ int8_t config_server_get_periodic_wakeup(void)
 	{
 		return 1;
 	}
-	else if(strcmp(device_config.periodic_wakeup, "disable") == 0)
-	{
-		return 0;
-	}
-	return -1;
+	return 0;
 }
 
 int8_t config_server_get_wakeup_interval(uint32_t *wakeup_interval)
