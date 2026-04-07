@@ -605,7 +605,7 @@ int8_t sleep_mode_init(uint8_t enable, float sleep_volt)
 #define ADC_GET_CHANNEL(p_data)   ((p_data)->type2.channel)
 #define ADC_GET_DATA(p_data)      ((p_data)->type2.data)
 
-#define CRITICAL_VOLTAGE  11.80f
+#define CRITICAL_VOLTAGE  11.90f
 
 static adc_oneshot_unit_handle_t adc_handle;
 static adc_cali_handle_t cali_handle = NULL;
