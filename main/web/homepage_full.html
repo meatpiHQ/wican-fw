@@ -1393,8 +1393,9 @@
                 <tr>
                     <td>WebHook:</td>
                     <td>
-                        <select id="webhook_en" name="webhook_en" onchange="submit_enable();">
+                        <select id="webhook_en" name="webhook_en" onchange="toggleWebhookMode(); submit_enable();">
                             <option value="enable">Enable</option>
+                            <option value="user_settings">Enable User Settings</option>
                             <option value="disable">Disable</option>
                         </select>
                     </td>
@@ -1402,7 +1403,7 @@
                 <tr>
                     <td>Primary WebHook URL:</td>
                     <td>
-                        <input type="text" id="webhook_url" name="webhook_url" readonly style="background-color:#f5f5f5; cursor:not-allowed;">
+                        <input type="url" id="webhook_url" name="webhook_url" readonly spellcheck="false" placeholder="https://example.local/api/webhook" oninput="markWebhookUrlDirty(); submit_enable();" style="background-color:#f5f5f5; cursor:not-allowed;">
                     </td>
                 </tr>
                 <tr>
@@ -1414,11 +1415,11 @@
                 <tr>
                     <td>WebHook Interval (s):</td>
                     <td>
-                        <input type="text" id="webhook_interval" name="webhook_interval" readonly style="background-color:#f5f5f5; cursor:not-allowed;">
+                        <input type="number" id="webhook_interval" name="webhook_interval" min="0" step="1" readonly oninput="markWebhookUrlDirty(); submit_enable();" style="background-color:#f5f5f5; cursor:not-allowed;">
                     </td>
                 </tr>
                 <tr>
-                    <td colspan="2" style="font-size:0.7rem; color:#555; margin-top:0.5rem;">WebHook configuration is set in the Home Assistant integration.</td>
+                    <td colspan="2" id="webhook_url_help" style="font-size:0.7rem; color:#555; margin-top:0.5rem;">WebHook URL, failover URL, and interval are managed by the Home Assistant integration while WebHook is enabled. Choose Enable User Settings to edit them on the device.</td>
                 </tr>
                 <tr>
                     <td>WebHook Data Mode:</td>

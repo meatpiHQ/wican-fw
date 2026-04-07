@@ -144,7 +144,7 @@ typedef struct _device_config
 	char batt_mqtt_user[64];
 	char batt_mqtt_pass[64];
 	char mqtt_en[10];
-	char webhook_en[10];
+	char webhook_en[24];
 	char mqtt_tx_en[10];
 	char mqtt_rx_en[10];
 	char mqtt_url[256];
