@@ -55,6 +55,7 @@ extern "C" {
 #define DEV_AUTOPID_ELM327_APP_BIT      BIT18
 // Indicates that the voltage-based wake condition is met (battery voltage >= configured sleep voltage).
 #define DEV_WAKE_VOLTAGE_OK_BIT         BIT19
+#define DEV_AUTOPID_IDLE_BIT            BIT20
 
 // Mask for "all bits" in a FreeRTOS event group.
 // Only the lower 24 bits are available for application use; the upper 8 are reserved by the kernel.

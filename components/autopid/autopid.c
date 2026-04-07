@@ -3857,7 +3857,9 @@ static void autopid_task(void *pvParameters)
         {
             ESP_LOGI(TAG, "Device is sleeping, waiting for wakeup");
             obd_logger_disable();
+            dev_status_set_bits(DEV_AUTOPID_IDLE_BIT);
             dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
+            dev_status_clear_bits(DEV_AUTOPID_IDLE_BIT);
             ESP_LOGI(TAG, "Device awake, resuming autopid task");
             obd_logger_enable();
         }
@@ -3866,7 +3868,9 @@ static void autopid_task(void *pvParameters)
         {
             ESP_LOGI(TAG, "Voltage below sleep threshold, pausing autopid until voltage recovers");
             obd_logger_disable();
+            dev_status_set_bits(DEV_AUTOPID_IDLE_BIT);
             dev_status_wait_for_bits(DEV_WAKE_VOLTAGE_OK_BIT, portMAX_DELAY);
+            dev_status_clear_bits(DEV_AUTOPID_IDLE_BIT);
             ESP_LOGI(TAG, "Voltage OK, resuming autopid task");
             obd_logger_enable();
         }
@@ -3875,7 +3879,9 @@ static void autopid_task(void *pvParameters)
         {
             ESP_LOGI(TAG, "Autopid is disabled, waiting for enable");
             obd_logger_disable();
+            dev_status_set_bits(DEV_AUTOPID_IDLE_BIT);
             dev_status_wait_for_bits(DEV_AUTOPID_ENABLED_BIT, portMAX_DELAY);
+            dev_status_clear_bits(DEV_AUTOPID_IDLE_BIT);
             ESP_LOGI(TAG, "Autopid enabled, resuming autopid task");
             obd_logger_enable();
             send_commands(default_init, 50);
@@ -3920,6 +3926,10 @@ static void autopid_task(void *pvParameters)
             // Loop through all PIDs
             for (uint32_t i = 0; i < autopid_config->pid_count; i++)
             {
+                if(dev_status_is_sleeping())
+                {
+                    break; // Break out of PID loop immediately if device goes to sleep
+                }
                 pid_data_t *curr_pid = &autopid_config->pids[i];
                 // Skip if PID type not enabled
                 if ((curr_pid->pid_type == PID_STD && !autopid_config->pid_std_en) ||
@@ -3937,6 +3947,10 @@ static void autopid_task(void *pvParameters)
                 // Loop through parameters
                 for (uint32_t p = 0; p < curr_pid->parameters_count; p++)
                 {
+                    if(dev_status_is_sleeping())
+                    {
+                        break; // Break out of PID loop immediately if device goes to sleep
+                    }
                     parameter_t *param = &curr_pid->parameters[p];
 
                     if (!param->enabled)
@@ -4004,15 +4018,7 @@ static void autopid_task(void *pvParameters)
                             }
 
                             ESP_LOGI(TAG, "Executing command: %s", curr_pid->cmd);
-// if(elm327_process_cmd((uint8_t*)curr_pid->cmd,
-//                     strlen(curr_pid->cmd),
-//                     &tx_msg,
-//                     &autopidQueue) == ESP_OK)
-#if HARDWARE_VER == WICAN_PRO
                         if (elm327_process_cmd((uint8_t *)curr_pid->cmd, strlen(curr_pid->cmd), &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, autopid_parser) == ESP_OK)
-#else
-                        if (elm327_process_cmd((uint8_t *)pid_req[i].pid_command, strlen(pid_req[i].pid_command), &tx_msg, &autopidQueue) == ESP_OK)
-#endif
                         {
                             response_t elm327_response;
                             ESP_LOGI(TAG, "Command processed successfully");

@@ -952,6 +952,7 @@ void light_sleep_task(void *pvParameters)
                         gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
                         dev_status_clear_bits(DEV_AWAKE_BIT);
                         dev_status_set_bits(DEV_SLEEP_BIT);
+                        dev_status_wait_for_bits(DEV_AUTOPID_ENABLED_BIT, pdMS_TO_TICKS(10000));
                         elm327_sleep();
                         can_disable();
                         wifi_mgr_deinit();
