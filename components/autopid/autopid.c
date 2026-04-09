@@ -113,32 +113,16 @@ static const uint8_t autopid_protocol_header_length[] = {
     0  // C: USER2 CAN (29 bit ID, 50 kbaud)
 };
 
-// Helper functions
-//  Custom printer function to format numbers with 2 decimal places
-char *formatNumberPrecision(double num)
-{
-    static char buf[32];
-    snprintf(buf, sizeof(buf), "%.2f", num);
-
-    // Remove trailing zeros after decimal point
-    size_t len = strlen(buf);
-    if (strchr(buf, '.'))
-    {
-        while (len > 0 && buf[len - 1] == '0')
-        {
-            buf[--len] = '\0';
-        }
-        if (len > 0 && buf[len - 1] == '.')
-        {
-            buf[--len] = '\0';
-        }
-    }
-    return buf;
-}
-
 static double autopid_round_parameter_value(double value)
 {
     return round(value * 100.0) / 100.0;
+}
+
+static cJSON *autopid_add_parameter_number_to_object(cJSON *object,
+                                                     const char *name,
+                                                     float value)
+{
+    return cJSON_AddNumberToObject(object, name, autopid_round_parameter_value((double)value));
 }
 
 static bool autopid_prepare_parameter_value(parameter_t *param,
@@ -197,29 +181,6 @@ static char *strdup_psram(const char *s)
 
     memcpy(copy, s, len);
     return copy;
-}
-
-// Recursively limit decimal precision in the JSON structure
-void limitJsonDecimalPrecision(cJSON *item)
-{
-    if (!item)
-        return;
-
-    // If current item is a number, modify its value
-    if (cJSON_IsNumber(item))
-    {
-        char *formatted = formatNumberPrecision(item->valuedouble);
-        item->valuedouble = atof(formatted);
-        item->valuestring = NULL; // Force cJSON to use valuedouble
-    }
-
-    // Process all children
-    cJSON *child = item->child;
-    while (child)
-    {
-        limitJsonDecimalPrecision(child);
-        child = child->next;
-    }
 }
 
 esp_err_t autopid_set_protocol_number(int32_t protocol_value)
@@ -691,7 +652,7 @@ static void autopid_data_update(autopid_config_t *pids)
                         }
                         else
                         {
-                            cJSON_AddNumberToObject(root, param->name, param->value);
+                            autopid_add_parameter_number_to_object(root, param->name, param->value);
                         }
                     }
                 }
@@ -716,12 +677,11 @@ static void autopid_data_update(autopid_config_t *pids)
                         }
                         else
                         {
-                            cJSON_AddNumberToObject(root, param->name, param->value);
+                            autopid_add_parameter_number_to_object(root, param->name, param->value);
                         }
                     }
                 }
             }
-            limitJsonDecimalPrecision(root);
             autopid_data.json_str = cJSON_PrintUnformatted(root);
             cJSON_Delete(root);
         }
@@ -835,7 +795,7 @@ void autopid_data_publish(void)
                         }
                         else
                         {
-                            cJSON_AddNumberToObject(root, param->name, param->value);
+                            autopid_add_parameter_number_to_object(root, param->name, param->value);
                         }
                     }
                 }
@@ -856,7 +816,7 @@ void autopid_data_publish(void)
                         }
                         else
                         {
-                            cJSON_AddNumberToObject(root, param->name, param->value);
+                            autopid_add_parameter_number_to_object(root, param->name, param->value);
                         }
                     }
                 }
@@ -865,7 +825,6 @@ void autopid_data_publish(void)
             if (root->child)
             {
                 cJSON_AddNumberToObject(root, "timestamp", (double)time(NULL));
-                limitJsonDecimalPrecision(root);
                 char *json_str = cJSON_PrintUnformatted(root);
                 if (json_str)
                 {
@@ -3041,10 +3000,9 @@ static void publish_parameter_mqtt(parameter_t *param)
             }
             else
             {
-                cJSON_AddNumberToObject(param_json, param->name, param->value);
+                autopid_add_parameter_number_to_object(param_json, param->name, param->value);
             }
             cJSON_AddNumberToObject(param_json, "timestamp", (double)time(NULL));
-            limitJsonDecimalPrecision(param_json);
             payload = cJSON_PrintUnformatted(param_json);
             cJSON_Delete(param_json);
         }
@@ -3521,10 +3479,6 @@ static void autopid_webhook_task(void *pvParameters)
                                 //     cJSON_AddNumberToObject(gps, "heading", 180);
                                 //     cJSON_AddItemToObject(root_obj, "gps", gps);
                                 // }
-
-                                // Normalize precision across payload
-                                limitJsonDecimalPrecision(root_obj);
-
                                 char *printed = cJSON_PrintUnformatted(root_obj);
                                 if (printed)
                                 {
