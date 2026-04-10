@@ -1875,13 +1875,6 @@ function loadAutoTable(jsonData) {
         console.log("Raw jsonData:", jsonData);
         const data = jsonData;
 
-        const togglePidPollingMinVoltageRow = () => {
-            const mode = document.getElementById("disable_on_sleep_voltage")?.value || 'disable';
-            const row = document.getElementById("pid_polling_min_voltage_row");
-            if (!row) return;
-            row.style.display = (mode === 'automate_threshold') ? '' : 'none';
-        };
-
         // Reset custom filters UI to avoid duplicates on reload
         const customFilterContainer = document.querySelector('.custom-canfilter-entries');
         if (customFilterContainer) customFilterContainer.innerHTML = '';
@@ -2064,10 +2057,17 @@ function loadAutoTable(jsonData) {
 }
 
 function togglePidPollingMinVoltageRow() {
-    const mode = document.getElementById("disable_on_sleep_voltage")?.value || 'disable';
+    const mode = document.getElementById("disable_on_sleep_voltage")?.value || 'automate_threshold';
     const row = document.getElementById("pid_polling_min_voltage_row");
-    if (!row) return;
-    row.style.display = (mode === 'automate_threshold') ? '' : 'none';
+    const warningDiv = document.getElementById("autopid_low_voltage_warning_div");
+
+    if (row) {
+        row.style.display = (mode === 'automate_threshold') ? '' : 'none';
+    }
+
+    if (warningDiv) {
+        warningDiv.style.display = (mode === 'disable') ? 'block' : 'none';
+    }
 }
 
 
@@ -2090,11 +2090,11 @@ async function storeAutoTableData() {
 
         const initialisationValue = document.getElementById("initialisation")?.value || '';
         const groupingValue = document.getElementById("grouping")?.value || 'disable';
-        const disableOnSleepVoltageValue = document.getElementById("disable_on_sleep_voltage")?.value || 'disable';
+        const disableOnSleepVoltageValue = document.getElementById("disable_on_sleep_voltage")?.value || 'automate_threshold';
         const pidPollingMinVoltageValueRaw = document.getElementById("pid_polling_min_voltage")?.value;
         const pidPollingMinVoltageValue = (() => {
             const n = parseFloat(pidPollingMinVoltageValueRaw);
-            return Number.isFinite(n) ? n : 13.1;
+            return Number.isFinite(n) ? n : 12.0;
         })();
         const webhook_data_mode = document.getElementById("webhook_data_mode")?.value || 'changed';
         const ha_discoveryValue = document.getElementById("ha_discovery")?.value || 'disable';
@@ -3326,6 +3326,7 @@ function loadautoPID() {
             document.getElementById("custom_pid_store").disabled = true;
         } else {
             console.log("No PID data found on server");
+            togglePidPollingMinVoltageRow();
         }
     };
     xhttp.onerror = function(error) {
@@ -4236,6 +4237,9 @@ xhttp.onload = async function() {
 
     // Initialize AP+Station warning visibility
     try { toggleApStationWarning(); } catch(_) {}
+
+    // Initialize Automate low-voltage defaults before auto_pid.json is loaded.
+    try { togglePidPollingMinVoltageRow(); } catch(_) {}
 
     // Initialize AP SSID input state
     try { toggleApSsid(); } catch(_) {}

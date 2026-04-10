@@ -1360,10 +1360,10 @@
                     <td>Low-Voltage Behavior:</td>
                     <td>
                         <select id="disable_on_sleep_voltage" name="disable_on_sleep_voltage" onchange="togglePidPollingMinVoltageRow(); enableAutoStoreButton();submit_enable();">
-                            <option value="disable" selected>Disable</option>
+                            <option value="disable">Disable</option>
                             <option value="enable">Pause Automate on low voltage (Sleep Voltage)</option>
                             <option value="disable_pid_requests">Pause PID polling only (Sleep Voltage)</option>
-                            <option value="automate_threshold">Pause PID polling only (Custom Voltage)</option>
+                            <option value="automate_threshold" selected>Pause PID polling only (Custom Voltage)</option>
                         </select>
                     </td>
                 </tr>
@@ -1378,15 +1378,26 @@
                         <input type="range" 
                                id="pid_polling_min_voltage" 
                                name="pid_polling_min_voltage" 
-                               value="13.1" 
+                               value="12.0" 
                                min="12.0" 
                                max="15.0" 
                                step="0.1"
                                oninput="document.getElementById('pid_polling_min_voltage_value').textContent = this.value; enableAutoStoreButton(); submit_enable();">
-                        <span id="pid_polling_min_voltage_value">13.1</span>V
+                        <span id="pid_polling_min_voltage_value">12.0</span>V
                     </td>
                 </tr>
             </table>
+            <div id="autopid_low_voltage_warning_div" style="display: none; margin: 8px 0;">
+                <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 8px; padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                        <span data-lucide="alert-triangle" style="font-size: 16px; margin-right: 8px;"></span>
+                        <strong style="color: #92400e; font-size: 14px;">Low-Voltage Protection Warning</strong>
+                    </div>
+                    <div style="color: #78350f; font-size: 13px; line-height: 1.4;">
+                        It is recommended to keep this enabled. Polling the ECU when the battery voltage is low can increase battery drain while the vehicle is parked.
+                    </div>
+                </div>
+            </div>
             
             <div class="section-title" style="margin-top:1rem;">Home Assistant</div>
             <table class="form-table">
