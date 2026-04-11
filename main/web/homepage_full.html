@@ -851,6 +851,42 @@
                     </td>
                 </tr>
                 <tr>
+                    <td>Last Reset:</td>
+                    <td>
+                        <div id="restart_last_reset_reason">N/A&nbsp;</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Planned Restart:</td>
+                    <td>
+                        <div id="restart_last_planned_reason">N/A&nbsp;</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Restart Source:</td>
+                    <td>
+                        <div id="restart_last_source">N/A&nbsp;</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Last Boot Time:</td>
+                    <td>
+                        <div id="restart_last_boot_time">N/A&nbsp;</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Boot Count:</td>
+                    <td>
+                        <div id="restart_boot_count">0&nbsp;</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Unexpected Resets:</td>
+                    <td>
+                        <div id="restart_unexpected_reset_count">0&nbsp;</div>
+                    </td>
+                </tr>
+                <tr>
                     <td><input id="check_status_button" name="check_status_button" type="button" onclick="checkStatus()"
                             value="Check status" /></td>
                     <td>&nbsp;</td>
@@ -1931,6 +1967,10 @@
                         <input type="button" onclick="document.getElementById('fileInput').click()" value="Upload" class="system-button" />
                         <input type="file" id="fileInput" accept=".json" onchange="uploadCfg()" style="display: none;" />
                     </td>
+                </tr>
+                <tr>
+                    <td>Download Restart History:</td>
+                    <td><input id="download_restart_history_button" name="download_restart_history_button" type="button" onclick="downloadRestartHistoryJson()" value="Download" class="system-button" /></td>
                 </tr>
             </table>
         

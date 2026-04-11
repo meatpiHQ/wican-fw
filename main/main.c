@@ -75,6 +75,7 @@
 #include "filesystem.h"
 #include "safemode.h"
 #include "debug_logs.h"
+#include "restart_tracker.h"
 #include "sync_sys_time.h"
 #include "vpn_manager.h"
 #include "config_mode.h"
@@ -671,6 +672,8 @@ void app_main(void)
 	// rtcm_set_time(0x23, 0x32, 0x00);  // 12:30:00 in BCD
 	// rtcm_set_date(0x24, 0x12, 0x27, 0x06);  // 2024-01-20 Saturday(6) in BCD	
 	#endif
+
+	restart_tracker_init();
 
 	gpio_reset_pin(0);
 	gpio_set_direction(0, GPIO_MODE_INPUT);

@@ -40,6 +40,7 @@
 #include "esp_err.h"
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <sys/unistd.h>
 #include <sys/stat.h>
 #include "ff.h"
@@ -96,6 +97,8 @@
 #include "ha_webhooks.h"
 #include "autopid_http.h"
 #include "obd2_standard_pids.h"
+#include "restart_tracker.h"
+#include "restart_tracker_http.h"
 
 #include <ws_router.h>
 #include "ws_server.h"
@@ -109,6 +112,10 @@ static uint8_t xip_queue_storage[20];
 
 static uint8_t ws_led;
 #define TAG "CONFIG_SERVER"
+
+static restart_tracker_planned_reason_t s_reboot_reason = RESTART_TRACKER_PLANNED_REASON_USER_REQUEST;
+static restart_tracker_source_t s_reboot_source = RESTART_TRACKER_SOURCE_WEB_UI;
+static uint32_t s_reboot_flags = RESTART_TRACKER_FLAG_NONE;
 
 httpd_handle_t server = NULL;
 char *device_config_file = NULL;
@@ -235,13 +242,25 @@ const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"we
 static device_config_t device_config;
 TimerHandle_t xrestartTimer;
 
+static void config_server_schedule_reboot(restart_tracker_planned_reason_t reason,
+								  restart_tracker_source_t source,
+								  uint32_t flags)
+{
+	s_reboot_reason = reason;
+	s_reboot_source = source;
+	s_reboot_flags = flags;
+	xTimerStart(xrestartTimer, 0);
+}
+
 void config_server_reboot(void)
 {
 	gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
 	elm327_sleep();
 	ESP_LOGI(TAG, "reboot");
 	printf("reboot command\n");
-	xTimerStart( xrestartTimer, 0 );
+	config_server_schedule_reboot(RESTART_TRACKER_PLANNED_REASON_USER_REQUEST,
+						 RESTART_TRACKER_SOURCE_WEB_UI,
+						 RESTART_TRACKER_FLAG_NONE);
 }
 
 /* Max length a file path can have on storage */
@@ -983,7 +1002,9 @@ static esp_err_t store_config_handler(httpd_req_t *req)
 	response_sent = true;
 
 	// Trigger reboot
-	config_server_reboot();
+	config_server_schedule_reboot(RESTART_TRACKER_PLANNED_REASON_CONFIG_APPLY,
+						 RESTART_TRACKER_SOURCE_WEB_UI,
+						 RESTART_TRACKER_FLAG_SETTINGS_SAVED);
 
 	free(buf);
 	return ESP_OK;
@@ -1297,7 +1318,9 @@ static esp_err_t system_reboot_handler(httpd_req_t *req)
 {
 	const char *resp_str = "Configuration saved! Rebooting...";
     httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
-	config_server_reboot();
+	config_server_schedule_reboot(RESTART_TRACKER_PLANNED_REASON_USER_REQUEST,
+						 RESTART_TRACKER_SOURCE_WEB_UI,
+						 RESTART_TRACKER_FLAG_NONE);
 	// elm327_sleep();
 	// ESP_LOGI(TAG, "reboot");
 	// xTimerStart( xrestartTimer, 0 );
@@ -1667,6 +1690,51 @@ static esp_err_t store_car_data_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+static void config_server_add_restart_tracker_status(cJSON *root)
+{
+	restart_tracker_state_t state = {0};
+	restart_tracker_record_t latest = {0};
+	const char *last_reset_reason = "unknown";
+	const char *last_planned_reason = "none";
+	const char *last_source = "unknown";
+	double last_boot_timestamp_unix = 0;
+
+	if (root == NULL)
+	{
+		return;
+	}
+
+	if (restart_tracker_get_state(&state) == ESP_OK)
+	{
+		cJSON_AddNumberToObject(root, "restart_boot_count", state.boot_count);
+		cJSON_AddNumberToObject(root, "restart_unexpected_reset_count", state.unexpected_reset_count);
+	}
+	else
+	{
+		cJSON_AddNumberToObject(root, "restart_boot_count", 0);
+		cJSON_AddNumberToObject(root, "restart_unexpected_reset_count", 0);
+	}
+
+	if (restart_tracker_get_latest_record(&latest) == ESP_OK)
+	{
+		last_reset_reason = restart_tracker_reset_reason_to_str((esp_reset_reason_t)latest.actual_reset_reason);
+		if (latest.was_planned != 0U)
+		{
+			last_planned_reason = restart_tracker_planned_reason_to_str((restart_tracker_planned_reason_t)latest.planned_reason);
+			last_source = restart_tracker_source_to_str((restart_tracker_source_t)latest.source);
+		}
+		if (latest.time_valid != 0U && latest.boot_timestamp > 0)
+		{
+			last_boot_timestamp_unix = (double)latest.boot_timestamp;
+		}
+	}
+
+	cJSON_AddStringToObject(root, "restart_last_reset_reason", last_reset_reason);
+	cJSON_AddStringToObject(root, "restart_last_planned_reason", last_planned_reason);
+	cJSON_AddStringToObject(root, "restart_last_source", last_source);
+	cJSON_AddNumberToObject(root, "restart_last_boot_timestamp_unix", last_boot_timestamp_unix);
+}
+
 char *config_server_get_status_json(bool remove_sensitive_info)
 {
 	char ip_str[20] = {0};
@@ -1770,6 +1838,7 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	}
 	uptime_str[sizeof(uptime_str) - 1] = '\0';
 	cJSON_AddStringToObject(root, "uptime", uptime_str);
+	config_server_add_restart_tracker_status(root);
 
 	// Add timestamp (Unix epoch in seconds)
 	time_t now;
@@ -2114,7 +2183,9 @@ static esp_err_t upload_post_handler(httpd_req_t *req)
 	httpd_resp_sendstr(req, "File uploaded successfully");
 
 	// Reboot after responding
-	config_server_reboot();
+	config_server_schedule_reboot(RESTART_TRACKER_PLANNED_REASON_OTA_APPLY,
+						 RESTART_TRACKER_SOURCE_WEB_UI,
+						 RESTART_TRACKER_FLAG_FIRMWARE_UPDATED);
 	return ESP_OK;
 }
 
@@ -3353,7 +3424,9 @@ config_error:
 			fclose(f);
 		}
 		vTaskDelay(3000 / portTICK_PERIOD_MS);
-		esp_restart();
+		restart_tracker_restart(RESTART_TRACKER_PLANNED_REASON_CONFIG_RECOVERY,
+						 RESTART_TRACKER_SOURCE_CONFIG_SERVER,
+						 RESTART_TRACKER_FLAG_SETTINGS_SAVED | RESTART_TRACKER_FLAG_RECOVERY_ACTION);
     }
 	cJSON_Delete(root);
 	return;
@@ -3367,7 +3440,9 @@ config_error_no_json:
 		fclose(f);
 	}
 	vTaskDelay(3000 / portTICK_PERIOD_MS);
-	esp_restart();
+	restart_tracker_restart(RESTART_TRACKER_PLANNED_REASON_CONFIG_RECOVERY,
+					 RESTART_TRACKER_SOURCE_CONFIG_SERVER,
+					 RESTART_TRACKER_FLAG_SETTINGS_SAVED | RESTART_TRACKER_FLAG_RECOVERY_ACTION);
 }
 
 void config_server_wifi_connected(bool flag)
@@ -3406,7 +3481,7 @@ void config_server_get_sta_ip(char* ip)
 void vrestartTimerCallback( TimerHandle_t xTimer )
 {
 //	vTaskDelay(1000 / portTICK_PERIOD_MS);
-	esp_restart();
+	restart_tracker_restart(s_reboot_reason, s_reboot_source, s_reboot_flags);
 }
 
 static void register_server_uris(void)
@@ -3610,6 +3685,7 @@ static httpd_handle_t config_server_init(void)
 		vpn_manager_register_handlers(server);
 		autopid_register_handlers(server);
 		ha_webhooks_register_handlers(server);
+		restart_tracker_register_handlers(server);
 		// Now register catch-all wildcard
 		httpd_register_uri_handler(server, &get_uri_common);
 		ESP_LOGI(TAG, "Server started successfully");
@@ -3636,6 +3712,7 @@ void config_server_restart(void)
 		vpn_manager_register_handlers(server);
 		autopid_register_handlers(server);
 		ha_webhooks_register_handlers(server);
+		restart_tracker_register_handlers(server);
 		httpd_register_uri_handler(server, &get_uri_common);
 		ESP_LOGI(TAG, "Server restarted successfully");
         return;
@@ -4185,7 +4262,9 @@ void config_server_set_ble_config(uint8_t b)
 		fclose(f);
 	}
 	// xTimerStart( xrestartTimer, 0 );
-	config_server_reboot();
+	config_server_schedule_reboot(RESTART_TRACKER_PLANNED_REASON_CONFIG_APPLY,
+						 RESTART_TRACKER_SOURCE_CONFIG_SERVER,
+						 RESTART_TRACKER_FLAG_SETTINGS_SAVED);
 	free((void *)resp_str);
     cJSON_Delete(root);
 }

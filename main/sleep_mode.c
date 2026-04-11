@@ -53,6 +53,7 @@
 #include "esp_adc/adc_oneshot.h"
 #include "dev_status.h"
 #include "wifi_mgr.h"
+#include "restart_tracker.h"
 
 // #define TAG 		__func__
 #define TAG         "SLEEP_MODE"
@@ -520,7 +521,9 @@ static void adc_task(void *pvParameters)
 						if((esp_timer_get_time() - wakeup_detect_time) > WAKEUP_TIME_DELAY)
 						{
 							ESP_LOGI(TAG, "Wake up now...");
-							esp_restart();
+                            restart_tracker_restart(RESTART_TRACKER_PLANNED_REASON_POWER_WAKE,
+                                                    RESTART_TRACKER_SOURCE_SLEEP_MODE,
+                                                    RESTART_TRACKER_FLAG_NONE);
 
 						}
 					}
@@ -981,7 +984,9 @@ void light_sleep_task(void *pvParameters)
                     {
                         ESP_LOGI(TAG, "Periodic wakeup timer expired, returning to normal mode");
                         // current_state = STATE_NORMAL;
-                        esp_restart();
+                        restart_tracker_restart(RESTART_TRACKER_PLANNED_REASON_POWER_WAKE,
+                                                RESTART_TRACKER_SOURCE_SLEEP_MODE,
+                                                RESTART_TRACKER_FLAG_NONE);
                     }
                     break;
 
@@ -995,7 +1000,9 @@ void light_sleep_task(void *pvParameters)
 					{
                         ESP_LOGI(TAG, "Voltage stable above threshold, returning to normal mode");
                         // current_state = STATE_NORMAL;
-                        esp_restart();
+                        restart_tracker_restart(RESTART_TRACKER_PLANNED_REASON_POWER_WAKE,
+                                                RESTART_TRACKER_SOURCE_SLEEP_MODE,
+                                                RESTART_TRACKER_FLAG_NONE);
                     }
                     break;
             }
@@ -1060,7 +1067,9 @@ void light_sleep_task(void *pvParameters)
                 {
                     ESP_LOGE(TAG, "ELM327 chip is still NOT sleeping after 6 retries, restarting...");
                     vTaskDelay(pdMS_TO_TICKS(100));
-                    esp_restart();
+                    restart_tracker_restart(RESTART_TRACKER_PLANNED_REASON_INTERNAL_RECOVERY,
+                                            RESTART_TRACKER_SOURCE_SLEEP_MODE,
+                                            RESTART_TRACKER_FLAG_RECOVERY_ACTION);
                 }
                 if(elm327_chip_get_status() == ELM327_SLEEP)
                 {

@@ -32,6 +32,7 @@
 #include "led.h"
 #include "sleep_mode.h"
 #include "hw_config.h"
+#include "restart_tracker.h"
 #include "sdcard.h"
 #include "esp_heap_caps.h"
 #include <string.h>
@@ -293,8 +294,10 @@ static int cmd_system(int argc, char **argv)
     {
         console_printf("System will reboot now...\n");
         vTaskDelay(pdMS_TO_TICKS(2000));
-        
-        esp_restart();
+
+        restart_tracker_restart(RESTART_TRACKER_PLANNED_REASON_USER_REQUEST,
+                                RESTART_TRACKER_SOURCE_CONSOLE,
+                                RESTART_TRACKER_FLAG_NONE);
         return 0;
     }
 

@@ -73,6 +73,7 @@ set(requires
     ha_webhooks
     wican_common
     ws_server
+    restart_tracker
 )
 
 # Register the component

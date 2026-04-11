@@ -157,6 +157,57 @@ async function checkFirmwareUpdate() {
             notification.classList.remove("show");
         }, duration);
     }
+
+    async function downloadRestartHistoryJson() {
+        try {
+            const response = await fetch('/restart_tracker/history');
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            const json = JSON.stringify(data, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+            link.href = url;
+            link.download = `restart-history-${timestamp}.json`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+
+            showNotification('Restart history downloaded.', 'blue', 3000);
+        } catch (error) {
+            console.error('Failed to download restart history:', error);
+            showNotification(`Unable to fetch restart history JSON. ${error.message}`, 'red');
+        }
+    }
+
+    function formatRestartTrackerValue(value, fallback = 'N/A') {
+        if (value === undefined || value === null || value === '') {
+            return fallback;
+        }
+
+        return String(value).replace(/_/g, ' ');
+    }
+
+    function formatRestartTrackerLocalTime(unixTimestamp, fallback = 'N/A') {
+        if (unixTimestamp === undefined || unixTimestamp === null || Number(unixTimestamp) <= 0) {
+            return fallback;
+        }
+
+        const timestampMs = Number(unixTimestamp) * 1000;
+        const date = new Date(timestampMs);
+        if (Number.isNaN(date.getTime())) {
+            return fallback;
+        }
+
+        return date.toLocaleString();
+    }
+
     async function fetchVehicleProfiles() {
         try {
             if (!navigator.onLine) {
@@ -2860,6 +2911,18 @@ function checkStatus() {
         }
         document.getElementById("obd_chip_status").innerHTML = obj.obd_chip_status || "N/A";
         document.getElementById("uptime").innerHTML = obj.uptime || "N/A";
+        const restartLastResetEl = document.getElementById("restart_last_reset_reason");
+        if (restartLastResetEl) restartLastResetEl.innerHTML = formatRestartTrackerValue(obj.restart_last_reset_reason);
+        const restartLastPlannedEl = document.getElementById("restart_last_planned_reason");
+        if (restartLastPlannedEl) restartLastPlannedEl.innerHTML = formatRestartTrackerValue(obj.restart_last_planned_reason);
+        const restartLastSourceEl = document.getElementById("restart_last_source");
+        if (restartLastSourceEl) restartLastSourceEl.innerHTML = formatRestartTrackerValue(obj.restart_last_source);
+        const restartLastBootEl = document.getElementById("restart_last_boot_time");
+        if (restartLastBootEl) restartLastBootEl.innerHTML = formatRestartTrackerLocalTime(obj.restart_last_boot_timestamp_unix);
+        const restartBootCountEl = document.getElementById("restart_boot_count");
+        if (restartBootCountEl) restartBootCountEl.innerHTML = (obj.restart_boot_count ?? 0);
+        const restartUnexpectedCountEl = document.getElementById("restart_unexpected_reset_count");
+        if (restartUnexpectedCountEl) restartUnexpectedCountEl.innerHTML = (obj.restart_unexpected_reset_count ?? 0);
         checkFirmwareUpdate();
     };
     xhttp.open("GET", "/check_status");

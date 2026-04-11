@@ -44,6 +44,7 @@
 #include "cmd_factoryreset.h"
 #include "cmd_autopid.h"
 #include "cmd_debug.h"
+#include "cmd_restart_tracker.h"
 
 #define PROMPT "wican> "
 #define MAX_CMDLINE_LENGTH 256
@@ -242,6 +243,7 @@ static void register_all_commands(void)
     cmd_wifi_register();
     cmd_wusb_register();
     cmd_autopid_register();
+    cmd_restart_tracker_register();
 }
 
 // New: process command with IO context
