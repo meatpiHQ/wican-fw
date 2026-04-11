@@ -609,6 +609,7 @@ int8_t sleep_mode_init(uint8_t enable, float sleep_volt)
 #define ADC_GET_DATA(p_data)      ((p_data)->type2.data)
 
 #define CRITICAL_VOLTAGE  11.90f
+#define ERROR_VOLTAGE     12.1f
 
 static adc_oneshot_unit_handle_t adc_handle;
 static adc_cali_handle_t cali_handle = NULL;
@@ -955,7 +956,10 @@ void light_sleep_task(void *pvParameters)
                         gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
                         dev_status_clear_bits(DEV_AWAKE_BIT);
                         dev_status_set_bits(DEV_SLEEP_BIT);
-                        dev_status_wait_for_bits(DEV_AUTOPID_ENABLED_BIT, pdMS_TO_TICKS(20000));
+                        if(dev_status_is_autopid_enabled())
+                        {
+                            dev_status_wait_for_bits(DEV_AUTOPID_IDLE_BIT, pdMS_TO_TICKS(20000));
+                        }
                         elm327_sleep();
                         can_disable();
                         wifi_mgr_deinit();
@@ -1034,7 +1038,42 @@ void light_sleep_task(void *pvParameters)
         //     }
         //     // adc_continuous_start(handle);
         // }
-        
+        restart_tracker_state_t restart_tracker_state;
+        if(restart_tracker_get_state(&restart_tracker_state) == ESP_OK)
+        {
+            if(restart_tracker_state.unexpected_reset_count >=3 && battery_voltage < ERROR_VOLTAGE)
+            {
+                current_state = STATE_SLEEPING;
+                gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
+                dev_status_clear_bits(DEV_AWAKE_BIT);
+                dev_status_set_bits(DEV_SLEEP_BIT);
+                if(dev_status_is_autopid_enabled())
+                {
+                    dev_status_wait_for_bits(DEV_AUTOPID_IDLE_BIT, pdMS_TO_TICKS(20000));
+                }
+                elm327_sleep();
+                can_disable();
+                wifi_mgr_deinit();
+                ble_disable();
+                // Update immediately to prevenet elm327 wakeup 
+                state_info.state = current_state;
+                state_info.voltage = battery_voltage;
+                xQueueOverwrite(sleep_state_queue, &state_info);
+                printf("\r\nUnexpected reset count: %lu, entering sleep mode to prevent potential boot loop...\r\n", restart_tracker_state.unexpected_reset_count);
+                led_set_level(0,0,0);
+                led_pattern_ms_t breathing_pattern = {
+                    .rise_time_ms = 1000,    // 1 second fade in
+                    .hold_time_ms = 500,     // Hold for 0.5 seconds
+                    .fall_time_ms = 1000,    // 1 second fade out
+                    .off_time_ms = 3000,      // Off for 0.5 seconds
+                    .delay_time_ms = 0,      // No initial delay
+                    .repeat_times = 0        // Repeat forever
+                };
+                led_set_level(100, 0, 0);  // Set red color
+                led_set_pattern_ms(LED_RED, &breathing_pattern);
+                esp_light_sleep_start();
+            }
+        }
         if(current_state == STATE_SLEEPING) 
         {
             static wc_timer_t waketime = 0;
