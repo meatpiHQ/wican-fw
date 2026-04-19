@@ -353,6 +353,8 @@
       "unit": "none",
       "class": "light",
       "type": "binary_sensor"
+    }
+  },
   "HUMIDITY": {
     "description": "Humidity",
     "settings": {
