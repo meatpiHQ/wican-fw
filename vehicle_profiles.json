@@ -11649,6 +11649,44 @@
               "class": "none"
             }
           ]
+        },
+        {
+          "pid": "2242DB1",
+          "pid_init": "ATSP6;ATFCSH746;ATFCSM1;ATCRA7B0;",
+          "parameters": [
+            {
+              "name": "CO2",
+              "expression": "B5*100",
+              "unit": "ppm",
+              "class": "carbon_dioxide"
+            }
+          ]
+        },
+        {
+          "pid": "2227C42",
+          "pid_init": "ATSP6;ATFCSH746;ATFCSM1;ATCRA7B0;",
+          "parameters": [
+            {
+              "name": "HUMIDITY",
+              "expression": "B4",
+              "unit": "%",
+              "class": "humidity"
+            }
+          ]
+        },
+        {
+          "pid": "222A0B1",
+          "pid_init": "ATSP7;ATSHDB33F1;ATSHFC007B;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSM1;",
+          "parameters": [
+            {
+              "name": "BATT_TEMP",
+              "expression": "(B4&15)/2",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "80"
+            }
+          ]
         }
       ]
     },

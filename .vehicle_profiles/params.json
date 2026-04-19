@@ -118,6 +118,13 @@
       "max": "200"
     }
   },
+  "CO2": {
+    "description": "CO2 Concentration",
+    "settings": {
+      "unit": "ppm",
+      "class": "carbon_dioxide"
+    }
+  },
   "COOLANT_TMP": {
     "description": "Coolant Temperature",
     "settings": {
@@ -346,6 +353,11 @@
       "unit": "none",
       "class": "light",
       "type": "binary_sensor"
+  "HUMIDITY": {
+    "description": "Humidity",
+    "settings": {
+      "unit": "%",
+      "class": "humidity"
     }
   },
   "HV_A": {
