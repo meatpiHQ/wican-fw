@@ -162,7 +162,7 @@
     "description": "Front left (driver) door open",
     "settings": {
       "unit": "",
-      "class": "door"
+      "class": "door",
       "type": "binary_sensor"
     }
   },
@@ -170,7 +170,7 @@
     "description": "Front right (passenger) door open",
     "settings": {
       "unit": "",
-      "class": "door"
+      "class": "door",
       "type": "binary_sensor"
     }
   },
@@ -178,7 +178,7 @@
     "description": "Front left (driver) door locked",
     "settings": {
       "unit": "",
-      "class": "lock"
+      "class": "lock",
       "type": "binary_sensor"
     }
   },
@@ -186,7 +186,7 @@
     "description": "Front right (passenger) door locked",
     "settings": {
       "unit": "",
-      "class": "lock"
+      "class": "lock",
       "type": "binary_sensor"
     }
   },
@@ -194,7 +194,7 @@
     "description": "Rear left door locked",
     "settings": {
       "unit": "",
-      "class": "lock"
+      "class": "lock",
       "type": "binary_sensor"
     }
   },
@@ -202,7 +202,7 @@
     "description": "Rear right door locked",
     "settings": {
       "unit": "",
-      "class": "lock"
+      "class": "lock",
       "type": "binary_sensor"
     }
   },
@@ -210,7 +210,7 @@
     "description": "Rear left door open",
     "settings": {
       "unit": "",
-      "class": "door"
+      "class": "door",
       "type": "binary_sensor"
     }
   },
@@ -218,7 +218,7 @@
     "description": "Rear right door open",
     "settings": {
       "unit": "",
-      "class": "door"
+      "class": "door",
       "type": "binary_sensor"
     }
   },
