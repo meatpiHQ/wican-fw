@@ -19,6 +19,7 @@
 
 #include "filesystem.h"
 #include "esp_log.h"
+#include "restart_tracker.h"
 #include <sys/unistd.h>
 #include <sys/stat.h>
 #include <dirent.h>
@@ -217,6 +218,7 @@ void filesystem_init(void)
     
     ESP_LOGI(TAG, "FAT filesystem mounted successfully");
     initialized = 1;
+    restart_tracker_coredump_on_storage_ready(FS_MOUNT_POINT);
     #else
     ESP_LOGI(TAG, "Initializing LittleFS filesystem");
     
@@ -247,5 +249,6 @@ void filesystem_init(void)
             ESP_LOGI(TAG, "Partition size: total: %d, used: %d", total, used);
     }
     initialized = 1;
+    restart_tracker_coredump_on_storage_ready(FS_MOUNT_POINT);
     #endif
 }

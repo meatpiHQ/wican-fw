@@ -3516,6 +3516,55 @@ static void register_server_uris(void)
 	// NOTE: catch-all wildcard handler moved to after cert manager handlers to avoid shadowing
 }
 
+static esp_err_t config_server_register_component_routes(void)
+{
+	esp_err_t ret;
+
+	ret = cert_manager_register_handlers(server);
+	if (ret != ESP_OK)
+	{
+		ESP_LOGE(TAG, "Failed to register cert manager handlers (%s)", esp_err_to_name(ret));
+		return ret;
+	}
+
+	ret = vpn_manager_register_handlers(server);
+	if (ret != ESP_OK)
+	{
+		ESP_LOGE(TAG, "Failed to register VPN handlers (%s)", esp_err_to_name(ret));
+		return ret;
+	}
+
+	ret = autopid_register_handlers(server);
+	if (ret != ESP_OK)
+	{
+		ESP_LOGE(TAG, "Failed to register AutoPID handlers (%s)", esp_err_to_name(ret));
+		return ret;
+	}
+
+	ret = ha_webhooks_register_handlers(server);
+	if (ret != ESP_OK)
+	{
+		ESP_LOGE(TAG, "Failed to register HA webhook handlers (%s)", esp_err_to_name(ret));
+		return ret;
+	}
+
+	ret = restart_tracker_register_handlers(server);
+	if (ret != ESP_OK)
+	{
+		ESP_LOGE(TAG, "Failed to register restart tracker handlers (%s)", esp_err_to_name(ret));
+		return ret;
+	}
+
+	ret = httpd_register_uri_handler(server, &get_uri_common);
+	if (ret != ESP_OK)
+	{
+		ESP_LOGE(TAG, "Failed to register catch-all GET handler (%s)", esp_err_to_name(ret));
+		return ret;
+	}
+
+	return ESP_OK;
+}
+
 bool config_server_ws_connected(void)
 {
 	return ws_server_is_connected();
@@ -3670,8 +3719,8 @@ static httpd_handle_t config_server_init(void)
                          vrestartTimerCallback
                        );
 
-	// Start the httpd server (reserve extra slots for cert manager endpoints)
-	config.max_uri_handlers = 38;
+	// Start the httpd server and leave headroom for component routes and the catch-all asset handler.
+	config.max_uri_handlers = 48;
 	config.stack_size = (10*1024);
 	config.max_open_sockets = 15;
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
@@ -3679,15 +3728,13 @@ static httpd_handle_t config_server_init(void)
     {
         // Set URI handlers
 		register_server_uris();
-		// Register certificate manager endpoints (before wildcard catch-all so they match first)
-		cert_manager_register_handlers(server);
-		// Register VPN manager endpoints
-		vpn_manager_register_handlers(server);
-		autopid_register_handlers(server);
-		ha_webhooks_register_handlers(server);
-		restart_tracker_register_handlers(server);
-		// Now register catch-all wildcard
-		httpd_register_uri_handler(server, &get_uri_common);
+		if (config_server_register_component_routes() != ESP_OK)
+		{
+			httpd_stop(server);
+			server = NULL;
+			ESP_LOGI(TAG, "Error starting server!");
+			return NULL;
+		}
 		ESP_LOGI(TAG, "Server started successfully");
 		
         #if CONFIG_EXAMPLE_BASIC_AUTH
@@ -3708,12 +3755,13 @@ void config_server_restart(void)
         // Set URI handlers
         ESP_LOGI(TAG, "Registering URI handlers");
 		register_server_uris();
-		cert_manager_register_handlers(server);
-		vpn_manager_register_handlers(server);
-		autopid_register_handlers(server);
-		ha_webhooks_register_handlers(server);
-		restart_tracker_register_handlers(server);
-		httpd_register_uri_handler(server, &get_uri_common);
+		if (config_server_register_component_routes() != ESP_OK)
+		{
+			httpd_stop(server);
+			server = NULL;
+			ESP_LOGI(TAG, "Error starting server!");
+			return;
+		}
 		ESP_LOGI(TAG, "Server restarted successfully");
         return;
     }

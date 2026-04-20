@@ -30,6 +30,7 @@
 #include <esp_err.h>
 
 #include "restart_tracker.h"
+#include "restart_tracker_coredump.h"
 
 static size_t restart_tracker_history_count(const restart_tracker_state_t *state)
 {
@@ -363,11 +364,37 @@ static esp_err_t restart_tracker_pending_handler(httpd_req_t *req)
     return restart_tracker_send_json(req, response);
 }
 
+static esp_err_t restart_tracker_coredumps_handler(httpd_req_t *req)
+{
+    return restart_tracker_send_json(req,
+                                     restart_tracker_coredump_list_to_json("/restart_tracker/coredumps/download"));
+}
+
+static esp_err_t restart_tracker_coredumps_alias_handler(httpd_req_t *req)
+{
+    return restart_tracker_send_json(req,
+                                     restart_tracker_coredump_list_to_json("/coredumps/download"));
+}
+
+static esp_err_t restart_tracker_coredumps_download_handler(httpd_req_t *req)
+{
+    char query[128];
+    char name[128];
+
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
+        httpd_query_key_value(query, "name", name, sizeof(name)) != ESP_OK)
+    {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing name");
+    }
+
+    return restart_tracker_coredump_send_file(req, name);
+}
+
 static esp_err_t restart_tracker_router_handler(httpd_req_t *req)
 {
     const char *uri = req->uri;
     const char *segment = uri + strlen("/restart_tracker");
-    char route[16] = {0};
+    char route[40] = {0};
     size_t route_len;
 
     if (*segment == '/')
@@ -403,6 +430,16 @@ static esp_err_t restart_tracker_router_handler(httpd_req_t *req)
         return restart_tracker_pending_handler(req);
     }
 
+    if (strcmp(route, "coredumps") == 0)
+    {
+        return restart_tracker_coredumps_handler(req);
+    }
+
+    if (strcmp(route, "coredumps/download") == 0)
+    {
+        return restart_tracker_coredumps_download_handler(req);
+    }
+
     return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "route");
 }
 
@@ -413,12 +450,30 @@ esp_err_t restart_tracker_register_handlers(httpd_handle_t server)
         .method = HTTP_GET,
         .handler = restart_tracker_router_handler,
     };
+    static const httpd_uri_t coredumps_uri = {
+        .uri = "/coredumps",
+        .method = HTTP_GET,
+        .handler = restart_tracker_coredumps_alias_handler,
+    };
+    static const httpd_uri_t coredumps_download_uri = {
+        .uri = "/coredumps/download",
+        .method = HTTP_GET,
+        .handler = restart_tracker_coredumps_download_handler,
+    };
+    const httpd_uri_t *handlers[] = {
+        &restart_tracker_uri,
+        &coredumps_uri,
+        &coredumps_download_uri,
+    };
 
-    esp_err_t ret = httpd_register_uri_handler(server, &restart_tracker_uri);
-    if (ret == ESP_OK || ret == ESP_ERR_HTTPD_HANDLER_EXISTS)
+    for (size_t i = 0; i < sizeof(handlers) / sizeof(handlers[0]); ++i)
     {
-        return ESP_OK;
+        esp_err_t ret = httpd_register_uri_handler(server, handlers[i]);
+        if (ret != ESP_OK && ret != ESP_ERR_HTTPD_HANDLER_EXISTS)
+        {
+            return ret;
+        }
     }
 
-    return ret;
+    return ESP_OK;
 }

@@ -1184,5 +1184,9 @@ void app_main(void)
     #endif
 
 	cmdline_init();
+
+	// vTaskDelay(pdMS_TO_TICKS(25000)); 
+	// ESP_LOGE(TAG, "Forcing panic for testing");
+	// esp_system_abort("forced panic for testing");
 }
 

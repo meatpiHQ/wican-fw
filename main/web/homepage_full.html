@@ -524,6 +524,92 @@
             margin: 0.1rem;
         }
 
+        .system-button.is-secondary {
+            background-color: var(--gray-200);
+            color: var(--gray-700);
+        }
+
+        .system-button.is-secondary:hover {
+            background-color: var(--gray-300);
+        }
+
+        .coredump-panel {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+        }
+
+        .coredump-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .coredump-panel-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .coredump-meta {
+            font-size: 0.82rem;
+            color: var(--gray-600);
+            margin-bottom: 0.75rem;
+        }
+
+        .coredump-empty {
+            padding: 0.9rem;
+            border: 1px dashed var(--gray-300);
+            border-radius: 6px;
+            background: var(--white);
+            color: var(--gray-600);
+        }
+
+        .coredump-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+        }
+
+        .coredump-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 0.85rem 1rem;
+            background: var(--white);
+            border: 1px solid #dbe4f0;
+            border-radius: 8px;
+        }
+
+        .coredump-item-main {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .coredump-item-name {
+            font-weight: 600;
+            color: var(--primary-dark);
+            word-break: break-word;
+        }
+
+        .coredump-item-details {
+            margin-top: 0.2rem;
+            font-size: 0.8rem;
+            color: var(--gray-600);
+        }
+
+        .coredump-item-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            justify-content: flex-end;
+        }
+
         .ota-progress {
             width: 100%;
             height: 14px;
@@ -590,6 +676,17 @@
                 min-width: 110px;
                 width: 100%;
                 margin: 0.1rem 0;
+            }
+
+            .coredump-panel-header,
+            .coredump-item {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .coredump-item-actions,
+            .coredump-panel-actions {
+                justify-content: stretch;
             }
             
             .sidebar {
@@ -1973,6 +2070,22 @@
                     <td><input id="download_restart_history_button" name="download_restart_history_button" type="button" onclick="downloadRestartHistoryJson()" value="Download" class="system-button" /></td>
                 </tr>
             </table>
+
+            <div class="coredump-panel">
+                <div class="coredump-panel-header">
+                    <div>
+                        <div style="font-weight:600; color:var(--primary-dark);">Archived Coredumps</div>
+                        <div class="coredump-meta" id="coredump_meta">Loading archived coredumps...</div>
+                    </div>
+                    <div class="coredump-panel-actions">
+                        <input id="refresh_coredumps_button" type="button" value="Refresh" onclick="refreshCoredumpList()" class="system-button is-secondary" />
+                        <input id="download_all_coredumps_button" type="button" value="Download All" onclick="downloadAllCoredumps()" class="system-button" />
+                    </div>
+                </div>
+                <div id="coredump_list" class="coredump-list">
+                    <div class="coredump-empty">Loading archived coredumps...</div>
+                </div>
+            </div>
         
             <div class="section-title">Firmware Update</div>
             <div class="description-text">

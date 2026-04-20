@@ -56,9 +56,12 @@ async function checkFirmwareUpdate() {
     document.addEventListener('DOMContentLoaded', (event) => {
         document.getElementById("submit_button").disabled = true;
         setRTCTime();
+        refreshCoredumpList();
     });
     let latest_car_models = null;
     let bleAlertShown = false;
+
+    let cachedCoredumpFiles = [];
     function loadCarModels(data) {
         const carModelSelect = document.getElementById("car_model");
         if (data && Array.isArray(data.supported)) {
@@ -183,6 +186,184 @@ async function checkFirmwareUpdate() {
         } catch (error) {
             console.error('Failed to download restart history:', error);
             showNotification(`Unable to fetch restart history JSON. ${error.message}`, 'red');
+        }
+    }
+
+    function formatFileSize(sizeBytes) {
+        const size = Number(sizeBytes);
+        if (!Number.isFinite(size) || size < 0) {
+            return 'Unknown size';
+        }
+
+        if (size < 1024) {
+            return `${size} B`;
+        }
+
+        if (size < 1024 * 1024) {
+            return `${(size / 1024).toFixed(1)} KB`;
+        }
+
+        return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+    }
+
+    function getCoredumpSortTime(file) {
+        return Number(file?.metadata?.archived_timestamp_unix ?? file?.modified_timestamp_unix ?? 0);
+    }
+
+    function sortCoredumpFiles(files) {
+        return files.sort((left, right) => {
+            const timeDiff = getCoredumpSortTime(right) - getCoredumpSortTime(left);
+            if (timeDiff !== 0) {
+                return timeDiff;
+            }
+
+            return String(left?.name || '').localeCompare(String(right?.name || ''));
+        });
+    }
+
+    function triggerBrowserDownload(url, filename) {
+        const link = document.createElement('a');
+        link.href = url;
+        if (filename) {
+            link.download = filename;
+        }
+
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+    }
+
+    async function fetchArchivedCoredumps() {
+        const response = await fetch('/restart_tracker/coredumps');
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (!data || data.available === false) {
+            throw new Error('coredump storage unavailable');
+        }
+
+        const files = Array.isArray(data.files) ? sortCoredumpFiles(data.files.slice()) : [];
+        cachedCoredumpFiles = files;
+        return { data, files };
+    }
+
+    function renderCoredumpList(data, files) {
+        const listElement = document.getElementById('coredump_list');
+        const metaElement = document.getElementById('coredump_meta');
+        const downloadAllButton = document.getElementById('download_all_coredumps_button');
+        if (!listElement || !metaElement || !downloadAllButton) {
+            return;
+        }
+
+        const count = Array.isArray(files) ? files.length : 0;
+        const limit = Number(data?.limit ?? 0);
+        const path = data?.path ? ` Stored in ${data.path}.` : '';
+        metaElement.textContent = count > 0
+            ? `${count} archived coredump${count === 1 ? '' : 's'} available${limit > 0 ? `, limit ${limit}.` : '.'}${path}`
+            : `No archived coredumps found.${path}`;
+
+        downloadAllButton.disabled = count === 0;
+        listElement.innerHTML = '';
+
+        if (count === 0) {
+            listElement.innerHTML = '<div class="coredump-empty">No archived coredumps available.</div>';
+            return;
+        }
+
+        files.forEach((file, index) => {
+            const item = document.createElement('div');
+            const archivedText = formatRestartTrackerLocalTime(file?.metadata?.archived_timestamp_unix, 'Unknown archive time');
+            const modifiedText = formatRestartTrackerLocalTime(file?.modified_timestamp_unix, 'Unknown file time');
+            const reasonText = formatRestartTrackerValue(file?.metadata?.actual_reset_reason, 'Unknown reset reason');
+            const sequence = file?.metadata?.sequence;
+            const sequenceText = sequence !== undefined && sequence !== null ? `Boot #${sequence}` : 'Boot sequence unavailable';
+
+            item.className = 'coredump-item';
+            item.innerHTML = `
+                <div class="coredump-item-main">
+                    <div class="coredump-item-name">${file?.name || `coredump-${index + 1}`}</div>
+                    <div class="coredump-item-details">
+                        ${formatFileSize(file?.size_bytes)} · ${sequenceText} · ${reasonText}<br>
+                        Archived: ${archivedText} · File time: ${modifiedText}
+                    </div>
+                </div>
+                <div class="coredump-item-actions">
+                    <input type="button" value="Download" class="system-button" data-coredump-download="${file?.name || ''}" />
+                </div>
+            `;
+
+            const button = item.querySelector('[data-coredump-download]');
+            if (button) {
+                button.addEventListener('click', () => downloadNamedCoredump(file.name));
+            }
+
+            listElement.appendChild(item);
+        });
+    }
+
+    async function refreshCoredumpList() {
+        const listElement = document.getElementById('coredump_list');
+        const metaElement = document.getElementById('coredump_meta');
+        if (listElement) {
+            listElement.innerHTML = '<div class="coredump-empty">Refreshing archived coredumps...</div>';
+        }
+        if (metaElement) {
+            metaElement.textContent = 'Refreshing archived coredumps...';
+        }
+
+        try {
+            const { data, files } = await fetchArchivedCoredumps();
+            renderCoredumpList(data, files);
+        } catch (error) {
+            console.error('Failed to refresh coredump list:', error);
+            cachedCoredumpFiles = [];
+            if (listElement) {
+                listElement.innerHTML = `<div class="coredump-empty">Unable to load archived coredumps. ${error.message}</div>`;
+            }
+            if (metaElement) {
+                metaElement.textContent = 'Archived coredumps unavailable.';
+            }
+        }
+    }
+
+    async function downloadNamedCoredump(name) {
+        const file = cachedCoredumpFiles.find((entry) => entry?.name === name);
+        const downloadUrl = file?.download_url;
+        if (!downloadUrl) {
+            showNotification('Unable to find the requested coredump download URL.', 'red');
+            return;
+        }
+
+        triggerBrowserDownload(downloadUrl, file.name);
+        showNotification(`Downloading coredump: ${file.name}`, 'blue', 3000);
+    }
+
+    async function downloadAllCoredumps() {
+        try {
+            let files = cachedCoredumpFiles;
+            if (!Array.isArray(files) || files.length === 0) {
+                const result = await fetchArchivedCoredumps();
+                renderCoredumpList(result.data, result.files);
+                files = result.files;
+            }
+
+            if (!files.length) {
+                showNotification('No archived coredumps available.', 'yellow', 3500);
+                return;
+            }
+
+            files.forEach((file, index) => {
+                window.setTimeout(() => {
+                    triggerBrowserDownload(file.download_url, file.name);
+                }, index * 300);
+            });
+
+            showNotification(`Downloading ${files.length} archived coredump${files.length === 1 ? '' : 's'}.`, 'blue', 3500);
+        } catch (error) {
+            console.error('Failed to download all coredumps:', error);
+            showNotification(`Unable to download all coredumps. ${error.message}`, 'red');
         }
     }
 

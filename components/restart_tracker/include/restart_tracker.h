@@ -29,6 +29,8 @@ extern "C" {
 #endif
 
 #define RESTART_TRACKER_HISTORY_LEN 8U
+#define RESTART_TRACKER_COREDUMP_SUBDIR "coredumps"
+#define RESTART_TRACKER_COREDUMP_MAX_FILES 5U
 
 typedef enum {
     RESTART_TRACKER_PLANNED_REASON_NONE = 0,
@@ -111,6 +113,7 @@ void restart_tracker_restart(restart_tracker_planned_reason_t reason,
                              uint32_t flags);
 esp_err_t restart_tracker_get_state(restart_tracker_state_t *out_state);
 esp_err_t restart_tracker_get_latest_record(restart_tracker_record_t *out_record);
+esp_err_t restart_tracker_coredump_on_storage_ready(const char *mount_path);
 const char *restart_tracker_reset_reason_to_str(esp_reset_reason_t reason);
 const char *restart_tracker_planned_reason_to_str(restart_tracker_planned_reason_t reason);
 const char *restart_tracker_source_to_str(restart_tracker_source_t source);
