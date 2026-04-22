@@ -23,20 +23,6 @@
             }
         },
         {
-            "pid": "2212031",
-            "pid_init": "ATSH797;ATFCSH797;ATCRA79A;",
-            "parameters": {
-                "QC_COUNT": "[B4:B5]"
-            }
-        },
-        {
-            "pid": "2212051",
-            "pid_init": "ATSH797;ATFCSH797;ATCRA79A;",
-            "parameters": {
-                "L2_COUNT": "[B4:B5]"
-            }
-        },
-        {
             "pid": "220E011",
             "pid_init": "ATSH743;ATFCSH743;ATCRA763;",
             "parameters": {
