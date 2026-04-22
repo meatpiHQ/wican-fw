@@ -23,6 +23,7 @@
 #define __WC_MDNS_H__
 
 void wc_mdns_init(char *id, char* hv, char* fv);
+void wc_mdns_deinit(void);
 char* wc_mdns_get_hostname(void);
 
 #endif

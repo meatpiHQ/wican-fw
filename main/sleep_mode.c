@@ -53,6 +53,8 @@
 #include "esp_adc/adc_oneshot.h"
 #include "dev_status.h"
 #include "wifi_mgr.h"
+#include "wc_mdns.h"
+#include "vpn_manager.h"
 #include "restart_tracker.h"
 
 // #define TAG 		__func__
@@ -949,7 +951,7 @@ void light_sleep_task(void *pvParameters)
                         ESP_LOGI(TAG, "Battery voltage recovered (%.2fV)", battery_voltage);
                         current_state = STATE_NORMAL;
                     } 
-                    else if (wc_timer_is_expired(&sleep_timer)) 
+                    else if (wc_timer_is_expired(&sleep_timer))
 					{
                         ESP_LOGI(TAG, "Low voltage timeout expired, entering sleep mode");
                         current_state = STATE_SLEEPING;
@@ -962,6 +964,8 @@ void light_sleep_task(void *pvParameters)
                         }
                         elm327_sleep();
                         can_disable();
+                        vpn_manager_stop();
+                        wc_mdns_deinit();
                         wifi_mgr_deinit();
                         ble_disable();
                         led_set_level(0,0,0);
@@ -1053,6 +1057,8 @@ void light_sleep_task(void *pvParameters)
                 }
                 elm327_sleep();
                 can_disable();
+                vpn_manager_stop();
+                wc_mdns_deinit();
                 wifi_mgr_deinit();
                 ble_disable();
                 // Update immediately to prevenet elm327 wakeup 

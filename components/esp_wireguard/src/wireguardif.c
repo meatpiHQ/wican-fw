@@ -87,9 +87,32 @@ static bool wireguardif_can_send_initiation(struct wireguard_peer *peer) {
 	return ((peer->last_initiation_tx == 0) || (wireguard_expired(peer->last_initiation_tx, REKEY_TIMEOUT)));
 }
 
+static bool wireguardif_underlying_netif_ready(const struct wireguard_device *device) {
+	struct netif *underlying_netif;
+
+	if (!device || device->shutting_down || (device->magic != WIREGUARD_DEVICE_MAGIC) || !device->udp_pcb) {
+		return false;
+	}
+
+	underlying_netif = device->underlying_netif;
+	if (!underlying_netif) {
+		return false;
+	}
+
+	if (!netif_is_up(underlying_netif) || !netif_is_link_up(underlying_netif)) {
+		return false;
+	}
+
+	if (ip_addr_isany(&underlying_netif->ip_addr)) {
+		return false;
+	}
+
+	return true;
+}
+
 static err_t wireguardif_peer_output(struct netif *netif, struct pbuf *q, struct wireguard_peer *peer) {
 	struct wireguard_device *device = (struct wireguard_device *)netif->state;
-	if (!device || !device->udp_pcb || !device->underlying_netif) {
+	if (!wireguardif_underlying_netif_ready(device)) {
 		return ERR_IF;
 	}
 	// Send to last know port, not the connect port
@@ -98,7 +121,7 @@ static err_t wireguardif_peer_output(struct netif *netif, struct pbuf *q, struct
 }
 
 static err_t wireguardif_device_output(struct wireguard_device *device, struct pbuf *q, const ip_addr_t *ipaddr, u16_t port) {
-	if (!device || !device->udp_pcb || !device->underlying_netif) {
+	if (!wireguardif_underlying_netif_ready(device)) {
 		return ERR_IF;
 	}
 	return udp_sendto_if(device->udp_pcb, q, ipaddr, port, device->underlying_netif);
@@ -1091,6 +1114,7 @@ void wireguardif_shutdown(struct netif *netif) {
 	}
 	device->shutting_down = true;
 	device->magic = 0;
+	device->underlying_netif = NULL;
 	// Disable timer.
 	sys_untimeout(wireguardif_tmr, device);
 	// remove UDP context.
