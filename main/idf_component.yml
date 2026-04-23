@@ -10,4 +10,6 @@ dependencies:
     version: '>=4.1.0'
   eil/i2cdev: ^1.5.1
   zorxx/multipart-parser: '*'
-  cherry-embedded/cherryusb: ^1.5.2~2
+  cherry-embedded/cherryusb:
+    git: https://github.com/meatpiHQ/CherryUSB.git
+    version: sharred-buffer

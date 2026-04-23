@@ -1,18 +1,18 @@
 dependencies:
   cherry-embedded/cherryusb:
-    component_hash: ec3fda70779076a4a996abc52684fcafe4c61b269b722b775562f96c042c08f6
+    component_hash: 1de3aa4ff40cc86b3545869f6edb2ee5e35c843e5d807d4cf8b9526c823bb58f
     dependencies:
     - name: idf
-      require: private
       version: '>=4.4.1'
     source:
-      registry_url: https://components.espressif.com/
-      type: service
+      git: https://github.com/meatpiHQ/CherryUSB.git
+      path: .
+      type: git
     targets:
     - esp32s2
     - esp32s3
     - esp32p4
-    version: 1.5.2~2
+    version: 999e637b8a7bc2fece836da8d540100358ff5381
   eil/esp_idf_lib_helpers:
     component_hash: eaee96f02db1bea59d369e53e46fd100331eb9d1d9726416cace4dd01f72698e
     dependencies:
@@ -38,7 +38,7 @@ dependencies:
       type: service
     version: 1.5.1
   espressif/mdns:
-    component_hash: 3ec0af5f6bce310512e90f482388d21cc7c0e99668172d2f895356165fc6f7c5
+    component_hash: 8bcf12e37c58c1d584aef32a02b92548124c7a3a9fcf548d3235c844a035e0f0
     dependencies:
     - name: idf
       require: private
@@ -46,13 +46,13 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.8.2
+    version: 1.11.1
   idf:
     source:
       type: idf
     version: 5.5.3
   joltwallet/littlefs:
-    component_hash: e1dbe782be5aa58e879fe9f22bee60e5ff68acbfe3793d92a2e730c27374c787
+    component_hash: 29eff7921c4e8bce021aeb7fff2723bfcafed661756de700646ea0f6223c2a32
     dependencies:
     - name: idf
       require: private
@@ -60,15 +60,15 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.19.2
+    version: 1.21.1
   nopnop2002/sqlite3:
-    component_hash: 3deae8ed52e238e19eb13d2a347f1b2a9efe1d7e04007be6df7b04555a5543f7
+    component_hash: 5f15f87e2a4e660b99ddf95db8ced945090c1ba0fe52630fe262b1d77fee7317
     dependencies: []
     source:
       git: https://github.com/nopnop2002/esp32-idf-sqlite3.git
       path: components/esp32-idf-sqlite3/
       type: git
-    version: 8c38efacd2d9225295e2abcc85f565c9b65bb1e0
+    version: 25f1dc3481490325dced6502fe916454f40668ae
   zorxx/multipart-parser:
     component_hash: a80b98bbdd530829b5a4df54cd8332a265ef4d310392562cf37d4cac548c5fd2
     dependencies: []
@@ -84,6 +84,6 @@ direct_dependencies:
 - joltwallet/littlefs
 - nopnop2002/sqlite3
 - zorxx/multipart-parser
-manifest_hash: ebf393fa07e1f591e31bd37dd80d9dd982e16b9414717d185548a4171c7ba444
+manifest_hash: ecaaed2167f3f27a20797d28da4c3d994a8ebd852caf610453c4ab2a703a4095
 target: esp32s3
 version: 2.0.0
