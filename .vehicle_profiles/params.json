@@ -369,14 +369,6 @@
       "class": "current"
     }
   },
-  "HV_ACTIVE": {
-    "description": "HV contactors closed (car on or charging)",
-    "settings": {
-      "unit": "none",
-      "class": "none",
-      "type": "binary_sensor"
-    }
-  },
   "HV_AH_CHARGED": {
     "description": "Cumulative Charge Current",
     "settings": {
@@ -2440,7 +2432,7 @@
   "KWH_CHARGED": {
     "description": "Total kWh Charged (Cumulative Energy Charged)",
     "settings": {
-      "unit": "kwh",
+      "unit": "kWh",
       "class": "battery",
       "min": "0",
       "max": "1000000"
