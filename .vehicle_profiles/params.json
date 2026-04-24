@@ -2488,7 +2488,7 @@
   "OBC_TEMP": {
     "description": "On-board charger temperature",
     "settings": {
-      "unit": "\u00b0C",
+      "unit": "°C",
       "class": "temperature"
     }
   },
