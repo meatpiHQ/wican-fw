@@ -2485,13 +2485,6 @@
       "class": "none"
     }
   },
-  "OBC_DC_V": {
-    "description": "On-board charger DC output voltage",
-    "settings": {
-      "unit": "V",
-      "class": "voltage"
-    }
-  },
   "OBC_TEMP": {
     "description": "On-board charger temperature",
     "settings": {
