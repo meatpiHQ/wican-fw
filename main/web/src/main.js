@@ -1,4 +1,4 @@
-async function checkFirmwareUpdate() {
+﻿async function checkFirmwareUpdate() {
         try {
             const currentRaw = document.getElementById('fw_version')?.textContent?.trim();
             if (!currentRaw) return;
@@ -80,6 +80,82 @@ async function checkFirmwareUpdate() {
 
     function loadDashboard() {
         window.location.href = '/dashboard.html';
+    }
+
+    function usbHostShowBootstrapError(message) {
+        const stateEl = document.getElementById('usb_host_status_state');
+        const summaryEl = document.getElementById('usb_host_status_summary');
+        const errorEl = document.getElementById('usb_host_status_last_error');
+
+        if (stateEl) {
+            stateEl.textContent = 'Error';
+        }
+
+        if (summaryEl) {
+            summaryEl.textContent = 'USB Host UI failed to load';
+        }
+
+        if (errorEl) {
+            errorEl.textContent = message;
+        }
+    }
+
+    async function ensureUsbHostUiLoaded() {
+        if (typeof refreshUsbHostTab === 'function' &&
+            typeof usbHostStartAutoRefresh === 'function' &&
+            typeof usbHostStopAutoRefresh === 'function' &&
+            typeof usbHostSubmitConfig === 'function') {
+            return true;
+        }
+
+        if (window._usbHostUiLoadPromise) {
+            return window._usbHostUiLoadPromise;
+        }
+
+        window._usbHostUiLoadPromise = (async () => {
+            const response = await fetch('/usbhost.js', { cache: 'no-store' });
+            if (!response.ok) {
+                throw new Error('Failed to load /usbhost.js (' + response.status + ')');
+            }
+
+            const source = await response.text();
+            const script = document.createElement('script');
+            script.type = 'text/javascript';
+            script.text = source + '\n//# sourceURL=/usbhost.js';
+            document.head.appendChild(script);
+
+            if (typeof refreshUsbHostTab !== 'function' ||
+                typeof usbHostStartAutoRefresh !== 'function' ||
+                typeof usbHostStopAutoRefresh !== 'function' ||
+                typeof usbHostSubmitConfig !== 'function') {
+                throw new Error('USB Host UI initialization failed');
+            }
+
+            return true;
+        })().catch((error) => {
+            window._usbHostUiLoadPromise = null;
+            usbHostShowBootstrapError(error.message);
+            console.warn('USB Host UI bootstrap failed:', error);
+            throw error;
+        });
+
+        return window._usbHostUiLoadPromise;
+    }
+
+    function usbHostRefreshPanel() {
+        return ensureUsbHostUiLoaded().then(() => refreshUsbHostTab(false));
+    }
+
+    function usbHostStartPanelAutoRefresh() {
+        return ensureUsbHostUiLoaded().then(() => {
+            usbHostStartAutoRefresh();
+        });
+    }
+
+    function usbHostStopPanelAutoRefresh() {
+        if (typeof usbHostStopAutoRefresh === 'function') {
+            usbHostStopAutoRefresh();
+        }
     }
 
     function setRTCTime() {
@@ -2417,536 +2493,20 @@ function openTab(evt, tabName) {
     }
     
     if (tabName === 'dashboard_tab') {
-        try { usbHostStopAutoRefresh(); } catch(_) {}
+        try { usbHostStopPanelAutoRefresh(); } catch(_) {}
         loadDashboard();
     } else if (tabName === 'usb_host_tab') {
-        try { refreshUsbHostTab(false); } catch(_) {}
-        try { usbHostStartAutoRefresh(); } catch(_) {}
+        usbHostRefreshPanel().catch((error) => console.warn('USB Host refresh unavailable:', error));
+        usbHostStartPanelAutoRefresh().catch((error) => console.warn('USB Host auto refresh unavailable:', error));
     } else if (tabName === 'system_tab') {
-        try { usbHostStopAutoRefresh(); } catch(_) {}
+        try { usbHostStopPanelAutoRefresh(); } catch(_) {}
         if (typeof certManagerLoad === 'function') certManagerLoad();
     } else if (tabName === 'vpn_tab') {
-        try { usbHostStopAutoRefresh(); } catch(_) {}
+        try { usbHostStopPanelAutoRefresh(); } catch(_) {}
         // Refresh status so the badge reflects the latest state
         try { checkStatus(); } catch(_) {}
     } else {
-        try { usbHostStopAutoRefresh(); } catch(_) {}
-    }
-}
-
-function usbHostDeviceTypeLabel(type) {
-    switch (type) {
-        case 'espnetlink':
-            return 'ESPNetLink';
-        case 'none':
-            return 'None';
-        default:
-            return type || 'Unknown';
-    }
-}
-
-function usbHostStateLabel(state) {
-    if (!state) {
-        return 'Unknown';
-    }
-
-    return String(state)
-        .split('_')
-        .map(part => part ? (part.charAt(0).toUpperCase() + part.slice(1)) : '')
-        .join(' ');
-}
-
-function usbHostSetText(id, value, fallback = '-') {
-    const el = document.getElementById(id);
-    if (!el) return;
-    if (value === undefined || value === null || value === '') {
-        el.textContent = fallback;
-        return;
-    }
-    el.textContent = String(value);
-}
-
-function usbHostSetBadge(id, active, activeText, inactiveText) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.textContent = active ? activeText : inactiveText;
-    el.classList.remove('status-connected', 'status-disconnected');
-    el.classList.add(active ? 'status-connected' : 'status-disconnected');
-}
-
-function usbHostPrettyJsonText(data, emptyMessage = 'No data available yet.') {
-    if (data === undefined || data === null || data === '') {
-        return emptyMessage;
-    }
-
-    if (typeof data === 'string') {
-        try {
-            return JSON.stringify(JSON.parse(data), null, 2);
-        } catch (_) {
-            return data;
-        }
-    }
-
-    try {
-        return JSON.stringify(data, null, 2);
-    } catch (_) {
-        return String(data);
-    }
-}
-
-async function usbHostFetchJson(url, options) {
-    const response = await fetch(url, options);
-    const text = await response.text();
-    let data = null;
-
-    try {
-        data = text ? JSON.parse(text) : null;
-    } catch (_) {
-        data = null;
-    }
-
-    if (!response.ok) {
-        const message = (data && (data.error || data.message)) || text || response.statusText || 'Request failed';
-        const error = new Error(message);
-        error.status = response.status;
-        error.body = data;
-        throw error;
-    }
-
-    return data;
-}
-
-function usbHostGetState() {
-    if (!window.usbHostState) {
-        window.usbHostState = {
-            dirty: false,
-            preferSavedApn: false,
-            draft: null,
-            status: null,
-            config: null,
-            espnetlink: {
-                config: null,
-                lte: null,
-                gps: null
-            }
-        };
-    }
-
-    return window.usbHostState;
-}
-
-function usbHostCloneConfigState() {
-    const state = usbHostGetState();
-    return state.config ? JSON.parse(JSON.stringify(state.config)) : null;
-}
-
-function usbHostBuildConfigPayload(config) {
-    return {
-        enabled: !!config.enabled,
-        active_device_type: config.active_device_type || 'none',
-        monitor_interval_ms: config.monitor_interval_ms,
-        device_attach_delay_ms: config.device_attach_delay_ms,
-        device_detach_delay_ms: config.device_detach_delay_ms,
-        espnetlink: config.espnetlink || {}
-    };
-}
-
-function usbHostExtractConfigApn(data) {
-    if (!data) {
-        return '';
-    }
-
-    const payload = data.data && typeof data.data === 'object' ? data.data : data;
-    if (payload.APN !== undefined && payload.APN !== null) {
-        return String(payload.APN);
-    }
-    if (payload.apn !== undefined && payload.apn !== null) {
-        return String(payload.apn);
-    }
-
-    return '';
-}
-
-function usbHostResolvedDraftApn(config) {
-    const state = usbHostGetState();
-    const savedApn = ((config && config.espnetlink && config.espnetlink.apn) || '').trim();
-    const currentApn = usbHostCurrentApn().trim();
-
-    if (state.preferSavedApn && savedApn) {
-        if (!currentApn || currentApn !== savedApn) {
-            return savedApn;
-        }
-
-        state.preferSavedApn = false;
-    }
-
-    return currentApn || savedApn;
-}
-
-function usbHostSyncDraftFromConfig(force = false) {
-    const state = usbHostGetState();
-    const config = state.config;
-
-    if (!config) {
-        return;
-    }
-
-    if (!force && state.dirty && state.draft) {
-        return;
-    }
-
-    state.draft = {
-        enabled: !!config.enabled,
-        apn: usbHostResolvedDraftApn(config)
-    };
-    state.dirty = false;
-}
-
-function usbHostCaptureDraft() {
-    const state = usbHostGetState();
-    const enabledEl = document.getElementById('usb_host_enabled');
-    const apnEl = document.getElementById('usb_host_apn_value');
-
-    state.draft = {
-        enabled: enabledEl ? enabledEl.value === 'true' : false,
-        apn: apnEl ? apnEl.value.trim() : ''
-    };
-
-    return state.draft;
-}
-
-function usbHostMarkDirty() {
-    const state = usbHostGetState();
-    usbHostCaptureDraft();
-    state.dirty = true;
-    submit_enable();
-}
-
-function usbHostCurrentApn() {
-    const state = usbHostGetState();
-    return usbHostExtractConfigApn(state.espnetlink && state.espnetlink.config);
-}
-
-function usbHostStatusSummary(status, config) {
-    if (!config || !config.enabled) {
-        return 'USB Host is disabled';
-    }
-
-    if (!status) {
-        return 'Waiting for USB Host status';
-    }
-
-    if (status.last_error) {
-        return status.last_error;
-    }
-
-    if (!status.device_detected) {
-        return 'No USB device detected';
-    }
-
-    if (status.active_device_type === 'espnetlink' || config.active_device_type === 'espnetlink') {
-        if (status.cli_connected && status.ethernet_connected) {
-            return 'ESPNetLink connected';
-        }
-        if (status.cli_connected) {
-            return 'ESPNetLink CLI connected';
-        }
-        return 'ESPNetLink detected';
-    }
-
-    return usbHostStateLabel(status.state);
-}
-
-function usbHostRenderStatus(status) {
-    const state = usbHostGetState();
-    const config = state.config;
-    const resolvedDevice = (status && status.active_device_type && status.active_device_type !== 'none')
-        ? status.active_device_type
-        : (config && config.active_device_type ? config.active_device_type : 'none');
-
-    usbHostSetText('usb_host_status_state', status ? usbHostStateLabel(status.state) : 'Unknown');
-    usbHostSetText('usb_host_status_device', usbHostDeviceTypeLabel(resolvedDevice));
-    usbHostSetBadge('usb_host_status_detected', !!(status && status.device_detected), 'Detected', 'Not detected');
-    usbHostSetBadge('usb_host_status_ethernet', !!(status && status.ethernet_connected), 'Connected', 'Down');
-    usbHostSetBadge('usb_host_status_cli', !!(status && status.cli_connected), 'Connected', 'Disconnected');
-    usbHostSetText('usb_host_status_local_ip', status ? status.local_ip : '');
-    usbHostSetText('usb_host_status_management_ip', status ? status.management_ip : '');
-    usbHostSetText('usb_host_status_summary', usbHostStatusSummary(status, config));
-    usbHostSetText('usb_host_status_last_error', status ? status.last_error : '');
-}
-
-function usbHostRenderConfig(config) {
-    if (!config) {
-        return;
-    }
-
-    const state = usbHostGetState();
-    usbHostSyncDraftFromConfig();
-
-    const esp = config.espnetlink || {};
-    const draft = state.draft || {
-        enabled: !!config.enabled,
-        apn: usbHostResolvedDraftApn(config)
-    };
-    const enabledEl = document.getElementById('usb_host_enabled');
-    if (enabledEl && document.activeElement !== enabledEl) {
-        enabledEl.value = draft.enabled ? 'true' : 'false';
-    }
-
-    const apnEl = document.getElementById('usb_host_apn_value');
-    if (apnEl && document.activeElement !== apnEl) {
-        apnEl.value = draft.apn;
-    }
-}
-
-function usbHostTextValue(value, fallback = '-') {
-    return value === undefined || value === null || value === '' ? fallback : String(value);
-}
-
-function usbHostGpsFixText(gps) {
-    if (!gps) {
-        return '-';
-    }
-
-    if (gps.valid) {
-        return gps.fix_type ? 'Valid (' + gps.fix_type + ')' : 'Valid';
-    }
-
-    if (gps.fix_type !== undefined && gps.fix_type !== null && gps.fix_type !== '') {
-        return 'No fix (' + gps.fix_type + ')';
-    }
-
-    return 'No fix';
-}
-
-function usbHostGpsLocationText(gps) {
-    if (!gps || !gps.valid) {
-        return '-';
-    }
-
-    const lat = gps.lat;
-    const lon = gps.lon;
-    if (lat === undefined || lon === undefined || lat === null || lon === null) {
-        return '-';
-    }
-
-    return String(lat) + ', ' + String(lon);
-}
-
-function usbHostGpsSpeedText(gps) {
-    if (!gps) {
-        return '-';
-    }
-
-    if (gps.speed_kmph !== undefined && gps.speed_kmph !== null) {
-        return String(gps.speed_kmph) + ' km/h';
-    }
-
-    if (gps.speed_knots !== undefined && gps.speed_knots !== null) {
-        return String(gps.speed_knots) + ' kn';
-    }
-
-    return '-';
-}
-
-function usbHostLteOperatorText(lte) {
-    if (!lte) {
-        return '-';
-    }
-
-    return usbHostTextValue(lte.operator || lte.operator_name || lte.operator_act);
-}
-
-function usbHostLteSignalText(lte) {
-    if (!lte) {
-        return '-';
-    }
-
-    if (lte.rssi !== undefined && lte.rssi !== null) {
-        const rawRssi = Math.max(0, Math.min(31, Number(lte.rssi)));
-        const percent = Math.round((rawRssi / 31) * 100);
-
-        if (rawRssi >= 25) {
-            return String(percent) + '% (Excellent)';
-        }
-        if (rawRssi >= 20) {
-            return String(percent) + '% (Good)';
-        }
-        if (rawRssi >= 14) {
-            return String(percent) + '% (Fair)';
-        }
-        if (rawRssi >= 8) {
-            return String(percent) + '% (Poor)';
-        }
-
-        return String(percent) + '% (Very poor)';
-    }
-
-    if (lte.rssi_dbm !== undefined && lte.rssi_dbm !== null) {
-        const dbm = Number(lte.rssi_dbm);
-
-        if (dbm >= -65) {
-            return 'Excellent';
-        }
-        if (dbm >= -75) {
-            return 'Good';
-        }
-        if (dbm >= -85) {
-            return 'Fair';
-        }
-        if (dbm >= -95) {
-            return 'Poor';
-        }
-
-        return 'Very poor';
-    }
-
-    return '-';
-}
-
-function usbHostRenderTelemetry() {
-    const state = usbHostGetState();
-    const esp = state.espnetlink || {};
-    const lteEl = document.getElementById('usb_host_lte_json');
-    const gpsEl = document.getElementById('usb_host_gps_json');
-    const lte = esp.lte || null;
-    const gps = esp.gps || null;
-
-    usbHostSetText('usb_host_lte_stage', lte ? usbHostTextValue(lte.stage) : '-');
-    usbHostSetText('usb_host_lte_operator', usbHostLteOperatorText(lte));
-    usbHostSetText('usb_host_lte_signal', usbHostLteSignalText(lte));
-    usbHostSetText('usb_host_lte_network', lte ? usbHostTextValue(lte.network_type) : '-');
-    usbHostSetText('usb_host_lte_ip', lte ? usbHostTextValue(lte.ip) : '-');
-
-    usbHostSetText('usb_host_gps_fix', usbHostGpsFixText(gps));
-    usbHostSetText('usb_host_gps_satellites', gps ? usbHostTextValue(gps.satellites) : '-');
-    usbHostSetText('usb_host_gps_sats_in_view', gps ? usbHostTextValue(gps.sats_in_view) : '-');
-    usbHostSetText('usb_host_gps_location', usbHostGpsLocationText(gps));
-    usbHostSetText('usb_host_gps_speed', usbHostGpsSpeedText(gps));
-
-    if (lteEl) {
-        lteEl.textContent = usbHostPrettyJsonText(esp.lte, 'No LTE data available yet.');
-    }
-
-    if (gpsEl) {
-        gpsEl.textContent = usbHostPrettyJsonText(esp.gps, 'No GPS data available yet.');
-    }
-}
-
-async function refreshUsbHostTab(showToast = false) {
-    const state = usbHostGetState();
-
-    try {
-        const [status, config] = await Promise.all([
-            usbHostFetchJson('/usb_host/status'),
-            usbHostFetchJson('/usb_host/config')
-        ]);
-
-        state.status = status;
-        state.config = config;
-
-        const shouldFetchEspConfig = (status && status.active_device_type === 'espnetlink')
-            || (config && config.active_device_type === 'espnetlink');
-
-        if (shouldFetchEspConfig) {
-            const [espConfig, lteData, gpsData] = await Promise.all([
-                usbHostFetchJson('/usb_host/espnetlink/config'),
-                usbHostFetchJson('/usb_host/espnetlink/lte'),
-                usbHostFetchJson('/usb_host/espnetlink/gps')
-            ]);
-
-            state.espnetlink = {
-                config: espConfig,
-                lte: lteData && lteData.data !== undefined ? lteData.data : lteData,
-                gps: gpsData && gpsData.data !== undefined ? gpsData.data : gpsData
-            };
-        } else {
-            state.espnetlink = {
-                config: null,
-                lte: null,
-                gps: null
-            };
-        }
-
-        usbHostRenderStatus(status);
-        usbHostRenderConfig(config);
-        usbHostRenderTelemetry();
-
-        if (showToast) {
-            showNotification('USB Host refreshed', 'blue', 2500);
-        }
-    } catch (error) {
-        console.warn('USB Host refresh failed:', error);
-        if (showToast) {
-            showNotification('USB Host refresh failed: ' + error.message, 'red');
-        }
-    }
-}
-
-function usbHostStartAutoRefresh() {
-    if (window._usbHostTimer) {
-        return;
-    }
-
-    window._usbHostTimer = setInterval(() => {
-        const panel = document.getElementById('usb_host_tab');
-        if (!panel || panel.style.display !== 'block') {
-            usbHostStopAutoRefresh();
-            return;
-        }
-
-        refreshUsbHostTab(false).catch((error) => console.warn('USB Host auto refresh failed:', error));
-    }, 5000);
-}
-
-function usbHostStopAutoRefresh() {
-    if (!window._usbHostTimer) {
-        return;
-    }
-
-    clearInterval(window._usbHostTimer);
-    window._usbHostTimer = null;
-}
-
-async function usbHostSubmitConfig() {
-    const state = usbHostGetState();
-
-    if (!state.config) {
-        return true;
-    }
-
-    const draft = usbHostCaptureDraft();
-    const config = usbHostCloneConfigState();
-    if (!config) {
-        return true;
-    }
-
-    config.enabled = !!draft.enabled;
-    config.espnetlink = config.espnetlink || {};
-    config.espnetlink.apn = draft.apn;
-
-    if (config.enabled && (!config.active_device_type || config.active_device_type === 'none')) {
-        config.active_device_type = 'espnetlink';
-    }
-
-    try {
-        const response = await usbHostFetchJson('/usb_host/config', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(usbHostBuildConfigPayload(config))
-        });
-
-        state.config = response;
-        state.dirty = false;
-    state.preferSavedApn = true;
-        usbHostSyncDraftFromConfig(true);
-        await refreshUsbHostTab(false);
-        return true;
-    } catch (error) {
-        showNotification('Failed to save USB Host settings: ' + error.message, 'red');
-        return false;
+        try { usbHostStopPanelAutoRefresh(); } catch(_) {}
     }
 }
 
@@ -3665,6 +3225,8 @@ async function postConfig() {
         document.getElementById("submit_button").disabled = false;  
         return;
     }
+
+    await ensureUsbHostUiLoaded();
 
     const storeUsbHostResult = await usbHostSubmitConfig();
     if (!storeUsbHostResult) {
@@ -4544,7 +4106,7 @@ xhttp.onload = async function() {
         lucide.createIcons();
     }
 
-    try { refreshUsbHostTab(false); } catch(_) {}
+    usbHostRefreshPanel().catch((error) => console.warn('USB Host refresh unavailable:', error));
 }
 
 function toggleElm327UdpLogWarning() {

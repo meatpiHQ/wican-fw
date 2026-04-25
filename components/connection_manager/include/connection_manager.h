@@ -18,6 +18,12 @@ typedef enum connection_manager_uplink
     CONNECTION_MANAGER_UPLINK_USB_ETH,
 } connection_manager_uplink_t;
 
+typedef enum connection_manager_uplink_policy
+{
+    CONNECTION_MANAGER_UPLINK_POLICY_WIFI_FIRST = 0,
+    CONNECTION_MANAGER_UPLINK_POLICY_USB_FIRST,
+} connection_manager_uplink_policy_t;
+
 typedef struct connection_manager_config
 {
     const char *wifi_sta_ifkey;
@@ -28,6 +34,9 @@ typedef struct connection_manager_status
 {
     bool initialized;
     bool usb_fallback_enabled;
+    bool usb_uplink_enabled;
+    connection_manager_uplink_policy_t uplink_policy;
+    char usb_eth_ifkey[16];
     bool wifi_connected;
     bool usb_connected;
     connection_manager_uplink_t active_uplink;
@@ -35,10 +44,14 @@ typedef struct connection_manager_status
 
 esp_err_t connection_manager_init(const connection_manager_config_t *config);
 esp_err_t connection_manager_set_usb_fallback_enabled(bool enabled);
+esp_err_t connection_manager_set_usb_uplink_config(bool enabled,
+                                                   connection_manager_uplink_policy_t policy,
+                                                   const char *usb_eth_ifkey);
 esp_err_t connection_manager_request_reconcile(void);
 esp_err_t connection_manager_get_status(connection_manager_status_t *status);
 
 const char *connection_manager_uplink_to_str(connection_manager_uplink_t uplink);
+const char *connection_manager_uplink_policy_to_str(connection_manager_uplink_policy_t policy);
 
 #ifdef __cplusplus
 }

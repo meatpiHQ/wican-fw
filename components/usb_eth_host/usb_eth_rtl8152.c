@@ -1,4 +1,4 @@
-#include "usb_eth_host.h"
+#include "usb_eth_host_internal.h"
 
 #include "esp_log.h"
 
@@ -63,6 +63,8 @@ void usbh_rtl8152_run(struct usbh_rtl8152 *rtl8152_class)
                              usb_eth_host_get_netif_config(),
                              usb_eth_rtl8152_transmit);
 
+    usb_eth_host_notify_driver_started(USB_ETH_HOST_DRIVER_RTL8152, "u4");
+
     usb_osal_thread_create("usbh_rtl8152_rx", 2048, CONFIG_USBHOST_PSC_PRIO + 1, usbh_rtl8152_rx_thread, NULL);
 }
 
@@ -70,5 +72,6 @@ void usbh_rtl8152_stop(struct usbh_rtl8152 *rtl8152_class)
 {
     (void)rtl8152_class;
 
+    usb_eth_host_notify_driver_stopped(USB_ETH_HOST_DRIVER_RTL8152);
     usb_eth_netif_glue_stop(&g_glue);
 }

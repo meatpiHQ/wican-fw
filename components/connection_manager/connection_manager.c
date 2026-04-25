@@ -107,6 +107,19 @@ const char *connection_manager_uplink_to_str(connection_manager_uplink_t uplink)
     }
 }
 
+const char *connection_manager_uplink_policy_to_str(connection_manager_uplink_policy_t policy)
+{
+    switch (policy)
+    {
+        case CONNECTION_MANAGER_UPLINK_POLICY_USB_FIRST:
+            return "usb_first";
+
+        case CONNECTION_MANAGER_UPLINK_POLICY_WIFI_FIRST:
+        default:
+            return "wifi_first";
+    }
+}
+
 static void connection_manager_reconcile_locked(const char *reason)
 {
     esp_netif_t *wifi_netif;
@@ -121,7 +134,18 @@ static void connection_manager_reconcile_locked(const char *reason)
     target_netif = NULL;
     next_uplink = CONNECTION_MANAGER_UPLINK_NONE;
 
-    if (s_connection_mgr.status.wifi_connected)
+    if (s_connection_mgr.status.usb_uplink_enabled &&
+        s_connection_mgr.status.uplink_policy == CONNECTION_MANAGER_UPLINK_POLICY_USB_FIRST &&
+        s_connection_mgr.status.usb_connected)
+    {
+        target_netif = usb_netif;
+        if (target_netif != NULL)
+        {
+            next_uplink = CONNECTION_MANAGER_UPLINK_USB_ETH;
+        }
+    }
+
+    if (next_uplink == CONNECTION_MANAGER_UPLINK_NONE && s_connection_mgr.status.wifi_connected)
     {
         target_netif = wifi_netif;
         if (target_netif != NULL)
@@ -131,7 +155,7 @@ static void connection_manager_reconcile_locked(const char *reason)
     }
 
     if (next_uplink == CONNECTION_MANAGER_UPLINK_NONE &&
-        s_connection_mgr.status.usb_fallback_enabled &&
+        s_connection_mgr.status.usb_uplink_enabled &&
         s_connection_mgr.status.usb_connected)
     {
         target_netif = usb_netif;
@@ -151,13 +175,13 @@ static void connection_manager_reconcile_locked(const char *reason)
              (reason != NULL) ? reason : "manual",
              s_connection_mgr.status.wifi_connected,
              s_connection_mgr.status.usb_connected,
-             s_connection_mgr.status.usb_fallback_enabled,
+             s_connection_mgr.status.usb_uplink_enabled,
              (void *)wifi_netif,
              (void *)usb_netif,
              connection_manager_uplink_to_str(next_uplink));
 
     if (next_uplink == CONNECTION_MANAGER_UPLINK_NONE &&
-        s_connection_mgr.status.usb_fallback_enabled &&
+        s_connection_mgr.status.usb_uplink_enabled &&
         usb_netif != NULL &&
         !s_connection_mgr.status.usb_connected)
     {
@@ -171,7 +195,7 @@ static void connection_manager_reconcile_locked(const char *reason)
                  connection_manager_uplink_to_str(next_uplink),
                  s_connection_mgr.status.wifi_connected,
                  s_connection_mgr.status.usb_connected,
-                 s_connection_mgr.status.usb_fallback_enabled);
+                 s_connection_mgr.status.usb_uplink_enabled);
     }
 
     s_connection_mgr.status.active_uplink = next_uplink;
@@ -221,6 +245,15 @@ esp_err_t connection_manager_request_reconcile(void)
 
 esp_err_t connection_manager_set_usb_fallback_enabled(bool enabled)
 {
+    return connection_manager_set_usb_uplink_config(enabled,
+                                                    CONNECTION_MANAGER_UPLINK_POLICY_WIFI_FIRST,
+                                                    NULL);
+}
+
+esp_err_t connection_manager_set_usb_uplink_config(bool enabled,
+                                                   connection_manager_uplink_policy_t policy,
+                                                   const char *usb_eth_ifkey)
+{
     if (!s_connection_mgr.initialized)
     {
         return ESP_ERR_INVALID_STATE;
@@ -231,8 +264,23 @@ esp_err_t connection_manager_set_usb_fallback_enabled(bool enabled)
         return ESP_ERR_TIMEOUT;
     }
 
-    s_connection_mgr.status.usb_fallback_enabled = enabled;
-    connection_manager_reconcile_locked(enabled ? "usb_fallback_enabled" : "usb_fallback_disabled");
+    s_connection_mgr.status.usb_uplink_enabled = enabled;
+    s_connection_mgr.status.uplink_policy = policy;
+    s_connection_mgr.status.usb_fallback_enabled =
+        enabled && policy == CONNECTION_MANAGER_UPLINK_POLICY_WIFI_FIRST;
+
+    if (usb_eth_ifkey != NULL)
+    {
+        strlcpy(s_connection_mgr.usb_eth_ifkey, usb_eth_ifkey, sizeof(s_connection_mgr.usb_eth_ifkey));
+        strlcpy(s_connection_mgr.status.usb_eth_ifkey, usb_eth_ifkey, sizeof(s_connection_mgr.status.usb_eth_ifkey));
+    }
+    else if (!enabled)
+    {
+        s_connection_mgr.usb_eth_ifkey[0] = '\0';
+        s_connection_mgr.status.usb_eth_ifkey[0] = '\0';
+    }
+
+    connection_manager_reconcile_locked(enabled ? "usb_uplink_enabled" : "usb_uplink_disabled");
     connection_manager_unlock();
     return ESP_OK;
 }
@@ -339,6 +387,11 @@ esp_err_t connection_manager_init(const connection_manager_config_t *config)
     s_connection_mgr.initialized = true;
     s_connection_mgr.status.initialized = true;
     s_connection_mgr.status.usb_fallback_enabled = false;
+        s_connection_mgr.status.usb_uplink_enabled = false;
+        s_connection_mgr.status.uplink_policy = CONNECTION_MANAGER_UPLINK_POLICY_WIFI_FIRST;
+        strlcpy(s_connection_mgr.status.usb_eth_ifkey,
+            s_connection_mgr.usb_eth_ifkey,
+            sizeof(s_connection_mgr.status.usb_eth_ifkey));
 
     ESP_LOGI(TAG,
              "connection manager initialized (wifi=%s usb=%s)",

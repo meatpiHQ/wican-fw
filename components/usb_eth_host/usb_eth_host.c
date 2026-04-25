@@ -19,11 +19,115 @@ static const char *TAG = "usb_eth_host";
 
 static bool g_started;
 static usb_eth_host_config_t g_cfg;
+static usb_eth_host_driver_t g_active_driver = USB_ETH_HOST_DRIVER_MAX;
+static char g_active_ifkey[8];
 
 static esp_netif_t *g_last_usb_eth_netif;
 static esp_event_handler_instance_t g_ip_eth_got_ip_inst;
 static esp_event_handler_instance_t g_ip_sta_got_ip_inst;
 static esp_event_handler_instance_t g_ip_eth_lost_ip_inst;
+
+static usb_eth_host_driver_t usb_eth_host_driver_from_ifkey(const char *ifkey)
+{
+    if (ifkey == NULL || ifkey[0] == '\0')
+    {
+        return USB_ETH_HOST_DRIVER_MAX;
+    }
+
+    if (strcmp(ifkey, "u0") == 0)
+    {
+        return USB_ETH_HOST_DRIVER_CDC_ECM;
+    }
+
+    if (strcmp(ifkey, "u1") == 0)
+    {
+        return USB_ETH_HOST_DRIVER_CDC_NCM;
+    }
+
+    if (strcmp(ifkey, "u2") == 0)
+    {
+        return USB_ETH_HOST_DRIVER_RNDIS;
+    }
+
+    if (strcmp(ifkey, "u3") == 0)
+    {
+        return USB_ETH_HOST_DRIVER_ASIX;
+    }
+
+    if (strcmp(ifkey, "u4") == 0)
+    {
+        return USB_ETH_HOST_DRIVER_RTL8152;
+    }
+
+    return USB_ETH_HOST_DRIVER_MAX;
+}
+
+static const char *usb_eth_host_get_live_ifkey(void)
+{
+    if (g_last_usb_eth_netif == NULL)
+    {
+        return NULL;
+    }
+
+    return esp_netif_get_ifkey(g_last_usb_eth_netif);
+}
+
+const char *usb_eth_host_driver_to_str(usb_eth_host_driver_t driver)
+{
+    switch (driver)
+    {
+        case USB_ETH_HOST_DRIVER_RTL8152:
+            return "rtl8152";
+
+        case USB_ETH_HOST_DRIVER_ASIX:
+            return "asix";
+
+        case USB_ETH_HOST_DRIVER_CDC_ECM:
+            return "cdc_ecm";
+
+        case USB_ETH_HOST_DRIVER_CDC_NCM:
+            return "cdc_ncm";
+
+        case USB_ETH_HOST_DRIVER_RNDIS:
+            return "rndis";
+
+        case USB_ETH_HOST_DRIVER_MAX:
+        default:
+            return "unknown";
+    }
+}
+
+void usb_eth_host_notify_driver_started(usb_eth_host_driver_t driver, const char *ifkey)
+{
+    if (driver >= USB_ETH_HOST_DRIVER_MAX || ifkey == NULL || ifkey[0] == '\0')
+    {
+        return;
+    }
+
+    g_active_driver = driver;
+    strlcpy(g_active_ifkey, ifkey, sizeof(g_active_ifkey));
+
+    ESP_LOGI(TAG,
+             "active driver -> %s (%s)",
+             usb_eth_host_driver_to_str(g_active_driver),
+             g_active_ifkey);
+}
+
+void usb_eth_host_notify_driver_stopped(usb_eth_host_driver_t driver)
+{
+    if (driver >= USB_ETH_HOST_DRIVER_MAX)
+    {
+        return;
+    }
+
+    if (g_active_driver != driver)
+    {
+        return;
+    }
+
+    g_active_driver = USB_ETH_HOST_DRIVER_MAX;
+    g_active_ifkey[0] = '\0';
+}
 
 static void usb_eth_host_try_set_default_netif(esp_netif_t *netif)
 {
@@ -187,6 +291,58 @@ bool usb_eth_host_driver_is_allowed(usb_eth_host_driver_t driver)
     return (g_cfg.allowed_driver_mask & bit) != 0;
 }
 
+bool usb_eth_host_get_active_driver(usb_eth_host_driver_t *driver)
+{
+    usb_eth_host_driver_t live_driver;
+
+    if (driver == NULL)
+    {
+        return false;
+    }
+
+    if (g_active_driver < USB_ETH_HOST_DRIVER_MAX)
+    {
+        *driver = g_active_driver;
+        return true;
+    }
+
+    live_driver = usb_eth_host_driver_from_ifkey(usb_eth_host_get_live_ifkey());
+    if (live_driver >= USB_ETH_HOST_DRIVER_MAX)
+    {
+        return false;
+    }
+
+    g_active_driver = live_driver;
+    *driver = live_driver;
+    return true;
+}
+
+bool usb_eth_host_get_active_ifkey(char *ifkey, size_t ifkey_len)
+{
+    const char *live_ifkey;
+
+    if (ifkey == NULL || ifkey_len == 0)
+    {
+        return false;
+    }
+
+    if (g_active_ifkey[0] != '\0')
+    {
+        strlcpy(ifkey, g_active_ifkey, ifkey_len);
+        return true;
+    }
+
+    live_ifkey = usb_eth_host_get_live_ifkey();
+    if (live_ifkey == NULL || live_ifkey[0] == '\0')
+    {
+        return false;
+    }
+
+    strlcpy(g_active_ifkey, live_ifkey, sizeof(g_active_ifkey));
+    strlcpy(ifkey, live_ifkey, ifkey_len);
+    return true;
+}
+
 bool usb_eth_host_is_started(void)
 {
     return g_started;
@@ -247,6 +403,8 @@ esp_err_t usb_eth_host_start(const usb_eth_host_config_t *config)
     memcpy(&g_cfg, config, sizeof(g_cfg));
 
     g_last_usb_eth_netif = NULL;
+    g_active_driver = USB_ETH_HOST_DRIVER_MAX;
+    g_active_ifkey[0] = '\0';
 
     if (!g_cfg.enable)
     {
@@ -299,6 +457,8 @@ void usb_eth_host_stop(void)
     (void)esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_ETH_LOST_IP, g_ip_eth_lost_ip_inst);
     (void)esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, g_ip_sta_got_ip_inst);
     g_last_usb_eth_netif = NULL;
+    g_active_driver = USB_ETH_HOST_DRIVER_MAX;
+    g_active_ifkey[0] = '\0';
 
     usb_eth_host_apply_gpio(&g_cfg.gpio, false);
 

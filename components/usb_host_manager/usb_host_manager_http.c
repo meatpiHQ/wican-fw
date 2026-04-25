@@ -19,6 +19,19 @@ static esp_err_t usb_host_manager_status_handler(httpd_req_t *req);
 static esp_err_t usb_host_manager_espnetlink_cached_handler(httpd_req_t *req, const char *kind);
 static esp_err_t usb_host_manager_espnetlink_config_set_handler(httpd_req_t *req);
 
+static const char *usb_host_manager_uplink_priority_to_str(usb_host_manager_uplink_priority_t priority)
+{
+    switch (priority)
+    {
+        case USB_HOST_MANAGER_UPLINK_PRIORITY_USB_FIRST:
+            return "usb_first";
+
+        case USB_HOST_MANAGER_UPLINK_PRIORITY_WIFI_FIRST:
+        default:
+            return "wifi_first";
+    }
+}
+
 static esp_err_t usb_host_manager_send_json(httpd_req_t *req, cJSON *json)
 {
     char *json_str;
@@ -55,6 +68,7 @@ static void usb_host_manager_append_config_json(cJSON *root, const usb_host_mana
 
     cJSON_AddBoolToObject(root, "enabled", config->enabled);
     cJSON_AddStringToObject(root, "active_device_type", usb_host_manager_device_type_to_str(config->active_device_type));
+    cJSON_AddStringToObject(root, "uplink_priority", usb_host_manager_uplink_priority_to_str(config->uplink_priority));
     cJSON_AddNumberToObject(root, "monitor_interval_ms", config->monitor_interval_ms);
     cJSON_AddNumberToObject(root, "device_attach_delay_ms", config->device_attach_delay_ms);
     cJSON_AddNumberToObject(root, "device_detach_delay_ms", config->device_detach_delay_ms);
@@ -111,11 +125,26 @@ static void usb_host_manager_append_config_json(cJSON *root, const usb_host_mana
         if (entry != NULL)
         {
             cJSON_AddStringToObject(entry, "type", "usb_ethernet");
-            cJSON_AddBoolToObject(entry, "implemented", false);
+            cJSON_AddBoolToObject(entry, "implemented", true);
             cJSON_AddItemToArray(supported, entry);
         }
 
         cJSON_AddItemToObject(root, "supported_device_types", supported);
+    }
+
+    {
+        cJSON *usb_ethernet = cJSON_CreateObject();
+
+        if (usb_ethernet != NULL)
+        {
+            cJSON_AddStringToObject(usb_ethernet,
+                                    "ip_mode",
+                                    (config->usb_ethernet.ip_mode == USB_HOST_MANAGER_IP_MODE_STATIC) ? "static" : "dhcp");
+            cJSON_AddStringToObject(usb_ethernet, "static_ip", config->usb_ethernet.static_ip);
+            cJSON_AddStringToObject(usb_ethernet, "static_netmask", config->usb_ethernet.static_netmask);
+            cJSON_AddStringToObject(usb_ethernet, "static_gw", config->usb_ethernet.static_gw);
+            cJSON_AddItemToObject(root, "usb_ethernet", usb_ethernet);
+        }
     }
 }
 
@@ -452,6 +481,12 @@ static esp_err_t usb_host_manager_post_config_handler(httpd_req_t *req)
     }
 
     (void)usb_host_manager_parse_bool(root, "enabled", &config.enabled);
+    mode_item = cJSON_GetObjectItemCaseSensitive(root, "uplink_priority");
+    if (cJSON_IsString(mode_item) && mode_item->valuestring != NULL)
+    {
+        config.uplink_priority = (strcmp(mode_item->valuestring, "usb_first") == 0) ?
+            USB_HOST_MANAGER_UPLINK_PRIORITY_USB_FIRST : USB_HOST_MANAGER_UPLINK_PRIORITY_WIFI_FIRST;
+    }
     (void)usb_host_manager_parse_u32(root, "monitor_interval_ms", &config.monitor_interval_ms);
     (void)usb_host_manager_parse_u32(root, "device_attach_delay_ms", &config.device_attach_delay_ms);
     (void)usb_host_manager_parse_u32(root, "device_detach_delay_ms", &config.device_detach_delay_ms);
@@ -466,6 +501,10 @@ static esp_err_t usb_host_manager_post_config_handler(httpd_req_t *req)
         else if (strcmp(type_item->valuestring, "none") == 0)
         {
             config.active_device_type = USB_HOST_MANAGER_DEVICE_NONE;
+        }
+        else if (strcmp(type_item->valuestring, "usb_ethernet") == 0)
+        {
+            config.active_device_type = USB_HOST_MANAGER_DEVICE_USB_ETHERNET;
         }
     }
 
@@ -494,6 +533,33 @@ static esp_err_t usb_host_manager_post_config_handler(httpd_req_t *req)
         {
             config.espnetlink.ip_mode = (strcmp(mode_item->valuestring, "static") == 0) ?
                 USB_HOST_MANAGER_IP_MODE_STATIC : USB_HOST_MANAGER_IP_MODE_DHCP;
+        }
+    }
+
+    {
+        cJSON *usb_ethernet = cJSON_GetObjectItemCaseSensitive(root, "usb_ethernet");
+
+        if (cJSON_IsObject(usb_ethernet))
+        {
+            usb_host_manager_parse_string(usb_ethernet,
+                                          "static_ip",
+                                          config.usb_ethernet.static_ip,
+                                          sizeof(config.usb_ethernet.static_ip));
+            usb_host_manager_parse_string(usb_ethernet,
+                                          "static_netmask",
+                                          config.usb_ethernet.static_netmask,
+                                          sizeof(config.usb_ethernet.static_netmask));
+            usb_host_manager_parse_string(usb_ethernet,
+                                          "static_gw",
+                                          config.usb_ethernet.static_gw,
+                                          sizeof(config.usb_ethernet.static_gw));
+
+            mode_item = cJSON_GetObjectItemCaseSensitive(usb_ethernet, "ip_mode");
+            if (cJSON_IsString(mode_item) && mode_item->valuestring != NULL)
+            {
+                config.usb_ethernet.ip_mode = (strcmp(mode_item->valuestring, "static") == 0) ?
+                    USB_HOST_MANAGER_IP_MODE_STATIC : USB_HOST_MANAGER_IP_MODE_DHCP;
+            }
         }
     }
 
@@ -550,6 +616,8 @@ static esp_err_t usb_host_manager_status_handler(httpd_req_t *req)
     cJSON_AddStringToObject(root, "state", usb_host_manager_state_to_str(status.state));
     cJSON_AddStringToObject(root, "configured_device_type", usb_host_manager_device_type_to_str(status.configured_device_type));
     cJSON_AddStringToObject(root, "active_device_type", usb_host_manager_device_type_to_str(status.active_device_type));
+    cJSON_AddStringToObject(root, "ethernet_driver", status.ethernet_driver);
+    cJSON_AddStringToObject(root, "ethernet_ifkey", status.ethernet_ifkey);
     cJSON_AddStringToObject(root, "local_ip", status.local_ip);
     cJSON_AddStringToObject(root, "netmask", status.netmask);
     cJSON_AddStringToObject(root, "gateway", status.gateway);
@@ -558,10 +626,22 @@ static esp_err_t usb_host_manager_status_handler(httpd_req_t *req)
     cJSON_AddStringToObject(root, "cli_last_error", status.cli_last_error);
     cJSON_AddStringToObject(root, "cli_last_response", status.cli_last_response);
     cJSON_AddStringToObject(root, "last_error", status.last_error);
-    cJSON_AddStringToObject(root, "expected_vid", "0x303A");
-    cJSON_AddStringToObject(root, "expected_pid", "0x4007");
-    cJSON_AddStringToObject(root, "expected_network_if", "RNDIS");
-    cJSON_AddStringToObject(root, "expected_cli_if", "CDC-ACM");
+
+    if (status.active_device_type == USB_HOST_MANAGER_DEVICE_ESPNETLINK ||
+        status.configured_device_type == USB_HOST_MANAGER_DEVICE_ESPNETLINK)
+    {
+        cJSON_AddStringToObject(root, "expected_vid", "0x303A");
+        cJSON_AddStringToObject(root, "expected_pid", "0x4007");
+        cJSON_AddStringToObject(root, "expected_network_if", "RNDIS");
+        cJSON_AddStringToObject(root, "expected_cli_if", "CDC-ACM");
+    }
+    else
+    {
+        cJSON_AddStringToObject(root, "expected_vid", "");
+        cJSON_AddStringToObject(root, "expected_pid", "");
+        cJSON_AddStringToObject(root, "expected_network_if", status.ethernet_driver);
+        cJSON_AddStringToObject(root, "expected_cli_if", "");
+    }
 
     ESP_LOGI(TAG, "USB host status requested");
     return usb_host_manager_send_json(req, root);

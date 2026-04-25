@@ -23,6 +23,12 @@ typedef enum usb_host_manager_ip_mode
     USB_HOST_MANAGER_IP_MODE_STATIC = 1,
 } usb_host_manager_ip_mode_t;
 
+typedef enum usb_host_manager_uplink_priority
+{
+    USB_HOST_MANAGER_UPLINK_PRIORITY_WIFI_FIRST = 0,
+    USB_HOST_MANAGER_UPLINK_PRIORITY_USB_FIRST = 1,
+} usb_host_manager_uplink_priority_t;
+
 typedef enum usb_host_manager_state
 {
     USB_HOST_MANAGER_STATE_DISABLED = 0,
@@ -65,14 +71,24 @@ typedef struct usb_host_manager_espnetlink_config
     uint32_t cli_rx_buffer_size;
 } usb_host_manager_espnetlink_config_t;
 
+typedef struct usb_host_manager_usb_ethernet_config
+{
+    usb_host_manager_ip_mode_t ip_mode;
+    char static_ip[16];
+    char static_netmask[16];
+    char static_gw[16];
+} usb_host_manager_usb_ethernet_config_t;
+
 typedef struct usb_host_manager_config
 {
     bool enabled;
     usb_host_manager_device_type_t active_device_type;
+    usb_host_manager_uplink_priority_t uplink_priority;
     uint32_t monitor_interval_ms;
     uint32_t device_attach_delay_ms;
     uint32_t device_detach_delay_ms;
     usb_host_manager_espnetlink_config_t espnetlink;
+    usb_host_manager_usb_ethernet_config_t usb_ethernet;
 } usb_host_manager_config_t;
 
 typedef struct usb_host_manager_status
@@ -90,6 +106,8 @@ typedef struct usb_host_manager_status
     usb_host_manager_device_type_t configured_device_type;
     usb_host_manager_device_type_t active_device_type;
     usb_host_manager_state_t state;
+    char ethernet_driver[16];
+    char ethernet_ifkey[8];
     char local_ip[16];
     char netmask[16];
     char gateway[16];

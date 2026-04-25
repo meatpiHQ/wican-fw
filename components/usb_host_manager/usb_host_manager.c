@@ -61,11 +61,13 @@ typedef struct usb_host_manager_runtime
     bool initialized;
     bool device_present_raw;
     bool espnetlink_started;
+    bool cli_started;
     int64_t present_since_us;
     int64_t absent_since_us;
     int64_t next_start_retry_us;
     usb_host_manager_platform_config_t platform;
     usb_host_manager_config_t config;
+    uint32_t config_revision;
     usb_host_manager_status_t status;
     SemaphoreHandle_t lock;
     StaticSemaphore_t lock_buffer;
@@ -78,6 +80,12 @@ typedef struct usb_host_manager_runtime
     TaskHandle_t cli_task;
     StackType_t *cli_task_stack;
     StaticTask_t cli_task_buffer;
+    usb_host_manager_device_type_t detected_device_type;
+    usb_host_manager_device_type_t applied_device_type;
+    usb_eth_host_driver_t detected_driver;
+    char active_eth_ifkey[8];
+    char applied_eth_ifkey[8];
+    uint32_t applied_config_revision;
     bool cli_prompt_synced;
     bool cli_session_ready;
     int64_t cli_ready_after_us;
@@ -100,6 +108,7 @@ static usb_host_manager_runtime_t s_usb_host_mgr = { 0 };
 
 static void usb_host_manager_task(void *arg);
 static void usb_host_manager_cli_task(void *arg);
+static void usb_host_manager_update_presence_locked(void);
 
 static inline bool usb_host_manager_lock(TickType_t timeout)
 {
@@ -161,6 +170,68 @@ const char *usb_host_manager_state_to_str(usb_host_manager_state_t state)
         default:
             return "disabled";
     }
+}
+
+static connection_manager_uplink_policy_t usb_host_manager_uplink_policy_to_connection(usb_host_manager_uplink_priority_t priority)
+{
+    return (priority == USB_HOST_MANAGER_UPLINK_PRIORITY_USB_FIRST) ?
+        CONNECTION_MANAGER_UPLINK_POLICY_USB_FIRST :
+        CONNECTION_MANAGER_UPLINK_POLICY_WIFI_FIRST;
+}
+
+static usb_host_manager_device_type_t usb_host_manager_device_type_from_driver(usb_eth_host_driver_t driver)
+{
+    switch (driver)
+    {
+        case USB_ETH_HOST_DRIVER_RNDIS:
+            return USB_HOST_MANAGER_DEVICE_ESPNETLINK;
+
+        case USB_ETH_HOST_DRIVER_RTL8152:
+        case USB_ETH_HOST_DRIVER_ASIX:
+        case USB_ETH_HOST_DRIVER_CDC_ECM:
+        case USB_ETH_HOST_DRIVER_CDC_NCM:
+            return USB_HOST_MANAGER_DEVICE_USB_ETHERNET;
+
+        case USB_ETH_HOST_DRIVER_MAX:
+        default:
+            return USB_HOST_MANAGER_DEVICE_NONE;
+    }
+}
+
+static bool usb_host_manager_get_active_usb_runtime(usb_host_manager_device_type_t *device_type,
+                                                    usb_eth_host_driver_t *driver,
+                                                    char *ifkey,
+                                                    size_t ifkey_len)
+{
+    usb_eth_host_driver_t active_driver;
+
+    if (device_type == NULL || driver == NULL || ifkey == NULL || ifkey_len == 0)
+    {
+        return false;
+    }
+
+    *device_type = USB_HOST_MANAGER_DEVICE_NONE;
+    *driver = USB_ETH_HOST_DRIVER_MAX;
+    ifkey[0] = '\0';
+
+    if (!s_usb_host_mgr.espnetlink_started || !usb_eth_host_is_started())
+    {
+        return false;
+    }
+
+    if (!usb_eth_host_get_active_driver(&active_driver))
+    {
+        return false;
+    }
+
+    if (!usb_eth_host_get_active_ifkey(ifkey, ifkey_len))
+    {
+        return false;
+    }
+
+    *driver = active_driver;
+    *device_type = usb_host_manager_device_type_from_driver(active_driver);
+    return *device_type != USB_HOST_MANAGER_DEVICE_NONE;
 }
 
 static void usb_host_manager_set_error_locked(const char *msg)
@@ -657,7 +728,7 @@ static esp_err_t usb_host_manager_cli_execute(const char *cmd,
                                               bool *out_success,
                                               char **out_payload)
 {
-    bool success;
+    bool success = false;
     esp_err_t ret;
     char *payload;
 
@@ -1022,8 +1093,9 @@ static void usb_host_manager_cli_task(void *arg)
         {
             cli_available = s_usb_host_mgr.initialized &&
                 s_usb_host_mgr.espnetlink_started &&
+                s_usb_host_mgr.cli_started &&
                 s_usb_host_mgr.config.enabled &&
-                s_usb_host_mgr.config.active_device_type == USB_HOST_MANAGER_DEVICE_ESPNETLINK &&
+                s_usb_host_mgr.detected_device_type == USB_HOST_MANAGER_DEVICE_ESPNETLINK &&
                 s_usb_host_mgr.config.espnetlink.enable_cli &&
                 usb_acm_cli_is_connected();
 
@@ -1133,12 +1205,25 @@ static void usb_host_manager_refresh_ip_locked(void)
 {
     esp_netif_t *netif;
     esp_netif_ip_info_t ip_info;
+    char ifkey[8] = { 0 };
+    const char *netif_ifkey;
 
     s_usb_host_mgr.status.local_ip[0] = '\0';
     s_usb_host_mgr.status.netmask[0] = '\0';
     s_usb_host_mgr.status.gateway[0] = '\0';
 
-    netif = esp_netif_get_handle_from_ifkey(USB_HOST_MANAGER_NETIF_IFKEY);
+    netif_ifkey = s_usb_host_mgr.active_eth_ifkey;
+    if (netif_ifkey[0] == '\0' && usb_eth_host_get_active_ifkey(ifkey, sizeof(ifkey)))
+    {
+        netif_ifkey = ifkey;
+    }
+
+    if (netif_ifkey[0] == '\0')
+    {
+        return;
+    }
+
+    netif = esp_netif_get_handle_from_ifkey(netif_ifkey);
     if (netif == NULL)
     {
         return;
@@ -1172,27 +1257,29 @@ static bool usb_host_manager_parse_ipv4(const char *str, esp_ip4_addr_t *out)
     return true;
 }
 
-static bool usb_host_manager_fill_static_ip(const usb_host_manager_espnetlink_config_t *cfg,
+static bool usb_host_manager_fill_static_ip(const char *ip,
+                                            const char *netmask,
+                                            const char *gw,
                                             esp_netif_ip_info_t *ip_info)
 {
-    if (cfg == NULL || ip_info == NULL)
+    if (ip == NULL || netmask == NULL || gw == NULL || ip_info == NULL)
     {
         return false;
     }
 
     memset(ip_info, 0, sizeof(*ip_info));
 
-    if (!usb_host_manager_parse_ipv4(cfg->static_ip, &ip_info->ip))
+    if (!usb_host_manager_parse_ipv4(ip, &ip_info->ip))
     {
         return false;
     }
 
-    if (!usb_host_manager_parse_ipv4(cfg->static_netmask, &ip_info->netmask))
+    if (!usb_host_manager_parse_ipv4(netmask, &ip_info->netmask))
     {
         return false;
     }
 
-    if (!usb_host_manager_parse_ipv4(cfg->static_gw, &ip_info->gw))
+    if (!usb_host_manager_parse_ipv4(gw, &ip_info->gw))
     {
         return false;
     }
@@ -1204,6 +1291,15 @@ static void usb_host_manager_on_eth_ip_up(void)
 {
     if (!usb_host_manager_lock(pdMS_TO_TICKS(50)))
     {
+        return;
+    }
+
+    usb_host_manager_update_presence_locked();
+    if (!s_usb_host_mgr.device_present_raw)
+    {
+        s_usb_host_mgr.status.ethernet_connected = false;
+        usb_host_manager_unlock();
+        dev_status_clear_eth_connected();
         return;
     }
 
@@ -1242,36 +1338,47 @@ static void usb_host_manager_update_presence_locked(void)
     s_usb_host_mgr.status.device_detected = s_usb_host_mgr.device_present_raw;
 }
 
-static esp_err_t usb_host_manager_start_espnetlink(void)
+static esp_err_t usb_host_manager_start_cli(const usb_host_manager_espnetlink_config_t *cfg)
+{
+    usb_acm_cli_config_t cli_cfg;
+
+    if (cfg == NULL || !cfg->enable_cli)
+    {
+        return ESP_OK;
+    }
+
+    memset(&cli_cfg, 0, sizeof(cli_cfg));
+    cli_cfg.enable = true;
+    cli_cfg.dev_path = cfg->cli_dev_path;
+    cli_cfg.reconnect_delay_ms = cfg->cli_reconnect_delay_ms;
+    cli_cfg.assert_dtr = cfg->cli_assert_dtr;
+    cli_cfg.assert_rts = cfg->cli_assert_rts;
+    cli_cfg.line_state_delay_ms = cfg->cli_line_state_delay_ms;
+    cli_cfg.rx_task_stack_size = cfg->cli_rx_task_stack_size;
+    cli_cfg.rx_task_priority = (UBaseType_t)cfg->cli_rx_task_priority;
+    cli_cfg.rx_task_core_id = cfg->cli_rx_task_core_id;
+    cli_cfg.rx_buffer_size = cfg->cli_rx_buffer_size;
+
+    return usb_acm_cli_start(&cli_cfg);
+}
+
+static esp_err_t usb_host_manager_start_usb_device(void)
 {
     usb_eth_host_config_t eth_cfg;
-    usb_acm_cli_config_t cli_cfg;
-    esp_netif_ip_info_t ip_info;
     esp_err_t ret;
 
     memset(&eth_cfg, 0, sizeof(eth_cfg));
     eth_cfg.enable = true;
-    eth_cfg.allowed_driver_mask = USB_ETH_HOST_DRIVER_MASK_RNDIS;
+    eth_cfg.allowed_driver_mask = USB_ETH_HOST_DRIVER_MASK_ALL;
     eth_cfg.bus_id = s_usb_host_mgr.platform.bus_id;
     eth_cfg.reg_base = s_usb_host_mgr.platform.reg_base;
     eth_cfg.gpio.vbus_en_gpio = s_usb_host_mgr.platform.usb_vbus_gpio;
     eth_cfg.gpio.vbus_en_active_high = s_usb_host_mgr.platform.usb_vbus_active_high;
     eth_cfg.gpio.vbus_on_delay_ms = s_usb_host_mgr.platform.usb_vbus_on_delay_ms;
-    eth_cfg.netif.mode = (s_usb_host_mgr.config.espnetlink.ip_mode == USB_HOST_MANAGER_IP_MODE_STATIC) ?
-        USB_ETH_HOST_IP_MODE_STATIC : USB_ETH_HOST_IP_MODE_DHCP;
+    eth_cfg.netif.mode = USB_ETH_HOST_IP_MODE_DHCP;
     eth_cfg.netif.prefer_as_default_route = false;
     eth_cfg.on_eth_ip_up = usb_host_manager_on_eth_ip_up;
     eth_cfg.on_eth_ip_lost = usb_host_manager_on_eth_ip_lost;
-
-    if (eth_cfg.netif.mode == USB_ETH_HOST_IP_MODE_STATIC)
-    {
-        if (!usb_host_manager_fill_static_ip(&s_usb_host_mgr.config.espnetlink, &ip_info))
-        {
-            return ESP_ERR_INVALID_ARG;
-        }
-
-        eth_cfg.netif.static_ip = ip_info;
-    }
 
     if (s_usb_host_mgr.platform.usb_mode_gpio >= 0)
     {
@@ -1281,53 +1388,71 @@ static esp_err_t usb_host_manager_start_espnetlink(void)
     ret = usb_eth_host_start(&eth_cfg);
     if (ret != ESP_OK)
     {
-        return ret;
-    }
-
-    if (s_usb_host_mgr.config.espnetlink.enable_cli)
-    {
-        memset(&cli_cfg, 0, sizeof(cli_cfg));
-        cli_cfg.enable = true;
-        cli_cfg.dev_path = s_usb_host_mgr.config.espnetlink.cli_dev_path;
-        cli_cfg.reconnect_delay_ms = s_usb_host_mgr.config.espnetlink.cli_reconnect_delay_ms;
-        cli_cfg.assert_dtr = s_usb_host_mgr.config.espnetlink.cli_assert_dtr;
-        cli_cfg.assert_rts = s_usb_host_mgr.config.espnetlink.cli_assert_rts;
-        cli_cfg.line_state_delay_ms = s_usb_host_mgr.config.espnetlink.cli_line_state_delay_ms;
-        cli_cfg.rx_task_stack_size = s_usb_host_mgr.config.espnetlink.cli_rx_task_stack_size;
-        cli_cfg.rx_task_priority = (UBaseType_t)s_usb_host_mgr.config.espnetlink.cli_rx_task_priority;
-        cli_cfg.rx_task_core_id = s_usb_host_mgr.config.espnetlink.cli_rx_task_core_id;
-        cli_cfg.rx_buffer_size = s_usb_host_mgr.config.espnetlink.cli_rx_buffer_size;
-
-        ret = usb_acm_cli_start(&cli_cfg);
-        if (ret != ESP_OK)
+        if (s_usb_host_mgr.platform.usb_mode_gpio >= 0)
         {
-            if (s_usb_host_mgr.platform.usb_mode_gpio >= 0)
-            {
-                gpio_set_level((gpio_num_t)s_usb_host_mgr.platform.usb_mode_gpio, 0);
-            }
-            return ret;
+            gpio_set_level((gpio_num_t)s_usb_host_mgr.platform.usb_mode_gpio, 0);
         }
+        return ret;
     }
 
     if (usb_host_manager_lock(pdMS_TO_TICKS(50)))
     {
         usb_host_manager_cli_reset_locked(true);
-        s_usb_host_mgr.cli_ready_after_us = esp_timer_get_time() + ((int64_t)USB_HOST_MANAGER_CLI_BOOTSTRAP_DELAY_MS * 1000);
+        s_usb_host_mgr.cli_started = false;
+        s_usb_host_mgr.detected_device_type = USB_HOST_MANAGER_DEVICE_NONE;
+        s_usb_host_mgr.applied_device_type = USB_HOST_MANAGER_DEVICE_NONE;
+        s_usb_host_mgr.detected_driver = USB_ETH_HOST_DRIVER_MAX;
+        s_usb_host_mgr.active_eth_ifkey[0] = '\0';
+        s_usb_host_mgr.applied_eth_ifkey[0] = '\0';
+        s_usb_host_mgr.applied_config_revision = 0;
+        s_usb_host_mgr.status.management_ip[0] = '\0';
         usb_host_manager_unlock();
     }
 
     return ESP_OK;
 }
 
-static void usb_host_manager_stop_espnetlink(void)
+static void usb_host_manager_stop_usb_device(void)
 {
-    (void)usb_acm_cli_stop();
+    usb_host_manager_uplink_priority_t uplink_priority;
+    bool cli_started;
+
+    uplink_priority = USB_HOST_MANAGER_UPLINK_PRIORITY_WIFI_FIRST;
+    cli_started = false;
+
+    if (usb_host_manager_lock(pdMS_TO_TICKS(50)))
+    {
+        uplink_priority = s_usb_host_mgr.config.uplink_priority;
+        cli_started = s_usb_host_mgr.cli_started;
+        usb_host_manager_unlock();
+    }
+
+    if (cli_started)
+    {
+        (void)usb_acm_cli_stop();
+    }
+
+    usb_eth_host_stop();
     dev_status_clear_eth_connected();
-    (void)connection_manager_request_reconcile();
+    (void)connection_manager_set_usb_uplink_config(false,
+                                                   usb_host_manager_uplink_policy_to_connection(uplink_priority),
+                                                   NULL);
 
     if (usb_host_manager_lock(pdMS_TO_TICKS(50)))
     {
         usb_host_manager_cli_reset_locked(true);
+        s_usb_host_mgr.cli_started = false;
+        s_usb_host_mgr.detected_device_type = USB_HOST_MANAGER_DEVICE_NONE;
+        s_usb_host_mgr.applied_device_type = USB_HOST_MANAGER_DEVICE_NONE;
+        s_usb_host_mgr.detected_driver = USB_ETH_HOST_DRIVER_MAX;
+        s_usb_host_mgr.active_eth_ifkey[0] = '\0';
+        s_usb_host_mgr.applied_eth_ifkey[0] = '\0';
+        s_usb_host_mgr.applied_config_revision = 0;
+        s_usb_host_mgr.status.ethernet_connected = false;
+        s_usb_host_mgr.status.management_ip[0] = '\0';
+        s_usb_host_mgr.status.local_ip[0] = '\0';
+        s_usb_host_mgr.status.netmask[0] = '\0';
+        s_usb_host_mgr.status.gateway[0] = '\0';
         usb_host_manager_unlock();
     }
 
@@ -1335,6 +1460,227 @@ static void usb_host_manager_stop_espnetlink(void)
     {
         gpio_set_level((gpio_num_t)s_usb_host_mgr.platform.usb_mode_gpio, 0);
     }
+}
+
+static void usb_host_manager_reconcile_active_profile(void)
+{
+    usb_host_manager_device_type_t device_type;
+    usb_eth_host_driver_t driver;
+    usb_host_manager_uplink_priority_t uplink_priority;
+    usb_host_manager_espnetlink_config_t espnetlink_cfg;
+    usb_host_manager_usb_ethernet_config_t usb_ethernet_cfg;
+    usb_eth_host_netif_config_t netif_cfg;
+    char ifkey[8] = { 0 };
+    char applied_ifkey[8] = { 0 };
+    uint32_t config_revision;
+    uint32_t applied_config_revision;
+    bool cli_started;
+    bool had_runtime_profile;
+    bool need_apply_netif;
+    bool need_start_cli;
+    bool need_stop_cli;
+    esp_err_t cli_ret;
+    esp_err_t netif_ret;
+
+    cli_ret = ESP_OK;
+    netif_ret = ESP_OK;
+
+    if (!usb_host_manager_get_active_usb_runtime(&device_type, &driver, ifkey, sizeof(ifkey)))
+    {
+        bool cli_was_started;
+
+        cli_was_started = false;
+        uplink_priority = USB_HOST_MANAGER_UPLINK_PRIORITY_WIFI_FIRST;
+        had_runtime_profile = false;
+
+        if (usb_host_manager_lock(pdMS_TO_TICKS(50)))
+        {
+            uplink_priority = s_usb_host_mgr.config.uplink_priority;
+            had_runtime_profile = s_usb_host_mgr.detected_device_type != USB_HOST_MANAGER_DEVICE_NONE ||
+                s_usb_host_mgr.active_eth_ifkey[0] != '\0';
+            cli_was_started = s_usb_host_mgr.cli_started;
+
+            if (had_runtime_profile)
+            {
+                s_usb_host_mgr.detected_device_type = USB_HOST_MANAGER_DEVICE_NONE;
+                s_usb_host_mgr.applied_device_type = USB_HOST_MANAGER_DEVICE_NONE;
+                s_usb_host_mgr.detected_driver = USB_ETH_HOST_DRIVER_MAX;
+                s_usb_host_mgr.active_eth_ifkey[0] = '\0';
+                s_usb_host_mgr.applied_eth_ifkey[0] = '\0';
+                s_usb_host_mgr.applied_config_revision = 0;
+                s_usb_host_mgr.status.management_ip[0] = '\0';
+            }
+
+            if (cli_was_started)
+            {
+                s_usb_host_mgr.cli_started = false;
+                usb_host_manager_cli_reset_locked(true);
+            }
+            usb_host_manager_unlock();
+        }
+
+        if (cli_was_started)
+        {
+            (void)usb_acm_cli_stop();
+        }
+
+        if (had_runtime_profile || cli_was_started)
+        {
+            (void)connection_manager_set_usb_uplink_config(false,
+                                                           usb_host_manager_uplink_policy_to_connection(uplink_priority),
+                                                           NULL);
+        }
+        return;
+    }
+
+    if (!usb_host_manager_lock(pdMS_TO_TICKS(50)))
+    {
+        return;
+    }
+
+    s_usb_host_mgr.detected_device_type = device_type;
+    s_usb_host_mgr.detected_driver = driver;
+    strlcpy(s_usb_host_mgr.active_eth_ifkey, ifkey, sizeof(s_usb_host_mgr.active_eth_ifkey));
+
+    strlcpy(applied_ifkey, s_usb_host_mgr.applied_eth_ifkey, sizeof(applied_ifkey));
+    config_revision = s_usb_host_mgr.config_revision;
+    applied_config_revision = s_usb_host_mgr.applied_config_revision;
+    cli_started = s_usb_host_mgr.cli_started;
+    uplink_priority = s_usb_host_mgr.config.uplink_priority;
+    espnetlink_cfg = s_usb_host_mgr.config.espnetlink;
+    usb_ethernet_cfg = s_usb_host_mgr.config.usb_ethernet;
+    need_apply_netif = (s_usb_host_mgr.applied_device_type != device_type) ||
+        (strcmp(applied_ifkey, ifkey) != 0) ||
+        (applied_config_revision != config_revision);
+    need_start_cli = !cli_started &&
+        device_type == USB_HOST_MANAGER_DEVICE_ESPNETLINK &&
+        espnetlink_cfg.enable_cli;
+    need_stop_cli = cli_started &&
+        (device_type != USB_HOST_MANAGER_DEVICE_ESPNETLINK || !espnetlink_cfg.enable_cli);
+    usb_host_manager_unlock();
+
+    if (need_stop_cli)
+    {
+        (void)usb_acm_cli_stop();
+    }
+
+    if (need_apply_netif)
+    {
+        memset(&netif_cfg, 0, sizeof(netif_cfg));
+        netif_cfg.prefer_as_default_route = false;
+
+        if (device_type == USB_HOST_MANAGER_DEVICE_ESPNETLINK)
+        {
+            netif_cfg.mode = (espnetlink_cfg.ip_mode == USB_HOST_MANAGER_IP_MODE_STATIC) ?
+                USB_ETH_HOST_IP_MODE_STATIC : USB_ETH_HOST_IP_MODE_DHCP;
+            if (netif_cfg.mode == USB_ETH_HOST_IP_MODE_STATIC &&
+                !usb_host_manager_fill_static_ip(espnetlink_cfg.static_ip,
+                                                 espnetlink_cfg.static_netmask,
+                                                 espnetlink_cfg.static_gw,
+                                                 &netif_cfg.static_ip))
+            {
+                netif_ret = ESP_ERR_INVALID_ARG;
+            }
+        }
+        else if (device_type == USB_HOST_MANAGER_DEVICE_USB_ETHERNET)
+        {
+            netif_cfg.mode = (usb_ethernet_cfg.ip_mode == USB_HOST_MANAGER_IP_MODE_STATIC) ?
+                USB_ETH_HOST_IP_MODE_STATIC : USB_ETH_HOST_IP_MODE_DHCP;
+            if (netif_cfg.mode == USB_ETH_HOST_IP_MODE_STATIC &&
+                !usb_host_manager_fill_static_ip(usb_ethernet_cfg.static_ip,
+                                                 usb_ethernet_cfg.static_netmask,
+                                                 usb_ethernet_cfg.static_gw,
+                                                 &netif_cfg.static_ip))
+            {
+                netif_ret = ESP_ERR_INVALID_ARG;
+            }
+        }
+        else
+        {
+            netif_ret = ESP_ERR_NOT_SUPPORTED;
+        }
+
+        if (netif_ret == ESP_OK)
+        {
+            netif_ret = usb_eth_host_netif_apply(ifkey, &netif_cfg);
+        }
+    }
+
+    if (need_start_cli)
+    {
+        cli_ret = usb_host_manager_start_cli(&espnetlink_cfg);
+    }
+
+    if (need_apply_netif || need_start_cli || need_stop_cli)
+    {
+        (void)connection_manager_set_usb_uplink_config(true,
+                                                       usb_host_manager_uplink_policy_to_connection(uplink_priority),
+                                                       ifkey);
+    }
+
+    if (!usb_host_manager_lock(pdMS_TO_TICKS(50)))
+    {
+        return;
+    }
+
+    if (need_stop_cli)
+    {
+        s_usb_host_mgr.cli_started = false;
+        usb_host_manager_cli_reset_locked(true);
+    }
+
+    if (need_start_cli)
+    {
+        if (cli_ret == ESP_OK)
+        {
+            s_usb_host_mgr.cli_started = true;
+            usb_host_manager_cli_reset_locked(true);
+            s_usb_host_mgr.cli_ready_after_us = esp_timer_get_time() + ((int64_t)USB_HOST_MANAGER_CLI_BOOTSTRAP_DELAY_MS * 1000);
+            usb_host_manager_cli_set_error_locked(NULL);
+        }
+        else
+        {
+            char err_msg[96];
+
+            s_usb_host_mgr.cli_started = false;
+            snprintf(err_msg, sizeof(err_msg), "espnetlink cli start failed: %s", esp_err_to_name(cli_ret));
+            usb_host_manager_cli_set_error_locked(err_msg);
+        }
+    }
+
+    if (need_apply_netif)
+    {
+        if (netif_ret == ESP_OK)
+        {
+            s_usb_host_mgr.applied_device_type = device_type;
+            s_usb_host_mgr.applied_config_revision = config_revision;
+            strlcpy(s_usb_host_mgr.applied_eth_ifkey, ifkey, sizeof(s_usb_host_mgr.applied_eth_ifkey));
+            usb_host_manager_set_error_locked(NULL);
+        }
+        else
+        {
+            char err_msg[96];
+
+            s_usb_host_mgr.applied_device_type = USB_HOST_MANAGER_DEVICE_NONE;
+            s_usb_host_mgr.applied_config_revision = 0;
+            s_usb_host_mgr.applied_eth_ifkey[0] = '\0';
+            snprintf(err_msg, sizeof(err_msg), "usb profile apply failed: %s", esp_err_to_name(netif_ret));
+            usb_host_manager_set_error_locked(err_msg);
+        }
+    }
+
+    if (device_type == USB_HOST_MANAGER_DEVICE_ESPNETLINK)
+    {
+        strlcpy(s_usb_host_mgr.status.management_ip,
+                espnetlink_cfg.management_ip,
+                sizeof(s_usb_host_mgr.status.management_ip));
+    }
+    else
+    {
+        s_usb_host_mgr.status.management_ip[0] = '\0';
+    }
+
+    usb_host_manager_unlock();
 }
 
 static void usb_host_manager_update_runtime_status(void)
@@ -1348,17 +1694,28 @@ static void usb_host_manager_update_runtime_status(void)
     s_usb_host_mgr.status.initialized = s_usb_host_mgr.initialized;
     s_usb_host_mgr.status.enabled = s_usb_host_mgr.config.enabled;
     s_usb_host_mgr.status.configured_device_type = s_usb_host_mgr.config.active_device_type;
-    s_usb_host_mgr.status.active_device_type = s_usb_host_mgr.espnetlink_started ?
-        USB_HOST_MANAGER_DEVICE_ESPNETLINK : USB_HOST_MANAGER_DEVICE_NONE;
+    s_usb_host_mgr.status.active_device_type = s_usb_host_mgr.detected_device_type;
     s_usb_host_mgr.status.device_started = s_usb_host_mgr.espnetlink_started;
-    s_usb_host_mgr.status.cli_enabled = s_usb_host_mgr.config.espnetlink.enable_cli;
-    s_usb_host_mgr.status.cli_connected = usb_acm_cli_is_connected();
+    s_usb_host_mgr.status.cli_enabled =
+        s_usb_host_mgr.detected_device_type == USB_HOST_MANAGER_DEVICE_ESPNETLINK &&
+        s_usb_host_mgr.config.espnetlink.enable_cli;
+    s_usb_host_mgr.status.cli_connected = s_usb_host_mgr.cli_started && usb_acm_cli_is_connected();
     s_usb_host_mgr.status.cli_prompt_synced = s_usb_host_mgr.cli_prompt_synced;
     s_usb_host_mgr.status.cli_session_ready = s_usb_host_mgr.cli_session_ready;
     s_usb_host_mgr.status.ethernet_connected = dev_status_is_eth_connected();
-    strlcpy(s_usb_host_mgr.status.management_ip,
-            s_usb_host_mgr.config.espnetlink.management_ip,
-            sizeof(s_usb_host_mgr.status.management_ip));
+    if (s_usb_host_mgr.detected_driver < USB_ETH_HOST_DRIVER_MAX)
+    {
+        strlcpy(s_usb_host_mgr.status.ethernet_driver,
+                usb_eth_host_driver_to_str(s_usb_host_mgr.detected_driver),
+                sizeof(s_usb_host_mgr.status.ethernet_driver));
+    }
+    else
+    {
+        s_usb_host_mgr.status.ethernet_driver[0] = '\0';
+    }
+    strlcpy(s_usb_host_mgr.status.ethernet_ifkey,
+            s_usb_host_mgr.active_eth_ifkey,
+            sizeof(s_usb_host_mgr.status.ethernet_ifkey));
 
     if (s_usb_host_mgr.espnetlink_started)
     {
@@ -1375,7 +1732,7 @@ static void usb_host_manager_update_runtime_status(void)
     {
         usb_host_manager_update_state_locked(USB_HOST_MANAGER_STATE_DISABLED);
     }
-    else if (s_usb_host_mgr.espnetlink_started)
+    else if (s_usb_host_mgr.espnetlink_started && s_usb_host_mgr.detected_device_type != USB_HOST_MANAGER_DEVICE_NONE)
     {
         usb_host_manager_update_state_locked(USB_HOST_MANAGER_STATE_RUNNING);
     }
@@ -1410,10 +1767,9 @@ static void usb_host_manager_handle_reload(void)
     }
 
     memcpy(&s_usb_host_mgr.config, &loaded, sizeof(loaded));
+    s_usb_host_mgr.config_revision++;
     usb_host_manager_set_error_locked(NULL);
     usb_host_manager_unlock();
-
-    (void)connection_manager_set_usb_fallback_enabled(s_usb_host_mgr.config.espnetlink.prefer_default_route);
 }
 
 static void usb_host_manager_task(void *arg)
@@ -1461,8 +1817,7 @@ static void usb_host_manager_task(void *arg)
                 s_usb_host_mgr.present_since_us = 0;
             }
 
-            should_enable = s_usb_host_mgr.config.enabled &&
-                s_usb_host_mgr.config.active_device_type == USB_HOST_MANAGER_DEVICE_ESPNETLINK;
+            should_enable = s_usb_host_mgr.config.enabled;
 
             attach_ready = should_enable && s_usb_host_mgr.device_present_raw &&
                 s_usb_host_mgr.present_since_us != 0 &&
@@ -1478,7 +1833,7 @@ static void usb_host_manager_task(void *arg)
             {
                 usb_host_manager_update_state_locked(USB_HOST_MANAGER_STATE_STOPPING);
                 usb_host_manager_unlock();
-                usb_host_manager_stop_espnetlink();
+                usb_host_manager_stop_usb_device();
                 if (usb_host_manager_lock(pdMS_TO_TICKS(50)))
                 {
                     s_usb_host_mgr.espnetlink_started = false;
@@ -1486,7 +1841,6 @@ static void usb_host_manager_task(void *arg)
                     usb_host_manager_unlock();
                 }
                 usb_host_manager_update_runtime_status();
-                (void)connection_manager_request_reconcile();
                 continue;
             }
 
@@ -1494,14 +1848,13 @@ static void usb_host_manager_task(void *arg)
             {
                 usb_host_manager_update_state_locked(USB_HOST_MANAGER_STATE_STOPPING);
                 usb_host_manager_unlock();
-                usb_host_manager_stop_espnetlink();
+                usb_host_manager_stop_usb_device();
                 if (usb_host_manager_lock(pdMS_TO_TICKS(50)))
                 {
                     s_usb_host_mgr.espnetlink_started = false;
                     usb_host_manager_unlock();
                 }
                 usb_host_manager_update_runtime_status();
-                (void)connection_manager_request_reconcile();
                 continue;
             }
 
@@ -1511,7 +1864,7 @@ static void usb_host_manager_task(void *arg)
 
                 usb_host_manager_update_state_locked(USB_HOST_MANAGER_STATE_STARTING);
                 usb_host_manager_unlock();
-                ret = usb_host_manager_start_espnetlink();
+                ret = usb_host_manager_start_usb_device();
 
                 if (usb_host_manager_lock(pdMS_TO_TICKS(100)))
                 {
@@ -1527,20 +1880,20 @@ static void usb_host_manager_task(void *arg)
 
                         s_usb_host_mgr.espnetlink_started = false;
                         s_usb_host_mgr.next_start_retry_us = now_us + ((int64_t)USB_HOST_MANAGER_START_RETRY_MS * 1000);
-                        snprintf(err_msg, sizeof(err_msg), "espnetlink start failed: %s", esp_err_to_name(ret));
+                        snprintf(err_msg, sizeof(err_msg), "usb host start failed: %s", esp_err_to_name(ret));
                         usb_host_manager_set_error_locked(err_msg);
                     }
                     usb_host_manager_unlock();
                 }
 
                 usb_host_manager_update_runtime_status();
-                (void)connection_manager_request_reconcile();
                 continue;
             }
 
             usb_host_manager_unlock();
         }
 
+        usb_host_manager_reconcile_active_profile();
         usb_host_manager_update_runtime_status();
     }
 }
@@ -1589,9 +1942,8 @@ esp_err_t usb_host_manager_set_config(const usb_host_manager_config_t *config)
     }
 
     memcpy(&s_usb_host_mgr.config, &tmp, sizeof(tmp));
+    s_usb_host_mgr.config_revision++;
     usb_host_manager_unlock();
-
-    (void)connection_manager_set_usb_fallback_enabled(tmp.espnetlink.prefer_default_route);
 
     if (s_usb_host_mgr.cmd_queue != NULL)
     {
@@ -1825,13 +2177,14 @@ esp_err_t usb_host_manager_init(const usb_host_manager_platform_config_t *platfo
         gpio_set_level((gpio_num_t)s_usb_host_mgr.platform.usb_mode_gpio, 0);
     }
 
-    s_usb_host_mgr.task = xTaskCreateStatic(usb_host_manager_task,
-                                            "usb_host_mgr",
-                                            USB_HOST_MANAGER_TASK_STACK_WORDS,
-                                            NULL,
-                                            USB_HOST_MANAGER_TASK_PRIORITY,
-                                            s_usb_host_mgr.task_stack,
-                                            &s_usb_host_mgr.task_buffer);
+    s_usb_host_mgr.task = xTaskCreateStaticPinnedToCore(usb_host_manager_task,
+                                                        "usb_host_mgr",
+                                                        USB_HOST_MANAGER_TASK_STACK_WORDS,
+                                                        NULL,
+                                                        USB_HOST_MANAGER_TASK_PRIORITY,
+                                                        s_usb_host_mgr.task_stack,
+                                                        &s_usb_host_mgr.task_buffer,
+                                                        xPortGetCoreID());
     ESP_RETURN_ON_FALSE(s_usb_host_mgr.task != NULL, ESP_ERR_NO_MEM, TAG, "failed to create task");
 
     s_usb_host_mgr.cli_task = xTaskCreateStatic(usb_host_manager_cli_task,
@@ -1846,11 +2199,14 @@ esp_err_t usb_host_manager_init(const usb_host_manager_platform_config_t *platfo
     s_usb_host_mgr.initialized = true;
     s_usb_host_mgr.status.initialized = true;
     s_usb_host_mgr.status.configured_device_type = s_usb_host_mgr.config.active_device_type;
-    strlcpy(s_usb_host_mgr.status.management_ip,
-            s_usb_host_mgr.config.espnetlink.management_ip,
-            sizeof(s_usb_host_mgr.status.management_ip));
+        s_usb_host_mgr.detected_device_type = USB_HOST_MANAGER_DEVICE_NONE;
+        s_usb_host_mgr.applied_device_type = USB_HOST_MANAGER_DEVICE_NONE;
+        s_usb_host_mgr.detected_driver = USB_ETH_HOST_DRIVER_MAX;
+        s_usb_host_mgr.config_revision = 1;
     usb_host_manager_update_runtime_status();
-    (void)connection_manager_set_usb_fallback_enabled(s_usb_host_mgr.config.espnetlink.prefer_default_route);
+        (void)connection_manager_set_usb_uplink_config(false,
+                               usb_host_manager_uplink_policy_to_connection(s_usb_host_mgr.config.uplink_priority),
+                               NULL);
 
     ESP_LOGI(TAG, "USB host manager initialized for %s", usb_host_manager_device_type_to_str(s_usb_host_mgr.config.active_device_type));
     return ESP_OK;

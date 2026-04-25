@@ -1,4 +1,4 @@
-#include "usb_eth_host.h"
+#include "usb_eth_host_internal.h"
 
 #include "esp_log.h"
 
@@ -63,6 +63,8 @@ void usbh_cdc_ecm_run(struct usbh_cdc_ecm *cdc_ecm_class)
                              usb_eth_host_get_netif_config(),
                              usb_eth_cdc_ecm_transmit);
 
+    usb_eth_host_notify_driver_started(USB_ETH_HOST_DRIVER_CDC_ECM, "u0");
+
     usb_osal_thread_create("usbh_cdc_ecm_rx", 2048, CONFIG_USBHOST_PSC_PRIO + 1, usbh_cdc_ecm_rx_thread, NULL);
 }
 
@@ -70,5 +72,6 @@ void usbh_cdc_ecm_stop(struct usbh_cdc_ecm *cdc_ecm_class)
 {
     (void)cdc_ecm_class;
 
+    usb_eth_host_notify_driver_stopped(USB_ETH_HOST_DRIVER_CDC_ECM);
     usb_eth_netif_glue_stop(&g_glue);
 }

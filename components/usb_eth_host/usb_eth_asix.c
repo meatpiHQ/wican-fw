@@ -1,4 +1,4 @@
-#include "usb_eth_host.h"
+#include "usb_eth_host_internal.h"
 
 #include "esp_log.h"
 
@@ -63,6 +63,8 @@ void usbh_asix_run(struct usbh_asix *asix_class)
                              usb_eth_host_get_netif_config(),
                              usb_eth_asix_transmit);
 
+    usb_eth_host_notify_driver_started(USB_ETH_HOST_DRIVER_ASIX, "u3");
+
     usb_osal_thread_create("usbh_asix_rx", 2048, CONFIG_USBHOST_PSC_PRIO + 1, usbh_asix_rx_thread, NULL);
 }
 
@@ -70,5 +72,6 @@ void usbh_asix_stop(struct usbh_asix *asix_class)
 {
     (void)asix_class;
 
+    usb_eth_host_notify_driver_stopped(USB_ETH_HOST_DRIVER_ASIX);
     usb_eth_netif_glue_stop(&g_glue);
 }

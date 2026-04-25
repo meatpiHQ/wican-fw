@@ -64,6 +64,19 @@ static void usb_host_manager_parse_string(const cJSON *obj, const char *name, ch
     }
 }
 
+static const char *usb_host_manager_uplink_priority_to_str(usb_host_manager_uplink_priority_t priority)
+{
+    switch (priority)
+    {
+        case USB_HOST_MANAGER_UPLINK_PRIORITY_USB_FIRST:
+            return "usb_first";
+
+        case USB_HOST_MANAGER_UPLINK_PRIORITY_WIFI_FIRST:
+        default:
+            return "wifi_first";
+    }
+}
+
 void usb_host_manager_set_default_config(usb_host_manager_config_t *config)
 {
     if (config == NULL)
@@ -74,6 +87,7 @@ void usb_host_manager_set_default_config(usb_host_manager_config_t *config)
     memset(config, 0, sizeof(*config));
     config->enabled = true;
     config->active_device_type = USB_HOST_MANAGER_DEVICE_ESPNETLINK;
+    config->uplink_priority = USB_HOST_MANAGER_UPLINK_PRIORITY_WIFI_FIRST;
     config->monitor_interval_ms = 500;
     config->device_attach_delay_ms = 1500;
     config->device_detach_delay_ms = 250;
@@ -95,6 +109,11 @@ void usb_host_manager_set_default_config(usb_host_manager_config_t *config)
     config->espnetlink.cli_rx_task_priority = 5;
     config->espnetlink.cli_rx_task_core_id = -1;
     config->espnetlink.cli_rx_buffer_size = 2048;
+
+    config->usb_ethernet.ip_mode = USB_HOST_MANAGER_IP_MODE_DHCP;
+    strlcpy(config->usb_ethernet.static_ip, "192.168.10.2", sizeof(config->usb_ethernet.static_ip));
+    strlcpy(config->usb_ethernet.static_netmask, "255.255.255.0", sizeof(config->usb_ethernet.static_netmask));
+    strlcpy(config->usb_ethernet.static_gw, "192.168.10.1", sizeof(config->usb_ethernet.static_gw));
 }
 
 void usb_host_manager_sanitize_config(usb_host_manager_config_t *config)
@@ -107,6 +126,12 @@ void usb_host_manager_sanitize_config(usb_host_manager_config_t *config)
     if (config->monitor_interval_ms == 0)
     {
         config->monitor_interval_ms = 500;
+    }
+
+    if (config->uplink_priority != USB_HOST_MANAGER_UPLINK_PRIORITY_WIFI_FIRST &&
+        config->uplink_priority != USB_HOST_MANAGER_UPLINK_PRIORITY_USB_FIRST)
+    {
+        config->uplink_priority = USB_HOST_MANAGER_UPLINK_PRIORITY_WIFI_FIRST;
     }
 
     if (config->device_attach_delay_ms < 100)
@@ -155,6 +180,21 @@ void usb_host_manager_sanitize_config(usb_host_manager_config_t *config)
         config->active_device_type != USB_HOST_MANAGER_DEVICE_USB_ETHERNET)
     {
         config->active_device_type = USB_HOST_MANAGER_DEVICE_ESPNETLINK;
+    }
+
+    if (config->usb_ethernet.static_ip[0] == '\0')
+    {
+        strlcpy(config->usb_ethernet.static_ip, "192.168.10.2", sizeof(config->usb_ethernet.static_ip));
+    }
+
+    if (config->usb_ethernet.static_netmask[0] == '\0')
+    {
+        strlcpy(config->usb_ethernet.static_netmask, "255.255.255.0", sizeof(config->usb_ethernet.static_netmask));
+    }
+
+    if (config->usb_ethernet.static_gw[0] == '\0')
+    {
+        strlcpy(config->usb_ethernet.static_gw, "192.168.10.1", sizeof(config->usb_ethernet.static_gw));
     }
 }
 
@@ -235,6 +275,7 @@ esp_err_t usb_host_manager_save_config(const usb_host_manager_config_t *config)
 
     cJSON_AddBoolToObject(root, "enabled", config->enabled);
     cJSON_AddStringToObject(root, "active_device_type", usb_host_manager_device_type_to_str(config->active_device_type));
+    cJSON_AddStringToObject(root, "uplink_priority", usb_host_manager_uplink_priority_to_str(config->uplink_priority));
     cJSON_AddNumberToObject(root, "monitor_interval_ms", config->monitor_interval_ms);
     cJSON_AddNumberToObject(root, "device_attach_delay_ms", config->device_attach_delay_ms);
     cJSON_AddNumberToObject(root, "device_detach_delay_ms", config->device_detach_delay_ms);
@@ -275,6 +316,25 @@ esp_err_t usb_host_manager_save_config(const usb_host_manager_config_t *config)
     cJSON_AddNumberToObject(espnetlink, "cli_rx_buffer_size", config->espnetlink.cli_rx_buffer_size);
 
     cJSON_AddItemToObject(devices, "espnetlink", espnetlink);
+
+    {
+        cJSON *usb_ethernet = cJSON_CreateObject();
+
+        if (usb_ethernet == NULL)
+        {
+            cJSON_Delete(root);
+            return ESP_ERR_NO_MEM;
+        }
+
+        cJSON_AddStringToObject(usb_ethernet,
+                                "ip_mode",
+                                (config->usb_ethernet.ip_mode == USB_HOST_MANAGER_IP_MODE_STATIC) ? "static" : "dhcp");
+        usb_host_manager_json_add_string(usb_ethernet, "static_ip", config->usb_ethernet.static_ip);
+        usb_host_manager_json_add_string(usb_ethernet, "static_netmask", config->usb_ethernet.static_netmask);
+        usb_host_manager_json_add_string(usb_ethernet, "static_gw", config->usb_ethernet.static_gw);
+        cJSON_AddItemToObject(devices, "usb_ethernet", usb_ethernet);
+    }
+
     cJSON_AddItemToObject(root, "devices", devices);
 
     json = cJSON_PrintUnformatted(root);
@@ -366,6 +426,13 @@ esp_err_t usb_host_manager_load_config(usb_host_manager_config_t *config)
         }
     }
 
+    item = cJSON_GetObjectItemCaseSensitive(root, "uplink_priority");
+    if (cJSON_IsString(item) && item->valuestring != NULL)
+    {
+        tmp.uplink_priority = (strcmp(item->valuestring, "usb_first") == 0) ?
+            USB_HOST_MANAGER_UPLINK_PRIORITY_USB_FIRST : USB_HOST_MANAGER_UPLINK_PRIORITY_WIFI_FIRST;
+    }
+
     item = cJSON_GetObjectItemCaseSensitive(root, "monitor_interval_ms");
     if (cJSON_IsNumber(item) && item->valuedouble > 0)
     {
@@ -398,6 +465,10 @@ esp_err_t usb_host_manager_load_config(usb_host_manager_config_t *config)
         if (cJSON_IsBool(item))
         {
             tmp.espnetlink.prefer_default_route = cJSON_IsTrue(item);
+            if (cJSON_GetObjectItemCaseSensitive(root, "uplink_priority") == NULL)
+            {
+                tmp.uplink_priority = USB_HOST_MANAGER_UPLINK_PRIORITY_WIFI_FIRST;
+            }
         }
 
         item = cJSON_GetObjectItemCaseSensitive(espnetlink, "ip_mode");
@@ -460,6 +531,33 @@ esp_err_t usb_host_manager_load_config(usb_host_manager_config_t *config)
         if (cJSON_IsNumber(item) && item->valuedouble > 0)
         {
             tmp.espnetlink.cli_rx_buffer_size = (uint32_t)item->valuedouble;
+        }
+    }
+
+    {
+        cJSON *usb_ethernet = cJSON_GetObjectItemCaseSensitive(devices, "usb_ethernet");
+
+        if (cJSON_IsObject(usb_ethernet))
+        {
+            item = cJSON_GetObjectItemCaseSensitive(usb_ethernet, "ip_mode");
+            if (cJSON_IsString(item) && item->valuestring != NULL)
+            {
+                tmp.usb_ethernet.ip_mode = (strcmp(item->valuestring, "static") == 0) ?
+                    USB_HOST_MANAGER_IP_MODE_STATIC : USB_HOST_MANAGER_IP_MODE_DHCP;
+            }
+
+            usb_host_manager_parse_string(usb_ethernet,
+                                          "static_ip",
+                                          tmp.usb_ethernet.static_ip,
+                                          sizeof(tmp.usb_ethernet.static_ip));
+            usb_host_manager_parse_string(usb_ethernet,
+                                          "static_netmask",
+                                          tmp.usb_ethernet.static_netmask,
+                                          sizeof(tmp.usb_ethernet.static_netmask));
+            usb_host_manager_parse_string(usb_ethernet,
+                                          "static_gw",
+                                          tmp.usb_ethernet.static_gw,
+                                          sizeof(tmp.usb_ethernet.static_gw));
         }
     }
 

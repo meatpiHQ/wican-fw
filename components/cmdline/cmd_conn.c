@@ -87,6 +87,9 @@ static int cmd_conn(int argc, char **argv)
     cmdline_printf("Connection Manager:\n");
     cmdline_printf("  Initialized: %s\n", status.initialized ? "yes" : "no");
     cmdline_printf("  Active uplink: %s\n", connection_manager_uplink_to_str(status.active_uplink));
+    cmdline_printf("  USB uplink enabled: %s\n", status.usb_uplink_enabled ? "yes" : "no");
+    cmdline_printf("  Uplink priority: %s\n", connection_manager_uplink_policy_to_str(status.uplink_policy));
+    cmdline_printf("  USB ifkey: %s\n", status.usb_eth_ifkey[0] ? status.usb_eth_ifkey : "(unset)");
     cmdline_printf("  USB fallback enabled: %s\n", status.usb_fallback_enabled ? "yes" : "no");
     cmdline_printf("  WiFi connected bit: %s\n", status.wifi_connected ? "set" : "clear");
     cmdline_printf("  USB connected bit: %s\n", status.usb_connected ? "set" : "clear");

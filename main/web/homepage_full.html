@@ -329,6 +329,11 @@
             color: #991b1b;
         }
 
+        .status-neutral {
+            background-color: #e5e7eb;
+            color: #4b5563;
+        }
+
         .usb-host-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -997,7 +1002,7 @@
         <div id="usb_host_tab" class="tabcontent">
             <div class="section-title">USB Host</div>
             <div class="usb-host-help" style="margin-bottom: 1rem;">
-                USB Host changes are saved only when you press <b>Submit Changes</b>. The APN is stored in USB Host configuration and checked on boot so ESPNetLink is updated only when needed.
+                USB Host keeps separate stored profiles for ESPNetLink and generic USB Ethernet adapters. The page switches device-specific status panels automatically when a supported USB Ethernet class is detected.
             </div>
 
             <div class="usb-host-card">
@@ -1010,6 +1015,20 @@
                                 <option value="true">Enable</option>
                                 <option value="false">Disable</option>
                             </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Uplink Priority</td>
+                        <td>
+                            <select id="usb_host_uplink_priority" onchange="usbHostMarkDirty()">
+                                <option value="wifi_first">Wi-Fi First</option>
+                                <option value="usb_first">USB Ethernet First</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="2" class="usb-host-help">
+                            Wi-Fi First keeps Wi-Fi as the default route when both links are up. USB Ethernet First promotes the detected USB Ethernet adapter to the primary uplink as soon as it is ready.
                         </td>
                     </tr>
                 </table>
@@ -1026,6 +1045,12 @@
 
                             <div class="usb-host-kv-label">Device</div>
                             <div id="usb_host_status_device" class="usb-host-kv-value">-</div>
+
+                            <div class="usb-host-kv-label">Ethernet Driver</div>
+                            <div id="usb_host_status_driver" class="usb-host-kv-value">-</div>
+
+                            <div class="usb-host-kv-label">Interface</div>
+                            <div id="usb_host_status_ifkey" class="usb-host-kv-value">-</div>
 
                             <div class="usb-host-kv-label">Summary</div>
                             <div id="usb_host_status_summary" class="usb-host-kv-value">-</div>
@@ -1050,6 +1075,9 @@
                             <div class="usb-host-kv-label">Local IP</div>
                             <div id="usb_host_status_local_ip" class="usb-host-kv-value">-</div>
 
+                            <div class="usb-host-kv-label">Gateway</div>
+                            <div id="usb_host_status_gateway" class="usb-host-kv-value">-</div>
+
                             <div class="usb-host-kv-label">Management IP</div>
                             <div id="usb_host_status_management_ip" class="usb-host-kv-value">-</div>
                         </div>
@@ -1057,81 +1085,160 @@
                 </div>
             </div>
 
-            <div class="usb-host-card">
-                <div class="section-title">ESPNetLink Configuration</div>
+            <div id="usb_host_esp_profile_card" class="usb-host-card">
+                <div class="section-title">ESPNetLink Profile</div>
                 <table class="form-table">
                     <tr>
                         <td>APN</td>
                         <td><input type="text" id="usb_host_apn_value" placeholder="simbase" oninput="usbHostMarkDirty()" /></td>
                     </tr>
                     <tr>
+                        <td>IP Mode</td>
+                        <td>
+                            <select id="usb_host_esp_ip_mode" onchange="usbHostMarkDirty()">
+                                <option value="dhcp">DHCP</option>
+                                <option value="static">Static IP</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr id="usb_host_esp_static_ip_row">
+                        <td>Static IP</td>
+                        <td><input type="text" id="usb_host_esp_static_ip" placeholder="192.168.7.2" oninput="usbHostMarkDirty()" /></td>
+                    </tr>
+                    <tr id="usb_host_esp_static_netmask_row">
+                        <td>Static Netmask</td>
+                        <td><input type="text" id="usb_host_esp_static_netmask" placeholder="255.255.255.0" oninput="usbHostMarkDirty()" /></td>
+                    </tr>
+                    <tr id="usb_host_esp_static_gw_row">
+                        <td>Static Gateway</td>
+                        <td><input type="text" id="usb_host_esp_static_gw" placeholder="192.168.7.1" oninput="usbHostMarkDirty()" /></td>
+                    </tr>
+                    <tr>
+                        <td>Management IP</td>
+                        <td><input type="text" id="usb_host_esp_management_ip" placeholder="192.168.7.1" oninput="usbHostMarkDirty()" /></td>
+                    </tr>
+                    <tr>
                         <td colspan="2" class="usb-host-help">
-                            The APN field loads the live ESPNetLink APN when available. When you press <b>Submit Changes</b>, WiCAN stores that APN in USB Host config and applies it on boot only if the device APN differs.
+                            The APN field loads the live ESPNetLink APN when available. Static IP settings apply only to the ESPNetLink RNDIS interface and are stored separately from generic USB Ethernet adapters.
                         </td>
                     </tr>
                 </table>
             </div>
 
-            <div class="usb-host-card">
-                <div class="section-title">ESPNetLink Status</div>
-                <div class="usb-host-grid" style="margin-bottom: 0;">
-                    <div>
-                        <div class="section-title" style="font-size: 1rem; margin-bottom: 0.75rem;">LTE</div>
-                        <div class="usb-host-kv">
-                            <div class="usb-host-kv-label">Stage</div>
-                            <div id="usb_host_lte_stage" class="usb-host-kv-value">-</div>
+            <div id="usb_host_eth_profile_card" class="usb-host-card">
+                <div class="section-title">USB Ethernet Adapter Profile</div>
+                <table class="form-table">
+                    <tr>
+                        <td>IP Mode</td>
+                        <td>
+                            <select id="usb_host_eth_ip_mode" onchange="usbHostMarkDirty()">
+                                <option value="dhcp">DHCP</option>
+                                <option value="static">Static IP</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr id="usb_host_eth_static_ip_row">
+                        <td>Static IP</td>
+                        <td><input type="text" id="usb_host_eth_static_ip" placeholder="192.168.10.2" oninput="usbHostMarkDirty()" /></td>
+                    </tr>
+                    <tr id="usb_host_eth_static_netmask_row">
+                        <td>Static Netmask</td>
+                        <td><input type="text" id="usb_host_eth_static_netmask" placeholder="255.255.255.0" oninput="usbHostMarkDirty()" /></td>
+                    </tr>
+                    <tr id="usb_host_eth_static_gw_row">
+                        <td>Static Gateway</td>
+                        <td><input type="text" id="usb_host_eth_static_gw" placeholder="192.168.10.1" oninput="usbHostMarkDirty()" /></td>
+                    </tr>
+                    <tr>
+                        <td colspan="2" class="usb-host-help">
+                            This profile is applied when ASIX, RTL8152, CDC-ECM, or CDC-NCM USB Ethernet adapters are detected. DHCP is the default and static IP is applied after the adapter class is identified.
+                        </td>
+                    </tr>
+                </table>
+            </div>
 
-                            <div class="usb-host-kv-label">Operator</div>
-                            <div id="usb_host_lte_operator" class="usb-host-kv-value">-</div>
+            <div id="usb_host_generic_panel" class="usb-host-card" style="display: none;">
+                <div class="section-title">USB Ethernet Adapter</div>
+                <div class="usb-host-kv">
+                    <div class="usb-host-kv-label">Driver</div>
+                    <div id="usb_host_generic_driver" class="usb-host-kv-value">-</div>
 
-                            <div class="usb-host-kv-label">Signal</div>
-                            <div id="usb_host_lte_signal" class="usb-host-kv-value">-</div>
+                    <div class="usb-host-kv-label">Interface</div>
+                    <div id="usb_host_generic_ifkey" class="usb-host-kv-value">-</div>
 
-                            <div class="usb-host-kv-label">Network</div>
-                            <div id="usb_host_lte_network" class="usb-host-kv-value">-</div>
+                    <div class="usb-host-kv-label">Configured IP Mode</div>
+                    <div id="usb_host_generic_ip_mode" class="usb-host-kv-value">-</div>
 
-                            <div class="usb-host-kv-label">IP</div>
-                            <div id="usb_host_lte_ip" class="usb-host-kv-value">-</div>
-                        </div>
-                    </div>
+                    <div class="usb-host-kv-label">Local IP</div>
+                    <div id="usb_host_generic_local_ip" class="usb-host-kv-value">-</div>
 
-                    <div>
-                        <div class="section-title" style="font-size: 1rem; margin-bottom: 0.75rem;">GPS</div>
-                        <div class="usb-host-kv">
-                            <div class="usb-host-kv-label">Fix</div>
-                            <div id="usb_host_gps_fix" class="usb-host-kv-value">-</div>
-
-                            <div class="usb-host-kv-label">Satellites</div>
-                            <div id="usb_host_gps_satellites" class="usb-host-kv-value">-</div>
-
-                            <div class="usb-host-kv-label">Sats In View</div>
-                            <div id="usb_host_gps_sats_in_view" class="usb-host-kv-value">-</div>
-
-                            <div class="usb-host-kv-label">Location</div>
-                            <div id="usb_host_gps_location" class="usb-host-kv-value">-</div>
-
-                            <div class="usb-host-kv-label">Speed</div>
-                            <div id="usb_host_gps_speed" class="usb-host-kv-value">-</div>
-                        </div>
-                    </div>
+                    <div class="usb-host-kv-label">Gateway</div>
+                    <div id="usb_host_generic_gateway" class="usb-host-kv-value">-</div>
                 </div>
             </div>
 
-            <div class="usb-host-grid">
+            <div id="usb_host_esp_status_panels">
                 <div class="usb-host-card">
-                    <div class="section-title">ESPNetLink LTE</div>
-                    <details class="usb-host-collapsible">
-                        <summary>Show full LTE data</summary>
-                        <pre id="usb_host_lte_json" class="usb-host-json">No LTE data available yet.</pre>
-                    </details>
+                    <div class="section-title">ESPNetLink Status</div>
+                    <div class="usb-host-grid" style="margin-bottom: 0;">
+                        <div>
+                            <div class="section-title" style="font-size: 1rem; margin-bottom: 0.75rem;">LTE</div>
+                            <div class="usb-host-kv">
+                                <div class="usb-host-kv-label">Stage</div>
+                                <div id="usb_host_lte_stage" class="usb-host-kv-value">-</div>
+
+                                <div class="usb-host-kv-label">Operator</div>
+                                <div id="usb_host_lte_operator" class="usb-host-kv-value">-</div>
+
+                                <div class="usb-host-kv-label">Signal</div>
+                                <div id="usb_host_lte_signal" class="usb-host-kv-value">-</div>
+
+                                <div class="usb-host-kv-label">Network</div>
+                                <div id="usb_host_lte_network" class="usb-host-kv-value">-</div>
+
+                                <div class="usb-host-kv-label">IP</div>
+                                <div id="usb_host_lte_ip" class="usb-host-kv-value">-</div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="section-title" style="font-size: 1rem; margin-bottom: 0.75rem;">GPS</div>
+                            <div class="usb-host-kv">
+                                <div class="usb-host-kv-label">Fix</div>
+                                <div id="usb_host_gps_fix" class="usb-host-kv-value">-</div>
+
+                                <div class="usb-host-kv-label">Satellites</div>
+                                <div id="usb_host_gps_satellites" class="usb-host-kv-value">-</div>
+
+                                <div class="usb-host-kv-label">Sats In View</div>
+                                <div id="usb_host_gps_sats_in_view" class="usb-host-kv-value">-</div>
+
+                                <div class="usb-host-kv-label">Location</div>
+                                <div id="usb_host_gps_location" class="usb-host-kv-value">-</div>
+
+                                <div class="usb-host-kv-label">Speed</div>
+                                <div id="usb_host_gps_speed" class="usb-host-kv-value">-</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="usb-host-card">
-                    <div class="section-title">ESPNetLink GPS</div>
-                    <details class="usb-host-collapsible">
-                        <summary>Show full GPS data</summary>
-                        <pre id="usb_host_gps_json" class="usb-host-json">No GPS data available yet.</pre>
-                    </details>
+                <div class="usb-host-grid">
+                    <div class="usb-host-card">
+                        <div class="section-title">ESPNetLink LTE</div>
+                        <details class="usb-host-collapsible">
+                            <summary>Show full LTE data</summary>
+                            <pre id="usb_host_lte_json" class="usb-host-json">No LTE data available yet.</pre>
+                        </details>
+                    </div>
+
+                    <div class="usb-host-card">
+                        <div class="section-title">ESPNetLink GPS</div>
+                        <details class="usb-host-collapsible">
+                            <summary>Show full GPS data</summary>
+                            <pre id="usb_host_gps_json" class="usb-host-json">No GPS data available yet.</pre>
+                        </details>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2451,6 +2558,7 @@
     <script src="/ws_client.js"></script>
     <script src="/terminal.js"></script>
     <script src="/main.js"></script>
+    <script src="/usbhost.js"></script>
     <script src="/lucide_icons.js"></script>
 </body>
 

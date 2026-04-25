@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "esp_err.h"
@@ -81,6 +82,11 @@ void usb_eth_host_stop(void);
 bool usb_eth_host_is_started(void);
 
 bool usb_eth_host_driver_is_allowed(usb_eth_host_driver_t driver);
+
+const char *usb_eth_host_driver_to_str(usb_eth_host_driver_t driver);
+
+bool usb_eth_host_get_active_driver(usb_eth_host_driver_t *driver);
+bool usb_eth_host_get_active_ifkey(char *ifkey, size_t ifkey_len);
 
 // Returns the netif config passed to usb_eth_host_start().
 // Intended for internal component use by the USB-ETH drivers.

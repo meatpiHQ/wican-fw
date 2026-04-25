@@ -101,6 +101,7 @@ idf_component_register(
         "web/src/dashboard.js"
         "web/src/lucide_icons.js"
         "web/src/main.js"
+		"web/src/usbhost.js"
 		"web/src/ws_client.js"
 		"web/src/terminal.js"
         "web/src/dashboard_live.js"

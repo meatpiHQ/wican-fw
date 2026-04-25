@@ -157,6 +157,8 @@ extern const unsigned char lucide_icons_js_start[] asm("_binary_lucide_icons_js_
 extern const unsigned char lucide_icons_js_end[] asm("_binary_lucide_icons_js_end");
 extern const unsigned char main_js_start[] asm("_binary_main_js_start");
 extern const unsigned char main_js_end[] asm("_binary_main_js_end");
+extern const unsigned char usbhost_js_start[] asm("_binary_usbhost_js_start");
+extern const unsigned char usbhost_js_end[] asm("_binary_usbhost_js_end");
 extern const unsigned char ws_client_js_start[] asm("_binary_ws_client_js_start");
 extern const unsigned char ws_client_js_end[] asm("_binary_ws_client_js_end");
 extern const unsigned char terminal_js_start[] asm("_binary_terminal_js_start");
@@ -178,6 +180,7 @@ static const file_lookup_t file_lookup[] = {
 	{"/dashboard_live.js", "application/javascript", dashboard_live_js_start, dashboard_live_js_end, false, NULL, NULL},
 	{"/lucide_icons.js", "application/javascript", lucide_icons_js_start, lucide_icons_js_end, false, NULL, NULL},
 	{"/main.js", "application/javascript", main_js_start, main_js_end, false, NULL, NULL},
+	{"/usbhost.js", "application/javascript", usbhost_js_start, usbhost_js_end, false, NULL, NULL},
 	{"/ws_client.js", "application/javascript", ws_client_js_start, ws_client_js_end, false, NULL, NULL},
 	{"/terminal.js", "application/javascript", terminal_js_start, terminal_js_end, false, NULL, NULL},
 	{"/chartjs-adapter-moment.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/chartjs-adapter-moment.min.js", "https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.0/dist/chartjs-adapter-moment.min.js"},
@@ -839,7 +842,6 @@ static esp_err_t store_config_handler(httpd_req_t *req)
 	ESP_LOGI(TAG, "store_config_handler called: content_len=%d", req ? req->content_len : -1);
 
 	esp_err_t ret_val = ESP_OK;
-	bool response_sent = false;
 	FILE *f = NULL;
 
 	if (req == NULL)
@@ -983,7 +985,6 @@ static esp_err_t store_config_handler(httpd_req_t *req)
 	// Send success response
 	const char *resp_str = "Configuration saved! Rebooting...";
 	httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
-	response_sent = true;
 
 	// Trigger reboot
 	config_server_reboot();
