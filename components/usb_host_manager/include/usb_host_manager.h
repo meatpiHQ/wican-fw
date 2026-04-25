@@ -120,6 +120,7 @@ typedef struct usb_host_manager_status
 
 esp_err_t usb_host_manager_init(const usb_host_manager_platform_config_t *platform_config);
 esp_err_t usb_host_manager_request_reload(void);
+esp_err_t usb_host_manager_stop(void);
 esp_err_t usb_host_manager_load_config(usb_host_manager_config_t *config);
 esp_err_t usb_host_manager_save_config(const usb_host_manager_config_t *config);
 esp_err_t usb_host_manager_set_config(const usb_host_manager_config_t *config);

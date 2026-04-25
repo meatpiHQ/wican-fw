@@ -52,6 +52,10 @@
 #define BUTTON_GPIO_NUM			    8
 #define IMU_INT_GPIO_NUM			3
 
+#define USB_ID_PIN					39
+#define USB_OTG_PWR_EN				10
+#define USB_ESP_MODE_EN				11
+
 #else
 
 #define TX_GPIO_NUM             	0

@@ -594,6 +594,7 @@ int8_t sleep_mode_init(uint8_t enable, float sleep_volt)
 #include "hw_config.h"
 #include "sdcard.h"
 #include "ble.h"
+#include "usb_host_manager.h"
 
 #define ADC_UNIT          ADC_UNIT_1
 #define ADC_CONV_MODE     ADC_CONV_SINGLE_UNIT_1
@@ -955,7 +956,17 @@ void light_sleep_task(void *pvParameters)
                         elm327_sleep();
                         can_disable();
                         wifi_mgr_deinit();
+                        usb_host_manager_stop();
                         ble_disable();
+
+                        /* Keep USB power rail off during sleep by forcing EN low and holding it. */
+                        gpio_set_direction(USB_OTG_PWR_EN, GPIO_MODE_OUTPUT_OD);
+                        gpio_set_level(USB_OTG_PWR_EN, 0);
+                        gpio_sleep_set_pull_mode(USB_OTG_PWR_EN, GPIO_PULLDOWN_ONLY);
+                        gpio_pulldown_en(USB_OTG_PWR_EN);
+                        gpio_hold_en(USB_OTG_PWR_EN);
+                        gpio_deep_sleep_hold_en();
+
                         led_set_level(0,0,0);
                         // Update immediately to prevenet elm327 wakeup 
                         state_info.state = current_state;

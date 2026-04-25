@@ -1898,6 +1898,33 @@ static void usb_host_manager_task(void *arg)
     }
 }
 
+esp_err_t usb_host_manager_stop(void)
+{
+    if (!s_usb_host_mgr.initialized)
+    {
+        return ESP_OK;
+    }
+
+    usb_host_manager_stop_usb_device();
+
+    /* Cut USB VBUS power so the attached device is fully de-energised. */
+    if (s_usb_host_mgr.platform.usb_vbus_gpio >= 0)
+    {
+        /* Drive the enable pin to the inactive (off) level. */
+        gpio_set_level((gpio_num_t)s_usb_host_mgr.platform.usb_vbus_gpio,
+                       s_usb_host_mgr.platform.usb_vbus_active_high ? 0 : 1);
+        ESP_LOGI(TAG, "USB VBUS power cut (gpio %d)", s_usb_host_mgr.platform.usb_vbus_gpio);
+    }
+
+    if (usb_host_manager_lock(pdMS_TO_TICKS(100)))
+    {
+        usb_host_manager_update_state_locked(USB_HOST_MANAGER_STATE_DISABLED);
+        usb_host_manager_unlock();
+    }
+
+    return ESP_OK;
+}
+
 esp_err_t usb_host_manager_request_reload(void)
 {
     usb_host_manager_cmd_t cmd;

@@ -3529,8 +3529,8 @@ static httpd_handle_t config_server_init(void)
 		usb_host_manager_init(&(usb_host_manager_platform_config_t) {
 			.usb_id_gpio = 39,
 			.usb_mode_gpio = 11,
-			.usb_vbus_gpio = -1,
-			.usb_vbus_active_high = false,
+			.usb_vbus_gpio = USB_OTG_PWR_EN,
+			.usb_vbus_active_high = true,  /* 1 = released (USB on), 0 = pulled low (USB off) */
 			.usb_vbus_on_delay_ms = 0,
 			.bus_id = 0,
 			.reg_base = 0,
