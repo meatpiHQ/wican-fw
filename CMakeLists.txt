@@ -14,17 +14,19 @@ set(CONFIG_CHERRYUSB_OSAL "idf" CACHE INTERNAL "Use ESP-IDF OSAL")
 # CherryUSB NCM source: "Rx packet is overflow, please reduce tcp window size
 # or increase CONFIG_USBHOST_CDC_NCM_ETH_MAX_RX_SIZE"
 # The NCM/RNDIS/ASIX/RTL8152 drivers each have separate RX/TX config names.
+# CherryUSB's shared Ethernet RX pool is sized from the largest per-driver RX setting,
+# so ASIX and RTL8152 do not need to use the same transfer size.
 # The ECM driver uses a single CONFIG_USBHOST_CDC_ECM_ETH_MAX_SIZE (one frame = 1514B; no aggregation).
 # TX buffers stay at 2048: lwIP doesn't support multi-pbuf so larger TX brings no gain.
 # Define all here (project-level) to keep managed_components untouched.
-add_compile_definitions(CONFIG_USBHOST_CDC_NCM_ETH_MAX_RX_SIZE=1024*16)
-add_compile_definitions(CONFIG_USBHOST_CDC_NCM_ETH_MAX_TX_SIZE=1024*16)
-add_compile_definitions(CONFIG_USBHOST_RNDIS_ETH_MAX_RX_SIZE=1024*16)
-add_compile_definitions(CONFIG_USBHOST_RNDIS_ETH_MAX_TX_SIZE=1024*16)
-add_compile_definitions(CONFIG_USBHOST_ASIX_ETH_MAX_RX_SIZE=1024*16)
-add_compile_definitions(CONFIG_USBHOST_ASIX_ETH_MAX_TX_SIZE=1024*16)
+add_compile_definitions(CONFIG_USBHOST_CDC_NCM_ETH_MAX_RX_SIZE=1024*2)
+add_compile_definitions(CONFIG_USBHOST_CDC_NCM_ETH_MAX_TX_SIZE=1024*2)
+add_compile_definitions(CONFIG_USBHOST_RNDIS_ETH_MAX_RX_SIZE=1024*2)
+add_compile_definitions(CONFIG_USBHOST_RNDIS_ETH_MAX_TX_SIZE=1024*2)
+add_compile_definitions(CONFIG_USBHOST_ASIX_ETH_MAX_RX_SIZE=1024*2)
+add_compile_definitions(CONFIG_USBHOST_ASIX_ETH_MAX_TX_SIZE=1024*2)
 add_compile_definitions(CONFIG_USBHOST_RTL8152_ETH_MAX_RX_SIZE=1024*16)
-add_compile_definitions(CONFIG_USBHOST_RTL8152_ETH_MAX_TX_SIZE=1024*16)
+add_compile_definitions(CONFIG_USBHOST_RTL8152_ETH_MAX_TX_SIZE=1024*2)
 
 
 set(WICAN_V210 1)
