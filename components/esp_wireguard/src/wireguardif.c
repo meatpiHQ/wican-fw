@@ -87,6 +87,20 @@ static bool wireguardif_can_send_initiation(struct wireguard_peer *peer) {
 	return ((peer->last_initiation_tx == 0) || (wireguard_expired(peer->last_initiation_tx, REKEY_TIMEOUT)));
 }
 
+// Walk lwIP's global netif_list to confirm 'candidate' is still registered.
+// Returns candidate if valid, NULL if it has been removed (dangling pointer guard).
+static struct netif *wireguardif_validate_netif(struct netif *candidate) {
+	if (candidate == NULL) {
+		return NULL;
+	}
+	for (struct netif *n = netif_list; n != NULL; n = n->next) {
+		if (n == candidate) {
+			return candidate;
+		}
+	}
+	return NULL;
+}
+
 // Returns underlying netif only when device and link state are valid.
 // Also verifies the netif is still registered in lwIP's global netif_list.
 static struct netif *wireguardif_get_ready_underlying_netif(const struct wireguard_device *device) {
