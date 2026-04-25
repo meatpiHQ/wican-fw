@@ -48,6 +48,7 @@
 #include "cmd_debug.h"
 #include "cmd_ping.h"
 #include "cmd_espnetlink.h"
+#include "cmd_restart_tracker.h"
 
 #define PROMPT "wican> "
 #define MAX_CMDLINE_LENGTH 256
@@ -283,6 +284,7 @@ static void register_all_commands(void)
     (void)cmd_espnetlink_register();
 
     cmdline_register_extra_commands();
+    cmd_restart_tracker_register();
 }
 
 // New: process command with IO context

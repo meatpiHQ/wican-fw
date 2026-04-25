@@ -26,6 +26,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "filesystem.h"
+#include "restart_tracker.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <string.h>
@@ -81,9 +82,10 @@ static int cmd_factoryreset(int argc, char **argv)
         
         // Give some time for the message to be sent
         vTaskDelay(pdMS_TO_TICKS(3000));
-        
-        // Restart the system
-        esp_restart();
+
+        restart_tracker_restart(RESTART_TRACKER_PLANNED_REASON_FACTORY_RESET,
+                                RESTART_TRACKER_SOURCE_CMDLINE,
+                                RESTART_TRACKER_FLAG_FILESYSTEM_CHANGED);
         
         return 0;
     }

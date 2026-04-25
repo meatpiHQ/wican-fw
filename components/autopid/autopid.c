@@ -59,6 +59,7 @@
 
 #define TEMP_BUFFER_LENGTH 32
 #define ECU_CONNECTED_BIT BIT0
+#define AUTOPID_POLL_JITTER_MS 100
 
 // Backoff tuning (milliseconds)
 // How many consecutive failures before enabling backoff.
@@ -112,27 +113,60 @@ static const uint8_t autopid_protocol_header_length[] = {
     0  // C: USER2 CAN (29 bit ID, 50 kbaud)
 };
 
-// Helper functions
-//  Custom printer function to format numbers with 2 decimal places
-char *formatNumberPrecision(double num)
+static double autopid_round_parameter_value(double value)
 {
-    static char buf[32];
-    snprintf(buf, sizeof(buf), "%.2f", num);
+    return round(value * 100.0) / 100.0;
+}
 
-    // Remove trailing zeros after decimal point
-    size_t len = strlen(buf);
-    if (strchr(buf, '.'))
+static cJSON *autopid_add_parameter_number_to_object(cJSON *object,
+                                                     const char *name,
+                                                     float value)
+{
+    return cJSON_AddNumberToObject(object, name, autopid_round_parameter_value((double)value));
+}
+
+static bool autopid_prepare_parameter_value(parameter_t *param,
+                                            double raw_value,
+                                            float *out_value,
+                                            const char *source)
+{
+    double rounded_value;
+
+    if (!param || !out_value)
+        return false;
+
+    if (!isfinite(raw_value))
     {
-        while (len > 0 && buf[len - 1] == '0')
-        {
-            buf[--len] = '\0';
-        }
-        if (len > 0 && buf[len - 1] == '.')
-        {
-            buf[--len] = '\0';
-        }
+        ESP_LOGW(TAG, "%s parameter %s produced non-finite value - ignoring",
+                 source ? source : "AUTO_PID",
+                 param->name ? param->name : "(null)");
+        return false;
     }
-    return buf;
+
+    rounded_value = autopid_round_parameter_value(raw_value);
+
+    if (param->min != FLT_MAX && rounded_value < param->min)
+    {
+        ESP_LOGW(TAG, "%s parameter %s value %.2f below min %.2f - ignoring",
+                 source ? source : "AUTO_PID",
+                 param->name ? param->name : "(null)",
+                 rounded_value,
+                 param->min);
+        return false;
+    }
+
+    if (param->max != FLT_MAX && rounded_value > param->max)
+    {
+        ESP_LOGW(TAG, "%s parameter %s value %.2f above max %.2f - ignoring",
+                 source ? source : "AUTO_PID",
+                 param->name ? param->name : "(null)",
+                 rounded_value,
+                 param->max);
+        return false;
+    }
+
+    *out_value = (float)rounded_value;
+    return true;
 }
 // strdup_psram
 static char *strdup_psram(const char *s)
@@ -147,29 +181,6 @@ static char *strdup_psram(const char *s)
 
     memcpy(copy, s, len);
     return copy;
-}
-
-// Recursively limit decimal precision in the JSON structure
-void limitJsonDecimalPrecision(cJSON *item)
-{
-    if (!item)
-        return;
-
-    // If current item is a number, modify its value
-    if (cJSON_IsNumber(item))
-    {
-        char *formatted = formatNumberPrecision(item->valuedouble);
-        item->valuedouble = atof(formatted);
-        item->valuestring = NULL; // Force cJSON to use valuedouble
-    }
-
-    // Process all children
-    cJSON *child = item->child;
-    while (child)
-    {
-        limitJsonDecimalPrecision(child);
-        child = child->next;
-    }
 }
 
 esp_err_t autopid_set_protocol_number(int32_t protocol_value)
@@ -641,7 +652,7 @@ static void autopid_data_update(autopid_config_t *pids)
                         }
                         else
                         {
-                            cJSON_AddNumberToObject(root, param->name, param->value);
+                            autopid_add_parameter_number_to_object(root, param->name, param->value);
                         }
                     }
                 }
@@ -666,12 +677,11 @@ static void autopid_data_update(autopid_config_t *pids)
                         }
                         else
                         {
-                            cJSON_AddNumberToObject(root, param->name, param->value);
+                            autopid_add_parameter_number_to_object(root, param->name, param->value);
                         }
                     }
                 }
             }
-            limitJsonDecimalPrecision(root);
             autopid_data.json_str = cJSON_PrintUnformatted(root);
             cJSON_Delete(root);
         }
@@ -785,7 +795,7 @@ void autopid_data_publish(void)
                         }
                         else
                         {
-                            cJSON_AddNumberToObject(root, param->name, param->value);
+                            autopid_add_parameter_number_to_object(root, param->name, param->value);
                         }
                     }
                 }
@@ -806,7 +816,7 @@ void autopid_data_publish(void)
                         }
                         else
                         {
-                            cJSON_AddNumberToObject(root, param->name, param->value);
+                            autopid_add_parameter_number_to_object(root, param->name, param->value);
                         }
                     }
                 }
@@ -815,7 +825,6 @@ void autopid_data_publish(void)
             if (root->child)
             {
                 cJSON_AddNumberToObject(root, "timestamp", (double)time(NULL));
-                limitJsonDecimalPrecision(root);
                 char *json_str = cJSON_PrintUnformatted(root);
                 if (json_str)
                 {
@@ -2086,20 +2095,13 @@ static void process_can_filter_frame(can_filter_t *f, const response_t *rsp)
         double result = 0;
         if (evaluate_expression((uint8_t *)param->expression, (uint8_t *)rsp->data, 0, &result))
         {
-            if (param->min != FLT_MAX && result < param->min)
+            if (autopid_prepare_parameter_value(param, result, &param->value, "CANFLT"))
             {
-                continue;
+                param->failed = false;
+                ESP_LOGI(TAG, "CANFLT 0x%lX param=%s result=%.2f", (unsigned long)f->frame_id,
+                         param->name ? param->name : "(null)", (double)param->value);
+                publish_parameter_mqtt(param);
             }
-            if (param->max != FLT_MAX && result > param->max)
-            {
-                continue;
-            }
-
-            param->failed = false;
-            param->value = (float)(round(result * 100.0) / 100.0);
-            ESP_LOGI(TAG, "CANFLT 0x%lX param=%s result=%.2f", (unsigned long)f->frame_id,
-                     param->name ? param->name : "(null)", (double)param->value);
-            publish_parameter_mqtt(param);
         }
         else
         {
@@ -2998,10 +3000,9 @@ static void publish_parameter_mqtt(parameter_t *param)
             }
             else
             {
-                cJSON_AddNumberToObject(param_json, param->name, param->value);
+                autopid_add_parameter_number_to_object(param_json, param->name, param->value);
             }
             cJSON_AddNumberToObject(param_json, "timestamp", (double)time(NULL));
-            limitJsonDecimalPrecision(param_json);
             payload = cJSON_PrintUnformatted(param_json);
             cJSON_Delete(param_json);
         }
@@ -3478,10 +3479,6 @@ static void autopid_webhook_task(void *pvParameters)
                                 //     cJSON_AddNumberToObject(gps, "heading", 180);
                                 //     cJSON_AddItemToObject(root_obj, "gps", gps);
                                 // }
-
-                                // Normalize precision across payload
-                                limitJsonDecimalPrecision(root_obj);
-
                                 char *printed = cJSON_PrintUnformatted(root_obj);
                                 if (printed)
                                 {
@@ -3814,7 +3811,9 @@ static void autopid_task(void *pvParameters)
         {
             ESP_LOGI(TAG, "Device is sleeping, waiting for wakeup");
             obd_logger_disable();
+            dev_status_set_bits(DEV_AUTOPID_IDLE_BIT);
             dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
+            dev_status_clear_bits(DEV_AUTOPID_IDLE_BIT);
             ESP_LOGI(TAG, "Device awake, resuming autopid task");
             obd_logger_enable();
         }
@@ -3823,7 +3822,9 @@ static void autopid_task(void *pvParameters)
         {
             ESP_LOGI(TAG, "Voltage below sleep threshold, pausing autopid until voltage recovers");
             obd_logger_disable();
+            dev_status_set_bits(DEV_AUTOPID_IDLE_BIT);
             dev_status_wait_for_bits(DEV_WAKE_VOLTAGE_OK_BIT, portMAX_DELAY);
+            dev_status_clear_bits(DEV_AUTOPID_IDLE_BIT);
             ESP_LOGI(TAG, "Voltage OK, resuming autopid task");
             obd_logger_enable();
         }
@@ -3832,7 +3833,9 @@ static void autopid_task(void *pvParameters)
         {
             ESP_LOGI(TAG, "Autopid is disabled, waiting for enable");
             obd_logger_disable();
+            dev_status_set_bits(DEV_AUTOPID_IDLE_BIT);
             dev_status_wait_for_bits(DEV_AUTOPID_ENABLED_BIT, portMAX_DELAY);
+            dev_status_clear_bits(DEV_AUTOPID_IDLE_BIT);
             ESP_LOGI(TAG, "Autopid enabled, resuming autopid task");
             obd_logger_enable();
             send_commands(default_init, 50);
@@ -3877,6 +3880,10 @@ static void autopid_task(void *pvParameters)
             // Loop through all PIDs
             for (uint32_t i = 0; i < autopid_config->pid_count; i++)
             {
+                if(dev_status_is_sleeping())
+                {
+                    break; // Break out of PID loop immediately if device goes to sleep
+                }
                 pid_data_t *curr_pid = &autopid_config->pids[i];
                 // Skip if PID type not enabled
                 if ((curr_pid->pid_type == PID_STD && !autopid_config->pid_std_en) ||
@@ -3894,6 +3901,10 @@ static void autopid_task(void *pvParameters)
                 // Loop through parameters
                 for (uint32_t p = 0; p < curr_pid->parameters_count; p++)
                 {
+                    if(dev_status_is_sleeping())
+                    {
+                        break; // Break out of PID loop immediately if device goes to sleep
+                    }
                     parameter_t *param = &curr_pid->parameters[p];
 
                     if (!param->enabled)
@@ -3947,7 +3958,7 @@ static void autopid_task(void *pvParameters)
                         ESP_LOGI(TAG, "Processing parameter: %s", param->name);
                         // Reset timer with parameter period
                         wc_timer_set(&param->timer, param->period);
-
+                        param->timer += ((int64_t)(esp_random() % ((AUTOPID_POLL_JITTER_MS * 2) + 1)) - AUTOPID_POLL_JITTER_MS) * 1000;
                         if (curr_pid->cmd != NULL && strlen(curr_pid->cmd) > 0)
                         {
                             // twai_message_t tx_msg;
@@ -3961,15 +3972,7 @@ static void autopid_task(void *pvParameters)
                             }
 
                             ESP_LOGI(TAG, "Executing command: %s", curr_pid->cmd);
-// if(elm327_process_cmd((uint8_t*)curr_pid->cmd,
-//                     strlen(curr_pid->cmd),
-//                     &tx_msg,
-//                     &autopidQueue) == ESP_OK)
-#if HARDWARE_VER == WICAN_PRO
                         if (elm327_process_cmd((uint8_t *)curr_pid->cmd, strlen(curr_pid->cmd), &autopidQueue, elm327_autopid_cmd_buffer, &elm327_autopid_cmd_buffer_len, &elm327_autopid_last_cmd_time, autopid_parser) == ESP_OK)
-#else
-                        if (elm327_process_cmd((uint8_t *)pid_req[i].pid_command, strlen(pid_req[i].pid_command), &tx_msg, &autopidQueue) == ESP_OK)
-#endif
                         {
                             response_t elm327_response;
                             ESP_LOGI(TAG, "Command processed successfully");
@@ -3998,25 +4001,20 @@ static void autopid_task(void *pvParameters)
                                             evaluate_expression((uint8_t *)param->expression,
                                                                 elm327_response.data, 0, &result))
                                         {
-                                            if (param->min != FLT_MAX && result < param->min)
+                                            param->failed = false;
+                                            if (autopid_prepare_parameter_value(param, result, &param->value, "PID"))
                                             {
-                                                ESP_LOGW(TAG, "Parameter %s value %.2f below min %.2f - ignoring",
-                                                         param->name, result, param->min);
-                                            }
-                                            else if (param->max != FLT_MAX && result > param->max)
-                                            {
-                                                ESP_LOGW(TAG, "Parameter %s value %.2f above max %.2f - ignoring",
-                                                         param->name, result, param->max);
-                                            }
-                                            else
-                                            {
-                                                result = round(result * 100.0) / 100.0;
                                                 ESP_LOGI(TAG, "Parameter %s result: %.2f",
-                                                         param->name, result);
-                                                param->value = result;
+                                                         param->name, param->value);
                                                 autopid_config->last_successful_pid_time = time(NULL);
                                                 publish_parameter_mqtt(param);
                                             }
+                                        }
+                                        else
+                                        {
+                                            param->failed = true;
+                                            ESP_LOGW(TAG, "Parameter %s expression evaluation failed",
+                                                     param->name ? param->name : "(null)");
                                         }
                                     }
                                     else if (curr_pid->pid_type == PID_STD)
@@ -4062,14 +4060,15 @@ static void autopid_task(void *pvParameters)
                                                             ESP_LOGE(TAG, "Failed to extract signal: %s", esp_err_to_name(err));
                                                             break;
                                                         }
-                                                        param->value = roundf(param->value * 100.0) / 100.0;
-                                                        ESP_LOGI(TAG, "Parameter %s result: %.2f %s",
-                                                                 param->name,
-                                                                 param->value,
-                                                                 pid_info->params[p].unit);
-                                                        param->value = roundf(param->value * 100.0) / 100.0;
-                                                        autopid_config->last_successful_pid_time = time(NULL);
-                                                        publish_parameter_mqtt(param);
+                                                        if (autopid_prepare_parameter_value(param, param->value, &param->value, "STD"))
+                                                        {
+                                                            ESP_LOGI(TAG, "Parameter %s result: %.2f %s",
+                                                                     param->name,
+                                                                     param->value,
+                                                                     pid_info->params[p].unit);
+                                                            autopid_config->last_successful_pid_time = time(NULL);
+                                                            publish_parameter_mqtt(param);
+                                                        }
                                                         break;
                                                     }
                                                 }
@@ -4098,7 +4097,7 @@ static void autopid_task(void *pvParameters)
                         // pause 100ms between pid requests
                         xSemaphoreGive(autopid_config->mutex);
                         dev_status_wait_for_bits(DEV_AUTOPID_ELM327_APP_BIT, portMAX_DELAY);
-                        vTaskDelay(pdMS_TO_TICKS(5));
+                        vTaskDelay(pdMS_TO_TICKS(100));
                         xSemaphoreTake(autopid_config->mutex, portMAX_DELAY);
                     }
                     else
@@ -4111,7 +4110,7 @@ static void autopid_task(void *pvParameters)
 
             // elm327_unlock();
             xSemaphoreGive(autopid_config->mutex);
-            vTaskDelay(pdMS_TO_TICKS(5));
+            vTaskDelay(pdMS_TO_TICKS(100));
         }
 
         // CAN filters monitor window (broadcast frames)

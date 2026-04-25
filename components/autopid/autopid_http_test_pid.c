@@ -394,6 +394,14 @@ static esp_err_t test_pid_handler(httpd_req_t *req)
                     snprintf(init_buf, sizeof(init_buf), "ATCRA\rATTP%d\r", proto);
                 else
                     snprintf(init_buf, sizeof(init_buf), "ATTP%d\r", proto);
+                if(proto == 6 || proto == 8)
+                {
+                    strcat(init_buf, "ATSH7DF\r");
+                }
+                else if(proto == 7 || proto == 9)
+                {
+                    strcat(init_buf, "ATSH18DB33F1\r");
+                }
             }
             else
             {

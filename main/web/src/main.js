@@ -233,6 +233,57 @@
             notification.classList.remove("show");
         }, duration);
     }
+
+    async function downloadRestartHistoryJson() {
+        try {
+            const response = await fetch('/restart_tracker/history');
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            const json = JSON.stringify(data, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+            link.href = url;
+            link.download = `restart-history-${timestamp}.json`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+
+            showNotification('Restart history downloaded.', 'blue', 3000);
+        } catch (error) {
+            console.error('Failed to download restart history:', error);
+            showNotification(`Unable to fetch restart history JSON. ${error.message}`, 'red');
+        }
+    }
+
+    function formatRestartTrackerValue(value, fallback = 'N/A') {
+        if (value === undefined || value === null || value === '') {
+            return fallback;
+        }
+
+        return String(value).replace(/_/g, ' ');
+    }
+
+    function formatRestartTrackerLocalTime(unixTimestamp, fallback = 'N/A') {
+        if (unixTimestamp === undefined || unixTimestamp === null || Number(unixTimestamp) <= 0) {
+            return fallback;
+        }
+
+        const timestampMs = Number(unixTimestamp) * 1000;
+        const date = new Date(timestampMs);
+        if (Number.isNaN(date.getTime())) {
+            return fallback;
+        }
+
+        return date.toLocaleString();
+    }
+
     async function fetchVehicleProfiles() {
         try {
             if (!navigator.onLine) {
@@ -1951,13 +2002,6 @@ function loadAutoTable(jsonData) {
         console.log("Raw jsonData:", jsonData);
         const data = jsonData;
 
-        const togglePidPollingMinVoltageRow = () => {
-            const mode = document.getElementById("disable_on_sleep_voltage")?.value || 'disable';
-            const row = document.getElementById("pid_polling_min_voltage_row");
-            if (!row) return;
-            row.style.display = (mode === 'automate_threshold') ? '' : 'none';
-        };
-
         // Reset custom filters UI to avoid duplicates on reload
         const customFilterContainer = document.querySelector('.custom-canfilter-entries');
         if (customFilterContainer) customFilterContainer.innerHTML = '';
@@ -2140,10 +2184,17 @@ function loadAutoTable(jsonData) {
 }
 
 function togglePidPollingMinVoltageRow() {
-    const mode = document.getElementById("disable_on_sleep_voltage")?.value || 'disable';
+    const mode = document.getElementById("disable_on_sleep_voltage")?.value || 'automate_threshold';
     const row = document.getElementById("pid_polling_min_voltage_row");
-    if (!row) return;
-    row.style.display = (mode === 'automate_threshold') ? '' : 'none';
+    const warningDiv = document.getElementById("autopid_low_voltage_warning_div");
+
+    if (row) {
+        row.style.display = (mode === 'automate_threshold') ? '' : 'none';
+    }
+
+    if (warningDiv) {
+        warningDiv.style.display = (mode === 'disable') ? 'block' : 'none';
+    }
 }
 
 
@@ -2166,11 +2217,11 @@ async function storeAutoTableData() {
 
         const initialisationValue = document.getElementById("initialisation")?.value || '';
         const groupingValue = document.getElementById("grouping")?.value || 'disable';
-        const disableOnSleepVoltageValue = document.getElementById("disable_on_sleep_voltage")?.value || 'disable';
+        const disableOnSleepVoltageValue = document.getElementById("disable_on_sleep_voltage")?.value || 'automate_threshold';
         const pidPollingMinVoltageValueRaw = document.getElementById("pid_polling_min_voltage")?.value;
         const pidPollingMinVoltageValue = (() => {
             const n = parseFloat(pidPollingMinVoltageValueRaw);
-            return Number.isFinite(n) ? n : 13.1;
+            return Number.isFinite(n) ? n : 12.0;
         })();
         const webhook_data_mode = document.getElementById("webhook_data_mode")?.value || 'changed';
         const ha_discoveryValue = document.getElementById("ha_discovery")?.value || 'disable';
@@ -2944,10 +2995,257 @@ function checkStatus() {
         }
         document.getElementById("obd_chip_status").innerHTML = obj.obd_chip_status || "N/A";
         document.getElementById("uptime").innerHTML = obj.uptime || "N/A";
+        const restartLastResetEl = document.getElementById("restart_last_reset_reason");
+        if (restartLastResetEl) restartLastResetEl.innerHTML = formatRestartTrackerValue(obj.restart_last_reset_reason);
+        const restartLastPlannedEl = document.getElementById("restart_last_planned_reason");
+        if (restartLastPlannedEl) restartLastPlannedEl.innerHTML = formatRestartTrackerValue(obj.restart_last_planned_reason);
+        const restartLastSourceEl = document.getElementById("restart_last_source");
+        if (restartLastSourceEl) restartLastSourceEl.innerHTML = formatRestartTrackerValue(obj.restart_last_source);
+        const restartLastBootEl = document.getElementById("restart_last_boot_time");
+        if (restartLastBootEl) restartLastBootEl.innerHTML = formatRestartTrackerLocalTime(obj.restart_last_boot_timestamp_unix);
+        const restartBootCountEl = document.getElementById("restart_boot_count");
+        if (restartBootCountEl) restartBootCountEl.innerHTML = (obj.restart_boot_count ?? 0);
+        const restartUnexpectedCountEl = document.getElementById("restart_unexpected_reset_count");
+        if (restartUnexpectedCountEl) restartUnexpectedCountEl.innerHTML = (obj.restart_unexpected_reset_count ?? 0);
         checkFirmwareUpdate();
     };
     xhttp.open("GET", "/check_status");
     xhttp.send();
+}
+
+function getWebhookUiState() {
+    if (!window._webhookUiState) {
+        window._webhookUiState = {
+            dirty: false,
+            loaded: {
+                url: "",
+                mode: "enable",
+                enabled: false,
+                interval: 0,
+                urls: []
+            }
+        };
+    }
+
+    return window._webhookUiState;
+}
+
+function normalizeWebhookUrl(url) {
+    return typeof url === "string" ? url.trim() : "";
+}
+
+function markWebhookUrlDirty() {
+    getWebhookUiState().dirty = true;
+}
+
+function getWebhookMode() {
+    const value = document.getElementById("webhook_en")?.value || "enable";
+    return value === "disable" ? "disable" : value === "user_settings" ? "user_settings" : "enable";
+}
+
+function toggleWebhookMode(options = {}) {
+    const preserveValue = !!options.preserveValue;
+    const uiState = getWebhookUiState();
+    const urlField = document.getElementById("webhook_url");
+    const failoverUrlField = document.getElementById("webhook_failover_url");
+    const intervalField = document.getElementById("webhook_interval");
+    const helpField = document.getElementById("webhook_url_help");
+    const mode = getWebhookMode();
+    const userManaged = mode === "user_settings";
+
+    if (urlField) {
+        if (!userManaged && !preserveValue) {
+            urlField.value = normalizeWebhookUrl(uiState.loaded?.url);
+        }
+
+        urlField.readOnly = !userManaged;
+        urlField.style.backgroundColor = userManaged ? "" : "#f5f5f5";
+        urlField.style.cursor = userManaged ? "text" : "not-allowed";
+        urlField.placeholder = userManaged ? "https://example.local/api/webhook" : "";
+    }
+
+    if (failoverUrlField) {
+        if (!userManaged && !preserveValue) {
+            failoverUrlField.value = Array.isArray(uiState.loaded?.urls) && uiState.loaded.urls.length > 1 ? uiState.loaded.urls[1] : "";
+        }
+
+        failoverUrlField.readOnly = !userManaged;
+        failoverUrlField.style.backgroundColor = userManaged ? "" : "#f5f5f5";
+        failoverUrlField.style.cursor = userManaged ? "text" : "not-allowed";
+        failoverUrlField.placeholder = userManaged ? "https://backup.example.local/api/webhook" : "";
+    }
+
+    if (intervalField) {
+        if (!userManaged && !preserveValue) {
+            intervalField.value = uiState.loaded?.interval > 0 ? uiState.loaded.interval.toString() : "";
+        }
+
+        intervalField.readOnly = !userManaged;
+        intervalField.style.backgroundColor = userManaged ? "" : "#f5f5f5";
+        intervalField.style.cursor = userManaged ? "text" : "not-allowed";
+    }
+
+    if (helpField) {
+        helpField.textContent = userManaged
+            ? "User settings mode is enabled. Primary URL, failover URL, and interval are saved on the device when you submit changes."
+            : mode === "disable"
+                ? "WebHook delivery is disabled. Switch to Enable or Enable User Settings to use webhook posting."
+                : "WebHook URL, failover URL, and interval are managed by the Home Assistant integration while WebHook is enabled. Choose Enable User Settings to edit them on the device.";
+    }
+}
+
+function webhookUrlIsHttp(url) {
+    return /^https?:\/\//i.test(url);
+}
+
+function applyWebhookConfig(config, options = {}) {
+    const force = !!options.force;
+    const uiState = getWebhookUiState();
+    const urlField = document.getElementById("webhook_url");
+    const failoverUrlField = document.getElementById("webhook_failover_url");
+    const intervalField = document.getElementById("webhook_interval");
+
+    const urls = Array.isArray(config?.urls) ? config.urls.filter(url => typeof url === "string") : [];
+    const normalizedUrl = normalizeWebhookUrl(config?.url);
+    const intervalValue = Number(config?.interval || 0);
+    const enabled = !!config?.enabled;
+    const mode = uiState.loaded?.mode || getWebhookMode();
+
+    uiState.loaded = {
+        url: normalizedUrl,
+        mode: mode,
+        enabled: enabled,
+        interval: Number.isFinite(intervalValue) ? intervalValue : 0,
+        urls: urls
+    };
+
+    if (urlField && (force || !uiState.dirty)) {
+        urlField.value = normalizedUrl;
+    }
+
+    if (failoverUrlField && (force || !uiState.dirty)) {
+        failoverUrlField.value = urls.length > 1 ? urls[1] : "";
+    }
+
+    if (intervalField && (force || !uiState.dirty)) {
+        intervalField.value = uiState.loaded.interval > 0 ? uiState.loaded.interval.toString() : "";
+    }
+
+    if (force || !uiState.dirty) {
+        toggleWebhookMode({ preserveValue: true });
+    }
+}
+
+async function saveWebhookConfig() {
+    const urlField = document.getElementById("webhook_url");
+    const failoverUrlField = document.getElementById("webhook_failover_url");
+    const intervalField = document.getElementById("webhook_interval");
+    if (!urlField) {
+        return true;
+    }
+
+    const uiState = getWebhookUiState();
+    const mode = getWebhookMode();
+    const userManaged = mode === "user_settings";
+    const currentEnabled = mode !== "disable";
+    const currentUrl = normalizeWebhookUrl(urlField.value);
+    const currentFailoverUrl = normalizeWebhookUrl(failoverUrlField?.value || "");
+    const currentInterval = Number.parseInt(intervalField?.value || "0", 10);
+    const loadedUrl = normalizeWebhookUrl(uiState.loaded?.url);
+    const loadedFailoverUrl = Array.isArray(uiState.loaded?.urls) && uiState.loaded.urls.length > 1
+        ? normalizeWebhookUrl(uiState.loaded.urls[1])
+        : "";
+    const loadedMode = uiState.loaded?.mode || (uiState.loaded?.enabled ? "enable" : "disable");
+    const loadedInterval = Number.isFinite(Number(uiState.loaded?.interval)) ? Number(uiState.loaded.interval) : 0;
+    const normalizedCurrentInterval = Number.isFinite(currentInterval) ? currentInterval : 0;
+    const hasWebhookChange = currentUrl !== loadedUrl || currentFailoverUrl !== loadedFailoverUrl ||
+        normalizedCurrentInterval !== loadedInterval || mode !== loadedMode;
+
+    if (!hasWebhookChange) {
+        return true;
+    }
+
+    if (!currentEnabled) {
+        try {
+            const response = await fetch('/api/webhook', {
+                method: 'DELETE'
+            });
+
+            if (!response.ok) {
+                const message = await response.text();
+                throw new Error(message || 'save failed');
+            }
+
+            uiState.loaded.mode = "disable";
+            uiState.dirty = false;
+            applyWebhookConfig({ url: "", enabled: false, interval: 0, urls: [] }, { force: true });
+            return true;
+        } catch (error) {
+            showNotification("Error saving webhook settings: " + error.message, "red");
+            return false;
+        }
+    }
+
+    if (!currentUrl) {
+        if (userManaged) {
+            showNotification("Primary WebHook URL is required in Enable User Settings mode", "red");
+            return false;
+        }
+
+        if (!loadedUrl) {
+            return true;
+        }
+    }
+
+    if (currentUrl && !webhookUrlIsHttp(currentUrl)) {
+        showNotification("Primary WebHook URL must start with http:// or https://", "red");
+        return false;
+    }
+
+    if (currentFailoverUrl && !webhookUrlIsHttp(currentFailoverUrl)) {
+        showNotification("Failover WebHook URL must start with http:// or https://", "red");
+        return false;
+    }
+
+    if (normalizedCurrentInterval < 0) {
+        showNotification("WebHook interval must be 0 or greater", "red");
+        return false;
+    }
+
+    const payload = {
+        url: currentUrl,
+        manual_override: userManaged,
+        enabled: true,
+        interval: normalizedCurrentInterval
+    };
+
+    if (userManaged && currentFailoverUrl) {
+        payload.urls = [currentUrl, currentFailoverUrl];
+    }
+
+    try {
+        const response = await fetch('/api/webhook', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const message = await response.text();
+            throw new Error(message || 'save failed');
+        }
+
+        const savedConfig = await response.json();
+        uiState.loaded.mode = mode;
+        uiState.dirty = false;
+        applyWebhookConfig(savedConfig, { force: true });
+        return true;
+    } catch (error) {
+        showNotification("Error saving webhook settings: " + error.message, "red");
+        return false;
+    }
 }
 
 function loadWebhookConfig() {
@@ -2964,10 +3262,6 @@ function loadWebhookConfig() {
             return response.json();
         })
         .then(config => {
-            const urlField = document.getElementById("webhook_url");
-            const failoverUrlField = document.getElementById("webhook_failover_url");
-            const intervalField = document.getElementById("webhook_interval");
-
             // Stats elements (may not exist on older pages)
             const okEl = document.getElementById("webhook_stat_success");
             const failEl = document.getElementById("webhook_stat_fail");
@@ -2978,16 +3272,7 @@ function loadWebhookConfig() {
             const errorRowEl = document.getElementById("webhook_error_row");
             const detailsBtnEl = document.getElementById("webhook_error_details_btn");
 
-            if (urlField) {
-                urlField.value = config.enabled && config.url ? config.url : "Not configured";
-            }
-            if (failoverUrlField) {
-                const failoverUrl = Array.isArray(config.urls) && config.urls.length > 1 ? config.urls[1] : "";
-                failoverUrlField.value = config.enabled && failoverUrl ? failoverUrl : "Not configured";
-            }
-            if (intervalField) {
-                intervalField.value = config.enabled && config.interval ? config.interval.toString() : "Not configured";
-            }
+            applyWebhookConfig(config);
 
             const successCount = Number(config.success_count || 0);
             const failCount = Number(config.fail_count || 0);
@@ -3025,12 +3310,13 @@ function loadWebhookConfig() {
         })
         .catch(error => {
             console.log('Webhook config not available:', error);
-            const urlField = document.getElementById("webhook_url");
+            const uiState = getWebhookUiState();
             const failoverUrlField = document.getElementById("webhook_failover_url");
             const intervalField = document.getElementById("webhook_interval");
-            if (urlField) urlField.value = "Not configured";
-            if (failoverUrlField) failoverUrlField.value = "Not configured";
-            if (intervalField) intervalField.value = "Not configured";
+            if (!uiState.dirty && !normalizeWebhookUrl(uiState.loaded?.url)) {
+                if (failoverUrlField) failoverUrlField.value = "";
+                if (intervalField) intervalField.value = "";
+            }
 
             const okEl = document.getElementById("webhook_stat_success");
             const failEl = document.getElementById("webhook_stat_fail");
@@ -3187,6 +3473,7 @@ function loadautoPID() {
             document.getElementById("custom_pid_store").disabled = true;
         } else {
             console.log("No PID data found on server");
+            togglePidPollingMinVoltageRow();
         }
     };
     xhttp.onerror = function(error) {
@@ -3230,6 +3517,12 @@ async function postConfig() {
 
     const storeUsbHostResult = await usbHostSubmitConfig();
     if (!storeUsbHostResult) {
+        document.getElementById("submit_button").disabled = false;
+        return;
+    }
+
+    const storeWebhookResult = await saveWebhookConfig();
+    if (!storeWebhookResult) {
         document.getElementById("submit_button").disabled = false;
         return;
     }
@@ -3766,6 +4059,8 @@ xhttp.onload = async function() {
             const webhookModeFromCfg = obj.webhook_en || "enable";
             const hasWebhookOption = Array.from(webhookEnEl.options || []).some(o => o && o.value === webhookModeFromCfg);
             webhookEnEl.value = hasWebhookOption ? webhookModeFromCfg : "enable";
+            getWebhookUiState().loaded.mode = webhookEnEl.value;
+            toggleWebhookMode({ preserveValue: true });
         }
         
         if(obj.ap_auto_disable == "enable") {
@@ -4097,6 +4392,9 @@ xhttp.onload = async function() {
 
     // Initialize AP+Station warning visibility
     try { toggleApStationWarning(); } catch(_) {}
+
+    // Initialize Automate low-voltage defaults before auto_pid.json is loaded.
+    try { togglePidPollingMinVoltageRow(); } catch(_) {}
 
     // Initialize AP SSID input state
     try { toggleApSsid(); } catch(_) {}

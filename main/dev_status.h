@@ -59,6 +59,7 @@ extern "C" {
 #define DEV_ETH_CONNECTED_BIT           BIT20
 // Convenience mask: any upstream network path is available (WiFi STA or wired ETH).
 #define DEV_NETWORK_CONNECTED_MASK      (DEV_STA_CONNECTED_BIT | DEV_ETH_CONNECTED_BIT)
+#define DEV_AUTOPID_IDLE_BIT            BIT21
 
 // Mask for "all bits" in a FreeRTOS event group.
 // Only the lower 24 bits are available for application use; the upper 8 are reserved by the kernel.

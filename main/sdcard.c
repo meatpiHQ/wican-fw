@@ -13,6 +13,7 @@
 #include "esp_littlefs.h"
 #include "dev_status.h"
 #include "filesystem.h"
+#include "restart_tracker.h"
 
 #define OTA_BUFFER_SIZE 4096  
 
@@ -154,9 +155,10 @@ esp_err_t sdcard_perform_ota_update(const char* firmware_path)
     
     // Optional: Add a delay before reboot to ensure logs are printed
     vTaskDelay(pdMS_TO_TICKS(1000));
-    
-    // Reboot system to apply update
-    esp_restart();
+
+    restart_tracker_restart(RESTART_TRACKER_PLANNED_REASON_OTA_APPLY,
+                            RESTART_TRACKER_SOURCE_OTA,
+                            RESTART_TRACKER_FLAG_FILESYSTEM_CHANGED | RESTART_TRACKER_FLAG_FIRMWARE_UPDATED);
     
     return ESP_OK;  // This will never be reached due to restart
 }

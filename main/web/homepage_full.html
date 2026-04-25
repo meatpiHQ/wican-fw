@@ -992,6 +992,42 @@
                     </td>
                 </tr>
                 <tr>
+                    <td>Last Reset:</td>
+                    <td>
+                        <div id="restart_last_reset_reason">N/A&nbsp;</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Planned Restart:</td>
+                    <td>
+                        <div id="restart_last_planned_reason">N/A&nbsp;</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Restart Source:</td>
+                    <td>
+                        <div id="restart_last_source">N/A&nbsp;</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Last Boot Time:</td>
+                    <td>
+                        <div id="restart_last_boot_time">N/A&nbsp;</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Boot Count:</td>
+                    <td>
+                        <div id="restart_boot_count">0&nbsp;</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Unexpected Resets:</td>
+                    <td>
+                        <div id="restart_unexpected_reset_count">0&nbsp;</div>
+                    </td>
+                </tr>
+                <tr>
                     <td><input id="check_status_button" name="check_status_button" type="button" onclick="checkStatus()"
                             value="Check status" /></td>
                     <td>&nbsp;</td>
@@ -1745,10 +1781,10 @@
                     <td>Low-Voltage Behavior:</td>
                     <td>
                         <select id="disable_on_sleep_voltage" name="disable_on_sleep_voltage" onchange="togglePidPollingMinVoltageRow(); enableAutoStoreButton();submit_enable();">
-                            <option value="disable" selected>Disable</option>
+                            <option value="disable">Disable</option>
                             <option value="enable">Pause Automate on low voltage (Sleep Voltage)</option>
                             <option value="disable_pid_requests">Pause PID polling only (Sleep Voltage)</option>
-                            <option value="automate_threshold">Pause PID polling only (Custom Voltage)</option>
+                            <option value="automate_threshold" selected>Pause PID polling only (Custom Voltage)</option>
                         </select>
                     </td>
                 </tr>
@@ -1763,23 +1799,35 @@
                         <input type="range" 
                                id="pid_polling_min_voltage" 
                                name="pid_polling_min_voltage" 
-                               value="13.1" 
+                               value="12.0" 
                                min="12.0" 
                                max="15.0" 
                                step="0.1"
                                oninput="document.getElementById('pid_polling_min_voltage_value').textContent = this.value; enableAutoStoreButton(); submit_enable();">
-                        <span id="pid_polling_min_voltage_value">13.1</span>V
+                        <span id="pid_polling_min_voltage_value">12.0</span>V
                     </td>
                 </tr>
             </table>
+            <div id="autopid_low_voltage_warning_div" style="display: none; margin: 8px 0;">
+                <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 8px; padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                        <span data-lucide="alert-triangle" style="font-size: 16px; margin-right: 8px;"></span>
+                        <strong style="color: #92400e; font-size: 14px;">Low-Voltage Protection Warning</strong>
+                    </div>
+                    <div style="color: #78350f; font-size: 13px; line-height: 1.4;">
+                        It is recommended to keep this enabled. Polling the ECU when the battery voltage is low can increase battery drain while the vehicle is parked.
+                    </div>
+                </div>
+            </div>
             
             <div class="section-title" style="margin-top:1rem;">Home Assistant</div>
             <table class="form-table">
                 <tr>
                     <td>WebHook:</td>
                     <td>
-                        <select id="webhook_en" name="webhook_en" onchange="submit_enable();">
+                        <select id="webhook_en" name="webhook_en" onchange="toggleWebhookMode(); submit_enable();">
                             <option value="enable">Enable</option>
+                            <option value="user_settings">Enable User Settings</option>
                             <option value="disable">Disable</option>
                         </select>
                     </td>
@@ -1787,7 +1835,7 @@
                 <tr>
                     <td>Primary WebHook URL:</td>
                     <td>
-                        <input type="text" id="webhook_url" name="webhook_url" readonly style="background-color:#f5f5f5; cursor:not-allowed;">
+                        <input type="url" id="webhook_url" name="webhook_url" readonly spellcheck="false" placeholder="https://example.local/api/webhook" oninput="markWebhookUrlDirty(); submit_enable();" style="background-color:#f5f5f5; cursor:not-allowed;">
                     </td>
                 </tr>
                 <tr>
@@ -1799,11 +1847,11 @@
                 <tr>
                     <td>WebHook Interval (s):</td>
                     <td>
-                        <input type="text" id="webhook_interval" name="webhook_interval" readonly style="background-color:#f5f5f5; cursor:not-allowed;">
+                        <input type="number" id="webhook_interval" name="webhook_interval" min="0" step="1" readonly oninput="markWebhookUrlDirty(); submit_enable();" style="background-color:#f5f5f5; cursor:not-allowed;">
                     </td>
                 </tr>
                 <tr>
-                    <td colspan="2" style="font-size:0.7rem; color:#555; margin-top:0.5rem;">WebHook configuration is set in the Home Assistant integration.</td>
+                    <td colspan="2" id="webhook_url_help" style="font-size:0.7rem; color:#555; margin-top:0.5rem;">WebHook URL, failover URL, and interval are managed by the Home Assistant integration while WebHook is enabled. Choose Enable User Settings to edit them on the device.</td>
                 </tr>
                 <tr>
                     <td>WebHook Data Mode:</td>
@@ -2304,6 +2352,10 @@
                         <input type="button" onclick="document.getElementById('fileInput').click()" value="Upload" class="system-button" />
                         <input type="file" id="fileInput" accept=".json" onchange="uploadCfg()" style="display: none;" />
                     </td>
+                </tr>
+                <tr>
+                    <td>Download Restart History:</td>
+                    <td><input id="download_restart_history_button" name="download_restart_history_button" type="button" onclick="downloadRestartHistoryJson()" value="Download" class="system-button" /></td>
                 </tr>
             </table>
         

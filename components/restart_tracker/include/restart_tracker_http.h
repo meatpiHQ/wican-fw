@@ -18,12 +18,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#pragma once
 
-#ifndef __WC_MDNS_H__
-#define __WC_MDNS_H__
+#include <esp_http_server.h>
 
-void wc_mdns_init(char *id, char* hv, char* fv);
-void wc_mdns_deinit(void);
-char* wc_mdns_get_hostname(void);
+#ifdef __cplusplus
+extern "C" {
+#endif
 
+esp_err_t restart_tracker_register_handlers(httpd_handle_t server);
+
+#ifdef __cplusplus
+}
 #endif

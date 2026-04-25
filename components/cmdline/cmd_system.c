@@ -30,6 +30,7 @@
 #include "esp_private/esp_clk.h"
 #include "esp_flash.h"
 #include "esp_heap_caps.h"
+#include "restart_tracker.h"
 #include "sleep_mode.h"
 #include "hw_config.h"
 #include "freertos/FreeRTOS.h"
@@ -69,7 +70,9 @@ static int cmd_system(int argc, char **argv)
     if (system_args.reboot->count > 0) {
         cmdline_printf("System will reboot now...\n");
         vTaskDelay(pdMS_TO_TICKS(2000));
-        esp_restart();
+        restart_tracker_restart(RESTART_TRACKER_PLANNED_REASON_USER_REQUEST,
+                                RESTART_TRACKER_SOURCE_CMDLINE,
+                                RESTART_TRACKER_FLAG_NONE);
         return 0;
     }
 

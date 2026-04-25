@@ -36,6 +36,7 @@
 #include "filesystem.h"
 #include "multipart_parser.h"
 #include "multipart_upload.h"
+#include "restart_tracker.h"
 
 // Define MIN macro if not already defined
 #ifndef MIN
@@ -177,7 +178,9 @@ static esp_err_t upload_firmware_handler(httpd_req_t *req)
 
     // Reboot after a short delay
     vTaskDelay(3000 / portTICK_PERIOD_MS);
-    esp_restart();
+    restart_tracker_restart(RESTART_TRACKER_PLANNED_REASON_OTA_APPLY,
+                            RESTART_TRACKER_SOURCE_SAFE_MODE,
+                            RESTART_TRACKER_FLAG_FIRMWARE_UPDATED);
     return ESP_OK;
 }
 
@@ -194,7 +197,9 @@ static esp_err_t factory_reset_handler(httpd_req_t *req)
 
     // Reboot after a short delay
     vTaskDelay(2000 / portTICK_PERIOD_MS);
-    esp_restart();
+    restart_tracker_restart(RESTART_TRACKER_PLANNED_REASON_FACTORY_RESET,
+                            RESTART_TRACKER_SOURCE_SAFE_MODE,
+                            RESTART_TRACKER_FLAG_FILESYSTEM_CHANGED | RESTART_TRACKER_FLAG_NVS_ERASED);
 
     return ESP_OK;
 }

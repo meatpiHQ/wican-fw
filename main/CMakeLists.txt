@@ -78,6 +78,7 @@ set(requires
     cmd_ping
     wican_common
     ws_server
+    restart_tracker
 )
 
 # Register the component

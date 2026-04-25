@@ -49,6 +49,7 @@ typedef struct ha_webhook_config
     char urls[HA_WEBHOOK_MAX_URLS][192]; /**< Ordered webhook failover URLs */
     size_t url_count;    /**< Number of configured entries in urls */
 #endif
+    bool manual_override; /**< True when the device should keep the user-entered URL */
     bool enabled;        /**< Whether webhook is enabled */
     int interval;        /**< Poll/post interval in seconds (or minutes as defined by usage) */
     char last_post[32];  /**< Timestamp of last successful POST */

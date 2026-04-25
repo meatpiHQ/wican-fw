@@ -200,6 +200,13 @@ esp_err_t ha_webhook_load_config(ha_webhook_config_t *cfg)
 #endif
 
     // Parse enabled flag
+    it = cJSON_GetObjectItem(root, "manual_override");
+    if (cJSON_IsBool(it))
+    {
+        cfg->manual_override = cJSON_IsTrue(it);
+        ESP_LOGD(TAG, "Manual webhook override: %s", cfg->manual_override ? "yes" : "no");
+    }
+
     it = cJSON_GetObjectItem(root, "enabled");
     if (cJSON_IsBool(it))
     {
@@ -288,6 +295,7 @@ esp_err_t ha_webhook_save_config(const ha_webhook_config_t *cfg)
         }
     }
 #endif
+    cJSON_AddBoolToObject(root, "manual_override", cfg->manual_override);
     cJSON_AddBoolToObject(root, "enabled", cfg->enabled);
     cJSON_AddStringToObject(root, "last_post", cfg->last_post);
     cJSON_AddStringToObject(root, "status", cfg->status[0] ? cfg->status : "unknown");

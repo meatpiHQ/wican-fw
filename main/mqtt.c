@@ -57,6 +57,7 @@
 #include "cJSON.h"
 #include "wifi_network.h"
 #include "mqtt.h"
+#include "restart_tracker.h"
 #include <stdbool.h>
 #include <ctype.h>
 #include "esp_timer.h"
@@ -329,7 +330,9 @@ static void mqtt_parse_data(void *handler_args, esp_event_base_t base, int32_t e
             mqtt_publish(mqtt_rsp_topic, cmd_response, strlen(cmd_response), 0, 0);
             // Perform the reboot operation here
             vTaskDelay(pdMS_TO_TICKS(2000));
-            esp_restart();
+            restart_tracker_restart(RESTART_TRACKER_PLANNED_REASON_USER_REQUEST,
+                                    RESTART_TRACKER_SOURCE_MQTT,
+                                    RESTART_TRACKER_FLAG_NONE);
         }
         else if(strcmp(cmd->valuestring, "get_vbatt") == 0)
         {

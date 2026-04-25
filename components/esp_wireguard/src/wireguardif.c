@@ -87,29 +87,41 @@ static bool wireguardif_can_send_initiation(struct wireguard_peer *peer) {
 	return ((peer->last_initiation_tx == 0) || (wireguard_expired(peer->last_initiation_tx, REKEY_TIMEOUT)));
 }
 
-// Walk lwIP's global netif_list to confirm 'candidate' is still registered.
-// Returns candidate if valid, NULL if it has been removed (dangling pointer guard).
-static struct netif *wireguardif_validate_netif(struct netif *candidate) {
-	if (candidate == NULL) {
+// Returns underlying netif only when device and link state are valid.
+// Also verifies the netif is still registered in lwIP's global netif_list.
+static struct netif *wireguardif_get_ready_underlying_netif(const struct wireguard_device *device) {
+	struct netif *underlying_netif;
+
+	if (!device || device->shutting_down || (device->magic != WIREGUARD_DEVICE_MAGIC) || !device->udp_pcb) {
 		return NULL;
 	}
+
+	underlying_netif = device->underlying_netif;
+	if (!underlying_netif) {
+		return NULL;
+	}
+
+	if (!netif_is_up(underlying_netif) || !netif_is_link_up(underlying_netif)) {
+		return NULL;
+	}
+
+	if (ip_addr_isany(&underlying_netif->ip_addr)) {
+		return NULL;
+	}
+
 	for (struct netif *n = netif_list; n != NULL; n = n->next) {
-		if (n == candidate) {
-			return candidate;
+		if (n == underlying_netif) {
+			return underlying_netif;
 		}
 	}
+
 	return NULL;
 }
 
 static err_t wireguardif_peer_output(struct netif *netif, struct pbuf *q, struct wireguard_peer *peer) {
 	struct wireguard_device *device = (struct wireguard_device *)netif->state;
-	struct netif *underlying = device ? wireguardif_validate_netif(device->underlying_netif) : NULL;
-	if (!device || !device->udp_pcb || !underlying) {
-		ESP_LOGE(TAG, "wireguardif_peer_output: device=%p udp_pcb=%p underlying=%p (valid=%p)",
-				 device,
-				 device ? device->udp_pcb : NULL,
-				 device ? device->underlying_netif : NULL,
-				 underlying);
+	struct netif *underlying = wireguardif_get_ready_underlying_netif(device);
+	if (!underlying) {
 		return ERR_IF;
 	}
 	err_t r = udp_sendto_if(device->udp_pcb, q, &peer->ip, peer->port, underlying);
@@ -120,8 +132,8 @@ static err_t wireguardif_peer_output(struct netif *netif, struct pbuf *q, struct
 }
 
 static err_t wireguardif_device_output(struct wireguard_device *device, struct pbuf *q, const ip_addr_t *ipaddr, u16_t port) {
-	struct netif *underlying = device ? wireguardif_validate_netif(device->underlying_netif) : NULL;
-	if (!device || !device->udp_pcb || !underlying) {
+	struct netif *underlying = wireguardif_get_ready_underlying_netif(device);
+	if (!underlying) {
 		return ERR_IF;
 	}
 	return udp_sendto_if(device->udp_pcb, q, ipaddr, port, underlying);
@@ -1144,6 +1156,7 @@ void wireguardif_shutdown(struct netif *netif) {
 	}
 	device->shutting_down = true;
 	device->magic = 0;
+	device->underlying_netif = NULL;
 	// Disable timer.
 	sys_untimeout(wireguardif_tmr, device);
 	// remove UDP context.
