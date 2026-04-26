@@ -194,6 +194,77 @@
       ]
     },
     {
+      "car_model": "BYD: Atto 2/Atto 3/Yuan Plus EV/Dolphin/Seal/Seal U/Sealion/M6/eMax 7/海豚/Denza D9/Denza N7/Sealion 7 EV (EU version, only before 2024.10 update)",
+      "init": "ATSP6;ATAT1;ATST96;ATSH7E7;ATFCSH7E7;ATFCSD300000;ATFCSM1;",
+      "pids": [
+        {
+          "pid": "220005",
+          "parameters": [
+            {
+              "name": "SOC_D",
+              "expression": "B4",
+              "unit": "%",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "221FFE",
+          "parameters": [
+            {
+              "name": "HV_CAPACITY",
+              "expression": "(((B7*256)+B6)/100)",
+              "unit": "Ah",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "221FFC",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "((((B5*256)+B4)*100)/10000)",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            },
+            {
+              "name": "BATT_CAPACITY",
+              "expression": "(((B7*256)+B6)/100)",
+              "unit": "Ah",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "220008",
+          "parameters": [
+            {
+              "name": "HV_V",
+              "expression": "((B5*256)+B4)",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "480"
+            }
+          ]
+        },
+        {
+          "pid": "220009",
+          "parameters": [
+            {
+              "name": "HV_A",
+              "expression": "((((B5*256)+B4)*0.1)-500)",
+              "unit": "A",
+              "class": "current"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "BYD: Atto 3",
       "init": "ATAT1;ATST96;ATSH7E7;ATFCSH7E7;ATFCSD300000;ATFCSM1;",
       "pids": [
