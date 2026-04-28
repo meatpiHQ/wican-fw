@@ -1,0 +1,77 @@
+{
+  "car_model": "Audi: EV MEB: ID.3, ID.4, ID.5, ID.6, ID.7, ID.Buzz, Enyaq, Elroq, Q4 E-tron, Q6 e-tron, Cupra Born, Cupra Tavascan, Porsche Macan EV, Ford Explorer EV, Capri EV",
+  "init": "ATAT1;ATST96;ATSHFC007B;ATFCSHFC007B;ATFCSD300000;ATFCSM1;",
+  "pids": [
+    {
+      "pid": "22028C1",
+      "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+      "parameters": {
+        "SOC": "(B4/2.5)",
+        "SOC_D": "(((B4*20.4)/46)-6.4)"
+      }
+    },
+    {
+      "pid": "222AB62",
+      "pid_init": "ATSP6;ATSH710;ATFCSH710;ATFCSD300000;ATFCSM1;ATCRA77A;",
+      "parameters": {
+        "RANGE": "(B5*256)+B6"
+      }
+    },
+    {
+      "pid": "22295A",
+      "pid_init": "ATSP7;ATSHFC0076;ATCP17;ATCRA17FE0076;ATFCSH17FC0076;ATFCSD300000;ATFCSM1;",
+      "parameters": {
+        "ODOMETER": "[B4:B6]"
+      }
+    },
+    {
+      "pid": "222AB2",
+      "pid_init": "ATSP6;ATSH710;ATFCSH710;ATFCSD300000;ATFCSM1;ATCRA77A;",
+      "parameters": {
+        "HV_CAPACITY_KWH": "[B4:B5]*50"
+      }
+    },
+    {
+      "pid": "2242DB1",
+      "pid_init": "ATSP6;ATSH746;ATFCSH746;ATFCSD300000;ATFCSM1;ATCRA7B0;",
+      "parameters": {
+        "CO2": "B5*100"
+      }
+    },
+    {
+      "pid": "2227C42",
+      "pid_init": "ATSP6;ATSH746;ATFCSH746;ATFCSD300000;ATFCSM1;ATCRA7B0;",
+      "parameters": {
+        "HUMIDITY": "B8*0.5"
+      }
+    },
+    {
+      "pid": "222A0B1",
+      "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+      "parameters": {
+        "BATT_TEMP": "((B4/2)-40)"
+      }
+    },
+    {
+      "pid": "2226091",
+      "pid_init": "ATSP6;ATSH746;ATFCSH746;ATFCSD300000;ATFCSM1;ATCRA7B0;",
+      "parameters": {
+        "OUTSIDE_TEMPERATURE": "((B4*0.5)-50)"
+      }
+    },
+    {
+      "pid": "2226131",
+      "pid_init": "ATSP6;ATSH746;ATFCSH746;ATFCSD300000;ATFCSM1;ATCRA7B0;",
+      "parameters": {
+        "CABIN_TEMPERATURE": "(([B4:B5]/5)-40)"
+      }
+    },
+    {
+      "pid": "227448",
+      "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+      "parameters": {
+        "CHARGING": "B4"
+      }
+    }
+  ]
+}
