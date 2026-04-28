@@ -250,6 +250,22 @@
       "class": "humidity"
     }
   },
+  "OUTSIDE_TEMPERATURE": {
+    "description": "Outside temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "max": "100"
+    }
+  },
+  "CABIN_TEMPERATURE": {
+    "description": "Cabin temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "max": "100"
+    }
+  },
   "HV_A": {
     "description": "High Voltage Battery current",
     "settings": {
