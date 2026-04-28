@@ -69,6 +69,14 @@
       "max": "80"
     }
   },
+  "CABIN_TEMPERATURE": {
+    "description": "Cabin temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "max": "100"
+    }
+  },
   "CAPACITOR": {
     "description": "Inverter Capacitor Voltage",
     "settings": {
@@ -248,22 +256,6 @@
     "settings": {
       "unit": "%",
       "class": "humidity"
-    }
-  },
-  "OUTSIDE_TEMPERATURE": {
-    "description": "Outside temperature",
-    "settings": {
-      "unit": "°C",
-      "class": "temperature",
-      "max": "100"
-    }
-  },
-  "CABIN_TEMPERATURE": {
-    "description": "Cabin temperature",
-    "settings": {
-      "unit": "°C",
-      "class": "temperature",
-      "max": "100"
     }
   },
   "HV_A": {
@@ -2425,6 +2417,14 @@
       "class": "none",
       "min": "0",
       "max": "1000000"
+    }
+  },
+  "OUTSIDE_TEMPERATURE": {
+    "description": "Outside temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "max": "100"
     }
   },
   "PARK_BRAKE": {
