@@ -118,6 +118,146 @@
       ]
     },
     {
+      "car_model": "Audi: EV MEB: ID.3, ID.4, ID.5, ID.6, ID.7, ID.Buzz, Enyaq, Elroq, Q4 E-tron, Q6 e-tron, Cupra Born, Cupra Tavascan, Porsche Macan EV, Ford Explorer EV, Capri EV",
+      "init": "ATAT1;ATST96;ATSHFC007B;ATFCSHFC007B;ATFCSD300000;ATFCSM1;",
+      "pids": [
+        {
+          "pid": "22028C1",
+          "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "(B4/2.5)",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            },
+            {
+              "name": "SOC_D",
+              "expression": "(((B4*20.4)/46)-6.4)",
+              "unit": "%",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "222AB62",
+          "pid_init": "ATSP6;ATSH710;ATFCSH710;ATFCSD300000;ATFCSM1;ATCRA77A;",
+          "parameters": [
+            {
+              "name": "RANGE",
+              "expression": "(B5*256)+B6",
+              "unit": "km",
+              "class": "distance"
+            }
+          ]
+        },
+        {
+          "pid": "22295A",
+          "pid_init": "ATSP7;ATSHFC0076;ATCP17;ATCRA17FE0076;ATFCSH17FC0076;ATFCSD300000;ATFCSM1;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B4:B6]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "222AB2",
+          "pid_init": "ATSP6;ATSH710;ATFCSH710;ATFCSD300000;ATFCSM1;ATCRA77A;",
+          "parameters": [
+            {
+              "name": "HV_CAPACITY_KWH",
+              "expression": "[B4:B5]*50",
+              "unit": "kWh",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "2242DB1",
+          "pid_init": "ATSP6;ATSH746;ATFCSH746;ATFCSD300000;ATFCSM1;ATCRA7B0;",
+          "parameters": [
+            {
+              "name": "CO2",
+              "expression": "B5*100",
+              "unit": "ppm",
+              "class": "carbon_dioxide"
+            }
+          ]
+        },
+        {
+          "pid": "2227C42",
+          "pid_init": "ATSP6;ATSH746;ATFCSH746;ATFCSD300000;ATFCSM1;ATCRA7B0;",
+          "parameters": [
+            {
+              "name": "HUMIDITY",
+              "expression": "B8*0.5",
+              "unit": "%",
+              "class": "humidity"
+            }
+          ]
+        },
+        {
+          "pid": "222A0B1",
+          "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+          "parameters": [
+            {
+              "name": "BATT_TEMP",
+              "expression": "((B4/2)-40)",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "80"
+            }
+          ]
+        },
+        {
+          "pid": "2226091",
+          "pid_init": "ATSP6;ATSH746;ATFCSH746;ATFCSD300000;ATFCSM1;ATCRA7B0;",
+          "parameters": [
+            {
+              "name": "OUTSIDE_TEMPERATURE",
+              "expression": "((B4*0.5)-50)",
+              "unit": "°C",
+              "class": "temperature",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "2226131",
+          "pid_init": "ATSP6;ATSH746;ATFCSH746;ATFCSD300000;ATFCSM1;ATCRA7B0;",
+          "parameters": [
+            {
+              "name": "CABIN_TEMPERATURE",
+              "expression": "(([B4:B5]/5)-40)",
+              "unit": "°C",
+              "class": "temperature",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "227448",
+          "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+          "parameters": [
+            {
+              "name": "CHARGING",
+              "expression": "B4",
+              "unit": "",
+              "class": "battery_charging",
+              "type": "binary_sensor"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Audi: PQ25/PQ26/PQ35/PQ46/MQB",
       "init": "ATSP6;ATST96;",
       "pids": [
