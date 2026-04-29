@@ -70,7 +70,14 @@
       "pid": "227448",
       "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
       "parameters": {
-        "CHARGING": "B4"
+        "CHARGING": "B4:2"
+      }
+    },
+    {
+      "pid": "221E3B1E3D",
+      "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+      "parameters": {
+        "HV_AV": "(((150000-[B10:B13])/100)*([B6:B7]/4))/1000"
       }
     }
   ]
