@@ -266,6 +266,32 @@
               "class": "battery"
             }
           ]
+        },
+        {
+          "pid": "221E3B",
+          "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+          "parameters": [
+            {
+              "name": "HV_V",
+              "expression": "(((B4*256)+B5)/4)",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "480"
+            }
+          ]
+        },
+        {
+          "pid": "221E3D",
+          "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+          "parameters": [
+            {
+              "name": "HV_A",
+              "expression": "(150000-[B4:B7])/100",
+              "unit": "A",
+              "class": "current"
+            }
+          ]
         }
       ]
     },
