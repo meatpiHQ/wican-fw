@@ -84,15 +84,14 @@
       "pid": "221E3B",
       "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
       "parameters": {
-        "DC_BATTERY_VOLTAGE": "(((B4*256)+B5)/4)",
-        "DC_BATTERY_VOLTAGE_MACAN_EV_Q6_ETRON": "(((B4*256)+B5)/16)"
+        "HV_V": "(((B4*256)+B5)/4)"
       }
     },
     {
       "pid": "221E3D",
       "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
       "parameters": {
-        "DC_BATTERY_CURRENT": "(150000-[B4:B7])/100"
+        "HV_A": "(150000-[B4:B7])/100"
       }
     }
   ]
