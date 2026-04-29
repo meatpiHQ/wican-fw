@@ -79,6 +79,21 @@
       "parameters": {
         "HV_AV": "(((150000-[B10:B13])/100)*([B6:B7]/4))/1000"
       }
+    },
+    {
+      "pid": "221E3B",
+      "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+      "parameters": {
+        "DC_BATTERY_VOLTAGE": "(((B4*256)+B5)/4)",
+        "DC_BATTERY_VOLTAGE_MACAN_EV_Q6_ETRON": "(((B4*256)+B5)/16)"
+      }
+    },
+    {
+      "pid": "221E3D",
+      "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+      "parameters": {
+        "DC_BATTERY_CURRENT": "(150000-[B4:B7])/100"
+      }
     }
   ]
 }
