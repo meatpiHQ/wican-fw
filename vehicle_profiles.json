@@ -248,10 +248,22 @@
           "parameters": [
             {
               "name": "CHARGING",
-              "expression": "B4",
+              "expression": "B4:2",
               "unit": "",
               "class": "battery_charging",
               "type": "binary_sensor"
+            }
+          ]
+        },
+        {
+          "pid": "221E3B1E3D",
+          "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+          "parameters": [
+            {
+              "name": "HV_AV",
+              "expression": "(((150000-[B10:B13])/100)*([B6:B7]/4))/1000",
+              "unit": "kW",
+              "class": "battery"
             }
           ]
         }
