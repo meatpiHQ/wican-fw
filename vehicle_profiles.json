@@ -6591,6 +6591,7 @@
       "pids": [
         {
           "pid": "2201019",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "SOC",
@@ -6722,6 +6723,7 @@
         },
         {
           "pid": "2201057",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "SOH",
@@ -6754,6 +6756,19 @@
               "expression": "[B37:B38]/10",
               "unit": "%",
               "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "22B002",
+          "pid_init": "ATSH7C6;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B12:B14]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
             }
           ]
         }
