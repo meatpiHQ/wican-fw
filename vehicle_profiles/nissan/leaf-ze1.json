@@ -1,14 +1,41 @@
 {
-  "car_model": "Nissan : leaf-ze1",
-  "init": "ATSP6;ATFCSH79B;ATST96;ATFCSD300000;ATFCSM1;",
-  "pids": [
-    {
-      "pid": "21018",
-      "pid_init": "ATSH79B;ATFCSH79B;ATCRA7BB;",
-      "parameters": {
-        "SOH": "[B36:B37]/102.4",
-        "SOC": "((B39*65536)+[B41:B42])/10000"
-      }
-    }
-  ]
+    "car_model": "Nissan: leaf-ze1",
+    "init": "ATSP6;ATFCSH79B;ATST96;ATFCSD300000;ATFCSM1;",
+    "pids": [
+        {
+            "pid": "21018",
+            "pid_init": "ATSH79B;ATFCSH79B;ATCRA7BB;",
+            "parameters": {
+                "SOC": "((B39*65536)+[B41:B42])/10000",
+                "SOC_D": "((((B39*65536)+[B41:B42])/10000)-12)/0.85",
+                "SOH": "((B44*65536)+[B45:B46])/11544",
+                "HV_CAPACITY": "((B44*65536)+[B45:B46])/10000",
+                "HV_CAPACITY_KWH": "((B44*65536)+[B45:B46])/29600",
+                "HV_CAPACITY_R": "((B39*65536)+[B41:B42])/10000*((B44*65536)+[B45:B46])/29600/100"
+            }
+        },
+        {
+            "pid": "21045",
+            "pid_init": "ATSH79B;ATFCSH79B;ATCRA7BB;",
+            "parameters": {
+                "HV_T_1": "B6",
+                "HV_T_2": "B10",
+                "HV_T_3": "B17"
+            }
+        },
+        {
+            "pid": "220E011",
+            "pid_init": "ATSH743;ATFCSH743;ATCRA763;",
+            "parameters": {
+                "ODOMETER": "(B4*65536)+(B5*256)+B6"
+            }
+        },
+        {
+            "pid": "220E2E1",
+            "pid_init": "ATSH743;ATFCSH743;ATCRA763;",
+            "parameters": {
+                "RANGE": "[B4:B5]"
+            }
+        }
+    ]
 }
