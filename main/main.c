@@ -1165,18 +1165,7 @@ void app_main(void)
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
 	#elif HARDWARE_VER == WICAN_PRO
 	led_set_level(0,0,200);
-	// // led_enable_fade(LED_RED, 1, 0);
-	// led_pattern_ms_t breathing_pattern = {
-	// 	.rise_time_ms = 1000,    // 1 second fade in
-	// 	.hold_time_ms = 500,     // Hold for 0.5 seconds
-	// 	.fall_time_ms = 1000,    // 1 second fade out
-	// 	.off_time_ms = 500,      // Off for 0.5 seconds
-	// 	.delay_time_ms = 0,      // No initial delay
-	// 	.repeat_times = 0        // Repeat forever
-	// };
-	// led_set_level(100, 0, 200);  // Set blue color
-	// led_set_pattern_ms(LED_BLUE, &breathing_pattern);
-	// led_set_pattern_ms(LED_GREEN, &breathing_pattern);
+
 	if(gpio_get_level(USB_ID_PIN) == 0)
 	{
 		usb_host_init();
