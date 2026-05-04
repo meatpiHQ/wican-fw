@@ -1349,6 +1349,26 @@
                     </table>
                     <div style="overflow-x:auto;">
                         <div class="section-title">MQTT CAN Filter</div>
+                        <table class="form-table">
+                            <tr>
+                                <td>Per-Filter MQTT Topics:</td>
+                                <td>
+                                    <select name="mqtt_rx_individual_en" id="mqtt_rx_individual_en">
+                                        <option value="enable">Enable</option>
+                                        <option value="disable">Disable</option>
+                                    </select>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>Per-Filter MQTT Retain:</td>
+                                <td>
+                                    <select name="mqtt_rx_individual_retain" id="mqtt_rx_individual_retain">
+                                        <option value="enable">Enable</option>
+                                        <option value="disable">Disable</option>
+                                    </select>
+                                </td>
+                            </tr>
+                        </table>
                         <table id="can_flt_table" >
                             <tr>
                                 <th style="text-align: left;">CAN ID (dec)</th>
