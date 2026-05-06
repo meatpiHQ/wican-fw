@@ -109,6 +109,12 @@
       "parameters": {
         "STEER_ANGLE": "((S20)*256+B19)/10"
       }
+    },
+    {
+      "pid": "220100",
+      "parameters": {
+        "TMP_A": "(B12/2)-40"
+      }
     }
   ]
 }
