@@ -1,0 +1,25 @@
+{
+  "car_model": "Toyota: Tacoma 2024+",
+  "init": "ATSP6;",
+  "pids": [
+    {
+      "pid": "015B2",
+      "parameters": {
+        "SOC": "(B3*20)/51"
+      }
+    },
+    {
+      "pid": "01A61",
+      "parameters": {
+        "ODOMETER": "([B3:B6])/10"
+      }
+    },
+    {
+      "pid": "01317",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "OILCH_DIS": "(256*B3)+B4"
+      }
+    }
+  ]
+}

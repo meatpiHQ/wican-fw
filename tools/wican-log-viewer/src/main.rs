@@ -4,7 +4,7 @@ use std::io::Write; // needed for writeln!(File,...)
 use clap::Parser;
 use regex::Regex;
 use chrono::Local;
-
+// TODO figure out what this does
 #[derive(Parser, Debug)]
 #[command(author, version, about="WiCAN UDP Log Viewer", long_about=None)]
 struct Args {
