@@ -3,15 +3,15 @@
   "init": "ATAT1;ATST96;ATSHFC007B;ATFCSHFC007B;ATFCSD300000;ATFCSM1;",
   "pids": [
     {
-      "pid": "22028C1",
-      "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+      "pid": "22028C",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATCRA17FE007B;",
       "parameters": {
         "SOC": "(B4/2.5)",
         "SOC_D": "(((B4*20.4)/46)-6.4)"
       }
     },
     {
-      "pid": "222AB62",
+      "pid": "222AB6",
       "pid_init": "ATSP6;ATSH710;ATFCSH710;ATFCSD300000;ATFCSM1;ATCRA77A;",
       "parameters": {
         "RANGE": "(B5*256)+B6"
@@ -19,7 +19,7 @@
     },
     {
       "pid": "22295A",
-      "pid_init": "ATSP7;ATSHFC0076;ATCP17;ATCRA17FE0076;ATFCSH17FC0076;ATFCSD300000;ATFCSM1;",
+      "pid_init": "ATSP7;ATAR;ATCP18;ATSHDB33F1;ATSHFC0076;ATCP17;ATCRA17FE0076;ATFCSH17FC0076;",
       "parameters": {
         "ODOMETER": "[B4:B6]"
       }
@@ -42,12 +42,12 @@
       "pid": "2227C42",
       "pid_init": "ATSP6;ATSH746;ATFCSH746;ATFCSD300000;ATFCSM1;ATCRA7B0;",
       "parameters": {
-        "HUMIDITY": "B8*0.5"
+        "HUMIDITY": "B10*0.5"
       }
     },
     {
       "pid": "222A0B1",
-      "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+      "pid_init": "ATFCSM0;ATAR;ATSP7;ATSHDB33F1;ATSHFC007B;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSM1;",
       "parameters": {
         "BATT_TEMP": "((B4/2)-40)"
       }
