@@ -122,8 +122,8 @@
       "init": "ATAT1;ATST96;ATSHFC007B;ATFCSHFC007B;ATFCSD300000;ATFCSM1;",
       "pids": [
         {
-          "pid": "22028C1",
-          "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+          "pid": "22028C",
+          "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATCRA17FE007B;",
           "parameters": [
             {
               "name": "SOC",
@@ -142,7 +142,7 @@
           ]
         },
         {
-          "pid": "222AB62",
+          "pid": "222AB6",
           "pid_init": "ATSP6;ATSH710;ATFCSH710;ATFCSD300000;ATFCSM1;ATCRA77A;",
           "parameters": [
             {
@@ -155,7 +155,7 @@
         },
         {
           "pid": "22295A",
-          "pid_init": "ATSP7;ATSHFC0076;ATCP17;ATCRA17FE0076;ATFCSH17FC0076;ATFCSD300000;ATFCSM1;",
+          "pid_init": "ATSP7;ATAR;ATCP18;ATSHDB33F1;ATSHFC0076;ATCP17;ATCRA17FE0076;ATFCSH17FC0076;",
           "parameters": [
             {
               "name": "ODOMETER",
@@ -196,7 +196,7 @@
           "parameters": [
             {
               "name": "HUMIDITY",
-              "expression": "B8*0.5",
+              "expression": "B10*0.5",
               "unit": "%",
               "class": "humidity"
             }
@@ -204,7 +204,7 @@
         },
         {
           "pid": "222A0B1",
-          "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+          "pid_init": "ATFCSM0;ATAR;ATSP7;ATSHDB33F1;ATSHFC007B;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSM1;",
           "parameters": [
             {
               "name": "BATT_TEMP",
