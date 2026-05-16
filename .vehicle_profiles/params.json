@@ -166,6 +166,70 @@
       "max": "10100"
     }
   },
+  "DOOR_FL_OPEN": {
+    "description": "Front left (driver) door open",
+    "settings": {
+      "unit": "",
+      "class": "door",
+      "type": "binary_sensor"
+    }
+  },
+  "DOOR_FR_OPEN": {
+    "description": "Front right (passenger) door open",
+    "settings": {
+      "unit": "",
+      "class": "door",
+      "type": "binary_sensor"
+    }
+  },
+  "DOOR_LOCK_FL": {
+    "description": "Front left (driver) door locked",
+    "settings": {
+      "unit": "",
+      "class": "lock",
+      "type": "binary_sensor"
+    }
+  },
+  "DOOR_LOCK_FR": {
+    "description": "Front right (passenger) door locked",
+    "settings": {
+      "unit": "",
+      "class": "lock",
+      "type": "binary_sensor"
+    }
+  },
+  "DOOR_LOCK_RL": {
+    "description": "Rear left door locked",
+    "settings": {
+      "unit": "",
+      "class": "lock",
+      "type": "binary_sensor"
+    }
+  },
+  "DOOR_LOCK_RR": {
+    "description": "Rear right door locked",
+    "settings": {
+      "unit": "",
+      "class": "lock",
+      "type": "binary_sensor"
+    }
+  },
+  "DOOR_RL_OPEN": {
+    "description": "Rear left door open",
+    "settings": {
+      "unit": "",
+      "class": "door",
+      "type": "binary_sensor"
+    }
+  },
+  "DOOR_RR_OPEN": {
+    "description": "Rear right door open",
+    "settings": {
+      "unit": "",
+      "class": "door",
+      "type": "binary_sensor"
+    }
+  },
   "DRIVE_MODE": {
     "description": "Drive Mode",
     "settings": {
@@ -192,6 +256,14 @@
     "settings": {
       "unit": "RPM",
       "class": "frequency"
+    }
+  },
+  "FOG_FRONT": {
+    "description": "Front fog lights active",
+    "settings": {
+      "unit": "none",
+      "class": "light",
+      "type": "binary_sensor"
     }
   },
   "FUEL": {
@@ -249,6 +321,46 @@
     "settings": {
       "unit": "none",
       "class": "none"
+    }
+  },
+  "GEAR_DRIVE": {
+    "description": "Gear selector in Drive",
+    "settings": {
+      "unit": "none",
+      "class": "none",
+      "type": "binary_sensor"
+    }
+  },
+  "GEAR_NEUTRAL": {
+    "description": "Gear selector in Neutral",
+    "settings": {
+      "unit": "none",
+      "class": "none",
+      "type": "binary_sensor"
+    }
+  },
+  "GEAR_PARK": {
+    "description": "Gear selector in Park",
+    "settings": {
+      "unit": "none",
+      "class": "none",
+      "type": "binary_sensor"
+    }
+  },
+  "GEAR_REVERSE": {
+    "description": "Gear selector in Reverse",
+    "settings": {
+      "unit": "none",
+      "class": "none",
+      "type": "binary_sensor"
+    }
+  },
+  "HIGH_BEAM": {
+    "description": "High beam headlights active",
+    "settings": {
+      "unit": "none",
+      "class": "light",
+      "type": "binary_sensor"
     }
   },
   "HUMIDITY": {
@@ -2328,7 +2440,7 @@
   "KWH_CHARGED": {
     "description": "Total kWh Charged (Cumulative Energy Charged)",
     "settings": {
-      "unit": "kwh",
+      "unit": "kWh",
       "class": "battery",
       "min": "0",
       "max": "1000000"
@@ -2341,6 +2453,14 @@
       "class": "none",
       "min": "0",
       "max": "1000000"
+    }
+  },
+  "LOW_BEAM": {
+    "description": "Low beam headlights active",
+    "settings": {
+      "unit": "none",
+      "class": "light",
+      "type": "binary_sensor"
     }
   },
   "LV_A": {
@@ -2371,6 +2491,13 @@
     "settings": {
       "unit": "g/s",
       "class": "none"
+    }
+  },
+  "OBC_TEMP": {
+    "description": "On-board charger temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature"
     }
   },
   "OCTANE_RATIO_L": {
@@ -2545,6 +2672,46 @@
       "max": "1000"
     }
   },
+  "SEATBELT_FL": {
+    "description": "Front left (driver) seatbelt buckled",
+    "settings": {
+      "unit": "none",
+      "class": "none",
+      "type": "binary_sensor"
+    }
+  },
+  "SEATBELT_FR": {
+    "description": "Front right (passenger) seatbelt buckled",
+    "settings": {
+      "unit": "none",
+      "class": "none",
+      "type": "binary_sensor"
+    }
+  },
+  "SEATBELT_RC": {
+    "description": "Rear centre seatbelt buckled",
+    "settings": {
+      "unit": "none",
+      "class": "none",
+      "type": "binary_sensor"
+    }
+  },
+  "SEATBELT_RL": {
+    "description": "Rear left seatbelt buckled",
+    "settings": {
+      "unit": "none",
+      "class": "none",
+      "type": "binary_sensor"
+    }
+  },
+  "SEATBELT_RR": {
+    "description": "Rear right seatbelt buckled",
+    "settings": {
+      "unit": "none",
+      "class": "none",
+      "type": "binary_sensor"
+    }
+  },
   "SOC": {
     "description": "State Of Charge",
     "settings": {
@@ -2626,6 +2793,14 @@
     "settings": {
       "unit": "°C",
       "class": "temperature"
+    }
+  },
+  "TRUNK_OPEN": {
+    "description": "Boot/trunk open",
+    "settings": {
+      "unit": "none",
+      "class": "door",
+      "type": "binary_sensor"
     }
   },
   "TYRE_P_FL": {
