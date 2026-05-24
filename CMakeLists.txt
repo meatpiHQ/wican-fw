@@ -44,8 +44,8 @@ add_definitions(-DGIT_SHA="${GIT_SHA1}")
 
 # Uncomment and use one of the following as needed
 # set(HARDWARE_VER ${WICAN_V210})
-set(HARDWARE_VER ${WICAN_V300})
-# set(HARDWARE_VER ${WICAN_USB_V100})
+# set(HARDWARE_VER ${WICAN_V300})
+set(HARDWARE_VER ${WICAN_USB_V100})
 # set(HARDWARE_VER ${WICAN_PRO})
 
 add_definitions(-DHARDWARE_VER=${HARDWARE_VER})
