@@ -26,11 +26,80 @@
 #include <errno.h>
 #include <string.h>
 #include "esp_vfs_fat.h"
+#include "esp_spiffs.h"
 #include "esp_littlefs.h"
 #include "wear_levelling.h"
 
 static const char *TAG = "filesystem";
 static uint8_t initialized = 0;
+
+#define STORAGE_PARTITION_LABEL "storage"
+#define LEGACY_SPIFFS_MOUNT_POINT "/spiffs_legacy"
+
+static esp_err_t mount_littlefs(bool format_if_mount_failed)
+{
+    esp_vfs_littlefs_conf_t conf = {
+        .base_path = FS_MOUNT_POINT,
+        .partition_label = STORAGE_PARTITION_LABEL,
+        .format_if_mount_failed = format_if_mount_failed,
+        .dont_mount = false,
+    };
+
+    esp_err_t ret = esp_vfs_littlefs_register(&conf);
+    if (ret != ESP_OK)
+    {
+        return ret;
+    }
+
+    ESP_LOGI(TAG, "LittleFS filesystem mounted successfully");
+
+    size_t total = 0;
+    size_t used = 0;
+    ret = esp_littlefs_info(conf.partition_label, &total, &used);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to get LittleFS partition information (%s)", esp_err_to_name(ret));
+    }
+    else
+    {
+        ESP_LOGI(TAG, "Partition size: total: %d, used: %d", total, used);
+    }
+
+    return ESP_OK;
+}
+
+static esp_err_t format_legacy_spiffs_partition(void)
+{
+    const esp_vfs_spiffs_conf_t conf = {
+        .base_path = LEGACY_SPIFFS_MOUNT_POINT,
+        .partition_label = STORAGE_PARTITION_LABEL,
+        .max_files = 4,
+        .format_if_mount_failed = false,
+    };
+
+    esp_err_t ret = esp_vfs_spiffs_register(&conf);
+    if (ret != ESP_OK)
+    {
+        return ret;
+    }
+
+    ESP_LOGW(TAG, "Legacy SPIFFS partition detected, formatting for LittleFS");
+
+    ret = esp_vfs_spiffs_unregister(STORAGE_PARTITION_LABEL);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to unmount legacy SPIFFS (%s)", esp_err_to_name(ret));
+        return ret;
+    }
+
+    ret = esp_littlefs_format(STORAGE_PARTITION_LABEL);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to format LittleFS partition (%s)", esp_err_to_name(ret));
+    }
+
+    return ret;
+}
 
 // Recursively delete a path (file or directory). If it's a directory, delete all contents then the directory itself.
 static esp_err_t delete_path_recursive(const char *path)
@@ -220,33 +289,30 @@ void filesystem_init(void)
     initialized = 1;
     #else
     ESP_LOGI(TAG, "Initializing LittleFS filesystem");
-    
-    esp_vfs_littlefs_conf_t conf = {
-        .base_path = FS_MOUNT_POINT,
-        .partition_label = "storage",
-        .format_if_mount_failed = true,
-        .dont_mount = false,
-    };
-    
-    esp_err_t ret = esp_vfs_littlefs_register(&conf);
-    if (ret != ESP_OK) 
-    {
-        ESP_LOGE(TAG, "Failed to mount LittleFS (%s)", esp_err_to_name(ret));
-        return;
-    }
-    
-    ESP_LOGI(TAG, "LittleFS filesystem mounted successfully");
 
-    size_t total = 0, used = 0;
-    ret = esp_littlefs_info(conf.partition_label, &total, &used);
+    esp_err_t ret = mount_littlefs(false);
     if (ret != ESP_OK)
     {
-            ESP_LOGE(TAG, "Failed to get LittleFS partition information (%s)", esp_err_to_name(ret));
+        ESP_LOGW(TAG, "Initial LittleFS mount failed (%s)", esp_err_to_name(ret));
+
+        esp_err_t legacy_ret = format_legacy_spiffs_partition();
+        if (legacy_ret == ESP_OK)
+        {
+            ret = mount_littlefs(false);
+        }
+        else
+        {
+            ESP_LOGI(TAG, "Legacy SPIFFS partition not detected or not recoverable (%s)", esp_err_to_name(legacy_ret));
+            ret = mount_littlefs(true);
+        }
+
+        if (ret != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Failed to mount LittleFS (%s)", esp_err_to_name(ret));
+            return;
+        }
     }
-    else
-    {
-            ESP_LOGI(TAG, "Partition size: total: %d, used: %d", total, used);
-    }
+
     initialized = 1;
     #endif
 }
