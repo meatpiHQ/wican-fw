@@ -22,6 +22,7 @@
 
 #pragma once
 #include "esp_tls_crypto.h"
+#include <stdbool.h>
 #include <esp_http_server.h>
 
 #define AP_MODE				0
@@ -93,6 +94,7 @@ typedef struct _device_config
 	char batt_mqtt_pass[64];
 	char keep_alive[16];
 	char mqtt_en[10];
+	char webhook_en[10];
 	char mqtt_tx_en[10];
 	char mqtt_rx_en[10];
 	char mqtt_url[256];
@@ -110,6 +112,7 @@ void config_server_start(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, u
 void config_server_stop(void);
 int8_t config_server_get_wifi_mode(void);
 int8_t config_server_get_ap_ch(void);
+int8_t config_server_get_webhook_en(void);
 char *config_server_get_sta_ssid(void);
 char *config_server_get_sta_pass(void);
 int8_t config_server_get_can_rate(void);
@@ -160,3 +163,5 @@ int8_t config_server_get_wakeup_time(uint32_t *wakeup_time);
 wifi_security_t config_server_get_sta_security(void);
 int8_t config_server_get_ap_auto_disable(void);
 int8_t config_server_get_keep_alive(uint32_t *keep_alive);
+
+char *config_server_get_status_json(bool remove_sensitive_info);

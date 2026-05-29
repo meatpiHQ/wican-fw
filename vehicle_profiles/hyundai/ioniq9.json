@@ -4,6 +4,7 @@
   "pids": [
     {
       "pid": "2201019",
+      "pid_init": "ATSH7E4;",
       "parameters": {
         "SOC": "B10/2",
         "REGEN_MAX": "[B11:B12]/100",
@@ -29,12 +30,20 @@
     },
     {
       "pid": "2201057",
+      "pid_init": "ATSH7E4;",
       "parameters": {
         "SOH": "[B34:B35]/10",
         "SOC_D": "B41/2",
         "HV_C_D_MIN_NO": "B39",
         "HV_C_D_MAX_NO": "B36",
         "HV_C_D_MIN": "[B37:B38]/10"
+      }
+    },
+    {
+      "pid": "22B002",
+      "pid_init": "ATSH7C6;",
+      "parameters": {
+        "ODOMETER": "[B12:B14]"
       }
     }
   ]

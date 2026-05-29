@@ -21,6 +21,13 @@ extern "C" {
 // Initialize device status event group
 void dev_status_init(void);
 
+// Returns a static buffer with human-readable uptime since boot.
+// Format: "HH:MM:SS" or "<d>d HH:MM:SS" when days > 0.
+const char* dev_status_get_uptime_string(void);
+
+// Returns number of characters written (excluding null), or 0 on error/insufficient buffer.
+size_t dev_status_format_uptime(char* buf, size_t buf_len);
+
 // Generic set/clear functions
 void dev_status_set_bits(EventBits_t bits_to_set);
 void dev_status_clear_bits(EventBits_t bits_to_clear);
@@ -48,7 +55,7 @@ bool dev_status_is_any_bit_set(EventBits_t bits);
 #define dev_status_clear_sleep()          dev_status_clear_bits(DEV_SLEEP_BIT)
 #define dev_status_clear_wifi_connected() dev_status_clear_bits(DEV_WIFI_CONNECTED_BIT)
 #define dev_status_clear_mqtt_connected() dev_status_clear_bits(DEV_MQTT_CONNECTED_BIT)
-#define dev_status_clear_ble_connected()  dev_status_clear_bits(BLE_CONNECTED_BIT)
+#define dev_status_clear_ble_connected()  dev_status_clear_bits(DEV_BLE_CONNECTED_BIT)
 
 #define dev_status_is_awake()        dev_status_is_bit_set(DEV_AWAKE_BIT)
 #define dev_status_is_sleeping()     dev_status_is_bit_set(DEV_SLEEP_BIT)

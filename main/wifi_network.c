@@ -70,6 +70,9 @@
      else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
      {
          ESP_LOGI(WIFI_TAG, "WIFI_EVENT_STA_DISCONNECTED");
+
+         // Keep global device status in sync
+         dev_status_clear_wifi_connected();
  
          xEventGroupSetBits(s_wifi_event_group, WIFI_DISCONNECTED_BIT);
          xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECT_IDLE_BIT);
@@ -127,6 +130,9 @@
          xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
          xEventGroupClearBits(s_wifi_event_group, WIFI_DISCONNECTED_BIT);
          xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECT_IDLE_BIT);
+
+         // Keep global device status in sync
+         dev_status_set_wifi_connected();
      }
  
      if (event_id == WIFI_EVENT_AP_STACONNECTED)

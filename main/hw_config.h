@@ -47,7 +47,7 @@
 
 #else
 
-#define FS_MOUNT_POINT              "/spiffs"
+#define FS_MOUNT_POINT              "/littlefs"
 #define TX_GPIO_NUM             	0
 #define RX_GPIO_NUM             	3
 #define CONNECTED_LED_GPIO_NUM		8
