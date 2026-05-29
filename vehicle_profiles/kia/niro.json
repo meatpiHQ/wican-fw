@@ -89,6 +89,20 @@
       }
     },
     {
+      "pid": "22C00B4",
+      "pid_init": "ATSH7A0;",
+      "parameters": {
+        "TYRE_P_FL": "B10*0.2",
+        "TYRE_T_FL": "B11-50",
+        "TYRE_P_FR": "B14*0.2",
+        "TYRE_T_FR": "B15-50",
+        "TYRE_P_RR": "B19*0.2",
+        "TYRE_T_RR": "B20-50",
+        "TYRE_P_RL": "B23*0.2",
+        "TYRE_T_RL": "B25-50"
+      }
+    },
+    {
       "pid": "2101",
       "pid_init": "ATSH7E5;",
       "parameters": {
