@@ -1,0 +1,1430 @@
+{
+    "car_model": "NC Datalogger - Phase 0 Discovery",
+    "car_specific": "enable",
+    "can_filters": [
+        {
+            "frame_id": "0x200",
+            "parameters": [
+                {
+                    "name": "ID200_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID200_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID200_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID200_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID200_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID200_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID200_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID200_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID200_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID200_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID200_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID200_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x201",
+            "parameters": [
+                {
+                    "name": "ID201_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID201_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID201_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID201_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID201_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID201_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID201_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID201_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID201_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID201_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID201_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID201_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x211",
+            "parameters": [
+                {
+                    "name": "ID211_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID211_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID211_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID211_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID211_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID211_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID211_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID211_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID211_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID211_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID211_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID211_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x215",
+            "parameters": [
+                {
+                    "name": "ID215_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID215_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID215_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID215_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID215_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID215_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID215_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID215_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID215_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID215_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID215_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID215_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x216",
+            "parameters": [
+                {
+                    "name": "ID216_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID216_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID216_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID216_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID216_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID216_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID216_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID216_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID216_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID216_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID216_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID216_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x218",
+            "parameters": [
+                {
+                    "name": "ID218_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID218_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID218_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID218_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID218_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID218_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID218_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID218_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID218_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID218_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID218_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID218_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x21A",
+            "parameters": [
+                {
+                    "name": "ID21A_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID21A_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID21A_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID21A_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID21A_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID21A_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID21A_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID21A_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID21A_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID21A_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID21A_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID21A_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x231",
+            "parameters": [
+                {
+                    "name": "ID231_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID231_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID231_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID231_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID231_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID231_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID231_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID231_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID231_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID231_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID231_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID231_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x240",
+            "parameters": [
+                {
+                    "name": "ID240_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID240_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID240_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID240_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID240_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID240_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID240_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID240_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID240_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID240_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID240_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID240_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x420",
+            "parameters": [
+                {
+                    "name": "ID420_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID420_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID420_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID420_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID420_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID420_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID420_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID420_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID420_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID420_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID420_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID420_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x430",
+            "parameters": [
+                {
+                    "name": "ID430_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID430_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID430_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID430_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID430_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID430_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID430_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID430_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID430_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID430_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID430_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID430_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x4B0",
+            "parameters": [
+                {
+                    "name": "ID4B0_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4B0_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4B0_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4B0_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4B0_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4B0_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4B0_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4B0_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4B0_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4B0_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4B0_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4B0_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x4EC",
+            "parameters": [
+                {
+                    "name": "ID4EC_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4EC_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4EC_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4EC_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4EC_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4EC_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4EC_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4EC_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4EC_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4EC_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4EC_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4EC_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x4F0",
+            "parameters": [
+                {
+                    "name": "ID4F0_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4F0_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4F0_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4F0_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4F0_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4F0_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4F0_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4F0_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4F0_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4F0_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4F0_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4F0_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x4F1",
+            "parameters": [
+                {
+                    "name": "ID4F1_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4F1_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4F1_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4F1_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4F1_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4F1_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4F1_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4F1_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4F1_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4F1_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4F1_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID4F1_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x0EC",
+            "parameters": [
+                {
+                    "name": "ID0EC_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID0EC_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID0EC_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID0EC_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID0EC_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID0EC_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID0EC_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID0EC_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID0EC_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID0EC_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID0EC_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "ID0EC_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        }
+    ]
+}
