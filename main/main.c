@@ -59,6 +59,7 @@
 #include "mqtt.h"
 #include "ftp.h"
 #include "autopid.h"
+#include "csv_logger.h"
 #include "led.h"
 #include "obd.h"
 #include "wusb3801.h"
@@ -910,6 +911,10 @@ void app_main(void)
 		{
 			ESP_LOGE(TAG, "error getting log period");
 			log_period = 60;
+		}
+		if(config_server_get_csv_log() == 1)
+		{
+			csv_logger_init();
 		}
 		autopid_init((char*)&uid[0], config_server_get_logger_config(), log_period);
 	}

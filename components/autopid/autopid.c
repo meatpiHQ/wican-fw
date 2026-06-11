@@ -42,6 +42,7 @@
 #include "wc_timer.h"
 #include <float.h>
 #include "obd_logger.h"
+#include "csv_logger.h"
 #include "hw_config.h"
 #include "dev_status.h"
 #include "sleep_mode.h"
@@ -166,6 +167,7 @@ static bool autopid_prepare_parameter_value(parameter_t *param,
     }
 
     *out_value = (float)rounded_value;
+    csv_logger_record(param->name, *out_value, param->unit, source);
     return true;
 }
 // strdup_psram

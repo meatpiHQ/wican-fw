@@ -3533,6 +3533,7 @@ async function postConfig() {
     obj["mqtt_status_topic"] = document.getElementById("mqtt_status_topic").value;
     obj["mqtt_elm327_log"] = document.getElementById("mqtt_elm327_log").value;
     obj["logger_status"] = document.getElementById("logger_status").value;
+    obj["csv_log"] = document.getElementById("csv_log").value;
     obj["log_filesystem"] = document.getElementById("log_filesystem").value;
     obj["log_storage"] = document.getElementById("log_storage").value;
     obj["log_period"] = document.getElementById("log_period").value;
@@ -4082,6 +4083,12 @@ xhttp.onload = async function() {
             document.getElementById("logger_status").selectedIndex = "0";
         } else if (obj.logger_status === "disable") {
             document.getElementById("logger_status").selectedIndex = "1";
+        }
+
+        if (obj.csv_log === "enable") {
+            document.getElementById("csv_log").selectedIndex = "0";
+        } else {
+            document.getElementById("csv_log").selectedIndex = "1";
         }
 
         if (obj.log_filesystem === "fatfs") {

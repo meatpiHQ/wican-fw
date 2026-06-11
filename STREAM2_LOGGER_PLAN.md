@@ -1,5 +1,35 @@
 # Stream 2 — CAN + OBD-II PID CSV Logger
 
+## Status: MVP implemented (2026-06)
+
+A deeper audit found that most of this plan already existed in the codebase:
+the `autopid` component already interleaves passive STN CAN-filter monitoring
+(`can_filter_t`, Pattern B below) with active PID polling through the single
+STN/UART1 path, serialized by its own lock (`autopid_lock`). So instead of
+building `broadcast_capture` / `pid_poller` / `adapter_owner` from scratch,
+the MVP is a thin CSV sink:
+
+- `components/csv_logger/` — queue + writer task. CSV to `/sdcard/logs/`,
+  one file per ignition cycle, 8 MB rotation, ~1 s flush interval.
+- Single hook in `autopid_prepare_parameter_value()` captures all three data
+  paths (CANFLT broadcast, custom/specific PID, standard PID) as decoded
+  `name,value,unit` rows. `raw_hex` from the original format is deferred —
+  decoded values come free from autopid; raw frames do not.
+- Ignition gating via `vehicle_ignition_state()` with a 3 s off-debounce so
+  cranking dips don't split files. SD writes never block PID polling (records
+  are dropped, and counted, if the queue backs up).
+- Enabled via **CSV Datalog (SD)** in Logger Settings (`csv_log` config key,
+  default disable). Docs: `docs/content/0.Config/7.CSV-Datalogger.md`.
+
+The `adapter_owner` mutex is not needed yet: when Stream 1 (ECU flashing)
+lands it should pause AutoPID (e.g. `DEV_AUTOPID_ENABLED_BIT` or
+`autopid_lock`), which automatically silences this logger since no parameters
+flow while AutoPID is idle.
+
+Original parked design below, kept for reference.
+
+---
+
 Parked design doc. Stream 1 (ECU flashing) ships first; this branch holds the
 investigation and plan so Stream 2 can resume cleanly later.
 

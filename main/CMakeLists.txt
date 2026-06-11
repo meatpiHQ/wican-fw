@@ -70,6 +70,7 @@ set(requires
     cert_manager
     vpn_manager
     autopid
+    csv_logger
     ha_webhooks
     wican_common
     ws_server
