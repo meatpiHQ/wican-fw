@@ -1,0 +1,78 @@
+{
+    "car_model": "Mazda: MX-5/Miata NC (2006-2015)",
+    "init": "ATSP6;",
+    "can_filters": [
+        {
+            "frame_id": "0x201",
+            "parameters": [
+                {
+                    "name": "EngineRPM",
+                    "expression": "[B0:B1]/4",
+                    "unit": "RPM",
+                    "class": "frequency",
+                    "period": 100
+                },
+                {
+                    "name": "VehicleSpeed",
+                    "expression": "([B4:B5]/100)-100",
+                    "unit": "km/h",
+                    "class": "speed",
+                    "period": 100
+                },
+                {
+                    "name": "AcceleratorPedal",
+                    "expression": "B6/2",
+                    "unit": "%",
+                    "class": "none",
+                    "period": 100
+                }
+            ]
+        },
+        {
+            "frame_id": "0x240",
+            "parameters": [
+                {
+                    "name": "CalculatedLoad",
+                    "expression": "B0/2.55",
+                    "unit": "%",
+                    "class": "none",
+                    "period": 200
+                },
+                {
+                    "name": "Coolant",
+                    "expression": "B1-40",
+                    "unit": "°C",
+                    "class": "temperature",
+                    "period": 1000
+                },
+                {
+                    "name": "Throttle",
+                    "expression": "B3/2.55",
+                    "unit": "%",
+                    "class": "none",
+                    "period": 200
+                },
+                {
+                    "name": "IntakeAirTemp",
+                    "expression": "B4-40",
+                    "unit": "°C",
+                    "class": "temperature",
+                    "period": 1000
+                }
+            ]
+        }
+    ],
+    "pids": [
+        {
+            "pid": "01461",
+            "parameters": [
+                {
+                    "name": "AmbientAirTemp",
+                    "expression": "B3-40",
+                    "unit": "°C",
+                    "class": "temperature"
+                }
+            ]
+        }
+    ]
+}
