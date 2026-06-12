@@ -1,0 +1,74 @@
+{
+  "TIRE_P_FL": {
+    "description": "Front Left Tire Pressure",
+    "settings": {
+      "unit": "psi",
+      "class": "pressure",
+      "min": "-7.35",
+      "max": "56.4"
+    }
+  },
+  "TIRE_P_RL": {
+    "description": "Rear Left Tire Pressure",
+    "settings": {
+      "unit": "psi",
+      "class": "pressure",
+      "min": "-7.35",
+      "max": "56.4"
+    }
+  },
+  "TIRE_P_FR": {
+    "description": "Front Right Tire Pressure",
+    "settings": {
+      "unit": "psi",
+      "class": "pressure",
+      "min": "-7.35",
+      "max": "56.4"
+    }
+  },
+  "TIRE_P_RR": {
+    "description": "Rear Right Tire Pressure",
+    "settings": {
+      "unit": "psi",
+      "class": "pressure",
+      "min": "-7.35",
+      "max": "56.4"
+    }
+  },
+  "TIRE_T_FL": {
+    "description": "Front Left Tire Temperature",
+    "settings": {
+      "unit": "°F",
+      "class": "temperature",
+      "min": "-40.0",
+      "max": "419.0"
+    }
+  },
+  "TIRE_T_RL": {
+    "description": "Rear Left Tire Temperature",
+    "settings": {
+      "unit": "°F",
+      "class": "temperature",
+      "min": "-40.0",
+      "max": "419.0"
+    }
+  },
+  "TIRE_T_FR": {
+    "description": "Front Right Tire Temperature",
+    "settings": {
+      "unit": "°F",
+      "class": "temperature",
+      "min": "-40.0",
+      "max": "419.0"
+    }
+  },
+  "TIRE_T_RR": {
+    "description": "Rear Right Tire Temperature",
+    "settings": {
+      "unit": "°F",
+      "class": "temperature",
+      "min": "-40.0",
+      "max": "419.0"
+    }
+  }
+}

@@ -1,24 +1,24 @@
 {
-  "car_model": "Toyota: Tacoma 2024+",
-  "init": "ATSP6;",
+  "car_model": "Toyota: Tacoma 2025 (Gen 4)",
+  "comment": "",
+  "init": "ATSP6;ATST96;ATSH750;ATCEA2A;ATTA2A;ATCER2A;ATFCSH750;ATFCSD2A300000;ATFCSM1;ATE0;ATH1;ATL0;ATS1;ATM0;ATST96;ATCRA;",
   "pids": [
     {
-      "pid": "015B2",
+      "pid": "2210053",
       "parameters": {
-        "SOC": "(B3*20)/51"
+        "TIRE_P_FL": "(B7 / 4) - 7.35",
+        "TIRE_P_RL": "(B11 / 4) - 7.35",
+        "TIRE_P_FR": "(B13 / 4) - 7.35",
+        "TIRE_P_RR": "(B15 / 4) - 7.35"
       }
     },
     {
-      "pid": "01A61",
+      "pid": "2210042",
       "parameters": {
-        "ODOMETER": "([B3:B6])/10"
-      }
-    },
-    {
-      "pid": "01317",
-      "pid_init": "ATSH7DF;",
-      "parameters": {
-        "OILCH_DIS": "(256*B3)+B4"
+        "TIRE_T_FL": "(B6 *1.8) - 40.00",
+        "TIRE_T_RL": "(B7 *1.8) - 40.00",
+        "TIRE_T_FR": "(B10 *1.8) - 40.00",
+        "TIRE_T_RR": "(B11 *1.8) - 40.00"
       }
     }
   ]
