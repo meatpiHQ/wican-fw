@@ -1,60 +1,413 @@
 {
-  "car_model": "Xpeng: G6",
-  "init": "ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH704;ATCRA784;ATFCSH704;ATFCSM1",
-  "pids": [
-    {
-      "pid": "2211091",
-      "parameters": {
-        "SOC": "[B4:B5]/10"
-      }
-    },
-    {
-      "pid": "2201011",
-      "parameters": {
-        "ODOMETER": "[B5:B6]"
-      }
-    },
-    {
-      "pid": "22011A1",
-      "parameters": {
-        "SOH": "[B4:B5]/10"
-      }
-    },
-    {
-      "pid": "2211031",
-      "parameters": {
-        "HV_A": "(B4*256+B5)*0.5-1600"
-      }
-    },
-    {
-      "pid": "2211011",
-      "parameters": {
-        "HV_V": "[B4:B5]/10"
-      }
-    },
-    {
-      "pid": "2211071",
-      "parameters": {
-        "HV_T_MAX": "B4-40"
-      }
-    },
-    {
-      "pid": "2211081",
-      "parameters": {
-        "HV_T_MIN": "B4-40"
-      }
-    },
-    {
-      "pid": "2211051",
-      "parameters": {
-        "HV_C_V_MAX": "[B4:B5]/1000"
-      }
-    },
-    {
-      "pid": "2211061",
-      "parameters": {
-        "HV_C_V_MIN": "[B4:B5]/1000"
-      }
-    }
-  ]
+    "car_model":  "Xpeng: G6",
+    "init":  "ATH1;ATSP6;ATM0;ATAT1;ATSH704;ATCRA784;ATFCSH704;ATFCSM1",
+    "pids":  [
+                 {
+                     "pid":  "2211091",
+                     "parameters":  {
+                                        "SOC":  "[B4:B5]/10"
+                                    }
+                 },
+                 {
+                     "pid":  "2201011",
+                     "parameters":  {
+                                        "ODOMETER":  "[B5:B6]"
+                                    }
+                 },
+                 {
+                     "pid":  "22011A1",
+                     "parameters":  {
+                                        "SOH":  "[B4:B5]/10"
+                                    }
+                 },
+                 {
+                     "pid":  "2211031",
+                     "parameters":  {
+                                        "HV_A":  "(B4*256+B5)*0.5-1600"
+                                    }
+                 },
+                 {
+                     "pid":  "2211011",
+                     "parameters":  {
+                                        "HV_V":  "[B4:B5]/10"
+                                    }
+                 },
+                 {
+                     "pid":  "2211071",
+                     "parameters":  {
+                                        "HV_T_MAX":  "B4-40"
+                                    }
+                 },
+                 {
+                     "pid":  "2211081",
+                     "parameters":  {
+                                        "HV_T_MIN":  "B4-40"
+                                    }
+                 },
+                 {
+                     "pid":  "2211051",
+                     "parameters":  {
+                                        "HV_C_V_MAX":  "[B4:B5]/1000"
+                                    }
+                 },
+                 {
+                     "pid":  "2211061",
+                     "parameters":  {
+                                        "HV_C_V_MIN":  "[B4:B5]/1000"
+                                    }
+                 },
+                 {
+                     "pid":  "2201021",
+                     "pid_init":  "ATSH704",
+                     "parameters":  {
+                                        "12V_VOLTAGE":  "(B4*0.1/1)"
+                                    }
+                 },
+                 {
+                     "pid":  "2201041",
+                     "pid_init":  "ATSH704",
+                     "parameters":  {
+                                        "RES_PID_010D":  "([B5]*100/10000)"
+                                    }
+                 },
+                 {
+                     "pid":  "2203131",
+                     "pid_init":  "ATSH7E0",
+                     "parameters":  {
+                                        "ACCELERATOR_PEDAL_POSITION":  "(B4*0.5/1)"
+                                    }
+                 },
+                 {
+                     "pid":  "2203171",
+                     "pid_init":  "ATSH7E0",
+                     "parameters":  {
+                                        "FRONT_MOTOR_SPEED_P5_P7":  "[B5]-5000",
+                                        "FRONT_MOTOR_SPEED_G6_G9":  "[B5]-16000"
+                                    }
+                 },
+                 {
+                     "pid":  "2203181",
+                     "pid_init":  "ATSH7E0",
+                     "parameters":  {
+                                        "REAR_MOTOR_SPEED_P5_P7":  "[B5]-5000",
+                                        "REAR_MOTOR_SPEED_G6_G9":  "[B5]-16000"
+                                    }
+                 },
+                 {
+                     "pid":  "2203191",
+                     "pid_init":  "ATSH7E0",
+                     "parameters":  {
+                                        "FRONT_MOTOR_TORQUE_REQUEST":  "([B5]*0.25/1)-500"
+                                    }
+                 },
+                 {
+                     "pid":  "22031A1",
+                     "pid_init":  "ATSH7E0",
+                     "parameters":  {
+                                        "REAR_MOTOR_TORQUE_REQUEST":  "([B5]*0.25/1)-500"
+                                    }
+                 },
+                 {
+                     "pid":  "22031D1",
+                     "pid_init":  "ATSH7E0",
+                     "parameters":  {
+                                        "CHARGING_HVIL_STATUS":  "B4"
+                                    }
+                 },
+                 {
+                     "pid":  "22031E1",
+                     "pid_init":  "ATSH7E0",
+                     "parameters":  {
+                                        "BATTERY_SOC":  "([B5]*1000/10000)"
+                                    }
+                 },
+                 {
+                     "pid":  "22031F1",
+                     "pid_init":  "ATSH7E0",
+                     "parameters":  {
+                                        "FAST_CHARGING_CURRENT_VALUE":  "([B5]*1000/10000)-1200"
+                                    }
+                 },
+                 {
+                     "pid":  "2203201",
+                     "pid_init":  "ATSH7E0",
+                     "parameters":  {
+                                        "FAST_CHARGING_VOLTAGE":  "[B5]"
+                                    }
+                 },
+                 {
+                     "pid":  "2203211",
+                     "pid_init":  "ATSH7E0",
+                     "parameters":  {
+                                        "BRAKE_MAIN_CYLINDER_PRESSURE":  "([B5]*0.2/1)"
+                                    }
+                 },
+                 {
+                     "pid":  "2203221",
+                     "pid_init":  "ATSH7E0",
+                     "parameters":  {
+                                        "FAST_CHARGING_TEMPERATURE_1":  "B4-40"
+                                    }
+                 },
+                 {
+                     "pid":  "2203231",
+                     "pid_init":  "ATSH7E0",
+                     "parameters":  {
+                                        "FAST_CHARGING_TEMPERATURE_2":  "B4-40"
+                                    }
+                 },
+                 {
+                     "pid":  "2203241",
+                     "pid_init":  "ATSH7E0",
+                     "parameters":  {
+                                        "SLOW_CHARGING_TEMPERATURE_1":  "B4-40"
+                                    }
+                 },
+                 {
+                     "pid":  "2203251",
+                     "pid_init":  "ATSH7E0",
+                     "parameters":  {
+                                        "SLOW_CHARGING_TEMPERATURE_2":  "B4-40"
+                                    }
+                 },
+                 {
+                     "pid":  "2203261",
+                     "pid_init":  "ATSH7E0",
+                     "parameters":  {
+                                        "SLOW_CHARGING_TEMPERATURE_3":  "B4-40"
+                                    }
+                 },
+                 {
+                     "pid":  "2203271",
+                     "pid_init":  "ATSH7E0",
+                     "parameters":  {
+                                        "TRACTION_MOTOR_COOLANT_TEMPERATURE":  "(B4*0.5/1)-40"
+                                    }
+                 },
+                 {
+                     "pid":  "2203281",
+                     "pid_init":  "ATSH7E0",
+                     "parameters":  {
+                                        "BATTERY_COOLANT_TEMPERATURE":  "(B4*0.5/1)-40"
+                                    }
+                 },
+                 {
+                     "pid":  "22110A1",
+                     "pid_init":  "ATSH704",
+                     "parameters":  {
+                                        "STATE_OF_HEALTH":  "([B5]*1000/10000)"
+                                    }
+                 },
+                 {
+                     "pid":  "2211201",
+                     "pid_init":  "ATSH704",
+                     "parameters":  {
+                                        "BATTERY_PACK_CUMULATIVE_CHARGING":  "[B7]"
+                                    }
+                 },
+                 {
+                     "pid":  "2211211",
+                     "pid_init":  "ATSH704",
+                     "parameters":  {
+                                        "BATTERY_PACK_CUMULATIVE_DISCHARGING":  "[B7]"
+                                    }
+                 },
+                 {
+                     "pid":  "2211221",
+                     "pid_init":  "ATSH704",
+                     "parameters":  {
+                                        "HV_C_V_001":  "(B4*2/100)",
+                                        "HV_C_V_002":  "(B5*2/100)",
+                                        "HV_C_V_003":  "(B6*2/100)",
+                                        "HV_C_V_004":  "(B7*2/100)",
+                                        "HV_C_V_005":  "(B8*2/100)",
+                                        "HV_C_V_006":  "(B9*2/100)",
+                                        "HV_C_V_007":  "(B10*2/100)",
+                                        "HV_C_V_008":  "(B11*2/100)",
+                                        "HV_C_V_009":  "(B12*2/100)",
+                                        "HV_C_V_010":  "(B13*2/100)",
+                                        "HV_C_V_011":  "(B14*2/100)",
+                                        "HV_C_V_012":  "(B15*2/100)",
+                                        "HV_C_V_013":  "(B16*2/100)",
+                                        "HV_C_V_014":  "(B17*2/100)",
+                                        "HV_C_V_015":  "(B18*2/100)",
+                                        "HV_C_V_016":  "(B19*2/100)",
+                                        "HV_C_V_017":  "(B20*2/100)",
+                                        "HV_C_V_018":  "(B21*2/100)",
+                                        "HV_C_V_019":  "(B22*2/100)",
+                                        "HV_C_V_020":  "(B23*2/100)",
+                                        "HV_C_V_021":  "(B24*2/100)",
+                                        "HV_C_V_022":  "(B25*2/100)",
+                                        "HV_C_V_023":  "(B26*2/100)",
+                                        "HV_C_V_024":  "(B27*2/100)",
+                                        "HV_C_V_025":  "(B28*2/100)",
+                                        "HV_C_V_026":  "(B29*2/100)",
+                                        "HV_C_V_027":  "(B30*2/100)",
+                                        "HV_C_V_028":  "(B31*2/100)",
+                                        "HV_C_V_029":  "(B32*2/100)",
+                                        "HV_C_V_030":  "(B33*2/100)",
+                                        "HV_C_V_031":  "(B34*2/100)",
+                                        "HV_C_V_032":  "(B35*2/100)",
+                                        "HV_C_V_033":  "(B36*2/100)",
+                                        "HV_C_V_034":  "(B37*2/100)",
+                                        "HV_C_V_035":  "(B38*2/100)",
+                                        "HV_C_V_036":  "(B39*2/100)",
+                                        "HV_C_V_037":  "(B40*2/100)",
+                                        "HV_C_V_038":  "(B41*2/100)",
+                                        "HV_C_V_039":  "(B42*2/100)",
+                                        "HV_C_V_040":  "(B43*2/100)",
+                                        "HV_C_V_041":  "(B44*2/100)",
+                                        "HV_C_V_042":  "(B45*2/100)",
+                                        "HV_C_V_043":  "(B46*2/100)",
+                                        "HV_C_V_044":  "(B47*2/100)",
+                                        "HV_C_V_045":  "(B48*2/100)",
+                                        "HV_C_V_046":  "(B49*2/100)",
+                                        "HV_C_V_047":  "(B50*2/100)",
+                                        "HV_C_V_048":  "(B51*2/100)",
+                                        "HV_C_V_049":  "(B52*2/100)",
+                                        "HV_C_V_050":  "(B53*2/100)",
+                                        "HV_C_V_051":  "(B54*2/100)",
+                                        "HV_C_V_052":  "(B55*2/100)",
+                                        "HV_C_V_053":  "(B56*2/100)",
+                                        "HV_C_V_054":  "(B57*2/100)",
+                                        "HV_C_V_055":  "(B58*2/100)",
+                                        "HV_C_V_056":  "(B59*2/100)",
+                                        "HV_C_V_057":  "(B60*2/100)",
+                                        "HV_C_V_058":  "(B61*2/100)",
+                                        "HV_C_V_059":  "(B62*2/100)",
+                                        "HV_C_V_060":  "(B63*2/100)",
+                                        "HV_C_V_061":  "(B64*2/100)",
+                                        "HV_C_V_062":  "(B65*2/100)",
+                                        "HV_C_V_063":  "(B66*2/100)",
+                                        "HV_C_V_064":  "(B67*2/100)",
+                                        "HV_C_V_065":  "(B68*2/100)",
+                                        "HV_C_V_066":  "(B69*2/100)",
+                                        "HV_C_V_067":  "(B70*2/100)",
+                                        "HV_C_V_068":  "(B71*2/100)",
+                                        "HV_C_V_069":  "(B72*2/100)",
+                                        "HV_C_V_070":  "(B73*2/100)",
+                                        "HV_C_V_071":  "(B74*2/100)",
+                                        "HV_C_V_072":  "(B75*2/100)",
+                                        "HV_C_V_073":  "(B76*2/100)",
+                                        "HV_C_V_074":  "(B77*2/100)",
+                                        "HV_C_V_075":  "(B78*2/100)",
+                                        "HV_C_V_076":  "(B79*2/100)",
+                                        "HV_C_V_077":  "(B80*2/100)",
+                                        "HV_C_V_078":  "(B81*2/100)",
+                                        "HV_C_V_079":  "(B82*2/100)",
+                                        "HV_C_V_080":  "(B83*2/100)",
+                                        "HV_C_V_081":  "(B84*2/100)",
+                                        "HV_C_V_082":  "(B85*2/100)",
+                                        "HV_C_V_083":  "(B86*2/100)",
+                                        "HV_C_V_084":  "(B87*2/100)",
+                                        "HV_C_V_085":  "(B88*2/100)",
+                                        "HV_C_V_086":  "(B89*2/100)",
+                                        "HV_C_V_087":  "(B90*2/100)",
+                                        "HV_C_V_088":  "(B91*2/100)",
+                                        "HV_C_V_089":  "(B92*2/100)",
+                                        "HV_C_V_090":  "(B93*2/100)",
+                                        "HV_C_V_091":  "(B94*2/100)",
+                                        "HV_C_V_092":  "(B95*2/100)",
+                                        "HV_C_V_093":  "(B96*2/100)",
+                                        "HV_C_V_094":  "(B97*2/100)",
+                                        "HV_C_V_095":  "(B98*2/100)",
+                                        "HV_C_V_096":  "(B99*2/100)",
+                                        "HV_C_V_097":  "(B100*2/100)",
+                                        "HV_C_V_098":  "(B101*2/100)",
+                                        "HV_C_V_099":  "(B102*2/100)",
+                                        "HV_C_V_100":  "(B103*2/100)",
+                                        "HV_C_V_101":  "(B104*2/100)",
+                                        "HV_C_V_102":  "(B105*2/100)",
+                                        "HV_C_V_103":  "(B106*2/100)",
+                                        "HV_C_V_104":  "(B107*2/100)",
+                                        "HV_C_V_105":  "(B108*2/100)",
+                                        "HV_C_V_106":  "(B109*2/100)",
+                                        "HV_C_V_107":  "(B110*2/100)",
+                                        "HV_C_V_108":  "(B111*2/100)",
+                                        "HV_C_V_109":  "(B112*2/100)",
+                                        "HV_C_V_110":  "(B113*2/100)",
+                                        "HV_C_V_111":  "(B114*2/100)",
+                                        "HV_C_V_112":  "(B115*2/100)",
+                                        "HV_C_V_113":  "(B116*2/100)",
+                                        "HV_C_V_114":  "(B117*2/100)",
+                                        "HV_C_V_115":  "(B118*2/100)",
+                                        "HV_C_V_116":  "(B119*2/100)",
+                                        "HV_C_V_117":  "(B120*2/100)",
+                                        "HV_C_V_118":  "(B121*2/100)",
+                                        "HV_C_V_119":  "(B122*2/100)",
+                                        "HV_C_V_120":  "(B123*2/100)",
+                                        "HV_C_V_121":  "(B124*2/100)",
+                                        "HV_C_V_122":  "(B125*2/100)",
+                                        "HV_C_V_123":  "(B126*2/100)",
+                                        "HV_C_V_124":  "(B127*2/100)",
+                                        "HV_C_V_125":  "(B128*2/100)",
+                                        "HV_C_V_126":  "(B129*2/100)",
+                                        "HV_C_V_127":  "(B130*2/100)",
+                                        "HV_C_V_128":  "(B131*2/100)",
+                                        "HV_C_V_129":  "(B132*2/100)",
+                                        "HV_C_V_130":  "(B133*2/100)",
+                                        "HV_C_V_131":  "(B134*2/100)",
+                                        "HV_C_V_132":  "(B135*2/100)",
+                                        "HV_C_V_133":  "(B136*2/100)",
+                                        "HV_C_V_134":  "(B137*2/100)",
+                                        "HV_C_V_135":  "(B138*2/100)",
+                                        "HV_C_V_136":  "(B139*2/100)",
+                                        "HV_C_V_137":  "(B140*2/100)",
+                                        "HV_C_V_138":  "(B141*2/100)",
+                                        "HV_C_V_139":  "(B142*2/100)",
+                                        "HV_C_V_140":  "(B143*2/100)",
+                                        "HV_C_V_141":  "(B144*2/100)",
+                                        "HV_C_V_142":  "(B145*2/100)",
+                                        "HV_C_V_143":  "(B146*2/100)",
+                                        "HV_C_V_144":  "(B147*2/100)",
+                                        "HV_C_V_145":  "(B148*2/100)",
+                                        "HV_C_V_146":  "(B149*2/100)",
+                                        "HV_C_V_147":  "(B150*2/100)",
+                                        "HV_C_V_148":  "(B151*2/100)",
+                                        "HV_C_V_149":  "(B152*2/100)",
+                                        "HV_C_V_150":  "(B153*2/100)",
+                                    }
+                 },
+                 {
+                     "pid":  "2211231",
+                     "pid_init":  "ATSH704",
+                     "parameters":  {
+                                        "BATTERY_MODULE_01_TEMPERATURE":  "B4-40",
+                                        "BATTERY_MODULE_02_TEMPERATURE":  "B5-40",
+                                        "BATTERY_MODULE_03_TEMPERATURE":  "B6-40",
+                                        "BATTERY_MODULE_04_TEMPERATURE":  "B7-40",
+                                        "BATTERY_MODULE_05_TEMPERATURE":  "B8-40",
+                                        "BATTERY_MODULE_06_TEMPERATURE":  "B9-40",
+                                        "BATTERY_MODULE_07_TEMPERATURE":  "B10-40",
+                                        "BATTERY_MODULE_08_TEMPERATURE":  "B11-40",
+                                        "BATTERY_MODULE_09_TEMPERATURE":  "B12-40",
+                                        "BATTERY_MODULE_10_TEMPERATURE":  "B13-40",
+                                        "BATTERY_MODULE_11_TEMPERATURE":  "B14-40",
+                                        "BATTERY_MODULE_12_TEMPERATURE":  "B15-40",
+                                        "BATTERY_MODULE_13_TEMPERATURE":  "B16-40",
+                                        "BATTERY_MODULE_14_TEMPERATURE":  "B17-40",
+                                        "BATTERY_MODULE_15_TEMPERATURE":  "B18-40",
+                                        "BATTERY_MODULE_16_TEMPERATURE":  "B19-40",
+                                        "BATTERY_MODULE_17_TEMPERATURE":  "B20-40",
+                                        "BATTERY_MODULE_18_TEMPERATURE":  "B21-40",
+                                        "BATTERY_MODULE_19_TEMPERATURE":  "B22-40",
+                                        "BATTERY_MODULE_20_TEMPERATURE":  "B23-40",
+                                        "BATTERY_MODULE_21_TEMPERATURE":  "B24-40",
+                                        "BATTERY_MODULE_22_TEMPERATURE":  "B25-40",
+                                        "BATTERY_MODULE_23_TEMPERATURE":  "B26-40",
+                                        "BATTERY_MODULE_24_TEMPERATURE":  "B27-40",
+                                        "BATTERY_MODULE_25_TEMPERATURE":  "B28-40",
+                                        "BATTERY_MODULE_26_TEMPERATURE":  "B29-40",
+                                        "BATTERY_MODULE_27_TEMPERATURE":  "B30-40",
+                                        "BATTERY_MODULE_28_TEMPERATURE":  "B31-40",
+                                        "BATTERY_MODULE_29_TEMPERATURE":  "B32-40",
+                                        "BATTERY_MODULE_30_TEMPERATURE":  "B33-40",
+                                        "BATTERY_MODULE_31_TEMPERATURE":  "B34-40",
+                                        "BATTERY_MODULE_32_TEMPERATURE":  "B35-40",
+                                        "BATTERY_MODULE_33_TEMPERATURE":  "B36-40",
+                                        "BATTERY_MODULE_34_TEMPERATURE":  "B37-40",
+                                        "BATTERY_MODULE_35_TEMPERATURE":  "B38-40"
+                                    }
+                 }
+             ]
 }
