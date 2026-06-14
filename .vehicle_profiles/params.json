@@ -2193,70 +2193,6 @@
       "max": "80"
     }
   },
-  "HV_T_2": {
-    "description": "HV Battery Temp Sensor 2",
-    "settings": {
-      "unit": "°C",
-      "class": "temperature"
-    }
-  },
-  "HV_T_3": {
-    "description": "HV Battery Temp Sensor 3",
-    "settings": {
-      "unit": "°C",
-      "class": "temperature"
-    }
-  },
-  "HV_T_4": {
-    "description": "HV Battery Temp Sensor 4",
-    "settings": {
-      "unit": "°C",
-      "class": "temperature"
-    }
-  },
-  "HV_T_5": {
-    "description": "HV Battery Temp Sensor 5",
-    "settings": {
-      "unit": "°C",
-      "class": "temperature"
-    }
-  },
-  "HV_T_6": {
-    "description": "HV Battery Temp Sensor 6",
-    "settings": {
-      "unit": "°C",
-      "class": "temperature",
-      "min": "-40",
-      "max": "80"
-    }
-  },
-  "HV_T_7": {
-    "description": "HV Battery Temp Sensor 7",
-    "settings": {
-      "unit": "°C",
-      "class": "temperature",
-      "min": "-40",
-      "max": "80"
-    }
-  },
-  "HV_T_8": {
-    "description": "HV Battery Temp Sensor 8",
-    "settings": {
-      "unit": "°C",
-      "class": "temperature",
-      "min": "-40",
-      "max": "80"
-    }
-  },
-  "HV_T_9": {
-    "description": "HV Battery Temp Sensor 9",
-    "settings": {
-      "unit": "°C",
-      "class": "temperature",
-      "min": "-40",
-      "max": "80"
-    }
-  },
   "HV_T_17": {
     "description": "HV Battery Temp Sensor 17",
     "settings": {
@@ -2282,6 +2218,13 @@
       "class": "temperature",
       "min": "-40",
       "max": "80"
+    }
+  },
+  "HV_T_2": {
+    "description": "HV Battery Temp Sensor 2",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature"
     }
   },
   "HV_T_20": {
@@ -2374,6 +2317,13 @@
       "max": "80"
     }
   },
+  "HV_T_3": {
+    "description": "HV Battery Temp Sensor 3",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature"
+    }
+  },
   "HV_T_30": {
     "description": "HV Battery Temp Sensor 30",
     "settings": {
@@ -2421,6 +2371,56 @@
   },
   "HV_T_35": {
     "description": "HV Battery Temp Sensor 35",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_4": {
+    "description": "HV Battery Temp Sensor 4",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature"
+    }
+  },
+  "HV_T_5": {
+    "description": "HV Battery Temp Sensor 5",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature"
+    }
+  },
+  "HV_T_6": {
+    "description": "HV Battery Temp Sensor 6",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_7": {
+    "description": "HV Battery Temp Sensor 7",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_8": {
+    "description": "HV Battery Temp Sensor 8",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_9": {
+    "description": "HV Battery Temp Sensor 9",
     "settings": {
       "unit": "°C",
       "class": "temperature",
