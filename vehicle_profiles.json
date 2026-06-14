@@ -11955,7 +11955,7 @@
       ]
     },
     {
-      "car_model": "Xpeng: G6",
+      "car_model": "Xpeng: P5/P7/G6/G9/X9",
       "init": "ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH704;ATCRA784;ATFCSH704;ATFCSM1",
       "pids": [
         {
