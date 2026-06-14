@@ -1761,6 +1761,15 @@
       "max": "10"
     }
   },
+  "HV_C_V_158": {
+    "description": "Cell Voltage 158",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
   "HV_C_V_159": {
     "description": "Cell Voltage 159",
     "settings": {
