@@ -1,0 +1,19 @@
+{
+  "car_model": "Toyota: Prius Prime (Gen2 PHV)",
+  "comment": "Toyota Prius Prime (Gen2 PHV, 2017-2022). Confirmed on WiCAN-OBD-C3 fw 4.21. HV/EV battery SOC via standard PID 015B (two ECUs respond, hence 015B2), same scaling as the Rav4 profile. Note: unlike the Rav4, the Prius Prime does not respond to standard fuel PID 012F or odometer PID 01A6.",
+  "init": "ATSP6;",
+  "pids": [
+    {
+      "pid": "01051",
+      "parameters": {
+        "COOLANT_TMP": "B3-40"
+      }
+    },
+    {
+      "pid": "015B2",
+      "parameters": {
+        "SOC": "(B3*20)/51"
+      }
+    }
+  ]
+}
