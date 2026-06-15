@@ -32,16 +32,51 @@ the discovery filters -- useful for cross-referencing and covers the Phase 0
 AAT probe in the same pass. With those two added in, ~18 filters run per
 monitor pass (~25 s/pass at ~1.1 s ATMA slice each).
 
-**Prerequisite**: the device must already have a `car_data.json` with at
-least one PID entry loaded (e.g. `vehicle_profiles/mazda/mx5_nc.json`,
-uploaded once via the web UI's vehicle-profile picker). If `car_data.json`
-has zero PIDs, `autopid` skips loading *all* `can_filters` (from both
-`car_data.json` and `auto_pid.json`), including these discovery filters.
+## Prerequisites
+
+Both of these must be true *before* uploading, or the device stores the
+filters but captures nothing:
+
+1. **Protocol must be set to AutoPID.** The `can_filters` monitor loop and
+   the CSV logger only run when the device protocol is AutoPID. In the web
+   UI go to **Settings -> CAN**, set **Protocol** to **AutoPID**, and click
+   **Submit Changes**. In any other mode (the factory/ELM327 default is
+   `elm327`) the discovery filters are saved to `auto_pid.json` but never
+   executed -- endpoints such as `scan_available_pids` even reply
+   *"Go to Settings -> CAN and set Protocol to AutoPID then click Submit
+   Changes"*. Verify with:
+
+   ```bash
+   curl http://<wican-ip>/check_status
+   # the active protocol (home_protocol / drive_protocol) must read "auto_pid",
+   # not "elm327"
+   ```
+
+2. **A car profile with at least one PID must be loaded.** The device must
+   already have a `car_data.json` with at least one PID entry (e.g.
+   `vehicle_profiles/mazda/mx5_nc.json`, uploaded once via the web UI's
+   vehicle-profile picker). The discovery config itself contains zero PIDs,
+   and if `car_data.json` also has zero PIDs, `autopid` aborts with
+   *"No PIDs found in car_data.json or auto_pid.json"* and skips loading
+   *all* `can_filters` (from both files), including these discovery filters.
+   Verify with:
+
+   ```bash
+   curl http://<wican-ip>/load_auto_pid_car_data
+   # the selected car must show a non-empty "pids" array -- NOT
+   # {"car_model":"Not Selected", ... "pids":[]}
+   ```
 
 ## Usage
 
-1. **Back up the current Automate/custom-PID config** (this overwrites
-   `auto_pid.json` on the device):
+1. **Set Protocol to AutoPID and enable CSV logging** (see Prerequisites).
+   In the web UI under **Settings -> CAN** set Protocol to **AutoPID**, then
+   turn on **CSV Datalog** with log storage set to the SD card -- the
+   default `csv_log` value is `disable`, so without this step nothing is
+   written to the card. Click **Submit Changes**.
+
+2. **Back up the current Automate/custom-PID config** (the upload in step 3
+   overwrites `auto_pid.json` on the device):
 
    ```bash
    curl http://<wican-ip>/load_auto_pid -o auto_pid_backup.json
@@ -50,7 +85,7 @@ has zero PIDs, `autopid` skips loading *all* `can_filters` (from both
    If the response body is literally `NONE`, there was no existing
    `auto_pid.json` -- nothing to restore later.
 
-2. **Upload the discovery config**:
+3. **Upload the discovery config**:
 
    ```bash
    curl -X POST http://<wican-ip>/store_auto_data \
@@ -58,16 +93,25 @@ has zero PIDs, `autopid` skips loading *all* `can_filters` (from both
        --data-binary @discovery_auto_pid.json
    ```
 
-3. **Power-cycle the WiCAN** so `autopid_config` reloads with the new
-   filters.
+   A `200` with `Auto PID table will take effect after submit.` confirms the
+   write. You can read it back with `curl http://<wican-ip>/load_auto_pid`
+   -- it should return the exact bytes you just uploaded.
 
-4. With CSV Datalog enabled, idle and drive for 10-15 minutes, then pull the
+4. **Restart the WiCAN** so `autopid_config` reloads with the new filters.
+   Power-cycle the device, or trigger a reboot over HTTP without touching
+   the hardware:
+
+   ```bash
+   curl -X POST http://<wican-ip>/system_reboot
+   ```
+
+5. With CSV Datalog enabled, idle and drive for 10-15 minutes, then pull the
    CSV from the SD card. Each row is `CANFLT,<name>,<value>,<unit>` --
    non-zero/changing values on the `ID4xx_*` and `ID0EC_*` columns confirm
    HCAN1 visibility at the OBD port and answer the Phase 0 questions (VSS
    arbitration, TP cross-check, AAT support).
 
-5. **Restore your previous config**:
+6. **Restore your previous config**:
 
    ```bash
    curl -X POST http://<wican-ip>/store_auto_data \
@@ -75,7 +119,7 @@ has zero PIDs, `autopid` skips loading *all* `can_filters` (from both
        --data-binary @auto_pid_backup.json
    ```
 
-   ...then power-cycle again.
+   ...then restart again (power-cycle or `POST /system_reboot`).
 
 ## Regenerating
 
