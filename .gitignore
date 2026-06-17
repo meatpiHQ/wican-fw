@@ -67,3 +67,11 @@ managed_components/
 # Clangd Cache
 .cache/
 tools/https_test_server/test_certs/
+
+# Claude Code session artifacts (notes, config backups, captures, build logs)
+.claude/
+
+# Out-of-tree build dirs and stray capture/log artifacts
+/build_553*/
+/*.log
+/home.html

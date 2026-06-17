@@ -85,6 +85,7 @@
 #include "rtcm.h"
 #include "esp_littlefs.h"
 #include "obd_logger_iface.h"
+#include "csv_logger.h"
 #include "https_client_mgr.h"
 #include "sdcard.h"
 #include "obd2_standard_pids.h"
@@ -3527,6 +3528,9 @@ static void register_server_uris(void)
 	httpd_register_uri_handler(server, &obd_logger_ws);
 	httpd_register_uri_handler(server, &db_download_uri);
 	httpd_register_uri_handler(server, &db_files_uri);
+	httpd_register_uri_handler(server, &csv_status_uri);
+	httpd_register_uri_handler(server, &csv_list_uri);
+	httpd_register_uri_handler(server, &csv_download_uri);
 	// NOTE: catch-all wildcard handler moved to after cert manager handlers to avoid shadowing
 }
 
@@ -3685,7 +3689,10 @@ static httpd_handle_t config_server_init(void)
                        );
 
 	// Start the httpd server (reserve extra slots for cert manager endpoints)
-	config.max_uri_handlers = 38;
+	// NOTE: the catch-all "/*" file server (get_uri_common) is registered LAST, so it
+	// must fit within this cap. The 3 CSV-logger endpoints pushed the total past 38,
+	// which silently dropped "/*" and 404'd every embedded asset (main.js, etc.).
+	config.max_uri_handlers = 48;
 	config.stack_size = (10*1024);
 	config.max_open_sockets = 15;
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);

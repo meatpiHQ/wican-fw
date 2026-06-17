@@ -106,10 +106,25 @@ filters but captures nothing:
    ```
 
 5. With CSV Datalog enabled, idle and drive for 10-15 minutes, then pull the
-   CSV from the SD card. Each row is `CANFLT,<name>,<value>,<unit>` --
-   non-zero/changing values on the `ID4xx_*` and `ID0EC_*` columns confirm
-   HCAN1 visibility at the OBD port and answer the Phase 0 questions (VSS
-   arbitration, TP cross-check, AAT support).
+   log. The CSV is `timestamp_ms,source,name,value,unit` per row (e.g.
+   `12345,CANFLT,ID200_B0,167.000,raw`); `source` is `CANFLT` for the discovery
+   filters and `PID`/`STD` for polled values. Non-zero/changing values on the
+   `ID4xx_*` and `ID0EC_*` names confirm HCAN1 visibility at the OBD port and
+   answer the Phase 0 questions (VSS arbitration, TP cross-check, AAT support).
+
+   The logger only writes while it considers the ignition **on**, which means
+   battery voltage above the device's `sleep_volt` threshold (default 13.1 V --
+   i.e. the engine running with the alternator up). On a bench supply below that
+   it stays idle and writes nothing; use the live verify below instead, or raise
+   the supply / lower `sleep_volt`.
+
+   Retrieve and inspect the CSV over HTTP (no need to remove the SD card):
+
+   ```bash
+   curl http://<wican-ip>/csv_status          # {"running":..,"session_active":..,"rows_written":..,"files_count":..}
+   curl http://<wican-ip>/csv_list            # {"files":[{"name":"20260615_103000.csv","size":12345}, ...]}
+   curl -OJ http://<wican-ip>/download_csv?file=20260615_103000.csv
+   ```
 
 6. **Restore your previous config**:
 
@@ -120,6 +135,41 @@ filters but captures nothing:
    ```
 
    ...then restart again (power-cycle or `POST /system_reboot`).
+
+## Live verify (no drive cycle, no SD card needed)
+
+Before committing to a full idle-and-drive capture, confirm the filters are
+actually decoding frames with a quick bench check. This reads the same decoded
+parameters that get written to the CSV, straight out of RAM -- so it works even
+when the CSV logger is idle (e.g. on a bench, where the logger stays closed
+until ignition/voltage comes up).
+
+1. **Confirm the ECU is connected.** After the reboot in step 4 above:
+
+   ```bash
+   curl http://<wican-ip>/check_status
+   # "protocol":"auto_pid" and "ecu_status":"online" -- online means autopid
+   # connected to the ECU. "offline" = still in elm327, or no ECU response yet.
+   ```
+
+2. **Read the live decoded values.** `autopid` exposes the latest value of every
+   decoded parameter as a flat JSON object:
+
+   ```bash
+   curl http://<wican-ip>/autopid_data
+   ```
+
+   Each `can_filters` parameter shows up as `ID<hex>_Bn` / `ID<hex>_Wnn`. A frame
+   that is present on the bus shows real, sensible byte values; a frame that is
+   **not** visible at the port is either absent from the response or reads all
+   `255` (0xFF, the unwritten default). Poll it a few times -- bytes that change
+   between reads confirm the ID is live and moving. Only parameters that have
+   been decoded at least once appear, so the key count also tells you how many of
+   the 16 candidate IDs the ECU is actually broadcasting.
+
+This answers the Phase 0 "which IDs are visible at the OBD port" question on the
+bench in seconds. It does **not** persist anything -- use the CSV capture (Usage
+step 5) for the actual logged dataset.
 
 ## Regenerating
 

@@ -912,9 +912,15 @@ void app_main(void)
 			ESP_LOGE(TAG, "error getting log period");
 			log_period = 60;
 		}
+		// CSV datalogger: DEFERRED start when enabled. The historical boot crash was a
+		// task-publish race in csv_logger_init() (csv_queue published after the higher-
+		// priority writer task was created), now fixed. The deferred start is kept as a
+		// modest settle margin: csv_logger_init_deferred() waits ~20s, then starts the
+		// logger. A one-shot RTC guard skips CSV for one boot if a startup attempt ever
+		// fails to stabilize, so it can never boot-loop.
 		if(config_server_get_csv_log() == 1)
 		{
-			csv_logger_init();
+			csv_logger_init_deferred();
 		}
 		autopid_init((char*)&uid[0], config_server_get_logger_config(), log_period);
 	}

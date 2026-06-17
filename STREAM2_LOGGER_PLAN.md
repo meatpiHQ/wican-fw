@@ -26,6 +26,73 @@ lands it should pause AutoPID (e.g. `DEV_AUTOPID_ENABLED_BIT` or
 `autopid_lock`), which automatically silences this logger since no parameters
 flow while AutoPID is idle.
 
+### Boot auto-start crash — root-caused & fixed (2026-06-17)
+
+Enabling CSV at boot (`csv_log=enable`) bricked the device into a breathing-red
+boot-loop, while on-demand start (post-boot) always worked. After a long hunt
+(which wrongly chased PSRAM-cache and brownout theories), the root cause was a
+**task-publish race** in `csv_logger_init()`: `csv_queue` was assigned *after*
+`xTaskCreateStatic()`. The writer task runs at priority 4, but its boot-time
+creators run lower (deferred-init task = 3, `app_main` = 1), so the create
+**preempts immediately** and the new task calls `xQueueReceive(csv_queue, …)`
+while `csv_queue` is still `NULL` → panic at the first receive. On-demand never
+hit it only because the httpd caller is priority 5 (> 4): no preemption, so the
+queue was already published before the task ran. This one race explains every
+symptom (PSRAM == internal, 20 s == 90 s defer, "panic not brownout",
+inline-at-boot, deferred, on-demand-works).
+
+**Fix:** publish the queue *before* creating the task — one line of ordering in
+`csv_logger.c`, `csv_logger_init()` (un-publish to `NULL` on create failure).
+Verified end-to-end: `csv_log=enable` boots clean, the writer task comes up
+running, and real auto_pid frames (CAN 0x231 etc.) are written to
+`/sdcard/logs/*.csv` — reset count stays 0, zero drops.
+
+A permanent **one-shot RTC crash guard** was added alongside the fix: if a boot
+arms a CSV attempt and it doesn't survive 15 s, the next boot skips CSV init, so
+any future CSV-startup fault self-recovers in a single reboot instead of a
+boot-loop. The diagnostic scaffolding from the hunt (RTC progress markers,
+`/csv_debug`, `/csv_debug_clear`, `/csv_test_*`, the bench force-gate) has since
+been **stripped** — the production tree keeps only the race fix + the one-shot
+guard. The full harness is archived on the `claude/csv-datalogger-debug-ref`
+branch for reference if a similar no-serial boot fault ever recurs.
+
+## Target operating model — Tactrix OpenPort 2.0 style (operator vision, 2026-06-17)
+
+The MVP is a CSV sink; the target is a Tactrix-class logger. Captured as tasks
+#8-#12; the key design decisions below are still open.
+
+**Lifecycle:** configured PIDs (existing UI, fine as-is) are polled while the
+engine runs. Logging **auto-starts when the car starts** and **auto-stops +
+finalizes the file when the engine stops** (existing ignition gate +
+off-debounce; gated on Task #6, the ignition-state fix). One file per drive.
+Task #10.
+
+**File naming:** `log<NNNNN>.csv` (Tactrix incremental) or `YYYYMMDD[_NN].csv`.
+*Decision open* — date-only collides on same-day multiple drives.
+
+**Format:** the final on-SD file is **wide / Tactrix-style** — one row per time
+sample, one column per channel — with **forward-fill (LOCF)**: fast channels
+(RPM) change every row; slow channels (IAT/ECT) repeat the last value until
+refreshed. *Decision open* — **(A)** long during the drive + streaming pivot on
+engine-stop (single pass, O(channels) RAM, must defer sleep until done) vs
+**(B)** write wide incrementally with in-RAM forward-fill and a fixed
+config-derived column set (no end-of-drive crunch, no sleep-deferral). Recommend
+**B**. Plus a time-grid choice (one row per event vs fixed-rate resample). Must
+handle large files (a 5 h drive). Task #11.
+
+**Access:**
+- Web-UI **file browser** — list + click-to-download; backend (`/csv_list`,
+  `/download_csv`) already exists. Task #8.
+- **USB Mass Storage** — plug the USB cable and the SD appears in the host file
+  explorer; USB connect also finalizes the current log. MSC and FATFS can't both
+  own the SD, so USB connect must stop logging and hand the card off. Task #9.
+
+**Offload:** auto-upload the finished log when the engine stops (future; must
+fit the post-key-off power window before sleep). Task #12 — supersedes the
+Phase 4 "auto-offload" note below.
+
+---
+
 Original parked design below, kept for reference.
 
 ---

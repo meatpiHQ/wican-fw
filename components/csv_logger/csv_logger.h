@@ -24,6 +24,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "esp_err.h"
+#include "esp_http_server.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,6 +47,17 @@ extern "C" {
 esp_err_t csv_logger_init(void);
 
 /**
+ * @brief Start the CSV datalogger AFTER boot settles (deferred ~20s).
+ *
+ * Call this at boot instead of csv_logger_init(); it spawns a small task that waits,
+ * then calls csv_logger_init() once. The wait is a modest settle margin (the historical
+ * boot crash was a task-publish race in csv_logger_init(), now fixed). A one-shot RTC
+ * guard skips CSV for a single boot if a startup attempt ever fails to stabilize, so a
+ * CSV-startup fault can never boot-loop the device.
+ */
+void csv_logger_init_deferred(void);
+
+/**
  * @brief Queue one decoded parameter sample for CSV logging.
  *
  * Non-blocking: called from the AutoPID hot path, so it never waits. If the
@@ -63,6 +75,15 @@ void csv_logger_record(const char *name, float value, const char *unit, const ch
  * @brief Logger status snapshot as a cJSON-printed string (caller frees), or NULL.
  */
 char *csv_logger_get_status_json(void);
+
+/* HTTP endpoints (register in config_server):
+ *   GET  /csv_status            -> logger status JSON (running, sd_mounted, session_active, rows_written...)
+ *   GET  /csv_list              -> {"files":[{"name":..,"size":..}, ...]} of the SD-card CSV logs
+ *   GET  /download_csv?file=NAME -> streams that CSV file as a download
+ */
+extern const httpd_uri_t csv_status_uri;
+extern const httpd_uri_t csv_list_uri;
+extern const httpd_uri_t csv_download_uri;
 
 #ifdef __cplusplus
 }
