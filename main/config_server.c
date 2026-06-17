@@ -86,6 +86,7 @@
 #include "esp_littlefs.h"
 #include "obd_logger_iface.h"
 #include "csv_logger.h"
+#include "sd_filemgr.h"
 #include "https_client_mgr.h"
 #include "sdcard.h"
 #include "obd2_standard_pids.h"
@@ -3552,6 +3553,8 @@ static void register_server_uris(void)
 	httpd_register_uri_handler(server, &csv_status_uri);
 	httpd_register_uri_handler(server, &csv_list_uri);
 	httpd_register_uri_handler(server, &csv_download_uri);
+	httpd_register_uri_handler(server, &sd_files_get_uri);
+	httpd_register_uri_handler(server, &sd_files_post_uri);
 	// NOTE: catch-all wildcard handler moved to after cert manager handlers to avoid shadowing
 }
 

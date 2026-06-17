@@ -76,6 +76,13 @@ void csv_logger_record(const char *name, float value, const char *unit, const ch
  */
 char *csv_logger_get_status_json(void);
 
+/**
+ * @brief True if abspath is the CSV file the writer task currently holds open.
+ *
+ * Lets the SD file manager refuse to delete/rename the log being written.
+ */
+bool csv_logger_is_active_file(const char *abspath);
+
 /* HTTP endpoints (register in config_server):
  *   GET  /csv_status            -> logger status JSON (running, sd_mounted, session_active, rows_written...)
  *   GET  /csv_list              -> {"files":[{"name":..,"size":..}, ...]} of the SD-card CSV logs

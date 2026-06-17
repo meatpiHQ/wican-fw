@@ -2450,6 +2450,159 @@ function restoreCANFLTRow(id, n, p, pi, s, b, e, c) {
     document.getElementById("cycle").value = "";
 }
 
+// ===== SD-card file browser (Task #8) =====
+var filesCwd = '';   // current directory, relative to /sdcard
+
+function filesFmtSize(b) {
+    if (b == null) return '';
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+    if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
+    return (b / 1073741824).toFixed(2) + ' GB';
+}
+
+function filesJoin(dir, name) { return dir ? (dir + '/' + name) : name; }
+
+function filesParent(dir) {
+    if (!dir) return '';
+    var i = dir.lastIndexOf('/');
+    return i < 0 ? '' : dir.substring(0, i);
+}
+
+function filesApi(method, qsOrBody, cb) {
+    var xhr = new XMLHttpRequest();
+    if (method === 'GET') {
+        xhr.open('GET', '/files?' + qsOrBody);
+    } else {
+        xhr.open('POST', '/files');
+        xhr.setRequestHeader('Content-Type', 'application/json');
+    }
+    xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4) {
+            var ok = xhr.status >= 200 && xhr.status < 300;
+            var data = null;
+            try { data = JSON.parse(xhr.responseText); } catch (e) {}
+            cb(ok, data, xhr.status);
+        }
+    };
+    xhr.send(method === 'GET' ? null : qsOrBody);
+}
+
+function filesLoad(rel) {
+    filesCwd = rel || '';
+    filesApi('GET', 'op=list&path=' + encodeURIComponent(filesCwd), function(ok, data) {
+        if (!ok || !data) {
+            var b = document.getElementById('files_body');
+            if (b) b.innerHTML = '<tr><td colspan=4 style="text-align:center;color:#b91c1c;padding:8px">Failed to load folder</td></tr>';
+            return;
+        }
+        filesRender(data);
+    });
+    filesApi('GET', 'op=df', function(ok, data) {
+        var el = document.getElementById('files_df');
+        if (!el) return;
+        el.textContent = (ok && data && data.total) ? ('SD: ' + filesFmtSize(data.free) + ' free of ' + filesFmtSize(data.total)) : '';
+    });
+}
+
+function filesRender(data) {
+    document.getElementById('files_path').textContent = '/sdcard' + (data.path ? '/' + data.path : '');
+    var body = document.getElementById('files_body');
+    body.innerHTML = '';
+    if (data.sd_mounted === false) {
+        body.innerHTML = '<tr><td colspan=4 style="text-align:center;color:#b91c1c;padding:8px">SD card not mounted</td></tr>';
+        return;
+    }
+    var cell = 'border:1px solid #e2e8f0;padding:6px';
+    if (filesCwd) {
+        var up = document.createElement('tr');
+        var uc = document.createElement('td'); uc.colSpan = 4; uc.style.cssText = cell;
+        var ua = document.createElement('a'); ua.href = '#'; ua.textContent = '.. (up one level)';
+        ua.onclick = function(e) { e.preventDefault(); filesLoad(filesParent(filesCwd)); };
+        uc.appendChild(ua); up.appendChild(uc); body.appendChild(up);
+    }
+    var entries = (data.entries || []).slice();
+    entries.sort(function(a, b) {
+        if ((a.type === 'dir') !== (b.type === 'dir')) return a.type === 'dir' ? -1 : 1;
+        return a.name.localeCompare(b.name);
+    });
+    entries.forEach(function(en) {
+        var isDir = en.type === 'dir';
+        var rel = filesJoin(filesCwd, en.name);
+        var tr = document.createElement('tr');
+
+        var nameTd = document.createElement('td'); nameTd.style.cssText = cell;
+        if (isDir) {
+            var a = document.createElement('a'); a.href = '#'; a.textContent = en.name + '/';
+            a.onclick = function(e) { e.preventDefault(); filesLoad(rel); };
+            nameTd.appendChild(a);
+        } else {
+            nameTd.textContent = en.name + (en.active ? '  (active log)' : '');
+        }
+        tr.appendChild(nameTd);
+
+        var sizeTd = document.createElement('td'); sizeTd.style.cssText = cell;
+        sizeTd.textContent = isDir ? '' : filesFmtSize(en.size); tr.appendChild(sizeTd);
+
+        var typeTd = document.createElement('td'); typeTd.style.cssText = cell;
+        typeTd.textContent = isDir ? 'folder' : 'file'; tr.appendChild(typeTd);
+
+        var actTd = document.createElement('td'); actTd.style.cssText = cell;
+        if (!isDir) {
+            var dl = document.createElement('button'); dl.textContent = 'Download'; dl.style.marginRight = '4px';
+            dl.onclick = function() { filesDownload(rel, en.name); };
+            actTd.appendChild(dl);
+        }
+        var rn = document.createElement('button'); rn.textContent = 'Rename'; rn.style.marginRight = '4px';
+        rn.onclick = function() { filesRename(rel, en.name); };
+        actTd.appendChild(rn);
+        var del = document.createElement('button'); del.textContent = 'Delete';
+        del.onclick = function() { filesDelete(rel, en.name, isDir); };
+        actTd.appendChild(del);
+        tr.appendChild(actTd);
+
+        body.appendChild(tr);
+    });
+    if (!entries.length) {
+        var er = document.createElement('tr'); var ec = document.createElement('td');
+        ec.colSpan = 4; ec.style.cssText = 'text-align:center;color:#555;padding:8px'; ec.textContent = '(empty)';
+        er.appendChild(ec); body.appendChild(er);
+    }
+}
+
+function filesDownload(rel, name) {
+    var a = document.createElement('a');
+    a.href = '/files?op=download&path=' + encodeURIComponent(rel);
+    a.download = name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+function filesMkdir() {
+    var name = prompt('New folder name:');
+    if (!name) return;
+    filesApi('POST', JSON.stringify({ op: 'mkdir', path: filesCwd, name: name }), function(ok, data, st) {
+        if (!ok) alert('Create failed: ' + ((data && data.error) || st));
+        filesLoad(filesCwd);
+    });
+}
+
+function filesRename(rel, oldName) {
+    var name = prompt('Rename "' + oldName + '" to:', oldName);
+    if (!name || name === oldName) return;
+    filesApi('POST', JSON.stringify({ op: 'rename', path: rel, name: name }), function(ok, data, st) {
+        if (!ok) alert('Rename failed: ' + ((data && data.error) || st));
+        filesLoad(filesCwd);
+    });
+}
+
+function filesDelete(rel, name, isDir) {
+    if (!confirm('Delete ' + (isDir ? 'folder (and ALL its contents)' : 'file') + ' "' + name + '"?')) return;
+    filesApi('POST', JSON.stringify({ op: 'delete', path: rel }), function(ok, data, st) {
+        if (!ok) alert('Delete failed: ' + ((data && data.error) || st));
+        filesLoad(filesCwd);
+    });
+}
+
 function openTab(evt, tabName) {
     var i, tabcontent, tablinks;
     tabcontent = document.getElementsByClassName("tabcontent");
@@ -2471,6 +2624,9 @@ function openTab(evt, tabName) {
         loadDashboard();
     } else if (tabName === 'system_tab') {
         if (typeof certManagerLoad === 'function') certManagerLoad();
+    } else if (tabName === 'files_tab') {
+        filesCwd = '';
+        filesLoad('');
     } else if (tabName === 'vpn_tab') {
         // Refresh status so the badge reflects the latest state
         try { checkStatus(); } catch(_) {}

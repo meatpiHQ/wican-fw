@@ -332,6 +332,14 @@ void csv_logger_record(const char *name, float value, const char *unit, const ch
     }
 }
 
+bool csv_logger_is_active_file(const char *abspath)
+{
+    // Plain read of the writer task's open-file state (same pattern as the status
+    // JSON). Lets the SD file manager refuse to delete/rename the in-use log.
+    return csv_session_active && csv_file != NULL && abspath != NULL &&
+           strcmp(abspath, csv_file_path) == 0;
+}
+
 char *csv_logger_get_status_json(void)
 {
     cJSON *root = cJSON_CreateObject();

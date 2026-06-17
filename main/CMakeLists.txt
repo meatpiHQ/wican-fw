@@ -71,6 +71,7 @@ set(requires
     vpn_manager
     autopid
     csv_logger
+    sd_filemgr
     ha_webhooks
     wican_common
     ws_server
