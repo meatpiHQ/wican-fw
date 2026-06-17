@@ -3243,6 +3243,27 @@ static void config_server_load_cfg(char *cfg)
 	//*****
 
 	//*****
+	// Logger mutual exclusion (Task #5): only ONE of the stock SQLite/OBD logger
+	// (logger_status) or the CSV logger (csv_log) may be enabled at once. This is the
+	// AUTHORITATIVE, browser-independent enforcement point. Deterministic winner: CSV
+	// (matches the single-owner boot gate in main.c). Also coerce any non-enable/disable
+	// value to "disable" so a garbage NVS value can never enable a logger.
+	if(strcmp(device_config.logger_status, "enable") != 0 && strcmp(device_config.logger_status, "disable") != 0)
+	{
+		strlcpy(device_config.logger_status, "disable", sizeof(device_config.logger_status));
+	}
+	if(strcmp(device_config.csv_log, "enable") != 0 && strcmp(device_config.csv_log, "disable") != 0)
+	{
+		strlcpy(device_config.csv_log, "disable", sizeof(device_config.csv_log));
+	}
+	if(strcmp(device_config.logger_status, "enable") == 0 && strcmp(device_config.csv_log, "enable") == 0)
+	{
+		strlcpy(device_config.logger_status, "disable", sizeof(device_config.logger_status));   // CSV wins
+		ESP_LOGW(TAG, "logger_status and csv_log both enabled -> forcing logger_status=disable (CSV wins)");
+	}
+	//*****
+
+	//*****
 	key = cJSON_GetObjectItem(root,"log_filesystem");
 	if(key == 0)
 	{

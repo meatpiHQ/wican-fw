@@ -3413,6 +3413,26 @@ function postCANFLT() {
     xhttp.send(canfltJSON);
 }
 
+// Logger Settings consolidation (Task #5): one master "Logging" toggle + a mutually-
+// exclusive "Log Type" (csv|sqlite) compose onto the two real config keys logger_status
+// (SQLite/OBD) and csv_log (CSV), which remain in the DOM as hidden selects. CSV wins
+// ties to match the firmware boot gate + the server-side /store_config normalizer.
+function applyLoggerXor() {
+    var masterEl = document.getElementById("logging_master");
+    var typeEl = document.getElementById("log_type_sel");
+    var ls = document.getElementById("logger_status");
+    var cs = document.getElementById("csv_log");
+    if (!masterEl || !typeEl || !ls || !cs) { return; }
+    if (masterEl.value !== "enable") {
+        ls.value = "disable"; cs.value = "disable";
+    } else if (typeEl.value === "sqlite") {
+        ls.value = "enable"; cs.value = "disable";
+    } else {
+        ls.value = "disable"; cs.value = "enable";
+    }
+    typeEl.disabled = (masterEl.value !== "enable");
+}
+
 async function postConfig() {
     var obj = {};
     document.getElementById("submit_button").disabled = true;
@@ -3532,6 +3552,7 @@ async function postConfig() {
     }
     obj["mqtt_status_topic"] = document.getElementById("mqtt_status_topic").value;
     obj["mqtt_elm327_log"] = document.getElementById("mqtt_elm327_log").value;
+    applyLoggerXor();   // compose the two real keys from the master + type widgets
     obj["logger_status"] = document.getElementById("logger_status").value;
     obj["csv_log"] = document.getElementById("csv_log").value;
     obj["log_filesystem"] = document.getElementById("log_filesystem").value;
@@ -4079,17 +4100,15 @@ xhttp.onload = async function() {
             document.getElementById("mqtt_rx_topic").disabled = true;
         }
         
-        if (obj.logger_status === "enable") {
-            document.getElementById("logger_status").selectedIndex = "0";
-        } else if (obj.logger_status === "disable") {
-            document.getElementById("logger_status").selectedIndex = "1";
-        }
-
-        if (obj.csv_log === "enable") {
-            document.getElementById("csv_log").selectedIndex = "0";
-        } else {
-            document.getElementById("csv_log").selectedIndex = "1";
-        }
+        // Populate the two real (hidden) keys, then derive the master + type widgets.
+        document.getElementById("logger_status").value = (obj.logger_status === "enable") ? "enable" : "disable";
+        document.getElementById("csv_log").value = (obj.csv_log === "enable") ? "enable" : "disable";
+        var _ls_on = (obj.logger_status === "enable");
+        var _cs_on = (obj.csv_log === "enable");
+        document.getElementById("logging_master").value = (_ls_on || _cs_on) ? "enable" : "disable";
+        // CSV wins ties (matches boot gate + server normalizer); default type = CSV.
+        document.getElementById("log_type_sel").value = _cs_on ? "csv" : (_ls_on ? "sqlite" : "csv");
+        applyLoggerXor();
 
         if (obj.log_filesystem === "fatfs") {
             document.getElementById("log_filesystem").selectedIndex = "0";
@@ -4102,6 +4121,7 @@ xhttp.onload = async function() {
         }
 
         document.getElementById('log_period_value').textContent = obj.log_period;
+        document.getElementById('log_period').value = obj.log_period;   // restore slider thumb (was stuck at default)
         
         // Load IMU threshold value and update display
         document.getElementById("imu_threshold").value = obj.imu_threshold || "8";

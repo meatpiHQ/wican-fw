@@ -918,11 +918,16 @@ void app_main(void)
 		// modest settle margin: csv_logger_init_deferred() waits ~20s, then starts the
 		// logger. A one-shot RTC guard skips CSV for one boot if a startup attempt ever
 		// fails to stabilize, so it can never boot-loop.
-		if(config_server_get_csv_log() == 1)
+		// Single-owner gate (Task #5): at most one logger starts. CSV wins if both are
+		// somehow enabled (matches the /store_config normalizer). Explicit '== 1' so a
+		// -1 (unset/garbage logger_status) can NEVER enable a logger via bool coercion.
+		int8_t csv_en = config_server_get_csv_log();
+		int8_t obd_en = config_server_get_logger_config();
+		if(csv_en == 1)
 		{
 			csv_logger_init_deferred();
 		}
-		autopid_init((char*)&uid[0], config_server_get_logger_config(), log_period);
+		autopid_init((char*)&uid[0], (obd_en == 1 && csv_en != 1), log_period);
 	}
 
 	#else
