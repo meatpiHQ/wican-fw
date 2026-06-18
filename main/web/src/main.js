@@ -2553,12 +2553,14 @@ function filesRender(data) {
             dl.onclick = function() { filesDownload(rel, en.name); };
             actTd.appendChild(dl);
         }
-        var rn = document.createElement('button'); rn.textContent = 'Rename'; rn.style.marginRight = '4px';
-        rn.onclick = function() { filesRename(rel, en.name); };
-        actTd.appendChild(rn);
-        var del = document.createElement('button'); del.textContent = 'Delete';
-        del.onclick = function() { filesDelete(rel, en.name, isDir); };
-        actTd.appendChild(del);
+        if (!en.locked) {
+            var rn = document.createElement('button'); rn.textContent = 'Rename'; rn.style.marginRight = '4px';
+            rn.onclick = function() { filesRename(rel, en.name); };
+            actTd.appendChild(rn);
+            var del = document.createElement('button'); del.textContent = 'Delete';
+            del.onclick = function() { filesDelete(rel, en.name, isDir); };
+            actTd.appendChild(del);
+        }
         tr.appendChild(actTd);
 
         body.appendChild(tr);
@@ -3587,6 +3589,12 @@ function applyLoggerXor() {
         ls.value = "disable"; cs.value = "enable";
     }
     typeEl.disabled = (masterEl.value !== "enable");
+    // Log Period drives only the SQLite/OBD logger; the CSV logger logs at the
+    // decode rate and ignores it. Hide the row unless SQLite is the active type.
+    var lpRow = document.getElementById("log_period_row");
+    if (lpRow) {
+        lpRow.style.display = (masterEl.value === "enable" && typeEl.value === "sqlite") ? "" : "none";
+    }
 }
 
 async function postConfig() {

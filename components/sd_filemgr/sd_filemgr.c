@@ -34,12 +34,17 @@ static const char *TAG = "SD_FILEMGR";
 #define SDFM_OBD_DIR         SDFM_ROOT "/obd_logs"     /* reserved: SQLite OBD logger */
 /* CSV_LOGGER_DIR ("/sdcard/logs") comes from csv_logger.h -- also reserved. */
 
+/* Fully protected subtrees: neither the dir NOR anything under it may be deleted
+ * or renamed (the reserved roots above protect only the dir itself, not contents). */
+#define SDFM_SVI_DIR         SDFM_ROOT "/System Volume Information"  /* FAT system dir */
+#define SDFM_WICAN_DIR       SDFM_ROOT "/wican_data"                 /* device data + web assets */
+
 #define SDFM_MAX_DEPTH       16
 #define SDFM_PATH_MAX        320
 #define SDFM_NAME_MAX        255
 #define SDFM_LIST_CAP        1000
 #define SDFM_RMTREE_DEPTH    16
-#define SDFM_STREAM_BUF      (32 * 1024)
+#define SDFM_STREAM_BUF      (8 * 1024)
 #define SDFM_POST_BODY_MAX   1024
 
 /* ---------------- path jail ---------------- */
@@ -154,6 +159,22 @@ static bool sdfm_is_reserved(const char *abspath)
            strcmp(abspath, SDFM_OBD_DIR) == 0;
 }
 
+/* True if abspath IS a protected subtree root or lies anywhere beneath one.
+ * These are locked top-to-bottom: the dir and all of its contents are read-only
+ * to the file manager (delete/rename forbidden), so housekeeping can never touch
+ * the FAT system folder or the device's own data/web assets. */
+static bool sdfm_is_protected(const char *abspath)
+{
+    static const char *const roots[] = { SDFM_SVI_DIR, SDFM_WICAN_DIR };
+    for (size_t i = 0; i < sizeof(roots) / sizeof(roots[0]); i++)
+    {
+        size_t rl = strlen(roots[i]);
+        if (strcmp(abspath, roots[i]) == 0)                          { return true; }  /* the dir itself */
+        if (strncmp(abspath, roots[i], rl) == 0 && abspath[rl] == '/') { return true; } /* under it */
+    }
+    return false;
+}
+
 /* ---------------- small response helpers ---------------- */
 
 static esp_err_t sdfm_reply(httpd_req_t *req, const char *status, const char *json)
@@ -260,6 +281,9 @@ static esp_err_t sdfm_list(httpd_req_t *req, const char *abspath)
             if (snprintf(child, sizeof(child), "%s/%s", abspath, e->d_name) >= (int)sizeof(child)) { continue; }
             cJSON *item = cJSON_CreateObject();
             cJSON_AddStringToObject(item, "name", e->d_name);
+            /* Tell the UI to hide rename/delete for reserved roots and anything
+             * inside a fully protected subtree. (Backend enforces it regardless.) */
+            if (sdfm_is_reserved(child) || sdfm_is_protected(child)) { cJSON_AddBoolToObject(item, "locked", true); }
             if (stat(child, &st) == 0)
             {
                 bool is_dir = S_ISDIR(st.st_mode);
@@ -316,8 +340,17 @@ static esp_err_t sdfm_download(httpd_req_t *req, const char *abspath)
     httpd_resp_set_hdr(req, "Content-Disposition", disp);
 
     /* INTERNAL-only buffer: this server runs alongside SD writers, and a PSRAM
-     * buffer could fault during a flash-cache-disable window. */
-    char *buf = heap_caps_malloc(SDFM_STREAM_BUF, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+     * buffer could fault during a flash-cache-disable window. The size adapts to
+     * what internal RAM can actually give right now -- a fixed large block often
+     * fails to allocate alongside WiFi+httpd, which would 500 the whole download. */
+    size_t bufsz = SDFM_STREAM_BUF;
+    char *buf = NULL;
+    while (bufsz >= 1024)
+    {
+        buf = heap_caps_malloc(bufsz, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (buf != NULL) { break; }
+        bufsz /= 2;
+    }
     if (buf == NULL)
     {
         fclose(f);
@@ -326,7 +359,7 @@ static esp_err_t sdfm_download(httpd_req_t *req, const char *abspath)
 
     size_t r;
     esp_err_t rc = ESP_OK;
-    while ((r = fread(buf, 1, SDFM_STREAM_BUF, f)) > 0)
+    while ((r = fread(buf, 1, bufsz, f)) > 0)
     {
         if (httpd_resp_send_chunk(req, buf, r) != ESP_OK) { rc = ESP_FAIL; break; }
     }
@@ -410,7 +443,8 @@ static esp_err_t sdfm_op_delete(httpd_req_t *req, const char *rel)
     {
         return sdfm_reply(req, "400 Bad Request", "{\"error\":\"invalid path\"}");
     }
-    if (sdfm_is_reserved(abspath)) { return sdfm_reply(req, "403 Forbidden", "{\"error\":\"reserved path\"}"); }
+    if (sdfm_is_reserved(abspath))  { return sdfm_reply(req, "403 Forbidden", "{\"error\":\"reserved path\"}"); }
+    if (sdfm_is_protected(abspath)) { return sdfm_reply(req, "403 Forbidden", "{\"error\":\"protected path\"}"); }
 
     struct stat st;
     if (stat(abspath, &st) != 0)   { return sdfm_reply(req, "404 Not Found", "{\"error\":\"not found\"}"); }
@@ -437,6 +471,7 @@ static esp_err_t sdfm_op_rename(httpd_req_t *req, const char *rel, const char *n
         return sdfm_reply(req, "400 Bad Request", "{\"error\":\"invalid path\"}");
     }
     if (sdfm_is_reserved(src))             { return sdfm_reply(req, "403 Forbidden", "{\"error\":\"reserved path\"}"); }
+    if (sdfm_is_protected(src))            { return sdfm_reply(req, "403 Forbidden", "{\"error\":\"protected path\"}"); }
     if (csv_logger_is_active_file(src))    { return sdfm_reply(req, "409 Conflict", "{\"error\":\"file is being written\"}"); }
 
     struct stat st;
