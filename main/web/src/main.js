@@ -3605,6 +3605,17 @@ function applyLoggerXor() {
     var csvStatRow = document.getElementById("csv_status_row");
     if (csvRow) csvRow.style.display = csvShow ? "" : "none";
     if (csvStatRow) csvStatRow.style.display = csvShow ? "" : "none";
+    // Wide CSV (Task #11) controls, progressive: Format shown when CSV; Grid Mode only when
+    // Format=Wide; Grid Rate only when Wide + Fixed-rate (the grid is a wide-only concept).
+    var fmtEl = document.getElementById("csv_format");
+    var gmEl = document.getElementById("csv_grid_mode");
+    var fmtRow = document.getElementById("csv_format_row");
+    var gmRow = document.getElementById("csv_grid_mode_row");
+    var hzRow = document.getElementById("csv_grid_hz_row");
+    var wideOn = csvShow && fmtEl && fmtEl.value === "wide";
+    if (fmtRow) fmtRow.style.display = csvShow ? "" : "none";
+    if (gmRow) gmRow.style.display = wideOn ? "" : "none";
+    if (hzRow) hzRow.style.display = (wideOn && gmEl && gmEl.value === "fixed") ? "" : "none";
 }
 
 async function postConfig() {
@@ -3732,6 +3743,9 @@ async function postConfig() {
     obj["log_filesystem"] = document.getElementById("log_filesystem").value;
     obj["log_storage"] = document.getElementById("log_storage").value;
     obj["log_period"] = document.getElementById("log_period").value;
+    obj["csv_format"] = document.getElementById("csv_format").value;
+    obj["csv_grid_mode"] = document.getElementById("csv_grid_mode").value;
+    obj["csv_grid_hz"] = document.getElementById("csv_grid_hz").value;
     obj["imu_threshold"] = document.getElementById("imu_threshold").value;
     obj["elm327_udp_log"] = document.getElementById("elm327_udp_log").value;
 
@@ -4282,6 +4296,12 @@ xhttp.onload = async function() {
         document.getElementById("logging_master").value = (_ls_on || _cs_on) ? "enable" : "disable";
         // CSV wins ties (matches boot gate + server normalizer); default type = CSV.
         document.getElementById("log_type_sel").value = _cs_on ? "csv" : (_ls_on ? "sqlite" : "csv");
+        // Wide CSV (Task #11): hydrate format/grid controls BEFORE applyLoggerXor so it can
+        // gate the rows. Firmware defaults are wide/fixed/10 -> mirror them when absent.
+        document.getElementById("csv_format").value = (obj.csv_format === "long") ? "long" : "wide";
+        document.getElementById("csv_grid_mode").value = (obj.csv_grid_mode === "event") ? "event" : "fixed";
+        var _hz = parseInt(obj.csv_grid_hz, 10);
+        document.getElementById("csv_grid_hz").value = (_hz >= 1 && _hz <= 50) ? _hz : 10;
         applyLoggerXor();
 
         if (obj.log_filesystem === "fatfs") {

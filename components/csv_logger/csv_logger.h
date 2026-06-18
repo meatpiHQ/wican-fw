@@ -67,6 +67,34 @@ esp_err_t csv_logger_init(void);
 esp_err_t csv_logger_set_manual_override(bool enable);
 
 /**
+ * @brief Column provider for the WIDE (Tactrix-style) CSV format (Task #11).
+ *
+ * Registered by the AutoPID module at init so the CSV logger can enumerate the set of
+ * logged channels (one column each) WITHOUT a build-time dependency on autopid. autopid
+ * already REQUIRES csv_logger; routing the enumeration through a function pointer keeps
+ * that dependency one-way (no circular CMake REQUIRES).
+ *
+ * The provider fills caller-supplied fixed-stride arrays and returns the column count, or
+ * -1 if the config/lock is not ready (the writer retries briefly, then falls back to LONG).
+ * Counting mode: names==NULL returns an UPPER BOUND on the count (no writes) so the caller
+ * can size buffers before the fill pass. The provider takes its own lock BRIEFLY and does
+ * NO SD/flash/PSRAM-heavy work while holding it.
+ *
+ * Array dims MUST equal CSV_LOGGER_NAME_MAX / CSV_LOGGER_UNIT_MAX / CSV_LOGGER_SOURCE_MAX.
+ * The (source,name) pair is the column key: the producer emits the same name under
+ * different source tags (e.g. "PID" vs "CANFLT"), so source disambiguates two channels.
+ */
+typedef int (*csv_column_provider_t)(char (*names)[CSV_LOGGER_NAME_MAX],
+                                     char (*units)[CSV_LOGGER_UNIT_MAX],
+                                     char (*sources)[CSV_LOGGER_SOURCE_MAX],
+                                     int max_cols);
+
+/**
+ * @brief Register the wide-CSV column provider. Call once at boot (before logging starts).
+ */
+void csv_logger_set_column_provider(csv_column_provider_t provider);
+
+/**
  * @brief Start the CSV datalogger AFTER boot settles (deferred ~20s).
  *
  * Call this at boot instead of csv_logger_init(); it spawns a small task that waits,

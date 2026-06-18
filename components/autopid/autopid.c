@@ -249,6 +249,97 @@ void autopid_unlock(void)
     xSemaphoreGive(autopid_config->mutex);
 }
 
+// Column provider for the wide CSV logger (Task #11). Registered via
+// csv_logger_set_column_provider() in autopid_init so csv_logger has no build-time
+// dependency on autopid (autopid already REQUIRES csv_logger -> keeps the dep one-way).
+//
+// Mirrors the PRODUCER enable-gates exactly (NOT the JSON-export walk), so the wide header
+// lists precisely the channels that csv_logger_record will emit at runtime -- no phantom
+// all-empty columns, no missing channels. Source tags MUST match the producer call sites:
+//   PIDs:        STD (pid_type==PID_STD) / PID (CUSTOM,SPECIFIC)   [autopid.c ~4007/4065]
+//   CAN filters: CANFLT                                            [autopid.c ~2100]
+//
+// names==NULL -> count-only (returns an upper bound, no writes, no dedup). Otherwise fills
+// the caller arrays with the deduped set, keyed on (source,name), and returns the count.
+// Returns -1 if the config/mutex isn't ready. Takes autopid_lock for a BRIEF, bounded time
+// (100 ms): the calling writer task is prio 4 and the autopid task can hold this mutex across
+// a multi-second ELM read, so we must never block long here. Does NO SD/flash work locked.
+static int autopid_collect_log_columns(char (*names)[CSV_LOGGER_NAME_MAX],
+                                       char (*units)[CSV_LOGGER_UNIT_MAX],
+                                       char (*sources)[CSV_LOGGER_SOURCE_MAX],
+                                       int max_cols)
+{
+    if (!autopid_config || !autopid_config->mutex)
+        return -1;
+    if (!autopid_lock(100))
+        return -1;
+
+    bool count_only = (names == NULL);
+    int count = 0;
+
+    // ---- Configured PIDs ----
+    for (uint32_t i = 0; i < autopid_config->pid_count && count < max_cols; i++)
+    {
+        pid_data_t *pid = &autopid_config->pids[i];
+        if ((pid->pid_type == PID_STD && !autopid_config->pid_std_en) ||
+            (pid->pid_type == PID_CUSTOM && !autopid_config->pid_custom_en) ||
+            (pid->pid_type == PID_SPECIFIC && !autopid_config->pid_specific_en))
+            continue;
+        if (!pid->enabled)
+            continue;
+        const char *src = (pid->pid_type == PID_STD) ? "STD" : "PID";
+        for (uint32_t j = 0; j < pid->parameters_count && count < max_cols; j++)
+        {
+            parameter_t *p = &pid->parameters[j];
+            if (!p->enabled || !p->name || p->name[0] == '\0')
+                continue;
+            if (!count_only)
+            {
+                bool dup = false;
+                for (int k = 0; k < count; k++)
+                    if (strcmp(names[k], p->name) == 0 && strcmp(sources[k], src) == 0)
+                    { dup = true; break; }
+                if (dup) continue;
+                strlcpy(names[count], p->name, CSV_LOGGER_NAME_MAX);
+                strlcpy(units[count], p->unit ? p->unit : "", CSV_LOGGER_UNIT_MAX);
+                strlcpy(sources[count], src, CSV_LOGGER_SOURCE_MAX);
+            }
+            count++;
+        }
+    }
+
+    // ---- CAN-filter (broadcast) params ----
+    for (uint32_t fi = 0; fi < autopid_config->can_filters_count && count < max_cols; fi++)
+    {
+        can_filter_t *f = &autopid_config->can_filters[fi];
+        if (f->is_vehicle_specific && !autopid_config->pid_specific_en)
+            continue;
+        for (uint32_t pi = 0; pi < f->parameters_count && count < max_cols; pi++)
+        {
+            parameter_t *p = &f->parameters[pi];
+            if (!p->enabled || !p->expression || !p->name || p->name[0] == '\0')
+                continue;
+            if (!count_only)
+            {
+                bool dup = false;
+                for (int k = 0; k < count; k++)
+                    if (strcmp(names[k], p->name) == 0 && strcmp(sources[k], "CANFLT") == 0)
+                    { dup = true; break; }
+                if (dup) continue;
+                strlcpy(names[count], p->name, CSV_LOGGER_NAME_MAX);
+                strlcpy(units[count], p->unit ? p->unit : "", CSV_LOGGER_UNIT_MAX);
+                strlcpy(sources[count], "CANFLT", CSV_LOGGER_SOURCE_MAX);
+            }
+            count++;
+        }
+    }
+
+    autopid_unlock();
+    if (!count_only && count >= max_cols)
+        ESP_LOGW(TAG, "Wide CSV column cap (%d) reached - some channels omitted", max_cols);
+    return count;
+}
+
 const std_pid_t *get_pid_from_string(const char *pid_string)
 {
     char pid_hex[3];
@@ -4371,6 +4462,11 @@ static void autopid_app_setbit_timer_callback(TimerHandle_t xTimer)
 void autopid_init(char *id, bool enable_logging, uint32_t logging_period)
 {
     device_id = id;
+
+    // Register the wide-CSV column provider (Task #11). Done once here at boot, before any
+    // logging session opens, so csv_logger can enumerate channels via this function pointer
+    // without a build-time dependency on autopid.
+    csv_logger_set_column_provider(autopid_collect_log_columns);
     // if(autopid_data.mutex == NULL)
     // {
     //     autopid_data.mutex = xSemaphoreCreateMutex();
