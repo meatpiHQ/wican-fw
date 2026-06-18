@@ -2615,6 +2615,8 @@ function openTab(evt, tabName) {
     for(i = 0; i < tablinks.length; i++) {
         tablinks[i].className = tablinks[i].className.replace(" active", "");
     }
+    // Stop the CSV status poll on every tab switch (restarted below only for the logger tab).
+    if (typeof csv_status_poll_stop === 'function') csv_status_poll_stop();
     document.getElementById(tabName).style.display = "block";
     evt.currentTarget.className += " active";
 
@@ -2632,6 +2634,8 @@ function openTab(evt, tabName) {
     } else if (tabName === 'vpn_tab') {
         // Refresh status so the badge reflects the latest state
         try { checkStatus(); } catch(_) {}
+    } else if (tabName === 'logger') {
+        csv_status_poll_start();
     }
 }
 
@@ -3595,6 +3599,12 @@ function applyLoggerXor() {
     if (lpRow) {
         lpRow.style.display = (masterEl.value === "enable" && typeEl.value === "sqlite") ? "" : "none";
     }
+    // CSV-only runtime Start/Stop button + live status line: shown only when CSV is active.
+    var csvShow = (masterEl.value === "enable" && typeEl.value === "csv");
+    var csvRow = document.getElementById("csv_runtime_row");
+    var csvStatRow = document.getElementById("csv_status_row");
+    if (csvRow) csvRow.style.display = csvShow ? "" : "none";
+    if (csvStatRow) csvStatRow.style.display = csvShow ? "" : "none";
 }
 
 async function postConfig() {
@@ -4625,6 +4635,73 @@ function mon_button_en(b) {
         document.getElementById("mon_filter").disabled = true;
         document.getElementById("mon_mask").disabled = true;
     }
+}
+
+// ---- CSV datalogger runtime Start/Stop (POST /csv_logger) + live status poll ----
+// The button is a runtime action (NOT part of the config form / Submit). Firmware status
+// is the source of truth: after each POST and on every poll we reconcile the button label
+// from /csv_status (manual_override || session_active), robust to cross-core latency and
+// to start/stop happening from another client or from ignition.
+function csv_notify(m, c) {
+    if (typeof showNotification === 'function') showNotification(m, c); else console.log(m);
+}
+function csv_log_button_en(b) {
+    // b==1 => idle/Start, b==0 => active/Stop (mirror mon_button_en; no sibling inputs)
+    var btn = document.getElementById('csv_log_button');
+    if (btn) btn.value = (b == 1) ? 'Start' : 'Stop';
+}
+function csv_status_render(j) {
+    // Firmware status is the source of truth (robust to cross-core latency + external
+    // start/stop). "on" => button shows Stop; otherwise Start.
+    var on = !!(j && (j.manual_mode === 'on' || j.session_active));
+    csv_log_button_en(on ? 0 : 1);
+    var line = document.getElementById('csv_status_line');
+    if (!line) return;
+    if (j && j.session_active) {
+        line.textContent = 'logging • ' + (j.file || '') + ' • ' + (j.rows_written || 0) + ' rows';
+    } else if (j && j.manual_mode === 'on' && j.sd_mounted === false) {
+        line.textContent = 'waiting for SD card…';
+    } else if (j && j.manual_mode === 'on') {
+        line.textContent = 'armed — waiting for data…';
+    } else if (j && j.manual_mode === 'off') {
+        line.textContent = 'stopped';
+    } else {
+        line.textContent = 'idle';
+    }
+}
+function csv_status_tick() {
+    if (window._csvStatusInFlight) return;
+    window._csvStatusInFlight = true;
+    fetch('/csv_status').then(function(r) { return r.json(); })
+        .then(function(j) { csv_status_render(j); })
+        .catch(function() {})
+        .finally(function() { window._csvStatusInFlight = false; });
+}
+function csv_status_poll_start() {
+    if (window._csvStatusTimer) return;
+    csv_status_tick();
+    window._csvStatusTimer = setInterval(csv_status_tick, 1500);
+}
+function csv_status_poll_stop() {
+    if (window._csvStatusTimer) { clearInterval(window._csvStatusTimer); window._csvStatusTimer = null; }
+}
+function csv_log_control() {
+    var btn = document.getElementById('csv_log_button');
+    if (!btn) return;
+    var op = (btn.value === 'Start') ? 'start' : 'stop';
+    fetch('/csv_logger?op=' + op, { method: 'POST' })
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function(j) {
+            csv_status_render(j);
+            if (op === 'start') {
+                csv_notify(j.session_active ? 'Datalogging started' : 'Datalogging armed — waiting for data',
+                           j.session_active ? 'green' : 'orange');
+            } else {
+                csv_notify('Datalogging stopped', 'blue');
+            }
+            csv_status_poll_start();
+        })
+        .catch(function(e) { csv_notify('CSV control failed: ' + e.message, 'red'); });
 }
 
 function isNameUnique(name) {

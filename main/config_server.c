@@ -3553,6 +3553,7 @@ static void register_server_uris(void)
 	httpd_register_uri_handler(server, &csv_status_uri);
 	httpd_register_uri_handler(server, &csv_list_uri);
 	httpd_register_uri_handler(server, &csv_download_uri);
+	httpd_register_uri_handler(server, &csv_control_uri);
 	httpd_register_uri_handler(server, &sd_files_get_uri);
 	httpd_register_uri_handler(server, &sd_files_post_uri);
 	// NOTE: catch-all wildcard handler moved to after cert manager handlers to avoid shadowing

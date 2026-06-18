@@ -81,6 +81,18 @@ static uint32_t csv_files_count = 0;
 static bool csv_session_active = false;
 static int64_t csv_sd_retry_after_ms = 0;
 
+// Runtime manual logging mode (web Start/Stop button). Authoritative, like the CAN
+// Monitor button: START forces logging ON, STOP forces it OFF -- both override the
+// ignition gate (whose voltage heuristic is unreliable, e.g. reads ON at a 13.9V bench
+// supply; see Task #6). AUTO (boot default) follows ignition, preserving the existing
+// csv_log=enable behavior. Written by the httpd handler task, read by the writer task on
+// a possibly-different core; a naturally-aligned int8 is an atomic load/store on the
+// dual-core S3 and volatile forces a fresh read each writer-loop pass. .bss => INTERNAL RAM.
+#define CSV_MANUAL_AUTO  0   // follow ignition_on (default)
+#define CSV_MANUAL_ON    1   // force logging on
+#define CSV_MANUAL_OFF   2   // force logging off
+static volatile int8_t csv_manual_mode = CSV_MANUAL_AUTO;
+
 // One-shot auto-start crash guard (RTC_NOINIT: survives a panic/brownout/watchdog/SW
 // reset; wiped by a cold power cycle). Armed when a boot attempt starts; cleared by the
 // writer task after it proves stable for 15s. If a boot finds it still armed, the
@@ -236,10 +248,15 @@ static void csv_logger_task(void *pvParameters)
             // VEHICLE_STATE_IGNITION_INVALID: keep last known state
         }
 
-        // Log while ignition is on (engine running). The ignition state is derived from
-        // battery voltage (sleep_mode_get_voltage > sleep_volt) with a 3s off-debounce
-        // so a cranking dip doesn't split the file.
-        bool logging_active = ignition_on;
+        // Log while ignition is on (engine running). Ignition is derived from battery
+        // voltage (sleep_mode_get_voltage > sleep_volt) with a 3s off-debounce. The manual
+        // mode overrides authoritatively: FORCE_ON logs regardless of ignition (bench +
+        // manual control), FORCE_OFF stops regardless of ignition, AUTO follows ignition.
+        // NOTE: a session only OPENS when a record arrives, so a forced-on start logs only
+        // while AutoPID records are actually flowing (csv_logger_record at autopid.c).
+        bool logging_active = (csv_manual_mode == CSV_MANUAL_ON)  ? true
+                            : (csv_manual_mode == CSV_MANUAL_OFF) ? false
+                            : ignition_on;
 
         // Session close: logging stopped (ignition off / disabled) or SD was pulled.
         if (csv_session_active && (!logging_active || !sdcard_is_mounted()))
@@ -340,6 +357,40 @@ bool csv_logger_is_active_file(const char *abspath)
            strcmp(abspath, csv_file_path) == 0;
 }
 
+esp_err_t csv_logger_set_manual_override(bool enable)
+{
+    if (enable)
+    {
+        // Lazy on-demand start when csv_log=disable at boot (writer never created).
+        // SAFE: this runs on the httpd handler task (prio 5 > writer prio 4), AND
+        // csv_logger_init() publishes csv_queue BEFORE xTaskCreateStatic -- so the boot
+        // publish-race cannot recur on-demand. csv_logger_init() is idempotent (early
+        // return if csv_queue != NULL), so the csv_log=enable boot path is a no-op here.
+        // Deliberately does NOT arm the RTC one-shot guard (csv_attempt_inprogress): a
+        // manual start is operator-initiated, not a boot-loop risk, and arming it would
+        // wrongly suppress the next AUTO boot. Only csv_logger_init_deferred() arms it.
+        if (csv_queue == NULL)
+        {
+            esp_err_t e = csv_logger_init();
+            if (e != ESP_OK)
+            {
+                csv_manual_mode = CSV_MANUAL_OFF;   // failed start: don't lie via status
+                return e;
+            }
+        }
+        csv_manual_mode = CSV_MANUAL_ON;
+    }
+    else
+    {
+        // STOP: authoritative force-off. The writer task stays alive (never deleted at
+        // runtime) and closes the current session on its next pass (the close logic runs
+        // every loop, even with no records). Logging stays off even if ignition reads on,
+        // until the next START or a reboot (which resets to AUTO).
+        csv_manual_mode = CSV_MANUAL_OFF;
+    }
+    return ESP_OK;
+}
+
 char *csv_logger_get_status_json(void)
 {
     cJSON *root = cJSON_CreateObject();
@@ -350,6 +401,13 @@ char *csv_logger_get_status_json(void)
     cJSON_AddBoolToObject(root, "running", csv_queue != NULL);
     cJSON_AddBoolToObject(root, "sd_mounted", sdcard_is_mounted());
     cJSON_AddBoolToObject(root, "session_active", csv_session_active);
+    // Runtime manual mode for the web Start/Stop button: "auto" | "on" | "off". (The "file"
+    // field below is read without a lock, but only when session_active is true; the writer
+    // fully writes csv_file_path before session_active flips on, so the only unsynchronized
+    // window is the close transition, where a stale-but-NUL-terminated name self-heals next poll.)
+    cJSON_AddStringToObject(root, "manual_mode",
+                            (csv_manual_mode == CSV_MANUAL_ON)  ? "on" :
+                            (csv_manual_mode == CSV_MANUAL_OFF) ? "off" : "auto");
     cJSON_AddStringToObject(root, "file", csv_session_active ? csv_file_path : "");
     cJSON_AddNumberToObject(root, "rows_written", csv_rows_written);
     cJSON_AddNumberToObject(root, "rows_dropped", csv_rows_dropped);
@@ -483,6 +541,47 @@ static esp_err_t csv_download_handler(httpd_req_t *req)
     return ret;
 }
 
+// POST /csv_logger?op=start|stop -- runtime manual start/stop (web Start/Stop button).
+static esp_err_t csv_control_handler(httpd_req_t *req)
+{
+    char query[64];
+    char op[16] = {0};
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
+        httpd_query_key_value(query, "op", op, sizeof(op)) != ESP_OK)
+    {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing op=start|stop");
+        return ESP_FAIL;
+    }
+
+    esp_err_t e;
+    if (strcmp(op, "start") == 0)     { e = csv_logger_set_manual_override(true); }
+    else if (strcmp(op, "stop") == 0) { e = csv_logger_set_manual_override(false); }
+    else
+    {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "op must be start or stop");
+        return ESP_FAIL;
+    }
+
+    if (e != ESP_OK)
+    {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "CSV start failed (out of memory)");
+        return ESP_FAIL;
+    }
+
+    // Reply with the live status JSON so the UI updates without a second GET.
+    // Mirror csv_status_handler: malloc'd, freed after sendstr.
+    char *status = csv_logger_get_status_json();
+    httpd_resp_set_type(req, "application/json");
+    if (status == NULL)
+    {
+        httpd_resp_sendstr(req, "{\"ok\":true}");
+        return ESP_OK;
+    }
+    httpd_resp_sendstr(req, status);
+    free(status);
+    return ESP_OK;
+}
+
 const httpd_uri_t csv_status_uri = {
     .uri = "/csv_status",
     .method = HTTP_GET,
@@ -501,6 +600,13 @@ const httpd_uri_t csv_download_uri = {
     .uri = "/download_csv",
     .method = HTTP_GET,
     .handler = csv_download_handler,
+    .user_ctx = NULL
+};
+
+const httpd_uri_t csv_control_uri = {
+    .uri = "/csv_logger",
+    .method = HTTP_POST,
+    .handler = csv_control_handler,
     .user_ctx = NULL
 };
 

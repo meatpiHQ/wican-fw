@@ -47,6 +47,26 @@ extern "C" {
 esp_err_t csv_logger_init(void);
 
 /**
+ * @brief Runtime manual Start/Stop for the CSV logger (web button, authoritative).
+ *
+ * Like the CAN Monitor button: START forces logging ON and STOP forces it OFF, both
+ * overriding the ignition gate. Runtime-only, NOT persisted -- a reboot resets to AUTO
+ * (follow ignition) under the csv_log config boot gate.
+ *
+ * enable=true:  force logging ON regardless of ignition; lazily creates the writer task
+ *   (csv_logger_init()) if csv_log was disabled at boot. MUST be called from a task at
+ *   priority > 4 (the httpd handler at prio 5 qualifies) so the on-demand init cannot hit
+ *   the boot publish-race. Returns the csv_logger_init() error on a failed start (e.g. OOM),
+ *   leaving the mode OFF. Note: a session only opens once a record arrives, so logging is
+ *   effective only while AutoPID records are flowing.
+ * enable=false: force logging OFF even if ignition reads on; the writer closes the session
+ *   on its next pass and stays alive (never deleted). Stays off until the next START/reboot.
+ *
+ * @return ESP_OK, or the csv_logger_init() error on a failed on-demand start.
+ */
+esp_err_t csv_logger_set_manual_override(bool enable);
+
+/**
  * @brief Start the CSV datalogger AFTER boot settles (deferred ~20s).
  *
  * Call this at boot instead of csv_logger_init(); it spawns a small task that waits,
@@ -91,6 +111,7 @@ bool csv_logger_is_active_file(const char *abspath);
 extern const httpd_uri_t csv_status_uri;
 extern const httpd_uri_t csv_list_uri;
 extern const httpd_uri_t csv_download_uri;
+extern const httpd_uri_t csv_control_uri;   /* POST /csv_logger?op=start|stop */
 
 #ifdef __cplusplus
 }
