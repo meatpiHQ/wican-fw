@@ -999,11 +999,13 @@ void app_main(void)
 //
 //		mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM, &xmsg_mqtt_rx_queue);
 //	}
+	// Task #6: the engine-running gate uses a DEDICATED threshold (engine_volt), NOT sleep_volt.
+	// sleep_volt stays exclusively for deep-sleep / battery protection (sleep_mode), untouched.
 	vehicle_config_t vehicle_config;
-	if(config_server_get_sleep_volt(&vehicle_config.voltage_at_ignition) == -1)
+	if(config_server_get_engine_volt(&vehicle_config.engine_on_volt) == -1)
 	{
-		ESP_LOGE(TAG, "Error getting sleep voltage");
-		vehicle_config.voltage_at_ignition = 13.1;  // Default value
+		ESP_LOGE(TAG, "Error getting engine voltage");
+		vehicle_config.engine_on_volt = 13.2;  // Default value
 	}
 	vehicle_init(&vehicle_config);
 	wifi_network_init(ap_ssid);

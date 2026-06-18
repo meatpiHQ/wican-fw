@@ -127,6 +127,7 @@ typedef struct _device_config
 	char sleep_status[32];
 	char sleep_disable_agree[10];
 	char sleep_volt[10];
+	char engine_volt[10];   // Task #6: dedicated engine-running gate for the CSV logger (separate from sleep_volt)
 	char wakeup_volt[10];
 	char sleep_time[32];
 	char wakeup_time[32];
@@ -214,6 +215,7 @@ void config_server_set_ble_config(uint8_t b);
 void config_server_restart(void);
 bool config_server_ws_connected(void);
 int8_t config_server_get_sleep_volt(float *sleep_volt);
+int8_t config_server_get_engine_volt(float *engine_volt);   // Task #6: engine-running gate (13.0-15.0 V)
 int8_t config_server_get_battery_alert_config(void);
 int32_t config_server_get_alert_port(void);
 char *config_server_get_alert_ssid(void);

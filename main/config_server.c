@@ -232,7 +232,7 @@ const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"we
 										\"drive_ssid\":\"MeatPi\",\"drive_password\":\"TomatoSauce\",\"drive_security\":\"wpa3\",\"drive_protocol\":\"elm327\",\"drive_connection_type\":\"wifi\",\"drive_mode_timeout\":\"60\",\
 										\"can_datarate\":\"500K\",\
 										\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\
-								\"ble_status\":\"disable\",\"ble_power\":\"9\",\"sleep_status\":\"enable\",\"periodic_wakeup\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"sleep_time\":\"5\",\"wakeup_interval\":\"90\",\"batt_alert\":\"disable\",\
+								\"ble_status\":\"disable\",\"ble_power\":\"9\",\"sleep_status\":\"enable\",\"periodic_wakeup\":\"disable\",\"sleep_volt\":\"13.1\",\"engine_volt\":\"13.2\",\"wakeup_volt\":\"13.5\",\"sleep_time\":\"5\",\"wakeup_interval\":\"90\",\"batt_alert\":\"disable\",\
 										\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\
 										\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\
 								\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"elm327_udp_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\
@@ -1799,6 +1799,7 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	cJSON_AddStringToObject(root, "sleep_status", device_config.sleep_status);
 	cJSON_AddStringToObject(root, "sleep_disable_agree", device_config.sleep_disable_agree);
 	cJSON_AddStringToObject(root, "sleep_volt", device_config.sleep_volt);
+	cJSON_AddStringToObject(root, "engine_volt", device_config.engine_volt);
 	cJSON_AddStringToObject(root, "sleep_time", device_config.sleep_time);
 	cJSON_AddStringToObject(root, "wakeup_volt", device_config.wakeup_volt);
 	cJSON_AddStringToObject(root, "periodic_wakeup", device_config.periodic_wakeup);
@@ -2714,6 +2715,29 @@ static void config_server_load_cfg(char *cfg)
 	}
 	strlcpy(device_config.sleep_volt, key->valuestring, sizeof(device_config.sleep_volt));
 	ESP_LOGI(TAG, "device_config.sleep_volt: %s", device_config.sleep_volt);
+
+	// Task #6: engine-running gate threshold (CSV logger only; separate from sleep_volt).
+	// MIGRATION-SAFE: default on a missing/garbage key -- do NOT goto config_error like the
+	// sleep_volt block above, or the first boot after upgrade (old NVS has no engine_volt)
+	// would wipe the whole config. Range floor 13.0 keeps the ON edge above a healthy NC
+	// resting battery (~12.6-12.8 V) even at the slider minimum, so the parked-reads-ON bug
+	// cannot return; ceiling 15.0.
+	key = cJSON_GetObjectItem(root,"engine_volt");
+	if(key == 0 || key->valuestring == NULL)
+	{
+		strlcpy(device_config.engine_volt, "13.2", sizeof(device_config.engine_volt));
+	}
+	else
+	{
+		strlcpy(device_config.engine_volt, key->valuestring, sizeof(device_config.engine_volt));
+		char *ev_end;
+		float ev = strtof(device_config.engine_volt, &ev_end);
+		if(*ev_end != '\0' || ev_end == device_config.engine_volt || ev < 13.0f || ev > 15.0f)
+		{
+			strlcpy(device_config.engine_volt, "13.2", sizeof(device_config.engine_volt));
+		}
+	}
+	ESP_LOGI(TAG, "device_config.engine_volt: %s", device_config.engine_volt);
 
 	//*****
 	// key = cJSON_GetObjectItem(root,"batt_alert");
@@ -3907,6 +3931,19 @@ int8_t config_server_get_sleep_volt(float *sleep_volt)
 	*sleep_volt = atof(device_config.sleep_volt);
 
 	if(*sleep_volt >= 12.0f && *sleep_volt <= 15.0f)
+	{
+		return 1;
+	}
+	return -1;
+}
+
+// Task #6: dedicated engine-running gate for the CSV logger. Range floor 13.0 keeps the ON
+// edge above a resting battery so a parked car can't read "ignition on" (the original bug).
+int8_t config_server_get_engine_volt(float *engine_volt)
+{
+	*engine_volt = atof(device_config.engine_volt);
+
+	if(*engine_volt >= 13.0f && *engine_volt <= 15.0f)
 	{
 		return 1;
 	}

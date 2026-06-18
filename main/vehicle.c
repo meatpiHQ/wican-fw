@@ -28,27 +28,43 @@
 
 static const char *TAG = "VEHICLE";
 static EventGroupHandle_t vehicle_event_group;
-static float voltage_at_ignition = 0;
+
+// Engine-running gate (Task #6). DEDICATED logging threshold, fully decoupled from the
+// deep-sleep voltage (sleep_volt): the alternator-charging level (~13.2 V) is far above the
+// sleep/battery-protection level (~12.4 V) and a resting battery (~12.6-12.8 V), so a parked
+// car no longer reads "ignition on". Hysteresis (a fixed band below the ON edge) plus the
+// 0.1 V ADC quantization avoids flapping at idle; csv_logger adds a 3 s ON->OFF debounce on
+// top for cranking dips. This gate is consumed ONLY by csv_logger (the writer task), so it
+// never touches sleep/wake or battery protection -- logging-only, cannot brick.
+#define VEHICLE_IGN_HYSTERESIS_V 0.3f   // OFF edge = engine_on_volt - band; 3x the 0.1 V ADC step
+
+static float engine_on_volt = 13.2f;    // set in vehicle_init() from config (config_server_get_engine_volt)
+// Held ignition state for hysteresis. Mutated only by the single caller (csv_logger writer
+// task) -> no lock needed. Boots OFF so logging starts only once charging is actually seen.
+static vehicle_ignition_state_t ign_state = VEHICLE_STATE_IGNITION_OFF;
 
 vehicle_ignition_state_t vehicle_ignition_state(void)
 {
     float batt_voltage = 0;
 
-    if(sleep_mode_get_voltage(&batt_voltage) == ESP_OK)
+    if(sleep_mode_get_voltage(&batt_voltage) != ESP_OK)
     {
-        if(batt_voltage > voltage_at_ignition)
-        {
-            return VEHICLE_STATE_IGNITION_ON;
-        }
-        else
-        {
-            return VEHICLE_STATE_IGNITION_OFF;
-        }
-    }
-    else
-    {
+        // Transient read failure: KEEP the last latched state (return INVALID; csv_logger
+        // also holds last-state on INVALID). Do not flap to OFF on a single bad read.
         return VEHICLE_STATE_IGNITION_INVALID;
     }
+
+    if(batt_voltage >= engine_on_volt)
+    {
+        ign_state = VEHICLE_STATE_IGNITION_ON;
+    }
+    else if(batt_voltage <= (engine_on_volt - VEHICLE_IGN_HYSTERESIS_V))
+    {
+        ign_state = VEHICLE_STATE_IGNITION_OFF;
+    }
+    // else: inside the hysteresis band -> hold ign_state unchanged
+
+    return ign_state;
 }
 
 vehicle_motion_state_t vehicle_motion_state(void)
@@ -71,5 +87,6 @@ vehicle_motion_state_t vehicle_motion_state(void)
 
 void vehicle_init(vehicle_config_t *vehicle_config)
 {
-    voltage_at_ignition = vehicle_config->voltage_at_ignition;
+    engine_on_volt = vehicle_config->engine_on_volt;
+    ign_state = VEHICLE_STATE_IGNITION_OFF;   // explicit boot state: start OFF
 }

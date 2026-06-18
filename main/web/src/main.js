@@ -3691,6 +3691,7 @@ async function postConfig() {
     obj["sleep_disable_agree"] = document.getElementById("sleep_disable_agree").value;
     obj["periodic_wakeup"] = document.getElementById("periodic_wakeup").value;
     obj["sleep_volt"] = document.getElementById("sleep_volt").value;
+    obj["engine_volt"] = document.getElementById("engine_volt").value;
     obj["sleep_time"] = document.getElementById("sleep_time").value;
     obj["wakeup_interval"] = document.getElementById("wakeup_interval").value;
     obj["batt_alert"] = document.getElementById("batt_alert").value;
@@ -4340,6 +4341,10 @@ xhttp.onload = async function() {
         document.getElementById("ble_pass_value").value = obj.ble_pass;
         document.getElementById("sleep_volt").value = obj.sleep_volt;
         document.getElementById("sleep_volt_value").textContent = obj.sleep_volt;
+        if (obj.engine_volt !== undefined) {   // Task #6; null-guard for old configs missing the key
+            document.getElementById("engine_volt").value = obj.engine_volt;
+            document.getElementById("engine_volt_value").textContent = obj.engine_volt;
+        }
         document.getElementById("sleep_time").value = obj.sleep_time;
         document.getElementById('sleep_time_value').textContent = obj.sleep_time;
         document.getElementById("wakeup_interval").value = obj.wakeup_interval;

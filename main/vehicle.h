@@ -48,7 +48,7 @@ typedef enum {
 } vehicle_motion_state_t;
 
 typedef struct {
-    float voltage_at_ignition;
+    float engine_on_volt;   /* engine-running detect threshold (V); OFF edge = on - VEHICLE_IGN_HYSTERESIS_V */
 
 } vehicle_config_t;
 
