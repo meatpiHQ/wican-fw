@@ -213,6 +213,14 @@ typedef struct
 
 void autopid_parser(char *str, uint32_t len, QueueHandle_t *q, char* cmd_str);
 void autopid_init(char* id, bool enable_logging, uint32_t logging_period);
+
+// FAST_LOG support (Task #18): parse auto_pid.json into the module config WITHOUT starting
+// the AutoPID task or any ELM polling. Creates autopid_config + its mutex and registers the
+// wide-CSV column provider, so the native-TWAI fast datalogger (components/fast_log) can
+// read can_filters[]/pids[] and reuse autopid_lock()/the column provider. Returns the parsed
+// config (NULL on failure). Idempotent: returns the existing config if already loaded.
+// Unlike autopid_init() it does NOT require pid_count>0 (broadcast-only configs are valid).
+autopid_config_t* autopid_load_config_only(void);
 char *autopid_data_read(void);
 bool autopid_get_ecu_status(void);
 char* autopid_get_config(void);

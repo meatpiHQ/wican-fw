@@ -60,6 +60,7 @@
 #include "ftp.h"
 #include "autopid.h"
 #include "csv_logger.h"
+#include "fast_log.h"
 #include "led.h"
 #include "obd.h"
 #include "wusb3801.h"
@@ -373,6 +374,16 @@ static void can_rx_task(void *pvParameters)
 //        esp_err_t ret = 0xFF;
 
 		dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
+
+		// FAST_LOG (Task #18) owns the native TWAI controller exclusively: its fastlog_rx_task
+		// is the SOLE twai_receive() consumer. If this task also drained the RX queue, TWAI
+		// would split/steal frames between the two (each frame goes to exactly one waiter).
+		// Gate this task off entirely in FAST_LOG mode. MUST stay above the can_receive() loop.
+		if(protocol == FAST_LOG)
+		{
+			vTaskDelay(pdMS_TO_TICKS(50));
+			continue;
+		}
 //    	time_old = esp_timer_get_time();
 //    	if((esp_timer_get_time() - time_old) > 1000000)
 //    	{
@@ -928,6 +939,24 @@ void app_main(void)
 			csv_logger_init_deferred();
 		}
 		autopid_init((char*)&uid[0], (obd_en == 1 && csv_en != 1), log_period);
+	}
+	else if(protocol == FAST_LOG)
+	{
+		// Native-TWAI fast datalogger (Task #18), Phase A: passive broadcast capture.
+		// fast_log brings up the bus LISTEN_ONLY and decodes broadcast frames at bus rate,
+		// in place of the AutoPID/ELM poll loop. elm327_init() above stays dormant (no client
+		// drives it in FAST_LOG mode, so it never touches the CAN bus). Same CSV gate as
+		// AUTO_PID: deferred start when csv_log is enabled.
+		uint32_t log_period = 0;
+		if(config_server_get_log_period(&log_period) == -1)
+		{
+			log_period = 60;
+		}
+		if(config_server_get_csv_log() == 1)
+		{
+			csv_logger_init_deferred();
+		}
+		fast_log_init((char*)&uid[0], log_period);
 	}
 
 	#else

@@ -542,6 +542,10 @@ int8_t config_server_protocol(void)
 	{
 		return AUTO_PID;
 	}
+	else if(strcmp(device_config.protocol, "fast_log") == 0)
+	{
+		return FAST_LOG;
+	}
 	return OBD_ELM327;
 }
 

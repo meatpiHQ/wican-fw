@@ -4459,6 +4459,50 @@ static void autopid_app_setbit_timer_callback(TimerHandle_t xTimer)
     dev_status_set_bits(DEV_AUTOPID_ELM327_APP_BIT);
 }
 
+// FAST_LOG (Task #18): load the channel config WITHOUT starting the AutoPID task / ELM
+// polling. Mirrors the config-load half of autopid_init() (load + mutex + provider + JSON
+// cache) and nothing else. Lets components/fast_log read can_filters[]/pids[] and reuse
+// autopid_lock()/autopid_collect_log_columns while the native-TWAI capture owns the bus.
+autopid_config_t *autopid_load_config_only(void)
+{
+    // Idempotent: if autopid_init() already ran (or this was called before), reuse it.
+    if (autopid_config != NULL)
+    {
+        return autopid_config;
+    }
+
+    // Register the wide-CSV column provider (the same one autopid_init() uses) so the CSV
+    // writer can enumerate channels through the function pointer with no build-time dep.
+    csv_logger_set_column_provider(autopid_collect_log_columns);
+
+    autopid_config = load_autopid_config();
+    if (autopid_config == NULL)
+    {
+        ESP_LOGE(TAG, "autopid_load_config_only: load_autopid_config returned NULL");
+        return NULL;
+    }
+
+    autopid_config->mutex = xSemaphoreCreateMutex();
+    if (autopid_config->mutex == NULL)
+    {
+        ESP_LOGE(TAG, "autopid_load_config_only: failed to create config mutex");
+        return NULL;
+    }
+
+    if (autopid_data.mutex == NULL)
+    {
+        autopid_data.mutex = xSemaphoreCreateMutex();
+    }
+    // Build & cache the config JSON once (mirrors autopid_init) so /load_auto_pid and
+    // /autopid_data behave the same when running in FAST_LOG mode.
+    (void)autopid_get_config();
+
+    ESP_LOGI(TAG, "autopid_load_config_only: %lu pids, %lu can_filters",
+             (unsigned long)autopid_config->pid_count,
+             (unsigned long)autopid_config->can_filters_count);
+    return autopid_config;
+}
+
 void autopid_init(char *id, bool enable_logging, uint32_t logging_period)
 {
     device_id = id;
