@@ -26,6 +26,8 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <time.h>
+#include <sys/time.h>
+#include <math.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -42,6 +44,7 @@
 #include "sdcard.h"
 #include "vehicle.h"
 #include "wc_timer.h"
+#include "sleep_mode.h"      // sleep_mode_get_voltage() for the BATT_V system column (non-blocking queue peek)
 
 static const char *TAG = "CSV_LOGGER";
 
@@ -214,11 +217,13 @@ static esp_err_t csv_open_new_file(void)
 
     if (csv_fmt == CSV_FMT_WIDE && csv_cols != NULL && csv_col_count > 0)
     {
-        // Wide header: timestamp_ms + one column per channel. Built from csv_cols, which is
-        // fixed for the whole session -> rotation re-emits a byte-identical header, so every
-        // rotated file is self-describing. Stream column-by-column (no buffer bound here).
+        // Wide header: timestamp_ms + two system columns (datetime, BATT_V) + one column per
+        // channel. Built from csv_cols, which is fixed for the whole session -> rotation
+        // re-emits a byte-identical header, so every rotated file is self-describing. Stream
+        // column-by-column (no buffer bound here). The two system columns are emitted in the
+        // same fixed order by csv_emit_wide_row(), so header and rows stay aligned.
         csv_file_bytes = 0;
-        int n = fprintf(csv_file, "timestamp_ms");
+        int n = fprintf(csv_file, "timestamp_ms,datetime,BATT_V");
         if (n > 0) csv_file_bytes += (size_t)n;
         for (int c = 0; c < csv_col_count; c++)
         {
@@ -351,6 +356,37 @@ static bool csv_emit_wide_row(int64_t ts_ms)
         if (fl > cap - 2) fl = cap - 2;
         memcpy(buf, field, fl);
         len = fl;
+    }
+
+    // System columns (must match the header order "timestamp_ms,datetime,BATT_V"):
+    //   datetime: human-readable wall-clock at emit time; empty until system time is synced.
+    //   BATT_V:   battery voltage from sleep_mode_get_voltage() (non-blocking queue peek).
+    // Both use the same reserve-2-bytes bounded-append discipline as the channel loop below.
+    {
+        struct timeval tv;
+        struct tm tm_now;
+        gettimeofday(&tv, NULL);
+        localtime_r(&tv.tv_sec, &tm_now);
+        if ((tm_now.tm_year + 1900) >= 2020)
+            n = snprintf(field, sizeof(field), ",%04d-%02d-%02d %02d:%02d:%02d.%03d",
+                         tm_now.tm_year + 1900, tm_now.tm_mon + 1, tm_now.tm_mday,
+                         tm_now.tm_hour, tm_now.tm_min, tm_now.tm_sec, (int)(tv.tv_usec / 1000));
+        else
+            n = snprintf(field, sizeof(field), ",");
+        if (n < 0) { field[0] = ','; field[1] = '\0'; n = 1; }
+        if (len + (size_t)n <= cap - 2) { memcpy(buf + len, field, (size_t)n); len += (size_t)n; }
+        else if (len + 1 <= cap - 2) { buf[len++] = ','; }
+    }
+    {
+        float bv = 0.0f;
+        sleep_mode_get_voltage(&bv);
+        if (isfinite(bv) && bv > 1.0f && bv < 60.0f)
+            n = snprintf(field, sizeof(field), ",%.2f", bv);
+        else
+            n = snprintf(field, sizeof(field), ",");
+        if (n < 0) { field[0] = ','; field[1] = '\0'; n = 1; }
+        if (len + (size_t)n <= cap - 2) { memcpy(buf + len, field, (size_t)n); len += (size_t)n; }
+        else if (len + 1 <= cap - 2) { buf[len++] = ','; }
     }
 
     for (int c = 0; c < csv_col_count; c++)
