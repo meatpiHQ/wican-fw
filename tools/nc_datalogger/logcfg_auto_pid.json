@@ -1,0 +1,194 @@
+{
+    "car_model": "NC logcfg (broadcast + polled)",
+    "ecu_protocol": "6",
+    "initialisation": "ATSP6",
+    "car_specific": "disable",
+    "disable_on_sleep_voltage": "enable",
+    "can_filters": [
+        {
+            "frame_id": "0x201",
+            "parameters": [
+                {
+                    "name": "RPM",
+                    "expression": "[B0:B1]/4",
+                    "unit": "rpm",
+                    "class": "frequency",
+                    "period": 100
+                },
+                {
+                    "name": "VSS",
+                    "expression": "([B4:B5]/100)-100",
+                    "unit": "km/h",
+                    "class": "speed",
+                    "period": 100
+                },
+                {
+                    "name": "APP",
+                    "expression": "B6/2",
+                    "unit": "%",
+                    "class": "none",
+                    "period": 100
+                }
+            ]
+        },
+        {
+            "frame_id": "0x240",
+            "parameters": [
+                {
+                    "name": "ECT",
+                    "expression": "B1-40",
+                    "unit": "C",
+                    "class": "temperature",
+                    "period": 100
+                },
+                {
+                    "name": "IAT",
+                    "expression": "B4-40",
+                    "unit": "C",
+                    "class": "temperature",
+                    "period": 100
+                },
+                {
+                    "name": "TPS",
+                    "expression": "B3/2.55",
+                    "unit": "%",
+                    "class": "none",
+                    "period": 100
+                }
+            ]
+        }
+    ],
+    "pids": [
+        {
+            "PID": "010B1",
+            "Period": "200",
+            "enabled": true,
+            "Name": "MAP",
+            "Expression": "B3",
+            "unit": "kPa",
+            "class": "none"
+        },
+        {
+            "PID": "01101",
+            "Period": "200",
+            "enabled": true,
+            "Name": "MAF",
+            "Expression": "[B3:B4]*0.01",
+            "unit": "g/s",
+            "class": "none"
+        },
+        {
+            "PID": "010E1",
+            "Period": "200",
+            "enabled": true,
+            "Name": "SPARKADV",
+            "Expression": "(B3*0.5)-64",
+            "unit": "deg",
+            "class": "none"
+        },
+        {
+            "PID": "01061",
+            "Period": "200",
+            "enabled": true,
+            "Name": "STFT",
+            "Expression": "(B3*0.78125)-100",
+            "unit": "%",
+            "class": "none"
+        },
+        {
+            "PID": "01071",
+            "Period": "200",
+            "enabled": true,
+            "Name": "LTFT",
+            "Expression": "(B3*0.78125)-100",
+            "unit": "%",
+            "class": "none"
+        },
+        {
+            "PID": "01341",
+            "Period": "200",
+            "enabled": true,
+            "Name": "EQ_RATIO",
+            "Expression": "[B3:B4]*0.0000305175",
+            "unit": "lambda",
+            "class": "none"
+        },
+        {
+            "PID": "01031",
+            "Period": "200",
+            "enabled": true,
+            "Name": "FUELSYS",
+            "Expression": "[B3:B4]*0.00390625",
+            "unit": "",
+            "class": "none"
+        },
+        {
+            "PID": "01331",
+            "Period": "200",
+            "enabled": true,
+            "Name": "BARO",
+            "Expression": "B3",
+            "unit": "kPa",
+            "class": "none"
+        },
+        {
+            "PID": "01431",
+            "Period": "200",
+            "enabled": true,
+            "Name": "LOAD",
+            "Expression": "[B3:B4]*0.0039215684",
+            "unit": "g/rev",
+            "class": "none"
+        },
+        {
+            "PID": "2217461",
+            "Period": "200",
+            "enabled": true,
+            "Name": "KNOCKR",
+            "Expression": "B4*0.3521126761",
+            "unit": "deg",
+            "class": "none",
+            "Init": "ATSH7E0;"
+        },
+        {
+            "PID": "2214101",
+            "Period": "200",
+            "enabled": true,
+            "Name": "FUEL_PW",
+            "Expression": "[B4:B5]*0.008",
+            "unit": "ms",
+            "class": "none",
+            "Init": "ATSH7E0;"
+        },
+        {
+            "PID": "2216CD1",
+            "Period": "200",
+            "enabled": true,
+            "Name": "VCT_ACT",
+            "Expression": "[B4:B5]*0.0625",
+            "unit": "deg",
+            "class": "none",
+            "Init": "ATSH7E0;"
+        },
+        {
+            "PID": "2217061",
+            "Period": "200",
+            "enabled": true,
+            "Name": "HIDET_SW",
+            "Expression": "B4&1",
+            "unit": "on/off",
+            "class": "none",
+            "Init": "ATSH7E0;"
+        },
+        {
+            "PID": "22098E1",
+            "Period": "200",
+            "enabled": true,
+            "Name": "EGRP_STEPS",
+            "Expression": "[B4:B5]",
+            "unit": "steps",
+            "class": "none",
+            "Init": "ATSH7E0;"
+        }
+    ]
+}
