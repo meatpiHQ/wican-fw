@@ -238,7 +238,7 @@ const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"we
 										\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\
 								\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"elm327_udp_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\
 										\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\",\"mqtt_security\":\"none\",\"mqtt_cert_set\": \"default\",\"mqtt_skip_cn\":\"disable\",\
-										\"logger_status\":\"disable\",\"csv_log\":\"disable\",\"log_filesystem\":\"littlefs\",\"log_storage\":\"sdcard\",\"log_period\":\"10\",\"csv_format\":\"wide\",\"csv_grid_mode\":\"fixed\",\"csv_grid_hz\":\"10\"}";
+										\"logger_status\":\"disable\",\"csv_log\":\"disable\",\"log_filesystem\":\"littlefs\",\"log_storage\":\"sdcard\",\"log_period\":\"10\",\"csv_grid_mode\":\"fixed\",\"csv_grid_hz\":\"10\"}";
 
 // const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\", \"ap_auto_disable\": \"disable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
 // const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\", \"ap_auto_disable\": \"disable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"periodic_wakeup\":\"disable\",\"wakeup_interval\":\"5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
@@ -1832,7 +1832,6 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	cJSON_AddStringToObject(root, "csv_log", device_config.csv_log);
 	cJSON_AddStringToObject(root, "log_filesystem", device_config.log_filesystem);
 	cJSON_AddStringToObject(root, "log_period", device_config.log_period);
-	cJSON_AddStringToObject(root, "csv_format", device_config.csv_format);
 	cJSON_AddStringToObject(root, "csv_grid_mode", device_config.csv_grid_mode);
 	cJSON_AddStringToObject(root, "csv_grid_hz", device_config.csv_grid_hz);
 	cJSON_AddStringToObject(root, "log_storage", device_config.log_storage);
@@ -3370,24 +3369,8 @@ static void config_server_load_cfg(char *cfg)
 	ESP_LOGI(TAG, "device_config.log_period: %s", device_config.log_period);
 	//*****
 
-	//***** Wide CSV (Task #11): csv_format / csv_grid_mode / csv_grid_hz. Garbage coerces
-	//      to a safe default so a bad NVS value can never select an invalid layout.
-	key = cJSON_GetObjectItem(root,"csv_format");
-	if(key == 0)
-	{
-		strlcpy(device_config.csv_format, "wide", sizeof(device_config.csv_format));
-	}
-	else
-	{
-		strlcpy(device_config.csv_format, key->valuestring, sizeof(device_config.csv_format));
-	}
-	if(strcmp(device_config.csv_format, "long") != 0 && strcmp(device_config.csv_format, "wide") != 0)
-	{
-		strlcpy(device_config.csv_format, "wide", sizeof(device_config.csv_format));
-	}
-	ESP_LOGI(TAG, "device_config.csv_format: %s", device_config.csv_format);
-	//*****
-
+	//***** Wide CSV (Task #11): csv_grid_mode / csv_grid_hz. Garbage coerces to a safe default
+	//      so a bad NVS value can never select an invalid layout. (csv_format removed: Task #16.)
 	key = cJSON_GetObjectItem(root,"csv_grid_mode");
 	if(key == 0)
 	{
@@ -4383,19 +4366,6 @@ int8_t config_server_get_log_period(uint32_t *log_period)
 	
 	*log_period = (uint32_t)log_int;
 	return 1;
-}
-
-int8_t config_server_get_csv_format(void)
-{
-	if(strcmp(device_config.csv_format, "wide") == 0)
-	{
-		return 1;
-	}
-	else if(strcmp(device_config.csv_format, "long") == 0)
-	{
-		return 0;
-	}
-	return -1;
 }
 
 int8_t config_server_get_csv_grid_mode(void)

@@ -168,7 +168,6 @@ typedef struct _device_config
 	char log_storage[16];
 	char log_filesystem[16];
 	char log_period[16];
-	char csv_format[16];      // CSV datalogger layout: "long" | "wide" (Task #11)
 	char csv_grid_mode[16];   // wide time grid: "event" | "fixed"
 	char csv_grid_hz[16];     // wide fixed-rate grid frequency, 1..50 Hz
 	char imu_threshold[16];
@@ -249,9 +248,8 @@ wifi_security_t config_server_get_sta_security(void);
 int8_t config_server_get_logger_config(void);
 int8_t config_server_get_csv_log(void);
 int8_t config_server_get_log_period(uint32_t *log_period);
-// Wide CSV (Task #11): format 1=wide / 0=long / -1=invalid; grid_mode 1=fixed / 0=event / -1;
-// grid_hz writes *hz (1..50) and returns 1, or -1 (leaves *hz untouched) on a bad value.
-int8_t config_server_get_csv_format(void);
+// Wide CSV (Task #11): grid_mode 1=fixed / 0=event / -1=invalid; grid_hz writes *hz (1..50)
+// and returns 1, or -1 (leaves *hz untouched) on a bad value.
 int8_t config_server_get_csv_grid_mode(void);
 int8_t config_server_get_csv_grid_hz(uint32_t *hz);
 log_storage_t config_server_get_log_storage(void);
