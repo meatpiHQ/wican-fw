@@ -120,10 +120,7 @@ static volatile int8_t csv_manual_mode = CSV_MANUAL_AUTO;
                                         // half-written number or a dropped column mid-row.
 #define CSV_WIDE_FIELD_MAX      64      // holds ",%.3f" of any finite float (FLT_MAX ~= 45 chars)
 #define CSV_GRID_HZ_DEFAULT     10
-#define CSV_WIDE_ENUM_GRACE_MS  3000    // max time a WIDE session waits for column enumeration
-                                        // before falling back to LONG (so logging never blocks)
 
-typedef enum { CSV_FMT_LONG = 0, CSV_FMT_WIDE = 1 } csv_format_t;
 typedef enum { CSV_GRID_EVENT = 0, CSV_GRID_FIXED = 1 } csv_grid_mode_t;
 
 // One wide column. (source,name) is the dedupe + match KEY (the producer emits the same
@@ -140,7 +137,6 @@ typedef struct {
 } csv_wide_col_t;
 
 // Latched ONCE per session by the writer task (single-writer thereafter -> no torn reads).
-static csv_format_t    csv_fmt        = CSV_FMT_LONG;
 static csv_grid_mode_t csv_grid_mode  = CSV_GRID_EVENT;
 static uint32_t        csv_grid_hz    = CSV_GRID_HZ_DEFAULT;
 static csv_wide_col_t *csv_cols       = NULL;   // [csv_col_count], INTERNAL RAM, session-scoped
@@ -215,38 +211,31 @@ static esp_err_t csv_open_new_file(void)
         return ESP_FAIL;
     }
 
-    if (csv_fmt == CSV_FMT_WIDE && csv_cols != NULL && csv_col_count > 0)
+    // Wide header: timestamp_ms + two system columns (datetime, BATT_V) + one column per channel.
+    // Long format was removed (Task #16) and a session only opens after columns are enumerated, so
+    // csv_cols is always valid here (a 0-count loop just yields the system-columns-only header).
+    // Built from csv_cols, which is fixed for the whole session -> rotation re-emits a byte-
+    // identical header, so every rotated file is self-describing. Stream column-by-column (no
+    // buffer bound here). The two system columns are emitted in the same fixed order by
+    // csv_emit_wide_row(), so header and rows stay aligned.
+    csv_file_bytes = 0;
+    int n = fprintf(csv_file, "timestamp_ms,datetime,BATT_V");
+    if (n > 0) csv_file_bytes += (size_t)n;
+    for (int c = 0; c < csv_col_count; c++)
     {
-        // Wide header: timestamp_ms + two system columns (datetime, BATT_V) + one column per
-        // channel. Built from csv_cols, which is fixed for the whole session -> rotation
-        // re-emits a byte-identical header, so every rotated file is self-describing. Stream
-        // column-by-column (no buffer bound here). The two system columns are emitted in the
-        // same fixed order by csv_emit_wide_row(), so header and rows stay aligned.
-        csv_file_bytes = 0;
-        int n = fprintf(csv_file, "timestamp_ms,datetime,BATT_V");
-        if (n > 0) csv_file_bytes += (size_t)n;
-        for (int c = 0; c < csv_col_count; c++)
-        {
-            char hdr[CSV_LOGGER_NAME_MAX + CSV_LOGGER_SOURCE_MAX + 4];
-            if (csv_cols[c].dup_name)
-                snprintf(hdr, sizeof(hdr), "%s [%s]", csv_cols[c].name, csv_cols[c].source);
-            else
-                strlcpy(hdr, csv_cols[c].name, sizeof(hdr));
-            csv_sanitize_field(hdr);   // sanitize a COPY; the column table keeps the raw name
-            n = fprintf(csv_file, ",%s", hdr);
-            if (n > 0) csv_file_bytes += (size_t)n;
-        }
-        n = fprintf(csv_file, "\n");
+        char hdr[CSV_LOGGER_NAME_MAX + CSV_LOGGER_SOURCE_MAX + 4];
+        if (csv_cols[c].dup_name)
+            snprintf(hdr, sizeof(hdr), "%s [%s]", csv_cols[c].name, csv_cols[c].source);
+        else
+            strlcpy(hdr, csv_cols[c].name, sizeof(hdr));
+        csv_sanitize_field(hdr);   // sanitize a COPY; the column table keeps the raw name
+        n = fprintf(csv_file, ",%s", hdr);
         if (n > 0) csv_file_bytes += (size_t)n;
     }
-    else
-    {
-        int n = fprintf(csv_file, "timestamp_ms,source,name,value,unit\n");
-        csv_file_bytes = (n > 0) ? (size_t)n : 0;
-    }
+    n = fprintf(csv_file, "\n");
+    if (n > 0) csv_file_bytes += (size_t)n;
     csv_files_count++;
-    ESP_LOGI(TAG, "CSV log started: %s (%s)", csv_file_path,
-             (csv_fmt == CSV_FMT_WIDE && csv_cols != NULL) ? "wide" : "long");
+    ESP_LOGI(TAG, "CSV log started: %s (wide, %d cols)", csv_file_path, csv_col_count);
     return ESP_OK;
 }
 
@@ -262,29 +251,6 @@ static void csv_close_file(void)
         csv_file = NULL;
         csv_file_bytes = 0;
     }
-}
-
-static bool csv_write_record(const csv_record_t *rec)
-{
-    char name[CSV_LOGGER_NAME_MAX];
-    char unit[CSV_LOGGER_UNIT_MAX];
-    char source[CSV_LOGGER_SOURCE_MAX];
-
-    strlcpy(name, rec->name, sizeof(name));
-    strlcpy(unit, rec->unit, sizeof(unit));
-    strlcpy(source, rec->source, sizeof(source));
-    csv_sanitize_field(name);
-    csv_sanitize_field(unit);
-    csv_sanitize_field(source);
-
-    int n = fprintf(csv_file, "%lld,%s,%s,%.3f,%s\n", rec->t_ms, source, name, rec->value, unit);
-    if (n < 0)
-    {
-        return false;
-    }
-    csv_file_bytes += (size_t)n;
-    csv_rows_written++;
-    return true;
 }
 
 // ---- Wide-format helpers (Task #11) ----
@@ -503,7 +469,6 @@ static void csv_logger_task(void *pvParameters)
     wc_timer_t ignition_poll_timer = 0;
     wc_timer_t ignition_off_timer = 0;
     wc_timer_t grid_timer = 0;            // WIDE fixed-rate grid tick
-    int64_t enum_defer_since_us = 0;      // when a WIDE session first deferred for enumeration
     bool ignition_on = false;
     bool ignition_off_pending = false;
     bool flush_pending = false;
@@ -523,7 +488,7 @@ static void csv_logger_task(void *pvParameters)
         // In WIDE fixed-rate mode shorten the wait to the grid period so a tick can fire on
         // idle passes (records may be sparse but the grid still emits at 1/hz). Default 250ms.
         TickType_t rx_to = pdMS_TO_TICKS(250);
-        if (csv_session_active && csv_fmt == CSV_FMT_WIDE && csv_grid_mode == CSV_GRID_FIXED)
+        if (csv_session_active && csv_grid_mode == CSV_GRID_FIXED)
         {
             uint32_t gp = (csv_grid_hz > 0) ? (1000u / csv_grid_hz) : 100u;
             if (gp < 1) gp = 1;
@@ -576,7 +541,7 @@ static void csv_logger_task(void *pvParameters)
         }
 
         // WIDE fixed-rate grid: emit one LOCF snapshot row per 1/hz, even on idle passes.
-        if (csv_session_active && csv_fmt == CSV_FMT_WIDE && csv_grid_mode == CSV_GRID_FIXED &&
+        if (csv_session_active && csv_grid_mode == CSV_GRID_FIXED &&
             wc_timer_is_expired(&grid_timer))
         {
             uint32_t gp = (csv_grid_hz > 0) ? (1000u / csv_grid_hz) : 100u;
@@ -621,39 +586,34 @@ static void csv_logger_task(void *pvParameters)
                 continue;
             }
 
-            // Latch the format/grid config ONCE for this session (a snapshot of device_config;
-            // single-writer thereafter so no torn cross-core read). A reboot/new session re-reads.
-            csv_fmt = (config_server_get_csv_format() == 1 && csv_line_buf != NULL)
-                          ? CSV_FMT_WIDE : CSV_FMT_LONG;
-            if (csv_fmt == CSV_FMT_WIDE)
+            // Wide is the only format (Task #16 removed LONG). It needs the line buffer that
+            // csv_logger_init allocates; if that alloc failed there is nothing to fall back to.
+            if (csv_line_buf == NULL)
             {
-                csv_grid_mode = (config_server_get_csv_grid_mode() == 0) ? CSV_GRID_EVENT : CSV_GRID_FIXED;
-                uint32_t hz;
-                csv_grid_hz = (config_server_get_csv_grid_hz(&hz) == 1) ? hz : CSV_GRID_HZ_DEFAULT;
-                if (csv_grid_hz < 1) csv_grid_hz = 1;
-                if (csv_grid_hz > 50) csv_grid_hz = 50;
-
-                // Build the fixed column set from the AutoPID config. May briefly defer if the
-                // autopid mutex is busy (held across an ELM read); we NEVER block the writer.
-                int br = csv_build_wide_columns();
-                if (br <= 0)
-                {
-                    // Not ready. Defer this record and retry soon -- but never block logging
-                    // forever: after a short grace, fall back to LONG so data is still captured.
-                    if (enum_defer_since_us == 0) enum_defer_since_us = esp_timer_get_time();
-                    if ((esp_timer_get_time() - enum_defer_since_us) < ((int64_t)CSV_WIDE_ENUM_GRACE_MS * 1000))
-                    {
-                        csv_pending_drops++;
-                        csv_sd_retry_after_ms = now_ms + 250;   // short retry (not the 5s SD backoff)
-                        continue;
-                    }
-                    ESP_LOGW(TAG, "Wide column enumeration unavailable after %d ms - this session logs LONG",
-                             CSV_WIDE_ENUM_GRACE_MS);
-                    csv_fmt = CSV_FMT_LONG;
-                    csv_free_wide_state();
-                }
+                csv_pending_drops++;
+                csv_sd_retry_after_ms = now_ms + CSV_LOGGER_SD_RETRY_MS;
+                continue;
             }
-            enum_defer_since_us = 0;
+
+            // Latch the grid config ONCE for this session (a snapshot of device_config;
+            // single-writer thereafter so no torn cross-core read). A reboot/new session re-reads.
+            csv_grid_mode = (config_server_get_csv_grid_mode() == 0) ? CSV_GRID_EVENT : CSV_GRID_FIXED;
+            uint32_t hz;
+            csv_grid_hz = (config_server_get_csv_grid_hz(&hz) == 1) ? hz : CSV_GRID_HZ_DEFAULT;
+            if (csv_grid_hz < 1) csv_grid_hz = 1;
+            if (csv_grid_hz > 50) csv_grid_hz = 50;
+
+            // Build the fixed column set from the AutoPID config. May briefly defer if the autopid
+            // mutex is busy (held across an ELM read); we NEVER block the writer, and there is NO
+            // LONG fallback -- drop + retry until columns are available (pending_drops, surfaced in
+            // /csv_status, tracks the loss).
+            int br = csv_build_wide_columns();
+            if (br <= 0)
+            {
+                csv_pending_drops++;
+                csv_sd_retry_after_ms = now_ms + 250;   // short retry (not the 5s SD backoff)
+                continue;
+            }
 
             if (!sdcard_is_mounted() || csv_open_new_file() != ESP_OK)
             {
@@ -663,7 +623,7 @@ static void csv_logger_task(void *pvParameters)
             }
             csv_session_active = true;
             wc_timer_set(&flush_timer, CSV_LOGGER_FLUSH_PERIOD_MS);
-            if (csv_fmt == CSV_FMT_WIDE && csv_grid_mode == CSV_GRID_FIXED)
+            if (csv_grid_mode == CSV_GRID_FIXED)
             {
                 uint32_t gp = (csv_grid_hz > 0) ? (1000u / csv_grid_hz) : 100u;
                 if (gp < 1) gp = 1;
@@ -671,18 +631,10 @@ static void csv_logger_task(void *pvParameters)
             }
         }
 
-        // Write the record. LONG: the proven per-record row. WIDE: update the LOCF row, and
-        // in EVENT mode emit a wide row now (FIXED mode emits on the grid tick above).
-        bool wrote_ok;
-        if (csv_fmt == CSV_FMT_LONG)
-        {
-            wrote_ok = csv_write_record(&rec);
-        }
-        else
-        {
-            csv_locf_update(&rec);
-            wrote_ok = (csv_grid_mode == CSV_GRID_EVENT) ? csv_emit_wide_row(rec.t_ms) : true;
-        }
+        // Update the LOCF row; in EVENT mode emit a wide row now (FIXED mode emits on the grid
+        // tick above). The long per-record format was removed (Task #16).
+        csv_locf_update(&rec);
+        bool wrote_ok = (csv_grid_mode == CSV_GRID_EVENT) ? csv_emit_wide_row(rec.t_ms) : true;
         if (!wrote_ok)
         {
             ESP_LOGE(TAG, "Write failed on %s, closing", csv_file_path);
@@ -800,14 +752,12 @@ char *csv_logger_get_status_json(void)
     cJSON_AddNumberToObject(root, "rows_written", csv_rows_written);
     cJSON_AddNumberToObject(root, "rows_dropped", csv_rows_dropped);
     cJSON_AddNumberToObject(root, "files_count", csv_files_count);
-    // Wide-format (Task #11) diagnostics. "format"/"columns" reflect the ACTIVE session
-    // (csv_fmt is latched at session-open). cols_unmatched = records whose (source,name) had
-    // no column (a config/gating divergence, distinct from the queue-full rows_dropped);
-    // pending_drops = records lost while a WIDE session waited for column enumeration.
-    cJSON_AddStringToObject(root, "format",
-                            (csv_session_active && csv_fmt == CSV_FMT_WIDE) ? "wide" : "long");
-    cJSON_AddNumberToObject(root, "columns",
-                            (csv_session_active && csv_fmt == CSV_FMT_WIDE) ? csv_col_count : 0);
+    // Wide-format (Task #11) diagnostics. "format" is always "wide" now (long removed, Task #16);
+    // "columns" reflects the ACTIVE session. cols_unmatched = records whose (source,name) had no
+    // column (a config/gating divergence, distinct from the queue-full rows_dropped);
+    // pending_drops = records lost while a session waited for column enumeration.
+    cJSON_AddStringToObject(root, "format", "wide");
+    cJSON_AddNumberToObject(root, "columns", csv_session_active ? csv_col_count : 0);
     cJSON_AddNumberToObject(root, "cols_unmatched", csv_cols_unmatched);
     cJSON_AddNumberToObject(root, "pending_drops", csv_pending_drops);
     char *out = cJSON_PrintUnformatted(root);
