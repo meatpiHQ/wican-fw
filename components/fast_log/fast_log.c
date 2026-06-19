@@ -155,6 +155,7 @@ static void fastlog_rx_task(void *arg)
 
     const int64_t start_us = esp_timer_get_time();
     bool guard_cleared = false;
+    int64_t calc_next_us = 0;   /* Task #17: throttle the calculated-channel pass */
     twai_message_t msg;
 
     for (;;)
@@ -174,6 +175,19 @@ static void fastlog_rx_task(void *arg)
             if (++drained >= FASTLOG_RX_DRAIN_MAX)
                 break; /* periodic yield so a flooded bus can't starve other tasks */
         }
+
+        /* Calculated channels (Task #17): throttled per-wake pass. Broadcast has no sweep
+         * boundary, so this is best-effort -- a source still un-decoded fails its calc until its
+         * frame arrives. Gate to FASTLOG_RECORD_PERIOD_MS to match the per-channel record cap. */
+        {
+            const int64_t now_us = esp_timer_get_time();
+            if (now_us >= calc_next_us)
+            {
+                autopid_eval_calculated_channels();
+                calc_next_us = now_us + (int64_t)FASTLOG_RECORD_PERIOD_MS * 1000;
+            }
+        }
+
         vTaskDelay(pdMS_TO_TICKS(FASTLOG_RX_PACE_MS));
 
         if (!guard_cleared && (esp_timer_get_time() - start_us) > FASTLOG_GUARD_STABLE_US)

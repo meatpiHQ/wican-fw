@@ -393,6 +393,11 @@ static void polllog_rx_task(void *arg)
              * sleep -- reclaiming ~20% of the sweep time the measure-first run was leaving on the table. */
         }
 
+        /* Calculated channels (Task #17): after a full round-robin sweep every polled source
+         * channel's p->value is freshest -- evaluate calc expressions over those and record each
+         * as source "CALC". No-op when none configured; takes autopid_lock itself (we hold none here). */
+        autopid_eval_calculated_channels();
+
         if (!guard_cleared && (esp_timer_get_time() - start_us) > POLLLOG_GUARD_STABLE_US)
         {
             s_polllog_guard = 0;

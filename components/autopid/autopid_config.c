@@ -221,6 +221,7 @@ static destination_type_t json_destination_type(const cJSON *obj, const char *ke
 
 // Forward declarations for CAN filters parsing/merge (implemented later in file)
 static void autopid_cfg_append_can_filters_from_array(autopid_config_t *cfg, const cJSON *can_filters_arr, bool is_vehicle_specific);
+static void autopid_cfg_parse_calculated_from_array(autopid_config_t *cfg, const cJSON *calc_arr);
 
 static sensor_type_t json_sensor_type(const cJSON *obj, const char *key, sensor_type_t default_value)
 {
@@ -401,6 +402,7 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
     cJSON *standard_pids_item = cJSON_GetObjectItem(root, "standard_pids");
     cJSON *specific_pids_item = cJSON_GetObjectItem(root, "car_specific");
     cJSON *can_filters_item = cJSON_GetObjectItem(root, "can_filters");
+    cJSON *calculated_item = cJSON_GetObjectItem(root, "calculated");   // Task #17 calculated channels
     cJSON *group_destination_item = cJSON_GetObjectItem(root, "destination");   // legacy single destination
     cJSON *group_dest_type_item = cJSON_GetObjectItem(root, "group_dest_type"); // legacy single type
     cJSON *destinations_array = cJSON_GetObjectItem(root, "destinations");      // new multi-destination array
@@ -964,6 +966,13 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
         autopid_cfg_append_can_filters_from_array(autopid_config, can_filters_item, false);
     }
 
+    // Parse optional calculated channels (Task #17): top-level "calculated" array of
+    // {name, expression, unit}. Expressions reference OTHER channel names, not raw CAN bytes.
+    if (calculated_item && cJSON_IsArray(calculated_item))
+    {
+        autopid_cfg_parse_calculated_from_array(autopid_config, calculated_item);
+    }
+
     *pid_index = idx;
     cJSON_Delete(root);
 }
@@ -1080,6 +1089,54 @@ static void autopid_cfg_append_can_filters_from_array(autopid_config_t *cfg, con
 
     cfg->can_filters = new_arr;
     cfg->can_filters_count = new_count;
+}
+
+// Task #17: parse the top-level "calculated" array into cfg->calculated[] (parameter_t[]).
+// Each entry is {name, expression, unit}; expression references OTHER decoded channel names.
+// Reuses parse_parameter_object (defaults: enabled=true, value=FLT_MAX, min/max=FLT_MAX), and
+// is bounded by AUTOPID_MAX_CALCULATED so a large JSON cannot exhaust the heap (brick invariant).
+#define AUTOPID_MAX_CALCULATED 24
+static void autopid_cfg_parse_calculated_from_array(autopid_config_t *cfg, const cJSON *calc_arr)
+{
+    if (!cfg || !calc_arr || !cJSON_IsArray(calc_arr))
+    {
+        return;
+    }
+
+    int n = cJSON_GetArraySize((cJSON *)calc_arr);
+    if (n <= 0)
+    {
+        return;
+    }
+    if (n > AUTOPID_MAX_CALCULATED)
+    {
+        ESP_LOGW(TAG, "calculated channels capped at %d (had %d)", AUTOPID_MAX_CALCULATED, n);
+        n = AUTOPID_MAX_CALCULATED;
+    }
+
+    parameter_t *arr = (parameter_t *)heap_caps_calloc((size_t)n, sizeof(parameter_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
+    if (!arr)
+    {
+        return;
+    }
+
+    int filled = 0;
+    for (int i = 0; i < n; i++)
+    {
+        cJSON *obj = cJSON_GetArrayItem((cJSON *)calc_arr, i);
+        if (!obj || !cJSON_IsObject(obj))
+        {
+            continue;
+        }
+        parse_parameter_object(&arr[filled], obj,
+                               "name", "expression", "unit", "class", "sensor_type",
+                               "min", "max", "period", "send_to", "type");
+        filled++;
+    }
+
+    cfg->calculated = arr;
+    cfg->calculated_count = (uint32_t)filled;
+    ESP_LOGI(TAG, "Parsed %d calculated channel(s)", filled);
 }
 
 static void parse_car_data_json(autopid_config_t *autopid_config, int *pid_index)

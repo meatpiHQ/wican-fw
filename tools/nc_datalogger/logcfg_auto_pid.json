@@ -181,5 +181,19 @@
             "unit": "%",
             "class": "none"
         }
+    ],
+    "calculated": [
+        {
+            "name": "AFR",
+            "expression": "EQ_RATIO * 14.64",
+            "unit": "AFR",
+            "enabled": true
+        },
+        {
+            "name": "BOOST",
+            "expression": "MAP - BARO",
+            "unit": "kPa",
+            "enabled": true
+        }
     ]
 }

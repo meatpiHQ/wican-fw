@@ -95,6 +95,25 @@ POLLED = [
 ]
 
 
+# ---- CALCULATED channels (Task #17): (name, expression, unit) ----
+# Math over OTHER decoded channel NAMES (source "CALC"), evaluated once per poll sweep on-device.
+# Operators: + - * / and parens, plus unary minus. Operands are channel names (bare identifiers,
+# e.g. EQ_RATIO, MAP, BARO) or decimal numbers. A calc whose inputs aren't decoded yet stays empty
+# (LOCF) until they are. These reference the POLLED channels above so they populate in poll_log.
+CALCULATED = [
+    # name      expression            unit    note
+    ("AFR",    "EQ_RATIO * 14.64",   "AFR"),   # lambda -> gasoline air/fuel ratio (~14.6 stoich)
+    ("BOOST",  "MAP - BARO",         "kPa"),   # manifold vs atmospheric (NA NC: <=0 == vacuum)
+]
+
+
+def build_calculated():
+    return [
+        {"name": name, "expression": expr, "unit": unit, "enabled": True}
+        for name, expr, unit in CALCULATED
+    ]
+
+
 def build_can_filters():
     by_frame = {}
     order = []
@@ -145,6 +164,7 @@ def main():
         "disable_on_sleep_voltage": "enable",
         "can_filters": build_can_filters() if EMIT_BROADCAST_FILTERS else [],
         "pids": build_pids(),
+        "calculated": build_calculated(),
     }
     print(json.dumps(config, indent=4))
 

@@ -52,6 +52,7 @@
 #include "ha_webhooks.h"
 #include "autopid_config.h"
 #include "esp_heap_caps.h"
+#include <stdlib.h>   /* strtod for the calculated-channel evaluator (Task #17) */
 
 // #define TAG __func__
 #define TAG "AUTO_PID"
@@ -258,6 +259,7 @@ void autopid_unlock(void)
 // all-empty columns, no missing channels. Source tags MUST match the producer call sites:
 //   PIDs:        STD (pid_type==PID_STD) / PID (CUSTOM,SPECIFIC)   [autopid.c ~4007/4065]
 //   CAN filters: CANFLT                                            [autopid.c ~2100]
+//   Calculated:  CALC                                              [autopid_eval_calculated_channels]
 //
 // names==NULL -> count-only (returns an upper bound, no writes, no dedup). Otherwise fills
 // the caller arrays with the deduped set, keyed on (source,name), and returns the count.
@@ -334,10 +336,245 @@ static int autopid_collect_log_columns(char (*names)[CSV_LOGGER_NAME_MAX],
         }
     }
 
+    // ---- Calculated channels (Task #17, source "CALC") ----
+    // Listed AFTER pids and can_filters so column order is PID/STD, then CANFLT, then CALC.
+    // Mirrors the producer gate in autopid_eval_calculated_channels(): enabled + named + has expr.
+    for (uint32_t ci = 0; ci < autopid_config->calculated_count && count < max_cols; ci++)
+    {
+        parameter_t *p = &autopid_config->calculated[ci];
+        if (!p->enabled || !p->name || p->name[0] == '\0' ||
+            !p->expression || p->expression[0] == '\0')
+            continue;
+        if (!count_only)
+        {
+            bool dup = false;
+            for (int k = 0; k < count; k++)
+                if (strcmp(names[k], p->name) == 0 && strcmp(sources[k], "CALC") == 0)
+                { dup = true; break; }
+            if (dup) continue;
+            strlcpy(names[count], p->name, CSV_LOGGER_NAME_MAX);
+            strlcpy(units[count], p->unit ? p->unit : "", CSV_LOGGER_UNIT_MAX);
+            strlcpy(sources[count], "CALC", CSV_LOGGER_SOURCE_MAX);
+        }
+        count++;
+    }
+
     autopid_unlock();
     if (!count_only && count >= max_cols)
         ESP_LOGW(TAG, "Wide CSV column cap (%d) reached - some channels omitted", max_cols);
     return count;
+}
+
+/* ===== Calculated channels (Task #17) =====================================================
+ * Self-contained recursive-descent evaluator over decoded CHANNEL NAMES, e.g.
+ *   "MAP - BARO"   "EQ_RATIO * 14.64"   "SPARKADV - KNOCKR"
+ * Deliberately SEPARATE from expression_parser.c's evaluate_expression(): that one is
+ * single-char-sigil / raw-CAN-byte (B0..B7, S<n>, [Bx:By], V) and runs live on the car for
+ * PID/broadcast decode -- it cannot lex multi-letter channel names and must not be touched.
+ *
+ * Grammar (left-assoc; '*' '/' bind tighter than '+' '-'; unary +/- supported):
+ *   expr    := term (('+'|'-') term)*
+ *   term    := primary (('*'|'/') primary)*
+ *   primary := ('+'|'-') primary | '(' expr ')' | number | identifier
+ * Identifiers are bare names [A-Za-z_][A-Za-z0-9_]* resolved to a source channel's latest
+ * decoded value. An unknown or not-yet-decoded (FLT_MAX sentinel) input fails the whole
+ * expression so the calc column simply stays empty (LOCF) until its inputs exist. Allocation-
+ * free; bounded recursion; reads source values under the caller's autopid_lock.
+ */
+#define CALC_MAX_DEPTH 32
+
+typedef struct
+{
+    const char *s;            // parse cursor
+    autopid_config_t *cfg;    // source-channel universe (read under autopid_lock)
+    int depth;                // recursion guard
+    bool ok;                  // cleared on any parse/resolve error
+} calc_ctx_t;
+
+// Resolve a length-delimited channel name to its latest decoded value. Scans polled PIDs then
+// CAN filters; returns the first FINITE (already-decoded) match. Unknown or all-stale (FLT_MAX)
+// -> false, which fails the calc for this sweep.
+static bool calc_resolve_name(autopid_config_t *cfg, const char *name, size_t len, double *out)
+{
+    if (!cfg || !name || len == 0)
+        return false;
+    for (uint32_t i = 0; i < cfg->pid_count; i++)
+    {
+        pid_data_t *pid = &cfg->pids[i];
+        for (uint32_t j = 0; j < pid->parameters_count; j++)
+        {
+            parameter_t *p = &pid->parameters[j];
+            if (p->name && strlen(p->name) == len && strncmp(p->name, name, len) == 0 &&
+                p->value != FLT_MAX && isfinite(p->value))
+            {
+                *out = (double)p->value;
+                return true;
+            }
+        }
+    }
+    for (uint32_t fi = 0; fi < cfg->can_filters_count; fi++)
+    {
+        can_filter_t *f = &cfg->can_filters[fi];
+        for (uint32_t pi = 0; pi < f->parameters_count; pi++)
+        {
+            parameter_t *p = &f->parameters[pi];
+            if (p->name && strlen(p->name) == len && strncmp(p->name, name, len) == 0 &&
+                p->value != FLT_MAX && isfinite(p->value))
+            {
+                *out = (double)p->value;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static void calc_skipws(calc_ctx_t *c)
+{
+    while (*c->s == ' ' || *c->s == '\t')
+        c->s++;
+}
+
+static double calc_parse_expr(calc_ctx_t *c);   // forward (parens recurse)
+
+static double calc_parse_primary(calc_ctx_t *c)
+{
+    calc_skipws(c);
+    char ch = *c->s;
+
+    // unary +/-
+    if (ch == '+' || ch == '-')
+    {
+        c->s++;
+        if (++c->depth > CALC_MAX_DEPTH) { c->ok = false; c->depth--; return 0.0; }
+        double v = calc_parse_primary(c);
+        c->depth--;
+        return (ch == '-') ? -v : v;
+    }
+
+    // parenthesized sub-expression
+    if (ch == '(')
+    {
+        c->s++;
+        if (++c->depth > CALC_MAX_DEPTH) { c->ok = false; c->depth--; return 0.0; }
+        double v = calc_parse_expr(c);
+        calc_skipws(c);
+        if (*c->s == ')') c->s++;
+        else c->ok = false;
+        c->depth--;
+        return v;
+    }
+
+    // numeric literal
+    if ((ch >= '0' && ch <= '9') || ch == '.')
+    {
+        char *end = NULL;
+        double v = strtod(c->s, &end);
+        if (end == c->s) { c->ok = false; return 0.0; }
+        c->s = end;
+        return v;
+    }
+
+    // identifier -> channel name
+    if (isalpha((unsigned char)ch) || ch == '_')
+    {
+        const char *start = c->s;
+        while (isalnum((unsigned char)*c->s) || *c->s == '_')
+            c->s++;
+        size_t len = (size_t)(c->s - start);
+        double v = 0.0;
+        if (!calc_resolve_name(c->cfg, start, len, &v)) { c->ok = false; return 0.0; }
+        return v;
+    }
+
+    c->ok = false;
+    return 0.0;
+}
+
+static double calc_parse_term(calc_ctx_t *c)
+{
+    double v = calc_parse_primary(c);
+    while (c->ok)
+    {
+        calc_skipws(c);
+        char op = *c->s;
+        if (op != '*' && op != '/')
+            break;
+        c->s++;
+        double rhs = calc_parse_primary(c);
+        if (!c->ok)
+            break;
+        if (op == '*')
+            v *= rhs;
+        else
+        {
+            if (rhs == 0.0) { c->ok = false; break; }
+            v /= rhs;
+        }
+    }
+    return v;
+}
+
+static double calc_parse_expr(calc_ctx_t *c)
+{
+    double v = calc_parse_term(c);
+    while (c->ok)
+    {
+        calc_skipws(c);
+        char op = *c->s;
+        if (op != '+' && op != '-')
+            break;
+        c->s++;
+        double rhs = calc_parse_term(c);
+        if (!c->ok)
+            break;
+        if (op == '+') v += rhs;
+        else v -= rhs;
+    }
+    return v;
+}
+
+// Evaluate a calculated-channel expression over current source values. true + *result on success.
+static bool calc_evaluate(autopid_config_t *cfg, const char *expr, double *result)
+{
+    if (!cfg || !expr || !result)
+        return false;
+    calc_ctx_t c = { .s = expr, .cfg = cfg, .depth = 0, .ok = true };
+    double v = calc_parse_expr(&c);
+    calc_skipws(&c);
+    if (!c.ok || *c.s != '\0')      // parse error or trailing garbage
+        return false;
+    if (!isfinite(v))
+        return false;
+    *result = v;
+    return true;
+}
+
+void autopid_eval_calculated_channels(void)
+{
+    if (!autopid_config || autopid_config->calculated_count == 0)
+        return;
+    if (!autopid_lock(20))
+        return;
+
+    for (uint32_t i = 0; i < autopid_config->calculated_count; i++)
+    {
+        parameter_t *c = &autopid_config->calculated[i];
+        if (!c->enabled || !c->name || c->name[0] == '\0' ||
+            !c->expression || c->expression[0] == '\0')
+            continue;
+        double result = 0.0;
+        if (!calc_evaluate(autopid_config, c->expression, &result))
+            continue;                       // unknown/stale input or parse error -> skip this sweep
+        if (c->min != FLT_MAX && result < (double)c->min)
+            continue;
+        if (c->max != FLT_MAX && result > (double)c->max)
+            continue;
+        c->value = (float)result;
+        csv_logger_record(c->name, c->value, c->unit, "CALC");
+    }
+
+    autopid_unlock();
 }
 
 const std_pid_t *get_pid_from_string(const char *pid_string)

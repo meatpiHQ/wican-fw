@@ -1313,7 +1313,7 @@ function addCustomCanFilterEntry(rowData = {}) {
     const entry = document.createElement('div');
     entry.className = 'custom-canfilter-entry';
 
-    const safe = (v)=>String(v ?? '').replace(/"/g,'&quot;');
+    const safe = (v)=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     const titleText = `${frameIdValue || 'Frame'} - ${(p.name || rowData.name || 'New Parameter')}`;
 
     entry.innerHTML = `
@@ -1447,7 +1447,7 @@ function addVehicleSpecificCanFilterEntry(rowData = {}) {
     const entry = document.createElement('div');
     entry.className = 'specific-canfilter-entry';
 
-    const safe = (v)=>String(v ?? '').replace(/"/g,'&quot;');
+    const safe = (v)=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     const titleText = `${frameIdValue || 'Frame'} - ${(p.name || rowData.name || 'New Parameter')}`;
 
     entry.innerHTML = `
@@ -1574,6 +1574,101 @@ function addCustomFilterRow() {
         frame_id: '',
         parameter: { name: 'New Parameter', expression: '', unit: '', class: '', period: '5000', min: '', max: '', type: 'Default', send_to: '' }
     });
+}
+
+// Calculated channels (Task #17): a derived channel computed on-device from OTHER channel
+// values (source "CALC"). Expression references channel NAMES, e.g. "MAP - BARO" or
+// "EQ_RATIO * 14.64" (operators + - * /, parens, unary minus). Mirrors the custom-filter row.
+function addCalculatedChannelEntry(rowData = {}) {
+    const container = document.querySelector('.calculated-entries');
+    if (!container) return;
+
+    const safe = (v)=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const name = (rowData.name !== undefined && rowData.name !== null) ? String(rowData.name) : 'New Channel';
+    const expr = (rowData.expression !== undefined && rowData.expression !== null) ? String(rowData.expression) : '';
+    const unit = (rowData.unit !== undefined && rowData.unit !== null) ? String(rowData.unit) : '';
+    const enabled = (rowData.enabled === false) ? false : true;
+
+    const entry = document.createElement('div');
+    entry.className = 'calculated-entry';
+
+    entry.innerHTML = `
+        <div class="pid-header">
+            <div class="header-left">
+                <button type="button" class="collapse-btn">▼</button>
+                <span class="pid-title">${safe(name)}</span>
+            </div>
+            <div class="header-right">
+                <label class="enabled-label" style="display:flex; align-items:center; gap:4px; font-size:0.7rem;">
+                    <input type="checkbox" class="enabled-chk" ${enabled ? 'checked' : ''}>
+                    Enabled
+                </label>
+                <button type="button" class="delete-btn">Delete</button>
+            </div>
+        </div>
+        <div class="pid-content" style="display: none;">
+            <table class="compact-form-table">
+                <tr>
+                    <td>Name:</td>
+                    <td><input type="text" class="name-input" value="${safe(name)}" placeholder="Channel Name"></td>
+                </tr>
+                <tr>
+                    <td>Expression:</td>
+                    <td><input type="text" class="expression-input" value="${safe(expr)}" placeholder="e.g. MAP - BARO"></td>
+                </tr>
+                <tr>
+                    <td>Unit:</td>
+                    <td><input type="text" class="unit-input" value="${safe(unit)}" placeholder="Unit"></td>
+                </tr>
+            </table>
+        </div>
+    `;
+
+    const style = document.createElement('style');
+    style.textContent = pidEntryStyles;
+    document.head.appendChild(style);
+
+    const header = entry.querySelector('.pid-header');
+    const deleteBtn = entry.querySelector('.delete-btn');
+    const collapseBtn = entry.querySelector('.collapse-btn');
+    const content = entry.querySelector('.pid-content');
+    const titleEl = entry.querySelector('.pid-title');
+    const enabledChk = entry.querySelector('.enabled-chk');
+
+    if (enabledChk) {
+        enabledChk.addEventListener('click', (e) => e.stopPropagation());
+        enabledChk.addEventListener('change', enableAutoStoreButton);
+    }
+
+    deleteBtn.addEventListener('click', () => {
+        entry.remove();
+        enableAutoStoreButton();
+    });
+
+    const toggleCollapse = (e) => {
+        e.stopPropagation();
+        const isHidden = content.style.display === 'none';
+        content.style.display = isHidden ? 'block' : 'none';
+        collapseBtn.textContent = isHidden ? '▲' : '▼';
+    };
+    header.addEventListener('click', toggleCollapse);
+    collapseBtn.addEventListener('click', toggleCollapse);
+
+    const updateTitle = () => {
+        titleEl.textContent = entry.querySelector('.name-input')?.value?.trim() || 'New Channel';
+    };
+
+    entry.querySelectorAll('input').forEach(input => {
+        input.addEventListener('input', () => { updateTitle(); enableAutoStoreButton(); });
+        input.addEventListener('change', () => { updateTitle(); enableAutoStoreButton(); });
+    });
+
+    container.appendChild(entry);
+    enableAutoStoreButton();
+}
+
+function addCalculatedRow() {
+    addCalculatedChannelEntry({ name: 'New Channel', expression: '', unit: '', enabled: true });
 }
 
 window.automateDestinations = [];
@@ -1930,6 +2025,10 @@ function loadAutoTable(jsonData) {
         const customFilterContainer = document.querySelector('.custom-canfilter-entries');
         if (customFilterContainer) customFilterContainer.innerHTML = '';
 
+        // Reset calculated channels UI (Task #17) to avoid duplicates on reload
+        const calculatedContainer = document.querySelector('.calculated-entries');
+        if (calculatedContainer) calculatedContainer.innerHTML = '';
+
         const initialisationElement = document.getElementById("initialisation");
         if (initialisationElement) {
             initialisationElement.value = data.initialisation || '';
@@ -2058,6 +2157,18 @@ function loadAutoTable(jsonData) {
                     Type: pidData.Type || 'Default',
                     Send_to: pidData.Send_to || '',
                     enabled: pidData.enabled
+                });
+            });
+        }
+
+        // Calculated channels (Task #17, source CALC)
+        if (Array.isArray(data.calculated)) {
+            data.calculated.forEach(c => {
+                addCalculatedChannelEntry({
+                    name: c.name,
+                    expression: c.expression,
+                    unit: c.unit,
+                    enabled: c.enabled
                 });
             });
         }
@@ -2333,7 +2444,22 @@ async function storeAutoTableData() {
             });
             custom_can_filters.push(...Array.from(grouped.values()));
         }
-        
+
+        // Calculated channels (Task #17): collect name/expression/unit/enabled rows. Carried
+        // through verbatim so a UI "Store" never drops imported calculated channels.
+        const calculated_data = [];
+        document.querySelectorAll('.calculated-entry').forEach(entry => {
+            const name = (entry.querySelector('.name-input')?.value || '').trim();
+            const expression = (entry.querySelector('.expression-input')?.value || '').trim();
+            const unit = (entry.querySelector('.unit-input')?.value || '').trim();
+            const enabled = entry.querySelector('.enabled-chk')?.checked !== false;
+            if (!name) return;  // skip unnamed rows
+            if (name.length > 47) {
+                throw new Error("Calculated channel name must be less than 48 characters");
+            }
+            calculated_data.push({ name, expression, unit, enabled });
+        });
+
         const jsonData = {
             initialisation: initialisationValue,
             grouping: groupingValue,
@@ -2346,6 +2472,7 @@ async function storeAutoTableData() {
             pids: custom_pid_data,
             std_pids: std_pid_data,
             can_filters: custom_can_filters,
+            calculated: calculated_data,
             standard_pids: standard_pidsValue,
             ecu_protocol: ecu_protocolValue,
             group_api_token: window.automateDestinations[0]?.api_token || '',
