@@ -181,14 +181,58 @@
             "Init": "ATSH7E0;"
         },
         {
-            "PID": "22098E1",
+            "PID": "010C1",
             "Period": "200",
             "enabled": true,
-            "Name": "EGRP_STEPS",
-            "Expression": "[B4:B5]",
-            "unit": "steps",
-            "class": "none",
-            "Init": "ATSH7E0;"
+            "Name": "RPM",
+            "Expression": "[B3:B4]/4",
+            "unit": "rpm",
+            "class": "none"
+        },
+        {
+            "PID": "010D1",
+            "Period": "200",
+            "enabled": true,
+            "Name": "VSS",
+            "Expression": "B3",
+            "unit": "km/h",
+            "class": "none"
+        },
+        {
+            "PID": "01051",
+            "Period": "200",
+            "enabled": true,
+            "Name": "ECT",
+            "Expression": "B3-40",
+            "unit": "C",
+            "class": "none"
+        },
+        {
+            "PID": "010F1",
+            "Period": "200",
+            "enabled": true,
+            "Name": "IAT",
+            "Expression": "B3-40",
+            "unit": "C",
+            "class": "none"
+        },
+        {
+            "PID": "01111",
+            "Period": "200",
+            "enabled": true,
+            "Name": "TPS",
+            "Expression": "B3*0.39215686",
+            "unit": "%",
+            "class": "none"
+        },
+        {
+            "PID": "01491",
+            "Period": "200",
+            "enabled": true,
+            "Name": "APP",
+            "Expression": "B3*0.39215686",
+            "unit": "%",
+            "class": "none"
         }
     ]
 }

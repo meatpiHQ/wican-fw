@@ -21,10 +21,17 @@ Two sources of data, both land in the SD wide-CSV as one column each:
   byte A is B3, B is B4; for a mode 22 reply [PCI,0x62,pidHi,pidLo,A,B,...] A is
   B4, B is B5. (Verified against mx5_nc.json's AAT: "01461" -> "B3-40".)
 
-Channels covered by BROADCAST instead of polling: RPM, VSS, APP, ECT, IAT (all in
-logcfg) plus TPS (free bonus on the same 0x240 frame). Everything else in logcfg
-is polled. car_specific is "disable" so the mx5_nc profile's own 0x201/0x240
-filters don't double up; ecu_protocol "6" + ATSP6 init force ISO15765 11bit/500k.
+Channels covered by BROADCAST: RPM, VSS, APP, ECT, IAT (all in logcfg) plus TPS
+(free bonus on the same 0x240 frame). car_specific is "disable" so the mx5_nc
+profile's own 0x201/0x240 filters don't double up; ecu_protocol "6" + ATSP6 init
+force ISO15765 11bit/500k.
+
+NOTE (poll_log validation): those same six channels are ALSO listed under POLLED,
+as standard mode-01 PIDs. The broadcast set still feeds the hybrid/fast_log modes,
+but in poll_log (poll-only) mode the can_filters never fire, so the polled copies
+keep RPM/VSS/ECT/IAT/TPS/APP populated -- and being ground-truthable (tach, temp
+gauge) they're the cleanest way to confirm polled values are correct. The header
+disambiguates the two as e.g. "RPM [PID]" vs "RPM [CANFLT]".
 
 Run: python gen_logcfg_pid.py > logcfg_auto_pid.json
 """
@@ -62,7 +69,18 @@ POLLED = [
     ("FUEL_PW",    "2214101",   "[B4:B5]*0.008",            "ms",      "none"),
     ("VCT_ACT",    "2216CD1",   "[B4:B5]*0.0625",           "deg",     "none"),
     ("HIDET_SW",   "2217061",   "B4&1",                     "on/off",  "none"),
-    ("EGRP_STEPS", "22098E1",   "[B4:B5]",                  "steps",   "none"),
+    # Polled mode-01 equivalents of the BROADCAST channels above. In poll_log (poll-only)
+    # mode the can_filters never fire, so without these the RPM/VSS/ECT/IAT/TPS/APP columns
+    # are empty. Adding them lets the poll-only run be validated against ground truth (tach,
+    # temp gauge, etc.) and cross-checked against the broadcast values from a fast_log run.
+    # These are standard OBD PIDs (0C/0D/05/0F/11) -- universally supported -- except APP:
+    # 0x49 (accelerator pedal position D) may NRC/time out on the NC; if so, drop it.
+    ("RPM",        "010C1",     "[B3:B4]/4",                "rpm",     "none"),
+    ("VSS",        "010D1",     "B3",                       "km/h",    "none"),
+    ("ECT",        "01051",     "B3-40",                    "C",       "none"),
+    ("IAT",        "010F1",     "B3-40",                    "C",       "none"),
+    ("TPS",        "01111",     "B3*0.39215686",            "%",       "none"),
+    ("APP",        "01491",     "B3*0.39215686",            "%",       "none"),
 ]
 
 
