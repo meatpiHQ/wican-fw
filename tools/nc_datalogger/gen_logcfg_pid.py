@@ -26,12 +26,15 @@ Channels covered by BROADCAST: RPM, VSS, APP, ECT, IAT (all in logcfg) plus TPS
 profile's own 0x201/0x240 filters don't double up; ecu_protocol "6" + ATSP6 init
 force ISO15765 11bit/500k.
 
-NOTE (poll_log validation): those same six channels are ALSO listed under POLLED,
-as standard mode-01 PIDs. The broadcast set still feeds the hybrid/fast_log modes,
-but in poll_log (poll-only) mode the can_filters never fire, so the polled copies
-keep RPM/VSS/ECT/IAT/TPS/APP populated -- and being ground-truthable (tach, temp
-gauge) they're the cleanest way to confirm polled values are correct. The header
-disambiguates the two as e.g. "RPM [PID]" vs "RPM [CANFLT]".
+NOTE (poll_log validation): those same six channels are listed ONLY under POLLED,
+as standard mode-01 PIDs. The broadcast can_filters are NOT emitted by default
+(EMIT_BROADCAST_FILTERS = False) because poll_log (the live path) does request/
+response only and never decodes broadcast frames -- emitting them would just add
+empty "RPM [CANFLT]" duplicate columns beside the polled "RPM [PID]" ones. The
+polled copies keep RPM/VSS/ECT/IAT/TPS/APP populated and are ground-truthable
+(tach, temp gauge), so they're the cleanest way to confirm polled values. Flip
+EMIT_BROADCAST_FILTERS back on to re-stage the broadcast set for hybrid/fast_log
+(passive, ~100 Hz, no bus traffic) once polled values are confirmed.
 
 Run: python gen_logcfg_pid.py > logcfg_auto_pid.json
 """
@@ -40,6 +43,14 @@ import json
 
 # ---- BROADCAST channels: (frame_id, name, expression, unit, class) ----
 # Period in ms applied uniformly below. Expressions/scaling proven in mx5_nc.json.
+#
+# EMIT_BROADCAST_FILTERS: OFF for poll-only validation. poll_log (the live path)
+# does request/response only and never decodes broadcast frames, so emitting these
+# filters would only add empty duplicate columns (RPM [CANFLT] etc.) next to the
+# polled copies below. The six channels are covered as POLLED PIDs instead. Flip to
+# True to re-stage the broadcast set for the hybrid/fast_log path (passive ~100 Hz,
+# no bus traffic) once polled values are confirmed valid.
+EMIT_BROADCAST_FILTERS = False
 BROADCAST_PERIOD_MS = 100
 BROADCAST = [
     ("0x201", "RPM", "[B0:B1]/4",        "rpm",  "frequency"),
@@ -132,7 +143,7 @@ def main():
         # pause ALL AutoPID (polling + CAN monitoring) below sleep_volt to protect
         # the battery when parked. (UI: Automate -> Low-Voltage Behavior.)
         "disable_on_sleep_voltage": "enable",
-        "can_filters": build_can_filters(),
+        "can_filters": build_can_filters() if EMIT_BROADCAST_FILTERS else [],
         "pids": build_pids(),
     }
     print(json.dumps(config, indent=4))
