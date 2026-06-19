@@ -86,6 +86,7 @@
 #include "esp_littlefs.h"
 #include "obd_logger_iface.h"
 #include "csv_logger.h"
+#include "poll_log.h"
 #include "sd_filemgr.h"
 #include "https_client_mgr.h"
 #include "sdcard.h"
@@ -545,6 +546,10 @@ int8_t config_server_protocol(void)
 	else if(strcmp(device_config.protocol, "fast_log") == 0)
 	{
 		return FAST_LOG;
+	}
+	else if(strcmp(device_config.protocol, "poll_log") == 0)
+	{
+		return POLL_LOG;
 	}
 	return OBD_ELM327;
 }
@@ -2485,7 +2490,29 @@ static const httpd_uri_t std_pid_info = {
     .uri       = "/std_pid_info",
     .method    = HTTP_GET,
     .handler   = std_pid_info_handler,
-    .user_ctx  = &server_data 
+    .user_ctx  = &server_data
+};
+
+/* GET /poll_status -> live POLL_LOG metrics (req/s, rtt, ok/timeout/txfail) over WiFi, so the
+ * polling rate is readable in the car without a serial cable. Safe in any protocol mode. */
+static esp_err_t poll_status_handler(httpd_req_t *req)
+{
+    char *status = poll_log_get_status_json();
+    httpd_resp_set_type(req, "application/json");
+    if (status == NULL)
+    {
+        httpd_resp_sendstr(req, "{\"active\":false}");
+        return ESP_OK;
+    }
+    httpd_resp_sendstr(req, status);
+    free(status);
+    return ESP_OK;
+}
+static const httpd_uri_t poll_status_uri = {
+    .uri       = "/poll_status",
+    .method    = HTTP_GET,
+    .handler   = poll_status_handler,
+    .user_ctx  = NULL
 };
 
 static void config_server_load_cfg(char *cfg)
@@ -3628,6 +3655,7 @@ static void register_server_uris(void)
 	httpd_register_uri_handler(server, &system_commands);
 	httpd_register_uri_handler(server, &scan_available_pids_uri);
 	httpd_register_uri_handler(server, &std_pid_info);
+	httpd_register_uri_handler(server, &poll_status_uri);
 	
 	//Add before this line
 	httpd_register_uri_handler(server, &obd_logger_ws);

@@ -61,6 +61,7 @@
 #include "autopid.h"
 #include "csv_logger.h"
 #include "fast_log.h"
+#include "poll_log.h"
 #include "led.h"
 #include "obd.h"
 #include "wusb3801.h"
@@ -375,11 +376,12 @@ static void can_rx_task(void *pvParameters)
 
 		dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
 
-		// FAST_LOG (Task #18) owns the native TWAI controller exclusively: its fastlog_rx_task
-		// is the SOLE twai_receive() consumer. If this task also drained the RX queue, TWAI
-		// would split/steal frames between the two (each frame goes to exactly one waiter).
-		// Gate this task off entirely in FAST_LOG mode. MUST stay above the can_receive() loop.
-		if(protocol == FAST_LOG)
+		// FAST_LOG / POLL_LOG (Task #18) own the native TWAI controller exclusively: their
+		// task is the SOLE twai_receive()/twai_transmit() consumer. If this task also drained
+		// the RX queue, TWAI would split/steal frames between the two (each frame goes to exactly
+		// one waiter) -- in POLL_LOG that would steal the PCM's diagnostic responses.
+		// Gate this task off entirely in those modes. MUST stay above the can_receive() loop.
+		if(protocol == FAST_LOG || protocol == POLL_LOG)
 		{
 			vTaskDelay(pdMS_TO_TICKS(50));
 			continue;
@@ -957,6 +959,23 @@ void app_main(void)
 			csv_logger_init_deferred();
 		}
 		fast_log_init((char*)&uid[0], log_period);
+	}
+	else if(protocol == POLL_LOG)
+	{
+		// Native-TWAI request/response poller (Task #18, Phase B "measure-first"). Brings up the
+		// bus NORMAL/on-bus and polls the configured mode-01/22 PIDs with no ELM emulation and no
+		// hardcoded 100ms inter-poll delay, in place of the AutoPID/ELM poll loop. elm327_init()
+		// above stays dormant (no client drives it). Same CSV gate as FAST_LOG: deferred start.
+		uint32_t log_period = 0;
+		if(config_server_get_log_period(&log_period) == -1)
+		{
+			log_period = 60;
+		}
+		if(config_server_get_csv_log() == 1)
+		{
+			csv_logger_init_deferred();
+		}
+		poll_log_init((char*)&uid[0], log_period);
 	}
 
 	#else

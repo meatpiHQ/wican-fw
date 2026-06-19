@@ -54,6 +54,7 @@
 #define OBD_ELM327			3
 #define AUTO_PID			4
 #define FAST_LOG			5	/* Native-TWAI fast datalogger (Task #18) */
+#define POLL_LOG			6	/* Native-TWAI request/response poller (Task #18, Phase B) */
 
 typedef enum
 {

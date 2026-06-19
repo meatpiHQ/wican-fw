@@ -1,0 +1,40 @@
+/*
+ * This file is part of the WiCAN project.
+ *
+ * Copyright (C) 2022  Meatpi Electronics.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#ifndef POLL_LOG_H
+#define POLL_LOG_H
+
+#include <stdint.h>
+
+/*
+ * POLL_LOG mode (Task #18, Phase B "measure-first"): native-TWAI request/response
+ * polling of the configured mode-01/22 PIDs, with NO ELM327 emulation and NO hardcoded
+ * 100 ms inter-poll delay. Single-PID round-robin -- the simplest correct poller -- so we
+ * can measure the REAL per-request turnaround on the PCM before adding batching.
+ *
+ * Sibling to fast_log (passive broadcast). Selected via the "poll_log" protocol string.
+ */
+void poll_log_init(char *id, uint32_t log_period);
+
+/*
+ * Live poll metrics for GET /poll_status, as a malloc'd JSON string the caller must free().
+ * Safe to call in any protocol mode -- returns {"active":false,...} when POLL_LOG isn't running.
+ * Shape: {active, ok, timeout, txfail (cumulative), rtt_avg_ms/min/max, req_s (last 3 s window),
+ * win_ok/win_timeout/win_txfail (that window's counts)}.
+ */
+char *poll_log_get_status_json(void);
+
+#endif /* POLL_LOG_H */
