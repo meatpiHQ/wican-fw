@@ -26,6 +26,21 @@
 #define NCFLASH_FASTREAD_CMD       'X'
 #define NCFLASH_FASTREAD_CMD_LEN   18
 
+/* Version ping: a fast-read whose start address is this sentinel streams back a
+ * fixed build marker (NCFLASH_FASTREAD_VERSION bytes) WITHOUT touching CAN, so
+ * the host can confirm exactly which fast-read build is live before a real read.
+ * Bump the version string whenever the read loop's wire behaviour changes. */
+#define NCFLASH_FASTREAD_PING_ADDR 0xFFFFFFFEu
+#define NCFLASH_FASTREAD_VERSION   "NCFRv4\n"   /* v4: + sync preamble before ROM */
+
+/* Sync preamble streamed once, right after CAN forwarding is suspended and
+ * before the first ROM byte. Any CAN frames already queued/in-flight toward the
+ * host (TX queue + TCP send buffer) precede it; the host discards everything up
+ * to and including this marker, then reads exactly `length` ROM bytes. The
+ * token cannot occur in SLCAN frames (hex 0-9A-F; types t/T/r/R), so the host
+ * locks onto it unambiguously even amid live CAN traffic. */
+#define NCFLASH_FASTREAD_SYNC      "NCFRDATA"
+
 /* True if buf looks like a fast-read command (so the caller routes it here
  * instead of to slcan_parse_str). */
 int ncflash_is_fastread_cmd(const uint8_t *buf, int len);
