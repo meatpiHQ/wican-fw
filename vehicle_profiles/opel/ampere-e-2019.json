@@ -1,0 +1,49 @@
+{
+  "car_model": "Opel: Ampere-E 2019",
+  "init": "ATSP6;ATST96;ATSH7E0;ATSH7E1;ATSH7E4;",
+  "pids": [
+    {
+      "pid": "2283341",
+      "pid_init": "ATSH7E4",
+      "parameters": {
+        "SOC": "(B4*100)/255"
+      }
+    },
+    {
+      "pid": "2245F9",
+      "pid_init": "ATSH7E4",
+      "parameters": {
+        "HV_CAPACITY": "((B4*256)+B5)/100",
+        "HV_CAPACITY_KWH": "((B4*256)+B5)*0.0032"
+      }
+    },
+    {
+      "pid": "22434F",
+      "pid_init": "ATSH7E4",
+      "parameters": {
+        "BATT_TEMP": "(B4-40)"
+      }
+    },
+    {
+      "pid": "224369",
+      "pid_init": "ATSH7E4",
+      "parameters": {
+        "AC_C_C": "B4*.2"
+      }
+    },
+    {
+      "pid": "224368",
+      "pid_init": "ATSH7E4",
+      "parameters": {
+        "AC_C_V": "B4*2"
+      }
+    },
+    {
+      "pid": "224533",
+      "pid_init": "ATSH7E4",
+      "parameters": {
+        "CHARGING_R_A": "B4*0.3"
+      }
+    }
+  ]
+}
