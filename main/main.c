@@ -50,6 +50,7 @@
 #include "realdash.h"
 #include "slcan.h"
 #include "can.h"
+#include "ncflash_fastread.h"
 #include "ble.h"
 #include "gvret.h"
 #include "sleep_mode.h"
@@ -286,7 +287,15 @@ static void can_tx_task(void *pvParameters)
 		{
 			if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI)
 			{
-				slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xMsg_Tx_Queue);
+				if(ncflash_is_fastread_cmd(msg_ptr, temp_len))
+					{
+						/* NC Flash autonomous in-firmware ROM read */
+						ncflash_fast_read(msg_ptr, temp_len, &xMsg_Tx_Queue);
+					}
+					else
+					{
+						slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xMsg_Tx_Queue);
+					}
 			}
 			else if(ucTCP_RX_Buffer.dev_channel == DEV_BLE)
 			{

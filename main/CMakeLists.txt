@@ -9,6 +9,7 @@ set(srcs
     "realdash.c"
     "slcan.c"
     "can.c"
+    "ncflash_fastread.c"
     "ble.c"
     "wifi_network.c"
     "gvret.c"
