@@ -4,7 +4,7 @@
   "pids": [
     {
       "pid": "22028C",
-      "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
       "parameters": {
         "SOC": "(B4/2.5)",
         "SOC_D": "(((B4*20.4)/46)-6.4)"
@@ -19,7 +19,7 @@
     },
     {
       "pid": "22295A",
-      "pid_init": "ATSP7;ATCP17;ATCRA17FE0076;ATFCSH17FC0076;ATFCSD300000;ATFCSM1;",
+      "pid_init": "ATSP7;ATCP17;ATSHFC0076;ATCRA17FE0076;ATFCSH17FC0076;ATFCSD300000;ATFCSM1;",
       "parameters": {
         "ODOMETER": "[B4:B6]"
       }
@@ -47,7 +47,7 @@
     },
     {
       "pid": "222A0B1",
-      "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
       "parameters": {
         "BATT_TEMP": "((B4/2)-40)"
       }
@@ -68,28 +68,28 @@
     },
     {
       "pid": "227448",
-      "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
       "parameters": {
         "CHARGING": "B4:2"
       }
     },
     {
       "pid": "221E3B1E3D",
-      "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
       "parameters": {
         "HV_AV": "(((150000-[B10:B13])/100)*([B6:B7]/4))/1000"
       }
     },
     {
       "pid": "221E3B",
-      "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
       "parameters": {
         "HV_V": "(((B4*256)+B5)/4)"
       }
     },
     {
       "pid": "221E3D",
-      "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
       "parameters": {
         "HV_A": "(150000-[B4:B7])/100"
       }
