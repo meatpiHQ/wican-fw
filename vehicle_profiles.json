@@ -10748,6 +10748,96 @@
       ]
     },
     {
+      "car_model": "Opel: Ampere-E 2019",
+      "init": "ATSP6;ATST96;ATSH7E0;ATSH7E1;ATSH7E4;",
+      "pids": [
+        {
+          "pid": "2283341",
+          "pid_init": "ATSH7E4",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "(B4*100)/255",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "2245F9",
+          "pid_init": "ATSH7E4",
+          "parameters": [
+            {
+              "name": "HV_CAPACITY",
+              "expression": "((B4*256)+B5)/100",
+              "unit": "Ah",
+              "class": "battery"
+            },
+            {
+              "name": "HV_CAPACITY_KWH",
+              "expression": "((B4*256)+B5)*0.0032",
+              "unit": "kWh",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "22434F",
+          "pid_init": "ATSH7E4",
+          "parameters": [
+            {
+              "name": "BATT_TEMP",
+              "expression": "(B4-40)",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "80"
+            }
+          ]
+        },
+        {
+          "pid": "224369",
+          "pid_init": "ATSH7E4",
+          "parameters": [
+            {
+              "name": "AC_C_C",
+              "expression": "B4*.2",
+              "unit": "A",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "224368",
+          "pid_init": "ATSH7E4",
+          "parameters": [
+            {
+              "name": "AC_C_V",
+              "expression": "B4*2",
+              "unit": "V",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "224533",
+          "pid_init": "ATSH7E4",
+          "parameters": [
+            {
+              "name": "CHARGING_R_A",
+              "expression": "B4*0.3",
+              "unit": "A",
+              "class": "current",
+              "min": "0",
+              "max": "200"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Opel: Astra",
       "init": "ATSP6;ATST96;ATSH79B;ATFCSH79B;ATFCSD300000;ATFCSM1;",
       "pids": [
