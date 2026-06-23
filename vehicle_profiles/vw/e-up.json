@@ -7,6 +7,13 @@
       "parameters": {
         "SOC": "B4/2.5"
       }
+    },
+    {
+      "pid": "2202BD",
+      "pid_init": "ATSH7E5;",
+      "parameters": {
+        "ODOMETER": "((B6*65536)+(B7*256)+B9)"
+      }
     }
   ]
 }
