@@ -40,6 +40,27 @@ Run: python gen_logcfg_pid.py > logcfg_auto_pid.json
 """
 
 import json
+import sys
+
+# ---- "Best grid rate without clipping" model (Tactrix-style guesstimate) ----------------
+# poll_log polls one PID at a time, round-robin. The aggregate request rate is RTT-bound
+# (~1000/avg_rtt req/s), so each of the N polled channels is refreshed aggregate/N times per
+# second. The wide-CSV fixed grid should sit AT that per-channel rate: set it higher and you
+# only log held repeats (oversampling -> the stair-step "clipping"); set it lower and you throw
+# real samples away. AVG_RTT_MS is measured live on the NC PCM (GET /poll_status showed
+# rtt_avg ~2.5 ms, 396 req/s, 0 timeouts). recommend_grid_hz() prints the suggested
+# device_config.csv_grid_hz for the current POLLED set every time this file is generated.
+AVG_RTT_MS  = 2.5     # measured per-request round-trip on the NC PCM via poll_log
+GRID_SAFETY = 0.95    # sit just under the per-channel rate so each grid row lands a fresh sample
+GRID_HZ_MAX = 50      # firmware clamps csv_grid_hz to 1..50
+
+
+def recommend_grid_hz(num_pids):
+    """Best fixed-grid Hz for num_pids polled channels = per-channel poll rate, floored to 1..50."""
+    budget_req_s = 1000.0 / AVG_RTT_MS                 # achievable aggregate poll rate
+    per_channel_hz = budget_req_s / max(1, num_pids)
+    return max(1, min(GRID_HZ_MAX, int(per_channel_hz * GRID_SAFETY)))
+
 
 # ---- BROADCAST channels: (frame_id, name, expression, unit, class) ----
 # Period in ms applied uniformly below. Expressions/scaling proven in mx5_nc.json.
@@ -167,6 +188,18 @@ def main():
         "calculated": build_calculated(),
     }
     print(json.dumps(config, indent=4))
+
+    # Grid-rate guesstimate -> stderr (keeps stdout pure JSON for redirection).
+    n = len(POLLED)
+    budget = 1000.0 / AVG_RTT_MS
+    hz = recommend_grid_hz(n)
+    print(
+        f"[grid] {n} polled PIDs | ~{budget:.0f} req/s budget (@{AVG_RTT_MS} ms RTT) "
+        f"| ~{budget / n:.1f} Hz/channel -> recommended csv_grid_hz = {hz}\n"
+        f"[grid] set it in Logger Settings -> Grid Rate (device_config.csv_grid_hz, 1..{GRID_HZ_MAX}); "
+        f"use grid_mode=fixed.",
+        file=sys.stderr,
+    )
 
 
 if __name__ == "__main__":
