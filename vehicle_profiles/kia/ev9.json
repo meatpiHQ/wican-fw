@@ -1,0 +1,125 @@
+{
+  "car_model": "Kia: EV9 (2024+)",
+  "init": "ATST96;ATAT1;",
+  "pids": [
+
+    {
+      "pid": "220100",
+      "pid_init": "ATSH7B3;",
+      "parameters": [
+        { "name": "SPEED",          "expression": "B38",        "unit": "km/h", "class": "speed",       "period": "500"   },
+        { "name": "T_CAB",          "expression": "(B11/2)-40", "unit": "°C",   "class": "temperature", "period": "30000" },
+        { "name": "TMP_A",          "expression": "(B12/2)-40", "unit": "°C",   "class": "temperature", "period": "30000" },
+        { "name": "EVAP_TEMP",      "expression": "(B13/2)-40", "unit": "°C",   "class": "temperature", "period": "30000" },
+        { "name": "HUMIDITY",       "expression": "B34",        "unit": "%",    "class": "humidity",    "period": "30000" },
+        { "name": "VENT_TEMP_DRV",  "expression": "(B36/2)-40", "unit": "°C",   "class": "temperature", "period": "30000" },
+        { "name": "VENT_TEMP_LEGS", "expression": "(B37/2)-40", "unit": "°C",   "class": "temperature", "period": "30000" }
+      ]
+    },
+
+    {
+      "pid": "220101",
+      "pid_init": "ATSH7E4;",
+      "parameters": [
+        { "name": "HV_A",         "expression": "(S17*256+B18)/10",                     "unit": "A",    "class": "current",     "period": "500"   },
+        { "name": "HV_V",         "expression": "(B19*256+B20)/10",                     "unit": "V",    "class": "voltage",     "period": "500"   },
+        { "name": "HV_W_kW",      "expression": "((B19*256+B20)*(S17*256+B18))/100000", "unit": "kW",   "class": "power",       "period": "500"   },
+        { "name": "MOTOR_RPM_R",  "expression": "(S66*256+B67)",                        "unit": "rpm",  "class": "none",        "period": "500"   },
+        { "name": "MOTOR_RPM_F",  "expression": "(S68*256+B69)",                        "unit": "rpm",  "class": "none",        "period": "500"   },
+        { "name": "CUM_ENE_CHR",  "expression": "(B51*256+B52)/10",                     "unit": "kWh",  "class": "energy",      "period": "1000"  },
+        { "name": "CUM_ENE_DIS",  "expression": "(B55*256+B57)/10",                     "unit": "kWh",  "class": "energy",      "period": "1000"  },
+        { "name": "CUM_CHR_CURR", "expression": "(B42*256+B43)/10",                     "unit": "Ah",   "class": "none",        "period": "1000"  },
+        { "name": "CUM_DIS_CURR", "expression": "(B46*256+B47)/10",                     "unit": "Ah",   "class": "none",        "period": "1000"  },
+        { "name": "OP_TIME",      "expression": "(B58<<24)+(B59<<16)+(B60<<8)+B61",     "unit": "s",    "class": "none",        "period": "1000"  },
+        { "name": "SOC",          "expression": "B10/2",                                "unit": "%",    "class": "battery",     "period": "30000" },
+        { "name": "BATT_T_MAX",   "expression": "B21",                                  "unit": "°C",   "class": "temperature", "period": "30000" },
+        { "name": "BATT_T_MIN",   "expression": "B22",                                  "unit": "°C",   "class": "temperature", "period": "30000" },
+        { "name": "PACK_T_B01",   "expression": "B23",                                  "unit": "°C",   "class": "temperature", "period": "30000" },
+        { "name": "PACK_T_B02",   "expression": "B25",                                  "unit": "°C",   "class": "temperature", "period": "30000" },
+        { "name": "PACK_T_B03",   "expression": "B26",                                  "unit": "°C",   "class": "temperature", "period": "30000" },
+        { "name": "PACK_T_B04",   "expression": "B27",                                  "unit": "°C",   "class": "temperature", "period": "30000" },
+        { "name": "PACK_T_B05",   "expression": "B28",                                  "unit": "°C",   "class": "temperature", "period": "30000" },
+        { "name": "BATT_INLET_T", "expression": "B30-40",                               "unit": "°C",   "class": "temperature", "period": "30000" },
+        { "name": "CELL_V_MAX",   "expression": "B31/50",                               "unit": "V",    "class": "voltage",     "period": "30000" },
+        { "name": "CELL_MAX_NO",  "expression": "B33",                                  "unit": "none", "class": "none",        "period": "30000" },
+        { "name": "CELL_V_MIN",   "expression": "B34/50",                               "unit": "V",    "class": "voltage",     "period": "30000" },
+        { "name": "CELL_MIN_NO",  "expression": "B35",                                  "unit": "none", "class": "none",        "period": "30000" },
+        { "name": "AUX_BATT_V",   "expression": "B38/10",                               "unit": "V",    "class": "voltage",     "period": "30000" },
+        { "name": "INV_CAP_V",    "expression": "(B63*256+B65)",                        "unit": "V",    "class": "voltage",     "period": "30000" },
+        { "name": "ISOL_R",       "expression": "(B70*256+B71)",                        "unit": "kOhm", "class": "none",        "period": "30000" }
+      ]
+    },
+
+    {
+      "_comment": "ODOMETER (D6:D8) needs this convoluted expression because ECU 7C6 intermittently prepends a 4-byte UDS 'response pending' frame (7F 22 78), shifting all data +4: the value is at B12:B14 normally but B16:B18 when shifted. Bit 5 of B12 is set only in the shifted case, so the expression uses it to select the correct 3 bytes (the parser has no conditional operator). Wrong-case reads decode as huge (>2,000,000 km) values.",
+      "pid": "22B002",
+      "pid_init": "ATSH7C6;",
+      "parameters": [
+        { "name": "ODOMETER", "expression": "((B12>>5)&1)*(B16*65536+B17*256+B18)+(1-((B12>>5)&1))*(B12*65536+B13*256+B14)", "unit": "km", "class": "distance", "period": "30000" }
+      ]
+    },
+
+    {
+      "pid": "22F010",
+      "pid_init": "ATSH730;",
+      "parameters": [
+        { "name": "WHL_SPD_FR",  "expression": "(B11*256+B10)/32",               "unit": "km/h", "class": "speed", "period": "500" },
+        { "name": "WHL_SPD_FL",  "expression": "(B13*256+B12)/32",               "unit": "km/h", "class": "speed", "period": "500" },
+        { "name": "WHL_SPD_RR",  "expression": "(B15*256+B14)/32",               "unit": "km/h", "class": "speed", "period": "500" },
+        { "name": "WHL_SPD_RL",  "expression": "(B18*256+B17)/32",               "unit": "km/h", "class": "speed", "period": "500" },
+        { "name": "STEER_ANGLE", "expression": "(S20*256+B19)/10",               "unit": "°",    "class": "none",  "period": "500" },
+        { "name": "LAT_ACCEL",   "expression": "(B22*256+B21-32768)*0.00012747", "unit": "m/s²", "class": "none",  "period": "500" },
+        { "name": "LONG_ACCEL",  "expression": "(B25*256+B23-32768)*0.00012747", "unit": "m/s²", "class": "none",  "period": "500" },
+        { "name": "YAW_RATE",    "expression": "(B27*256+B26-32768)/200",        "unit": "°/s",  "class": "none",  "period": "500" }
+      ]
+    },
+
+    {
+      "pid": "22E004",
+      "pid_init": "ATSH7E2;",
+      "parameters": [
+        { "name": "ACCEL_PED",      "expression": "(B15*256+B14)/512",       "unit": "%",    "class": "none",    "period": "500"   },
+        { "name": "VCS_SPEED",      "expression": "(B18*256+B17)/64",        "unit": "km/h", "class": "speed",   "period": "500"   },
+        { "name": "AUX_BATT_V_VCS", "expression": "(B20*256+B19)*0.0004883", "unit": "V",    "class": "voltage", "period": "60000" }
+      ]
+    },
+
+    {
+      "pid": "22E001",
+      "pid_init": "ATSH7E3;",
+      "parameters": [
+        { "name": "MCU_RPM",      "expression": "(S25*256+B23)",     "unit": "rpm", "class": "none",        "period": "500"  },
+        { "name": "MCU_TORQUE_A", "expression": "(S27*256+B26)*0.1", "unit": "Nm",  "class": "none",        "period": "500"  },
+        { "name": "MCU_TORQUE_B", "expression": "(S29*256+B28)*0.1", "unit": "Nm",  "class": "none",        "period": "500"  },
+        { "name": "MCU_TEMP",     "expression": "(S34*256+B33)/100", "unit": "°C",  "class": "temperature", "period": "1000" }
+      ]
+    },
+
+    {
+      "pid": "22E101",
+      "pid_init": "ATSH7E5;",
+      "parameters": [
+        { "name": "LDC_TEMP",  "expression": "B15-100",             "unit": "°C", "class": "temperature", "period": "60000" },
+        { "name": "LDC_OUT_V", "expression": "(B17*256+B18)*0.001", "unit": "V",  "class": "voltage",     "period": "60000" },
+        { "name": "LDC_OUT_A", "expression": "(B19*256+B20)*0.01",  "unit": "A",  "class": "current",     "period": "60000" },
+        { "name": "LDC_IN_V",  "expression": "(B21*256+B22)*0.1",   "unit": "V",  "class": "voltage",     "period": "60000" }
+      ]
+    },
+
+    {
+      "pid": "22C00B",
+      "pid_init": "ATSH7A0;",
+      "parameters": [
+        { "name": "TYRE_P_FL", "expression": "B10*0.2", "unit": "PSI", "class": "pressure",    "period": "600000" },
+        { "name": "TYRE_T_FL", "expression": "B11-50",  "unit": "°C",  "class": "temperature", "period": "600000" },
+        { "name": "TYRE_P_FR", "expression": "B15*0.2", "unit": "PSI", "class": "pressure",    "period": "600000" },
+        { "name": "TYRE_T_FR", "expression": "B17-50",  "unit": "°C",  "class": "temperature", "period": "600000" },
+        { "name": "TYRE_P_RL", "expression": "B21*0.2", "unit": "PSI", "class": "pressure",    "period": "600000" },
+        { "name": "TYRE_T_RL", "expression": "B22-50",  "unit": "°C",  "class": "temperature", "period": "600000" },
+        { "name": "TYRE_P_RR", "expression": "B27*0.2", "unit": "PSI", "class": "pressure",    "period": "600000" },
+        { "name": "TYRE_T_RR", "expression": "B28-50",  "unit": "°C",  "class": "temperature", "period": "600000" }
+      ]
+    }
+
+  ]
+}
