@@ -156,6 +156,7 @@ static volatile float    s_win_rtt_avg_ms = 0, s_win_rtt_min_ms = 0, s_win_rtt_m
 static volatile bool    s_engine_running = true;  /* default true: non-poll modes never suppress logging */
 static volatile bool    s_quiesced       = false; /* true == bus currently flipped to LISTEN_ONLY */
 static volatile int64_t s_last_ok_us     = 0;     /* esp_timer stamp of last matched OK reply */
+static volatile bool    s_start_logged   = false; /* ENGINE_START emitted once for this power-on run */
 static volatile int64_t s_last_rx_us     = 0;     /* esp_timer stamp of last received frame (any id) */
 static volatile int64_t s_last_flip_us   = 0;     /* dwell timer for POLLLOG_FLIP_MIN_MS */
 
@@ -422,6 +423,16 @@ static void polllog_rx_task(void *arg)
              * as source "CALC". No-op when none configured; takes autopid_lock itself (we hold none here). */
             autopid_eval_calculated_channels();
 
+            /* First confirmed run after power-on: poll_log assumes s_engine_running=true at boot, so a
+             * normal engine start crosses no quiesce->resume edge and would otherwise log no START.
+             * Emit ENGINE_START once when the ECU first actually answers (s_last_ok_us set), so every
+             * powered run with the engine running is bracketed by a START -- not just restarts. */
+            if (!s_start_logged && s_last_ok_us != 0)
+            {
+                s_start_logged = true;
+                event_log_emit(EVL_ENGINE_START, "engine running (ECU answering)");
+            }
+
             /* Engine-OFF detect: the ECU has not answered for POLLLOG_ENGINE_OFF_MS -> stop
              * transmitting and flip the bus to LISTEN_ONLY so we stop holding the vehicle bus awake.
              * The flip MUST bracket can_set_silent() with disable/enable -- it is a no-op while ON_BUS. */
@@ -474,6 +485,7 @@ static void polllog_rx_task(void *arg)
                 {
                     s_quiesced       = false;
                     s_engine_running = true;
+                    s_start_logged   = true;  /* this resume logs ENGINE_START; don't re-fire initial-confirm */
                     s_last_ok_us     = now;   /* reset the off-debounce so it can't instantly re-fire */
                     s_last_flip_us   = now;
                     ESP_LOGI(TAG, "bus alive (%d frame[s]) -> NORMAL, resume polling", got);

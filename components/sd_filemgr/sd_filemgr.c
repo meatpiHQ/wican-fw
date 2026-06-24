@@ -27,6 +27,7 @@
 #include "esp_vfs_fat.h"
 #include "sdcard.h"
 #include "csv_logger.h"
+#include "event_log.h"
 
 static const char *TAG = "SD_FILEMGR";
 
@@ -162,10 +163,11 @@ static bool sdfm_is_reserved(const char *abspath)
 /* True if abspath IS a protected subtree root or lies anywhere beneath one.
  * These are locked top-to-bottom: the dir and all of its contents are read-only
  * to the file manager (delete/rename forbidden), so housekeeping can never touch
- * the FAT system folder or the device's own data/web assets. */
+ * the FAT system folder, the device's own data/web assets, or the operational
+ * event log (EVENT_LOG_DIR -- self-managed by rotation, never hand-deleted). */
 static bool sdfm_is_protected(const char *abspath)
 {
-    static const char *const roots[] = { SDFM_SVI_DIR, SDFM_WICAN_DIR };
+    static const char *const roots[] = { SDFM_SVI_DIR, SDFM_WICAN_DIR, EVENT_LOG_DIR };
     for (size_t i = 0; i < sizeof(roots) / sizeof(roots[0]); i++)
     {
         size_t rl = strlen(roots[i]);

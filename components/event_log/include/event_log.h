@@ -29,6 +29,11 @@
 extern "C" {
 #endif
 
+// SD directory holding the rotating event-log files. Hardcoded mount root MUST match
+// SD_CARD_MOUNT_POINT in main/sdcard.h (event_log is a leaf and can't read that macro). Exposed here
+// so sd_filemgr can treat it as a protected dir.
+#define EVENT_LOG_DIR  "/sdcard/events"
+
 // On-device operational event log (Task #24).
 //
 // Records meaningful operating events (boot, engine start/stop, datalog session open/close,

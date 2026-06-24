@@ -39,10 +39,9 @@
 
 static const char *TAG = "event_log";
 
-// SD layout. Hardcoded mount root MUST match SD_CARD_MOUNT_POINT in main/sdcard.h -- event_log is a
-// leaf and deliberately does not REQUIRE main, so it cannot read that macro. The mount point is a
-// long-stable constant; a fopen under it simply returns NULL (handled) when no card is mounted.
-#define EVENT_LOG_DIR          "/sdcard/events"
+// SD layout. EVENT_LOG_DIR ("/sdcard/events") is defined in event_log.h (shared with sd_filemgr, which
+// marks it a protected dir). A fopen under it returns NULL (handled) when no card is mounted; event_log
+// is a leaf and never reads main's SD_CARD_MOUNT_POINT macro.
 #define EVENT_LOG_FILE         EVENT_LOG_DIR "/events.log"
 
 // Tunables. Events are sparse (boot, a few engine/datalog transitions per drive, rare OTA), so the
