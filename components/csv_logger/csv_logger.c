@@ -204,7 +204,7 @@ static esp_err_t csv_open_new_file(void)
         time_t now = time(NULL);
         struct tm tm_now;
         localtime_r(&now, &tm_now);
-        snprintf(csv_file_path, sizeof(csv_file_path), CSV_LOGGER_DIR "/%04d%02d%02d_%02d%02d%02d.csv",
+        snprintf(csv_file_path, sizeof(csv_file_path), CSV_LOGGER_DIR "/%04d%02d%02d_%02dh%02dm%02ds.csv",
                  tm_now.tm_year + 1900, tm_now.tm_mon + 1, tm_now.tm_mday,
                  tm_now.tm_hour, tm_now.tm_min, tm_now.tm_sec);
     }
