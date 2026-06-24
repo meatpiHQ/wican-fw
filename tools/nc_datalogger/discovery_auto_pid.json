@@ -1,0 +1,1430 @@
+{
+    "car_model": "NC Datalogger - Phase 0 Discovery",
+    "car_specific": "enable",
+    "can_filters": [
+        {
+            "frame_id": "0x200",
+            "parameters": [
+                {
+                    "name": "EngTorq_200_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "EngTorq_200_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "EngTorq_200_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "EngTorq_200_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "EngTorq_200_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "EngTorq_200_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "EngTorq_200_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "EngTorq_200_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "EngTorq_200_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "EngTorq_200_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "EngTorq_200_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "EngTorq_200_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x201",
+            "parameters": [
+                {
+                    "name": "RPM_201_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "RPM_201_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "EngSpd_201_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "EngSpd_201_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Speed_201_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Speed_201_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Pedal_201_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "EngSpd_201_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "RPM_201_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "EngSpd_201_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Speed_201_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "EngSpd_201_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x211",
+            "parameters": [
+                {
+                    "name": "Cluster_211_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Cluster_211_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Cluster_211_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Cluster_211_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Cluster_211_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Cluster_211_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Cluster_211_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Cluster_211_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Cluster_211_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Cluster_211_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Cluster_211_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Cluster_211_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x215",
+            "parameters": [
+                {
+                    "name": "TorqABC_215_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "TorqABC_215_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "TorqABC_215_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "TorqABC_215_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "TorqABC_215_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "TorqABC_215_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "TorqABC_215_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "TorqABC_215_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "TorqABC_215_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "TorqABC_215_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "TorqABC_215_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "TorqABC_215_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x216",
+            "parameters": [
+                {
+                    "name": "TcmAbs_216_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "TcmAbs_216_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "TcmAbs_216_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "TcmAbs_216_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "TcmAbs_216_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "TcmAbs_216_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "TcmAbs_216_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "TcmAbs_216_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "TcmAbs_216_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "TcmAbs_216_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "TcmAbs_216_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "TcmAbs_216_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x218",
+            "parameters": [
+                {
+                    "name": "Chassis_218_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Chassis_218_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Chassis_218_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Chassis_218_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Chassis_218_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Chassis_218_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Chassis_218_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Chassis_218_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Chassis_218_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Chassis_218_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Chassis_218_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Chassis_218_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x21A",
+            "parameters": [
+                {
+                    "name": "Brake_21A_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Brake_21A_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Brake_21A_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Brake_21A_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Brake_21A_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Brake_21A_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Brake_21A_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Brake_21A_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Brake_21A_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Brake_21A_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Brake_21A_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Brake_21A_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x231",
+            "parameters": [
+                {
+                    "name": "AtGear_231_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "AtGear_231_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "AtGear_231_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "AtGear_231_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "AtGear_231_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "AtGear_231_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "AtGear_231_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "AtGear_231_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "AtGear_231_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "AtGear_231_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "AtGear_231_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "AtGear_231_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x240",
+            "parameters": [
+                {
+                    "name": "Load_240_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Coolant_240_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Pwrtrn_240_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Throttle_240_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "IAT_240_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Pwrtrn_240_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Pwrtrn_240_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Pwrtrn_240_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Pwrtrn_240_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Pwrtrn_240_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Pwrtrn_240_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Pwrtrn_240_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x420",
+            "parameters": [
+                {
+                    "name": "CruiseEct_420_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "CruiseEct_420_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "CruiseEct_420_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "CruiseEct_420_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "CruiseEct_420_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "CruiseEct_420_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "CruiseEct_420_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "CruiseEct_420_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "CruiseEct_420_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "CruiseEct_420_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "CruiseEct_420_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "CruiseEct_420_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x430",
+            "parameters": [
+                {
+                    "name": "Odo_430_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Odo_430_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Odo_430_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Odo_430_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Odo_430_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Odo_430_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Odo_430_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Odo_430_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Odo_430_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Odo_430_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Odo_430_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "Odo_430_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x4B0",
+            "parameters": [
+                {
+                    "name": "WheelSpd_4B0_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "WheelSpd_4B0_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "WheelSpd_4B0_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "WheelSpd_4B0_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "WheelSpd_4B0_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "WheelSpd_4B0_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "WheelSpd_4B0_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "WheelSpd_4B0_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "WheelSpd_4B0_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "WheelSpd_4B0_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "WheelSpd_4B0_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "WheelSpd_4B0_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x4EC",
+            "parameters": [
+                {
+                    "name": "CruiseCtl_4EC_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "CruiseCtl_4EC_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "CruiseCtl_4EC_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "CruiseCtl_4EC_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "CruiseCtl_4EC_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "CruiseCtl_4EC_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "CruiseCtl_4EC_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "CruiseCtl_4EC_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "CruiseCtl_4EC_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "CruiseCtl_4EC_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "CruiseCtl_4EC_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "CruiseCtl_4EC_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x4F0",
+            "parameters": [
+                {
+                    "name": "VehCfg1_4F0_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "VehCfg1_4F0_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "VehCfg1_4F0_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "VehCfg1_4F0_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "VehCfg1_4F0_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "VehCfg1_4F0_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "VehCfg1_4F0_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "VehCfg1_4F0_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "VehCfg1_4F0_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "VehCfg1_4F0_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "VehCfg1_4F0_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "VehCfg1_4F0_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x4F1",
+            "parameters": [
+                {
+                    "name": "VehCfg2_4F1_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "VehCfg2_4F1_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "VehCfg2_4F1_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "VehCfg2_4F1_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "VehCfg2_4F1_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "VehCfg2_4F1_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "VehCfg2_4F1_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "VehCfg2_4F1_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "VehCfg2_4F1_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "VehCfg2_4F1_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "VehCfg2_4F1_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "VehCfg2_4F1_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        },
+        {
+            "frame_id": "0x0EC",
+            "parameters": [
+                {
+                    "name": "FlexFuel_0EC_B0",
+                    "expression": "B0",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "FlexFuel_0EC_B1",
+                    "expression": "B1",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "FlexFuel_0EC_B2",
+                    "expression": "B2",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "FlexFuel_0EC_B3",
+                    "expression": "B3",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "FlexFuel_0EC_B4",
+                    "expression": "B4",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "FlexFuel_0EC_B5",
+                    "expression": "B5",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "FlexFuel_0EC_B6",
+                    "expression": "B6",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "FlexFuel_0EC_B7",
+                    "expression": "B7",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "FlexFuel_0EC_W01",
+                    "expression": "[B0:B1]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "FlexFuel_0EC_W23",
+                    "expression": "[B2:B3]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "FlexFuel_0EC_W45",
+                    "expression": "[B4:B5]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                },
+                {
+                    "name": "FlexFuel_0EC_W67",
+                    "expression": "[B6:B7]",
+                    "unit": "raw",
+                    "class": "none",
+                    "period": 1000
+                }
+            ]
+        }
+    ]
+}

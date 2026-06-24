@@ -27,29 +27,57 @@
                         "description": "Array of Parameters for this PID",
                         "type": "array",
                         "minItems": 1,
-                        "items": {
-                            "type": "object",
-                            "required": ["name", "expression", "unit", "class"],
-                            "properties": {
-                                "name": {
-                                    "description": "Used in MQTT JSON, no spaces",
-                                    "type": "string"
-                                },
-                                "expression": {
-                                    "description": "Expression to calculate value",
-                                    "type": "string"
-                                },
-                                "unit": {
-                                    "description": "Unit for this  parameter",
-                                    "type": "string"
-                                },
-                                "class": {
-                                    "description": "Class of sensor, See Home Assistant sensor classes",
-                                    "type": "string"
-                                }
-                            }
-                        }
+                        "items": { "$ref": "#/$defs/parameter" }
                     }
+                }
+            }
+        },
+        "can_filters": {
+            "description": "Passive broadcast CAN frames to monitor (no polling)",
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "type": "object",
+                "required": ["frame_id", "parameters"],
+                "properties": {
+                    "frame_id": {
+                        "description": "CAN frame ID to match, hex string e.g. 0x201",
+                        "type": "string"
+                    },
+                    "parameters": {
+                        "description": "Parameters decoded from this frame's data bytes (B0 = first data byte)",
+                        "type": "array",
+                        "minItems": 1,
+                        "items": { "$ref": "#/$defs/parameter" }
+                    }
+                }
+            }
+        }
+    },
+    "$defs": {
+        "parameter": {
+            "type": "object",
+            "required": ["name", "expression", "unit", "class"],
+            "properties": {
+                "name": {
+                    "description": "Used in MQTT JSON, no spaces",
+                    "type": "string"
+                },
+                "expression": {
+                    "description": "Expression to calculate value",
+                    "type": "string"
+                },
+                "unit": {
+                    "description": "Unit for this  parameter",
+                    "type": "string"
+                },
+                "class": {
+                    "description": "Class of sensor, See Home Assistant sensor classes",
+                    "type": "string"
+                },
+                "period": {
+                    "description": "Minimum update period in ms (optional, default 5000)",
+                    "type": "number"
                 }
             }
         }

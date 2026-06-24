@@ -1313,7 +1313,7 @@ function addCustomCanFilterEntry(rowData = {}) {
     const entry = document.createElement('div');
     entry.className = 'custom-canfilter-entry';
 
-    const safe = (v)=>String(v ?? '').replace(/"/g,'&quot;');
+    const safe = (v)=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     const titleText = `${frameIdValue || 'Frame'} - ${(p.name || rowData.name || 'New Parameter')}`;
 
     entry.innerHTML = `
@@ -1447,7 +1447,7 @@ function addVehicleSpecificCanFilterEntry(rowData = {}) {
     const entry = document.createElement('div');
     entry.className = 'specific-canfilter-entry';
 
-    const safe = (v)=>String(v ?? '').replace(/"/g,'&quot;');
+    const safe = (v)=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     const titleText = `${frameIdValue || 'Frame'} - ${(p.name || rowData.name || 'New Parameter')}`;
 
     entry.innerHTML = `
@@ -1574,6 +1574,101 @@ function addCustomFilterRow() {
         frame_id: '',
         parameter: { name: 'New Parameter', expression: '', unit: '', class: '', period: '5000', min: '', max: '', type: 'Default', send_to: '' }
     });
+}
+
+// Calculated channels (Task #17): a derived channel computed on-device from OTHER channel
+// values (source "CALC"). Expression references channel NAMES, e.g. "MAP - BARO" or
+// "EQ_RATIO * 14.64" (operators + - * /, parens, unary minus). Mirrors the custom-filter row.
+function addCalculatedChannelEntry(rowData = {}) {
+    const container = document.querySelector('.calculated-entries');
+    if (!container) return;
+
+    const safe = (v)=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const name = (rowData.name !== undefined && rowData.name !== null) ? String(rowData.name) : 'New Channel';
+    const expr = (rowData.expression !== undefined && rowData.expression !== null) ? String(rowData.expression) : '';
+    const unit = (rowData.unit !== undefined && rowData.unit !== null) ? String(rowData.unit) : '';
+    const enabled = (rowData.enabled === false) ? false : true;
+
+    const entry = document.createElement('div');
+    entry.className = 'calculated-entry';
+
+    entry.innerHTML = `
+        <div class="pid-header">
+            <div class="header-left">
+                <button type="button" class="collapse-btn">▼</button>
+                <span class="pid-title">${safe(name)}</span>
+            </div>
+            <div class="header-right">
+                <label class="enabled-label" style="display:flex; align-items:center; gap:4px; font-size:0.7rem;">
+                    <input type="checkbox" class="enabled-chk" ${enabled ? 'checked' : ''}>
+                    Enabled
+                </label>
+                <button type="button" class="delete-btn">Delete</button>
+            </div>
+        </div>
+        <div class="pid-content" style="display: none;">
+            <table class="compact-form-table">
+                <tr>
+                    <td>Name:</td>
+                    <td><input type="text" class="name-input" value="${safe(name)}" placeholder="Channel Name"></td>
+                </tr>
+                <tr>
+                    <td>Expression:</td>
+                    <td><input type="text" class="expression-input" value="${safe(expr)}" placeholder="e.g. MAP - BARO"></td>
+                </tr>
+                <tr>
+                    <td>Unit:</td>
+                    <td><input type="text" class="unit-input" value="${safe(unit)}" placeholder="Unit"></td>
+                </tr>
+            </table>
+        </div>
+    `;
+
+    const style = document.createElement('style');
+    style.textContent = pidEntryStyles;
+    document.head.appendChild(style);
+
+    const header = entry.querySelector('.pid-header');
+    const deleteBtn = entry.querySelector('.delete-btn');
+    const collapseBtn = entry.querySelector('.collapse-btn');
+    const content = entry.querySelector('.pid-content');
+    const titleEl = entry.querySelector('.pid-title');
+    const enabledChk = entry.querySelector('.enabled-chk');
+
+    if (enabledChk) {
+        enabledChk.addEventListener('click', (e) => e.stopPropagation());
+        enabledChk.addEventListener('change', enableAutoStoreButton);
+    }
+
+    deleteBtn.addEventListener('click', () => {
+        entry.remove();
+        enableAutoStoreButton();
+    });
+
+    const toggleCollapse = (e) => {
+        e.stopPropagation();
+        const isHidden = content.style.display === 'none';
+        content.style.display = isHidden ? 'block' : 'none';
+        collapseBtn.textContent = isHidden ? '▲' : '▼';
+    };
+    header.addEventListener('click', toggleCollapse);
+    collapseBtn.addEventListener('click', toggleCollapse);
+
+    const updateTitle = () => {
+        titleEl.textContent = entry.querySelector('.name-input')?.value?.trim() || 'New Channel';
+    };
+
+    entry.querySelectorAll('input').forEach(input => {
+        input.addEventListener('input', () => { updateTitle(); enableAutoStoreButton(); });
+        input.addEventListener('change', () => { updateTitle(); enableAutoStoreButton(); });
+    });
+
+    container.appendChild(entry);
+    enableAutoStoreButton();
+}
+
+function addCalculatedRow() {
+    addCalculatedChannelEntry({ name: 'New Channel', expression: '', unit: '', enabled: true });
 }
 
 window.automateDestinations = [];
@@ -1930,6 +2025,10 @@ function loadAutoTable(jsonData) {
         const customFilterContainer = document.querySelector('.custom-canfilter-entries');
         if (customFilterContainer) customFilterContainer.innerHTML = '';
 
+        // Reset calculated channels UI (Task #17) to avoid duplicates on reload
+        const calculatedContainer = document.querySelector('.calculated-entries');
+        if (calculatedContainer) calculatedContainer.innerHTML = '';
+
         const initialisationElement = document.getElementById("initialisation");
         if (initialisationElement) {
             initialisationElement.value = data.initialisation || '';
@@ -2058,6 +2157,18 @@ function loadAutoTable(jsonData) {
                     Type: pidData.Type || 'Default',
                     Send_to: pidData.Send_to || '',
                     enabled: pidData.enabled
+                });
+            });
+        }
+
+        // Calculated channels (Task #17, source CALC)
+        if (Array.isArray(data.calculated)) {
+            data.calculated.forEach(c => {
+                addCalculatedChannelEntry({
+                    name: c.name,
+                    expression: c.expression,
+                    unit: c.unit,
+                    enabled: c.enabled
                 });
             });
         }
@@ -2333,7 +2444,22 @@ async function storeAutoTableData() {
             });
             custom_can_filters.push(...Array.from(grouped.values()));
         }
-        
+
+        // Calculated channels (Task #17): collect name/expression/unit/enabled rows. Carried
+        // through verbatim so a UI "Store" never drops imported calculated channels.
+        const calculated_data = [];
+        document.querySelectorAll('.calculated-entry').forEach(entry => {
+            const name = (entry.querySelector('.name-input')?.value || '').trim();
+            const expression = (entry.querySelector('.expression-input')?.value || '').trim();
+            const unit = (entry.querySelector('.unit-input')?.value || '').trim();
+            const enabled = entry.querySelector('.enabled-chk')?.checked !== false;
+            if (!name) return;  // skip unnamed rows
+            if (name.length > 47) {
+                throw new Error("Calculated channel name must be less than 48 characters");
+            }
+            calculated_data.push({ name, expression, unit, enabled });
+        });
+
         const jsonData = {
             initialisation: initialisationValue,
             grouping: groupingValue,
@@ -2346,6 +2472,7 @@ async function storeAutoTableData() {
             pids: custom_pid_data,
             std_pids: std_pid_data,
             can_filters: custom_can_filters,
+            calculated: calculated_data,
             standard_pids: standard_pidsValue,
             ecu_protocol: ecu_protocolValue,
             group_api_token: window.automateDestinations[0]?.api_token || '',
@@ -2450,6 +2577,284 @@ function restoreCANFLTRow(id, n, p, pi, s, b, e, c) {
     document.getElementById("cycle").value = "";
 }
 
+// ===== SD-card file browser (Task #8) =====
+var filesCwd = '';   // current directory, relative to /sdcard
+var filesSortKey = 'mtime';   // 'name' | 'size' | 'type' | 'mtime'
+var filesSortDir = 'desc';    // 'asc' | 'desc' (default: newest first)
+// Selection lives in the DOM checkboxes (see filesSelectedPaths) — single source of truth.
+
+function filesFmtSize(b) {
+    if (b == null) return '';
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+    if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
+    return (b / 1073741824).toFixed(2) + ' GB';
+}
+
+function filesFmtDate(mtime) {
+    if (!mtime) return '';
+    var d = new Date(mtime * 1000);
+    if (isNaN(d.getTime())) return '';
+    function p(n) { return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
+           ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+function filesJoin(dir, name) { return dir ? (dir + '/' + name) : name; }
+
+function filesParent(dir) {
+    if (!dir) return '';
+    var i = dir.lastIndexOf('/');
+    return i < 0 ? '' : dir.substring(0, i);
+}
+
+function filesApi(method, qsOrBody, cb) {
+    var xhr = new XMLHttpRequest();
+    if (method === 'GET') {
+        xhr.open('GET', '/files?' + qsOrBody);
+    } else {
+        xhr.open('POST', '/files');
+        xhr.setRequestHeader('Content-Type', 'application/json');
+    }
+    xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4) {
+            var ok = xhr.status >= 200 && xhr.status < 300;
+            var data = null;
+            try { data = JSON.parse(xhr.responseText); } catch (e) {}
+            cb(ok, data, xhr.status);
+        }
+    };
+    xhr.send(method === 'GET' ? null : qsOrBody);
+}
+
+function filesLoad(rel) {
+    filesCwd = rel || '';
+    filesApi('GET', 'op=list&path=' + encodeURIComponent(filesCwd), function(ok, data) {
+        if (!ok || !data) {
+            var b = document.getElementById('files_body');
+            if (b) b.innerHTML = '<tr><td colspan=6 style="text-align:center;color:#b91c1c;padding:8px">Failed to load folder</td></tr>';
+            return;
+        }
+        filesRender(data);
+    });
+    filesApi('GET', 'op=df', function(ok, data) {
+        var el = document.getElementById('files_df');
+        if (!el) return;
+        el.textContent = (ok && data && data.total) ? ('SD: ' + filesFmtSize(data.free) + ' free of ' + filesFmtSize(data.total)) : '';
+    });
+}
+
+// Update the sortable header labels (Name/Size/Modified/Type) with the active arrow.
+function filesUpdateSortHeaders() {
+    var keys = ['name', 'size', 'mtime', 'type'];
+    var labels = { name: 'Name', size: 'Size', mtime: 'Modified', type: 'Type' };
+    keys.forEach(function(k) {
+        var th = document.getElementById('files_th_' + k);
+        if (!th) return;
+        th.textContent = labels[k] + (filesSortKey === k ? (filesSortDir === 'asc' ? ' ▲' : ' ▼') : '');
+    });
+}
+
+// Header click handler: toggle direction on the active column, else switch column.
+function filesSortBy(key) {
+    if (filesSortKey === key) {
+        filesSortDir = (filesSortDir === 'asc') ? 'desc' : 'asc';
+    } else {
+        filesSortKey = key;
+        filesSortDir = (key === 'mtime') ? 'desc' : 'asc';
+    }
+    // Preserve the current checkbox selection across the sort re-render.
+    if (filesLastData) filesRender(filesLastData, filesSelectedPaths());
+}
+
+var filesLastData = null;
+
+function filesRender(data, keepSel) {
+    filesLastData = data;
+    // The DOM checkboxes are the sole source of truth for selection. keepSel is an
+    // optional array of rel-paths whose checkbox should stay ticked across a re-render
+    // (used by sort, which rebuilds the rows); a fresh folder load passes nothing.
+    var keep = {};
+    if (keepSel) { for (var ki = 0; ki < keepSel.length; ki++) { keep[keepSel[ki]] = true; } }
+    document.getElementById('files_path').textContent = '/sdcard' + (data.path ? '/' + data.path : '');
+    var body = document.getElementById('files_body');
+    body.innerHTML = '';
+    var selAll = document.getElementById('files_selall');
+    if (selAll) selAll.checked = false;
+    filesUpdateSortHeaders();
+    if (data.sd_mounted === false) {
+        body.innerHTML = '<tr><td colspan=6 style="text-align:center;color:#b91c1c;padding:8px">SD card not mounted</td></tr>';
+        return;
+    }
+    var cell = 'border:1px solid #e2e8f0;padding:6px';
+    if (filesCwd) {
+        var up = document.createElement('tr');
+        var uc = document.createElement('td'); uc.colSpan = 6; uc.style.cssText = cell;
+        var ua = document.createElement('a'); ua.href = '#'; ua.textContent = '.. (up one level)';
+        ua.onclick = function(e) { e.preventDefault(); filesLoad(filesParent(filesCwd)); };
+        uc.appendChild(ua); up.appendChild(uc); body.appendChild(up);
+    }
+    var entries = (data.entries || []).slice();
+    var dir = (filesSortDir === 'asc') ? 1 : -1;
+    function cmp(a, b) {
+        var r = 0;
+        if (filesSortKey === 'size') {
+            r = (a.size || 0) - (b.size || 0);
+        } else if (filesSortKey === 'mtime') {
+            r = (a.mtime || 0) - (b.mtime || 0);
+        } else if (filesSortKey === 'type') {
+            r = (a.type || '').localeCompare(b.type || '');
+        } else {
+            r = a.name.localeCompare(b.name);
+        }
+        if (r === 0) r = a.name.localeCompare(b.name);
+        return r * dir;
+    }
+    entries.sort(function(a, b) {
+        // Keep directories grouped first; sort chosen key within each group.
+        if ((a.type === 'dir') !== (b.type === 'dir')) return a.type === 'dir' ? -1 : 1;
+        return cmp(a, b);
+    });
+    entries.forEach(function(en) {
+        var isDir = en.type === 'dir';
+        var rel = filesJoin(filesCwd, en.name);
+        var tr = document.createElement('tr');
+
+        var selTd = document.createElement('td'); selTd.style.cssText = cell;
+        if (!isDir) {
+            var cb = document.createElement('input'); cb.type = 'checkbox';
+            cb.className = 'files_sel_cb'; cb.value = rel; cb.checked = !!keep[rel];
+            selTd.appendChild(cb);
+        }
+        tr.appendChild(selTd);
+
+        var nameTd = document.createElement('td'); nameTd.style.cssText = cell;
+        if (isDir) {
+            var a = document.createElement('a'); a.href = '#'; a.textContent = en.name + '/';
+            a.onclick = function(e) { e.preventDefault(); filesLoad(rel); };
+            nameTd.appendChild(a);
+        } else {
+            nameTd.textContent = en.name + (en.active ? '  (active log)' : '');
+        }
+        tr.appendChild(nameTd);
+
+        var sizeTd = document.createElement('td'); sizeTd.style.cssText = cell;
+        sizeTd.textContent = isDir ? '' : filesFmtSize(en.size); tr.appendChild(sizeTd);
+
+        var dateTd = document.createElement('td'); dateTd.style.cssText = cell;
+        dateTd.textContent = filesFmtDate(en.mtime); tr.appendChild(dateTd);
+
+        var typeTd = document.createElement('td'); typeTd.style.cssText = cell;
+        typeTd.textContent = isDir ? 'folder' : 'file'; tr.appendChild(typeTd);
+
+        var actTd = document.createElement('td'); actTd.style.cssText = cell;
+        if (!isDir) {
+            var dl = document.createElement('button'); dl.textContent = 'Download'; dl.style.marginRight = '4px';
+            dl.onclick = function() { filesDownload(rel, en.name); };
+            actTd.appendChild(dl);
+        }
+        if (!en.locked) {
+            var rn = document.createElement('button'); rn.textContent = 'Rename'; rn.style.marginRight = '4px';
+            rn.onclick = function() { filesRename(rel, en.name); };
+            actTd.appendChild(rn);
+            var del = document.createElement('button'); del.textContent = 'Delete';
+            del.onclick = function() { filesDelete(rel, en.name, isDir); };
+            actTd.appendChild(del);
+        }
+        tr.appendChild(actTd);
+
+        body.appendChild(tr);
+    });
+    if (!entries.length) {
+        var er = document.createElement('tr'); var ec = document.createElement('td');
+        ec.colSpan = 6; ec.style.cssText = 'text-align:center;color:#555;padding:8px'; ec.textContent = '(empty)';
+        er.appendChild(ec); body.appendChild(er);
+    }
+}
+
+// Header "select all" checkbox: toggle every currently-listed file checkbox.
+function filesToggleAll(cb) {
+    var boxes = document.getElementsByClassName('files_sel_cb');
+    for (var i = 0; i < boxes.length; i++) {
+        boxes[i].checked = cb.checked;
+    }
+}
+
+// Collect the relative paths of all currently-checked file rows.
+function filesSelectedPaths() {
+    var out = [];
+    var boxes = document.getElementsByClassName('files_sel_cb');
+    for (var i = 0; i < boxes.length; i++) {
+        if (boxes[i].checked) out.push(boxes[i].value);
+    }
+    return out;
+}
+
+function filesDownloadSelected() {
+    var paths = filesSelectedPaths();
+    if (!paths.length) { alert('No files selected.'); return; }
+    // No zip endpoint: trigger each single-file download with a small stagger.
+    var i = 0;
+    function next() {
+        if (i >= paths.length) return;
+        var rel = paths[i++];
+        var name = rel.indexOf('/') >= 0 ? rel.substring(rel.lastIndexOf('/') + 1) : rel;
+        filesDownload(rel, name);
+        setTimeout(next, 400);
+    }
+    next();
+}
+
+function filesDeleteSelected() {
+    var paths = filesSelectedPaths();
+    if (!paths.length) { alert('No files selected.'); return; }
+    if (!confirm('Delete ' + paths.length + ' selected file(s)?')) return;
+    var remaining = paths.length;
+    var failures = [];
+    paths.forEach(function(rel) {
+        filesApi('POST', JSON.stringify({ op: 'delete', path: rel }), function(ok, data, st) {
+            if (!ok) failures.push(rel + ': ' + ((data && data.error) || st));
+            if (--remaining === 0) {
+                if (failures.length) alert('Some deletes failed:\n' + failures.join('\n'));
+                filesLoad(filesCwd);
+            }
+        });
+    });
+}
+
+function filesDownload(rel, name) {
+    var a = document.createElement('a');
+    a.href = '/files?op=download&path=' + encodeURIComponent(rel);
+    a.download = name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+function filesMkdir() {
+    var name = prompt('New folder name:');
+    if (!name) return;
+    filesApi('POST', JSON.stringify({ op: 'mkdir', path: filesCwd, name: name }), function(ok, data, st) {
+        if (!ok) alert('Create failed: ' + ((data && data.error) || st));
+        filesLoad(filesCwd);
+    });
+}
+
+function filesRename(rel, oldName) {
+    var name = prompt('Rename "' + oldName + '" to:', oldName);
+    if (!name || name === oldName) return;
+    filesApi('POST', JSON.stringify({ op: 'rename', path: rel, name: name }), function(ok, data, st) {
+        if (!ok) alert('Rename failed: ' + ((data && data.error) || st));
+        filesLoad(filesCwd);
+    });
+}
+
+function filesDelete(rel, name, isDir) {
+    if (!confirm('Delete ' + (isDir ? 'folder (and ALL its contents)' : 'file') + ' "' + name + '"?')) return;
+    filesApi('POST', JSON.stringify({ op: 'delete', path: rel }), function(ok, data, st) {
+        if (!ok) alert('Delete failed: ' + ((data && data.error) || st));
+        filesLoad(filesCwd);
+    });
+}
+
 function openTab(evt, tabName) {
     var i, tabcontent, tablinks;
     tabcontent = document.getElementsByClassName("tabcontent");
@@ -2460,6 +2865,8 @@ function openTab(evt, tabName) {
     for(i = 0; i < tablinks.length; i++) {
         tablinks[i].className = tablinks[i].className.replace(" active", "");
     }
+    // Stop the CSV status poll on every tab switch (restarted below only for the logger tab).
+    if (typeof csv_status_poll_stop === 'function') csv_status_poll_stop();
     document.getElementById(tabName).style.display = "block";
     evt.currentTarget.className += " active";
 
@@ -2471,9 +2878,14 @@ function openTab(evt, tabName) {
         loadDashboard();
     } else if (tabName === 'system_tab') {
         if (typeof certManagerLoad === 'function') certManagerLoad();
+    } else if (tabName === 'files_tab') {
+        filesCwd = '';
+        filesLoad('');
     } else if (tabName === 'vpn_tab') {
         // Refresh status so the badge reflects the latest state
         try { checkStatus(); } catch(_) {}
+    } else if (tabName === 'logger') {
+        csv_status_poll_start();
     }
 }
 
@@ -3413,6 +3825,48 @@ function postCANFLT() {
     xhttp.send(canfltJSON);
 }
 
+// Logger Settings consolidation (Task #5): one master "Logging" toggle + a mutually-
+// exclusive "Log Type" (csv|sqlite) compose onto the two real config keys logger_status
+// (SQLite/OBD) and csv_log (CSV), which remain in the DOM as hidden selects. CSV wins
+// ties to match the firmware boot gate + the server-side /store_config normalizer.
+function applyLoggerXor() {
+    var masterEl = document.getElementById("logging_master");
+    var typeEl = document.getElementById("log_type_sel");
+    var ls = document.getElementById("logger_status");
+    var cs = document.getElementById("csv_log");
+    if (!masterEl || !typeEl || !ls || !cs) { return; }
+    if (masterEl.value !== "enable") {
+        ls.value = "disable"; cs.value = "disable";
+    } else if (typeEl.value === "sqlite") {
+        ls.value = "enable"; cs.value = "disable";
+    } else {
+        ls.value = "disable"; cs.value = "enable";
+    }
+    typeEl.disabled = (masterEl.value !== "enable");
+    // Log Period drives only the SQLite/OBD logger; the CSV logger logs at the
+    // decode rate and ignores it. Hide the row unless SQLite is the active type.
+    var lpRow = document.getElementById("log_period_row");
+    if (lpRow) {
+        lpRow.style.display = (masterEl.value === "enable" && typeEl.value === "sqlite") ? "" : "none";
+    }
+    // CSV-only runtime Start/Stop button + live status line: shown only when CSV is active.
+    var csvShow = (masterEl.value === "enable" && typeEl.value === "csv");
+    var csvRow = document.getElementById("csv_runtime_row");
+    var csvStatRow = document.getElementById("csv_status_row");
+    if (csvRow) csvRow.style.display = csvShow ? "" : "none";
+    if (csvStatRow) csvStatRow.style.display = csvShow ? "" : "none";
+    // Wide CSV (Task #11) controls, progressive: Grid Mode shown when CSV is active; Grid Rate
+    // only when Fixed-rate. (Format toggle removed in Task #16 -- output is always Wide.)
+    var gmEl = document.getElementById("csv_grid_mode");
+    var gmRow = document.getElementById("csv_grid_mode_row");
+    var hzRow = document.getElementById("csv_grid_hz_row");
+    var wideOn = csvShow;
+    if (gmRow) gmRow.style.display = wideOn ? "" : "none";
+    if (hzRow) hzRow.style.display = (wideOn && gmEl && gmEl.value === "fixed") ? "" : "none";
+    var reRow = document.getElementById("csv_require_engine_row");
+    if (reRow) reRow.style.display = wideOn ? "" : "none";
+}
+
 async function postConfig() {
     var obj = {};
     document.getElementById("submit_button").disabled = true;
@@ -3486,6 +3940,7 @@ async function postConfig() {
     obj["sleep_disable_agree"] = document.getElementById("sleep_disable_agree").value;
     obj["periodic_wakeup"] = document.getElementById("periodic_wakeup").value;
     obj["sleep_volt"] = document.getElementById("sleep_volt").value;
+    obj["engine_volt"] = document.getElementById("engine_volt").value;
     obj["sleep_time"] = document.getElementById("sleep_time").value;
     obj["wakeup_interval"] = document.getElementById("wakeup_interval").value;
     obj["batt_alert"] = document.getElementById("batt_alert").value;
@@ -3532,10 +3987,15 @@ async function postConfig() {
     }
     obj["mqtt_status_topic"] = document.getElementById("mqtt_status_topic").value;
     obj["mqtt_elm327_log"] = document.getElementById("mqtt_elm327_log").value;
+    applyLoggerXor();   // compose the two real keys from the master + type widgets
     obj["logger_status"] = document.getElementById("logger_status").value;
+    obj["csv_log"] = document.getElementById("csv_log").value;
     obj["log_filesystem"] = document.getElementById("log_filesystem").value;
     obj["log_storage"] = document.getElementById("log_storage").value;
     obj["log_period"] = document.getElementById("log_period").value;
+    obj["csv_grid_mode"] = document.getElementById("csv_grid_mode").value;
+    obj["csv_grid_hz"] = document.getElementById("csv_grid_hz").value;
+    obj["csv_require_engine"] = document.getElementById("csv_require_engine").value;
     obj["imu_threshold"] = document.getElementById("imu_threshold").value;
     obj["elm327_udp_log"] = document.getElementById("elm327_udp_log").value;
 
@@ -4078,11 +4538,21 @@ xhttp.onload = async function() {
             document.getElementById("mqtt_rx_topic").disabled = true;
         }
         
-        if (obj.logger_status === "enable") {
-            document.getElementById("logger_status").selectedIndex = "0";
-        } else if (obj.logger_status === "disable") {
-            document.getElementById("logger_status").selectedIndex = "1";
-        }
+        // Populate the two real (hidden) keys, then derive the master + type widgets.
+        document.getElementById("logger_status").value = (obj.logger_status === "enable") ? "enable" : "disable";
+        document.getElementById("csv_log").value = (obj.csv_log === "enable") ? "enable" : "disable";
+        var _ls_on = (obj.logger_status === "enable");
+        var _cs_on = (obj.csv_log === "enable");
+        document.getElementById("logging_master").value = (_ls_on || _cs_on) ? "enable" : "disable";
+        // CSV wins ties (matches boot gate + server normalizer); default type = CSV.
+        document.getElementById("log_type_sel").value = _cs_on ? "csv" : (_ls_on ? "sqlite" : "csv");
+        // Wide CSV (Task #11): hydrate grid controls BEFORE applyLoggerXor so it can gate the
+        // rows. Firmware defaults are fixed/10 -> mirror them when absent.
+        document.getElementById("csv_grid_mode").value = (obj.csv_grid_mode === "event") ? "event" : "fixed";
+        var _hz = parseInt(obj.csv_grid_hz, 10);
+        document.getElementById("csv_grid_hz").value = (_hz >= 1 && _hz <= 50) ? _hz : 10;
+        document.getElementById("csv_require_engine").value = (obj.csv_require_engine === "disable") ? "disable" : "enable";
+        applyLoggerXor();
 
         if (obj.log_filesystem === "fatfs") {
             document.getElementById("log_filesystem").selectedIndex = "0";
@@ -4095,6 +4565,7 @@ xhttp.onload = async function() {
         }
 
         document.getElementById('log_period_value').textContent = obj.log_period;
+        document.getElementById('log_period').value = obj.log_period;   // restore slider thumb (was stuck at default)
         
         // Load IMU threshold value and update display
         document.getElementById("imu_threshold").value = obj.imu_threshold || "8";
@@ -4119,6 +4590,10 @@ xhttp.onload = async function() {
         document.getElementById("ble_pass_value").value = obj.ble_pass;
         document.getElementById("sleep_volt").value = obj.sleep_volt;
         document.getElementById("sleep_volt_value").textContent = obj.sleep_volt;
+        if (obj.engine_volt !== undefined) {   // Task #6; null-guard for old configs missing the key
+            document.getElementById("engine_volt").value = obj.engine_volt;
+            document.getElementById("engine_volt_value").textContent = obj.engine_volt;
+        }
         document.getElementById("sleep_time").value = obj.sleep_time;
         document.getElementById('sleep_time_value').textContent = obj.sleep_time;
         document.getElementById("wakeup_interval").value = obj.wakeup_interval;
@@ -4434,6 +4909,73 @@ function mon_button_en(b) {
         document.getElementById("mon_filter").disabled = true;
         document.getElementById("mon_mask").disabled = true;
     }
+}
+
+// ---- CSV datalogger runtime Start/Stop (POST /csv_logger) + live status poll ----
+// The button is a runtime action (NOT part of the config form / Submit). Firmware status
+// is the source of truth: after each POST and on every poll we reconcile the button label
+// from /csv_status (manual_override || session_active), robust to cross-core latency and
+// to start/stop happening from another client or from ignition.
+function csv_notify(m, c) {
+    if (typeof showNotification === 'function') showNotification(m, c); else console.log(m);
+}
+function csv_log_button_en(b) {
+    // b==1 => idle/Start, b==0 => active/Stop (mirror mon_button_en; no sibling inputs)
+    var btn = document.getElementById('csv_log_button');
+    if (btn) btn.value = (b == 1) ? 'Start' : 'Stop';
+}
+function csv_status_render(j) {
+    // Firmware status is the source of truth (robust to cross-core latency + external
+    // start/stop). "on" => button shows Stop; otherwise Start.
+    var on = !!(j && (j.manual_mode === 'on' || j.session_active));
+    csv_log_button_en(on ? 0 : 1);
+    var line = document.getElementById('csv_status_line');
+    if (!line) return;
+    if (j && j.session_active) {
+        line.textContent = 'logging • ' + (j.file || '') + ' • ' + (j.rows_written || 0) + ' rows';
+    } else if (j && j.manual_mode === 'on' && j.sd_mounted === false) {
+        line.textContent = 'waiting for SD card…';
+    } else if (j && j.manual_mode === 'on') {
+        line.textContent = 'armed — waiting for data…';
+    } else if (j && j.manual_mode === 'off') {
+        line.textContent = 'stopped';
+    } else {
+        line.textContent = 'idle';
+    }
+}
+function csv_status_tick() {
+    if (window._csvStatusInFlight) return;
+    window._csvStatusInFlight = true;
+    fetch('/csv_status').then(function(r) { return r.json(); })
+        .then(function(j) { csv_status_render(j); })
+        .catch(function() {})
+        .finally(function() { window._csvStatusInFlight = false; });
+}
+function csv_status_poll_start() {
+    if (window._csvStatusTimer) return;
+    csv_status_tick();
+    window._csvStatusTimer = setInterval(csv_status_tick, 1500);
+}
+function csv_status_poll_stop() {
+    if (window._csvStatusTimer) { clearInterval(window._csvStatusTimer); window._csvStatusTimer = null; }
+}
+function csv_log_control() {
+    var btn = document.getElementById('csv_log_button');
+    if (!btn) return;
+    var op = (btn.value === 'Start') ? 'start' : 'stop';
+    fetch('/csv_logger?op=' + op, { method: 'POST' })
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function(j) {
+            csv_status_render(j);
+            if (op === 'start') {
+                csv_notify(j.session_active ? 'Datalogging started' : 'Datalogging armed — waiting for data',
+                           j.session_active ? 'green' : 'orange');
+            } else {
+                csv_notify('Datalogging stopped', 'blue');
+            }
+            csv_status_poll_start();
+        })
+        .catch(function(e) { csv_notify('CSV control failed: ' + e.message, 'red'); });
 }
 
 function isNameUnique(name) {

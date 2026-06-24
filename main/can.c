@@ -133,6 +133,12 @@ void can_enable(void)
 	f_config.single_filter = 1;
 	g_config_silent.intr_flags = ESP_INTR_FLAG_LEVEL3 | ESP_INTR_FLAG_SHARED;
 	g_config_normal.intr_flags = ESP_INTR_FLAG_LEVEL3 | ESP_INTR_FLAG_SHARED;
+	// Deepen the RX FIFO (TWAI_GENERAL_CONFIG_DEFAULT is only 5). The native FAST_LOG capture
+	// (Task #18) accepts ALL frames and can briefly stall during SD/flash cache-disable
+	// windows; a deeper queue prevents frame loss across the stall. Harmless for every other
+	// mode -- strictly fewer drops, ~a few KB of internal RAM at install time.
+	g_config_silent.rx_queue_len = 96;
+	g_config_normal.rx_queue_len = 96;
 	if(can_cfg.silent)
 	{
 		if(twai_driver_install(&g_config_silent, (const twai_timing_config_t *)t_config, &f_config) == ESP_OK)

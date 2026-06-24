@@ -53,6 +53,8 @@
 #define SAVVYCAN			2
 #define OBD_ELM327			3
 #define AUTO_PID			4
+#define FAST_LOG			5	/* Native-TWAI fast datalogger (Task #18) */
+#define POLL_LOG			6	/* Native-TWAI request/response poller (Task #18, Phase B) */
 
 typedef enum
 {
@@ -127,6 +129,7 @@ typedef struct _device_config
 	char sleep_status[32];
 	char sleep_disable_agree[10];
 	char sleep_volt[10];
+	char engine_volt[10];   // Task #6: dedicated engine-running gate for the CSV logger (separate from sleep_volt)
 	char wakeup_volt[10];
 	char sleep_time[32];
 	char wakeup_time[32];
@@ -161,9 +164,13 @@ typedef struct _device_config
 	char mqtt_rx_topic[64];
 	char mqtt_status_topic[64];
 	char logger_status[16];
+	char csv_log[16];
 	char log_storage[16];
 	char log_filesystem[16];
 	char log_period[16];
+	char csv_grid_mode[16];   // wide time grid: "event" | "fixed"
+	char csv_grid_hz[16];     // wide fixed-rate grid frequency, 1..50 Hz
+	char csv_require_engine[16]; // gate CSV logging on engine running (ECU answering): "enable" | "disable"
 	char imu_threshold[16];
 	bool debug_enabled;
 }device_config_t;
@@ -210,6 +217,7 @@ void config_server_set_ble_config(uint8_t b);
 void config_server_restart(void);
 bool config_server_ws_connected(void);
 int8_t config_server_get_sleep_volt(float *sleep_volt);
+int8_t config_server_get_engine_volt(float *engine_volt);   // Task #6: engine-running gate (13.0-15.0 V)
 int8_t config_server_get_battery_alert_config(void);
 int32_t config_server_get_alert_port(void);
 char *config_server_get_alert_ssid(void);
@@ -239,7 +247,14 @@ int8_t config_server_get_sleep_time(uint32_t *sleep_time);
 int8_t config_server_get_wakeup_time(uint32_t *wakeup_time);
 wifi_security_t config_server_get_sta_security(void);
 int8_t config_server_get_logger_config(void);
+int8_t config_server_get_csv_log(void);
 int8_t config_server_get_log_period(uint32_t *log_period);
+// Wide CSV (Task #11): grid_mode 1=fixed / 0=event / -1=invalid; grid_hz writes *hz (1..50)
+// and returns 1, or -1 (leaves *hz untouched) on a bad value.
+int8_t config_server_get_csv_grid_mode(void);
+int8_t config_server_get_csv_grid_hz(uint32_t *hz);
+// Engine-running CSV gate (default ON): 1=enable, 0=disable.
+int8_t config_server_get_csv_require_engine(void);
 log_storage_t config_server_get_log_storage(void);
 log_filesystem_t config_server_get_log_filesystem(void);
 int8_t config_server_get_ap_auto_disable(void);

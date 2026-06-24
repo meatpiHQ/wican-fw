@@ -85,6 +85,10 @@
 #include "rtcm.h"
 #include "esp_littlefs.h"
 #include "obd_logger_iface.h"
+#include "csv_logger.h"
+#include "poll_log.h"
+#include "event_log.h"
+#include "sd_filemgr.h"
 #include "https_client_mgr.h"
 #include "sdcard.h"
 #include "obd2_standard_pids.h"
@@ -230,12 +234,12 @@ const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"we
 										\"drive_ssid\":\"MeatPi\",\"drive_password\":\"TomatoSauce\",\"drive_security\":\"wpa3\",\"drive_protocol\":\"elm327\",\"drive_connection_type\":\"wifi\",\"drive_mode_timeout\":\"60\",\
 										\"can_datarate\":\"500K\",\
 										\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\
-								\"ble_status\":\"disable\",\"ble_power\":\"9\",\"sleep_status\":\"enable\",\"periodic_wakeup\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"sleep_time\":\"5\",\"wakeup_interval\":\"90\",\"batt_alert\":\"disable\",\
+								\"ble_status\":\"disable\",\"ble_power\":\"9\",\"sleep_status\":\"enable\",\"periodic_wakeup\":\"disable\",\"sleep_volt\":\"13.1\",\"engine_volt\":\"13.2\",\"wakeup_volt\":\"13.5\",\"sleep_time\":\"5\",\"wakeup_interval\":\"90\",\"batt_alert\":\"disable\",\
 										\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\
 										\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\
 								\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"elm327_udp_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\
 										\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\",\"mqtt_security\":\"none\",\"mqtt_cert_set\": \"default\",\"mqtt_skip_cn\":\"disable\",\
-										\"logger_status\":\"disable\",\"log_filesystem\":\"littlefs\",\"log_storage\":\"sdcard\",\"log_period\":\"10\"}";
+										\"logger_status\":\"disable\",\"csv_log\":\"disable\",\"log_filesystem\":\"littlefs\",\"log_storage\":\"sdcard\",\"log_period\":\"10\",\"csv_grid_mode\":\"fixed\",\"csv_grid_hz\":\"10\",\"csv_require_engine\":\"enable\"}";
 
 // const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\", \"ap_auto_disable\": \"disable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
 // const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\", \"ap_auto_disable\": \"disable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"periodic_wakeup\":\"disable\",\"wakeup_interval\":\"5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
@@ -539,6 +543,14 @@ int8_t config_server_protocol(void)
 	else if(strcmp(device_config.protocol, "auto_pid") == 0)
 	{
 		return AUTO_PID;
+	}
+	else if(strcmp(device_config.protocol, "fast_log") == 0)
+	{
+		return FAST_LOG;
+	}
+	else if(strcmp(device_config.protocol, "poll_log") == 0)
+	{
+		return POLL_LOG;
 	}
 	return OBD_ELM327;
 }
@@ -1797,6 +1809,7 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	cJSON_AddStringToObject(root, "sleep_status", device_config.sleep_status);
 	cJSON_AddStringToObject(root, "sleep_disable_agree", device_config.sleep_disable_agree);
 	cJSON_AddStringToObject(root, "sleep_volt", device_config.sleep_volt);
+	cJSON_AddStringToObject(root, "engine_volt", device_config.engine_volt);
 	cJSON_AddStringToObject(root, "sleep_time", device_config.sleep_time);
 	cJSON_AddStringToObject(root, "wakeup_volt", device_config.wakeup_volt);
 	cJSON_AddStringToObject(root, "periodic_wakeup", device_config.periodic_wakeup);
@@ -1817,8 +1830,12 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	cJSON_AddStringToObject(root, "batt_alert_topic", device_config.batt_alert_topic);
 	cJSON_AddStringToObject(root, "batt_alert_time", device_config.batt_alert_time);
 	cJSON_AddStringToObject(root, "logger_status", device_config.logger_status);
+	cJSON_AddStringToObject(root, "csv_log", device_config.csv_log);
 	cJSON_AddStringToObject(root, "log_filesystem", device_config.log_filesystem);
 	cJSON_AddStringToObject(root, "log_period", device_config.log_period);
+	cJSON_AddStringToObject(root, "csv_grid_mode", device_config.csv_grid_mode);
+	cJSON_AddStringToObject(root, "csv_grid_hz", device_config.csv_grid_hz);
+	cJSON_AddStringToObject(root, "csv_require_engine", device_config.csv_require_engine);
 	cJSON_AddStringToObject(root, "log_storage", device_config.log_storage);
 	cJSON_AddStringToObject(root, "imu_threshold", device_config.imu_threshold);
 	cJSON_AddStringToObject(root, "elm327_udp_log", device_config.elm327_udp_log);
@@ -2001,6 +2018,9 @@ static bool ota_on_part_begin(const multipart_part_info_t *info, void *user_ctx)
 	}
 
 	ctx->started = true;
+	// Operational event (Task #24): firmware update began. Runs on the httpd task; the in-RAM ring
+	// carries it even though the SD may be unavailable during the OTA flash window.
+	event_log_emit(EVL_OTA_START, "firmware OTA started (part subtype %d)", (int)ctx->update_partition->subtype);
 	return true;
 }
 
@@ -2168,12 +2188,17 @@ static esp_err_t upload_post_handler(httpd_req_t *req)
 		{
 			esp_ota_abort(ctx.update_handle);
 		}
+		// Operational event (Task #24): single consolidated OTA-failure site.
+		event_log_emit(EVL_OTA_FAIL, "OTA failed: mp=%s ota=%s started=%d",
+		               esp_err_to_name(mp_err), esp_err_to_name(ctx.err), (int)ctx.started);
 		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA upload failed");
 		return ESP_FAIL;
 	}
 
 	total_size = (uint32_t)ctx.total_size;
 	ESP_LOGI(TAG, "OTA upload complete: %lu bytes", (unsigned long)total_size);
+	// Operational event (Task #24): OTA written + boot partition switched; reboot scheduled below.
+	event_log_emit(EVL_OTA_OK, "firmware OTA complete: %lu bytes, reboot scheduled", (unsigned long)total_size);
 
 	httpd_resp_set_status(req, "303 See Other");
 	httpd_resp_set_hdr(req, "Location", "/");
@@ -2474,7 +2499,29 @@ static const httpd_uri_t std_pid_info = {
     .uri       = "/std_pid_info",
     .method    = HTTP_GET,
     .handler   = std_pid_info_handler,
-    .user_ctx  = &server_data 
+    .user_ctx  = &server_data
+};
+
+/* GET /poll_status -> live POLL_LOG metrics (req/s, rtt, ok/timeout/txfail) over WiFi, so the
+ * polling rate is readable in the car without a serial cable. Safe in any protocol mode. */
+static esp_err_t poll_status_handler(httpd_req_t *req)
+{
+    char *status = poll_log_get_status_json();
+    httpd_resp_set_type(req, "application/json");
+    if (status == NULL)
+    {
+        httpd_resp_sendstr(req, "{\"active\":false}");
+        return ESP_OK;
+    }
+    httpd_resp_sendstr(req, status);
+    free(status);
+    return ESP_OK;
+}
+static const httpd_uri_t poll_status_uri = {
+    .uri       = "/poll_status",
+    .method    = HTTP_GET,
+    .handler   = poll_status_handler,
+    .user_ctx  = NULL
 };
 
 static void config_server_load_cfg(char *cfg)
@@ -2708,6 +2755,29 @@ static void config_server_load_cfg(char *cfg)
 	}
 	strlcpy(device_config.sleep_volt, key->valuestring, sizeof(device_config.sleep_volt));
 	ESP_LOGI(TAG, "device_config.sleep_volt: %s", device_config.sleep_volt);
+
+	// Task #6: engine-running gate threshold (CSV logger only; separate from sleep_volt).
+	// MIGRATION-SAFE: default on a missing/garbage key -- do NOT goto config_error like the
+	// sleep_volt block above, or the first boot after upgrade (old NVS has no engine_volt)
+	// would wipe the whole config. Range floor 13.0 keeps the ON edge above a healthy NC
+	// resting battery (~12.6-12.8 V) even at the slider minimum, so the parked-reads-ON bug
+	// cannot return; ceiling 15.0.
+	key = cJSON_GetObjectItem(root,"engine_volt");
+	if(key == 0 || key->valuestring == NULL)
+	{
+		strlcpy(device_config.engine_volt, "13.2", sizeof(device_config.engine_volt));
+	}
+	else
+	{
+		strlcpy(device_config.engine_volt, key->valuestring, sizeof(device_config.engine_volt));
+		char *ev_end;
+		float ev = strtof(device_config.engine_volt, &ev_end);
+		if(*ev_end != '\0' || ev_end == device_config.engine_volt || ev < 13.0f || ev > 15.0f)
+		{
+			strlcpy(device_config.engine_volt, "13.2", sizeof(device_config.engine_volt));
+		}
+	}
+	ESP_LOGI(TAG, "device_config.engine_volt: %s", device_config.engine_volt);
 
 	//*****
 	// key = cJSON_GetObjectItem(root,"batt_alert");
@@ -3228,6 +3298,40 @@ static void config_server_load_cfg(char *cfg)
 	//*****
 
 	//*****
+	key = cJSON_GetObjectItem(root,"csv_log");
+	if(key == 0)
+	{
+		strlcpy(device_config.csv_log, "disable", sizeof(device_config.csv_log));
+	}
+	else
+	{
+		strlcpy(device_config.csv_log, key->valuestring, sizeof(device_config.csv_log));
+	}
+	ESP_LOGI(TAG, "device_config.csv_log: %s", device_config.csv_log);
+	//*****
+
+	//*****
+	// Logger mutual exclusion (Task #5): only ONE of the stock SQLite/OBD logger
+	// (logger_status) or the CSV logger (csv_log) may be enabled at once. This is the
+	// AUTHORITATIVE, browser-independent enforcement point. Deterministic winner: CSV
+	// (matches the single-owner boot gate in main.c). Also coerce any non-enable/disable
+	// value to "disable" so a garbage NVS value can never enable a logger.
+	if(strcmp(device_config.logger_status, "enable") != 0 && strcmp(device_config.logger_status, "disable") != 0)
+	{
+		strlcpy(device_config.logger_status, "disable", sizeof(device_config.logger_status));
+	}
+	if(strcmp(device_config.csv_log, "enable") != 0 && strcmp(device_config.csv_log, "disable") != 0)
+	{
+		strlcpy(device_config.csv_log, "disable", sizeof(device_config.csv_log));
+	}
+	if(strcmp(device_config.logger_status, "enable") == 0 && strcmp(device_config.csv_log, "enable") == 0)
+	{
+		strlcpy(device_config.logger_status, "disable", sizeof(device_config.logger_status));   // CSV wins
+		ESP_LOGW(TAG, "logger_status and csv_log both enabled -> forcing logger_status=disable (CSV wins)");
+	}
+	//*****
+
+	//*****
 	key = cJSON_GetObjectItem(root,"log_filesystem");
 	if(key == 0)
 	{
@@ -3273,6 +3377,60 @@ static void config_server_load_cfg(char *cfg)
 		strlcpy(device_config.log_period, key->valuestring, sizeof(device_config.log_period));
 	}
 	ESP_LOGI(TAG, "device_config.log_period: %s", device_config.log_period);
+	//*****
+
+	//***** Wide CSV (Task #11): csv_grid_mode / csv_grid_hz. Garbage coerces to a safe default
+	//      so a bad NVS value can never select an invalid layout. (csv_format removed: Task #16.)
+	key = cJSON_GetObjectItem(root,"csv_grid_mode");
+	if(key == 0)
+	{
+		strlcpy(device_config.csv_grid_mode, "fixed", sizeof(device_config.csv_grid_mode));
+	}
+	else
+	{
+		strlcpy(device_config.csv_grid_mode, key->valuestring, sizeof(device_config.csv_grid_mode));
+	}
+	if(strcmp(device_config.csv_grid_mode, "event") != 0 && strcmp(device_config.csv_grid_mode, "fixed") != 0)
+	{
+		strlcpy(device_config.csv_grid_mode, "fixed", sizeof(device_config.csv_grid_mode));
+	}
+	ESP_LOGI(TAG, "device_config.csv_grid_mode: %s", device_config.csv_grid_mode);
+	//*****
+
+	key = cJSON_GetObjectItem(root,"csv_grid_hz");
+	if(key == 0)
+	{
+		strlcpy(device_config.csv_grid_hz, "10", sizeof(device_config.csv_grid_hz));
+	}
+	else
+	{
+		strlcpy(device_config.csv_grid_hz, key->valuestring, sizeof(device_config.csv_grid_hz));
+		char *gh_end;
+		long gh = strtol(device_config.csv_grid_hz, &gh_end, 10);
+		if(*gh_end != '\0' || gh_end == device_config.csv_grid_hz || gh < 1 || gh > 50)
+		{
+			strlcpy(device_config.csv_grid_hz, "10", sizeof(device_config.csv_grid_hz));
+		}
+	}
+	ESP_LOGI(TAG, "device_config.csv_grid_hz: %s", device_config.csv_grid_hz);
+	//*****
+
+	//***** Engine-running CSV gate (Stage 1): anything not "enable"/"disable" coerces to "enable"
+	//      (default ON). An absent key (old NVS / first upgrade boot) also defaults ON.
+	key = cJSON_GetObjectItem(root,"csv_require_engine");
+	if(key == 0 || key->valuestring == NULL)
+	{
+		strlcpy(device_config.csv_require_engine, "enable", sizeof(device_config.csv_require_engine));
+	}
+	else
+	{
+		strlcpy(device_config.csv_require_engine, key->valuestring, sizeof(device_config.csv_require_engine));
+	}
+	if(strcmp(device_config.csv_require_engine, "enable") != 0 && strcmp(device_config.csv_require_engine, "disable") != 0)
+	{
+		strlcpy(device_config.csv_require_engine, "enable", sizeof(device_config.csv_require_engine));
+	}
+	ESP_LOGI(TAG, "device_config.csv_require_engine: %s", device_config.csv_require_engine);
 	//*****
 
 	key = cJSON_GetObjectItem(root,"ap_auto_disable");
@@ -3481,6 +3639,9 @@ void config_server_get_sta_ip(char* ip)
 void vrestartTimerCallback( TimerHandle_t xTimer )
 {
 //	vTaskDelay(1000 / portTICK_PERIOD_MS);
+	// NOTE: the reboot is recorded by the event log AFTER the fact, on the next boot (the boot event
+	// reads restart_tracker's planned-reason), so nothing new touches this reset chokepoint. Events
+	// emitted before a reboot (OTA_OK, etc.) are already fsync'd by the writer within ~1s of emission.
 	restart_tracker_restart(s_reboot_reason, s_reboot_source, s_reboot_flags);
 }
 
@@ -3508,11 +3669,19 @@ static void register_server_uris(void)
 	httpd_register_uri_handler(server, &system_commands);
 	httpd_register_uri_handler(server, &scan_available_pids_uri);
 	httpd_register_uri_handler(server, &std_pid_info);
+	httpd_register_uri_handler(server, &poll_status_uri);
 	
 	//Add before this line
 	httpd_register_uri_handler(server, &obd_logger_ws);
 	httpd_register_uri_handler(server, &db_download_uri);
 	httpd_register_uri_handler(server, &db_files_uri);
+	httpd_register_uri_handler(server, &csv_status_uri);
+	httpd_register_uri_handler(server, &csv_list_uri);
+	httpd_register_uri_handler(server, &csv_download_uri);
+	httpd_register_uri_handler(server, &csv_control_uri);
+	httpd_register_uri_handler(server, &sd_files_get_uri);
+	httpd_register_uri_handler(server, &sd_files_post_uri);
+	event_log_register_handlers(server);   // GET /event_log* (Task #24) -- before the catch-all wildcard
 	// NOTE: catch-all wildcard handler moved to after cert manager handlers to avoid shadowing
 }
 
@@ -3671,7 +3840,10 @@ static httpd_handle_t config_server_init(void)
                        );
 
 	// Start the httpd server (reserve extra slots for cert manager endpoints)
-	config.max_uri_handlers = 38;
+	// NOTE: the catch-all "/*" file server (get_uri_common) is registered LAST, so it
+	// must fit within this cap. The 3 CSV-logger endpoints pushed the total past 38,
+	// which silently dropped "/*" and 404'd every embedded asset (main.js, etc.).
+	config.max_uri_handlers = 48;
 	config.stack_size = (10*1024);
 	config.max_open_sockets = 15;
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
@@ -3806,6 +3978,19 @@ int8_t config_server_get_sleep_volt(float *sleep_volt)
 	*sleep_volt = atof(device_config.sleep_volt);
 
 	if(*sleep_volt >= 12.0f && *sleep_volt <= 15.0f)
+	{
+		return 1;
+	}
+	return -1;
+}
+
+// Task #6: dedicated engine-running gate for the CSV logger. Range floor 13.0 keeps the ON
+// edge above a resting battery so a parked car can't read "ignition on" (the original bug).
+int8_t config_server_get_engine_volt(float *engine_volt)
+{
+	*engine_volt = atof(device_config.engine_volt);
+
+	if(*engine_volt >= 13.0f && *engine_volt <= 15.0f)
 	{
 		return 1;
 	}
@@ -4141,6 +4326,20 @@ int8_t config_server_get_logger_config(void)
 	return -1;
 }
 
+int8_t config_server_get_csv_log(void)
+{
+	if(strcmp(device_config.csv_log, "enable") == 0)
+	{
+		return 1;
+	}
+	else if(strcmp(device_config.csv_log, "disable") == 0)
+	{
+		return 0;
+	}
+
+	return -1;
+}
+
 int8_t config_server_get_ap_auto_disable(void)
 {
 	if(strcmp(device_config.ap_auto_disable, "enable") == 0)
@@ -4198,6 +4397,46 @@ int8_t config_server_get_log_period(uint32_t *log_period)
 	}
 	
 	*log_period = (uint32_t)log_int;
+	return 1;
+}
+
+int8_t config_server_get_csv_grid_mode(void)
+{
+	if(strcmp(device_config.csv_grid_mode, "fixed") == 0)
+	{
+		return 1;
+	}
+	else if(strcmp(device_config.csv_grid_mode, "event") == 0)
+	{
+		return 0;
+	}
+	return -1;
+}
+
+int8_t config_server_get_csv_require_engine(void)
+{
+	// Default ON: "disable" turns the gate off; "enable" or any other value keeps it on.
+	if(strcmp(device_config.csv_require_engine, "disable") == 0)
+	{
+		return 0;
+	}
+	return 1;
+}
+
+int8_t config_server_get_csv_grid_hz(uint32_t *hz)
+{
+	char *endptr;
+	long v = strtol(device_config.csv_grid_hz, &endptr, 10);
+
+	if(*endptr != '\0' || endptr == device_config.csv_grid_hz)
+	{
+		return -1;
+	}
+	if(v < 1 || v > 50)
+	{
+		return -1;
+	}
+	*hz = (uint32_t)v;
 	return 1;
 }
 

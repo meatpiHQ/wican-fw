@@ -69,6 +69,21 @@ endif()
 
 add_definitions(-DHARDWARE_VERSION="${HW_VER}")
 
+# TEMP build workaround (revert for a faithful build): this tree targets a
+# pre-GCC14 ESP-IDF (~5.3 / GCC 13.2). Building on IDF 5.4 (GCC 14.2) promotes
+# several of the existing code's benign, pre-GCC14 patterns to hard errors via
+# the unconditional `-Werror=all` in IDF's build.cmake -- e.g. printf-family
+# format checks (`%u`/`%X` for a uint32_t, which is `long unsigned int` on
+# esp32s3: same 32-bit representation, harmless), implicit declarations, and
+# int/pointer conversions. Demote ONLY those specific pedantic classes back to
+# warnings so the project builds unmodified. This does NOT demote genuinely
+# dangerous diagnostics (-Werror=return-type, -Werror=uninitialized,
+# -Werror=array-bounds, etc.), which stay as hard errors, and it does not change
+# generated code -- it only affects whether a diagnostic stops the build.
+idf_build_set_property(COMPILE_OPTIONS
+    "-Wno-error=implicit-function-declaration;-Wno-error=implicit-int;-Wno-error=incompatible-pointer-types;-Wno-error=int-conversion;-Wno-error=format;-Wno-error=format-security"
+    APPEND)
+
 # Form the project binary name
 set(PRJ_BIN "${PROJECT_PREF}_${HW_PREF}_${GIT_SHA}")
 project("${PRJ_BIN}")

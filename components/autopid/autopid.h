@@ -163,6 +163,11 @@ typedef struct
     // CAN filters (broadcast frames)
     can_filter_t *can_filters;
     uint32_t can_filters_count;
+    // Calculated channels (Task #17): math over OTHER decoded channel values (source "CALC").
+    // Reuses parameter_t (name/expression/unit/value/enabled/min/max); expression references
+    // channel NAMES, not raw CAN bytes -- evaluated by autopid_eval_calculated_channels().
+    parameter_t *calculated;
+    uint32_t calculated_count;
     char* custom_init;
     char* standard_init;
     char* specific_init;
@@ -213,6 +218,14 @@ typedef struct
 
 void autopid_parser(char *str, uint32_t len, QueueHandle_t *q, char* cmd_str);
 void autopid_init(char* id, bool enable_logging, uint32_t logging_period);
+
+// FAST_LOG support (Task #18): parse auto_pid.json into the module config WITHOUT starting
+// the AutoPID task or any ELM polling. Creates autopid_config + its mutex and registers the
+// wide-CSV column provider, so the native-TWAI fast datalogger (components/fast_log) can
+// read can_filters[]/pids[] and reuse autopid_lock()/the column provider. Returns the parsed
+// config (NULL on failure). Idempotent: returns the existing config if already loaded.
+// Unlike autopid_init() it does NOT require pid_count>0 (broadcast-only configs are valid).
+autopid_config_t* autopid_load_config_only(void);
 char *autopid_data_read(void);
 bool autopid_get_ecu_status(void);
 char* autopid_get_config(void);
@@ -233,4 +246,11 @@ void autopid_app_reset_timer(void);
 // prevent interleaved commands/responses.
 bool autopid_lock(uint32_t timeout_ms);
 void autopid_unlock(void);
+
+// Calculated channels (Task #17): evaluate every configured calculated channel from the latest
+// decoded source-channel values and record each as a wide-CSV column (source "CALC"). Called once
+// per decode sweep by the native-TWAI loggers (poll_log/fast_log). Takes autopid_lock() internally
+// (the caller must NOT already hold it); does no bus/SD/flash I/O; a no-op when no calculated
+// channels are configured.
+void autopid_eval_calculated_channels(void);
 #endif

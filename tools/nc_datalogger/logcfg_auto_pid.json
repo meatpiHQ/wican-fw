@@ -1,0 +1,199 @@
+{
+    "car_model": "NC logcfg (broadcast + polled)",
+    "ecu_protocol": "6",
+    "initialisation": "ATSP6",
+    "car_specific": "disable",
+    "disable_on_sleep_voltage": "enable",
+    "can_filters": [],
+    "pids": [
+        {
+            "PID": "010B1",
+            "Period": "200",
+            "enabled": true,
+            "Name": "MAP",
+            "Expression": "B3",
+            "unit": "kPa",
+            "class": "none"
+        },
+        {
+            "PID": "01101",
+            "Period": "200",
+            "enabled": true,
+            "Name": "MAF",
+            "Expression": "[B3:B4]*0.01",
+            "unit": "g/s",
+            "class": "none"
+        },
+        {
+            "PID": "010E1",
+            "Period": "200",
+            "enabled": true,
+            "Name": "SPARKADV",
+            "Expression": "(B3*0.5)-64",
+            "unit": "deg",
+            "class": "none"
+        },
+        {
+            "PID": "01061",
+            "Period": "200",
+            "enabled": true,
+            "Name": "STFT",
+            "Expression": "(B3*0.78125)-100",
+            "unit": "%",
+            "class": "none"
+        },
+        {
+            "PID": "01071",
+            "Period": "200",
+            "enabled": true,
+            "Name": "LTFT",
+            "Expression": "(B3*0.78125)-100",
+            "unit": "%",
+            "class": "none"
+        },
+        {
+            "PID": "01341",
+            "Period": "200",
+            "enabled": true,
+            "Name": "EQ_RATIO",
+            "Expression": "[B3:B4]*0.0000305175",
+            "unit": "lambda",
+            "class": "none"
+        },
+        {
+            "PID": "01031",
+            "Period": "200",
+            "enabled": true,
+            "Name": "FUELSYS",
+            "Expression": "[B3:B4]*0.00390625",
+            "unit": "",
+            "class": "none"
+        },
+        {
+            "PID": "01331",
+            "Period": "200",
+            "enabled": true,
+            "Name": "BARO",
+            "Expression": "B3",
+            "unit": "kPa",
+            "class": "none"
+        },
+        {
+            "PID": "01431",
+            "Period": "200",
+            "enabled": true,
+            "Name": "LOAD",
+            "Expression": "[B3:B4]*0.0039215684",
+            "unit": "g/rev",
+            "class": "none"
+        },
+        {
+            "PID": "2217461",
+            "Period": "200",
+            "enabled": true,
+            "Name": "KNOCKR",
+            "Expression": "B4*0.3521126761",
+            "unit": "deg",
+            "class": "none",
+            "Init": "ATSH7E0;"
+        },
+        {
+            "PID": "2214101",
+            "Period": "200",
+            "enabled": true,
+            "Name": "FUEL_PW",
+            "Expression": "[B4:B5]*0.008",
+            "unit": "ms",
+            "class": "none",
+            "Init": "ATSH7E0;"
+        },
+        {
+            "PID": "2216CD1",
+            "Period": "200",
+            "enabled": true,
+            "Name": "VCT_ACT",
+            "Expression": "[B4:B5]*0.0625",
+            "unit": "deg",
+            "class": "none",
+            "Init": "ATSH7E0;"
+        },
+        {
+            "PID": "2217061",
+            "Period": "200",
+            "enabled": true,
+            "Name": "HIDET_SW",
+            "Expression": "B4&1",
+            "unit": "on/off",
+            "class": "none",
+            "Init": "ATSH7E0;"
+        },
+        {
+            "PID": "010C1",
+            "Period": "200",
+            "enabled": true,
+            "Name": "RPM",
+            "Expression": "[B3:B4]/4",
+            "unit": "rpm",
+            "class": "none"
+        },
+        {
+            "PID": "010D1",
+            "Period": "200",
+            "enabled": true,
+            "Name": "VSS",
+            "Expression": "B3",
+            "unit": "km/h",
+            "class": "none"
+        },
+        {
+            "PID": "01051",
+            "Period": "200",
+            "enabled": true,
+            "Name": "ECT",
+            "Expression": "B3-40",
+            "unit": "C",
+            "class": "none"
+        },
+        {
+            "PID": "010F1",
+            "Period": "200",
+            "enabled": true,
+            "Name": "IAT",
+            "Expression": "B3-40",
+            "unit": "C",
+            "class": "none"
+        },
+        {
+            "PID": "01111",
+            "Period": "200",
+            "enabled": true,
+            "Name": "TPS",
+            "Expression": "B3*0.39215686",
+            "unit": "%",
+            "class": "none"
+        },
+        {
+            "PID": "01491",
+            "Period": "200",
+            "enabled": true,
+            "Name": "APP",
+            "Expression": "B3*0.39215686",
+            "unit": "%",
+            "class": "none"
+        }
+    ],
+    "calculated": [
+        {
+            "name": "AFR",
+            "expression": "EQ_RATIO * 14.64",
+            "unit": "AFR",
+            "enabled": true
+        },
+        {
+            "name": "BOOST",
+            "expression": "MAP - BARO",
+            "unit": "kPa",
+            "enabled": true
+        }
+    ]
+}

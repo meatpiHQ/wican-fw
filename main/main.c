@@ -59,6 +59,10 @@
 #include "mqtt.h"
 #include "ftp.h"
 #include "autopid.h"
+#include "csv_logger.h"
+#include "fast_log.h"
+#include "poll_log.h"
+#include "event_log.h"
 #include "led.h"
 #include "obd.h"
 #include "wusb3801.h"
@@ -372,6 +376,17 @@ static void can_rx_task(void *pvParameters)
 //        esp_err_t ret = 0xFF;
 
 		dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
+
+		// FAST_LOG / POLL_LOG (Task #18) own the native TWAI controller exclusively: their
+		// task is the SOLE twai_receive()/twai_transmit() consumer. If this task also drained
+		// the RX queue, TWAI would split/steal frames between the two (each frame goes to exactly
+		// one waiter) -- in POLL_LOG that would steal the PCM's diagnostic responses.
+		// Gate this task off entirely in those modes. MUST stay above the can_receive() loop.
+		if(protocol == FAST_LOG || protocol == POLL_LOG)
+		{
+			vTaskDelay(pdMS_TO_TICKS(50));
+			continue;
+		}
 //    	time_old = esp_timer_get_time();
 //    	if((esp_timer_get_time() - time_old) > 1000000)
 //    	{
@@ -675,6 +690,36 @@ void app_main(void)
 
 	restart_tracker_init();
 
+	// Operational event log (Task #24): bring up the in-RAM ring + SD writer here -- the SD mount
+	// (sd_card_init above) and the reset reason (restart_tracker_init above) are both ready, and this
+	// is upstream of httpd + every logger hot path, so it can never stall them. Inject the main-owned
+	// SD-mounted predicate so the writer skips fopen churn when no card is present, then log the boot.
+	event_log_set_sd_ready_fn(sdcard_is_mounted);
+	event_log_init();
+	{
+		restart_tracker_record_t ev_boot = {0};
+		bool ev_have = (restart_tracker_get_latest_record(&ev_boot) == ESP_OK);
+		const char *ev_reason = ev_have
+		                        ? restart_tracker_reset_reason_to_str((esp_reset_reason_t)ev_boot.actual_reset_reason)
+		                        : "unknown";
+		esp_app_desc_t *ev_app = dev_status_get_running_app_info();
+		const char *ev_fw = (ev_app != NULL && ev_app->version[0] != '\0') ? ev_app->version : "?";
+		const char *ev_sd = sdcard_is_mounted() ? "mounted" : "none";
+		if (ev_have && ev_boot.was_planned)
+		{
+			// Planned reboot: record WHY the previous boot ended (ota_apply / config_apply / user_request)
+			// here, AFTER the fact -- so the reboot is logged without adding any code to the reset path.
+			event_log_emit(EVL_BOOT, "reason=%s planned=%s src=%s fw=%s sd=%s", ev_reason,
+			               restart_tracker_planned_reason_to_str((restart_tracker_planned_reason_t)ev_boot.planned_reason),
+			               restart_tracker_source_to_str((restart_tracker_source_t)ev_boot.source),
+			               ev_fw, ev_sd);
+		}
+		else
+		{
+			event_log_emit(EVL_BOOT, "reason=%s fw=%s sd=%s", ev_reason, ev_fw, ev_sd);
+		}
+	}
+
 	gpio_reset_pin(0);
 	gpio_set_direction(0, GPIO_MODE_INPUT);
 	gpio_reset_pin(USB_OTG_PWR_EN);
@@ -911,7 +956,57 @@ void app_main(void)
 			ESP_LOGE(TAG, "error getting log period");
 			log_period = 60;
 		}
-		autopid_init((char*)&uid[0], config_server_get_logger_config(), log_period);
+		// CSV datalogger: DEFERRED start when enabled. The historical boot crash was a
+		// task-publish race in csv_logger_init() (csv_queue published after the higher-
+		// priority writer task was created), now fixed. The deferred start is kept as a
+		// modest settle margin: csv_logger_init_deferred() waits ~20s, then starts the
+		// logger. A one-shot RTC guard skips CSV for one boot if a startup attempt ever
+		// fails to stabilize, so it can never boot-loop.
+		// Single-owner gate (Task #5): at most one logger starts. CSV wins if both are
+		// somehow enabled (matches the /store_config normalizer). Explicit '== 1' so a
+		// -1 (unset/garbage logger_status) can NEVER enable a logger via bool coercion.
+		int8_t csv_en = config_server_get_csv_log();
+		int8_t obd_en = config_server_get_logger_config();
+		if(csv_en == 1)
+		{
+			csv_logger_init_deferred();
+		}
+		autopid_init((char*)&uid[0], (obd_en == 1 && csv_en != 1), log_period);
+	}
+	else if(protocol == FAST_LOG)
+	{
+		// Native-TWAI fast datalogger (Task #18), Phase A: passive broadcast capture.
+		// fast_log brings up the bus LISTEN_ONLY and decodes broadcast frames at bus rate,
+		// in place of the AutoPID/ELM poll loop. elm327_init() above stays dormant (no client
+		// drives it in FAST_LOG mode, so it never touches the CAN bus). Same CSV gate as
+		// AUTO_PID: deferred start when csv_log is enabled.
+		uint32_t log_period = 0;
+		if(config_server_get_log_period(&log_period) == -1)
+		{
+			log_period = 60;
+		}
+		if(config_server_get_csv_log() == 1)
+		{
+			csv_logger_init_deferred();
+		}
+		fast_log_init((char*)&uid[0], log_period);
+	}
+	else if(protocol == POLL_LOG)
+	{
+		// Native-TWAI request/response poller (Task #18, Phase B "measure-first"). Brings up the
+		// bus NORMAL/on-bus and polls the configured mode-01/22 PIDs with no ELM emulation and no
+		// hardcoded 100ms inter-poll delay, in place of the AutoPID/ELM poll loop. elm327_init()
+		// above stays dormant (no client drives it). Same CSV gate as FAST_LOG: deferred start.
+		uint32_t log_period = 0;
+		if(config_server_get_log_period(&log_period) == -1)
+		{
+			log_period = 60;
+		}
+		if(config_server_get_csv_log() == 1)
+		{
+			csv_logger_init_deferred();
+		}
+		poll_log_init((char*)&uid[0], log_period);
 	}
 
 	#else
@@ -983,11 +1078,13 @@ void app_main(void)
 //
 //		mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM, &xmsg_mqtt_rx_queue);
 //	}
+	// Task #6: the engine-running gate uses a DEDICATED threshold (engine_volt), NOT sleep_volt.
+	// sleep_volt stays exclusively for deep-sleep / battery protection (sleep_mode), untouched.
 	vehicle_config_t vehicle_config;
-	if(config_server_get_sleep_volt(&vehicle_config.voltage_at_ignition) == -1)
+	if(config_server_get_engine_volt(&vehicle_config.engine_on_volt) == -1)
 	{
-		ESP_LOGE(TAG, "Error getting sleep voltage");
-		vehicle_config.voltage_at_ignition = 13.1;  // Default value
+		ESP_LOGE(TAG, "Error getting engine voltage");
+		vehicle_config.engine_on_volt = 13.2;  // Default value
 	}
 	vehicle_init(&vehicle_config);
 	wifi_network_init(ap_ssid);

@@ -10,7 +10,9 @@ dependencies:
   meatpihq/usb_host_ch34x_vcp:
     git: https://github.com/meatpiHQ/esp-usb.git
     path: host/class/cdc/usb_host_ch34x_vcp
-    version: ch343
+    # Pinned to an immutable commit (was the mutable 'ch343' branch) so the build always
+    # resolves the exact validated driver; this is the commit the lockfile already used.
+    version: c80a574e26b4807816fdcb939218d143841b852c
   espressif/usb_host_vcp: ^1.0.0~5
   # Required IDF version
   idf:
