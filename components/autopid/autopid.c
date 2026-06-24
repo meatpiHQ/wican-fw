@@ -2292,6 +2292,10 @@ void parse_elm327_response(char *buffer, response_t *response)
                 k++;
                 data_start += 2;
             }
+            if (k ==  4 && memcmp(response->data, "\x03\x7f\x22\x78", 4) == 0) {
+                // This is a "pending" response frame from ECU, ignore/drop that frame
+                k = 0;
+            }
         }
         else
         {
