@@ -69,6 +69,7 @@
 #include "can.h"
 #include "autopid.h"
 #include "csv_logger.h"
+#include "event_log.h"
 #include "config_server.h"
 #include "expression_parser.h"
 
@@ -439,6 +440,10 @@ static void polllog_rx_task(void *arg)
                     s_last_flip_us   = now;
                     ESP_LOGI(TAG, "ECU silent %dms -> LISTEN_ONLY quiesce (stop holding bus awake)",
                              POLLLOG_ENGINE_OFF_MS);
+                    /* Operational event (Task #24): once per running->off transition. Non-blocking
+                     * enqueue only -- this is the sole-consumer poll task; no SD I/O here. */
+                    event_log_emit(EVL_ENGINE_STOP, "ECU silent %dms -> quiesce (LISTEN_ONLY)",
+                                   POLLLOG_ENGINE_OFF_MS);
                 }
                 /* if !can_is_enabled(): an OTA/sleep fence disabled the bus under us -> just fall
                  * through; the next iteration re-checks and we never spin against a dead driver. */
@@ -472,6 +477,8 @@ static void polllog_rx_task(void *arg)
                     s_last_ok_us     = now;   /* reset the off-debounce so it can't instantly re-fire */
                     s_last_flip_us   = now;
                     ESP_LOGI(TAG, "bus alive (%d frame[s]) -> NORMAL, resume polling", got);
+                    /* Operational event (Task #24): once per off->running transition. Non-blocking. */
+                    event_log_emit(EVL_ENGINE_START, "bus alive (%d frame[s]) -> resume polling", got);
                 }
             }
             vTaskDelay(pdMS_TO_TICKS(20));   /* ~20 ms quiesce cadence: feeds WDT/idle, fast resume */

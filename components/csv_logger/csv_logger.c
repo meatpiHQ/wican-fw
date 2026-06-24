@@ -40,6 +40,7 @@
 #include "cJSON.h"
 
 #include "csv_logger.h"
+#include "event_log.h"
 #include "config_server.h"
 #include "sdcard.h"
 #include "vehicle.h"
@@ -558,9 +559,20 @@ static void csv_logger_task(void *pvParameters)
         // Session close: logging stopped (ignition off / disabled) or SD was pulled.
         if (csv_session_active && (!logging_active || !sdcard_is_mounted()))
         {
+            // Accurate close cause for post-hoc forensics: distinguish a voltage ignition-off from the
+            // "require engine running" gate going false (engine quiesced while the bench/voltage still
+            // reads ON). ignition_on / engine_ok are already computed above for logging_active.
+            const char *why = !sdcard_is_mounted()             ? "sd_removed"
+                            : (csv_manual_mode == CSV_MANUAL_OFF) ? "manual_stop"
+                            : (!ignition_on)                      ? "ignition_off"
+                                                                  : "engine_stopped";
+            size_t closed_bytes = csv_file_bytes;   // csv_close_file zeroes this; capture first
             csv_close_file();
             csv_session_active = false;
             csv_free_wide_state();
+            // Operational event (Task #24): one emit per real session close. Non-blocking enqueue.
+            event_log_emit(EVL_DATALOG_CLOSE, "%s (%s, %u bytes)",
+                           csv_file_path, why, (unsigned)closed_bytes);
         }
 
         // WIDE fixed-rate grid: emit one LOCF snapshot row per 1/hz, even on idle passes.
@@ -576,6 +588,7 @@ static void csv_logger_task(void *pvParameters)
                 csv_close_file();
                 csv_session_active = false;
                 csv_free_wide_state();
+                event_log_emit(EVL_DATALOG_CLOSE, "%s (write_error)", csv_file_path);
                 csv_sd_retry_after_ms = (esp_timer_get_time() / 1000) + CSV_LOGGER_SD_RETRY_MS;
                 continue;
             }
@@ -645,6 +658,9 @@ static void csv_logger_task(void *pvParameters)
                 continue;
             }
             csv_session_active = true;
+            // Operational event (Task #24): one emit per session open (covers auto + manual).
+            // Not emitted on rotation (which calls csv_open_new_file directly, not this block).
+            event_log_emit(EVL_DATALOG_OPEN, "%s (%d cols)", csv_file_path, csv_col_count);
             wc_timer_set(&flush_timer, CSV_LOGGER_FLUSH_PERIOD_MS);
             if (csv_grid_mode == CSV_GRID_FIXED)
             {
@@ -664,6 +680,7 @@ static void csv_logger_task(void *pvParameters)
             csv_close_file();
             csv_session_active = false;
             csv_free_wide_state();
+            event_log_emit(EVL_DATALOG_CLOSE, "%s (write_error)", csv_file_path);
             csv_sd_retry_after_ms = (esp_timer_get_time() / 1000) + CSV_LOGGER_SD_RETRY_MS;
             continue;
         }
@@ -681,11 +698,16 @@ static void csv_logger_task(void *pvParameters)
         {
             // Rotation: close + reopen. csv_close_file does NOT free the wide column table, so
             // the reopened file re-emits a byte-identical wide header and LOCF carries forward.
+            // Capture the path being closed BEFORE csv_open_new_file() overwrites csv_file_path with
+            // the new (failed-to-open) name, so the rotate_error event names the file we actually closed.
+            char rot_closed[sizeof(csv_file_path)];
+            strlcpy(rot_closed, csv_file_path, sizeof(rot_closed));
             csv_close_file();
             if (csv_open_new_file() != ESP_OK)
             {
                 csv_session_active = false;
                 csv_free_wide_state();
+                event_log_emit(EVL_DATALOG_CLOSE, "%s (rotate_error)", rot_closed);
                 csv_sd_retry_after_ms = (esp_timer_get_time() / 1000) + CSV_LOGGER_SD_RETRY_MS;
             }
         }

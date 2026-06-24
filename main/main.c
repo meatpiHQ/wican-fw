@@ -62,6 +62,7 @@
 #include "csv_logger.h"
 #include "fast_log.h"
 #include "poll_log.h"
+#include "event_log.h"
 #include "led.h"
 #include "obd.h"
 #include "wusb3801.h"
@@ -688,6 +689,36 @@ void app_main(void)
 	#endif
 
 	restart_tracker_init();
+
+	// Operational event log (Task #24): bring up the in-RAM ring + SD writer here -- the SD mount
+	// (sd_card_init above) and the reset reason (restart_tracker_init above) are both ready, and this
+	// is upstream of httpd + every logger hot path, so it can never stall them. Inject the main-owned
+	// SD-mounted predicate so the writer skips fopen churn when no card is present, then log the boot.
+	event_log_set_sd_ready_fn(sdcard_is_mounted);
+	event_log_init();
+	{
+		restart_tracker_record_t ev_boot = {0};
+		bool ev_have = (restart_tracker_get_latest_record(&ev_boot) == ESP_OK);
+		const char *ev_reason = ev_have
+		                        ? restart_tracker_reset_reason_to_str((esp_reset_reason_t)ev_boot.actual_reset_reason)
+		                        : "unknown";
+		esp_app_desc_t *ev_app = dev_status_get_running_app_info();
+		const char *ev_fw = (ev_app != NULL && ev_app->version[0] != '\0') ? ev_app->version : "?";
+		const char *ev_sd = sdcard_is_mounted() ? "mounted" : "none";
+		if (ev_have && ev_boot.was_planned)
+		{
+			// Planned reboot: record WHY the previous boot ended (ota_apply / config_apply / user_request)
+			// here, AFTER the fact -- so the reboot is logged without adding any code to the reset path.
+			event_log_emit(EVL_BOOT, "reason=%s planned=%s src=%s fw=%s sd=%s", ev_reason,
+			               restart_tracker_planned_reason_to_str((restart_tracker_planned_reason_t)ev_boot.planned_reason),
+			               restart_tracker_source_to_str((restart_tracker_source_t)ev_boot.source),
+			               ev_fw, ev_sd);
+		}
+		else
+		{
+			event_log_emit(EVL_BOOT, "reason=%s fw=%s sd=%s", ev_reason, ev_fw, ev_sd);
+		}
+	}
 
 	gpio_reset_pin(0);
 	gpio_set_direction(0, GPIO_MODE_INPUT);

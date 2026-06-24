@@ -77,6 +77,7 @@ set(requires
     wican_common
     ws_server
     restart_tracker
+    event_log
 )
 
 # Register the component

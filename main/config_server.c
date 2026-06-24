@@ -87,6 +87,7 @@
 #include "obd_logger_iface.h"
 #include "csv_logger.h"
 #include "poll_log.h"
+#include "event_log.h"
 #include "sd_filemgr.h"
 #include "https_client_mgr.h"
 #include "sdcard.h"
@@ -2017,6 +2018,9 @@ static bool ota_on_part_begin(const multipart_part_info_t *info, void *user_ctx)
 	}
 
 	ctx->started = true;
+	// Operational event (Task #24): firmware update began. Runs on the httpd task; the in-RAM ring
+	// carries it even though the SD may be unavailable during the OTA flash window.
+	event_log_emit(EVL_OTA_START, "firmware OTA started (part subtype %d)", (int)ctx->update_partition->subtype);
 	return true;
 }
 
@@ -2184,12 +2188,17 @@ static esp_err_t upload_post_handler(httpd_req_t *req)
 		{
 			esp_ota_abort(ctx.update_handle);
 		}
+		// Operational event (Task #24): single consolidated OTA-failure site.
+		event_log_emit(EVL_OTA_FAIL, "OTA failed: mp=%s ota=%s started=%d",
+		               esp_err_to_name(mp_err), esp_err_to_name(ctx.err), (int)ctx.started);
 		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA upload failed");
 		return ESP_FAIL;
 	}
 
 	total_size = (uint32_t)ctx.total_size;
 	ESP_LOGI(TAG, "OTA upload complete: %lu bytes", (unsigned long)total_size);
+	// Operational event (Task #24): OTA written + boot partition switched; reboot scheduled below.
+	event_log_emit(EVL_OTA_OK, "firmware OTA complete: %lu bytes, reboot scheduled", (unsigned long)total_size);
 
 	httpd_resp_set_status(req, "303 See Other");
 	httpd_resp_set_hdr(req, "Location", "/");
@@ -3630,6 +3639,9 @@ void config_server_get_sta_ip(char* ip)
 void vrestartTimerCallback( TimerHandle_t xTimer )
 {
 //	vTaskDelay(1000 / portTICK_PERIOD_MS);
+	// NOTE: the reboot is recorded by the event log AFTER the fact, on the next boot (the boot event
+	// reads restart_tracker's planned-reason), so nothing new touches this reset chokepoint. Events
+	// emitted before a reboot (OTA_OK, etc.) are already fsync'd by the writer within ~1s of emission.
 	restart_tracker_restart(s_reboot_reason, s_reboot_source, s_reboot_flags);
 }
 
@@ -3669,6 +3681,7 @@ static void register_server_uris(void)
 	httpd_register_uri_handler(server, &csv_control_uri);
 	httpd_register_uri_handler(server, &sd_files_get_uri);
 	httpd_register_uri_handler(server, &sd_files_post_uri);
+	event_log_register_handlers(server);   // GET /event_log* (Task #24) -- before the catch-all wildcard
 	// NOTE: catch-all wildcard handler moved to after cert manager handlers to avoid shadowing
 }
 
