@@ -36,6 +36,7 @@
 #include "hw_config.h"
 #include "obd2_standard_pids.h"
 #include "autopid_config.h"
+#include "config_server.h"
 #define TAG "AUTO_PID_CFG"
 
 // Forward declaration (implemented in autopid.c)
@@ -1240,6 +1241,9 @@ autopid_config_t *load_autopid_config(void)
     parse_car_data_json(autopid_config, &pid_index);
 
     autopid_config->pid_count = total_pids;
+
+    // Point directly into device_config — no copy needed, it's constant for the session.
+    autopid_config->car_on_param = config_server_get_car_on_param();
 
     return autopid_config;
 }

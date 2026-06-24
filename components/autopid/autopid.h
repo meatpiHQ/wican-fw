@@ -203,6 +203,11 @@ typedef struct
     uint32_t cycle;     //To be removed when std pid gets its own period
     time_t last_successful_pid_time;  // Timestamp in seconds since epoch of last successful PID response
     SemaphoreHandle_t mutex;
+    // Name of the autopid parameter used as "car ON" indicator.
+    // When non-NULL and the named parameter reports a value >= 1.0, the sleep
+    // state machine suppresses sleep transition,
+    // NULL means the feature is disabled.
+    const char *car_on_param;
 } autopid_config_t;
 
 typedef struct 
@@ -224,6 +229,7 @@ esp_err_t autopid_set_protocol_number(int32_t protocol_value);
 esp_err_t autopid_get_protocol_number(int32_t *protocol_value);
 
 char *autopid_get_value_by_name(char* name);
+bool autopid_car_is_on(void);
 void autopid_publish_all_destinations(void);
 void autopid_app_reset_timer(void);
 

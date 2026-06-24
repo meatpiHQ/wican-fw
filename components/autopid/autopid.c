@@ -125,6 +125,26 @@ static cJSON *autopid_add_parameter_number_to_object(cJSON *object,
     return cJSON_AddNumberToObject(object, name, autopid_round_parameter_value((double)value));
 }
 
+/* Seconds since boot at which LDC_A was last seen > 1.0; -1 = never.
+ * int32_t is written and read atomically on the 32-bit Xtensa LX7 core,
+ * avoiding the torn-read race that a 64-bit µs timestamp would have. */
+static volatile int32_t s_last_car_on_valid_stamp = -1;
+
+static void autopid_pid_update_hook(parameter_t *param, float value)
+{
+    if (!autopid_config->car_on_param)
+        return;
+    if (param->name && strcmp(param->name, autopid_config->car_on_param) == 0 && value >= 0.5f)
+        s_last_car_on_valid_stamp = (int32_t)(esp_timer_get_time() / 1000000ULL);
+}
+
+bool autopid_car_is_on(void)
+{
+    int32_t t = s_last_car_on_valid_stamp;
+    return t >= 0 &&
+           ((int32_t)(esp_timer_get_time() / 1000000ULL) - t) < 10;
+}
+
 static bool autopid_prepare_parameter_value(parameter_t *param,
                                             double raw_value,
                                             float *out_value,
@@ -166,6 +186,7 @@ static bool autopid_prepare_parameter_value(parameter_t *param,
     }
 
     *out_value = (float)rounded_value;
+    autopid_pid_update_hook(param, *out_value);
     return true;
 }
 // strdup_psram
@@ -3806,7 +3827,7 @@ static void autopid_task(void *pvParameters)
         static bool pid_polling_paused_prev = false;
 
         dev_status_wait_for_bits(DEV_AUTOPID_ELM327_APP_BIT, portMAX_DELAY);
-        
+
         if (dev_status_is_sleeping())
         {
             ESP_LOGI(TAG, "Device is sleeping, waiting for wakeup");
