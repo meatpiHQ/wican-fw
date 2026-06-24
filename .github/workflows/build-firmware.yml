@@ -1,0 +1,42 @@
+# First-cut CI: build the obd_pro firmware image (ESP-IDF v5.5.3 / esp32s3)
+# and upload the flashable artifacts. Uses the committed sdkconfig as-is
+# (no set-target). To be refined later (matrix/other HW variants, releases, etc.).
+name: Build firmware
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - wican-pro
+    tags:
+      - 'v*'
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build (ESP-IDF v5.5.3, esp32s3)
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5.3
+          target: esp32s3
+          path: '.'
+          command: 'idf.py build'
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wican-obd_pro-firmware
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            build/*.bin
+            build/bootloader/bootloader.bin
+            build/partition_table/partition-table.bin
+            build/flasher_args.json
