@@ -61,7 +61,12 @@ _Static_assert(CSV_LOGGER_SOURCE_MAX == 8, "wide column source dim must match pr
 // writer task preempted and ran xQueueReceive(NULL) -> panic). Fixed by publishing the
 // queue before creating the task. This delay is now just a modest margin.
 #define CSV_LOGGER_DEFER_BOOT_MS    20000
-#define CSV_LOGGER_ROTATE_BYTES     (8 * 1024 * 1024)
+// One file per engine on/off cycle: the session already opens on ignition-on and closes on
+// ignition-off (3 s debounce), so the only thing that can split a single drive is this byte cap.
+// It is now a SAFETY BACKSTOP, not a routine split -- a realistic drive is tens of MB (~6-7 MB/h
+// at 10 Hz wide), far below this. Sized safely under the FAT32 single-file hard limit (4 GB) and
+// the 32-bit csv_file_bytes counter; if ever hit, rotation still closes+reopens cleanly as before.
+#define CSV_LOGGER_ROTATE_BYTES     (1024u * 1024u * 1024u)   /* 1 GiB backstop (~150 h of logging) */
 #define CSV_LOGGER_FLUSH_PERIOD_MS  1000
 #define CSV_LOGGER_IGNITION_POLL_MS 500
 // Ignition-off must persist this long before the session closes, so a voltage
@@ -145,6 +150,10 @@ static char           *csv_line_buf   = NULL;   // CSV_WIDE_LINE_BUF, INTERNAL R
 
 // Column provider (registered by autopid). Written once at boot before the writer runs.
 static csv_column_provider_t csv_col_provider = NULL;
+
+// Engine-running predicate (registered by poll_log). NULL = no provider -> gate degrades to the
+// voltage ignition gate. Written once at boot before the writer runs; read lock-free in the gate.
+static csv_engine_state_fn_t csv_engine_state_fn = NULL;
 
 // Distinct diagnostics -- do NOT overload csv_rows_dropped (which means "queue full"):
 static uint32_t csv_cols_unmatched = 0;   // WIDE record whose (source,name) isn't a column
@@ -462,6 +471,11 @@ void csv_logger_set_column_provider(csv_column_provider_t provider)
     csv_col_provider = provider;
 }
 
+void csv_logger_set_engine_state_fn(csv_engine_state_fn_t fn)
+{
+    csv_engine_state_fn = fn;
+}
+
 static void csv_logger_task(void *pvParameters)
 {
     csv_record_t rec;
@@ -471,6 +485,10 @@ static void csv_logger_task(void *pvParameters)
     wc_timer_t grid_timer = 0;            // WIDE fixed-rate grid tick
     bool ignition_on = false;
     bool ignition_off_pending = false;
+    // "Require engine running" gate (Stage 1), latched once at task start (config is constant per
+    // boot -- store_config reboots). When on AND an engine-state provider is registered (poll_log),
+    // AUTO logging also requires the engine to be running; otherwise it degrades to the voltage gate.
+    bool require_engine = (config_server_get_csv_require_engine() == 1);
     bool flush_pending = false;
 
     wc_timer_set(&flush_timer, CSV_LOGGER_FLUSH_PERIOD_MS);
@@ -528,9 +546,14 @@ static void csv_logger_task(void *pvParameters)
         // manual control), FORCE_OFF stops regardless of ignition, AUTO follows ignition.
         // NOTE: a session only OPENS when a record arrives, so a forced-on start logs only
         // while AutoPID records are actually flowing (csv_logger_record at autopid.c).
+        // Engine-running gate (Stage 1): with the switch on, AUTO logging needs the engine actually
+        // running (poll_log: ECU answering / not quiesced) IN ADDITION to the voltage ignition gate.
+        // The provider returns true when poll_log isn't the active mode, so this auto-degrades to the
+        // voltage gate when RPM isn't available. FORCE_ON/FORCE_OFF still win for bench use.
+        bool engine_ok = !require_engine || csv_engine_state_fn == NULL || csv_engine_state_fn();
         bool logging_active = (csv_manual_mode == CSV_MANUAL_ON)  ? true
                             : (csv_manual_mode == CSV_MANUAL_OFF) ? false
-                            : ignition_on;
+                            : (ignition_on && engine_ok);
 
         // Session close: logging stopped (ignition off / disabled) or SD was pulled.
         if (csv_session_active && (!logging_active || !sdcard_is_mounted()))

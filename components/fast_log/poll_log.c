@@ -86,6 +86,16 @@ static const char *TAG = "poll_log";
 #define POLLLOG_STATS_PERIOD_US  (3LL * 1000 * 1000)    /* emit turnaround stats every 3 s */
 #define POLLLOG_GUARD_STABLE_US  (15LL * 1000 * 1000)   /* clear crash-guard after 15 s stable */
 
+/* ---- Engine-off LISTEN_ONLY quiesce (Stage 1) -------------------------- */
+/* When the ECU stops answering (engine/key off), stop transmitting and flip the bus to
+ * LISTEN_ONLY so the dongle no longer keeps the vehicle CAN bus awake; resume on the first
+ * received frame (the car woke). All thresholds are CAN-derived -- no voltage dependency, so a
+ * parked battery sitting above sleep_volt can never trip or block it. */
+#define POLLLOG_ENGINE_OFF_MS    5000     /* no matched OK reply this long -> declare engine OFF */
+#define POLLLOG_FLIP_MIN_MS      2000     /* min dwell between mode flips (anti-thrash hysteresis) */
+#define POLLLOG_MAX_QUIESCE_MS   600000   /* 10 min: force NORMAL+repoll even with no frame (self-heal) */
+#define POLLLOG_RESUME_FRAMES    1        /* received frames in LISTEN_ONLY -> bus alive -> resume */
+
 /* ---- Hybrid broadcast capture (STAGED -- OFF by default) ----------------- */
 /* Flip POLLLOG_HYBRID to 1, then rebuild + OTA, to fold the passive broadcast decode back into
  * poll_log: every non-response frame poll_log already drains while waiting (and currently throws
@@ -139,6 +149,14 @@ static volatile bool     s_active = false;
 static volatile uint32_t s_cum_ok = 0, s_cum_timeout = 0, s_cum_txfail = 0;
 static volatile uint32_t s_win_ok = 0, s_win_timeout = 0, s_win_txfail = 0;
 static volatile float    s_win_rtt_avg_ms = 0, s_win_rtt_min_ms = 0, s_win_rtt_max_ms = 0, s_win_req_s = 0;
+
+/* Engine-off quiesce state (Stage 1). Single-writer (the poll task) aligned fields, same no-mutex
+ * contract as the status snapshot above; the getters below do plain reads. */
+static volatile bool    s_engine_running = true;  /* default true: non-poll modes never suppress logging */
+static volatile bool    s_quiesced       = false; /* true == bus currently flipped to LISTEN_ONLY */
+static volatile int64_t s_last_ok_us     = 0;     /* esp_timer stamp of last matched OK reply */
+static volatile int64_t s_last_rx_us     = 0;     /* esp_timer stamp of last received frame (any id) */
+static volatile int64_t s_last_flip_us   = 0;     /* dwell timer for POLLLOG_FLIP_MIN_MS */
 
 /*
  * Parse a polled-PID command string into request bytes.
@@ -353,6 +371,7 @@ static void polllog_poll_one(pid_data_t *pid)
             if (rtt > s_st.max_us) s_st.max_us = rtt;
             s_st.ok++;
             s_cum_ok++;
+            s_last_ok_us = esp_timer_get_time();   /* engine-running heartbeat for the quiesce gate */
             got = true;
             break;
         }
@@ -381,22 +400,82 @@ static void polllog_rx_task(void *arg)
 
     for (;;)
     {
-        /* One single-PID round-robin sweep over all configured polled PIDs. */
-        for (uint32_t i = 0; i < s_cfg->pid_count; i++)
-        {
-            polllog_poll_one(&s_cfg->pids[i]);
-            /* Phase B option (b): no per-PID delay. Every poll already yields inside
-             * polllog_poll_one -- the response-wait loop sleeps vTaskDelay(1) until the reply lands
-             * (the reply can't be queued before we send: we drain stale frames first), a timeout
-             * sleeps the full window, and the lone no-wait path (TX-queue-full) yields explicitly.
-             * So the idle task and the task watchdog stay fed without burning ~1 ms/PID of forced
-             * sleep -- reclaiming ~20% of the sweep time the measure-first run was leaving on the table. */
-        }
+        const int64_t now = esp_timer_get_time();
 
-        /* Calculated channels (Task #17): after a full round-robin sweep every polled source
-         * channel's p->value is freshest -- evaluate calc expressions over those and record each
-         * as source "CALC". No-op when none configured; takes autopid_lock itself (we hold none here). */
-        autopid_eval_calculated_channels();
+        if (s_engine_running)
+        {
+            /* One single-PID round-robin sweep over all configured polled PIDs. */
+            for (uint32_t i = 0; i < s_cfg->pid_count; i++)
+            {
+                polllog_poll_one(&s_cfg->pids[i]);
+                /* Phase B option (b): no per-PID delay. Every poll already yields inside
+                 * polllog_poll_one -- the response-wait loop sleeps vTaskDelay(1) until the reply lands
+                 * (the reply can't be queued before we send: we drain stale frames first), a timeout
+                 * sleeps the full window, and the lone no-wait path (TX-queue-full) yields explicitly.
+                 * So the idle task and the task watchdog stay fed without burning ~1 ms/PID of forced
+                 * sleep -- reclaiming ~20% of the sweep time the measure-first run was leaving on the table. */
+            }
+
+            /* Calculated channels (Task #17): after a full round-robin sweep every polled source
+             * channel's p->value is freshest -- evaluate calc expressions over those and record each
+             * as source "CALC". No-op when none configured; takes autopid_lock itself (we hold none here). */
+            autopid_eval_calculated_channels();
+
+            /* Engine-OFF detect: the ECU has not answered for POLLLOG_ENGINE_OFF_MS -> stop
+             * transmitting and flip the bus to LISTEN_ONLY so we stop holding the vehicle bus awake.
+             * The flip MUST bracket can_set_silent() with disable/enable -- it is a no-op while ON_BUS. */
+            if (s_last_ok_us != 0 &&
+                (now - s_last_ok_us)   > (int64_t)POLLLOG_ENGINE_OFF_MS * 1000 &&
+                (now - s_last_flip_us) > (int64_t)POLLLOG_FLIP_MIN_MS   * 1000)
+            {
+                can_disable();
+                can_set_silent(1);
+                can_enable();
+                if (can_is_enabled())
+                {
+                    s_quiesced       = true;
+                    s_engine_running = false;
+                    s_last_rx_us     = now;   /* arm the idle clock from the flip instant */
+                    s_last_flip_us   = now;
+                    ESP_LOGI(TAG, "ECU silent %dms -> LISTEN_ONLY quiesce (stop holding bus awake)",
+                             POLLLOG_ENGINE_OFF_MS);
+                }
+                /* if !can_is_enabled(): an OTA/sleep fence disabled the bus under us -> just fall
+                 * through; the next iteration re-checks and we never spin against a dead driver. */
+            }
+        }
+        else
+        {
+            /* QUIESCED (LISTEN_ONLY): never transmit. Drain RX non-blocking; the FIRST frame of any
+             * id means the car woke. Resume to NORMAL (same mandatory disable/silent/enable bracket),
+             * or after MAX_QUIESCE as a self-heal so a stuck detector can never strand the logger. */
+            twai_message_t m;
+            int got = 0;
+            while (can_receive(&m, 0) == ESP_OK)
+            {
+                s_last_rx_us = now;
+                got++;
+            }
+
+            bool resume = (got >= POLLLOG_RESUME_FRAMES) ||
+                          ((now - s_last_flip_us) > (int64_t)POLLLOG_MAX_QUIESCE_MS * 1000);
+
+            if (resume && (now - s_last_flip_us) > (int64_t)POLLLOG_FLIP_MIN_MS * 1000)
+            {
+                can_disable();
+                can_set_silent(0);
+                can_enable();
+                if (can_is_enabled())
+                {
+                    s_quiesced       = false;
+                    s_engine_running = true;
+                    s_last_ok_us     = now;   /* reset the off-debounce so it can't instantly re-fire */
+                    s_last_flip_us   = now;
+                    ESP_LOGI(TAG, "bus alive (%d frame[s]) -> NORMAL, resume polling", got);
+                }
+            }
+            vTaskDelay(pdMS_TO_TICKS(20));   /* ~20 ms quiesce cadence: feeds WDT/idle, fast resume */
+        }
 
         if (!guard_cleared && (esp_timer_get_time() - start_us) > POLLLOG_GUARD_STABLE_US)
         {
@@ -405,7 +484,6 @@ static void polllog_rx_task(void *arg)
             ESP_LOGI(TAG, "poll_log stable; crash-guard cleared");
         }
 
-        const int64_t now = esp_timer_get_time();
         if (now - stats_t > POLLLOG_STATS_PERIOD_US)
         {
             const int total = s_st.ok + s_st.timeout + s_st.txfail;
@@ -493,8 +571,37 @@ void poll_log_init(char *id, uint32_t log_period)
         return;
     }
 
+    /* Let the CSV logger gate on engine-running via our CAN-derived signal. Registration (not a
+     * direct include) avoids a circular component dependency: poll_log already depends on
+     * csv_logger, not the reverse. */
+    csv_logger_set_engine_state_fn(poll_log_engine_running);
+
     ESP_LOGI(TAG, "Phase B (measure-first) up: %lu polled PID(s), NORMAL/on-bus, single-PID round-robin",
              (unsigned long)s_cfg->pid_count);
+}
+
+/* Engine/quiesce state for the CSV logging gate, the Route-B sleep sensor, and /poll_status.
+ * Plain reads of the poll task's aligned fields (no mutex, same contract as the status snapshot).
+ * When POLL_LOG is not the active mode these report "running / not idle" so other modes (FAST_LOG,
+ * bench) and any stale read never suppress logging or wrongly trigger sleep. */
+bool poll_log_engine_running(void)
+{
+    return s_active ? s_engine_running : true;
+}
+
+bool poll_log_quiesced(void)
+{
+    return s_active ? s_quiesced : false;
+}
+
+uint32_t poll_log_bus_idle_ms(void)
+{
+    if (!s_active || s_engine_running)
+        return UINT32_MAX;   /* not idle while actively polling or outside POLL_LOG */
+    int64_t d = (esp_timer_get_time() - s_last_rx_us) / 1000;
+    if (d < 0) d = 0;
+    if (d > (int64_t)UINT32_MAX) d = UINT32_MAX;
+    return (uint32_t)d;
 }
 
 /*
@@ -506,17 +613,21 @@ void poll_log_init(char *id, uint32_t log_period)
  */
 char *poll_log_get_status_json(void)
 {
-    char *buf = malloc(256);
+    char *buf = malloc(320);
     if (buf == NULL)
         return NULL;
-    snprintf(buf, 256,
+    snprintf(buf, 320,
              "{\"active\":%s,\"ok\":%u,\"timeout\":%u,\"txfail\":%u,"
              "\"rtt_avg_ms\":%.2f,\"rtt_min_ms\":%.2f,\"rtt_max_ms\":%.2f,\"req_s\":%.1f,"
-             "\"win_ok\":%u,\"win_timeout\":%u,\"win_txfail\":%u}",
+             "\"win_ok\":%u,\"win_timeout\":%u,\"win_txfail\":%u,"
+             "\"engine_running\":%s,\"quiesced\":%s,\"bus_idle_ms\":%u}",
              s_active ? "true" : "false",
              (unsigned)s_cum_ok, (unsigned)s_cum_timeout, (unsigned)s_cum_txfail,
              (double)s_win_rtt_avg_ms, (double)s_win_rtt_min_ms, (double)s_win_rtt_max_ms,
              (double)s_win_req_s,
-             (unsigned)s_win_ok, (unsigned)s_win_timeout, (unsigned)s_win_txfail);
+             (unsigned)s_win_ok, (unsigned)s_win_timeout, (unsigned)s_win_txfail,
+             poll_log_engine_running() ? "true" : "false",
+             s_quiesced ? "true" : "false",
+             (unsigned)poll_log_bus_idle_ms());
     return buf;
 }

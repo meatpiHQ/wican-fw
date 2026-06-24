@@ -170,6 +170,7 @@ typedef struct _device_config
 	char log_period[16];
 	char csv_grid_mode[16];   // wide time grid: "event" | "fixed"
 	char csv_grid_hz[16];     // wide fixed-rate grid frequency, 1..50 Hz
+	char csv_require_engine[16]; // gate CSV logging on engine running (ECU answering): "enable" | "disable"
 	char imu_threshold[16];
 	bool debug_enabled;
 }device_config_t;
@@ -252,6 +253,8 @@ int8_t config_server_get_log_period(uint32_t *log_period);
 // and returns 1, or -1 (leaves *hz untouched) on a bad value.
 int8_t config_server_get_csv_grid_mode(void);
 int8_t config_server_get_csv_grid_hz(uint32_t *hz);
+// Engine-running CSV gate (default ON): 1=enable, 0=disable.
+int8_t config_server_get_csv_require_engine(void);
 log_storage_t config_server_get_log_storage(void);
 log_filesystem_t config_server_get_log_filesystem(void);
 int8_t config_server_get_ap_auto_disable(void);

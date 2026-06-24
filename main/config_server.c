@@ -238,7 +238,7 @@ const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"we
 										\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\
 								\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"elm327_udp_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\
 										\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\",\"mqtt_security\":\"none\",\"mqtt_cert_set\": \"default\",\"mqtt_skip_cn\":\"disable\",\
-										\"logger_status\":\"disable\",\"csv_log\":\"disable\",\"log_filesystem\":\"littlefs\",\"log_storage\":\"sdcard\",\"log_period\":\"10\",\"csv_grid_mode\":\"fixed\",\"csv_grid_hz\":\"10\"}";
+										\"logger_status\":\"disable\",\"csv_log\":\"disable\",\"log_filesystem\":\"littlefs\",\"log_storage\":\"sdcard\",\"log_period\":\"10\",\"csv_grid_mode\":\"fixed\",\"csv_grid_hz\":\"10\",\"csv_require_engine\":\"enable\"}";
 
 // const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\", \"ap_auto_disable\": \"disable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
 // const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\", \"ap_auto_disable\": \"disable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"periodic_wakeup\":\"disable\",\"wakeup_interval\":\"5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
@@ -1834,6 +1834,7 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	cJSON_AddStringToObject(root, "log_period", device_config.log_period);
 	cJSON_AddStringToObject(root, "csv_grid_mode", device_config.csv_grid_mode);
 	cJSON_AddStringToObject(root, "csv_grid_hz", device_config.csv_grid_hz);
+	cJSON_AddStringToObject(root, "csv_require_engine", device_config.csv_require_engine);
 	cJSON_AddStringToObject(root, "log_storage", device_config.log_storage);
 	cJSON_AddStringToObject(root, "imu_threshold", device_config.imu_threshold);
 	cJSON_AddStringToObject(root, "elm327_udp_log", device_config.elm327_udp_log);
@@ -3405,6 +3406,24 @@ static void config_server_load_cfg(char *cfg)
 	ESP_LOGI(TAG, "device_config.csv_grid_hz: %s", device_config.csv_grid_hz);
 	//*****
 
+	//***** Engine-running CSV gate (Stage 1): anything not "enable"/"disable" coerces to "enable"
+	//      (default ON). An absent key (old NVS / first upgrade boot) also defaults ON.
+	key = cJSON_GetObjectItem(root,"csv_require_engine");
+	if(key == 0 || key->valuestring == NULL)
+	{
+		strlcpy(device_config.csv_require_engine, "enable", sizeof(device_config.csv_require_engine));
+	}
+	else
+	{
+		strlcpy(device_config.csv_require_engine, key->valuestring, sizeof(device_config.csv_require_engine));
+	}
+	if(strcmp(device_config.csv_require_engine, "enable") != 0 && strcmp(device_config.csv_require_engine, "disable") != 0)
+	{
+		strlcpy(device_config.csv_require_engine, "enable", sizeof(device_config.csv_require_engine));
+	}
+	ESP_LOGI(TAG, "device_config.csv_require_engine: %s", device_config.csv_require_engine);
+	//*****
+
 	key = cJSON_GetObjectItem(root,"ap_auto_disable");
 	if(key == 0)
 	{
@@ -4379,6 +4398,16 @@ int8_t config_server_get_csv_grid_mode(void)
 		return 0;
 	}
 	return -1;
+}
+
+int8_t config_server_get_csv_require_engine(void)
+{
+	// Default ON: "disable" turns the gate off; "enable" or any other value keeps it on.
+	if(strcmp(device_config.csv_require_engine, "disable") == 0)
+	{
+		return 0;
+	}
+	return 1;
 }
 
 int8_t config_server_get_csv_grid_hz(uint32_t *hz)

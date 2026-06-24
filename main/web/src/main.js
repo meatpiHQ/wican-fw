@@ -3740,6 +3740,8 @@ function applyLoggerXor() {
     var wideOn = csvShow;
     if (gmRow) gmRow.style.display = wideOn ? "" : "none";
     if (hzRow) hzRow.style.display = (wideOn && gmEl && gmEl.value === "fixed") ? "" : "none";
+    var reRow = document.getElementById("csv_require_engine_row");
+    if (reRow) reRow.style.display = wideOn ? "" : "none";
 }
 
 async function postConfig() {
@@ -3870,6 +3872,7 @@ async function postConfig() {
     obj["log_period"] = document.getElementById("log_period").value;
     obj["csv_grid_mode"] = document.getElementById("csv_grid_mode").value;
     obj["csv_grid_hz"] = document.getElementById("csv_grid_hz").value;
+    obj["csv_require_engine"] = document.getElementById("csv_require_engine").value;
     obj["imu_threshold"] = document.getElementById("imu_threshold").value;
     obj["elm327_udp_log"] = document.getElementById("elm327_udp_log").value;
 
@@ -4425,6 +4428,7 @@ xhttp.onload = async function() {
         document.getElementById("csv_grid_mode").value = (obj.csv_grid_mode === "event") ? "event" : "fixed";
         var _hz = parseInt(obj.csv_grid_hz, 10);
         document.getElementById("csv_grid_hz").value = (_hz >= 1 && _hz <= 50) ? _hz : 10;
+        document.getElementById("csv_require_engine").value = (obj.csv_require_engine === "disable") ? "disable" : "enable";
         applyLoggerXor();
 
         if (obj.log_filesystem === "fatfs") {
