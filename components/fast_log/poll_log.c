@@ -92,10 +92,11 @@ static const char *TAG = "poll_log";
  * LISTEN_ONLY so the dongle no longer keeps the vehicle CAN bus awake; resume on the first
  * received frame (the car woke). All thresholds are CAN-derived -- no voltage dependency, so a
  * parked battery sitting above sleep_volt can never trip or block it. */
-#define POLLLOG_ENGINE_OFF_MS    5000     /* no matched OK reply this long -> declare engine OFF */
+#define POLLLOG_ENGINE_OFF_MS    5000     /* confirmed-running: no OK this long -> engine OFF (quiesce) */
+#define POLLLOG_PROBE_MS         2000     /* probing (no OK yet, boot or resume): re-quiesce after this -> kills the dead-bus spin */
 #define POLLLOG_FLIP_MIN_MS      2000     /* min dwell between mode flips (anti-thrash hysteresis) */
 #define POLLLOG_MAX_QUIESCE_MS   600000   /* 10 min: force NORMAL+repoll even with no frame (self-heal) */
-#define POLLLOG_RESUME_FRAMES    1        /* received frames in LISTEN_ONLY -> bus alive -> resume */
+#define POLLLOG_RESUME_FRAMES    1        /* an RX frame triggers a PROBE-resume; confirmed only by a real OK */
 
 /* ---- Hybrid broadcast capture (STAGED -- OFF by default) ----------------- */
 /* Flip POLLLOG_HYBRID to 1, then rebuild + OTA, to fold the passive broadcast decode back into
@@ -155,8 +156,9 @@ static volatile float    s_win_rtt_avg_ms = 0, s_win_rtt_min_ms = 0, s_win_rtt_m
  * contract as the status snapshot above; the getters below do plain reads. */
 static volatile bool    s_engine_running = true;  /* default true: non-poll modes never suppress logging */
 static volatile bool    s_quiesced       = false; /* true == bus currently flipped to LISTEN_ONLY */
-static volatile int64_t s_last_ok_us     = 0;     /* esp_timer stamp of last matched OK reply */
-static volatile bool    s_start_logged   = false; /* ENGINE_START emitted once for this power-on run */
+static volatile int64_t s_last_ok_us     = 0;     /* esp_timer stamp of last matched OK reply (real ECU answer) */
+static volatile bool    s_confirmed      = false; /* got an OK in the CURRENT NORMAL session -> engine truly running */
+static volatile int64_t s_norm_start_us  = 0;     /* when the current NORMAL session began (boot/resume) = probe-window ref */
 static volatile int64_t s_last_rx_us     = 0;     /* esp_timer stamp of last received frame (any id) */
 static volatile int64_t s_last_flip_us   = 0;     /* dwell timer for POLLLOG_FLIP_MIN_MS */
 
@@ -374,6 +376,14 @@ static void polllog_poll_one(pid_data_t *pid)
             s_st.ok++;
             s_cum_ok++;
             s_last_ok_us = esp_timer_get_time();   /* engine-running heartbeat for the quiesce gate */
+            if (!s_confirmed)
+            {
+                /* First real ECU answer of this NORMAL session => engine confirmed running. A bus frame
+                 * alone only PROBES (flips us to NORMAL); the OK is what confirms, so a stray wind-down
+                 * frame can never log a false start. Exactly one ENGINE_START per confirmed run. */
+                s_confirmed = true;
+                event_log_emit(EVL_ENGINE_START, "engine running (ECU answering)");
+            }
             got = true;
             break;
         }
@@ -396,6 +406,7 @@ static void polllog_rx_task(void *arg)
     s_active = true;   /* GET /poll_status now reports live counters */
 
     const int64_t start_us = esp_timer_get_time();
+    s_norm_start_us = start_us;   /* boot enters NORMAL probing; arm the probe/off-detect window from t=0 */
     bool guard_cleared = false;
     int64_t stats_t = start_us;
     polllog_stats_reset();
@@ -423,23 +434,21 @@ static void polllog_rx_task(void *arg)
              * as source "CALC". No-op when none configured; takes autopid_lock itself (we hold none here). */
             autopid_eval_calculated_channels();
 
-            /* First confirmed run after power-on: poll_log assumes s_engine_running=true at boot, so a
-             * normal engine start crosses no quiesce->resume edge and would otherwise log no START.
-             * Emit ENGINE_START once when the ECU first actually answers (s_last_ok_us set), so every
-             * powered run with the engine running is bracketed by a START -- not just restarts. */
-            if (!s_start_logged && s_last_ok_us != 0)
-            {
-                s_start_logged = true;
-                event_log_emit(EVL_ENGINE_START, "engine running (ECU answering)");
-            }
-
-            /* Engine-OFF detect: the ECU has not answered for POLLLOG_ENGINE_OFF_MS -> stop
-             * transmitting and flip the bus to LISTEN_ONLY so we stop holding the vehicle bus awake.
+            /* Quiesce decision -> flip the bus to LISTEN_ONLY so we stop holding it awake. Two cases,
+             * so we never spin-transmit onto a dead bus:
+             *   - CONFIRMED running (had an OK this session): quiesce when the ECU is silent for
+             *     ENGINE_OFF_MS -> log ENGINE_STOP.
+             *   - PROBING (booted, or resumed on a bus frame, but no OK yet): re-quiesce after the short
+             *     PROBE_MS window. This kills a boot-with-engine-off (or a stray wind-down frame) that
+             *     would otherwise transmit failed requests forever (the old 100k+ txfail spin). No
+             *     ENGINE_STOP is logged -- the engine was never confirmed running.
              * The flip MUST bracket can_set_silent() with disable/enable -- it is a no-op while ON_BUS. */
-            if (s_last_ok_us != 0 &&
-                (now - s_last_ok_us)   > (int64_t)POLLLOG_ENGINE_OFF_MS * 1000 &&
-                (now - s_last_flip_us) > (int64_t)POLLLOG_FLIP_MIN_MS   * 1000)
+            bool engine_off = s_confirmed
+                ? ((now - s_last_ok_us)    > (int64_t)POLLLOG_ENGINE_OFF_MS * 1000)
+                : ((now - s_norm_start_us) > (int64_t)POLLLOG_PROBE_MS      * 1000);
+            if (engine_off && (now - s_last_flip_us) > (int64_t)POLLLOG_FLIP_MIN_MS * 1000)
             {
+                bool was_confirmed = s_confirmed;
                 can_disable();
                 can_set_silent(1);
                 can_enable();
@@ -447,14 +456,22 @@ static void polllog_rx_task(void *arg)
                 {
                     s_quiesced       = true;
                     s_engine_running = false;
+                    s_confirmed      = false;
                     s_last_rx_us     = now;   /* arm the idle clock from the flip instant */
                     s_last_flip_us   = now;
-                    ESP_LOGI(TAG, "ECU silent %dms -> LISTEN_ONLY quiesce (stop holding bus awake)",
-                             POLLLOG_ENGINE_OFF_MS);
-                    /* Operational event (Task #24): once per running->off transition. Non-blocking
-                     * enqueue only -- this is the sole-consumer poll task; no SD I/O here. */
-                    event_log_emit(EVL_ENGINE_STOP, "ECU silent %dms -> quiesce (LISTEN_ONLY)",
-                                   POLLLOG_ENGINE_OFF_MS);
+                    if (was_confirmed)
+                    {
+                        ESP_LOGI(TAG, "ECU silent %dms -> LISTEN_ONLY quiesce (stop holding bus awake)",
+                                 POLLLOG_ENGINE_OFF_MS);
+                        /* Operational event (Task #24): once per confirmed running->off transition. */
+                        event_log_emit(EVL_ENGINE_STOP, "ECU silent %dms -> quiesce (LISTEN_ONLY)",
+                                       POLLLOG_ENGINE_OFF_MS);
+                    }
+                    else
+                    {
+                        ESP_LOGI(TAG, "no ECU reply within %dms -> LISTEN_ONLY quiesce (engine off, probe)",
+                                 POLLLOG_PROBE_MS);
+                    }
                 }
                 /* if !can_is_enabled(): an OTA/sleep fence disabled the bus under us -> just fall
                  * through; the next iteration re-checks and we never spin against a dead driver. */
@@ -485,12 +502,12 @@ static void polllog_rx_task(void *arg)
                 {
                     s_quiesced       = false;
                     s_engine_running = true;
-                    s_start_logged   = true;  /* this resume logs ENGINE_START; don't re-fire initial-confirm */
-                    s_last_ok_us     = now;   /* reset the off-debounce so it can't instantly re-fire */
+                    s_confirmed      = false; /* PROBE: a frame woke us, but require a real OK to confirm running */
+                    s_norm_start_us  = now;   /* start the probe window (re-quiesce after PROBE_MS if no OK) */
                     s_last_flip_us   = now;
-                    ESP_LOGI(TAG, "bus alive (%d frame[s]) -> NORMAL, resume polling", got);
-                    /* Operational event (Task #24): once per off->running transition. Non-blocking. */
-                    event_log_emit(EVL_ENGINE_START, "bus alive (%d frame[s]) -> resume polling", got);
+                    ESP_LOGI(TAG, "bus alive (%d frame[s]) -> NORMAL, probing for ECU", got);
+                    /* ENGINE_START is emitted on the first OK (polllog_poll_one), NOT here: a stray
+                     * wind-down frame that yields no OK is a false alarm and must not log a start. */
                 }
             }
             vTaskDelay(pdMS_TO_TICKS(20));   /* ~20 ms quiesce cadence: feeds WDT/idle, fast resume */
@@ -605,7 +622,11 @@ void poll_log_init(char *id, uint32_t log_period)
  * bench) and any stale read never suppress logging or wrongly trigger sleep. */
 bool poll_log_engine_running(void)
 {
-    return s_active ? s_engine_running : true;
+    /* "confirmed running" (the ECU answered a poll this session), NOT merely in NORMAL mode: during the
+     * ~2s probe after a boot or a stray-frame resume the ECU hasn't replied yet, so this stays false.
+     * That keeps the csv require-engine gate closed during a probe AND makes /poll_status honest -- a
+     * boot-with-engine-off now reports engine_running:false instead of the old misleading true. */
+    return s_active ? s_confirmed : true;
 }
 
 bool poll_log_quiesced(void)
