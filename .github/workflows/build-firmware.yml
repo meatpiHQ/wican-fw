@@ -1,6 +1,7 @@
-# First-cut CI: build the obd_pro firmware image (ESP-IDF v5.5.3 / esp32s3)
-# and upload the flashable artifacts. Uses the committed sdkconfig as-is
-# (no set-target). To be refined later (matrix/other HW variants, releases, etc.).
+# CI: build the obd_pro firmware image (ESP-IDF v5.5.3 / esp32s3) and upload the
+# flashable artifacts. On a v* tag, also publish a GitHub Release with auto-generated
+# notes and the firmware attached. Uses the committed sdkconfig as-is (no set-target).
+# First-cut; refine later (matrix/other HW variants, signed images, etc.).
 name: Build firmware
 
 on:
@@ -29,14 +30,42 @@ jobs:
           path: '.'
           command: 'idf.py build'
 
+      - name: Stage flashable artifacts
+        run: |
+          set -e
+          mkdir -p dist
+          # App image (also the OTA image: POST to /upload/ota.bin) + ota_data + the
+          # bootloader/partition-table for a full serial flash + the offsets file.
+          cp build/*.bin dist/
+          cp build/bootloader/bootloader.bin dist/
+          cp build/partition_table/partition-table.bin dist/
+          cp build/flasher_args.json dist/
+          echo "Staged:"; ls -l dist
+
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
           name: wican-obd_pro-firmware
           if-no-files-found: error
           retention-days: 14
-          path: |
-            build/*.bin
-            build/bootloader/bootloader.bin
-            build/partition_table/partition-table.bin
-            build/flasher_args.json
+          path: dist/**
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create the release + upload assets
+    steps:
+      - name: Download built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wican-obd_pro-firmware
+          path: dist
+
+      - name: Publish GitHub Release (auto-generated notes + firmware)
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true        # notes from merged PRs/commits since the last tag
+          fail_on_unmatched_files: true
+          files: dist/*
