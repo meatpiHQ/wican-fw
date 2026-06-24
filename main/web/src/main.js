@@ -2579,6 +2579,9 @@ function restoreCANFLTRow(id, n, p, pi, s, b, e, c) {
 
 // ===== SD-card file browser (Task #8) =====
 var filesCwd = '';   // current directory, relative to /sdcard
+var filesSortKey = 'mtime';   // 'name' | 'size' | 'type' | 'mtime'
+var filesSortDir = 'desc';    // 'asc' | 'desc' (default: newest first)
+// Selection lives in the DOM checkboxes (see filesSelectedPaths) — single source of truth.
 
 function filesFmtSize(b) {
     if (b == null) return '';
@@ -2586,6 +2589,15 @@ function filesFmtSize(b) {
     if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
     if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
     return (b / 1073741824).toFixed(2) + ' GB';
+}
+
+function filesFmtDate(mtime) {
+    if (!mtime) return '';
+    var d = new Date(mtime * 1000);
+    if (isNaN(d.getTime())) return '';
+    function p(n) { return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
+           ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
 }
 
 function filesJoin(dir, name) { return dir ? (dir + '/' + name) : name; }
@@ -2620,7 +2632,7 @@ function filesLoad(rel) {
     filesApi('GET', 'op=list&path=' + encodeURIComponent(filesCwd), function(ok, data) {
         if (!ok || !data) {
             var b = document.getElementById('files_body');
-            if (b) b.innerHTML = '<tr><td colspan=4 style="text-align:center;color:#b91c1c;padding:8px">Failed to load folder</td></tr>';
+            if (b) b.innerHTML = '<tr><td colspan=6 style="text-align:center;color:#b91c1c;padding:8px">Failed to load folder</td></tr>';
             return;
         }
         filesRender(data);
@@ -2632,31 +2644,89 @@ function filesLoad(rel) {
     });
 }
 
-function filesRender(data) {
+// Update the sortable header labels (Name/Size/Modified/Type) with the active arrow.
+function filesUpdateSortHeaders() {
+    var keys = ['name', 'size', 'mtime', 'type'];
+    var labels = { name: 'Name', size: 'Size', mtime: 'Modified', type: 'Type' };
+    keys.forEach(function(k) {
+        var th = document.getElementById('files_th_' + k);
+        if (!th) return;
+        th.textContent = labels[k] + (filesSortKey === k ? (filesSortDir === 'asc' ? ' ▲' : ' ▼') : '');
+    });
+}
+
+// Header click handler: toggle direction on the active column, else switch column.
+function filesSortBy(key) {
+    if (filesSortKey === key) {
+        filesSortDir = (filesSortDir === 'asc') ? 'desc' : 'asc';
+    } else {
+        filesSortKey = key;
+        filesSortDir = (key === 'mtime') ? 'desc' : 'asc';
+    }
+    // Preserve the current checkbox selection across the sort re-render.
+    if (filesLastData) filesRender(filesLastData, filesSelectedPaths());
+}
+
+var filesLastData = null;
+
+function filesRender(data, keepSel) {
+    filesLastData = data;
+    // The DOM checkboxes are the sole source of truth for selection. keepSel is an
+    // optional array of rel-paths whose checkbox should stay ticked across a re-render
+    // (used by sort, which rebuilds the rows); a fresh folder load passes nothing.
+    var keep = {};
+    if (keepSel) { for (var ki = 0; ki < keepSel.length; ki++) { keep[keepSel[ki]] = true; } }
     document.getElementById('files_path').textContent = '/sdcard' + (data.path ? '/' + data.path : '');
     var body = document.getElementById('files_body');
     body.innerHTML = '';
+    var selAll = document.getElementById('files_selall');
+    if (selAll) selAll.checked = false;
+    filesUpdateSortHeaders();
     if (data.sd_mounted === false) {
-        body.innerHTML = '<tr><td colspan=4 style="text-align:center;color:#b91c1c;padding:8px">SD card not mounted</td></tr>';
+        body.innerHTML = '<tr><td colspan=6 style="text-align:center;color:#b91c1c;padding:8px">SD card not mounted</td></tr>';
         return;
     }
     var cell = 'border:1px solid #e2e8f0;padding:6px';
     if (filesCwd) {
         var up = document.createElement('tr');
-        var uc = document.createElement('td'); uc.colSpan = 4; uc.style.cssText = cell;
+        var uc = document.createElement('td'); uc.colSpan = 6; uc.style.cssText = cell;
         var ua = document.createElement('a'); ua.href = '#'; ua.textContent = '.. (up one level)';
         ua.onclick = function(e) { e.preventDefault(); filesLoad(filesParent(filesCwd)); };
         uc.appendChild(ua); up.appendChild(uc); body.appendChild(up);
     }
     var entries = (data.entries || []).slice();
+    var dir = (filesSortDir === 'asc') ? 1 : -1;
+    function cmp(a, b) {
+        var r = 0;
+        if (filesSortKey === 'size') {
+            r = (a.size || 0) - (b.size || 0);
+        } else if (filesSortKey === 'mtime') {
+            r = (a.mtime || 0) - (b.mtime || 0);
+        } else if (filesSortKey === 'type') {
+            r = (a.type || '').localeCompare(b.type || '');
+        } else {
+            r = a.name.localeCompare(b.name);
+        }
+        if (r === 0) r = a.name.localeCompare(b.name);
+        return r * dir;
+    }
     entries.sort(function(a, b) {
+        // Keep directories grouped first; sort chosen key within each group.
         if ((a.type === 'dir') !== (b.type === 'dir')) return a.type === 'dir' ? -1 : 1;
-        return a.name.localeCompare(b.name);
+        return cmp(a, b);
     });
     entries.forEach(function(en) {
         var isDir = en.type === 'dir';
         var rel = filesJoin(filesCwd, en.name);
         var tr = document.createElement('tr');
+
+        var selTd = document.createElement('td'); selTd.style.cssText = cell;
+        if (!isDir) {
+            var cb = document.createElement('input'); cb.type = 'checkbox';
+            cb.className = 'files_sel_cb'; cb.value = rel; cb.checked = !!keep[rel];
+            selTd.appendChild(cb);
+        }
+        tr.appendChild(selTd);
 
         var nameTd = document.createElement('td'); nameTd.style.cssText = cell;
         if (isDir) {
@@ -2670,6 +2740,9 @@ function filesRender(data) {
 
         var sizeTd = document.createElement('td'); sizeTd.style.cssText = cell;
         sizeTd.textContent = isDir ? '' : filesFmtSize(en.size); tr.appendChild(sizeTd);
+
+        var dateTd = document.createElement('td'); dateTd.style.cssText = cell;
+        dateTd.textContent = filesFmtDate(en.mtime); tr.appendChild(dateTd);
 
         var typeTd = document.createElement('td'); typeTd.style.cssText = cell;
         typeTd.textContent = isDir ? 'folder' : 'file'; tr.appendChild(typeTd);
@@ -2694,9 +2767,59 @@ function filesRender(data) {
     });
     if (!entries.length) {
         var er = document.createElement('tr'); var ec = document.createElement('td');
-        ec.colSpan = 4; ec.style.cssText = 'text-align:center;color:#555;padding:8px'; ec.textContent = '(empty)';
+        ec.colSpan = 6; ec.style.cssText = 'text-align:center;color:#555;padding:8px'; ec.textContent = '(empty)';
         er.appendChild(ec); body.appendChild(er);
     }
+}
+
+// Header "select all" checkbox: toggle every currently-listed file checkbox.
+function filesToggleAll(cb) {
+    var boxes = document.getElementsByClassName('files_sel_cb');
+    for (var i = 0; i < boxes.length; i++) {
+        boxes[i].checked = cb.checked;
+    }
+}
+
+// Collect the relative paths of all currently-checked file rows.
+function filesSelectedPaths() {
+    var out = [];
+    var boxes = document.getElementsByClassName('files_sel_cb');
+    for (var i = 0; i < boxes.length; i++) {
+        if (boxes[i].checked) out.push(boxes[i].value);
+    }
+    return out;
+}
+
+function filesDownloadSelected() {
+    var paths = filesSelectedPaths();
+    if (!paths.length) { alert('No files selected.'); return; }
+    // No zip endpoint: trigger each single-file download with a small stagger.
+    var i = 0;
+    function next() {
+        if (i >= paths.length) return;
+        var rel = paths[i++];
+        var name = rel.indexOf('/') >= 0 ? rel.substring(rel.lastIndexOf('/') + 1) : rel;
+        filesDownload(rel, name);
+        setTimeout(next, 400);
+    }
+    next();
+}
+
+function filesDeleteSelected() {
+    var paths = filesSelectedPaths();
+    if (!paths.length) { alert('No files selected.'); return; }
+    if (!confirm('Delete ' + paths.length + ' selected file(s)?')) return;
+    var remaining = paths.length;
+    var failures = [];
+    paths.forEach(function(rel) {
+        filesApi('POST', JSON.stringify({ op: 'delete', path: rel }), function(ok, data, st) {
+            if (!ok) failures.push(rel + ': ' + ((data && data.error) || st));
+            if (--remaining === 0) {
+                if (failures.length) alert('Some deletes failed:\n' + failures.join('\n'));
+                filesLoad(filesCwd);
+            }
+        });
+    });
 }
 
 function filesDownload(rel, name) {
