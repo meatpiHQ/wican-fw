@@ -51,6 +51,7 @@
 #include "slcan.h"
 #include "can.h"
 #include "ncflash_fastread.h"
+#include "ncflash_fastwrite.h"
 #include "ble.h"
 #include "gvret.h"
 #include "sleep_mode.h"
@@ -291,6 +292,11 @@ static void can_tx_task(void *pvParameters)
 					{
 						/* NC Flash autonomous in-firmware ROM read */
 						ncflash_fast_read(msg_ptr, temp_len, &xMsg_Tx_Queue);
+					}
+					else if(ncflash_is_fastwrite_cmd(msg_ptr, temp_len))
+					{
+						/* NC Flash SD-staged in-firmware ROM write (Option B) */
+						ncflash_fast_write(msg_ptr, temp_len, &xMsg_Tx_Queue);
 					}
 					else
 					{

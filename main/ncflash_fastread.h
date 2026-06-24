@@ -31,7 +31,7 @@
  * the host can confirm exactly which fast-read build is live before a real read.
  * Bump the version string whenever the read loop's wire behaviour changes. */
 #define NCFLASH_FASTREAD_PING_ADDR 0xFFFFFFFEu
-#define NCFLASH_FASTREAD_VERSION   "NCFRv4\n"   /* v4: + sync preamble before ROM */
+#define NCFLASH_FASTREAD_VERSION   "NCFRv5\n"   /* v5: + clean-teardown (Part-C #21) + live SD-staged fastwrite */
 
 /* Sync preamble streamed once, right after CAN forwarding is suspended and
  * before the first ROM byte. Any CAN frames already queued/in-flight toward the

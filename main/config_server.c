@@ -2249,6 +2249,212 @@ static esp_err_t upload_car_data_handler(httpd_req_t *req)
 	return ESP_OK;
 }
 
+/* ---- NC Flash SD-staged flash upload: POST /upload/sd/<name> --------------
+ * Stores a staged flash image (checksum-corrected ROM ++ SBL, produced host-side
+ * by wican_sd_package.py) to /sdcard/roms/<name> over reliable TCP, then reports
+ * {bytes_written, crc32}. The host (wican_sd_upload.py) verifies that CRC before
+ * it will trigger a flash, so a corrupt upload can never reach the ECU. This is
+ * additive and NON-destructive: no CAN/BLE disable, no reboot. Writes to a .part
+ * temp then atomically renames so a half-upload never looks complete. */
+#define SD_ROMS_DIR        SD_CARD_MOUNT_POINT "/roms"
+#define MAX_SD_UPLOAD_SIZE (4u * 1024u * 1024u) /* generous; staged image is ~1.03 MB */
+
+/* Reflected CRC-32 step (poly 0xEDB88320), no init/final XOR — the caller seeds
+ * with 0xFFFFFFFF and XORs the final result with 0xFFFFFFFF, so it matches
+ * Python's zlib.crc32 byte-for-byte (the host's verification CRC). */
+static uint32_t nc_crc32_step(uint32_t crc, const uint8_t *data, size_t len)
+{
+	for (size_t i = 0; i < len; i++)
+	{
+		crc ^= data[i];
+		for (int k = 0; k < 8; k++)
+			crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1u)));
+	}
+	return crc;
+}
+
+typedef struct {
+	FILE *fd;
+	const char *path;   /* temp (.part) path we stream into */
+	size_t total_size;
+	uint32_t crc;       /* running zlib CRC state, seeded 0xFFFFFFFF */
+	esp_err_t err;
+	bool started;
+	bool too_big;
+} sd_upload_ctx_t;
+
+static bool sd_on_part_begin(const multipart_part_info_t *info, void *user_ctx)
+{
+	sd_upload_ctx_t *ctx = (sd_upload_ctx_t *)user_ctx;
+	if (!ctx || ctx->started || !info) return false;
+	if (info->filename[0] == '\0') return false; /* only accept file parts */
+	ctx->fd = fopen(ctx->path, "w");
+	if (!ctx->fd)
+	{
+		ESP_LOGE(TAG, "SD upload: cannot open %s", ctx->path);
+		ctx->err = ESP_FAIL;
+		return false;
+	}
+	ctx->started = true;
+	return true;
+}
+
+static esp_err_t sd_on_part_data(const char *data, size_t len, void *user_ctx)
+{
+	sd_upload_ctx_t *ctx = (sd_upload_ctx_t *)user_ctx;
+	if (!ctx || !ctx->fd) return ESP_FAIL;
+	if (len == 0) return ESP_OK;
+	if (ctx->total_size + len > MAX_SD_UPLOAD_SIZE)
+	{
+		ctx->too_big = true;
+		ctx->err = ESP_FAIL;
+		return ESP_FAIL;
+	}
+	if (fwrite(data, 1, len, ctx->fd) != len)
+	{
+		ESP_LOGE(TAG, "SD upload: write failed");
+		ctx->err = ESP_FAIL;
+		return ESP_FAIL;
+	}
+	ctx->crc = nc_crc32_step(ctx->crc, (const uint8_t *)data, len);
+	ctx->total_size += len;
+	return ESP_OK;
+}
+
+static void sd_on_part_end(void *user_ctx)
+{
+	sd_upload_ctx_t *ctx = (sd_upload_ctx_t *)user_ctx;
+	if (ctx && ctx->fd) { fclose(ctx->fd); ctx->fd = NULL; }
+}
+
+/* Validate the <name> after /upload/sd/. Returns 0 only for a simple filename
+ * with an extension and no path separators / traversal / control characters. */
+static int sd_name_is_safe(const char *name)
+{
+	if (!name || name[0] == '\0' || name[0] == '.') return -1;
+	size_t n = strlen(name);
+	if (n > 96) return -1;
+	if (name[n - 1] == '/') return -1;
+	bool has_dot = false;
+	for (size_t i = 0; i < n; i++)
+	{
+		char c = name[i];
+		if (c == '/' || c == '\\') return -1;                       /* no separators */
+		if (c == '.' && i + 1 < n && name[i + 1] == '.') return -1; /* no ".." */
+		if (c == '.') has_dot = true;
+		bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+		          (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.';
+		if (!ok) return -1;
+	}
+	return has_dot ? 0 : -1; /* require an extension */
+}
+
+static esp_err_t upload_sd_handler(httpd_req_t *req)
+{
+	const char *prefix = "/upload/sd/";
+	if (strncmp(req->uri, prefix, strlen(prefix)) != 0)
+	{
+		httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad path");
+		return ESP_FAIL;
+	}
+
+	/* Extract <name> (drop any query string) and validate it. */
+	const char *name = req->uri + strlen(prefix);
+	char namebuf[97];
+	const char *q = strchr(name, '?');
+	size_t nlen = q ? (size_t)(q - name) : strlen(name);
+	if (nlen >= sizeof(namebuf))
+	{
+		httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Name too long");
+		return ESP_FAIL;
+	}
+	memcpy(namebuf, name, nlen);
+	namebuf[nlen] = '\0';
+	if (sd_name_is_safe(namebuf) != 0)
+	{
+		ESP_LOGE(TAG, "SD upload: rejected unsafe name '%s'", namebuf);
+		httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid filename");
+		return ESP_FAIL;
+	}
+
+	if (!sdcard_is_mounted())
+	{
+		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "SD card not mounted");
+		return ESP_FAIL;
+	}
+
+	/* Ensure /sdcard/roms exists. */
+	struct stat st;
+	if (stat(SD_ROMS_DIR, &st) != 0 && mkdir(SD_ROMS_DIR, 0775) != 0)
+	{
+		ESP_LOGE(TAG, "SD upload: mkdir %s failed", SD_ROMS_DIR);
+		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot create roms dir");
+		return ESP_FAIL;
+	}
+
+	/* Big enough for SD_ROMS_DIR + the full 96-char namebuf + the ".part" temp
+	 * suffix (FILE_PATH_MAX ~= 47 is too small — a ~29+ char name overflowed). */
+	char finalpath[160];
+	char tmppath[160];
+	int fn = snprintf(finalpath, sizeof(finalpath), "%s/%s", SD_ROMS_DIR, namebuf);
+	int tn = snprintf(tmppath, sizeof(tmppath), "%s/%s.part", SD_ROMS_DIR, namebuf);
+	if (fn <= 0 || fn >= (int)sizeof(finalpath) || tn <= 0 || tn >= (int)sizeof(tmppath))
+	{
+		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Path too long");
+		return ESP_FAIL;
+	}
+
+	ESP_LOGI(TAG, "SD upload: receiving %s", finalpath);
+
+	sd_upload_ctx_t ctx = {0};
+	ctx.path = tmppath;
+	ctx.crc = 0xFFFFFFFFu;
+	ctx.err = ESP_OK;
+
+	multipart_upload_handlers_t handlers = {
+		.on_part_begin = sd_on_part_begin,
+		.on_part_data = sd_on_part_data,
+		.on_part_end = sd_on_part_end,
+		.on_finished = file_on_finished,
+	};
+	multipart_upload_config_t mp_cfg = multipart_upload_default_config();
+	mp_cfg.rx_buf_size = 4096;
+
+	esp_err_t mp_err = multipart_upload_handle(req, &handlers, &ctx, &mp_cfg);
+	if (ctx.fd) { fclose(ctx.fd); ctx.fd = NULL; }
+
+	if (mp_err != ESP_OK || ctx.err != ESP_OK || !ctx.started)
+	{
+		unlink(tmppath);
+		if (ctx.too_big)
+			httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "File too large");
+		else
+			httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Upload failed");
+		return ESP_FAIL;
+	}
+
+	/* Atomic publish: replace any prior staged copy of the same name. */
+	unlink(finalpath);
+	if (rename(tmppath, finalpath) != 0)
+	{
+		ESP_LOGE(TAG, "SD upload: rename %s -> %s failed", tmppath, finalpath);
+		unlink(tmppath);
+		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Rename failed");
+		return ESP_FAIL;
+	}
+
+	uint32_t crc = ctx.crc ^ 0xFFFFFFFFu;
+	ESP_LOGI(TAG, "SD upload complete: %s %u bytes crc32=0x%08X",
+	         finalpath, (unsigned)ctx.total_size, (unsigned)crc);
+
+	char resp[96];
+	int rn = snprintf(resp, sizeof(resp), "{\"bytes_written\":%u,\"crc32\":%u}",
+	                  (unsigned)ctx.total_size, (unsigned)crc);
+	httpd_resp_set_type(req, "application/json");
+	httpd_resp_send(req, resp, rn);
+	return ESP_OK;
+}
+
 esp_err_t autopid_data_handler(httpd_req_t *req)
 {
     char *data = autopid_data_read();
@@ -2437,6 +2643,12 @@ static const httpd_uri_t upload_car_data = {
     .method    = HTTP_POST,
     .handler   = upload_car_data_handler,
     .user_ctx  = &server_data    // Pass server data as context
+};
+static const httpd_uri_t upload_sd_uri = {
+    .uri       = "/upload/sd/*",   // NC Flash SD-staged flash image upload
+    .method    = HTTP_POST,
+    .handler   = upload_sd_handler,
+    .user_ctx  = &server_data
 };
 static const httpd_uri_t autopid_data = {
     .uri       = "/autopid_data",   // Match all URIs of type /upload/path/to/file
@@ -3501,6 +3713,7 @@ static void register_server_uris(void)
 	httpd_register_uri_handler(server, &load_pid_auto_uri);
 	httpd_register_uri_handler(server, &load_pid_auto_conf_uri);
 	httpd_register_uri_handler(server, &upload_car_data);
+	httpd_register_uri_handler(server, &upload_sd_uri);
 	httpd_register_uri_handler(server, &autopid_data);
 	httpd_register_uri_handler(server, &load_car_config_uri);
 	httpd_register_uri_handler(server, &destinations_stats_uri);
