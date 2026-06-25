@@ -28,13 +28,11 @@ jobs:
           esp_idf_version: v5.5.3
           target: esp32s3
           path: '.'
-          # Regenerate the lockfile in-container before building: the committed
-          # dependencies.lock stores a component_hash for the git-sourced ch34x driver that
-          # was computed on Windows (CRLF) and does NOT match the Linux checkout (LF), tripping
-          # a false "component is corrupted" error. The ch34x dep is pinned to a commit (see
-          # main/idf_component.yml), so the source stays immutable; only the platform-sensitive
-          # hash is re-derived here.
-          command: 'rm -f dependencies.lock && idf.py build'
+          # dependencies.lock is untracked (see .gitignore) and regenerated fresh in-container,
+          # which avoids the Windows-CRLF vs Linux-LF component_hash clash on the git-sourced
+          # ch34x driver (still pinned to an immutable commit in main/idf_component.yml). Nothing
+          # mutates the working tree here, so tagged builds produce clean (non-dirty) artifacts.
+          command: 'idf.py build'
 
       - name: Stage flashable artifacts
         run: |

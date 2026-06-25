@@ -38,7 +38,12 @@ execute_process(
 )
 
 set(GIT_SHA1 "${GIT_SHA}")
-string(REPLACE "." "" GIT_SHA "${GIT_SHA}")
+# Filename-safe build id for the project / .bin name. Keep full provenance in GIT_SHA1
+# (the -DGIT_SHA the firmware reports, e.g. v1.0.0 or abc1234-dirty), but for the image
+# FILENAME drop the trailing "-dirty" marker and turn dots into underscores
+# (e.g. v1.0.0-dirty -> v1_0_0) so releases get clean, readable artifact names.
+string(REGEX REPLACE "-dirty$" "" GIT_SHA "${GIT_SHA}")
+string(REPLACE "." "_" GIT_SHA "${GIT_SHA}")
 
 add_definitions(-DGIT_SHA="${GIT_SHA1}")
 

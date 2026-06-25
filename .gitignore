@@ -62,6 +62,10 @@ docs/node_modules
 
 #managed components
 managed_components/
+# Component-manager lockfile: regenerated per build. Not committed because its
+# git-sourced component hashes are line-ending (CRLF/LF) sensitive and a Windows-made
+# lock breaks the Linux CI build; the git dep is pinned to a commit instead.
+dependencies.lock
 .vscode/
 
 # Clangd Cache
