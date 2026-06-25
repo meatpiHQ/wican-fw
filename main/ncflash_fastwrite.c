@@ -335,12 +335,18 @@ int ncflash_fast_write(const uint8_t *buf, int len, QueueHandle_t *tx_queue)
         return -1;
     }
 
-    if (s_fwbusy)
+    /* Unified single-CAN-owner guard (task #36 / plan §5.4): refuse if THIS op is
+     * already running (s_fwbusy) OR any other fast-op owns the bus (fast-read sets
+     * FLASH_ACTIVE_BIT too), so fast-read and fast-write mutually exclude. */
+    if (s_fwbusy || can_flash_active())
     {
         ESP_LOGW(TAG, "fast write refused: another fast-op in progress");
         return -1;
     }
     s_fwbusy = 1;
+    /* Claim the bus BEFORE suspending can_rx_task (plan §5.2): the datalogger poll
+     * task parks on this bit, so no stray 0x7E0 can corrupt the UDS session. */
+    can_flash_active_set();
 
     /* Variables the cleanup label touches MUST be declared before any goto. */
     FILE *f = NULL;
@@ -519,6 +525,10 @@ cleanup:
         while (xQueueReceive(*tx_queue, &leftover, 0) == pdTRUE) { /* discard */ }
         ESP_LOGW(TAG, "fast write aborted: host stopped draining TCP (clean teardown)");
     }
+    /* Release the bus LAST (task #36 / plan §5.2): only now -- after can_rx_task is
+     * resumed and the bus drained -- does the poll task un-park, so the single-CAN-
+     * owner invariant holds on EVERY exit path (success / host-gone / abort). */
+    can_flash_active_clear();
     s_fwbusy = 0;
     return rc;
 }

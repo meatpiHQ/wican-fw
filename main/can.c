@@ -38,6 +38,12 @@
 static EventGroupHandle_t s_can_event_group = NULL;
 static StaticEventGroup_t xCanEventGroupBuffer;
 #define CAN_ENABLE_BIT 		BIT0
+/* Single-CAN-owner interlock (no-reboot coexistence, task #36 / plan §5): set by
+ * the fast-read/fast-write codecs for the whole duration of a flash/read so the
+ * datalogger poll task parks instead of injecting a stray 0x7E0 frame into the
+ * ECU's ISO-TP reassembly mid-TransferData (which soft-bricks). At most one TX
+ * producer owns the bus while this is set. */
+#define FLASH_ACTIVE_BIT 	BIT1
 
 #define TAG 		__func__
 enum bus_state
@@ -112,6 +118,30 @@ void can_unblock(void)
 	{
 		xTimerReset( xCAN_EN_Timer, 0 );
 	}
+}
+
+/* --- Single-CAN-owner interlock (task #36 / plan §5) -----------------------
+ * A flash/read codec sets FLASH_ACTIVE_BIT before it takes the bus and clears
+ * it on EVERY exit path (success / host-gone / abort / socket-close). The
+ * datalogger poll task short-sleeps and skips while it is set, so at most one
+ * TX producer ever drives the single TWAI controller. NULL-group-safe so it is
+ * callable before can_init(). */
+void can_flash_active_set(void)
+{
+	if(s_can_event_group)
+		xEventGroupSetBits(s_can_event_group, FLASH_ACTIVE_BIT);
+}
+
+void can_flash_active_clear(void)
+{
+	if(s_can_event_group)
+		xEventGroupClearBits(s_can_event_group, FLASH_ACTIVE_BIT);
+}
+
+bool can_flash_active(void)
+{
+	return s_can_event_group &&
+		   (xEventGroupGetBits(s_can_event_group) & FLASH_ACTIVE_BIT) != 0;
 }
 
 

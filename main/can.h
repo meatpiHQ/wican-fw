@@ -66,4 +66,9 @@ bool can_is_enabled(void);
 uint8_t can_get_bitrate(void);
 uint32_t can_msgs_to_rx(void);
 
+/* Single-CAN-owner interlock for no-reboot coexistence (task #36 / plan §5). */
+void can_flash_active_set(void);
+void can_flash_active_clear(void);
+bool can_flash_active(void);
+
 #endif

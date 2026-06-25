@@ -36,6 +36,10 @@ typedef enum
 	DEV_WIFI_WS,
 	DEV_BLE,
 	DEV_UART,
+	DEV_SLCAN_PORT,   /* Always-on dedicated SLCAN TCP port (no-reboot coexistence,
+	                     task #36): frames tagged with this route through the
+	                     fast-read/write + slcan codecs regardless of the persisted
+	                     protocol, so flashing coexists with the datalogger. */
 	DEV_MAX
 } dev_channel_t;
 
