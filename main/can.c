@@ -25,6 +25,7 @@
 #include "esp_wifi.h"
 #include "esp_system.h"
 #include "esp_event.h"
+#include "esp_timer.h"
 #include "nvs_flash.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
@@ -33,6 +34,7 @@
 #include "lwip/sockets.h"
 #include "driver/twai.h"
 #include "can.h"
+#include "slcan_port.h"   /* slcan_port_conn_gen(): owning 35001 connection generation (dead-man's-switch) */
 #include "hw_config.h"
 
 static EventGroupHandle_t s_can_event_group = NULL;
@@ -44,14 +46,35 @@ static StaticEventGroup_t xCanEventGroupBuffer;
  * ECU's ISO-TP reassembly mid-TransferData (which soft-bricks). At most one TX
  * producer owns the bus while this is set. */
 #define FLASH_ACTIVE_BIT 	BIT1
-/* Host-requested datalog pause (no-reboot coexistence, task #36.C): set/cleared ONLY by
- * the REST POST /datalog?op=pause|resume handler so the host can quiesce the poller
- * around a flash. Kept SEPARATE from FLASH_ACTIVE_BIT on purpose: the REST layer must
- * never write the codec-owned FLASH_ACTIVE_BIT, or a stray/duplicate `resume` (a second
- * client, a reconnect) could un-park a LIVE flash mid-TransferData -> soft-brick. The
- * poll/AutoPID tasks park on EITHER bit (can_should_park); FLASH_ACTIVE_BIT alone remains
- * the brick-safety guarantee, DATALOG_PARK_BIT is an advisory pre-park. */
-#define DATALOG_PARK_BIT 	BIT2
+
+/* === Host-owned coexistence state: datalog-park + host-bus-claim (dead-man's-switch) =======
+ * docs/internal/WICAN_DEADMAN_AUTORESUME.md.
+ *
+ * DELIBERATELY NOT event-group bits. The two host-owned states (advisory datalog pause, and
+ * the host bus-claim that fences the UDS auth window) live ENTIRELY under the s_park_mux
+ * spinlock as {active flag + token + owner-generation + u64 deadline}. This is the brick fix
+ * for the reaper TOCTOU: with the flag and its lease in ONE lock, the dead-man reaper can
+ * COMPARE-AND-ACT atomically (reap clears only if the token+deadline are still the exact ones
+ * it sampled), so a fresh host arm/renew landing between the reaper's snapshot and its action
+ * bumps the token/deadline and ABORTS the reap -- it can never destroy a fresh, live claim and
+ * un-park the poller into a security-unlocked session.
+ *
+ * FLASH_ACTIVE_BIT stays the codec-owned event-group bit, written ONLY at the four codec sites
+ * (INV-1, untouched). can_should_park() ORs the lock-free active-flag reads with it. The REST
+ * layer never touches FLASH_ACTIVE_BIT, so a stray/duplicate resume can never un-park a LIVE
+ * flash -- BIT1 remains the sole brick-safety guarantee, park/claim are advisory pre-park. */
+static portMUX_TYPE s_park_mux = portMUX_INITIALIZER_UNLOCKED;
+static volatile uint32_t s_token_seq = 0;            /* monotonic token source (0 is reserved) */
+static volatile bool     s_claim_active = false;     /* host bus-claim raised (auth-window fence) */
+static volatile uint32_t s_claim_token = 0;          /* 0 = claim disarmed */
+static volatile uint32_t s_claim_owner_gen = 0;      /* slcan_port conn-gen that armed the claim */
+static volatile uint64_t s_claim_deadline_us = 0;    /* 0 = disarmed; else esp_timer deadline */
+static volatile bool     s_park_active = false;      /* datalog pause raised (advisory pre-park) */
+static volatile uint32_t s_park_token = 0;           /* 0 = park lease disarmed */
+static volatile uint32_t s_park_owner_gen = 0;       /* slcan_port conn-gen that armed the pause */
+static volatile uint64_t s_park_deadline_us = 0;     /* 0 = disarmed */
+static volatile uint32_t s_last_bus_activity_ms = 0; /* last TWAI TX or RX (atomic 32-bit ms) */
+static volatile bool     s_stuck_flash_alarm = false;
 
 #define TAG 		__func__
 enum bus_state
@@ -152,34 +175,253 @@ bool can_flash_active(void)
 		   (xEventGroupGetBits(s_can_event_group) & FLASH_ACTIVE_BIT) != 0;
 }
 
-/* --- Host-requested datalog pause (task #36.C) ---------------------------------
- * Driven ONLY by the REST /datalog handler (see DATALOG_PARK_BIT above). NULL-safe. */
-void can_datalog_park_set(void)
-{
-	if(s_can_event_group)
-		xEventGroupSetBits(s_can_event_group, DATALOG_PARK_BIT);
-}
-
-void can_datalog_park_clear(void)
-{
-	if(s_can_event_group)
-		xEventGroupClearBits(s_can_event_group, DATALOG_PARK_BIT);
-}
-
+/* --- Host-requested datalog pause (advisory pre-park) ---------------------------
+ * s_park_active is the BIT2 replacement, written ONLY under s_park_mux by the lease
+ * arm/release/reap below. NULL-safe (a plain bool, valid before can_init). */
 bool can_datalog_park_active(void)
 {
-	return s_can_event_group &&
-		   (xEventGroupGetBits(s_can_event_group) & DATALOG_PARK_BIT) != 0;
+	return s_park_active;
 }
 
-/* True while the single TWAI controller is reserved by EITHER a flash codec
- * (FLASH_ACTIVE_BIT) or a host REST datalog-pause (DATALOG_PARK_BIT). The datalogger
- * poll task and the AutoPID poll task park on THIS so neither injects a stray frame
- * while the bus is reserved. NULL-group-safe (callable before can_init). */
+/* True while the single TWAI controller is reserved by ANY of: a flash codec
+ * (FLASH_ACTIVE_BIT, event group), a host REST datalog-pause (s_park_active), or a host
+ * bus-claim over the UDS auth window (s_claim_active). The datalogger poll task and the
+ * AutoPID poll task park on THIS so neither injects a stray frame while the bus is reserved.
+ * The triple OR is the brick interlock: even if a stray resume cleared the park flag,
+ * FLASH_ACTIVE_BIT or the claim flag independently keeps every producer parked. The two
+ * flags are lock-free single-byte reads; FLASH_ACTIVE_BIT is read via the event group.
+ * NULL-group-safe (can_flash_active() handles a NULL group; the flags default false). */
 bool can_should_park(void)
 {
-	return s_can_event_group &&
-		   (xEventGroupGetBits(s_can_event_group) & (FLASH_ACTIVE_BIT | DATALOG_PARK_BIT)) != 0;
+	return can_flash_active() || s_park_active || s_claim_active;
+}
+
+/* --- Dead-man's-switch lease primitives (WICAN_DEADMAN_AUTORESUME.md) ----------------
+ * Every park/claim state transition is done ENTIRELY under s_park_mux: the active flag,
+ * token, owner-generation and deadline move together so no reader sees a torn lease and the
+ * reaper can compare-and-act atomically. slcan_port_conn_gen() and esp_timer_get_time() are
+ * read BEFORE entering the critical section (they take their own locks / are independently
+ * atomic) to keep the critical section short and avoid lock nesting. Tokens are a monotonic
+ * counter; 0 is the reserved "disarmed / no token" sentinel so a stale token never matches.
+ *
+ *  arm     : issue a fresh token + deadline, raise the flag (op=bus_claim / op=pause).
+ *  renew   : token-matched deadline bump + owner re-stamp (op=keepalive, in-flash reconnect).
+ *  release : token-matched clear (handler op=bus_release / op=resume); 0 = unconditional.
+ *  reap    : token+deadline-matched clear for the reaper -- clears ONLY if the lease is STILL
+ *            the exact (token,deadline) the reaper sampled AND still expired, so a host
+ *            arm/renew landing in the snapshot->act gap aborts the reap (the brick fix). */
+
+uint32_t can_host_bus_claim_arm(uint64_t ttl_us)
+{
+	uint64_t now = (uint64_t)esp_timer_get_time();
+	uint32_t owner = (uint32_t)slcan_port_conn_gen();
+	portENTER_CRITICAL(&s_park_mux);
+	uint32_t tok = ++s_token_seq;
+	if(tok == 0) { tok = ++s_token_seq; }   /* skip the reserved 0 sentinel on wrap */
+	s_claim_token = tok;
+	s_claim_owner_gen = owner;
+	s_claim_deadline_us = now + ttl_us;
+	s_claim_active = true;
+	portEXIT_CRITICAL(&s_park_mux);
+	return tok;
+}
+
+bool can_host_bus_claim_renew(uint32_t token, uint64_t ttl_us)
+{
+	uint64_t now = (uint64_t)esp_timer_get_time();
+	uint32_t owner = (uint32_t)slcan_port_conn_gen();
+	bool ok = false;
+	portENTER_CRITICAL(&s_park_mux);
+	if(s_claim_active && s_claim_token == token)
+	{
+		s_claim_deadline_us = now + ttl_us;
+		if(owner != 0) { s_claim_owner_gen = owner; }  /* re-stamp on in-flash reconnect */
+		ok = true;
+	}
+	portEXIT_CRITICAL(&s_park_mux);
+	return ok;
+}
+
+bool can_host_bus_claim_release(uint32_t token)
+{
+	bool ok = false;
+	portENTER_CRITICAL(&s_park_mux);
+	if(s_claim_active && (token == 0 || s_claim_token == token))
+	{
+		s_claim_active = false;
+		s_claim_token = 0;
+		s_claim_owner_gen = 0;
+		s_claim_deadline_us = 0;
+		ok = true;
+	}
+	else if(!s_claim_active && token == 0)
+	{
+		ok = true;   /* already released + unconditional -> idempotent success */
+	}
+	portEXIT_CRITICAL(&s_park_mux);
+	return ok;
+}
+
+bool can_host_bus_claim_reap(uint32_t token, uint64_t deadline_us)
+{
+	uint64_t now = (uint64_t)esp_timer_get_time();
+	bool ok = false;
+	portENTER_CRITICAL(&s_park_mux);
+	/* Clear ONLY if the claim is STILL the exact lease the reaper sampled (token+deadline)
+	 * AND still expired. Any arm (new token) or renew (new deadline) in the gap aborts. */
+	if(s_claim_active && s_claim_token == token &&
+	   s_claim_deadline_us == deadline_us && deadline_us != 0 && now > deadline_us)
+	{
+		s_claim_active = false;
+		s_claim_token = 0;
+		s_claim_owner_gen = 0;
+		s_claim_deadline_us = 0;
+		ok = true;
+	}
+	portEXIT_CRITICAL(&s_park_mux);
+	return ok;
+}
+
+bool can_host_bus_claim_active(void)
+{
+	return s_claim_active;
+}
+
+uint32_t can_host_bus_claim_token(void)
+{
+	portENTER_CRITICAL(&s_park_mux);
+	uint32_t t = s_claim_token;
+	portEXIT_CRITICAL(&s_park_mux);
+	return t;
+}
+
+uint32_t can_park_lease_arm(uint64_t ttl_us)
+{
+	uint64_t now = (uint64_t)esp_timer_get_time();
+	uint32_t owner = (uint32_t)slcan_port_conn_gen();
+	portENTER_CRITICAL(&s_park_mux);
+	uint32_t tok = ++s_token_seq;
+	if(tok == 0) { tok = ++s_token_seq; }
+	s_park_token = tok;
+	s_park_owner_gen = owner;
+	s_park_deadline_us = now + ttl_us;
+	s_park_active = true;
+	portEXIT_CRITICAL(&s_park_mux);
+	return tok;
+}
+
+bool can_park_lease_renew(uint32_t token, uint64_t ttl_us)
+{
+	uint64_t now = (uint64_t)esp_timer_get_time();
+	uint32_t owner = (uint32_t)slcan_port_conn_gen();
+	bool ok = false;
+	portENTER_CRITICAL(&s_park_mux);
+	if(s_park_active && s_park_token == token)
+	{
+		s_park_deadline_us = now + ttl_us;
+		if(owner != 0) { s_park_owner_gen = owner; }   /* re-stamp on in-flash reconnect */
+		ok = true;
+	}
+	portEXIT_CRITICAL(&s_park_mux);
+	return ok;
+}
+
+bool can_park_lease_release(uint32_t token)
+{
+	bool ok = false;
+	portENTER_CRITICAL(&s_park_mux);
+	if(s_park_active && (token == 0 || s_park_token == token))
+	{
+		s_park_active = false;
+		s_park_token = 0;
+		s_park_owner_gen = 0;
+		s_park_deadline_us = 0;
+		ok = true;
+	}
+	else if(!s_park_active && token == 0)
+	{
+		ok = true;   /* already resumed + unconditional -> idempotent success */
+	}
+	portEXIT_CRITICAL(&s_park_mux);
+	return ok;
+}
+
+bool can_park_lease_reap(uint32_t token, uint64_t deadline_us)
+{
+	uint64_t now = (uint64_t)esp_timer_get_time();
+	bool ok = false;
+	portENTER_CRITICAL(&s_park_mux);
+	if(s_park_active && s_park_token == token &&
+	   s_park_deadline_us == deadline_us && deadline_us != 0 && now > deadline_us)
+	{
+		s_park_active = false;
+		s_park_token = 0;
+		s_park_owner_gen = 0;
+		s_park_deadline_us = 0;
+		ok = true;
+	}
+	portEXIT_CRITICAL(&s_park_mux);
+	return ok;
+}
+
+uint32_t can_park_token(void)
+{
+	portENTER_CRITICAL(&s_park_mux);
+	uint32_t t = s_park_token;
+	portEXIT_CRITICAL(&s_park_mux);
+	return t;
+}
+
+uint32_t can_bus_idle_ms(void)
+{
+	uint32_t now_ms = (uint32_t)((uint64_t)esp_timer_get_time() / 1000ULL);
+	return now_ms - s_last_bus_activity_ms;   /* unsigned wrap is fine (same modulus) */
+}
+
+void can_set_stuck_flash_alarm(bool on)
+{
+	s_stuck_flash_alarm = on;
+}
+
+bool can_stuck_flash_alarm(void)
+{
+	return s_stuck_flash_alarm;
+}
+
+/* One-tick snapshot for the dead-man reaper. The whole park/claim lease is read under
+ * s_park_mux so the reaper never sees a torn lease; FLASH_ACTIVE_BIT and the conn-gen
+ * (independently atomic) are read just outside it. The reaper passes the sampled token +
+ * deadline back to can_*_reap(), which re-validates them under the lock before acting --
+ * so a slightly-stale snapshot can never cause a wrong reap. owner_alive falls back to
+ * "any client connected" when the owner-gen was never captured (0), so a bus_claim issued
+ * before the 35001 socket opened does not collapse presence-detection to TTL-only. */
+void can_coexist_snapshot(can_coexist_snapshot_t *out)
+{
+	if(out == NULL) { return; }
+	uint64_t now = (uint64_t)esp_timer_get_time();
+	uint32_t live_gen = (uint32_t)slcan_port_conn_gen();
+	bool flash = can_flash_active();
+	uint32_t idle_ms = (uint32_t)(now / 1000ULL) - s_last_bus_activity_ms;
+
+	portENTER_CRITICAL(&s_park_mux);
+	out->now_us            = now;
+	out->flash_active      = flash;
+	out->host_bus_claimed  = s_claim_active;
+	out->datalog_parked    = s_park_active;
+	out->claim_armed       = s_claim_active;
+	out->claim_token       = s_claim_token;
+	out->claim_deadline_us = s_claim_deadline_us;
+	out->claim_expired     = (s_claim_deadline_us != 0 && now > s_claim_deadline_us);
+	out->claim_owner_alive = (s_claim_owner_gen == 0) ? (live_gen != 0)
+	                                                  : (live_gen == s_claim_owner_gen);
+	out->park_armed        = s_park_active;
+	out->park_token        = s_park_token;
+	out->park_deadline_us  = s_park_deadline_us;
+	out->park_expired      = (s_park_deadline_us != 0 && now > s_park_deadline_us);
+	out->park_owner_alive  = (s_park_owner_gen == 0) ? (live_gen != 0)
+	                                                 : (live_gen == s_park_owner_gen);
+	out->bus_idle_ms       = idle_ms;
+	portEXIT_CRITICAL(&s_park_mux);
 }
 
 
@@ -444,7 +686,14 @@ esp_err_t can_receive(twai_message_t *message, TickType_t ticks_to_wait)
 	// }
 	// else
 	{
-		return twai_receive(message, ticks_to_wait);
+		esp_err_t ret = twai_receive(message, ticks_to_wait);
+		if(ret == ESP_OK)
+		{
+			/* Stamp bus activity (dead-man's-switch bus-idle evidence): a received frame
+			 * proves the bus is not quiescent. Single atomic 32-bit ms write. */
+			s_last_bus_activity_ms = (uint32_t)((uint64_t)esp_timer_get_time() / 1000ULL);
+		}
+		return ret;
 	}
 }
 
@@ -470,7 +719,14 @@ esp_err_t can_send(twai_message_t *message, TickType_t ticks_to_wait)
 
 	if(uxBits & CAN_ENABLE_BIT)
 	{
-		return twai_transmit(message, ticks_to_wait);
+		esp_err_t ret = twai_transmit(message, ticks_to_wait);
+		if(ret == ESP_OK)
+		{
+			/* Stamp bus activity (dead-man's-switch bus-idle evidence): the single TX
+			 * chokepoint. Single atomic 32-bit ms write. */
+			s_last_bus_activity_ms = (uint32_t)((uint64_t)esp_timer_get_time() / 1000ULL);
+		}
+		return ret;
 	}
 	else return ESP_ERR_INVALID_STATE;
 }

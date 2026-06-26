@@ -47,6 +47,7 @@
 #include "hw_config.h"
 #include "comm_server.h"
 #include "slcan_port.h"   /* dedicated always-on SLCAN listener (no-reboot coexistence, task #36) */
+#include "datalog_lease_task.h"   /* dead-man's-switch reaper (brick-safe datalog auto-resume, task #36) */
 #include "config_server.h"
 #include "realdash.h"
 #include "slcan.h"
@@ -436,7 +437,17 @@ static void can_rx_task(void *pvParameters)
 		// task off above (e.g. auto_pid, realdash), this task would otherwise race the codec for
 		// the ECU's flash/UDS reply frames and steal them -> flaky/failed read mid-flash. Park on
 		// can_flash_active() so the codec stays sole TWAI owner while a flash holds the bus.
-		if(protocol == FAST_LOG || protocol == POLL_LOG || can_flash_active())
+		// No-reboot coexistence RX-forward (task #36): when a host coexist session has
+		// reserved the bus (a REST datalog pause OR a host bus-claim, and NO flash) the
+		// FAST_LOG/POLL_LOG task is NOT draining TWAI, so this task must take over as the
+		// sole consumer and forward the ECU's reply frames to the dedicated port (35001)
+		// below. Keying on EITHER park or claim means a claim-without-pause (e.g. a future
+		// op=flash_begin) still hands TWAI here for forwarding. A flash/read codec
+		// (FLASH_ACTIVE_BIT) is ALWAYS the sole bus owner for its duration (it also
+		// vTaskSuspend()s this task), so we still park hard whenever it is set.
+		bool coexist_session =
+			(can_datalog_park_active() || can_host_bus_claim_active()) && !can_flash_active();
+		if(((protocol == FAST_LOG || protocol == POLL_LOG) && !coexist_session) || can_flash_active())
 		{
 			vTaskDelay(pdMS_TO_TICKS(50));
 			continue;
@@ -474,6 +485,23 @@ static void can_rx_task(void *pvParameters)
 //        	num_msg++;
 
         	process_led(1);
+
+			// Coexist RX-forward (task #36): while the dedicated SLCAN port owns the bus
+			// (logger parked/claimed, no flash), forward EVERY ECU frame to that port as
+			// SLCAN regardless of the persisted `protocol`, then skip the primary-port / ws /
+			// mqtt fan-out for this frame. Without this the ECU's UDS replies are dropped
+			// and host-driven reads/sessions over 35001 hang. The !can_flash_active() re-check
+			// stops forwarding the instant a codec sets FLASH_ACTIVE_BIT mid-inner-loop (it is
+			// about to suspend us), so no stale ECU frame races the codec. Only to a live client.
+			if(coexist_session && !can_flash_active() && slcan_port_is_open())
+			{
+				ucTCP_TX_Buffer.usLen = slcan_parse_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
+				if(ucTCP_TX_Buffer.usLen != 0)
+				{
+					xQueueSend( xMsg_SlcanPort_Tx_Queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
+				}
+				continue;
+			}
 
 			if(config_server_ws_connected() && ws_router_is_in_monitor_mode())
 			{
@@ -1182,6 +1210,10 @@ void app_main(void)
 	{
 		ESP_LOGE(TAG, "dedicated SLCAN port init failed (no-reboot coexistence unavailable)");
 	}
+	/* Dead-man's-switch reaper (task #36): brick-safe datalog auto-resume if NC-Flash vanishes
+	 * mid-coexistence (lid close / crash / Wi-Fi drop). Reads coexistence state only; safe to
+	 * start regardless of whether the dedicated port came up. See WICAN_DEADMAN_AUTORESUME.md. */
+	datalog_lease_task_start();
 	#endif
 
 	if(config_server_get_ble_config())

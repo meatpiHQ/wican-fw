@@ -54,4 +54,11 @@ int8_t slcan_port_init(uint32_t port, QueueHandle_t *rx_queue, QueueHandle_t *tx
 /* Non-zero while a client is connected to the dedicated port. */
 int8_t slcan_port_is_open(void);
 
+/* Owning connection generation for the dead-man's-switch (WICAN_DEADMAN_AUTORESUME.md):
+ * returns the current accept() generation while a client is connected (PORT_OPEN_BIT), else
+ * 0. The reaper compares this against the generation stamped when the host paused/claimed: a
+ * change (host reconnected) or 0 (socket gone) means the original owner is no longer present.
+ * Monotonic and never 0 while open, so 0 unambiguously means "no owner". */
+uint32_t slcan_port_conn_gen(void);
+
 #endif /* __SLCAN_PORT_H__ */

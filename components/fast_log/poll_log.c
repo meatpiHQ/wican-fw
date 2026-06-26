@@ -415,8 +415,8 @@ static void polllog_rx_task(void *arg)
     for (;;)
     {
         /* Single-CAN-owner interlock (task #36 / plan §5.3): the one TWAI controller is
-         * reserved by EITHER a flash/read codec (FLASH_ACTIVE_BIT) or a host REST datalog
-         * pause (DATALOG_PARK_BIT) -- can_should_park() covers both. Park here -- short
+         * reserved by ANY of a flash/read codec (FLASH_ACTIVE_BIT), a host REST datalog
+         * pause, or a host bus-claim -- can_should_park() covers all three. Park here -- short
          * sleep + skip, NEVER portMAX_DELAY (that would starve the task WDT while the bus
          * is held). This stops a poll request (can_send below) from injecting a stray
          * 0x7E0 into the ECU's ISO-TP reassembly mid-TransferData (soft-brick) and stops

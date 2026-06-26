@@ -73,6 +73,17 @@ int8_t slcan_port_is_open(void)
 	return 0;
 }
 
+uint32_t slcan_port_conn_gen(void)
+{
+	/* The current accept() generation while a client is connected, else 0 (no owner). The
+	 * dead-man reaper uses 0 / a changed value as "the original host socket is gone". */
+	if (s_event_group != NULL && (xEventGroupGetBits(s_event_group) & PORT_OPEN_BIT))
+	{
+		return s_conn_gen;
+	}
+	return 0;
+}
+
 /* Receive client frames, tag DEV_SLCAN_PORT, push onto the shared RX queue. */
 static void slcan_port_rx_task(void *pvParameters)
 {
