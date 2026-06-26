@@ -44,6 +44,14 @@ static StaticEventGroup_t xCanEventGroupBuffer;
  * ECU's ISO-TP reassembly mid-TransferData (which soft-bricks). At most one TX
  * producer owns the bus while this is set. */
 #define FLASH_ACTIVE_BIT 	BIT1
+/* Host-requested datalog pause (no-reboot coexistence, task #36.C): set/cleared ONLY by
+ * the REST POST /datalog?op=pause|resume handler so the host can quiesce the poller
+ * around a flash. Kept SEPARATE from FLASH_ACTIVE_BIT on purpose: the REST layer must
+ * never write the codec-owned FLASH_ACTIVE_BIT, or a stray/duplicate `resume` (a second
+ * client, a reconnect) could un-park a LIVE flash mid-TransferData -> soft-brick. The
+ * poll/AutoPID tasks park on EITHER bit (can_should_park); FLASH_ACTIVE_BIT alone remains
+ * the brick-safety guarantee, DATALOG_PARK_BIT is an advisory pre-park. */
+#define DATALOG_PARK_BIT 	BIT2
 
 #define TAG 		__func__
 enum bus_state
@@ -142,6 +150,36 @@ bool can_flash_active(void)
 {
 	return s_can_event_group &&
 		   (xEventGroupGetBits(s_can_event_group) & FLASH_ACTIVE_BIT) != 0;
+}
+
+/* --- Host-requested datalog pause (task #36.C) ---------------------------------
+ * Driven ONLY by the REST /datalog handler (see DATALOG_PARK_BIT above). NULL-safe. */
+void can_datalog_park_set(void)
+{
+	if(s_can_event_group)
+		xEventGroupSetBits(s_can_event_group, DATALOG_PARK_BIT);
+}
+
+void can_datalog_park_clear(void)
+{
+	if(s_can_event_group)
+		xEventGroupClearBits(s_can_event_group, DATALOG_PARK_BIT);
+}
+
+bool can_datalog_park_active(void)
+{
+	return s_can_event_group &&
+		   (xEventGroupGetBits(s_can_event_group) & DATALOG_PARK_BIT) != 0;
+}
+
+/* True while the single TWAI controller is reserved by EITHER a flash codec
+ * (FLASH_ACTIVE_BIT) or a host REST datalog-pause (DATALOG_PARK_BIT). The datalogger
+ * poll task and the AutoPID poll task park on THIS so neither injects a stray frame
+ * while the bus is reserved. NULL-group-safe (callable before can_init). */
+bool can_should_park(void)
+{
+	return s_can_event_group &&
+		   (xEventGroupGetBits(s_can_event_group) & (FLASH_ACTIVE_BIT | DATALOG_PARK_BIT)) != 0;
 }
 
 
@@ -410,6 +448,17 @@ esp_err_t can_receive(twai_message_t *message, TickType_t ticks_to_wait)
 	}
 }
 
+/* NOTE (single-CAN-owner invariant, task #36): can_send() intentionally does NOT check
+ * FLASH_ACTIVE_BIT here. The flash codecs themselves call can_send() WHILE holding the bit,
+ * so a blanket reject would deadlock the flash. Single-ownership is therefore enforced at
+ * each TX PRODUCER, which must park/skip while the bus is reserved:
+ *   - poll_log polllog_rx_task ........ parks on can_should_park()   (poll_log.c)
+ *   - AutoPID autopid_task ............ parks on can_should_park()   (autopid.c)
+ *   - MQTT can/rx command handler ..... skips if can_flash_active()  (mqtt.c)
+ *   - REALDASH/SAVVYCAN/SLCAN/ELM327 .. serialized: they run INLINE on can_tx_task, which
+ *                                       is blocked inside the codec for the whole flash.
+ * Any NEW producer added here MUST honor this contract or it can inject a stray frame into
+ * the ECU's ISO-TP reassembly mid-TransferData and soft-brick. */
 esp_err_t can_send(twai_message_t *message, TickType_t ticks_to_wait)
 {
 //	xEventGroupWaitBits(s_can_event_group,

@@ -43,6 +43,7 @@
 #include "event_log.h"
 #include "config_server.h"
 #include "sdcard.h"
+#include "can.h"   /* can_flash_active / can_datalog_park_*: no-reboot coexistence (task #36.C) */
 #include "vehicle.h"
 #include "wc_timer.h"
 #include "sleep_mode.h"      // sleep_mode_get_voltage() for the BATT_V system column (non-blocking queue peek)
@@ -974,6 +975,107 @@ static esp_err_t csv_control_handler(httpd_req_t *req)
     free(status);
     return ESP_OK;
 }
+
+// ---- /datalog coordination endpoint (no-reboot coexistence, task #36.C) ----
+// Mode to restore on resume (snapshotted on the FIRST pause so a re-pause can't clobber it).
+static volatile int8_t s_datalog_prepause_mode = CSV_MANUAL_AUTO;
+
+// Compact live state for the host to verify quiesce/resume. Caller frees.
+static char *datalog_state_json(void)
+{
+    cJSON *root = cJSON_CreateObject();
+    if (root == NULL) { return NULL; }
+    cJSON_AddBoolToObject(root, "ok", true);
+    cJSON_AddBoolToObject(root, "flash_active", can_flash_active());
+    cJSON_AddBoolToObject(root, "datalog_parked", can_datalog_park_active());
+    cJSON_AddStringToObject(root, "manual_mode",
+                            (csv_manual_mode == CSV_MANUAL_ON)  ? "on" :
+                            (csv_manual_mode == CSV_MANUAL_OFF) ? "off" : "auto");
+    char *out = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    return out;
+}
+
+static void datalog_send_state(httpd_req_t *req)
+{
+    char *s = datalog_state_json();
+    httpd_resp_set_type(req, "application/json");
+    if (s == NULL) { httpd_resp_sendstr(req, "{\"ok\":false}"); return; }
+    httpd_resp_sendstr(req, s);
+    free(s);
+}
+
+// POST /datalog?op=pause|resume -- the host's coexistence coordination layer.
+//   pause : stop the CSV/AutoPID datalog producer, THEN park the poller (DATALOG_PARK_BIT).
+//   resume: clear the park FIRST, THEN restore the pre-pause datalog mode.
+// DATALOG_PARK_BIT is deliberately SEPARATE from the codec-owned FLASH_ACTIVE_BIT: this REST
+// path must NEVER write the codec's bit, or a stray/duplicate resume (a 2nd client, a reconnect)
+// could un-park a LIVE flash mid-TransferData -> soft-brick. The flash's own FLASH_ACTIVE_BIT
+// remains the brick-safety guarantee; REST pause is advisory pre-park + SD-logging stop.
+// Idempotent. Returns the live state JSON. (Reuses csv_logger_set_manual_override; ~public funcs.)
+static esp_err_t datalog_control_handler(httpd_req_t *req)
+{
+    char query[64];
+    char op[16] = {0};
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
+        httpd_query_key_value(query, "op", op, sizeof(op)) != ESP_OK)
+    {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing op=pause|resume");
+        return ESP_FAIL;
+    }
+
+    if (strcmp(op, "pause") == 0)
+    {
+        // Snapshot the restore target only on the FIRST pause (re-pause must not overwrite it
+        // with the already-forced-off mode). Stop the producer BEFORE parking the bus.
+        if (!can_datalog_park_active()) { s_datalog_prepause_mode = csv_manual_mode; }
+        csv_logger_set_manual_override(false);
+        can_datalog_park_set();
+    }
+    else if (strcmp(op, "resume") == 0)
+    {
+        // Release the bus FIRST, then restore the exact pre-pause mode (AUTO/ON/OFF) so a
+        // pause/resume cycle can't silently flip an AUTO (engine-gated) device to force-on.
+        can_datalog_park_clear();
+        if (s_datalog_prepause_mode == CSV_MANUAL_ON)
+        {
+            csv_logger_set_manual_override(true);   // ON needs the lazy writer-init path
+        }
+        else
+        {
+            csv_manual_mode = s_datalog_prepause_mode;  // AUTO/OFF: no init, just restore the gate
+        }
+    }
+    else
+    {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "op must be pause or resume");
+        return ESP_FAIL;
+    }
+
+    datalog_send_state(req);
+    return ESP_OK;
+}
+
+// GET /datalog -- live coordination state so the host can VERIFY (not assume) quiesce/resume.
+static esp_err_t datalog_status_handler(httpd_req_t *req)
+{
+    datalog_send_state(req);
+    return ESP_OK;
+}
+
+const httpd_uri_t datalog_control_uri = {
+    .uri = "/datalog",
+    .method = HTTP_POST,
+    .handler = datalog_control_handler,
+    .user_ctx = NULL
+};
+
+const httpd_uri_t datalog_status_uri = {
+    .uri = "/datalog",
+    .method = HTTP_GET,
+    .handler = datalog_status_handler,
+    .user_ctx = NULL
+};
 
 const httpd_uri_t csv_status_uri = {
     .uri = "/csv_status",

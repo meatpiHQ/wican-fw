@@ -5,6 +5,7 @@
 set(srcs
     "main.c"
     "comm_server.c"
+    "slcan_port.c"
     "config_server.c"
     "realdash.c"
     "slcan.c"

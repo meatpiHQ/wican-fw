@@ -150,7 +150,9 @@ bool csv_logger_is_active_file(const char *abspath);
 extern const httpd_uri_t csv_status_uri;
 extern const httpd_uri_t csv_list_uri;
 extern const httpd_uri_t csv_download_uri;
-extern const httpd_uri_t csv_control_uri;   /* POST /csv_logger?op=start|stop */
+extern const httpd_uri_t csv_control_uri;     /* POST /csv_logger?op=start|stop */
+extern const httpd_uri_t datalog_control_uri; /* POST /datalog?op=pause|resume (task #36.C) */
+extern const httpd_uri_t datalog_status_uri;  /* GET  /datalog -> live coexistence state */
 
 #ifdef __cplusplus
 }

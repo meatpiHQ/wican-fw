@@ -66,9 +66,16 @@ bool can_is_enabled(void);
 uint8_t can_get_bitrate(void);
 uint32_t can_msgs_to_rx(void);
 
-/* Single-CAN-owner interlock for no-reboot coexistence (task #36 / plan §5). */
+/* Single-CAN-owner interlock for no-reboot coexistence (task #36 / plan §5).
+ * FLASH_ACTIVE_BIT (codec-owned) is the brick-safety guarantee; DATALOG_PARK_BIT
+ * (REST /datalog-owned, task #36.C) is an advisory host pre-park. Poll tasks park on
+ * can_should_park() (either bit); non-datalog producers gate on can_flash_active(). */
 void can_flash_active_set(void);
 void can_flash_active_clear(void);
 bool can_flash_active(void);
+void can_datalog_park_set(void);
+void can_datalog_park_clear(void);
+bool can_datalog_park_active(void);
+bool can_should_park(void);
 
 #endif

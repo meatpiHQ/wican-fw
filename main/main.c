@@ -46,6 +46,7 @@
 #include "ver.h"
 #include "hw_config.h"
 #include "comm_server.h"
+#include "slcan_port.h"   /* dedicated always-on SLCAN listener (no-reboot coexistence, task #36) */
 #include "config_server.h"
 #include "realdash.h"
 #include "slcan.h"
@@ -109,6 +110,13 @@
 #define BLE_Enabled()		(!gpio_get_level(BLE_EN_PIN_NUM))
 
 static QueueHandle_t xMsg_Tx_Queue, xMsg_Rx_Queue, xmsg_ws_tx_queue, xmsg_ble_tx_queue, xmsg_uart_tx_queue, xmsg_obd_rx_queue, xmsg_mqtt_rx_queue, xmsg_elm327_rx_queue;
+/* Private reply queue for the dedicated SLCAN port (task #36): the fast-read/write codecs
+ * push DEV_SLCAN_PORT replies here, drained by slcan_port_tx_task to its own socket, so they
+ * never collide with the stock port's xMsg_Tx_Queue. WICAN_PRO only. */
+static QueueHandle_t xMsg_SlcanPort_Tx_Queue;
+/* Fixed TCP port of the dedicated always-on SLCAN listener; MUST match the host's
+ * WICAN_DEDICATED_SLCAN_PORT (src/ecu/constants.py). */
+#define WICAN_DEDICATED_SLCAN_PORT   35001
 static xdev_buffer ucTCP_RX_Buffer;
 static xdev_buffer ucTCP_TX_Buffer;
 static xdev_buffer ucBLE_TX_Buffer;
@@ -288,6 +296,31 @@ static void can_tx_task(void *pvParameters)
 				slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xmsg_ws_tx_queue);
 			}
 		}
+		/* No-reboot coexistence (task #36): frames from the dedicated SLCAN port (35001)
+		 * are dispatched here -- BEFORE the persisted-protocol gate -- so the host can
+		 * version-ping / fast-read / fast-write / slcan over CAN while the device stays in
+		 * poll_log / auto_pid / realdash, with NO protocol-switch reboot. Replies go to the
+		 * port's PRIVATE queue so they never mix with the stock port. The fast codecs take
+		 * FLASH_ACTIVE_BIT (single bus owner) for their duration; running them INLINE on
+		 * can_tx_task is also what serializes the REALDASH/SAVVYCAN/SLCAN/ELM327 producers
+		 * below out of a flash window (the task is blocked inside the codec). 'continue' so
+		 * the frame never falls through to the protocol arms. */
+		if(ucTCP_RX_Buffer.dev_channel == DEV_SLCAN_PORT)
+		{
+			if(ncflash_is_fastread_cmd(msg_ptr, temp_len))
+			{
+				ncflash_fast_read(msg_ptr, temp_len, &xMsg_SlcanPort_Tx_Queue);
+			}
+			else if(ncflash_is_fastwrite_cmd(msg_ptr, temp_len))
+			{
+				ncflash_fast_write(msg_ptr, temp_len, &xMsg_SlcanPort_Tx_Queue);
+			}
+			else
+			{
+				slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xMsg_SlcanPort_Tx_Queue);
+			}
+			continue;
+		}
 		if(protocol == SLCAN)
 		{
 			if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI)
@@ -397,7 +430,13 @@ static void can_rx_task(void *pvParameters)
 		// the RX queue, TWAI would split/steal frames between the two (each frame goes to exactly
 		// one waiter) -- in POLL_LOG that would steal the PCM's diagnostic responses.
 		// Gate this task off entirely in those modes. MUST stay above the can_receive() loop.
-		if(protocol == FAST_LOG || protocol == POLL_LOG)
+		//
+		// No-reboot coexistence (task #36): a flash/read codec is also the SOLE TWAI consumer
+		// for its duration (it does its own can_receive). In coexist modes that DON'T gate this
+		// task off above (e.g. auto_pid, realdash), this task would otherwise race the codec for
+		// the ECU's flash/UDS reply frames and steal them -> flaky/failed read mid-flash. Park on
+		// can_flash_active() so the codec stays sole TWAI owner while a flash holds the bus.
+		if(protocol == FAST_LOG || protocol == POLL_LOG || can_flash_active())
 		{
 			vTaskDelay(pdMS_TO_TICKS(50));
 			continue;
@@ -800,18 +839,21 @@ void app_main(void)
 	static xdev_buffer* xMsg_Rx_Queue_Storage;
 	static xdev_buffer* xMsg_Tx_Queue_Storage;
 	static xdev_buffer* xmsg_ws_tx_queue_Storage;
+	static xdev_buffer* xMsg_SlcanPort_Tx_Queue_Storage;
 	static StaticQueue_t xMsg_Rx_Queue_Buffer;
 	static StaticQueue_t xMsg_Tx_Queue_Buffer;
 	static StaticQueue_t xmsg_ws_tx_queue_Buffer;
+	static StaticQueue_t xMsg_SlcanPort_Tx_Queue_Buffer;
 
 	size_t xdev_buffer_size = sizeof( xdev_buffer);
-	
+
     xMsg_Rx_Queue_Storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
     xMsg_Tx_Queue_Storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
     xmsg_ws_tx_queue_Storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
+    xMsg_SlcanPort_Tx_Queue_Storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
 
     // Check if memory allocation was successful
-    if (xMsg_Rx_Queue_Storage == NULL || xMsg_Tx_Queue_Storage == NULL || xmsg_ws_tx_queue_Storage == NULL) {
+    if (xMsg_Rx_Queue_Storage == NULL || xMsg_Tx_Queue_Storage == NULL || xmsg_ws_tx_queue_Storage == NULL || xMsg_SlcanPort_Tx_Queue_Storage == NULL) {
         // Handle memory allocation failure
         ESP_LOGE(TAG, "Failed to allocate memory for queues in external RAM");
         return;
@@ -821,9 +863,10 @@ void app_main(void)
     xMsg_Rx_Queue = xQueueCreateStatic(32, xdev_buffer_size, (uint8_t *)xMsg_Rx_Queue_Storage, &xMsg_Rx_Queue_Buffer);
     xMsg_Tx_Queue = xQueueCreateStatic(32, xdev_buffer_size, (uint8_t *)xMsg_Tx_Queue_Storage, &xMsg_Tx_Queue_Buffer);
     xmsg_ws_tx_queue = xQueueCreateStatic(32, xdev_buffer_size, (uint8_t *)xmsg_ws_tx_queue_Storage, &xmsg_ws_tx_queue_Buffer);
+    xMsg_SlcanPort_Tx_Queue = xQueueCreateStatic(32, xdev_buffer_size, (uint8_t *)xMsg_SlcanPort_Tx_Queue_Storage, &xMsg_SlcanPort_Tx_Queue_Buffer);
 
     // Check if queues were created successfully
-    if (xMsg_Rx_Queue == NULL || xMsg_Tx_Queue == NULL || xmsg_ws_tx_queue == NULL) {
+    if (xMsg_Rx_Queue == NULL || xMsg_Tx_Queue == NULL || xmsg_ws_tx_queue == NULL || xMsg_SlcanPort_Tx_Queue == NULL) {
         // Handle queue creation failure
         ESP_LOGE(TAG, "Failed to create queues");
         return;
@@ -1122,6 +1165,24 @@ void app_main(void)
 		tcp_server_init(port, &xMsg_Tx_Queue, &xMsg_Rx_Queue, 0, 0);
 		#endif
 	}
+
+	#if HARDWARE_VER == WICAN_PRO
+	/* No-reboot coexistence (task #36): start the always-on dedicated SLCAN listener AFTER
+	 * the queues exist (above) and the network stack is up (wifi_network_init). Frames arrive
+	 * tagged DEV_SLCAN_PORT on the shared RX queue and are dispatched by can_tx_task regardless
+	 * of persisted protocol; replies drain from the private xMsg_SlcanPort_Tx_Queue. If the
+	 * stock port is (mis)configured to the same value, skip rather than fight over the bind --
+	 * the host then simply falls back to the legacy reboot path. */
+	if(port == WICAN_DEDICATED_SLCAN_PORT)
+	{
+		ESP_LOGW(TAG, "stock port == %d collides with dedicated SLCAN port; coexistence listener NOT started",
+				 WICAN_DEDICATED_SLCAN_PORT);
+	}
+	else if(slcan_port_init(WICAN_DEDICATED_SLCAN_PORT, &xMsg_Rx_Queue, &xMsg_SlcanPort_Tx_Queue) != 0)
+	{
+		ESP_LOGE(TAG, "dedicated SLCAN port init failed (no-reboot coexistence unavailable)");
+	}
+	#endif
 
 	if(config_server_get_ble_config())
 	{
