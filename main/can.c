@@ -65,14 +65,24 @@ static StaticEventGroup_t xCanEventGroupBuffer;
  * flash -- BIT1 remains the sole brick-safety guarantee, park/claim are advisory pre-park. */
 static portMUX_TYPE s_park_mux = portMUX_INITIALIZER_UNLOCKED;
 static volatile uint32_t s_token_seq = 0;            /* monotonic token source (0 is reserved) */
-static volatile bool     s_claim_active = false;     /* host bus-claim raised (auth-window fence) */
-static volatile uint32_t s_claim_token = 0;          /* 0 = claim disarmed */
-static volatile uint32_t s_claim_owner_gen = 0;      /* slcan_port conn-gen that armed the claim */
-static volatile uint64_t s_claim_deadline_us = 0;    /* 0 = disarmed; else esp_timer deadline */
-static volatile bool     s_park_active = false;      /* datalog pause raised (advisory pre-park) */
-static volatile uint32_t s_park_token = 0;           /* 0 = park lease disarmed */
-static volatile uint32_t s_park_owner_gen = 0;       /* slcan_port conn-gen that armed the pause */
-static volatile uint64_t s_park_deadline_us = 0;     /* 0 = disarmed */
+
+/* The host bus-claim and the datalog-park are two instances of the SAME dead-man lease shape
+ * -- {active flag + token + owner-generation + u64 deadline} -- so they share ONE lease_t type
+ * and ONE set of generic primitives (lease_arm/renew/release/reap/token) instead of two
+ * byte-identical copies (task #43). Both instances are guarded by the single s_park_mux and draw
+ * tokens from the single shared s_token_seq above, so claim/park tokens can never collide and the
+ * reaper's one-lock cross-lease snapshot stays torn-free. Every field is volatile so the lock-free
+ * .active reads on the hot park path keep the exact single-byte semantics of the old volatile
+ * statics; token/owner_gen/deadline are only ever touched under s_park_mux. */
+typedef struct {
+	volatile bool     active;       /* lease raised; READ LOCK-FREE (can_should_park / *_active) */
+	volatile uint32_t token;        /* 0 = disarmed */
+	volatile uint32_t owner_gen;    /* slcan_port conn-gen that armed/last-renewed the lease */
+	volatile uint64_t deadline_us;  /* 0 = disarmed; else esp_timer deadline */
+} lease_t;
+
+static lease_t s_claim = {0};   /* host bus-claim raised over the UDS auth window (auth fence) */
+static lease_t s_park  = {0};   /* host REST datalog-pause (advisory pre-park)                 */
 static volatile uint32_t s_last_bus_activity_ms = 0; /* last TWAI TX or RX (atomic 32-bit ms) */
 static volatile bool     s_stuck_flash_alarm = false;
 
@@ -176,16 +186,16 @@ bool can_flash_active(void)
 }
 
 /* --- Host-requested datalog pause (advisory pre-park) ---------------------------
- * s_park_active is the BIT2 replacement, written ONLY under s_park_mux by the lease
- * arm/release/reap below. NULL-safe (a plain bool, valid before can_init). */
+ * s_park.active is the BIT2 replacement, written ONLY under s_park_mux by the lease
+ * arm/release/reap below. NULL-safe (a plain volatile bool, valid before can_init). */
 bool can_datalog_park_active(void)
 {
-	return s_park_active;
+	return s_park.active;
 }
 
 /* True while the single TWAI controller is reserved by ANY of: a flash codec
- * (FLASH_ACTIVE_BIT, event group), a host REST datalog-pause (s_park_active), or a host
- * bus-claim over the UDS auth window (s_claim_active). The datalogger poll task and the
+ * (FLASH_ACTIVE_BIT, event group), a host REST datalog-pause (s_park.active), or a host
+ * bus-claim over the UDS auth window (s_claim.active). The datalogger poll task and the
  * AutoPID poll task park on THIS so neither injects a stray frame while the bus is reserved.
  * The triple OR is the brick interlock: even if a stray resume cleared the park flag,
  * FLASH_ACTIVE_BIT or the claim flag independently keeps every producer parked. The two
@@ -193,16 +203,18 @@ bool can_datalog_park_active(void)
  * NULL-group-safe (can_flash_active() handles a NULL group; the flags default false). */
 bool can_should_park(void)
 {
-	return can_flash_active() || s_park_active || s_claim_active;
+	return can_flash_active() || s_park.active || s_claim.active;
 }
 
 /* --- Dead-man's-switch lease primitives (WICAN_DEADMAN_AUTORESUME.md) ----------------
- * Every park/claim state transition is done ENTIRELY under s_park_mux: the active flag,
- * token, owner-generation and deadline move together so no reader sees a torn lease and the
- * reaper can compare-and-act atomically. slcan_port_conn_gen() and esp_timer_get_time() are
- * read BEFORE entering the critical section (they take their own locks / are independently
- * atomic) to keep the critical section short and avoid lock nesting. Tokens are a monotonic
- * counter; 0 is the reserved "disarmed / no token" sentinel so a stale token never matches.
+ * ONE generic implementation drives BOTH leases; can_host_bus_claim_* / can_park_lease_*
+ * below are thin wrappers that pick the s_claim or s_park instance (task #43). Every park/claim
+ * state transition is done ENTIRELY under s_park_mux: the active flag, token, owner-generation
+ * and deadline move together so no reader sees a torn lease and the reaper can compare-and-act
+ * atomically. slcan_port_conn_gen() and esp_timer_get_time() are read BEFORE entering the
+ * critical section (they take their own locks / are independently atomic) to keep the critical
+ * section short and avoid lock nesting. Tokens come from the single shared s_token_seq; 0 is the
+ * reserved "disarmed / no token" sentinel so a stale token never matches.
  *
  *  arm     : issue a fresh token + deadline, raise the flag (op=bus_claim / op=pause).
  *  renew   : token-matched deadline bump + owner re-stamp (op=keepalive, in-flash reconnect).
@@ -211,50 +223,56 @@ bool can_should_park(void)
  *            the exact (token,deadline) the reaper sampled AND still expired, so a host
  *            arm/renew landing in the snapshot->act gap aborts the reap (the brick fix). */
 
-uint32_t can_host_bus_claim_arm(uint64_t ttl_us)
+/* Lower a lease's four fields together. MUST be called with s_park_mux held. */
+static inline void lease_clear(lease_t *L)
+{
+	L->active = false;
+	L->token = 0;
+	L->owner_gen = 0;
+	L->deadline_us = 0;
+}
+
+static uint32_t lease_arm(lease_t *L, uint64_t ttl_us)
 {
 	uint64_t now = (uint64_t)esp_timer_get_time();
 	uint32_t owner = (uint32_t)slcan_port_conn_gen();
 	portENTER_CRITICAL(&s_park_mux);
 	uint32_t tok = ++s_token_seq;
 	if(tok == 0) { tok = ++s_token_seq; }   /* skip the reserved 0 sentinel on wrap */
-	s_claim_token = tok;
-	s_claim_owner_gen = owner;
-	s_claim_deadline_us = now + ttl_us;
-	s_claim_active = true;
+	L->token = tok;
+	L->owner_gen = owner;
+	L->deadline_us = now + ttl_us;
+	L->active = true;                        /* raised LAST: the other fields are coherent first */
 	portEXIT_CRITICAL(&s_park_mux);
 	return tok;
 }
 
-bool can_host_bus_claim_renew(uint32_t token, uint64_t ttl_us)
+static bool lease_renew(lease_t *L, uint32_t token, uint64_t ttl_us)
 {
 	uint64_t now = (uint64_t)esp_timer_get_time();
 	uint32_t owner = (uint32_t)slcan_port_conn_gen();
 	bool ok = false;
 	portENTER_CRITICAL(&s_park_mux);
-	if(s_claim_active && s_claim_token == token)
+	if(L->active && L->token == token)
 	{
-		s_claim_deadline_us = now + ttl_us;
-		if(owner != 0) { s_claim_owner_gen = owner; }  /* re-stamp on in-flash reconnect */
+		L->deadline_us = now + ttl_us;
+		if(owner != 0) { L->owner_gen = owner; }  /* re-stamp on in-flash reconnect */
 		ok = true;
 	}
 	portEXIT_CRITICAL(&s_park_mux);
 	return ok;
 }
 
-bool can_host_bus_claim_release(uint32_t token)
+static bool lease_release(lease_t *L, uint32_t token)
 {
 	bool ok = false;
 	portENTER_CRITICAL(&s_park_mux);
-	if(s_claim_active && (token == 0 || s_claim_token == token))
+	if(L->active && (token == 0 || L->token == token))
 	{
-		s_claim_active = false;
-		s_claim_token = 0;
-		s_claim_owner_gen = 0;
-		s_claim_deadline_us = 0;
+		lease_clear(L);
 		ok = true;
 	}
-	else if(!s_claim_active && token == 0)
+	else if(!L->active && token == 0)
 	{
 		ok = true;   /* already released + unconditional -> idempotent success */
 	}
@@ -262,115 +280,45 @@ bool can_host_bus_claim_release(uint32_t token)
 	return ok;
 }
 
-bool can_host_bus_claim_reap(uint32_t token, uint64_t deadline_us)
+static bool lease_reap(lease_t *L, uint32_t token, uint64_t deadline_us)
 {
 	uint64_t now = (uint64_t)esp_timer_get_time();
 	bool ok = false;
 	portENTER_CRITICAL(&s_park_mux);
-	/* Clear ONLY if the claim is STILL the exact lease the reaper sampled (token+deadline)
+	/* Clear ONLY if the lease is STILL the exact one the reaper sampled (token+deadline)
 	 * AND still expired. Any arm (new token) or renew (new deadline) in the gap aborts. */
-	if(s_claim_active && s_claim_token == token &&
-	   s_claim_deadline_us == deadline_us && deadline_us != 0 && now > deadline_us)
+	if(L->active && L->token == token &&
+	   L->deadline_us == deadline_us && deadline_us != 0 && now > deadline_us)
 	{
-		s_claim_active = false;
-		s_claim_token = 0;
-		s_claim_owner_gen = 0;
-		s_claim_deadline_us = 0;
+		lease_clear(L);
 		ok = true;
 	}
 	portEXIT_CRITICAL(&s_park_mux);
 	return ok;
 }
 
-bool can_host_bus_claim_active(void)
-{
-	return s_claim_active;
-}
-
-uint32_t can_host_bus_claim_token(void)
+static uint32_t lease_token(lease_t *L)
 {
 	portENTER_CRITICAL(&s_park_mux);
-	uint32_t t = s_claim_token;
+	uint32_t t = L->token;
 	portEXIT_CRITICAL(&s_park_mux);
 	return t;
 }
 
-uint32_t can_park_lease_arm(uint64_t ttl_us)
-{
-	uint64_t now = (uint64_t)esp_timer_get_time();
-	uint32_t owner = (uint32_t)slcan_port_conn_gen();
-	portENTER_CRITICAL(&s_park_mux);
-	uint32_t tok = ++s_token_seq;
-	if(tok == 0) { tok = ++s_token_seq; }
-	s_park_token = tok;
-	s_park_owner_gen = owner;
-	s_park_deadline_us = now + ttl_us;
-	s_park_active = true;
-	portEXIT_CRITICAL(&s_park_mux);
-	return tok;
-}
+/* --- Host bus-claim (auth-window fence): wrappers over the s_claim instance --- */
+uint32_t can_host_bus_claim_arm(uint64_t ttl_us) { return lease_arm(&s_claim, ttl_us); }
+bool can_host_bus_claim_renew(uint32_t token, uint64_t ttl_us) { return lease_renew(&s_claim, token, ttl_us); }
+bool can_host_bus_claim_release(uint32_t token) { return lease_release(&s_claim, token); }
+bool can_host_bus_claim_reap(uint32_t token, uint64_t deadline_us) { return lease_reap(&s_claim, token, deadline_us); }
+bool can_host_bus_claim_active(void) { return s_claim.active; }   /* lock-free volatile read */
+uint32_t can_host_bus_claim_token(void) { return lease_token(&s_claim); }
 
-bool can_park_lease_renew(uint32_t token, uint64_t ttl_us)
-{
-	uint64_t now = (uint64_t)esp_timer_get_time();
-	uint32_t owner = (uint32_t)slcan_port_conn_gen();
-	bool ok = false;
-	portENTER_CRITICAL(&s_park_mux);
-	if(s_park_active && s_park_token == token)
-	{
-		s_park_deadline_us = now + ttl_us;
-		if(owner != 0) { s_park_owner_gen = owner; }   /* re-stamp on in-flash reconnect */
-		ok = true;
-	}
-	portEXIT_CRITICAL(&s_park_mux);
-	return ok;
-}
-
-bool can_park_lease_release(uint32_t token)
-{
-	bool ok = false;
-	portENTER_CRITICAL(&s_park_mux);
-	if(s_park_active && (token == 0 || s_park_token == token))
-	{
-		s_park_active = false;
-		s_park_token = 0;
-		s_park_owner_gen = 0;
-		s_park_deadline_us = 0;
-		ok = true;
-	}
-	else if(!s_park_active && token == 0)
-	{
-		ok = true;   /* already resumed + unconditional -> idempotent success */
-	}
-	portEXIT_CRITICAL(&s_park_mux);
-	return ok;
-}
-
-bool can_park_lease_reap(uint32_t token, uint64_t deadline_us)
-{
-	uint64_t now = (uint64_t)esp_timer_get_time();
-	bool ok = false;
-	portENTER_CRITICAL(&s_park_mux);
-	if(s_park_active && s_park_token == token &&
-	   s_park_deadline_us == deadline_us && deadline_us != 0 && now > deadline_us)
-	{
-		s_park_active = false;
-		s_park_token = 0;
-		s_park_owner_gen = 0;
-		s_park_deadline_us = 0;
-		ok = true;
-	}
-	portEXIT_CRITICAL(&s_park_mux);
-	return ok;
-}
-
-uint32_t can_park_token(void)
-{
-	portENTER_CRITICAL(&s_park_mux);
-	uint32_t t = s_park_token;
-	portEXIT_CRITICAL(&s_park_mux);
-	return t;
-}
+/* --- Datalog-park (advisory pre-park): wrappers over the s_park instance --- */
+uint32_t can_park_lease_arm(uint64_t ttl_us) { return lease_arm(&s_park, ttl_us); }
+bool can_park_lease_renew(uint32_t token, uint64_t ttl_us) { return lease_renew(&s_park, token, ttl_us); }
+bool can_park_lease_release(uint32_t token) { return lease_release(&s_park, token); }
+bool can_park_lease_reap(uint32_t token, uint64_t deadline_us) { return lease_reap(&s_park, token, deadline_us); }
+uint32_t can_park_token(void) { return lease_token(&s_park); }
 
 uint32_t can_bus_idle_ms(void)
 {
@@ -406,20 +354,20 @@ void can_coexist_snapshot(can_coexist_snapshot_t *out)
 	portENTER_CRITICAL(&s_park_mux);
 	out->now_us            = now;
 	out->flash_active      = flash;
-	out->host_bus_claimed  = s_claim_active;
-	out->datalog_parked    = s_park_active;
-	out->claim_armed       = s_claim_active;
-	out->claim_token       = s_claim_token;
-	out->claim_deadline_us = s_claim_deadline_us;
-	out->claim_expired     = (s_claim_deadline_us != 0 && now > s_claim_deadline_us);
-	out->claim_owner_alive = (s_claim_owner_gen == 0) ? (live_gen != 0)
-	                                                  : (live_gen == s_claim_owner_gen);
-	out->park_armed        = s_park_active;
-	out->park_token        = s_park_token;
-	out->park_deadline_us  = s_park_deadline_us;
-	out->park_expired      = (s_park_deadline_us != 0 && now > s_park_deadline_us);
-	out->park_owner_alive  = (s_park_owner_gen == 0) ? (live_gen != 0)
-	                                                 : (live_gen == s_park_owner_gen);
+	out->host_bus_claimed  = s_claim.active;
+	out->datalog_parked    = s_park.active;
+	out->claim_armed       = s_claim.active;
+	out->claim_token       = s_claim.token;
+	out->claim_deadline_us = s_claim.deadline_us;
+	out->claim_expired     = (s_claim.deadline_us != 0 && now > s_claim.deadline_us);
+	out->claim_owner_alive = (s_claim.owner_gen == 0) ? (live_gen != 0)
+	                                                  : (live_gen == s_claim.owner_gen);
+	out->park_armed        = s_park.active;
+	out->park_token        = s_park.token;
+	out->park_deadline_us  = s_park.deadline_us;
+	out->park_expired      = (s_park.deadline_us != 0 && now > s_park.deadline_us);
+	out->park_owner_alive  = (s_park.owner_gen == 0) ? (live_gen != 0)
+	                                                 : (live_gen == s_park.owner_gen);
 	out->bus_idle_ms       = idle_ms;
 	portEXIT_CRITICAL(&s_park_mux);
 }
