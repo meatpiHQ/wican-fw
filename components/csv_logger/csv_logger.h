@@ -150,7 +150,21 @@ bool csv_logger_is_active_file(const char *abspath);
 extern const httpd_uri_t csv_status_uri;
 extern const httpd_uri_t csv_list_uri;
 extern const httpd_uri_t csv_download_uri;
-extern const httpd_uri_t csv_control_uri;   /* POST /csv_logger?op=start|stop */
+extern const httpd_uri_t csv_control_uri;     /* POST /csv_logger?op=start|stop */
+extern const httpd_uri_t datalog_control_uri; /* POST /datalog?op=pause|resume|bus_claim|bus_release|keepalive */
+extern const httpd_uri_t datalog_status_uri;  /* GET  /datalog -> live coexistence state */
+
+/**
+ * @brief Restore the pre-pause manual mode after a park lease has been released/reaped
+ *        (dead-man's-switch, WICAN_DEADMAN_AUTORESUME.md).
+ *
+ * Called by exactly one winner per park lease: the REST op=resume handler (after a successful
+ * token-matched can_park_lease_release) OR the firmware dead-man reaper (after a successful
+ * token+deadline-matched can_park_lease_reap). Because both lower the park flag atomically under
+ * the can.c spinlock, only one reaches here for a given pause -- that mutual exclusion is what
+ * makes this lock-free mode-restore safe. Touches ONLY the csv manual mode, never a CAN bit.
+ */
+void datalog_restore_mode(void);
 
 #ifdef __cplusplus
 }

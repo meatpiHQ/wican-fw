@@ -43,6 +43,7 @@
 #include "event_log.h"
 #include "config_server.h"
 #include "sdcard.h"
+#include "can.h"   /* can_flash_active / can_park_lease_* / can_host_bus_claim_*: coexistence + dead-man's-switch (task #36) */
 #include "vehicle.h"
 #include "wc_timer.h"
 #include "sleep_mode.h"      // sleep_mode_get_voltage() for the BATT_V system column (non-blocking queue peek)
@@ -974,6 +975,193 @@ static esp_err_t csv_control_handler(httpd_req_t *req)
     free(status);
     return ESP_OK;
 }
+
+// ---- /datalog coordination endpoint (no-reboot coexistence, task #36.C) ----
+// Mode to restore on resume (snapshotted on the FIRST pause so a re-pause can't clobber it).
+static volatile int8_t s_datalog_prepause_mode = CSV_MANUAL_AUTO;
+
+// Compact live state for the host to verify quiesce/resume + run the dead-man's-switch
+// (host reconcile reads flash_active/host_bus_claimed; pause/bus_claim read the issued
+// tokens). Tokens are emitted as JSON numbers when armed, null when disarmed, matching
+// WiCANDatalogClient. Caller frees.
+static char *datalog_state_json(void)
+{
+    cJSON *root = cJSON_CreateObject();
+    if (root == NULL) { return NULL; }
+    cJSON_AddBoolToObject(root, "ok", true);
+    cJSON_AddBoolToObject(root, "flash_active", can_flash_active());
+    cJSON_AddBoolToObject(root, "datalog_parked", can_datalog_park_active());
+    cJSON_AddBoolToObject(root, "host_bus_claimed", can_host_bus_claim_active());
+    cJSON_AddStringToObject(root, "manual_mode",
+                            (csv_manual_mode == CSV_MANUAL_ON)  ? "on" :
+                            (csv_manual_mode == CSV_MANUAL_OFF) ? "off" : "auto");
+    uint32_t park_tok = can_park_token();
+    uint32_t claim_tok = can_host_bus_claim_token();
+    if (park_tok) { cJSON_AddNumberToObject(root, "park_token", park_tok); }
+    else          { cJSON_AddNullToObject(root, "park_token"); }
+    if (claim_tok) { cJSON_AddNumberToObject(root, "claim_token", claim_tok); }
+    else           { cJSON_AddNullToObject(root, "claim_token"); }
+    cJSON_AddNumberToObject(root, "lease_ttl_ms", COEXIST_PARK_LEASE_TTL_MS);
+    cJSON_AddNumberToObject(root, "claim_ttl_ms", COEXIST_HOST_CLAIM_LEASE_TTL_MS);
+    cJSON_AddNumberToObject(root, "bus_idle_ms", can_bus_idle_ms());
+    cJSON_AddBoolToObject(root, "stuck_flash_alarm", can_stuck_flash_alarm());
+    char *out = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    return out;
+}
+
+// Restore the pre-pause manual mode after the park flag has ALREADY been lowered (by the
+// atomic can_park_lease_release / can_park_lease_reap in can.c). Called by exactly ONE winner
+// per park lease -- the REST op=resume handler (after a successful token-matched release) OR
+// the dead-man reaper (after a successful token+deadline-matched reap) -- because both clear
+// the lease atomically under s_park_mux, so only one of them succeeds and reaches here for a
+// given pause. That mutual exclusion is what makes this lock-free mode-restore safe (it does
+// not itself re-derive park state). Touches ONLY the csv manual mode, never any CAN bit, so it
+// is brick-safe. In the realistic flow the logger was already running before the pause, so
+// csv_logger_set_manual_override(true)'s lazy csv_logger_init() early-returns (csv_queue != NULL).
+void datalog_restore_mode(void)
+{
+    if (s_datalog_prepause_mode == CSV_MANUAL_ON)
+    {
+        csv_logger_set_manual_override(true);   // ON needs the lazy writer-init path
+    }
+    else
+    {
+        csv_manual_mode = s_datalog_prepause_mode;  // AUTO/OFF: no init, just restore the gate
+    }
+}
+
+// Parse an unsigned-int query param; true + *out on a present, parseable value.
+static bool datalog_query_u32(const char *query, const char *key, uint32_t *out)
+{
+    char buf[16];
+    if (httpd_query_key_value(query, key, buf, sizeof(buf)) != ESP_OK) { return false; }
+    *out = (uint32_t)strtoul(buf, NULL, 10);
+    return true;
+}
+
+static void datalog_send_state(httpd_req_t *req)
+{
+    char *s = datalog_state_json();
+    httpd_resp_set_type(req, "application/json");
+    if (s == NULL) { httpd_resp_sendstr(req, "{\"ok\":false}"); return; }
+    httpd_resp_sendstr(req, s);
+    free(s);
+}
+
+// POST /datalog?op=pause|resume|bus_claim|bus_release|keepalive -- the host's no-reboot
+// coexistence + dead-man's-switch coordination layer (WICAN_DEADMAN_AUTORESUME.md).
+//   pause     : stop the CSV/AutoPID producer, then arm the park lease (raises the park flag).
+//               -> returns park_token.
+//   resume    : token-matched release of the park lease + restore pre-pause mode. A stale token
+//               (the reaper already auto-resumed after the host vanished) -> 409, which the host
+//               treats as success.
+//   bus_claim : arm the host bus-claim lease (raises the claim flag) -- the brick fence over the
+//               UDS auth window FLASH_ACTIVE_BIT does not cover. -> returns claim_token.
+//   bus_release: token-matched clear of the claim (stale token -> 409).
+//   keepalive : token-matched renew of EITHER/BOTH leases; never touches a flag.
+// All park/claim state here is SEPARATE from the codec-owned FLASH_ACTIVE_BIT: this REST path
+// must NEVER write BIT1, or a stray/duplicate resume could un-park a LIVE flash -> soft-brick.
+// BIT1 remains the brick-safety guarantee; these are advisory pre-park + auth-window fence.
+// Returns the live state JSON. (Reuses csv_logger_set_manual_override; ~public funcs.)
+static esp_err_t datalog_control_handler(httpd_req_t *req)
+{
+    char query[96];
+    char op[16] = {0};
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
+        httpd_query_key_value(query, "op", op, sizeof(op)) != ESP_OK)
+    {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing op");
+        return ESP_FAIL;
+    }
+
+    bool conflict = false;  // -> HTTP 409 (stale token; host reads it as already-reaped success)
+
+    if (strcmp(op, "pause") == 0)
+    {
+        // Snapshot the restore target only on the FIRST pause (re-pause must not overwrite it
+        // with the already-forced-off mode). Stop the producer BEFORE parking the bus. Arming
+        // the park lease raises the park flag atomically (issues park_token, stamps the owning
+        // 35001 connection generation).
+        if (!can_datalog_park_active()) { s_datalog_prepause_mode = csv_manual_mode; }
+        csv_logger_set_manual_override(false);
+        can_park_lease_arm(COEXIST_PARK_LEASE_TTL_US);
+    }
+    else if (strcmp(op, "resume") == 0)
+    {
+        // Token-matched atomic release of the park flag, THEN restore the mode. If the reaper
+        // already reaped (host had vanished) the token no longer matches -> release fails -> 409.
+        uint32_t token = 0;
+        bool has_token = datalog_query_u32(query, "token", &token);
+        if (!can_park_lease_release(has_token ? token : 0))
+        {
+            conflict = true;  // reaper already reset this lease -> 409, leave state as-is
+        }
+        else
+        {
+            datalog_restore_mode();   // park flag already lowered; restore exact pre-pause mode
+        }
+    }
+    else if (strcmp(op, "bus_claim") == 0)
+    {
+        // Raise the auth-window brick fence for the WHOLE host-driven session; arming the lease
+        // raises the claim flag atomically and issues claim_token.
+        can_host_bus_claim_arm(COEXIST_HOST_CLAIM_LEASE_TTL_US);
+    }
+    else if (strcmp(op, "bus_release") == 0)
+    {
+        uint32_t token = 0;
+        bool has_token = datalog_query_u32(query, "token", &token);
+        if (!can_host_bus_claim_release(has_token ? token : 0))
+        {
+            conflict = true;  // stale claim token (already reaped) -> 409
+        }
+    }
+    else if (strcmp(op, "keepalive") == 0)
+    {
+        // Renew whichever leases the host still holds. A token mismatch is silently ignored
+        // (the lease simply isn't renewed and the reaper will handle a truly-gone host).
+        uint32_t park_tok = 0, claim_tok = 0;
+        if (datalog_query_u32(query, "park_token", &park_tok))
+        {
+            can_park_lease_renew(park_tok, COEXIST_PARK_LEASE_TTL_US);
+        }
+        if (datalog_query_u32(query, "claim_token", &claim_tok))
+        {
+            can_host_bus_claim_renew(claim_tok, COEXIST_HOST_CLAIM_LEASE_TTL_US);
+        }
+    }
+    else
+    {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "unknown op");
+        return ESP_FAIL;
+    }
+
+    if (conflict) { httpd_resp_set_status(req, "409 Conflict"); }
+    datalog_send_state(req);
+    return ESP_OK;
+}
+
+// GET /datalog -- live coordination state so the host can VERIFY (not assume) quiesce/resume.
+static esp_err_t datalog_status_handler(httpd_req_t *req)
+{
+    datalog_send_state(req);
+    return ESP_OK;
+}
+
+const httpd_uri_t datalog_control_uri = {
+    .uri = "/datalog",
+    .method = HTTP_POST,
+    .handler = datalog_control_handler,
+    .user_ctx = NULL
+};
+
+const httpd_uri_t datalog_status_uri = {
+    .uri = "/datalog",
+    .method = HTTP_GET,
+    .handler = datalog_status_handler,
+    .user_ctx = NULL
+};
 
 const httpd_uri_t csv_status_uri = {
     .uri = "/csv_status",

@@ -299,7 +299,15 @@ static void mqtt_parse_data(void *handler_args, esp_event_base_t base, int32_t e
             }
             can_frame.self = 0;
             // can_enable();
-            can_send(&can_frame, 1);
+            /* Single-CAN-owner interlock (task #36): this runs on the MQTT event-loop task,
+             * an OUT-OF-BAND TX producer not serialized by can_tx_task. Drop the broker-
+             * injected frame while a flash owns the bus -- it could otherwise corrupt the
+             * ECU's ISO-TP reassembly mid-TransferData (soft-brick). A coexist flash is
+             * exclusive-owner by design, so a concurrent MQTT frame is never legitimate. */
+            if (!can_flash_active())
+            {
+                can_send(&can_frame, 1);
+            }
         }
     }
     else if (event->topic && (event->topic_len == (int)strlen(mqtt_cmd_topic)) &&

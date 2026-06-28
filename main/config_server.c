@@ -3892,6 +3892,8 @@ static void register_server_uris(void)
 	httpd_register_uri_handler(server, &csv_list_uri);
 	httpd_register_uri_handler(server, &csv_download_uri);
 	httpd_register_uri_handler(server, &csv_control_uri);
+	httpd_register_uri_handler(server, &datalog_control_uri);   /* POST /datalog?op=pause|resume (task #36.C) */
+	httpd_register_uri_handler(server, &datalog_status_uri);    /* GET  /datalog -> live coexistence state */
 	httpd_register_uri_handler(server, &sd_files_get_uri);
 	httpd_register_uri_handler(server, &sd_files_post_uri);
 	event_log_register_handlers(server);   // GET /event_log* (Task #24) -- before the catch-all wildcard

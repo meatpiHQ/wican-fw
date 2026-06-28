@@ -56,9 +56,11 @@
 /* Minimum command length: 'W' + mode + at least 1 filename char. */
 #define NCFLASH_FASTWRITE_MIN_LEN 3
 
-/* Build marker bumped to NCFRv5 once a LIVE-capable fastwrite ships (so the
- * host rev-gate in src/ecu/wican_sd_flash.py opens). A dry-run-only build keeps
- * the fast-read marker at NCFRv4. */
+/* INFORMATIONAL / log-only. The host rev-gate (src/ecu/wican_sd_flash.py, constants.py)
+ * is driven SOLELY by NCFLASH_FASTREAD_VERSION ("NCFRv<rev>"): the fastwrite SD-flash trigger
+ * opens at rev >= FASTWRITE_MIN_FW_REV. This marker is NEVER streamed on the ping path and must
+ * not be -- the host parser only recognizes the NCFRv prefix. Do not wire it into any wire
+ * contract; bump NCFLASH_FASTREAD_VERSION instead. */
 #define NCFLASH_FASTWRITE_VERSION "NCFWv1"
 
 /* True if buf looks like a fast-write command (routed here before slcan_parse_str). */

@@ -252,13 +252,18 @@ int ncflash_fast_read(const uint8_t *buf, int len, QueueHandle_t *tx_queue)
     ESP_LOGI(TAG, "fast read start=0x%06lX len=0x%06lX",
              (unsigned long)start, (unsigned long)length);
 
-    /* Re-entry guard: refuse a second concurrent fast-op (it would race the bus). */
-    if (s_fastop_busy)
+    /* Unified single-CAN-owner guard (task #36 / plan §5.4): refuse a second
+     * concurrent fast-op -- this one (s_fastop_busy) OR a fast-write (which sets
+     * FLASH_ACTIVE_BIT too) -- so fast-read and fast-write mutually exclude. */
+    if (s_fastop_busy || can_flash_active())
     {
         ESP_LOGW(TAG, "fast read refused: another fast-op is in progress");
         return -1;
     }
     s_fastop_busy = 1;
+    /* Claim the bus BEFORE suspending can_rx_task (plan §5.2): the datalogger poll
+     * task parks on this bit so no stray poll frame can race the read. */
+    can_flash_active_set();
 
     /* Take exclusive ownership of the CAN bus: pause the frame-forwarding task
      * so it cannot consume the ECU's responses, then flush stale RX frames.
@@ -391,6 +396,9 @@ cleanup:
         while (xQueueReceive(*tx_queue, &leftover, 0) == pdTRUE) { /* discard */ }
         ESP_LOGW(TAG, "fast read aborted: host stopped draining TCP (clean teardown)");
     }
+    /* Release the bus LAST (task #36 / plan §5.2): the poll task un-parks only
+     * after can_rx_task is resumed and the bus drained, on EVERY exit path. */
+    can_flash_active_clear();
     s_fastop_busy = 0;
     return rc;
 }

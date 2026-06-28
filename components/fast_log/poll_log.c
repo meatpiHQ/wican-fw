@@ -97,6 +97,7 @@ static const char *TAG = "poll_log";
 #define POLLLOG_FLIP_MIN_MS      2000     /* min dwell between mode flips (anti-thrash hysteresis) */
 #define POLLLOG_MAX_QUIESCE_MS   600000   /* 10 min: force NORMAL+repoll even with no frame (self-heal) */
 #define POLLLOG_RESUME_FRAMES    1        /* an RX frame triggers a PROBE-resume; confirmed only by a real OK */
+#define POLLLOG_FLASH_PARK_MS    20       /* interlock park sleep while a flash owns the bus (task #36) */
 
 /* ---- Hybrid broadcast capture (STAGED -- OFF by default) ----------------- */
 /* Flip POLLLOG_HYBRID to 1, then rebuild + OTA, to fold the passive broadcast decode back into
@@ -413,6 +414,20 @@ static void polllog_rx_task(void *arg)
 
     for (;;)
     {
+        /* Single-CAN-owner interlock (task #36 / plan §5.3): the one TWAI controller is
+         * reserved by ANY of a flash/read codec (FLASH_ACTIVE_BIT), a host REST datalog
+         * pause, or a host bus-claim -- can_should_park() covers all three. Park here -- short
+         * sleep + skip, NEVER portMAX_DELAY (that would starve the task WDT while the bus
+         * is held). This stops a poll request (can_send below) from injecting a stray
+         * 0x7E0 into the ECU's ISO-TP reassembly mid-TransferData (soft-brick) and stops
+         * the bus disable/silent/enable flips from fighting the flash for the controller.
+         * Resumes cleanly the moment the bus is released. */
+        if (can_should_park())
+        {
+            vTaskDelay(pdMS_TO_TICKS(POLLLOG_FLASH_PARK_MS));
+            continue;
+        }
+
         const int64_t now = esp_timer_get_time();
 
         if (s_engine_running)

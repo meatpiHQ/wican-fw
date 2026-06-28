@@ -31,7 +31,13 @@
  * the host can confirm exactly which fast-read build is live before a real read.
  * Bump the version string whenever the read loop's wire behaviour changes. */
 #define NCFLASH_FASTREAD_PING_ADDR 0xFFFFFFFEu
-#define NCFLASH_FASTREAD_VERSION   "NCFRv5\n"   /* v5: + clean-teardown (Part-C #21) + live SD-staged fastwrite */
+/* This NCFRv<rev> marker is the SOLE wire-contract the host rev-gates on (NCFLASH_FASTWRITE_VERSION
+ * is log-only, never streamed). The host (src/ecu/constants.py) reads it on the dedicated port to
+ * detect capability: rev >= COEXIST_MIN_FW_REV(6) => no-reboot coexistence (dedicated SLCAN port
+ * 35001). v6 means ONLY "the dedicated port exists + routes the protocol-agnostic codecs"; the
+ * REST /datalog endpoint (36.C) is a SEPARATE capability the host soft-detects (404 degrades, never
+ * aborts a flash). Keep this in lockstep with COEXIST_MIN_FW_REV. */
+#define NCFLASH_FASTREAD_VERSION   "NCFRv6\n"   /* v6: no-reboot SLCAN coexistence (dedicated port 35001); v5: clean-teardown + live SD fastwrite */
 
 /* Sync preamble streamed once, right after CAN forwarding is suspended and
  * before the first ROM byte. Any CAN frames already queued/in-flight toward the

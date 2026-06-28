@@ -53,6 +53,10 @@
 #include "autopid_config.h"
 #include "esp_heap_caps.h"
 #include <stdlib.h>   /* strtod for the calculated-channel evaluator (Task #17) */
+#include "can.h"      /* can_should_park: single-CAN-owner interlock (task #36) */
+
+/* Park sleep while the bus is reserved for a flash/datalog-pause (mirrors POLLLOG_FLASH_PARK_MS). */
+#define AUTOPID_FLASH_PARK_MS   20
 
 // #define TAG __func__
 #define TAG "AUTO_PID"
@@ -4136,7 +4140,21 @@ static void autopid_task(void *pvParameters)
         static bool pid_polling_paused_prev = false;
 
         dev_status_wait_for_bits(DEV_AUTOPID_ELM327_APP_BIT, portMAX_DELAY);
-        
+
+        /* Single-CAN-owner interlock (task #36): a flash/read codec or a host REST datalog
+         * pause reserves the one CAN controller (can_should_park). The AutoPID poller is an
+         * autonomous TX producer -- without this it would keep firing 0x7E0/0x7DF OBD requests
+         * and ATMA bus-mode flips while a no-reboot coexist flash holds the bus mid-TransferData
+         * (protocol STAYS auto_pid during a coexist flash, so this gate, not a protocol refusal,
+         * is the brick guard). Park here -- short sleep + skip, NEVER portMAX_DELAY -- mirroring
+         * poll_log.c. Covers both the PID poll loop and the ATMA CAN-filter monitor below
+         * (both are downstream of this loop-top check). Resumes the moment the bus is released. */
+        if (can_should_park())
+        {
+            vTaskDelay(pdMS_TO_TICKS(AUTOPID_FLASH_PARK_MS));
+            continue;
+        }
+
         if (dev_status_is_sleeping())
         {
             ESP_LOGI(TAG, "Device is sleeping, waiting for wakeup");
