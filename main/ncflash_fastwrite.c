@@ -449,7 +449,7 @@ int ncflash_fast_write(const uint8_t *buf, int len, QueueHandle_t *tx_queue)
     /* Operational milestone (Task #12): the flash is past every pre-erase gate and is about to
      * touch the ECU. One sparse line -- the per-block progress stays on the wire (NCFWPROG). */
     fw_t0_us = esp_timer_get_time();
-    event_log_emit(EVL_FLASH_START, "%s %s blocks=%lu",
+    event_log_emit(EVL_FLASH_START, "%.48s %s blocks=%lu",
                    name, live ? "LIVE" : "dry-run", (unsigned long)total_blocks);
 
     if (fw_emit(tx_queue, "NCFWSYNC\n") != 0) { host_gone = 1; rc = -3; goto cleanup; }
@@ -527,7 +527,7 @@ int ncflash_fast_write(const uint8_t *buf, int len, QueueHandle_t *tx_queue)
     (void)fw_emit(tx_queue, "NCFWDONE\n");
     ESP_LOGI(TAG, "fast write %s complete: %lu blocks",
              live ? "LIVE" : "dry-run", (unsigned long)total_blocks);
-    event_log_emit(EVL_FLASH_OK, "%s %s blocks=%lu elapsed=%lldms",
+    event_log_emit(EVL_FLASH_OK, "%.48s %s blocks=%lu elapsed=%lldms",
                    name, live ? "LIVE" : "dry-run", (unsigned long)total_blocks,
                    (long long)((esp_timer_get_time() - fw_t0_us) / 1000));
     rc = 0;
@@ -552,13 +552,15 @@ cleanup:
     /* Operational milestone (Task #12): any non-zero rc is an aborted/failed flash. One sparse
      * line naming WHERE it died -- the fw_emit_err stage + the FWSUB_*/NRC sub-code + the block
      * index reached (done/total) -- so a post-mortem of a wireless flash is a one-line lookup.
-     * Stash is set by fw_emit_err; host-gone aborts (rc=-3) carry no stage, so flag them. */
+     * Stash is set by fw_emit_err; host-gone aborts (rc=-3) carry no stage, so flag them. The
+     * load-bearing fixed fields come FIRST and the variable-length ROM name LAST (capped), so a
+     * long filename can only ever truncate itself in the 112-byte detail, never the diagnostics. */
     if (rc != 0)
     {
-        event_log_emit(EVL_FLASH_FAIL, "%s %s rc=%d st=%d nrc=0x%02X blk=%lu/%lu%s",
-                       name, live ? "LIVE" : "dry-run", rc, s_fw_err_stage,
+        event_log_emit(EVL_FLASH_FAIL, "%s rc=%d st=%d nrc=0x%02X blk=%lu/%lu%s name=%.48s",
+                       live ? "LIVE" : "dry-run", rc, s_fw_err_stage,
                        s_fw_err_nrc & 0xFF, (unsigned long)done, (unsigned long)total_blocks,
-                       host_gone ? " host_gone" : "");
+                       host_gone ? " host_gone" : "", name);
     }
     /* Release the bus LAST (task #36 / plan §5.2): only now -- after can_rx_task is
      * resumed and the bus drained -- does the poll task un-park, so the single-CAN-

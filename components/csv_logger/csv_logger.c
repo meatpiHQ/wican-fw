@@ -1083,12 +1083,16 @@ static esp_err_t datalog_control_handler(httpd_req_t *req)
         // with the already-forced-off mode). Stop the producer BEFORE parking the bus. Arming
         // the park lease raises the park flag atomically (issues park_token, stamps the owning
         // 35001 connection generation).
-        if (!can_datalog_park_active()) { s_datalog_prepause_mode = csv_manual_mode; }
+        // Snapshot the restore target AND decide whether to log only on the FIRST pause: a re-pause
+        // (already parked) must neither overwrite the saved mode nor emit a second PARK with no
+        // intervening RESUME -- the resume side is edge-gated, so the park side must be too.
+        bool was_parked = can_datalog_park_active();
+        if (!was_parked) { s_datalog_prepause_mode = csv_manual_mode; }
         csv_logger_set_manual_override(false);
         can_park_lease_arm(COEXIST_PARK_LEASE_TTL_US);
-        // Operational milestone (Task #12): datalogger parked for a host session. keepalive renews
-        // are deliberately NOT logged (too chatty); only the park/resume edges are.
-        event_log_emit(EVL_DATALOG_PARK, "host paused datalog");
+        // Operational milestone (Task #12): datalogger parked for a host session. Only the rising
+        // edge is logged; keepalive renews + re-pause are deliberately NOT logged (too chatty).
+        if (!was_parked) { event_log_emit(EVL_DATALOG_PARK, "host paused datalog"); }
     }
     else if (strcmp(op, "resume") == 0)
     {
@@ -1112,10 +1116,12 @@ static esp_err_t datalog_control_handler(httpd_req_t *req)
     {
         // Raise the auth-window brick fence for the WHOLE host-driven session; arming the lease
         // raises the claim flag atomically and issues claim_token.
+        bool was_claimed = can_host_bus_claim_active();
         can_host_bus_claim_arm(COEXIST_HOST_CLAIM_LEASE_TTL_US);
         // Operational milestone (Task #12): NC-Flash "cable plugged in" -- the host bus-claim window
-        // opened. Brackets the flash sequence in events.log.
-        event_log_emit(EVL_HOST_CLAIM, "host claimed bus");
+        // opened. Log only the rising edge (the release side is edge-gated) so a re-claim renew
+        // doesn't double-log. Brackets the flash sequence in events.log.
+        if (!was_claimed) { event_log_emit(EVL_HOST_CLAIM, "host claimed bus"); }
     }
     else if (strcmp(op, "bus_release") == 0)
     {
