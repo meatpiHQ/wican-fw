@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WiCAN · Field Console — Variant B · Aurora Glass</title>
+<style>
+  :root{
+    --ink:#0f1535; --txt:#1b2150; --muted:#5b6493;
+    --glass:rgba(255,255,255,.55); --glass-2:rgba(255,255,255,.38);
+    --stroke:rgba(255,255,255,.65); --brand:#5b5bff; --brand-d:#2c2c8f;
+    --rec:#ff4d8d; --ok:#0fb37a; --warn:#e08a00; --err:#e23d6b;
+    --r:20px; --sh:0 12px 40px rgba(31,38,90,.18);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;color:var(--txt);position:relative;overflow-x:hidden;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  /* aurora mesh background */
+  body::before{content:"";position:fixed;inset:-20% -20% -20% -20%;z-index:-2;
+    background:
+      radial-gradient(40% 50% at 12% 18%,#7c5cff66 0,transparent 60%),
+      radial-gradient(45% 55% at 85% 12%,#19d3ff5e 0,transparent 60%),
+      radial-gradient(55% 60% at 78% 88%,#ff5ca85c 0,transparent 60%),
+      radial-gradient(50% 55% at 18% 92%,#23e6a85c 0,transparent 60%),
+      linear-gradient(135deg,#eef1ff 0%,#f6f0ff 50%,#eafcff 100%);
+    filter:saturate(1.1)}
+  body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+    background-image:radial-gradient(rgba(255,255,255,.5) 1px,transparent 1px);background-size:5px 5px;opacity:.25}
+  .glass{background:var(--glass);backdrop-filter:blur(22px) saturate(1.6);-webkit-backdrop-filter:blur(22px) saturate(1.6);
+    border:1px solid var(--stroke);box-shadow:var(--sh);border-radius:var(--r)}
+  .side{width:250px;margin:18px 0 18px 18px;padding:20px 14px;position:sticky;top:18px;height:calc(100vh - 36px);
+    display:flex;flex-direction:column;gap:5px}
+  .brand{display:flex;align-items:center;gap:11px;padding:6px 8px 18px}
+  .brand .logo{width:40px;height:40px;border-radius:13px;background:linear-gradient(135deg,#7c5cff,#19d3ff);
+    display:grid;place-items:center;color:#fff;font-weight:800;font-size:19px;box-shadow:0 6px 18px #7c5cff66}
+  .brand .name{font-weight:800;font-size:18px;color:var(--brand-d);letter-spacing:.2px}
+  .brand .tag{font-size:10.5px;color:var(--muted);font-weight:700;letter-spacing:1.5px}
+  .navlabel{font-size:10.5px;text-transform:uppercase;letter-spacing:1.4px;color:var(--muted);font-weight:800;padding:14px 12px 6px}
+  .nav a{display:flex;align-items:center;gap:12px;padding:12px 13px;border-radius:14px;color:var(--txt);
+    text-decoration:none;font-weight:700;font-size:14.5px;transition:.16s}
+  .nav a svg{width:19px;height:19px;flex:none;opacity:.85}
+  .nav a:hover{background:var(--glass-2)}
+  .nav a.active{background:linear-gradient(135deg,#7c5cff,#5b8bff);color:#fff;box-shadow:0 8px 22px #6a5cff66}
+  .nav a .badge{margin-left:auto;background:var(--rec);color:#fff;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;letter-spacing:.5px}
+  .guardbox{margin-top:auto;border-radius:14px;padding:13px;font-size:11.5px;line-height:1.55;
+    background:linear-gradient(135deg,rgba(124,92,255,.16),rgba(25,211,255,.12));border:1px solid var(--stroke)}
+  .guardbox b{display:flex;align-items:center;gap:6px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px;color:var(--brand-d)}
+  .guardbox code{background:rgba(255,255,255,.55);border-radius:5px;padding:1px 5px;font-size:11px}
+  .main{flex:1;min-width:0;padding:26px 30px 60px}
+  .head{display:flex;align-items:flex-start;gap:16px;margin-bottom:24px;flex-wrap:wrap}
+  .head h1{margin:0;font-size:30px;font-weight:800;letter-spacing:-.5px;
+    background:linear-gradient(120deg,#3a2c8f,#5b5bff 45%,#19a3d3);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .head p{margin:4px 0 0;color:var(--muted);font-size:13.5px;font-weight:600}
+  .chips{margin-left:auto;display:flex;gap:10px;flex-wrap:wrap}
+  .chip{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:700;
+    background:var(--glass-2);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--stroke)}
+  .chip .d{width:8px;height:8px;border-radius:50%;box-shadow:0 0 8px currentColor}
+  .cols{display:grid;grid-template-columns:1.55fr 1fr;gap:20px;align-items:start}
+  .card{padding:22px}
+  .card h2{margin:0 0 3px;font-size:16px;font-weight:800;color:var(--brand-d)}
+  .card .h-sub{color:var(--muted);font-size:12.5px;margin-bottom:18px;font-weight:600}
+  /* recording */
+  .arm{position:relative;overflow:hidden;background:linear-gradient(135deg,rgba(255,255,255,.62),rgba(255,255,255,.34))}
+  .arm::before{content:"";position:absolute;top:-60px;right:-60px;width:200px;height:200px;border-radius:50%;
+    background:radial-gradient(circle,#ff4d8d55,transparent 70%)}
+  .recstate{display:flex;align-items:center;gap:16px;margin:8px 0 20px;position:relative}
+  .recring{width:66px;height:66px;border-radius:50%;display:grid;place-items:center;position:relative;
+    background:conic-gradient(from -90deg,#ff4d8d,#ff8d6b 70%,rgba(255,255,255,.4) 0);
+    box-shadow:0 8px 24px #ff4d8d55,inset 0 0 0 6px rgba(255,255,255,.55)}
+  .recring i{width:22px;height:22px;border-radius:7px;background:#fff;box-shadow:0 0 12px #fff;animation:bp 1.3s ease-in-out infinite}
+  @keyframes bp{50%{opacity:.4}}
+  .recstate .lab{font-size:12px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--rec)}
+  .recstate .big{font-size:30px;font-weight:800;letter-spacing:-.5px;font-variant-numeric:tabular-nums;color:var(--ink)}
+  .recstate .file{color:var(--brand);font-weight:700;font-size:13.5px}
+  .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:6px 0 20px}
+  .metric{border-radius:15px;padding:14px;background:var(--glass-2);border:1px solid var(--stroke);text-align:left}
+  .metric .v{font-size:21px;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:-.5px}
+  .metric .k{font-size:11.5px;color:var(--muted);margin-top:3px;font-weight:600}
+  .btn{border:none;border-radius:15px;padding:15px;font-weight:800;font-size:15px;cursor:pointer;color:#fff;
+    display:flex;align-items:center;justify-content:center;gap:9px;transition:.16s}
+  .btn:hover{transform:translateY(-2px)}
+  .btn-stop{width:100%;background:linear-gradient(135deg,#ff4d8d,#ff7a5c);box-shadow:0 12px 30px #ff4d8d5e}
+  .btn-row{display:flex;gap:12px;margin-top:12px}
+  .btn-2{flex:1;background:var(--glass-2);color:var(--brand-d);border:1px solid var(--stroke);font-size:14px;backdrop-filter:blur(8px)}
+  /* status */
+  .stat{display:flex;align-items:center;gap:13px;padding:12px 0;border-bottom:1px solid rgba(91,100,147,.16)}
+  .stat:last-child{border-bottom:none}
+  .stat .ic{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;font-size:17px;
+    background:linear-gradient(135deg,rgba(124,92,255,.18),rgba(25,211,255,.14));border:1px solid var(--stroke)}
+  .stat .k{font-size:12px;color:var(--muted);font-weight:600}
+  .stat .v{font-size:15px;font-weight:700;color:var(--ink)}
+  .stat .r{margin-left:auto;text-align:right;font-size:12px;color:var(--muted);font-weight:600}
+  /* trips */
+  .trip{display:flex;align-items:center;gap:13px;padding:13px;border-radius:15px;margin-bottom:10px;
+    background:var(--glass-2);border:1px solid var(--stroke);transition:.16s}
+  .trip:hover{transform:translateX(3px);background:rgba(255,255,255,.55)}
+  .trip .fi{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font-size:11px;font-weight:800;color:#fff;
+    background:linear-gradient(135deg,#5b8bff,#19d3ff)}
+  .trip .nm{font-weight:700;font-size:14px;color:var(--ink)}
+  .trip .sub{font-size:12px;color:var(--muted);margin-top:2px;font-weight:600}
+  .trip .right{margin-left:auto;text-align:right}
+  .trip .sz{font-weight:800;font-size:13.5px;color:var(--ink);font-variant-numeric:tabular-nums}
+  .dl{display:inline-block;margin-top:4px;font-size:12px;font-weight:800;color:#fff;text-decoration:none;
+    background:linear-gradient(135deg,#0fb37a,#19d3a8);padding:4px 11px;border-radius:9px}
+  .live{background:linear-gradient(135deg,rgba(255,77,141,.16),rgba(255,255,255,.42))!important;border-color:rgba(255,77,141,.5)!important}
+  .live .fi{background:linear-gradient(135deg,#ff4d8d,#ff7a5c)}
+  /* event log */
+  .evt{display:flex;gap:11px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(91,100,147,.16);font-size:13px}
+  .evt:last-child{border:none}
+  .evt .t{color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px;min-width:62px;font-weight:600}
+  .evt .tag{font-size:10px;font-weight:800;padding:3px 8px;border-radius:7px;letter-spacing:.4px;color:#fff}
+  .t-ok{background:linear-gradient(135deg,#0fb37a,#19d3a8)} .t-wn{background:linear-gradient(135deg,#e08a00,#ffb020)} .t-er{background:linear-gradient(135deg,#e23d6b,#ff6b8b)}
+  @media(max-width:980px){.cols{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}.chips{margin-left:0}}
+</style>
+</head>
+<body>
+  <aside class="side glass">
+    <div class="brand">
+      <div class="logo">W</div>
+      <div><div class="name">WiCAN</div><div class="tag">DATALOGGER</div></div>
+    </div>
+    <div class="navlabel">Operate</div>
+    <nav class="nav">
+      <a class="active" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>Console<span class="badge">REC</span></a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Logger Settings</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Files (SD)</a>
+    </nav>
+    <div class="navlabel">Device</div>
+    <nav class="nav">
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13a10 10 0 0 1 14 0"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><circle cx="12" cy="20" r="1"/></svg>WiFi &amp; Recovery AP</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/></svg>System &amp; OTA</a>
+    </nav>
+    <div class="guardbox">
+      <b>🔒 Un-brick path</b>
+      Recovery AP, <code>/upload/ota.bin</code> &amp; <code>safe_mode_check()</code> are permanent — can't be hidden or removed.
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="head">
+      <div>
+        <h1>Logger Console</h1>
+        <p>CAR1 · 2019 GR Corolla · CAN 500K · firmware v4.2.1</p>
+      </div>
+      <div class="chips">
+        <span class="chip" style="color:var(--ok)"><span class="d"></span><span style="color:var(--txt)">SD 12.4 GB free</span></span>
+        <span class="chip" style="color:var(--brand)"><span class="d"></span><span style="color:var(--txt)">192.168.3.42</span></span>
+        <span class="chip" style="color:var(--ok)"><span class="d"></span><span style="color:var(--txt)">12.8 V</span></span>
+      </div>
+    </div>
+
+    <div class="cols">
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <section class="card glass arm">
+          <h2>Recording</h2>
+          <div class="h-sub">Tap once to start or stop a trip. The rest is automatic.</div>
+          <div class="recstate">
+            <div class="recring"><i></i></div>
+            <div>
+              <div class="lab">● Recording</div>
+              <div class="big">00:14:32</div>
+              <div class="file">trip_0231.csv</div>
+            </div>
+          </div>
+          <div class="metrics">
+            <div class="metric"><div class="v">10 Hz</div><div class="k">Sample rate</div></div>
+            <div class="metric"><div class="v">14</div><div class="k">PIDs armed</div></div>
+            <div class="metric"><div class="v">8.7 MB</div><div class="k">This trip</div></div>
+            <div class="metric"><div class="v">231</div><div class="k">Trip #</div></div>
+          </div>
+          <button class="btn btn-stop">■ Stop &amp; Close Trip</button>
+          <div class="btn-row">
+            <button class="btn btn-2">⚑ Mark Event</button>
+            <button class="btn btn-2">⏏ Split / New Trip</button>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <h2>Recent Trips</h2>
+          <div class="h-sub">Stored on SD · FATFS · CSV</div>
+          <div class="trip live">
+            <div class="fi">REC</div>
+            <div><div class="nm">trip_0231.csv</div><div class="sub">recording now · 14 PIDs</div></div>
+            <div class="right"><div class="sz">8.7 MB</div><span class="sub">live</span></div>
+          </div>
+          <div class="trip">
+            <div class="fi">CSV</div>
+            <div><div class="nm">trip_0230.csv</div><div class="sub">Today 09:14 · 23 min · 14 PIDs</div></div>
+            <div class="right"><div class="sz">19.4 MB</div><a class="dl" href="#">Download</a></div>
+          </div>
+          <div class="trip">
+            <div class="fi">CSV</div>
+            <div><div class="nm">trip_0229.csv</div><div class="sub">Today 07:51 · 41 min · 14 PIDs</div></div>
+            <div class="right"><div class="sz">33.1 MB</div><a class="dl" href="#">Download</a></div>
+          </div>
+          <div class="trip">
+            <div class="fi">CSV</div>
+            <div><div class="nm">trip_0228.csv</div><div class="sub">Yesterday 18:02 · 9 min · 14 PIDs</div></div>
+            <div class="right"><div class="sz">7.2 MB</div><a class="dl" href="#">Download</a></div>
+          </div>
+        </section>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <section class="card glass">
+          <h2>Device Status</h2>
+          <div class="h-sub">At a glance</div>
+          <div class="stat"><div class="ic">📶</div><div><div class="k">WiFi</div><div class="v">STA · GarageNet</div></div><div class="r">−54 dBm</div></div>
+          <div class="stat"><div class="ic">🚗</div><div><div class="k">OBD Link</div><div class="v">Up · 14/14 PIDs</div></div><div class="r" style="color:var(--ok)">● live</div></div>
+          <div class="stat"><div class="ic">💾</div><div><div class="k">SD Card</div><div class="v">12.4 / 32 GB free</div></div><div class="r">FATFS</div></div>
+          <div class="stat"><div class="ic">🔋</div><div><div class="k">Battery</div><div class="v">12.8 V</div></div><div class="r">healthy</div></div>
+          <div class="stat"><div class="ic">⏱</div><div><div class="k">Uptime</div><div class="v">4h 12m</div></div><div class="r">no resets</div></div>
+        </section>
+
+        <section class="card glass">
+          <h2>Event Log</h2>
+          <div class="h-sub">Last boot &amp; this session</div>
+          <div class="evt"><span class="t">14:32:08</span><span class="tag t-ok">OK</span><span>Trip started → trip_0231.csv</span></div>
+          <div class="evt"><span class="t">14:31:55</span><span class="tag t-ok">OK</span><span>SD mounted (FATFS, 32 GB)</span></div>
+          <div class="evt"><span class="t">14:31:54</span><span class="tag t-ok">OK</span><span>OBD link up · 14/14 PIDs</span></div>
+          <div class="evt"><span class="t">14:31:50</span><span class="tag t-wn">WARN</span><span>NTP not synced — using RTC</span></div>
+          <div class="evt"><span class="t">14:31:42</span><span class="tag t-ok">OK</span><span>Boot OK · safe_mode_check passed</span></div>
+          <div class="evt"><span class="t">09:12:03</span><span class="tag t-er">ERR</span><span>Trip 0227 closed early (ign off)</span></div>
+        </section>
+
+        <section class="card glass" style="background:linear-gradient(135deg,rgba(124,92,255,.2),rgba(25,211,255,.12))">
+          <h2>Firmware</h2>
+          <div class="h-sub">Over-the-air update</div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="font-size:30px;font-weight:800;color:var(--brand-d);letter-spacing:-.5px">v4.2.1</div>
+            <span class="chip" style="color:var(--ok)"><span class="d"></span><span style="color:var(--txt)">Up to date</span></span>
+          </div>
+          <button class="btn btn-2" style="width:100%;margin-top:16px">Check for update / Upload .bin</button>
+        </section>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

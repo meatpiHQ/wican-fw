@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WiCAN · Field Console — Variant A · Industrial Brutalist</title>
+<style>
+  :root{
+    --ink:#0b0b0c; --paper:#f4f1e9; --panel:#fffdf7; --line:#0b0b0c;
+    --hazard:#ffd400; --rec:#ff2e2e; --ok:#15a05a; --ok-bg:#caf0d8;
+    --warn:#b46e00; --warn-bg:#ffe39a; --err:#c01515; --err-bg:#ffd0d0;
+    --blue:#244cff; --mute:#5a5750;
+    --mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+    --shadow:5px 5px 0 var(--ink);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;color:var(--ink);
+    background:var(--paper);
+    background-image:linear-gradient(rgba(11,11,12,.05) 1px,transparent 1px),
+                     linear-gradient(90deg,rgba(11,11,12,.05) 1px,transparent 1px);
+    background-size:22px 22px;
+    font-family:"Arial Narrow",Arial,Helvetica,sans-serif;font-weight:700}
+  .side{width:258px;background:var(--panel);border-right:3px solid var(--ink);padding:16px;
+    position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:6px}
+  .brand{display:flex;align-items:center;gap:11px;border:3px solid var(--ink);background:var(--hazard);
+    padding:12px;box-shadow:var(--shadow);margin-bottom:16px}
+  .brand .logo{width:40px;height:40px;background:var(--ink);color:var(--hazard);display:grid;place-items:center;
+    font-weight:900;font-size:20px;border:2px solid var(--ink)}
+  .brand .name{font-weight:900;font-size:20px;letter-spacing:-.5px;line-height:1}
+  .brand .tag{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:2px;margin-top:2px}
+  .navlabel{font-family:var(--mono);font-size:11px;letter-spacing:2px;color:var(--ink);
+    border-bottom:2px solid var(--ink);padding:14px 2px 5px;margin-bottom:4px;text-transform:uppercase}
+  .nav a{display:flex;align-items:center;gap:11px;padding:11px 12px;border:2px solid var(--ink);background:var(--panel);
+    color:var(--ink);text-decoration:none;font-weight:800;font-size:15px;margin-bottom:7px;
+    text-transform:uppercase;letter-spacing:.3px;transition:.08s}
+  .nav a svg{width:18px;height:18px;flex:none}
+  .nav a:hover{transform:translate(-2px,-2px);box-shadow:3px 3px 0 var(--ink)}
+  .nav a.active{background:var(--ink);color:var(--hazard);box-shadow:var(--shadow)}
+  .nav a .badge{margin-left:auto;background:var(--rec);color:#fff;font-family:var(--mono);font-size:10px;
+    padding:2px 7px;border:2px solid var(--ink);letter-spacing:1px}
+  .nav a.active .badge{border-color:var(--hazard)}
+  .guardbox{margin-top:auto;border:3px solid var(--ink);background:var(--hazard);padding:12px;box-shadow:var(--shadow);
+    font-family:var(--mono);font-size:11px;line-height:1.5;font-weight:700}
+  .guardbox b{display:block;font-size:11px;letter-spacing:1px;margin-bottom:6px;
+    background:var(--ink);color:var(--hazard);padding:3px 6px;display:inline-block}
+  .main{flex:1;min-width:0;padding:24px 30px 60px}
+  .head{display:flex;align-items:flex-start;gap:16px;margin-bottom:22px;flex-wrap:wrap}
+  .head h1{margin:0;font-size:34px;font-weight:900;letter-spacing:-1px;text-transform:uppercase;line-height:.95}
+  .head p{margin:6px 0 0;font-family:var(--mono);font-size:12px;color:var(--mute);font-weight:700}
+  .chips{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .chip{display:inline-flex;align-items:center;gap:7px;background:var(--panel);border:2px solid var(--ink);
+    padding:7px 12px;font-family:var(--mono);font-size:12px;box-shadow:3px 3px 0 var(--ink)}
+  .chip .d{width:9px;height:9px;border:2px solid var(--ink)}
+  .cols{display:grid;grid-template-columns:1.55fr 1fr;gap:20px;align-items:start}
+  .card{background:var(--panel);border:3px solid var(--ink);box-shadow:var(--shadow);padding:18px}
+  .card h2{margin:0 0 2px;font-size:19px;font-weight:900;text-transform:uppercase;letter-spacing:-.4px;
+    display:inline-block;background:var(--ink);color:var(--paper);padding:3px 9px}
+  .card .h-sub{font-family:var(--mono);font-size:11px;color:var(--mute);margin:8px 0 16px}
+  /* recording */
+  .arm{position:relative}
+  .arm::before{content:"REC";position:absolute;top:-3px;right:-3px;background:var(--rec);color:#fff;
+    font-family:var(--mono);font-size:12px;padding:5px 12px;border:3px solid var(--ink);letter-spacing:2px}
+  .recstate{display:flex;align-items:center;gap:16px;margin:6px 0 16px}
+  .recring{width:62px;height:62px;border:3px solid var(--ink);background:
+    conic-gradient(var(--rec) 70%,var(--panel) 0);display:grid;place-items:center;border-radius:50%}
+  .recring i{width:22px;height:22px;background:var(--rec);border:2px solid var(--ink);animation:bp 1s steps(2) infinite}
+  @keyframes bp{50%{background:var(--panel)}}
+  .recstate .lab{font-family:var(--mono);font-size:11px;letter-spacing:1px;color:var(--rec)}
+  .recstate .big{font-size:34px;font-weight:900;font-variant-numeric:tabular-nums;letter-spacing:-1px;line-height:1}
+  .recstate .file{font-family:var(--mono);font-size:13px;color:var(--blue);margin-top:2px}
+  .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:6px 0 16px}
+  .metric{border:2px solid var(--ink);background:var(--paper);padding:11px}
+  .metric .v{font-size:22px;font-weight:900;font-variant-numeric:tabular-nums;line-height:1}
+  .metric .k{font-family:var(--mono);font-size:10px;color:var(--mute);margin-top:5px;text-transform:uppercase}
+  .btn{border:3px solid var(--ink);padding:14px;font-weight:900;font-size:16px;cursor:pointer;
+    text-transform:uppercase;letter-spacing:.5px;box-shadow:4px 4px 0 var(--ink);transition:.08s}
+  .btn:hover{transform:translate(-2px,-2px);box-shadow:6px 6px 0 var(--ink)}
+  .btn-stop{background:var(--rec);color:#fff;width:100%}
+  .btn-row{display:flex;gap:10px;margin-top:10px}
+  .btn-2{flex:1;background:var(--hazard);color:var(--ink);font-size:14px}
+  /* status */
+  .stat{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:2px dashed var(--ink)}
+  .stat:last-child{border-bottom:none}
+  .stat .ic{width:36px;height:36px;border:2px solid var(--ink);background:var(--hazard);display:grid;place-items:center;font-size:17px}
+  .stat .k{font-family:var(--mono);font-size:10px;color:var(--mute);text-transform:uppercase}
+  .stat .v{font-size:16px;font-weight:800}
+  .stat .r{margin-left:auto;text-align:right;font-family:var(--mono);font-size:11px;color:var(--mute)}
+  /* trips */
+  .trip{display:flex;align-items:center;gap:13px;border:2px solid var(--ink);background:var(--paper);padding:11px;margin-bottom:9px}
+  .trip:hover{box-shadow:3px 3px 0 var(--ink)}
+  .trip .fi{width:42px;height:42px;border:2px solid var(--ink);background:var(--blue);color:#fff;display:grid;place-items:center;
+    font-family:var(--mono);font-size:11px;font-weight:800}
+  .trip .nm{font-size:15px;font-weight:800;font-family:var(--mono)}
+  .trip .sub{font-family:var(--mono);font-size:11px;color:var(--mute);margin-top:2px}
+  .trip .right{margin-left:auto;text-align:right}
+  .trip .sz{font-weight:900;font-size:14px;font-variant-numeric:tabular-nums}
+  .dl{display:inline-block;margin-top:4px;font-family:var(--mono);font-size:11px;color:var(--ink);
+    border:2px solid var(--ink);background:var(--ok-bg);padding:3px 9px;text-decoration:none;letter-spacing:.5px}
+  .live{border-color:var(--rec)!important;background:#fff0f0!important;border-width:3px!important}
+  .live .fi{background:var(--rec)}
+  /* event log */
+  .evt{display:flex;gap:11px;align-items:center;padding:9px 0;border-bottom:2px dashed var(--ink);font-family:var(--mono);font-size:12px}
+  .evt:last-child{border:none}
+  .evt .t{color:var(--mute);min-width:62px}
+  .evt .tag{font-size:10px;padding:2px 7px;border:2px solid var(--ink);letter-spacing:.5px}
+  .t-ok{background:var(--ok-bg)} .t-wn{background:var(--warn-bg)} .t-er{background:var(--err-bg)}
+  @media(max-width:980px){.cols{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}.chips{margin-left:0}}
+</style>
+</head>
+<body>
+  <aside class="side">
+    <div class="brand">
+      <div class="logo">W</div>
+      <div><div class="name">WiCAN</div><div class="tag">DATALOGGER</div></div>
+    </div>
+    <div class="navlabel">// Operate</div>
+    <nav class="nav">
+      <a class="active" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>Console<span class="badge">REC</span></a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Logger</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Files (SD)</a>
+    </nav>
+    <div class="navlabel">// Device</div>
+    <nav class="nav">
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 13a10 10 0 0 1 14 0"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><circle cx="12" cy="20" r="1"/></svg>WiFi / Recovery AP</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M9 9h6v6H9z"/></svg>System / OTA</a>
+    </nav>
+    <div class="guardbox">
+      <b>🔒 UN-BRICK PATH</b>
+      Recovery AP, /upload/ota.bin &amp; safe_mode_check() are PERMANENT — can't be hidden or removed.
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="head">
+      <div>
+        <h1>Logger Console</h1>
+        <p>CAR1 · 2019 GR COROLLA · CAN 500K · FW v4.2.1</p>
+      </div>
+      <div class="chips">
+        <span class="chip"><span class="d" style="background:var(--ok)"></span>SD 12.4 GB</span>
+        <span class="chip"><span class="d" style="background:var(--blue)"></span>192.168.3.42</span>
+        <span class="chip"><span class="d" style="background:var(--ok)"></span>12.8 V</span>
+      </div>
+    </div>
+
+    <div class="cols">
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <section class="card arm">
+          <h2>Recording</h2>
+          <div class="h-sub">TAP ONCE TO START/STOP A TRIP. THE REST IS AUTOMATIC.</div>
+          <div class="recstate">
+            <div class="recring"><i></i></div>
+            <div>
+              <div class="lab">● RECORDING</div>
+              <div class="big">00:14:32</div>
+              <div class="file">trip_0231.csv</div>
+            </div>
+          </div>
+          <div class="metrics">
+            <div class="metric"><div class="v">10 Hz</div><div class="k">Rate</div></div>
+            <div class="metric"><div class="v">14</div><div class="k">PIDs</div></div>
+            <div class="metric"><div class="v">8.7 MB</div><div class="k">This trip</div></div>
+            <div class="metric"><div class="v">231</div><div class="k">Trip #</div></div>
+          </div>
+          <button class="btn btn-stop">■ Stop &amp; Close Trip</button>
+          <div class="btn-row">
+            <button class="btn btn-2">⚑ Mark</button>
+            <button class="btn btn-2">⏏ Split / New</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Recent Trips</h2>
+          <div class="h-sub">STORED ON SD · FATFS · CSV</div>
+          <div class="trip live">
+            <div class="fi">REC</div>
+            <div><div class="nm">trip_0231.csv</div><div class="sub">recording now · 14 PIDs</div></div>
+            <div class="right"><div class="sz">8.7 MB</div><span class="sub">live</span></div>
+          </div>
+          <div class="trip">
+            <div class="fi">CSV</div>
+            <div><div class="nm">trip_0230.csv</div><div class="sub">Today 09:14 · 23 min · 14 PIDs</div></div>
+            <div class="right"><div class="sz">19.4 MB</div><a class="dl" href="#">▼ GET</a></div>
+          </div>
+          <div class="trip">
+            <div class="fi">CSV</div>
+            <div><div class="nm">trip_0229.csv</div><div class="sub">Today 07:51 · 41 min · 14 PIDs</div></div>
+            <div class="right"><div class="sz">33.1 MB</div><a class="dl" href="#">▼ GET</a></div>
+          </div>
+          <div class="trip">
+            <div class="fi">CSV</div>
+            <div><div class="nm">trip_0228.csv</div><div class="sub">Yest 18:02 · 9 min · 14 PIDs</div></div>
+            <div class="right"><div class="sz">7.2 MB</div><a class="dl" href="#">▼ GET</a></div>
+          </div>
+        </section>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <section class="card">
+          <h2>Device Status</h2>
+          <div class="h-sub">AT A GLANCE</div>
+          <div class="stat"><div class="ic">📶</div><div><div class="k">WiFi</div><div class="v">STA · GarageNet</div></div><div class="r">−54 dBm</div></div>
+          <div class="stat"><div class="ic">🚗</div><div><div class="k">OBD Link</div><div class="v">Up · 14/14 PIDs</div></div><div class="r" style="color:var(--ok)">●●●</div></div>
+          <div class="stat"><div class="ic">💾</div><div><div class="k">SD Card</div><div class="v">12.4 / 32 GB</div></div><div class="r">FATFS</div></div>
+          <div class="stat"><div class="ic">🔋</div><div><div class="k">Battery</div><div class="v">12.8 V</div></div><div class="r">healthy</div></div>
+          <div class="stat"><div class="ic">⏱</div><div><div class="k">Uptime</div><div class="v">4h 12m</div></div><div class="r">no resets</div></div>
+        </section>
+
+        <section class="card">
+          <h2>Event Log</h2>
+          <div class="h-sub">LAST BOOT &amp; THIS SESSION</div>
+          <div class="evt"><span class="t">14:32:08</span><span class="tag t-ok">OK</span><span>Trip started → trip_0231</span></div>
+          <div class="evt"><span class="t">14:31:55</span><span class="tag t-ok">OK</span><span>SD mounted (FATFS,32G)</span></div>
+          <div class="evt"><span class="t">14:31:54</span><span class="tag t-ok">OK</span><span>OBD link 14/14 PIDs</span></div>
+          <div class="evt"><span class="t">14:31:50</span><span class="tag t-wn">WARN</span><span>NTP not synced — RTC</span></div>
+          <div class="evt"><span class="t">14:31:42</span><span class="tag t-ok">OK</span><span>Boot OK · safe_mode pass</span></div>
+          <div class="evt"><span class="t">09:12:03</span><span class="tag t-er">ERR</span><span>Trip 0227 closed early</span></div>
+        </section>
+
+        <section class="card" style="background:var(--hazard)">
+          <h2 style="background:var(--ink);color:var(--hazard)">Firmware</h2>
+          <div class="h-sub" style="color:#6b5b00">OVER-THE-AIR UPDATE</div>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:4px">
+            <div style="font-size:34px;font-weight:900;letter-spacing:-1px">v4.2.1</div>
+            <span class="chip" style="box-shadow:none;background:var(--ok-bg)">✓ UP TO DATE</span>
+          </div>
+          <button class="btn btn-2" style="width:100%;margin-top:14px;background:var(--panel)">Check / Upload .bin</button>
+        </section>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

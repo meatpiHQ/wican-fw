@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WiCAN · Field Console — Variant C · Carbon Motorsport</title>
+<style>
+  :root{
+    --bg:#0a0b0d; --carbon:#14161a; --carbon-2:#1b1e24; --line:#2a2f38;
+    --txt:#eef1f5; --muted:#8b95a6; --rec:#ff2030; --red-d:#b3121f;
+    --amber:#ffb800; --ok:#2bd576; --warn:#ffb800; --err:#ff4d4d;
+    --steel:#3a4658; --chrome:linear-gradient(180deg,#fff,#9aa6b8 45%,#5b6678 55%,#cfd8e6);
+    --mono:"Rajdhani","Oswald",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;color:var(--txt);
+    font-family:"Segoe UI",Roboto,-apple-system,sans-serif;
+    background:
+      radial-gradient(900px 500px at 85% -10%,#1a1112 0%,transparent 55%),
+      var(--bg);
+    background-attachment:fixed}
+  /* carbon weave texture */
+  .carbon-tex{background-color:var(--carbon);
+    background-image:
+      linear-gradient(27deg,#1d2128 5px,transparent 5px),
+      linear-gradient(207deg,#1d2128 5px,transparent 5px),
+      linear-gradient(27deg,#11141a 5px,transparent 5px),
+      linear-gradient(207deg,#11141a 5px,transparent 5px);
+    background-position:0 0,1px 4px,4px 5px,5px 9px;
+    background-size:10px 10px}
+  .side{width:252px;border-right:1px solid var(--line);padding:18px 14px;position:sticky;top:0;height:100vh;
+    display:flex;flex-direction:column;gap:5px;box-shadow:inset -1px 0 0 #000}
+  .brand{display:flex;align-items:center;gap:11px;padding:6px 8px 18px;border-bottom:1px solid var(--line);margin-bottom:8px}
+  .brand .logo{width:42px;height:42px;border-radius:10px;display:grid;place-items:center;font-weight:900;font-size:19px;color:#fff;
+    background:linear-gradient(135deg,var(--rec),var(--red-d));box-shadow:0 0 22px #ff203066,inset 0 1px 0 #ff8a8a}
+  .brand .name{font-weight:800;font-size:19px;letter-spacing:1px;font-family:var(--mono);text-transform:uppercase}
+  .brand .tag{font-size:9.5px;color:var(--muted);font-weight:700;letter-spacing:3px}
+  .navlabel{font-size:10px;text-transform:uppercase;letter-spacing:2.5px;color:#5d6677;font-weight:800;padding:14px 12px 6px}
+  .nav a{display:flex;align-items:center;gap:12px;padding:12px 13px;border-radius:9px;color:#b8c0cd;
+    text-decoration:none;font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:.8px;transition:.14s;
+    border:1px solid transparent}
+  .nav a svg{width:18px;height:18px;flex:none}
+  .nav a:hover{background:var(--carbon-2);color:#fff;border-color:var(--line)}
+  .nav a.active{background:linear-gradient(90deg,rgba(255,32,48,.22),transparent);color:#fff;
+    border-color:rgba(255,32,48,.5);box-shadow:inset 3px 0 0 var(--rec)}
+  .nav a .badge{margin-left:auto;background:var(--rec);color:#fff;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;
+    letter-spacing:1px;box-shadow:0 0 12px #ff203099;animation:glow 1.4s ease-in-out infinite}
+  @keyframes glow{50%{box-shadow:0 0 4px #ff203055}}
+  .guardbox{margin-top:auto;border-radius:10px;padding:12px;font-size:11px;line-height:1.55;color:#bfead0;
+    background:linear-gradient(135deg,rgba(43,213,118,.1),rgba(0,0,0,.3));border:1px solid rgba(43,213,118,.28)}
+  .guardbox b{display:flex;align-items:center;gap:6px;font-size:10.5px;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;color:var(--ok)}
+  .guardbox code{background:rgba(0,0,0,.4);border-radius:4px;padding:1px 5px;font-size:10.5px;color:#9fe9bd}
+  .main{flex:1;min-width:0;padding:22px 30px 60px}
+  .head{display:flex;align-items:flex-end;gap:16px;margin-bottom:22px;flex-wrap:wrap;
+    border-bottom:1px solid var(--line);padding-bottom:18px}
+  .head h1{margin:0;font-family:var(--mono);font-size:34px;font-weight:800;text-transform:uppercase;letter-spacing:1px;line-height:.9}
+  .head h1 .slash{color:var(--rec)}
+  .head p{margin:7px 0 0;font-family:var(--mono);font-size:13px;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+  .chips{margin-left:auto;display:flex;gap:9px;flex-wrap:wrap}
+  .chip{display:inline-flex;align-items:center;gap:8px;padding:8px 13px;border-radius:7px;font-size:12.5px;font-weight:700;
+    font-family:var(--mono);letter-spacing:.5px;background:var(--carbon-2);border:1px solid var(--line)}
+  .chip .d{width:8px;height:8px;border-radius:50%;box-shadow:0 0 8px currentColor}
+  .cols{display:grid;grid-template-columns:1.55fr 1fr;gap:18px;align-items:start}
+  .card{border:1px solid var(--line);border-radius:14px;padding:20px;position:relative;
+    box-shadow:0 10px 30px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.04)}
+  .card::after{content:"";position:absolute;left:0;right:0;top:0;height:2px;border-radius:14px 14px 0 0;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.12),transparent)}
+  .card h2{margin:0 0 3px;font-family:var(--mono);font-size:16px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;
+    display:flex;align-items:center;gap:9px}
+  .card h2::before{content:"";width:14px;height:3px;background:var(--rec);display:inline-block;box-shadow:0 0 8px var(--rec)}
+  .card .h-sub{color:var(--muted);font-size:11.5px;margin-bottom:18px;font-family:var(--mono);letter-spacing:.6px;text-transform:uppercase}
+  /* recording */
+  .arm{background:radial-gradient(120% 100% at 0% 0%,rgba(255,32,48,.14),transparent 55%),var(--carbon)}
+  .recstate{display:flex;align-items:center;gap:18px;margin:8px 0 20px}
+  .recring{width:72px;height:72px;border-radius:50%;display:grid;place-items:center;position:relative;
+    background:conic-gradient(var(--rec) 70%,#23272f 0);
+    box-shadow:0 0 24px #ff203055,inset 0 0 0 5px #0d0f12}
+  .recring::after{content:"";position:absolute;inset:5px;border-radius:50%;border:1px solid rgba(255,255,255,.06)}
+  .recring i{width:22px;height:22px;background:var(--rec);border-radius:5px;box-shadow:0 0 16px var(--rec);
+    animation:bp 1.1s ease-in-out infinite;z-index:2}
+  @keyframes bp{50%{opacity:.35;transform:scale(.9)}}
+  .recstate .lab{font-family:var(--mono);font-size:12px;font-weight:800;letter-spacing:2px;color:var(--rec);text-transform:uppercase}
+  .recstate .big{font-family:var(--mono);font-size:42px;font-weight:800;letter-spacing:1px;font-variant-numeric:tabular-nums;
+    line-height:1;text-shadow:0 0 18px rgba(255,32,48,.3)}
+  .recstate .file{font-family:var(--mono);color:#7fc0ff;font-size:13.5px;letter-spacing:.5px;margin-top:3px}
+  .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin:6px 0 20px}
+  .metric{border:1px solid var(--line);border-radius:10px;padding:13px;background:#0e1014;position:relative;overflow:hidden}
+  .metric::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--rec);opacity:.6}
+  .metric .v{font-family:var(--mono);font-size:23px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:.5px}
+  .metric .k{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:5px;text-transform:uppercase;letter-spacing:1px}
+  .btn{border:none;border-radius:11px;padding:15px;font-weight:800;font-size:15px;cursor:pointer;color:#fff;
+    display:flex;align-items:center;justify-content:center;gap:9px;text-transform:uppercase;letter-spacing:1.5px;
+    font-family:var(--mono);transition:.14s}
+  .btn:hover{transform:translateY(-2px)}
+  .btn-stop{width:100%;background:linear-gradient(180deg,#ff3040,var(--red-d));
+    box-shadow:0 10px 30px #ff20304d,inset 0 1px 0 #ff8a8a}
+  .btn-row{display:flex;gap:11px;margin-top:11px}
+  .btn-2{flex:1;background:var(--carbon-2);color:#d6deea;border:1px solid var(--line);font-size:13px;letter-spacing:1px}
+  .btn-2:hover{border-color:var(--rec);color:#fff}
+  /* status */
+  .stat{display:flex;align-items:center;gap:13px;padding:12px 0;border-bottom:1px solid var(--line)}
+  .stat:last-child{border-bottom:none}
+  .stat .ic{width:38px;height:38px;border-radius:9px;display:grid;place-items:center;font-size:16px;
+    background:#0e1014;border:1px solid var(--line)}
+  .stat .k{font-family:var(--mono);font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .stat .v{font-size:15px;font-weight:700}
+  .stat .r{margin-left:auto;text-align:right;font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.5px}
+  /* trips */
+  .trip{display:flex;align-items:center;gap:13px;border:1px solid var(--line);border-radius:11px;background:#0e1014;padding:12px;margin-bottom:10px;transition:.14s}
+  .trip:hover{border-color:var(--steel);transform:translateX(3px)}
+  .trip .fi{width:44px;height:44px;border-radius:9px;display:grid;place-items:center;font-family:var(--mono);font-size:11px;font-weight:800;color:#fff;
+    background:linear-gradient(135deg,#2c5cff,#1736b3)}
+  .trip .nm{font-family:var(--mono);font-weight:700;font-size:14.5px;letter-spacing:.5px}
+  .trip .sub{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px;letter-spacing:.3px}
+  .trip .right{margin-left:auto;text-align:right}
+  .trip .sz{font-family:var(--mono);font-weight:800;font-size:14px;font-variant-numeric:tabular-nums}
+  .dl{display:inline-block;margin-top:4px;font-family:var(--mono);font-size:11px;font-weight:800;color:#0a0b0d;text-decoration:none;
+    background:var(--ok);padding:4px 11px;border-radius:6px;letter-spacing:1px;box-shadow:0 0 12px rgba(43,213,118,.4)}
+  .live{border-color:rgba(255,32,48,.55)!important;background:linear-gradient(90deg,rgba(255,32,48,.12),#0e1014)!important;
+    box-shadow:0 0 20px rgba(255,32,48,.18)}
+  .live .fi{background:linear-gradient(135deg,#ff3040,var(--red-d))}
+  /* event log */
+  .evt{display:flex;gap:11px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:12.5px;letter-spacing:.3px}
+  .evt:last-child{border:none}
+  .evt .t{color:var(--muted);font-variant-numeric:tabular-nums;min-width:64px}
+  .evt .tag{font-size:9.5px;font-weight:800;padding:3px 8px;border-radius:5px;letter-spacing:1px;color:#0a0b0d}
+  .t-ok{background:var(--ok)} .t-wn{background:var(--warn)} .t-er{background:var(--err);color:#fff}
+  @media(max-width:980px){.cols{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}.chips{margin-left:0}}
+</style>
+</head>
+<body>
+  <aside class="side carbon-tex">
+    <div class="brand">
+      <div class="logo">W</div>
+      <div><div class="name">WiCAN</div><div class="tag">DATALOGGER</div></div>
+    </div>
+    <div class="navlabel">Operate</div>
+    <nav class="nav">
+      <a class="active" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>Console<span class="badge">REC</span></a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Logger</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Files</a>
+    </nav>
+    <div class="navlabel">Device</div>
+    <nav class="nav">
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13a10 10 0 0 1 14 0"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><circle cx="12" cy="20" r="1"/></svg>WiFi / AP</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/></svg>System / OTA</a>
+    </nav>
+    <div class="guardbox">
+      <b>🔒 Un-brick path</b>
+      Recovery AP, <code>/upload/ota.bin</code> &amp; <code>safe_mode_check()</code> are permanent — can't be hidden or removed.
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="head">
+      <div>
+        <h1>Logger<span class="slash">//</span>Console</h1>
+        <p>CAR1 · 2019 GR Corolla · CAN 500K · FW v4.2.1</p>
+      </div>
+      <div class="chips">
+        <span class="chip" style="color:var(--ok)"><span class="d"></span><span style="color:var(--txt)">SD 12.4 GB</span></span>
+        <span class="chip" style="color:#7fc0ff"><span class="d"></span><span style="color:var(--txt)">192.168.3.42</span></span>
+        <span class="chip" style="color:var(--ok)"><span class="d"></span><span style="color:var(--txt)">12.8 V</span></span>
+      </div>
+    </div>
+
+    <div class="cols">
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <section class="card carbon-tex arm">
+          <h2>Recording</h2>
+          <div class="h-sub">Tap once to start / stop a trip — the rest is automatic</div>
+          <div class="recstate">
+            <div class="recring"><i></i></div>
+            <div>
+              <div class="lab">● Recording</div>
+              <div class="big">00:14:32</div>
+              <div class="file">trip_0231.csv</div>
+            </div>
+          </div>
+          <div class="metrics">
+            <div class="metric"><div class="v">10<span style="font-size:12px;color:var(--muted)"> Hz</span></div><div class="k">Rate</div></div>
+            <div class="metric"><div class="v">14</div><div class="k">PIDs</div></div>
+            <div class="metric"><div class="v">8.7<span style="font-size:12px;color:var(--muted)"> MB</span></div><div class="k">This trip</div></div>
+            <div class="metric"><div class="v">231</div><div class="k">Trip #</div></div>
+          </div>
+          <button class="btn btn-stop">■ Stop &amp; Close Trip</button>
+          <div class="btn-row">
+            <button class="btn btn-2">⚑ Mark Event</button>
+            <button class="btn btn-2">⏏ Split / New</button>
+          </div>
+        </section>
+
+        <section class="card carbon-tex">
+          <h2>Recent Trips</h2>
+          <div class="h-sub">Stored on SD · FATFS · CSV</div>
+          <div class="trip live">
+            <div class="fi">REC</div>
+            <div><div class="nm">trip_0231.csv</div><div class="sub">recording now · 14 PIDs</div></div>
+            <div class="right"><div class="sz">8.7 MB</div><span class="sub">live</span></div>
+          </div>
+          <div class="trip">
+            <div class="fi">CSV</div>
+            <div><div class="nm">trip_0230.csv</div><div class="sub">Today 09:14 · 23 min · 14 PIDs</div></div>
+            <div class="right"><div class="sz">19.4 MB</div><a class="dl" href="#">↓ GET</a></div>
+          </div>
+          <div class="trip">
+            <div class="fi">CSV</div>
+            <div><div class="nm">trip_0229.csv</div><div class="sub">Today 07:51 · 41 min · 14 PIDs</div></div>
+            <div class="right"><div class="sz">33.1 MB</div><a class="dl" href="#">↓ GET</a></div>
+          </div>
+          <div class="trip">
+            <div class="fi">CSV</div>
+            <div><div class="nm">trip_0228.csv</div><div class="sub">Yesterday 18:02 · 9 min · 14 PIDs</div></div>
+            <div class="right"><div class="sz">7.2 MB</div><a class="dl" href="#">↓ GET</a></div>
+          </div>
+        </section>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <section class="card carbon-tex">
+          <h2>Device Status</h2>
+          <div class="h-sub">At a glance</div>
+          <div class="stat"><div class="ic">📶</div><div><div class="k">WiFi</div><div class="v">STA · GarageNet</div></div><div class="r">−54 dBm</div></div>
+          <div class="stat"><div class="ic">🚗</div><div><div class="k">OBD Link</div><div class="v">Up · 14/14 PIDs</div></div><div class="r" style="color:var(--ok)">● LIVE</div></div>
+          <div class="stat"><div class="ic">💾</div><div><div class="k">SD Card</div><div class="v">12.4 / 32 GB free</div></div><div class="r">FATFS</div></div>
+          <div class="stat"><div class="ic">🔋</div><div><div class="k">Battery</div><div class="v">12.8 V</div></div><div class="r">healthy</div></div>
+          <div class="stat"><div class="ic">⏱</div><div><div class="k">Uptime</div><div class="v">4h 12m</div></div><div class="r">no resets</div></div>
+        </section>
+
+        <section class="card carbon-tex">
+          <h2>Event Log</h2>
+          <div class="h-sub">Last boot &amp; this session</div>
+          <div class="evt"><span class="t">14:32:08</span><span class="tag t-ok">OK</span><span>Trip started → trip_0231.csv</span></div>
+          <div class="evt"><span class="t">14:31:55</span><span class="tag t-ok">OK</span><span>SD mounted (FATFS, 32 GB)</span></div>
+          <div class="evt"><span class="t">14:31:54</span><span class="tag t-ok">OK</span><span>OBD link up · 14/14 PIDs</span></div>
+          <div class="evt"><span class="t">14:31:50</span><span class="tag t-wn">WARN</span><span>NTP not synced — using RTC</span></div>
+          <div class="evt"><span class="t">14:31:42</span><span class="tag t-ok">OK</span><span>Boot OK · safe_mode_check passed</span></div>
+          <div class="evt"><span class="t">09:12:03</span><span class="tag t-er">ERR</span><span>Trip 0227 closed early (ign off)</span></div>
+        </section>
+
+        <section class="card carbon-tex" style="background:radial-gradient(120% 100% at 100% 0,rgba(44,92,255,.16),transparent 55%),var(--carbon)">
+          <h2>Firmware</h2>
+          <div class="h-sub">Over-the-air update</div>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:4px">
+            <div style="font-family:var(--mono);font-size:34px;font-weight:800;letter-spacing:1px">v4.2.1</div>
+            <span class="chip" style="color:var(--ok)"><span class="d"></span><span style="color:var(--txt)">UP TO DATE</span></span>
+          </div>
+          <button class="btn btn-2" style="width:100%;margin-top:16px">Check / Upload .bin</button>
+        </section>
+      </div>
+    </div>
+  </main>
+</body>
+</html>
