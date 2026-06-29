@@ -4,7 +4,7 @@
   "pids": [
     {
       "pid": "22028C",
-      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATCRA17FE007B;",
       "parameters": {
         "SOC": "(B4/2.5)",
         "SOC_D": "(((B4*20.4)/46)-6.4)"
