@@ -99,6 +99,16 @@ static const char *evl_code_str(event_log_code_t code)
         case EVL_OTA_START:     return "OTA_START";
         case EVL_OTA_OK:        return "OTA_OK";
         case EVL_OTA_FAIL:      return "OTA_FAIL";
+        case EVL_FLASH_START:   return "FLASH_START";
+        case EVL_FLASH_OK:      return "FLASH_OK";
+        case EVL_FLASH_FAIL:    return "FLASH_FAIL";
+        case EVL_READ_START:    return "READ_START";
+        case EVL_READ_OK:       return "READ_OK";
+        case EVL_HOST_CLAIM:    return "HOST_CLAIM";
+        case EVL_HOST_RELEASE:  return "HOST_RELEASE";
+        case EVL_DATALOG_PARK:  return "DATALOG_PARK";
+        case EVL_DATALOG_RESUME:return "DATALOG_RESUME";
+        case EVL_REAPER_RESUME: return "REAPER_RESUME";
         case EVL_INFO:          return "INFO";
         default:                return "EVENT";
     }
