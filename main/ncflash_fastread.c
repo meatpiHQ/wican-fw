@@ -15,6 +15,7 @@
 
 #include "can.h"
 #include "types.h"
+#include "event_log.h"
 
 #define TAG "ncflash_fastread"
 
@@ -265,6 +266,11 @@ int ncflash_fast_read(const uint8_t *buf, int len, QueueHandle_t *tx_queue)
      * task parks on this bit so no stray poll frame can race the read. */
     can_flash_active_set();
 
+    /* Operational milestone (Task #12): a fast ROM read claimed the bus. Symmetrical with the
+     * fast-write FLASH_START/OK; one sparse line, never per-block. */
+    event_log_emit(EVL_READ_START, "start=0x%06lX len=0x%06lX",
+                   (unsigned long)start, (unsigned long)length);
+
     /* Take exclusive ownership of the CAN bus: pause the frame-forwarding task
      * so it cannot consume the ECU's responses, then flush stale RX frames.
      * Track that WE suspended it so the teardown only resumes what it suspended. */
@@ -369,6 +375,15 @@ int ncflash_fast_read(const uint8_t *buf, int len, QueueHandle_t *tx_queue)
         int64_t dt_ms = (esp_timer_get_time() - t0) / 1000;
         ESP_LOGI(TAG, "fast read done rc=%d, %lu bytes in %lld ms",
                  rc, (unsigned long)(length - remaining), (long long)dt_ms);
+        /* Operational milestone (Task #12): only the clean read (rc==0) gets a READ_OK; a block
+         * failure already streams FRERR and a non-destructive read needs no FAIL line. The
+         * host-gone path skips this block (goto cleanup) and so emits nothing -- intentional. */
+        if (rc == 0)
+        {
+            event_log_emit(EVL_READ_OK, "start=0x%06lX %lu bytes in %lldms",
+                           (unsigned long)start, (unsigned long)(length - remaining),
+                           (long long)dt_ms);
+        }
     }
 
 cleanup:

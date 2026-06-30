@@ -19,6 +19,7 @@
 #include "can.h"
 #include "types.h"
 #include "sdcard.h"
+#include "event_log.h"
 
 #define TAG "ncflash_fastwrite"
 
@@ -65,6 +66,12 @@ static uint8_t s_fw_msg[1 + 1024 + 8];    /* 0x36 + up to a 1 KB block */
 /* Re-entry guard: a fast-op owns the CAN bus exclusively. */
 static volatile int s_fwbusy;
 
+/* Last fw_emit_err() coordinates, stashed so the cleanup path can name in EVL_FLASH_FAIL
+ * exactly WHERE a flash died (the stage + the FWSUB_* or NRC sub-code) without threading them
+ * through every goto site. Reset at the top of each flash op. */
+static int s_fw_err_stage;
+static int s_fw_err_nrc;
+
 typedef struct {
     int manifest_version;
     uint32_t download_addr, download_size, block_size;
@@ -109,6 +116,8 @@ static int fw_emit(QueueHandle_t *tx_queue, const char *line)
 /* Stream a terminal FWERR diagnostic (best-effort; host may already be gone). */
 static void fw_emit_err(QueueHandle_t *tx_queue, uint32_t addr, int stage, int nrc)
 {
+    s_fw_err_stage = stage;   /* remember the failure site for EVL_FLASH_FAIL at cleanup */
+    s_fw_err_nrc = nrc;
     char line[64];
     int n = snprintf(line, sizeof(line), "\r\nFWERR a=%06lX st=%d nrc=%02X\r\n",
                      (unsigned long)addr, stage, nrc & 0xFF);
@@ -355,6 +364,14 @@ int ncflash_fast_write(const uint8_t *buf, int len, QueueHandle_t *tx_queue)
     int rc = 0;
     TaskHandle_t rx_task = NULL;
     fw_manifest_t m;
+    /* Event-log milestone bookkeeping (Task #12): total_blocks/done are read by the cleanup label
+     * (EVL_FLASH_FAIL), so they must be declared before any goto. fw_t0_us is captured for real at
+     * FLASH_START (the about-to-touch-ECU point), not here. */
+    int64_t fw_t0_us = 0;
+    uint32_t total_blocks = 0;
+    uint32_t done = 0;            /* blocks completed; on FAIL this is "where it died" */
+    s_fw_err_stage = 0;
+    s_fw_err_nrc = 0;
 
     char img_path[160];
     char man_path[160];
@@ -366,8 +383,9 @@ int ncflash_fast_write(const uint8_t *buf, int len, QueueHandle_t *tx_queue)
     snprintf(man_path, sizeof(man_path), "%s/%s.json", FW_ROMS_DIR, stem);
 
     int live = (mode == 'L');
+    const char *mode_str = live ? "LIVE" : "dry-run";
 
-    ESP_LOGI(TAG, "fast write %s: %s", live ? "LIVE" : "dry-run", img_path);
+    ESP_LOGI(TAG, "fast write %s: %s", mode_str, img_path);
 
     /* Take exclusive CAN ownership (mirrors live; also exercises the teardown). */
     rx_task = xTaskGetHandle("can_rx_task");
@@ -429,7 +447,13 @@ int ncflash_fast_write(const uint8_t *buf, int len, QueueHandle_t *tx_queue)
     uint32_t bs = m.block_size;
     uint32_t sbl_blocks = (m.sbl_len + bs - 1) / bs;
     uint32_t prog_blocks = (m.program_len + bs - 1) / bs;
-    uint32_t total_blocks = sbl_blocks + prog_blocks;
+    total_blocks = sbl_blocks + prog_blocks;
+
+    /* Operational milestone (Task #12): the flash is past every pre-erase gate and is about to
+     * touch the ECU. One sparse line -- the per-block progress stays on the wire (NCFWPROG). */
+    fw_t0_us = esp_timer_get_time();
+    event_log_emit(EVL_FLASH_START, "%.48s %s blocks=%lu",
+                   name, mode_str, (unsigned long)total_blocks);
 
     if (fw_emit(tx_queue, "NCFWSYNC\n") != 0) { host_gone = 1; rc = -3; goto cleanup; }
 
@@ -450,7 +474,6 @@ int ncflash_fast_write(const uint8_t *buf, int len, QueueHandle_t *tx_queue)
         {m.sbl_offset, m.sbl_len},
         {m.program_offset, m.program_len},
     };
-    uint32_t done = 0;
     for (int r = 0; r < 2; r++)
     {
         uint32_t off = regions[r][0];
@@ -505,7 +528,10 @@ int ncflash_fast_write(const uint8_t *buf, int len, QueueHandle_t *tx_queue)
 
     (void)fw_emit(tx_queue, "NCFWDONE\n");
     ESP_LOGI(TAG, "fast write %s complete: %lu blocks",
-             live ? "LIVE" : "dry-run", (unsigned long)total_blocks);
+             mode_str, (unsigned long)total_blocks);
+    event_log_emit(EVL_FLASH_OK, "%.48s %s blocks=%lu elapsed=%lldms",
+                   name, mode_str, (unsigned long)total_blocks,
+                   (long long)((esp_timer_get_time() - fw_t0_us) / 1000));
     rc = 0;
 
 cleanup:
@@ -524,6 +550,19 @@ cleanup:
         xdev_buffer leftover;
         while (xQueueReceive(*tx_queue, &leftover, 0) == pdTRUE) { /* discard */ }
         ESP_LOGW(TAG, "fast write aborted: host stopped draining TCP (clean teardown)");
+    }
+    /* Operational milestone (Task #12): any non-zero rc is an aborted/failed flash. One sparse
+     * line naming WHERE it died -- the fw_emit_err stage + the FWSUB_* or NRC sub-code + the block
+     * index reached (done/total) -- so a post-mortem of a wireless flash is a one-line lookup.
+     * Stash is set by fw_emit_err; host-gone aborts (rc=-3) carry no stage, so flag them. The
+     * load-bearing fixed fields come FIRST and the variable-length ROM name LAST (capped), so a
+     * long filename can only ever truncate itself in the 112-byte detail, never the diagnostics. */
+    if (rc != 0)
+    {
+        event_log_emit(EVL_FLASH_FAIL, "%s rc=%d st=%d nrc=0x%02X blk=%lu/%lu%s name=%.48s",
+                       mode_str, rc, s_fw_err_stage,
+                       s_fw_err_nrc & 0xFF, (unsigned long)done, (unsigned long)total_blocks,
+                       host_gone ? " host_gone" : "", name);
     }
     /* Release the bus LAST (task #36 / plan §5.2): only now -- after can_rx_task is
      * resumed and the bus drained -- does the poll task un-park, so the single-CAN-

@@ -1079,13 +1079,19 @@ static esp_err_t datalog_control_handler(httpd_req_t *req)
 
     if (strcmp(op, "pause") == 0)
     {
-        // Snapshot the restore target only on the FIRST pause (re-pause must not overwrite it
-        // with the already-forced-off mode). Stop the producer BEFORE parking the bus. Arming
-        // the park lease raises the park flag atomically (issues park_token, stamps the owning
-        // 35001 connection generation).
-        if (!can_datalog_park_active()) { s_datalog_prepause_mode = csv_manual_mode; }
+        // FIRST-pause gating (both snapshot AND log): on the first pause, snapshot the restore
+        // target (a re-pause must not overwrite it with the already-forced-off mode) and emit PARK.
+        // A re-pause while already parked must neither re-snapshot nor emit a second PARK with no
+        // intervening RESUME -- the resume side is edge-gated, so the park side must be too. Then
+        // stop the producer BEFORE parking the bus; arming the park lease raises the park flag
+        // atomically (issues park_token, stamps the owning 35001 connection generation).
+        bool was_parked = can_datalog_park_active();
+        if (!was_parked) { s_datalog_prepause_mode = csv_manual_mode; }
         csv_logger_set_manual_override(false);
         can_park_lease_arm(COEXIST_PARK_LEASE_TTL_US);
+        // Operational milestone (Task #12): datalogger parked for a host session. Only the rising
+        // edge is logged; keepalive renews + re-pause are deliberately NOT logged (too chatty).
+        if (!was_parked) { event_log_emit(EVL_DATALOG_PARK, "host paused datalog"); }
     }
     else if (strcmp(op, "resume") == 0)
     {
@@ -1100,13 +1106,21 @@ static esp_err_t datalog_control_handler(httpd_req_t *req)
         else
         {
             datalog_restore_mode();   // park flag already lowered; restore exact pre-pause mode
+            // Only the real host-driven resume is logged here. A 409 (stale token) means the reaper
+            // already auto-resumed and emitted EVL_REAPER_RESUME, so emitting again would double-log.
+            event_log_emit(EVL_DATALOG_RESUME, "host resumed datalog");
         }
     }
     else if (strcmp(op, "bus_claim") == 0)
     {
         // Raise the auth-window brick fence for the WHOLE host-driven session; arming the lease
         // raises the claim flag atomically and issues claim_token.
+        bool was_claimed = can_host_bus_claim_active();
         can_host_bus_claim_arm(COEXIST_HOST_CLAIM_LEASE_TTL_US);
+        // Operational milestone (Task #12): NC-Flash "cable plugged in" -- the host bus-claim window
+        // opened. Log only the rising edge (the release side is edge-gated) so a re-claim renew
+        // doesn't double-log. Brackets the flash sequence in events.log.
+        if (!was_claimed) { event_log_emit(EVL_HOST_CLAIM, "host claimed bus"); }
     }
     else if (strcmp(op, "bus_release") == 0)
     {
@@ -1115,6 +1129,11 @@ static esp_err_t datalog_control_handler(httpd_req_t *req)
         if (!can_host_bus_claim_release(has_token ? token : 0))
         {
             conflict = true;  // stale claim token (already reaped) -> 409
+        }
+        else
+        {
+            // Host bus-claim window closed cleanly (stale-token 409 already reaped -> no log).
+            event_log_emit(EVL_HOST_RELEASE, "host released bus");
         }
     }
     else if (strcmp(op, "keepalive") == 0)
