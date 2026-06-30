@@ -89,6 +89,9 @@ void event_log_set_sd_ready_fn(event_log_sd_ready_fn_t fn)
 
 static const char *evl_code_str(event_log_code_t code)
 {
+    // No default: every enumerator is listed so -Wswitch (under -Werror) turns a future
+    // "added an event code, forgot its string" into a build error instead of a silent "EVENT"
+    // mislabel in the post-hoc brick log. EVL_CODE_MAX is the count sentinel, not a real event.
     switch (code)
     {
         case EVL_BOOT:          return "BOOT";
@@ -110,8 +113,9 @@ static const char *evl_code_str(event_log_code_t code)
         case EVL_DATALOG_RESUME:return "DATALOG_RESUME";
         case EVL_REAPER_RESUME: return "REAPER_RESUME";
         case EVL_INFO:          return "INFO";
-        default:                return "EVENT";
+        case EVL_CODE_MAX:      break;
     }
+    return "EVENT";
 }
 
 void event_log_emit(event_log_code_t code, const char *fmt, ...)

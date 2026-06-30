@@ -1079,13 +1079,12 @@ static esp_err_t datalog_control_handler(httpd_req_t *req)
 
     if (strcmp(op, "pause") == 0)
     {
-        // Snapshot the restore target only on the FIRST pause (re-pause must not overwrite it
-        // with the already-forced-off mode). Stop the producer BEFORE parking the bus. Arming
-        // the park lease raises the park flag atomically (issues park_token, stamps the owning
-        // 35001 connection generation).
-        // Snapshot the restore target AND decide whether to log only on the FIRST pause: a re-pause
-        // (already parked) must neither overwrite the saved mode nor emit a second PARK with no
-        // intervening RESUME -- the resume side is edge-gated, so the park side must be too.
+        // FIRST-pause gating (both snapshot AND log): on the first pause, snapshot the restore
+        // target (a re-pause must not overwrite it with the already-forced-off mode) and emit PARK.
+        // A re-pause while already parked must neither re-snapshot nor emit a second PARK with no
+        // intervening RESUME -- the resume side is edge-gated, so the park side must be too. Then
+        // stop the producer BEFORE parking the bus; arming the park lease raises the park flag
+        // atomically (issues park_token, stamps the owning 35001 connection generation).
         bool was_parked = can_datalog_park_active();
         if (!was_parked) { s_datalog_prepause_mode = csv_manual_mode; }
         csv_logger_set_manual_override(false);
