@@ -372,6 +372,26 @@
       ]
     },
     {
+      "car_model": "BT1: Hummer EV, Silverado EV, Sierra AV; BEV3: Cadillac Lyriq, Celestiq, Chevrolet Blazer EV, Equinox EV; Honda Prologue EV; Acura ZDX",
+      "init": "ATST96;",
+      "pids": [
+        {
+          "pid": "2227C6",
+          "pid_init": "ATSP7;ATCP14;ATSHDACBF1;ATCRA142AF1CB;ATFCSH14DACBF1;ATFCSD300000;ATFCSM1;",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "[B4:B5]/655.35",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "BYD: Atto 2/Atto 3/Yuan Plus EV/Dolphin/Seal/Seal U/Sealion/M6/eMax 7/海豚/Denza D9/Denza N7/Sealion 7 EV (EU version, only before 2024.10 update)",
       "init": "ATSP6;ATAT1;ATST96;ATSH7E7;ATFCSH7E7;ATFCSD300000;ATFCSM1;",
       "pids": [
