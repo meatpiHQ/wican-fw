@@ -1,6 +1,26 @@
+// Check OUR fork's releases for OTA updates (never the stock meatpiHQ repo, whose
+// images would overwrite this custom build). Compares the running firmware against
+// the latest v* release tag and, when newer, links straight to that release's OTA
+// app image (the *.bin you POST to /upload/ota.bin).
+const FW_UPDATE_REPO = 'cdufresne81/nc-flash-wican-fw';
+const FW_RELEASES_URL = `https://github.com/${FW_UPDATE_REPO}/releases`;
+// Check once per page load. checkFirmwareUpdate() is called from the shared
+// /check_status onload handler, which also runs on VPN-tab opens and VPN tests;
+// without this guard the rate-limited (60/hr) GitHub releases API would be
+// re-hit each time, for a result that can't change within a page's lifetime.
+let fwUpdateChecked = false;
 async function checkFirmwareUpdate() {
+        if (fwUpdateChecked) return;
+        fwUpdateChecked = true;
         try {
-            const currentRaw = document.getElementById('fw_version')?.textContent?.trim();
+            // Prefer the git-describe tag (git_version, e.g. "v1.2.3"): it carries the
+            // full semver including patch and matches our release tag format exactly.
+            // Only trust it when it actually looks like a vX.Y[.Z] tag -- dev builds
+            // report a bare SHA (e.g. "b79549b-dirty") that must not be mis-parsed as a
+            // version. Otherwise fall back to the major.minor fw_version display.
+            const gitRaw = document.getElementById('git_version')?.textContent?.trim();
+            const fwRaw = document.getElementById('fw_version')?.textContent?.trim();
+            const currentRaw = (gitRaw && /v?\d+\.\d+/i.test(gitRaw)) ? gitRaw : fwRaw;
             if (!currentRaw) return;
 
             // Helpers: extract numeric version and compare a.b.c parts
@@ -25,24 +45,44 @@ async function checkFirmwareUpdate() {
             const currentVersion = extractVersion(currentRaw);
             if (!currentVersion) return;
 
-            const response = await fetch('https://api.github.com/repos/meatpiHQ/wican-fw/releases');
+            const response = await fetch(`https://api.github.com/repos/${FW_UPDATE_REPO}/releases`);
             if (!response.ok) return;
             const releases = await response.json();
-            const proRelease = releases.find(rel =>
-                (rel?.name && rel.name.toUpperCase().includes('PRO')) ||
-                (rel?.tag_name && rel.tag_name.toUpperCase().includes('P'))
-            );
-            if (!proRelease) return;
+            if (!Array.isArray(releases)) return;
 
-            const latestRaw = (proRelease.tag_name || proRelease.name || '').toString();
-            const latestVersion = extractVersion(latestRaw);
-            if (!latestVersion) return;
+            // Pick the highest published v* release (skip drafts/prereleases). Don't
+            // rely on API ordering -- compare semver across all candidates.
+            let latest = null;
+            let latestVersion = null;
+            for (const rel of releases) {
+                if (!rel || rel.draft || rel.prerelease) continue;
+                const tag = rel.tag_name || rel.name || '';
+                if (!/^v?\d+\.\d+/i.test(tag)) continue;
+                const ver = extractVersion(tag);
+                if (!ver) continue;
+                if (!latestVersion || cmpVersions(ver, latestVersion) === 1) {
+                    latest = rel;
+                    latestVersion = ver;
+                }
+            }
+            if (!latest) return;
 
             // Only notify if latest > current
             if (cmpVersions(latestVersion, currentVersion) === 1) {
                 const notice = document.getElementById('firmware-update-notice');
                 if (notice) {
-                    const url = proRelease.html_url || 'https://github.com/meatpiHQ/wican-fw/releases';
+                    // Prefer a direct link to the OTA app image asset (the obd_pro *.bin
+                    // flashable via /upload/ota.bin), not the bootloader/partition-table/
+                    // ota_data bins or the source archives. Fall back to the release page.
+                    const assets = Array.isArray(latest.assets) ? latest.assets : [];
+                    const otaAsset = assets.find(a => {
+                        const name = (a && a.name) || '';
+                        return /\.bin$/i.test(name) &&
+                            /obd[_-]?pro/i.test(name) &&
+                            !/bootloader|partition|ota[_-]?data/i.test(name);
+                    });
+                    const url = (otaAsset && otaAsset.browser_download_url)
+                        || latest.html_url || FW_RELEASES_URL;
                     const versionText = ` <span style='color:#b45309'>(v${latestVersion})</span>`;
                     notice.innerHTML = `<span style=\"font-weight: 600;\">New firmware available!</span><br><a id=\"firmware-update-link\" href=\"${url}\" target=\"_blank\" style=\"color: #2563eb; text-decoration: underline;\">Download</a>${versionText}`;
                     notice.style.display = 'block';
