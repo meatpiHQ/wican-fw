@@ -10,10 +10,11 @@ idf_component_register(
     REQUIRES
         connection_manager
         driver
+        esp_driver_gpio
         esp_http_server
         esp_netif
         freertos
-        json
+        cjson
         log
         usb_acm_cli
         usb_eth_host

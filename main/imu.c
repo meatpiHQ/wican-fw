@@ -25,7 +25,7 @@
 #include "driver/gpio.h"
 #include "hw_config.h"
 #include "wc_timer.h"
-#include "rtc.h"
+#include "esp_rtc_time.h"
 #include "dev_status.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"

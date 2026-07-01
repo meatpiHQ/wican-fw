@@ -1,15 +1,16 @@
 # IDF Component Manager Manifest File
 dependencies:
-  joltwallet/littlefs: ^1.19.2
+  joltwallet/littlefs: 1.19.2
   nopnop2002/sqlite3:
     path: components/esp32-idf-sqlite3/
     git: https://github.com/nopnop2002/esp32-idf-sqlite3.git
-  espressif/mdns: ^1.0.0
+    version: bf5a8617a9c1933b525f9484ed7e328a1d8bd02f
+  espressif/mdns: 1.8.2
   # Required IDF version
   idf:
     version: '>=4.1.0'
   eil/i2cdev: ^1.5.1
   zorxx/multipart-parser: '*'
-  cherry-embedded/cherryusb:
-    git: https://github.com/meatpiHQ/CherryUSB.git
-    version: sharred-buffer
+  cherry-embedded/cherryusb: 1.5.2~2
+  espressif/mqtt: '*'
+  espressif/cjson: '*'

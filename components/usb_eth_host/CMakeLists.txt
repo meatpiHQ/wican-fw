@@ -16,6 +16,7 @@ idf_component_register(
         esp_netif
         lwip
         driver
+        esp_driver_gpio
     PRIV_REQUIRES
         freertos
         cherry-embedded__cherryusb
