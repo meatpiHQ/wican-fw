@@ -4,7 +4,14 @@
 // app image (the *.bin you POST to /upload/ota.bin).
 const FW_UPDATE_REPO = 'cdufresne81/nc-flash-wican-fw';
 const FW_RELEASES_URL = `https://github.com/${FW_UPDATE_REPO}/releases`;
+// Check once per page load. checkFirmwareUpdate() is called from the shared
+// /check_status onload handler, which also runs on VPN-tab opens and VPN tests;
+// without this guard the rate-limited (60/hr) GitHub releases API would be
+// re-hit each time, for a result that can't change within a page's lifetime.
+let fwUpdateChecked = false;
 async function checkFirmwareUpdate() {
+        if (fwUpdateChecked) return;
+        fwUpdateChecked = true;
         try {
             // Prefer the git-describe tag (git_version, e.g. "v1.2.3"): it carries the
             // full semver including patch and matches our release tag format exactly.
@@ -49,7 +56,7 @@ async function checkFirmwareUpdate() {
             let latestVersion = null;
             for (const rel of releases) {
                 if (!rel || rel.draft || rel.prerelease) continue;
-                const tag = (rel.tag_name || rel.name || '').toString();
+                const tag = rel.tag_name || rel.name || '';
                 if (!/^v?\d+\.\d+/i.test(tag)) continue;
                 const ver = extractVersion(tag);
                 if (!ver) continue;
@@ -58,7 +65,7 @@ async function checkFirmwareUpdate() {
                     latestVersion = ver;
                 }
             }
-            if (!latest || !latestVersion) return;
+            if (!latest) return;
 
             // Only notify if latest > current
             if (cmpVersions(latestVersion, currentVersion) === 1) {
@@ -68,11 +75,12 @@ async function checkFirmwareUpdate() {
                     // flashable via /upload/ota.bin), not the bootloader/partition-table/
                     // ota_data bins or the source archives. Fall back to the release page.
                     const assets = Array.isArray(latest.assets) ? latest.assets : [];
-                    const otaAsset = assets.find(a =>
-                        a && /\.bin$/i.test(a.name || '') &&
-                        /obd[_-]?pro/i.test(a.name || '') &&
-                        !/bootloader|partition|ota[_-]?data/i.test(a.name || '')
-                    );
+                    const otaAsset = assets.find(a => {
+                        const name = (a && a.name) || '';
+                        return /\.bin$/i.test(name) &&
+                            /obd[_-]?pro/i.test(name) &&
+                            !/bootloader|partition|ota[_-]?data/i.test(name);
+                    });
                     const url = (otaAsset && otaAsset.browser_download_url)
                         || latest.html_url || FW_RELEASES_URL;
                     const versionText = ` <span style='color:#b45309'>(v${latestVersion})</span>`;
