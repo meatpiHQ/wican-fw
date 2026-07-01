@@ -47,6 +47,9 @@ set(requires
     fatfs
     vfs
     driver
+    esp_hw_support
+    esp_driver_uart
+    esp_usb_cdc_rom_console
     esp-tls
     esp_adc
     esp_eth
@@ -57,7 +60,7 @@ set(requires
     spiffs
     freertos
     mqtt
-    json
+    cjson
     wear_levelling
     esp_http_client
     spi_flash

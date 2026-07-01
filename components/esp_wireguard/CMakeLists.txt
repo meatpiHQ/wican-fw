@@ -10,11 +10,11 @@ idf_component_register(
          "src/crypto/refc/x25519.c"
          "src/esp_wireguard.c"
          "src/nacl/crypto_scalarmult/curve25519/ref/smult.c"
-    INCLUDE_DIRS "include"
+    INCLUDE_DIRS "include" "src/crypto/refc"
     PRIV_INCLUDE_DIRS "src"
     REQUIRES esp_netif lwip mbedtls)
 
-if(${IDF_VERSION_MAJOR} STREQUAL 5)
+if(${IDF_VERSION_MAJOR} GREATER_EQUAL 5)
     set_source_files_properties(src/crypto/refc/x25519.c
         PROPERTIES COMPILE_FLAGS
         -Wno-error=stringop-overread)

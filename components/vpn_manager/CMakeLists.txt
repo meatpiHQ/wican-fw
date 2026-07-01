@@ -6,7 +6,7 @@ idf_component_register(SRCS "vpn_manager.c"
                        INCLUDE_DIRS "include"
                        REQUIRES esp_wireguard
                                 esp_http_server 
-                                json
+                                cjson
                                 esp_netif
                                 freertos
                                 esp_wifi

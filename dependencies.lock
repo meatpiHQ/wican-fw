@@ -37,6 +37,16 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.5.1
+  espressif/cjson:
+    component_hash: e788323270d90738662d66fffa910bfe1fba019bba087f01557e70c40485b469
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.7.19~2
   espressif/mdns:
     component_hash: 3ec0af5f6bce310512e90f482388d21cc7c0e99668172d2f895356165fc6f7c5
     dependencies:
@@ -47,10 +57,20 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.8.2
+  espressif/mqtt:
+    component_hash: ffdad5659706b4dc14bc63f8eb73ef765efa015bf7e9adf71c813d52a2dc9342
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.3'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.0.0
   idf:
     source:
       type: idf
-    version: 5.5.3
+    version: 6.0.2
   joltwallet/littlefs:
     component_hash: e1dbe782be5aa58e879fe9f22bee60e5ff68acbfe3793d92a2e730c27374c787
     dependencies:
@@ -62,13 +82,13 @@ dependencies:
       type: service
     version: 1.19.2
   nopnop2002/sqlite3:
-    component_hash: 3deae8ed52e238e19eb13d2a347f1b2a9efe1d7e04007be6df7b04555a5543f7
+    component_hash: 5f15f87e2a4e660b99ddf95db8ced945090c1ba0fe52630fe262b1d77fee7317
     dependencies: []
     source:
       git: https://github.com/nopnop2002/esp32-idf-sqlite3.git
       path: components/esp32-idf-sqlite3/
       type: git
-    version: 8c38efacd2d9225295e2abcc85f565c9b65bb1e0
+    version: bf5a8617a9c1933b525f9484ed7e328a1d8bd02f
   zorxx/multipart-parser:
     component_hash: a80b98bbdd530829b5a4df54cd8332a265ef4d310392562cf37d4cac548c5fd2
     dependencies: []
@@ -79,11 +99,13 @@ dependencies:
 direct_dependencies:
 - cherry-embedded/cherryusb
 - eil/i2cdev
+- espressif/cjson
 - espressif/mdns
+- espressif/mqtt
 - idf
 - joltwallet/littlefs
 - nopnop2002/sqlite3
 - zorxx/multipart-parser
-manifest_hash: ebf393fa07e1f591e31bd37dd80d9dd982e16b9414717d185548a4171c7ba444
+manifest_hash: 6c87476a6b1dc3cbe9d52fc510f39e71debbcdcbf57a17e1c2f5aad4da1632f3
 target: esp32s3
-version: 2.0.0
+version: 3.0.0
