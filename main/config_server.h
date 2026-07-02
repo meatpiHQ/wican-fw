@@ -159,7 +159,7 @@ typedef struct _device_config
 }device_config_t;
 
 
-void config_server_start(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t connected_led, char * did);
+void config_server_start(QueueHandle_t *xRXp_Queue, uint8_t connected_led, char * did);
 void config_server_stop(void);
 int8_t config_server_get_wifi_mode(void);
 int8_t config_server_get_ap_ch(void);
@@ -197,7 +197,6 @@ int8_t config_server_get_ble_power(int8_t *power_dbm); // returns 0 on success
 int8_t config_server_get_ble_config(void);
 void config_server_set_ble_config(uint8_t b);
 void config_server_restart(void);
-bool config_server_ws_connected(void);
 int8_t config_server_get_sleep_volt(float *sleep_volt);
 int8_t config_server_get_engine_volt(float *engine_volt);   // Task #6: engine-running gate (13.0-15.0 V)
 int8_t config_server_get_battery_alert_config(void);

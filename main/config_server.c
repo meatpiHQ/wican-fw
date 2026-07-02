@@ -99,8 +99,6 @@
 #include "restart_tracker.h"
 #include "restart_tracker_http.h"
 
-#include <ws_router.h>
-#include "ws_server.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
 static EventGroupHandle_t xServerEventGroup = NULL;
@@ -153,10 +151,6 @@ extern const unsigned char lucide_icons_js_start[] asm("_binary_lucide_icons_js_
 extern const unsigned char lucide_icons_js_end[] asm("_binary_lucide_icons_js_end");
 extern const unsigned char main_js_start[] asm("_binary_main_js_start");
 extern const unsigned char main_js_end[] asm("_binary_main_js_end");
-extern const unsigned char ws_client_js_start[] asm("_binary_ws_client_js_start");
-extern const unsigned char ws_client_js_end[] asm("_binary_ws_client_js_end");
-extern const unsigned char terminal_js_start[] asm("_binary_terminal_js_start");
-extern const unsigned char terminal_js_end[] asm("_binary_terminal_js_end");
 
 typedef struct {
     const char *uri;
@@ -170,8 +164,6 @@ typedef struct {
 static const file_lookup_t file_lookup[] = {
 	{"/lucide_icons.js", "application/javascript", lucide_icons_js_start, lucide_icons_js_end, false, NULL},
 	{"/main.js", "application/javascript", main_js_start, main_js_end, false, NULL},
-	{"/ws_client.js", "application/javascript", ws_client_js_start, ws_client_js_end, false, NULL},
-	{"/terminal.js", "application/javascript", terminal_js_start, terminal_js_end, false, NULL},
 	
 	{NULL, NULL, NULL, NULL, false, NULL} // Sentinel to mark end of array
 };
@@ -2916,7 +2908,6 @@ static void register_server_uris(void)
 	httpd_register_uri_handler(server, &check_status_uri);
 	httpd_register_uri_handler(server, &load_config_uri);
 	httpd_register_uri_handler(server, &logo_uri);
-	ws_server_register_uri(server);
 	httpd_register_uri_handler(server, &file_upload);
 	httpd_register_uri_handler(server, &system_reboot);
 	httpd_register_uri_handler(server, &store_auto_data_uri);
@@ -2939,28 +2930,6 @@ static void register_server_uris(void)
 	event_log_register_handlers(server);   // GET /event_log* (Task #24) -- before the catch-all wildcard
 }
 
-bool config_server_ws_connected(void)
-{
-	return ws_server_is_connected();
-}
-
-static void ws_server_on_open_cb(void *ctx)
-{
-	(void)ctx;
-	ws_router_on_open();
-}
-
-static void ws_server_on_close_cb(void *ctx)
-{
-	(void)ctx;
-	ws_router_on_close();
-}
-
-static bool ws_server_handle_frame_cb(httpd_req_t *req, const uint8_t *data, size_t len, void *ctx)
-{
-	(void)ctx;
-	return ws_router_handle_frame(req, data, len);
-}
 //static char* device_config = NULL;
 static uint8_t esp_fatfs_flag = 0;
 static httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -3154,7 +3123,7 @@ wifi_security_t config_server_get_sta_fallback_security(int index)
 	if (strcmp(sec, "wpa3") == 0) return WIFI_WPA3_PSK;
 	return WIFI_WPA2_PSK;
 }
-void config_server_start(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t connected_led, char * did)
+void config_server_start(QueueHandle_t *xRXp_Queue, uint8_t connected_led, char * did)
 {
     if (server == NULL)
     {
@@ -3162,13 +3131,6 @@ void config_server_start(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, u
         ws_led = connected_led;
         ESP_LOGI(TAG, "Starting webserver");
         server = config_server_init();
-		ws_server_hooks_t hooks = {
-			.on_open = ws_server_on_open_cb,
-			.on_close = ws_server_on_close_cb,
-			.handle_frame = ws_server_handle_frame_cb,
-			.ctx = NULL,
-		};
-		ws_server_start(xTXp_Queue, xRXp_Queue, &hooks);
     }
 }
 

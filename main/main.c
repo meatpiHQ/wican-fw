@@ -57,7 +57,6 @@
 #include "sleep_mode.h"
 #include "wc_uart.h"
 #include "elm327.h"
-#include <ws_router.h>
 #include "autopid.h"
 #include "csv_logger.h"
 #include "fast_log.h"
@@ -104,7 +103,7 @@
 #define BLE_EN_PIN_SEL		(1ULL<<BLE_EN_PIN_NUM)
 #define BLE_Enabled()		(!gpio_get_level(BLE_EN_PIN_NUM))
 
-static QueueHandle_t xMsg_Tx_Queue, xMsg_Rx_Queue, xmsg_ws_tx_queue, xmsg_ble_tx_queue, xmsg_uart_tx_queue, xmsg_obd_rx_queue, xmsg_elm327_rx_queue;
+static QueueHandle_t xMsg_Tx_Queue, xMsg_Rx_Queue, xmsg_ble_tx_queue, xmsg_uart_tx_queue, xmsg_obd_rx_queue, xmsg_elm327_rx_queue;
 /* Private reply queue for the dedicated SLCAN port (task #36): the fast-read/write codecs
  * push DEV_SLCAN_PORT replies here, drained by slcan_port_tx_task to its own socket, so they
  * never collide with the stock port's xMsg_Tx_Queue. WICAN_PRO only. */
@@ -252,13 +251,6 @@ static void can_tx_task(void *pvParameters)
 		uint8_t* msg_ptr = ucTCP_RX_Buffer.ucElement;
 		int temp_len = ucTCP_RX_Buffer.usLen;
 
-		if(config_server_ws_connected())
-		{
-			if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI_WS)
-			{
-				slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xmsg_ws_tx_queue);
-			}
-		}
 		/* No-reboot coexistence (task #36): frames from the dedicated SLCAN port (35001)
 		 * are dispatched here -- BEFORE the persisted-protocol gate -- so the host can
 		 * version-ping / fast-read / fast-write / slcan over CAN while the device stays in
@@ -327,10 +319,6 @@ static void can_tx_task(void *pvParameters)
 			{
 				elm327_process_cmd(msg_ptr, temp_len, &xMsg_Tx_Queue, elm327_cmd_buffer, &cmd_buffer_len, &last_cmd_time, &send_to_host);
 			}
-			else if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI_WS)
-			{
-				elm327_process_cmd(msg_ptr, temp_len, &xmsg_ws_tx_queue, elm327_cmd_buffer, &cmd_buffer_len, &last_cmd_time, &send_to_host);
-			}
 			else if(ucTCP_RX_Buffer.dev_channel == DEV_BLE)
 			{
 				elm327_send_cmd(msg_ptr, temp_len);
@@ -342,10 +330,6 @@ static void can_tx_task(void *pvParameters)
 			if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI)
 			{
 				elm327_process_cmd(msg_ptr, temp_len, &tx_msg, &xMsg_Tx_Queue);
-			}
-			else if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI_WS)
-			{
-				elm327_process_cmd(msg_ptr, temp_len, &tx_msg, &xmsg_ws_tx_queue);
 			}
 			else if(ucTCP_RX_Buffer.dev_channel == DEV_BLE)
 			{
@@ -446,11 +430,6 @@ static void can_rx_task(void *pvParameters)
 				continue;
 			}
 
-			if(config_server_ws_connected() && ws_router_is_in_monitor_mode())
-			{
-				ucTCP_TX_Buffer.usLen = slcan_parse_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
-				xQueueSend( xmsg_ws_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
-			}
         	//TODO: optimize, useless ifs
 			if(tcp_port_open() || ble_connected() || HARDWARE_VER == WICAN_USB_V100 || protocol == AUTO_PID )
 			{
@@ -768,26 +747,22 @@ void app_main(void)
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 	xMsg_Rx_Queue = xQueueCreate(32, sizeof( xdev_buffer) );
     xMsg_Tx_Queue = xQueueCreate(32, sizeof( xdev_buffer) );
-    xmsg_ws_tx_queue = xQueueCreate(32, sizeof( xdev_buffer) );
 	#elif HARDWARE_VER == WICAN_PRO
 	static xdev_buffer* xMsg_Rx_Queue_Storage;
 	static xdev_buffer* xMsg_Tx_Queue_Storage;
-	static xdev_buffer* xmsg_ws_tx_queue_Storage;
 	static xdev_buffer* xMsg_SlcanPort_Tx_Queue_Storage;
 	static StaticQueue_t xMsg_Rx_Queue_Buffer;
 	static StaticQueue_t xMsg_Tx_Queue_Buffer;
-	static StaticQueue_t xmsg_ws_tx_queue_Buffer;
 	static StaticQueue_t xMsg_SlcanPort_Tx_Queue_Buffer;
 
 	size_t xdev_buffer_size = sizeof( xdev_buffer);
 
     xMsg_Rx_Queue_Storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
     xMsg_Tx_Queue_Storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
-    xmsg_ws_tx_queue_Storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
     xMsg_SlcanPort_Tx_Queue_Storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
 
     // Check if memory allocation was successful
-    if (xMsg_Rx_Queue_Storage == NULL || xMsg_Tx_Queue_Storage == NULL || xmsg_ws_tx_queue_Storage == NULL || xMsg_SlcanPort_Tx_Queue_Storage == NULL) {
+    if (xMsg_Rx_Queue_Storage == NULL || xMsg_Tx_Queue_Storage == NULL || xMsg_SlcanPort_Tx_Queue_Storage == NULL) {
         // Handle memory allocation failure
         ESP_LOGE(TAG, "Failed to allocate memory for queues in external RAM");
         return;
@@ -796,11 +771,10 @@ void app_main(void)
     // Create the static queues
     xMsg_Rx_Queue = xQueueCreateStatic(32, xdev_buffer_size, (uint8_t *)xMsg_Rx_Queue_Storage, &xMsg_Rx_Queue_Buffer);
     xMsg_Tx_Queue = xQueueCreateStatic(32, xdev_buffer_size, (uint8_t *)xMsg_Tx_Queue_Storage, &xMsg_Tx_Queue_Buffer);
-    xmsg_ws_tx_queue = xQueueCreateStatic(32, xdev_buffer_size, (uint8_t *)xmsg_ws_tx_queue_Storage, &xmsg_ws_tx_queue_Buffer);
     xMsg_SlcanPort_Tx_Queue = xQueueCreateStatic(32, xdev_buffer_size, (uint8_t *)xMsg_SlcanPort_Tx_Queue_Storage, &xMsg_SlcanPort_Tx_Queue_Buffer);
 
     // Check if queues were created successfully
-    if (xMsg_Rx_Queue == NULL || xMsg_Tx_Queue == NULL || xmsg_ws_tx_queue == NULL || xMsg_SlcanPort_Tx_Queue == NULL) {
+    if (xMsg_Rx_Queue == NULL || xMsg_Tx_Queue == NULL || xMsg_SlcanPort_Tx_Queue == NULL) {
         // Handle queue creation failure
         ESP_LOGE(TAG, "Failed to create queues");
         return;
@@ -825,9 +799,9 @@ void app_main(void)
 			derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
 			
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
-		config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, (char*)&uid[0]);
+		config_server_start(&xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, (char*)&uid[0]);
 	#else
-		config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, 0, (char*)&uid[0]);
+		config_server_start(&xMsg_Rx_Queue, 0, (char*)&uid[0]);
 	#endif
 
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100

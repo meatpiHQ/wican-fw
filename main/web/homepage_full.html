@@ -605,7 +605,7 @@
 </head>
 
 <body onload="Load();">
-    <div class="sidebar"><embed class="logo" src="/logo.svg"><button onclick="openTab(event, 'status_view')" class="tablinks" id="defaultOpen"><span data-lucide="signal" style="width:18px;height:18px;margin-right:8px"></span> <b>Status</b></button><button onclick="openTab(event, 'wifi_settings')" class="tablinks"><span data-lucide="settings" style="width:18px;height:18px;margin-right:8px"></span> <b>Settings</b></button><button onclick="openTab(event, 'automate')" class="tablinks"><span data-lucide="zap" style="width:18px;height:18px;margin-right:8px"></span> <b>Automate</b></button><button onclick="openTab(event, 'power_saving_tab')" class="tablinks"><span data-lucide="battery" style="width:18px;height:18px;margin-right:8px"></span> <b>Power Saving</b></button><button onclick="openTab(event, 'logger')" class="tablinks"><span data-lucide="file-text" style="width:18px;height:18px;margin-right:8px"></span> <b>Logger Settings</b></button><button onclick="openTab(event, 'files_tab')" class="tablinks"><span data-lucide="folder" style="width:18px;height:18px;margin-right:8px"></span> <b>Files</b></button><button onclick="openTab(event, 'monitor')" class="tablinks"><span data-lucide="monitor" style="width:18px;height:18px;margin-right:8px"></span> <b>CAN Monitor</b></button><button onclick="openTab(event, 'terminal_tab')" class="tablinks"><span data-lucide="terminal" style="width:18px;height:18px;margin-right:8px"></span> <b>Terminal</b></button><button onclick="openTab(event, 'advanced_tab')" class="tablinks"><span data-lucide="settings" style="width:18px;height:18px;margin-right:8px"></span> <b>Advanced</b></button><button onclick="openTab(event, 'system_tab')" class="tablinks"><span data-lucide="cpu" style="width:18px;height:18px;margin-right:8px"></span> <b>System</b></button><button onclick="openTab(event, 'about_tab')" class="tablinks"><span data-lucide="info" style="width:18px;height:18px;margin-right:8px"></span> <b>About</b></button>
+    <div class="sidebar"><embed class="logo" src="/logo.svg"><button onclick="openTab(event, 'status_view')" class="tablinks" id="defaultOpen"><span data-lucide="signal" style="width:18px;height:18px;margin-right:8px"></span> <b>Status</b></button><button onclick="openTab(event, 'wifi_settings')" class="tablinks"><span data-lucide="settings" style="width:18px;height:18px;margin-right:8px"></span> <b>Settings</b></button><button onclick="openTab(event, 'automate')" class="tablinks"><span data-lucide="zap" style="width:18px;height:18px;margin-right:8px"></span> <b>Automate</b></button><button onclick="openTab(event, 'power_saving_tab')" class="tablinks"><span data-lucide="battery" style="width:18px;height:18px;margin-right:8px"></span> <b>Power Saving</b></button><button onclick="openTab(event, 'logger')" class="tablinks"><span data-lucide="file-text" style="width:18px;height:18px;margin-right:8px"></span> <b>Logger Settings</b></button><button onclick="openTab(event, 'files_tab')" class="tablinks"><span data-lucide="folder" style="width:18px;height:18px;margin-right:8px"></span> <b>Files</b></button><button onclick="openTab(event, 'advanced_tab')" class="tablinks"><span data-lucide="settings" style="width:18px;height:18px;margin-right:8px"></span> <b>Advanced</b></button><button onclick="openTab(event, 'system_tab')" class="tablinks"><span data-lucide="cpu" style="width:18px;height:18px;margin-right:8px"></span> <b>System</b></button><button onclick="openTab(event, 'about_tab')" class="tablinks"><span data-lucide="info" style="width:18px;height:18px;margin-right:8px"></span> <b>About</b></button>
         <div style="color:#24478f;text-align:center;background:#faa3a3;border:1px solid #fde68a;border-radius:8px;margin:2rem 1rem 1rem;padding:.75rem;font-size:.95rem;display:none" id="firmware-update-notice"><span style="font-weight:600">New firmware available!</span><br><a href="https://github.com/cdufresne81/nc-flash-wican-fw/releases" id="firmware-update-link" style="color:#2563eb;text-decoration:underline" target="_blank">Download</a></div>
     </div>
     <div class="content">
@@ -1124,68 +1124,6 @@
             <div class="section-title" style="margin-top:1rem"></div>
             <div class="button-group"><button class="store success-button" disabled="" id="custom_pid_store" onclick="storeAutoTableData()">Store</button></div>
         </div>
-        <div class="tabcontent" id="monitor">
-            <div class="section-title">Monitor Settings</div>
-            <table class="form-table">
-                <tbody>
-                    <tr>
-                        <td>Bitrate</td>
-                        <td>Filter</td>
-                        <td>Mask</td>
-                    </tr>
-                    <tr>
-                        <td><select id="mon_datarate" name="mon_datarate">
-                                <option value="10K">10K</option>
-                                <option value="20K">20K</option>
-                                <option value="50K">50K</option>
-                                <option value="100K">100K</option>
-                                <option value="125K">125K</option>
-                                <option value="250K">250K</option>
-                                <option selected="" value="500K">500K</option>
-                                <option value="800K">800K</option>
-                                <option value="1000K">1Mbit</option>
-                            </select></td>
-                        <td><input id="mon_filter" name="mon_filter" value="00000000"></td>
-                        <td><input id="mon_mask" name="mon_mask" value="FFFFFFFF"></td>
-                        <td><input id="mon_button" name="mon_button" onclick="mon_control()" style="font-size:100%" type="button" value="Start"></td>
-                    </tr>
-                </tbody>
-            </table>
-            <div class="divider"></div>
-            <table class="form-table" id="table2">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Type</th>
-                        <th>Len</th>
-                        <th>Data</th>
-                        <th>Time</th>
-                        <th>Count</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-        </div>
-        <div class="tabcontent" id="terminal_tab">
-            <div class="section-title" style="justify-content:space-between;align-items:center;gap:12px;display:flex"><span>Terminal</span><span class="status-indicator status-disconnected" title="Terminal status" id="terminal_status_badge">Disconnected</span></div>
-            <table class="form-table">
-                <tbody>
-                    <tr>
-                        <td>Terminal Type:</td>
-                        <td>
-                            <div style="align-items:center;gap:10px;display:flex"><select id="terminal_type" name="terminal_type" style="flex:1">
-                                    <option selected="" value="console">WiCAN Command Line</option>
-                                    <option value="elm327">ELM327</option>
-                                    <option disabled="" value="uds">UDS (coming soon)</option>
-                                </select><button id="terminal_connect_btn" style="white-space:nowrap" type="button">Connect</button></div>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-            <div class="divider"></div>
-            <pre style="white-space:pre-wrap;word-break:break-word;color:#0cca7e;background:#181818;border:1px solid #181818;border-radius:6px;height:360px;margin:0;padding:10px;font-family:Consolas,Courier New,monospace;font-size:.9rem;font-weight:400;line-height:1.35;overflow:auto" id="terminal_output"></pre>
-            <div style="align-items:center;gap:10px;margin-top:10px;display:flex"><input placeholder="Type a command (e.g. help, status, echo hello)" style="color:#0cca7e;background:#181818;border-color:#181818;flex:1;font-family:Consolas,Courier New,monospace" id="terminal_input"><button id="terminal_send_btn" type="button">Send</button></div>
-        </div>
         <div class="tabcontent" id="power_saving_tab">
             <div class="section-title">Sleep Mode</div>
             <table class="form-table">
@@ -1460,8 +1398,6 @@
             </table>
         </div><input value="Submit Changes" disabled="" id="submit_button" name="submit_button" onclick="postConfig()" type="button">
     </div>
-    <script src="/ws_client.js"></script>
-    <script src="/terminal.js"></script>
     <script src="/main.js"></script>
     <script src="/lucide_icons.js"></script>
 </body>

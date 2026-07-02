@@ -70,7 +70,6 @@ set(requires
     fast_log
     sd_filemgr
     wican_common
-    ws_server
     restart_tracker
     event_log
 )
@@ -94,8 +93,6 @@ idf_component_register(
         "web/src/homepage.html"
         "web/src/lucide_icons.js"
         "web/src/main.js"
-		"web/src/ws_client.js"
-		"web/src/terminal.js"
         "web/safemode.html"
         # "obd_fw/V2.3.18.txt"
         "obd_fw/V2.3.22.txt"
