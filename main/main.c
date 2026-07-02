@@ -58,7 +58,6 @@
 #include "wc_uart.h"
 #include "elm327.h"
 #include <ws_router.h>
-#include "mqtt.h"
 #include "autopid.h"
 #include "csv_logger.h"
 #include "fast_log.h"
@@ -105,7 +104,7 @@
 #define BLE_EN_PIN_SEL		(1ULL<<BLE_EN_PIN_NUM)
 #define BLE_Enabled()		(!gpio_get_level(BLE_EN_PIN_NUM))
 
-static QueueHandle_t xMsg_Tx_Queue, xMsg_Rx_Queue, xmsg_ws_tx_queue, xmsg_ble_tx_queue, xmsg_uart_tx_queue, xmsg_obd_rx_queue, xmsg_mqtt_rx_queue, xmsg_elm327_rx_queue;
+static QueueHandle_t xMsg_Tx_Queue, xMsg_Rx_Queue, xmsg_ws_tx_queue, xmsg_ble_tx_queue, xmsg_uart_tx_queue, xmsg_obd_rx_queue, xmsg_elm327_rx_queue;
 /* Private reply queue for the dedicated SLCAN port (task #36): the fast-read/write codecs
  * push DEV_SLCAN_PORT replies here, drained by slcan_port_tx_task to its own socket, so they
  * never collide with the stock port's xMsg_Tx_Queue. WICAN_PRO only. */
@@ -119,7 +118,6 @@ static xdev_buffer ucBLE_TX_Buffer;
 
 static uint8_t protocol = OBD_ELM327;
 
-static uint8_t mqtt_elm327_log_en = 0;
 static uint8_t derived_mac_addr[6] = {0};
 static uint8_t uid[16];
 static uint8_t ble_uid[33];
@@ -127,30 +125,6 @@ static char ap_ssid[33] = {0};
 static char hardware_version[16];
 static char firmware_version[10];
 
-static void log_can_to_mqtt(twai_message_t *frame, uint8_t type)
-{
-	static mqtt_can_message_t mqtt_msg;
-
-	mqtt_msg.frame.extd = frame->extd;
-	mqtt_msg.frame.rtr = frame->rtr;
-	mqtt_msg.frame.ss = frame->ss;
-	mqtt_msg.frame.self = frame->self;
-	mqtt_msg.frame.dlc_non_comp = frame->dlc_non_comp;
-	mqtt_msg.frame.identifier = frame->identifier;
-	mqtt_msg.frame.data_length_code = frame->data_length_code;
-
-	mqtt_msg.frame.data[0] = frame->data[0];
-	mqtt_msg.frame.data[1] = frame->data[1];
-	mqtt_msg.frame.data[2] = frame->data[2];
-	mqtt_msg.frame.data[3] = frame->data[3];
-	mqtt_msg.frame.data[4] = frame->data[4];
-	mqtt_msg.frame.data[5] = frame->data[5];
-	mqtt_msg.frame.data[6] = frame->data[6];
-	mqtt_msg.frame.data[7] = frame->data[7];
-
-	mqtt_msg.type = type;
-	xQueueSend( xmsg_mqtt_rx_queue, ( void * ) &mqtt_msg, pdMS_TO_TICKS(0) );
-}
 static void process_led(bool state)
 {
 	static bool current_state;
@@ -335,10 +309,7 @@ static void can_tx_task(void *pvParameters)
 			}
 			else if(ucTCP_RX_Buffer.dev_channel == DEV_UART)
 			{
-				if(!config_server_mqtt_en_config())
-				{
-					slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xmsg_uart_tx_queue);
-				}
+				slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xmsg_uart_tx_queue);
 			}
 		}
 		else if(protocol == OBD_ELM327 || protocol == AUTO_PID)
@@ -460,8 +431,8 @@ static void can_rx_task(void *pvParameters)
 
 			// Coexist RX-forward (task #36): while the dedicated SLCAN port owns the bus
 			// (logger parked/claimed, no flash), forward EVERY ECU frame to that port as
-			// SLCAN regardless of the persisted `protocol`, then skip the primary-port / ws /
-			// mqtt fan-out for this frame. Without this the ECU's UDS replies are dropped
+			// SLCAN regardless of the persisted `protocol`, then skip the primary-port / ws
+			// fan-out for this frame. Without this the ECU's UDS replies are dropped
 			// and host-driven reads/sessions over 35001 hang. The !can_flash_active() re-check
 			// stops forwarding the instant a codec sets FLASH_ACTIVE_BIT mid-inner-loop (it is
 			// about to suspend us), so no stale ECU frame races the codec. Only to a live client.
@@ -481,7 +452,7 @@ static void can_rx_task(void *pvParameters)
 				xQueueSend( xmsg_ws_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
 			}
         	//TODO: optimize, useless ifs
-			if(tcp_port_open() || ble_connected() || HARDWARE_VER == WICAN_USB_V100 || mqtt_connected() || protocol == AUTO_PID )
+			if(tcp_port_open() || ble_connected() || HARDWARE_VER == WICAN_USB_V100 || protocol == AUTO_PID )
 			{
 				memset(ucTCP_TX_Buffer.ucElement, 0, sizeof(ucTCP_TX_Buffer.ucElement));
 				ucTCP_TX_Buffer.usLen = 0;
@@ -514,37 +485,8 @@ static void can_rx_task(void *pvParameters)
 					}
 					else if(HARDWARE_VER == WICAN_USB_V100)
 					{
-						if(!config_server_mqtt_en_config())
-						{
-							xQueueSend( xmsg_uart_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
-						}
+						xQueueSend( xmsg_uart_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
 					}
-				}
-			}
-			if(mqtt_connected())
-			{
-				static mqtt_can_message_t mqtt_rx_msg;
-				if(mqtt_elm327_log_en == 0)
-				{
-					mqtt_rx_msg.frame.extd = rx_msg.extd;
-					mqtt_rx_msg.frame.rtr = rx_msg.rtr;
-					mqtt_rx_msg.frame.ss = rx_msg.ss;
-					mqtt_rx_msg.frame.self = rx_msg.self;
-					mqtt_rx_msg.frame.dlc_non_comp = rx_msg.dlc_non_comp;
-					mqtt_rx_msg.frame.identifier = rx_msg.identifier;
-					mqtt_rx_msg.frame.data_length_code = rx_msg.data_length_code;
-
-					mqtt_rx_msg.frame.data[0] = rx_msg.data[0];
-					mqtt_rx_msg.frame.data[1] = rx_msg.data[1];
-					mqtt_rx_msg.frame.data[2] = rx_msg.data[2];
-					mqtt_rx_msg.frame.data[3] = rx_msg.data[3];
-					mqtt_rx_msg.frame.data[4] = rx_msg.data[4];
-					mqtt_rx_msg.frame.data[5] = rx_msg.data[5];
-					mqtt_rx_msg.frame.data[6] = rx_msg.data[6];
-					mqtt_rx_msg.frame.data[7] = rx_msg.data[7];
-
-					mqtt_rx_msg.type = MQTT_CAN;
-					xQueueSend( xmsg_mqtt_rx_queue, ( void * ) &mqtt_rx_msg, pdMS_TO_TICKS(0) );
 				}
 			}
         }
@@ -1034,15 +976,7 @@ void app_main(void)
 		can_enable();
 		#endif
 		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
-		if(config_server_mqtt_en_config() && config_server_mqtt_elm327_log())
-		{
-			mqtt_elm327_log_en = config_server_mqtt_elm327_log();
-			elm327_init(&xmsg_obd_rx_queue, log_can_to_mqtt);
-		}
-		else
-		{
-			elm327_init(&xmsg_obd_rx_queue, NULL);
-		}
+		elm327_init(&xmsg_obd_rx_queue, NULL);
 	}
 	else if(protocol == AUTO_PID)
 	{
@@ -1057,42 +991,6 @@ void app_main(void)
 	}
 	#endif
 	
-	if(config_server_mqtt_en_config())
-	{
-		static mqtt_can_message_t* xmsg_mqtt_rx_queue_Storage;
-		static StaticQueue_t xmsg_mqtt_rx_queue_Buffer;
-		xmsg_mqtt_rx_queue_Storage = (mqtt_can_message_t *)heap_caps_malloc(32 * sizeof(mqtt_can_message_t), MALLOC_CAP_SPIRAM);
-		xmsg_mqtt_rx_queue = xQueueCreateStatic(32, sizeof(mqtt_can_message_t), (uint8_t *)xmsg_mqtt_rx_queue_Storage, &xmsg_mqtt_rx_queue_Buffer);
-		#if HARDWARE_VER == WICAN_PRO
-		// if(protocol != AUTO_PID && protocol != OBD_ELM327)
-		{
-			can_set_bitrate(can_datarate);
-			can_enable();
-		}
-		// else
-		// {
-		// 	can_disable();
-		// }
-		#else
-		can_set_bitrate(can_datarate);
-		can_enable();
-		#endif
-		
-		#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
-			mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM, &xmsg_mqtt_rx_queue);
-		#else
-			mqtt_init((char*)&uid[0], 0, &xmsg_mqtt_rx_queue);
-		#endif
-		
-	}
-//	else if(protocol == MQTT)
-//	{
-//		xmsg_mqtt_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
-//		can_init(CAN_500K);
-//		can_enable();
-//
-//		mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM, &xmsg_mqtt_rx_queue);
-//	}
 	// Task #6: the engine-running gate uses a DEDICATED threshold (engine_volt), NOT sleep_volt.
 	// sleep_volt stays exclusively for deep-sleep / battery protection (sleep_mode), untouched.
 	vehicle_config_t vehicle_config;
@@ -1183,13 +1081,10 @@ void app_main(void)
         {
         	// project_hardware_rev = WICAN_USB_V100;
         	// ESP_LOGI(TAG, "project_hardware_rev: USB");
-        	if(!config_server_mqtt_en_config())
-        	{
-				#if HARDWARE_VER == WICAN_USB_V100
-				xmsg_uart_tx_queue = xQueueCreate(32, sizeof( xdev_buffer) );
-				wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
-				#endif
-        	}
+			#if HARDWARE_VER == WICAN_USB_V100
+			xmsg_uart_tx_queue = xQueueCreate(32, sizeof( xdev_buffer) );
+			wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
+			#endif
 
         }
         // else
@@ -1278,7 +1173,6 @@ void app_main(void)
 	// esp_log_level_set("mbedtls", ESP_LOG_VERBOSE);
 	// esp_log_level_set("TRANSPORT_BASE", ESP_LOG_VERBOSE);
 	// esp_log_level_set("SYNC_SYS_TIME", ESP_LOG_INFO);
-	// esp_log_level_set("MQTT", ESP_LOG_INFO);
 	// esp_log_level_set("WiFi_Manager", ESP_LOG_INFO);
 
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100

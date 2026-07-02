@@ -15,7 +15,6 @@ set(srcs
     "ble.c"
     "wifi_network.c"
     "wc_uart.c"
-    "mqtt.c"
     "sleep_mode.c"
     "expression_parser.c"
     "led.c"

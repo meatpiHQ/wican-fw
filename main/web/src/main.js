@@ -389,22 +389,6 @@ async function checkFirmwareUpdate() {
         row.style.display = needsToken ? 'table-row' : 'none';
     }
     
-    function txCheckBoxChanged() {
-        if (document.getElementById("mqtt_tx_en_checkbox").checked) {
-            document.getElementById("mqtt_tx_topic").disabled = false;
-        } else {
-            document.getElementById("mqtt_tx_topic").disabled = true;
-        }
-    }
-
-    function rxCheckBoxChanged() {
-        if (document.getElementById("mqtt_rx_en_checkbox").checked) {
-            document.getElementById("mqtt_rx_topic").disabled = false;
-        } else {
-            document.getElementById("mqtt_rx_topic").disabled = true;
-        }
-    }
-
     // Fallback Networks UI helpers
     function renderFallbackNetworks(list) {
         const container = document.getElementById('fallback_rows');
@@ -1719,51 +1703,6 @@ try {
 return window.certManagerSetsCache;
 }
 
-// Populate MQTT cert set dropdown using the same Certificate Manager source as destinations
-async function populateMqttCertSets(){
-const sel = document.getElementById('mqtt_cert_set');
-if(!sel) return;
-try{
-    // Preserve current/desired value before repopulating
-    const prev = sel.value || sel.getAttribute('data-desired') || '';
-    const list = await fetchCertSetsForDestinations();
-    const options = (list||['default']).map(n=>`<option value="${n}">${n}</option>`).join('');
-    sel.innerHTML = options;
-    // Restore selection if available; fallback to default
-    const desired = prev || 'default';
-    if (Array.isArray(list) && list.includes(desired)) {
-        sel.value = desired;
-    } else if (Array.isArray(list) && list.length) {
-        // Keep whatever browser selects (first option), otherwise set default
-        if (!list.includes(sel.value)) sel.value = list[0];
-    } else {
-        sel.value = 'default';
-    }
-}catch(e){
-    // Fallback to default only
-    sel.innerHTML = '<option value="default">default</option>';
-    sel.value = 'default';
-}
-}
-
-function toggleMqttTLS(){
-const secSel = document.getElementById('mqtt_security');
-const row = document.getElementById('mqtt_cert_set_row');
-const skipRow = document.getElementById('mqtt_skip_cn_row');
-if(!secSel || !row) return;
-const isTLS = (secSel.value === 'tls');
-row.style.display = isTLS ? 'table-row' : 'none';
-if (skipRow) skipRow.style.display = isTLS ? 'table-row' : 'none';
-if(isTLS){
-    populateMqttCertSets();
-    // Nudge port to 8883 if it is at the plain default
-    const portEl = document.getElementById('mqtt_port');
-    if(portEl && (portEl.value === '' || portEl.value === '1883')){
-        portEl.value = '8883';
-    }
-}
-}
-
 function truncateMiddle(str, max=40){
 if (!str) return '';
 if (str.length <= max) return str;
@@ -2542,68 +2481,6 @@ function toggleSendToFields() {
     });
 }
 
-var canData = [];
-
-function restoreCANFLTRow(id, n, p, pi, s, b, e, c) {
-    var canId = id;
-    if(canId < 0) {
-        canId = 0;
-    } else if(canId > 536870912) {
-        canId = 536870912;
-    }
-    var name = n;
-    var pid = p;
-    var pindex = pi;
-    var startBit = s;
-    var bitLength = b;
-    var expression = e;
-    var cycle = c;
-    var table = document.getElementById("can_flt_table");
-    var row = table.insertRow(-1);
-    var cell1 = row.insertCell(0);
-    var cell2 = row.insertCell(1);
-    var cell3 = row.insertCell(2);
-    var cell4 = row.insertCell(3);
-    var cell5 = row.insertCell(4);
-    var cell6 = row.insertCell(5);
-    var cell7 = row.insertCell(6);
-    var cell8 = row.insertCell(7);
-    var cell9 = row.insertCell(8);
-    cell1.innerHTML = canId;
-    cell2.innerHTML = name;
-    cell3.innerHTML = pid;
-    cell4.innerHTML = pindex;
-    cell5.innerHTML = startBit;
-    cell6.innerHTML = bitLength;
-    cell7.innerHTML = expression;
-    cell8.innerHTML = cycle;
-    cell9.innerHTML = '<button style="width: 100%;" onclick="deleteCANFLTRow(this)">Delete</button>';
-    canData.push({
-        CANID: canId,
-        Name: name,
-        PID: pid,
-        PIDIndex: pindex,
-        StartBit: startBit,
-        BitLength: bitLength,
-        Expression: expression,
-        Cycle: cycle
-    });
-    document.getElementById("canId").value = "";
-    document.getElementById("name").value = "";
-    document.getElementById("pid").value = "";
-    document.getElementById("pindex").value = "";
-    document.getElementById("startBit").value = "";
-    document.getElementById("bitLength").value = "";
-    document.getElementById("expression").value = "";
-    document.getElementById("cycle").value = "";
-}
-
-// ===== SD-card file browser (Task #8) =====
-var filesCwd = '';   // current directory, relative to /sdcard
-var filesSortKey = 'mtime';   // 'name' | 'size' | 'type' | 'mtime'
-var filesSortDir = 'desc';    // 'asc' | 'desc' (default: newest first)
-// Selection lives in the DOM checkboxes (see filesSelectedPaths) — single source of truth.
-
 function filesFmtSize(b) {
     if (b == null) return '';
     if (b < 1024) return b + ' B';
@@ -2939,16 +2816,10 @@ function getElements() {
         bleStatus: document.getElementById("ble_status"),
         apAutoDisable: document.getElementById("ap_auto_disable"),
         bleWarningDiv: document.getElementById("ble_warning_div"),
-        mqttEn: document.getElementById("mqtt_en"),
-        mqttWarningDiv: document.getElementById("mqtt_warning_div"),
-        mqttEnDiv: document.getElementById("mqtt_en_div"),
         battAlert: document.getElementById("batt_alert"),
         battAlertDiv: document.getElementById("batt_alert_div"),
         submitButton: document.getElementById("submit_button"),
         apPassValue: document.getElementById("ap_pass_value"),
-        mqttTxTopic: document.getElementById("mqtt_tx_topic"),
-        mqttRxTopic: document.getElementById("mqtt_rx_topic"),
-        mqttStatusTopic: document.getElementById("mqtt_status_topic"),
         tcpPortValue: document.getElementById("tcp_port_value"),
         battAlertPort: document.getElementById("batt_alert_port"),
         blePassValue: document.getElementById("ble_pass_value"),
@@ -2957,7 +2828,6 @@ function getElements() {
         sleepDisableAgree: document.getElementById("sleep_disable_agree"),
         protocol: document.getElementById("protocol"),
         portType: document.getElementById("port_type"),
-        mqttElm327Log: document.getElementById("mqtt_elm327_log"),
         periodicWakeup: document.getElementById("periodic_wakeup"),
         wakeupEveryRow: document.getElementById("wakeup_every_row"),
         sta_ble_info: document.getElementById("sta_ble_info")
@@ -3067,7 +2937,6 @@ function handleBleStatus(elements) {
     elements.blePassValue.disabled = !isBleEnabled;
     
     if (isBleEnabled && !window.bleAlertShown) {
-        elements.mqttWarningDiv.style.display = "none";
         elements.battAlert.value = "disable";
         elements.battAlertDiv.style.display = "none";
         elements.battAlert.disabled = true;
@@ -3104,20 +2973,6 @@ function validateForm(elements, wifiMode) {
         }
     }
 
-    
-    // MQTT topics validation - only validate if MQTT is enabled
-    const isMqttEnabled = elements.mqttEn.value === "enable";
-    if (isMqttEnabled) {
-        if (!validateLength(elements.mqttTxTopic.value, 1, 64)) {
-            return disableSubmitWithError("MQTT TX Topic length, min=1 max=64", 5000);
-        }
-        if (!validateLength(elements.mqttRxTopic.value, 1, 64)) {
-            return disableSubmitWithError("MQTT RX Topic length, min=1 max=64", 5000);
-        }
-        if (!validateLength(elements.mqttStatusTopic.value, 1, 64)) {
-            return disableSubmitWithError("MQTT Status Topic length, min=1 max=64", 5000);
-        }
-    }
     
     // Port validation
     if (!validatePort(elements.tcpPortValue.value)) {
@@ -3178,16 +3033,9 @@ function validateSmartConnect() {
 }
 
 function configureProtocolSettings(elements) {
-    const isElm327 = elements.protocol.value === "elm327";
-
     elements.tcpPortValue.disabled = false;
     elements.portType.selectedIndex = 0;
     elements.portType.disabled = false;
-
-    elements.mqttElm327Log.disabled = !isElm327;
-    if (!isElm327) {
-        elements.mqttElm327Log.value = "disable";
-    }
 }
 
 function configureSleepSettings(elements) {
@@ -3207,11 +3055,6 @@ function configureSleepSettings(elements) {
 function configureMqttAndBatteryAlerts(elements) {
     // Battery alert div is always hidden in current logic
     elements.battAlertDiv.style.display = "none";
-    
-    // MQTT div visibility
-    const mqttEnabled = elements.mqttEn.value === "enable";
-    elements.mqttEnDiv.style.display = mqttEnabled ? "block" : "none";
-    elements.mqttWarningDiv.style.display = mqttEnabled ? "block" : "none";
 }
 
 function configurePeriodicWakeup(elements) {
@@ -3290,11 +3133,6 @@ function checkStatus() {
         } else if(document.getElementById("batt_alert").value == "disable") {
             document.getElementById("batt_alert_div").style.display = "none";
         }
-        if(document.getElementById("mqtt_en").value == "enable") {
-            document.getElementById("mqtt_en_div").style.display = "block";
-        } else if(document.getElementById("mqtt_en").value == "disable") {
-            document.getElementById("mqtt_en_div").style.display = "none";
-        }
         document.getElementById("obd_chip_status").innerHTML = obj.obd_chip_status || "N/A";
         document.getElementById("uptime").innerHTML = obj.uptime || "N/A";
         const restartLastResetEl = document.getElementById("restart_last_reset_reason");
@@ -3312,25 +3150,6 @@ function checkStatus() {
         checkFirmwareUpdate();
     };
     xhttp.open("GET", "/check_status");
-    xhttp.send();
-}
-
-function loadCANFLT() {
-    const xhttp = new XMLHttpRequest();
-    xhttp.onload = function() {
-        if (this.responseText === "NONE") {
-            return;
-        }
-        var obj = JSON.parse(this.responseText);
-        if(this.responseText != "NONE") {
-            if(Array.isArray(obj.can_flt)) {
-                obj.can_flt.forEach((item) => {
-                    restoreCANFLTRow(item["CANID"], item["Name"], item["PID"], item["PIDIndex"], item["StartBit"], item["BitLength"], item["Expression"], item["Cycle"]);
-                });
-            }
-        }
-    };
-    xhttp.open("GET", "/load_canflt");
     xhttp.send();
 }
 
@@ -3444,20 +3263,6 @@ function loadautoPID() {
     xhttp.send();
 }
 
-function postCANFLT() {
-    var obj = {};
-    obj["can_flt"] = canData;
-    var canfltJSON = JSON.stringify(obj, null, 0);
-    const xhttp = new XMLHttpRequest();
-    xhttp.onload = function() {
-        showNotification(this.responseText, "green");
-        submit_enable();
-    };
-    xhttp.open("POST", "/store_canflt");
-    xhttp.setRequestHeader("Content-Type", "application/json");
-    xhttp.send(canfltJSON);
-}
-
 // Logger Settings (Task #5, trimmed in #5 datalogger-trim): one master "Logging"
 // toggle drives the single real config key csv_log (a hidden select in the DOM).
 function applyLoggerXor() {
@@ -3558,37 +3363,6 @@ async function postConfig() {
     obj["batt_alert_time"] = document.getElementById("batt_alert_time").value;
     obj["batt_mqtt_user"] = document.getElementById("batt_mqtt_user").value;
     obj["batt_mqtt_pass"] = document.getElementById("batt_mqtt_pass").value;
-    obj["mqtt_en"] = document.getElementById("mqtt_en").value;
-    let mqtt_url_val2;
-    if(document.getElementById("mqtt_security").value == "tls"){
-        let mqtt_txt2 = "mqtts://";
-        mqtt_url_val2 = mqtt_txt2.concat(document.getElementById("mqtt_url").value);
-    } else {
-        let mqtt_txt2 = "mqtt://";
-        mqtt_url_val2 = mqtt_txt2.concat(document.getElementById("mqtt_url").value);
-    }
-    obj["mqtt_url"] = mqtt_url_val2;
-    obj["mqtt_port"] = document.getElementById("mqtt_port").value;
-    obj["mqtt_user"] = document.getElementById("mqtt_user").value;
-    obj["mqtt_pass"] = document.getElementById("mqtt_pass").value;
-    obj["mqtt_security"] = document.getElementById("mqtt_security").value;
-    obj["mqtt_cert_set"] = document.getElementById("mqtt_cert_set").value;
-    obj["mqtt_skip_cn"] = document.getElementById("mqtt_skip_cn").value;
-    obj["mqtt_tx_topic"] = document.getElementById("mqtt_tx_topic").value;
-    obj["ap_auto_disable"] = document.getElementById("ap_auto_disable").value;
-    if(document.getElementById("mqtt_tx_en_checkbox").checked){
-        obj["mqtt_tx_en"] = "enable";
-    }else{
-        obj["mqtt_tx_en"] = "disable";
-    }
-    obj["mqtt_rx_topic"] = document.getElementById("mqtt_rx_topic").value;
-    if(document.getElementById("mqtt_rx_en_checkbox").checked){
-        obj["mqtt_rx_en"] = "enable";
-    }else{
-        obj["mqtt_rx_en"] = "disable";
-    }
-    obj["mqtt_status_topic"] = document.getElementById("mqtt_status_topic").value;
-    obj["mqtt_elm327_log"] = document.getElementById("mqtt_elm327_log").value;
     applyLoggerXor();   // compose the real csv_log key from the master widget
     obj["csv_log"] = document.getElementById("csv_log").value;
     obj["log_filesystem"] = document.getElementById("log_filesystem").value;
@@ -3862,8 +3636,7 @@ async function downloadCfg() {
     const endpoints = [
         '/load_config',
         '/load_auto_pid_car_data',
-        '/load_auto_pid',
-        '/load_canflt'
+        '/load_auto_pid'
     ];
     
     const delay = 500; 
@@ -3927,8 +3700,7 @@ async function uploadCfg() {
     const endpointMap = {
         'config': '/store_config',
         'auto_pid': '/store_auto_data',
-        'auto_pid_car_data': '/store_car_data',
-        'canflt': '/store_canflt'
+        'auto_pid_car_data': '/store_car_data'
     };
 
     const delay = 200;
@@ -4103,118 +3875,8 @@ xhttp.onload = async function() {
             document.getElementById("periodic_wakeup").selectedIndex = "1";
         }
 
-        if ("mqtt_tx_en" in obj) {
-            if (obj.mqtt_tx_en === "enable") {
-                document.getElementById("mqtt_tx_en_checkbox").checked = true;
-            } else {
-                document.getElementById("mqtt_tx_en_checkbox").checked = false;
-            }
-        } else {
-            document.getElementById("mqtt_tx_en_checkbox").checked = false; 
-            document.getElementById("mqtt_tx_topic").disabled = true;
-        }
-        
-        if ("mqtt_rx_en" in obj) {
-            if (obj.mqtt_rx_en === "enable") {
-                document.getElementById("mqtt_rx_en_checkbox").checked = true;
-            } else {
-                document.getElementById("mqtt_rx_en_checkbox").checked = false;
-            }
-        } else {
-            document.getElementById("mqtt_rx_en_checkbox").checked = false;
-            document.getElementById("mqtt_rx_topic").disabled = true;
-        }
-        
-        // Populate the real (hidden) csv_log key, then derive the master widget.
-        var _cs_on = (obj.csv_log === "enable");
-        document.getElementById("csv_log").value = _cs_on ? "enable" : "disable";
-        document.getElementById("logging_master").value = _cs_on ? "enable" : "disable";
-        // Wide CSV (Task #11): hydrate grid controls BEFORE applyLoggerXor so it can gate the
-        // rows. Firmware defaults are fixed/10 -> mirror them when absent.
-        document.getElementById("csv_grid_mode").value = (obj.csv_grid_mode === "event") ? "event" : "fixed";
-        var _hz = parseInt(obj.csv_grid_hz, 10);
-        document.getElementById("csv_grid_hz").value = (_hz >= 1 && _hz <= 50) ? _hz : 10;
-        document.getElementById("csv_require_engine").value = (obj.csv_require_engine === "disable") ? "disable" : "enable";
-        applyLoggerXor();
-
-        if (obj.log_filesystem === "fatfs") {
-            document.getElementById("log_filesystem").selectedIndex = "0";
-        }
-
-        if (obj.log_storage === "sdcard") {
-            document.getElementById("log_storage").selectedIndex = "0";
-        } else if (obj.log_storage === "internal") {
-            document.getElementById("log_storage").selectedIndex = "1";
-        }
-
-        
-        // Load IMU threshold value and update display
-        document.getElementById("imu_threshold").value = obj.imu_threshold || "8";
-        document.getElementById("imu_threshold_value").textContent = ((obj.imu_threshold || 8) * 3.9).toFixed(1) + ' mg';
-
-        
-        const blePowerVal = ("ble_power" in obj) ? obj.ble_power : 9;
-        document.getElementById("ble_power").value = blePowerVal;
-        document.getElementById("ble_power_value").textContent = blePowerVal;
-
-        txCheckBoxChanged();
-        rxCheckBoxChanged();
-        document.getElementById("protocol").value = obj.protocol;
-        document.getElementById("tcp_port_value").value = obj.port;
-        document.getElementById("ap_pass_value").value = obj.ap_pass;
-        document.getElementById("ble_pass_value").value = obj.ble_pass;
-        document.getElementById("sleep_volt").value = obj.sleep_volt;
-        document.getElementById("sleep_volt_value").textContent = obj.sleep_volt;
-        if (obj.engine_volt !== undefined) {   // Task #6; null-guard for old configs missing the key
-            document.getElementById("engine_volt").value = obj.engine_volt;
-            document.getElementById("engine_volt_value").textContent = obj.engine_volt;
-        }
-        document.getElementById("sleep_time").value = obj.sleep_time;
-        document.getElementById('sleep_time_value').textContent = obj.sleep_time;
-        document.getElementById("wakeup_interval").value = obj.wakeup_interval;
-        document.getElementById('wakeup_interval_value').textContent = obj.wakeup_interval;
-        document.getElementById("batt_alert").value = "disable";
-        document.getElementById("batt_alert_ssid").value = obj.batt_alert_ssid;
-        document.getElementById("batt_alert_pass").value = obj.batt_alert_pass;
-        document.getElementById("batt_alert_volt").value = obj.batt_alert_volt;
-        document.getElementById("batt_alert_protocol").value = obj.batt_alert_protocol;
-        document.getElementById("batt_alert_url").value = obj.batt_alert_url.slice(7);
-        document.getElementById("batt_alert_port").value = obj.batt_alert_port;
-        document.getElementById("batt_alert_topic").value = obj.batt_alert_topic;
         document.getElementById("batt_mqtt_user").value = obj.batt_mqtt_user;
         document.getElementById("batt_mqtt_pass").value = obj.batt_mqtt_pass;
-        document.getElementById("mqtt_en").value = obj.mqtt_en;
-        if(obj.mqtt_security == "tls"){
-            document.getElementById("mqtt_url").value = obj.mqtt_url.slice(8);
-        } else {
-            document.getElementById("mqtt_url").value = obj.mqtt_url.slice(7);
-        }
-        document.getElementById("mqtt_port").value = obj.mqtt_port;
-        document.getElementById("mqtt_user").value = obj.mqtt_user;
-        document.getElementById("mqtt_pass").value = obj.mqtt_pass;
-        document.getElementById("mqtt_tx_topic").value = obj.mqtt_tx_topic;
-        document.getElementById("mqtt_rx_topic").value = obj.mqtt_rx_topic;
-        document.getElementById("mqtt_status_topic").value = obj.mqtt_status_topic;
-        document.getElementById("mqtt_elm327_log").value = obj.mqtt_elm327_log;
-        // Optional fields for MQTTS (UI only for now)
-        if (obj.mqtt_security){
-            const sec = document.getElementById('mqtt_security');
-            if (sec){ sec.value = obj.mqtt_security; }
-        }
-        // Preserve desired cert set (may be populated asynchronously)
-        {
-            const certSel = document.getElementById('mqtt_cert_set');
-            const desired = obj.mqtt_cert_set || 'default';
-            if (certSel){
-                certSel.setAttribute('data-desired', desired);
-                certSel.value = desired; // in case options are already present
-            }
-        }
-
-        // Restore Skip CN selection (default to disable)
-        const skipSel = document.getElementById('mqtt_skip_cn');
-        if (skipSel){ skipSel.value = obj.mqtt_skip_cn || 'disable'; }
-        toggleMqttTLS();
         if(obj.batt_alert_time == "1") {
             document.getElementById("batt_alert_time").selectedIndex = "0";
         } else if(obj.batt_alert_time == "6") {
@@ -4229,12 +3891,6 @@ xhttp.onload = async function() {
         } else if(document.getElementById("batt_alert").value == "disable") {
             document.getElementById("batt_alert_div").style.display = "none";
         }
-        if(document.getElementById("mqtt_en").value == "enable") {
-            document.getElementById("mqtt_en_div").style.display = "block";
-        } else if(document.getElementById("mqtt_en").value == "disable") {
-            document.getElementById("mqtt_en_div").style.display = "none";
-        }
-        loadCANFLT();
         loadautoPIDCarData();
         loadautoPID();
 
@@ -4322,7 +3978,6 @@ xhttp.onload = async function() {
         try { toggleApStationWarning(); } catch(_) {}
         try { submit_enable(); } catch(_) {}
 
-        document.getElementById("store_canflt_button").disabled = true;
         document.querySelector(".store").disabled = true;
         document.getElementById("submit_button").disabled = true;
     };
@@ -4536,113 +4191,6 @@ function csv_log_control() {
 
 function isNameUnique(name) {
     return canData.every((item) => item["Name"] !== name);
-}
-
-function addCANFLTRow() {
-    var canId = parseInt(document.getElementById("canId").value);
-    var startBit = parseInt(document.getElementById("startBit").value);
-    var bitLength = parseInt(document.getElementById("bitLength").value);
-    Length = parseInt(document.getElementById("bitLength").value);
-    var cycle = parseInt(document.getElementById("cycle").value);
-    var name = document.getElementById("name").value;
-    var expression = document.getElementById("expression").value;
-    var pid = parseInt(document.getElementById("pid").value);
-    var pidi = parseInt(document.getElementById("pindex").value);
-    if(isNaN(canId) || canId == "" || canId < 0 || canId > 536870912) {
-        alert("CAN ID must be a valid number between 0 and 536870912");
-        return;
-    }
-    if(isNaN(startBit) || isNaN(bitLength) || startBit > 64 - bitLength || bitLength <= 0 || bitLength > 64 || startBit < 0 || startBit > 63) {
-        alert("startBit or bitLength error");
-        return;
-    }
-    if(isNaN(cycle) || cycle < 100 || cycle > 10000) {
-        alert("cycle must be between 100 and 10000");
-        return;
-    }
-    if(name.length < 1 || name.length > 16) {
-        alert("Name must be between 1 and 16 characters in length.");
-        return;
-    }
-    if(expression.length < 1 || expression.length > 64) {
-        alert("Expression must be between 1 and 64 characters in length.");
-        return;
-    }
-    if(isNaN(pid) || pid < -1 || pid > 255) {
-        alert("PID must be a number between -1 and 255");
-        return;
-    }
-    if(isNaN(pidi) || pidi < 0 || pidi > 7) {
-        alert("PID must be a number between 0 and 7");
-        return;
-    }
-    if(isNameUnique(name)) {
-        var table = document.getElementById("can_flt_table");
-        var row = table.insertRow(-1);
-        var cell1 = row.insertCell(0);
-        var cell2 = row.insertCell(1);
-        var cell3 = row.insertCell(2);
-        var cell4 = row.insertCell(3);
-        var cell5 = row.insertCell(4);
-        var cell6 = row.insertCell(5);
-        var cell7 = row.insertCell(6);
-        var cell8 = row.insertCell(7);
-        var cell9 = row.insertCell(8);
-        if(table.rows.length - 1 >= 100) {
-            alert("Maximum row limit (100) reached.");
-            return;
-        }
-        cell1.innerHTML = canId;
-        cell2.innerHTML = name;
-        cell3.innerHTML = pid;
-        cell4.innerHTML = pidi;
-        cell5.innerHTML = startBit;
-        cell6.innerHTML = bitLength;
-        cell7.innerHTML = expression;
-        cell8.innerHTML = cycle;
-        cell9.innerHTML = '<button style="width: 100%;" onclick="deleteCANFLTRow(this) ">Delete</button>';
-        canData.push({
-            CANID: canId,
-            Name: name,
-            PID: pid,
-            PIDIndex: pidi,
-            StartBit: startBit,
-            BitLength: bitLength,
-            Expression: expression,
-            Cycle: cycle
-        });
-        document.getElementById("canId").value = "";
-        document.getElementById("name").value = "";
-        document.getElementById("pid").value = "";
-        document.getElementById("pindex").value = "";
-        document.getElementById("startBit").value = "";
-        document.getElementById("bitLength").value = "";
-        document.getElementById("expression").value = "";
-        document.getElementById("cycle").value = "";
-    } else {
-        alert("Name must be unique.");
-    }
-    document.getElementById("store_canflt_button").disabled = false;
-}
-
-function deleteCANFLTRow(button) {
-    var row = button.parentNode.parentNode;
-    var canIdToDelete = row.cells[0].textContent;
-    var indexToDelete = canData.findIndex((item) => item["CANID"] === parseInt(canIdToDelete));
-    if(indexToDelete !== -1) {
-        canData.splice(indexToDelete, 1);
-    }
-    row.parentNode.removeChild(row);
-    document.getElementById("store_canflt_button").disabled = false;
-}
-
-function alert_elm327() {
-    alert("If elm327 log is enabled then only CAN frames proccessed by elm327 will be sent to MQTT broker.");
-}
-
-function storeCANFLT() {
-    postCANFLT();
-    document.getElementById("store_canflt_button").disabled = true;
 }
 
 function toggleSleepWarning() {
