@@ -41,7 +41,6 @@
 #include "obd2_standard_pids.h"
 #include "wc_timer.h"
 #include <float.h>
-#include "obd_logger.h"
 #include "csv_logger.h"
 #include "hw_config.h"
 #include "dev_status.h"
@@ -3584,34 +3583,28 @@ static void autopid_task(void *pvParameters)
         if (dev_status_is_sleeping())
         {
             ESP_LOGI(TAG, "Device is sleeping, waiting for wakeup");
-            obd_logger_disable();
             dev_status_set_bits(DEV_AUTOPID_IDLE_BIT);
             dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
             dev_status_clear_bits(DEV_AUTOPID_IDLE_BIT);
             ESP_LOGI(TAG, "Device awake, resuming autopid task");
-            obd_logger_enable();
         }
 
         if (autopid_config->disable_on_sleep_voltage && !dev_status_is_wake_voltage_ok())
         {
             ESP_LOGI(TAG, "Voltage below sleep threshold, pausing autopid until voltage recovers");
-            obd_logger_disable();
             dev_status_set_bits(DEV_AUTOPID_IDLE_BIT);
             dev_status_wait_for_bits(DEV_WAKE_VOLTAGE_OK_BIT, portMAX_DELAY);
             dev_status_clear_bits(DEV_AUTOPID_IDLE_BIT);
             ESP_LOGI(TAG, "Voltage OK, resuming autopid task");
-            obd_logger_enable();
         }
 
         if (!dev_status_is_autopid_enabled())
         {
             ESP_LOGI(TAG, "Autopid is disabled, waiting for enable");
-            obd_logger_disable();
             dev_status_set_bits(DEV_AUTOPID_IDLE_BIT);
             dev_status_wait_for_bits(DEV_AUTOPID_ENABLED_BIT, portMAX_DELAY);
             dev_status_clear_bits(DEV_AUTOPID_IDLE_BIT);
             ESP_LOGI(TAG, "Autopid enabled, resuming autopid task");
-            obd_logger_enable();
             send_commands(default_init, 50);
             vTaskDelay(pdMS_TO_TICKS(100));
         }
@@ -3991,102 +3984,6 @@ static void autopid_task(void *pvParameters)
     }
 }
 
-static void autopid_init_obd_logger(uint32_t log_period)
-{
-    ESP_LOGI(TAG, "Initializing Autopid OBD logger...");
-
-    // Prepare parameters from autopid for the OBD logger
-    obd_param_entry_t *params = NULL;
-    size_t param_count = 0;
-
-    // Allocate memory for all possible parameters
-    size_t max_params = 0;
-    for (uint32_t i = 0; i < autopid_config->pid_count; i++)
-    {
-        max_params += autopid_config->pids[i].parameters_count;
-    }
-
-    params = heap_caps_malloc(sizeof(obd_param_entry_t) * max_params, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!params)
-    {
-        ESP_LOGE(TAG, "Failed to allocate memory for OBD logger parameters");
-        return;
-    }
-
-    // Convert autopid parameters to OBD logger format
-    for (uint32_t i = 0; i < autopid_config->pid_count; i++)
-    {
-        pid_data_t *pid = &autopid_config->pids[i];
-
-        for (uint32_t j = 0; j < pid->parameters_count; j++)
-        {
-            parameter_t *param = &pid->parameters[j];
-
-            // Create metadata JSON
-            char *metadata = heap_caps_malloc(1024 * 4, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-            if (!metadata)
-            {
-                continue;
-            }
-
-            // snprintf(metadata, 256,
-            //         "{\"unit\":\"%s\",\"min\":%f,\"max\":%f,\"period\":%lu}",
-            //         param->unit ? param->unit : "",
-            //         param->min, param->max, param->period);
-            snprintf(metadata, 1024 * 4,
-                     "{\"unit\":\"%s\",\"period\":%lu}",
-                     param->unit ? param->unit : "", param->period);
-
-            // Add parameter to list
-            params[param_count].name = strdup_psram(param->name);
-            params[param_count].type = "NUMERIC";
-            params[param_count].metadata = metadata;
-            param_count++;
-        }
-    }
-
-    // Initialize OBD logger with these parameters
-    // obd_logger_init_params(params, param_count);
-
-    // create directory if not exists
-    if (mkdir(DB_ROOT_PATH "/" DB_DIR_NAME, 0755) != 0)
-    {
-        // Ignore error if directory already exists
-        if (errno != EEXIST)
-        {
-            ESP_LOGE(TAG, "Failed to create directory %s: %s", DB_ROOT_PATH "/" DB_DIR_NAME, strerror(errno));
-        }
-    }
-    else
-    {
-        ESP_LOGI(TAG, "Created directory: %s", DB_ROOT_PATH "/" DB_DIR_NAME);
-    }
-
-    static obd_logger_t obd_logger = {
-        .path = DB_ROOT_PATH "/" DB_DIR_NAME,
-        .db_filename = DB_ROOT_PATH "/" DB_DIR_NAME "/" DB_DIR_NAME,
-        .obd_logger_get_params_cb = autopid_data_read};
-    obd_logger.period_sec = log_period;
-    obd_logger.obd_logger_params = params;
-    obd_logger.obd_logger_params_count = param_count;
-
-    if (odb_logger_init(&obd_logger) != ESP_OK)
-    {
-        ESP_LOGE(TAG, "Failed to initialize OBD logger");
-        return;
-    }
-
-    // Free allocated memory
-    for (size_t i = 0; i < param_count; i++)
-    {
-        free((void *)params[i].name);
-        free((void *)params[i].metadata);
-    }
-    free(params);
-
-    ESP_LOGI(TAG, "OBD logger initialized with %zu parameters", param_count);
-}
-
 void print_pids(autopid_config_t *autopid_config)
 {
     const char *pid_type_str[] = {"Standard", "Custom", "Specific"};
@@ -4184,7 +4081,7 @@ autopid_config_t *autopid_load_config_only(void)
     return autopid_config;
 }
 
-void autopid_init(char *id, bool enable_logging, uint32_t logging_period)
+void autopid_init(char *id)
 {
     device_id = id;
 
@@ -4313,14 +4210,6 @@ void autopid_init(char *id, bool enable_logging, uint32_t logging_period)
     else
     {
         ESP_LOGI(TAG, "SD Card not mounted");
-    }
-
-    // Initialize OBD logger if enabled and SD card is mounted
-    if (enable_logging && dev_status_is_bit_set(DEV_SDCARD_MOUNTED_BIT))
-    {
-        xSemaphoreTake(autopid_config->mutex, portMAX_DELAY);
-        autopid_init_obd_logger(logging_period);
-        xSemaphoreGive(autopid_config->mutex);
     }
 
     static StackType_t *autopid_task_stack;

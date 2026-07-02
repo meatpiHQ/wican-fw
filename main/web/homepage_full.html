@@ -605,17 +605,11 @@
 </head>
 
 <body onload="Load();">
-    <div class="sidebar"><embed class="logo" src="/logo.svg"><button onclick="openTab(event, 'status_view')" class="tablinks" id="defaultOpen"><span data-lucide="signal" style="width:18px;height:18px;margin-right:8px"></span> <b>Status</b></button><button onclick="openTab(event, 'wifi_settings')" class="tablinks"><span data-lucide="settings" style="width:18px;height:18px;margin-right:8px"></span> <b>Settings</b></button><button onclick="openTab(event, 'automate')" class="tablinks"><span data-lucide="zap" style="width:18px;height:18px;margin-right:8px"></span> <b>Automate</b></button><button onclick="openTab(event, 'power_saving_tab')" class="tablinks"><span data-lucide="battery" style="width:18px;height:18px;margin-right:8px"></span> <b>Power Saving</b></button><button onclick="openTab(event, 'logger')" class="tablinks"><span data-lucide="file-text" style="width:18px;height:18px;margin-right:8px"></span> <b>Logger Settings</b></button><button onclick="openTab(event, 'files_tab')" class="tablinks"><span data-lucide="folder" style="width:18px;height:18px;margin-right:8px"></span> <b>Files</b></button><button onclick="openTab(event, 'dashboard_tab')" class="tablinks"><span data-lucide="bar-chart-3" style="width:18px;height:18px;margin-right:8px"></span> <b>Dashboard</b></button><button onclick="openTab(event, 'monitor')" class="tablinks"><span data-lucide="monitor" style="width:18px;height:18px;margin-right:8px"></span> <b>CAN Monitor</b></button><button onclick="openTab(event, 'terminal_tab')" class="tablinks"><span data-lucide="terminal" style="width:18px;height:18px;margin-right:8px"></span> <b>Terminal</b></button><button onclick="openTab(event, 'advanced_tab')" class="tablinks"><span data-lucide="settings" style="width:18px;height:18px;margin-right:8px"></span> <b>Advanced</b></button><button onclick="openTab(event, 'system_tab')" class="tablinks"><span data-lucide="cpu" style="width:18px;height:18px;margin-right:8px"></span> <b>System</b></button><button onclick="openTab(event, 'about_tab')" class="tablinks"><span data-lucide="info" style="width:18px;height:18px;margin-right:8px"></span> <b>About</b></button>
+    <div class="sidebar"><embed class="logo" src="/logo.svg"><button onclick="openTab(event, 'status_view')" class="tablinks" id="defaultOpen"><span data-lucide="signal" style="width:18px;height:18px;margin-right:8px"></span> <b>Status</b></button><button onclick="openTab(event, 'wifi_settings')" class="tablinks"><span data-lucide="settings" style="width:18px;height:18px;margin-right:8px"></span> <b>Settings</b></button><button onclick="openTab(event, 'automate')" class="tablinks"><span data-lucide="zap" style="width:18px;height:18px;margin-right:8px"></span> <b>Automate</b></button><button onclick="openTab(event, 'power_saving_tab')" class="tablinks"><span data-lucide="battery" style="width:18px;height:18px;margin-right:8px"></span> <b>Power Saving</b></button><button onclick="openTab(event, 'logger')" class="tablinks"><span data-lucide="file-text" style="width:18px;height:18px;margin-right:8px"></span> <b>Logger Settings</b></button><button onclick="openTab(event, 'files_tab')" class="tablinks"><span data-lucide="folder" style="width:18px;height:18px;margin-right:8px"></span> <b>Files</b></button><button onclick="openTab(event, 'monitor')" class="tablinks"><span data-lucide="monitor" style="width:18px;height:18px;margin-right:8px"></span> <b>CAN Monitor</b></button><button onclick="openTab(event, 'terminal_tab')" class="tablinks"><span data-lucide="terminal" style="width:18px;height:18px;margin-right:8px"></span> <b>Terminal</b></button><button onclick="openTab(event, 'advanced_tab')" class="tablinks"><span data-lucide="settings" style="width:18px;height:18px;margin-right:8px"></span> <b>Advanced</b></button><button onclick="openTab(event, 'system_tab')" class="tablinks"><span data-lucide="cpu" style="width:18px;height:18px;margin-right:8px"></span> <b>System</b></button><button onclick="openTab(event, 'about_tab')" class="tablinks"><span data-lucide="info" style="width:18px;height:18px;margin-right:8px"></span> <b>About</b></button>
         <div style="color:#24478f;text-align:center;background:#faa3a3;border:1px solid #fde68a;border-radius:8px;margin:2rem 1rem 1rem;padding:.75rem;font-size:.95rem;display:none" id="firmware-update-notice"><span style="font-weight:600">New firmware available!</span><br><a href="https://github.com/cdufresne81/nc-flash-wican-fw/releases" id="firmware-update-link" style="color:#2563eb;text-decoration:underline" target="_blank">Download</a></div>
     </div>
     <div class="content">
         <div class="notification-container" id="notification"></div>
-        <div class="tabcontent" id="dashboard_tab">
-            <div class="section-title">Dashboard</div>
-            <div id="dashboard-content">
-                <p>Loading dashboard content...</p>
-            </div>
-        </div>
         <div id="sleep_warning_div" style="display:none">
             <div class="divider"></div>
             <div class="section-title" style="color:#dc2626">⚠️ Sleep Mode Disabled Warning</div>
@@ -1468,20 +1462,6 @@
                                 <option value="enable">Enable</option>
                             </select></td>
                     </tr>
-                    <tr>
-                        <td>Log Type:</td>
-                        <td><select id="log_type_sel" onchange="applyLoggerXor();submit_enable();">
-                                <option value="csv">CSV (SD)</option>
-                                <option value="sqlite">SQLite (OBD)</option>
-                            </select></td>
-                    </tr>
-                    <tr style="display:none">
-                        <td>Logger:</td>
-                        <td><select id="logger_status" name="logger_status" onchange="submit_enable();">
-                                <option value="enable">Enable</option>
-                                <option value="disable">Disable</option>
-                            </select></td>
-                    </tr>
                     <tr style="display:none">
                         <td>CSV Datalog (SD):</td>
                         <td><select id="csv_log" name="csv_log" onchange="submit_enable();">
@@ -1500,10 +1480,6 @@
                         <td><select id="log_filesystem" name="log_filesystem" onchange="submit_enable();">
                                 <option value="fatfs">FATFS</option>
                             </select></td>
-                    </tr>
-                    <tr id="log_period_row">
-                        <td>Log Period:</td>
-                        <td class="slider-container"><input oninput="document.getElementById('log_period_value').textContent = this.value;submit_enable();" id="log_period" max="300" min="10" name="log_period" step="1" type="range" value="60"> <span id="log_period_value">60</span>sec</td>
                     </tr>
                     <tr>
                         <td>Engine-On Voltage:</td>

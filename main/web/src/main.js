@@ -118,10 +118,6 @@ async function checkFirmwareUpdate() {
         toggleSmartConnectConfig();
     }
 
-    function loadDashboard() {
-        window.location.href = '/dashboard.html';
-    }
-
     function setRTCTime() {
         const now = new Date();
         
@@ -2899,9 +2895,7 @@ function openTab(evt, tabName) {
         try { ensureAutomateSubTabInitialized(); } catch(_) {}
     }
     
-    if (tabName === 'dashboard_tab') {
-        loadDashboard();
-    } else if (tabName === 'system_tab') {
+    if (tabName === 'system_tab') {
         if (typeof certManagerLoad === 'function') certManagerLoad();
     } else if (tabName === 'files_tab') {
         filesCwd = '';
@@ -3472,32 +3466,15 @@ function postCANFLT() {
     xhttp.send(canfltJSON);
 }
 
-// Logger Settings consolidation (Task #5): one master "Logging" toggle + a mutually-
-// exclusive "Log Type" (csv|sqlite) compose onto the two real config keys logger_status
-// (SQLite/OBD) and csv_log (CSV), which remain in the DOM as hidden selects. CSV wins
-// ties to match the firmware boot gate + the server-side /store_config normalizer.
+// Logger Settings (Task #5, trimmed in #5 datalogger-trim): one master "Logging"
+// toggle drives the single real config key csv_log (a hidden select in the DOM).
 function applyLoggerXor() {
     var masterEl = document.getElementById("logging_master");
-    var typeEl = document.getElementById("log_type_sel");
-    var ls = document.getElementById("logger_status");
     var cs = document.getElementById("csv_log");
-    if (!masterEl || !typeEl || !ls || !cs) { return; }
-    if (masterEl.value !== "enable") {
-        ls.value = "disable"; cs.value = "disable";
-    } else if (typeEl.value === "sqlite") {
-        ls.value = "enable"; cs.value = "disable";
-    } else {
-        ls.value = "disable"; cs.value = "enable";
-    }
-    typeEl.disabled = (masterEl.value !== "enable");
-    // Log Period drives only the SQLite/OBD logger; the CSV logger logs at the
-    // decode rate and ignores it. Hide the row unless SQLite is the active type.
-    var lpRow = document.getElementById("log_period_row");
-    if (lpRow) {
-        lpRow.style.display = (masterEl.value === "enable" && typeEl.value === "sqlite") ? "" : "none";
-    }
-    // CSV-only runtime Start/Stop button + live status line: shown only when CSV is active.
-    var csvShow = (masterEl.value === "enable" && typeEl.value === "csv");
+    if (!masterEl || !cs) { return; }
+    var csvShow = (masterEl.value === "enable");
+    cs.value = csvShow ? "enable" : "disable";
+    // CSV runtime Start/Stop button + live status line: shown only when logging is on.
     var csvRow = document.getElementById("csv_runtime_row");
     var csvStatRow = document.getElementById("csv_status_row");
     if (csvRow) csvRow.style.display = csvShow ? "" : "none";
@@ -3507,11 +3484,10 @@ function applyLoggerXor() {
     var gmEl = document.getElementById("csv_grid_mode");
     var gmRow = document.getElementById("csv_grid_mode_row");
     var hzRow = document.getElementById("csv_grid_hz_row");
-    var wideOn = csvShow;
-    if (gmRow) gmRow.style.display = wideOn ? "" : "none";
-    if (hzRow) hzRow.style.display = (wideOn && gmEl && gmEl.value === "fixed") ? "" : "none";
+    if (gmRow) gmRow.style.display = csvShow ? "" : "none";
+    if (hzRow) hzRow.style.display = (csvShow && gmEl && gmEl.value === "fixed") ? "" : "none";
     var reRow = document.getElementById("csv_require_engine_row");
-    if (reRow) reRow.style.display = wideOn ? "" : "none";
+    if (reRow) reRow.style.display = csvShow ? "" : "none";
 }
 
 async function postConfig() {
@@ -3621,12 +3597,10 @@ async function postConfig() {
     }
     obj["mqtt_status_topic"] = document.getElementById("mqtt_status_topic").value;
     obj["mqtt_elm327_log"] = document.getElementById("mqtt_elm327_log").value;
-    applyLoggerXor();   // compose the two real keys from the master + type widgets
-    obj["logger_status"] = document.getElementById("logger_status").value;
+    applyLoggerXor();   // compose the real csv_log key from the master widget
     obj["csv_log"] = document.getElementById("csv_log").value;
     obj["log_filesystem"] = document.getElementById("log_filesystem").value;
     obj["log_storage"] = document.getElementById("log_storage").value;
-    obj["log_period"] = document.getElementById("log_period").value;
     obj["csv_grid_mode"] = document.getElementById("csv_grid_mode").value;
     obj["csv_grid_hz"] = document.getElementById("csv_grid_hz").value;
     obj["csv_require_engine"] = document.getElementById("csv_require_engine").value;
@@ -4160,14 +4134,10 @@ xhttp.onload = async function() {
             document.getElementById("mqtt_rx_topic").disabled = true;
         }
         
-        // Populate the two real (hidden) keys, then derive the master + type widgets.
-        document.getElementById("logger_status").value = (obj.logger_status === "enable") ? "enable" : "disable";
-        document.getElementById("csv_log").value = (obj.csv_log === "enable") ? "enable" : "disable";
-        var _ls_on = (obj.logger_status === "enable");
+        // Populate the real (hidden) csv_log key, then derive the master widget.
         var _cs_on = (obj.csv_log === "enable");
-        document.getElementById("logging_master").value = (_ls_on || _cs_on) ? "enable" : "disable";
-        // CSV wins ties (matches boot gate + server normalizer); default type = CSV.
-        document.getElementById("log_type_sel").value = _cs_on ? "csv" : (_ls_on ? "sqlite" : "csv");
+        document.getElementById("csv_log").value = _cs_on ? "enable" : "disable";
+        document.getElementById("logging_master").value = _cs_on ? "enable" : "disable";
         // Wide CSV (Task #11): hydrate grid controls BEFORE applyLoggerXor so it can gate the
         // rows. Firmware defaults are fixed/10 -> mirror them when absent.
         document.getElementById("csv_grid_mode").value = (obj.csv_grid_mode === "event") ? "event" : "fixed";
@@ -4186,8 +4156,6 @@ xhttp.onload = async function() {
             document.getElementById("log_storage").selectedIndex = "1";
         }
 
-        document.getElementById('log_period_value').textContent = obj.log_period;
-        document.getElementById('log_period').value = obj.log_period;   // restore slider thumb (was stuck at default)
         
         // Load IMU threshold value and update display
         document.getElementById("imu_threshold").value = obj.imu_threshold || "8";

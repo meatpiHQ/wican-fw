@@ -1032,28 +1032,18 @@ void app_main(void)
 		// #if HARDWARE_VER != WICAN_PRO
 		// can_enable();
 		// #endif
-		uint32_t log_period = 0;
-		if(config_server_get_log_period(&log_period) == -1)
-		{
-			ESP_LOGE(TAG, "error getting log period");
-			log_period = 60;
-		}
 		// CSV datalogger: DEFERRED start when enabled. The historical boot crash was a
 		// task-publish race in csv_logger_init() (csv_queue published after the higher-
 		// priority writer task was created), now fixed. The deferred start is kept as a
 		// modest settle margin: csv_logger_init_deferred() waits ~20s, then starts the
 		// logger. A one-shot RTC guard skips CSV for one boot if a startup attempt ever
-		// fails to stabilize, so it can never boot-loop.
-		// Single-owner gate (Task #5): at most one logger starts. CSV wins if both are
-		// somehow enabled (matches the /store_config normalizer). Explicit '== 1' so a
-		// -1 (unset/garbage logger_status) can NEVER enable a logger via bool coercion.
-		int8_t csv_en = config_server_get_csv_log();
-		int8_t obd_en = config_server_get_logger_config();
-		if(csv_en == 1)
+		// fails to stabilize, so it can never boot-loop. Explicit '== 1' so a garbage
+		// csv_log value can NEVER enable the logger via bool coercion.
+		if(config_server_get_csv_log() == 1)
 		{
 			csv_logger_init_deferred();
 		}
-		autopid_init((char*)&uid[0], (obd_en == 1 && csv_en != 1), log_period);
+		autopid_init((char*)&uid[0]);
 	}
 	else if(protocol == FAST_LOG)
 	{
@@ -1120,7 +1110,7 @@ void app_main(void)
 		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
 		
 		elm327_init(&xmsg_obd_rx_queue, NULL);
-		autopid_init((char*)&uid[0], config_server_get_auto_pid());
+		autopid_init((char*)&uid[0]);
 	}
 	#endif
 	

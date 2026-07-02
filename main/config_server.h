@@ -162,7 +162,6 @@ typedef struct _device_config
 	char mqtt_tx_topic[64];
 	char mqtt_rx_topic[64];
 	char mqtt_status_topic[64];
-	char logger_status[16];
 	char csv_log[16];
 	char log_storage[16];
 	char log_filesystem[16];
@@ -244,7 +243,6 @@ int8_t config_server_get_wakeup_volt(float *wakeup_volt);
 int8_t config_server_get_sleep_time(uint32_t *sleep_time);
 int8_t config_server_get_wakeup_time(uint32_t *wakeup_time);
 wifi_security_t config_server_get_sta_security(void);
-int8_t config_server_get_logger_config(void);
 int8_t config_server_get_csv_log(void);
 int8_t config_server_get_log_period(uint32_t *log_period);
 // Wide CSV (Task #11): grid_mode 1=fixed / 0=event / -1=invalid; grid_hz writes *hz (1..50)

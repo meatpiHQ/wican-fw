@@ -84,7 +84,6 @@
 #include "hw_config.h"
 #include "rtcm.h"
 #include "esp_littlefs.h"
-#include "obd_logger_iface.h"
 #include "csv_logger.h"
 #include "poll_log.h"
 #include "event_log.h"
@@ -131,10 +130,6 @@ extern const unsigned char homepage_start[] asm("_binary_homepage_html_start");
 extern const unsigned char homepage_end[]   asm("_binary_homepage_html_end");
 extern const unsigned char logo_start[] asm("_binary_logo_txt_start");
 extern const unsigned char logo_end[]   asm("_binary_logo_txt_end");
-extern const unsigned char dashboard_html_start[] asm("_binary_dashboard_html_start");
-extern const unsigned char dashboard_html_end[] asm("_binary_dashboard_html_end");
-extern const unsigned char dashboard_js_start[] asm("_binary_dashboard_js_start");
-extern const unsigned char dashboard_js_end[] asm("_binary_dashboard_js_end");
 extern const unsigned char chart_js_start[] asm("_binary_chart_js_start");
 extern const unsigned char chart_js_end[] asm("_binary_chart_js_end");
 extern const unsigned char sql_wasm_js_start[] asm("_binary_sqlwasm_js_start");
@@ -157,8 +152,6 @@ extern const unsigned char daterangepicker_css_start[] asm("_binary_daterangepic
 extern const unsigned char daterangepicker_css_end[] asm("_binary_daterangepicker_css_end");
 extern const unsigned char bootstrap_min_css_start[] asm("_binary_bootstrap_min_css_start");
 extern const unsigned char bootstrap_min_css_end[] asm("_binary_bootstrap_min_css_end");
-extern const unsigned char dashboard_live_js_start[] asm("_binary_dashboard_live_js_start");
-extern const unsigned char dashboard_live_js_end[] asm("_binary_dashboard_live_js_end");
 extern const unsigned char lucide_icons_js_start[] asm("_binary_lucide_icons_js_start");
 extern const unsigned char lucide_icons_js_end[] asm("_binary_lucide_icons_js_end");
 extern const unsigned char main_js_start[] asm("_binary_main_js_start");
@@ -179,25 +172,10 @@ typedef struct {
 } file_lookup_t;
 
 static const file_lookup_t file_lookup[] = {
-    {"/dashboard.html", "text/html", dashboard_html_start, dashboard_html_end, false, NULL, NULL},
-    {"/dashboard.js", "application/javascript", dashboard_js_start, dashboard_js_end, false, NULL, NULL},
-	{"/dashboard_live.js", "application/javascript", dashboard_live_js_start, dashboard_live_js_end, false, NULL, NULL},
 	{"/lucide_icons.js", "application/javascript", lucide_icons_js_start, lucide_icons_js_end, false, NULL, NULL},
 	{"/main.js", "application/javascript", main_js_start, main_js_end, false, NULL, NULL},
 	{"/ws_client.js", "application/javascript", ws_client_js_start, ws_client_js_end, false, NULL, NULL},
 	{"/terminal.js", "application/javascript", terminal_js_start, terminal_js_end, false, NULL, NULL},
-	{"/chartjs-adapter-moment.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/chartjs-adapter-moment.min.js", "https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.0/dist/chartjs-adapter-moment.min.js"},
-	{"/jquery-3.6.0.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/jquery-3.6.0.min.js", "https://code.jquery.com/jquery-3.6.0.min.js"},
-	{"/bootstrap.bundle.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/bootstrap.bundle.min.js", "https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"},
-	{"/moment.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/moment.min.js", "https://cdn.jsdelivr.net/npm/moment/moment.min.js"},
-	{"/daterangepicker.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/daterangepicker.min.js", "https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"},
-	{"/sql-wasm.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/sql-wasm.js", "https://cdn.jsdelivr.net/npm/sql.js@1.8.0/dist/sql-wasm.js"},
-	{"/chart.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/chart.js", "https://cdn.jsdelivr.net/npm/chart.js"},
-	{"/jszip.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/jszip.min.js", "https://cdn.jsdelivr.net/npm/jszip@3.7.1/dist/jszip.min.js"},
-	{"/sql-wasm.wasm", "application/wasm", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/sql-wasm.wasm", "https://cdn.jsdelivr.net/npm/sql.js@1.8.0/dist/sql-wasm.wasm"},
-	{"/bootstrap.min.css", "text/css", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/bootstrap.min.css", "https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css"},
-	{"/daterangepicker.min.css", "text/css", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/daterangepicker.min.css", "https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.css"},
-	{"/daterangepicker.css", "text/css", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/daterangepicker.min.css", "https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css"},
 	
 	{NULL, NULL, NULL, NULL, false, NULL, NULL} // Sentinel to mark end of array
 };
@@ -237,7 +215,7 @@ const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"st
 										\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\
 								\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"elm327_udp_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\
 										\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\",\"mqtt_security\":\"none\",\"mqtt_cert_set\": \"default\",\"mqtt_skip_cn\":\"disable\",\
-										\"logger_status\":\"disable\",\"csv_log\":\"disable\",\"log_filesystem\":\"littlefs\",\"log_storage\":\"sdcard\",\"log_period\":\"10\",\"csv_grid_mode\":\"fixed\",\"csv_grid_hz\":\"10\",\"csv_require_engine\":\"enable\"}";
+										\"csv_log\":\"disable\",\"log_filesystem\":\"littlefs\",\"log_storage\":\"sdcard\",\"log_period\":\"10\",\"csv_grid_mode\":\"fixed\",\"csv_grid_hz\":\"10\",\"csv_require_engine\":\"enable\"}";
 
 // const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\", \"ap_auto_disable\": \"disable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
 // const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\", \"ap_auto_disable\": \"disable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"periodic_wakeup\":\"disable\",\"wakeup_interval\":\"5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
@@ -1817,7 +1795,6 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	cJSON_AddStringToObject(root, "batt_alert_volt", device_config.batt_alert_volt);
 	cJSON_AddStringToObject(root, "batt_alert_topic", device_config.batt_alert_topic);
 	cJSON_AddStringToObject(root, "batt_alert_time", device_config.batt_alert_time);
-	cJSON_AddStringToObject(root, "logger_status", device_config.logger_status);
 	cJSON_AddStringToObject(root, "csv_log", device_config.csv_log);
 	cJSON_AddStringToObject(root, "log_filesystem", device_config.log_filesystem);
 	cJSON_AddStringToObject(root, "log_period", device_config.log_period);
@@ -2424,28 +2401,6 @@ static esp_err_t upload_sd_handler(httpd_req_t *req)
 	return ESP_OK;
 }
 
-esp_err_t autopid_data_handler(httpd_req_t *req)
-{
-    char *data = autopid_data_read();
-    
-    if (data == NULL)
-    {
-        ESP_LOGE(TAG, "No data available");
-        const char *response = "{\"error\":\"No data available\"}";
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_send(req, response, strlen(response));
-        return ESP_OK;
-    }
-
-    httpd_resp_set_type(req, "application/json");
-
-    httpd_resp_send(req, data, HTTPD_RESP_USE_STRLEN);
-
-    free(data);
-
-    return ESP_OK;
-}
-
 #define MAX_AVAILABLE_PIDS_SIZE 		(1024*15)
 static esp_err_t scan_available_pids_handler(httpd_req_t *req)
 {
@@ -2618,12 +2573,6 @@ static const httpd_uri_t upload_sd_uri = {
     .method    = HTTP_POST,
     .handler   = upload_sd_handler,
     .user_ctx  = &server_data
-};
-static const httpd_uri_t autopid_data = {
-    .uri       = "/autopid_data",   // Match all URIs of type /upload/path/to/file
-    .method    = HTTP_GET,
-    .handler   = autopid_data_handler,
-    .user_ctx  = &server_data    // Pass server data as context
 };
 static const httpd_uri_t store_car_data_uri = {
     .uri       = "/store_car_data",
@@ -3441,19 +3390,6 @@ static void config_server_load_cfg(char *cfg)
 	//**** End SmartConnect fields ****
 
 	//*****
-	key = cJSON_GetObjectItem(root,"logger_status");
-	if(key == 0)
-	{
-		strlcpy(device_config.logger_status, "disable", sizeof(device_config.logger_status));
-	}
-	else
-	{
-		strlcpy(device_config.logger_status, key->valuestring, sizeof(device_config.logger_status));
-	}
-	ESP_LOGI(TAG, "device_config.logger_status: %s", device_config.logger_status);
-	//*****
-
-	//*****
 	key = cJSON_GetObjectItem(root,"csv_log");
 	if(key == 0)
 	{
@@ -3467,23 +3403,11 @@ static void config_server_load_cfg(char *cfg)
 	//*****
 
 	//*****
-	// Logger mutual exclusion (Task #5): only ONE of the stock SQLite/OBD logger
-	// (logger_status) or the CSV logger (csv_log) may be enabled at once. This is the
-	// AUTHORITATIVE, browser-independent enforcement point. Deterministic winner: CSV
-	// (matches the single-owner boot gate in main.c). Also coerce any non-enable/disable
-	// value to "disable" so a garbage NVS value can never enable a logger.
-	if(strcmp(device_config.logger_status, "enable") != 0 && strcmp(device_config.logger_status, "disable") != 0)
-	{
-		strlcpy(device_config.logger_status, "disable", sizeof(device_config.logger_status));
-	}
+	// Coerce any non-enable/disable csv_log value to "disable" so a garbage NVS
+	// value can never enable the logger.
 	if(strcmp(device_config.csv_log, "enable") != 0 && strcmp(device_config.csv_log, "disable") != 0)
 	{
 		strlcpy(device_config.csv_log, "disable", sizeof(device_config.csv_log));
-	}
-	if(strcmp(device_config.logger_status, "enable") == 0 && strcmp(device_config.csv_log, "enable") == 0)
-	{
-		strlcpy(device_config.logger_status, "disable", sizeof(device_config.logger_status));   // CSV wins
-		ESP_LOGW(TAG, "logger_status and csv_log both enabled -> forcing logger_status=disable (CSV wins)");
 	}
 	//*****
 
@@ -3802,7 +3726,6 @@ static void register_server_uris(void)
 	httpd_register_uri_handler(server, &load_pid_auto_conf_uri);
 	httpd_register_uri_handler(server, &upload_car_data);
 	httpd_register_uri_handler(server, &upload_sd_uri);
-	httpd_register_uri_handler(server, &autopid_data);
 	httpd_register_uri_handler(server, &load_car_config_uri);
 	httpd_register_uri_handler(server, &destinations_stats_uri);
 	httpd_register_uri_handler(server, &store_car_data_uri);
@@ -3812,9 +3735,6 @@ static void register_server_uris(void)
 	httpd_register_uri_handler(server, &poll_status_uri);
 	
 	//Add before this line
-	httpd_register_uri_handler(server, &obd_logger_ws);
-	httpd_register_uri_handler(server, &db_download_uri);
-	httpd_register_uri_handler(server, &db_files_uri);
 	httpd_register_uri_handler(server, &csv_status_uri);
 	httpd_register_uri_handler(server, &csv_list_uri);
 	httpd_register_uri_handler(server, &csv_download_uri);
@@ -4445,20 +4365,6 @@ wifi_security_t config_server_get_sta_security(void)
 		return WIFI_WPA3_PSK;
 	}
 	return WIFI_MAX;
-}
-
-int8_t config_server_get_logger_config(void)
-{
-	if(strcmp(device_config.logger_status, "enable") == 0)
-	{
-		return 1;
-	}
-	else if(strcmp(device_config.logger_status, "disable") == 0)
-	{
-		return 0;
-	}
-
-	return -1;
 }
 
 int8_t config_server_get_csv_log(void)

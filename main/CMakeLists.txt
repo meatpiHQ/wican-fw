@@ -65,7 +65,6 @@ set(requires
     wear_levelling
     esp_http_client
     spi_flash
-    obd_logger
     https_client_mgr
     unity
     cmdline
@@ -99,13 +98,10 @@ idf_component_register(
         PRIV_REQUIRES       spi_flash # Private requirements
         EMBED_FILES 
         "web/src/homepage.html"
-        "web/src/dashboard.html"
-        "web/src/dashboard.js"
         "web/src/lucide_icons.js"
         "web/src/main.js"
 		"web/src/ws_client.js"
 		"web/src/terminal.js"
-        "web/src/dashboard_live.js"
         "web/safemode.html"
         # "obd_fw/V2.3.18.txt"
         "obd_fw/V2.3.22.txt"
