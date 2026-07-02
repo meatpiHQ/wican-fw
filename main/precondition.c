@@ -121,6 +121,9 @@ _Static_assert(sizeof(activation_buttons) / sizeof(activation_buttons[0])
 #define PRECONDITION_MAX_RETRIES 4U
 #define PRECONDITION_STARTED_TIMEOUT_US 70000000U  // 70 seconds
 
+#define CAR_BUS CAN_BUS_0
+#define HEAD_UNIT_BUS CAN_BUS_1
+
 #define SECONDS_UNTIL_START(elapsed) \
     (((elapsed) >= PRECONDITION_STARTED_TIMEOUT_US) ? 0U : \
      ((PRECONDITION_STARTED_TIMEOUT_US - (elapsed)) / 1000000U))
@@ -151,7 +154,7 @@ static void send_precondition_start_msg(uint8_t ticks_remaining) {
         packet.data[4] = 0x07U;
     }
     // TODO(ejones): ensure that blocking for 1 tick is the right move here and elsewhere
-    can_send(CAN_BUS_0, &packet, 1);
+    can_send(CAR_BUS, &packet, 1);
 }
 
 static void send_precondition_stop_msg(uint8_t ticks_remaining) {
@@ -163,21 +166,22 @@ static void send_precondition_stop_msg(uint8_t ticks_remaining) {
         packet.data[3] = 0xE0U;
         packet.data[4] = 0x07U;
     }
-    can_send(CAN_BUS_0, &packet, 1);
+    can_send(CAR_BUS, &packet, 1);
 }
 
 // Decide whether to block, modify, or passthrough a message for preconditioning.
 // Modifies packet data in-place when returning FWD_MODIFIED.
-// When NO_MITM is defined, this only has an effect when FWD_MODIFIED is returned
-fwd_result_t precondition_fwd_hook(twai_message_t *to_send) {
+// On single-bus builds only FWD_MODIFIED has an effect (FWD_BLOCK can't pull a
+// frame that's already on the wire); on multi-bus builds the caller bridges,
+// so FWD_BLOCK and FWD_PASSTHROUGH matter too. fwd_bus is the destination bus.
+fwd_result_t precondition_fwd_hook(twai_message_t *to_send, can_bus_t fwd_bus) {
     // block 0x0C7 message so that the head unit doesn't turn off preconditioning on us
-    // (no effect currently since we're doing NO_MITM path)
-    // if (precondition_requested && to_send->identifier == 0x0C7U) {
-    //     return FWD_BLOCK;
-    // }
+    if (precondition_requested && to_send->identifier == 0x0C7U && fwd_bus == CAR_BUS) {
+        return FWD_BLOCK;
+    }
 
     // MITM 0x4ED message while preconditioning is requested
-    if (precondition_requested && to_send->identifier == 0x4EDU) {
+    if (precondition_requested && to_send->identifier == 0x4EDU && fwd_bus == CAR_BUS) {
         to_send->data[5] = 0x10U;
         to_send->data[6] = 0xA0U;
         to_send->data[7] = 0x00U;
@@ -185,7 +189,7 @@ fwd_result_t precondition_fwd_hook(twai_message_t *to_send) {
     }
 
     // we are currently starting preconditioning and want to display the countdown flag.
-    if (precondition_requested && !precondition_started_confirmed) {
+    if (precondition_requested && !precondition_started_confirmed && fwd_bus == CAR_BUS) {
         uint32_t now = now_us();
         uint32_t time_since_last_attempt = ts_elapsed(now, precondition_last_attempt_ts);
         if (to_send->identifier == 0x4E8U) {
@@ -212,7 +216,8 @@ fwd_result_t precondition_fwd_hook(twai_message_t *to_send) {
     if (!precondition_requested 
             && status_frame_available 
             && !precondition_stop_confirmed 
-            && precondition_retries < PRECONDITION_MAX_RETRIES) {
+            && precondition_retries < PRECONDITION_MAX_RETRIES
+            && fwd_bus == CAR_BUS) {
         uint32_t now = now_us();
         uint32_t time_since_last_attempt = ts_elapsed(now, precondition_last_attempt_ts);
         if (to_send->identifier == 0x4E8U) {
@@ -268,11 +273,13 @@ static int8_t cached_precon_button_type(void) {
     return precon_button_type;
 }
 
-void precondition_can_rx_hook(twai_message_t *to_push) {
+void precondition_can_rx_hook(twai_message_t *to_push, can_bus_t rx_bus) {
     // 0x2AD/0x0A82AA03 status frame: second byte indicates precondition state
     //   Ioniq 5/6: 0x01 = off/idle, 0x05 = starting, 0x15 = fully running
     //   EV6: 0x41 = off/idle, 0x45 = starting, 0x55 = fully running
-    if (IS_STATUS_FRAME(to_push->identifier)) {
+    // only trust status frames coming from the car itself; a same-ID frame on
+    // the head unit bus must not drive the state machine
+    if (IS_STATUS_FRAME(to_push->identifier) && rx_bus == CAR_BUS) {
         // we now know we have the status frame on the current car, so we should use it
         status_frame_available = true;
 

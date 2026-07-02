@@ -292,16 +292,33 @@ static void can_rx_task(void *pvParameters)
         }
         do
         {
-            // Only GVRET/SavvyCAN is bus-aware; precondition and the
-            // single-bus protocols (slcan/realdash/elm327/mqtt) see
+            // Only GVRET/SavvyCAN and the precondition code are bus-aware;
+            // the single-bus protocols (slcan/realdash/elm327/mqtt) see
             // CAN_BUS_0 traffic only.
-            if (rx_bus == CAN_BUS_0)
+            precondition_can_rx_hook(&rx_msg, rx_bus);
             {
-                precondition_can_rx_hook(&rx_msg);
+                twai_message_t fwd_msg = rx_msg;
+#if CAN_BUS_COUNT > 1
+                // MITM bridge: forward all traffic to the other bus. Don't
+                // block RX servicing on a stalled TX--drop and count.
+                can_bus_t fwd_bus = (rx_bus == CAN_BUS_0) ? CAN_BUS_1 : CAN_BUS_0;
+                fwd_result_t fwd_result = precondition_fwd_hook(&fwd_msg, fwd_bus);
+                bool fwd_wanted = (fwd_result != FWD_BLOCK);
+                TickType_t fwd_wait = 0;
+#else
+                // Single bus: inject a modified duplicate alongside the original
+                can_bus_t fwd_bus = CAN_BUS_0;
+                fwd_result_t fwd_result = precondition_fwd_hook(&fwd_msg, fwd_bus);
+                bool fwd_wanted = (fwd_result == FWD_MODIFIED);
+                TickType_t fwd_wait = 1;
+#endif
+                if (fwd_wanted && can_send(fwd_bus, &fwd_msg, fwd_wait) != ESP_OK)
                 {
-                    twai_message_t fwd_msg = rx_msg;
-                    if (precondition_fwd_hook(&fwd_msg) == FWD_MODIFIED) {
-                        can_send(rx_bus, &fwd_msg, 1);
+                    static uint32_t fwd_drop_cnt = 0;
+                    if ((++fwd_drop_cnt % 256U) == 1U)
+                    {
+                        ESP_LOGW(TAG, "precondition fwd: %lu frames dropped",
+                                 (unsigned long)fwd_drop_cnt);
                     }
                 }
             }

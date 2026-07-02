@@ -25,8 +25,8 @@
 #include "hw_config.h"
 
 typedef enum {
-	CAN_BUS_0 = 0,   /* on-chip TWAI controller */
-	CAN_BUS_1 = 1,   /* MCP2515 over SPI (custom board only) */
+	CAN_BUS_0 = 0,   /* on-chip TWAI controller (OBD-II pins 6/14) */
+	CAN_BUS_1 = 1,   /* MCP2515 over SPI, custom board only (OBD-II pins 12/13) */
 } can_bus_t;
 
 #define CAN_5K				0
