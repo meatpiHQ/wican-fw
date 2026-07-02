@@ -85,7 +85,7 @@ static void sync_sys_time(void *pvParameters)
     uint32_t retry_count = 0;
     const uint32_t MAX_RETRIES = 10;
 
-    dev_status_wait_for_any_bits(DEV_STA_CONNECTED_BIT, portMAX_DELAY);
+    dev_status_wait_for_any_bits(DEV_NETWORK_CONNECTED_MASK, portMAX_DELAY);
 
     // Initialize SNTP with multiple servers for redundancy
     // Explicitly set timezone to UTC to prevent any local timezone conversions
@@ -161,7 +161,7 @@ static void sync_sys_time(void *pvParameters)
         vTaskDelay(pdMS_TO_TICKS(3600000)); // 1 hour
 
         // Check if we're still connected before attempting sync
-        if (dev_status_is_bit_set(DEV_STA_CONNECTED_BIT))
+        if (dev_status_is_network_connected())
         {
             if (esp_netif_sntp_sync_wait(pdMS_TO_TICKS(10000)) == ESP_OK)
             {

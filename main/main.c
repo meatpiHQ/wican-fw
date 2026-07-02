@@ -1151,20 +1151,20 @@ void app_main(void)
 	// esp_log_level_set("TRANSPORT_BASE", ESP_LOG_VERBOSE);
 	// esp_log_level_set("SYNC_SYS_TIME", ESP_LOG_INFO);
 	// esp_log_level_set("MQTT", ESP_LOG_INFO);
-	// esp_log_level_set("VPN_HTTP", ESP_LOG_INFO);
-	// esp_log_level_set("VPN_MANAGER", ESP_LOG_INFO);
-	// esp_log_level_set("VPN_WG", ESP_LOG_INFO);
-	// esp_log_level_set("VPN_CFG", ESP_LOG_INFO);
-	// esp_log_level_set("esp_wireguard", ESP_LOG_INFO);
-	// esp_log_level_set("wireguardif", ESP_LOG_INFO);
-	// esp_log_level_set("WiFi_Manager", ESP_LOG_INFO);
+	esp_log_level_set("VPN_HTTP", ESP_LOG_INFO);
+	esp_log_level_set("VPN_MANAGER", ESP_LOG_INFO);
+	esp_log_level_set("VPN_WG", ESP_LOG_INFO);
+	esp_log_level_set("VPN_CFG", ESP_LOG_INFO);
+	esp_log_level_set("esp_wireguard", ESP_LOG_INFO);
+	esp_log_level_set("wireguardif", ESP_LOG_INFO);
+	esp_log_level_set("WiFi_Manager", ESP_LOG_INFO);
 	// esp_log_level_set("HA_WEBHOOK_CFG", ESP_LOG_INFO);
 	// esp_log_level_set("HA_WEBHOOK_HTTP", ESP_LOG_INFO);
-	// esp_log_level_set("usb_host_mgr", ESP_LOG_INFO);
-	// esp_log_level_set("usb_host_http", ESP_LOG_INFO);
-	// esp_log_level_set("usb_host_cfg", ESP_LOG_INFO);
-	// esp_log_level_set("usb_acm_cli", ESP_LOG_INFO);
-	// esp_log_level_set("espnetlink_cmd", ESP_LOG_INFO);
+	esp_log_level_set("usb_host_mgr", ESP_LOG_INFO);
+	esp_log_level_set("usb_host_http", ESP_LOG_INFO);
+	esp_log_level_set("usb_host_cfg", ESP_LOG_INFO);
+	esp_log_level_set("usb_acm_cli", ESP_LOG_INFO);
+	esp_log_level_set("espnetlink_cmd", ESP_LOG_INFO);
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
 	#elif HARDWARE_VER == WICAN_PRO
