@@ -1414,6 +1414,10 @@ async function storeAutoTableData() {
     }
 }
 
+var filesCwd = '';   // current directory, relative to /sdcard
+var filesSortKey = 'mtime';   // 'name' | 'size' | 'type' | 'mtime'
+var filesSortDir = 'desc';    // 'asc' | 'desc' (default: newest first)
+
 function filesFmtSize(b) {
     if (b == null) return '';
     if (b < 1024) return b + ' B';
