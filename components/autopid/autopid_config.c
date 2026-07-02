@@ -391,10 +391,8 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
 
     cJSON *init_item = cJSON_GetObjectItem(root, "initialisation");
     cJSON *grouping_item = cJSON_GetObjectItem(root, "grouping");
-    cJSON *webhook_data_mode_item = cJSON_GetObjectItem(root, "webhook_data_mode");
     cJSON *car_model_item = cJSON_GetObjectItem(root, "car_model");
     cJSON *ecu_protocol_item = cJSON_GetObjectItem(root, "ecu_protocol");
-    cJSON *ha_discovery_item = cJSON_GetObjectItem(root, "ha_discovery");
     cJSON *disable_on_sleep_voltage_item = cJSON_GetObjectItem(root, "disable_on_sleep_voltage");
     cJSON *pid_polling_min_voltage_item = cJSON_GetObjectItem(root, "pid_polling_min_voltage");
     cJSON *cycle_item = cJSON_GetObjectItem(root, "cycle");
@@ -419,10 +417,8 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
 
     autopid_config->grouping = strdup_psram("enable");
     // autopid_config->grouping = (grouping_item && grouping_item->valuestring && strlen(grouping_item->valuestring) > 1) ? strdup_psram(grouping_item->valuestring) : strdup_psram("disable");
-    autopid_config->webhook_data_mode = (webhook_data_mode_item && webhook_data_mode_item->valuestring && strlen(webhook_data_mode_item->valuestring) > 1) ? strdup_psram(webhook_data_mode_item->valuestring) : strdup_psram("changed");
     autopid_config->vehicle_model = car_model_item ? strdup_psram(car_model_item->valuestring) : NULL;
     autopid_config->std_ecu_protocol = ecu_protocol_item ? strdup_psram(ecu_protocol_item->valuestring) : NULL;
-    autopid_config->ha_discovery_en = ha_discovery_item ? (strcmp(ha_discovery_item->valuestring, "enable") == 0) : false;
 
     // Backward-compatible default: do NOT disable AutoPID on low voltage unless explicitly enabled.
     autopid_config->disable_on_sleep_voltage = false;

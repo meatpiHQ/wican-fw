@@ -336,73 +336,6 @@
             background-color: #fee2e2
         }
 
-        .webhook-stats {
-            flex-direction: column;
-            gap: .35rem;
-            display: flex
-        }
-
-        .webhook-stats-top {
-            flex-wrap: wrap;
-            align-items: center;
-            gap: .5rem;
-            display: flex
-        }
-
-        .webhook-meta {
-            color: var(--gray-600);
-            font-size: .85rem;
-            font-weight: 500
-        }
-
-        .webhook-stats-bottom {
-            align-items: center;
-            gap: .5rem;
-            min-width: 0;
-            display: flex
-        }
-
-        .webhook-error-preview {
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            color: var(--danger-color);
-            flex: 1;
-            min-width: 0;
-            max-width: 520px;
-            font-size: .85rem;
-            font-weight: 500;
-            overflow: hidden
-        }
-
-        .webhook-details-btn {
-            background-color: var(--gray-100);
-            color: var(--primary-color);
-            border: 1px solid var(--gray-300);
-            border-radius: 999px;
-            padding: .25rem .6rem;
-            font-size: .8rem
-        }
-
-        .webhook-details-btn:hover {
-            background-color: var(--gray-200)
-        }
-
-        .webhook-details-btn:disabled {
-            opacity: .6;
-            cursor: not-allowed
-        }
-
-        .webhook-error-box {
-            color: var(--gray-700);
-            border: 1px solid var(--gray-300);
-            background: var(--gray-100);
-            white-space: pre-wrap;
-            word-break: break-word;
-            border-radius: 8px;
-            padding: .6rem;
-            font-size: .85rem
-        }
-
         input[type=file] {
             border: 1px dashed var(--gray-400);
             background-color: var(--gray-50);
@@ -1254,57 +1187,6 @@
                     <div style="color:#78350f;font-size:13px;line-height:1.4">It is recommended to keep this enabled. Polling the ECU when the battery voltage is low can increase battery drain while the vehicle is parked.</div>
                 </div>
             </div>
-            <div class="section-title" style="margin-top:1rem">Home Assistant</div>
-            <table class="form-table">
-                <tbody>
-                    <tr>
-                        <td>WebHook:</td>
-                        <td><select onchange="toggleWebhookMode(); submit_enable();" id="webhook_en" name="webhook_en">
-                                <option value="enable">Enable</option>
-                                <option value="user_settings">Enable User Settings</option>
-                                <option value="disable">Disable</option>
-                            </select></td>
-                    </tr>
-                    <tr>
-                        <td>Primary WebHook URL:</td>
-                        <td><input oninput="markWebhookUrlDirty(); submit_enable();" id="webhook_url" name="webhook_url" placeholder="https://example.local/api/webhook" readonly="" spellcheck="false" style="cursor:not-allowed;background-color:#f5f5f5" type="url"></td>
-                    </tr>
-                    <tr>
-                        <td>Failover WebHook URL:</td>
-                        <td><input id="webhook_failover_url" name="webhook_failover_url" readonly="" style="cursor:not-allowed;background-color:#f5f5f5"></td>
-                    </tr>
-                    <tr>
-                        <td>WebHook Interval (s):</td>
-                        <td><input oninput="markWebhookUrlDirty(); submit_enable();" id="webhook_interval" min="0" name="webhook_interval" readonly="" step="1" style="cursor:not-allowed;background-color:#f5f5f5" type="number"></td>
-                    </tr>
-                    <tr>
-                        <td colspan="2" id="webhook_url_help" style="color:#555;margin-top:.5rem;font-size:.7rem">WebHook URL, failover URL, and interval are managed by the Home Assistant integration while WebHook is enabled. Choose Enable User Settings to edit them on the device.</td>
-                    </tr>
-                    <tr>
-                        <td>WebHook Data Mode:</td>
-                        <td><select id="webhook_data_mode" name="webhook_data_mode" onchange="enableAutoStoreButton();submit_enable();">
-                                <option value="full">Full Data (All Fields)</option>
-                                <option value="changed">Changed Values Only</option>
-                            </select></td>
-                    </tr>
-                    <tr>
-                        <td>WebHook Stats:</td>
-                        <td>
-                            <div class="webhook-stats">
-                                <div class="webhook-stats-top"><span class="status-indicator status-connected" id="webhook_stat_success">OK: 0</span><span class="status-indicator status-disconnected" id="webhook_stat_fail">Fail: 0</span><span class="webhook-meta" id="webhook_stat_status">Status: -</span><span class="webhook-meta" id="webhook_stat_last_post">Last: -</span></div>
-                                <div class="webhook-stats-bottom" id="webhook_error_row"><span class="webhook-meta">Last error:</span><span class="webhook-error-preview" id="webhook_last_error"></span><button class="webhook-details-btn" id="webhook_error_details_btn" onclick="toggleWebhookErrorDetails();" type="button">Details</button></div>
-                                <div class="webhook-error-box" id="webhook_error_details" style="display:none"></div>
-                            </div>
-                        </td>
-                    </tr>
-                    <tr style="display:none">
-                        <td>MQTT HA Discovery:</td>
-                        <td><select onchange="toggleSendToFields(); enableAutoStoreButton();submit_enable();" id="ha_discovery" name="ha_discovery">
-                                <option value="disable">Disable</option>
-                            </select></td>
-                    </tr>
-                </tbody>
-            </table>
             <div style="margin:8px 0;display:none" id="autopid_warning_div">
                 <div style="background:linear-gradient(135deg,#fef3c7 0%,#fde68a 100%);border:1px solid #f59e0b;border-radius:8px;padding:12px;box-shadow:0 2px 4px #0000001a">
                     <div style="align-items:center;margin-bottom:6px;display:flex"><span data-lucide="alert-triangle" style="margin-right:8px;font-size:16px"></span><strong style="color:#92400e;font-size:14px">AutoPID Warning</strong></div>

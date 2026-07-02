@@ -289,7 +289,6 @@ async function checkFirmwareUpdate() {
         } else {
             carModelSelect.disabled = false;
         }
-        toggleDiscovery();
     }
     function toggleStandardPIDOptions() {
         const standardPidsSelect = document.getElementById("standard_pids");
@@ -392,14 +391,6 @@ async function checkFirmwareUpdate() {
         const type = typeEl.value;
         const needsToken = (type === 'HTTP' || type === 'HTTPS' || type === 'ABRP_API');
         row.style.display = needsToken ? 'table-row' : 'none';
-    }
-    
-    function toggleDiscovery() {
-        const carSpecific = document.getElementById("car_specific").value;
-        const discovery = document.getElementById("ha_discovery");
-
-        discovery.disabled = true;
-        discovery.value = "disable";
     }
     
     function txCheckBoxChanged() {
@@ -2088,14 +2079,12 @@ function loadAutoTable(jsonData) {
         };
 
         setElementValue("car_specific", data.car_specific, 'disable');
-        setElementValue("ha_discovery", 'disable');
         setElementValue("grouping", data.grouping, 'disable');
         setElementValue("disable_on_sleep_voltage", data.disable_on_sleep_voltage, 'disable');
         setElementValue("pid_polling_min_voltage", data.pid_polling_min_voltage, '13.1');
         const pidMinVoltEl = document.getElementById("pid_polling_min_voltage");
         const pidMinVoltValEl = document.getElementById("pid_polling_min_voltage_value");
         if (pidMinVoltEl && pidMinVoltValEl) pidMinVoltValEl.textContent = pidMinVoltEl.value;
-        setElementValue("webhook_data_mode", data.webhook_data_mode, 'changed');
         // Legacy cycle/destination will be migrated into destinations[0].
         setElementValue("car_model", data.car_model, '');
         setElementValue("standard_pids", data.standard_pids, 'disable');
@@ -2298,8 +2287,6 @@ async function storeAutoTableData() {
             const n = parseFloat(pidPollingMinVoltageValueRaw);
             return Number.isFinite(n) ? n : 12.0;
         })();
-        const webhook_data_mode = document.getElementById("webhook_data_mode")?.value || 'changed';
-        const ha_discoveryValue = document.getElementById("ha_discovery")?.value || 'disable';
         const carSpecificValue = document.getElementById("car_specific")?.value || 'disable';
         const carModelField = document.getElementById("car_model");
         const standard_pidsValue = document.getElementById("standard_pids")?.value || 'disable';
@@ -2505,9 +2492,7 @@ async function storeAutoTableData() {
             grouping: groupingValue,
             disable_on_sleep_voltage: disableOnSleepVoltageValue,
             pid_polling_min_voltage: pidPollingMinVoltageValue,
-            webhook_data_mode: webhook_data_mode,
             car_specific: carSpecificValue,
-            ha_discovery: ha_discoveryValue,
             car_model: carModelValue,
             pids: custom_pid_data,
             std_pids: std_pid_data,
@@ -3381,347 +3366,6 @@ function checkStatus() {
     xhttp.send();
 }
 
-function getWebhookUiState() {
-    if (!window._webhookUiState) {
-        window._webhookUiState = {
-            dirty: false,
-            loaded: {
-                url: "",
-                mode: "enable",
-                enabled: false,
-                interval: 0,
-                urls: []
-            }
-        };
-    }
-
-    return window._webhookUiState;
-}
-
-function normalizeWebhookUrl(url) {
-    return typeof url === "string" ? url.trim() : "";
-}
-
-function markWebhookUrlDirty() {
-    getWebhookUiState().dirty = true;
-}
-
-function getWebhookMode() {
-    const value = document.getElementById("webhook_en")?.value || "enable";
-    return value === "disable" ? "disable" : value === "user_settings" ? "user_settings" : "enable";
-}
-
-function toggleWebhookMode(options = {}) {
-    const preserveValue = !!options.preserveValue;
-    const uiState = getWebhookUiState();
-    const urlField = document.getElementById("webhook_url");
-    const failoverUrlField = document.getElementById("webhook_failover_url");
-    const intervalField = document.getElementById("webhook_interval");
-    const helpField = document.getElementById("webhook_url_help");
-    const mode = getWebhookMode();
-    const userManaged = mode === "user_settings";
-
-    if (urlField) {
-        if (!userManaged && !preserveValue) {
-            urlField.value = normalizeWebhookUrl(uiState.loaded?.url);
-        }
-
-        urlField.readOnly = !userManaged;
-        urlField.style.backgroundColor = userManaged ? "" : "#f5f5f5";
-        urlField.style.cursor = userManaged ? "text" : "not-allowed";
-        urlField.placeholder = userManaged ? "https://example.local/api/webhook" : "";
-    }
-
-    if (failoverUrlField) {
-        if (!userManaged && !preserveValue) {
-            failoverUrlField.value = Array.isArray(uiState.loaded?.urls) && uiState.loaded.urls.length > 1 ? uiState.loaded.urls[1] : "";
-        }
-
-        failoverUrlField.readOnly = !userManaged;
-        failoverUrlField.style.backgroundColor = userManaged ? "" : "#f5f5f5";
-        failoverUrlField.style.cursor = userManaged ? "text" : "not-allowed";
-        failoverUrlField.placeholder = userManaged ? "https://backup.example.local/api/webhook" : "";
-    }
-
-    if (intervalField) {
-        if (!userManaged && !preserveValue) {
-            intervalField.value = uiState.loaded?.interval > 0 ? uiState.loaded.interval.toString() : "";
-        }
-
-        intervalField.readOnly = !userManaged;
-        intervalField.style.backgroundColor = userManaged ? "" : "#f5f5f5";
-        intervalField.style.cursor = userManaged ? "text" : "not-allowed";
-    }
-
-    if (helpField) {
-        helpField.textContent = userManaged
-            ? "User settings mode is enabled. Primary URL, failover URL, and interval are saved on the device when you submit changes."
-            : mode === "disable"
-                ? "WebHook delivery is disabled. Switch to Enable or Enable User Settings to use webhook posting."
-                : "WebHook URL, failover URL, and interval are managed by the Home Assistant integration while WebHook is enabled. Choose Enable User Settings to edit them on the device.";
-    }
-}
-
-function webhookUrlIsHttp(url) {
-    return /^https?:\/\//i.test(url);
-}
-
-function applyWebhookConfig(config, options = {}) {
-    const force = !!options.force;
-    const uiState = getWebhookUiState();
-    const urlField = document.getElementById("webhook_url");
-    const failoverUrlField = document.getElementById("webhook_failover_url");
-    const intervalField = document.getElementById("webhook_interval");
-
-    const urls = Array.isArray(config?.urls) ? config.urls.filter(url => typeof url === "string") : [];
-    const normalizedUrl = normalizeWebhookUrl(config?.url);
-    const intervalValue = Number(config?.interval || 0);
-    const enabled = !!config?.enabled;
-    const mode = uiState.loaded?.mode || getWebhookMode();
-
-    uiState.loaded = {
-        url: normalizedUrl,
-        mode: mode,
-        enabled: enabled,
-        interval: Number.isFinite(intervalValue) ? intervalValue : 0,
-        urls: urls
-    };
-
-    if (urlField && (force || !uiState.dirty)) {
-        urlField.value = normalizedUrl;
-    }
-
-    if (failoverUrlField && (force || !uiState.dirty)) {
-        failoverUrlField.value = urls.length > 1 ? urls[1] : "";
-    }
-
-    if (intervalField && (force || !uiState.dirty)) {
-        intervalField.value = uiState.loaded.interval > 0 ? uiState.loaded.interval.toString() : "";
-    }
-
-    if (force || !uiState.dirty) {
-        toggleWebhookMode({ preserveValue: true });
-    }
-}
-
-async function saveWebhookConfig() {
-    const urlField = document.getElementById("webhook_url");
-    const failoverUrlField = document.getElementById("webhook_failover_url");
-    const intervalField = document.getElementById("webhook_interval");
-    if (!urlField) {
-        return true;
-    }
-
-    const uiState = getWebhookUiState();
-    const mode = getWebhookMode();
-    const userManaged = mode === "user_settings";
-    const currentEnabled = mode !== "disable";
-    const currentUrl = normalizeWebhookUrl(urlField.value);
-    const currentFailoverUrl = normalizeWebhookUrl(failoverUrlField?.value || "");
-    const currentInterval = Number.parseInt(intervalField?.value || "0", 10);
-    const loadedUrl = normalizeWebhookUrl(uiState.loaded?.url);
-    const loadedFailoverUrl = Array.isArray(uiState.loaded?.urls) && uiState.loaded.urls.length > 1
-        ? normalizeWebhookUrl(uiState.loaded.urls[1])
-        : "";
-    const loadedMode = uiState.loaded?.mode || (uiState.loaded?.enabled ? "enable" : "disable");
-    const loadedInterval = Number.isFinite(Number(uiState.loaded?.interval)) ? Number(uiState.loaded.interval) : 0;
-    const normalizedCurrentInterval = Number.isFinite(currentInterval) ? currentInterval : 0;
-    const hasWebhookChange = currentUrl !== loadedUrl || currentFailoverUrl !== loadedFailoverUrl ||
-        normalizedCurrentInterval !== loadedInterval || mode !== loadedMode;
-
-    if (!hasWebhookChange) {
-        return true;
-    }
-
-    if (!currentEnabled) {
-        try {
-            const response = await fetch('/api/webhook', {
-                method: 'DELETE'
-            });
-
-            if (!response.ok) {
-                const message = await response.text();
-                throw new Error(message || 'save failed');
-            }
-
-            uiState.loaded.mode = "disable";
-            uiState.dirty = false;
-            applyWebhookConfig({ url: "", enabled: false, interval: 0, urls: [] }, { force: true });
-            return true;
-        } catch (error) {
-            showNotification("Error saving webhook settings: " + error.message, "red");
-            return false;
-        }
-    }
-
-    if (!currentUrl) {
-        if (userManaged) {
-            showNotification("Primary WebHook URL is required in Enable User Settings mode", "red");
-            return false;
-        }
-
-        if (!loadedUrl) {
-            return true;
-        }
-    }
-
-    if (currentUrl && !webhookUrlIsHttp(currentUrl)) {
-        showNotification("Primary WebHook URL must start with http:// or https://", "red");
-        return false;
-    }
-
-    if (currentFailoverUrl && !webhookUrlIsHttp(currentFailoverUrl)) {
-        showNotification("Failover WebHook URL must start with http:// or https://", "red");
-        return false;
-    }
-
-    if (normalizedCurrentInterval < 0) {
-        showNotification("WebHook interval must be 0 or greater", "red");
-        return false;
-    }
-
-    const payload = {
-        url: currentUrl,
-        manual_override: userManaged,
-        enabled: true,
-        interval: normalizedCurrentInterval
-    };
-
-    if (userManaged && currentFailoverUrl) {
-        payload.urls = [currentUrl, currentFailoverUrl];
-    }
-
-    try {
-        const response = await fetch('/api/webhook', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) {
-            const message = await response.text();
-            throw new Error(message || 'save failed');
-        }
-
-        const savedConfig = await response.json();
-        uiState.loaded.mode = mode;
-        uiState.dirty = false;
-        applyWebhookConfig(savedConfig, { force: true });
-        return true;
-    } catch (error) {
-        showNotification("Error saving webhook settings: " + error.message, "red");
-        return false;
-    }
-}
-
-function loadWebhookConfig() {
-    // Periodic refresh so stats update without reloading the page
-    if (!window._webhookStatsTimer) {
-        window._webhookStatsTimer = setInterval(loadWebhookConfig, 5000);
-    }
-
-    fetch('/api/webhook')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Failed to fetch webhook config');
-            }
-            return response.json();
-        })
-        .then(config => {
-            // Stats elements (may not exist on older pages)
-            const okEl = document.getElementById("webhook_stat_success");
-            const failEl = document.getElementById("webhook_stat_fail");
-            const statusEl = document.getElementById("webhook_stat_status");
-            const lastPostEl = document.getElementById("webhook_stat_last_post");
-            const lastErrEl = document.getElementById("webhook_last_error");
-            const detailsEl = document.getElementById("webhook_error_details");
-            const errorRowEl = document.getElementById("webhook_error_row");
-            const detailsBtnEl = document.getElementById("webhook_error_details_btn");
-
-            applyWebhookConfig(config);
-
-            const successCount = Number(config.success_count || 0);
-            const failCount = Number(config.fail_count || 0);
-            const statusText = (config && config.status) ? String(config.status) : (config.enabled ? 'unknown' : 'disabled');
-            const lastPost = (config && config.last_post) ? String(config.last_post) : '';
-            const lastErr = (config && config.last_error) ? String(config.last_error) : '';
-            const lastErrTime = (config && config.last_error_time) ? String(config.last_error_time) : '';
-
-            const fullErrText = lastErr ? ((lastErrTime ? (lastErrTime + ' ') : '') + lastErr) : '';
-            window._webhookLastErrorText = fullErrText;
-
-            if (okEl) okEl.textContent = `OK: ${successCount}`;
-            if (failEl) failEl.textContent = `Fail: ${failCount}`;
-            if (statusEl) {
-                statusEl.textContent = `Status: ${statusText || '-'}`;
-                const s = String(statusText || '').toLowerCase();
-                if (s === 'ok') statusEl.style.color = 'var(--success-color)';
-                else if (s === 'failed' || s === 'error') statusEl.style.color = 'var(--danger-color)';
-                else statusEl.style.color = 'var(--gray-600)';
-            }
-            if (lastPostEl) lastPostEl.textContent = `Last: ${lastPost || '-'}`;
-
-            if (lastErrEl) {
-                lastErrEl.textContent = fullErrText || '';
-                lastErrEl.title = fullErrText || '';
-            }
-            if (detailsEl) {
-                detailsEl.textContent = fullErrText || 'No error recorded.';
-            }
-
-            const hasErr = !!fullErrText;
-            if (errorRowEl) errorRowEl.style.display = hasErr ? 'flex' : 'none';
-            if (detailsBtnEl) detailsBtnEl.disabled = !hasErr;
-            if (!hasErr && detailsEl) detailsEl.style.display = 'none';
-        })
-        .catch(error => {
-            console.log('Webhook config not available:', error);
-            const uiState = getWebhookUiState();
-            const failoverUrlField = document.getElementById("webhook_failover_url");
-            const intervalField = document.getElementById("webhook_interval");
-            if (!uiState.dirty && !normalizeWebhookUrl(uiState.loaded?.url)) {
-                if (failoverUrlField) failoverUrlField.value = "";
-                if (intervalField) intervalField.value = "";
-            }
-
-            const okEl = document.getElementById("webhook_stat_success");
-            const failEl = document.getElementById("webhook_stat_fail");
-            const statusEl = document.getElementById("webhook_stat_status");
-            const lastPostEl = document.getElementById("webhook_stat_last_post");
-            const lastErrEl = document.getElementById("webhook_last_error");
-            const detailsEl = document.getElementById("webhook_error_details");
-            const errorRowEl = document.getElementById("webhook_error_row");
-            const detailsBtnEl = document.getElementById("webhook_error_details_btn");
-
-            if (okEl) okEl.textContent = "OK: 0";
-            if (failEl) failEl.textContent = "Fail: 0";
-            if (statusEl) statusEl.textContent = "Status: -";
-            if (lastPostEl) lastPostEl.textContent = "Last: -";
-            if (lastErrEl) {
-                lastErrEl.textContent = "";
-                lastErrEl.title = "";
-            }
-            if (detailsEl) detailsEl.textContent = "No error recorded.";
-            if (errorRowEl) errorRowEl.style.display = 'none';
-            if (detailsBtnEl) detailsBtnEl.disabled = true;
-            if (detailsEl) detailsEl.style.display = 'none';
-        });
-}
-
-function toggleWebhookErrorDetails() {
-    const detailsEl = document.getElementById('webhook_error_details');
-    if (!detailsEl) return;
-    const isHidden = (detailsEl.style.display === 'none' || detailsEl.style.display === '');
-    if (isHidden) {
-        detailsEl.textContent = window._webhookLastErrorText || 'No error recorded.';
-        detailsEl.style.display = 'block';
-    } else {
-        detailsEl.style.display = 'none';
-    }
-}
-
 function loadCANFLT() {
     const xhttp = new XMLHttpRequest();
     xhttp.onload = function() {
@@ -3923,12 +3567,6 @@ async function postConfig() {
         return;
     }
 
-    const storeWebhookResult = await saveWebhookConfig();
-    if (!storeWebhookResult) {
-        document.getElementById("submit_button").disabled = false;
-        return;
-    }
-
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     obj["wifi_mode"] = document.getElementById("wifi_mode").value;
@@ -3953,7 +3591,6 @@ async function postConfig() {
         obj["ap_ssid_en"] = enabled ? "enable" : "disable";
         obj["ap_ssid"] = ssid;
     }
-    obj["webhook_en"] = document.getElementById("webhook_en")?.value || "enable";
     obj["sta_ssid"] = document.getElementById("ssid_value").value;
     obj["sta_pass"] = document.getElementById("pass_value").value;
     obj["sta_security"] = document.getElementById("sta_security").value;
@@ -4461,15 +4098,6 @@ xhttp.onload = async function() {
         document.getElementById("drive_mode_timeout").value = obj.drive_mode_timeout || "60";
         document.getElementById("drive_mode_timeout_value").textContent = obj.drive_mode_timeout || "60";
 
-        // WebHook enable/disable (defaults to enabled for backward compatibility)
-        const webhookEnEl = document.getElementById("webhook_en");
-        if (webhookEnEl) {
-            const webhookModeFromCfg = obj.webhook_en || "enable";
-            const hasWebhookOption = Array.from(webhookEnEl.options || []).some(o => o && o.value === webhookModeFromCfg);
-            webhookEnEl.value = hasWebhookOption ? webhookModeFromCfg : "enable";
-            getWebhookUiState().loaded.mode = webhookEnEl.value;
-            toggleWebhookMode({ preserveValue: true });
-        }
         
         if(obj.ap_auto_disable == "enable") {
             document.getElementById("ap_auto_disable").selectedIndex = "0";
@@ -4709,7 +4337,6 @@ xhttp.onload = async function() {
         loadCANFLT();
         loadautoPIDCarData();
         loadautoPID();
-        loadWebhookConfig();
 
         // Load fallback networks if present
         try {

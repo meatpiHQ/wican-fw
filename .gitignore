@@ -79,3 +79,8 @@ tools/https_test_server/test_certs/
 /build_553*/
 /*.log
 /home.html
+
+# local bench artifacts
+*.bin
+build_*.log
+build_log_*.txt

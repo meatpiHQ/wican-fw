@@ -98,7 +98,6 @@
 #include "vpn_manager.h"
 #include "dev_status.h"
 #include "esp_heap_caps.h"
-#include "ha_webhooks.h"
 #include "autopid_http.h"
 #include "obd2_standard_pids.h"
 #include "restart_tracker.h"
@@ -228,7 +227,7 @@ static char can_datarate_str[11][7] = {
 								"1000K",
 };
 
-const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"webhook_en\":\"enable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\
+const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\
 									\"ap_ssid_en\":\"disable\",\"ap_ssid\":\"\",\
 										\"home_ssid\":\"MeatPi\",\"home_password\":\"TomatoSauce\",\"home_security\":\"wpa3\",\"home_protocol\":\"elm327\",\
 										\"drive_ssid\":\"MeatPi\",\"drive_password\":\"TomatoSauce\",\"drive_security\":\"wpa3\",\"drive_protocol\":\"elm327\",\"drive_connection_type\":\"wifi\",\"drive_mode_timeout\":\"60\",\
@@ -350,16 +349,6 @@ int8_t config_server_get_ap_ch(void)
 		return ch_val;
 	}
 	return -1;
-}
-
-int8_t config_server_get_webhook_en(void)
-{
-	// Backward-compatible default: enabled unless explicitly set to "disable"
-	if (strcmp(device_config.webhook_en, "disable") == 0)
-	{
-		return 0;
-	}
-	return 1;
 }
 
 char *config_server_get_sta_ssid(void)
@@ -3760,23 +3749,6 @@ static void config_server_load_cfg(char *cfg)
 	}
 	//*****
 
-	//*****
-	strlcpy(device_config.webhook_en, "enable", sizeof(device_config.webhook_en));
-	key = cJSON_GetObjectItem(root, "webhook_en");
-	if (key)
-	{
-		if (cJSON_IsString(key) && key->valuestring && strlen(key->valuestring) > 0)
-		{
-			strlcpy(device_config.webhook_en, key->valuestring, sizeof(device_config.webhook_en));
-		}
-		else if (cJSON_IsBool(key))
-		{
-			strlcpy(device_config.webhook_en, cJSON_IsTrue(key) ? "enable" : "disable", sizeof(device_config.webhook_en));
-		}
-	}
-	ESP_LOGI(TAG, "device_config.webhook_en: %s", device_config.webhook_en);
-	//*****
-
 	cJSON_Delete(root);
 	return;
 
@@ -4071,7 +4043,6 @@ static httpd_handle_t config_server_init(void)
 		// Register VPN manager endpoints
 		vpn_manager_register_handlers(server);
 		autopid_register_handlers(server);
-		ha_webhooks_register_handlers(server);
 		restart_tracker_register_handlers(server);
 		// Now register catch-all wildcard
 		httpd_register_uri_handler(server, &get_uri_common);
@@ -4098,7 +4069,6 @@ void config_server_restart(void)
 		cert_manager_register_handlers(server);
 		vpn_manager_register_handlers(server);
 		autopid_register_handlers(server);
-		ha_webhooks_register_handlers(server);
 		restart_tracker_register_handlers(server);
 		httpd_register_uri_handler(server, &get_uri_common);
 		ESP_LOGI(TAG, "Server restarted successfully");

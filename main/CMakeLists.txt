@@ -77,7 +77,6 @@ set(requires
     csv_logger
     fast_log
     sd_filemgr
-    ha_webhooks
     wican_common
     ws_server
     restart_tracker

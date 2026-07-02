@@ -173,7 +173,6 @@ typedef struct
     char* specific_init;
     char* selected_car_model;
     char* grouping;
-    char* webhook_data_mode;  // "full" or "changed"
     destination_type_t group_destination_type;
     char* group_destination;    //"destination"
     // Multi-destination support
@@ -204,7 +203,6 @@ typedef struct
     bool pid_validation_en;
     char* std_ecu_protocol;
     char* vehicle_model;
-    bool ha_discovery_en;
     uint32_t cycle;     //To be removed when std pid gets its own period
     time_t last_successful_pid_time;  // Timestamp in seconds since epoch of last successful PID response
     SemaphoreHandle_t mutex;
