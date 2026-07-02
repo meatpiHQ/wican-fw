@@ -2151,6 +2151,7 @@ async function postConfig() {
 
     obj["wifi_mode"] = document.getElementById("wifi_mode").value;
     obj["ap_ch"] = document.getElementById("ap_ch_value").value;
+    obj["ap_auto_disable"] = document.getElementById("ap_auto_disable").value;
 
     // Optional custom AP SSID
     {
@@ -2220,6 +2221,7 @@ async function postConfig() {
     obj["csv_grid_mode"] = document.getElementById("csv_grid_mode").value;
     obj["csv_grid_hz"] = document.getElementById("csv_grid_hz").value;
     obj["csv_require_engine"] = document.getElementById("csv_require_engine").value;
+    obj["log_period"] = loadedLogPeriod;   // preserve persisted datalog period (no UI element after trim)
     obj["imu_threshold"] = document.getElementById("imu_threshold").value;
 
     // Collect fallback networks (max 5)
@@ -2609,6 +2611,8 @@ async function uploadCfg() {
     }
 }
 
+var loadedLogPeriod = "10";   // last persisted datalog period; re-sent by postConfig (no UI element after trim)
+
 async function Load() {
     const xhttp = new XMLHttpRequest();
 xhttp.onload = async function() {
@@ -2738,6 +2742,58 @@ xhttp.onload = async function() {
             document.getElementById("batt_alert_div").style.display = "none";
         } else if(document.getElementById("batt_alert").value == "disable") {
             document.getElementById("batt_alert_div").style.display = "none";
+        }
+
+        // --- Restored settings population (regression fix: commit d372fc9 over-cut this block,
+        //     causing every Submit to persist stock HTML defaults). MQTT-gateway lines intentionally
+        //     omitted (feature removed by the trim); protocol is populated by checkStatus(). ---
+        // Datalogger master + wide-CSV grid controls (firmware defaults are fixed/10).
+        var _cs_on = (obj.csv_log === "enable");
+        document.getElementById("csv_log").value = _cs_on ? "enable" : "disable";
+        document.getElementById("logging_master").value = _cs_on ? "enable" : "disable";
+        document.getElementById("csv_grid_mode").value = (obj.csv_grid_mode === "event") ? "event" : "fixed";
+        var _hz = parseInt(obj.csv_grid_hz, 10);
+        document.getElementById("csv_grid_hz").value = (_hz >= 1 && _hz <= 50) ? _hz : 10;
+        document.getElementById("csv_require_engine").value = (obj.csv_require_engine === "disable") ? "disable" : "enable";
+        applyLoggerXor();
+
+        // SD card is the only storage option after the trim ("internal" was removed);
+        // the select has a single option, so pin it to index 0.
+        document.getElementById("log_storage").selectedIndex = 0;
+
+        // IMU wake threshold (raw LSB; displayed in mg at 3.9 mg/LSB).
+        document.getElementById("imu_threshold").value = obj.imu_threshold || "8";
+        document.getElementById("imu_threshold_value").textContent = ((obj.imu_threshold || 8) * 3.9).toFixed(1) + ' mg';
+
+        const blePowerVal = ("ble_power" in obj) ? obj.ble_power : 9;
+        document.getElementById("ble_power").value = blePowerVal;
+        document.getElementById("ble_power_value").textContent = blePowerVal;
+
+        document.getElementById("tcp_port_value").value = obj.port;
+        document.getElementById("ap_pass_value").value = obj.ap_pass;
+        document.getElementById("ble_pass_value").value = obj.ble_pass;
+        document.getElementById("sleep_volt").value = obj.sleep_volt;
+        document.getElementById("sleep_volt_value").textContent = obj.sleep_volt;
+        if (obj.engine_volt !== undefined) {   // null-guard for old configs missing the key
+            document.getElementById("engine_volt").value = obj.engine_volt;
+            document.getElementById("engine_volt_value").textContent = obj.engine_volt;
+        }
+        document.getElementById("sleep_time").value = obj.sleep_time;
+        document.getElementById('sleep_time_value').textContent = obj.sleep_time;
+        document.getElementById("wakeup_interval").value = obj.wakeup_interval;
+        document.getElementById('wakeup_interval_value').textContent = obj.wakeup_interval;
+        document.getElementById("batt_alert").value = "disable";
+        document.getElementById("batt_alert_ssid").value = obj.batt_alert_ssid;
+        document.getElementById("batt_alert_pass").value = obj.batt_alert_pass;
+        document.getElementById("batt_alert_volt").value = obj.batt_alert_volt;
+        document.getElementById("batt_alert_protocol").value = obj.batt_alert_protocol;
+        document.getElementById("batt_alert_url").value = obj.batt_alert_url.slice(7);
+        document.getElementById("batt_alert_port").value = obj.batt_alert_port;
+        document.getElementById("batt_alert_topic").value = obj.batt_alert_topic;
+        // Preserve the persisted datalog period (no UI element after the trim; feeds
+        // poll_log_init/fast_log_init). Re-sent verbatim by postConfig so Submit never pins it to 10.
+        if (obj.log_period !== undefined && obj.log_period !== null) {
+            loadedLogPeriod = obj.log_period;
         }
         loadautoPID();
 
