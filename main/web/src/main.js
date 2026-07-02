@@ -3178,20 +3178,12 @@ function validateSmartConnect() {
 }
 
 function configureProtocolSettings(elements) {
-    const isSavvyCan = elements.protocol.value === "savvycan";
     const isElm327 = elements.protocol.value === "elm327";
-    
-    if (isSavvyCan) {
-        elements.tcpPortValue.value = "23";
-        elements.tcpPortValue.disabled = true;
-        elements.portType.selectedIndex = 0;
-        elements.portType.disabled = true;
-    } else {
-        elements.tcpPortValue.disabled = false;
-        elements.portType.selectedIndex = 0;
-        elements.portType.disabled = false;
-    }
-    
+
+    elements.tcpPortValue.disabled = false;
+    elements.portType.selectedIndex = 0;
+    elements.portType.disabled = false;
+
     elements.mqttElm327Log.disabled = !isElm327;
     if (!isElm327) {
         elements.mqttElm327Log.value = "disable";
@@ -4238,12 +4230,6 @@ xhttp.onload = async function() {
             document.getElementById("batt_alert_time").selectedIndex = "2";
         } else if(obj.batt_alert_time == "24") {
             document.getElementById("batt_alert_time").selectedIndex = "3";
-        }
-        if(document.getElementById("protocol").value == "savvycan") {
-            document.getElementById("tcp_port_value").value = "23";
-            document.getElementById("tcp_port_value").disabled = true;
-            document.getElementById("port_type").selectedIndex = "0";
-            document.getElementById("port_type").disabled = true;
         }
         if(document.getElementById("batt_alert").value == "enable") {
             document.getElementById("batt_alert_div").style.display = "none";

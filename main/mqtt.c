@@ -35,7 +35,6 @@
 #include "driver/twai.h"
 #include "types.h"
 #include "config_server.h"
-#include "realdash.h"
 #include "slcan.h"
 #include "can.h"
 #include "ble.h"

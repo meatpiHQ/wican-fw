@@ -49,13 +49,11 @@
 #include "slcan_port.h"   /* dedicated always-on SLCAN listener (no-reboot coexistence, task #36) */
 #include "datalog_lease_task.h"   /* dead-man's-switch reaper (brick-safe datalog auto-resume, task #36) */
 #include "config_server.h"
-#include "realdash.h"
 #include "slcan.h"
 #include "can.h"
 #include "ncflash_fastread.h"
 #include "ncflash_fastwrite.h"
 #include "ble.h"
-#include "gvret.h"
 #include "sleep_mode.h"
 #include "wc_uart.h"
 #include "elm327.h"
@@ -296,12 +294,12 @@ static void can_tx_task(void *pvParameters)
 		/* No-reboot coexistence (task #36): frames from the dedicated SLCAN port (35001)
 		 * are dispatched here -- BEFORE the persisted-protocol gate -- so the host can
 		 * version-ping / fast-read / fast-write / slcan over CAN while the device stays in
-		 * poll_log / auto_pid / realdash, with NO protocol-switch reboot. Replies go to the
+		 * poll_log / auto_pid / elm327, with NO protocol-switch reboot. Replies go to the
 		 * port's PRIVATE queue so they never mix with the stock port. The fast codecs take
 		 * FLASH_ACTIVE_BIT (single bus owner) for their duration; running them INLINE on
-		 * can_tx_task is also what serializes the REALDASH/SAVVYCAN/SLCAN/ELM327 producers
-		 * below out of a flash window (the task is blocked inside the codec). 'continue' so
-		 * the frame never falls through to the protocol arms. */
+		 * can_tx_task is also what serializes the SLCAN/ELM327 producers below out of a
+		 * flash window (the task is blocked inside the codec). 'continue' so the frame
+		 * never falls through to the protocol arms. */
 		if(ucTCP_RX_Buffer.dev_channel == DEV_SLCAN_PORT)
 		{
 			if(ncflash_is_fastread_cmd(msg_ptr, temp_len))
@@ -348,22 +346,6 @@ static void can_tx_task(void *pvParameters)
 					slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xmsg_uart_tx_queue);
 				}
 			}
-		}
-		else if(protocol == REALDASH)
-		{
-			ESP_LOG_BUFFER_HEX(TAG, ucTCP_RX_Buffer.ucElement, ucTCP_RX_Buffer.usLen);
-
-			if(real_dash_parse_66(&tx_msg, ucTCP_RX_Buffer.ucElement) == 0)
-			{
-				real_dash_parse_44(&tx_msg, ucTCP_RX_Buffer.ucElement, ucTCP_RX_Buffer.usLen);
-			}
-
-			tx_msg.self = 0;
-			can_send(&tx_msg, portMAX_DELAY);
-		}
-		else if(protocol == SAVVYCAN)
-		{
-			gvret_parse(msg_ptr, temp_len, &tx_msg, &xMsg_Tx_Queue);
 		}
 		else if(protocol == OBD_ELM327 || protocol == AUTO_PID)
 		{
@@ -430,7 +412,7 @@ static void can_rx_task(void *pvParameters)
 		//
 		// No-reboot coexistence (task #36): a flash/read codec is also the SOLE TWAI consumer
 		// for its duration (it does its own can_receive). In coexist modes that DON'T gate this
-		// task off above (e.g. auto_pid, realdash), this task would otherwise race the codec for
+		// task off above (e.g. auto_pid), this task would otherwise race the codec for
 		// the ECU's flash/UDS reply frames and steal them -> flaky/failed read mid-flash. Park on
 		// can_flash_active() so the codec stays sole TWAI owner while a flash holds the bus.
 		// No-reboot coexistence RX-forward (task #36): when a host coexist session has
@@ -513,14 +495,6 @@ static void can_rx_task(void *pvParameters)
 				if(protocol == SLCAN)
 				{
 					ucTCP_TX_Buffer.usLen = slcan_parse_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
-				}
-				else if(protocol == REALDASH)
-				{
-					ucTCP_TX_Buffer.usLen = real_dash_set_66(&rx_msg, ucTCP_TX_Buffer.ucElement);
-				}
-				else if(protocol == SAVVYCAN)
-				{
-					ucTCP_TX_Buffer.usLen = gvret_parse_can_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
 				}
 				#if HARDWARE_VER != WICAN_PRO
 				else if(protocol == OBD_ELM327 || protocol == AUTO_PID)
@@ -984,26 +958,6 @@ void app_main(void)
 		}
 	}
 
-	if(protocol == REALDASH)
-	{
-//		int can_datarate = config_server_get_can_rate();
-		if(can_datarate != -1)
-		{
-			can_set_bitrate(can_datarate);
-		}
-		else
-		{
-			ESP_LOGE(TAG, "error going to default CAN_500K");
-			can_set_bitrate(CAN_500K);
-		}
-
-		can_enable();
-	}
-	else if(protocol == SAVVYCAN)
-	{
-		gvret_init(&send_to_host);
-		can_enable();
-	}
 	#if HARDWARE_VER == WICAN_PRO
 	// xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
 	// static uint8_t* elm327_uart_rx_queue_storage;

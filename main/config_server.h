@@ -49,8 +49,8 @@
 #define TCP_PORT			1
 
 #define SLCAN				0
-#define REALDASH			1
-#define SAVVYCAN			2
+/* protocol ids 1 (realdash66) and 2 (savvycan) retired in the #5 trim; values
+ * reserved so the remaining ids never shift. */
 #define OBD_ELM327			3
 #define AUTO_PID			4
 #define FAST_LOG			5	/* Native-TWAI fast datalogger (Task #18) */

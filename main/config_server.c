@@ -385,14 +385,6 @@ int8_t config_server_get_home_protocol(void)
 	{
 		return SLCAN;
 	}
-	else if(strcmp(device_config.home_protocol, "realdash66") == 0)
-	{
-		return REALDASH;
-	}
-	else if(strcmp(device_config.home_protocol, "savvycan") == 0)
-	{
-		return SAVVYCAN;
-	}
 	else if(strcmp(device_config.home_protocol, "elm327") == 0)
 	{
 		return OBD_ELM327;
@@ -424,14 +416,6 @@ int8_t config_server_get_drive_protocol(void)
 	if(strcmp(device_config.drive_protocol, "slcan") == 0)
 	{
 		return SLCAN;
-	}
-	else if(strcmp(device_config.drive_protocol, "realdash66") == 0)
-	{
-		return REALDASH;
-	}
-	else if(strcmp(device_config.drive_protocol, "savvycan") == 0)
-	{
-		return SAVVYCAN;
 	}
 	else if(strcmp(device_config.drive_protocol, "elm327") == 0)
 	{
@@ -493,14 +477,6 @@ int8_t config_server_protocol(void)
 	if(strcmp(device_config.protocol, "slcan") == 0)
 	{
 		return SLCAN;
-	}
-	else if(strcmp(device_config.protocol, "realdash66") == 0)
-	{
-		return REALDASH;
-	}
-	else if(strcmp(device_config.protocol, "savvycan") == 0)
-	{
-		return SAVVYCAN;
 	}
 	else if(strcmp(device_config.protocol, "elm327") == 0)
 	{
