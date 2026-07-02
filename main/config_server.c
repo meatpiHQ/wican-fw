@@ -904,71 +904,6 @@ static esp_err_t load_pid_auto_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-static esp_err_t load_pid_auto_config_handler(httpd_req_t *req)
-{
-    const char *filepath = FS_MOUNT_POINT"/car_data.json";
-    ESP_LOGI(TAG, "Opening file: %s", filepath);
-    FILE *fd = fopen(filepath, "r");
-
-    if (fd == NULL)
-    {
-        ESP_LOGE(TAG, "File does not exist: %s", filepath);
-        httpd_resp_send(req, "NONE", HTTPD_RESP_USE_STRLEN);
-        return ESP_OK;
-    }
-
-    // Seek to the end of the file to determine its size
-    fseek(fd, 0, SEEK_END);
-    long file_size = ftell(fd);
-    rewind(fd);
-
-    if (file_size <= 0)
-    {
-        ESP_LOGE(TAG, "File is empty or invalid: %s", filepath);
-        fclose(fd);
-        httpd_resp_send(req, "NONE", HTTPD_RESP_USE_STRLEN);
-        return ESP_OK;
-    }
-
-    ESP_LOGI(TAG, "File size: %ld bytes", file_size);
-
-    // Allocate memory on the heap to hold the file content
-    char *buf = (char *)malloc(file_size + 1);
-    if (buf == NULL)
-    {
-        ESP_LOGE(TAG, "Failed to allocate memory for file content");
-        fclose(fd);
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
-        return ESP_FAIL;
-    }
-	memset(buf, 0, file_size + 1);
-    // Read the file into the buffer
-    size_t read_len = fread(buf, 1, file_size, fd);
-    fclose(fd);
-
-    if (read_len != file_size)
-    {
-        ESP_LOGE(TAG, "Failed to read the entire file. Read %zu bytes out of %ld", read_len, file_size);
-        free(buf);
-        httpd_resp_send(req, "NONE", HTTPD_RESP_USE_STRLEN);
-        return ESP_OK;
-    }
-
-    // Find the last closing brace and terminate the string there
-    char *last_brace = strrchr(buf, '}');
-    if (last_brace != NULL) {
-        *(last_brace + 1) = '\0';  // Terminate string right after the last }
-        read_len = last_brace - buf + 1;  // Update length to new size
-    }
-
-    ESP_LOGI(TAG, "Sending response: %s", buf);
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, buf, HTTPD_RESP_USE_STRLEN);  // Use actual content length instead of HTTPD_RESP_USE_STRLEN
-    
-    free(buf);
-    return ESP_OK;
-}
-
 static esp_err_t load_config_handler(httpd_req_t *req)
 {
     const char* resp_str = (const char*)device_config_file;
@@ -977,23 +912,6 @@ static esp_err_t load_config_handler(httpd_req_t *req)
     ESP_LOGI(TAG, "device_config_file: %s", device_config_file);
 	UBaseType_t stack_high_watermark = uxTaskGetStackHighWaterMark(NULL);
 	ESP_LOGI(TAG, "Task stack high watermark: %u words", stack_high_watermark);
-    return ESP_OK;
-}
-
-static esp_err_t load_car_config_handler(httpd_req_t *req)
-{
-    char *response_str = autopid_get_config();
-    
-    if (response_str) {
-        ESP_LOGI(TAG, "Sending response: %s", response_str);
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_send(req, response_str, HTTPD_RESP_USE_STRLEN);
-		// Do not free: response_str is a cached global string
-    } else {
-        ESP_LOGE(TAG, "Failed to generate JSON response");
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to generate JSON");
-    }
-    
     return ESP_OK;
 }
 
@@ -1260,118 +1178,6 @@ static esp_err_t store_auto_data_handler(httpd_req_t *req)
 	ESP_LOGI(TAG, "store_auto_data_handler completed successfully: written=%d bytes", received);
 
 	return ESP_OK;
-}
-
-static esp_err_t store_car_data_handler(httpd_req_t *req)
-{
-    int total_len = req->content_len;
-    int received = 0;
-    const char *filepath = FS_MOUNT_POINT"/car_data.json";
-    
-	ESP_LOGI(TAG, "store_car_data_handler called");
-    // Validate content length
-    if (total_len <= 0 || total_len > MAX_FILE_SIZE) {
-        ESP_LOGE(TAG, "Invalid content length: %d", total_len);
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid content length");
-        return ESP_FAIL;
-    }
-
-    // Allocate buffer for entire JSON content
-    char *json_buffer = heap_caps_malloc(total_len + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!json_buffer) {
-        ESP_LOGE(TAG, "Failed to allocate JSON buffer");
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
-        return ESP_FAIL;
-    }
-
-	memset(json_buffer, 0, total_len + 1);
-
-    // Receive all data first
-    char *temp_buffer = heap_caps_malloc(1024, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!temp_buffer) {
-        ESP_LOGE(TAG, "Failed to allocate temp buffer");
-        free(json_buffer);
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
-        return ESP_FAIL;
-    }
-
-	memset(temp_buffer, 0, 1024);
-
-    esp_err_t ret_val = ESP_OK;
-    while (received < total_len) {
-        int ret = httpd_req_recv(req, temp_buffer, MIN(1024, total_len - received));
-        if (ret < 0) {
-            if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
-                continue;  // Retry on timeout
-            }
-            ESP_LOGE(TAG, "Failed to receive JSON data: %d", ret);
-            ret_val = ESP_FAIL;
-            break;
-        }
-        
-        if (ret == 0) {
-            ESP_LOGE(TAG, "Connection closed unexpectedly");
-            ret_val = ESP_FAIL;
-            break;
-        }
-        
-        // Copy to JSON buffer
-        memcpy(json_buffer + received, temp_buffer, ret);
-        received += ret;
-    }
-
-    free(temp_buffer);
-    
-    if (ret_val != ESP_OK) {
-        free(json_buffer);
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive data");
-        return ESP_FAIL;
-    }
-
-    // Null terminate the JSON string
-    json_buffer[received] = '\0';
-    
-    // Validate JSON format
-    cJSON *json = cJSON_Parse(json_buffer);
-    if (!json) {
-        const char *error_ptr = cJSON_GetErrorPtr();
-        if (error_ptr != NULL) {
-            ESP_LOGE(TAG, "JSON parse error before: %s", error_ptr);
-        } else {
-            ESP_LOGE(TAG, "Invalid JSON format");
-        }
-        free(json_buffer);
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON format");
-        return ESP_FAIL;
-    }
-    
-    // JSON is valid, clean up parser
-    cJSON_Delete(json);
-    
-    // Now write validated JSON to file
-    FILE *file = fopen(filepath, "w");
-    if (!file) {
-        ESP_LOGE(TAG, "Failed to open file for writing");
-        free(json_buffer);
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open file for writing");
-        return ESP_FAIL;
-    }
-
-    if (fwrite(json_buffer, 1, received, file) != received) {
-        ESP_LOGE(TAG, "Failed to write data to file");
-        fclose(file);
-        free(json_buffer);
-        unlink(filepath);  // Clean up partial file
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to write data to file");
-        return ESP_FAIL;
-    }
-
-    fclose(file);
-    free(json_buffer);
-    
-    ESP_LOGI(TAG, "Valid JSON data successfully stored (%d bytes)", received);
-    httpd_resp_send(req, "Data stored successfully", HTTPD_RESP_USE_STRLEN);
-    return ESP_OK;
 }
 
 static void config_server_add_restart_tracker_status(cJSON *root)
@@ -1829,66 +1635,6 @@ static esp_err_t upload_post_handler(httpd_req_t *req)
 	return ESP_OK;
 }
 
-static esp_err_t upload_car_data_handler(httpd_req_t *req)
-{
-    char filepath[FILE_PATH_MAX];
-	uint32_t total_size = 0;
-
-    /* Skip leading "/upload" from URI to get filename */
-    /* Note sizeof() counts NULL termination hence the -1 */
-    const char *filename = get_path_from_uri(filepath, ((struct file_server_data *)req->user_ctx)->base_path,
-                                             req->uri + sizeof("/upload") - 1, sizeof(filepath));
-    if (!filename) {
-        /* Respond with 500 Internal Server Error */
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Filename too long");
-        return ESP_FAIL;
-    }
-
-    /* Filename cannot have a trailing '/' */
-    if (filename[strlen(filename) - 1] == '/') {
-        ESP_LOGE(TAG, "Invalid filename : %s", filename);
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Invalid filename");
-        return ESP_FAIL;
-    }
-
-	// For multipart + chunked, req->content_len may be unknown (0). Enforce size during streaming instead.
-
-	ESP_LOGI(TAG, "Receiving file : %s...", filename);
-
-	file_upload_ctx_t ctx = {0};
-	ctx.path = filepath;
-	ctx.err = ESP_OK;
-
-	multipart_upload_handlers_t handlers = {
-		.on_part_begin = file_on_part_begin,
-		.on_part_data = file_on_part_data,
-		.on_part_end = file_on_part_end,
-		.on_finished = file_on_finished,
-	};
-
-	multipart_upload_config_t mp_cfg = multipart_upload_default_config();
-	mp_cfg.rx_buf_size = 4096;
-
-	esp_err_t mp_err = multipart_upload_handle(req, &handlers, &ctx, &mp_cfg);
-	if (ctx.fd)
-	{
-		fclose(ctx.fd);
-		ctx.fd = NULL;
-	}
-
-	if (mp_err != ESP_OK || ctx.err != ESP_OK || !ctx.started)
-	{
-		unlink(filepath);
-		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Upload failed");
-		return ESP_FAIL;
-	}
-
-	total_size = (uint32_t)ctx.total_size;
-	ESP_LOGI(TAG, "File reception complete: %lu", (unsigned long)total_size);
-	httpd_resp_sendstr(req, "File uploaded successfully");
-	return ESP_OK;
-}
-
 /* ---- NC Flash SD-staged flash upload: POST /upload/sd/<name> --------------
  * Stores a staged flash image (checksum-corrected ROM ++ SBL, produced host-side
  * by wican_sd_package.py) to /sdcard/roms/<name> over reliable TCP, then reports
@@ -2170,23 +1916,6 @@ static const httpd_uri_t load_pid_auto_uri = {
      * context to demonstrate it's usage */
     .user_ctx  = NULL
 };
-static const httpd_uri_t load_pid_auto_conf_uri = {
-    .uri       = "/load_auto_pid_car_data",
-    .method    = HTTP_GET,
-    .handler   = load_pid_auto_config_handler,
-    /* Let's pass response string in user
-     * context to demonstrate it's usage */
-    .user_ctx  = NULL
-};
-static const httpd_uri_t load_car_config_uri = {
-    .uri       = "/load_car_config",
-    .method    = HTTP_GET,
-    .handler   = load_car_config_handler,
-    /* Let's pass response string in user
-     * context to demonstrate it's usage */
-    .user_ctx  = NULL
-};
-
 static const httpd_uri_t check_status_uri = {
     .uri       = "/check_status",
     .method    = HTTP_GET,
@@ -2234,25 +1963,11 @@ static const httpd_uri_t store_auto_data_uri = {
      * context to demonstrate it's usage */
     .user_ctx  = NULL
 };
-static const httpd_uri_t upload_car_data = {
-    .uri       = "/upload/car_data.json",   // Match all URIs of type /upload/path/to/file
-    .method    = HTTP_POST,
-    .handler   = upload_car_data_handler,
-    .user_ctx  = &server_data    // Pass server data as context
-};
 static const httpd_uri_t upload_sd_uri = {
     .uri       = "/upload/sd/*",   // NC Flash SD-staged flash image upload
     .method    = HTTP_POST,
     .handler   = upload_sd_handler,
     .user_ctx  = &server_data
-};
-static const httpd_uri_t store_car_data_uri = {
-    .uri       = "/store_car_data",
-    .method    = HTTP_POST,
-    .handler   = store_car_data_handler,
-    /* Let's pass response string in user
-     * context to demonstrate it's usage */
-    .user_ctx  = NULL
 };
 static const httpd_uri_t system_commands = {
     .uri       = "/system_commands",   // Match all URIs of type /upload/path/to/file
@@ -3207,11 +2922,7 @@ static void register_server_uris(void)
 	httpd_register_uri_handler(server, &system_reboot);
 	httpd_register_uri_handler(server, &store_auto_data_uri);
 	httpd_register_uri_handler(server, &load_pid_auto_uri);
-	httpd_register_uri_handler(server, &load_pid_auto_conf_uri);
-	httpd_register_uri_handler(server, &upload_car_data);
 	httpd_register_uri_handler(server, &upload_sd_uri);
-	httpd_register_uri_handler(server, &load_car_config_uri);
-	httpd_register_uri_handler(server, &store_car_data_uri);
 	httpd_register_uri_handler(server, &system_commands);
 	httpd_register_uri_handler(server, &scan_available_pids_uri);
 	httpd_register_uri_handler(server, &std_pid_info);

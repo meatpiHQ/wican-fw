@@ -97,27 +97,6 @@ async function checkFirmwareUpdate() {
         document.getElementById("submit_button").disabled = true;
         setRTCTime();
     });
-    let latest_car_models = null;
-    let bleAlertShown = false;
-    function loadCarModels(data) {
-        const carModelSelect = document.getElementById("car_model");
-        if (data && Array.isArray(data.supported)) {
-            carModelSelect.innerHTML = "";
-            data.supported.forEach(model => {
-                const option = document.createElement("option");
-                option.value = model;
-                option.text = model;
-                carModelSelect.appendChild(option);
-            });
-        } else {
-            console.error("Invalid data format or missing 'supported' property.");
-        }
-        toggleCarModel();
-        toggleSendToFields();
-        toggleStandardPIDOptions();
-        toggleSmartConnectConfig();
-    }
-
     function setRTCTime() {
         const now = new Date();
         
@@ -244,48 +223,6 @@ async function checkFirmwareUpdate() {
         return date.toLocaleString();
     }
 
-    async function fetchVehicleProfiles() {
-        try {
-            if (!navigator.onLine) {
-                throw new Error('No internet connection');
-            }
-            
-            const response = await fetch('https://raw.githubusercontent.com/meatpiHQ/wican-fw/main/vehicle_profiles.json');
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-            const data = await response.json();
-            console.log(data);
-            latest_car_models = data;
-            const carModels = [];
-            carModels.push("Not Selected");
-            if (data && Array.isArray(data.cars)) {
-                data.cars.forEach(car => {
-                    if (car.car_model) {
-                        carModels.push(car.car_model);
-                    }
-                });
-            }
-            console.log(carModels);
-            var mod = { "supported": carModels };
-            loadCarModels(mod);
-            enableAutoStoreButton();
-            
-        } catch (error) {
-            console.error('There was a problem with the fetch operation:', error);
-            showNotification("Unable to fetch vehicle_profiles.json. " + error.message, "red");
-        }
-    }
-
-    function toggleCarModel() {
-        const carSpecific = document.getElementById("car_specific").value;
-        const carModelSelect = document.getElementById("car_model");
-        if (carSpecific === "disable") {
-            carModelSelect.disabled = true;
-        } else {
-            carModelSelect.disabled = false;
-        }
-    }
     function toggleStandardPIDOptions() {
         const standardPidsSelect = document.getElementById("standard_pids");
         const ecuProtocolSelect = document.getElementById("ecu_protocol");
@@ -378,18 +315,6 @@ async function checkFirmwareUpdate() {
         submit_enable();
     }
 
-    function toggleGroupApiToken() {
-        // Legacy UI toggle; safely no-op if elements are not present
-        const typeEl = document.getElementById('group_dest_type');
-        const row = document.getElementById('group_api_token_row');
-        if (!typeEl || !row) return;
-
-        const type = typeEl.value;
-        const needsToken = (type === 'HTTP' || type === 'HTTPS' || type === 'ABRP_API');
-        row.style.display = needsToken ? 'table-row' : 'none';
-    }
-    
-    // Fallback Networks UI helpers
     function renderFallbackNetworks(list) {
         const container = document.getElementById('fallback_rows');
         if (!container) return;
@@ -438,202 +363,6 @@ async function checkFirmwareUpdate() {
         if (!addBtn) return;
         const count = document.querySelectorAll('#fallback_rows .fallback-row').length;
         addBtn.disabled = count >= 5 || document.getElementById('wifi_mode').value === 'SmartConnect';
-    }
-
-    function loadLocalCarModels() {
-        const fileInput = document.getElementById("car_data_file");
-
-        if (fileInput.files.length == 0) {
-            showNotification("No files selected!", "red");
-            return;
-        }
-
-        const file = fileInput.files[0];
-
-        const reader = new FileReader();
-        reader.onload = async function(event) {
-            try {
-                const jsonData = JSON.parse(event.target.result);
-                let data;
-                const isMultiCar = (jsonData && Array.isArray(jsonData.cars));
-                const isSingleCar = (jsonData && jsonData.car_model && Array.isArray(jsonData.pids));
-
-                const looksLikeShorthandSingleProfile = (() => {
-                    if (!isSingleCar) return false;
-                    for (const pid of jsonData.pids) {
-                        if (!pid || pid.parameters === undefined || pid.parameters === null) continue;
-                        if (Array.isArray(pid.parameters)) return false; // already in target format
-                        if (typeof pid.parameters !== 'object') continue;
-                        const values = Object.values(pid.parameters);
-                        // Shorthand single-profile format maps NAME -> "expression" (string)
-                        if (values.some(v => typeof v === 'string')) return true;
-                    }
-                    return false;
-                })();
-
-                if (isMultiCar) {
-                    data = jsonData;
-                } else if (looksLikeShorthandSingleProfile) {
-                    showNotification("Shorthand single-profile detected. Loading parameter metadata...", "blue");
-                    try {
-                        const paramsResponse = await fetch('https://raw.githubusercontent.com/meatpiHQ/wican-fw/main/.vehicle_profiles/params.json');
-                        const paramsData = await paramsResponse.json();
-                        const convertedCar = convertSingleCarFormat(jsonData, paramsData);
-                        data = { cars: [convertedCar] };
-                        showNotification("Profile loaded successfully!", "green");
-                    } catch (fetchError) {
-                        console.warn('Failed to fetch params.json, using basic conversion:', fetchError);
-                        data = { cars: [convertSingleCarBasic(jsonData)] };
-                        showNotification("Couldn't download params.json for parameter metadata. Make sure you're connected to the internet. Loaded profile without metadata.", "yellow");
-                    }
-                } else if (isSingleCar) {
-                    // Already in vehicle_profiles.json schema; wrap without conversion
-                    data = { cars: [jsonData] };
-                } else {
-                    // Existing fallback
-                    data = jsonData.car_model ? { cars: [jsonData] } : jsonData;
-                }
-                
-                latest_car_models = data;
-                const carModels = [];
-                carModels.push("Not Selected");
-                
-                if (data && Array.isArray(data.cars)) {
-                    data.cars.forEach(car => {
-                        if (car.car_model) {
-                            carModels.push(car.car_model);
-                        }
-                    });
-                }
-                
-                console.log(carModels);
-                var mod = { "supported": carModels };
-                loadCarModels(mod);
-                enableAutoStoreButton();
-
-                // If a single-car profile was uploaded, auto-enable vehicle-specific mode,
-                // select that model, and trigger the change handler to populate PIDs/filters.
-                try {
-                    if (data && Array.isArray(data.cars) && data.cars.length === 1 && data.cars[0]?.car_model) {
-                        const carSpecificEl = document.getElementById('car_specific');
-                        if (carSpecificEl && carSpecificEl.value === 'disable') {
-                            carSpecificEl.value = 'enable';
-                        }
-                        try { toggleCarModel(); } catch(_) {}
-
-                        const carModelEl = document.getElementById('car_model');
-                        if (carModelEl) {
-                            carModelEl.value = data.cars[0].car_model;
-                            carModelEl.dispatchEvent(new Event('change', { bubbles: true }));
-                        }
-
-                        showNotification(`Loaded profile: ${data.cars[0].car_model}`, 'green');
-                    }
-                } catch (e) {
-                    console.warn('Auto-select uploaded car model failed:', e);
-                }
-                
-                if (!jsonData.car_model || !jsonData.pids) {
-                    showNotification("Car models loaded successfully!", "green");
-                }
-            } catch (e) {
-                showNotification("Invalid JSON file!", "red");
-                console.error('JSON parse error:', e);
-            }
-        };
-        reader.readAsText(file);
-    }
-
-    function convertSingleCarFormat(singleCarData, paramsData) {
-        // Convert from shorthand single-profile (NAME -> expression map) to vehicle_profiles.json format
-        const convertedCar = {
-            car_model: singleCarData.car_model,
-            init: singleCarData.init,
-            pids: [],
-            can_filters: Array.isArray(singleCarData.can_filters) ? singleCarData.can_filters : []
-        };
-
-        singleCarData.pids.forEach(pidEntry => {
-            const newPidEntry = {
-                pid: pidEntry.pid,
-                parameters: []
-            };
-
-            if (pidEntry.pid_init) {
-                newPidEntry.pid_init = pidEntry.pid_init;
-            }
-
-            // Convert parameters from object format to array format
-            // If it's already an array (vehicle_profiles.json schema), keep it as-is.
-            if (Array.isArray(pidEntry.parameters)) {
-                newPidEntry.parameters = pidEntry.parameters;
-            } else if (pidEntry.parameters && typeof pidEntry.parameters === 'object') {
-                Object.keys(pidEntry.parameters).forEach(paramName => {
-                    const expression = pidEntry.parameters[paramName];
-                    const paramDef = paramsData?.[paramName] || {};
-                    const settings = paramDef.settings || {};
-
-                    const parameter = {
-                        name: paramName,
-                        expression: expression,
-                        unit: settings.unit || "",
-                        class: settings.class || "none",
-                        min: settings.min ?? "",
-                        max: settings.max ?? "",
-                        type: settings.type || "Default",
-                        period: "5000",
-                        send_to: ""
-                    };
-
-                    newPidEntry.parameters.push(parameter);
-                });
-            }
-
-            convertedCar.pids.push(newPidEntry);
-        });
-
-        return convertedCar;
-    }
-
-    function convertSingleCarBasic(singleCarData) {
-        // Basic conversion without parameter enrichment (fallback)
-        const convertedCar = {
-            car_model: singleCarData.car_model,
-            init: singleCarData.init,
-            pids: [],
-            can_filters: Array.isArray(singleCarData.can_filters) ? singleCarData.can_filters : []
-        };
-
-        singleCarData.pids.forEach(pidEntry => {
-            const newPidEntry = {
-                pid: pidEntry.pid,
-                parameters: []
-            };
-
-            if (pidEntry.pid_init) {
-                newPidEntry.pid_init = pidEntry.pid_init;
-            }
-
-            // Convert parameters from object format to array format (basic)
-            if (pidEntry.parameters && typeof pidEntry.parameters === 'object') {
-                Object.keys(pidEntry.parameters).forEach(paramName => {
-                    const expression = pidEntry.parameters[paramName];
-                    
-                    const parameter = {
-                        name: paramName,
-                        expression: expression,
-                        unit: "",
-                        class: "none"
-                    };
-
-                    newPidEntry.parameters.push(parameter);
-                });
-            }
-
-            convertedCar.pids.push(newPidEntry);
-        });
-
-        return convertedCar;
     }
 
     function addRowAutoTable() {
@@ -686,9 +415,7 @@ async function scanAvailablePIDs() {
 const pidEntryStyles = `
     .pid-entry,
     .std-pid-entry,
-    .specific-pid-entry,
-    .custom-canfilter-entry,
-    .specific-canfilter-entry {
+    .custom-canfilter-entry {
         border: 1px solid #e2e8f0;
         background: #fff;
         border-radius: 6px;
@@ -790,15 +517,6 @@ async function runPidTest(kind, entry) {
         payload.name = name.trim();
         payload.protocol = protocol;
         if (rxheader.trim()) payload.rxheader = rxheader.trim();
-    } else if (kind === 'vehicle') {
-        const init = document.getElementById('specific_init')?.value || '';
-        const pid = entry.querySelector('.pid-input')?.value || '';
-        const pidInit = entry.querySelector('.pid-init-input')?.value || '';
-        const expr = entry.querySelector('.expression-input')?.value || '';
-        if (init.trim()) payload.init = init;
-        payload.pid = pid.trim();
-        if (pidInit.trim()) payload.pid_init = pidInit;
-        payload.expr = expr;
     } else if (kind === 'custom') {
         const init = document.getElementById('initialisation')?.value || '';
         const pid = entry.querySelector('.pid-input')?.value || '';
@@ -989,24 +707,10 @@ function addCollapsibleRow(rowData = {}) {
                     <td><input type="number" class="period-input" value="${rowData.Period || ''}" 
                         placeholder="ms"></td>
                 </tr>
-                <tr>
-                    <td>Destination Type:</td>
-                    <td><select class="type-select">
-                        <option value="Default" ${rowData.Type === 'Default' ? 'selected' : ''}>Default</option>
-                        <option value="MQTT_Topic" ${rowData.Type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
-                        <option value="MQTT_WallBox" ${rowData.Type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
-                    </select></td>
-                </tr>
-                <tr>
-                    <td>Send_to:</td>
-                    <td><input type="text" class="send-to-input" value="${rowData.Send_to || ''}"
-                        placeholder="Enter destination"></td>
-                </tr>
             </table>
         </div>
     `;
 console.log("addCollapsibleRow:", rowData);
-console.log("Send_to value:", rowData.Send_to);
 const style = document.createElement('style');
 style.textContent = pidEntryStyles;
 document.head.appendChild(style);
@@ -1101,19 +805,6 @@ if (selectedPID) {
                     <td><input type="number" class="period-input" value="${rowData.Period || '1000'}" 
                         min="100" max="120000"></td>
                 </tr>
-                <tr>
-                    <td>Destination Type:</td>
-                    <td><select class="type-select">
-                        <option value="Default" ${rowData.Type === 'Default' ? 'selected' : ''}>Default</option>
-                        <option value="MQTT_Topic" ${rowData.Type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
-                        <option value="MQTT_WallBox" ${rowData.Type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
-                    </select></td>
-                </tr>
-                <tr>
-                    <td>Destination:</td>
-                    <td><input type="text" class="send-to-input" value="${rowData.Send_to || ''}" 
-                        placeholder="Enter destination"></td>
-                </tr>
             </table>
         </div>
     `;
@@ -1142,130 +833,6 @@ if (selectedPID) {
     testBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         runPidTest('std', entry);
-    });
-
-    const toggleCollapse = (e) => {
-        e.stopPropagation();
-        const isHidden = content.style.display === 'none';
-        content.style.display = isHidden ? 'block' : 'none';
-        collapseBtn.textContent = isHidden ? '▲' : '▼';
-    };
-
-    header.addEventListener('click', toggleCollapse);
-    collapseBtn.addEventListener('click', toggleCollapse);
-
-    entry.querySelectorAll('input, select').forEach(input => {
-        input.addEventListener('input', enableAutoStoreButton);
-    });
-
-    container.appendChild(entry);
-    enableAutoStoreButton();
-}
-}
-
-function addCarParameter(rowData = {}) {
-if (rowData.name) {
-    const container = document.querySelector('.specific-pid-entries');
-    const entry = document.createElement('div');
-    entry.className = 'specific-pid-entry';
-
-    entry.innerHTML = `
-        <div class="pid-header">
-            <div class="header-left">
-                <button type="button" class="collapse-btn">▼</button>
-                <span class="pid-title">${rowData.name}</span>
-            </div>
-            <div class="header-right">
-                <span class="test-result status-indicator" style="display:none"></span>
-                <button type="button" class="test-btn">Test</button>
-                <label class="enabled-label" style="display:flex; align-items:center; gap:4px; font-size:0.7rem;">
-                    <input type="checkbox" class="enabled-chk" ${(rowData.enabled === false || rowData.Enabled === false) ? '' : 'checked'}>
-                    Enabled
-                </label>
-                <button type="button" class="delete-btn">Delete</button>
-            </div>
-        </div>
-        <div class="pid-content" style="display: none;">
-            <table class="compact-form-table">
-                <tr>
-                    <td>Name:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td>
-                    <td><input type="text" class="name-input" value="${rowData.name}"></td>
-                </tr>
-                <tr>
-                    <td>PID:</td>
-                    <td><input type="text" class="pid-input" value="${rowData.pid || ''}" placeholder="PID"></td>
-                </tr>
-                <tr>
-                    <td>PID Init:</td>
-                    <td><input type="text" class="pid-init-input" value="${rowData.pid_init || ''}" placeholder="Init"></td>
-                </tr>
-                <tr>
-                    <td>Expression:</td>
-                    <td><input type="text" class="expression-input" value="${rowData.expression || ''}" placeholder="Expression"></td>
-                </tr>
-                <tr>
-                    <td>Unit:</td>
-                    <td><input type="text" class="unit-input" value="${rowData.unit || ''}" placeholder="Unit"></td>
-                </tr>
-                <tr>
-                    <td>Class:</td>
-                    <td><input type="text" class="class-input" value="${rowData.class || ''}" placeholder="Class"></td>
-                </tr>
-
-                <tr>
-                    <td>Min Value:</td>
-                    <td><input type="number" class="min-input" value="${rowData.min || ''}" step="0.01" placeholder="Min"></td>
-                </tr>
-                <tr>
-                    <td>Max Value:</td>
-                    <td><input type="number" class="max-input" value="${rowData.max || ''}" step="0.01" placeholder="Max"></td>
-                </tr>
-                <tr>
-                    <td>Period(ms):</td>
-                    <td><input type="number" class="period-input" value="${rowData.period || '5000'}" min="100" max="60000"></td>
-                </tr>
-                <tr>
-                    <td>Destination Type:</td>
-                    <td><select class="type-select">
-                        <option value="Default" ${rowData.type === 'Default' ? 'selected' : ''}>Default</option>
-                        <option value="MQTT_Topic" ${rowData.type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
-                        <option value="MQTT_WallBox" ${rowData.type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
-                    </select></td>
-                </tr>
-                <tr>
-                    <td>Destination:</td>
-                    <td><input type="text" class="send-to-input" value="${rowData.send_to || ''}" 
-                        placeholder="Destination"></td>
-                </tr>
-            </table>
-        </div>
-    `;
-
-
-
-    const style = document.createElement('style');
-    style.textContent = pidEntryStyles;
-    document.head.appendChild(style);
-    const header = entry.querySelector('.pid-header');
-    const deleteBtn = entry.querySelector('.delete-btn');
-    const testBtn = entry.querySelector('.test-btn');
-    const collapseBtn = entry.querySelector('.collapse-btn');
-    const content = entry.querySelector('.pid-content');
-    const enabledChk = entry.querySelector('.enabled-chk');
-
-    if (enabledChk) {
-        enabledChk.addEventListener('click', (e) => e.stopPropagation());
-        enabledChk.addEventListener('change', enableAutoStoreButton);
-    }
-
-    deleteBtn.addEventListener('click', () => {
-        entry.remove();
-        enableAutoStoreButton();
-    });
-
-    testBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        runPidTest('vehicle', entry);
     });
 
     const toggleCollapse = (e) => {
@@ -1377,18 +944,6 @@ function addCustomCanFilterEntry(rowData = {}) {
                     <td>Period(ms):</td>
                     <td><input type="number" class="period-input" value="${safe(p.period || '5000')}" min="100" max="60000"></td>
                 </tr>
-                <tr>
-                    <td>Destination Type:</td>
-                    <td><select class="type-select">
-                        <option value="Default" ${(p.type === 'Default' || !p.type) ? 'selected' : ''}>Default</option>
-                        <option value="MQTT_Topic" ${p.type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
-                        <option value="MQTT_WallBox" ${p.type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
-                    </select></td>
-                </tr>
-                <tr>
-                    <td>Destination:</td>
-                    <td><input type="text" class="send-to-input" value="${safe(p.send_to)}" placeholder="Destination"></td>
-                </tr>
             </table>
         </div>
     `;
@@ -1446,144 +1001,10 @@ function addCustomCanFilterEntry(rowData = {}) {
     enableAutoStoreButton();
 }
 
-function addVehicleSpecificCanFilterEntry(rowData = {}) {
-    const container = document.querySelector('.specific-canfilter-entries');
-    if (!container) return;
-
-    const frameIdValue = (rowData.frame_id !== undefined && rowData.frame_id !== null)
-        ? (typeof rowData.frame_id === 'number' ? formatFrameIdForUi(rowData.frame_id) : String(rowData.frame_id))
-        : '';
-    const p = rowData.parameter || (Array.isArray(rowData.parameters) ? rowData.parameters[0] : {}) || {};
-
-    const entry = document.createElement('div');
-    entry.className = 'specific-canfilter-entry';
-
-    const safe = (v)=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    const titleText = `${frameIdValue || 'Frame'} - ${(p.name || rowData.name || 'New Parameter')}`;
-
-    entry.innerHTML = `
-        <div class="pid-header">
-            <div class="header-left">
-                <button type="button" class="collapse-btn">▼</button>
-                <span class="pid-title">${safe(titleText)}</span>
-            </div>
-            <div class="header-right">
-                <span class="test-result status-indicator" style="display:none"></span>
-                <button type="button" class="test-btn">Test</button>
-                <label class="enabled-label" style="display:flex; align-items:center; gap:4px; font-size:0.7rem;">
-                    <input type="checkbox" class="enabled-chk" ${(p.enabled === false || rowData.enabled === false) ? '' : 'checked'}>
-                    Enabled
-                </label>
-                <button type="button" class="delete-btn">Delete</button>
-            </div>
-        </div>
-        <div class="pid-content" style="display: none;">
-            <table class="compact-form-table">
-                <tr>
-                    <td>Frame ID:</td>
-                    <td><input type="text" class="frame-id-input" value="${safe(frameIdValue)}" placeholder="0x7E8 or 2024"></td>
-                </tr>
-                <tr>
-                    <td>Name:</td>
-                    <td><input type="text" class="name-input" value="${safe(p.name || rowData.name || 'New Parameter')}" placeholder="Parameter Name"></td>
-                </tr>
-                <tr>
-                    <td>Expression:</td>
-                    <td><input type="text" class="expression-input" value="${safe(p.expression)}" placeholder="Expression"></td>
-                </tr>
-                <tr>
-                    <td>Unit:</td>
-                    <td><input type="text" class="unit-input" value="${safe(p.unit)}" placeholder="Unit"></td>
-                </tr>
-                <tr>
-                    <td>Class:</td>
-                    <td><input type="text" class="class-input" value="${safe(p.class)}" placeholder="Class"></td>
-                </tr>
-                <tr>
-                    <td>Min Value:</td>
-                    <td><input type="number" class="min-input" value="${safe(p.min)}" step="0.01" placeholder="Min"></td>
-                </tr>
-                <tr>
-                    <td>Max Value:</td>
-                    <td><input type="number" class="max-input" value="${safe(p.max)}" step="0.01" placeholder="Max"></td>
-                </tr>
-                <tr>
-                    <td>Period(ms):</td>
-                    <td><input type="number" class="period-input" value="${safe(p.period || '5000')}" min="100" max="60000"></td>
-                </tr>
-                <tr>
-                    <td>Destination Type:</td>
-                    <td><select class="type-select">
-                        <option value="Default" ${(p.type === 'Default' || !p.type) ? 'selected' : ''}>Default</option>
-                        <option value="MQTT_Topic" ${p.type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
-                        <option value="MQTT_WallBox" ${p.type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
-                    </select></td>
-                </tr>
-                <tr>
-                    <td>Destination:</td>
-                    <td><input type="text" class="send-to-input" value="${safe(p.send_to)}" placeholder="Destination"></td>
-                </tr>
-            </table>
-        </div>
-    `;
-
-    const style = document.createElement('style');
-    style.textContent = pidEntryStyles;
-    document.head.appendChild(style);
-
-    const header = entry.querySelector('.pid-header');
-    const deleteBtn = entry.querySelector('.delete-btn');
-    const testBtn = entry.querySelector('.test-btn');
-    const collapseBtn = entry.querySelector('.collapse-btn');
-    const content = entry.querySelector('.pid-content');
-    const titleEl = entry.querySelector('.pid-title');
-    const enabledChk = entry.querySelector('.enabled-chk');
-
-    if (enabledChk) {
-        enabledChk.addEventListener('click', (e) => e.stopPropagation());
-        enabledChk.addEventListener('change', enableAutoStoreButton);
-    }
-
-    deleteBtn.addEventListener('click', () => {
-        entry.remove();
-        enableAutoStoreButton();
-    });
-
-    if (testBtn) {
-        testBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            runCanFilterTest('vehicle', entry);
-        });
-    }
-
-    const toggleCollapse = (e) => {
-        e.stopPropagation();
-        const isHidden = content.style.display === 'none';
-        content.style.display = isHidden ? 'block' : 'none';
-        collapseBtn.textContent = isHidden ? '▲' : '▼';
-    };
-    header.addEventListener('click', toggleCollapse);
-    collapseBtn.addEventListener('click', toggleCollapse);
-
-    const updateTitle = () => {
-        const fid = entry.querySelector('.frame-id-input')?.value?.trim() || 'Frame';
-        const nm = entry.querySelector('.name-input')?.value?.trim() || 'New Parameter';
-        titleEl.textContent = `${fid} - ${nm}`;
-    };
-
-    entry.querySelectorAll('input, select').forEach(input => {
-        input.addEventListener('input', () => { updateTitle(); enableAutoStoreButton(); });
-        input.addEventListener('change', () => { updateTitle(); enableAutoStoreButton(); });
-    });
-
-    container.appendChild(entry);
-    enableAutoStoreButton();
-}
-
 function addCustomFilterRow() {
     addCustomCanFilterEntry({
         frame_id: '',
-        parameter: { name: 'New Parameter', expression: '', unit: '', class: '', period: '5000', min: '', max: '', type: 'Default', send_to: '' }
+        parameter: { name: 'New Parameter', expression: '', unit: '', class: '', period: '5000', min: '', max: '' }
     });
 }
 
@@ -1682,306 +1103,6 @@ function addCalculatedRow() {
     addCalculatedChannelEntry({ name: 'New Channel', expression: '', unit: '', enabled: true });
 }
 
-window.automateDestinations = [];
-window.certManagerSetsCache = null;
-
-async function fetchCertSetsForDestinations() {
-if (window.certManagerSetsCache) return window.certManagerSetsCache;
-try {
-    const r = await fetch('/cert_manager/sets');
-    if (!r.ok) throw new Error('cert sets HTTP '+r.status);
-    const arr = await r.json();
-    if (Array.isArray(arr)) {
-        window.certManagerSetsCache = ['default'].concat(arr.map(s=>s.name).filter(Boolean));
-    } else {
-        window.certManagerSetsCache = ['default'];
-    }
-} catch(e){
-    console.warn('Failed to load cert sets', e);
-    window.certManagerSetsCache = ['default'];
-}
-return window.certManagerSetsCache;
-}
-
-function truncateMiddle(str, max=40){
-if (!str) return '';
-if (str.length <= max) return str;
-const half = Math.floor((max-3)/2);
-return str.slice(0,half)+'...'+str.slice(-half);
-}
-
-function renderDestinations(){
-const container = document.getElementById('destinations_container');
-if(!container) return;
-container.innerHTML='';
-if(!Array.isArray(window.automateDestinations)) window.automateDestinations=[];
-const ABRP_DEFAULT_URL = 'https://api.iternio.com/1/tlm/send';
-window.automateDestinations.forEach((d,idx)=>{
-    const wrap = document.createElement('div');
-    wrap.className='dest-entry';
-    wrap.style.cssText='border:1px solid #e2e8f0; background:#fff; border-radius:6px; margin-bottom:8px;';
-    const header = document.createElement('div');
-    header.className='dest-header';
-    header.style.cssText='display:flex; align-items:center; justify-content:space-between; cursor:pointer; padding:6px 8px; background:#f1f5f9; border-radius:6px 6px 0 0;';
-    const left = document.createElement('div');
-    left.style.cssText='display:flex; align-items:center; gap:8px; flex:1;';
-    const collapseBtn = document.createElement('button');
-const isCollapsed = !!d.collapsed;
-collapseBtn.textContent = isCollapsed ? '▼' : '▲';
-// Match collapsible arrow color with other automate tab collapsibles
-collapseBtn.style.cssText='border:none; background:transparent; font-size:0.75rem; cursor:pointer; padding:2px 4px; color:#334155;';
-    const title = document.createElement('div');
-    title.style.cssText='font-weight:600; font-size:0.8rem; flex:1;';
-    title.textContent=`${idx+1}. ${d.type} - ${truncateMiddle(d.destination||'(unset)',50)}`;
-    const enabledLabel = document.createElement('label');
-    enabledLabel.style.cssText='display:flex; align-items:center; gap:4px; font-size:0.7rem;';
-    const enabledChk = document.createElement('input');
-    enabledChk.type='checkbox';
-    enabledChk.checked = d.enabled !== false;
-    enabledChk.onchange = ()=>{ d.enabled = enabledChk.checked; enableAutoStoreButton(); };
-    // Runtime publish stats (OK/Fail) - shown before Enabled checkbox
-    const statsSpan = document.createElement('span');
-    statsSpan.className = 'dest-stats';
-    statsSpan.dataset.idx = String(idx);
-    statsSpan.style.cssText = 'margin-right:8px; color:#475569; font-size:0.7rem; white-space:nowrap;';
-    const ok0 = Number(d.success_count || 0);
-    const fail0 = Number(d.fail_count || 0);
-    statsSpan.textContent = `OK: ${ok0} Fail: ${fail0}`;
-    enabledLabel.appendChild(statsSpan);
-    enabledLabel.appendChild(enabledChk);
-    enabledLabel.appendChild(document.createTextNode('Enabled'));
-    const delBtn = document.createElement('button');
-    delBtn.textContent='Delete';
-delBtn.style.cssText='background:#dc2626; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.65rem; margin-left:12px;';
-    delBtn.onclick=(e)=>{ e.stopPropagation(); if(confirm('Delete destination '+(idx+1)+'?')){ window.automateDestinations.splice(idx,1); renderDestinations(); enableAutoStoreButton(); }};
-    left.appendChild(collapseBtn); left.appendChild(title);
-    header.appendChild(left);
-    header.appendChild(enabledLabel);
-    header.appendChild(delBtn);
-const content = document.createElement('div');
-content.style.cssText='padding:8px 10px;'+(isCollapsed?'display:none;':'display:block;');
-    content.innerHTML=`<table style="width:100%; border-collapse:collapse; font-size:0.75rem;">
-        <tr><td style="width:110px;">Type:</td><td>
-            <select class="dest-type" style="width:180px; box-sizing:border-box;">
-                <option value="Default" ${d.type==='Default'?'selected':''}>Default</option>
-                <option value="MQTT_Topic" ${d.type==='MQTT_Topic'?'selected':''}>MQTT Topic</option>
-                <option value="HTTP" ${d.type==='HTTP'?'selected':''}>HTTP POST</option>
-                <option value="HTTPS" ${d.type==='HTTPS'?'selected':''}>HTTPS POST</option>
-                <option value="ABRP_API" ${d.type==='ABRP_API'?'selected':''}>ABRP API</option>
-            </select>
-        </td></tr>
-        <tr><td style="width:110px;">Cycle (ms):</td><td><input type="number" class="dest-cycle" value="${d.cycle}" min="0" style="width:180px; box-sizing:border-box;"/></td></tr>
-        <tr><td>Destination:</td><td><input type="text" class="dest-url" value="${(d.destination||'').replace(/"/g,'&quot;')}" placeholder="URL / topic" maxlength="1024" style="width:100%; box-sizing:border-box;"/></td></tr>
-        <tr class="row-api-token" ${d.type==='ABRP_API'?'':'style="display:none;"'}><td>API Token:</td><td><input type="text" class="dest-api-token" value="${(d.api_token||'').replace(/"/g,'&quot;')}" placeholder="ABRP token" maxlength="512" style="width:100%; box-sizing:border-box;"/></td></tr>
-        <tr class="row-abrp-api-key" ${d.type==='ABRP_API'?'':'style="display:none;"'}><td>API Key:</td><td><input type="text" class="dest-abrp-api-key" value="${(d.auth?.api_key||'').replace(/"/g,'&quot;')}" placeholder="ABRP api_key" maxlength="512" style="width:100%; box-sizing:border-box;"/></td></tr>
-        <tr class="row-auth" ${((d.type==='HTTP'||d.type==='HTTPS')?'':'style=\"display:none;\"')}><td>Auth:</td><td>
-            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                <select class="auth-type" style="width:200px;">
-                    <option value="none" ${(d.auth?.type||'none')==='none'?'selected':''}>None</option>
-                    <option value="bearer" ${(d.auth?.type)==='bearer'?'selected':''}>Bearer Token</option>
-                    <option value="api_key_header" ${(d.auth?.type)==='api_key_header'?'selected':''}>API Key (Header)</option>
-                    <option value="api_key_query" ${(d.auth?.type)==='api_key_query'?'selected':''}>API Key (Query)</option>
-                    <option value="basic" ${(d.auth?.type)==='basic'?'selected':''}>Basic (User/Pass)</option>
-                </select>
-                <div class="row-bearer" style="${(d.auth?.type)==='bearer'?'':'display:none;'}; flex:1;">
-                    <input type="text" class="auth-bearer-token" placeholder="Bearer token" value="${(d.auth?.bearer||d.api_token||'').replace(/"/g,'&quot;')}" style="width:100%;" maxlength="512"/>
-                </div>
-                <div class="row-apikey-header" style="${(d.auth?.type)==='api_key_header'?'':'display:none;'}; display:flex; gap:6px; flex:1;">
-                    <input type="text" class="auth-api-header-name" placeholder="Header name (e.g. x-api-key)" value="${(d.auth?.api_key_header_name||'x-api-key').replace(/"/g,'&quot;')}" style="width:220px;" maxlength="64"/>
-                    <input type="text" class="auth-api-key" placeholder="API key value" value="${(d.auth?.api_key||'').replace(/"/g,'&quot;')}" style="flex:1;" maxlength="512"/>
-                </div>
-                <div class="row-apikey-query" style="${(d.auth?.type)==='api_key_query'?'':'display:none;'}; display:flex; gap:6px; flex:1;">
-                    <input type="text" class="auth-api-query-name" placeholder="Query name (e.g. api_key)" value="${(d.auth?.api_key_query_name||'').replace(/"/g,'&quot;')}" style="width:220px;" maxlength="64"/>
-                    <input type="text" class="auth-api-key" placeholder="API key value" value="${(d.auth?.api_key||'').replace(/"/g,'&quot;')}" style="flex:1;" maxlength="512"/>
-                </div>
-                <div class="row-basic" style="${(d.auth?.type)==='basic'?'':'display:none;'}; display:flex; gap:6px; flex:1;">
-                    <input type="text" class="auth-basic-user" placeholder="Username" value="${(d.auth?.basic_username||'').replace(/"/g,'&quot;')}" style="width:200px;" maxlength="128"/>
-                    <input type="text" class="auth-basic-pass" placeholder="Password" value="${(d.auth?.basic_password||'').replace(/"/g,'&quot;')}" style="width:200px;" maxlength="128"/>
-                </div>
-            </div>
-        </td></tr>
-        <tr class="row-query-params" ${((d.type==='HTTP'||d.type==='HTTPS')?'':'style=\"display:none;\"')}><td>Query Params:</td><td>
-            <div class="qp-container" style="display:flex; flex-direction:column; gap:6px; margin-bottom:6px;"></div>
-            <button type="button" class="qp-add" style="background:#334155; font-size:0.7rem; padding:4px 8px;">Add param</button>
-        </td></tr>
-        <tr class="row-cert-set" ${d.type==='HTTPS'?'':'style="display:none;"'}><td>Cert Set:</td><td><select class="dest-cert-set" style="width:180px;"></select></td></tr>
-    </table>`;
-    function toggleCollapse(e){
-        e.stopPropagation();
-        const currentlyHidden = content.style.display==='none';
-        const newHidden = !currentlyHidden; // we will toggle
-        content.style.display = newHidden ? 'none' : 'block';
-        collapseBtn.textContent = newHidden ? '▼' : '▲';
-        d.collapsed = newHidden; // persist state
-    }
-    header.onclick=toggleCollapse; collapseBtn.onclick=toggleCollapse;
-    wrap.appendChild(header); wrap.appendChild(content); container.appendChild(wrap);
-    const typeSel = content.querySelector('.dest-type');
-    const urlIn = content.querySelector('.dest-url');
-    const cycleIn = content.querySelector('.dest-cycle');
-    const apiRow = content.querySelector('.row-api-token');
-    const apiIn = content.querySelector('.dest-api-token');
-    const abrpKeyRow = content.querySelector('.row-abrp-api-key');
-    const abrpKeyIn = content.querySelector('.dest-abrp-api-key');
-    const authRow = content.querySelector('.row-auth');
-    const qpRow = content.querySelector('.row-query-params');
-    const certRow = content.querySelector('.row-cert-set');
-    const certSel = content.querySelector('.dest-cert-set');
-    const initialCertSet = d.cert_set || 'default';
-    // Auth controls
-    d.auth = d.auth || { type: 'none' };
-    d.query_params = Array.isArray(d.query_params) ? d.query_params : [];
-    const authTypeSel = content.querySelector('.auth-type');
-    const rowBearer = content.querySelector('.row-bearer');
-    const bearerIn = content.querySelector('.auth-bearer-token');
-    const rowApiHdr = content.querySelector('.row-apikey-header');
-    const apiHeaderNameIn = content.querySelector('.auth-api-header-name');
-    const apiKeyInputs = content.querySelectorAll('.auth-api-key');
-    const rowApiQry = content.querySelector('.row-apikey-query');
-    const apiQueryNameIn = content.querySelector('.auth-api-query-name');
-    const rowBasic = content.querySelector('.row-basic');
-    const basicUserIn = content.querySelector('.auth-basic-user');
-    const basicPassIn = content.querySelector('.auth-basic-pass');
-    const qpContainer = content.querySelector('.qp-container');
-    const qpAddBtn = content.querySelector('.qp-add');
-
-    function updateAuthVisibility(){
-        const t = authTypeSel ? authTypeSel.value : 'none';
-        if(rowBearer) rowBearer.style.display = (t==='bearer')? 'flex':'none';
-        if(rowApiHdr) rowApiHdr.style.display = (t==='api_key_header')? 'flex':'none';
-        if(rowApiQry) rowApiQry.style.display = (t==='api_key_query')? 'flex':'none';
-        if(rowBasic) rowBasic.style.display = (t==='basic')? 'flex':'none';
-    }
-
-    function renderQP(){
-        if(!qpContainer) return;
-        qpContainer.innerHTML = '';
-        d.query_params.forEach((kv, i)=>{
-            const row = document.createElement('div');
-            row.style.cssText = 'display:flex; gap:6px; align-items:center;';
-            row.innerHTML = `
-                <input type="text" class="qp-key" placeholder="key" value="${(kv.key||'').replace(/"/g,'&quot;')}" style="width:160px;" maxlength="64"/>
-                <input type="text" class="qp-value" placeholder="value" value="${(kv.value||'').replace(/"/g,'&quot;')}" style="flex:1;" maxlength="256"/>
-                <button type="button" class="qp-del" style="background:#dc2626; padding:4px 8px; color:#fff; font-size:0.7rem;">Remove</button>
-            `;
-            qpContainer.appendChild(row);
-            const keyIn = row.querySelector('.qp-key');
-            const valIn = row.querySelector('.qp-value');
-            const delBtn = row.querySelector('.qp-del');
-            keyIn.oninput = ()=>{ d.query_params[i].key = keyIn.value.trim(); enableAutoStoreButton(); };
-            valIn.oninput = ()=>{ d.query_params[i].value = valIn.value.trim(); enableAutoStoreButton(); };
-            delBtn.onclick = ()=>{ d.query_params.splice(i,1); renderQP(); enableAutoStoreButton(); };
-        });
-    }
-
-    if(qpAddBtn){ qpAddBtn.onclick = (e)=>{ e.preventDefault(); d.query_params.push({key:'', value:''}); renderQP(); enableAutoStoreButton(); }; }
-    renderQP();
-
-    if(authTypeSel){ authTypeSel.onchange = ()=>{ d.auth.type = authTypeSel.value; updateAuthVisibility(); enableAutoStoreButton(); }; }
-    if(bearerIn){ bearerIn.oninput = ()=>{ d.auth.bearer = bearerIn.value.trim(); d.api_token = bearerIn.value.trim(); enableAutoStoreButton(); }; }
-    if(apiHeaderNameIn){ apiHeaderNameIn.oninput = ()=>{ d.auth.api_key_header_name = apiHeaderNameIn.value.trim(); enableAutoStoreButton(); }; }
-    if(apiKeyInputs && apiKeyInputs.length){ apiKeyInputs.forEach(el=>{ el.oninput = ()=>{ d.auth.api_key = el.value.trim(); enableAutoStoreButton(); }; }); }
-    if(apiQueryNameIn){ apiQueryNameIn.oninput = ()=>{ d.auth.api_key_query_name = apiQueryNameIn.value.trim(); enableAutoStoreButton(); }; }
-    if(basicUserIn){ basicUserIn.oninput = ()=>{ d.auth.basic_username = basicUserIn.value.trim(); enableAutoStoreButton(); }; }
-    if(basicPassIn){ basicPassIn.oninput = ()=>{ d.auth.basic_password = basicPassIn.value; enableAutoStoreButton(); }; }
-    updateAuthVisibility();
-
-    const bind = ()=>{
-        enableAutoStoreButton();
-        d.type = typeSel.value;
-        d.destination = urlIn.value.trim();
-        d.cycle = parseInt(cycleIn.value)||0;
-        if(apiIn) d.api_token = apiIn.value.trim();
-
-        // ABRP: store api_key into d.auth in a predictable way.
-        if (d.type === 'ABRP_API') {
-            const k = abrpKeyIn ? abrpKeyIn.value.trim() : '';
-            d.auth = d.auth || { type: 'none' };
-            // Preserve explicit header-mode configs; otherwise default to query api_key=...
-            if (d.auth.type !== 'api_key_header') {
-                d.auth.type = 'api_key_query';
-                d.auth.api_key_query_name = 'api_key';
-            } else {
-                d.auth.api_key_header_name = d.auth.api_key_header_name || 'Authorization';
-            }
-            d.auth.api_key = k;
-        }
-
-        if(certSel && certSel.options.length > 0){
-            d.cert_set = certSel.value || 'default';
-        }
-        title.textContent = `${idx+1}. ${d.type} - ${truncateMiddle(d.destination||'(unset)',50)}`;
-        apiRow.style.display = (d.type==='ABRP_API')? 'table-row':'none';
-        if (abrpKeyRow) abrpKeyRow.style.display = (d.type==='ABRP_API')? 'table-row':'none';
-        authRow.style.display = ((d.type==='HTTP'||d.type==='HTTPS')? 'table-row':'none');
-        qpRow.style.display = ((d.type==='HTTP'||d.type==='HTTPS')? 'table-row':'none');
-        certRow.style.display = (d.type==='HTTPS')? 'table-row':'none';
-    };
-
-    typeSel.onchange=()=>{
-        // Convenience: when switching to ABRP, prefill the standard telemetry endpoint if empty.
-        if (typeSel.value === 'ABRP_API' && urlIn && urlIn.value.trim() === '') {
-            urlIn.value = ABRP_DEFAULT_URL;
-        }
-        bind();
-    };
-    urlIn.oninput=bind; cycleIn.oninput=bind; if(apiIn) apiIn.oninput=bind; if(abrpKeyIn) abrpKeyIn.oninput=bind; if(certSel) certSel.onchange=bind;
-    // initial toggle
-    bind();
-    fetchCertSetsForDestinations().then(list=>{
-        if(!certSel) return;
-        const safeList = Array.isArray(list) && list.length ? list : ['default'];
-        const desired = (d.cert_set && safeList.includes(d.cert_set)) ? d.cert_set : (safeList.includes(initialCertSet) ? initialCertSet : safeList[0]);
-        certSel.innerHTML = safeList.map(n=>`<option value="${n}" ${desired===n?'selected':''}>${n}</option>`).join('');
-        certSel.value = desired;
-        d.cert_set = certSel.value || 'default';
-    });
-});
-document.getElementById('add_destination_btn').disabled = window.automateDestinations.length>=6;
-}
-
-async function refreshDestinationStats(){
-    if (window._destStatsInFlight) return;
-    window._destStatsInFlight = true;
-    try{
-        const r = await fetch('/api/destinations_stats');
-        if(!r.ok) throw new Error('HTTP '+r.status);
-        const js = await r.json();
-        const arr = Array.isArray(js?.destinations) ? js.destinations : [];
-        // Update model and DOM (without re-rendering)
-        arr.forEach((s, i)=>{
-            const ok = Number(s?.success || 0);
-            const fail = Number(s?.fail || 0);
-            if (Array.isArray(window.automateDestinations) && window.automateDestinations[i]) {
-                window.automateDestinations[i].success_count = ok;
-                window.automateDestinations[i].fail_count = fail;
-            }
-            const el = document.querySelector(`.dest-stats[data-idx="${i}"]`);
-            if (el) el.textContent = `OK: ${ok} Fail: ${fail}`;
-        });
-    }catch(e){
-        // silently ignore; endpoint may not exist on older FW
-        // console.log('dest stats fetch failed', e);
-    }finally{
-        window._destStatsInFlight = false;
-    }
-}
-
-function ensureDestinationStatsRefresh(){
-    if (window._destStatsTimer) return;
-    // Refresh periodically so users can see failures/successes live.
-    window._destStatsTimer = setInterval(refreshDestinationStats, 5000);
-    refreshDestinationStats();
-}
-
-function addDestinationEntry(){
-if(!Array.isArray(window.automateDestinations)) window.automateDestinations=[];
-if(window.automateDestinations.length>=6){ showNotification('Maximum 6 destinations', 'red'); return; }
-window.automateDestinations.push({type:'Default', destination:'', cycle:5000, api_token:'', cert_set:'default', enabled:true, auth:{type:'none'}, query_params:[]});
-renderDestinations();
-enableAutoStoreButton();
-}
-
 function loadAutoTable(jsonData) {
     try {
         console.log("Raw jsonData:", jsonData);
@@ -2013,55 +1134,14 @@ function loadAutoTable(jsonData) {
             }
         };
 
-        setElementValue("car_specific", data.car_specific, 'disable');
-        setElementValue("grouping", data.grouping, 'disable');
         setElementValue("disable_on_sleep_voltage", data.disable_on_sleep_voltage, 'disable');
         setElementValue("pid_polling_min_voltage", data.pid_polling_min_voltage, '13.1');
         const pidMinVoltEl = document.getElementById("pid_polling_min_voltage");
         const pidMinVoltValEl = document.getElementById("pid_polling_min_voltage_value");
         if (pidMinVoltEl && pidMinVoltValEl) pidMinVoltValEl.textContent = pidMinVoltEl.value;
-        // Legacy cycle/destination will be migrated into destinations[0].
-        setElementValue("car_model", data.car_model, '');
         setElementValue("standard_pids", data.standard_pids, 'disable');
         setElementValue("ecu_protocol", data.ecu_protocol, '6');
-        // group_dest_type & group_api_token migrated via destinations array.
 
-        // Destinations migration
-        window.automateDestinations = [];
-        if (Array.isArray(data.destinations) && data.destinations.length) {
-            data.destinations.slice(0,6).forEach(d => {
-                window.automateDestinations.push({
-                    type: d.type || 'Default',
-                    destination: d.destination || '',
-                    cycle: (typeof d.cycle==='number'? d.cycle : parseInt(d.cycle)||5000),
-                    api_token: d.api_token || '',
-                    cert_set: d.cert_set || 'default',
-                    enabled: (d.enabled===false)?false:true,
-                    auth: d.auth || { type: 'none' },
-                    query_params: Array.isArray(d.query_params) ? d.query_params : [],
-                    success_count: Number(d.success_count || 0),
-                    fail_count: Number(d.fail_count || 0)
-                });
-            });
-        } else {
-            window.automateDestinations.push({
-                type: data.group_dest_type || 'Default',
-                destination: data.destination || '',
-                cycle: (typeof data.cycle==='number'? data.cycle : parseInt(data.cycle)||5000),
-                api_token: data.group_api_token || '',
-                cert_set: 'default',
-                enabled: true,
-                auth: { type: 'none' },
-                query_params: [],
-                success_count: 0,
-                fail_count: 0
-            });
-        }
-        // Collapse all destinations on initial load
-        window.automateDestinations.forEach(d=>{ d.collapsed = true; });
-        renderDestinations();
-        ensureDestinationStatsRefresh();
-        
         if (data.pids && Array.isArray(data.pids)) {
             data.pids.forEach((pidData, index) => {
                 console.log(`Loading PID ${index}:`, pidData);
@@ -2075,8 +1155,6 @@ function loadAutoTable(jsonData) {
                     MinValue: pidData.MinValue || '',
                     MaxValue: pidData.MaxValue || '',
                     Period: pidData.Period || '',
-                    Type: pidData.Type || 'Default',
-                    Send_to: pidData.Send_to || '',
                     enabled: pidData.enabled
                 });
             });
@@ -2100,13 +1178,12 @@ function loadAutoTable(jsonData) {
                                 type: param.type,
                                 min: param.min,
                                 max: param.max,
-                                send_to: param.send_to,
                                 enabled: param.enabled
                             }
                         });
                     });
                 } else if (fid !== null) {
-                    addCustomCanFilterEntry({ frame_id: fid, parameter: { name: 'New Parameter', period: '5000', type: 'Default', send_to: '' } });
+                    addCustomCanFilterEntry({ frame_id: fid, parameter: { name: 'New Parameter', period: '5000' } });
                 }
             });
         }
@@ -2118,8 +1195,6 @@ function loadAutoTable(jsonData) {
                     Name: pidData.Name || '',
                     ReceiveHeader: pidData.ReceiveHeader || '',
                     Period: pidData.Period || '',
-                    Type: pidData.Type || 'Default',
-                    Send_to: pidData.Send_to || '',
                     enabled: pidData.enabled
                 });
             });
@@ -2139,21 +1214,6 @@ function loadAutoTable(jsonData) {
 
         requestAnimationFrame(() => {
             try {
-                const carSpecificElement = document.getElementById("car_specific");
-                if (carSpecificElement) {
-                    carSpecificElement.dispatchEvent(new Event('change'));
-                }
-
-                const groupingElement = document.getElementById("grouping");
-                if (groupingElement) {
-                    groupingElement.dispatchEvent(new Event('change'));
-                }
-
-                const groupDestTypeElement = document.getElementById("group_dest_type");
-                if (groupDestTypeElement) {
-                    groupDestTypeElement.dispatchEvent(new Event('change'));
-                }
-
                 const ecuProtocolElement = document.getElementById("ecu_protocol");
                 if (ecuProtocolElement) {
                     ecuProtocolElement.dispatchEvent(new Event('change'));
@@ -2165,7 +1225,6 @@ function loadAutoTable(jsonData) {
                 }
 
                 if (typeof toggleCarModel === 'function') toggleCarModel();
-                if (typeof toggleSendToFields === 'function') toggleSendToFields();
                 if (typeof toggleGroupApiToken === 'function') toggleGroupApiToken();
                 if (typeof toggleStandardPIDOptions === 'function') toggleStandardPIDOptions();
 
@@ -2215,107 +1274,14 @@ async function storeAutoTableData() {
         const standardEntries = document.querySelectorAll('.std-pid-entry');
 
         const initialisationValue = document.getElementById("initialisation")?.value || '';
-        const groupingValue = document.getElementById("grouping")?.value || 'disable';
         const disableOnSleepVoltageValue = document.getElementById("disable_on_sleep_voltage")?.value || 'automate_threshold';
         const pidPollingMinVoltageValueRaw = document.getElementById("pid_polling_min_voltage")?.value;
         const pidPollingMinVoltageValue = (() => {
             const n = parseFloat(pidPollingMinVoltageValueRaw);
             return Number.isFinite(n) ? n : 12.0;
         })();
-        const carSpecificValue = document.getElementById("car_specific")?.value || 'disable';
-        const carModelField = document.getElementById("car_model");
         const standard_pidsValue = document.getElementById("standard_pids")?.value || 'disable';
         const ecu_protocolValue = document.getElementById("ecu_protocol")?.value || '6';
-        const carModelValue = carModelField?.value || '';
-        if (carSpecificValue== "enable" && (!carModelValue || carModelValue.length === 0 || carModelValue === "Not Selected")) {
-            throw new Error("Car model must be selected");
-        }
-
-        let carData = {
-            car_model: carModelValue,
-            init: document.getElementById("specific_init").value,
-            pids: [],
-            can_filters: []
-        };
-
-        const specificPidEntries = document.querySelectorAll('.specific-pid-entry');
-        if (specificPidEntries.length > 0) {
-            carData.pids = Array.from(specificPidEntries).map(entry => {
-                return {
-                    pid: entry.querySelector('.pid-input').value,
-                    pid_init: entry.querySelector('.pid-init-input').value,
-                    enabled: entry.querySelector('.enabled-chk')?.checked !== false,
-                    parameters: [{
-                        name: entry.querySelector('.name-input').value,
-                        expression: entry.querySelector('.expression-input').value,
-                        unit: entry.querySelector('.unit-input').value,
-                        class: entry.querySelector('.class-input').value,
-                        period: entry.querySelector('.period-input').value,
-                        min: entry.querySelector('.min-input').value,
-                        max: entry.querySelector('.max-input').value,
-                        type: entry.querySelector('.type-select').value,
-                        send_to: entry.querySelector('.send-to-input').value
-                    }]
-                };
-            });
-        }
-
-        // Vehicle Specific CAN filters (from car profile)
-        const specificFilterEntries = document.querySelectorAll('.specific-canfilter-entry');
-        if (specificFilterEntries.length > 0) {
-            const grouped = new Map();
-            specificFilterEntries.forEach(entry => {
-                const fidRaw = entry.querySelector('.frame-id-input')?.value || '';
-                const fidNum = normalizeFrameIdInputToNumber(fidRaw);
-                const frameIdOut = (fidNum !== null) ? fidNum : String(fidRaw).trim();
-                if (!frameIdOut) {
-                    throw new Error('Vehicle specific filter frame_id is required');
-                }
-                const key = (fidNum !== null) ? `n:${fidNum}` : `s:${String(fidRaw).trim().toLowerCase()}`;
-                if (!grouped.has(key)) {
-                    grouped.set(key, { frame_id: frameIdOut, parameters: [] });
-                }
-                grouped.get(key).parameters.push({
-                    name: entry.querySelector('.name-input')?.value || '',
-                    expression: entry.querySelector('.expression-input')?.value || '',
-                    unit: entry.querySelector('.unit-input')?.value || '',
-                    class: entry.querySelector('.class-input')?.value || '',
-                    period: entry.querySelector('.period-input')?.value || '',
-                    min: entry.querySelector('.min-input')?.value || '',
-                    max: entry.querySelector('.max-input')?.value || '',
-                    type: entry.querySelector('.type-select')?.value || 'Default',
-                    send_to: entry.querySelector('.send-to-input')?.value || '',
-                    enabled: entry.querySelector('.enabled-chk')?.checked !== false
-                });
-            });
-            carData.can_filters = Array.from(grouped.values());
-        }
-
-        fetch('/store_car_data', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ cars: [carData] }, null, 0)
-        }).then(response => response.text())
-        .then(data => console.log('Success:', data))
-        .catch(error => console.error('Error:', error));
-
-        // Validate destinations
-        if(groupingValue === 'enable') {
-            if (!Array.isArray(window.automateDestinations) || window.automateDestinations.length===0){
-                showNotification('At least one destination required','red'); return false; }
-            for (let i=0;i<window.automateDestinations.length;i++){
-                const d = window.automateDestinations[i];
-                if (!Number.isInteger(d.cycle)) { showNotification(`Destination ${i+1} cycle invalid`,'red'); return false; }
-                if (d.cycle!==0 && d.cycle<1000){ showNotification(`Destination ${i+1} cycle must be >=1000 or 0`,'red'); return false; }
-                if (d.destination && d.destination.length > 1024){ showNotification(`Destination ${i+1} URL/topic >1024 chars`,'red'); return false; }
-                if (d.type==='ABRP_API' && !d.api_token){ showNotification(`Destination ${i+1} requires API token`,'red'); return false; }
-                if (d.api_token && d.api_token.length > 512){ showNotification(`Destination ${i+1} API token >512 chars`,'red'); return false; }
-                if (d.type==='HTTPS' && !d.cert_set){ showNotification(`Destination ${i+1} select cert set`,'red'); return false; }
-            }
-        }
-
         if(entries?.length) {
             entries.forEach((entry, index) => {
                 const pidData = {
@@ -2328,8 +1294,6 @@ async function storeAutoTableData() {
                     MinValue: entry.querySelector('.min-value-input')?.value || '',
                     MaxValue: entry.querySelector('.max-value-input')?.value || '',
                     Period: entry.querySelector('.period-input')?.value || '',
-                    Type: entry.querySelector('.type-select')?.value || 'Default',
-                    Send_to: entry.querySelector('.send-to-input')?.value || '',
                     enabled: entry.querySelector('.enabled-chk')?.checked !== false
                 };
 
@@ -2345,9 +1309,6 @@ async function storeAutoTableData() {
                 if (!/^\d+$/.test(pidData.Period) || (parseInt(pidData.Period) < 100 && parseInt(pidData.Period) != 0)) {
                     throw new Error("Period must be a number greater than 100");
                 }
-                if (pidData.Send_to.length >= 64) {
-                    throw new Error("Send_to must be less than 64 characters");
-                }
                 custom_pid_data.push(pidData);
             });
         }
@@ -2358,8 +1319,6 @@ async function storeAutoTableData() {
                     Name: entry.querySelector('.name-input')?.value || '',
                     ReceiveHeader: entry.querySelector('.receive-header-input')?.value || '',
                     Period: entry.querySelector('.period-input')?.value || '',
-                    Type: entry.querySelector('.type-select')?.value || 'Default',
-                    Send_to: entry.querySelector('.send-to-input')?.value || '',
                     enabled: entry.querySelector('.enabled-chk')?.checked !== false
                 };
 
@@ -2368,9 +1327,6 @@ async function storeAutoTableData() {
                 }
                 if (!/^\d+$/.test(stdPIDData.Period) || (parseInt(stdPIDData.Period) < 1000 && parseInt(stdPIDData.Period) != 0)) {
                     throw new Error("Period must be a number greater than 1000");
-                }
-                if (stdPIDData.Send_to.length >= 64) {
-                    throw new Error("Send_to must be less than 64 characters");
                 }
                 std_pid_data.push(stdPIDData);
             });
@@ -2399,8 +1355,6 @@ async function storeAutoTableData() {
                     period: entry.querySelector('.period-input')?.value || '',
                     min: entry.querySelector('.min-input')?.value || '',
                     max: entry.querySelector('.max-input')?.value || '',
-                    type: entry.querySelector('.type-select')?.value || 'Default',
-                    send_to: entry.querySelector('.send-to-input')?.value || '',
                     enabled: entry.querySelector('.enabled-chk')?.checked !== false
                 });
             });
@@ -2424,19 +1378,14 @@ async function storeAutoTableData() {
 
         const jsonData = {
             initialisation: initialisationValue,
-            grouping: groupingValue,
             disable_on_sleep_voltage: disableOnSleepVoltageValue,
             pid_polling_min_voltage: pidPollingMinVoltageValue,
-            car_specific: carSpecificValue,
-            car_model: carModelValue,
             pids: custom_pid_data,
             std_pids: std_pid_data,
             can_filters: custom_can_filters,
             calculated: calculated_data,
             standard_pids: standard_pidsValue,
-            ecu_protocol: ecu_protocolValue,
-            group_api_token: window.automateDestinations[0]?.api_token || '',
-            destinations: window.automateDestinations
+            ecu_protocol: ecu_protocolValue
         };
 
         await fetch('store_auto_data', {
@@ -2463,22 +1412,6 @@ async function storeAutoTableData() {
         showNotification(error.message, "red");
         return false;
     }
-}
-
-function toggleSendToFields() {
-    const groupingValue = document.getElementById("grouping")?.value || 'disable';
-    const table = document.getElementById("automate_table");
-    if (!table) return;
-
-    const rows = table.getElementsByClassName('pid-entry');
-    if (!rows.length) return;
-
-    Array.from(rows).forEach(row => {
-        const sendToInput = row.querySelector('.send-to-input');
-        if (sendToInput) {
-            sendToInput.disabled = (groupingValue === "Group ALL");
-        }
-    });
 }
 
 function filesFmtSize(b) {
@@ -3153,94 +2086,6 @@ function checkStatus() {
     xhttp.send();
 }
 
-function loadautoPIDCarData() {
-    const xhttp = new XMLHttpRequest();
-    xhttp.onload = function() {
-        console.log("Car models:", this.responseText);
-        if(this.responseText != "NONE") {
-            var obj = JSON.parse(this.responseText);
-            const carModels = [];
-
-            // Clear existing rows to avoid duplicates on reload
-            const pidContainer = document.querySelector('.specific-pid-entries');
-            if (pidContainer) pidContainer.innerHTML = '';
-
-            const filterContainer = document.querySelector('.specific-canfilter-entries');
-            if (filterContainer) filterContainer.innerHTML = '';
-
-            if (obj && Array.isArray(obj.cars)) {
-                obj.cars.forEach(car => {
-                    if (car.car_model) {
-                        carModels.push(car.car_model);
-                    }
-                    
-                    if (car.pids) {
-                        document.getElementById("specific_init").value = car.init;
-                        car.pids.forEach(pid => {
-
-                            if (pid.parameters) {
-                                pid.parameters.forEach(param => {
-                                    addCarParameter({
-                                        name: param.name,
-                                        expression: param.expression,
-                                        unit: param.unit,
-                                        class: param.class, 
-                                        period: param.period,
-                                        type: param.type,
-                                        min: param.min,
-                                        max: param.max,
-                                        send_to: param.send_to,
-                                        pid: pid.pid,
-                                        pid_init: pid.pid_init,
-                                        enabled: pid.enabled
-                                    });
-                                });
-                            }
-                        });
-                    }
-
-                    if (Array.isArray(car.can_filters)) {
-                        car.can_filters.forEach(f => {
-                            const fid = (f && f.frame_id !== undefined) ? f.frame_id : null;
-                            const params = (f && Array.isArray(f.parameters)) ? f.parameters : [];
-                            if (params.length) {
-                                params.forEach(param => {
-                                    addVehicleSpecificCanFilterEntry({
-                                        frame_id: fid,
-                                        parameter: {
-                                            name: param.name,
-                                            expression: param.expression,
-                                            unit: param.unit,
-                                            class: param.class,
-                                            period: param.period,
-                                            type: param.type,
-                                            min: param.min,
-                                            max: param.max,
-                                            send_to: param.send_to,
-                                            enabled: param.enabled
-                                        }
-                                    });
-                                });
-                            } else if (fid !== null) {
-                                addVehicleSpecificCanFilterEntry({ frame_id: fid, parameter: { name: 'New Parameter', period: '5000', type: 'Default', send_to: '' } });
-                            }
-                        });
-                    }
-
-                });
-            }
-            var modifiedObj = { "supported": carModels };
-            loadCarModels(modifiedObj);
-        } else {
-            toggleCarModel();
-            toggleSendToFields();
-            toggleStandardPIDOptions();
-        }
-    };
-    xhttp.open("GET", "/load_auto_pid_car_data");
-    xhttp.send();
-}
-
 
 function loadautoPID() {
     console.log("Loading auto PID data..."); 
@@ -3635,7 +2480,6 @@ function send_system_command(command) {
 async function downloadCfg() {
     const endpoints = [
         '/load_config',
-        '/load_auto_pid_car_data',
         '/load_auto_pid'
     ];
     
@@ -3699,8 +2543,7 @@ async function uploadCfg() {
 
     const endpointMap = {
         'config': '/store_config',
-        'auto_pid': '/store_auto_data',
-        'auto_pid_car_data': '/store_car_data'
+        'auto_pid': '/store_auto_data'
     };
 
     const delay = 200;
@@ -3891,7 +2734,6 @@ xhttp.onload = async function() {
         } else if(document.getElementById("batt_alert").value == "disable") {
             document.getElementById("batt_alert_div").style.display = "none";
         }
-        loadautoPIDCarData();
         loadautoPID();
 
         // Load fallback networks if present
@@ -3901,77 +2743,6 @@ xhttp.onload = async function() {
         } catch(e) {
             renderFallbackNetworks([]);
         }
-        document.getElementById("car_model").addEventListener('change', function() {
-            const pidContainer = document.querySelector('.specific-pid-entries');
-            if (pidContainer) pidContainer.innerHTML = '';
-
-            const filterContainer = document.querySelector('.specific-canfilter-entries');
-            if (filterContainer) filterContainer.innerHTML = '';
-            
-            const selectedModel = this.value;
-            const specificInitElement = document.getElementById("specific_init");
-            if (specificInitElement) specificInitElement.value = '';
-
-            if (!selectedModel || selectedModel === 'Not Selected') {
-                enableAutoStoreButton();
-                return;
-            }
-
-            if (latest_car_models && Array.isArray(latest_car_models.cars)) {
-                const selectedCar = latest_car_models.cars.find(car => car && car.car_model === selectedModel);
-                if (!selectedCar) {
-                    enableAutoStoreButton();
-                    return;
-                }
-
-                if (specificInitElement) specificInitElement.value = selectedCar.init || '';
-
-                if (selectedCar.pids) {
-                    selectedCar.pids.forEach(pid => {
-                        if (pid && pid.parameters) {
-                            pid.parameters.forEach(param => {
-                                addCarParameter({
-                                    ...param,
-                                    pid: pid.pid,
-                                    pid_init: pid.pid_init,
-                                    enabled: pid.enabled
-                                });
-                            });
-                        }
-                    });
-                }
-
-                if (Array.isArray(selectedCar.can_filters)) {
-                    selectedCar.can_filters.forEach(f => {
-                        const fid = (f && f.frame_id !== undefined) ? f.frame_id : null;
-                        const params = (f && Array.isArray(f.parameters)) ? f.parameters : [];
-                        if (params.length) {
-                            params.forEach(param => {
-                                addVehicleSpecificCanFilterEntry({
-                                    frame_id: fid,
-                                    parameter: {
-                                        name: param.name,
-                                        expression: param.expression,
-                                        unit: param.unit,
-                                        class: param.class,
-                                        period: param.period,
-                                        type: param.type,
-                                        min: param.min,
-                                        max: param.max,
-                                        send_to: param.send_to,
-                                        enabled: param.enabled
-                                    }
-                                });
-                            });
-                        } else if (fid !== null) {
-                            addVehicleSpecificCanFilterEntry({ frame_id: fid, parameter: { name: 'New Parameter', period: '5000', type: 'Default', send_to: '' } });
-                        }
-                    });
-                }
-            }
-
-            enableAutoStoreButton();
-        });
 
         // Apply mode-dependent enable/disable rules after values are loaded
         try { toggleSmartConnectConfig(); } catch(_) {}
