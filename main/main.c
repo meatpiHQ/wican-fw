@@ -1168,7 +1168,6 @@ void app_main(void)
 	// esp_log_level_set("AUTO_PID", ESP_LOG_INFO);
 	// esp_log_level_set("AUTO_PID", ESP_LOG_INFO);
 	// esp_log_level_set("HTTPS_CLIENT_MGR", ESP_LOG_INFO);
-	// esp_log_level_set("cert_manager", ESP_LOG_INFO);
 	// esp_log_level_set("esp-tls", ESP_LOG_VERBOSE);
 	// esp_log_level_set("mbedtls", ESP_LOG_VERBOSE);
 	// esp_log_level_set("TRANSPORT_BASE", ESP_LOG_VERBOSE);

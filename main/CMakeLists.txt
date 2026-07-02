@@ -65,7 +65,6 @@ set(requires
     unity
     cmdline
     zorxx__multipart-parser
-    cert_manager
     autopid
     csv_logger
     fast_log

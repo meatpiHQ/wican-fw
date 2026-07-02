@@ -1705,9 +1705,7 @@ function openTab(evt, tabName) {
         try { ensureAutomateSubTabInitialized(); } catch(_) {}
     }
     
-    if (tabName === 'system_tab') {
-        if (typeof certManagerLoad === 'function') certManagerLoad();
-    } else if (tabName === 'files_tab') {
+    if (tabName === 'files_tab') {
         filesCwd = '';
         filesLoad('');
     } else if (tabName === 'logger') {
@@ -2753,8 +2751,6 @@ xhttp.onload = async function() {
         document.getElementById("submit_button").disabled = true;
     };
     checkStatus();
-    // Load HTTPS certificate status after initial config load
-// Removed single-cert status refresh
     xhttp.open("GET", "/load_config");
     xhttp.send();
 
@@ -3088,122 +3084,6 @@ function selectWifiNetwork() {
         submit_enable(); // Trigger form validation
         enableAutoStoreButton(); // Enable store button if it exists
     }
-}
-
-function toggleHttpsCertUploadVisibility(){
-    const show = document.getElementById('https_trust_source').value === 'uploaded';
-    const tbl = document.getElementById('https_cert_upload_table');
-if(tbl) tbl.style.display = show ? 'table' : 'none';
-const rows = ['https_ca_row','https_client_cert_row','https_client_key_row'];
-rows.forEach(id=>{ const el = document.getElementById(id); if(el) el.style.display = show ? 'table-row' : 'none'; });
-}
-
-async function uploadHttpsCerts(){
-    const caF = document.getElementById('https_ca_file').files[0];
-    const ccF = document.getElementById('https_client_cert_file').files[0];
-    const ckF = document.getElementById('https_client_key_file').files[0];
-    if(!caF && !ccF && !ckF){
-        showNotification('No certificate files selected', 'red');
-        return;
-    }
-    const btn = document.getElementById('https_upload_button');
-    btn.disabled = true;
-    btn.value = 'Uploading...';
-    try {
-        const fd = new FormData();
-        if(caF) fd.append('ca_cert', caF, 'ca.pem');
-        if(ccF) fd.append('client_cert', ccF, 'client.crt');
-        if(ckF) fd.append('client_key', ckF, 'client.key');
-        const r = await fetch('/cert_manager/upload', { method: 'POST', body: fd });
-        if(!r.ok) throw new Error('upload status ' + r.status);
-        const js = await r.json().catch(()=>({}));
-        showNotification('Certificates uploaded (' + (js.saved_parts||'?') + ' parts)', 'green');
-        // clear selected files
-        document.getElementById('https_ca_file').value='';
-        document.getElementById('https_client_cert_file').value='';
-        document.getElementById('https_client_key_file').value='';
-        await new Promise(res=>setTimeout(res, 500));
-        refreshHttpsCertStatus();
-    } catch(e){
-        console.error('HTTPS cert upload error', e);
-        showNotification('Upload failed', 'red');
-    } finally {
-        btn.disabled = false;
-        btn.value = 'Upload';
-    }
-}
-
-let certManagerSets = []; // {name, has_ca, has_client_cert, has_client_key, readOnly}
-
-function certManagerValidateName(name){
-    return /^[A-Za-z0-9_-]{1,24}$/.test(name);
-}
-
-async function certManagerLoad(){
-    try{
-        const r = await fetch('/cert_manager/sets');
-        if(!r.ok) throw 0;
-        const list = await r.json();
-        // Preserve existing single (readOnly) entry if present
-        const single = certManagerSets.find(s=>s.readOnly);
-        certManagerSets = [];
-        if(single) certManagerSets.push(single);
-        for(const s of list){ certManagerSets.push(s); }
-        certManagerRender();
-    }catch(e){ console.log('cert sets load failed', e); }
-}
-
-function certManagerRender(){
-    const body = document.getElementById('certmgr_body');
-    if(!body) return;
-    if(certManagerSets.length===0){
-        body.innerHTML = '<tr><td colspan="5" style="padding:8px; text-align:center; color:#555;">No certificate sets</td></tr>';
-        return;
-    }
-    body.innerHTML = certManagerSets.map((s,idx)=>{
-        const delBtn = s.readOnly? '' : `<button style=\"background:#dc2626; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;\" onclick=\"certManagerDelete('${s.name}')\">Delete</button>`;
-        return `<tr>
-            <td style=\"padding:6px; border:1px solid #e2e8f0; font-weight:600;\">${s.name}${s.readOnly?' (single)':''}</td>
-            <td style=\"padding:6px; border:1px solid #e2e8f0;\">${s.has_ca?'&#10003;':'-'} </td>
-            <td style=\"padding:6px; border:1px solid #e2e8f0;\">${s.has_client_cert?'&#10003;':'-'} </td>
-            <td style=\"padding:6px; border:1px solid #e2e8f0;\">${s.has_client_key?'&#10003;':'-'} </td>
-            <td style=\"padding:6px; border:1px solid #e2e8f0;\">${delBtn}</td>
-        </tr>`;
-    }).join('');
-}
-
-async function certManagerDelete(name){
-    if(!confirm(`Delete certificate set '${name}'?`)) return;
-    try{
-        const r = await fetch('/cert_manager/sets/'+encodeURIComponent(name), {method:'DELETE'});
-        if(!r.ok){ showNotification('Delete failed','red'); return; }
-        showNotification('Deleted','green');
-        certManagerLoad();
-    }catch(e){ showNotification('Delete error','red'); }
-}
-
-async function certManagerAddSet(){
-    const nameEl = document.getElementById('certmgr_name');
-    const caEl = document.getElementById('certmgr_ca');
-    const ccEl = document.getElementById('certmgr_client_cert');
-    const ckEl = document.getElementById('certmgr_client_key');
-    const name = (nameEl.value||'').trim();
-    if(!certManagerValidateName(name)){ showNotification('Invalid name','red'); return; }
-    if(certManagerSets.some(s=>s.name===name)){ showNotification('Name exists','red'); return; }
-    const caF=caEl.files[0]; const ccF=ccEl.files[0]; const ckF=ckEl.files[0];
-    if(!caF && !(ccF && ckF)){ showNotification('Need CA or client cert+key','red'); return; }
-    const fd = new FormData();
-    if(caF) fd.append('ca_cert', caF, 'ca.pem');
-    if(ccF) fd.append('client_cert', ccF, 'client.crt');
-    if(ckF) fd.append('client_key', ckF, 'client.key');
-    try{
-        const btn = document.querySelector('#certmgr_controls button');
-        if(btn) btn.disabled=true;
-        const r = await fetch('/cert_manager/sets?name='+encodeURIComponent(name), {method:'POST', body: fd});
-        if(!r.ok){ const t=await r.text(); showNotification('Upload failed '+t,'red'); } else { showNotification('Uploaded','green'); certManagerLoad(); }
-    }catch(e){ showNotification('Upload error','red'); }
-    finally{ if(btn) btn.disabled=false; }
-    nameEl.value=''; caEl.value=''; ccEl.value=''; ckEl.value='';
 }
 
 document.getElementById("defaultOpen").click();

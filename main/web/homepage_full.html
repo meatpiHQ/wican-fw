@@ -1427,51 +1427,6 @@
                     </tbody>
                 </table>
             </form>
-            <div class="section-title">Certificate Manager</div>
-            <div class="description-text">Manage up to 10 named certificate sets. Each set may include: CA (for custom trust), and/or client certificate &amp; key for mutual TLS. Enter a unique name (immutable), choose files, then Add. Delete removes the set directory.</div>
-            <div style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;margin:.75rem 0;padding:.75rem">
-                <table class="form-table" style="width:100%">
-                    <tbody>
-                        <tr>
-                            <td style="width:140px">New Cert Name:</td>
-                            <td style="align-items:center;gap:.5rem;display:flex"><input placeholder="e.g. abrp_prod" id="certmgr_name" maxlength="24" style="flex:1"> <input value="Add Set" class="system-button" onclick="certManagerAddSet();" type="button"></td>
-                        </tr>
-                        <tr>
-                            <td>CA Certificate:</td>
-                            <td><input accept=".pem,.crt" id="certmgr_ca" type="file"></td>
-                        </tr>
-                        <tr>
-                            <td>Client Certificate:</td>
-                            <td><input accept=".pem,.crt" id="certmgr_client_cert" type="file"></td>
-                        </tr>
-                        <tr>
-                            <td>Client Key:</td>
-                            <td><input accept=".pem,.key" id="certmgr_client_key" type="file"></td>
-                        </tr>
-                    </tbody>
-                </table>
-                <div style="color:#555;font-size:.75rem">Name: letters, digits, dash, underscore. CA file strongly recommended unless using system trust. Client cert+key optional but must both be provided for mutual TLS.</div>
-            </div>
-            <div style="margin-top:1rem">
-                <div style="margin-bottom:.5rem;font-weight:600">Existing Sets</div>
-                <table id="certmgr_table" style="border-collapse:collapse;width:100%">
-                    <thead>
-                        <tr style="background:#f8fafc">
-                            <th style="text-align:left;border:1px solid #e2e8f0;padding:6px">Name</th>
-                            <th style="text-align:left;border:1px solid #e2e8f0;padding:6px">CA</th>
-                            <th style="text-align:left;border:1px solid #e2e8f0;padding:6px">Client Cert</th>
-                            <th style="text-align:left;border:1px solid #e2e8f0;padding:6px">Client Key</th>
-                            <th style="text-align:left;border:1px solid #e2e8f0;padding:6px"></th>
-                        </tr>
-                    </thead>
-                    <tbody id="certmgr_body">
-                        <tr>
-                            <td colspan="5" style="text-align:center;color:#555;padding:8px">No certificate sets</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-            <div style="color:#666;margin-top:.75rem;font-size:.7rem">Single-cert uploads appear as the read-only 'default' set.</div>
         </div>
         <div class="tabcontent" id="about_tab">
             <div class="section-title">About</div>

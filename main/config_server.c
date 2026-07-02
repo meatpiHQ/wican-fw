@@ -92,7 +92,6 @@
 #include "obd2_standard_pids.h"
 #include "wifi_mgr.h"
 #include "dev_status.h"
-#include "cert_manager.h"
 #include "dev_status.h"
 #include "esp_heap_caps.h"
 #include "autopid_http.h"
@@ -2938,7 +2937,6 @@ static void register_server_uris(void)
 	httpd_register_uri_handler(server, &sd_files_get_uri);
 	httpd_register_uri_handler(server, &sd_files_post_uri);
 	event_log_register_handlers(server);   // GET /event_log* (Task #24) -- before the catch-all wildcard
-	// NOTE: catch-all wildcard handler moved to after cert manager handlers to avoid shadowing
 }
 
 bool config_server_ws_connected(void)
@@ -3013,8 +3011,6 @@ static httpd_handle_t config_server_init(void)
 	if(esp_fatfs_flag == 0) 
 	{
 		filesystem_init();
-		// Initialize certificate manager storage (creates /certs if missing)
-		cert_manager_init();
 		// Handle config.json
 		FILE* f = fopen(FS_MOUNT_POINT"/config.json", "r");
 		if (f == NULL)
@@ -3088,7 +3084,6 @@ static httpd_handle_t config_server_init(void)
         // Set URI handlers
 		register_server_uris();
 		// Register certificate manager endpoints (before wildcard catch-all so they match first)
-		cert_manager_register_handlers(server);
 		autopid_register_handlers(server);
 		restart_tracker_register_handlers(server);
 		// Now register catch-all wildcard
@@ -3113,7 +3108,6 @@ void config_server_restart(void)
         // Set URI handlers
         ESP_LOGI(TAG, "Registering URI handlers");
 		register_server_uris();
-		cert_manager_register_handlers(server);
 		autopid_register_handlers(server);
 		restart_tracker_register_handlers(server);
 		httpd_register_uri_handler(server, &get_uri_common);

@@ -44,7 +44,6 @@
 #include "hw_config.h"
 #include "dev_status.h"
 #include "sleep_mode.h"
-#include "cert_manager.h"
 #include <time.h>
 #include "autopid_config.h"
 #include "esp_heap_caps.h"
