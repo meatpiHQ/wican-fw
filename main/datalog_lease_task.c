@@ -36,6 +36,7 @@
 #include "can.h"
 #include "csv_logger.h"
 #include "datalog_lease_task.h"
+#include "event_log.h"
 
 #define TAG "datalog_reaper"
 
@@ -86,6 +87,7 @@ static void datalog_lease_task(void *arg)
          * still-expired lease -- so a fresh op=bus_claim / renew landing between this
          * snapshot and the reap bumps the token/deadline and ABORTS, never destroying a live
          * claim. Clears ONLY the claim flag, never FLASH_ACTIVE_BIT. */
+        bool claim_reaped = false;   /* host vanished mid bus-claim (i.e. mid flash session) this tick */
         if (s.host_bus_claimed)
         {
             const bool teardown_elapsed =
@@ -94,6 +96,7 @@ static void datalog_lease_task(void *arg)
                 can_host_bus_claim_reap(s.claim_token, s.claim_deadline_us))
             {
                 s.host_bus_claimed = false;  /* allow the datalog-reap below this tick */
+                claim_reaped = true;
                 ESP_LOGW(TAG, "NCCLAIMREAP host bus-claim reaped (host gone mid-claim)");
             }
         }
@@ -113,6 +116,14 @@ static void datalog_lease_task(void *arg)
         {
             datalog_restore_mode();
             ESP_LOGW(TAG, "NCDLAUTORESUME datalogger auto-resumed (host gone, bus idle)");
+            // Highest-value observability line (Task #12): the brick-safe dead-man recovery. Records
+            // that the firmware -- not the host -- resumed the datalogger, and the host-gone signals
+            // that fired (park lease TTL expired AND its owning socket dropped; the bus then went
+            // idle). claim_reaped distinguishes "host vanished mid bus-claim/flash" from a plain
+            // parked-then-gone. event_log_emit is non-blocking, safe from this prio-2 task.
+            event_log_emit(EVL_REAPER_RESUME,
+                           "auto-resume: host gone (ttl_expired socket_dropped) bus_idle=%ums%s",
+                           (unsigned)s.bus_idle_ms, claim_reaped ? " mid_claim" : "");
         }
     }
 }

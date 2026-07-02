@@ -37,9 +37,10 @@ extern "C" {
 // On-device operational event log (Task #24).
 //
 // Records meaningful operating events (boot, engine start/stop, datalog session open/close,
-// software update / reboot) so the device keeps a factual, retrievable history of what it did --
-// without a serial cable. Two sinks: an always-present in-RAM ring (survives a missing/failed SD)
-// and a rotating text file on the SD card.
+// software update / reboot, and NC-Flash flash/read + host-coexistence sessions) so the device
+// keeps a factual, retrievable history of what it did -- without a serial cable. This matters most
+// on the wireless brick-risk path: a flash leaves no other post-hoc trace. Two sinks: an
+// always-present in-RAM ring (survives a missing/failed SD) and a rotating text file on the SD card.
 //
 // BRICK-SAFE CONTRACT (mirrors csv_logger's invariants):
 //  - This is a LEAF component: it REQUIRES only base IDF, so csv_logger / poll_log / config_server /
@@ -63,6 +64,19 @@ typedef enum {
     EVL_OTA_START,       // firmware OTA upload began
     EVL_OTA_OK,          // firmware OTA written + boot partition switched
     EVL_OTA_FAIL,        // firmware OTA aborted/failed
+    // --- NC-Flash / coexistence lifecycle (Task #12). Milestone-only: emitted at start/done/abort
+    //     of a flash, fast-read, or host bus session -- NEVER per-block on the TransferData hot path
+    //     and NEVER inside an fwrite/fsync flash-cache-disable window (NCFWPROG covers live progress).
+    EVL_FLASH_START,     // ncflash_fastwrite: SD-staged fast-write begins (mode, ROM, total blocks)
+    EVL_FLASH_OK,        // ncflash_fastwrite: NCFWDONE reached (blocks written, elapsed)
+    EVL_FLASH_FAIL,      // ncflash_fastwrite: aborted/failed (where it died: stage + FWSUB/NRC + block)
+    EVL_READ_START,      // ncflash_fastread: fast ROM read begins (addr, length)
+    EVL_READ_OK,         // ncflash_fastread: fast ROM read completed (bytes, elapsed)
+    EVL_HOST_CLAIM,      // host opened the bus-claim window (NC-Flash "cable plugged in")
+    EVL_HOST_RELEASE,    // host closed the bus-claim window
+    EVL_DATALOG_PARK,    // datalogger parked for a host session (POST /datalog?op=pause)
+    EVL_DATALOG_RESUME,  // datalogger resumed after a host session (POST /datalog?op=resume)
+    EVL_REAPER_RESUME,   // dead-man reaper auto-resumed datalog (host vanished) -- highest-value line
     EVL_INFO,            // generic informational note
     EVL_CODE_MAX
 } event_log_code_t;
