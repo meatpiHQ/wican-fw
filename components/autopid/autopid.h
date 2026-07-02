@@ -32,7 +32,6 @@
 
 // Safety caps for user-configurable destinations (prevents stack/heap abuse via config JSON)
 #define AUTOPID_MAX_DESTINATIONS 6
-#define AUTOPID_MAX_DEST_QUERY_PARAMS 16
 
 typedef struct {
     uint8_t data[AUTOPID_BUFFER_SIZE];
@@ -57,61 +56,6 @@ typedef enum
     PID_MAX
 }pid_type_t;
 
-typedef enum
-{
-    DEST_DEFAULT,
-    DEST_MQTT_TOPIC,
-    DEST_MQTT_WALLBOX,
-    DEST_HTTP,
-    DEST_HTTPS,
-    DEST_ABRP_API,
-    DEST_MAX
-}destination_type_t;
-
-// HTTP(S) auth types supported by https_client_mgr_request_with_auth
-typedef enum {
-    DEST_AUTH_NONE = 0,
-    DEST_AUTH_BEARER,
-    DEST_AUTH_API_KEY_HEADER,
-    DEST_AUTH_API_KEY_QUERY,
-    DEST_AUTH_BASIC
-} destination_auth_type_t;
-
-typedef struct {
-    destination_auth_type_t type;   // Which auth to apply
-    char *bearer;                   // Bearer token
-    char *api_key_header_name;      // Header name for API key, e.g. "x-api-key"
-    char *api_key;                  // API key value (header or query)
-    char *api_key_query_name;       // Query parameter name for API key
-    char *basic_username;           // Basic auth username
-    char *basic_password;           // Basic auth password
-} destination_auth_t;
-
-typedef struct {
-    char *key;
-    char *value;    // Pre-encoded; UI may provide raw, backend can encode later if needed
-} dest_query_kv_t;
-
-// Group destination entry (multi-destination support)
-typedef struct {
-    destination_type_t type;    // Destination type
-    char *destination;          // URL / topic / etc.
-    uint32_t cycle;             // Publish cycle (ms) or 0 for event based
-    char *api_token;            // Optional API/Bearer token (HTTP/HTTPS/ABRP)
-    char *cert_set;             // Certificate set name for HTTPS ("default" for built-in)
-    bool enabled;               // Whether this destination is active
-    // Stats (runtime only)
-    uint32_t success_count;      // Number of successful publishes
-    uint32_t fail_count;         // Number of failed publishes
-    // Extended HTTP(S) settings
-    destination_auth_t auth;    // Detailed auth configuration for HTTP/HTTPS
-    dest_query_kv_t *query_params;   // Optional extra query parameters
-    uint32_t query_params_count;     // Number of query params
-    int64_t publish_timer;   // Internal: next publish expiration timer (0 = not scheduled / immediate)
-    uint32_t consec_failures;   // Internal: consecutive failure counter
-    uint32_t backoff_ms;        // Internal: current backoff delay extension (ms)
-    bool settings_sent;         // Internal: for HTTP/HTTPS, whether initial {config,status,autopid_data} was sent successfully
-} group_destination_t;
 
 typedef struct 
 {
@@ -124,8 +68,6 @@ typedef struct
     float min;
     float max;
     sensor_type_t sensor_type;
-    char* destination;
-    destination_type_t destination_type;
     int64_t timer;
     float value;
     bool failed;
@@ -172,12 +114,6 @@ typedef struct
     char* standard_init;
     char* specific_init;
     char* selected_car_model;
-    char* grouping;
-    destination_type_t group_destination_type;
-    char* group_destination;    //"destination"
-    // Multi-destination support
-    group_destination_t *destinations;   // Array of destinations (nullable)
-    uint32_t destinations_count;         // Number of entries in destinations
     bool pid_std_en;
     bool pid_custom_en;
     bool pid_specific_en;
@@ -227,7 +163,6 @@ autopid_config_t* autopid_load_config_only(void);
 char *autopid_data_read(void);
 bool autopid_get_ecu_status(void);
 char* autopid_get_config(void);
-char *autopid_get_destinations_stats_json(void);
 esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint32_t available_pids_size) ;
 
 // Protocol tracking helpers used by AutoPID parsing and related modules.
@@ -235,7 +170,6 @@ esp_err_t autopid_set_protocol_number(int32_t protocol_value);
 esp_err_t autopid_get_protocol_number(int32_t *protocol_value);
 
 char *autopid_get_value_by_name(char* name);
-void autopid_publish_all_destinations(void);
 void autopid_app_reset_timer(void);
 
 // Shared lock for ELM327 access.

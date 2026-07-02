@@ -193,36 +193,6 @@ static char *json_strdup_key_or_default(const cJSON *obj, const char *key, const
     return default_value ? strdup_psram(default_value) : NULL;
 }
 
-static destination_type_t destination_type_from_string(const char *t)
-{
-    if (!t)
-        return DEST_DEFAULT;
-    if (strcmp(t, "MQTT_Topic") == 0)
-        return DEST_MQTT_TOPIC;
-    if (strcmp(t, "MQTT_WallBox") == 0)
-        return DEST_MQTT_WALLBOX;
-    if (strcmp(t, "HTTP") == 0)
-        return DEST_HTTP;
-    if (strcmp(t, "HTTPS") == 0)
-        return DEST_HTTPS;
-    if (strcmp(t, "ABRP_API") == 0)
-        return DEST_ABRP_API;
-    return DEST_DEFAULT;
-}
-
-static destination_type_t json_destination_type(const cJSON *obj, const char *key, destination_type_t default_value)
-{
-    if (!obj || !key)
-        return default_value;
-    const cJSON *item = cJSON_GetObjectItem((cJSON *)obj, key);
-    const char *s = json_get_string(item);
-    return s ? destination_type_from_string(s) : default_value;
-}
-
-// Forward declarations for CAN filters parsing/merge (implemented later in file)
-static void autopid_cfg_append_can_filters_from_array(autopid_config_t *cfg, const cJSON *can_filters_arr, bool is_vehicle_specific);
-static void autopid_cfg_parse_calculated_from_array(autopid_config_t *cfg, const cJSON *calc_arr);
-
 static sensor_type_t json_sensor_type(const cJSON *obj, const char *key, sensor_type_t default_value)
 {
     if (!obj || !key)
@@ -239,8 +209,7 @@ static void parse_parameter_object(parameter_t *out_param, const cJSON *param_ob
                                    const char *unit_key, const char *class_key,
                                    const char *sensor_type_key,
                                    const char *min_key, const char *max_key,
-                                   const char *period_key,
-                                   const char *destination_key, const char *destination_type_key)
+                                   const char *period_key)
 {
     if (!out_param || !param_obj)
         return;
@@ -260,9 +229,6 @@ static void parse_parameter_object(parameter_t *out_param, const cJSON *param_ob
     out_param->min = json_item_to_float(min_key ? cJSON_GetObjectItem((cJSON *)param_obj, min_key) : NULL, FLT_MAX);
     out_param->max = json_item_to_float(max_key ? cJSON_GetObjectItem((cJSON *)param_obj, max_key) : NULL, FLT_MAX);
     out_param->period = json_item_to_u32(period_key ? cJSON_GetObjectItem((cJSON *)param_obj, period_key) : NULL, 0);
-
-    out_param->destination = json_strdup_key_or_default(param_obj, destination_key, "none");
-    out_param->destination_type = json_destination_type(param_obj, destination_type_key, DEST_DEFAULT);
 
     out_param->timer = 0;
     out_param->value = FLT_MAX;
@@ -378,6 +344,9 @@ static int count_auto_pid_pids(void)
     return count;
 }
 
+static void autopid_cfg_append_can_filters_from_array(autopid_config_t *cfg, const cJSON *can_filters_arr, bool is_vehicle_specific);
+static void autopid_cfg_parse_calculated_from_array(autopid_config_t *cfg, const cJSON *calc_arr);
+
 static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index)
 {
     if (!autopid_config || !pid_index)
@@ -390,7 +359,6 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
     int idx = *pid_index;
 
     cJSON *init_item = cJSON_GetObjectItem(root, "initialisation");
-    cJSON *grouping_item = cJSON_GetObjectItem(root, "grouping");
     cJSON *car_model_item = cJSON_GetObjectItem(root, "car_model");
     cJSON *ecu_protocol_item = cJSON_GetObjectItem(root, "ecu_protocol");
     cJSON *disable_on_sleep_voltage_item = cJSON_GetObjectItem(root, "disable_on_sleep_voltage");
@@ -401,10 +369,6 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
     cJSON *specific_pids_item = cJSON_GetObjectItem(root, "car_specific");
     cJSON *can_filters_item = cJSON_GetObjectItem(root, "can_filters");
     cJSON *calculated_item = cJSON_GetObjectItem(root, "calculated");   // Task #17 calculated channels
-    cJSON *group_destination_item = cJSON_GetObjectItem(root, "destination");   // legacy single destination
-    cJSON *group_dest_type_item = cJSON_GetObjectItem(root, "group_dest_type"); // legacy single type
-    cJSON *destinations_array = cJSON_GetObjectItem(root, "destinations");      // new multi-destination array
-    cJSON *group_api_token_item = cJSON_GetObjectItem(root, "group_api_token"); // legacy api token
 
     if (init_item && init_item->valuestring)
     {
@@ -415,8 +379,6 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
         autopid_config->custom_init = NULL;
     }
 
-    autopid_config->grouping = strdup_psram("enable");
-    // autopid_config->grouping = (grouping_item && grouping_item->valuestring && strlen(grouping_item->valuestring) > 1) ? strdup_psram(grouping_item->valuestring) : strdup_psram("disable");
     autopid_config->vehicle_model = car_model_item ? strdup_psram(car_model_item->valuestring) : NULL;
     autopid_config->std_ecu_protocol = ecu_protocol_item ? strdup_psram(ecu_protocol_item->valuestring) : NULL;
 
@@ -493,275 +455,6 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
     }
     autopid_config->pid_validation_en = true; 
 
-    autopid_config->group_destination = group_destination_item ? strdup_psram(group_destination_item->valuestring) : NULL;
-    // Map legacy group_dest_type to enum (for backward compatibility)
-    if (group_dest_type_item && group_dest_type_item->valuestring)
-    {
-        autopid_config->group_destination_type = destination_type_from_string(group_dest_type_item->valuestring);
-    }
-    else
-    {
-        autopid_config->group_destination_type = DEST_DEFAULT;
-    }
-
-    // Parse new destinations array (capped)
-    autopid_config->destinations = NULL;
-    autopid_config->destinations_count = 0;
-    if (destinations_array && cJSON_IsArray(destinations_array))
-    {
-        int count = cJSON_GetArraySize(destinations_array);
-        if (count > AUTOPID_MAX_DESTINATIONS)
-        {
-            ESP_LOGW(TAG, "Destinations count %d exceeds max %d; truncating", count, AUTOPID_MAX_DESTINATIONS);
-            count = AUTOPID_MAX_DESTINATIONS;
-        }
-        if (count > 0)
-        {
-            autopid_config->destinations = (group_destination_t *)heap_caps_calloc(
-                count,
-                sizeof(group_destination_t),
-                MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
-            if (autopid_config->destinations)
-            {
-                autopid_config->destinations_count = count;
-                for (int di = 0; di < count; di++)
-                {
-                    cJSON *d = cJSON_GetArrayItem(destinations_array, di);
-                    if (!d)
-                        continue;
-                    group_destination_t *gd = &autopid_config->destinations[di];
-                    cJSON *type_item = cJSON_GetObjectItem(d, "type");
-                    cJSON *dest_item = cJSON_GetObjectItem(d, "destination");
-                    cJSON *cycle_item2 = cJSON_GetObjectItem(d, "cycle");
-                    cJSON *api_token_item = cJSON_GetObjectItem(d, "api_token");
-                    cJSON *cert_set_item = cJSON_GetObjectItem(d, "cert_set");
-                    cJSON *enabled_item = cJSON_GetObjectItem(d, "enabled");
-                    cJSON *auth_item = cJSON_GetObjectItem(d, "auth");
-                    cJSON *qp_arr = cJSON_GetObjectItem(d, "query_params");
-
-                    const char *type_str = type_item && cJSON_IsString(type_item) ? type_item->valuestring : "Default";
-                    gd->type = destination_type_from_string(type_str);
-                    gd->destination = dest_item && cJSON_IsString(dest_item) ? strdup_psram(dest_item->valuestring) : NULL;
-
-                    // Ensure scheme prefix for HTTP/HTTPS destinations if missing
-                    if (gd->destination && (gd->type == DEST_HTTP || gd->type == DEST_HTTPS || gd->type == DEST_ABRP_API))
-                    {
-                        bool has_http = (strncmp(gd->destination, "http://", 7) == 0);
-                        bool has_https = (strncmp(gd->destination, "https://", 8) == 0);
-                        if (!has_http && !has_https)
-                        {
-                            const char *prefix = (gd->type == DEST_HTTPS || gd->type == DEST_ABRP_API) ? "https://" : "http://";
-                            size_t new_len = strlen(prefix) + strlen(gd->destination) + 1;
-                            char *with_prefix = (char *)heap_caps_malloc(new_len, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
-                            if (with_prefix)
-                            {
-                                strcpy(with_prefix, prefix);
-                                strcat(with_prefix, gd->destination);
-                                free(gd->destination);
-                                gd->destination = with_prefix;
-                            }
-                        }
-                    }
-
-                    if (cycle_item2 && cycle_item2->valuestring && strlen(cycle_item2->valuestring) > 0)
-                        gd->cycle = (uint32_t)atoi(cycle_item2->valuestring);
-                    else if (cycle_item2 && cycle_item2->valueint)
-                        gd->cycle = (uint32_t)cycle_item2->valueint;
-                    else
-                        gd->cycle = 10000;
-
-                    gd->api_token = api_token_item && cJSON_IsString(api_token_item) ? strdup_psram(api_token_item->valuestring) : NULL;
-                    if (gd->type != DEST_ABRP_API)
-                    {
-                        gd->cert_set = cert_set_item && cJSON_IsString(cert_set_item) ? strdup_psram(cert_set_item->valuestring) : strdup_psram("default");
-                    }
-                    else
-                    {
-                        gd->cert_set = strdup_psram("default");
-                    }
-                    gd->enabled = enabled_item && cJSON_IsBool(enabled_item) ? cJSON_IsTrue(enabled_item) : false;
-
-                    // Parse optional auth
-                    gd->auth.type = DEST_AUTH_NONE;
-                    if (auth_item && cJSON_IsObject(auth_item))
-                    {
-                        cJSON *atype = cJSON_GetObjectItem(auth_item, "type");
-                        if (atype && cJSON_IsString(atype))
-                        {
-                            const char *ts = atype->valuestring;
-                            if (strcmp(ts, "bearer") == 0)
-                                gd->auth.type = DEST_AUTH_BEARER;
-                            else if (strcmp(ts, "api_key_header") == 0)
-                                gd->auth.type = DEST_AUTH_API_KEY_HEADER;
-                            else if (strcmp(ts, "api_key_query") == 0)
-                                gd->auth.type = DEST_AUTH_API_KEY_QUERY;
-                            else if (strcmp(ts, "basic") == 0)
-                                gd->auth.type = DEST_AUTH_BASIC;
-                            else
-                                gd->auth.type = DEST_AUTH_NONE;
-                        }
-                        cJSON *bearer = cJSON_GetObjectItem(auth_item, "bearer");
-                        if (bearer && cJSON_IsString(bearer) && bearer->valuestring && bearer->valuestring[0])
-                            gd->auth.bearer = strdup_psram(bearer->valuestring);
-                        cJSON *hn = cJSON_GetObjectItem(auth_item, "api_key_header_name");
-                        if (hn && cJSON_IsString(hn) && hn->valuestring && hn->valuestring[0])
-                            gd->auth.api_key_header_name = strdup_psram(hn->valuestring);
-                        cJSON *ak = cJSON_GetObjectItem(auth_item, "api_key");
-                        if (ak && cJSON_IsString(ak) && ak->valuestring)
-                            gd->auth.api_key = strdup_psram(ak->valuestring);
-                        cJSON *qn = cJSON_GetObjectItem(auth_item, "api_key_query_name");
-                        if (qn && cJSON_IsString(qn) && qn->valuestring && qn->valuestring[0])
-                            gd->auth.api_key_query_name = strdup_psram(qn->valuestring);
-                        cJSON *bu = cJSON_GetObjectItem(auth_item, "basic_username");
-                        if (bu && cJSON_IsString(bu) && bu->valuestring)
-                            gd->auth.basic_username = strdup_psram(bu->valuestring);
-                        cJSON *bp = cJSON_GetObjectItem(auth_item, "basic_password");
-                        if (bp && cJSON_IsString(bp) && bp->valuestring)
-                            gd->auth.basic_password = strdup_psram(bp->valuestring);
-                    }
-                    else
-                    {
-                        // Back-compat: if HTTP/HTTPS and api_token exists, set bearer auth implicitly
-                        if ((gd->type == DEST_HTTP || gd->type == DEST_HTTPS) && gd->api_token && strlen(gd->api_token) > 0)
-                        {
-                            gd->auth.type = DEST_AUTH_BEARER;
-                            gd->auth.bearer = strdup_psram(gd->api_token);
-                        }
-                    }
-
-                    // Parse optional query params array
-                    if (qp_arr && cJSON_IsArray(qp_arr))
-                    {
-                        int qn = cJSON_GetArraySize(qp_arr);
-                        if (qn > AUTOPID_MAX_DEST_QUERY_PARAMS)
-                        {
-                            ESP_LOGW(TAG, "Query params count %d exceeds max %d; truncating", qn, AUTOPID_MAX_DEST_QUERY_PARAMS);
-                            qn = AUTOPID_MAX_DEST_QUERY_PARAMS;
-                        }
-                        if (qn > 0)
-                        {
-                            gd->query_params = (dest_query_kv_t *)heap_caps_calloc(qn, sizeof(dest_query_kv_t), MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
-                            if (gd->query_params)
-                            {
-                                gd->query_params_count = qn;
-                                for (int qi = 0; qi < qn; ++qi)
-                                {
-                                    cJSON *kv = cJSON_GetArrayItem(qp_arr, qi);
-                                    if (!kv || !cJSON_IsObject(kv))
-                                        continue;
-                                    cJSON *k = cJSON_GetObjectItem(kv, "key");
-                                    cJSON *v = cJSON_GetObjectItem(kv, "value");
-                                    if (k && cJSON_IsString(k) && k->valuestring)
-                                        gd->query_params[qi].key = strdup_psram(k->valuestring);
-                                    if (v && cJSON_IsString(v) && v->valuestring)
-                                        gd->query_params[qi].value = strdup_psram(v->valuestring);
-                                }
-                            }
-                        }
-                    }
-
-                    // Normalize cycle: treat 0 as default 10000 ms
-                    if (gd->cycle == 0)
-                        gd->cycle = 10000;
-                    gd->publish_timer = 0; // immediate eligibility
-                    gd->consec_failures = 0;
-                    gd->backoff_ms = 0;
-                    gd->settings_sent = false;
-                }
-
-                // Compact array: keep only entries with valid destination and enabled
-                uint32_t write_idx = 0;
-                for (uint32_t read_idx = 0; read_idx < autopid_config->destinations_count; ++read_idx)
-                {
-                    group_destination_t *src = &autopid_config->destinations[read_idx];
-                    if (src->enabled && src->destination && strlen(src->destination) > 0)
-                    {
-                        if (write_idx != read_idx)
-                        {
-                            autopid_config->destinations[write_idx] = *src;
-                            memset(src, 0, sizeof(group_destination_t));
-                        }
-                        write_idx++;
-                    }
-                }
-                autopid_config->destinations_count = write_idx;
-
-                ESP_LOGI(TAG, "Configured destinations loaded: %u", (unsigned)autopid_config->destinations_count);
-                for (uint32_t di = 0; di < autopid_config->destinations_count; ++di)
-                {
-                    group_destination_t *gd = &autopid_config->destinations[di];
-                    ESP_LOGI(TAG,
-                             "Dest[%u]: type=%d cycle=%u qp_count=%u has_dest=%d",
-                             (unsigned)di,
-                             (int)gd->type,
-                             (unsigned)gd->cycle,
-                             (unsigned)gd->query_params_count,
-                             (gd->destination && gd->destination[0]) ? 1 : 0);
-                }
-            }
-        }
-    }
-    else
-    {
-        // No new destinations array: fabricate one from legacy fields if present
-        if (autopid_config->group_destination || group_dest_type_item)
-        {
-            autopid_config->destinations = (group_destination_t *)heap_caps_calloc(
-                1,
-                sizeof(group_destination_t),
-                MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
-            if (autopid_config->destinations)
-            {
-                autopid_config->destinations_count = 1;
-                autopid_config->destinations[0].type = autopid_config->group_destination_type;
-                autopid_config->destinations[0].destination = autopid_config->group_destination ? strdup_psram(autopid_config->group_destination) : NULL;
-                if (autopid_config->destinations[0].destination && (autopid_config->destinations[0].type == DEST_HTTP || autopid_config->destinations[0].type == DEST_HTTPS))
-                {
-                    bool has_http = (strncmp(autopid_config->destinations[0].destination, "http://", 7) == 0);
-                    bool has_https = (strncmp(autopid_config->destinations[0].destination, "https://", 8) == 0);
-                    if (!has_http && !has_https)
-                    {
-                        const char *prefix = (autopid_config->destinations[0].type == DEST_HTTPS) ? "https://" : "http://";
-                        size_t new_len = strlen(prefix) + strlen(autopid_config->destinations[0].destination) + 1;
-                        char *with_prefix = (char *)heap_caps_malloc(new_len, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
-                        if (with_prefix)
-                        {
-                            strcpy(with_prefix, prefix);
-                            strcat(with_prefix, autopid_config->destinations[0].destination);
-                            free(autopid_config->destinations[0].destination);
-                            autopid_config->destinations[0].destination = with_prefix;
-                        }
-                    }
-                }
-                autopid_config->destinations[0].cycle = autopid_config->cycle;
-                if (autopid_config->destinations[0].cycle == 0)
-                {
-                    autopid_config->destinations[0].cycle = 10000;
-                }
-                autopid_config->destinations[0].api_token = group_api_token_item && group_api_token_item->valuestring ? strdup_psram(group_api_token_item->valuestring) : NULL;
-                autopid_config->destinations[0].cert_set = strdup_psram("default");
-                autopid_config->destinations[0].enabled = false;
-                if ((autopid_config->destinations[0].type == DEST_HTTP || autopid_config->destinations[0].type == DEST_HTTPS) && autopid_config->destinations[0].api_token)
-                {
-                    autopid_config->destinations[0].auth.type = DEST_AUTH_BEARER;
-                    autopid_config->destinations[0].auth.bearer = strdup_psram(autopid_config->destinations[0].api_token);
-                }
-                else
-                {
-                    autopid_config->destinations[0].auth.type = DEST_AUTH_NONE;
-                }
-                autopid_config->destinations[0].publish_timer = 0;
-                autopid_config->destinations[0].consec_failures = 0;
-                autopid_config->destinations[0].backoff_ms = 0;
-                autopid_config->destinations[0].settings_sent = false;
-                if (!autopid_config->destinations[0].destination || strlen(autopid_config->destinations[0].destination) == 0)
-                {
-                    autopid_config->destinations_count = 0;
-                }
-            }
-        }
-    }
-
     // Load custom pids
     cJSON *pids = cJSON_GetObjectItem(root, "pids");
     if (pids)
@@ -820,9 +513,7 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
                     "sensor_type",
                     "MinValue",
                     "MaxValue",
-                    "Period",
-                    "Send_to",
-                    "Type");
+                    "Period");
             }
 
             idx++;
@@ -864,9 +555,7 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
                     "sensor_type",
                     NULL,
                     NULL,
-                    "Period",
-                    "Send_to",
-                    "Type");
+                    "Period");
                 if (curr_pid->parameters->period == 0)
                 {
                     curr_pid->parameters->period = 10000;
@@ -1033,9 +722,7 @@ static void parse_can_filter_object(can_filter_t *out, const cJSON *filter)
             "sensor_type",
             "min",
             "max",
-            "period",
-            "send_to",
-            "type");
+            "period");
 
         if (out->parameters[pi].period == 0)
         {
@@ -1126,7 +813,7 @@ static void autopid_cfg_parse_calculated_from_array(autopid_config_t *cfg, const
         }
         parse_parameter_object(&arr[filled], obj,
                                "name", "expression", "unit", "class", "sensor_type",
-                               "min", "max", "period", "send_to", "type");
+                               "min", "max", "period");
         filled++;
     }
 
@@ -1232,9 +919,7 @@ static void parse_car_data_json(autopid_config_t *autopid_config, int *pid_index
                                 "sensor_type",
                                 "min",
                                 "max",
-                                "period",
-                                "send_to",
-                                "type");
+                                "period");
                             if (curr_pid->parameters[param_index].period == 0)
                             {
                                 curr_pid->parameters[param_index].period = autopid_config->cycle;
