@@ -49,8 +49,8 @@
 #define TCP_PORT			1
 
 #define SLCAN				0
-#define REALDASH			1
-#define SAVVYCAN			2
+/* protocol ids 1 (realdash66) and 2 (savvycan) retired in the #5 trim; values
+ * reserved so the remaining ids never shift. */
 #define OBD_ELM327			3
 #define AUTO_PID			4
 #define FAST_LOG			5	/* Native-TWAI fast datalogger (Task #18) */
@@ -146,24 +146,7 @@ typedef struct _device_config
 	char batt_alert_time[16];
 	char batt_mqtt_user[64];
 	char batt_mqtt_pass[64];
-	char mqtt_en[10];
-	char webhook_en[24];
-	char mqtt_tx_en[10];
-	char mqtt_rx_en[10];
-	char mqtt_url[256];
-	char mqtt_port[32];
-	char mqtt_user[64];
-	char mqtt_pass[64];
-	char mqtt_cert_set[64];
-	char mqtt_security[16];
 	// MQTT TLS verification behavior: "enable" to skip CN check, "disable" (default) to verify
-	char mqtt_skip_cn[10];
-	char mqtt_elm327_log[10];
-	char elm327_udp_log[10];
-	char mqtt_tx_topic[64];
-	char mqtt_rx_topic[64];
-	char mqtt_status_topic[64];
-	char logger_status[16];
 	char csv_log[16];
 	char log_storage[16];
 	char log_filesystem[16];
@@ -176,11 +159,10 @@ typedef struct _device_config
 }device_config_t;
 
 
-void config_server_start(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t connected_led, char * did);
+void config_server_start(QueueHandle_t *xRXp_Queue, uint8_t connected_led, char * did);
 void config_server_stop(void);
 int8_t config_server_get_wifi_mode(void);
 int8_t config_server_get_ap_ch(void);
-int8_t config_server_get_webhook_en(void);
 char *config_server_get_sta_ssid(void);
 char *config_server_get_sta_pass(void);
 char *config_server_get_home_ssid(void);
@@ -215,7 +197,6 @@ int8_t config_server_get_ble_power(int8_t *power_dbm); // returns 0 on success
 int8_t config_server_get_ble_config(void);
 void config_server_set_ble_config(uint8_t b);
 void config_server_restart(void);
-bool config_server_ws_connected(void);
 int8_t config_server_get_sleep_volt(float *sleep_volt);
 int8_t config_server_get_engine_volt(float *engine_volt);   // Task #6: engine-running gate (13.0-15.0 V)
 int8_t config_server_get_battery_alert_config(void);
@@ -229,24 +210,10 @@ int8_t config_server_get_alert_volt(float *alert_volt);
 int config_server_get_alert_time(void);
 char *config_server_get_alert_mqtt_user(void);
 char *config_server_get_alert_mqtt_pass(void);
-int8_t config_server_mqtt_en_config(void);
-char *config_server_get_mqtt_url(void);
-int32_t config_server_get_mqtt_port(void);
-char *config_server_get_mqtt_user(void);
-char *config_server_get_mmqtt_pass(void);
-char *config_server_get_mqtt_canflt(void);
-int8_t config_server_mqtt_elm327_log(void);
-int8_t config_server_elm327_udp_log(void);
-char *config_server_get_mqtt_tx_topic(void);
-char *config_server_get_mqtt_rx_topic(void);
-char *config_server_get_mqtt_status_topic(void);
-int8_t config_server_mqtt_tx_en_config(void);
-int8_t config_server_mqtt_rx_en_config(void);
 int8_t config_server_get_wakeup_volt(float *wakeup_volt);
 int8_t config_server_get_sleep_time(uint32_t *sleep_time);
 int8_t config_server_get_wakeup_time(uint32_t *wakeup_time);
 wifi_security_t config_server_get_sta_security(void);
-int8_t config_server_get_logger_config(void);
 int8_t config_server_get_csv_log(void);
 int8_t config_server_get_log_period(uint32_t *log_period);
 // Wide CSV (Task #11): grid_mode 1=fixed / 0=event / -1=invalid; grid_hz writes *hz (1..50)
@@ -262,9 +229,6 @@ int8_t config_server_get_periodic_wakeup(void);
 int8_t config_server_get_wakeup_interval(uint32_t *wakeup_interval);
 int8_t config_server_get_imu_threshold(uint8_t *imu_threshold);
 bool config_server_is_debug_enabled(void);
-bool config_server_get_mqtt_security_enabled(void);
-char *config_server_get_mqtt_cert_set(void);
-bool config_server_get_mqtt_skip_cn_check(void);
 // Fallback STA networks accessors
 int config_server_get_sta_fallbacks_count(void);
 const char *config_server_get_sta_fallback_ssid(int index);

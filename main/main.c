@@ -49,19 +49,14 @@
 #include "slcan_port.h"   /* dedicated always-on SLCAN listener (no-reboot coexistence, task #36) */
 #include "datalog_lease_task.h"   /* dead-man's-switch reaper (brick-safe datalog auto-resume, task #36) */
 #include "config_server.h"
-#include "realdash.h"
 #include "slcan.h"
 #include "can.h"
 #include "ncflash_fastread.h"
 #include "ncflash_fastwrite.h"
 #include "ble.h"
-#include "gvret.h"
 #include "sleep_mode.h"
 #include "wc_uart.h"
 #include "elm327.h"
-#include <ws_router.h>
-#include "mqtt.h"
-#include "ftp.h"
 #include "autopid.h"
 #include "csv_logger.h"
 #include "fast_log.h"
@@ -82,10 +77,8 @@
 #include "wc_timer.h"
 #include "filesystem.h"
 #include "safemode.h"
-#include "debug_logs.h"
 #include "restart_tracker.h"
 #include "sync_sys_time.h"
-#include "vpn_manager.h"
 #include "config_mode.h"
 #include "driver/rtc_io.h"
 
@@ -110,7 +103,7 @@
 #define BLE_EN_PIN_SEL		(1ULL<<BLE_EN_PIN_NUM)
 #define BLE_Enabled()		(!gpio_get_level(BLE_EN_PIN_NUM))
 
-static QueueHandle_t xMsg_Tx_Queue, xMsg_Rx_Queue, xmsg_ws_tx_queue, xmsg_ble_tx_queue, xmsg_uart_tx_queue, xmsg_obd_rx_queue, xmsg_mqtt_rx_queue, xmsg_elm327_rx_queue;
+static QueueHandle_t xMsg_Tx_Queue, xMsg_Rx_Queue, xmsg_ble_tx_queue, xmsg_uart_tx_queue, xmsg_obd_rx_queue, xmsg_elm327_rx_queue;
 /* Private reply queue for the dedicated SLCAN port (task #36): the fast-read/write codecs
  * push DEV_SLCAN_PORT replies here, drained by slcan_port_tx_task to its own socket, so they
  * never collide with the stock port's xMsg_Tx_Queue. WICAN_PRO only. */
@@ -124,9 +117,6 @@ static xdev_buffer ucBLE_TX_Buffer;
 
 static uint8_t protocol = OBD_ELM327;
 
-int FTP_TASK_FINISH_BIT = BIT2;
-EventGroupHandle_t xEventTask;
-static uint8_t mqtt_elm327_log_en = 0;
 static uint8_t derived_mac_addr[6] = {0};
 static uint8_t uid[16];
 static uint8_t ble_uid[33];
@@ -134,35 +124,6 @@ static char ap_ssid[33] = {0};
 static char hardware_version[16];
 static char firmware_version[10];
 
-static bool debug_logs_network_ready_sta(void)
-{
-	return dev_status_is_sta_connected();
-}
-
-static void log_can_to_mqtt(twai_message_t *frame, uint8_t type)
-{
-	static mqtt_can_message_t mqtt_msg;
-
-	mqtt_msg.frame.extd = frame->extd;
-	mqtt_msg.frame.rtr = frame->rtr;
-	mqtt_msg.frame.ss = frame->ss;
-	mqtt_msg.frame.self = frame->self;
-	mqtt_msg.frame.dlc_non_comp = frame->dlc_non_comp;
-	mqtt_msg.frame.identifier = frame->identifier;
-	mqtt_msg.frame.data_length_code = frame->data_length_code;
-
-	mqtt_msg.frame.data[0] = frame->data[0];
-	mqtt_msg.frame.data[1] = frame->data[1];
-	mqtt_msg.frame.data[2] = frame->data[2];
-	mqtt_msg.frame.data[3] = frame->data[3];
-	mqtt_msg.frame.data[4] = frame->data[4];
-	mqtt_msg.frame.data[5] = frame->data[5];
-	mqtt_msg.frame.data[6] = frame->data[6];
-	mqtt_msg.frame.data[7] = frame->data[7];
-
-	mqtt_msg.type = type;
-	xQueueSend( xmsg_mqtt_rx_queue, ( void * ) &mqtt_msg, pdMS_TO_TICKS(0) );
-}
 static void process_led(bool state)
 {
 	static bool current_state;
@@ -290,22 +251,15 @@ static void can_tx_task(void *pvParameters)
 		uint8_t* msg_ptr = ucTCP_RX_Buffer.ucElement;
 		int temp_len = ucTCP_RX_Buffer.usLen;
 
-		if(config_server_ws_connected())
-		{
-			if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI_WS)
-			{
-				slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xmsg_ws_tx_queue);
-			}
-		}
 		/* No-reboot coexistence (task #36): frames from the dedicated SLCAN port (35001)
 		 * are dispatched here -- BEFORE the persisted-protocol gate -- so the host can
 		 * version-ping / fast-read / fast-write / slcan over CAN while the device stays in
-		 * poll_log / auto_pid / realdash, with NO protocol-switch reboot. Replies go to the
+		 * poll_log / auto_pid / elm327, with NO protocol-switch reboot. Replies go to the
 		 * port's PRIVATE queue so they never mix with the stock port. The fast codecs take
 		 * FLASH_ACTIVE_BIT (single bus owner) for their duration; running them INLINE on
-		 * can_tx_task is also what serializes the REALDASH/SAVVYCAN/SLCAN/ELM327 producers
-		 * below out of a flash window (the task is blocked inside the codec). 'continue' so
-		 * the frame never falls through to the protocol arms. */
+		 * can_tx_task is also what serializes the SLCAN/ELM327 producers below out of a
+		 * flash window (the task is blocked inside the codec). 'continue' so the frame
+		 * never falls through to the protocol arms. */
 		if(ucTCP_RX_Buffer.dev_channel == DEV_SLCAN_PORT)
 		{
 			if(ncflash_is_fastread_cmd(msg_ptr, temp_len))
@@ -347,27 +301,8 @@ static void can_tx_task(void *pvParameters)
 			}
 			else if(ucTCP_RX_Buffer.dev_channel == DEV_UART)
 			{
-				if(!config_server_mqtt_en_config())
-				{
-					slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xmsg_uart_tx_queue);
-				}
+				slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xmsg_uart_tx_queue);
 			}
-		}
-		else if(protocol == REALDASH)
-		{
-			ESP_LOG_BUFFER_HEX(TAG, ucTCP_RX_Buffer.ucElement, ucTCP_RX_Buffer.usLen);
-
-			if(real_dash_parse_66(&tx_msg, ucTCP_RX_Buffer.ucElement) == 0)
-			{
-				real_dash_parse_44(&tx_msg, ucTCP_RX_Buffer.ucElement, ucTCP_RX_Buffer.usLen);
-			}
-
-			tx_msg.self = 0;
-			can_send(&tx_msg, portMAX_DELAY);
-		}
-		else if(protocol == SAVVYCAN)
-		{
-			gvret_parse(msg_ptr, temp_len, &tx_msg, &xMsg_Tx_Queue);
 		}
 		else if(protocol == OBD_ELM327 || protocol == AUTO_PID)
 		{
@@ -384,10 +319,6 @@ static void can_tx_task(void *pvParameters)
 			{
 				elm327_process_cmd(msg_ptr, temp_len, &xMsg_Tx_Queue, elm327_cmd_buffer, &cmd_buffer_len, &last_cmd_time, &send_to_host);
 			}
-			else if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI_WS)
-			{
-				elm327_process_cmd(msg_ptr, temp_len, &xmsg_ws_tx_queue, elm327_cmd_buffer, &cmd_buffer_len, &last_cmd_time, &send_to_host);
-			}
 			else if(ucTCP_RX_Buffer.dev_channel == DEV_BLE)
 			{
 				elm327_send_cmd(msg_ptr, temp_len);
@@ -399,10 +330,6 @@ static void can_tx_task(void *pvParameters)
 			if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI)
 			{
 				elm327_process_cmd(msg_ptr, temp_len, &tx_msg, &xMsg_Tx_Queue);
-			}
-			else if(ucTCP_RX_Buffer.dev_channel == DEV_WIFI_WS)
-			{
-				elm327_process_cmd(msg_ptr, temp_len, &tx_msg, &xmsg_ws_tx_queue);
 			}
 			else if(ucTCP_RX_Buffer.dev_channel == DEV_BLE)
 			{
@@ -434,7 +361,7 @@ static void can_rx_task(void *pvParameters)
 		//
 		// No-reboot coexistence (task #36): a flash/read codec is also the SOLE TWAI consumer
 		// for its duration (it does its own can_receive). In coexist modes that DON'T gate this
-		// task off above (e.g. auto_pid, realdash), this task would otherwise race the codec for
+		// task off above (e.g. auto_pid), this task would otherwise race the codec for
 		// the ECU's flash/UDS reply frames and steal them -> flaky/failed read mid-flash. Park on
 		// can_flash_active() so the codec stays sole TWAI owner while a flash holds the bus.
 		// No-reboot coexistence RX-forward (task #36): when a host coexist session has
@@ -488,8 +415,8 @@ static void can_rx_task(void *pvParameters)
 
 			// Coexist RX-forward (task #36): while the dedicated SLCAN port owns the bus
 			// (logger parked/claimed, no flash), forward EVERY ECU frame to that port as
-			// SLCAN regardless of the persisted `protocol`, then skip the primary-port / ws /
-			// mqtt fan-out for this frame. Without this the ECU's UDS replies are dropped
+			// SLCAN regardless of the persisted `protocol`, then skip the primary-port / ws
+			// fan-out for this frame. Without this the ECU's UDS replies are dropped
 			// and host-driven reads/sessions over 35001 hang. The !can_flash_active() re-check
 			// stops forwarding the instant a codec sets FLASH_ACTIVE_BIT mid-inner-loop (it is
 			// about to suspend us), so no stale ECU frame races the codec. Only to a live client.
@@ -503,13 +430,8 @@ static void can_rx_task(void *pvParameters)
 				continue;
 			}
 
-			if(config_server_ws_connected() && ws_router_is_in_monitor_mode())
-			{
-				ucTCP_TX_Buffer.usLen = slcan_parse_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
-				xQueueSend( xmsg_ws_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
-			}
         	//TODO: optimize, useless ifs
-			if(tcp_port_open() || ble_connected() || HARDWARE_VER == WICAN_USB_V100 || mqtt_connected() || protocol == AUTO_PID )
+			if(tcp_port_open() || ble_connected() || HARDWARE_VER == WICAN_USB_V100 || protocol == AUTO_PID )
 			{
 				memset(ucTCP_TX_Buffer.ucElement, 0, sizeof(ucTCP_TX_Buffer.ucElement));
 				ucTCP_TX_Buffer.usLen = 0;
@@ -517,14 +439,6 @@ static void can_rx_task(void *pvParameters)
 				if(protocol == SLCAN)
 				{
 					ucTCP_TX_Buffer.usLen = slcan_parse_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
-				}
-				else if(protocol == REALDASH)
-				{
-					ucTCP_TX_Buffer.usLen = real_dash_set_66(&rx_msg, ucTCP_TX_Buffer.ucElement);
-				}
-				else if(protocol == SAVVYCAN)
-				{
-					ucTCP_TX_Buffer.usLen = gvret_parse_can_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
 				}
 				#if HARDWARE_VER != WICAN_PRO
 				else if(protocol == OBD_ELM327 || protocol == AUTO_PID)
@@ -550,37 +464,8 @@ static void can_rx_task(void *pvParameters)
 					}
 					else if(HARDWARE_VER == WICAN_USB_V100)
 					{
-						if(!config_server_mqtt_en_config())
-						{
-							xQueueSend( xmsg_uart_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
-						}
+						xQueueSend( xmsg_uart_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
 					}
-				}
-			}
-			if(mqtt_connected())
-			{
-				static mqtt_can_message_t mqtt_rx_msg;
-				if(mqtt_elm327_log_en == 0)
-				{
-					mqtt_rx_msg.frame.extd = rx_msg.extd;
-					mqtt_rx_msg.frame.rtr = rx_msg.rtr;
-					mqtt_rx_msg.frame.ss = rx_msg.ss;
-					mqtt_rx_msg.frame.self = rx_msg.self;
-					mqtt_rx_msg.frame.dlc_non_comp = rx_msg.dlc_non_comp;
-					mqtt_rx_msg.frame.identifier = rx_msg.identifier;
-					mqtt_rx_msg.frame.data_length_code = rx_msg.data_length_code;
-
-					mqtt_rx_msg.frame.data[0] = rx_msg.data[0];
-					mqtt_rx_msg.frame.data[1] = rx_msg.data[1];
-					mqtt_rx_msg.frame.data[2] = rx_msg.data[2];
-					mqtt_rx_msg.frame.data[3] = rx_msg.data[3];
-					mqtt_rx_msg.frame.data[4] = rx_msg.data[4];
-					mqtt_rx_msg.frame.data[5] = rx_msg.data[5];
-					mqtt_rx_msg.frame.data[6] = rx_msg.data[6];
-					mqtt_rx_msg.frame.data[7] = rx_msg.data[7];
-
-					mqtt_rx_msg.type = MQTT_CAN;
-					xQueueSend( xmsg_mqtt_rx_queue, ( void * ) &mqtt_rx_msg, pdMS_TO_TICKS(0) );
 				}
 			}
         }
@@ -862,26 +747,22 @@ void app_main(void)
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 	xMsg_Rx_Queue = xQueueCreate(32, sizeof( xdev_buffer) );
     xMsg_Tx_Queue = xQueueCreate(32, sizeof( xdev_buffer) );
-    xmsg_ws_tx_queue = xQueueCreate(32, sizeof( xdev_buffer) );
 	#elif HARDWARE_VER == WICAN_PRO
 	static xdev_buffer* xMsg_Rx_Queue_Storage;
 	static xdev_buffer* xMsg_Tx_Queue_Storage;
-	static xdev_buffer* xmsg_ws_tx_queue_Storage;
 	static xdev_buffer* xMsg_SlcanPort_Tx_Queue_Storage;
 	static StaticQueue_t xMsg_Rx_Queue_Buffer;
 	static StaticQueue_t xMsg_Tx_Queue_Buffer;
-	static StaticQueue_t xmsg_ws_tx_queue_Buffer;
 	static StaticQueue_t xMsg_SlcanPort_Tx_Queue_Buffer;
 
 	size_t xdev_buffer_size = sizeof( xdev_buffer);
 
     xMsg_Rx_Queue_Storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
     xMsg_Tx_Queue_Storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
-    xmsg_ws_tx_queue_Storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
     xMsg_SlcanPort_Tx_Queue_Storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
 
     // Check if memory allocation was successful
-    if (xMsg_Rx_Queue_Storage == NULL || xMsg_Tx_Queue_Storage == NULL || xmsg_ws_tx_queue_Storage == NULL || xMsg_SlcanPort_Tx_Queue_Storage == NULL) {
+    if (xMsg_Rx_Queue_Storage == NULL || xMsg_Tx_Queue_Storage == NULL || xMsg_SlcanPort_Tx_Queue_Storage == NULL) {
         // Handle memory allocation failure
         ESP_LOGE(TAG, "Failed to allocate memory for queues in external RAM");
         return;
@@ -890,11 +771,10 @@ void app_main(void)
     // Create the static queues
     xMsg_Rx_Queue = xQueueCreateStatic(32, xdev_buffer_size, (uint8_t *)xMsg_Rx_Queue_Storage, &xMsg_Rx_Queue_Buffer);
     xMsg_Tx_Queue = xQueueCreateStatic(32, xdev_buffer_size, (uint8_t *)xMsg_Tx_Queue_Storage, &xMsg_Tx_Queue_Buffer);
-    xmsg_ws_tx_queue = xQueueCreateStatic(32, xdev_buffer_size, (uint8_t *)xmsg_ws_tx_queue_Storage, &xmsg_ws_tx_queue_Buffer);
     xMsg_SlcanPort_Tx_Queue = xQueueCreateStatic(32, xdev_buffer_size, (uint8_t *)xMsg_SlcanPort_Tx_Queue_Storage, &xMsg_SlcanPort_Tx_Queue_Buffer);
 
     // Check if queues were created successfully
-    if (xMsg_Rx_Queue == NULL || xMsg_Tx_Queue == NULL || xmsg_ws_tx_queue == NULL || xMsg_SlcanPort_Tx_Queue == NULL) {
+    if (xMsg_Rx_Queue == NULL || xMsg_Tx_Queue == NULL || xMsg_SlcanPort_Tx_Queue == NULL) {
         // Handle queue creation failure
         ESP_LOGE(TAG, "Failed to create queues");
         return;
@@ -919,9 +799,9 @@ void app_main(void)
 			derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
 			
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
-		config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, (char*)&uid[0]);
+		config_server_start(&xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, (char*)&uid[0]);
 	#else
-		config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, 0, (char*)&uid[0]);
+		config_server_start(&xMsg_Rx_Queue, 0, (char*)&uid[0]);
 	#endif
 
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
@@ -988,26 +868,6 @@ void app_main(void)
 		}
 	}
 
-	if(protocol == REALDASH)
-	{
-//		int can_datarate = config_server_get_can_rate();
-		if(can_datarate != -1)
-		{
-			can_set_bitrate(can_datarate);
-		}
-		else
-		{
-			ESP_LOGE(TAG, "error going to default CAN_500K");
-			can_set_bitrate(CAN_500K);
-		}
-
-		can_enable();
-	}
-	else if(protocol == SAVVYCAN)
-	{
-		gvret_init(&send_to_host);
-		can_enable();
-	}
 	#if HARDWARE_VER == WICAN_PRO
 	// xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
 	// static uint8_t* elm327_uart_rx_queue_storage;
@@ -1024,40 +884,25 @@ void app_main(void)
     elm327_uart_rx_queue_storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
 	xmsg_obd_rx_queue = xQueueCreateStatic(32, xdev_buffer_size, (uint8_t *)elm327_uart_rx_queue_storage, &elm327_uart_rx_queue_buffer);
 	// elm327_init( &send_to_host, &xmsg_obd_rx_queue, NULL); //not needed
-	bool elm327_udp_log = config_server_elm327_udp_log() == 1 ? true : false;
-	elm327_init(&send_to_host, &xmsg_ble_tx_queue, NULL, elm327_udp_log);
-	if(elm327_udp_log)
-	{
-		debug_logs_init(debug_logs_network_ready_sta, true);
-	}
+	elm327_init(&send_to_host, &xmsg_ble_tx_queue, NULL);
 	if(protocol == AUTO_PID)
 	{
 		// can_set_bitrate(can_datarate);
 		// #if HARDWARE_VER != WICAN_PRO
 		// can_enable();
 		// #endif
-		uint32_t log_period = 0;
-		if(config_server_get_log_period(&log_period) == -1)
-		{
-			ESP_LOGE(TAG, "error getting log period");
-			log_period = 60;
-		}
 		// CSV datalogger: DEFERRED start when enabled. The historical boot crash was a
 		// task-publish race in csv_logger_init() (csv_queue published after the higher-
 		// priority writer task was created), now fixed. The deferred start is kept as a
 		// modest settle margin: csv_logger_init_deferred() waits ~20s, then starts the
 		// logger. A one-shot RTC guard skips CSV for one boot if a startup attempt ever
-		// fails to stabilize, so it can never boot-loop.
-		// Single-owner gate (Task #5): at most one logger starts. CSV wins if both are
-		// somehow enabled (matches the /store_config normalizer). Explicit '== 1' so a
-		// -1 (unset/garbage logger_status) can NEVER enable a logger via bool coercion.
-		int8_t csv_en = config_server_get_csv_log();
-		int8_t obd_en = config_server_get_logger_config();
-		if(csv_en == 1)
+		// fails to stabilize, so it can never boot-loop. Explicit '== 1' so a garbage
+		// csv_log value can NEVER enable the logger via bool coercion.
+		if(config_server_get_csv_log() == 1)
 		{
 			csv_logger_init_deferred();
 		}
-		autopid_init((char*)&uid[0], (obd_en == 1 && csv_en != 1), log_period);
+		autopid_init((char*)&uid[0]);
 	}
 	else if(protocol == FAST_LOG)
 	{
@@ -1105,15 +950,7 @@ void app_main(void)
 		can_enable();
 		#endif
 		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
-		if(config_server_mqtt_en_config() && config_server_mqtt_elm327_log())
-		{
-			mqtt_elm327_log_en = config_server_mqtt_elm327_log();
-			elm327_init(&xmsg_obd_rx_queue, log_can_to_mqtt);
-		}
-		else
-		{
-			elm327_init(&xmsg_obd_rx_queue, NULL);
-		}
+		elm327_init(&xmsg_obd_rx_queue, NULL);
 	}
 	else if(protocol == AUTO_PID)
 	{
@@ -1124,46 +961,10 @@ void app_main(void)
 		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
 		
 		elm327_init(&xmsg_obd_rx_queue, NULL);
-		autopid_init((char*)&uid[0], config_server_get_auto_pid());
+		autopid_init((char*)&uid[0]);
 	}
 	#endif
 	
-	if(config_server_mqtt_en_config())
-	{
-		static mqtt_can_message_t* xmsg_mqtt_rx_queue_Storage;
-		static StaticQueue_t xmsg_mqtt_rx_queue_Buffer;
-		xmsg_mqtt_rx_queue_Storage = (mqtt_can_message_t *)heap_caps_malloc(32 * sizeof(mqtt_can_message_t), MALLOC_CAP_SPIRAM);
-		xmsg_mqtt_rx_queue = xQueueCreateStatic(32, sizeof(mqtt_can_message_t), (uint8_t *)xmsg_mqtt_rx_queue_Storage, &xmsg_mqtt_rx_queue_Buffer);
-		#if HARDWARE_VER == WICAN_PRO
-		// if(protocol != AUTO_PID && protocol != OBD_ELM327)
-		{
-			can_set_bitrate(can_datarate);
-			can_enable();
-		}
-		// else
-		// {
-		// 	can_disable();
-		// }
-		#else
-		can_set_bitrate(can_datarate);
-		can_enable();
-		#endif
-		
-		#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
-			mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM, &xmsg_mqtt_rx_queue);
-		#else
-			mqtt_init((char*)&uid[0], 0, &xmsg_mqtt_rx_queue);
-		#endif
-		
-	}
-//	else if(protocol == MQTT)
-//	{
-//		xmsg_mqtt_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
-//		can_init(CAN_500K);
-//		can_enable();
-//
-//		mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM, &xmsg_mqtt_rx_queue);
-//	}
 	// Task #6: the engine-running gate uses a DEDICATED threshold (engine_volt), NOT sleep_volt.
 	// sleep_volt stays exclusively for deep-sleep / battery protection (sleep_mode), untouched.
 	vehicle_config_t vehicle_config;
@@ -1254,13 +1055,10 @@ void app_main(void)
         {
         	// project_hardware_rev = WICAN_USB_V100;
         	// ESP_LOGI(TAG, "project_hardware_rev: USB");
-        	if(!config_server_mqtt_en_config())
-        	{
-				#if HARDWARE_VER == WICAN_USB_V100
-				xmsg_uart_tx_queue = xQueueCreate(32, sizeof( xdev_buffer) );
-				wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
-				#endif
-        	}
+			#if HARDWARE_VER == WICAN_USB_V100
+			xmsg_uart_tx_queue = xQueueCreate(32, sizeof( xdev_buffer) );
+			wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
+			#endif
 
         }
         // else
@@ -1308,7 +1106,6 @@ void app_main(void)
 	// Initialize time synchronization task
 	sync_sys_time_init();
 
-	vpn_manager_set_enabled(1);
 	if(internal_buf != NULL)
 	{
 		free(internal_buf);
@@ -1316,13 +1113,6 @@ void app_main(void)
 	config_mode_init();
 	wc_mdns_init((char*)uid, hardware_version, firmware_version);
 	
-	// xEventTask = xEventGroupCreate();
-	// xTaskCreate(ftp_task, "FTP", 1024*6, NULL, 2, NULL);
-	// xEventGroupWaitBits( xEventTask,
-	// FTP_TASK_FINISH_BIT, /* The bits within the event group to wait for. */
-	// pdTRUE, /* BIT_0 should be cleared before returning. */
-	// pdFALSE, /* Don't wait for both bits, either bit will do. */
-	// portMAX_DELAY);/* Wait forever. */ 
 	if(!config_server_is_debug_enabled())
 	{
 		esp_log_level_set("*", ESP_LOG_NONE);
@@ -1352,19 +1142,11 @@ void app_main(void)
 	// esp_log_level_set("AUTO_PID", ESP_LOG_INFO);
 	// esp_log_level_set("AUTO_PID", ESP_LOG_INFO);
 	// esp_log_level_set("HTTPS_CLIENT_MGR", ESP_LOG_INFO);
-	// esp_log_level_set("cert_manager", ESP_LOG_INFO);
 	// esp_log_level_set("esp-tls", ESP_LOG_VERBOSE);
 	// esp_log_level_set("mbedtls", ESP_LOG_VERBOSE);
 	// esp_log_level_set("TRANSPORT_BASE", ESP_LOG_VERBOSE);
 	// esp_log_level_set("SYNC_SYS_TIME", ESP_LOG_INFO);
-	// esp_log_level_set("MQTT", ESP_LOG_INFO);
-	// esp_log_level_set("VPN_HTTP", ESP_LOG_INFO);
-	// esp_log_level_set("VPN_MANAGER", ESP_LOG_INFO);
-	// esp_log_level_set("VPN_WG", ESP_LOG_INFO);
-	// esp_log_level_set("VPN_CFG", ESP_LOG_INFO);
 	// esp_log_level_set("WiFi_Manager", ESP_LOG_INFO);
-	// esp_log_level_set("HA_WEBHOOK_CFG", ESP_LOG_INFO);
-	// esp_log_level_set("HA_WEBHOOK_HTTP", ESP_LOG_INFO);
 
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
     gpio_set_level(PWR_LED_GPIO_NUM, 1);

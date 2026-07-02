@@ -29,7 +29,7 @@
  * Always-on dedicated SLCAN TCP listener (no-reboot coexistence, task #36).
  *
  * The stock comm_server owns the configured port and serves whatever protocol
- * is persisted (poll_log/realdash/elm327/slcan/...). When the device boots in a
+ * is persisted (poll_log/elm327/slcan/...). When the device boots in a
  * datalogger mode the flash codecs are unreachable on that port because
  * dispatch is gated behind `if(protocol == SLCAN)` in main.c::can_tx_task.
  *

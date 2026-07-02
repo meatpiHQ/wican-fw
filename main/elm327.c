@@ -1307,7 +1307,6 @@ void elm327_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q), QueueH
 #include "esp_timer.h"
 #include "led.h"
 #include "hw_config.h"
-#include "debug_logs.h"
 
 /* Defines and Constants */
 #define BUF_SIZE 						(1024)
@@ -1375,186 +1374,14 @@ static char *update_resp_buf = NULL;
 static int uart_read_until_pattern(uart_port_t uart_num, char* buffer, size_t buffer_size, 
                                  const char* end_pattern, int total_timeout_ms) ;
 
-#define ELM327_UART_LOG_BUF_SZ (10*1024)
-static char *s_elm_tx_buf = NULL;
-static size_t s_elm_tx_len = 0;
-static char *s_elm_rx_buf = NULL;
-static size_t s_elm_rx_len = 0;
-static char* emit_line_buf = NULL;
-static bool elm327_udp_log_enabled = false;
-
-static void elm327_trim_trailing_spaces(char *buf, size_t *len)
-{
-	while (*len > 0 && buf[*len - 1] == ' ')
-	{
-		(*len)--;
-	}
-	buf[*len] = 0;
-}
-
-static void elm327_emit_line(const char *prefix, const char *payload, bool add_prompt)
-{
-	if (!elm327_udp_log_enabled)
-	{
-		return;
-	}
-
-	char *out = emit_line_buf;
-	if (!out)
-	{
-		return;
-	}
-	if (!payload)
-	{
-		payload = "";
-	}
-	const size_t cap = (size_t)ELM327_UART_LOG_BUF_SZ;
-	out[0] = 0;
-	(void)strlcpy(out, prefix ? prefix : "", cap);
-	(void)strlcat(out, payload, cap);
-	if (add_prompt)
-	{
-		(void)strlcat(out, (payload[0] ? " >" : ">"), cap);
-	}
-	debug_logs_log(DEBUG_LOG_LEVEL_INFO, "ELM327_UART", "%s", out);
-}
-
-static void elm327_uart_log_tx_bytes(uart_port_t uart_num, const uint8_t *data, int len)
-{
-	(void)uart_num;
-	if (!data || len <= 0)
-	{
-		return;
-	}
-	if (!s_elm_tx_buf)
-	{
-		return;
-	}
-	for (int i = 0; i < len; i++)
-	{
-		uint8_t c = data[i];
-		if (c == '\r')
-		{
-			s_elm_tx_buf[s_elm_tx_len] = 0;
-			elm327_trim_trailing_spaces(s_elm_tx_buf, &s_elm_tx_len);
-			if (s_elm_tx_len > 0)
-			{
-				elm327_emit_line("ELM TX: ", s_elm_tx_buf, false);
-			}
-			s_elm_tx_len = 0;
-			continue;
-		}
-		if (c == '\n')
-		{
-			continue;
-		}
-		if (c == '\t')
-		{
-			c = ' ';
-		}
-		if (c < 32 || c > 126)
-		{
-			c = '?';
-		}
-
-		if (s_elm_tx_len + 1 >= ELM327_UART_LOG_BUF_SZ)
-		{
-			s_elm_tx_buf[s_elm_tx_len] = 0;
-			elm327_trim_trailing_spaces(s_elm_tx_buf, &s_elm_tx_len);
-			if (s_elm_tx_len > 0)
-			{
-				elm327_emit_line("ELM TX: ", s_elm_tx_buf, false);
-			}
-			s_elm_tx_len = 0;
-		}
-		s_elm_tx_buf[s_elm_tx_len++] = (char)c;
-		s_elm_tx_buf[s_elm_tx_len] = 0;
-	}
-}
-
-static void elm327_uart_log_rx_bytes(uart_port_t uart_num, const uint8_t *data, int len)
-{
-	(void)uart_num;
-	if (!data || len <= 0)
-	{
-		return;
-	}
-	if (!s_elm_rx_buf)
-	{
-		return;
-	}
-	for (int i = 0; i < len; i++)
-	{
-		uint8_t c = data[i];
-		if (c == '>')
-		{
-			s_elm_rx_buf[s_elm_rx_len] = 0;
-			elm327_trim_trailing_spaces(s_elm_rx_buf, &s_elm_rx_len);
-			if (s_elm_rx_len > 0)
-			{
-				elm327_emit_line("ELM RX: ", s_elm_rx_buf, false);
-			}
-			elm327_emit_line("ELM RX: ", "", true);
-			s_elm_rx_len = 0;
-			continue;
-		}
-		if (c == '\r' || c == '\n' || c == '\t')
-		{
-			// Treat line breaks as a single space separator
-			if (s_elm_rx_len > 0 && s_elm_rx_buf[s_elm_rx_len - 1] != ' ')
-			{
-				if (s_elm_rx_len + 1 < ELM327_UART_LOG_BUF_SZ)
-				{
-					s_elm_rx_buf[s_elm_rx_len++] = ' ';
-					s_elm_rx_buf[s_elm_rx_len] = 0;
-				}
-			}
-			continue;
-		}
-		if (c < 32 || c > 126)
-		{
-			c = '?';
-		}
-
-		if (s_elm_rx_len + 1 >= ELM327_UART_LOG_BUF_SZ)
-		{
-			s_elm_rx_buf[s_elm_rx_len] = 0;
-			elm327_trim_trailing_spaces(s_elm_rx_buf, &s_elm_rx_len);
-			if (s_elm_rx_len > 0)
-			{
-				elm327_emit_line("ELM RX: ", s_elm_rx_buf, false);
-			}
-			s_elm_rx_len = 0;
-		}
-		s_elm_rx_buf[s_elm_rx_len++] = (char)c;
-		s_elm_rx_buf[s_elm_rx_len] = 0;
-	}
-}
-
 static int elm327_uart_write_bytes(uart_port_t uart_num, const void *src, size_t size)
 {
-	int written = uart_write_bytes(uart_num, src, size);
-	if(elm327_udp_log_enabled)	//if log to udp enabled place holder here
-	{
-		if (written > 0 && src)
-		{
-			elm327_uart_log_tx_bytes(uart_num, (const uint8_t*)src, written);
-		}
-	}
-	return written;
+	return uart_write_bytes(uart_num, src, size);
 }
 
 static int elm327_uart_read_bytes(uart_port_t uart_num, void *buf, size_t size, TickType_t ticks_to_wait)
 {
-	int r = uart_read_bytes(uart_num, buf, size, ticks_to_wait);
-	if(elm327_udp_log_enabled)	//if log to udp enabled place holder here
-	{
-		if (r > 0 && buf)
-		{
-			elm327_uart_log_rx_bytes(uart_num, (const uint8_t*)buf, r);
-		}
-	} 
-	return r;
+	return uart_read_bytes(uart_num, buf, size, ticks_to_wait);
 }
 
 static void elm327_powerpin_commands(void)
@@ -3377,16 +3204,11 @@ void elm327_read_task(void *pvParameters)
 }
 
 
-void elm327_init(response_callback_t rsp_callback, QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame, uint8_t type), bool udp_log_enabled)
+void elm327_init(response_callback_t rsp_callback, QueueHandle_t *rx_queue, void (*can_log)(twai_message_t* frame, uint8_t type))
 {
     xqueue_elm327_uart_rx = rx_queue;
     elm327_can_log = can_log;
 	elm327_response = rsp_callback;
-	elm327_udp_log_enabled = udp_log_enabled;
-	if(elm327_udp_log_enabled)
-	{
-		ESP_LOGW(TAG, "ELM327 UDP logging enabled");
-	}
 
 	if(update_resp_buf == NULL)
 	{
@@ -3395,21 +3217,6 @@ void elm327_init(response_callback_t rsp_callback, QueueHandle_t *rx_queue, void
 	}
 
 
-	if(s_elm_tx_buf == NULL)
-	{
-		s_elm_tx_buf = (char *)heap_caps_malloc(ELM327_UART_LOG_BUF_SZ, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-		memset(s_elm_tx_buf, 0, ELM327_UART_LOG_BUF_SZ);
-	}
-	if(s_elm_rx_buf == NULL)
-	{
-		s_elm_rx_buf = (char *)heap_caps_malloc(ELM327_UART_LOG_BUF_SZ, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-		memset(s_elm_rx_buf, 0, ELM327_UART_LOG_BUF_SZ);
-	}
-	if(emit_line_buf == NULL)
-	{
-		emit_line_buf = (char *)heap_caps_malloc(ELM327_UART_LOG_BUF_SZ, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-		memset(emit_line_buf, 0, ELM327_UART_LOG_BUF_SZ);
-	}
 
 	if (elm327_cmd_queue_storage == NULL)
 	{

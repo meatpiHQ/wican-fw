@@ -652,7 +652,7 @@ esp_err_t can_receive(twai_message_t *message, TickType_t ticks_to_wait)
  *   - poll_log polllog_rx_task ........ parks on can_should_park()   (poll_log.c)
  *   - AutoPID autopid_task ............ parks on can_should_park()   (autopid.c)
  *   - MQTT can/rx command handler ..... skips if can_flash_active()  (mqtt.c)
- *   - REALDASH/SAVVYCAN/SLCAN/ELM327 .. serialized: they run INLINE on can_tx_task, which
+ *   - SLCAN/ELM327 ................. serialized: they run INLINE on can_tx_task, which
  *                                       is blocked inside the codec for the whole flash.
  * Any NEW producer added here MUST honor this contract or it can inject a stray frame into
  * the ECU's ISO-TP reassembly mid-TransferData and soft-brick. */

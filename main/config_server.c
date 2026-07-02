@@ -84,28 +84,21 @@
 #include "hw_config.h"
 #include "rtcm.h"
 #include "esp_littlefs.h"
-#include "obd_logger_iface.h"
 #include "csv_logger.h"
 #include "poll_log.h"
 #include "event_log.h"
 #include "sd_filemgr.h"
-#include "https_client_mgr.h"
 #include "sdcard.h"
 #include "obd2_standard_pids.h"
 #include "wifi_mgr.h"
 #include "dev_status.h"
-#include "cert_manager.h"
-#include "vpn_manager.h"
 #include "dev_status.h"
 #include "esp_heap_caps.h"
-#include "ha_webhooks.h"
 #include "autopid_http.h"
 #include "obd2_standard_pids.h"
 #include "restart_tracker.h"
 #include "restart_tracker_http.h"
 
-#include <ws_router.h>
-#include "ws_server.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
 static EventGroupHandle_t xServerEventGroup = NULL;
@@ -123,7 +116,6 @@ static uint32_t s_reboot_flags = RESTART_TRACKER_FLAG_NONE;
 
 httpd_handle_t server = NULL;
 char *device_config_file = NULL;
-static char *mqtt_canflt_file = NULL;
 static char *device_id;
 
 //Function prototypes
@@ -133,10 +125,6 @@ extern const unsigned char homepage_start[] asm("_binary_homepage_html_start");
 extern const unsigned char homepage_end[]   asm("_binary_homepage_html_end");
 extern const unsigned char logo_start[] asm("_binary_logo_txt_start");
 extern const unsigned char logo_end[]   asm("_binary_logo_txt_end");
-extern const unsigned char dashboard_html_start[] asm("_binary_dashboard_html_start");
-extern const unsigned char dashboard_html_end[] asm("_binary_dashboard_html_end");
-extern const unsigned char dashboard_js_start[] asm("_binary_dashboard_js_start");
-extern const unsigned char dashboard_js_end[] asm("_binary_dashboard_js_end");
 extern const unsigned char chart_js_start[] asm("_binary_chart_js_start");
 extern const unsigned char chart_js_end[] asm("_binary_chart_js_end");
 extern const unsigned char sql_wasm_js_start[] asm("_binary_sqlwasm_js_start");
@@ -159,16 +147,10 @@ extern const unsigned char daterangepicker_css_start[] asm("_binary_daterangepic
 extern const unsigned char daterangepicker_css_end[] asm("_binary_daterangepicker_css_end");
 extern const unsigned char bootstrap_min_css_start[] asm("_binary_bootstrap_min_css_start");
 extern const unsigned char bootstrap_min_css_end[] asm("_binary_bootstrap_min_css_end");
-extern const unsigned char dashboard_live_js_start[] asm("_binary_dashboard_live_js_start");
-extern const unsigned char dashboard_live_js_end[] asm("_binary_dashboard_live_js_end");
 extern const unsigned char lucide_icons_js_start[] asm("_binary_lucide_icons_js_start");
 extern const unsigned char lucide_icons_js_end[] asm("_binary_lucide_icons_js_end");
 extern const unsigned char main_js_start[] asm("_binary_main_js_start");
 extern const unsigned char main_js_end[] asm("_binary_main_js_end");
-extern const unsigned char ws_client_js_start[] asm("_binary_ws_client_js_start");
-extern const unsigned char ws_client_js_end[] asm("_binary_ws_client_js_end");
-extern const unsigned char terminal_js_start[] asm("_binary_terminal_js_start");
-extern const unsigned char terminal_js_end[] asm("_binary_terminal_js_end");
 
 typedef struct {
     const char *uri;
@@ -177,31 +159,13 @@ typedef struct {
     const unsigned char *data_end;
     bool load_from_fs;      
     const char *fs_path;
-	const char *download_uri;
 } file_lookup_t;
 
 static const file_lookup_t file_lookup[] = {
-    {"/dashboard.html", "text/html", dashboard_html_start, dashboard_html_end, false, NULL, NULL},
-    {"/dashboard.js", "application/javascript", dashboard_js_start, dashboard_js_end, false, NULL, NULL},
-	{"/dashboard_live.js", "application/javascript", dashboard_live_js_start, dashboard_live_js_end, false, NULL, NULL},
-	{"/lucide_icons.js", "application/javascript", lucide_icons_js_start, lucide_icons_js_end, false, NULL, NULL},
-	{"/main.js", "application/javascript", main_js_start, main_js_end, false, NULL, NULL},
-	{"/ws_client.js", "application/javascript", ws_client_js_start, ws_client_js_end, false, NULL, NULL},
-	{"/terminal.js", "application/javascript", terminal_js_start, terminal_js_end, false, NULL, NULL},
-	{"/chartjs-adapter-moment.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/chartjs-adapter-moment.min.js", "https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.0/dist/chartjs-adapter-moment.min.js"},
-	{"/jquery-3.6.0.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/jquery-3.6.0.min.js", "https://code.jquery.com/jquery-3.6.0.min.js"},
-	{"/bootstrap.bundle.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/bootstrap.bundle.min.js", "https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"},
-	{"/moment.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/moment.min.js", "https://cdn.jsdelivr.net/npm/moment/moment.min.js"},
-	{"/daterangepicker.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/daterangepicker.min.js", "https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"},
-	{"/sql-wasm.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/sql-wasm.js", "https://cdn.jsdelivr.net/npm/sql.js@1.8.0/dist/sql-wasm.js"},
-	{"/chart.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/chart.js", "https://cdn.jsdelivr.net/npm/chart.js"},
-	{"/jszip.min.js", "application/javascript", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/jszip.min.js", "https://cdn.jsdelivr.net/npm/jszip@3.7.1/dist/jszip.min.js"},
-	{"/sql-wasm.wasm", "application/wasm", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/sql-wasm.wasm", "https://cdn.jsdelivr.net/npm/sql.js@1.8.0/dist/sql-wasm.wasm"},
-	{"/bootstrap.min.css", "text/css", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/bootstrap.min.css", "https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css"},
-	{"/daterangepicker.min.css", "text/css", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/daterangepicker.min.css", "https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.css"},
-	{"/daterangepicker.css", "text/css", NULL, NULL, true, SD_CARD_MOUNT_POINT"/wican_data/web/daterangepicker.min.css", "https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css"},
+	{"/lucide_icons.js", "application/javascript", lucide_icons_js_start, lucide_icons_js_end, false, NULL},
+	{"/main.js", "application/javascript", main_js_start, main_js_end, false, NULL},
 	
-	{NULL, NULL, NULL, NULL, false, NULL, NULL} // Sentinel to mark end of array
+	{NULL, NULL, NULL, NULL, false, NULL} // Sentinel to mark end of array
 };
 
 typedef struct {
@@ -228,7 +192,7 @@ static char can_datarate_str[11][7] = {
 								"1000K",
 };
 
-const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"webhook_en\":\"enable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\
+const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\
 									\"ap_ssid_en\":\"disable\",\"ap_ssid\":\"\",\
 										\"home_ssid\":\"MeatPi\",\"home_password\":\"TomatoSauce\",\"home_security\":\"wpa3\",\"home_protocol\":\"elm327\",\
 										\"drive_ssid\":\"MeatPi\",\"drive_password\":\"TomatoSauce\",\"drive_security\":\"wpa3\",\"drive_protocol\":\"elm327\",\"drive_connection_type\":\"wifi\",\"drive_mode_timeout\":\"60\",\
@@ -237,12 +201,11 @@ const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"we
 								\"ble_status\":\"disable\",\"ble_power\":\"9\",\"sleep_status\":\"enable\",\"periodic_wakeup\":\"disable\",\"sleep_volt\":\"13.1\",\"engine_volt\":\"13.2\",\"wakeup_volt\":\"13.5\",\"sleep_time\":\"5\",\"wakeup_interval\":\"90\",\"batt_alert\":\"disable\",\
 										\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\
 										\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\
-								\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"elm327_udp_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\
-										\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\",\"mqtt_security\":\"none\",\"mqtt_cert_set\": \"default\",\"mqtt_skip_cn\":\"disable\",\
-										\"logger_status\":\"disable\",\"csv_log\":\"disable\",\"log_filesystem\":\"littlefs\",\"log_storage\":\"sdcard\",\"log_period\":\"10\",\"csv_grid_mode\":\"fixed\",\"csv_grid_hz\":\"10\",\"csv_require_engine\":\"enable\"}";
+								\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\
+										\"csv_log\":\"disable\",\"log_filesystem\":\"littlefs\",\"log_storage\":\"sdcard\",\"log_period\":\"10\",\"csv_grid_mode\":\"fixed\",\"csv_grid_hz\":\"10\",\"csv_require_engine\":\"enable\"}";
 
-// const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\", \"ap_auto_disable\": \"disable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
-// const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\", \"ap_auto_disable\": \"disable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"periodic_wakeup\":\"disable\",\"wakeup_interval\":\"5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
+// const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\", \"ap_auto_disable\": \"disable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
+// const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\", \"ap_auto_disable\": \"disable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"periodic_wakeup\":\"disable\",\"wakeup_interval\":\"5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
 static device_config_t device_config;
 TimerHandle_t xrestartTimer;
 
@@ -352,16 +315,6 @@ int8_t config_server_get_ap_ch(void)
 	return -1;
 }
 
-int8_t config_server_get_webhook_en(void)
-{
-	// Backward-compatible default: enabled unless explicitly set to "disable"
-	if (strcmp(device_config.webhook_en, "disable") == 0)
-	{
-		return 0;
-	}
-	return 1;
-}
-
 char *config_server_get_sta_ssid(void)
 {
 	return device_config.sta_ssid;
@@ -419,14 +372,6 @@ int8_t config_server_get_home_protocol(void)
 	{
 		return SLCAN;
 	}
-	else if(strcmp(device_config.home_protocol, "realdash66") == 0)
-	{
-		return REALDASH;
-	}
-	else if(strcmp(device_config.home_protocol, "savvycan") == 0)
-	{
-		return SAVVYCAN;
-	}
 	else if(strcmp(device_config.home_protocol, "elm327") == 0)
 	{
 		return OBD_ELM327;
@@ -458,14 +403,6 @@ int8_t config_server_get_drive_protocol(void)
 	if(strcmp(device_config.drive_protocol, "slcan") == 0)
 	{
 		return SLCAN;
-	}
-	else if(strcmp(device_config.drive_protocol, "realdash66") == 0)
-	{
-		return REALDASH;
-	}
-	else if(strcmp(device_config.drive_protocol, "savvycan") == 0)
-	{
-		return SAVVYCAN;
 	}
 	else if(strcmp(device_config.drive_protocol, "elm327") == 0)
 	{
@@ -527,14 +464,6 @@ int8_t config_server_protocol(void)
 	if(strcmp(device_config.protocol, "slcan") == 0)
 	{
 		return SLCAN;
-	}
-	else if(strcmp(device_config.protocol, "realdash66") == 0)
-	{
-		return REALDASH;
-	}
-	else if(strcmp(device_config.protocol, "savvycan") == 0)
-	{
-		return SAVVYCAN;
 	}
 	else if(strcmp(device_config.protocol, "elm327") == 0)
 	{
@@ -651,48 +580,6 @@ int32_t config_server_get_port(void)
 }
 
 // Create directories recursively if they don't exist
-static esp_err_t create_dir_recursively(const char* path) {
-    if (!path) return ESP_ERR_INVALID_ARG;
-    
-    char* temp_path = strdup(path);
-    if (!temp_path) return ESP_ERR_NO_MEM;
-    
-    // Make sure the path ends with a delimiter
-    size_t len = strlen(temp_path);
-    if (temp_path[len-1] != '/') {
-        char* new_path = realloc(temp_path, len + 2);
-        if (!new_path) {
-            free(temp_path);
-            return ESP_ERR_NO_MEM;
-        }
-        temp_path = new_path;
-        temp_path[len] = '/';
-        temp_path[len+1] = '\0';
-    }
-    
-    // Create parent directories
-    for (char* p = temp_path + 1; *p; p++) {
-        if (*p == '/') {
-            *p = '\0';
-            
-            // Try to create directory
-            if (mkdir(temp_path, 0755) != 0) {
-                // Ignore error if directory already exists
-                if (errno != EEXIST) {
-                    ESP_LOGE(TAG, "Failed to create directory %s: %s", temp_path, strerror(errno));
-                }
-            } else {
-                ESP_LOGI(TAG, "Created directory: %s", temp_path);
-            }
-            
-            *p = '/';
-        }
-    }
-    
-    free(temp_path);
-    return ESP_OK;
-}
-
 static esp_err_t wifi_scan_handler(httpd_req_t *req)
 {
     if(config_server_get_ble_config() == 1){
@@ -764,68 +651,7 @@ static esp_err_t get_uri_handler(httpd_req_t *req)
                         fclose(fp);
                         return ESP_OK;
                     }
-                } else if (file->download_uri != NULL) {
-					// File doesn't exist, try to download it
-					ESP_LOGI(TAG, "File not found on filesystem, attempting to download from: %s", file->download_uri);
-					
-					esp_err_t ret = https_client_mgr_init();
-					if (ret != ESP_OK) {
-						ESP_LOGE(TAG, "Failed to initialize HTTPS client: %s", esp_err_to_name(ret));
-						httpd_resp_send_500(req);
-						return ESP_FAIL;
-					}
-					
-					// Create directories recursively
-					char *path_copy = strdup(file->fs_path);
-					if (path_copy) {
-						char *last_slash = strrchr(path_copy, '/');
-						if (last_slash) {
-							*last_slash = '\0';
-							create_dir_recursively(path_copy);
-						}
-						free(path_copy);
-					}
-					
-					// Download the file
-					ret = https_client_mgr_download_file(
-						file->download_uri,
-						file->fs_path,
-						NULL  // No progress callback in this context
-					);
-					
-					https_client_mgr_deinit();
-					
-					if (ret == ESP_OK) {
-						ESP_LOGI(TAG, "File downloaded successfully: %s", file->fs_path);
-						
-						// Now serve the downloaded file
-						FILE *fp = fopen(file->fs_path, "r");
-						if (fp) {
-							httpd_resp_set_type(req, file->content_type);
-							char *buffer = malloc(chunk_size);
-							if (!buffer) {
-								fclose(fp);
-								httpd_resp_send_500(req);
-								return ESP_ERR_NO_MEM;
-							}
-							memset(buffer, 0, chunk_size);
-							
-							size_t bytes_read;
-							while ((bytes_read = fread(buffer, 1, chunk_size, fp)) > 0) {
-								httpd_resp_send_chunk(req, buffer, bytes_read);
-							}
-							httpd_resp_send_chunk(req, NULL, 0); // End response
-							free(buffer);
-							fclose(fp);
-							return ESP_OK;
-						} else {
-							ESP_LOGE(TAG, "Failed to open downloaded file: %s", file->fs_path);
-						}
-					} else {
-						ESP_LOGE(TAG, "Failed to download file: %s, error: %s", 
-								file->download_uri, esp_err_to_name(ret));
-					}
-				}				
+                }
             }
             
             // Fallback to serving from memory if filesystem loading failed or wasn't configured
@@ -1022,155 +848,7 @@ static esp_err_t store_config_handler(httpd_req_t *req)
 	return ESP_OK;
 }
 
-static esp_err_t store_canflt_handler(httpd_req_t *req)
-{
-	ESP_LOGI(TAG, "store_canflt_handler called: content_len=%d", req ? req->content_len : -1);
 
-	if (req == NULL)
-	{
-		return ESP_ERR_INVALID_ARG;
-	}
-
-	// Validate content type
-	char content_type[32];
-	if (httpd_req_get_hdr_value_str(req, "Content-Type", content_type, sizeof(content_type)) == ESP_OK)
-	{
-		if (strncmp(content_type, "application/json", 16) != 0)
-		{
-			ESP_LOGE(TAG, "Invalid content type for CAN filter: %s", content_type);
-			httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Content type must be application/json");
-			return ESP_FAIL;
-		}
-	}
-
-	// Validate content length
-	int total_len = req->content_len;
-	if (total_len <= 0 || total_len > MAX_FILE_SIZE)
-	{
-		ESP_LOGE(TAG, "Invalid CAN filter content length: %d (max %s)", total_len, MAX_FILE_SIZE_STR);
-		httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid content length");
-		return ESP_FAIL;
-	}
-
-	// Allocate buffer in PSRAM (+1 for NUL)
-	char *buf = (char *)heap_caps_malloc(total_len + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-	if (buf == NULL)
-	{
-		ESP_LOGE(TAG, "Failed to allocate %d bytes in PSRAM for CAN filter", total_len + 1);
-		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
-		return ESP_ERR_NO_MEM;
-	}
-	memset(buf, 0, total_len + 1);
-
-	// Receive in chunks
-	int received = 0;
-	while (received < total_len)
-	{
-		int to_read = MIN(4096, total_len - received);
-		int r = httpd_req_recv(req, buf + received, to_read);
-		if (r < 0)
-		{
-			if (r == HTTPD_SOCK_ERR_TIMEOUT)
-			{
-				continue; // retry
-			}
-			ESP_LOGE(TAG, "CAN filter receive error: %d after %d/%d bytes", r, received, total_len);
-			free(buf);
-			httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive data");
-			return ESP_FAIL;
-		}
-		if (r == 0)
-		{
-			ESP_LOGE(TAG, "CAN filter connection closed after %d/%d bytes", received, total_len);
-			free(buf);
-			httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Connection closed unexpectedly");
-			return ESP_FAIL;
-		}
-		received += r;
-		ESP_LOGD(TAG, "CAN filter chunk: %d (total %d/%d)", r, received, total_len);
-	}
-	buf[received] = '\0';
-
-	// Optionally validate JSON quickly (keeps handler consistent with others)
-	cJSON *json = cJSON_Parse(buf);
-	if (!json)
-	{
-		const char *err_ptr = cJSON_GetErrorPtr();
-		ESP_LOGE(TAG, "Invalid CAN filter JSON%s%s",
-				 err_ptr ? " near: " : "",
-				 err_ptr ? err_ptr : "");
-		free(buf);
-		httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON format");
-		return ESP_FAIL;
-	}
-	cJSON_Delete(json);
-
-	// Write exactly received bytes
-	const char *path = FS_MOUNT_POINT "/mqtt_canfilt.json";
-	FILE *f = fopen(path, "w");
-	if (!f)
-	{
-		ESP_LOGE(TAG, "Failed to open %s for writing", path);
-		free(buf);
-		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open file for writing");
-		return ESP_FAIL;
-	}
-	size_t written = fwrite(buf, 1, (size_t)received, f);
-	fclose(f);
-	if (written != (size_t)received)
-	{
-		ESP_LOGE(TAG, "Failed to write CAN filter: %zu/%d bytes", written, received);
-		free(buf);
-		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to write data to file");
-		return ESP_FAIL;
-	}
-
-	// Update cached mqtt_canflt_file safely (no mutex here; consider adding if concurrent access is expected)
-	free(mqtt_canflt_file);
-	mqtt_canflt_file = NULL;
-	FILE *f1 = fopen(path, "r");
-	if (f1 != NULL)
-	{
-		fseek(f1, 0, SEEK_END);
-		long filesize = ftell(f1);
-		fseek(f1, 0, SEEK_SET);
-		mqtt_canflt_file = malloc((size_t)filesize + 1);
-		if (mqtt_canflt_file)
-		{
-			memset(mqtt_canflt_file, 0, (size_t)filesize + 1);
-			size_t rr = fread(mqtt_canflt_file, 1, (size_t)filesize, f1);
-			mqtt_canflt_file[rr] = '\0';
-			ESP_LOGI(TAG, "mqtt_canfilt.json (%zu bytes): %s", rr, mqtt_canflt_file);
-		}
-		fclose(f1);
-	}
-
-	free(buf);
-
-	const char *resp_str = "CAN filter saved! Filter will take effect after submit.";
-	httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
-	ESP_LOGI(TAG, "store_canflt_handler completed successfully: written=%d bytes", received);
-	return ESP_OK;
-}
-
-static esp_err_t load_canflt_handler(httpd_req_t *req)
-{
-	if(mqtt_canflt_file != NULL)
-	{
-		const char* resp_str = (const char*)mqtt_canflt_file;
-		httpd_resp_set_type(req, "application/json");
-		httpd_resp_send(req, (const char*)resp_str, HTTPD_RESP_USE_STRLEN);
-		ESP_LOGI(TAG, "mqtt_canflt_file: %s", mqtt_canflt_file);
-	}
-	else
-	{
-		const char* resp_str = (const char*) "NONE";
-		httpd_resp_send(req, (const char*)resp_str, HTTPD_RESP_USE_STRLEN);
-		ESP_LOGI(TAG, "mqtt_canflt_file: NONE");
-	}
-
-    return ESP_OK;
-}
 
 static esp_err_t load_pid_auto_handler(httpd_req_t *req)
 {
@@ -1217,71 +895,6 @@ static esp_err_t load_pid_auto_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-static esp_err_t load_pid_auto_config_handler(httpd_req_t *req)
-{
-    const char *filepath = FS_MOUNT_POINT"/car_data.json";
-    ESP_LOGI(TAG, "Opening file: %s", filepath);
-    FILE *fd = fopen(filepath, "r");
-
-    if (fd == NULL)
-    {
-        ESP_LOGE(TAG, "File does not exist: %s", filepath);
-        httpd_resp_send(req, "NONE", HTTPD_RESP_USE_STRLEN);
-        return ESP_OK;
-    }
-
-    // Seek to the end of the file to determine its size
-    fseek(fd, 0, SEEK_END);
-    long file_size = ftell(fd);
-    rewind(fd);
-
-    if (file_size <= 0)
-    {
-        ESP_LOGE(TAG, "File is empty or invalid: %s", filepath);
-        fclose(fd);
-        httpd_resp_send(req, "NONE", HTTPD_RESP_USE_STRLEN);
-        return ESP_OK;
-    }
-
-    ESP_LOGI(TAG, "File size: %ld bytes", file_size);
-
-    // Allocate memory on the heap to hold the file content
-    char *buf = (char *)malloc(file_size + 1);
-    if (buf == NULL)
-    {
-        ESP_LOGE(TAG, "Failed to allocate memory for file content");
-        fclose(fd);
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
-        return ESP_FAIL;
-    }
-	memset(buf, 0, file_size + 1);
-    // Read the file into the buffer
-    size_t read_len = fread(buf, 1, file_size, fd);
-    fclose(fd);
-
-    if (read_len != file_size)
-    {
-        ESP_LOGE(TAG, "Failed to read the entire file. Read %zu bytes out of %ld", read_len, file_size);
-        free(buf);
-        httpd_resp_send(req, "NONE", HTTPD_RESP_USE_STRLEN);
-        return ESP_OK;
-    }
-
-    // Find the last closing brace and terminate the string there
-    char *last_brace = strrchr(buf, '}');
-    if (last_brace != NULL) {
-        *(last_brace + 1) = '\0';  // Terminate string right after the last }
-        read_len = last_brace - buf + 1;  // Update length to new size
-    }
-
-    ESP_LOGI(TAG, "Sending response: %s", buf);
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, buf, HTTPD_RESP_USE_STRLEN);  // Use actual content length instead of HTTPD_RESP_USE_STRLEN
-    
-    free(buf);
-    return ESP_OK;
-}
-
 static esp_err_t load_config_handler(httpd_req_t *req)
 {
     const char* resp_str = (const char*)device_config_file;
@@ -1291,38 +904,6 @@ static esp_err_t load_config_handler(httpd_req_t *req)
 	UBaseType_t stack_high_watermark = uxTaskGetStackHighWaterMark(NULL);
 	ESP_LOGI(TAG, "Task stack high watermark: %u words", stack_high_watermark);
     return ESP_OK;
-}
-
-static esp_err_t load_car_config_handler(httpd_req_t *req)
-{
-    char *response_str = autopid_get_config();
-    
-    if (response_str) {
-        ESP_LOGI(TAG, "Sending response: %s", response_str);
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_send(req, response_str, HTTPD_RESP_USE_STRLEN);
-		// Do not free: response_str is a cached global string
-    } else {
-        ESP_LOGE(TAG, "Failed to generate JSON response");
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to generate JSON");
-    }
-    
-    return ESP_OK;
-}
-
-static esp_err_t destinations_stats_handler(httpd_req_t *req)
-{
-	char *response_str = autopid_get_destinations_stats_json();
-	if (response_str)
-	{
-		httpd_resp_set_type(req, "application/json");
-		httpd_resp_send(req, response_str, HTTPD_RESP_USE_STRLEN);
-		free(response_str);
-		return ESP_OK;
-	}
-
-	httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to generate JSON");
-	return ESP_OK;
 }
 
 
@@ -1590,118 +1171,6 @@ static esp_err_t store_auto_data_handler(httpd_req_t *req)
 	return ESP_OK;
 }
 
-static esp_err_t store_car_data_handler(httpd_req_t *req)
-{
-    int total_len = req->content_len;
-    int received = 0;
-    const char *filepath = FS_MOUNT_POINT"/car_data.json";
-    
-	ESP_LOGI(TAG, "store_car_data_handler called");
-    // Validate content length
-    if (total_len <= 0 || total_len > MAX_FILE_SIZE) {
-        ESP_LOGE(TAG, "Invalid content length: %d", total_len);
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid content length");
-        return ESP_FAIL;
-    }
-
-    // Allocate buffer for entire JSON content
-    char *json_buffer = heap_caps_malloc(total_len + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!json_buffer) {
-        ESP_LOGE(TAG, "Failed to allocate JSON buffer");
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
-        return ESP_FAIL;
-    }
-
-	memset(json_buffer, 0, total_len + 1);
-
-    // Receive all data first
-    char *temp_buffer = heap_caps_malloc(1024, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!temp_buffer) {
-        ESP_LOGE(TAG, "Failed to allocate temp buffer");
-        free(json_buffer);
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory allocation failed");
-        return ESP_FAIL;
-    }
-
-	memset(temp_buffer, 0, 1024);
-
-    esp_err_t ret_val = ESP_OK;
-    while (received < total_len) {
-        int ret = httpd_req_recv(req, temp_buffer, MIN(1024, total_len - received));
-        if (ret < 0) {
-            if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
-                continue;  // Retry on timeout
-            }
-            ESP_LOGE(TAG, "Failed to receive JSON data: %d", ret);
-            ret_val = ESP_FAIL;
-            break;
-        }
-        
-        if (ret == 0) {
-            ESP_LOGE(TAG, "Connection closed unexpectedly");
-            ret_val = ESP_FAIL;
-            break;
-        }
-        
-        // Copy to JSON buffer
-        memcpy(json_buffer + received, temp_buffer, ret);
-        received += ret;
-    }
-
-    free(temp_buffer);
-    
-    if (ret_val != ESP_OK) {
-        free(json_buffer);
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive data");
-        return ESP_FAIL;
-    }
-
-    // Null terminate the JSON string
-    json_buffer[received] = '\0';
-    
-    // Validate JSON format
-    cJSON *json = cJSON_Parse(json_buffer);
-    if (!json) {
-        const char *error_ptr = cJSON_GetErrorPtr();
-        if (error_ptr != NULL) {
-            ESP_LOGE(TAG, "JSON parse error before: %s", error_ptr);
-        } else {
-            ESP_LOGE(TAG, "Invalid JSON format");
-        }
-        free(json_buffer);
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON format");
-        return ESP_FAIL;
-    }
-    
-    // JSON is valid, clean up parser
-    cJSON_Delete(json);
-    
-    // Now write validated JSON to file
-    FILE *file = fopen(filepath, "w");
-    if (!file) {
-        ESP_LOGE(TAG, "Failed to open file for writing");
-        free(json_buffer);
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open file for writing");
-        return ESP_FAIL;
-    }
-
-    if (fwrite(json_buffer, 1, received, file) != received) {
-        ESP_LOGE(TAG, "Failed to write data to file");
-        fclose(file);
-        free(json_buffer);
-        unlink(filepath);  // Clean up partial file
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to write data to file");
-        return ESP_FAIL;
-    }
-
-    fclose(file);
-    free(json_buffer);
-    
-    ESP_LOGI(TAG, "Valid JSON data successfully stored (%d bytes)", received);
-    httpd_resp_send(req, "Data stored successfully", HTTPD_RESP_USE_STRLEN);
-    return ESP_OK;
-}
-
 static void config_server_add_restart_tracker_status(cJSON *root)
 {
 	restart_tracker_state_t state = {0};
@@ -1829,7 +1298,6 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	cJSON_AddStringToObject(root, "batt_alert_volt", device_config.batt_alert_volt);
 	cJSON_AddStringToObject(root, "batt_alert_topic", device_config.batt_alert_topic);
 	cJSON_AddStringToObject(root, "batt_alert_time", device_config.batt_alert_time);
-	cJSON_AddStringToObject(root, "logger_status", device_config.logger_status);
 	cJSON_AddStringToObject(root, "csv_log", device_config.csv_log);
 	cJSON_AddStringToObject(root, "log_filesystem", device_config.log_filesystem);
 	cJSON_AddStringToObject(root, "log_period", device_config.log_period);
@@ -1838,7 +1306,6 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	cJSON_AddStringToObject(root, "csv_require_engine", device_config.csv_require_engine);
 	cJSON_AddStringToObject(root, "log_storage", device_config.log_storage);
 	cJSON_AddStringToObject(root, "imu_threshold", device_config.imu_threshold);
-	cJSON_AddStringToObject(root, "elm327_udp_log", device_config.elm327_udp_log);
 	if(gpio_get_level(OBD_READY_PIN) == 1)
 	{
 		cJSON_AddStringToObject(root, "obd_chip_status", "Sleep");
@@ -1862,7 +1329,7 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	time(&now);
 	cJSON_AddNumberToObject(root, "timestamp", (double)now);
 
-	// Time sync status (used by VPN gating + DNS resolution stability)
+	// Time sync status (DNS resolution stability)
 	cJSON_AddBoolToObject(root, "time_synced", dev_status_is_time_synced());
 
 	// STA DNS servers
@@ -1880,22 +1347,11 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	sprintf(volt, "%.1fV", tmp);
 	cJSON_AddStringToObject(root, "batt_voltage", volt);
 
-	cJSON_AddStringToObject(root, "mqtt_en", device_config.mqtt_en);
 	if(!remove_sensitive_info)
 	{
-		cJSON_AddStringToObject(root, "mqtt_url", device_config.mqtt_url);
-		cJSON_AddStringToObject(root, "mqtt_port", device_config.mqtt_port);
-		cJSON_AddStringToObject(root, "mqtt_user", device_config.mqtt_user);
-		cJSON_AddStringToObject(root, "mqtt_pass", device_config.mqtt_pass);
 	
 
-		cJSON_AddStringToObject(root, "mqtt_cert_set", device_config.mqtt_cert_set);
-		cJSON_AddStringToObject(root, "mqtt_security", device_config.mqtt_security);
-		cJSON_AddStringToObject(root, "mqtt_skip_cn", device_config.mqtt_skip_cn);
 	}
-	cJSON_AddStringToObject(root, "mqtt_tx_topic", device_config.mqtt_tx_topic);
-	cJSON_AddStringToObject(root, "mqtt_rx_topic", device_config.mqtt_rx_topic);
-	cJSON_AddStringToObject(root, "mqtt_status_topic", device_config.mqtt_status_topic);
 	cJSON_AddStringToObject(root, "device_id", device_id);
 	cJSON_AddStringToObject(root, "subnet_overlap", dev_status_is_bit_set(DEV_STA_AP_OVERLAP_BIT) ? "yes" : "no");
 
@@ -1906,50 +1362,6 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	else
 	{
 		cJSON_AddStringToObject(root, "ecu_status", "offline");
-	}
-
-	// Add VPN status information
-	vpn_status_t vpn_status = vpn_manager_get_status();
-	const char *vpn_status_str;
-	switch (vpn_status) 
-	{
-		case VPN_STATUS_DISABLED:
-			vpn_status_str = "disabled";
-			break;
-		case VPN_STATUS_DISCONNECTED:
-			vpn_status_str = "disconnected";
-			break;
-		case VPN_STATUS_CONNECTING:
-			vpn_status_str = "connecting";
-			break;
-		case VPN_STATUS_CONNECTED:
-			vpn_status_str = "connected";
-			break;
-		case VPN_STATUS_ERROR:
-			vpn_status_str = "error";
-			break;
-		default:
-			vpn_status_str = "unknown";
-			break;
-	}
-	cJSON_AddStringToObject(root, "vpn_status", vpn_status_str);
-	
-	// Add VPN IP if connected
-	if (vpn_status == VPN_STATUS_CONNECTED) 
-	{
-		char vpn_ip_str[20] = {0};
-		if (vpn_manager_get_ip_address(vpn_ip_str, sizeof(vpn_ip_str)) == ESP_OK) 
-		{
-			cJSON_AddStringToObject(root, "vpn_ip", vpn_ip_str);
-		}
-		else
-		{
-			cJSON_AddStringToObject(root, "vpn_ip", "");
-		}
-	}
-	else
-	{
-		cJSON_AddStringToObject(root, "vpn_ip", "");
 	}
 
     char *resp_str = cJSON_PrintUnformatted(root);
@@ -2214,66 +1626,6 @@ static esp_err_t upload_post_handler(httpd_req_t *req)
 	return ESP_OK;
 }
 
-static esp_err_t upload_car_data_handler(httpd_req_t *req)
-{
-    char filepath[FILE_PATH_MAX];
-	uint32_t total_size = 0;
-
-    /* Skip leading "/upload" from URI to get filename */
-    /* Note sizeof() counts NULL termination hence the -1 */
-    const char *filename = get_path_from_uri(filepath, ((struct file_server_data *)req->user_ctx)->base_path,
-                                             req->uri + sizeof("/upload") - 1, sizeof(filepath));
-    if (!filename) {
-        /* Respond with 500 Internal Server Error */
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Filename too long");
-        return ESP_FAIL;
-    }
-
-    /* Filename cannot have a trailing '/' */
-    if (filename[strlen(filename) - 1] == '/') {
-        ESP_LOGE(TAG, "Invalid filename : %s", filename);
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Invalid filename");
-        return ESP_FAIL;
-    }
-
-	// For multipart + chunked, req->content_len may be unknown (0). Enforce size during streaming instead.
-
-	ESP_LOGI(TAG, "Receiving file : %s...", filename);
-
-	file_upload_ctx_t ctx = {0};
-	ctx.path = filepath;
-	ctx.err = ESP_OK;
-
-	multipart_upload_handlers_t handlers = {
-		.on_part_begin = file_on_part_begin,
-		.on_part_data = file_on_part_data,
-		.on_part_end = file_on_part_end,
-		.on_finished = file_on_finished,
-	};
-
-	multipart_upload_config_t mp_cfg = multipart_upload_default_config();
-	mp_cfg.rx_buf_size = 4096;
-
-	esp_err_t mp_err = multipart_upload_handle(req, &handlers, &ctx, &mp_cfg);
-	if (ctx.fd)
-	{
-		fclose(ctx.fd);
-		ctx.fd = NULL;
-	}
-
-	if (mp_err != ESP_OK || ctx.err != ESP_OK || !ctx.started)
-	{
-		unlink(filepath);
-		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Upload failed");
-		return ESP_FAIL;
-	}
-
-	total_size = (uint32_t)ctx.total_size;
-	ESP_LOGI(TAG, "File reception complete: %lu", (unsigned long)total_size);
-	httpd_resp_sendstr(req, "File uploaded successfully");
-	return ESP_OK;
-}
-
 /* ---- NC Flash SD-staged flash upload: POST /upload/sd/<name> --------------
  * Stores a staged flash image (checksum-corrected ROM ++ SBL, produced host-side
  * by wican_sd_package.py) to /sdcard/roms/<name> over reliable TCP, then reports
@@ -2480,28 +1832,6 @@ static esp_err_t upload_sd_handler(httpd_req_t *req)
 	return ESP_OK;
 }
 
-esp_err_t autopid_data_handler(httpd_req_t *req)
-{
-    char *data = autopid_data_read();
-    
-    if (data == NULL)
-    {
-        ESP_LOGE(TAG, "No data available");
-        const char *response = "{\"error\":\"No data available\"}";
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_send(req, response, strlen(response));
-        return ESP_OK;
-    }
-
-    httpd_resp_set_type(req, "application/json");
-
-    httpd_resp_send(req, data, HTTPD_RESP_USE_STRLEN);
-
-    free(data);
-
-    return ESP_OK;
-}
-
 #define MAX_AVAILABLE_PIDS_SIZE 		(1024*15)
 static esp_err_t scan_available_pids_handler(httpd_req_t *req)
 {
@@ -2569,22 +1899,6 @@ static const httpd_uri_t store_config_uri = {
      * context to demonstrate it's usage */
     .user_ctx  = NULL
 };
-static const httpd_uri_t store_canflt_uri = {
-    .uri       = "/store_canflt",
-    .method    = HTTP_POST,
-    .handler   = store_canflt_handler,
-    /* Let's pass response string in user
-     * context to demonstrate it's usage */
-    .user_ctx  = NULL
-};
-static const httpd_uri_t load_canflt_uri = {
-    .uri       = "/load_canflt",
-    .method    = HTTP_GET,
-    .handler   = load_canflt_handler,
-    /* Let's pass response string in user
-     * context to demonstrate it's usage */
-    .user_ctx  = NULL
-};
 static const httpd_uri_t load_pid_auto_uri = {
     .uri       = "/load_auto_pid",
     .method    = HTTP_GET,
@@ -2592,29 +1906,6 @@ static const httpd_uri_t load_pid_auto_uri = {
     /* Let's pass response string in user
      * context to demonstrate it's usage */
     .user_ctx  = NULL
-};
-static const httpd_uri_t load_pid_auto_conf_uri = {
-    .uri       = "/load_auto_pid_car_data",
-    .method    = HTTP_GET,
-    .handler   = load_pid_auto_config_handler,
-    /* Let's pass response string in user
-     * context to demonstrate it's usage */
-    .user_ctx  = NULL
-};
-static const httpd_uri_t load_car_config_uri = {
-    .uri       = "/load_car_config",
-    .method    = HTTP_GET,
-    .handler   = load_car_config_handler,
-    /* Let's pass response string in user
-     * context to demonstrate it's usage */
-    .user_ctx  = NULL
-};
-
-static const httpd_uri_t destinations_stats_uri = {
-	.uri       = "/api/destinations_stats",
-	.method    = HTTP_GET,
-	.handler   = destinations_stats_handler,
-	.user_ctx  = NULL
 };
 static const httpd_uri_t check_status_uri = {
     .uri       = "/check_status",
@@ -2663,31 +1954,11 @@ static const httpd_uri_t store_auto_data_uri = {
      * context to demonstrate it's usage */
     .user_ctx  = NULL
 };
-static const httpd_uri_t upload_car_data = {
-    .uri       = "/upload/car_data.json",   // Match all URIs of type /upload/path/to/file
-    .method    = HTTP_POST,
-    .handler   = upload_car_data_handler,
-    .user_ctx  = &server_data    // Pass server data as context
-};
 static const httpd_uri_t upload_sd_uri = {
     .uri       = "/upload/sd/*",   // NC Flash SD-staged flash image upload
     .method    = HTTP_POST,
     .handler   = upload_sd_handler,
     .user_ctx  = &server_data
-};
-static const httpd_uri_t autopid_data = {
-    .uri       = "/autopid_data",   // Match all URIs of type /upload/path/to/file
-    .method    = HTTP_GET,
-    .handler   = autopid_data_handler,
-    .user_ctx  = &server_data    // Pass server data as context
-};
-static const httpd_uri_t store_car_data_uri = {
-    .uri       = "/store_car_data",
-    .method    = HTTP_POST,
-    .handler   = store_car_data_handler,
-    /* Let's pass response string in user
-     * context to demonstrate it's usage */
-    .user_ctx  = NULL
 };
 static const httpd_uri_t system_commands = {
     .uri       = "/system_commands",   // Match all URIs of type /upload/path/to/file
@@ -3114,182 +2385,7 @@ static void config_server_load_cfg(char *cfg)
 
 
 
-	//*****
-	key = cJSON_GetObjectItem(root,"mqtt_en");
-	if(key == 0 || key->valuestring == NULL || (strlen(key->valuestring) > sizeof(device_config.mqtt_en)))
-	{
-		goto config_error;
-	}
-
-	strlcpy(device_config.mqtt_en, key->valuestring, sizeof(device_config.mqtt_en));
-	ESP_LOGI(TAG, "device_config.mqtt_en: %s", device_config.mqtt_en);
-	//*****
-
-	//*****
-	key = cJSON_GetObjectItem(root,"mqtt_url");
-	if(key == 0 || key->valuestring == NULL || (strlen(key->valuestring) > sizeof(device_config.mqtt_url)))
-	{
-		goto config_error;
-	}
-
-	strlcpy(device_config.mqtt_url, key->valuestring, sizeof(device_config.mqtt_url));
-	ESP_LOGE(TAG, "device_config.mqtt_url: %s", device_config.mqtt_url);
-	//*****
-
-	//*****
-	key = cJSON_GetObjectItem(root,"mqtt_port");
-	if(key == 0 || key->valuestring == NULL || (strlen(key->valuestring) > sizeof(device_config.mqtt_port)))
-	{
-		goto config_error;
-	}
-
-	strlcpy(device_config.mqtt_port, key->valuestring, sizeof(device_config.mqtt_port));
-	ESP_LOGI(TAG, "device_config.mqtt_port: %s", device_config.mqtt_port);
-	//*****
-
-	//*****
-	key = cJSON_GetObjectItem(root,"mqtt_user");
-	if(key == 0 || key->valuestring == NULL || (strlen(key->valuestring) > sizeof(device_config.mqtt_user)))
-	{
-		goto config_error;
-	}
-
-	strlcpy(device_config.mqtt_user, key->valuestring, sizeof(device_config.mqtt_user));
-	ESP_LOGI(TAG, "device_config.mqtt_user: %s", device_config.mqtt_user);
-	//*****
-
-	//*****
-	key = cJSON_GetObjectItem(root,"mqtt_pass");
-	if(key == 0 || key->valuestring == NULL || (strlen(key->valuestring) > sizeof(device_config.mqtt_pass)))
-	{
-		goto config_error;
-	}
-
-	strlcpy(device_config.mqtt_pass, key->valuestring, sizeof(device_config.mqtt_pass));
-	ESP_LOGI(TAG, "device_config.mqtt_pass: %s", device_config.mqtt_pass);
-	//*****
-
 	// mqtt_security
-	//*****
-	key = cJSON_GetObjectItem(root,"mqtt_security");
-	if(key == 0 || key->valuestring == NULL || (strlen(key->valuestring) > sizeof(device_config.mqtt_security)))
-	{
-		sprintf(device_config.mqtt_security, "none");
-	}
-	else
-	{
-		strlcpy(device_config.mqtt_security, key->valuestring, sizeof(device_config.mqtt_security));
-	}
-	ESP_LOGI(TAG, "device_config.mqtt_security: %s", device_config.mqtt_security);
-	//*****
-
-	//*****
-	key = cJSON_GetObjectItem(root,"mqtt_cert_set");
-	if(key == 0 || key->valuestring == NULL || (strlen(key->valuestring) > sizeof(device_config.mqtt_cert_set)))
-	{
-		sprintf(device_config.mqtt_cert_set, "default");
-	}
-	else
-	{
-		strlcpy(device_config.mqtt_cert_set, key->valuestring, sizeof(device_config.mqtt_cert_set));
-	}
-	ESP_LOGI(TAG, "device_config.mqtt_cert_set: %s", device_config.mqtt_cert_set);
-	//*****
-
-	//*****
-	key = cJSON_GetObjectItem(root,"mqtt_skip_cn");
-	if(key == 0 || key->valuestring == NULL || (strlen(key->valuestring) > sizeof(device_config.mqtt_skip_cn)))
-	{
-		strlcpy(device_config.mqtt_skip_cn, "disable", sizeof(device_config.mqtt_skip_cn));
-	}
-	else
-	{
-		strlcpy(device_config.mqtt_skip_cn, key->valuestring, sizeof(device_config.mqtt_skip_cn));
-	}
-	ESP_LOGI(TAG, "device_config.mqtt_skip_cn: %s", device_config.mqtt_skip_cn);
-	//*****
-
-	//*****
-	key = cJSON_GetObjectItem(root,"mqtt_elm327_log");
-	if(key == 0 || key->valuestring == NULL || (strlen(key->valuestring) > sizeof(device_config.mqtt_elm327_log)))
-	{
-		goto config_error;
-	}
-
-	strlcpy(device_config.mqtt_elm327_log, key->valuestring, sizeof(device_config.mqtt_elm327_log));
-	ESP_LOGI(TAG, "device_config.mqtt_elm327_log: %s", device_config.mqtt_elm327_log);
-	//*****
-
-	//*****
-	key = cJSON_GetObjectItem(root,"mqtt_tx_topic");
-	if(key == 0 || key->valuestring == NULL || (strlen(key->valuestring) > sizeof(device_config.mqtt_tx_topic)))
-	{
-		goto config_error;
-	}
-	if(key->valuestring == NULL || strlen(key->valuestring) == 0)
-	{
-		sprintf(device_config.mqtt_tx_topic, "wican/%s/can/tx", device_id);
-	}
-	else
-	{
-		strlcpy(device_config.mqtt_tx_topic, key->valuestring, sizeof(device_config.mqtt_tx_topic));
-	}
-	
-	ESP_LOGI(TAG, "device_config.mqtt_tx_topic: %s", device_config.mqtt_tx_topic);
-	//*****
-
-	//*****
-	key = cJSON_GetObjectItem(root,"mqtt_tx_en");
-	if(key == 0 || key->valuestring == NULL || (strlen(key->valuestring) > sizeof(device_config.mqtt_tx_en)))
-	{
-		strlcpy(device_config.mqtt_tx_en, "disable", sizeof(device_config.mqtt_tx_en));
-	}
-	else
-	{
-		strlcpy(device_config.mqtt_tx_en, key->valuestring, sizeof(device_config.mqtt_tx_en));
-	}
-	
-	ESP_LOGI(TAG, "device_config.mqtt_tx_en: %s", device_config.mqtt_tx_en);
-	//*****
-
-	//*****
-	key = cJSON_GetObjectItem(root,"mqtt_rx_en");
-	if(key == 0 || key->valuestring == NULL || (strlen(key->valuestring) > sizeof(device_config.mqtt_rx_en)))
-	{
-		strlcpy(device_config.mqtt_rx_en, "disable", sizeof(device_config.mqtt_rx_en));
-	}
-	else
-	{
-		strlcpy(device_config.mqtt_rx_en, key->valuestring, sizeof(device_config.mqtt_rx_en));
-	}
-
-	ESP_LOGI(TAG, "device_config.mqtt_rx_en: %s", device_config.mqtt_rx_en);
-	//*****
-
-	//*****
-
-	//*****
-	key = cJSON_GetObjectItem(root,"mqtt_rx_topic");
-	if(key == 0 || key->valuestring == NULL || (strlen(key->valuestring) > sizeof(device_config.mqtt_rx_topic)) || strlen(key->valuestring) == 0)
-	{
-		goto config_error;
-	}
-	strlcpy(device_config.mqtt_rx_topic, key->valuestring, sizeof(device_config.mqtt_rx_topic));
-
-	
-	ESP_LOGI(TAG, "device_config.mqtt_rx_topic: %s", device_config.mqtt_rx_topic);
-	//*****
-
-	//*****
-	key = cJSON_GetObjectItem(root,"mqtt_status_topic");
-	if(key == 0 || key->valuestring == NULL || (strlen(key->valuestring) > sizeof(device_config.mqtt_status_topic)) || strlen(key->valuestring) == 0)
-	{
-		goto config_error;
-	}
-	strlcpy(device_config.mqtt_status_topic, key->valuestring, sizeof(device_config.mqtt_status_topic));
-
-	
-	ESP_LOGI(TAG, "device_config.mqtt_status_topic: %s", device_config.mqtt_status_topic);
 	//*****
 
 	//*****
@@ -3497,19 +2593,6 @@ static void config_server_load_cfg(char *cfg)
 	//**** End SmartConnect fields ****
 
 	//*****
-	key = cJSON_GetObjectItem(root,"logger_status");
-	if(key == 0)
-	{
-		strlcpy(device_config.logger_status, "disable", sizeof(device_config.logger_status));
-	}
-	else
-	{
-		strlcpy(device_config.logger_status, key->valuestring, sizeof(device_config.logger_status));
-	}
-	ESP_LOGI(TAG, "device_config.logger_status: %s", device_config.logger_status);
-	//*****
-
-	//*****
 	key = cJSON_GetObjectItem(root,"csv_log");
 	if(key == 0)
 	{
@@ -3523,23 +2606,11 @@ static void config_server_load_cfg(char *cfg)
 	//*****
 
 	//*****
-	// Logger mutual exclusion (Task #5): only ONE of the stock SQLite/OBD logger
-	// (logger_status) or the CSV logger (csv_log) may be enabled at once. This is the
-	// AUTHORITATIVE, browser-independent enforcement point. Deterministic winner: CSV
-	// (matches the single-owner boot gate in main.c). Also coerce any non-enable/disable
-	// value to "disable" so a garbage NVS value can never enable a logger.
-	if(strcmp(device_config.logger_status, "enable") != 0 && strcmp(device_config.logger_status, "disable") != 0)
-	{
-		strlcpy(device_config.logger_status, "disable", sizeof(device_config.logger_status));
-	}
+	// Coerce any non-enable/disable csv_log value to "disable" so a garbage NVS
+	// value can never enable the logger.
 	if(strcmp(device_config.csv_log, "enable") != 0 && strcmp(device_config.csv_log, "disable") != 0)
 	{
 		strlcpy(device_config.csv_log, "disable", sizeof(device_config.csv_log));
-	}
-	if(strcmp(device_config.logger_status, "enable") == 0 && strcmp(device_config.csv_log, "enable") == 0)
-	{
-		strlcpy(device_config.logger_status, "disable", sizeof(device_config.logger_status));   // CSV wins
-		ESP_LOGW(TAG, "logger_status and csv_log both enabled -> forcing logger_status=disable (CSV wins)");
 	}
 	//*****
 
@@ -3726,17 +2797,6 @@ static void config_server_load_cfg(char *cfg)
 	//*****
 
 	//*****
-	// elm327_udp_log (optional; default disabled)
-	key = cJSON_GetObjectItem(root,"elm327_udp_log");
-	if(key == 0 || key->valuestring == NULL || (strlen(key->valuestring) > sizeof(device_config.elm327_udp_log)))
-	{
-		strlcpy(device_config.elm327_udp_log, "disable", sizeof(device_config.elm327_udp_log));
-	}
-	else
-	{
-		strlcpy(device_config.elm327_udp_log, key->valuestring, sizeof(device_config.elm327_udp_log));
-	}
-	ESP_LOGI(TAG, "device_config.elm327_udp_log: %s", device_config.elm327_udp_log);
 	//*****
 
 	//*****
@@ -3760,23 +2820,6 @@ static void config_server_load_cfg(char *cfg)
 	}
 	//*****
 
-	//*****
-	strlcpy(device_config.webhook_en, "enable", sizeof(device_config.webhook_en));
-	key = cJSON_GetObjectItem(root, "webhook_en");
-	if (key)
-	{
-		if (cJSON_IsString(key) && key->valuestring && strlen(key->valuestring) > 0)
-		{
-			strlcpy(device_config.webhook_en, key->valuestring, sizeof(device_config.webhook_en));
-		}
-		else if (cJSON_IsBool(key))
-		{
-			strlcpy(device_config.webhook_en, cJSON_IsTrue(key) ? "enable" : "disable", sizeof(device_config.webhook_en));
-		}
-	}
-	ESP_LOGI(TAG, "device_config.webhook_en: %s", device_config.webhook_en);
-	//*****
-
 	cJSON_Delete(root);
 	return;
 
@@ -3790,7 +2833,7 @@ config_error:
         unlink(FS_MOUNT_POINT"/config.json");
 		FILE* f = fopen(FS_MOUNT_POINT"/config.json", "w");
 		if (f) {
-			fprintf(f, device_config_default, (char*)device_id, (char*)device_id, (char*)device_id);
+			fputs(device_config_default, f);
 			fclose(f);
 		}
 		vTaskDelay(3000 / portTICK_PERIOD_MS);
@@ -3806,7 +2849,7 @@ config_error_no_json:
 	unlink(FS_MOUNT_POINT"/config.json");
 	FILE* f = fopen(FS_MOUNT_POINT"/config.json", "w");
 	if (f) {
-		fprintf(f, device_config_default, (char*)device_id, (char*)device_id, (char*)device_id);
+		fputs(device_config_default, f);
 		fclose(f);
 	}
 	vTaskDelay(3000 / portTICK_PERIOD_MS);
@@ -3865,29 +2908,17 @@ static void register_server_uris(void)
 	httpd_register_uri_handler(server, &check_status_uri);
 	httpd_register_uri_handler(server, &load_config_uri);
 	httpd_register_uri_handler(server, &logo_uri);
-	ws_server_register_uri(server);
 	httpd_register_uri_handler(server, &file_upload);
 	httpd_register_uri_handler(server, &system_reboot);
-	httpd_register_uri_handler(server, &store_canflt_uri);
-	httpd_register_uri_handler(server, &load_canflt_uri);
 	httpd_register_uri_handler(server, &store_auto_data_uri);
 	httpd_register_uri_handler(server, &load_pid_auto_uri);
-	httpd_register_uri_handler(server, &load_pid_auto_conf_uri);
-	httpd_register_uri_handler(server, &upload_car_data);
 	httpd_register_uri_handler(server, &upload_sd_uri);
-	httpd_register_uri_handler(server, &autopid_data);
-	httpd_register_uri_handler(server, &load_car_config_uri);
-	httpd_register_uri_handler(server, &destinations_stats_uri);
-	httpd_register_uri_handler(server, &store_car_data_uri);
 	httpd_register_uri_handler(server, &system_commands);
 	httpd_register_uri_handler(server, &scan_available_pids_uri);
 	httpd_register_uri_handler(server, &std_pid_info);
 	httpd_register_uri_handler(server, &poll_status_uri);
 	
 	//Add before this line
-	httpd_register_uri_handler(server, &obd_logger_ws);
-	httpd_register_uri_handler(server, &db_download_uri);
-	httpd_register_uri_handler(server, &db_files_uri);
 	httpd_register_uri_handler(server, &csv_status_uri);
 	httpd_register_uri_handler(server, &csv_list_uri);
 	httpd_register_uri_handler(server, &csv_download_uri);
@@ -3897,31 +2928,8 @@ static void register_server_uris(void)
 	httpd_register_uri_handler(server, &sd_files_get_uri);
 	httpd_register_uri_handler(server, &sd_files_post_uri);
 	event_log_register_handlers(server);   // GET /event_log* (Task #24) -- before the catch-all wildcard
-	// NOTE: catch-all wildcard handler moved to after cert manager handlers to avoid shadowing
 }
 
-bool config_server_ws_connected(void)
-{
-	return ws_server_is_connected();
-}
-
-static void ws_server_on_open_cb(void *ctx)
-{
-	(void)ctx;
-	ws_router_on_open();
-}
-
-static void ws_server_on_close_cb(void *ctx)
-{
-	(void)ctx;
-	ws_router_on_close();
-}
-
-static bool ws_server_handle_frame_cb(httpd_req_t *req, const uint8_t *data, size_t len, void *ctx)
-{
-	(void)ctx;
-	return ws_router_handle_frame(req, data, len);
-}
 //static char* device_config = NULL;
 static uint8_t esp_fatfs_flag = 0;
 static httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -3972,10 +2980,6 @@ static httpd_handle_t config_server_init(void)
 	if(esp_fatfs_flag == 0) 
 	{
 		filesystem_init();
-		// Initialize certificate manager storage (creates /certs if missing)
-		cert_manager_init();
-		// Initialize VPN manager
-		vpn_manager_init();
 		// Handle config.json
 		FILE* f = fopen(FS_MOUNT_POINT"/config.json", "r");
 		if (f == NULL)
@@ -3984,7 +2988,7 @@ static httpd_handle_t config_server_init(void)
 			f = fopen(FS_MOUNT_POINT"/config.json", "w");
 			if (f != NULL)
 			{
-				fprintf(f, device_config_default, (char*)device_id, (char*)device_id, (char*)device_id);
+				fputs(device_config_default, f);
 				fclose(f);
 				f = fopen(FS_MOUNT_POINT"/config.json", "r");
 				ESP_LOGW(TAG, "Config file trying to load again");
@@ -4015,24 +3019,6 @@ static httpd_handle_t config_server_init(void)
 			
 		}
 
-		// Handle mqtt_canfilt.json
-		f = fopen(FS_MOUNT_POINT"/mqtt_canfilt.json", "r");
-		if (f != NULL)
-		{
-			fseek(f, 0, SEEK_END);
-			long filesize = ftell(f);
-			fseek(f, 0, SEEK_SET);
-
-			mqtt_canflt_file = heap_caps_malloc(filesize + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-			if (mqtt_canflt_file != NULL)
-			{
-				memset(mqtt_canflt_file, 0, filesize + 1);
-				fread(mqtt_canflt_file, sizeof(char), filesize, f);
-				mqtt_canflt_file[filesize] = 0;
-				ESP_LOGI(TAG, "mqtt_canfilt.json: %s", mqtt_canflt_file);
-			}
-			fclose(f);
-		}
 	}
 
     xrestartTimer= xTimerCreate
@@ -4067,11 +3053,7 @@ static httpd_handle_t config_server_init(void)
         // Set URI handlers
 		register_server_uris();
 		// Register certificate manager endpoints (before wildcard catch-all so they match first)
-		cert_manager_register_handlers(server);
-		// Register VPN manager endpoints
-		vpn_manager_register_handlers(server);
 		autopid_register_handlers(server);
-		ha_webhooks_register_handlers(server);
 		restart_tracker_register_handlers(server);
 		// Now register catch-all wildcard
 		httpd_register_uri_handler(server, &get_uri_common);
@@ -4095,10 +3077,7 @@ void config_server_restart(void)
         // Set URI handlers
         ESP_LOGI(TAG, "Registering URI handlers");
 		register_server_uris();
-		cert_manager_register_handlers(server);
-		vpn_manager_register_handlers(server);
 		autopid_register_handlers(server);
-		ha_webhooks_register_handlers(server);
 		restart_tracker_register_handlers(server);
 		httpd_register_uri_handler(server, &get_uri_common);
 		ESP_LOGI(TAG, "Server restarted successfully");
@@ -4144,7 +3123,7 @@ wifi_security_t config_server_get_sta_fallback_security(int index)
 	if (strcmp(sec, "wpa3") == 0) return WIFI_WPA3_PSK;
 	return WIFI_WPA2_PSK;
 }
-void config_server_start(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, uint8_t connected_led, char * did)
+void config_server_start(QueueHandle_t *xRXp_Queue, uint8_t connected_led, char * did)
 {
     if (server == NULL)
     {
@@ -4152,13 +3131,6 @@ void config_server_start(QueueHandle_t *xTXp_Queue, QueueHandle_t *xRXp_Queue, u
         ws_led = connected_led;
         ESP_LOGI(TAG, "Starting webserver");
         server = config_server_init();
-		ws_server_hooks_t hooks = {
-			.on_open = ws_server_on_open_cb,
-			.on_close = ws_server_on_close_cb,
-			.handle_frame = ws_server_handle_frame_cb,
-			.ctx = NULL,
-		};
-		ws_server_start(xTXp_Queue, xRXp_Queue, &hooks);
     }
 }
 
@@ -4374,145 +3346,20 @@ int8_t config_server_get_alert_volt(float *alert_volt)
 	return -1;
 }
 
-int8_t config_server_mqtt_en_config(void)
-{
-	if(config_server_get_ble_config() == 1 && config_server_get_wifi_mode() == AP_MODE)
-	{
-		ESP_LOGW(TAG, "BLE enabled and WiFi in AP mode, disabling MQTT");
-		return 0;
-	}
-	if(strcmp(device_config.mqtt_en, "enable") == 0)
-	{
-		return 1;
-	}
-	else if(strcmp(device_config.mqtt_en, "disable") == 0)
-	{
-		return 0;
-	}
-	return 0;
-}
 
-int8_t config_server_mqtt_tx_en_config(void)
-{
-	if(strcmp(device_config.mqtt_tx_en, "enable") == 0)
-	{
-		return 1;
-	}
-	else if(strcmp(device_config.mqtt_tx_en, "disable") == 0)
-	{
-		return 0;
-	}
-	return -1;
-}
 
-int8_t config_server_mqtt_rx_en_config(void)
-{
-	if(strcmp(device_config.mqtt_rx_en, "enable") == 0)
-	{
-		return 1;
-	}
-	else if(strcmp(device_config.mqtt_rx_en, "disable") == 0)
-	{
-		return 0;
-	}
-	return -1;
-}
 
-int8_t config_server_mqtt_elm327_log(void)
-{
-	if(strcmp(device_config.mqtt_elm327_log, "enable") == 0)
-	{
-		return 1;
-	}
-	else if(strcmp(device_config.mqtt_elm327_log, "disable") == 0)
-	{
-		return 0;
-	}
-	return -1;
-}
 
-int8_t config_server_elm327_udp_log(void)
-{
-	if(strcmp(device_config.elm327_udp_log, "enable") == 0)
-	{
-		return 1;
-	}
-	else if(strcmp(device_config.elm327_udp_log, "disable") == 0)
-	{
-		return 0;
-	}
-	return -1;
-}
-char *config_server_get_mqtt_url(void)
-{
-	return device_config.mqtt_url;
-}
 
-int32_t config_server_get_mqtt_port(void)
-{
-	int port_val = atoi(device_config.mqtt_port);
 
-	if(port_val > 0 && port_val <= 65535)
-	{
-		return port_val;
-	}
-	return -1;
-}
 
-char *config_server_get_mqtt_user(void)
-{
-	return device_config.mqtt_user;
-}
 
-char *config_server_get_mmqtt_pass(void)
-{
-	return device_config.mqtt_pass;
-}
 
-char *config_server_get_mqtt_cert_set(void)
-{
-	return device_config.mqtt_cert_set;
-}
 
-bool config_server_get_mqtt_security_enabled(void)
-{
-	if(strcmp(device_config.mqtt_security, "tls") == 0)
-	{
-		return true;
-	}
 
-	return false;
-}
 
-bool config_server_get_mqtt_skip_cn_check(void)
-{
-	// Return true when user selects to skip CN check (i.e., "enable")
-	if (strcmp(device_config.mqtt_skip_cn, "enable") == 0)
-	{
-		return true;
-	}
-	return false;
-}
 
-char *config_server_get_mqtt_tx_topic(void)
-{
-	return device_config.mqtt_tx_topic;
-}
 
-char *config_server_get_mqtt_rx_topic(void)
-{
-	return device_config.mqtt_rx_topic;
-}
-
-char *config_server_get_mqtt_status_topic(void)
-{
-	return device_config.mqtt_status_topic;
-}
-
-char *config_server_get_mqtt_canflt(void)
-{
-	return mqtt_canflt_file;
-}
 
 wifi_security_t config_server_get_sta_security(void)
 {
@@ -4525,20 +3372,6 @@ wifi_security_t config_server_get_sta_security(void)
 		return WIFI_WPA3_PSK;
 	}
 	return WIFI_MAX;
-}
-
-int8_t config_server_get_logger_config(void)
-{
-	if(strcmp(device_config.logger_status, "enable") == 0)
-	{
-		return 1;
-	}
-	else if(strcmp(device_config.logger_status, "disable") == 0)
-	{
-		return 0;
-	}
-
-	return -1;
 }
 
 int8_t config_server_get_csv_log(void)

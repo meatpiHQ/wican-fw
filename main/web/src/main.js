@@ -5,7 +5,7 @@
 const FW_UPDATE_REPO = 'cdufresne81/nc-flash-wican-fw';
 const FW_RELEASES_URL = `https://github.com/${FW_UPDATE_REPO}/releases`;
 // Check once per page load. checkFirmwareUpdate() is called from the shared
-// /check_status onload handler, which also runs on VPN-tab opens and VPN tests;
+// /check_status onload handler;
 // without this guard the rate-limited (60/hr) GitHub releases API would be
 // re-hit each time, for a result that can't change within a page's lifetime.
 let fwUpdateChecked = false;
@@ -97,31 +97,6 @@ async function checkFirmwareUpdate() {
         document.getElementById("submit_button").disabled = true;
         setRTCTime();
     });
-    let latest_car_models = null;
-    let bleAlertShown = false;
-    function loadCarModels(data) {
-        const carModelSelect = document.getElementById("car_model");
-        if (data && Array.isArray(data.supported)) {
-            carModelSelect.innerHTML = "";
-            data.supported.forEach(model => {
-                const option = document.createElement("option");
-                option.value = model;
-                option.text = model;
-                carModelSelect.appendChild(option);
-            });
-        } else {
-            console.error("Invalid data format or missing 'supported' property.");
-        }
-        toggleCarModel();
-        toggleSendToFields();
-        toggleStandardPIDOptions();
-        toggleSmartConnectConfig();
-    }
-
-    function loadDashboard() {
-        window.location.href = '/dashboard.html';
-    }
-
     function setRTCTime() {
         const now = new Date();
         
@@ -248,49 +223,6 @@ async function checkFirmwareUpdate() {
         return date.toLocaleString();
     }
 
-    async function fetchVehicleProfiles() {
-        try {
-            if (!navigator.onLine) {
-                throw new Error('No internet connection');
-            }
-            
-            const response = await fetch('https://raw.githubusercontent.com/meatpiHQ/wican-fw/main/vehicle_profiles.json');
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-            const data = await response.json();
-            console.log(data);
-            latest_car_models = data;
-            const carModels = [];
-            carModels.push("Not Selected");
-            if (data && Array.isArray(data.cars)) {
-                data.cars.forEach(car => {
-                    if (car.car_model) {
-                        carModels.push(car.car_model);
-                    }
-                });
-            }
-            console.log(carModels);
-            var mod = { "supported": carModels };
-            loadCarModels(mod);
-            enableAutoStoreButton();
-            
-        } catch (error) {
-            console.error('There was a problem with the fetch operation:', error);
-            showNotification("Unable to fetch vehicle_profiles.json. " + error.message, "red");
-        }
-    }
-
-    function toggleCarModel() {
-        const carSpecific = document.getElementById("car_specific").value;
-        const carModelSelect = document.getElementById("car_model");
-        if (carSpecific === "disable") {
-            carModelSelect.disabled = true;
-        } else {
-            carModelSelect.disabled = false;
-        }
-        toggleDiscovery();
-    }
     function toggleStandardPIDOptions() {
         const standardPidsSelect = document.getElementById("standard_pids");
         const ecuProtocolSelect = document.getElementById("ecu_protocol");
@@ -383,42 +315,6 @@ async function checkFirmwareUpdate() {
         submit_enable();
     }
 
-    function toggleGroupApiToken() {
-        // Legacy UI toggle; safely no-op if elements are not present
-        const typeEl = document.getElementById('group_dest_type');
-        const row = document.getElementById('group_api_token_row');
-        if (!typeEl || !row) return;
-
-        const type = typeEl.value;
-        const needsToken = (type === 'HTTP' || type === 'HTTPS' || type === 'ABRP_API');
-        row.style.display = needsToken ? 'table-row' : 'none';
-    }
-    
-    function toggleDiscovery() {
-        const carSpecific = document.getElementById("car_specific").value;
-        const discovery = document.getElementById("ha_discovery");
-
-        discovery.disabled = true;
-        discovery.value = "disable";
-    }
-    
-    function txCheckBoxChanged() {
-        if (document.getElementById("mqtt_tx_en_checkbox").checked) {
-            document.getElementById("mqtt_tx_topic").disabled = false;
-        } else {
-            document.getElementById("mqtt_tx_topic").disabled = true;
-        }
-    }
-
-    function rxCheckBoxChanged() {
-        if (document.getElementById("mqtt_rx_en_checkbox").checked) {
-            document.getElementById("mqtt_rx_topic").disabled = false;
-        } else {
-            document.getElementById("mqtt_rx_topic").disabled = true;
-        }
-    }
-
-    // Fallback Networks UI helpers
     function renderFallbackNetworks(list) {
         const container = document.getElementById('fallback_rows');
         if (!container) return;
@@ -467,202 +363,6 @@ async function checkFirmwareUpdate() {
         if (!addBtn) return;
         const count = document.querySelectorAll('#fallback_rows .fallback-row').length;
         addBtn.disabled = count >= 5 || document.getElementById('wifi_mode').value === 'SmartConnect';
-    }
-
-    function loadLocalCarModels() {
-        const fileInput = document.getElementById("car_data_file");
-
-        if (fileInput.files.length == 0) {
-            showNotification("No files selected!", "red");
-            return;
-        }
-
-        const file = fileInput.files[0];
-
-        const reader = new FileReader();
-        reader.onload = async function(event) {
-            try {
-                const jsonData = JSON.parse(event.target.result);
-                let data;
-                const isMultiCar = (jsonData && Array.isArray(jsonData.cars));
-                const isSingleCar = (jsonData && jsonData.car_model && Array.isArray(jsonData.pids));
-
-                const looksLikeShorthandSingleProfile = (() => {
-                    if (!isSingleCar) return false;
-                    for (const pid of jsonData.pids) {
-                        if (!pid || pid.parameters === undefined || pid.parameters === null) continue;
-                        if (Array.isArray(pid.parameters)) return false; // already in target format
-                        if (typeof pid.parameters !== 'object') continue;
-                        const values = Object.values(pid.parameters);
-                        // Shorthand single-profile format maps NAME -> "expression" (string)
-                        if (values.some(v => typeof v === 'string')) return true;
-                    }
-                    return false;
-                })();
-
-                if (isMultiCar) {
-                    data = jsonData;
-                } else if (looksLikeShorthandSingleProfile) {
-                    showNotification("Shorthand single-profile detected. Loading parameter metadata...", "blue");
-                    try {
-                        const paramsResponse = await fetch('https://raw.githubusercontent.com/meatpiHQ/wican-fw/main/.vehicle_profiles/params.json');
-                        const paramsData = await paramsResponse.json();
-                        const convertedCar = convertSingleCarFormat(jsonData, paramsData);
-                        data = { cars: [convertedCar] };
-                        showNotification("Profile loaded successfully!", "green");
-                    } catch (fetchError) {
-                        console.warn('Failed to fetch params.json, using basic conversion:', fetchError);
-                        data = { cars: [convertSingleCarBasic(jsonData)] };
-                        showNotification("Couldn't download params.json for parameter metadata. Make sure you're connected to the internet. Loaded profile without metadata.", "yellow");
-                    }
-                } else if (isSingleCar) {
-                    // Already in vehicle_profiles.json schema; wrap without conversion
-                    data = { cars: [jsonData] };
-                } else {
-                    // Existing fallback
-                    data = jsonData.car_model ? { cars: [jsonData] } : jsonData;
-                }
-                
-                latest_car_models = data;
-                const carModels = [];
-                carModels.push("Not Selected");
-                
-                if (data && Array.isArray(data.cars)) {
-                    data.cars.forEach(car => {
-                        if (car.car_model) {
-                            carModels.push(car.car_model);
-                        }
-                    });
-                }
-                
-                console.log(carModels);
-                var mod = { "supported": carModels };
-                loadCarModels(mod);
-                enableAutoStoreButton();
-
-                // If a single-car profile was uploaded, auto-enable vehicle-specific mode,
-                // select that model, and trigger the change handler to populate PIDs/filters.
-                try {
-                    if (data && Array.isArray(data.cars) && data.cars.length === 1 && data.cars[0]?.car_model) {
-                        const carSpecificEl = document.getElementById('car_specific');
-                        if (carSpecificEl && carSpecificEl.value === 'disable') {
-                            carSpecificEl.value = 'enable';
-                        }
-                        try { toggleCarModel(); } catch(_) {}
-
-                        const carModelEl = document.getElementById('car_model');
-                        if (carModelEl) {
-                            carModelEl.value = data.cars[0].car_model;
-                            carModelEl.dispatchEvent(new Event('change', { bubbles: true }));
-                        }
-
-                        showNotification(`Loaded profile: ${data.cars[0].car_model}`, 'green');
-                    }
-                } catch (e) {
-                    console.warn('Auto-select uploaded car model failed:', e);
-                }
-                
-                if (!jsonData.car_model || !jsonData.pids) {
-                    showNotification("Car models loaded successfully!", "green");
-                }
-            } catch (e) {
-                showNotification("Invalid JSON file!", "red");
-                console.error('JSON parse error:', e);
-            }
-        };
-        reader.readAsText(file);
-    }
-
-    function convertSingleCarFormat(singleCarData, paramsData) {
-        // Convert from shorthand single-profile (NAME -> expression map) to vehicle_profiles.json format
-        const convertedCar = {
-            car_model: singleCarData.car_model,
-            init: singleCarData.init,
-            pids: [],
-            can_filters: Array.isArray(singleCarData.can_filters) ? singleCarData.can_filters : []
-        };
-
-        singleCarData.pids.forEach(pidEntry => {
-            const newPidEntry = {
-                pid: pidEntry.pid,
-                parameters: []
-            };
-
-            if (pidEntry.pid_init) {
-                newPidEntry.pid_init = pidEntry.pid_init;
-            }
-
-            // Convert parameters from object format to array format
-            // If it's already an array (vehicle_profiles.json schema), keep it as-is.
-            if (Array.isArray(pidEntry.parameters)) {
-                newPidEntry.parameters = pidEntry.parameters;
-            } else if (pidEntry.parameters && typeof pidEntry.parameters === 'object') {
-                Object.keys(pidEntry.parameters).forEach(paramName => {
-                    const expression = pidEntry.parameters[paramName];
-                    const paramDef = paramsData?.[paramName] || {};
-                    const settings = paramDef.settings || {};
-
-                    const parameter = {
-                        name: paramName,
-                        expression: expression,
-                        unit: settings.unit || "",
-                        class: settings.class || "none",
-                        min: settings.min ?? "",
-                        max: settings.max ?? "",
-                        type: settings.type || "Default",
-                        period: "5000",
-                        send_to: ""
-                    };
-
-                    newPidEntry.parameters.push(parameter);
-                });
-            }
-
-            convertedCar.pids.push(newPidEntry);
-        });
-
-        return convertedCar;
-    }
-
-    function convertSingleCarBasic(singleCarData) {
-        // Basic conversion without parameter enrichment (fallback)
-        const convertedCar = {
-            car_model: singleCarData.car_model,
-            init: singleCarData.init,
-            pids: [],
-            can_filters: Array.isArray(singleCarData.can_filters) ? singleCarData.can_filters : []
-        };
-
-        singleCarData.pids.forEach(pidEntry => {
-            const newPidEntry = {
-                pid: pidEntry.pid,
-                parameters: []
-            };
-
-            if (pidEntry.pid_init) {
-                newPidEntry.pid_init = pidEntry.pid_init;
-            }
-
-            // Convert parameters from object format to array format (basic)
-            if (pidEntry.parameters && typeof pidEntry.parameters === 'object') {
-                Object.keys(pidEntry.parameters).forEach(paramName => {
-                    const expression = pidEntry.parameters[paramName];
-                    
-                    const parameter = {
-                        name: paramName,
-                        expression: expression,
-                        unit: "",
-                        class: "none"
-                    };
-
-                    newPidEntry.parameters.push(parameter);
-                });
-            }
-
-            convertedCar.pids.push(newPidEntry);
-        });
-
-        return convertedCar;
     }
 
     function addRowAutoTable() {
@@ -715,9 +415,7 @@ async function scanAvailablePIDs() {
 const pidEntryStyles = `
     .pid-entry,
     .std-pid-entry,
-    .specific-pid-entry,
-    .custom-canfilter-entry,
-    .specific-canfilter-entry {
+    .custom-canfilter-entry {
         border: 1px solid #e2e8f0;
         background: #fff;
         border-radius: 6px;
@@ -819,15 +517,6 @@ async function runPidTest(kind, entry) {
         payload.name = name.trim();
         payload.protocol = protocol;
         if (rxheader.trim()) payload.rxheader = rxheader.trim();
-    } else if (kind === 'vehicle') {
-        const init = document.getElementById('specific_init')?.value || '';
-        const pid = entry.querySelector('.pid-input')?.value || '';
-        const pidInit = entry.querySelector('.pid-init-input')?.value || '';
-        const expr = entry.querySelector('.expression-input')?.value || '';
-        if (init.trim()) payload.init = init;
-        payload.pid = pid.trim();
-        if (pidInit.trim()) payload.pid_init = pidInit;
-        payload.expr = expr;
     } else if (kind === 'custom') {
         const init = document.getElementById('initialisation')?.value || '';
         const pid = entry.querySelector('.pid-input')?.value || '';
@@ -1018,24 +707,10 @@ function addCollapsibleRow(rowData = {}) {
                     <td><input type="number" class="period-input" value="${rowData.Period || ''}" 
                         placeholder="ms"></td>
                 </tr>
-                <tr>
-                    <td>Destination Type:</td>
-                    <td><select class="type-select">
-                        <option value="Default" ${rowData.Type === 'Default' ? 'selected' : ''}>Default</option>
-                        <option value="MQTT_Topic" ${rowData.Type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
-                        <option value="MQTT_WallBox" ${rowData.Type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
-                    </select></td>
-                </tr>
-                <tr>
-                    <td>Send_to:</td>
-                    <td><input type="text" class="send-to-input" value="${rowData.Send_to || ''}"
-                        placeholder="Enter destination"></td>
-                </tr>
             </table>
         </div>
     `;
 console.log("addCollapsibleRow:", rowData);
-console.log("Send_to value:", rowData.Send_to);
 const style = document.createElement('style');
 style.textContent = pidEntryStyles;
 document.head.appendChild(style);
@@ -1130,19 +805,6 @@ if (selectedPID) {
                     <td><input type="number" class="period-input" value="${rowData.Period || '1000'}" 
                         min="100" max="120000"></td>
                 </tr>
-                <tr>
-                    <td>Destination Type:</td>
-                    <td><select class="type-select">
-                        <option value="Default" ${rowData.Type === 'Default' ? 'selected' : ''}>Default</option>
-                        <option value="MQTT_Topic" ${rowData.Type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
-                        <option value="MQTT_WallBox" ${rowData.Type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
-                    </select></td>
-                </tr>
-                <tr>
-                    <td>Destination:</td>
-                    <td><input type="text" class="send-to-input" value="${rowData.Send_to || ''}" 
-                        placeholder="Enter destination"></td>
-                </tr>
             </table>
         </div>
     `;
@@ -1171,130 +833,6 @@ if (selectedPID) {
     testBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         runPidTest('std', entry);
-    });
-
-    const toggleCollapse = (e) => {
-        e.stopPropagation();
-        const isHidden = content.style.display === 'none';
-        content.style.display = isHidden ? 'block' : 'none';
-        collapseBtn.textContent = isHidden ? '▲' : '▼';
-    };
-
-    header.addEventListener('click', toggleCollapse);
-    collapseBtn.addEventListener('click', toggleCollapse);
-
-    entry.querySelectorAll('input, select').forEach(input => {
-        input.addEventListener('input', enableAutoStoreButton);
-    });
-
-    container.appendChild(entry);
-    enableAutoStoreButton();
-}
-}
-
-function addCarParameter(rowData = {}) {
-if (rowData.name) {
-    const container = document.querySelector('.specific-pid-entries');
-    const entry = document.createElement('div');
-    entry.className = 'specific-pid-entry';
-
-    entry.innerHTML = `
-        <div class="pid-header">
-            <div class="header-left">
-                <button type="button" class="collapse-btn">▼</button>
-                <span class="pid-title">${rowData.name}</span>
-            </div>
-            <div class="header-right">
-                <span class="test-result status-indicator" style="display:none"></span>
-                <button type="button" class="test-btn">Test</button>
-                <label class="enabled-label" style="display:flex; align-items:center; gap:4px; font-size:0.7rem;">
-                    <input type="checkbox" class="enabled-chk" ${(rowData.enabled === false || rowData.Enabled === false) ? '' : 'checked'}>
-                    Enabled
-                </label>
-                <button type="button" class="delete-btn">Delete</button>
-            </div>
-        </div>
-        <div class="pid-content" style="display: none;">
-            <table class="compact-form-table">
-                <tr>
-                    <td>Name:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td>
-                    <td><input type="text" class="name-input" value="${rowData.name}"></td>
-                </tr>
-                <tr>
-                    <td>PID:</td>
-                    <td><input type="text" class="pid-input" value="${rowData.pid || ''}" placeholder="PID"></td>
-                </tr>
-                <tr>
-                    <td>PID Init:</td>
-                    <td><input type="text" class="pid-init-input" value="${rowData.pid_init || ''}" placeholder="Init"></td>
-                </tr>
-                <tr>
-                    <td>Expression:</td>
-                    <td><input type="text" class="expression-input" value="${rowData.expression || ''}" placeholder="Expression"></td>
-                </tr>
-                <tr>
-                    <td>Unit:</td>
-                    <td><input type="text" class="unit-input" value="${rowData.unit || ''}" placeholder="Unit"></td>
-                </tr>
-                <tr>
-                    <td>Class:</td>
-                    <td><input type="text" class="class-input" value="${rowData.class || ''}" placeholder="Class"></td>
-                </tr>
-
-                <tr>
-                    <td>Min Value:</td>
-                    <td><input type="number" class="min-input" value="${rowData.min || ''}" step="0.01" placeholder="Min"></td>
-                </tr>
-                <tr>
-                    <td>Max Value:</td>
-                    <td><input type="number" class="max-input" value="${rowData.max || ''}" step="0.01" placeholder="Max"></td>
-                </tr>
-                <tr>
-                    <td>Period(ms):</td>
-                    <td><input type="number" class="period-input" value="${rowData.period || '5000'}" min="100" max="60000"></td>
-                </tr>
-                <tr>
-                    <td>Destination Type:</td>
-                    <td><select class="type-select">
-                        <option value="Default" ${rowData.type === 'Default' ? 'selected' : ''}>Default</option>
-                        <option value="MQTT_Topic" ${rowData.type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
-                        <option value="MQTT_WallBox" ${rowData.type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
-                    </select></td>
-                </tr>
-                <tr>
-                    <td>Destination:</td>
-                    <td><input type="text" class="send-to-input" value="${rowData.send_to || ''}" 
-                        placeholder="Destination"></td>
-                </tr>
-            </table>
-        </div>
-    `;
-
-
-
-    const style = document.createElement('style');
-    style.textContent = pidEntryStyles;
-    document.head.appendChild(style);
-    const header = entry.querySelector('.pid-header');
-    const deleteBtn = entry.querySelector('.delete-btn');
-    const testBtn = entry.querySelector('.test-btn');
-    const collapseBtn = entry.querySelector('.collapse-btn');
-    const content = entry.querySelector('.pid-content');
-    const enabledChk = entry.querySelector('.enabled-chk');
-
-    if (enabledChk) {
-        enabledChk.addEventListener('click', (e) => e.stopPropagation());
-        enabledChk.addEventListener('change', enableAutoStoreButton);
-    }
-
-    deleteBtn.addEventListener('click', () => {
-        entry.remove();
-        enableAutoStoreButton();
-    });
-
-    testBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        runPidTest('vehicle', entry);
     });
 
     const toggleCollapse = (e) => {
@@ -1406,18 +944,6 @@ function addCustomCanFilterEntry(rowData = {}) {
                     <td>Period(ms):</td>
                     <td><input type="number" class="period-input" value="${safe(p.period || '5000')}" min="100" max="60000"></td>
                 </tr>
-                <tr>
-                    <td>Destination Type:</td>
-                    <td><select class="type-select">
-                        <option value="Default" ${(p.type === 'Default' || !p.type) ? 'selected' : ''}>Default</option>
-                        <option value="MQTT_Topic" ${p.type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
-                        <option value="MQTT_WallBox" ${p.type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
-                    </select></td>
-                </tr>
-                <tr>
-                    <td>Destination:</td>
-                    <td><input type="text" class="send-to-input" value="${safe(p.send_to)}" placeholder="Destination"></td>
-                </tr>
             </table>
         </div>
     `;
@@ -1475,144 +1001,10 @@ function addCustomCanFilterEntry(rowData = {}) {
     enableAutoStoreButton();
 }
 
-function addVehicleSpecificCanFilterEntry(rowData = {}) {
-    const container = document.querySelector('.specific-canfilter-entries');
-    if (!container) return;
-
-    const frameIdValue = (rowData.frame_id !== undefined && rowData.frame_id !== null)
-        ? (typeof rowData.frame_id === 'number' ? formatFrameIdForUi(rowData.frame_id) : String(rowData.frame_id))
-        : '';
-    const p = rowData.parameter || (Array.isArray(rowData.parameters) ? rowData.parameters[0] : {}) || {};
-
-    const entry = document.createElement('div');
-    entry.className = 'specific-canfilter-entry';
-
-    const safe = (v)=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    const titleText = `${frameIdValue || 'Frame'} - ${(p.name || rowData.name || 'New Parameter')}`;
-
-    entry.innerHTML = `
-        <div class="pid-header">
-            <div class="header-left">
-                <button type="button" class="collapse-btn">▼</button>
-                <span class="pid-title">${safe(titleText)}</span>
-            </div>
-            <div class="header-right">
-                <span class="test-result status-indicator" style="display:none"></span>
-                <button type="button" class="test-btn">Test</button>
-                <label class="enabled-label" style="display:flex; align-items:center; gap:4px; font-size:0.7rem;">
-                    <input type="checkbox" class="enabled-chk" ${(p.enabled === false || rowData.enabled === false) ? '' : 'checked'}>
-                    Enabled
-                </label>
-                <button type="button" class="delete-btn">Delete</button>
-            </div>
-        </div>
-        <div class="pid-content" style="display: none;">
-            <table class="compact-form-table">
-                <tr>
-                    <td>Frame ID:</td>
-                    <td><input type="text" class="frame-id-input" value="${safe(frameIdValue)}" placeholder="0x7E8 or 2024"></td>
-                </tr>
-                <tr>
-                    <td>Name:</td>
-                    <td><input type="text" class="name-input" value="${safe(p.name || rowData.name || 'New Parameter')}" placeholder="Parameter Name"></td>
-                </tr>
-                <tr>
-                    <td>Expression:</td>
-                    <td><input type="text" class="expression-input" value="${safe(p.expression)}" placeholder="Expression"></td>
-                </tr>
-                <tr>
-                    <td>Unit:</td>
-                    <td><input type="text" class="unit-input" value="${safe(p.unit)}" placeholder="Unit"></td>
-                </tr>
-                <tr>
-                    <td>Class:</td>
-                    <td><input type="text" class="class-input" value="${safe(p.class)}" placeholder="Class"></td>
-                </tr>
-                <tr>
-                    <td>Min Value:</td>
-                    <td><input type="number" class="min-input" value="${safe(p.min)}" step="0.01" placeholder="Min"></td>
-                </tr>
-                <tr>
-                    <td>Max Value:</td>
-                    <td><input type="number" class="max-input" value="${safe(p.max)}" step="0.01" placeholder="Max"></td>
-                </tr>
-                <tr>
-                    <td>Period(ms):</td>
-                    <td><input type="number" class="period-input" value="${safe(p.period || '5000')}" min="100" max="60000"></td>
-                </tr>
-                <tr>
-                    <td>Destination Type:</td>
-                    <td><select class="type-select">
-                        <option value="Default" ${(p.type === 'Default' || !p.type) ? 'selected' : ''}>Default</option>
-                        <option value="MQTT_Topic" ${p.type === 'MQTT_Topic' ? 'selected' : ''}>MQTT_Topic</option>
-                        <option value="MQTT_WallBox" ${p.type === 'MQTT_WallBox' ? 'selected' : ''}>MQTT_WallBox</option>
-                    </select></td>
-                </tr>
-                <tr>
-                    <td>Destination:</td>
-                    <td><input type="text" class="send-to-input" value="${safe(p.send_to)}" placeholder="Destination"></td>
-                </tr>
-            </table>
-        </div>
-    `;
-
-    const style = document.createElement('style');
-    style.textContent = pidEntryStyles;
-    document.head.appendChild(style);
-
-    const header = entry.querySelector('.pid-header');
-    const deleteBtn = entry.querySelector('.delete-btn');
-    const testBtn = entry.querySelector('.test-btn');
-    const collapseBtn = entry.querySelector('.collapse-btn');
-    const content = entry.querySelector('.pid-content');
-    const titleEl = entry.querySelector('.pid-title');
-    const enabledChk = entry.querySelector('.enabled-chk');
-
-    if (enabledChk) {
-        enabledChk.addEventListener('click', (e) => e.stopPropagation());
-        enabledChk.addEventListener('change', enableAutoStoreButton);
-    }
-
-    deleteBtn.addEventListener('click', () => {
-        entry.remove();
-        enableAutoStoreButton();
-    });
-
-    if (testBtn) {
-        testBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            runCanFilterTest('vehicle', entry);
-        });
-    }
-
-    const toggleCollapse = (e) => {
-        e.stopPropagation();
-        const isHidden = content.style.display === 'none';
-        content.style.display = isHidden ? 'block' : 'none';
-        collapseBtn.textContent = isHidden ? '▲' : '▼';
-    };
-    header.addEventListener('click', toggleCollapse);
-    collapseBtn.addEventListener('click', toggleCollapse);
-
-    const updateTitle = () => {
-        const fid = entry.querySelector('.frame-id-input')?.value?.trim() || 'Frame';
-        const nm = entry.querySelector('.name-input')?.value?.trim() || 'New Parameter';
-        titleEl.textContent = `${fid} - ${nm}`;
-    };
-
-    entry.querySelectorAll('input, select').forEach(input => {
-        input.addEventListener('input', () => { updateTitle(); enableAutoStoreButton(); });
-        input.addEventListener('change', () => { updateTitle(); enableAutoStoreButton(); });
-    });
-
-    container.appendChild(entry);
-    enableAutoStoreButton();
-}
-
 function addCustomFilterRow() {
     addCustomCanFilterEntry({
         frame_id: '',
-        parameter: { name: 'New Parameter', expression: '', unit: '', class: '', period: '5000', min: '', max: '', type: 'Default', send_to: '' }
+        parameter: { name: 'New Parameter', expression: '', unit: '', class: '', period: '5000', min: '', max: '' }
     });
 }
 
@@ -1711,351 +1103,6 @@ function addCalculatedRow() {
     addCalculatedChannelEntry({ name: 'New Channel', expression: '', unit: '', enabled: true });
 }
 
-window.automateDestinations = [];
-window.certManagerSetsCache = null;
-
-async function fetchCertSetsForDestinations() {
-if (window.certManagerSetsCache) return window.certManagerSetsCache;
-try {
-    const r = await fetch('/cert_manager/sets');
-    if (!r.ok) throw new Error('cert sets HTTP '+r.status);
-    const arr = await r.json();
-    if (Array.isArray(arr)) {
-        window.certManagerSetsCache = ['default'].concat(arr.map(s=>s.name).filter(Boolean));
-    } else {
-        window.certManagerSetsCache = ['default'];
-    }
-} catch(e){
-    console.warn('Failed to load cert sets', e);
-    window.certManagerSetsCache = ['default'];
-}
-return window.certManagerSetsCache;
-}
-
-// Populate MQTT cert set dropdown using the same Certificate Manager source as destinations
-async function populateMqttCertSets(){
-const sel = document.getElementById('mqtt_cert_set');
-if(!sel) return;
-try{
-    // Preserve current/desired value before repopulating
-    const prev = sel.value || sel.getAttribute('data-desired') || '';
-    const list = await fetchCertSetsForDestinations();
-    const options = (list||['default']).map(n=>`<option value="${n}">${n}</option>`).join('');
-    sel.innerHTML = options;
-    // Restore selection if available; fallback to default
-    const desired = prev || 'default';
-    if (Array.isArray(list) && list.includes(desired)) {
-        sel.value = desired;
-    } else if (Array.isArray(list) && list.length) {
-        // Keep whatever browser selects (first option), otherwise set default
-        if (!list.includes(sel.value)) sel.value = list[0];
-    } else {
-        sel.value = 'default';
-    }
-}catch(e){
-    // Fallback to default only
-    sel.innerHTML = '<option value="default">default</option>';
-    sel.value = 'default';
-}
-}
-
-function toggleMqttTLS(){
-const secSel = document.getElementById('mqtt_security');
-const row = document.getElementById('mqtt_cert_set_row');
-const skipRow = document.getElementById('mqtt_skip_cn_row');
-if(!secSel || !row) return;
-const isTLS = (secSel.value === 'tls');
-row.style.display = isTLS ? 'table-row' : 'none';
-if (skipRow) skipRow.style.display = isTLS ? 'table-row' : 'none';
-if(isTLS){
-    populateMqttCertSets();
-    // Nudge port to 8883 if it is at the plain default
-    const portEl = document.getElementById('mqtt_port');
-    if(portEl && (portEl.value === '' || portEl.value === '1883')){
-        portEl.value = '8883';
-    }
-}
-}
-
-function truncateMiddle(str, max=40){
-if (!str) return '';
-if (str.length <= max) return str;
-const half = Math.floor((max-3)/2);
-return str.slice(0,half)+'...'+str.slice(-half);
-}
-
-function renderDestinations(){
-const container = document.getElementById('destinations_container');
-if(!container) return;
-container.innerHTML='';
-if(!Array.isArray(window.automateDestinations)) window.automateDestinations=[];
-const ABRP_DEFAULT_URL = 'https://api.iternio.com/1/tlm/send';
-window.automateDestinations.forEach((d,idx)=>{
-    const wrap = document.createElement('div');
-    wrap.className='dest-entry';
-    wrap.style.cssText='border:1px solid #e2e8f0; background:#fff; border-radius:6px; margin-bottom:8px;';
-    const header = document.createElement('div');
-    header.className='dest-header';
-    header.style.cssText='display:flex; align-items:center; justify-content:space-between; cursor:pointer; padding:6px 8px; background:#f1f5f9; border-radius:6px 6px 0 0;';
-    const left = document.createElement('div');
-    left.style.cssText='display:flex; align-items:center; gap:8px; flex:1;';
-    const collapseBtn = document.createElement('button');
-const isCollapsed = !!d.collapsed;
-collapseBtn.textContent = isCollapsed ? '▼' : '▲';
-// Match collapsible arrow color with other automate tab collapsibles
-collapseBtn.style.cssText='border:none; background:transparent; font-size:0.75rem; cursor:pointer; padding:2px 4px; color:#334155;';
-    const title = document.createElement('div');
-    title.style.cssText='font-weight:600; font-size:0.8rem; flex:1;';
-    title.textContent=`${idx+1}. ${d.type} - ${truncateMiddle(d.destination||'(unset)',50)}`;
-    const enabledLabel = document.createElement('label');
-    enabledLabel.style.cssText='display:flex; align-items:center; gap:4px; font-size:0.7rem;';
-    const enabledChk = document.createElement('input');
-    enabledChk.type='checkbox';
-    enabledChk.checked = d.enabled !== false;
-    enabledChk.onchange = ()=>{ d.enabled = enabledChk.checked; enableAutoStoreButton(); };
-    // Runtime publish stats (OK/Fail) - shown before Enabled checkbox
-    const statsSpan = document.createElement('span');
-    statsSpan.className = 'dest-stats';
-    statsSpan.dataset.idx = String(idx);
-    statsSpan.style.cssText = 'margin-right:8px; color:#475569; font-size:0.7rem; white-space:nowrap;';
-    const ok0 = Number(d.success_count || 0);
-    const fail0 = Number(d.fail_count || 0);
-    statsSpan.textContent = `OK: ${ok0} Fail: ${fail0}`;
-    enabledLabel.appendChild(statsSpan);
-    enabledLabel.appendChild(enabledChk);
-    enabledLabel.appendChild(document.createTextNode('Enabled'));
-    const delBtn = document.createElement('button');
-    delBtn.textContent='Delete';
-delBtn.style.cssText='background:#dc2626; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.65rem; margin-left:12px;';
-    delBtn.onclick=(e)=>{ e.stopPropagation(); if(confirm('Delete destination '+(idx+1)+'?')){ window.automateDestinations.splice(idx,1); renderDestinations(); enableAutoStoreButton(); }};
-    left.appendChild(collapseBtn); left.appendChild(title);
-    header.appendChild(left);
-    header.appendChild(enabledLabel);
-    header.appendChild(delBtn);
-const content = document.createElement('div');
-content.style.cssText='padding:8px 10px;'+(isCollapsed?'display:none;':'display:block;');
-    content.innerHTML=`<table style="width:100%; border-collapse:collapse; font-size:0.75rem;">
-        <tr><td style="width:110px;">Type:</td><td>
-            <select class="dest-type" style="width:180px; box-sizing:border-box;">
-                <option value="Default" ${d.type==='Default'?'selected':''}>Default</option>
-                <option value="MQTT_Topic" ${d.type==='MQTT_Topic'?'selected':''}>MQTT Topic</option>
-                <option value="HTTP" ${d.type==='HTTP'?'selected':''}>HTTP POST</option>
-                <option value="HTTPS" ${d.type==='HTTPS'?'selected':''}>HTTPS POST</option>
-                <option value="ABRP_API" ${d.type==='ABRP_API'?'selected':''}>ABRP API</option>
-            </select>
-        </td></tr>
-        <tr><td style="width:110px;">Cycle (ms):</td><td><input type="number" class="dest-cycle" value="${d.cycle}" min="0" style="width:180px; box-sizing:border-box;"/></td></tr>
-        <tr><td>Destination:</td><td><input type="text" class="dest-url" value="${(d.destination||'').replace(/"/g,'&quot;')}" placeholder="URL / topic" maxlength="1024" style="width:100%; box-sizing:border-box;"/></td></tr>
-        <tr class="row-api-token" ${d.type==='ABRP_API'?'':'style="display:none;"'}><td>API Token:</td><td><input type="text" class="dest-api-token" value="${(d.api_token||'').replace(/"/g,'&quot;')}" placeholder="ABRP token" maxlength="512" style="width:100%; box-sizing:border-box;"/></td></tr>
-        <tr class="row-abrp-api-key" ${d.type==='ABRP_API'?'':'style="display:none;"'}><td>API Key:</td><td><input type="text" class="dest-abrp-api-key" value="${(d.auth?.api_key||'').replace(/"/g,'&quot;')}" placeholder="ABRP api_key" maxlength="512" style="width:100%; box-sizing:border-box;"/></td></tr>
-        <tr class="row-auth" ${((d.type==='HTTP'||d.type==='HTTPS')?'':'style=\"display:none;\"')}><td>Auth:</td><td>
-            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                <select class="auth-type" style="width:200px;">
-                    <option value="none" ${(d.auth?.type||'none')==='none'?'selected':''}>None</option>
-                    <option value="bearer" ${(d.auth?.type)==='bearer'?'selected':''}>Bearer Token</option>
-                    <option value="api_key_header" ${(d.auth?.type)==='api_key_header'?'selected':''}>API Key (Header)</option>
-                    <option value="api_key_query" ${(d.auth?.type)==='api_key_query'?'selected':''}>API Key (Query)</option>
-                    <option value="basic" ${(d.auth?.type)==='basic'?'selected':''}>Basic (User/Pass)</option>
-                </select>
-                <div class="row-bearer" style="${(d.auth?.type)==='bearer'?'':'display:none;'}; flex:1;">
-                    <input type="text" class="auth-bearer-token" placeholder="Bearer token" value="${(d.auth?.bearer||d.api_token||'').replace(/"/g,'&quot;')}" style="width:100%;" maxlength="512"/>
-                </div>
-                <div class="row-apikey-header" style="${(d.auth?.type)==='api_key_header'?'':'display:none;'}; display:flex; gap:6px; flex:1;">
-                    <input type="text" class="auth-api-header-name" placeholder="Header name (e.g. x-api-key)" value="${(d.auth?.api_key_header_name||'x-api-key').replace(/"/g,'&quot;')}" style="width:220px;" maxlength="64"/>
-                    <input type="text" class="auth-api-key" placeholder="API key value" value="${(d.auth?.api_key||'').replace(/"/g,'&quot;')}" style="flex:1;" maxlength="512"/>
-                </div>
-                <div class="row-apikey-query" style="${(d.auth?.type)==='api_key_query'?'':'display:none;'}; display:flex; gap:6px; flex:1;">
-                    <input type="text" class="auth-api-query-name" placeholder="Query name (e.g. api_key)" value="${(d.auth?.api_key_query_name||'').replace(/"/g,'&quot;')}" style="width:220px;" maxlength="64"/>
-                    <input type="text" class="auth-api-key" placeholder="API key value" value="${(d.auth?.api_key||'').replace(/"/g,'&quot;')}" style="flex:1;" maxlength="512"/>
-                </div>
-                <div class="row-basic" style="${(d.auth?.type)==='basic'?'':'display:none;'}; display:flex; gap:6px; flex:1;">
-                    <input type="text" class="auth-basic-user" placeholder="Username" value="${(d.auth?.basic_username||'').replace(/"/g,'&quot;')}" style="width:200px;" maxlength="128"/>
-                    <input type="text" class="auth-basic-pass" placeholder="Password" value="${(d.auth?.basic_password||'').replace(/"/g,'&quot;')}" style="width:200px;" maxlength="128"/>
-                </div>
-            </div>
-        </td></tr>
-        <tr class="row-query-params" ${((d.type==='HTTP'||d.type==='HTTPS')?'':'style=\"display:none;\"')}><td>Query Params:</td><td>
-            <div class="qp-container" style="display:flex; flex-direction:column; gap:6px; margin-bottom:6px;"></div>
-            <button type="button" class="qp-add" style="background:#334155; font-size:0.7rem; padding:4px 8px;">Add param</button>
-        </td></tr>
-        <tr class="row-cert-set" ${d.type==='HTTPS'?'':'style="display:none;"'}><td>Cert Set:</td><td><select class="dest-cert-set" style="width:180px;"></select></td></tr>
-    </table>`;
-    function toggleCollapse(e){
-        e.stopPropagation();
-        const currentlyHidden = content.style.display==='none';
-        const newHidden = !currentlyHidden; // we will toggle
-        content.style.display = newHidden ? 'none' : 'block';
-        collapseBtn.textContent = newHidden ? '▼' : '▲';
-        d.collapsed = newHidden; // persist state
-    }
-    header.onclick=toggleCollapse; collapseBtn.onclick=toggleCollapse;
-    wrap.appendChild(header); wrap.appendChild(content); container.appendChild(wrap);
-    const typeSel = content.querySelector('.dest-type');
-    const urlIn = content.querySelector('.dest-url');
-    const cycleIn = content.querySelector('.dest-cycle');
-    const apiRow = content.querySelector('.row-api-token');
-    const apiIn = content.querySelector('.dest-api-token');
-    const abrpKeyRow = content.querySelector('.row-abrp-api-key');
-    const abrpKeyIn = content.querySelector('.dest-abrp-api-key');
-    const authRow = content.querySelector('.row-auth');
-    const qpRow = content.querySelector('.row-query-params');
-    const certRow = content.querySelector('.row-cert-set');
-    const certSel = content.querySelector('.dest-cert-set');
-    const initialCertSet = d.cert_set || 'default';
-    // Auth controls
-    d.auth = d.auth || { type: 'none' };
-    d.query_params = Array.isArray(d.query_params) ? d.query_params : [];
-    const authTypeSel = content.querySelector('.auth-type');
-    const rowBearer = content.querySelector('.row-bearer');
-    const bearerIn = content.querySelector('.auth-bearer-token');
-    const rowApiHdr = content.querySelector('.row-apikey-header');
-    const apiHeaderNameIn = content.querySelector('.auth-api-header-name');
-    const apiKeyInputs = content.querySelectorAll('.auth-api-key');
-    const rowApiQry = content.querySelector('.row-apikey-query');
-    const apiQueryNameIn = content.querySelector('.auth-api-query-name');
-    const rowBasic = content.querySelector('.row-basic');
-    const basicUserIn = content.querySelector('.auth-basic-user');
-    const basicPassIn = content.querySelector('.auth-basic-pass');
-    const qpContainer = content.querySelector('.qp-container');
-    const qpAddBtn = content.querySelector('.qp-add');
-
-    function updateAuthVisibility(){
-        const t = authTypeSel ? authTypeSel.value : 'none';
-        if(rowBearer) rowBearer.style.display = (t==='bearer')? 'flex':'none';
-        if(rowApiHdr) rowApiHdr.style.display = (t==='api_key_header')? 'flex':'none';
-        if(rowApiQry) rowApiQry.style.display = (t==='api_key_query')? 'flex':'none';
-        if(rowBasic) rowBasic.style.display = (t==='basic')? 'flex':'none';
-    }
-
-    function renderQP(){
-        if(!qpContainer) return;
-        qpContainer.innerHTML = '';
-        d.query_params.forEach((kv, i)=>{
-            const row = document.createElement('div');
-            row.style.cssText = 'display:flex; gap:6px; align-items:center;';
-            row.innerHTML = `
-                <input type="text" class="qp-key" placeholder="key" value="${(kv.key||'').replace(/"/g,'&quot;')}" style="width:160px;" maxlength="64"/>
-                <input type="text" class="qp-value" placeholder="value" value="${(kv.value||'').replace(/"/g,'&quot;')}" style="flex:1;" maxlength="256"/>
-                <button type="button" class="qp-del" style="background:#dc2626; padding:4px 8px; color:#fff; font-size:0.7rem;">Remove</button>
-            `;
-            qpContainer.appendChild(row);
-            const keyIn = row.querySelector('.qp-key');
-            const valIn = row.querySelector('.qp-value');
-            const delBtn = row.querySelector('.qp-del');
-            keyIn.oninput = ()=>{ d.query_params[i].key = keyIn.value.trim(); enableAutoStoreButton(); };
-            valIn.oninput = ()=>{ d.query_params[i].value = valIn.value.trim(); enableAutoStoreButton(); };
-            delBtn.onclick = ()=>{ d.query_params.splice(i,1); renderQP(); enableAutoStoreButton(); };
-        });
-    }
-
-    if(qpAddBtn){ qpAddBtn.onclick = (e)=>{ e.preventDefault(); d.query_params.push({key:'', value:''}); renderQP(); enableAutoStoreButton(); }; }
-    renderQP();
-
-    if(authTypeSel){ authTypeSel.onchange = ()=>{ d.auth.type = authTypeSel.value; updateAuthVisibility(); enableAutoStoreButton(); }; }
-    if(bearerIn){ bearerIn.oninput = ()=>{ d.auth.bearer = bearerIn.value.trim(); d.api_token = bearerIn.value.trim(); enableAutoStoreButton(); }; }
-    if(apiHeaderNameIn){ apiHeaderNameIn.oninput = ()=>{ d.auth.api_key_header_name = apiHeaderNameIn.value.trim(); enableAutoStoreButton(); }; }
-    if(apiKeyInputs && apiKeyInputs.length){ apiKeyInputs.forEach(el=>{ el.oninput = ()=>{ d.auth.api_key = el.value.trim(); enableAutoStoreButton(); }; }); }
-    if(apiQueryNameIn){ apiQueryNameIn.oninput = ()=>{ d.auth.api_key_query_name = apiQueryNameIn.value.trim(); enableAutoStoreButton(); }; }
-    if(basicUserIn){ basicUserIn.oninput = ()=>{ d.auth.basic_username = basicUserIn.value.trim(); enableAutoStoreButton(); }; }
-    if(basicPassIn){ basicPassIn.oninput = ()=>{ d.auth.basic_password = basicPassIn.value; enableAutoStoreButton(); }; }
-    updateAuthVisibility();
-
-    const bind = ()=>{
-        enableAutoStoreButton();
-        d.type = typeSel.value;
-        d.destination = urlIn.value.trim();
-        d.cycle = parseInt(cycleIn.value)||0;
-        if(apiIn) d.api_token = apiIn.value.trim();
-
-        // ABRP: store api_key into d.auth in a predictable way.
-        if (d.type === 'ABRP_API') {
-            const k = abrpKeyIn ? abrpKeyIn.value.trim() : '';
-            d.auth = d.auth || { type: 'none' };
-            // Preserve explicit header-mode configs; otherwise default to query api_key=...
-            if (d.auth.type !== 'api_key_header') {
-                d.auth.type = 'api_key_query';
-                d.auth.api_key_query_name = 'api_key';
-            } else {
-                d.auth.api_key_header_name = d.auth.api_key_header_name || 'Authorization';
-            }
-            d.auth.api_key = k;
-        }
-
-        if(certSel && certSel.options.length > 0){
-            d.cert_set = certSel.value || 'default';
-        }
-        title.textContent = `${idx+1}. ${d.type} - ${truncateMiddle(d.destination||'(unset)',50)}`;
-        apiRow.style.display = (d.type==='ABRP_API')? 'table-row':'none';
-        if (abrpKeyRow) abrpKeyRow.style.display = (d.type==='ABRP_API')? 'table-row':'none';
-        authRow.style.display = ((d.type==='HTTP'||d.type==='HTTPS')? 'table-row':'none');
-        qpRow.style.display = ((d.type==='HTTP'||d.type==='HTTPS')? 'table-row':'none');
-        certRow.style.display = (d.type==='HTTPS')? 'table-row':'none';
-    };
-
-    typeSel.onchange=()=>{
-        // Convenience: when switching to ABRP, prefill the standard telemetry endpoint if empty.
-        if (typeSel.value === 'ABRP_API' && urlIn && urlIn.value.trim() === '') {
-            urlIn.value = ABRP_DEFAULT_URL;
-        }
-        bind();
-    };
-    urlIn.oninput=bind; cycleIn.oninput=bind; if(apiIn) apiIn.oninput=bind; if(abrpKeyIn) abrpKeyIn.oninput=bind; if(certSel) certSel.onchange=bind;
-    // initial toggle
-    bind();
-    fetchCertSetsForDestinations().then(list=>{
-        if(!certSel) return;
-        const safeList = Array.isArray(list) && list.length ? list : ['default'];
-        const desired = (d.cert_set && safeList.includes(d.cert_set)) ? d.cert_set : (safeList.includes(initialCertSet) ? initialCertSet : safeList[0]);
-        certSel.innerHTML = safeList.map(n=>`<option value="${n}" ${desired===n?'selected':''}>${n}</option>`).join('');
-        certSel.value = desired;
-        d.cert_set = certSel.value || 'default';
-    });
-});
-document.getElementById('add_destination_btn').disabled = window.automateDestinations.length>=6;
-}
-
-async function refreshDestinationStats(){
-    if (window._destStatsInFlight) return;
-    window._destStatsInFlight = true;
-    try{
-        const r = await fetch('/api/destinations_stats');
-        if(!r.ok) throw new Error('HTTP '+r.status);
-        const js = await r.json();
-        const arr = Array.isArray(js?.destinations) ? js.destinations : [];
-        // Update model and DOM (without re-rendering)
-        arr.forEach((s, i)=>{
-            const ok = Number(s?.success || 0);
-            const fail = Number(s?.fail || 0);
-            if (Array.isArray(window.automateDestinations) && window.automateDestinations[i]) {
-                window.automateDestinations[i].success_count = ok;
-                window.automateDestinations[i].fail_count = fail;
-            }
-            const el = document.querySelector(`.dest-stats[data-idx="${i}"]`);
-            if (el) el.textContent = `OK: ${ok} Fail: ${fail}`;
-        });
-    }catch(e){
-        // silently ignore; endpoint may not exist on older FW
-        // console.log('dest stats fetch failed', e);
-    }finally{
-        window._destStatsInFlight = false;
-    }
-}
-
-function ensureDestinationStatsRefresh(){
-    if (window._destStatsTimer) return;
-    // Refresh periodically so users can see failures/successes live.
-    window._destStatsTimer = setInterval(refreshDestinationStats, 5000);
-    refreshDestinationStats();
-}
-
-function addDestinationEntry(){
-if(!Array.isArray(window.automateDestinations)) window.automateDestinations=[];
-if(window.automateDestinations.length>=6){ showNotification('Maximum 6 destinations', 'red'); return; }
-window.automateDestinations.push({type:'Default', destination:'', cycle:5000, api_token:'', cert_set:'default', enabled:true, auth:{type:'none'}, query_params:[]});
-renderDestinations();
-enableAutoStoreButton();
-}
-
 function loadAutoTable(jsonData) {
     try {
         console.log("Raw jsonData:", jsonData);
@@ -2087,57 +1134,14 @@ function loadAutoTable(jsonData) {
             }
         };
 
-        setElementValue("car_specific", data.car_specific, 'disable');
-        setElementValue("ha_discovery", 'disable');
-        setElementValue("grouping", data.grouping, 'disable');
         setElementValue("disable_on_sleep_voltage", data.disable_on_sleep_voltage, 'disable');
         setElementValue("pid_polling_min_voltage", data.pid_polling_min_voltage, '13.1');
         const pidMinVoltEl = document.getElementById("pid_polling_min_voltage");
         const pidMinVoltValEl = document.getElementById("pid_polling_min_voltage_value");
         if (pidMinVoltEl && pidMinVoltValEl) pidMinVoltValEl.textContent = pidMinVoltEl.value;
-        setElementValue("webhook_data_mode", data.webhook_data_mode, 'changed');
-        // Legacy cycle/destination will be migrated into destinations[0].
-        setElementValue("car_model", data.car_model, '');
         setElementValue("standard_pids", data.standard_pids, 'disable');
         setElementValue("ecu_protocol", data.ecu_protocol, '6');
-        // group_dest_type & group_api_token migrated via destinations array.
 
-        // Destinations migration
-        window.automateDestinations = [];
-        if (Array.isArray(data.destinations) && data.destinations.length) {
-            data.destinations.slice(0,6).forEach(d => {
-                window.automateDestinations.push({
-                    type: d.type || 'Default',
-                    destination: d.destination || '',
-                    cycle: (typeof d.cycle==='number'? d.cycle : parseInt(d.cycle)||5000),
-                    api_token: d.api_token || '',
-                    cert_set: d.cert_set || 'default',
-                    enabled: (d.enabled===false)?false:true,
-                    auth: d.auth || { type: 'none' },
-                    query_params: Array.isArray(d.query_params) ? d.query_params : [],
-                    success_count: Number(d.success_count || 0),
-                    fail_count: Number(d.fail_count || 0)
-                });
-            });
-        } else {
-            window.automateDestinations.push({
-                type: data.group_dest_type || 'Default',
-                destination: data.destination || '',
-                cycle: (typeof data.cycle==='number'? data.cycle : parseInt(data.cycle)||5000),
-                api_token: data.group_api_token || '',
-                cert_set: 'default',
-                enabled: true,
-                auth: { type: 'none' },
-                query_params: [],
-                success_count: 0,
-                fail_count: 0
-            });
-        }
-        // Collapse all destinations on initial load
-        window.automateDestinations.forEach(d=>{ d.collapsed = true; });
-        renderDestinations();
-        ensureDestinationStatsRefresh();
-        
         if (data.pids && Array.isArray(data.pids)) {
             data.pids.forEach((pidData, index) => {
                 console.log(`Loading PID ${index}:`, pidData);
@@ -2151,8 +1155,6 @@ function loadAutoTable(jsonData) {
                     MinValue: pidData.MinValue || '',
                     MaxValue: pidData.MaxValue || '',
                     Period: pidData.Period || '',
-                    Type: pidData.Type || 'Default',
-                    Send_to: pidData.Send_to || '',
                     enabled: pidData.enabled
                 });
             });
@@ -2176,13 +1178,12 @@ function loadAutoTable(jsonData) {
                                 type: param.type,
                                 min: param.min,
                                 max: param.max,
-                                send_to: param.send_to,
                                 enabled: param.enabled
                             }
                         });
                     });
                 } else if (fid !== null) {
-                    addCustomCanFilterEntry({ frame_id: fid, parameter: { name: 'New Parameter', period: '5000', type: 'Default', send_to: '' } });
+                    addCustomCanFilterEntry({ frame_id: fid, parameter: { name: 'New Parameter', period: '5000' } });
                 }
             });
         }
@@ -2194,8 +1195,6 @@ function loadAutoTable(jsonData) {
                     Name: pidData.Name || '',
                     ReceiveHeader: pidData.ReceiveHeader || '',
                     Period: pidData.Period || '',
-                    Type: pidData.Type || 'Default',
-                    Send_to: pidData.Send_to || '',
                     enabled: pidData.enabled
                 });
             });
@@ -2215,21 +1214,6 @@ function loadAutoTable(jsonData) {
 
         requestAnimationFrame(() => {
             try {
-                const carSpecificElement = document.getElementById("car_specific");
-                if (carSpecificElement) {
-                    carSpecificElement.dispatchEvent(new Event('change'));
-                }
-
-                const groupingElement = document.getElementById("grouping");
-                if (groupingElement) {
-                    groupingElement.dispatchEvent(new Event('change'));
-                }
-
-                const groupDestTypeElement = document.getElementById("group_dest_type");
-                if (groupDestTypeElement) {
-                    groupDestTypeElement.dispatchEvent(new Event('change'));
-                }
-
                 const ecuProtocolElement = document.getElementById("ecu_protocol");
                 if (ecuProtocolElement) {
                     ecuProtocolElement.dispatchEvent(new Event('change'));
@@ -2241,7 +1225,6 @@ function loadAutoTable(jsonData) {
                 }
 
                 if (typeof toggleCarModel === 'function') toggleCarModel();
-                if (typeof toggleSendToFields === 'function') toggleSendToFields();
                 if (typeof toggleGroupApiToken === 'function') toggleGroupApiToken();
                 if (typeof toggleStandardPIDOptions === 'function') toggleStandardPIDOptions();
 
@@ -2291,109 +1274,14 @@ async function storeAutoTableData() {
         const standardEntries = document.querySelectorAll('.std-pid-entry');
 
         const initialisationValue = document.getElementById("initialisation")?.value || '';
-        const groupingValue = document.getElementById("grouping")?.value || 'disable';
         const disableOnSleepVoltageValue = document.getElementById("disable_on_sleep_voltage")?.value || 'automate_threshold';
         const pidPollingMinVoltageValueRaw = document.getElementById("pid_polling_min_voltage")?.value;
         const pidPollingMinVoltageValue = (() => {
             const n = parseFloat(pidPollingMinVoltageValueRaw);
             return Number.isFinite(n) ? n : 12.0;
         })();
-        const webhook_data_mode = document.getElementById("webhook_data_mode")?.value || 'changed';
-        const ha_discoveryValue = document.getElementById("ha_discovery")?.value || 'disable';
-        const carSpecificValue = document.getElementById("car_specific")?.value || 'disable';
-        const carModelField = document.getElementById("car_model");
         const standard_pidsValue = document.getElementById("standard_pids")?.value || 'disable';
         const ecu_protocolValue = document.getElementById("ecu_protocol")?.value || '6';
-        const carModelValue = carModelField?.value || '';
-        if (carSpecificValue== "enable" && (!carModelValue || carModelValue.length === 0 || carModelValue === "Not Selected")) {
-            throw new Error("Car model must be selected");
-        }
-
-        let carData = {
-            car_model: carModelValue,
-            init: document.getElementById("specific_init").value,
-            pids: [],
-            can_filters: []
-        };
-
-        const specificPidEntries = document.querySelectorAll('.specific-pid-entry');
-        if (specificPidEntries.length > 0) {
-            carData.pids = Array.from(specificPidEntries).map(entry => {
-                return {
-                    pid: entry.querySelector('.pid-input').value,
-                    pid_init: entry.querySelector('.pid-init-input').value,
-                    enabled: entry.querySelector('.enabled-chk')?.checked !== false,
-                    parameters: [{
-                        name: entry.querySelector('.name-input').value,
-                        expression: entry.querySelector('.expression-input').value,
-                        unit: entry.querySelector('.unit-input').value,
-                        class: entry.querySelector('.class-input').value,
-                        period: entry.querySelector('.period-input').value,
-                        min: entry.querySelector('.min-input').value,
-                        max: entry.querySelector('.max-input').value,
-                        type: entry.querySelector('.type-select').value,
-                        send_to: entry.querySelector('.send-to-input').value
-                    }]
-                };
-            });
-        }
-
-        // Vehicle Specific CAN filters (from car profile)
-        const specificFilterEntries = document.querySelectorAll('.specific-canfilter-entry');
-        if (specificFilterEntries.length > 0) {
-            const grouped = new Map();
-            specificFilterEntries.forEach(entry => {
-                const fidRaw = entry.querySelector('.frame-id-input')?.value || '';
-                const fidNum = normalizeFrameIdInputToNumber(fidRaw);
-                const frameIdOut = (fidNum !== null) ? fidNum : String(fidRaw).trim();
-                if (!frameIdOut) {
-                    throw new Error('Vehicle specific filter frame_id is required');
-                }
-                const key = (fidNum !== null) ? `n:${fidNum}` : `s:${String(fidRaw).trim().toLowerCase()}`;
-                if (!grouped.has(key)) {
-                    grouped.set(key, { frame_id: frameIdOut, parameters: [] });
-                }
-                grouped.get(key).parameters.push({
-                    name: entry.querySelector('.name-input')?.value || '',
-                    expression: entry.querySelector('.expression-input')?.value || '',
-                    unit: entry.querySelector('.unit-input')?.value || '',
-                    class: entry.querySelector('.class-input')?.value || '',
-                    period: entry.querySelector('.period-input')?.value || '',
-                    min: entry.querySelector('.min-input')?.value || '',
-                    max: entry.querySelector('.max-input')?.value || '',
-                    type: entry.querySelector('.type-select')?.value || 'Default',
-                    send_to: entry.querySelector('.send-to-input')?.value || '',
-                    enabled: entry.querySelector('.enabled-chk')?.checked !== false
-                });
-            });
-            carData.can_filters = Array.from(grouped.values());
-        }
-
-        fetch('/store_car_data', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ cars: [carData] }, null, 0)
-        }).then(response => response.text())
-        .then(data => console.log('Success:', data))
-        .catch(error => console.error('Error:', error));
-
-        // Validate destinations
-        if(groupingValue === 'enable') {
-            if (!Array.isArray(window.automateDestinations) || window.automateDestinations.length===0){
-                showNotification('At least one destination required','red'); return false; }
-            for (let i=0;i<window.automateDestinations.length;i++){
-                const d = window.automateDestinations[i];
-                if (!Number.isInteger(d.cycle)) { showNotification(`Destination ${i+1} cycle invalid`,'red'); return false; }
-                if (d.cycle!==0 && d.cycle<1000){ showNotification(`Destination ${i+1} cycle must be >=1000 or 0`,'red'); return false; }
-                if (d.destination && d.destination.length > 1024){ showNotification(`Destination ${i+1} URL/topic >1024 chars`,'red'); return false; }
-                if (d.type==='ABRP_API' && !d.api_token){ showNotification(`Destination ${i+1} requires API token`,'red'); return false; }
-                if (d.api_token && d.api_token.length > 512){ showNotification(`Destination ${i+1} API token >512 chars`,'red'); return false; }
-                if (d.type==='HTTPS' && !d.cert_set){ showNotification(`Destination ${i+1} select cert set`,'red'); return false; }
-            }
-        }
-
         if(entries?.length) {
             entries.forEach((entry, index) => {
                 const pidData = {
@@ -2406,8 +1294,6 @@ async function storeAutoTableData() {
                     MinValue: entry.querySelector('.min-value-input')?.value || '',
                     MaxValue: entry.querySelector('.max-value-input')?.value || '',
                     Period: entry.querySelector('.period-input')?.value || '',
-                    Type: entry.querySelector('.type-select')?.value || 'Default',
-                    Send_to: entry.querySelector('.send-to-input')?.value || '',
                     enabled: entry.querySelector('.enabled-chk')?.checked !== false
                 };
 
@@ -2423,9 +1309,6 @@ async function storeAutoTableData() {
                 if (!/^\d+$/.test(pidData.Period) || (parseInt(pidData.Period) < 100 && parseInt(pidData.Period) != 0)) {
                     throw new Error("Period must be a number greater than 100");
                 }
-                if (pidData.Send_to.length >= 64) {
-                    throw new Error("Send_to must be less than 64 characters");
-                }
                 custom_pid_data.push(pidData);
             });
         }
@@ -2436,8 +1319,6 @@ async function storeAutoTableData() {
                     Name: entry.querySelector('.name-input')?.value || '',
                     ReceiveHeader: entry.querySelector('.receive-header-input')?.value || '',
                     Period: entry.querySelector('.period-input')?.value || '',
-                    Type: entry.querySelector('.type-select')?.value || 'Default',
-                    Send_to: entry.querySelector('.send-to-input')?.value || '',
                     enabled: entry.querySelector('.enabled-chk')?.checked !== false
                 };
 
@@ -2446,9 +1327,6 @@ async function storeAutoTableData() {
                 }
                 if (!/^\d+$/.test(stdPIDData.Period) || (parseInt(stdPIDData.Period) < 1000 && parseInt(stdPIDData.Period) != 0)) {
                     throw new Error("Period must be a number greater than 1000");
-                }
-                if (stdPIDData.Send_to.length >= 64) {
-                    throw new Error("Send_to must be less than 64 characters");
                 }
                 std_pid_data.push(stdPIDData);
             });
@@ -2477,8 +1355,6 @@ async function storeAutoTableData() {
                     period: entry.querySelector('.period-input')?.value || '',
                     min: entry.querySelector('.min-input')?.value || '',
                     max: entry.querySelector('.max-input')?.value || '',
-                    type: entry.querySelector('.type-select')?.value || 'Default',
-                    send_to: entry.querySelector('.send-to-input')?.value || '',
                     enabled: entry.querySelector('.enabled-chk')?.checked !== false
                 });
             });
@@ -2502,21 +1378,14 @@ async function storeAutoTableData() {
 
         const jsonData = {
             initialisation: initialisationValue,
-            grouping: groupingValue,
             disable_on_sleep_voltage: disableOnSleepVoltageValue,
             pid_polling_min_voltage: pidPollingMinVoltageValue,
-            webhook_data_mode: webhook_data_mode,
-            car_specific: carSpecificValue,
-            ha_discovery: ha_discoveryValue,
-            car_model: carModelValue,
             pids: custom_pid_data,
             std_pids: std_pid_data,
             can_filters: custom_can_filters,
             calculated: calculated_data,
             standard_pids: standard_pidsValue,
-            ecu_protocol: ecu_protocolValue,
-            group_api_token: window.automateDestinations[0]?.api_token || '',
-            destinations: window.automateDestinations
+            ecu_protocol: ecu_protocolValue
         };
 
         await fetch('store_auto_data', {
@@ -2545,83 +1414,9 @@ async function storeAutoTableData() {
     }
 }
 
-function toggleSendToFields() {
-    const groupingValue = document.getElementById("grouping")?.value || 'disable';
-    const table = document.getElementById("automate_table");
-    if (!table) return;
-
-    const rows = table.getElementsByClassName('pid-entry');
-    if (!rows.length) return;
-
-    Array.from(rows).forEach(row => {
-        const sendToInput = row.querySelector('.send-to-input');
-        if (sendToInput) {
-            sendToInput.disabled = (groupingValue === "Group ALL");
-        }
-    });
-}
-
-var canData = [];
-
-function restoreCANFLTRow(id, n, p, pi, s, b, e, c) {
-    var canId = id;
-    if(canId < 0) {
-        canId = 0;
-    } else if(canId > 536870912) {
-        canId = 536870912;
-    }
-    var name = n;
-    var pid = p;
-    var pindex = pi;
-    var startBit = s;
-    var bitLength = b;
-    var expression = e;
-    var cycle = c;
-    var table = document.getElementById("can_flt_table");
-    var row = table.insertRow(-1);
-    var cell1 = row.insertCell(0);
-    var cell2 = row.insertCell(1);
-    var cell3 = row.insertCell(2);
-    var cell4 = row.insertCell(3);
-    var cell5 = row.insertCell(4);
-    var cell6 = row.insertCell(5);
-    var cell7 = row.insertCell(6);
-    var cell8 = row.insertCell(7);
-    var cell9 = row.insertCell(8);
-    cell1.innerHTML = canId;
-    cell2.innerHTML = name;
-    cell3.innerHTML = pid;
-    cell4.innerHTML = pindex;
-    cell5.innerHTML = startBit;
-    cell6.innerHTML = bitLength;
-    cell7.innerHTML = expression;
-    cell8.innerHTML = cycle;
-    cell9.innerHTML = '<button style="width: 100%;" onclick="deleteCANFLTRow(this)">Delete</button>';
-    canData.push({
-        CANID: canId,
-        Name: name,
-        PID: pid,
-        PIDIndex: pindex,
-        StartBit: startBit,
-        BitLength: bitLength,
-        Expression: expression,
-        Cycle: cycle
-    });
-    document.getElementById("canId").value = "";
-    document.getElementById("name").value = "";
-    document.getElementById("pid").value = "";
-    document.getElementById("pindex").value = "";
-    document.getElementById("startBit").value = "";
-    document.getElementById("bitLength").value = "";
-    document.getElementById("expression").value = "";
-    document.getElementById("cycle").value = "";
-}
-
-// ===== SD-card file browser (Task #8) =====
 var filesCwd = '';   // current directory, relative to /sdcard
 var filesSortKey = 'mtime';   // 'name' | 'size' | 'type' | 'mtime'
 var filesSortDir = 'desc';    // 'asc' | 'desc' (default: newest first)
-// Selection lives in the DOM checkboxes (see filesSelectedPaths) — single source of truth.
 
 function filesFmtSize(b) {
     if (b == null) return '';
@@ -2914,18 +1709,14 @@ function openTab(evt, tabName) {
         try { ensureAutomateSubTabInitialized(); } catch(_) {}
     }
     
-    if (tabName === 'dashboard_tab') {
-        loadDashboard();
-    } else if (tabName === 'system_tab') {
-        if (typeof certManagerLoad === 'function') certManagerLoad();
-    } else if (tabName === 'files_tab') {
+    if (tabName === 'files_tab') {
         filesCwd = '';
         filesLoad('');
-    } else if (tabName === 'vpn_tab') {
-        // Refresh status so the badge reflects the latest state
-        try { checkStatus(); } catch(_) {}
     } else if (tabName === 'logger') {
         csv_status_poll_start();
+    } else if (tabName === 'console_tab') {
+        csv_status_poll_start();
+        consoleRefresh();
     }
 }
 
@@ -2963,16 +1754,10 @@ function getElements() {
         bleStatus: document.getElementById("ble_status"),
         apAutoDisable: document.getElementById("ap_auto_disable"),
         bleWarningDiv: document.getElementById("ble_warning_div"),
-        mqttEn: document.getElementById("mqtt_en"),
-        mqttWarningDiv: document.getElementById("mqtt_warning_div"),
-        mqttEnDiv: document.getElementById("mqtt_en_div"),
         battAlert: document.getElementById("batt_alert"),
         battAlertDiv: document.getElementById("batt_alert_div"),
         submitButton: document.getElementById("submit_button"),
         apPassValue: document.getElementById("ap_pass_value"),
-        mqttTxTopic: document.getElementById("mqtt_tx_topic"),
-        mqttRxTopic: document.getElementById("mqtt_rx_topic"),
-        mqttStatusTopic: document.getElementById("mqtt_status_topic"),
         tcpPortValue: document.getElementById("tcp_port_value"),
         battAlertPort: document.getElementById("batt_alert_port"),
         blePassValue: document.getElementById("ble_pass_value"),
@@ -2981,7 +1766,6 @@ function getElements() {
         sleepDisableAgree: document.getElementById("sleep_disable_agree"),
         protocol: document.getElementById("protocol"),
         portType: document.getElementById("port_type"),
-        mqttElm327Log: document.getElementById("mqtt_elm327_log"),
         periodicWakeup: document.getElementById("periodic_wakeup"),
         wakeupEveryRow: document.getElementById("wakeup_every_row"),
         sta_ble_info: document.getElementById("sta_ble_info")
@@ -3091,7 +1875,6 @@ function handleBleStatus(elements) {
     elements.blePassValue.disabled = !isBleEnabled;
     
     if (isBleEnabled && !window.bleAlertShown) {
-        elements.mqttWarningDiv.style.display = "none";
         elements.battAlert.value = "disable";
         elements.battAlertDiv.style.display = "none";
         elements.battAlert.disabled = true;
@@ -3128,20 +1911,6 @@ function validateForm(elements, wifiMode) {
         }
     }
 
-    
-    // MQTT topics validation - only validate if MQTT is enabled
-    const isMqttEnabled = elements.mqttEn.value === "enable";
-    if (isMqttEnabled) {
-        if (!validateLength(elements.mqttTxTopic.value, 1, 64)) {
-            return disableSubmitWithError("MQTT TX Topic length, min=1 max=64", 5000);
-        }
-        if (!validateLength(elements.mqttRxTopic.value, 1, 64)) {
-            return disableSubmitWithError("MQTT RX Topic length, min=1 max=64", 5000);
-        }
-        if (!validateLength(elements.mqttStatusTopic.value, 1, 64)) {
-            return disableSubmitWithError("MQTT Status Topic length, min=1 max=64", 5000);
-        }
-    }
     
     // Port validation
     if (!validatePort(elements.tcpPortValue.value)) {
@@ -3202,24 +1971,9 @@ function validateSmartConnect() {
 }
 
 function configureProtocolSettings(elements) {
-    const isSavvyCan = elements.protocol.value === "savvycan";
-    const isElm327 = elements.protocol.value === "elm327";
-    
-    if (isSavvyCan) {
-        elements.tcpPortValue.value = "23";
-        elements.tcpPortValue.disabled = true;
-        elements.portType.selectedIndex = 0;
-        elements.portType.disabled = true;
-    } else {
-        elements.tcpPortValue.disabled = false;
-        elements.portType.selectedIndex = 0;
-        elements.portType.disabled = false;
-    }
-    
-    elements.mqttElm327Log.disabled = !isElm327;
-    if (!isElm327) {
-        elements.mqttElm327Log.value = "disable";
-    }
+    elements.tcpPortValue.disabled = false;
+    elements.portType.selectedIndex = 0;
+    elements.portType.disabled = false;
 }
 
 function configureSleepSettings(elements) {
@@ -3239,11 +1993,6 @@ function configureSleepSettings(elements) {
 function configureMqttAndBatteryAlerts(elements) {
     // Battery alert div is always hidden in current logic
     elements.battAlertDiv.style.display = "none";
-    
-    // MQTT div visibility
-    const mqttEnabled = elements.mqttEn.value === "enable";
-    elements.mqttEnDiv.style.display = mqttEnabled ? "block" : "none";
-    elements.mqttWarningDiv.style.display = mqttEnabled ? "block" : "none";
 }
 
 function configurePeriodicWakeup(elements) {
@@ -3322,45 +2071,6 @@ function checkStatus() {
         } else if(document.getElementById("batt_alert").value == "disable") {
             document.getElementById("batt_alert_div").style.display = "none";
         }
-        if(document.getElementById("mqtt_en").value == "enable") {
-            document.getElementById("mqtt_en_div").style.display = "block";
-        } else if(document.getElementById("mqtt_en").value == "disable") {
-            document.getElementById("mqtt_en_div").style.display = "none";
-        }
-        // Update VPN text and badge
-        const vpnText = obj.vpn_status || 'N/A';
-        const vpnTextEl = document.getElementById('vpn_status');
-        if (vpnTextEl) vpnTextEl.innerHTML = vpnText;
-        const badge = document.getElementById('vpn_status_badge');
-        if (badge) {
-            const status = String(vpnText || '').toLowerCase();
-            let label = 'Disconnected';
-            let klass = 'status-disconnected';
-            if (status === 'connected') {
-                label = 'Connected';
-                klass = 'status-connected';
-            } else if (status === 'connecting') {
-                label = 'Connecting';
-                klass = 'status-disconnected';
-            } else if (status === 'disabled') {
-                label = 'Disabled';
-                klass = 'status-disconnected';
-            } else if (status === 'error') {
-                label = 'Error';
-                klass = 'status-disconnected';
-            } else if (status === 'unknown' || status === '') {
-                label = 'Unknown';
-                klass = 'status-disconnected';
-            } else if (status === 'disconnected') {
-                label = 'Disconnected';
-                klass = 'status-disconnected';
-            }
-
-            badge.textContent = label;
-            badge.classList.remove('status-connected','status-disconnected');
-            badge.classList.add(klass);
-            badge.title = vpnText;
-        }
         document.getElementById("obd_chip_status").innerHTML = obj.obd_chip_status || "N/A";
         document.getElementById("uptime").innerHTML = obj.uptime || "N/A";
         const restartLastResetEl = document.getElementById("restart_last_reset_reason");
@@ -3378,454 +2088,6 @@ function checkStatus() {
         checkFirmwareUpdate();
     };
     xhttp.open("GET", "/check_status");
-    xhttp.send();
-}
-
-function getWebhookUiState() {
-    if (!window._webhookUiState) {
-        window._webhookUiState = {
-            dirty: false,
-            loaded: {
-                url: "",
-                mode: "enable",
-                enabled: false,
-                interval: 0,
-                urls: []
-            }
-        };
-    }
-
-    return window._webhookUiState;
-}
-
-function normalizeWebhookUrl(url) {
-    return typeof url === "string" ? url.trim() : "";
-}
-
-function markWebhookUrlDirty() {
-    getWebhookUiState().dirty = true;
-}
-
-function getWebhookMode() {
-    const value = document.getElementById("webhook_en")?.value || "enable";
-    return value === "disable" ? "disable" : value === "user_settings" ? "user_settings" : "enable";
-}
-
-function toggleWebhookMode(options = {}) {
-    const preserveValue = !!options.preserveValue;
-    const uiState = getWebhookUiState();
-    const urlField = document.getElementById("webhook_url");
-    const failoverUrlField = document.getElementById("webhook_failover_url");
-    const intervalField = document.getElementById("webhook_interval");
-    const helpField = document.getElementById("webhook_url_help");
-    const mode = getWebhookMode();
-    const userManaged = mode === "user_settings";
-
-    if (urlField) {
-        if (!userManaged && !preserveValue) {
-            urlField.value = normalizeWebhookUrl(uiState.loaded?.url);
-        }
-
-        urlField.readOnly = !userManaged;
-        urlField.style.backgroundColor = userManaged ? "" : "#f5f5f5";
-        urlField.style.cursor = userManaged ? "text" : "not-allowed";
-        urlField.placeholder = userManaged ? "https://example.local/api/webhook" : "";
-    }
-
-    if (failoverUrlField) {
-        if (!userManaged && !preserveValue) {
-            failoverUrlField.value = Array.isArray(uiState.loaded?.urls) && uiState.loaded.urls.length > 1 ? uiState.loaded.urls[1] : "";
-        }
-
-        failoverUrlField.readOnly = !userManaged;
-        failoverUrlField.style.backgroundColor = userManaged ? "" : "#f5f5f5";
-        failoverUrlField.style.cursor = userManaged ? "text" : "not-allowed";
-        failoverUrlField.placeholder = userManaged ? "https://backup.example.local/api/webhook" : "";
-    }
-
-    if (intervalField) {
-        if (!userManaged && !preserveValue) {
-            intervalField.value = uiState.loaded?.interval > 0 ? uiState.loaded.interval.toString() : "";
-        }
-
-        intervalField.readOnly = !userManaged;
-        intervalField.style.backgroundColor = userManaged ? "" : "#f5f5f5";
-        intervalField.style.cursor = userManaged ? "text" : "not-allowed";
-    }
-
-    if (helpField) {
-        helpField.textContent = userManaged
-            ? "User settings mode is enabled. Primary URL, failover URL, and interval are saved on the device when you submit changes."
-            : mode === "disable"
-                ? "WebHook delivery is disabled. Switch to Enable or Enable User Settings to use webhook posting."
-                : "WebHook URL, failover URL, and interval are managed by the Home Assistant integration while WebHook is enabled. Choose Enable User Settings to edit them on the device.";
-    }
-}
-
-function webhookUrlIsHttp(url) {
-    return /^https?:\/\//i.test(url);
-}
-
-function applyWebhookConfig(config, options = {}) {
-    const force = !!options.force;
-    const uiState = getWebhookUiState();
-    const urlField = document.getElementById("webhook_url");
-    const failoverUrlField = document.getElementById("webhook_failover_url");
-    const intervalField = document.getElementById("webhook_interval");
-
-    const urls = Array.isArray(config?.urls) ? config.urls.filter(url => typeof url === "string") : [];
-    const normalizedUrl = normalizeWebhookUrl(config?.url);
-    const intervalValue = Number(config?.interval || 0);
-    const enabled = !!config?.enabled;
-    const mode = uiState.loaded?.mode || getWebhookMode();
-
-    uiState.loaded = {
-        url: normalizedUrl,
-        mode: mode,
-        enabled: enabled,
-        interval: Number.isFinite(intervalValue) ? intervalValue : 0,
-        urls: urls
-    };
-
-    if (urlField && (force || !uiState.dirty)) {
-        urlField.value = normalizedUrl;
-    }
-
-    if (failoverUrlField && (force || !uiState.dirty)) {
-        failoverUrlField.value = urls.length > 1 ? urls[1] : "";
-    }
-
-    if (intervalField && (force || !uiState.dirty)) {
-        intervalField.value = uiState.loaded.interval > 0 ? uiState.loaded.interval.toString() : "";
-    }
-
-    if (force || !uiState.dirty) {
-        toggleWebhookMode({ preserveValue: true });
-    }
-}
-
-async function saveWebhookConfig() {
-    const urlField = document.getElementById("webhook_url");
-    const failoverUrlField = document.getElementById("webhook_failover_url");
-    const intervalField = document.getElementById("webhook_interval");
-    if (!urlField) {
-        return true;
-    }
-
-    const uiState = getWebhookUiState();
-    const mode = getWebhookMode();
-    const userManaged = mode === "user_settings";
-    const currentEnabled = mode !== "disable";
-    const currentUrl = normalizeWebhookUrl(urlField.value);
-    const currentFailoverUrl = normalizeWebhookUrl(failoverUrlField?.value || "");
-    const currentInterval = Number.parseInt(intervalField?.value || "0", 10);
-    const loadedUrl = normalizeWebhookUrl(uiState.loaded?.url);
-    const loadedFailoverUrl = Array.isArray(uiState.loaded?.urls) && uiState.loaded.urls.length > 1
-        ? normalizeWebhookUrl(uiState.loaded.urls[1])
-        : "";
-    const loadedMode = uiState.loaded?.mode || (uiState.loaded?.enabled ? "enable" : "disable");
-    const loadedInterval = Number.isFinite(Number(uiState.loaded?.interval)) ? Number(uiState.loaded.interval) : 0;
-    const normalizedCurrentInterval = Number.isFinite(currentInterval) ? currentInterval : 0;
-    const hasWebhookChange = currentUrl !== loadedUrl || currentFailoverUrl !== loadedFailoverUrl ||
-        normalizedCurrentInterval !== loadedInterval || mode !== loadedMode;
-
-    if (!hasWebhookChange) {
-        return true;
-    }
-
-    if (!currentEnabled) {
-        try {
-            const response = await fetch('/api/webhook', {
-                method: 'DELETE'
-            });
-
-            if (!response.ok) {
-                const message = await response.text();
-                throw new Error(message || 'save failed');
-            }
-
-            uiState.loaded.mode = "disable";
-            uiState.dirty = false;
-            applyWebhookConfig({ url: "", enabled: false, interval: 0, urls: [] }, { force: true });
-            return true;
-        } catch (error) {
-            showNotification("Error saving webhook settings: " + error.message, "red");
-            return false;
-        }
-    }
-
-    if (!currentUrl) {
-        if (userManaged) {
-            showNotification("Primary WebHook URL is required in Enable User Settings mode", "red");
-            return false;
-        }
-
-        if (!loadedUrl) {
-            return true;
-        }
-    }
-
-    if (currentUrl && !webhookUrlIsHttp(currentUrl)) {
-        showNotification("Primary WebHook URL must start with http:// or https://", "red");
-        return false;
-    }
-
-    if (currentFailoverUrl && !webhookUrlIsHttp(currentFailoverUrl)) {
-        showNotification("Failover WebHook URL must start with http:// or https://", "red");
-        return false;
-    }
-
-    if (normalizedCurrentInterval < 0) {
-        showNotification("WebHook interval must be 0 or greater", "red");
-        return false;
-    }
-
-    const payload = {
-        url: currentUrl,
-        manual_override: userManaged,
-        enabled: true,
-        interval: normalizedCurrentInterval
-    };
-
-    if (userManaged && currentFailoverUrl) {
-        payload.urls = [currentUrl, currentFailoverUrl];
-    }
-
-    try {
-        const response = await fetch('/api/webhook', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) {
-            const message = await response.text();
-            throw new Error(message || 'save failed');
-        }
-
-        const savedConfig = await response.json();
-        uiState.loaded.mode = mode;
-        uiState.dirty = false;
-        applyWebhookConfig(savedConfig, { force: true });
-        return true;
-    } catch (error) {
-        showNotification("Error saving webhook settings: " + error.message, "red");
-        return false;
-    }
-}
-
-function loadWebhookConfig() {
-    // Periodic refresh so stats update without reloading the page
-    if (!window._webhookStatsTimer) {
-        window._webhookStatsTimer = setInterval(loadWebhookConfig, 5000);
-    }
-
-    fetch('/api/webhook')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Failed to fetch webhook config');
-            }
-            return response.json();
-        })
-        .then(config => {
-            // Stats elements (may not exist on older pages)
-            const okEl = document.getElementById("webhook_stat_success");
-            const failEl = document.getElementById("webhook_stat_fail");
-            const statusEl = document.getElementById("webhook_stat_status");
-            const lastPostEl = document.getElementById("webhook_stat_last_post");
-            const lastErrEl = document.getElementById("webhook_last_error");
-            const detailsEl = document.getElementById("webhook_error_details");
-            const errorRowEl = document.getElementById("webhook_error_row");
-            const detailsBtnEl = document.getElementById("webhook_error_details_btn");
-
-            applyWebhookConfig(config);
-
-            const successCount = Number(config.success_count || 0);
-            const failCount = Number(config.fail_count || 0);
-            const statusText = (config && config.status) ? String(config.status) : (config.enabled ? 'unknown' : 'disabled');
-            const lastPost = (config && config.last_post) ? String(config.last_post) : '';
-            const lastErr = (config && config.last_error) ? String(config.last_error) : '';
-            const lastErrTime = (config && config.last_error_time) ? String(config.last_error_time) : '';
-
-            const fullErrText = lastErr ? ((lastErrTime ? (lastErrTime + ' ') : '') + lastErr) : '';
-            window._webhookLastErrorText = fullErrText;
-
-            if (okEl) okEl.textContent = `OK: ${successCount}`;
-            if (failEl) failEl.textContent = `Fail: ${failCount}`;
-            if (statusEl) {
-                statusEl.textContent = `Status: ${statusText || '-'}`;
-                const s = String(statusText || '').toLowerCase();
-                if (s === 'ok') statusEl.style.color = 'var(--success-color)';
-                else if (s === 'failed' || s === 'error') statusEl.style.color = 'var(--danger-color)';
-                else statusEl.style.color = 'var(--gray-600)';
-            }
-            if (lastPostEl) lastPostEl.textContent = `Last: ${lastPost || '-'}`;
-
-            if (lastErrEl) {
-                lastErrEl.textContent = fullErrText || '';
-                lastErrEl.title = fullErrText || '';
-            }
-            if (detailsEl) {
-                detailsEl.textContent = fullErrText || 'No error recorded.';
-            }
-
-            const hasErr = !!fullErrText;
-            if (errorRowEl) errorRowEl.style.display = hasErr ? 'flex' : 'none';
-            if (detailsBtnEl) detailsBtnEl.disabled = !hasErr;
-            if (!hasErr && detailsEl) detailsEl.style.display = 'none';
-        })
-        .catch(error => {
-            console.log('Webhook config not available:', error);
-            const uiState = getWebhookUiState();
-            const failoverUrlField = document.getElementById("webhook_failover_url");
-            const intervalField = document.getElementById("webhook_interval");
-            if (!uiState.dirty && !normalizeWebhookUrl(uiState.loaded?.url)) {
-                if (failoverUrlField) failoverUrlField.value = "";
-                if (intervalField) intervalField.value = "";
-            }
-
-            const okEl = document.getElementById("webhook_stat_success");
-            const failEl = document.getElementById("webhook_stat_fail");
-            const statusEl = document.getElementById("webhook_stat_status");
-            const lastPostEl = document.getElementById("webhook_stat_last_post");
-            const lastErrEl = document.getElementById("webhook_last_error");
-            const detailsEl = document.getElementById("webhook_error_details");
-            const errorRowEl = document.getElementById("webhook_error_row");
-            const detailsBtnEl = document.getElementById("webhook_error_details_btn");
-
-            if (okEl) okEl.textContent = "OK: 0";
-            if (failEl) failEl.textContent = "Fail: 0";
-            if (statusEl) statusEl.textContent = "Status: -";
-            if (lastPostEl) lastPostEl.textContent = "Last: -";
-            if (lastErrEl) {
-                lastErrEl.textContent = "";
-                lastErrEl.title = "";
-            }
-            if (detailsEl) detailsEl.textContent = "No error recorded.";
-            if (errorRowEl) errorRowEl.style.display = 'none';
-            if (detailsBtnEl) detailsBtnEl.disabled = true;
-            if (detailsEl) detailsEl.style.display = 'none';
-        });
-}
-
-function toggleWebhookErrorDetails() {
-    const detailsEl = document.getElementById('webhook_error_details');
-    if (!detailsEl) return;
-    const isHidden = (detailsEl.style.display === 'none' || detailsEl.style.display === '');
-    if (isHidden) {
-        detailsEl.textContent = window._webhookLastErrorText || 'No error recorded.';
-        detailsEl.style.display = 'block';
-    } else {
-        detailsEl.style.display = 'none';
-    }
-}
-
-function loadCANFLT() {
-    const xhttp = new XMLHttpRequest();
-    xhttp.onload = function() {
-        if (this.responseText === "NONE") {
-            return;
-        }
-        var obj = JSON.parse(this.responseText);
-        if(this.responseText != "NONE") {
-            if(Array.isArray(obj.can_flt)) {
-                obj.can_flt.forEach((item) => {
-                    restoreCANFLTRow(item["CANID"], item["Name"], item["PID"], item["PIDIndex"], item["StartBit"], item["BitLength"], item["Expression"], item["Cycle"]);
-                });
-            }
-        }
-    };
-    xhttp.open("GET", "/load_canflt");
-    xhttp.send();
-}
-
-function loadautoPIDCarData() {
-    const xhttp = new XMLHttpRequest();
-    xhttp.onload = function() {
-        console.log("Car models:", this.responseText);
-        if(this.responseText != "NONE") {
-            var obj = JSON.parse(this.responseText);
-            const carModels = [];
-
-            // Clear existing rows to avoid duplicates on reload
-            const pidContainer = document.querySelector('.specific-pid-entries');
-            if (pidContainer) pidContainer.innerHTML = '';
-
-            const filterContainer = document.querySelector('.specific-canfilter-entries');
-            if (filterContainer) filterContainer.innerHTML = '';
-
-            if (obj && Array.isArray(obj.cars)) {
-                obj.cars.forEach(car => {
-                    if (car.car_model) {
-                        carModels.push(car.car_model);
-                    }
-                    
-                    if (car.pids) {
-                        document.getElementById("specific_init").value = car.init;
-                        car.pids.forEach(pid => {
-
-                            if (pid.parameters) {
-                                pid.parameters.forEach(param => {
-                                    addCarParameter({
-                                        name: param.name,
-                                        expression: param.expression,
-                                        unit: param.unit,
-                                        class: param.class, 
-                                        period: param.period,
-                                        type: param.type,
-                                        min: param.min,
-                                        max: param.max,
-                                        send_to: param.send_to,
-                                        pid: pid.pid,
-                                        pid_init: pid.pid_init,
-                                        enabled: pid.enabled
-                                    });
-                                });
-                            }
-                        });
-                    }
-
-                    if (Array.isArray(car.can_filters)) {
-                        car.can_filters.forEach(f => {
-                            const fid = (f && f.frame_id !== undefined) ? f.frame_id : null;
-                            const params = (f && Array.isArray(f.parameters)) ? f.parameters : [];
-                            if (params.length) {
-                                params.forEach(param => {
-                                    addVehicleSpecificCanFilterEntry({
-                                        frame_id: fid,
-                                        parameter: {
-                                            name: param.name,
-                                            expression: param.expression,
-                                            unit: param.unit,
-                                            class: param.class,
-                                            period: param.period,
-                                            type: param.type,
-                                            min: param.min,
-                                            max: param.max,
-                                            send_to: param.send_to,
-                                            enabled: param.enabled
-                                        }
-                                    });
-                                });
-                            } else if (fid !== null) {
-                                addVehicleSpecificCanFilterEntry({ frame_id: fid, parameter: { name: 'New Parameter', period: '5000', type: 'Default', send_to: '' } });
-                            }
-                        });
-                    }
-
-                });
-            }
-            var modifiedObj = { "supported": carModels };
-            loadCarModels(modifiedObj);
-        } else {
-            toggleCarModel();
-            toggleSendToFields();
-            toggleStandardPIDOptions();
-        }
-    };
-    xhttp.open("GET", "/load_auto_pid_car_data");
     xhttp.send();
 }
 
@@ -3851,46 +2113,15 @@ function loadautoPID() {
     xhttp.send();
 }
 
-function postCANFLT() {
-    var obj = {};
-    obj["can_flt"] = canData;
-    var canfltJSON = JSON.stringify(obj, null, 0);
-    const xhttp = new XMLHttpRequest();
-    xhttp.onload = function() {
-        showNotification(this.responseText, "green");
-        submit_enable();
-    };
-    xhttp.open("POST", "/store_canflt");
-    xhttp.setRequestHeader("Content-Type", "application/json");
-    xhttp.send(canfltJSON);
-}
-
-// Logger Settings consolidation (Task #5): one master "Logging" toggle + a mutually-
-// exclusive "Log Type" (csv|sqlite) compose onto the two real config keys logger_status
-// (SQLite/OBD) and csv_log (CSV), which remain in the DOM as hidden selects. CSV wins
-// ties to match the firmware boot gate + the server-side /store_config normalizer.
+// Logger Settings (Task #5, trimmed in #5 datalogger-trim): one master "Logging"
+// toggle drives the single real config key csv_log (a hidden select in the DOM).
 function applyLoggerXor() {
     var masterEl = document.getElementById("logging_master");
-    var typeEl = document.getElementById("log_type_sel");
-    var ls = document.getElementById("logger_status");
     var cs = document.getElementById("csv_log");
-    if (!masterEl || !typeEl || !ls || !cs) { return; }
-    if (masterEl.value !== "enable") {
-        ls.value = "disable"; cs.value = "disable";
-    } else if (typeEl.value === "sqlite") {
-        ls.value = "enable"; cs.value = "disable";
-    } else {
-        ls.value = "disable"; cs.value = "enable";
-    }
-    typeEl.disabled = (masterEl.value !== "enable");
-    // Log Period drives only the SQLite/OBD logger; the CSV logger logs at the
-    // decode rate and ignores it. Hide the row unless SQLite is the active type.
-    var lpRow = document.getElementById("log_period_row");
-    if (lpRow) {
-        lpRow.style.display = (masterEl.value === "enable" && typeEl.value === "sqlite") ? "" : "none";
-    }
-    // CSV-only runtime Start/Stop button + live status line: shown only when CSV is active.
-    var csvShow = (masterEl.value === "enable" && typeEl.value === "csv");
+    if (!masterEl || !cs) { return; }
+    var csvShow = (masterEl.value === "enable");
+    cs.value = csvShow ? "enable" : "disable";
+    // CSV runtime Start/Stop button + live status line: shown only when logging is on.
     var csvRow = document.getElementById("csv_runtime_row");
     var csvStatRow = document.getElementById("csv_status_row");
     if (csvRow) csvRow.style.display = csvShow ? "" : "none";
@@ -3900,11 +2131,10 @@ function applyLoggerXor() {
     var gmEl = document.getElementById("csv_grid_mode");
     var gmRow = document.getElementById("csv_grid_mode_row");
     var hzRow = document.getElementById("csv_grid_hz_row");
-    var wideOn = csvShow;
-    if (gmRow) gmRow.style.display = wideOn ? "" : "none";
-    if (hzRow) hzRow.style.display = (wideOn && gmEl && gmEl.value === "fixed") ? "" : "none";
+    if (gmRow) gmRow.style.display = csvShow ? "" : "none";
+    if (hzRow) hzRow.style.display = (csvShow && gmEl && gmEl.value === "fixed") ? "" : "none";
     var reRow = document.getElementById("csv_require_engine_row");
-    if (reRow) reRow.style.display = wideOn ? "" : "none";
+    if (reRow) reRow.style.display = csvShow ? "" : "none";
 }
 
 async function postConfig() {
@@ -3917,22 +2147,11 @@ async function postConfig() {
         return;
     }
     
-    const storeVpnResult = await saveVpnConfiguration();
-    if (!storeVpnResult) {
-        document.getElementById("submit_button").disabled = false;  
-        return;
-    }
-
-    const storeWebhookResult = await saveWebhookConfig();
-    if (!storeWebhookResult) {
-        document.getElementById("submit_button").disabled = false;
-        return;
-    }
-
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     obj["wifi_mode"] = document.getElementById("wifi_mode").value;
     obj["ap_ch"] = document.getElementById("ap_ch_value").value;
+    obj["ap_auto_disable"] = document.getElementById("ap_auto_disable").value;
 
     // Optional custom AP SSID
     {
@@ -3953,7 +2172,6 @@ async function postConfig() {
         obj["ap_ssid_en"] = enabled ? "enable" : "disable";
         obj["ap_ssid"] = ssid;
     }
-    obj["webhook_en"] = document.getElementById("webhook_en")?.value || "enable";
     obj["sta_ssid"] = document.getElementById("ssid_value").value;
     obj["sta_pass"] = document.getElementById("pass_value").value;
     obj["sta_security"] = document.getElementById("sta_security").value;
@@ -3996,48 +2214,15 @@ async function postConfig() {
     obj["batt_alert_time"] = document.getElementById("batt_alert_time").value;
     obj["batt_mqtt_user"] = document.getElementById("batt_mqtt_user").value;
     obj["batt_mqtt_pass"] = document.getElementById("batt_mqtt_pass").value;
-    obj["mqtt_en"] = document.getElementById("mqtt_en").value;
-    let mqtt_url_val2;
-    if(document.getElementById("mqtt_security").value == "tls"){
-        let mqtt_txt2 = "mqtts://";
-        mqtt_url_val2 = mqtt_txt2.concat(document.getElementById("mqtt_url").value);
-    } else {
-        let mqtt_txt2 = "mqtt://";
-        mqtt_url_val2 = mqtt_txt2.concat(document.getElementById("mqtt_url").value);
-    }
-    obj["mqtt_url"] = mqtt_url_val2;
-    obj["mqtt_port"] = document.getElementById("mqtt_port").value;
-    obj["mqtt_user"] = document.getElementById("mqtt_user").value;
-    obj["mqtt_pass"] = document.getElementById("mqtt_pass").value;
-    obj["mqtt_security"] = document.getElementById("mqtt_security").value;
-    obj["mqtt_cert_set"] = document.getElementById("mqtt_cert_set").value;
-    obj["mqtt_skip_cn"] = document.getElementById("mqtt_skip_cn").value;
-    obj["mqtt_tx_topic"] = document.getElementById("mqtt_tx_topic").value;
-    obj["ap_auto_disable"] = document.getElementById("ap_auto_disable").value;
-    if(document.getElementById("mqtt_tx_en_checkbox").checked){
-        obj["mqtt_tx_en"] = "enable";
-    }else{
-        obj["mqtt_tx_en"] = "disable";
-    }
-    obj["mqtt_rx_topic"] = document.getElementById("mqtt_rx_topic").value;
-    if(document.getElementById("mqtt_rx_en_checkbox").checked){
-        obj["mqtt_rx_en"] = "enable";
-    }else{
-        obj["mqtt_rx_en"] = "disable";
-    }
-    obj["mqtt_status_topic"] = document.getElementById("mqtt_status_topic").value;
-    obj["mqtt_elm327_log"] = document.getElementById("mqtt_elm327_log").value;
-    applyLoggerXor();   // compose the two real keys from the master + type widgets
-    obj["logger_status"] = document.getElementById("logger_status").value;
+    applyLoggerXor();   // compose the real csv_log key from the master widget
     obj["csv_log"] = document.getElementById("csv_log").value;
     obj["log_filesystem"] = document.getElementById("log_filesystem").value;
     obj["log_storage"] = document.getElementById("log_storage").value;
-    obj["log_period"] = document.getElementById("log_period").value;
     obj["csv_grid_mode"] = document.getElementById("csv_grid_mode").value;
     obj["csv_grid_hz"] = document.getElementById("csv_grid_hz").value;
     obj["csv_require_engine"] = document.getElementById("csv_require_engine").value;
+    obj["log_period"] = loadedLogPeriod;   // preserve persisted datalog period (no UI element after trim)
     obj["imu_threshold"] = document.getElementById("imu_threshold").value;
-    obj["elm327_udp_log"] = document.getElementById("elm327_udp_log").value;
 
     // Collect fallback networks (max 5)
     try {
@@ -4057,9 +2242,6 @@ async function postConfig() {
         document.getElementById("submit_button").disabled = false;
     }
 
-    // VPN configuration will be sent separately to /vpn/store_config
-    // Don't include it in the main config object
-    
     var configJSON = JSON.stringify(obj, null, 0);
     
     // Send main configuration first
@@ -4305,9 +2487,7 @@ function send_system_command(command) {
 async function downloadCfg() {
     const endpoints = [
         '/load_config',
-        '/load_auto_pid_car_data',
-        '/load_auto_pid',
-        '/load_canflt'
+        '/load_auto_pid'
     ];
     
     const delay = 500; 
@@ -4370,9 +2550,7 @@ async function uploadCfg() {
 
     const endpointMap = {
         'config': '/store_config',
-        'auto_pid': '/store_auto_data',
-        'auto_pid_car_data': '/store_car_data',
-        'canflt': '/store_canflt'
+        'auto_pid': '/store_auto_data'
     };
 
     const delay = 200;
@@ -4433,6 +2611,8 @@ async function uploadCfg() {
     }
 }
 
+var loadedLogPeriod = "10";   // last persisted datalog period; re-sent by postConfig (no UI element after trim)
+
 async function Load() {
     const xhttp = new XMLHttpRequest();
 xhttp.onload = async function() {
@@ -4461,15 +2641,6 @@ xhttp.onload = async function() {
         document.getElementById("drive_mode_timeout").value = obj.drive_mode_timeout || "60";
         document.getElementById("drive_mode_timeout_value").textContent = obj.drive_mode_timeout || "60";
 
-        // WebHook enable/disable (defaults to enabled for backward compatibility)
-        const webhookEnEl = document.getElementById("webhook_en");
-        if (webhookEnEl) {
-            const webhookModeFromCfg = obj.webhook_en || "enable";
-            const hasWebhookOption = Array.from(webhookEnEl.options || []).some(o => o && o.value === webhookModeFromCfg);
-            webhookEnEl.value = hasWebhookOption ? webhookModeFromCfg : "enable";
-            getWebhookUiState().loaded.mode = webhookEnEl.value;
-            toggleWebhookMode({ preserveValue: true });
-        }
         
         if(obj.ap_auto_disable == "enable") {
             document.getElementById("ap_auto_disable").selectedIndex = "0";
@@ -4556,81 +2727,54 @@ xhttp.onload = async function() {
             document.getElementById("periodic_wakeup").selectedIndex = "1";
         }
 
-        if ("mqtt_tx_en" in obj) {
-            if (obj.mqtt_tx_en === "enable") {
-                document.getElementById("mqtt_tx_en_checkbox").checked = true;
-            } else {
-                document.getElementById("mqtt_tx_en_checkbox").checked = false;
-            }
-        } else {
-            document.getElementById("mqtt_tx_en_checkbox").checked = false; 
-            document.getElementById("mqtt_tx_topic").disabled = true;
+        document.getElementById("batt_mqtt_user").value = obj.batt_mqtt_user;
+        document.getElementById("batt_mqtt_pass").value = obj.batt_mqtt_pass;
+        if(obj.batt_alert_time == "1") {
+            document.getElementById("batt_alert_time").selectedIndex = "0";
+        } else if(obj.batt_alert_time == "6") {
+            document.getElementById("batt_alert_time").selectedIndex = "1";
+        } else if(obj.batt_alert_time == "12") {
+            document.getElementById("batt_alert_time").selectedIndex = "2";
+        } else if(obj.batt_alert_time == "24") {
+            document.getElementById("batt_alert_time").selectedIndex = "3";
         }
-        
-        if ("mqtt_rx_en" in obj) {
-            if (obj.mqtt_rx_en === "enable") {
-                document.getElementById("mqtt_rx_en_checkbox").checked = true;
-            } else {
-                document.getElementById("mqtt_rx_en_checkbox").checked = false;
-            }
-        } else {
-            document.getElementById("mqtt_rx_en_checkbox").checked = false;
-            document.getElementById("mqtt_rx_topic").disabled = true;
+        if(document.getElementById("batt_alert").value == "enable") {
+            document.getElementById("batt_alert_div").style.display = "none";
+        } else if(document.getElementById("batt_alert").value == "disable") {
+            document.getElementById("batt_alert_div").style.display = "none";
         }
-        
-        // Populate the two real (hidden) keys, then derive the master + type widgets.
-        document.getElementById("logger_status").value = (obj.logger_status === "enable") ? "enable" : "disable";
-        document.getElementById("csv_log").value = (obj.csv_log === "enable") ? "enable" : "disable";
-        var _ls_on = (obj.logger_status === "enable");
+
+        // --- Restored settings population (regression fix: commit d372fc9 over-cut this block,
+        //     causing every Submit to persist stock HTML defaults). MQTT-gateway lines intentionally
+        //     omitted (feature removed by the trim); protocol is populated by checkStatus(). ---
+        // Datalogger master + wide-CSV grid controls (firmware defaults are fixed/10).
         var _cs_on = (obj.csv_log === "enable");
-        document.getElementById("logging_master").value = (_ls_on || _cs_on) ? "enable" : "disable";
-        // CSV wins ties (matches boot gate + server normalizer); default type = CSV.
-        document.getElementById("log_type_sel").value = _cs_on ? "csv" : (_ls_on ? "sqlite" : "csv");
-        // Wide CSV (Task #11): hydrate grid controls BEFORE applyLoggerXor so it can gate the
-        // rows. Firmware defaults are fixed/10 -> mirror them when absent.
+        document.getElementById("csv_log").value = _cs_on ? "enable" : "disable";
+        document.getElementById("logging_master").value = _cs_on ? "enable" : "disable";
         document.getElementById("csv_grid_mode").value = (obj.csv_grid_mode === "event") ? "event" : "fixed";
         var _hz = parseInt(obj.csv_grid_hz, 10);
         document.getElementById("csv_grid_hz").value = (_hz >= 1 && _hz <= 50) ? _hz : 10;
         document.getElementById("csv_require_engine").value = (obj.csv_require_engine === "disable") ? "disable" : "enable";
         applyLoggerXor();
 
-        if (obj.log_filesystem === "fatfs") {
-            document.getElementById("log_filesystem").selectedIndex = "0";
-        }
+        // SD card is the only storage option after the trim ("internal" was removed);
+        // the select has a single option, so pin it to index 0.
+        document.getElementById("log_storage").selectedIndex = 0;
 
-        if (obj.log_storage === "sdcard") {
-            document.getElementById("log_storage").selectedIndex = "0";
-        } else if (obj.log_storage === "internal") {
-            document.getElementById("log_storage").selectedIndex = "1";
-        }
-
-        document.getElementById('log_period_value').textContent = obj.log_period;
-        document.getElementById('log_period').value = obj.log_period;   // restore slider thumb (was stuck at default)
-        
-        // Load IMU threshold value and update display
+        // IMU wake threshold (raw LSB; displayed in mg at 3.9 mg/LSB).
         document.getElementById("imu_threshold").value = obj.imu_threshold || "8";
         document.getElementById("imu_threshold_value").textContent = ((obj.imu_threshold || 8) * 3.9).toFixed(1) + ' mg';
 
-        // Load ELM327 UDP log toggle (default disabled)
-        const elmUdp = document.getElementById("elm327_udp_log");
-        if (elmUdp) {
-            elmUdp.value = obj.elm327_udp_log || "disable";
-        }
-        toggleElm327UdpLogWarning();
-        
         const blePowerVal = ("ble_power" in obj) ? obj.ble_power : 9;
         document.getElementById("ble_power").value = blePowerVal;
         document.getElementById("ble_power_value").textContent = blePowerVal;
 
-        txCheckBoxChanged();
-        rxCheckBoxChanged();
-        document.getElementById("protocol").value = obj.protocol;
         document.getElementById("tcp_port_value").value = obj.port;
         document.getElementById("ap_pass_value").value = obj.ap_pass;
         document.getElementById("ble_pass_value").value = obj.ble_pass;
         document.getElementById("sleep_volt").value = obj.sleep_volt;
         document.getElementById("sleep_volt_value").textContent = obj.sleep_volt;
-        if (obj.engine_volt !== undefined) {   // Task #6; null-guard for old configs missing the key
+        if (obj.engine_volt !== undefined) {   // null-guard for old configs missing the key
             document.getElementById("engine_volt").value = obj.engine_volt;
             document.getElementById("engine_volt_value").textContent = obj.engine_volt;
         }
@@ -4646,70 +2790,12 @@ xhttp.onload = async function() {
         document.getElementById("batt_alert_url").value = obj.batt_alert_url.slice(7);
         document.getElementById("batt_alert_port").value = obj.batt_alert_port;
         document.getElementById("batt_alert_topic").value = obj.batt_alert_topic;
-        document.getElementById("batt_mqtt_user").value = obj.batt_mqtt_user;
-        document.getElementById("batt_mqtt_pass").value = obj.batt_mqtt_pass;
-        document.getElementById("mqtt_en").value = obj.mqtt_en;
-        if(obj.mqtt_security == "tls"){
-            document.getElementById("mqtt_url").value = obj.mqtt_url.slice(8);
-        } else {
-            document.getElementById("mqtt_url").value = obj.mqtt_url.slice(7);
+        // Preserve the persisted datalog period (no UI element after the trim; feeds
+        // poll_log_init/fast_log_init). Re-sent verbatim by postConfig so Submit never pins it to 10.
+        if (obj.log_period !== undefined && obj.log_period !== null) {
+            loadedLogPeriod = obj.log_period;
         }
-        document.getElementById("mqtt_port").value = obj.mqtt_port;
-        document.getElementById("mqtt_user").value = obj.mqtt_user;
-        document.getElementById("mqtt_pass").value = obj.mqtt_pass;
-        document.getElementById("mqtt_tx_topic").value = obj.mqtt_tx_topic;
-        document.getElementById("mqtt_rx_topic").value = obj.mqtt_rx_topic;
-        document.getElementById("mqtt_status_topic").value = obj.mqtt_status_topic;
-        document.getElementById("mqtt_elm327_log").value = obj.mqtt_elm327_log;
-        document.getElementById("vpn_status").innerHTML = obj.vpn_status || "N/A";
-        // Optional fields for MQTTS (UI only for now)
-        if (obj.mqtt_security){
-            const sec = document.getElementById('mqtt_security');
-            if (sec){ sec.value = obj.mqtt_security; }
-        }
-        // Preserve desired cert set (may be populated asynchronously)
-        {
-            const certSel = document.getElementById('mqtt_cert_set');
-            const desired = obj.mqtt_cert_set || 'default';
-            if (certSel){
-                certSel.setAttribute('data-desired', desired);
-                certSel.value = desired; // in case options are already present
-            }
-        }
-
-        // Restore Skip CN selection (default to disable)
-        const skipSel = document.getElementById('mqtt_skip_cn');
-        if (skipSel){ skipSel.value = obj.mqtt_skip_cn || 'disable'; }
-        toggleMqttTLS();
-        if(obj.batt_alert_time == "1") {
-            document.getElementById("batt_alert_time").selectedIndex = "0";
-        } else if(obj.batt_alert_time == "6") {
-            document.getElementById("batt_alert_time").selectedIndex = "1";
-        } else if(obj.batt_alert_time == "12") {
-            document.getElementById("batt_alert_time").selectedIndex = "2";
-        } else if(obj.batt_alert_time == "24") {
-            document.getElementById("batt_alert_time").selectedIndex = "3";
-        }
-        if(document.getElementById("protocol").value == "savvycan") {
-            document.getElementById("tcp_port_value").value = "23";
-            document.getElementById("tcp_port_value").disabled = true;
-            document.getElementById("port_type").selectedIndex = "0";
-            document.getElementById("port_type").disabled = true;
-        }
-        if(document.getElementById("batt_alert").value == "enable") {
-            document.getElementById("batt_alert_div").style.display = "none";
-        } else if(document.getElementById("batt_alert").value == "disable") {
-            document.getElementById("batt_alert_div").style.display = "none";
-        }
-        if(document.getElementById("mqtt_en").value == "enable") {
-            document.getElementById("mqtt_en_div").style.display = "block";
-        } else if(document.getElementById("mqtt_en").value == "disable") {
-            document.getElementById("mqtt_en_div").style.display = "none";
-        }
-        loadCANFLT();
-        loadautoPIDCarData();
         loadautoPID();
-        loadWebhookConfig();
 
         // Load fallback networks if present
         try {
@@ -4718,97 +2804,19 @@ xhttp.onload = async function() {
         } catch(e) {
             renderFallbackNetworks([]);
         }
-        document.getElementById("car_model").addEventListener('change', function() {
-            const pidContainer = document.querySelector('.specific-pid-entries');
-            if (pidContainer) pidContainer.innerHTML = '';
-
-            const filterContainer = document.querySelector('.specific-canfilter-entries');
-            if (filterContainer) filterContainer.innerHTML = '';
-            
-            const selectedModel = this.value;
-            const specificInitElement = document.getElementById("specific_init");
-            if (specificInitElement) specificInitElement.value = '';
-
-            if (!selectedModel || selectedModel === 'Not Selected') {
-                enableAutoStoreButton();
-                return;
-            }
-
-            if (latest_car_models && Array.isArray(latest_car_models.cars)) {
-                const selectedCar = latest_car_models.cars.find(car => car && car.car_model === selectedModel);
-                if (!selectedCar) {
-                    enableAutoStoreButton();
-                    return;
-                }
-
-                if (specificInitElement) specificInitElement.value = selectedCar.init || '';
-
-                if (selectedCar.pids) {
-                    selectedCar.pids.forEach(pid => {
-                        if (pid && pid.parameters) {
-                            pid.parameters.forEach(param => {
-                                addCarParameter({
-                                    ...param,
-                                    pid: pid.pid,
-                                    pid_init: pid.pid_init,
-                                    enabled: pid.enabled
-                                });
-                            });
-                        }
-                    });
-                }
-
-                if (Array.isArray(selectedCar.can_filters)) {
-                    selectedCar.can_filters.forEach(f => {
-                        const fid = (f && f.frame_id !== undefined) ? f.frame_id : null;
-                        const params = (f && Array.isArray(f.parameters)) ? f.parameters : [];
-                        if (params.length) {
-                            params.forEach(param => {
-                                addVehicleSpecificCanFilterEntry({
-                                    frame_id: fid,
-                                    parameter: {
-                                        name: param.name,
-                                        expression: param.expression,
-                                        unit: param.unit,
-                                        class: param.class,
-                                        period: param.period,
-                                        type: param.type,
-                                        min: param.min,
-                                        max: param.max,
-                                        send_to: param.send_to,
-                                        enabled: param.enabled
-                                    }
-                                });
-                            });
-                        } else if (fid !== null) {
-                            addVehicleSpecificCanFilterEntry({ frame_id: fid, parameter: { name: 'New Parameter', period: '5000', type: 'Default', send_to: '' } });
-                        }
-                    });
-                }
-            }
-
-            enableAutoStoreButton();
-        });
 
         // Apply mode-dependent enable/disable rules after values are loaded
         try { toggleSmartConnectConfig(); } catch(_) {}
         try { toggleApStationWarning(); } catch(_) {}
         try { submit_enable(); } catch(_) {}
 
-        document.getElementById("store_canflt_button").disabled = true;
         document.querySelector(".store").disabled = true;
         document.getElementById("submit_button").disabled = true;
     };
     checkStatus();
-    // Load HTTPS certificate status after initial config load
-// Removed single-cert status refresh
     xhttp.open("GET", "/load_config");
     xhttp.send();
 
-    // Fetch VPN config from device and populate UI
-    if (typeof loadVpnFromDevice === 'function') {
-        loadVpnFromDevice().catch(e=>console.warn('VPN load failed', e));
-    }
     
     // Initialize SmartConnect configuration visibility
     toggleSmartConnectConfig();
@@ -4825,129 +2833,6 @@ xhttp.onload = async function() {
     // Initialize lucide icons
     if (typeof lucide !== 'undefined' && lucide.createIcons) {
         lucide.createIcons();
-    }
-}
-
-function toggleElm327UdpLogWarning() {
-    const sel = document.getElementById("elm327_udp_log");
-    const div = document.getElementById("elm327_udp_log_warning_div");
-    if (!sel || !div) return;
-    div.style.display = (sel.value === "enable") ? "block" : "none";
-}
-
-function monitor_add_line(id, type, len, data, time) {
-    var table = document.getElementById("table2");
-    var nraw = -1;
-    if(typeof monitor_add_line.msg_time == "undefined") {
-        monitor_add_line.msg_time = [0];
-    }
-    for(var r = 1, n = table.rows.length; r < n; r++) {
-        if(table.rows[r].cells[0].innerHTML == id) {
-            nraw = r;
-            break;
-        }
-    }
-    if(nraw != -1) {
-        table.rows[nraw].cells[0].innerHTML = id;
-        table.rows[nraw].cells[1].innerHTML = type;
-        table.rows[nraw].cells[2].innerHTML = len;
-        table.rows[nraw].cells[3].innerHTML = data;
-        table.rows[nraw].cells[4].innerHTML = Date.now() - monitor_add_line.msg_time[nraw];
-        table.rows[nraw].cells[5].innerHTML = ++table.rows[nraw].cells[5].innerHTML;
-        monitor_add_line.msg_time[nraw] = Date.now();
-    } else {
-        var row = table.insertRow(1);
-        var cell1 = row.insertCell(0);
-        var cell2 = row.insertCell(1);
-        var cell3 = row.insertCell(2);
-        var cell4 = row.insertCell(3);
-        var cell5 = row.insertCell(4);
-        var cell6 = row.insertCell(5);
-        cell1.innerHTML = id;
-        cell2.innerHTML = type;
-        cell3.innerHTML = len;
-        cell4.innerHTML = data;
-        cell5.innerHTML = 0;
-        cell6.innerHTML = 1;
-        cell1.style.width = "10%"
-        monitor_add_line.msg_time.push(Date.now());
-    }
-}
-var ws = null;
-var cr = String.fromCharCode(13);
-
-function mon_control() {
-    var dr = document.getElementById("mon_datarate").selectedIndex;
-    var url = window.location.href;
-    var url2 = "http://192.168.31.72/";
-    console.log(dr);
-    alert("Please reboot device after Monitor, otherwise the device may not function as expected");
-    if (!window.wicanWs) {
-        alert("WebSocket client is not loaded.");
-        return;
-    }
-    if(document.getElementById("mon_button").value == "Start") {
-        window.wicanWs.connect('monitor', {
-            onOpen: function () {
-                var cmd = "C" + cr + "S" + dr + cr + "O" + cr;
-                console.log("monitor ws open");
-                window.wicanWs.sendText(cmd);
-                window.mon_button_en(0);
-            },
-            onClose: function () {
-                window.mon_button_en(1);
-                console.log("monitor ws close");
-            },
-            onMessage: function (evt) {
-                var received_msg = evt.data;
-                if(received_msg[0] == "t") {
-                    var len = (received_msg[4] - "0") * 2;
-                    var data_str = "";
-                    var i;
-                    for(i = 0; i < len; i += 2) {
-                        data_str += received_msg.substr(i + 5, 2) + " ";
-                    }
-                    monitor_add_line(received_msg.substr(1, 3) + "h", "Std", received_msg[4], data_str, 0);
-                } else if(received_msg[0] == "T") {
-                    var len = (received_msg[9] - "0") * 2;
-                    var data_str = "";
-                    var i;
-                    for(i = 0; i < len; i += 2) {
-                        data_str += received_msg.substr(i + 10, 2) + " ";
-                    }
-                    monitor_add_line(received_msg.substr(1, 8) + "h", "Ext", received_msg[9], data_str, 0);
-                } else if(received_msg[0] == "r") {
-                    var len = (received_msg[4] - "0") * 2;
-                    monitor_add_line(received_msg.substr(1, 3) + "h", "RTR-Std", received_msg[4], 0, 0);
-                } else if(received_msg[0] == "R") {
-                    var len = (received_msg[9] - "0") * 2;
-                    monitor_add_line(received_msg.substr(1, 8) + "h", "RTR-Ext", received_msg[9], 0, 0);
-                }
-            },
-        });
-    } else {
-        ws_close();
-    }
-}
-
-function ws_close() {
-    if (window.wicanWs && window.wicanWs.isOpen()) {
-        window.wicanWs.sendText("C" + cr);
-        window.wicanWs.close();
-    }
-}
-
-function mon_button_en(b) {
-    if(b == 1) {
-        document.getElementById("mon_button").value = "Start";
-        document.getElementById("mon_datarate").disabled = false;
-        document.getElementById("mon_filter").disabled = false;
-        document.getElementById("mon_mask").disabled = false;
-    } else {
-        document.getElementById("mon_button").value = "Stop";
-        document.getElementById("mon_datarate").disabled = true;
-        document.getElementById("mon_filter").disabled = true;
-        document.getElementById("mon_mask").disabled = true;
     }
 }
 
@@ -4969,6 +2854,7 @@ function csv_status_render(j) {
     // start/stop). "on" => button shows Stop; otherwise Start.
     var on = !!(j && (j.manual_mode === 'on' || j.session_active));
     csv_log_button_en(on ? 0 : 1);
+    console_status_render(j, on);
     var line = document.getElementById('csv_status_line');
     if (!line) return;
     if (j && j.session_active) {
@@ -5020,113 +2906,6 @@ function csv_log_control() {
 
 function isNameUnique(name) {
     return canData.every((item) => item["Name"] !== name);
-}
-
-function addCANFLTRow() {
-    var canId = parseInt(document.getElementById("canId").value);
-    var startBit = parseInt(document.getElementById("startBit").value);
-    var bitLength = parseInt(document.getElementById("bitLength").value);
-    Length = parseInt(document.getElementById("bitLength").value);
-    var cycle = parseInt(document.getElementById("cycle").value);
-    var name = document.getElementById("name").value;
-    var expression = document.getElementById("expression").value;
-    var pid = parseInt(document.getElementById("pid").value);
-    var pidi = parseInt(document.getElementById("pindex").value);
-    if(isNaN(canId) || canId == "" || canId < 0 || canId > 536870912) {
-        alert("CAN ID must be a valid number between 0 and 536870912");
-        return;
-    }
-    if(isNaN(startBit) || isNaN(bitLength) || startBit > 64 - bitLength || bitLength <= 0 || bitLength > 64 || startBit < 0 || startBit > 63) {
-        alert("startBit or bitLength error");
-        return;
-    }
-    if(isNaN(cycle) || cycle < 100 || cycle > 10000) {
-        alert("cycle must be between 100 and 10000");
-        return;
-    }
-    if(name.length < 1 || name.length > 16) {
-        alert("Name must be between 1 and 16 characters in length.");
-        return;
-    }
-    if(expression.length < 1 || expression.length > 64) {
-        alert("Expression must be between 1 and 64 characters in length.");
-        return;
-    }
-    if(isNaN(pid) || pid < -1 || pid > 255) {
-        alert("PID must be a number between -1 and 255");
-        return;
-    }
-    if(isNaN(pidi) || pidi < 0 || pidi > 7) {
-        alert("PID must be a number between 0 and 7");
-        return;
-    }
-    if(isNameUnique(name)) {
-        var table = document.getElementById("can_flt_table");
-        var row = table.insertRow(-1);
-        var cell1 = row.insertCell(0);
-        var cell2 = row.insertCell(1);
-        var cell3 = row.insertCell(2);
-        var cell4 = row.insertCell(3);
-        var cell5 = row.insertCell(4);
-        var cell6 = row.insertCell(5);
-        var cell7 = row.insertCell(6);
-        var cell8 = row.insertCell(7);
-        var cell9 = row.insertCell(8);
-        if(table.rows.length - 1 >= 100) {
-            alert("Maximum row limit (100) reached.");
-            return;
-        }
-        cell1.innerHTML = canId;
-        cell2.innerHTML = name;
-        cell3.innerHTML = pid;
-        cell4.innerHTML = pidi;
-        cell5.innerHTML = startBit;
-        cell6.innerHTML = bitLength;
-        cell7.innerHTML = expression;
-        cell8.innerHTML = cycle;
-        cell9.innerHTML = '<button style="width: 100%;" onclick="deleteCANFLTRow(this) ">Delete</button>';
-        canData.push({
-            CANID: canId,
-            Name: name,
-            PID: pid,
-            PIDIndex: pidi,
-            StartBit: startBit,
-            BitLength: bitLength,
-            Expression: expression,
-            Cycle: cycle
-        });
-        document.getElementById("canId").value = "";
-        document.getElementById("name").value = "";
-        document.getElementById("pid").value = "";
-        document.getElementById("pindex").value = "";
-        document.getElementById("startBit").value = "";
-        document.getElementById("bitLength").value = "";
-        document.getElementById("expression").value = "";
-        document.getElementById("cycle").value = "";
-    } else {
-        alert("Name must be unique.");
-    }
-    document.getElementById("store_canflt_button").disabled = false;
-}
-
-function deleteCANFLTRow(button) {
-    var row = button.parentNode.parentNode;
-    var canIdToDelete = row.cells[0].textContent;
-    var indexToDelete = canData.findIndex((item) => item["CANID"] === parseInt(canIdToDelete));
-    if(indexToDelete !== -1) {
-        canData.splice(indexToDelete, 1);
-    }
-    row.parentNode.removeChild(row);
-    document.getElementById("store_canflt_button").disabled = false;
-}
-
-function alert_elm327() {
-    alert("If elm327 log is enabled then only CAN frames proccessed by elm327 will be sent to MQTT broker.");
-}
-
-function storeCANFLT() {
-    postCANFLT();
-    document.getElementById("store_canflt_button").disabled = true;
 }
 
 function toggleSleepWarning() {
@@ -5255,818 +3034,112 @@ function selectWifiNetwork() {
     }
 }
 
-function toggleHttpsCertUploadVisibility(){
-    const show = document.getElementById('https_trust_source').value === 'uploaded';
-    const tbl = document.getElementById('https_cert_upload_table');
-if(tbl) tbl.style.display = show ? 'table' : 'none';
-const rows = ['https_ca_row','https_client_cert_row','https_client_key_row'];
-rows.forEach(id=>{ const el = document.getElementById(id); if(el) el.style.display = show ? 'table-row' : 'none'; });
-}
 
-async function uploadHttpsCerts(){
-    const caF = document.getElementById('https_ca_file').files[0];
-    const ccF = document.getElementById('https_client_cert_file').files[0];
-    const ckF = document.getElementById('https_client_key_file').files[0];
-    if(!caF && !ccF && !ckF){
-        showNotification('No certificate files selected', 'red');
-        return;
-    }
-    const btn = document.getElementById('https_upload_button');
-    btn.disabled = true;
-    btn.value = 'Uploading...';
-    try {
-        const fd = new FormData();
-        if(caF) fd.append('ca_cert', caF, 'ca.pem');
-        if(ccF) fd.append('client_cert', ccF, 'client.crt');
-        if(ckF) fd.append('client_key', ckF, 'client.key');
-        const r = await fetch('/cert_manager/upload', { method: 'POST', body: fd });
-        if(!r.ok) throw new Error('upload status ' + r.status);
-        const js = await r.json().catch(()=>({}));
-        showNotification('Certificates uploaded (' + (js.saved_parts||'?') + ' parts)', 'green');
-        // clear selected files
-        document.getElementById('https_ca_file').value='';
-        document.getElementById('https_client_cert_file').value='';
-        document.getElementById('https_client_key_file').value='';
-        await new Promise(res=>setTimeout(res, 500));
-        refreshHttpsCertStatus();
-    } catch(e){
-        console.error('HTTPS cert upload error', e);
-        showNotification('Upload failed', 'red');
-    } finally {
-        btn.disabled = false;
-        btn.value = 'Upload';
+// ---- Field Console (issue #5): one-tap trip landing surface ----
+function console_status_render(j, on) {
+    var dot = document.getElementById('console_rec_dot');
+    var state = document.getElementById('console_rec_state');
+    var file = document.getElementById('console_rec_file');
+    var btn = document.getElementById('console_rec_btn');
+    if (!dot || !state || !btn) return;
+    var live = !!(j && j.session_active);
+    var armed = !!(j && j.manual_mode === 'on' && !live);
+    dot.className = 'rec-dot' + (live ? ' live' : (armed ? ' armed' : ''));
+    state.textContent = live ? 'Recording' : (armed ? 'Armed' : 'Idle');
+    if (file) file.textContent = live ? (j.file || '') : (armed ? 'waiting for data\u2026' : '\u00a0');
+    btn.textContent = on ? 'Stop Trip' : 'Start Trip';
+    btn.className = 'console-rec-btn' + (on ? ' stop' : '');
+    var rows = document.getElementById('console_rec_rows');
+    var dropped = document.getElementById('console_rec_dropped');
+    var cols = document.getElementById('console_rec_cols');
+    if (rows) rows.textContent = (j && j.rows_written) || 0;
+    if (dropped) dropped.textContent = (j && j.rows_dropped) || 0;
+    if (cols) cols.textContent = (j && j.columns) || 0;
+    var sdDot = document.getElementById('console_dot_sd');
+    var sdChip = document.getElementById('console_chip_sd');
+    if (sdDot && j && typeof j.sd_mounted === 'boolean') {
+        sdDot.className = 'chip-dot ' + (j.sd_mounted ? 'ok' : 'bad');
+        if (sdChip) sdChip.textContent = j.sd_mounted ? 'mounted' : 'missing';
     }
 }
 
-let certManagerSets = []; // {name, has_ca, has_client_cert, has_client_key, readOnly}
-
-function certManagerValidateName(name){
-    return /^[A-Za-z0-9_-]{1,24}$/.test(name);
-}
-
-async function certManagerLoad(){
-    try{
-        const r = await fetch('/cert_manager/sets');
-        if(!r.ok) throw 0;
-        const list = await r.json();
-        // Preserve existing single (readOnly) entry if present
-        const single = certManagerSets.find(s=>s.readOnly);
-        certManagerSets = [];
-        if(single) certManagerSets.push(single);
-        for(const s of list){ certManagerSets.push(s); }
-        certManagerRender();
-    }catch(e){ console.log('cert sets load failed', e); }
-}
-
-function certManagerRender(){
-    const body = document.getElementById('certmgr_body');
-    if(!body) return;
-    if(certManagerSets.length===0){
-        body.innerHTML = '<tr><td colspan="5" style="padding:8px; text-align:center; color:#555;">No certificate sets</td></tr>';
-        return;
-    }
-    body.innerHTML = certManagerSets.map((s,idx)=>{
-        const delBtn = s.readOnly? '' : `<button style=\"background:#dc2626; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;\" onclick=\"certManagerDelete('${s.name}')\">Delete</button>`;
-        return `<tr>
-            <td style=\"padding:6px; border:1px solid #e2e8f0; font-weight:600;\">${s.name}${s.readOnly?' (single)':''}</td>
-            <td style=\"padding:6px; border:1px solid #e2e8f0;\">${s.has_ca?'&#10003;':'-'} </td>
-            <td style=\"padding:6px; border:1px solid #e2e8f0;\">${s.has_client_cert?'&#10003;':'-'} </td>
-            <td style=\"padding:6px; border:1px solid #e2e8f0;\">${s.has_client_key?'&#10003;':'-'} </td>
-            <td style=\"padding:6px; border:1px solid #e2e8f0;\">${delBtn}</td>
-        </tr>`;
-    }).join('');
-}
-
-async function certManagerDelete(name){
-    if(!confirm(`Delete certificate set '${name}'?`)) return;
-    try{
-        const r = await fetch('/cert_manager/sets/'+encodeURIComponent(name), {method:'DELETE'});
-        if(!r.ok){ showNotification('Delete failed','red'); return; }
-        showNotification('Deleted','green');
-        certManagerLoad();
-    }catch(e){ showNotification('Delete error','red'); }
-}
-
-async function certManagerAddSet(){
-    const nameEl = document.getElementById('certmgr_name');
-    const caEl = document.getElementById('certmgr_ca');
-    const ccEl = document.getElementById('certmgr_client_cert');
-    const ckEl = document.getElementById('certmgr_client_key');
-    const name = (nameEl.value||'').trim();
-    if(!certManagerValidateName(name)){ showNotification('Invalid name','red'); return; }
-    if(certManagerSets.some(s=>s.name===name)){ showNotification('Name exists','red'); return; }
-    const caF=caEl.files[0]; const ccF=ccEl.files[0]; const ckF=ckEl.files[0];
-    if(!caF && !(ccF && ckF)){ showNotification('Need CA or client cert+key','red'); return; }
-    const fd = new FormData();
-    if(caF) fd.append('ca_cert', caF, 'ca.pem');
-    if(ccF) fd.append('client_cert', ccF, 'client.crt');
-    if(ckF) fd.append('client_key', ckF, 'client.key');
-    try{
-        const btn = document.querySelector('#certmgr_controls button');
-        if(btn) btn.disabled=true;
-        const r = await fetch('/cert_manager/sets?name='+encodeURIComponent(name), {method:'POST', body: fd});
-        if(!r.ok){ const t=await r.text(); showNotification('Upload failed '+t,'red'); } else { showNotification('Uploaded','green'); certManagerLoad(); }
-    }catch(e){ showNotification('Upload error','red'); }
-    finally{ if(btn) btn.disabled=false; }
-    nameEl.value=''; caEl.value=''; ccEl.value=''; ckEl.value='';
-}
-
-function toggleVpnConfig() 
-{
-    const vpnEnabled = document.getElementById("vpn_enabled").value;
-    const wireguardConfig = document.getElementById("wireguard_config");
-    
-    if (vpnEnabled === "wireguard") 
-    {
-        wireguardConfig.style.display = "block";
-    } 
-    else 
-    {
-        wireguardConfig.style.display = "none";
-    }
-}
-
-async function generateWireGuardKeys() 
-{
-    try 
-    {
-        const response = await fetch('/vpn/generate_keys', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ vpn_type: 'wireguard' }, null, 0)
-        });
-        
-        if (!response.ok) 
-        {
-            throw new Error('Failed to generate keys');
-        }
-        
-        const data = await response.json();
-        
-        if (data.public_key) 
-        {
-            document.getElementById('wg_public_key').value = data.public_key;
-            document.getElementById('wg_private_key').value = "Generated and stored on device";
-            showNotification("WireGuard keys generated successfully!", "green");
-            submit_enable();
-        } 
-        else 
-        {
-            throw new Error('Invalid response from server');
-        }
-    } 
-    catch (error) 
-    {
-        console.error('Error generating WireGuard keys:', error);
-        showNotification("Failed to generate WireGuard keys: " + error.message, "red");
-    }
-}
-
-// Load VPN config from device and populate fields
-async function loadVpnFromDevice() {
-    try {
-        const resp = await fetch('/vpn/load_config');
-        if (!resp.ok) return;
-        const data = await resp.json();
-        applyVpnConfigToUi(data);
-    } catch (e) {
-        console.warn('Failed to load VPN config', e);
-    }
-}
-function tryApplyVPN(data) {
-    if (!data) return false;
-    const wg = data.wireguard || {};
-    const enabledEl = document.getElementById('vpn_enabled');
-    const peerEl = document.getElementById('wg_peer_public_key');
-    const pskEl = document.getElementById('wg_preshared_key');
-    const addrEl = document.getElementById('wg_address');
-    const allowedEl = document.getElementById('wg_allowed_ips');
-    const epEl = document.getElementById('wg_endpoint');
-    const keepEl = document.getElementById('wg_persistent_keepalive');
-    if (!enabledEl) {
-        return false;
-    }
-    // Enable/disable section
-    const isWG = data.enabled && (String(data.vpn_type).toLowerCase() === 'wireguard' || data.vpn_type === 1);
-    // Match HTML option values: 'disable' | 'wireguard'
-    const desired = isWG ? 'wireguard' : 'disable';
-    enabledEl.value = desired;
-    // Fallback in case options not yet populated or value mismatch
-    if (enabledEl.value !== desired) {
-        enabledEl.selectedIndex = 0; // default to Disabled
-    }
-    if (typeof toggleVpnConfig === 'function') {
-        toggleVpnConfig();
-    }
-    // Fill fields
-    if (peerEl) { peerEl.value = String(wg.peer_public_key || '').trim(); }
-    if (pskEl) { pskEl.value = wg.preshared_key != null ? String(wg.preshared_key).trim() : ''; }
-    if (addrEl) { addrEl.value = wg.address != null ? String(wg.address).trim() : ''; }
-    if (allowedEl) { allowedEl.value = wg.allowed_ips != null ? String(wg.allowed_ips).trim() : ''; }
-    if (epEl) { epEl.value = wg.endpoint != null ? String(wg.endpoint).trim() : ''; }
-    if (keepEl) { const n = Number(wg.persistent_keepalive); keepEl.value = Number.isFinite(n) ? String(n) : '0'; }
-    return true;
-}
-function applyVpnConfigToUi(data) {
-    if (!data) {
-        return;
-    }
-    const wg = data.wireguard || {};
-
-    if (!tryApplyVPN(data)) {
-        const container = document.getElementById('vpn_tab');
-        if (container) {
-            if (container.dataset.vpnObserverAttached !== '1') {
-                container.dataset.vpnObserverAttached = '1';
-                const obs = new MutationObserver(() => {
-                    if (tryApplyVPN(data)) {
-                        obs.disconnect();
-                        delete container.dataset.vpnObserverAttached;
-                    }
-                });
-                obs.observe(container, { childList: true, subtree: true });
-                setTimeout(() => {
-                    tryApplyVPN(data);
-                    obs.disconnect();
-                    delete container.dataset.vpnObserverAttached;
-                }, 8000);
+function consoleRecClick() {
+    var btn = document.getElementById('console_rec_btn');
+    if (!btn) return;
+    var op = btn.classList.contains('stop') ? 'stop' : 'start';
+    fetch('/csv_logger?op=' + op, { method: 'POST' })
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function(j) {
+            csv_status_render(j);
+            if (op === 'start') {
+                csv_notify(j.session_active ? 'Trip recording started' : 'Trip armed \u2014 waiting for data',
+                           j.session_active ? 'green' : 'orange');
+            } else {
+                csv_notify('Trip stopped', 'blue');
+                setTimeout(consoleLoadTrips, 800);
             }
-            setTimeout(() => { tryApplyVPN(data); }, 1000);
-        } else {
-            setTimeout(() => { tryApplyVPN(data); }, 1000);
-        }
-    }
+            csv_status_poll_start();
+        })
+        .catch(function(e) { csv_notify('Trip control failed: ' + e.message, 'red'); });
 }
 
-function loadWireGuardConfig() 
-{
-    const fileInput = document.getElementById("wg_config_file");
-    
-    if (fileInput.files.length === 0) 
-    {
-        showNotification("No config file selected!", "red");
-        return;
-    }
-    
-    const file = fileInput.files[0];
-    const reader = new FileReader();
-    
-    reader.onload = function(event) 
-    {
-        try 
-        {
-            const configText = event.target.result;
-            parseWireGuardConfig(configText);
-            showNotification("WireGuard config loaded successfully!", "green");
-            submit_enable();
-        } 
-        catch (e) 
-        {
-            console.error('Config parse error:', e);
-            showNotification("Invalid WireGuard config file!", "red");
-        }
-    };
-    
-    reader.readAsText(file);
+function consoleFmtSize(b) {
+    b = Number(b) || 0;
+    if (b >= 1048576) return (b / 1048576).toFixed(1) + ' MB';
+    if (b >= 1024) return (b / 1024).toFixed(0) + ' KB';
+    return b + ' B';
 }
 
-function parseWireGuardConfig(configText) 
-{
-    console.log('Parsing WireGuard config:', configText);
-    const lines = configText.split('\n');
-    let currentSection = '';
-    let fieldsFound = 0;
-    const pskEl = document.getElementById('wg_preshared_key');
-    if (pskEl)
-    {
-        pskEl.value = '';
-    }
+function consoleFmtDate(mtime) {
+    if (!mtime) return '';
+    var d = new Date(mtime * 1000);
+    function p(n) { return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
 
-    // Track imported DNS (IPv4 only) for submit/test payloads.
-    window.wgImportedDns = { main: '', backup: '' };
-
-    // Accumulate AllowedIPs across multiple lines and comma-separated lists.
-    const allowedIps = [];
-    
-    for (const line of lines) 
-    {
-        const trimmedLine = line.trim();
-        
-        // Skip empty lines and comments
-        if (!trimmedLine || trimmedLine.startsWith('#')) {
-            continue;
-        }
-        
-        if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']')) 
-        {
-            currentSection = trimmedLine.slice(1, -1).toLowerCase();
-            console.log('Found section:', currentSection);
-            continue;
-        }
-        
-        if (trimmedLine.includes('=')) 
-        {
-            // Only split on the first '=' to preserve '=' in values
-            const eqIdx = trimmedLine.indexOf('=');
-            const key = trimmedLine.slice(0, eqIdx).trim();
-            const value = trimmedLine.slice(eqIdx + 1).trim();
-            console.log(`Found ${currentSection}.${key} = ${value}`);
-            
-            if (currentSection === 'interface') 
-            {
-                switch (key.toLowerCase()) 
-                {
-                    case 'privatekey':
-                        document.getElementById('wg_private_key').value = value;
-                        fieldsFound++;
-                        break;
-                    case 'address':
-                        document.getElementById('wg_address').value = value;
-                        fieldsFound++;
-                        break;
-                    case 'dns':
-                        {
-                            // DNS may be comma-separated; keep first two IPv4.
-                            const parts = value.split(',').map(s => s.trim()).filter(Boolean);
-                            const v4 = parts.filter(s => /^\d{1,3}(?:\.\d{1,3}){3}$/.test(s));
-                            window.wgImportedDns.main = v4[0] || '';
-                            window.wgImportedDns.backup = v4[1] || '';
-                            fieldsFound++;
-                        }
-                        break;
-                }
-            } 
-            else if (currentSection === 'peer') 
-            {
-                switch (key.toLowerCase()) 
-                {
-                    case 'publickey':
-                        document.getElementById('wg_peer_public_key').value = value;
-                        fieldsFound++;
-                        break;
-                    case 'presharedkey':
-                        if (document.getElementById('wg_preshared_key'))
-                        {
-                            document.getElementById('wg_preshared_key').value = value;
-                            fieldsFound++;
-                        }
-                        break;
-                    case 'allowedips':
-                        {
-                            // Support multiple lines and comma-separated lists (IPv4 only).
-                            const parts = value.split(',').map(s => s.trim()).filter(Boolean);
-                            for (const p of parts)
-                            {
-                                if (p.includes(':')) continue; // IPv6 not supported here
-                                allowedIps.push(p);
-                            }
-                            fieldsFound++;
-                        }
-                        break;
-                    case 'endpoint':
-                        document.getElementById('wg_endpoint').value = value;
-                        fieldsFound++;
-                        break;
-                    case 'persistentkeepalive':
-                        document.getElementById('wg_persistent_keepalive').value = value;
-                        fieldsFound++;
-                        break;
-                }
+function consoleLoadTrips() {
+    fetch('/csv_list')
+        .then(function(r) { return r.json(); })
+        .then(function(j) {
+            var box = document.getElementById('console_trips');
+            if (!box) return;
+            var files = (j && Array.isArray(j.files)) ? j.files.slice(0, 12) : [];
+            if (!files.length) {
+                box.innerHTML = '<div class="console-empty">No trips yet \u2014 press Start Trip to record one.</div>';
+                return;
             }
-        }
-    }
-
-    if (allowedIps.length)
-    {
-        // Legacy model stores a single CIDR. Prefer 0.0.0.0/0 if present.
-        const preferred = allowedIps.find(v => v === '0.0.0.0/0') || allowedIps[0];
-        document.getElementById('wg_allowed_ips').value = preferred;
-    }
-    
-    console.log(`Parsed config, found ${fieldsFound} fields`);
-    if (fieldsFound === 0) {
-        throw new Error('No valid WireGuard configuration fields found');
-    }
+            box.innerHTML = files.map(function(f) {
+                var name = String(f.name || '');
+                var meta = consoleFmtSize(f.size) + (f.mtime ? ' \u2022 ' + consoleFmtDate(f.mtime) : '');
+                return '<div class="console-trip"><div><div class="t-name">' + name + '</div>' +
+                       '<div class="t-meta">' + meta + '</div></div>' +
+                       '<a class="t-dl" href="/download_csv?file=' + encodeURIComponent(name) + '" download>' +
+                       '<button class="console-mini-btn" type="button">Download</button></a></div>';
+            }).join('');
+        })
+        .catch(function() {});
 }
 
-async function saveVpnConfiguration() 
-{
-    console.log('Saving VPN configuration...');
-    
-    const vpnEnabled = document.getElementById("vpn_enabled").value;
-    
-    let vpnConfig = {
-        vpn_enabled: vpnEnabled,
-        vpn_type: vpnEnabled === "wireguard" ? "wireguard" : "disabled"
-    };
-    
-    if (vpnEnabled === "wireguard") 
-    {
-        // Device private key: do NOT send the UI placeholder back; let device preserve stored key
-        const priv = document.getElementById("wg_private_key").value;
-        if (priv && priv !== "Generated and stored on device") {
-            vpnConfig.private_key = priv;
-        }
-        // Peer/server public key (canonical)
-        const peerKey = document.getElementById("wg_peer_public_key").value;
-        vpnConfig.peer_public_key = peerKey;
-
-        // Optional preshared key
-        const pskEl = document.getElementById("wg_preshared_key");
-        if (pskEl)
-        {
-            const psk = (pskEl.value || '').trim();
-            if (psk === '')
-            {
-                // Explicit clear
-                vpnConfig.preshared_key = "";
-            }
-            else if (psk !== "Stored on device")
-            {
-                vpnConfig.preshared_key = psk;
-            }
-        }
-        vpnConfig.address = document.getElementById("wg_address").value;
-        vpnConfig.allowed_ips = document.getElementById("wg_allowed_ips").value;
-        vpnConfig.endpoint = document.getElementById("wg_endpoint").value;
-        // Optional DNS parsed from imported config (IPv4 only)
-        if (window.wgImportedDns && (window.wgImportedDns.main || window.wgImportedDns.backup))
-        {
-            const dns = [window.wgImportedDns.main, window.wgImportedDns.backup].filter(Boolean).join(',');
-            vpnConfig.dns = dns;
-        }
-        vpnConfig.persistent_keepalive = parseInt(document.getElementById("wg_persistent_keepalive").value) || 0;
-    }
-    
-    console.log('VPN config to save:', vpnConfig);
-    
-    const response = await fetch('/vpn/store_config', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(vpnConfig, null, 0)
-    });
-    
-    if (!response.ok) 
-    {
-        throw new Error('Failed to save VPN configuration');
-    }
-    
-    const responseText = await response.text();
-    console.log('VPN config save response:', responseText);
-    
-    return responseText;
+function consoleLoadChips() {
+    fetch('/check_status')
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            var wifiDot = document.getElementById('console_dot_wifi');
+            var wifiChip = document.getElementById('console_chip_wifi');
+            var proto = document.getElementById('console_chip_proto');
+            var fw = document.getElementById('console_chip_fw');
+            var staUp = (d && d.sta_status === 'Connected');
+            if (wifiDot) wifiDot.className = 'chip-dot ' + (staUp ? 'ok' : 'bad');
+            if (wifiChip) wifiChip.textContent = staUp ? (d.sta_ip || 'connected') : 'AP only';
+            if (proto) proto.textContent = (d && d.protocol) || '\u2013';
+            if (fw) fw.textContent = (d && (d.git_version || d.fw_version)) || '\u2013';
+        })
+        .catch(function() {});
 }
 
-async function testVpnConnection() 
-{
-    try 
-    {
-        const button = document.getElementById('test_vpn_button');
-        button.disabled = true;
-        button.textContent = 'Testing...';
-
-        const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-        async function fetchVpnDebug()
-        {
-            const r = await fetch('/vpn/debug');
-            if (!r.ok) throw new Error('VPN debug HTTP ' + r.status);
-            return await r.json();
-        }
-
-        async function waitForVpnResult(maxWaitMs)
-        {
-            const start = Date.now();
-            while ((Date.now() - start) < maxWaitMs)
-            {
-                const d = await fetchVpnDebug();
-
-                // Success criteria: peer is up and status is connected
-                if (d && d.wg_peer_up && (d.vpn_status === 'connected' || d.vpn_status_code === 3))
-                {
-                    return { ok: true, debug: d };
-                }
-
-                // Hard failure criteria
-                if (d && (d.vpn_status === 'error' || d.vpn_status_code === 4))
-                {
-                    return { ok: false, reason: 'VPN status error', debug: d };
-                }
-
-                // If connect attempt stopped and peer is not up, treat as failure
-                if (d && d.connect_in_progress === false && d.wg_peer_up === false && (d.vpn_status === 'disconnected' || d.vpn_status === 'disabled'))
-                {
-                    return { ok: false, reason: 'VPN not connected', debug: d };
-                }
-
-                await sleep(750);
-            }
-            return { ok: false, reason: 'timeout' };
-        }
-        
-        // Build config from current form so "Test Connection" reflects what the user loaded
-        const vpnConfig = {};
-        const vpnEnabled = document.getElementById("vpn_enabled") ? document.getElementById("vpn_enabled").value : 'disable';
-        vpnConfig.vpn_enabled = vpnEnabled;
-        if (vpnEnabled === 'wireguard')
-        {
-            const priv = document.getElementById("wg_private_key") ? document.getElementById("wg_private_key").value : '';
-            if (priv) vpnConfig.private_key = priv;
-            vpnConfig.peer_public_key = document.getElementById("wg_peer_public_key").value;
-            const pskEl = document.getElementById("wg_preshared_key");
-            if (pskEl)
-            {
-                const psk = (pskEl.value || '').trim();
-                if (psk === '')
-                {
-                    vpnConfig.preshared_key = "";
-                }
-                else if (psk !== "Stored on device")
-                {
-                    vpnConfig.preshared_key = psk;
-                }
-            }
-            vpnConfig.address = document.getElementById("wg_address").value;
-            vpnConfig.allowed_ips = document.getElementById("wg_allowed_ips").value;
-            vpnConfig.endpoint = document.getElementById("wg_endpoint").value;
-            // Optional DNS parsed from imported config (IPv4 only)
-            if (window.wgImportedDns && (window.wgImportedDns.main || window.wgImportedDns.backup))
-            {
-                const dns = [window.wgImportedDns.main, window.wgImportedDns.backup].filter(Boolean).join(',');
-                vpnConfig.dns = dns;
-            }
-            vpnConfig.persistent_keepalive = parseInt(document.getElementById("wg_persistent_keepalive").value) || 0;
-        }
-
-        async function postTestOnce()
-        {
-            return await fetch('/vpn/test_connection', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(vpnConfig, null, 0)
-            });
-        }
-
-        let response;
-        try
-        {
-            response = await postTestOnce();
-        }
-        catch (e)
-        {
-            // transient link blip (VPN task may be restarting); retry once
-            await sleep(400);
-            response = await postTestOnce();
-        }
-        
-        if (!response.ok) 
-        {
-            throw new Error('Test connection failed (HTTP ' + response.status + ')');
-        }
-        
-        const data = await response.json();
-
-        if (!data || !data.success)
-        {
-            showNotification("VPN connection test failed to start: " + ((data && data.error) ? data.error : "Unknown error"), "red");
-            return;
-        }
-
-        // Poll for a real result (since the backend queues the test)
-        let timeoutMs = 16000;
-        try
-        {
-            const d0 = await fetchVpnDebug();
-            if (d0 && typeof d0.connect_timeout_ms === 'number' && d0.connect_timeout_ms > 0)
-            {
-                timeoutMs = Math.max(2000, Math.min(30000, d0.connect_timeout_ms + 1000));
-            }
-        }
-        catch (_) {}
-
-        const result = await waitForVpnResult(timeoutMs);
-        if (result.ok)
-        {
-            showNotification("VPN connection test successful!", "green");
-        }
-        else
-        {
-            const reason = result.reason ? (": " + result.reason) : "";
-            showNotification("VPN connection test failed" + reason, "red");
-        }
-    } 
-    catch (error) 
-    {
-        console.error('Error testing VPN connection:', error);
-
-        // If the POST failed at the network layer, check if device is still reachable.
-        if (String(error && error.message).includes('Failed to fetch'))
-        {
-            try
-            {
-                const r = await fetch('/vpn/debug');
-                if (r.ok)
-                {
-                    showNotification("VPN test request failed to send (device reachable). Try again.", "red");
-                    return;
-                }
-            }
-            catch (_) {}
-            showNotification("VPN connection test failed: device unreachable (Failed to fetch)", "red");
-            return;
-        }
-
-        showNotification("VPN connection test failed: " + error.message, "red");
-    } 
-    finally 
-    {
-        const button = document.getElementById('test_vpn_button');
-        button.disabled = false;
-        button.textContent = 'Test Connection';
-        // Refresh status badge after test attempt
-        try { checkStatus(); } catch(_) {}
-    }
+function consoleRefresh() {
+    consoleLoadTrips();
+    consoleLoadChips();
 }
 
-function vpnDbgSet(id, text)
-{
-    const el = document.getElementById(id);
-    if (el) el.textContent = (text === undefined || text === null || text === '') ? '-' : String(text);
-}
-
-function vpnDbgExtractHost(endpoint)
-{
-    if (!endpoint) return '';
-    let s = String(endpoint).trim();
-    if (!s) return '';
-
-    // Strip scheme if user pasted one
-    const schemeIdx = s.indexOf('://');
-    if (schemeIdx >= 0) s = s.slice(schemeIdx + 3);
-
-    // IPv6 bracket form: [::1]:51820
-    if (s.startsWith('['))
-    {
-        const end = s.indexOf(']');
-        if (end > 1) return s.slice(1, end);
-        return s;
-    }
-
-    // Split optional :port only if port is numeric
-    const lastColon = s.lastIndexOf(':');
-    if (lastColon > 0)
-    {
-        const tail = s.slice(lastColon + 1);
-        if (/^\d+$/.test(tail))
-        {
-            return s.slice(0, lastColon);
-        }
-    }
-    return s;
-}
-
-async function vpnDebugRefresh()
-{
-    try
-    {
-        const btn = document.getElementById('vpn_dbg_refresh_btn');
-        if (btn) { btn.disabled = true; btn.textContent = 'Refreshing...'; }
-
-        const r = await fetch('/vpn/debug');
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const d = await r.json();
-
-        const prereqs = d.gating_prereqs_ok ? 'OK' : 'NOT OK';
-        const blockers = d.gating_blockers_present ? 'YES' : 'NO';
-        vpnDbgSet('vpn_dbg_gating', `prereqs=${prereqs}, blockers=${blockers} (vpn_enabled=${d.vpn_enabled_bit ? 'yes' : 'no'}, sta_connected=${d.sta_connected ? 'yes' : 'no'}, time_synced=${d.time_synced ? 'yes' : 'no'}, ap_enabled=${d.ap_enabled ? 'yes' : 'no'}, sleeping=${d.sleeping ? 'yes' : 'no'})`);
-
-        const peerUp = (d.wg_peer_up ? 'yes' : 'no');
-        const defIf = d.lwip_default_netif ? d.lwip_default_netif : '-';
-        const defIp = d.lwip_default_ip ? d.lwip_default_ip : '-';
-        const defGw = d.lwip_default_gw ? d.lwip_default_gw : '-';
-        const routeLine = `${defIf} (ip ${defIp}, gw ${defGw})`;
-
-        let timerLine = '-';
-        if (d.connect_in_progress)
-        {
-            const elapsed = (d.connect_elapsed_ms !== undefined) ? d.connect_elapsed_ms : '-';
-            const timeout = (d.connect_timeout_ms !== undefined) ? d.connect_timeout_ms : '-';
-            timerLine = `connecting: ${elapsed}ms / ${timeout}ms`;
-        }
-        else if (d.connect_timeout_ms !== undefined)
-        {
-            timerLine = `timeout=${d.connect_timeout_ms}ms`;
-        }
-
-        const vpnLine = `${d.vpn_status || 'unknown'}${d.vpn_ip ? ' (ip ' + d.vpn_ip + ')' : ''} | peer_up=${peerUp} | ${timerLine} | default=${routeLine}`;
-        vpnDbgSet('vpn_dbg_status', vpnLine);
-
-        // Optional extra rows (only visible if HTML contains these ids)
-        vpnDbgSet('vpn_dbg_peer', `peer_up=${peerUp}`);
-        vpnDbgSet('vpn_dbg_timer', timerLine);
-        vpnDbgSet('vpn_dbg_default', routeLine);
-
-        const staLine = `${d.sta_connected ? 'connected' : 'not connected'}${d.sta_ip ? ' (ip ' + d.sta_ip + ')' : ''}${d.sta_gw ? ', gw ' + d.sta_gw : ''}`;
-        vpnDbgSet('vpn_dbg_sta', staLine);
-
-        const dnsLine = `${d.dns_main ? 'main ' + d.dns_main : 'main -'}${d.dns_backup ? ', backup ' + d.dns_backup : ', backup -'}`;
-        vpnDbgSet('vpn_dbg_dns', dnsLine);
-
-        const rawEl = document.getElementById('vpn_dbg_raw');
-        if (rawEl) rawEl.textContent = JSON.stringify(d, null, 2);
-    }
-    catch (e)
-    {
-        console.error('vpnDebugRefresh failed', e);
-        vpnDbgSet('vpn_dbg_raw', 'Error: ' + (e && e.message ? e.message : String(e)));
-        try { showNotification('VPN debug refresh failed: ' + e.message, 'red'); } catch (_) {}
-    }
-    finally
-    {
-        const btn = document.getElementById('vpn_dbg_refresh_btn');
-        if (btn) { btn.disabled = false; btn.textContent = 'Refresh'; }
-    }
-}
-
-async function vpnDebugResolveHost(host, outputId)
-{
-    if (!host)
-    {
-        vpnDbgSet(outputId, '-');
-        return;
-    }
-    const r = await fetch('/vpn/resolve?host=' + encodeURIComponent(host));
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const d = await r.json();
-    if (!d.success)
-    {
-        vpnDbgSet(outputId, `${host}: DNS failed (gai=${d.gai_error})`);
-        return;
-    }
-    const addrs = Array.isArray(d.addrs) ? d.addrs.join(', ') : '-';
-    vpnDbgSet(outputId, `${host}: ${addrs || '-'}`);
-}
-
-async function vpnDebugResolveEndpoint()
-{
-    try
-    {
-        const btn = document.getElementById('vpn_dbg_resolve_ep_btn');
-        if (btn) { btn.disabled = true; btn.textContent = 'Resolving...'; }
-
-        const endpoint = document.getElementById('wg_endpoint') ? document.getElementById('wg_endpoint').value : '';
-        const host = vpnDbgExtractHost(endpoint);
-        if (!host)
-        {
-            vpnDbgSet('vpn_dbg_resolve', 'Endpoint host is empty');
-            return;
-        }
-        await vpnDebugResolveHost(host, 'vpn_dbg_resolve');
-    }
-    catch (e)
-    {
-        console.error('vpnDebugResolveEndpoint failed', e);
-        vpnDbgSet('vpn_dbg_resolve', 'Error: ' + (e && e.message ? e.message : String(e)));
-    }
-    finally
-    {
-        const btn = document.getElementById('vpn_dbg_resolve_ep_btn');
-        if (btn) { btn.disabled = false; btn.textContent = 'Resolve Endpoint'; }
-    }
-}
-
-async function vpnDebugResolveNtp()
-{
-    try
-    {
-        const btn = document.getElementById('vpn_dbg_resolve_ntp_btn');
-        if (btn) { btn.disabled = true; btn.textContent = 'Resolving...'; }
-
-        // These are the servers used by sync_sys_time.c
-        const lines = [];
-        await vpnDebugResolveHost('time.windows.com', 'vpn_dbg_ntp_resolve');
-        const first = document.getElementById('vpn_dbg_ntp_resolve') ? document.getElementById('vpn_dbg_ntp_resolve').textContent : '';
-        lines.push(first);
-        await vpnDebugResolveHost('pool.ntp.org', 'vpn_dbg_ntp_resolve');
-        const second = document.getElementById('vpn_dbg_ntp_resolve') ? document.getElementById('vpn_dbg_ntp_resolve').textContent : '';
-        lines.push(second);
-        vpnDbgSet('vpn_dbg_ntp_resolve', lines.filter(Boolean).join(' | '));
-    }
-    catch (e)
-    {
-        console.error('vpnDebugResolveNtp failed', e);
-        vpnDbgSet('vpn_dbg_ntp_resolve', 'Error: ' + (e && e.message ? e.message : String(e)));
-    }
-    finally
-    {
-        const btn = document.getElementById('vpn_dbg_resolve_ntp_btn');
-        if (btn) { btn.disabled = false; btn.textContent = 'Resolve NTP'; }
-    }
-}
 document.getElementById("defaultOpen").click();

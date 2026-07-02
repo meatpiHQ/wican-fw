@@ -8,16 +8,13 @@ set(srcs
     "slcan_port.c"
     "datalog_lease_task.c"
     "config_server.c"
-    "realdash.c"
     "slcan.c"
     "can.c"
     "ncflash_fastread.c"
     "ncflash_fastwrite.c"
     "ble.c"
     "wifi_network.c"
-    "gvret.c"
     "wc_uart.c"
-    "mqtt.c"
     "sleep_mode.c"
     "expression_parser.c"
     "led.c"
@@ -65,21 +62,14 @@ set(requires
     wear_levelling
     esp_http_client
     spi_flash
-    obd_logger
-    https_client_mgr
     unity
     cmdline
     zorxx__multipart-parser
-    debug_logs
-    cert_manager
-    vpn_manager
     autopid
     csv_logger
     fast_log
     sd_filemgr
-    ha_webhooks
     wican_common
-    ws_server
     restart_tracker
     event_log
 )
@@ -90,7 +80,6 @@ idf_component_register(
         "console.c"
         "rtcm.c"
         "usb_host.cpp"
-        "ftp.c"
         "elm327.c"
         "obd.c"
         "wusb3801.c"
@@ -102,13 +91,8 @@ idf_component_register(
         PRIV_REQUIRES       spi_flash # Private requirements
         EMBED_FILES 
         "web/src/homepage.html"
-        "web/src/dashboard.html"
-        "web/src/dashboard.js"
         "web/src/lucide_icons.js"
         "web/src/main.js"
-		"web/src/ws_client.js"
-		"web/src/terminal.js"
-        "web/src/dashboard_live.js"
         "web/safemode.html"
         # "obd_fw/V2.3.18.txt"
         "obd_fw/V2.3.22.txt"
