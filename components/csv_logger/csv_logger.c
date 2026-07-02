@@ -109,6 +109,13 @@ static int64_t csv_sd_retry_after_ms = 0;
 #define CSV_MANUAL_OFF   2   // force logging off
 static volatile int8_t csv_manual_mode = CSV_MANUAL_AUTO;
 
+// One-shot trip marker (web "Mark event" button). Written 1 by the httpd handler task
+// (op=mark), consumed (read+cleared) by the writer task when it composes the next row.
+// Same volatile-int8 cross-core pattern as csv_manual_mode above: httpd task only ever
+// writes 1, writer task only ever writes 0, so no read-modify-write race matters (worst
+// case = two clicks before the next row coalesce into one X; the UI debounces). .bss => RAM.
+static volatile int8_t csv_mark_pending = 0;
+
 // ---- Wide (Tactrix-style) CSV format state (Task #11) ----
 // Approach B: write WIDE incrementally (one column per channel) with in-RAM last-observation-
 // carried-forward (LOCF). Fast channels (RPM) change each row, slow ones (ECT/IAT) repeat
@@ -222,7 +229,8 @@ static esp_err_t csv_open_new_file(void)
         return ESP_FAIL;
     }
 
-    // Wide header: timestamp_ms + two system columns (datetime, BATT_V) + one column per channel.
+    // Wide header: timestamp_ms + two system columns (datetime, BATT_V) + one column per channel
+    // + a trailing "mark" column (one-shot web event marker; empty on every row unless clicked).
     // Long format was removed (Task #16) and a session only opens after columns are enumerated, so
     // csv_cols is always valid here (a 0-count loop just yields the system-columns-only header).
     // Built from csv_cols, which is fixed for the whole session -> rotation re-emits a byte-
@@ -243,6 +251,8 @@ static esp_err_t csv_open_new_file(void)
         n = fprintf(csv_file, ",%s", hdr);
         if (n > 0) csv_file_bytes += (size_t)n;
     }
+    n = fprintf(csv_file, ",mark");          /* FINAL column: one-shot event marker (see csv_mark_pending) */
+    if (n > 0) csv_file_bytes += (size_t)n;
     n = fprintf(csv_file, "\n");
     if (n > 0) csv_file_bytes += (size_t)n;
     csv_files_count++;
@@ -335,7 +345,8 @@ static bool csv_emit_wide_row(int64_t ts_ms)
         len = fl;
     }
 
-    // System columns (must match the header order "timestamp_ms,datetime,BATT_V"):
+    // System columns (must match the header order "timestamp_ms,datetime,BATT_V"; a trailing
+    // one-shot "mark" column is appended after the channel loop, matching the header's ",mark"):
     //   datetime: human-readable wall-clock at emit time; empty until system time is synced.
     //   BATT_V:   battery voltage from sleep_mode_get_voltage() (non-blocking queue peek).
     // Both use the same reserve-2-bytes bounded-append discipline as the channel loop below.
@@ -384,6 +395,22 @@ static bool csv_emit_wide_row(int64_t ts_ms)
         memcpy(buf + len, field, (size_t)n);
         len += (size_t)n;
     }
+
+    // FINAL column "mark" (must stay last; the header appends ",mark" last). One-shot:
+    // consume-on-compose so exactly one row carries the X, then the flag clears. Same
+    // reserve-2-bytes bounded append as the system columns above.
+    if (csv_mark_pending)
+    {
+        csv_mark_pending = 0;
+        n = snprintf(field, sizeof(field), ",X");
+    }
+    else
+    {
+        n = snprintf(field, sizeof(field), ",");
+    }
+    if (n < 0) { field[0] = ','; field[1] = '\0'; n = 1; }
+    if (len + (size_t)n <= cap - 2) { memcpy(buf + len, field, (size_t)n); len += (size_t)n; }
+    else if (len + 1 <= cap - 2) { buf[len++] = ','; }
 
     buf[len++] = '\n';
     buf[len] = '\0';
@@ -658,6 +685,8 @@ static void csv_logger_task(void *pvParameters)
                 csv_sd_retry_after_ms = now_ms + CSV_LOGGER_SD_RETRY_MS;
                 continue;
             }
+            csv_mark_pending = 0;   // clear before the session becomes visible to op=mark, so a
+                                    // mark can never leak from a previous/closing trip onto row 1
             csv_session_active = true;
             // Operational event (Task #24): one emit per session open (covers auto + manual).
             // Not emitted on rotation (which calls csv_open_new_file directly, not this block).
@@ -990,7 +1019,7 @@ static esp_err_t csv_download_handler(httpd_req_t *req)
     return ret;
 }
 
-// POST /csv_logger?op=start|stop -- runtime manual start/stop (web Start/Stop button).
+// POST /csv_logger?op=start|stop|mark -- runtime manual start/stop + one-shot trip marker.
 static esp_err_t csv_control_handler(httpd_req_t *req)
 {
     char query[64];
@@ -998,16 +1027,30 @@ static esp_err_t csv_control_handler(httpd_req_t *req)
     if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
         httpd_query_key_value(query, "op", op, sizeof(op)) != ESP_OK)
     {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing op=start|stop");
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing op=start|stop|mark");
         return ESP_FAIL;
     }
 
-    esp_err_t e;
+    esp_err_t e = ESP_OK;
+    bool conflict = false;   /* no trip file open -> 409, like datalog_control_handler */
     if (strcmp(op, "start") == 0)     { e = csv_logger_set_manual_override(true); }
     else if (strcmp(op, "stop") == 0) { e = csv_logger_set_manual_override(false); }
+    else if (strcmp(op, "mark") == 0)
+    {
+        // One-shot trip marker. Plain read of the writer's session flag (same benign
+        // cross-task read as csv_logger_get_status_json). Gate on a real open file, NOT
+        // manual_mode: an "armed, waiting for data" logger has no row to brand.
+        if (csv_session_active)
+        {
+            csv_mark_pending = 1;
+            event_log_emit(EVL_INFO, "trip mark: %s @ row %u",
+                           csv_file_path, (unsigned)csv_rows_written);
+        }
+        else { conflict = true; }
+    }
     else
     {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "op must be start or stop");
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "op must be start, stop or mark");
         return ESP_FAIL;
     }
 
@@ -1018,7 +1061,9 @@ static esp_err_t csv_control_handler(httpd_req_t *req)
     }
 
     // Reply with the live status JSON so the UI updates without a second GET.
-    // Mirror csv_status_handler: malloc'd, freed after sendstr.
+    // Mirror csv_status_handler: malloc'd, freed after sendstr. For op=mark with no open
+    // trip, tag the reply 409 (body still the live status JSON: session_active:false).
+    if (conflict) { httpd_resp_set_status(req, "409 Conflict"); }
     char *status = csv_logger_get_status_json();
     httpd_resp_set_type(req, "application/json");
     if (status == NULL)

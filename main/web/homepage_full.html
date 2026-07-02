@@ -14,7 +14,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta content="width=1024" name="viewport">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>WiCAN</title>
     <style>
         :root {
@@ -438,13 +438,13 @@
             display: flex
         }
 
-        @media (width<=768px) {
+        @media (max-width:768px) {
             .notification-container {
                 left: 0
             }
         }
 
-        @media (width<=1024px) {
+        @media (max-width:1024px) {
             .sidebar {
                 width: 200px
             }
@@ -524,7 +524,7 @@
             font-size: .85rem
         }
 
-        @media (width<=768px) {
+        @media (max-width:768px) {
             .system-button {
                 width: 100%;
                 min-width: 110px;
@@ -785,6 +785,15 @@
             background: #b91c1c
         }
 
+        .console-rec-btn.mark {
+            margin-top: .5rem;
+            background: var(--warning-color, #d97706)
+        }
+
+        .console-rec-btn.mark:disabled {
+            opacity: .7
+        }
+
         .console-note {
             color: var(--gray-600);
             font-size: .75rem;
@@ -831,7 +840,7 @@
             padding: .5rem 0
         }
 
-        .console-guard {
+        .guard-note {
             margin-top: 1rem;
             background: var(--primary-light);
             border: 1px dashed var(--primary-color);
@@ -839,6 +848,186 @@
             padding: .7rem .9rem;
             font-size: .78rem;
             color: var(--primary-dark)
+        }
+
+        .console-events-card {
+            margin-top: 16px
+        }
+
+        .console-evt {
+            display: flex;
+            align-items: baseline;
+            gap: 11px;
+            padding: 7px 0;
+            border-bottom: 1px solid var(--gray-200);
+            font-size: .82rem
+        }
+
+        .console-evt:last-child {
+            border-bottom: none
+        }
+
+        .console-evt .e-t {
+            color: var(--gray-500);
+            font-variant-numeric: tabular-nums;
+            font-size: .75rem;
+            min-width: 72px;
+            flex: none
+        }
+
+        .console-evt .e-d {
+            color: var(--gray-700);
+            overflow-wrap: anywhere
+        }
+
+        .console-tag {
+            font-size: .65rem;
+            font-weight: 800;
+            padding: 2px 7px;
+            border-radius: 6px;
+            letter-spacing: .4px;
+            flex: none
+        }
+
+        .console-tag.t-ok {
+            background: #d1fae5;
+            color: var(--success-color)
+        }
+
+        .console-tag.t-wn {
+            background: #fef3c7;
+            color: #b45309
+        }
+
+        .console-tag.t-er {
+            background: #fee2e2;
+            color: var(--danger-color)
+        }
+
+        .console-evt-link {
+            font-size: .8rem;
+            font-weight: 600;
+            color: var(--primary-color)
+        }
+
+        /* ---- Phone-responsive (Item 7). Appended last so it wins source-order ties. ---- */
+        /* Files table: inline styles moved here so media queries can shrink cells. */
+        #files_table {
+            border-collapse: collapse;
+            width: 100%
+        }
+
+        #files_table th,
+        #files_table td {
+            border: 1px solid #e2e8f0;
+            padding: 6px;
+            text-align: left
+        }
+
+        #files_table thead tr {
+            background: #f8fafc
+        }
+
+        #files_table th[id^=files_th_] {
+            cursor: pointer
+        }
+
+        @media (max-width:640px) {
+            /* Sidebar -> one horizontally scrollable sticky strip (one ~48px row). */
+            .sidebar {
+                display: flex;
+                flex-direction: row;
+                align-items: stretch;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                width: 100%;
+                height: auto;
+                position: sticky;
+                top: 0;
+                z-index: 100;
+                padding-top: 0;
+                border-right: 0;
+                border-bottom: 1px solid var(--gray-200)
+            }
+
+            .sidebar button {
+                flex: 0 0 auto;
+                width: auto;
+                white-space: nowrap;
+                padding: .8rem 1rem;
+                min-height: 44px
+            }
+
+            .sidebar .logo {
+                display: none
+            }
+
+            #firmware-update-notice {
+                flex: 0 0 auto;
+                margin: .5rem
+            }
+
+            .content {
+                width: 100%;
+                margin-left: 0;
+                padding: .75rem
+            }
+
+            .tabcontent {
+                padding: 1rem
+            }
+
+            /* Files table: hide the Type column (5th), tighten cells, tappable buttons. */
+            #files_table th:nth-child(5),
+            #files_table td:nth-child(5) {
+                display: none
+            }
+
+            #files_table th,
+            #files_table td {
+                padding: 4px;
+                font-size: .85rem
+            }
+
+            #files_table button {
+                padding: .5rem .6rem;
+                min-height: 40px
+            }
+
+            .files-toolbar {
+                flex-wrap: wrap
+            }
+
+            /* Console density + tap sizes (single-column collapse already free at <=900px). */
+            .console-metrics {
+                gap: 6px
+            }
+
+            .console-metric {
+                padding: 8px 10px
+            }
+
+            .console-mini-btn,
+            .console-trip .t-dl {
+                min-height: 40px;
+                padding: .5rem .9rem
+            }
+
+            /* Touch targets: primary controls >=44px; 16px inputs kill iOS focus-zoom. */
+            button,
+            input[type=button],
+            .store {
+                min-height: 44px
+            }
+
+            .automate-subtablinks {
+                min-height: 44px
+            }
+
+            input,
+            select {
+                font-size: 16px
+            }
         }
     </style>
 </head>
@@ -898,6 +1087,7 @@
                             <div class="k">channels</div>
                         </div>
                     </div><button class="console-rec-btn" id="console_rec_btn" onclick="consoleRecClick()">Start Trip</button>
+                    <button class="console-rec-btn mark" id="console_mark_btn" onclick="consoleMarkClick()" style="display:none" type="button">Mark Event</button>
                     <div class="console-note">Records the configured PID list to the SD card as CSV. Engine-on gating and grid rate follow Logger Settings.</div>
                 </div>
                 <div class="console-card">
@@ -909,7 +1099,14 @@
                     </div>
                 </div>
             </div>
-            <div class="console-guard"><b>Un-brick path (permanent):</b> Recovery AP via 5-second button hold — OTA under System &gt; Firmware Update — NC&nbsp;Flash port 35001 always on.</div>
+            <div class="console-card console-events-card">
+                <div class="console-card-title-row">
+                    <div class="console-card-title">Event Log</div><a class="console-evt-link" href="/event_log">Full log</a>
+                </div>
+                <div id="console_events">
+                    <div class="console-empty">No events yet</div>
+                </div>
+            </div>
         </div>
         <div class="tabcontent" id="status_view">
             <div class="section-title">Status</div>
@@ -1295,11 +1492,11 @@
                         <tr>
                             <td>Protocol:</td>
                             <td><select id="protocol" name="protocol">
-                                    <option value="slcan">slcan</option>
-                                    <option value="elm327">elm327</option>
-                                    <option value="auto_pid">AutoPID</option>
-                                    <option value="fast_log">Fast Log</option>
-                                    <option value="poll_log">Poll Log</option>
+                                    <option value="poll_log">Datalogger (poll_log)</option>
+                                    <option value="fast_log">Passive Logger (fast_log)</option>
+                                    <option value="elm327">OBD App (elm327)</option>
+                                    <option value="auto_pid">AutoPID (auto_pid)</option>
+                                    <option value="slcan">Bench SLCAN (slcan)</option>
                                 </select></td>
                         </tr>
                     </tbody>
@@ -1574,23 +1771,23 @@
         <div class="tabcontent" id="files_tab">
             <div class="section-title">Files</div>
             <div id="files_df" style="color:#6b7280;font-size:.85rem;margin-bottom:.5rem"></div>
-            <div style="align-items:center;gap:10px;margin-bottom:.5rem;display:flex">
+            <div class="files-toolbar" style="align-items:center;gap:10px;margin-bottom:.5rem;display:flex">
                 <div id="files_path" style="font-weight:600;flex:1">/sdcard</div><button onclick="filesMkdir()" type="button">New Folder</button><button onclick="filesLoad(filesCwd)" type="button">Refresh</button><button onclick="filesDownloadSelected()" type="button">Download selected</button><button onclick="filesDeleteSelected()" type="button">Delete selected</button>
             </div>
-            <table id="files_table" style="border-collapse:collapse;width:100%">
+            <table id="files_table">
                 <thead>
-                    <tr style="background:#f8fafc">
-                        <th style="text-align:left;border:1px solid #e2e8f0;padding:6px"><input type="checkbox" id="files_selall" onclick="filesToggleAll(this)"></th>
-                        <th id="files_th_name" style="text-align:left;border:1px solid #e2e8f0;padding:6px;cursor:pointer" onclick="filesSortBy('name')">Name</th>
-                        <th id="files_th_size" style="text-align:left;border:1px solid #e2e8f0;padding:6px;cursor:pointer" onclick="filesSortBy('size')">Size</th>
-                        <th id="files_th_mtime" style="text-align:left;border:1px solid #e2e8f0;padding:6px;cursor:pointer" onclick="filesSortBy('mtime')">Modified</th>
-                        <th id="files_th_type" style="text-align:left;border:1px solid #e2e8f0;padding:6px;cursor:pointer" onclick="filesSortBy('type')">Type</th>
-                        <th style="text-align:left;border:1px solid #e2e8f0;padding:6px">Actions</th>
+                    <tr>
+                        <th><input type="checkbox" id="files_selall" onclick="filesToggleAll(this)"></th>
+                        <th id="files_th_name" onclick="filesSortBy('name')">Name</th>
+                        <th id="files_th_size" onclick="filesSortBy('size')">Size</th>
+                        <th id="files_th_mtime" onclick="filesSortBy('mtime')">Modified</th>
+                        <th id="files_th_type" onclick="filesSortBy('type')">Type</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="files_body">
                     <tr>
-                        <td colspan="6" style="text-align:center;color:#555;padding:8px">Loading...</td>
+                        <td colspan="6">Loading...</td>
                     </tr>
                 </tbody>
             </table>
@@ -1630,6 +1827,7 @@
             </table>
             <div class="section-title">Firmware Update</div>
             <div class="description-text">Firmware updates are available on <a href="https://github.com/cdufresne81/nc-flash-wican-fw/releases">GitHub</a>. Download the latest release's OTA app image and upload it below. Instructions are available <a href="https://github.com/cdufresne81/nc-flash-wican-fw/releases/latest">here</a>.</div>
+            <div class="guard-note"><b>WiCAN adapter recovery — this device only, NOT the car's ECU:</b> a failed update cannot permanently brick this adapter. Hold the hardware button for 5&nbsp;seconds to start the Recovery&nbsp;AP, then re-upload firmware on this page. The NC&nbsp;Flash port&nbsp;35001 stays always on. Recovering the car's ECU after an interrupted flash is a separate procedure done from NC&nbsp;Flash on the PC — never from this page.</div>
             <form action="/upload/ota.bin" enctype="multipart/form-data" id="ota_form" method="post">
                 <table class="form-table">
                     <tbody>
@@ -1675,6 +1873,13 @@
                         <td>Designed By:</td>
                         <td>
                             <div id="made_by"><a href="https://www.meatpi.com/"><b>meatpi.com</b></a></div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Docs / Releases:</td>
+                        <td>
+                            <div><a href="https://github.com/cdufresne81/nc-flash-wican-fw">nc-flash-wican-fw</a></div>
+                            <div class="description-text">Adapter recovery: see System &gt; Firmware Update.</div>
                         </td>
                     </tr>
                 </tbody>

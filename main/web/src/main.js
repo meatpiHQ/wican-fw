@@ -1521,10 +1521,11 @@ function filesRender(data, keepSel) {
         body.innerHTML = '<tr><td colspan=6 style="text-align:center;color:#b91c1c;padding:8px">SD card not mounted</td></tr>';
         return;
     }
-    var cell = 'border:1px solid #e2e8f0;padding:6px';
+    // Cell styling lives in the #files_table CSS rules (so media queries can shrink padding);
+    // cells are created bare here.
     if (filesCwd) {
         var up = document.createElement('tr');
-        var uc = document.createElement('td'); uc.colSpan = 6; uc.style.cssText = cell;
+        var uc = document.createElement('td'); uc.colSpan = 6;
         var ua = document.createElement('a'); ua.href = '#'; ua.textContent = '.. (up one level)';
         ua.onclick = function(e) { e.preventDefault(); filesLoad(filesParent(filesCwd)); };
         uc.appendChild(ua); up.appendChild(uc); body.appendChild(up);
@@ -1555,7 +1556,7 @@ function filesRender(data, keepSel) {
         var rel = filesJoin(filesCwd, en.name);
         var tr = document.createElement('tr');
 
-        var selTd = document.createElement('td'); selTd.style.cssText = cell;
+        var selTd = document.createElement('td');
         if (!isDir) {
             var cb = document.createElement('input'); cb.type = 'checkbox';
             cb.className = 'files_sel_cb'; cb.value = rel; cb.checked = !!keep[rel];
@@ -1563,7 +1564,7 @@ function filesRender(data, keepSel) {
         }
         tr.appendChild(selTd);
 
-        var nameTd = document.createElement('td'); nameTd.style.cssText = cell;
+        var nameTd = document.createElement('td');
         if (isDir) {
             var a = document.createElement('a'); a.href = '#'; a.textContent = en.name + '/';
             a.onclick = function(e) { e.preventDefault(); filesLoad(rel); };
@@ -1573,16 +1574,16 @@ function filesRender(data, keepSel) {
         }
         tr.appendChild(nameTd);
 
-        var sizeTd = document.createElement('td'); sizeTd.style.cssText = cell;
+        var sizeTd = document.createElement('td');
         sizeTd.textContent = isDir ? '' : filesFmtSize(en.size); tr.appendChild(sizeTd);
 
-        var dateTd = document.createElement('td'); dateTd.style.cssText = cell;
+        var dateTd = document.createElement('td');
         dateTd.textContent = filesFmtDate(en.mtime); tr.appendChild(dateTd);
 
-        var typeTd = document.createElement('td'); typeTd.style.cssText = cell;
+        var typeTd = document.createElement('td');
         typeTd.textContent = isDir ? 'folder' : 'file'; tr.appendChild(typeTd);
 
-        var actTd = document.createElement('td'); actTd.style.cssText = cell;
+        var actTd = document.createElement('td');
         if (!isDir) {
             var dl = document.createElement('button'); dl.textContent = 'Download'; dl.style.marginRight = '4px';
             dl.onclick = function() { filesDownload(rel, en.name); };
@@ -1704,6 +1705,8 @@ function openTab(evt, tabName) {
     if (typeof csv_status_poll_stop === 'function') csv_status_poll_stop();
     document.getElementById(tabName).style.display = "block";
     evt.currentTarget.className += " active";
+    // Keep the active tab visible in the horizontal scroll strip on phones (no-op on desktop).
+    if (evt.currentTarget.scrollIntoView) evt.currentTarget.scrollIntoView({ inline: 'nearest', block: 'nearest' });
 
     if (tabName === 'automate') {
         try { ensureAutomateSubTabInitialized(); } catch(_) {}
@@ -3049,6 +3052,8 @@ function console_status_render(j, on) {
     if (file) file.textContent = live ? (j.file || '') : (armed ? 'waiting for data\u2026' : '\u00a0');
     btn.textContent = on ? 'Stop Trip' : 'Start Trip';
     btn.className = 'console-rec-btn' + (on ? ' stop' : '');
+    var markBtn = document.getElementById('console_mark_btn');
+    if (markBtn) markBtn.style.display = live ? '' : 'none';   // only offer Mark when a file is actually recording
     var rows = document.getElementById('console_rec_rows');
     var dropped = document.getElementById('console_rec_dropped');
     var cols = document.getElementById('console_rec_cols');
@@ -3061,6 +3066,7 @@ function console_status_render(j, on) {
         sdDot.className = 'chip-dot ' + (j.sd_mounted ? 'ok' : 'bad');
         if (sdChip) sdChip.textContent = j.sd_mounted ? 'mounted' : 'missing';
     }
+    consoleEventsTick();   // piggyback the event-card refresh on the csv_status poll (5s-throttled, tab-gated)
 }
 
 function consoleRecClick() {
@@ -3081,6 +3087,26 @@ function consoleRecClick() {
             csv_status_poll_start();
         })
         .catch(function(e) { csv_notify('Trip control failed: ' + e.message, 'red'); });
+}
+
+function consoleMarkClick() {
+    var btn = document.getElementById('console_mark_btn');
+    if (btn && btn.disabled) return;                 // debounce (also coalesces the one-shot)
+    fetch('/csv_logger?op=mark', { method: 'POST' })
+        .then(function(r) {
+            if (r.status === 409) throw new Error('no trip is recording');
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(function(j) {
+            csv_status_render(j);                    // reply is the live status JSON, like start/stop
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Marked ✓';
+                setTimeout(function() { btn.textContent = 'Mark Event'; btn.disabled = false; }, 1200);
+            }
+        })
+        .catch(function(e) { csv_notify('Mark failed: ' + e.message, 'red'); });
 }
 
 function consoleFmtSize(b) {
@@ -3131,7 +3157,16 @@ function consoleLoadChips() {
             var staUp = (d && d.sta_status === 'Connected');
             if (wifiDot) wifiDot.className = 'chip-dot ' + (staUp ? 'ok' : 'bad');
             if (wifiChip) wifiChip.textContent = staUp ? (d.sta_ip || 'connected') : 'AP only';
-            if (proto) proto.textContent = (d && d.protocol) || '\u2013';
+            // Friendly mode labels; keep the raw protocol string in the tooltip
+            // (runbooks reference the raw names) and fall back to it for unknowns.
+            // Compact chip labels; match the leading words of the protocol <select> options
+            // (homepage_full.html ~1495) so the two stay a single friendly-name source.
+            var MODE_NAMES = {poll_log:'Datalogger', fast_log:'Passive Logger', elm327:'OBD App', auto_pid:'AutoPID', slcan:'Bench SLCAN'};
+            if (proto) {
+                var p = (d && d.protocol) || '';
+                proto.textContent = MODE_NAMES[p] || p || '\u2013';
+                proto.title = p;
+            }
             if (fw) fw.textContent = (d && (d.git_version || d.fw_version)) || '\u2013';
         })
         .catch(function() {});
@@ -3140,6 +3175,86 @@ function consoleLoadChips() {
 function consoleRefresh() {
     consoleLoadTrips();
     consoleLoadChips();
+    window._consoleEvtLast = Date.now();
+    consoleLoadEvents();
+}
+
+function consoleEvtSeverity(code) {
+    if (code.indexOf('FAIL') !== -1) return 'er';
+    if (code === 'REAPER_RESUME' || code === 'ENGINE_STOP' ||
+        code === 'OTA_START' || code === 'DATALOG_PARK') return 'wn';
+    return 'ok';
+}
+
+function consoleFmtUptime(ms) {
+    var s = Math.floor(ms / 1000);
+    if (s < 60) return s + 's';
+    var m = Math.floor(s / 60); s %= 60;
+    if (m < 60) return m + 'm' + (s < 10 ? '0' : '') + s + 's';
+    var h = Math.floor(m / 60); m %= 60;
+    return h + 'h' + (m < 10 ? '0' : '') + m + 'm';
+}
+
+// Refresh the event card on the shared 1.5s csv_status cadence, throttled to >=5s
+// and only while the Console tab is actually visible (the logger tab runs the same poll).
+function consoleEventsTick() {
+    var tab = document.getElementById('console_tab');
+    if (!tab || tab.style.display !== 'block') return;
+    var now = Date.now();
+    if (window._consoleEvtLast && (now - window._consoleEvtLast) < 5000) return;
+    window._consoleEvtLast = now;
+    consoleLoadEvents();
+}
+
+function consoleLoadEvents() {
+    fetch('/event_log/ram')
+        .then(function(r) { return r.text(); })
+        .then(function(txt) {
+            var box = document.getElementById('console_events');
+            if (!box) return;
+            // The RAM event ring rarely changes between 5s ticks; skip the ~75-node rebuild
+            // when the raw payload is byte-identical to the last render.
+            if (txt === window._consoleEvtRaw) return;
+            window._consoleEvtRaw = txt;
+            var lines = txt.split('\n').filter(function(s) { return s.trim().length > 0; });
+            lines.reverse();                 // /event_log/ram streams oldest->newest
+            lines = lines.slice(0, 15);      // newest-first, cap 15
+            if (!lines.length) {
+                box.innerHTML = '<div class="console-empty">No events yet</div>';
+                return;
+            }
+            // Grammar (event_log.c:148): "<ts> up=<ms>ms <CODE %-12s> <detail>"
+            // where <ts> is "YYYY-MM-DD HH:MM:SS" (synced) or the literal "unsynced".
+            var re = /^(?:(\d{4})-\d{2}-\d{2} (\d{2}:\d{2}:\d{2})|unsynced) up=(\d+)ms (\S+)\s*(.*)$/;
+            box.textContent = '';
+            lines.forEach(function(line) {
+                var m = re.exec(line);
+                var t, code, detail;
+                if (m) {
+                    var synced = m[2] && parseInt(m[1], 10) >= 2000; // pre-2000/unsynced -> uptime
+                    t = synced ? m[2] : ('up ' + consoleFmtUptime(parseInt(m[3], 10)));
+                    code = m[4];
+                    detail = m[5];
+                } else {
+                    t = ''; code = 'EVENT'; detail = line;
+                }
+                var row = document.createElement('div');
+                row.className = 'console-evt';
+                var tEl = document.createElement('span');
+                tEl.className = 'e-t';
+                tEl.textContent = t;
+                tEl.title = line;            // full raw line (date + uptime) on hover
+                var tag = document.createElement('span');
+                tag.className = 'console-tag t-' + consoleEvtSeverity(code);
+                tag.textContent = code;
+                var d = document.createElement('span');
+                d.className = 'e-d';
+                d.textContent = detail;      // textContent everywhere: no HTML injection
+                row.appendChild(tEl); row.appendChild(tag); row.appendChild(d);
+                box.appendChild(row);
+            });
+        })
+        .catch(function() {});               // silent, same as consoleLoadTrips
 }
 
 document.getElementById("defaultOpen").click();
