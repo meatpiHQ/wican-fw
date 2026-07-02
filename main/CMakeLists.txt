@@ -62,7 +62,6 @@ set(requires
     wear_levelling
     esp_http_client
     spi_flash
-    https_client_mgr
     unity
     cmdline
     zorxx__multipart-parser

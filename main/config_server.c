@@ -88,7 +88,6 @@
 #include "poll_log.h"
 #include "event_log.h"
 #include "sd_filemgr.h"
-#include "https_client_mgr.h"
 #include "sdcard.h"
 #include "obd2_standard_pids.h"
 #include "wifi_mgr.h"
@@ -167,16 +166,15 @@ typedef struct {
     const unsigned char *data_end;
     bool load_from_fs;      
     const char *fs_path;
-	const char *download_uri;
 } file_lookup_t;
 
 static const file_lookup_t file_lookup[] = {
-	{"/lucide_icons.js", "application/javascript", lucide_icons_js_start, lucide_icons_js_end, false, NULL, NULL},
-	{"/main.js", "application/javascript", main_js_start, main_js_end, false, NULL, NULL},
-	{"/ws_client.js", "application/javascript", ws_client_js_start, ws_client_js_end, false, NULL, NULL},
-	{"/terminal.js", "application/javascript", terminal_js_start, terminal_js_end, false, NULL, NULL},
+	{"/lucide_icons.js", "application/javascript", lucide_icons_js_start, lucide_icons_js_end, false, NULL},
+	{"/main.js", "application/javascript", main_js_start, main_js_end, false, NULL},
+	{"/ws_client.js", "application/javascript", ws_client_js_start, ws_client_js_end, false, NULL},
+	{"/terminal.js", "application/javascript", terminal_js_start, terminal_js_end, false, NULL},
 	
-	{NULL, NULL, NULL, NULL, false, NULL, NULL} // Sentinel to mark end of array
+	{NULL, NULL, NULL, NULL, false, NULL} // Sentinel to mark end of array
 };
 
 typedef struct {
@@ -591,48 +589,6 @@ int32_t config_server_get_port(void)
 }
 
 // Create directories recursively if they don't exist
-static esp_err_t create_dir_recursively(const char* path) {
-    if (!path) return ESP_ERR_INVALID_ARG;
-    
-    char* temp_path = strdup(path);
-    if (!temp_path) return ESP_ERR_NO_MEM;
-    
-    // Make sure the path ends with a delimiter
-    size_t len = strlen(temp_path);
-    if (temp_path[len-1] != '/') {
-        char* new_path = realloc(temp_path, len + 2);
-        if (!new_path) {
-            free(temp_path);
-            return ESP_ERR_NO_MEM;
-        }
-        temp_path = new_path;
-        temp_path[len] = '/';
-        temp_path[len+1] = '\0';
-    }
-    
-    // Create parent directories
-    for (char* p = temp_path + 1; *p; p++) {
-        if (*p == '/') {
-            *p = '\0';
-            
-            // Try to create directory
-            if (mkdir(temp_path, 0755) != 0) {
-                // Ignore error if directory already exists
-                if (errno != EEXIST) {
-                    ESP_LOGE(TAG, "Failed to create directory %s: %s", temp_path, strerror(errno));
-                }
-            } else {
-                ESP_LOGI(TAG, "Created directory: %s", temp_path);
-            }
-            
-            *p = '/';
-        }
-    }
-    
-    free(temp_path);
-    return ESP_OK;
-}
-
 static esp_err_t wifi_scan_handler(httpd_req_t *req)
 {
     if(config_server_get_ble_config() == 1){
@@ -704,68 +660,7 @@ static esp_err_t get_uri_handler(httpd_req_t *req)
                         fclose(fp);
                         return ESP_OK;
                     }
-                } else if (file->download_uri != NULL) {
-					// File doesn't exist, try to download it
-					ESP_LOGI(TAG, "File not found on filesystem, attempting to download from: %s", file->download_uri);
-					
-					esp_err_t ret = https_client_mgr_init();
-					if (ret != ESP_OK) {
-						ESP_LOGE(TAG, "Failed to initialize HTTPS client: %s", esp_err_to_name(ret));
-						httpd_resp_send_500(req);
-						return ESP_FAIL;
-					}
-					
-					// Create directories recursively
-					char *path_copy = strdup(file->fs_path);
-					if (path_copy) {
-						char *last_slash = strrchr(path_copy, '/');
-						if (last_slash) {
-							*last_slash = '\0';
-							create_dir_recursively(path_copy);
-						}
-						free(path_copy);
-					}
-					
-					// Download the file
-					ret = https_client_mgr_download_file(
-						file->download_uri,
-						file->fs_path,
-						NULL  // No progress callback in this context
-					);
-					
-					https_client_mgr_deinit();
-					
-					if (ret == ESP_OK) {
-						ESP_LOGI(TAG, "File downloaded successfully: %s", file->fs_path);
-						
-						// Now serve the downloaded file
-						FILE *fp = fopen(file->fs_path, "r");
-						if (fp) {
-							httpd_resp_set_type(req, file->content_type);
-							char *buffer = malloc(chunk_size);
-							if (!buffer) {
-								fclose(fp);
-								httpd_resp_send_500(req);
-								return ESP_ERR_NO_MEM;
-							}
-							memset(buffer, 0, chunk_size);
-							
-							size_t bytes_read;
-							while ((bytes_read = fread(buffer, 1, chunk_size, fp)) > 0) {
-								httpd_resp_send_chunk(req, buffer, bytes_read);
-							}
-							httpd_resp_send_chunk(req, NULL, 0); // End response
-							free(buffer);
-							fclose(fp);
-							return ESP_OK;
-						} else {
-							ESP_LOGE(TAG, "Failed to open downloaded file: %s", file->fs_path);
-						}
-					} else {
-						ESP_LOGE(TAG, "Failed to download file: %s, error: %s", 
-								file->download_uri, esp_err_to_name(ret));
-					}
-				}				
+                }
             }
             
             // Fallback to serving from memory if filesystem loading failed or wasn't configured
