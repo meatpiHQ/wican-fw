@@ -601,11 +601,250 @@
             white-space: nowrap;
             min-width: 60px
         }
+
+        .console-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 1rem
+        }
+
+        .console-title {
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: var(--primary-dark)
+        }
+
+        .console-sub {
+            color: var(--gray-600);
+            font-size: .9rem
+        }
+
+        .console-chips {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap
+        }
+
+        .console-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--white);
+            border: 1px solid var(--gray-300);
+            border-radius: 999px;
+            padding: 6px 12px;
+            font-size: .8rem;
+            color: var(--gray-600);
+            box-shadow: var(--shadow-sm)
+        }
+
+        .console-chip b {
+            color: var(--gray-700)
+        }
+
+        .chip-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--gray-400)
+        }
+
+        .chip-dot.ok {
+            background: var(--success-color)
+        }
+
+        .chip-dot.bad {
+            background: var(--danger-color)
+        }
+
+        .console-grid {
+            display: grid;
+            grid-template-columns: 1.4fr 1fr;
+            gap: 16px;
+            align-items: start
+        }
+
+        @media(max-width:900px) {
+            .console-grid {
+                grid-template-columns: 1fr
+            }
+        }
+
+        .console-card {
+            background: var(--white);
+            border: 1px solid var(--gray-200);
+            border-radius: 8px;
+            box-shadow: var(--shadow-sm);
+            padding: 1.25rem
+        }
+
+        .console-card-title {
+            font-weight: 700;
+            color: var(--gray-700);
+            margin-bottom: .75rem
+        }
+
+        .console-card-title-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: .75rem
+        }
+
+        .console-card-title-row .console-card-title {
+            margin-bottom: 0
+        }
+
+        .console-recstate {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin: .25rem 0 1rem
+        }
+
+        .rec-dot {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: var(--gray-300);
+            flex: none;
+            box-shadow: inset 0 0 0 6px var(--white), 0 0 0 1px var(--gray-300)
+        }
+
+        .rec-dot.live {
+            background: var(--danger-color);
+            animation: console-pulse 1.3s ease-in-out infinite
+        }
+
+        .rec-dot.armed {
+            background: #f59e0b
+        }
+
+        @keyframes console-pulse {
+            50% {
+                opacity: .45
+            }
+        }
+
+        .rec-label {
+            font-weight: 800;
+            font-size: 1.15rem;
+            color: var(--gray-700);
+            text-transform: uppercase;
+            letter-spacing: .5px
+        }
+
+        .rec-file {
+            color: var(--primary-color);
+            font-size: .85rem;
+            font-weight: 600;
+            min-height: 1.1em
+        }
+
+        .console-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 1rem
+        }
+
+        .console-metric {
+            background: var(--gray-100);
+            border-radius: 8px;
+            padding: 10px 12px
+        }
+
+        .console-metric .v {
+            font-size: 1.3rem;
+            font-weight: 800;
+            color: var(--gray-700);
+            font-variant-numeric: tabular-nums
+        }
+
+        .console-metric .k {
+            font-size: .75rem;
+            color: var(--gray-600)
+        }
+
+        .console-rec-btn {
+            width: 100%;
+            padding: .9rem;
+            font-size: 1.05rem;
+            font-weight: 800;
+            border-radius: 8px
+        }
+
+        .console-rec-btn.stop {
+            background: var(--danger-color)
+        }
+
+        .console-rec-btn.stop:hover {
+            background: #b91c1c
+        }
+
+        .console-note {
+            color: var(--gray-600);
+            font-size: .75rem;
+            margin-top: .6rem
+        }
+
+        .console-mini-btn {
+            padding: .35rem .8rem;
+            font-size: .8rem
+        }
+
+        .console-trip {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border: 1px solid var(--gray-200);
+            border-radius: 8px;
+            padding: .6rem .75rem;
+            margin-bottom: .5rem
+        }
+
+        .console-trip .t-name {
+            font-weight: 600;
+            color: var(--gray-700);
+            font-size: .85rem;
+            overflow-wrap: anywhere
+        }
+
+        .console-trip .t-meta {
+            color: var(--gray-600);
+            font-size: .75rem
+        }
+
+        .console-trip .t-dl {
+            margin-left: auto;
+            white-space: nowrap;
+            padding: .35rem .8rem;
+            font-size: .8rem
+        }
+
+        .console-empty {
+            color: var(--gray-500);
+            font-size: .85rem;
+            padding: .5rem 0
+        }
+
+        .console-guard {
+            margin-top: 1rem;
+            background: var(--primary-light);
+            border: 1px dashed var(--primary-color);
+            border-radius: 8px;
+            padding: .7rem .9rem;
+            font-size: .78rem;
+            color: var(--primary-dark)
+        }
     </style>
 </head>
 
 <body onload="Load();">
-    <div class="sidebar"><embed class="logo" src="/logo.svg"><button onclick="openTab(event, 'status_view')" class="tablinks" id="defaultOpen"><span data-lucide="signal" style="width:18px;height:18px;margin-right:8px"></span> <b>Status</b></button><button onclick="openTab(event, 'wifi_settings')" class="tablinks"><span data-lucide="settings" style="width:18px;height:18px;margin-right:8px"></span> <b>Settings</b></button><button onclick="openTab(event, 'automate')" class="tablinks"><span data-lucide="zap" style="width:18px;height:18px;margin-right:8px"></span> <b>Automate</b></button><button onclick="openTab(event, 'power_saving_tab')" class="tablinks"><span data-lucide="battery" style="width:18px;height:18px;margin-right:8px"></span> <b>Power Saving</b></button><button onclick="openTab(event, 'logger')" class="tablinks"><span data-lucide="file-text" style="width:18px;height:18px;margin-right:8px"></span> <b>Logger Settings</b></button><button onclick="openTab(event, 'files_tab')" class="tablinks"><span data-lucide="folder" style="width:18px;height:18px;margin-right:8px"></span> <b>Files</b></button><button onclick="openTab(event, 'advanced_tab')" class="tablinks"><span data-lucide="settings" style="width:18px;height:18px;margin-right:8px"></span> <b>Advanced</b></button><button onclick="openTab(event, 'system_tab')" class="tablinks"><span data-lucide="cpu" style="width:18px;height:18px;margin-right:8px"></span> <b>System</b></button><button onclick="openTab(event, 'about_tab')" class="tablinks"><span data-lucide="info" style="width:18px;height:18px;margin-right:8px"></span> <b>About</b></button>
+    <div class="sidebar"><embed class="logo" src="/logo.svg"><button onclick="openTab(event, 'console_tab')" class="tablinks" id="defaultOpen"><span data-lucide="gauge" style="width:18px;height:18px;margin-right:8px"></span> <b>Console</b></button><button onclick="openTab(event, 'status_view')" class="tablinks"><span data-lucide="signal" style="width:18px;height:18px;margin-right:8px"></span> <b>Status</b></button><button onclick="openTab(event, 'wifi_settings')" class="tablinks"><span data-lucide="settings" style="width:18px;height:18px;margin-right:8px"></span> <b>Settings</b></button><button onclick="openTab(event, 'automate')" class="tablinks"><span data-lucide="zap" style="width:18px;height:18px;margin-right:8px"></span> <b>Automate</b></button><button onclick="openTab(event, 'power_saving_tab')" class="tablinks"><span data-lucide="battery" style="width:18px;height:18px;margin-right:8px"></span> <b>Power Saving</b></button><button onclick="openTab(event, 'logger')" class="tablinks"><span data-lucide="file-text" style="width:18px;height:18px;margin-right:8px"></span> <b>Logger Settings</b></button><button onclick="openTab(event, 'files_tab')" class="tablinks"><span data-lucide="folder" style="width:18px;height:18px;margin-right:8px"></span> <b>Files</b></button><button onclick="openTab(event, 'advanced_tab')" class="tablinks"><span data-lucide="settings" style="width:18px;height:18px;margin-right:8px"></span> <b>Advanced</b></button><button onclick="openTab(event, 'system_tab')" class="tablinks"><span data-lucide="cpu" style="width:18px;height:18px;margin-right:8px"></span> <b>System</b></button><button onclick="openTab(event, 'about_tab')" class="tablinks"><span data-lucide="info" style="width:18px;height:18px;margin-right:8px"></span> <b>About</b></button>
         <div style="color:#24478f;text-align:center;background:#faa3a3;border:1px solid #fde68a;border-radius:8px;margin:2rem 1rem 1rem;padding:.75rem;font-size:.95rem;display:none" id="firmware-update-notice"><span style="font-weight:600">New firmware available!</span><br><a href="https://github.com/cdufresne81/nc-flash-wican-fw/releases" id="firmware-update-link" style="color:#2563eb;text-decoration:underline" target="_blank">Download</a></div>
     </div>
     <div class="content">
@@ -627,6 +866,50 @@
                     </tr>
                 </tbody>
             </table>
+        </div>
+        <div class="tabcontent" id="console_tab">
+            <div class="console-head">
+                <div>
+                    <div class="console-title">Field Console</div>
+                    <div class="console-sub">One-tap trip datalogging — WiCAN PRO + NC Flash</div>
+                </div>
+                <div class="console-chips"><span class="console-chip"><span class="chip-dot" id="console_dot_sd"></span> SD <b id="console_chip_sd">–</b></span><span class="console-chip"><span class="chip-dot" id="console_dot_wifi"></span> Wi-Fi <b id="console_chip_wifi">–</b></span><span class="console-chip">Mode <b id="console_chip_proto">–</b></span><span class="console-chip">FW <b id="console_chip_fw">–</b></span></div>
+            </div>
+            <div class="console-grid">
+                <div class="console-card">
+                    <div class="console-card-title">Trip Recorder</div>
+                    <div class="console-recstate"><span class="rec-dot" id="console_rec_dot"></span>
+                        <div>
+                            <div class="rec-label" id="console_rec_state">idle</div>
+                            <div class="rec-file" id="console_rec_file">&nbsp;</div>
+                        </div>
+                    </div>
+                    <div class="console-metrics">
+                        <div class="console-metric">
+                            <div class="v" id="console_rec_rows">0</div>
+                            <div class="k">rows written</div>
+                        </div>
+                        <div class="console-metric">
+                            <div class="v" id="console_rec_dropped">0</div>
+                            <div class="k">rows dropped</div>
+                        </div>
+                        <div class="console-metric">
+                            <div class="v" id="console_rec_cols">0</div>
+                            <div class="k">channels</div>
+                        </div>
+                    </div><button class="console-rec-btn" id="console_rec_btn" onclick="consoleRecClick()">Start Trip</button>
+                    <div class="console-note">Records the configured PID list to the SD card as CSV. Engine-on gating and grid rate follow Logger Settings.</div>
+                </div>
+                <div class="console-card">
+                    <div class="console-card-title-row">
+                        <div class="console-card-title">Recent Trips</div><button class="console-mini-btn" onclick="consoleRefresh()">Refresh</button>
+                    </div>
+                    <div id="console_trips">
+                        <div class="console-empty">No trips yet</div>
+                    </div>
+                </div>
+            </div>
+            <div class="console-guard"><b>Un-brick path (permanent):</b> Recovery AP via 5-second button hold — OTA under System &gt; Firmware Update — NC&nbsp;Flash port 35001 always on.</div>
         </div>
         <div class="tabcontent" id="status_view">
             <div class="section-title">Status</div>

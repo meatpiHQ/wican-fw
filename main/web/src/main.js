@@ -1710,6 +1710,9 @@ function openTab(evt, tabName) {
         filesLoad('');
     } else if (tabName === 'logger') {
         csv_status_poll_start();
+    } else if (tabName === 'console_tab') {
+        csv_status_poll_start();
+        consoleRefresh();
     }
 }
 
@@ -2791,6 +2794,7 @@ function csv_status_render(j) {
     // start/stop). "on" => button shows Stop; otherwise Start.
     var on = !!(j && (j.manual_mode === 'on' || j.session_active));
     csv_log_button_en(on ? 0 : 1);
+    console_status_render(j, on);
     var line = document.getElementById('csv_status_line');
     if (!line) return;
     if (j && j.session_active) {
@@ -2968,6 +2972,114 @@ function selectWifiNetwork() {
         submit_enable(); // Trigger form validation
         enableAutoStoreButton(); // Enable store button if it exists
     }
+}
+
+
+// ---- Field Console (issue #5): one-tap trip landing surface ----
+function console_status_render(j, on) {
+    var dot = document.getElementById('console_rec_dot');
+    var state = document.getElementById('console_rec_state');
+    var file = document.getElementById('console_rec_file');
+    var btn = document.getElementById('console_rec_btn');
+    if (!dot || !state || !btn) return;
+    var live = !!(j && j.session_active);
+    var armed = !!(j && j.manual_mode === 'on' && !live);
+    dot.className = 'rec-dot' + (live ? ' live' : (armed ? ' armed' : ''));
+    state.textContent = live ? 'Recording' : (armed ? 'Armed' : 'Idle');
+    if (file) file.textContent = live ? (j.file || '') : (armed ? 'waiting for data\u2026' : '\u00a0');
+    btn.textContent = on ? 'Stop Trip' : 'Start Trip';
+    btn.className = 'console-rec-btn' + (on ? ' stop' : '');
+    var rows = document.getElementById('console_rec_rows');
+    var dropped = document.getElementById('console_rec_dropped');
+    var cols = document.getElementById('console_rec_cols');
+    if (rows) rows.textContent = (j && j.rows_written) || 0;
+    if (dropped) dropped.textContent = (j && j.rows_dropped) || 0;
+    if (cols) cols.textContent = (j && j.columns) || 0;
+    var sdDot = document.getElementById('console_dot_sd');
+    var sdChip = document.getElementById('console_chip_sd');
+    if (sdDot && j && typeof j.sd_mounted === 'boolean') {
+        sdDot.className = 'chip-dot ' + (j.sd_mounted ? 'ok' : 'bad');
+        if (sdChip) sdChip.textContent = j.sd_mounted ? 'mounted' : 'missing';
+    }
+}
+
+function consoleRecClick() {
+    var btn = document.getElementById('console_rec_btn');
+    if (!btn) return;
+    var op = btn.classList.contains('stop') ? 'stop' : 'start';
+    fetch('/csv_logger?op=' + op, { method: 'POST' })
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function(j) {
+            csv_status_render(j);
+            if (op === 'start') {
+                csv_notify(j.session_active ? 'Trip recording started' : 'Trip armed \u2014 waiting for data',
+                           j.session_active ? 'green' : 'orange');
+            } else {
+                csv_notify('Trip stopped', 'blue');
+                setTimeout(consoleLoadTrips, 800);
+            }
+            csv_status_poll_start();
+        })
+        .catch(function(e) { csv_notify('Trip control failed: ' + e.message, 'red'); });
+}
+
+function consoleFmtSize(b) {
+    b = Number(b) || 0;
+    if (b >= 1048576) return (b / 1048576).toFixed(1) + ' MB';
+    if (b >= 1024) return (b / 1024).toFixed(0) + ' KB';
+    return b + ' B';
+}
+
+function consoleFmtDate(mtime) {
+    if (!mtime) return '';
+    var d = new Date(mtime * 1000);
+    function p(n) { return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+function consoleLoadTrips() {
+    fetch('/csv_list')
+        .then(function(r) { return r.json(); })
+        .then(function(j) {
+            var box = document.getElementById('console_trips');
+            if (!box) return;
+            var files = (j && Array.isArray(j.files)) ? j.files.slice(0, 12) : [];
+            if (!files.length) {
+                box.innerHTML = '<div class="console-empty">No trips yet \u2014 press Start Trip to record one.</div>';
+                return;
+            }
+            box.innerHTML = files.map(function(f) {
+                var name = String(f.name || '');
+                var meta = consoleFmtSize(f.size) + (f.mtime ? ' \u2022 ' + consoleFmtDate(f.mtime) : '');
+                return '<div class="console-trip"><div><div class="t-name">' + name + '</div>' +
+                       '<div class="t-meta">' + meta + '</div></div>' +
+                       '<a class="t-dl" href="/download_csv?file=' + encodeURIComponent(name) + '" download>' +
+                       '<button class="console-mini-btn" type="button">Download</button></a></div>';
+            }).join('');
+        })
+        .catch(function() {});
+}
+
+function consoleLoadChips() {
+    fetch('/check_status')
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            var wifiDot = document.getElementById('console_dot_wifi');
+            var wifiChip = document.getElementById('console_chip_wifi');
+            var proto = document.getElementById('console_chip_proto');
+            var fw = document.getElementById('console_chip_fw');
+            var staUp = (d && d.sta_status === 'Connected');
+            if (wifiDot) wifiDot.className = 'chip-dot ' + (staUp ? 'ok' : 'bad');
+            if (wifiChip) wifiChip.textContent = staUp ? (d.sta_ip || 'connected') : 'AP only';
+            if (proto) proto.textContent = (d && d.protocol) || '\u2013';
+            if (fw) fw.textContent = (d && (d.git_version || d.fw_version)) || '\u2013';
+        })
+        .catch(function() {});
+}
+
+function consoleRefresh() {
+    consoleLoadTrips();
+    consoleLoadChips();
 }
 
 document.getElementById("defaultOpen").click();

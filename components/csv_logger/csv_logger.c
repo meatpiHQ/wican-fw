@@ -827,6 +827,27 @@ static esp_err_t csv_status_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+#define CSV_LIST_MAX_ENTRIES 256
+typedef struct
+{
+    char name[96];
+    long long size;
+    long long mtime;
+} csv_list_ent_t;
+
+static int csv_list_cmp_newest_first(const void *a, const void *b)
+{
+    const csv_list_ent_t *ea = (const csv_list_ent_t *)a;
+    const csv_list_ent_t *eb = (const csv_list_ent_t *)b;
+    if (ea->mtime != eb->mtime)
+    {
+        return (eb->mtime > ea->mtime) ? 1 : -1;
+    }
+    // mtime tie (or FAT clock unset): fall back to name descending -- our
+    // timestamped names sort chronologically.
+    return strcmp(eb->name, ea->name);
+}
+
 static esp_err_t csv_list_handler(httpd_req_t *req)
 {
     cJSON *root = cJSON_CreateObject();
@@ -839,9 +860,14 @@ static esp_err_t csv_list_handler(httpd_req_t *req)
     cJSON *files = cJSON_AddArrayToObject(root, "files");
 
     // Missing dir (nothing logged yet) is not an error: report an empty list.
+    // Trips are listed NEWEST-FIRST (issue #5 field console): collect name/size/mtime,
+    // then sort by mtime descending before emitting. Bounded scratch in PSRAM.
     DIR *dir = opendir(CSV_LOGGER_DIR);
     if (dir != NULL)
     {
+        csv_list_ent_t *ents = heap_caps_calloc(CSV_LIST_MAX_ENTRIES, sizeof(csv_list_ent_t),
+                                                MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        size_t count = 0;
         struct dirent *entry;
         char path[320];
         struct stat st;
@@ -852,16 +878,45 @@ static esp_err_t csv_list_handler(httpd_req_t *req)
             {
                 continue;
             }
-            cJSON *item = cJSON_CreateObject();
-            cJSON_AddStringToObject(item, "name", entry->d_name);
             snprintf(path, sizeof(path), "%s/%s", CSV_LOGGER_DIR, entry->d_name);
+            long long fsize = 0;
+            long long fmtime = 0;
             if (stat(path, &st) == 0)
             {
-                cJSON_AddNumberToObject(item, "size", (double)st.st_size);
+                fsize = (long long)st.st_size;
+                fmtime = (long long)st.st_mtime;
             }
-            cJSON_AddItemToArray(files, item);
+            if (ents != NULL && count < CSV_LIST_MAX_ENTRIES)
+            {
+                strlcpy(ents[count].name, entry->d_name, sizeof(ents[count].name));
+                ents[count].size = fsize;
+                ents[count].mtime = fmtime;
+                count++;
+            }
+            else
+            {
+                // Fallback (no scratch memory / overflow): emit unsorted so nothing is lost.
+                cJSON *item = cJSON_CreateObject();
+                cJSON_AddStringToObject(item, "name", entry->d_name);
+                cJSON_AddNumberToObject(item, "size", (double)fsize);
+                cJSON_AddNumberToObject(item, "mtime", (double)fmtime);
+                cJSON_AddItemToArray(files, item);
+            }
         }
         closedir(dir);
+        if (ents != NULL)
+        {
+            qsort(ents, count, sizeof(csv_list_ent_t), csv_list_cmp_newest_first);
+            for (size_t i = 0; i < count; i++)
+            {
+                cJSON *item = cJSON_CreateObject();
+                cJSON_AddStringToObject(item, "name", ents[i].name);
+                cJSON_AddNumberToObject(item, "size", (double)ents[i].size);
+                cJSON_AddNumberToObject(item, "mtime", (double)ents[i].mtime);
+                cJSON_AddItemToArray(files, item);
+            }
+            free(ents);
+        }
     }
 
     char *out = cJSON_PrintUnformatted(root);
