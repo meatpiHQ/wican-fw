@@ -61,7 +61,6 @@
 #include "elm327.h"
 #include <ws_router.h>
 #include "mqtt.h"
-#include "ftp.h"
 #include "autopid.h"
 #include "csv_logger.h"
 #include "fast_log.h"
@@ -123,8 +122,6 @@ static xdev_buffer ucBLE_TX_Buffer;
 
 static uint8_t protocol = OBD_ELM327;
 
-int FTP_TASK_FINISH_BIT = BIT2;
-EventGroupHandle_t xEventTask;
 static uint8_t mqtt_elm327_log_en = 0;
 static uint8_t derived_mac_addr[6] = {0};
 static uint8_t uid[16];
@@ -1314,13 +1311,6 @@ void app_main(void)
 	config_mode_init();
 	wc_mdns_init((char*)uid, hardware_version, firmware_version);
 	
-	// xEventTask = xEventGroupCreate();
-	// xTaskCreate(ftp_task, "FTP", 1024*6, NULL, 2, NULL);
-	// xEventGroupWaitBits( xEventTask,
-	// FTP_TASK_FINISH_BIT, /* The bits within the event group to wait for. */
-	// pdTRUE, /* BIT_0 should be cleared before returning. */
-	// pdFALSE, /* Don't wait for both bits, either bit will do. */
-	// portMAX_DELAY);/* Wait forever. */ 
 	if(!config_server_is_debug_enabled())
 	{
 		esp_log_level_set("*", ESP_LOG_NONE);

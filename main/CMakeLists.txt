@@ -88,7 +88,6 @@ idf_component_register(
         "console.c"
         "rtcm.c"
         "usb_host.cpp"
-        "ftp.c"
         "elm327.c"
         "obd.c"
         "wusb3801.c"
