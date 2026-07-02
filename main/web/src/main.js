@@ -3597,7 +3597,6 @@ async function postConfig() {
     obj["csv_grid_hz"] = document.getElementById("csv_grid_hz").value;
     obj["csv_require_engine"] = document.getElementById("csv_require_engine").value;
     obj["imu_threshold"] = document.getElementById("imu_threshold").value;
-    obj["elm327_udp_log"] = document.getElementById("elm327_udp_log").value;
 
     // Collect fallback networks (max 5)
     try {
@@ -4153,12 +4152,6 @@ xhttp.onload = async function() {
         document.getElementById("imu_threshold").value = obj.imu_threshold || "8";
         document.getElementById("imu_threshold_value").textContent = ((obj.imu_threshold || 8) * 3.9).toFixed(1) + ' mg';
 
-        // Load ELM327 UDP log toggle (default disabled)
-        const elmUdp = document.getElementById("elm327_udp_log");
-        if (elmUdp) {
-            elmUdp.value = obj.elm327_udp_log || "disable";
-        }
-        toggleElm327UdpLogWarning();
         
         const blePowerVal = ("ble_power" in obj) ? obj.ble_power : 9;
         document.getElementById("ble_power").value = blePowerVal;
@@ -4356,13 +4349,6 @@ xhttp.onload = async function() {
     if (typeof lucide !== 'undefined' && lucide.createIcons) {
         lucide.createIcons();
     }
-}
-
-function toggleElm327UdpLogWarning() {
-    const sel = document.getElementById("elm327_udp_log");
-    const div = document.getElementById("elm327_udp_log_warning_div");
-    if (!sel || !div) return;
-    div.style.display = (sel.value === "enable") ? "block" : "none";
 }
 
 function monitor_add_line(id, type, len, data, time) {

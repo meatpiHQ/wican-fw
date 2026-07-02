@@ -1547,21 +1547,8 @@
                         <td>Motion Threshold:</td>
                         <td class="slider-container"><input oninput="document.getElementById('imu_threshold_value').textContent = (this.value * 3.9).toFixed(1) + ' mg';submit_enable();" id="imu_threshold" max="32" min="1" name="imu_threshold" onchange="submit_enable();" step="1" type="range" value="8"> <span id="imu_threshold_value">31.2 mg</span></td>
                     </tr>
-                    <tr>
-                        <td>ELM327 UDP Log:</td>
-                        <td><select id="elm327_udp_log" name="elm327_udp_log" onchange="toggleElm327UdpLogWarning();submit_enable();">
-                                <option selected="" value="disable">Disable</option>
-                                <option value="enable">Enable</option>
-                            </select></td>
-                    </tr>
                 </tbody>
             </table>
-            <div style="margin:8px 0;display:none" id="elm327_udp_log_warning_div">
-                <div style="background:linear-gradient(135deg,#fef3c7 0%,#fde68a 100%);border:1px solid #f59e0b;border-radius:8px;padding:12px;box-shadow:0 2px 4px #0000001a">
-                    <div style="align-items:center;margin-bottom:6px;display:flex"><span data-lucide="alert-triangle" style="margin-right:8px;font-size:16px"></span><strong style="color:#92400e;font-size:14px">ELM327 UDP Log Enabled</strong></div>
-                    <div style="color:#78350f;font-size:13px;line-height:1.4">UDP logging can impact performance. Turn it off when not needed.</div>
-                </div>
-            </div>
         </div>
         <div class="tabcontent" id="system_tab">
             <div class="section-title">System</div>
