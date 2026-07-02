@@ -72,7 +72,6 @@ set(requires
     zorxx__multipart-parser
     debug_logs
     cert_manager
-    vpn_manager
     autopid
     csv_logger
     fast_log

@@ -95,7 +95,6 @@
 #include "wifi_mgr.h"
 #include "dev_status.h"
 #include "cert_manager.h"
-#include "vpn_manager.h"
 #include "dev_status.h"
 #include "esp_heap_caps.h"
 #include "autopid_http.h"
@@ -1851,7 +1850,7 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	time(&now);
 	cJSON_AddNumberToObject(root, "timestamp", (double)now);
 
-	// Time sync status (used by VPN gating + DNS resolution stability)
+	// Time sync status (DNS resolution stability)
 	cJSON_AddBoolToObject(root, "time_synced", dev_status_is_time_synced());
 
 	// STA DNS servers
@@ -1895,50 +1894,6 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	else
 	{
 		cJSON_AddStringToObject(root, "ecu_status", "offline");
-	}
-
-	// Add VPN status information
-	vpn_status_t vpn_status = vpn_manager_get_status();
-	const char *vpn_status_str;
-	switch (vpn_status) 
-	{
-		case VPN_STATUS_DISABLED:
-			vpn_status_str = "disabled";
-			break;
-		case VPN_STATUS_DISCONNECTED:
-			vpn_status_str = "disconnected";
-			break;
-		case VPN_STATUS_CONNECTING:
-			vpn_status_str = "connecting";
-			break;
-		case VPN_STATUS_CONNECTED:
-			vpn_status_str = "connected";
-			break;
-		case VPN_STATUS_ERROR:
-			vpn_status_str = "error";
-			break;
-		default:
-			vpn_status_str = "unknown";
-			break;
-	}
-	cJSON_AddStringToObject(root, "vpn_status", vpn_status_str);
-	
-	// Add VPN IP if connected
-	if (vpn_status == VPN_STATUS_CONNECTED) 
-	{
-		char vpn_ip_str[20] = {0};
-		if (vpn_manager_get_ip_address(vpn_ip_str, sizeof(vpn_ip_str)) == ESP_OK) 
-		{
-			cJSON_AddStringToObject(root, "vpn_ip", vpn_ip_str);
-		}
-		else
-		{
-			cJSON_AddStringToObject(root, "vpn_ip", "");
-		}
-	}
-	else
-	{
-		cJSON_AddStringToObject(root, "vpn_ip", "");
 	}
 
     char *resp_str = cJSON_PrintUnformatted(root);
@@ -3946,8 +3901,6 @@ static httpd_handle_t config_server_init(void)
 		filesystem_init();
 		// Initialize certificate manager storage (creates /certs if missing)
 		cert_manager_init();
-		// Initialize VPN manager
-		vpn_manager_init();
 		// Handle config.json
 		FILE* f = fopen(FS_MOUNT_POINT"/config.json", "r");
 		if (f == NULL)
@@ -4040,8 +3993,6 @@ static httpd_handle_t config_server_init(void)
 		register_server_uris();
 		// Register certificate manager endpoints (before wildcard catch-all so they match first)
 		cert_manager_register_handlers(server);
-		// Register VPN manager endpoints
-		vpn_manager_register_handlers(server);
 		autopid_register_handlers(server);
 		restart_tracker_register_handlers(server);
 		// Now register catch-all wildcard
@@ -4067,7 +4018,6 @@ void config_server_restart(void)
         ESP_LOGI(TAG, "Registering URI handlers");
 		register_server_uris();
 		cert_manager_register_handlers(server);
-		vpn_manager_register_handlers(server);
 		autopid_register_handlers(server);
 		restart_tracker_register_handlers(server);
 		httpd_register_uri_handler(server, &get_uri_common);

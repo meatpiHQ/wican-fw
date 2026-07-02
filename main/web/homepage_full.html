@@ -605,7 +605,7 @@
 </head>
 
 <body onload="Load();">
-    <div class="sidebar"><embed class="logo" src="/logo.svg"><button onclick="openTab(event, 'status_view')" class="tablinks" id="defaultOpen"><span data-lucide="signal" style="width:18px;height:18px;margin-right:8px"></span> <b>Status</b></button><button onclick="openTab(event, 'wifi_settings')" class="tablinks"><span data-lucide="settings" style="width:18px;height:18px;margin-right:8px"></span> <b>Settings</b></button><button onclick="openTab(event, 'automate')" class="tablinks"><span data-lucide="zap" style="width:18px;height:18px;margin-right:8px"></span> <b>Automate</b></button><button onclick="openTab(event, 'power_saving_tab')" class="tablinks"><span data-lucide="battery" style="width:18px;height:18px;margin-right:8px"></span> <b>Power Saving</b></button><button onclick="openTab(event, 'logger')" class="tablinks"><span data-lucide="file-text" style="width:18px;height:18px;margin-right:8px"></span> <b>Logger Settings</b></button><button onclick="openTab(event, 'files_tab')" class="tablinks"><span data-lucide="folder" style="width:18px;height:18px;margin-right:8px"></span> <b>Files</b></button><button onclick="openTab(event, 'dashboard_tab')" class="tablinks"><span data-lucide="bar-chart-3" style="width:18px;height:18px;margin-right:8px"></span> <b>Dashboard</b></button><button onclick="openTab(event, 'monitor')" class="tablinks"><span data-lucide="monitor" style="width:18px;height:18px;margin-right:8px"></span> <b>CAN Monitor</b></button><button onclick="openTab(event, 'terminal_tab')" class="tablinks"><span data-lucide="terminal" style="width:18px;height:18px;margin-right:8px"></span> <b>Terminal</b></button><button onclick="openTab(event, 'advanced_tab')" class="tablinks"><span data-lucide="settings" style="width:18px;height:18px;margin-right:8px"></span> <b>Advanced</b></button><button onclick="openTab(event, 'system_tab')" class="tablinks"><span data-lucide="cpu" style="width:18px;height:18px;margin-right:8px"></span> <b>System</b></button><button onclick="openTab(event, 'vpn_tab')" class="tablinks"><span data-lucide="shield" style="width:18px;height:18px;margin-right:8px"></span> <b>VPN</b></button><button onclick="openTab(event, 'about_tab')" class="tablinks"><span data-lucide="info" style="width:18px;height:18px;margin-right:8px"></span> <b>About</b></button>
+    <div class="sidebar"><embed class="logo" src="/logo.svg"><button onclick="openTab(event, 'status_view')" class="tablinks" id="defaultOpen"><span data-lucide="signal" style="width:18px;height:18px;margin-right:8px"></span> <b>Status</b></button><button onclick="openTab(event, 'wifi_settings')" class="tablinks"><span data-lucide="settings" style="width:18px;height:18px;margin-right:8px"></span> <b>Settings</b></button><button onclick="openTab(event, 'automate')" class="tablinks"><span data-lucide="zap" style="width:18px;height:18px;margin-right:8px"></span> <b>Automate</b></button><button onclick="openTab(event, 'power_saving_tab')" class="tablinks"><span data-lucide="battery" style="width:18px;height:18px;margin-right:8px"></span> <b>Power Saving</b></button><button onclick="openTab(event, 'logger')" class="tablinks"><span data-lucide="file-text" style="width:18px;height:18px;margin-right:8px"></span> <b>Logger Settings</b></button><button onclick="openTab(event, 'files_tab')" class="tablinks"><span data-lucide="folder" style="width:18px;height:18px;margin-right:8px"></span> <b>Files</b></button><button onclick="openTab(event, 'dashboard_tab')" class="tablinks"><span data-lucide="bar-chart-3" style="width:18px;height:18px;margin-right:8px"></span> <b>Dashboard</b></button><button onclick="openTab(event, 'monitor')" class="tablinks"><span data-lucide="monitor" style="width:18px;height:18px;margin-right:8px"></span> <b>CAN Monitor</b></button><button onclick="openTab(event, 'terminal_tab')" class="tablinks"><span data-lucide="terminal" style="width:18px;height:18px;margin-right:8px"></span> <b>Terminal</b></button><button onclick="openTab(event, 'advanced_tab')" class="tablinks"><span data-lucide="settings" style="width:18px;height:18px;margin-right:8px"></span> <b>Advanced</b></button><button onclick="openTab(event, 'system_tab')" class="tablinks"><span data-lucide="cpu" style="width:18px;height:18px;margin-right:8px"></span> <b>System</b></button><button onclick="openTab(event, 'about_tab')" class="tablinks"><span data-lucide="info" style="width:18px;height:18px;margin-right:8px"></span> <b>About</b></button>
         <div style="color:#24478f;text-align:center;background:#faa3a3;border:1px solid #fde68a;border-radius:8px;margin:2rem 1rem 1rem;padding:.75rem;font-size:.95rem;display:none" id="firmware-update-notice"><span style="font-weight:600">New firmware available!</span><br><a href="https://github.com/cdufresne81/nc-flash-wican-fw/releases" id="firmware-update-link" style="color:#2563eb;text-decoration:underline" target="_blank">Download</a></div>
     </div>
     <div class="content">
@@ -714,12 +714,6 @@
                         <td>Battery Voltage:</td>
                         <td>
                             <div id="batt_voltage">12.8V&nbsp;</div>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>VPN Status:</td>
-                        <td>
-                            <div id="vpn_status">Disconnected&nbsp;</div>
                         </td>
                     </tr>
                     <tr>
@@ -1682,134 +1676,6 @@
                 </table>
             </div>
             <div style="color:#666;margin-top:.75rem;font-size:.7rem">Single-cert uploads appear as the read-only 'default' set.</div>
-        </div>
-        <div class="tabcontent" id="vpn_tab">
-            <div class="section-title" style="justify-content:space-between;align-items:center;gap:12px;display:flex"><span>VPN Settings</span><span class="status-indicator status-disconnected" title="VPN status" id="vpn_status_badge">Disconnected</span></div>
-            <table class="form-table">
-                <tbody>
-                    <tr>
-                        <td>VPN:</td>
-                        <td><select onchange="toggleVpnConfig(); submit_enable();" id="vpn_enabled" name="vpn_enabled">
-                                <option value="disable">Disabled</option>
-                                <option value="wireguard">WireGuard</option>
-                            </select></td>
-                    </tr>
-                </tbody>
-            </table>
-            <div id="wireguard_config" style="display:none">
-                <div class="divider"></div>
-                <div class="section-title">WireGuard Configuration</div>
-                <div style="color:#2563eb;border-bottom:2px solid #93c5fd;align-items:center;gap:8px;padding-bottom:.25rem;font-size:1.25rem;display:flex" class="section-title"><span data-lucide="settings" style="width:20px;height:20px"></span> Interface</div>
-                <table class="form-table">
-                    <tbody>
-                        <tr>
-                            <td>Private Key:</td>
-                            <td>
-                                <div style="align-items:center;gap:8px;display:flex"><input placeholder="Loaded from config file" id="wg_private_key" name="wg_private_key" readonly="" style="flex:1"></div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>Public Key:</td>
-                            <td><input placeholder="Loaded from config file" id="wg_public_key" name="wg_public_key" readonly=""></td>
-                        </tr>
-                        <tr>
-                            <td>Address:</td>
-                            <td><input placeholder="e.g., 10.2.2.3/32" id="wg_address" name="wg_address" oninput="submit_enable();"></td>
-                        </tr>
-                    </tbody>
-                </table>
-                <div style="color:#2563eb;border-bottom:2px solid #93c5fd;align-items:center;gap:8px;padding-bottom:.25rem;font-size:1.25rem;display:flex" class="section-title"><span data-lucide="users" style="width:20px;height:20px"></span> Peer</div>
-                <table class="form-table">
-                    <tbody>
-                        <tr>
-                            <td>Public Key:</td>
-                            <td><input placeholder="Server's public key" id="wg_peer_public_key" name="wg_peer_public_key" oninput="submit_enable();"></td>
-                        </tr>
-                        <tr>
-                            <td>Preshared Key:</td>
-                            <td><input placeholder="Optional (wg-easy often uses this)" id="wg_preshared_key" name="wg_preshared_key" oninput="submit_enable();"></td>
-                        </tr>
-                        <tr>
-                            <td>Allowed IPs:</td>
-                            <td><input placeholder="e.g., 0.0.0.0/0" id="wg_allowed_ips" name="wg_allowed_ips" oninput="submit_enable();"></td>
-                        </tr>
-                        <tr>
-                            <td>Endpoint:</td>
-                            <td><input placeholder="e.g., 111.111.11.11:51820" id="wg_endpoint" name="wg_endpoint" oninput="submit_enable();"></td>
-                        </tr>
-                        <tr>
-                            <td>Persistent Keepalive:</td>
-                            <td><input id="wg_persistent_keepalive" max="65535" min="0" name="wg_persistent_keepalive" oninput="submit_enable();" placeholder="25" type="number"></td>
-                        </tr>
-                    </tbody>
-                </table>
-                <div class="divider"></div>
-                <div class="section-title">Configuration File</div>
-                <table class="form-table">
-                    <tbody>
-                        <tr>
-                            <td>Load Config File:</td>
-                            <td><input accept=".conf" id="wg_config_file" onchange="loadWireGuardConfig()" type="file"></td>
-                        </tr>
-                        <tr>
-                            <td>Test Connection:</td>
-                            <td><button id="test_vpn_button" onclick="testVpnConnection()" type="button">Test Connection</button></td>
-                        </tr>
-                    </tbody>
-                </table>
-                <div class="divider"></div>
-                <div class="section-title">VPN Debug</div>
-                <table class="form-table">
-                    <tbody>
-                        <tr>
-                            <td>Actions:</td>
-                            <td style="flex-wrap:wrap;align-items:center;gap:8px;display:flex"><button id="vpn_dbg_refresh_btn" onclick="vpnDebugRefresh()" type="button">Refresh</button> <button id="vpn_dbg_resolve_ep_btn" onclick="vpnDebugResolveEndpoint()" type="button">Resolve Endpoint</button> <button id="vpn_dbg_resolve_ntp_btn" onclick="vpnDebugResolveNtp()" type="button">Resolve NTP</button></td>
-                        </tr>
-                        <tr>
-                            <td>Gating:</td>
-                            <td>
-                                <div id="vpn_dbg_gating">-</div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>VPN Status:</td>
-                            <td>
-                                <div id="vpn_dbg_status">-</div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>Station (STA):</td>
-                            <td>
-                                <div id="vpn_dbg_sta">-</div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>DNS Servers:</td>
-                            <td>
-                                <div id="vpn_dbg_dns">-</div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>Endpoint Resolve:</td>
-                            <td>
-                                <div id="vpn_dbg_resolve">-</div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>NTP Resolve:</td>
-                            <td>
-                                <div id="vpn_dbg_ntp_resolve">-</div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>Raw:</td>
-                            <td>
-                                <pre style="white-space:pre-wrap;word-break:break-word;background:var(--gray-100);border:1px solid var(--gray-300);border-radius:6px;max-height:220px;margin:0;padding:10px;font-weight:400;overflow:auto" id="vpn_dbg_raw">-</pre>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
         </div>
         <div class="tabcontent" id="about_tab">
             <div class="section-title">About</div>

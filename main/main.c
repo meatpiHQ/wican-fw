@@ -85,7 +85,6 @@
 #include "debug_logs.h"
 #include "restart_tracker.h"
 #include "sync_sys_time.h"
-#include "vpn_manager.h"
 #include "config_mode.h"
 #include "driver/rtc_io.h"
 
@@ -1308,7 +1307,6 @@ void app_main(void)
 	// Initialize time synchronization task
 	sync_sys_time_init();
 
-	vpn_manager_set_enabled(1);
 	if(internal_buf != NULL)
 	{
 		free(internal_buf);
@@ -1358,10 +1356,6 @@ void app_main(void)
 	// esp_log_level_set("TRANSPORT_BASE", ESP_LOG_VERBOSE);
 	// esp_log_level_set("SYNC_SYS_TIME", ESP_LOG_INFO);
 	// esp_log_level_set("MQTT", ESP_LOG_INFO);
-	// esp_log_level_set("VPN_HTTP", ESP_LOG_INFO);
-	// esp_log_level_set("VPN_MANAGER", ESP_LOG_INFO);
-	// esp_log_level_set("VPN_WG", ESP_LOG_INFO);
-	// esp_log_level_set("VPN_CFG", ESP_LOG_INFO);
 	// esp_log_level_set("WiFi_Manager", ESP_LOG_INFO);
 
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100

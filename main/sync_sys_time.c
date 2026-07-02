@@ -131,7 +131,7 @@ static void sync_sys_time(void *pvParameters)
                 ESP_LOGI(TAG, "Time sync successful: %04d-%02d-%02d %02d:%02d:%02d UTC",
                          timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
                          timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
-                // Publish system time synced for other subsystems (e.g., VPN)
+                // Publish system time synced for other subsystems
                 dev_status_set_time_synced();
                 
                 // Sync RTCM with the newly acquired time
