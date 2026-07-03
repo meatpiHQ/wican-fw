@@ -33,6 +33,7 @@ static const char *TAG = "SD_FILEMGR";
 
 #define SDFM_ROOT            SD_CARD_MOUNT_POINT       /* "/sdcard" */
 #define SDFM_OBD_DIR         SDFM_ROOT "/obd_logs"     /* reserved: SQLite OBD logger */
+#define SDFM_ROMS_DIR        SDFM_ROOT "/roms"         /* reserved: NC Flash SD-staged ROM/firmware images */
 /* CSV_LOGGER_DIR ("/sdcard/logs") comes from csv_logger.h -- also reserved. */
 
 /* Fully protected subtrees: neither the dir NOR anything under it may be deleted
@@ -157,7 +158,8 @@ static bool sdfm_is_reserved(const char *abspath)
 {
     return strcmp(abspath, SDFM_ROOT) == 0 ||
            strcmp(abspath, CSV_LOGGER_DIR) == 0 ||
-           strcmp(abspath, SDFM_OBD_DIR) == 0;
+           strcmp(abspath, SDFM_OBD_DIR) == 0 ||
+           strcmp(abspath, SDFM_ROMS_DIR) == 0;
 }
 
 /* True if abspath IS a protected subtree root or lies anywhere beneath one.

@@ -125,11 +125,12 @@
         }
 
         .logo {
-            width: 80%;
-            max-width: 100%;
+            /* NC Flash badge is square; cap it so it doesn't tower over the nav the way
+               an 80%-width square would (the old MeatPi logo was landscape). */
+            width: 55%;
+            max-width: 140px;
             height: auto;
-            max-height: 100%;
-            margin: 2.5rem auto 0;
+            margin: 1.5rem auto 1rem;
             padding: 0;
             display: block
         }
@@ -979,8 +980,13 @@
             cursor: pointer
         }
 
-        @media (max-width:640px) {
-            /* Mobile nav -> off-canvas hamburger drawer (toggled by #hamburger_btn). */
+        @media (max-width:640px), (max-height:480px) and (max-width:1024px) {
+            /* Mobile nav -> off-canvas hamburger drawer (toggled by #hamburger_btn).
+               Fires on narrow viewports (phone portrait, <=640px) OR short-and-not-wide
+               ones (phone landscape: height <=480 AND width <=1024). A landscape phone is
+               ~844-956px wide so it cleared the old 640px width gate and rendered the full
+               sidebar, which ate the screen; the short-height clause catches it. Tablets
+               (portrait width >640; landscape height >=768) and PC stay on the full menu. */
             .mobile-topbar {
                 display: flex
             }
