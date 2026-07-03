@@ -208,6 +208,13 @@
             font-weight: 500
         }
 
+        /* Wide data tables scroll horizontally instead of pushing the page (no h-scroll on
+           the body). No-op on desktop where the table fits; load-bearing on narrow phones. */
+        .table-scroll {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch
+        }
+
         .slider-container {
             align-items: center;
             gap: 10px;
@@ -1023,6 +1030,7 @@
             }
 
             .content {
+                box-sizing: border-box;
                 width: 100%;
                 margin-left: 0;
                 padding: .75rem;
@@ -1843,7 +1851,7 @@
             <div class="files-toolbar" style="align-items:center;gap:10px;margin-bottom:.5rem;display:flex">
                 <div id="files_path" style="font-weight:600;flex:1">/sdcard</div><button onclick="filesMkdir()" type="button">New Folder</button><button onclick="filesLoad(filesCwd)" type="button">Refresh</button><button onclick="filesDownloadSelected()" type="button">Download selected</button><button onclick="filesDeleteSelected()" type="button">Delete selected</button>
             </div>
-            <table id="files_table">
+            <div class="table-scroll"><table id="files_table">
                 <thead>
                     <tr>
                         <th><input type="checkbox" id="files_selall" onclick="filesToggleAll(this)"></th>
@@ -1859,7 +1867,7 @@
                         <td colspan="6">Loading...</td>
                     </tr>
                 </tbody>
-            </table>
+            </table></div>
         </div>
         <div class="tabcontent" id="advanced_tab">
             <div class="section-title">Advanced Settings</div>
