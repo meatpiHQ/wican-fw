@@ -58,7 +58,10 @@
 #define MCP2515_CS_GPIO_NUM          18
 #define MCP2515_INT_GPIO_NUM         7
 #define MCP2515_RST_GPIO_NUM         8    // active-low: HIGH = run, LOW = reset
-#define MCP2515_SPI_CLOCK_HZ         5000000
+// 10 MHz is the MCP2515's rated max.
+// Verified clean on this board under playback flood. If bus 1 ever fails to
+// enable or reads garbage after an SPI/board change, drop this back to 5000000.
+#define MCP2515_SPI_CLOCK_HZ         10000000
 #define MCP2515_OSCILLATOR_HZ        8000000
 
 #define CONNECTED_LED_GPIO_NUM       41
