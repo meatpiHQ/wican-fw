@@ -299,12 +299,20 @@ static void can_rx_task(void *pvParameters)
             {
                 twai_message_t fwd_msg = rx_msg;
 #if CAN_BUS_COUNT > 1
-                // MITM bridge: forward all traffic to the other bus. Don't
-                // block RX servicing on a stalled TX--drop and count.
+                // MITM bridge: forward all traffic to the other bus, with
+                // adaptive backpressure. This task gets preempted, then
+				// drains the RX queue in a batch that can momentarily overrun
+				// the 32-slot TX pool even though a slot frees every ~250us;
+				// waiting a couple ticks absorbs the batch instead of dropping
+				// it. But if the wait itself times out, the bus is saturated
+				// or wedged: fall back to fast-drop for 100ms so a dead bus 1
+				// can't throttle RX servicing (and bus-0 GVRET streaming).
+                static int64_t fwd_fastdrop_until_us[CAN_BUS_COUNT];
                 can_bus_t fwd_bus = (rx_bus == CAN_BUS_0) ? CAN_BUS_1 : CAN_BUS_0;
                 fwd_result_t fwd_result = precondition_fwd_hook(&fwd_msg, fwd_bus);
                 bool fwd_wanted = (fwd_result != FWD_BLOCK);
-                TickType_t fwd_wait = 0;
+                TickType_t fwd_wait =
+                    (esp_timer_get_time() < fwd_fastdrop_until_us[fwd_bus]) ? 0 : 2;
 #else
                 // Single bus: inject a modified duplicate alongside the original
                 can_bus_t fwd_bus = CAN_BUS_0;
@@ -314,6 +322,12 @@ static void can_rx_task(void *pvParameters)
 #endif
                 if (fwd_wanted && can_send(fwd_bus, &fwd_msg, fwd_wait) != ESP_OK)
                 {
+#if CAN_BUS_COUNT > 1
+                    if (fwd_wait != 0)
+                    {
+                        fwd_fastdrop_until_us[fwd_bus] = esp_timer_get_time() + 100000;
+                    }
+#endif
                     static uint32_t fwd_drop_cnt = 0;
                     if ((++fwd_drop_cnt % 256U) == 1U)
                     {
