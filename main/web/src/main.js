@@ -1691,6 +1691,25 @@ function filesDelete(rel, name, isDir) {
     });
 }
 
+// Mobile hamburger drawer (<=640px): toggle the .sidebar as an off-canvas panel + backdrop.
+// All no-ops on desktop, where the drawer CSS never applies and the elements stay hidden.
+function openDrawer() {
+    var s = document.querySelector('.sidebar');
+    var b = document.getElementById('drawer_backdrop');
+    if (s) s.classList.add('open');
+    if (b) b.classList.add('open');
+}
+function closeDrawer() {
+    var s = document.querySelector('.sidebar');
+    var b = document.getElementById('drawer_backdrop');
+    if (s) s.classList.remove('open');
+    if (b) b.classList.remove('open');
+}
+function toggleDrawer() {
+    var s = document.querySelector('.sidebar');
+    if (s && s.classList.contains('open')) closeDrawer(); else openDrawer();
+}
+
 function openTab(evt, tabName) {
     var i, tabcontent, tablinks;
     tabcontent = document.getElementsByClassName("tabcontent");
@@ -1705,8 +1724,9 @@ function openTab(evt, tabName) {
     if (typeof csv_status_poll_stop === 'function') csv_status_poll_stop();
     document.getElementById(tabName).style.display = "block";
     evt.currentTarget.className += " active";
-    // Keep the active tab visible in the horizontal scroll strip on phones (no-op on desktop).
-    if (evt.currentTarget.scrollIntoView) evt.currentTarget.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+    // Close the mobile drawer after a tab is chosen (no-op on desktop); keep the active tab in view.
+    if (typeof closeDrawer === 'function') closeDrawer();
+    if (evt.currentTarget.scrollIntoView) evt.currentTarget.scrollIntoView({ block: 'nearest' });
 
     if (tabName === 'automate') {
         try { ensureAutomateSubTabInitialized(); } catch(_) {}
