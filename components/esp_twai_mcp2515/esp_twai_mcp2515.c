@@ -35,7 +35,7 @@
 #define MCP2515_MAX_BURST_REG_BYTES       13  /* SIDH..D7 block: ID(4) + DLC(1) + DATA(8) */
 #define MCP2515_SPI_BURST_BUF_BYTES       (MCP2515_SPI_CMD_OVERHEAD_BYTES + MCP2515_MAX_BURST_REG_BYTES)
 
-#define MCP2515_CANINTE_ENABLE_MASK       (MCP2515_INT_RX0IF | MCP2515_INT_RX1IF | MCP2515_INT_TX0IF | MCP2515_INT_ERRIF | MCP2515_INT_MERRF)
+#define MCP2515_CANINTE_ENABLE_MASK       (MCP2515_INT_RX0IF | MCP2515_INT_RX1IF | MCP2515_INT_TX0IF | MCP2515_INT_TX1IF | MCP2515_INT_ERRIF | MCP2515_INT_MERRF)
 
 typedef struct {
     struct twai_node_base api_base;
@@ -53,7 +53,18 @@ typedef struct {
     void *user_data;
     QueueHandle_t tx_queue;
     EventGroupHandle_t event_group;
+    /* Dual-buffer pipelined TX. p_curr_tx is the frame on the wire 
+     * (its TXREQ set, in hw buffer curr_txb); while it transmits, the next
+     * frame is pre-loaded into the other hw buffer (p_staged_tx, TXREQ not set),
+     * so on TXnIF the only wire-idle work is the 1-byte RTS. Exactly one TXREQ 
+     * is ever pending, so frame order is preserved. Both fields are owned by the
+     * interrupt task while hw_busy is true; transmit() only touches them after
+     * winning the false->true compare-and-swap on hw_busy.
+     */
     const twai_frame_t *p_curr_tx;
+    const twai_frame_t *p_staged_tx;
+    uint8_t curr_txb;
+    bool one_shot;
 
     _Atomic twai_error_state_t state;
     twai_node_record_t history;
@@ -154,18 +165,6 @@ static esp_err_t mcp2515_read_reg(twai_mcp2515_ctx_t *ctx, uint8_t reg, uint8_t 
     uint8_t rx[3] = {};
     ESP_RETURN_ON_ERROR(mcp2515_spi_transfer(ctx, tx, rx, sizeof(tx)), TAG, "spi read reg failed");
     *val = rx[2];
-    return ESP_OK;
-}
-
-static esp_err_t mcp2515_read_regs(twai_mcp2515_ctx_t *ctx, uint8_t start_reg, uint8_t *data, size_t len)
-{
-    uint8_t tx[MCP2515_SPI_BURST_BUF_BYTES] = { MCP2515_CMD_READ, start_reg };
-    uint8_t rx[MCP2515_SPI_BURST_BUF_BYTES] = {};
-    if (len > MCP2515_MAX_BURST_REG_BYTES) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    ESP_RETURN_ON_ERROR(mcp2515_spi_transfer(ctx, tx, rx, len + MCP2515_SPI_CMD_OVERHEAD_BYTES), TAG, "spi read regs failed");
-    memcpy(data, rx + MCP2515_SPI_CMD_OVERHEAD_BYTES, len);
     return ESP_OK;
 }
 
@@ -296,63 +295,114 @@ static esp_err_t mcp2515_calc_timing(uint32_t osc_hz, const twai_timing_basic_co
     return ESP_OK;
 }
 
-static esp_err_t mcp2515_load_tx_frame(twai_mcp2515_ctx_t *ctx, const twai_frame_t *frame)
-{
-    /*
-     * Current TX policy:
-     * - Only TXB0 is used for transmission.
-     * - Frames are serialized by software queue order (FIFO).
-     * - TX buffer priority bits (TXP[1:0]) are not configured.
-     *
-     * Future enhancement: use TXB1/TXB2 and map driver-level scheduling to
-     * MCP2515 TX buffer priorities.
-     */
-    uint8_t txb0ctrl = 0;
-    ESP_RETURN_ON_ERROR(mcp2515_read_reg(ctx, MCP2515_REG_TXB0CTRL, &txb0ctrl), TAG, "read txb0ctrl failed");
-    assert((txb0ctrl & MCP2515_TXBCTRL_TXREQ) == 0);
+/* per-TX-buffer opcode/register tables for the pipelined dual-buffer TX path
+ * (TXB2 intentionally unused).
+ */
+static const uint8_t s_txb_load_cmd[2] = {MCP2515_CMD_LOAD_TXB0_ID, MCP2515_CMD_LOAD_TXB1_ID};
+static const uint8_t s_txb_rts_cmd[2]  = {MCP2515_CMD_RTS_TXB0, MCP2515_CMD_RTS_TXB1};
+static const uint8_t s_txb_ctrl_reg[2] = {MCP2515_REG_TXB0CTRL, MCP2515_REG_TXB1CTRL};
+static const uint8_t s_txb_txif[2]     = {MCP2515_INT_TX0IF, MCP2515_INT_TX1IF};
 
-    uint8_t tx_data[13] = {};
-    mcp2515_encode_id(&frame->header, &tx_data[0]);
+/* Fill a TX buffer without setting TXREQ. LOAD TX BUFFER instead of WRITE
+ * saves the address byte, and the old TXBnCTRL read + TXREQ assert is
+ * replaced by the pipeline invariant: a buffer is only (re)loaded after its
+ * previous TXnIF was handled, or when the hardware is idle.
+ */
+static esp_err_t mcp2515_load_tx_buffer(twai_mcp2515_ctx_t *ctx, const twai_frame_t *frame, uint8_t txb)
+{
+    uint8_t tx_data[1 + MCP2515_MAX_BURST_REG_BYTES] = { s_txb_load_cmd[txb] };
+    mcp2515_encode_id(&frame->header, &tx_data[1]);
     uint8_t dlc = frame->header.dlc ? MIN(frame->header.dlc, TWAI_FRAME_MAX_DLC) : frame->buffer_len;
-    tx_data[4] = (frame->header.rtr ? MCP2515_DLC_RTR : 0) | (dlc & MCP2515_DLC_LEN_MASK);
+    tx_data[5] = (frame->header.rtr ? MCP2515_DLC_RTR : 0) | (dlc & MCP2515_DLC_LEN_MASK);
     if (frame->buffer_len) {
-        memcpy(&tx_data[5], frame->buffer, frame->buffer_len);
+        memcpy(&tx_data[6], frame->buffer, frame->buffer_len);
     }
-    ESP_RETURN_ON_ERROR(mcp2515_write_regs(ctx, MCP2515_REG_TXB0SIDH, tx_data, sizeof(tx_data)), TAG, "write tx frame failed");
-    uint8_t rts = MCP2515_CMD_RTS_TXB0;
-    ESP_RETURN_ON_ERROR(mcp2515_spi_transfer(ctx, &rts, NULL, 1), TAG, "request-to-send failed");
-    return ESP_OK;
+    return mcp2515_spi_transfer(ctx, tx_data, NULL, sizeof(tx_data));
 }
 
-static bool mcp2515_tx_is_success(twai_mcp2515_ctx_t *ctx)
+static esp_err_t mcp2515_rts(twai_mcp2515_ctx_t *ctx, uint8_t txb)
 {
-    uint8_t txb0ctrl = 0;
-    if (mcp2515_read_reg(ctx, MCP2515_REG_TXB0CTRL, &txb0ctrl) != ESP_OK) {
+    uint8_t rts = s_txb_rts_cmd[txb];
+    return mcp2515_spi_transfer(ctx, &rts, NULL, 1);
+}
+
+/* Load a frame into hw buffer txb and start transmitting it. Caller must own
+ * the TX state (hw_busy won via compare-and-swap, or interrupt-task context).
+ */
+static esp_err_t mcp2515_start_tx(twai_mcp2515_ctx_t *ctx, const twai_frame_t *frame, uint8_t txb)
+{
+    ctx->p_curr_tx = frame;
+    ctx->curr_txb = txb;
+    ESP_RETURN_ON_ERROR(mcp2515_load_tx_buffer(ctx, frame, txb), TAG, "load tx frame failed");
+    return mcp2515_rts(ctx, txb);
+}
+
+static bool mcp2515_tx_is_success(twai_mcp2515_ctx_t *ctx, uint8_t txb)
+{
+    /* With auto-retry (the only mode this project uses) TXnIF fires only on
+     * successful transmission, so skip the status readback entirely.
+     */
+    if (!ctx->one_shot) {
+        return true;
+    }
+    uint8_t txbctrl = 0;
+    if (mcp2515_read_reg(ctx, s_txb_ctrl_reg[txb], &txbctrl) != ESP_OK) {
         return false;
     }
-    return (txb0ctrl & (MCP2515_TXBCTRL_ABTF | MCP2515_TXBCTRL_MLOA | MCP2515_TXBCTRL_TXERR)) == 0;
+    return (txbctrl & (MCP2515_TXBCTRL_ABTF | MCP2515_TXBCTRL_MLOA | MCP2515_TXBCTRL_TXERR)) == 0;
 }
 
-static esp_err_t mcp2515_start_next_tx_from_queue(twai_mcp2515_ctx_t *ctx, BaseType_t *do_yield)
-{
-    if (xQueueReceiveFromISR(ctx->tx_queue, &ctx->p_curr_tx, do_yield)) {
-        atomic_store(&ctx->hw_busy, true);
-        return mcp2515_load_tx_frame(ctx, ctx->p_curr_tx);
-    }
-    atomic_store(&ctx->hw_busy, false);
-    xEventGroupSetBitsFromISR(ctx->event_group, TWAI_MCP2515_IDLE_EVENT_BIT, do_yield);
-    return ESP_OK;
-}
-
+/* Start TX from idle (task context; used by enable-resume). */
 static esp_err_t mcp2515_start_next_tx_from_queue_task(twai_mcp2515_ctx_t *ctx)
 {
-    if (xQueueReceive(ctx->tx_queue, &ctx->p_curr_tx, 0) == pdTRUE) {
+    const twai_frame_t *frame = NULL;
+    if (xQueueReceive(ctx->tx_queue, &frame, 0) == pdTRUE) {
         atomic_store(&ctx->hw_busy, true);
-        return mcp2515_load_tx_frame(ctx, ctx->p_curr_tx);
+        return mcp2515_start_tx(ctx, frame, 0);
     }
     atomic_store(&ctx->hw_busy, false);
     xEventGroupSetBits(ctx->event_group, TWAI_MCP2515_IDLE_EVENT_BIT);
     return ESP_OK;
+}
+
+/* Drain one RX hardware buffer. READ RX BUFFER (vs plain READ) drops the
+ * address byte and auto-clears RXnIF at CS rise, which both removes the
+ * separate CANINTF bit-modify transaction and frees the hw buffer for the
+ * next frame as early as possible.
+ */
+static void mcp2515_handle_rx(twai_mcp2515_ctx_t *ctx, uint8_t read_rx_cmd, BaseType_t *do_yield)
+{
+    uint8_t tx_buf[1 + MCP2515_MAX_BURST_REG_BYTES] = { read_rx_cmd };
+    uint8_t rx_buf[1 + MCP2515_MAX_BURST_REG_BYTES] = {};
+    if (mcp2515_spi_transfer(ctx, tx_buf, rx_buf, sizeof(rx_buf)) != ESP_OK) {
+        return;
+    }
+    const uint8_t *d = &rx_buf[1];   /* SIDH..D7 */
+
+    bool is_ext = false;
+    uint8_t dlc = d[4] & MCP2515_DLC_LEN_MASK;
+    if (dlc > TWAI_FRAME_MAX_LEN) {
+        dlc = TWAI_FRAME_MAX_LEN;
+    }
+    memset(&ctx->rx_cache, 0, sizeof(ctx->rx_cache));
+    ctx->rx_cache.header.id = mcp2515_decode_id(&d[0], &is_ext);
+    ctx->rx_cache.header.ide = is_ext;
+    ctx->rx_cache.header.rtr = is_ext ? !!(d[4] & MCP2515_DLC_RTR) : !!(d[1] & MCP2515_SIDL_SRR);
+    ctx->rx_cache.header.dlc = dlc;
+    ctx->rx_cache.header.timestamp = mcp2515_time_us_to_timestamp(esp_timer_get_time(), ctx->timestamp_resolution_hz);
+    ctx->rx_cache.buffer = ctx->rx_data;
+    ctx->rx_cache.buffer_len = dlc;
+    if (dlc) {
+        memcpy(ctx->rx_data, &d[5], dlc);
+    }
+    atomic_store(&ctx->rx_pending, true);
+
+    if (ctx->cbs.on_rx_done) {
+        twai_rx_done_event_data_t rx_edata = {};
+        atomic_store(&ctx->rx_isr, true);
+        *do_yield |= ctx->cbs.on_rx_done(&ctx->api_base, &rx_edata, ctx->user_data);
+        atomic_store(&ctx->rx_isr, false);
+    }
 }
 
 /* This is the former gpio ISR body, now run in ctx->intr_task (task context). 
@@ -373,6 +423,77 @@ static void mcp2515_intr_work(twai_mcp2515_ctx_t *ctx)
         }
         if (canintf == 0) {
             break;
+        }
+
+        /* TX completion first: the wire is idle from TXnIF until the next
+         * RTS, so restarting TX beats everything else for throughput.
+         */
+        if (canintf & (MCP2515_INT_TX0IF | MCP2515_INT_TX1IF)) {
+            uint8_t txif = s_txb_txif[ctx->curr_txb];
+            if (ctx->p_curr_tx == NULL || !(canintf & txif)) {
+                /* Stale/spurious flag (e.g. around a disable/enable cycle):
+                 * clear whatever is set so INT can deassert.
+                 */
+                mcp2515_bit_modify(ctx, MCP2515_REG_CANINTF,
+                                   canintf & (MCP2515_INT_TX0IF | MCP2515_INT_TX1IF), 0);
+            } else {
+                const twai_frame_t *done_frame = ctx->p_curr_tx;
+                uint8_t done_txb = ctx->curr_txb;
+                /* One-shot only; free (no SPI) in auto-retry mode. Must be
+                 * sampled before the buffer can be reused below.
+                 */
+                bool done_ok = mcp2515_tx_is_success(ctx, done_txb);
+                const twai_frame_t *next = NULL;
+
+                if (ctx->p_staged_tx != NULL) {
+                    /* Fast path: next frame is already sitting in the other
+                     * hw buffer--a single RTS byte restarts the wire.
+                     */
+                    uint8_t staged_txb = done_txb ^ 1;
+                    mcp2515_rts(ctx, staged_txb);
+                    ctx->p_curr_tx = ctx->p_staged_tx;
+                    ctx->curr_txb = staged_txb;
+                    ctx->p_staged_tx = NULL;
+                    mcp2515_bit_modify(ctx, MCP2515_REG_CANINTF, txif, 0);
+                } else if (xQueueReceiveFromISR(ctx->tx_queue, &next, &do_yield)) {
+                    /* Nothing staged: clear the completed flag before
+                     * re-arming the same buffer.
+                     */
+                    mcp2515_bit_modify(ctx, MCP2515_REG_CANINTF, txif, 0);
+                    mcp2515_start_tx(ctx, next, done_txb);
+                } else {
+                    ctx->p_curr_tx = NULL;
+                    mcp2515_bit_modify(ctx, MCP2515_REG_CANINTF, txif, 0);
+                }
+
+                if (ctx->cbs.on_tx_done) {
+                    twai_tx_done_event_data_t tx_edata = {
+                        .is_tx_success = done_ok,
+                        .done_tx_frame = done_frame,
+                    };
+                    do_yield |= ctx->cbs.on_tx_done(&ctx->api_base, &tx_edata, ctx->user_data);
+                }
+
+                if (ctx->p_curr_tx == NULL) {
+                    atomic_store(&ctx->hw_busy, false);
+                    xEventGroupSetBitsFromISR(ctx->event_group, TWAI_MCP2515_IDLE_EVENT_BIT, &do_yield);
+                } else if (ctx->p_staged_tx == NULL &&
+                           xQueueReceiveFromISR(ctx->tx_queue, &next, &do_yield)) {
+                    /* Pre-load the now-free buffer while current is on the
+                     * wire; this bulk transfer overlaps transmission.
+                     */
+                    ctx->p_staged_tx = next;
+                    mcp2515_load_tx_buffer(ctx, next, ctx->curr_txb ^ 1);
+                }
+            }
+        }
+
+        if (canintf & MCP2515_INT_RX0IF) {
+            mcp2515_handle_rx(ctx, MCP2515_CMD_READ_RXB0_ID, &do_yield);
+        }
+
+        if (canintf & MCP2515_INT_RX1IF) {
+            mcp2515_handle_rx(ctx, MCP2515_CMD_READ_RXB1_ID, &do_yield);
         }
 
         if (canintf & (MCP2515_INT_ERRIF | MCP2515_INT_MERRF)) {
@@ -404,81 +525,6 @@ static void mcp2515_intr_work(twai_mcp2515_ctx_t *ctx)
                 }
             }
             mcp2515_bit_modify(ctx, MCP2515_REG_CANINTF, MCP2515_INT_ERRIF | MCP2515_INT_MERRF, 0);
-        }
-
-        if (canintf & MCP2515_INT_RX0IF) {
-            uint8_t rx_buf[13] = {};
-            if (mcp2515_read_regs(ctx, MCP2515_REG_RXB0SIDH, rx_buf, sizeof(rx_buf)) == ESP_OK) {
-                bool is_ext = false;
-                uint8_t dlc = rx_buf[4] & MCP2515_DLC_LEN_MASK;
-                if (dlc > TWAI_FRAME_MAX_LEN) {
-                    dlc = TWAI_FRAME_MAX_LEN;
-                }
-                memset(&ctx->rx_cache, 0, sizeof(ctx->rx_cache));
-                ctx->rx_cache.header.id = mcp2515_decode_id(&rx_buf[0], &is_ext);
-                ctx->rx_cache.header.ide = is_ext;
-                ctx->rx_cache.header.rtr = is_ext ? !!(rx_buf[4] & MCP2515_DLC_RTR) : !!(rx_buf[1] & MCP2515_SIDL_SRR);
-                ctx->rx_cache.header.dlc = dlc;
-                ctx->rx_cache.header.timestamp = mcp2515_time_us_to_timestamp(esp_timer_get_time(), ctx->timestamp_resolution_hz);
-                ctx->rx_cache.buffer = ctx->rx_data;
-                ctx->rx_cache.buffer_len = dlc;
-                if (dlc) {
-                    memcpy(ctx->rx_data, &rx_buf[5], dlc);
-                }
-                atomic_store(&ctx->rx_pending, true);
-
-                if (ctx->cbs.on_rx_done) {
-                    twai_rx_done_event_data_t rx_edata = {};
-                    atomic_store(&ctx->rx_isr, true);
-                    do_yield |= ctx->cbs.on_rx_done(&ctx->api_base, &rx_edata, ctx->user_data);
-                    atomic_store(&ctx->rx_isr, false);
-                }
-            }
-            mcp2515_bit_modify(ctx, MCP2515_REG_CANINTF, MCP2515_INT_RX0IF, 0);
-        }
-
-        if (canintf & MCP2515_INT_RX1IF) {
-            uint8_t rx_buf[13] = {};
-            if (mcp2515_read_regs(ctx, MCP2515_REG_RXB1SIDH, rx_buf, sizeof(rx_buf)) == ESP_OK) {
-                bool is_ext = false;
-                uint8_t dlc = rx_buf[4] & MCP2515_DLC_LEN_MASK;
-                if (dlc > TWAI_FRAME_MAX_LEN) {
-                    dlc = TWAI_FRAME_MAX_LEN;
-                }
-                memset(&ctx->rx_cache, 0, sizeof(ctx->rx_cache));
-                ctx->rx_cache.header.id = mcp2515_decode_id(&rx_buf[0], &is_ext);
-                ctx->rx_cache.header.ide = is_ext;
-                ctx->rx_cache.header.rtr = is_ext ? !!(rx_buf[4] & MCP2515_DLC_RTR) : !!(rx_buf[1] & MCP2515_SIDL_SRR);
-                ctx->rx_cache.header.dlc = dlc;
-                ctx->rx_cache.header.timestamp = mcp2515_time_us_to_timestamp(esp_timer_get_time(), ctx->timestamp_resolution_hz);
-                ctx->rx_cache.buffer = ctx->rx_data;
-                ctx->rx_cache.buffer_len = dlc;
-                if (dlc) {
-                    memcpy(ctx->rx_data, &rx_buf[5], dlc);
-                }
-                atomic_store(&ctx->rx_pending, true);
-
-                if (ctx->cbs.on_rx_done) {
-                    twai_rx_done_event_data_t rx_edata = {};
-                    atomic_store(&ctx->rx_isr, true);
-                    do_yield |= ctx->cbs.on_rx_done(&ctx->api_base, &rx_edata, ctx->user_data);
-                    atomic_store(&ctx->rx_isr, false);
-                }
-            }
-            mcp2515_bit_modify(ctx, MCP2515_REG_CANINTF, MCP2515_INT_RX1IF, 0);
-        }
-
-        /* TX done path currently handles TXB0 only. */
-        if (canintf & MCP2515_INT_TX0IF) {
-            if (ctx->cbs.on_tx_done) {
-                twai_tx_done_event_data_t tx_edata = {
-                    .is_tx_success = mcp2515_tx_is_success(ctx),
-                    .done_tx_frame = ctx->p_curr_tx,
-                };
-                do_yield |= ctx->cbs.on_tx_done(&ctx->api_base, &tx_edata, ctx->user_data);
-            }
-            mcp2515_bit_modify(ctx, MCP2515_REG_CANINTF, MCP2515_INT_TX0IF, 0);
-            mcp2515_start_next_tx_from_queue(ctx, &do_yield);
         }
     } while (gpio_get_level(ctx->int_gpio) == 0);
 
@@ -561,8 +607,14 @@ static esp_err_t mcp2515_node_disable(twai_node_handle_t node)
      * not-yet-started frames for resume-after-enable semantics.
      */
     ESP_RETURN_ON_ERROR(mcp2515_bit_modify(ctx, MCP2515_REG_TXB0CTRL, MCP2515_TXBCTRL_TXREQ, 0), TAG, "clear txreq failed");
+    ESP_RETURN_ON_ERROR(mcp2515_bit_modify(ctx, MCP2515_REG_TXB1CTRL, MCP2515_TXBCTRL_TXREQ, 0), TAG, "clear txreq failed");
     ESP_RETURN_ON_ERROR(mcp2515_bit_modify(ctx, MCP2515_REG_CANINTF, MCP2515_CANINTE_ENABLE_MASK, 0), TAG, "clear canintf failed");
+    /* The staged frame (already dequeued, loaded, TXREQ never set) is dropped
+     * without an on_tx_done, like the in-flight one. can.c always recreates
+     * the node after disable and resets its slot pool, so nothing leaks.
+     */
     ctx->p_curr_tx = NULL;
+    ctx->p_staged_tx = NULL;
     atomic_store(&ctx->hw_busy, false);
     atomic_store(&ctx->state, TWAI_ERROR_BUS_OFF);
     return ESP_OK;
@@ -588,6 +640,7 @@ static esp_err_t mcp2515_node_delete(twai_node_handle_t node)
         vSemaphoreDelete(ctx->spi_mutex);
     }
     if (ctx->spi_dev) {
+        spi_device_release_bus(ctx->spi_dev);
         spi_bus_remove_device(ctx->spi_dev);
     }
     if (ctx->tx_queue) {
@@ -748,8 +801,13 @@ static esp_err_t mcp2515_node_transmit(twai_node_handle_t node, const twai_frame
     xEventGroupClearBits(ctx->event_group, TWAI_MCP2515_IDLE_EVENT_BIT);
     bool false_var = false;
     if (atomic_compare_exchange_strong(&ctx->hw_busy, &false_var, true)) {
-        ctx->p_curr_tx = frame;
-        ESP_RETURN_ON_ERROR(mcp2515_load_tx_frame(ctx, frame), TAG, "load tx frame failed");
+        esp_err_t err = mcp2515_start_tx(ctx, frame, 0);
+        if (err != ESP_OK) {
+            /* Don't leave the TX path wedged busy on an SPI error */
+            ctx->p_curr_tx = NULL;
+            atomic_store(&ctx->hw_busy, false);
+            ESP_RETURN_ON_ERROR(err, TAG, "load tx frame failed");
+        }
     } else {
         BaseType_t is_isr_context = xPortInIsrContext();
         BaseType_t yield_required = pdFALSE;
@@ -811,6 +869,7 @@ esp_err_t twai_new_node_mcp2515(twai_mcp2515_spi_bus_handle_t bus, const twai_mc
     ctx->int_gpio = node_config->io_cfg.int_gpio;
     ctx->flags.enable_loopback = node_config->flags.enable_loopback;
     ctx->flags.enable_listen_only = node_config->flags.enable_listen_only;
+    ctx->one_shot = one_shot;
     atomic_store(&ctx->state, TWAI_ERROR_BUS_OFF);
 
     uint32_t tx_queue_depth = node_config->tx_queue_depth ? node_config->tx_queue_depth : 1;
@@ -818,8 +877,20 @@ esp_err_t twai_new_node_mcp2515(twai_mcp2515_spi_bus_handle_t bus, const twai_mc
     ctx->event_group = xEventGroupCreateWithCaps(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     ctx->spi_mutex = xSemaphoreCreateMutex();
     ESP_GOTO_ON_FALSE(ctx->tx_queue && ctx->event_group && ctx->spi_mutex, ESP_ERR_NO_MEM, err, TAG, "no_mem");
-    ESP_GOTO_ON_FALSE(xTaskCreate(mcp2515_intr_task, "mcp2515_intr", 4096, ctx, 10, &ctx->intr_task) == pdPASS,
+    /* Priority 20: above lwip's tcpip_thread (18) but below the wifi task
+     * (23). Prevents the tcpip_thread being flooded by GVRET streaming and
+     * preempting this task for ms at a time, stalling the TX-restart path
+     * (each ms of stall is ~4-5 lost frames of wire time at 500k). The
+     * work here is short SPI bursts, so the high priority is cheap.
+     */
+#if CONFIG_FREERTOS_UNICORE
+    ESP_GOTO_ON_FALSE(xTaskCreate(mcp2515_intr_task, "mcp2515_intr", 4096, ctx, 20, &ctx->intr_task) == pdPASS,
                       ESP_ERR_NO_MEM, err, TAG, "no_mem");
+#else
+    /* Pin off core 0 so wifi/lwip bursts can't delay the TX-restart path */
+    ESP_GOTO_ON_FALSE(xTaskCreatePinnedToCore(mcp2515_intr_task, "mcp2515_intr", 4096, ctx, 20, &ctx->intr_task, 1) == pdPASS,
+                      ESP_ERR_NO_MEM, err, TAG, "no_mem");
+#endif
 
     // Configure SPI device for the node
     spi_device_interface_config_t devcfg = {
@@ -855,10 +926,21 @@ esp_err_t twai_new_node_mcp2515(twai_mcp2515_spi_bus_handle_t bus, const twai_mc
     ESP_GOTO_ON_ERROR(mcp2515_write_reg(ctx, MCP2515_REG_CNF3, cnf3), err, TAG, "write cnf3 failed");
     /* Keep CLKOUT disabled by default. */
     ESP_GOTO_ON_ERROR(mcp2515_bit_modify(ctx, MCP2515_REG_CANCTRL, MCP2515_CANCTRL_CLKEN, 0), err, TAG, "disable clkout failed");
+    /* Roll RXB0 over into RXB1 when RXB0 is still full (BUKT): without it a
+     * back-to-back second frame is silently lost whenever the interrupt task
+     * hasn't drained RXB0 yet.
+     */
+    ESP_GOTO_ON_ERROR(mcp2515_bit_modify(ctx, MCP2515_REG_RXB0CTRL, MCP2515_RXB0CTRL_BUKT, MCP2515_RXB0CTRL_BUKT), err, TAG, "enable rx rollover failed");
 
     if (one_shot) {
         ESP_GOTO_ON_ERROR(mcp2515_bit_modify(ctx, MCP2515_REG_CANCTRL, MCP2515_CANCTRL_OSM, MCP2515_CANCTRL_OSM), err, TAG, "set one shot mode failed");
     }
+
+    /* Sole device on this SPI host: hold the bus acquired for the node's
+     * lifetime so every polling transaction skips bus arbitration/queue
+     * overhead (this is per-device, not per-task; released in delete).
+     */
+    ESP_GOTO_ON_ERROR(spi_device_acquire_bus(ctx->spi_dev, portMAX_DELAY), err, TAG, "acquire spi bus failed");
 
     ctx->api_base.enable = mcp2515_node_enable;
     ctx->api_base.disable = mcp2515_node_disable;

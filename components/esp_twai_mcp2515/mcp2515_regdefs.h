@@ -17,6 +17,11 @@
 #define MCP2515_CMD_RTS_TXB1              0x82    /* Request transmit for TX buffer 1 */
 #define MCP2515_CMD_RTS_TXB2              0x84    /* Request transmit for TX buffer 2 */
 #define MCP2515_CMD_RTS_ALL               0x87    /* Request transmit for all TX buffers */
+#define MCP2515_CMD_LOAD_TXB0_ID          0x40    /* Load TX buffer 0 starting at TXB0SIDH */
+#define MCP2515_CMD_LOAD_TXB1_ID          0x42    /* Load TX buffer 1 starting at TXB1SIDH */
+#define MCP2515_CMD_LOAD_TXB2_ID          0x44    /* Load TX buffer 2 starting at TXB2SIDH */
+#define MCP2515_CMD_READ_RXB0_ID          0x90    /* Read RX buffer 0 from RXB0SIDH; clears RX0IF on CS rise */
+#define MCP2515_CMD_READ_RXB1_ID          0x94    /* Read RX buffer 1 from RXB1SIDH; clears RX1IF on CS rise */
 
 /* Registers */
 #define MCP2515_REG_CANSTAT               0x0E    /* CAN status register */

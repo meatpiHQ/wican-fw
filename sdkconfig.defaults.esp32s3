@@ -13,3 +13,9 @@ CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=32768
 CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y
 CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM=y
 CONFIG_BT_ALLOCATION_FROM_SPIRAM_FIRST=y
+
+# Keep ALL networking on core 0. By default lwip's tcpip_thread (prio 18) has
+# no core affinity, so under GVRET/SavvyCAN streaming it migrates to core 1
+# and preempts the mcp2515_intr task, stalling the bus-1 TX restart path.
+# Core 1 is the CAN datapath core.
+CONFIG_LWIP_TCPIP_TASK_AFFINITY_CPU0=y
