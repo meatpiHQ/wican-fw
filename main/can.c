@@ -142,7 +142,9 @@ void can_enable(void)
 	twai_clear_receive_queue();
 	can_unblock();
 	can_cfg.bus_state = ON_BUS;
+#ifdef CAN_STDBY_GPIO_NUM
 	gpio_set_level(CAN_STDBY_GPIO_NUM, 0);
+#endif
 }
 
 void can_disable(void)
@@ -153,7 +155,9 @@ void can_disable(void)
 	}
 	else if(can_cfg.bus_state == ON_BUS)
 	{
+#ifdef CAN_STDBY_GPIO_NUM
 		gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
+#endif
 		can_block();
 		twai_stop();
 		twai_driver_uninstall();

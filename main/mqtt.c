@@ -53,7 +53,7 @@
 
 #include "esp_log.h"
 #include "mqtt_client.h"
-#include "ver.h"
+#include "hw_config.h"
 #include "cJSON.h"
 #include "wifi_network.h"
 #include "mqtt.h"

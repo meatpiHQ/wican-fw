@@ -55,7 +55,7 @@
 #include "lwip/netdb.h"
 #include "esp_log.h"
 #include "mqtt_client.h"
-#include "ver.h"
+#include "hw_config.h"
 #include "math.h"
 #include "dev_status.h"
 
@@ -63,7 +63,7 @@
 
 #define ADC_UNIT          ADC_UNIT_1
 #define ADC_CONV_MODE     ADC_CONV_SINGLE_UNIT_1
-#define ADC_ATTEN         ADC_ATTEN_DB_12  // 0-3.3V
+#define ADC_ATTEN         VBAT_ADC_ATTEN
 #define ADC_BIT_WIDTH     SOC_ADC_DIGI_MAX_BITWIDTH
 #define ADC_READ_LEN      256
 
@@ -72,7 +72,7 @@
 #define MQTT_CONNECTED_BIT 			BIT0
 #define PUB_SUCCESS_BIT     		BIT1
 
-static adc_channel_t voltage_adc_ch = ADC_CHANNEL_4;
+static adc_channel_t voltage_adc_ch = VBAT_ADC_CHANNEL;
 static bool calibrated = false;
 static EventGroupHandle_t s_mqtt_event_group = NULL;
 static float sleep_voltage = 13.1f;
@@ -300,16 +300,7 @@ esp_err_t read_ss_adc_voltage(float *voltage_out)
 	{
         int avg_raw = sum_raw / valid_samples;
         int avg_voltage = sum_voltage / valid_samples;
-        float volt_rounded = 0;
-        
-    	if(project_hardware_rev == WICAN_V300)
-    	{
-    		volt_rounded = (avg_voltage*116)/(16*1000.0f);
-    	}
-    	else if(project_hardware_rev == WICAN_USB_V100)
-    	{
-    		volt_rounded = (avg_voltage*106.49f)/(6.49f*1000.0f);
-    	}
+        float volt_rounded = (avg_voltage * (float)VBAT_SCALE_NUM) / (VBAT_SCALE_DEN * 1000.0f);
 
         volt_rounded = roundf(volt_rounded * 10.0f) / 10.0f;
         *voltage_out = volt_rounded;
@@ -368,11 +359,7 @@ static void adc_task(void *pvParameters)
 			continue;
 		}
     	
-    	battery_voltage += 0.2;
-    	if(project_hardware_rev == WICAN_V210)
-    	{
-    		battery_voltage = -1;
-    	}
+    	battery_voltage += VBAT_READ_OFFSET_V;
 
     	xQueueOverwrite( voltage_queue, &battery_voltage );
     	if(enable_sleep == 1)

@@ -33,7 +33,6 @@
 #include "comm_server.h"
 #include "lwip/sockets.h"
 #include "driver/twai.h"
-#include "ver.h"
 #include "types.h"
 #include "config_server.h"
 #include "realdash.h"
@@ -47,7 +46,6 @@
 #include "nvs_flash.h"
 #include "gvret.h"
 #include "sleep_mode.h"
-#include "wc_uart.h"
 #include "elm327.h"
 #include "mqtt.h"
 #include "esp_mac.h"
@@ -63,16 +61,13 @@
 #define TAG 		__func__
 
 #define GPIO_OUTPUT_PIN_SEL  ((1ULL<<CONNECTED_LED_GPIO_NUM) | (1ULL<<ACTIVE_LED_GPIO_NUM) | (1ULL<<PWR_LED_GPIO_NUM))
-#define BLE_EN_PIN_SEL		(1ULL<<BLE_EN_PIN_NUM)
-#define BLE_Enabled()		(!gpio_get_level(BLE_EN_PIN_NUM))
 
-static QueueHandle_t xMsg_Tx_Queue, xMsg_Rx_Queue, xmsg_ws_tx_queue, xmsg_ble_tx_queue, xmsg_uart_tx_queue, xmsg_obd_rx_queue, xmsg_mqtt_rx_queue;
+static QueueHandle_t xMsg_Tx_Queue, xMsg_Rx_Queue, xmsg_ws_tx_queue, xmsg_ble_tx_queue, xmsg_obd_rx_queue, xmsg_mqtt_rx_queue;
 static xdev_buffer ucTCP_RX_Buffer;
 static xdev_buffer ucTCP_TX_Buffer;
 
 static uint8_t protocol = SLCAN;
 
-uint8_t project_hardware_rev;
 int FTP_TASK_FINISH_BIT = BIT2;
 EventGroupHandle_t xEventTask;
 static uint8_t mqtt_elm327_log_en = 0;
@@ -199,13 +194,6 @@ static void can_tx_task(void *pvParameters)
 			{
 				slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xmsg_ble_tx_queue);
 			}
-			else if(ucTCP_RX_Buffer.dev_channel == DEV_UART)
-			{
-				if(!config_server_mqtt_en_config())
-				{
-					slcan_parse_str(msg_ptr, temp_len, &tx_msg, &xmsg_uart_tx_queue);
-				}
-			}
 		}
 		else if(protocol == REALDASH)
 		{
@@ -308,7 +296,7 @@ static void can_rx_task(void *pvParameters)
 				}
         	}
         	//TODO: optimize, useless ifs
-			if(tcp_port_open() || ble_connected() || project_hardware_rev == WICAN_USB_V100 || mqtt_connected() || protocol == AUTO_PID )
+			if(tcp_port_open() || ble_connected() || mqtt_connected() || protocol == AUTO_PID )
 			{
 				memset(ucTCP_TX_Buffer.ucElement, 0, sizeof(ucTCP_TX_Buffer.ucElement));
 				ucTCP_TX_Buffer.usLen = 0;
@@ -343,13 +331,6 @@ static void can_rx_task(void *pvParameters)
 					if(ble_connected())
 					{
 						xQueueSend( xmsg_ble_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
-					}
-					else if(project_hardware_rev == WICAN_USB_V100)
-					{
-						if(!config_server_mqtt_en_config())
-						{
-							xQueueSend( xmsg_uart_tx_queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
-						}
 					}
 				}
 			}
@@ -409,9 +390,11 @@ void app_main(void)
 	gpio_set_level(CONNECTED_LED_GPIO_NUM, 1);
 	gpio_set_level(ACTIVE_LED_GPIO_NUM, 1);
 
+#ifdef CAN_STDBY_GPIO_NUM
     gpio_reset_pin(CAN_STDBY_GPIO_NUM);
     gpio_set_direction(CAN_STDBY_GPIO_NUM, GPIO_MODE_OUTPUT);
     gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
+#endif
 
     xMsg_Rx_Queue = xQueueCreate(16, sizeof( xdev_buffer) );
     xMsg_Tx_Queue = xQueueCreate(16, sizeof( xdev_buffer) );
@@ -570,61 +553,30 @@ void app_main(void)
 		}
 		sprintf(hardware_version, "WiCAN-%s", HARDWARE_VERSION);
 		ESP_LOGI(TAG, "Hardware version: %s", hardware_version);
-
-        if(strstr(running_app_info.project_name, "usb") != 0)
-        {
-        	project_hardware_rev = WICAN_USB_V100;
-        	ESP_LOGI(TAG, "project_hardware_rev: USB");
-        	if(!config_server_mqtt_en_config())
-        	{
-        	    xmsg_uart_tx_queue = xQueueCreate(32, sizeof( xdev_buffer) );
-        		wc_uart_init(&xmsg_uart_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM);
-        	}
-
-        }
-        else
-        {
-        	ESP_LOGI(TAG, "project_hardware_rev: OBD");
-            if(strstr(running_app_info.project_name, "hv210") != 0)
-            {
-            	project_hardware_rev = WICAN_V210;
-            }
-            else
-            {
-            	project_hardware_rev = WICAN_V300;
-            }
-        }
     }
 	wc_mdns_init((char*)uid, hardware_version, firmware_version);
     xTaskCreate(can_rx_task, "can_rx_task", 1024*3, (void*)AF_INET, 5, NULL);
     xTaskCreate(can_tx_task, "can_tx_task", 1024*3, (void*)AF_INET, 5, NULL);
 
-    if(project_hardware_rev != WICAN_V210)
-    {
-		if(config_server_get_sleep_config())
-		{
-			float sleep_voltage = 0;
+	if(config_server_get_sleep_config())
+	{
+		float sleep_voltage = 0;
 
-			if(config_server_get_sleep_volt(&sleep_voltage) != -1)
-			{
-				sleep_mode_init(1, sleep_voltage);
-			}
-			else
-			{
-				sleep_mode_init(0, 13.1f);
-			}
+		if(config_server_get_sleep_volt(&sleep_voltage) != -1)
+		{
+			sleep_mode_init(1, sleep_voltage);
 		}
 		else
 		{
 			sleep_mode_init(0, 13.1f);
 		}
-    }
-    else
-    {
-    	sleep_mode_init(0, 13.1f);
-    }
+	}
+	else
+	{
+		sleep_mode_init(0, 13.1f);
+	}
 
-    gpio_set_level(PWR_LED_GPIO_NUM, 1);
+    gpio_set_level(PWR_LED_GPIO_NUM, PWR_LED_ON);
     
 
 	// xEventTask = xEventGroupCreate();

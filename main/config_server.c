@@ -48,7 +48,6 @@
 #include "dev_status.h"
 #include<stdio.h>
 #include <stdlib.h>
-#include "ver.h"
 
 #include <esp_wifi.h>
 #include <esp_event.h>
