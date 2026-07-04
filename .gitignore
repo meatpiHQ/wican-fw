@@ -1,4 +1,7 @@
 build/
+build.*/
+sdkconfig
+sdkconfig.old
 esp_idf_components/
 # Prerequisites
 *.d
