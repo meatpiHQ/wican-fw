@@ -36,6 +36,7 @@
 #include <lwip/netdb.h>
 #include "types.h"
 #include "comm_server.h"
+#include "hw_config.h"
 
 #define TAG 		__func__
 
@@ -327,7 +328,7 @@ accept_socket:
 			}
 			ESP_LOGI(TAG, "Socket accepted ip address: %s", addr_str);
 			xEventGroupSetBits( xSocketEventGroup, PORT_OPEN_BIT );
-			gpio_set_level(conn_led, 0);
+			gpio_set_level(conn_led, LED_ON);
 			xEventGroupWaitBits(
 					  xSocketEventGroup,   /* The event group being tested. */
 					  PORT_CLOSED_BIT, /* The bits within the event group to wait for. */
@@ -336,7 +337,7 @@ accept_socket:
 					  portMAX_DELAY );/* Wait a maximum of 100ms for either bit to be set. */
 			xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
 			ESP_LOGI(TAG, "Socket disconnected...");
-			gpio_set_level(conn_led, 1);
+			gpio_set_level(conn_led, LED_OFF);
 			shutdown(sock, 0);
 			close(sock);
 		}
@@ -345,7 +346,7 @@ accept_socket:
 			ESP_LOGI(TAG, "UDP socket ready");
 			xEventGroupClearBits(xSocketEventGroup, PORT_CLOSED_BIT);
 			xEventGroupSetBits( xSocketEventGroup, PORT_OPEN_BIT );
-			gpio_set_level(conn_led, 0);
+			gpio_set_level(conn_led, LED_ON);
             ESP_LOGI(TAG, "Waiting for data");
 
 			xEventGroupWaitBits(
@@ -358,7 +359,7 @@ accept_socket:
 			xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
 			ESP_LOGI(TAG, "UDP socket error");
 
-			gpio_set_level(conn_led, 1);
+			gpio_set_level(conn_led, LED_OFF);
 			shutdown(sock, 0);
 			close(sock);
 			goto CLEAN_UP;

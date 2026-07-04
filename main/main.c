@@ -110,7 +110,7 @@ static void process_led(bool state)
 
 	if(!can_is_enabled())
 	{
-		gpio_set_level(ACTIVE_LED_GPIO_NUM, 1);
+		gpio_set_level(ACTIVE_LED_GPIO_NUM, LED_OFF);
 		current_state = 0;
 		last_change = esp_timer_get_time();
 	}
@@ -130,11 +130,11 @@ static void process_led(bool state)
 	}
 	if(state == 1)
 	{
-		gpio_set_level(ACTIVE_LED_GPIO_NUM, 0);
+		gpio_set_level(ACTIVE_LED_GPIO_NUM, LED_ON);
 	}
 	else
 	{
-		gpio_set_level(ACTIVE_LED_GPIO_NUM, 1);
+		gpio_set_level(ACTIVE_LED_GPIO_NUM, LED_OFF);
 	}
 }
 
@@ -387,8 +387,8 @@ void app_main(void)
     //configure GPIO with the given settings
     gpio_config(&io_conf);
 
-	gpio_set_level(CONNECTED_LED_GPIO_NUM, 1);
-	gpio_set_level(ACTIVE_LED_GPIO_NUM, 1);
+	gpio_set_level(CONNECTED_LED_GPIO_NUM, LED_OFF);
+	gpio_set_level(ACTIVE_LED_GPIO_NUM, LED_OFF);
 
 #ifdef CAN_STDBY_GPIO_NUM
     gpio_reset_pin(CAN_STDBY_GPIO_NUM);
