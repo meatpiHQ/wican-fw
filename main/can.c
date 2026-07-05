@@ -26,6 +26,7 @@
 #include "esp_system.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include <string.h>
 #include "esp_twai.h"
 #include "esp_twai_onchip.h"
@@ -96,6 +97,19 @@ static uint32_t tx_slot_used[CAN_BUS_COUNT];
 // shared with ISR context (can_on_tx_done), so we can't use a mutex.
 static portMUX_TYPE tx_slot_mux = portMUX_INITIALIZER_UNLOCKED;
 
+// RX frames lost because the shared rx queue was full (rx task too slow).
+// Incremented from can_on_rx_done (ISR context), logged rate-limited from
+// can_receive() in task context.
+static volatile uint32_t rx_drop_count[CAN_BUS_COUNT];
+static uint32_t rx_drop_logged[CAN_BUS_COUNT];
+static int64_t rx_drop_log_us[CAN_BUS_COUNT];
+
+// TX frames dropped by can_send() (bus down, or no free slot within the
+// caller's timeout). Counted and logged in place--can_send() is task
+// context, unlike the RX drop path above.
+static uint32_t tx_drop_count[CAN_BUS_COUNT];
+static int64_t tx_drop_log_us[CAN_BUS_COUNT];
+
 // Callback to receive frames from driver (ISR context): drain the frame out
 // of the hardware, tag it with its bus, and hand it to can_receive() via the
 // shared queue--all protocol work happens later in task context
@@ -128,11 +142,14 @@ static bool can_on_rx_done(twai_node_handle_t handle, const twai_rx_done_event_d
 	item.msg.data_length_code =
 			(rx_frame.header.dlc > TWAI_FRAME_MAX_DLC) ? TWAI_FRAME_MAX_DLC : rx_frame.header.dlc;
 
-	// Queue full = frame dropped
+	// Queue full = frame dropped: count it here, log it from task context
 	// task_woken -> tell the driver to context-switch on ISR exit if this
 	// send unblocked a higher-priority task (i.e. can_rx_task).
 	BaseType_t task_woken = pdFALSE;
-	xQueueSendFromISR(can_rx_queue, &item, &task_woken);
+	if (xQueueSendFromISR(can_rx_queue, &item, &task_woken) != pdTRUE)
+	{
+		rx_drop_count[item.bus]++;
+	}
 	return (task_woken == pdTRUE);
 }
 
@@ -479,6 +496,22 @@ esp_err_t can_receive(twai_message_t *message, can_bus_t *bus, TickType_t ticks_
 						pdFALSE,	// wait-any: one live bus is enough
 						portMAX_DELAY);
 
+	// Log rx drops, max 1 log/s/bus
+	for (int b = 0; b < CAN_BUS_COUNT; b++)
+	{
+		uint32_t dropped = rx_drop_count[b];
+		if (dropped != rx_drop_logged[b])
+		{
+			int64_t now = esp_timer_get_time();
+			if (now - rx_drop_log_us[b] > 1000000)
+			{
+				rx_drop_log_us[b] = now;
+				rx_drop_logged[b] = dropped;
+				ESP_LOGW(TAG, "bus %d: rx queue full, %lu frames dropped total", b, dropped);
+			}
+		}
+	}
+
 	// The caller's timeout applies to the actual wait-for-data
 	can_rx_item_t item;
 	if (xQueueReceive(can_rx_queue, &item, ticks_to_wait) != pdTRUE)
@@ -509,6 +542,14 @@ esp_err_t can_send(can_bus_t bus, twai_message_t *message, TickType_t ticks_to_w
 	// authoritative re-check happens under node_lock below
 	if (!(xEventGroupGetBits(s_can_event_group) & CAN_ENABLE_BIT(bus)))
 	{
+		tx_drop_count[bus]++;
+		int64_t now = esp_timer_get_time();
+		if (now - tx_drop_log_us[bus] > 1000000)
+		{
+			tx_drop_log_us[bus] = now;
+			ESP_LOGW(TAG, "bus %d: down (disabled), %lu frames dropped total",
+					 bus, tx_drop_count[bus]);
+		}
 		return ESP_ERR_INVALID_STATE;
 	}
 
@@ -517,6 +558,13 @@ esp_err_t can_send(can_bus_t bus, twai_message_t *message, TickType_t ticks_to_w
 	// full TX queue could stall can_disable() indefinitely.
 	if (xSemaphoreTake(tx_slot_sem[bus], ticks_to_wait) != pdTRUE)
 	{
+		tx_drop_count[bus]++;
+		int64_t now = esp_timer_get_time();
+		if (now - tx_drop_log_us[bus] > 1000000)
+		{
+			tx_drop_log_us[bus] = now;
+			ESP_LOGW(TAG, "bus %d: TX queue full, %lu frames dropped total", bus, tx_drop_count[bus]);
+		}
 		return ESP_ERR_TIMEOUT;
 	}
 
