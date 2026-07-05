@@ -491,18 +491,18 @@ static char* elm327_set_protocol(const char* command_str)
 	// the protocol.
 	if(elm327_config.protocol == '6' || elm327_config.protocol == '7')
 	{
-		can_disable();
+		can_disable(CAN_BUS_0);
 		vTaskDelay(pdMS_TO_TICKS(15));
-		can_set_bitrate(CAN_500K);
-		can_enable();
+		can_set_bitrate(CAN_BUS_0, CAN_500K);
+		can_enable(CAN_BUS_0);
 		vTaskDelay(pdMS_TO_TICKS(15));
 	}
 	else if(elm327_config.protocol == '8' || elm327_config.protocol == '9')
 	{
-		can_disable();
+		can_disable(CAN_BUS_0);
 		vTaskDelay(pdMS_TO_TICKS(15));
-		can_set_bitrate(CAN_250K);
-		can_enable();
+		can_set_bitrate(CAN_BUS_0, CAN_250K);
+		can_enable(CAN_BUS_0);
 		vTaskDelay(pdMS_TO_TICKS(15));
 	}
 
@@ -739,7 +739,7 @@ static void elm327_send_flow_control_frame(twai_message_t *first_frame)
 		elm327_can_log(&txframe, ELM327_CAN_TX);
 	}
 	
-	can_send(&txframe, 1);
+	can_send(CAN_BUS_0, &txframe, 1);
 }
 
 static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
@@ -836,7 +836,7 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 	}
 	while( xQueueReceive(*can_rx_queue, ( void * ) &rx_frame, pdMS_TO_TICKS(1)) == pdPASS );
 	can_flush_rx();
-	can_send(&txframe, 1);
+	can_send(CAN_BUS_0, &txframe, 1);
 	xEventGroupSetBits(elm327_event_group, ELM327_READY_TO_RECEIVE_CAN);
 
 	TickType_t xtimeout = (elm327_config.req_timeout*4.096) / portTICK_PERIOD_MS;

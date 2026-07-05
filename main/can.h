@@ -22,7 +22,12 @@
 #ifndef __CAN_H__
 #define __CAN_H__
 #include "driver/twai.h"
+#include "hw_config.h"
 
+typedef enum {
+	CAN_BUS_0 = 0,   /* on-chip TWAI controller */
+	CAN_BUS_1 = 1,   /* MCP2515 over SPI (custom board only) */
+} can_bus_t;
 
 #define CAN_5K				0
 #define CAN_10K				1
@@ -41,30 +46,25 @@ typedef struct {
 	uint8_t silent;
 	uint8_t loopback;
 	uint8_t auto_tx;
-	uint16_t brp;
-	uint8_t phase_seg1;
-	uint8_t phase_seg2;
-	uint8_t sjw;
+	uint8_t rate;
 	uint32_t filter;
 	uint32_t mask;
-	uint8_t auto_bitrate;
 }can_cfg_t;
 
-
-void can_enable(void);
-void can_disable(void);
-void can_set_silent(uint8_t flag);
-void can_set_loopback(uint8_t flag);
-void can_set_auto_retransmit(uint8_t flag);
-void can_set_filter(uint32_t f);
-void can_set_mask(uint32_t m);
-void can_set_bitrate(uint8_t rate);
-esp_err_t can_receive(twai_message_t *message, TickType_t ticks_to_wait);
-esp_err_t can_send(twai_message_t *message, TickType_t ticks_to_wait);
-void can_init(uint8_t bitrate);
-uint8_t can_is_silent(void);
-bool can_is_enabled(void);
-uint8_t can_get_bitrate(void);
-uint32_t can_msgs_to_rx(void);
+void can_init(void);
+void can_enable(can_bus_t bus);
+void can_disable(can_bus_t bus);
+void can_set_silent(can_bus_t bus, uint8_t flag);
+void can_set_loopback(can_bus_t bus, uint8_t flag);
+void can_set_auto_retransmit(can_bus_t bus, uint8_t flag);
+void can_set_filter(can_bus_t bus, uint32_t f);
+void can_set_mask(can_bus_t bus, uint32_t m);
+void can_set_bitrate(can_bus_t bus, uint8_t rate);
+esp_err_t can_send(can_bus_t bus, twai_message_t *message, TickType_t ticks_to_wait);
+esp_err_t can_receive(twai_message_t *message, can_bus_t *bus, TickType_t ticks_to_wait);
+uint8_t can_is_silent(can_bus_t bus);
+bool can_is_enabled(can_bus_t bus);
+bool can_any_enabled(void);
+uint8_t can_get_bitrate(can_bus_t bus);
 void can_flush_rx(void);
 #endif

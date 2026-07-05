@@ -30,6 +30,9 @@
 
 #define FS_MOUNT_POINT              "/littlefs"
 
+// All buses on all boards: classic CAN, 87.5% sample point (CiA recommendation)
+#define CAN_SAMPLE_POINT_PERMILL    875
+
 #if HARDWARE_VER == WICAN_CUSTOM
 
 // ---- Custom WiCAN: ESP32-S3-WROOM-1 N16R8, two CAN buses, no STN chip. ---- //
@@ -58,10 +61,6 @@
 #define MCP2515_RST_GPIO_NUM         8    // active-low: HIGH = run, LOW = reset
 #define MCP2515_SPI_CLOCK_HZ         5000000
 #define MCP2515_OSCILLATOR_HZ        8000000
-
-// These apply to both buses
-#define CAN_DEFAULT_BITRATE          500000
-#define CAN_DEFAULT_SAMPLE_POINT_PERMILL 875
 
 #define CONNECTED_LED_GPIO_NUM       41
 #define ACTIVE_LED_GPIO_NUM          40

@@ -92,13 +92,13 @@ uint8_t checksumCalc(uint8_t *buffer, int length)
 
 void gvert_setup(EEPROMSettings *settings)
 {
-	can_disable();
+	can_disable(CAN_BUS_0);
 	ESP_LOGI(__func__, "settings->CAN0Speed: %lu", settings->CAN0Speed);
 	for(uint8_t i = 0; i < sizeof(can_speed)/sizeof(uint32_t); i++)
 	{
 		if(can_speed[i] == settings->CAN0Speed)
 		{
-			can_set_bitrate(i);
+			can_set_bitrate(CAN_BUS_0, i);
 			ESP_LOGI(__func__, "CAN0 speed: %u", i);
 			break;
 		}
@@ -106,16 +106,16 @@ void gvert_setup(EEPROMSettings *settings)
 
 	if(settings->CAN0ListenOnly)
 	{
-		can_set_silent(1);
+		can_set_silent(CAN_BUS_0, 1);
 	}
 	else
 	{
-		can_set_silent(0);
+		can_set_silent(CAN_BUS_0, 0);
 	}
 
 	if(settings->CAN0_Enabled)
 	{
-		can_enable();
+		can_enable(CAN_BUS_0);
 		ESP_LOGI(__func__, "can_enabled");
 	}
 }
@@ -379,7 +379,7 @@ void gvret_parse(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t
 						//temp8 = checksumCalc(buff, step);
 						frame->rtr = 0;
 						frame->self = 0;
-						if (ESP_ERR_INVALID_STATE == can_send(frame, 1))
+						if (ESP_ERR_INVALID_STATE == can_send(CAN_BUS_0, frame, 1))
 						{
 							ESP_LOGE(__func__, "can_send error");
 						}
@@ -759,7 +759,7 @@ void gvret_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q))
             .name = "periodic"
     };
 
-    settings.CAN0_Enabled = can_is_enabled();
+    settings.CAN0_Enabled = can_is_enabled(CAN_BUS_0);
     if(config_server_get_can_mode() == CAN_SILENT)
     {
     	settings.CAN0ListenOnly = true;

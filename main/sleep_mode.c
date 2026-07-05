@@ -474,7 +474,10 @@ static void adc_task(void *pvParameters)
 			if(sleep_state == SLEEP_STATE)
 			{
 				ESP_LOGW(TAG, "sleeping");
-				can_disable();
+				for(int bus = 0; bus < CAN_BUS_COUNT; bus++)
+				{
+					can_disable(bus);
+				}
 				wifi_network_deinit();
 				ble_disable();
 				esp_sleep_enable_timer_wakeup(2*1000000);

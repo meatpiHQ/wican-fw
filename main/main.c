@@ -108,7 +108,7 @@ static void process_led(bool state)
 	static bool current_state;
 	static int64_t last_change;
 
-	if(!can_is_enabled())
+	if(!can_any_enabled())
 	{
 		gpio_set_level(ACTIVE_LED_GPIO_NUM, LED_OFF);
 		current_state = 0;
@@ -212,7 +212,7 @@ static void can_tx_task(void *pvParameters)
 			}
 
 			tx_msg.self = 0;
-			can_send(&tx_msg, portMAX_DELAY);
+			can_send(CAN_BUS_0, &tx_msg, portMAX_DELAY);
 		}
 		else if(protocol == SAVVYCAN)
 		{
@@ -244,6 +244,7 @@ static void can_rx_task(void *pvParameters)
 	while(1)
 	{
         static twai_message_t rx_msg;
+        static can_bus_t rx_bus;
 //        esp_err_t ret = 0xFF;
 
 
@@ -281,13 +282,13 @@ static void can_rx_task(void *pvParameters)
             precondition_tick();
         }
 
-        while(can_receive(&rx_msg, 0) ==  ESP_OK)
+        while(can_receive(&rx_msg, &rx_bus, 0) ==  ESP_OK)
         {
             precondition_can_rx_hook(&rx_msg);
             {
                 twai_message_t fwd_msg = rx_msg;
                 if (precondition_fwd_hook(&fwd_msg) == FWD_MODIFIED) {
-                    can_send(&fwd_msg, 1);
+                    can_send(rx_bus, &fwd_msg, 1);
                 }
             }
 //        	num_msg++;
@@ -422,25 +423,25 @@ void app_main(void)
 	slcan_init(&send_to_host);
 
 	int8_t can_datarate = config_server_get_can_rate();
-	(can_datarate != -1) ? can_init(can_datarate):can_init(CAN_500K);
+	can_init();
 
 	if(can_datarate != -1)
 	{
-		can_set_bitrate(can_datarate);
+		can_set_bitrate(CAN_BUS_0, can_datarate);
 	}
 	else
 	{
 		ESP_LOGE(TAG, "error going to default CAN_500K");
-		can_set_bitrate(CAN_500K);
+		can_set_bitrate(CAN_BUS_0, CAN_500K);
 	}
 
 	if(config_server_get_can_mode() == CAN_NORMAL)
 	{
-		can_set_silent(0);
+		can_set_silent(CAN_BUS_0, 0);
 	}
 	else
 	{
-		can_set_silent(1);
+		can_set_silent(CAN_BUS_0, 1);
 	}
 
 	protocol = config_server_protocol();
@@ -451,26 +452,26 @@ void app_main(void)
 //		int can_datarate = config_server_get_can_rate();
 		if(can_datarate != -1)
 		{
-			can_set_bitrate(can_datarate);
+			can_set_bitrate(CAN_BUS_0, can_datarate);
 		}
 		else
 		{
 			ESP_LOGE(TAG, "error going to default CAN_500K");
-			can_set_bitrate(CAN_500K);
+			can_set_bitrate(CAN_BUS_0, CAN_500K);
 		}
 
-		can_enable();
+		can_enable(CAN_BUS_0);
 	}
 	else if(protocol == SAVVYCAN)
 	{
 		gvret_init(&send_to_host);
-		can_enable();
+		can_enable(CAN_BUS_0);
 	}
 	else if(protocol == OBD_ELM327)
 	{
 //		can_init(CAN_500K);
-		can_set_bitrate(can_datarate);
-		can_enable();
+		can_set_bitrate(CAN_BUS_0, can_datarate);
+		can_enable(CAN_BUS_0);
 		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
 		
 		if(config_server_mqtt_en_config() && config_server_mqtt_elm327_log())
@@ -485,8 +486,8 @@ void app_main(void)
 	}
 	else if(protocol == AUTO_PID)
 	{
-		can_set_bitrate(can_datarate);
-		can_enable();
+		can_set_bitrate(CAN_BUS_0, can_datarate);
+		can_enable(CAN_BUS_0);
 		xmsg_obd_rx_queue = xQueueCreate(32, sizeof( twai_message_t) );
 		
 		elm327_init(&autopid_parser, &xmsg_obd_rx_queue, NULL);
@@ -495,16 +496,16 @@ void app_main(void)
 
 	if(config_server_mqtt_en_config())
 	{
-		can_set_bitrate(can_datarate);
+		can_set_bitrate(CAN_BUS_0, can_datarate);
 		xmsg_mqtt_rx_queue = xQueueCreate(32, sizeof(mqtt_can_message_t) );
-		can_enable();
+		can_enable(CAN_BUS_0);
 		mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM, &xmsg_mqtt_rx_queue);
 	}
 //	else if(protocol == MQTT)
 //	{
 //		xmsg_mqtt_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
 //		can_init(CAN_500K);
-//		can_enable();
+//		can_enable(CAN_BUS_0);
 //
 //		mqtt_init((char*)&uid[0], CONNECTED_LED_GPIO_NUM, &xmsg_mqtt_rx_queue);
 //	}

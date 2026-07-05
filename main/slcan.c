@@ -274,10 +274,10 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 			    {
 			    	ESP_LOGI(TAG, "open can!");
 			        // Open channel command
-			    	can_set_silent(0);
-			    	can_set_loopback(0);
+			    	can_set_silent(CAN_BUS_0, 0);
+			    	can_set_loopback(CAN_BUS_0, 0);
 			    	loopback = 0;
-					can_enable();
+					can_enable(CAN_BUS_0);
 			    	state = SL_END;
 			    	cmd = SL_OPEN;
 			    	break;
@@ -286,10 +286,10 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 			    else if (slcan_buffer[i] == 'Y')
 			    {
 			      // Open loop back mode
-					can_set_silent(0);
-					can_set_loopback(1);
+					can_set_silent(CAN_BUS_0, 0);
+					can_set_loopback(CAN_BUS_0, 1);
 					loopback = 1;
-					can_enable();
+					can_enable(CAN_BUS_0);
 			    	state = SL_END;
 			    	cmd = SL_OPEN;
 			    	break;
@@ -299,7 +299,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 			    {
 			        // Close channel command
 					ESP_LOGI(TAG, "open close!");
-			    	can_disable();
+			    	can_disable(CAN_BUS_0);
 			    	state = SL_END;
 			    	cmd = SL_CLOSE;
 			    	break;
@@ -307,10 +307,10 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 			    }
 			    else if (slcan_buffer[i] == 'L')
 			    {
-					can_set_silent(1);
-					can_set_loopback(0);
+					can_set_silent(CAN_BUS_0, 1);
+					can_set_loopback(CAN_BUS_0, 0);
 					loopback = 0;
-			    	can_enable();
+			    	can_enable(CAN_BUS_0);
 			    	state = SL_END;
 			    	cmd = SL_MUTE;
 			    	break;
@@ -441,7 +441,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 								break;
 							}
 
-							can_set_bitrate(sl_bitrate[b]);
+							can_set_bitrate(CAN_BUS_0, sl_bitrate[b]);
 							state = SL_END;
 							break;
 						}
@@ -476,7 +476,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 											((((filter[4]<<4)+filter[5]) << 8) & 0x0000FF00) |
 											((((filter[2]<<4)+filter[3]) << 16) & 0x00FF0000) |
 											((((filter[0]<<4)+filter[1]) << 24) & 0xFF000000);
-								can_set_filter(flt);
+								can_set_filter(CAN_BUS_0, flt);
 								//ESP_LOGI(TAG, "flt: 0xPRIxx", flt);
 								msg_index = 0;
 								state = SL_END;
@@ -493,7 +493,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 											((((mask[4]<<4)+mask[5]) << 8) & 0x0000FF00) |
 											((((mask[2]<<4)+mask[3]) << 16) & 0x00FF0000) |
 											((((mask[0]<<4)+mask[1]) << 24) & 0xFF000000);
-								can_set_mask(msk);
+								can_set_mask(CAN_BUS_0, msk);
 								//ESP_LOGI(TAG, "msk: 0xPRIxx", msk);
 								msg_index = 0;
 								state = SL_END;
@@ -575,7 +575,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 							frame->self = 0;
 						}
 
-						if (ESP_ERR_INVALID_STATE == can_send(frame, 1))
+						if (ESP_ERR_INVALID_STATE == can_send(CAN_BUS_0, frame, 1))
 						{
 							//ESP_LOGE(TAG, "can_send error");
 						}

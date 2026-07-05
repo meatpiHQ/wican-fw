@@ -852,7 +852,7 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	cJSON_AddBoolToObject(root, "sta_connected", wifi_network_is_connected());
 	cJSON_AddStringToObject(root, "mdns", wc_mdns_get_hostname());
 	cJSON_AddStringToObject(root, "ble_status", device_config.ble_status);
-	cJSON_AddStringToObject(root, "can_datarate", can_datarate_str[can_get_bitrate()]);
+	cJSON_AddStringToObject(root, "can_datarate", can_datarate_str[can_get_bitrate(CAN_BUS_0)]);
 	cJSON_AddStringToObject(root, "can_mode", device_config.can_mode);
 	cJSON_AddStringToObject(root, "port_type", device_config.port_type);
 	cJSON_AddStringToObject(root, "port", device_config.port);
@@ -1062,7 +1062,10 @@ static esp_err_t upload_post_handler(httpd_req_t *req)
     {
     	ble_disable();
     }
-    can_disable();
+    for(int bus = 0; bus < CAN_BUS_COUNT; bus++)
+    {
+        can_disable(bus);
+    }
     /* Skip leading "/upload" from URI to get filename */
     /* Note sizeof() counts NULL termination hence the -1 */
     const char *filename = get_path_from_uri(filepath, ((struct file_server_data *)req->user_ctx)->base_path,

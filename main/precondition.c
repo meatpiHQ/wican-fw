@@ -151,7 +151,7 @@ static void send_precondition_start_msg(uint8_t ticks_remaining) {
         packet.data[4] = 0x07U;
     }
     // TODO(ejones): ensure that blocking for 1 tick is the right move here and elsewhere
-    can_send(&packet, 1);
+    can_send(CAN_BUS_0, &packet, 1);
 }
 
 static void send_precondition_stop_msg(uint8_t ticks_remaining) {
@@ -163,7 +163,7 @@ static void send_precondition_stop_msg(uint8_t ticks_remaining) {
         packet.data[3] = 0xE0U;
         packet.data[4] = 0x07U;
     }
-    can_send(&packet, 1);
+    can_send(CAN_BUS_0, &packet, 1);
 }
 
 // Decide whether to block, modify, or passthrough a message for preconditioning.

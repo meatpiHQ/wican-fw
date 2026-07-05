@@ -20,362 +20,597 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include  "freertos/queue.h"
+#include "freertos/queue.h"
+#include "freertos/semphr.h"
 #include "freertos/event_groups.h"
-#include "esp_wifi.h"
 #include "esp_system.h"
-#include "esp_event.h"
-#include "nvs_flash.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include <string.h>
-#include "comm_server.h"
-#include "lwip/sockets.h"
-#include "driver/twai.h"
+#include "esp_twai.h"
+#include "esp_twai_onchip.h"
 #include "can.h"
 #include "hw_config.h"
 
-static EventGroupHandle_t s_can_event_group = NULL;
-#define CAN_ENABLE_BIT 		BIT0
-
 #define TAG 		__func__
+
 enum bus_state
 {
     OFF_BUS = 0,
     ON_BUS = 1,
 	END_BUS
 };
-static const twai_timing_config_t twai_timing_config[] = {
-	{.brp = 800, .tseg_1 = 15, .tseg_2 = 4, .sjw = 3, .triple_sampling = false},
-	{.brp = 400, .tseg_1 = 15, .tseg_2 = 4, .sjw = 3, .triple_sampling = false},
-	{.brp = 200, .tseg_1 = 15, .tseg_2 = 4, .sjw = 3, .triple_sampling = false},
-	{.brp = 128, .tseg_1 = 16, .tseg_2 = 8, .sjw = 3, .triple_sampling = false},
-	{.brp = 80, .tseg_1 = 15, .tseg_2 = 4, .sjw = 3, .triple_sampling = false},
-	{.brp = 40, .tseg_1 = 15, .tseg_2 = 4, .sjw = 3, .triple_sampling = false},
-	{.brp = 32, .tseg_1 = 15, .tseg_2 = 4, .sjw = 3, .triple_sampling = false},
-	{.brp = 16, .tseg_1 = 15, .tseg_2 = 4, .sjw = 3, .triple_sampling = false},
-	{.brp = 8, .tseg_1 = 15, .tseg_2 = 4, .sjw = 3, .triple_sampling = false},
-	{.brp = 4, .tseg_1 = 16, .tseg_2 = 8, .sjw = 3, .triple_sampling = false},
-	{.brp = 4, .tseg_1 = 15, .tseg_2 = 4, .sjw = 3, .triple_sampling = false}
+
+typedef struct {
+	twai_frame_t frame;
+	uint8_t data[TWAI_FRAME_MAX_LEN];
+} can_tx_slot_t;
+
+typedef struct {
+	twai_message_t msg;
+	can_bus_t bus;
+} can_rx_item_t;
+
+// Indexed by the CAN_5K..CAN_1000K rate codes in can.h
+static const uint32_t can_bitrate_bps[] = {
+	5000, 10000, 20000, 25000, 50000, 100000,
+	125000, 250000, 500000, 800000, 1000000
 };
 
-//static EventGroupHandle_t s_can_event_group;
-//
-static TimerHandle_t xCAN_EN_Timer;
-//static uint8_t silent = 0;
-//static uint8_t auto_retransmit = 0;
-static uint8_t datarate = CAN_500K;
-//static uint8_t bus_state = OFF_BUS;
-// static uint32_t mask = 0xFFFFFFFF;
-// static uint32_t filter = 0;
-static can_cfg_t can_cfg = {.bus_state = END_BUS, .auto_bitrate = 0, .mask = 0xFFFFFFFF, .filter = 0};
+static can_cfg_t can_cfg[CAN_BUS_COUNT];
+static twai_node_handle_t can_node[CAN_BUS_COUNT];
+// Mutex guarding each node handle's lifecycle: can_disable() deletes the node,
+// so create/delete/transmit are serialized under it to prevent use-after-free.
+// Don't hold it across a blocking call.
+static SemaphoreHandle_t node_lock[CAN_BUS_COUNT];
+// One queue shared by all buses; can_receive() returns the bus tag.
+static QueueHandle_t can_rx_queue = NULL;
+// Per-bus "enabled" bits (BIT(bus)). These are state flags, not events:
+// set by can_enable(), cleared by can_disable(), never consumed by waiters.
+// can_receive() parks on wait-any until some bus is up (keeps can_rx_task
+// asleep while CAN is off); can_send() reads its bus's bit as a fast-fail
+// gate. Only touched from task context (the FromISR set is deferred/lossy).
+static EventGroupHandle_t s_can_event_group = NULL;
+#define CAN_ENABLE_BIT(bus)		BIT(bus)
+#define CAN_ENABLE_BIT_ANY		((1 << CAN_BUS_COUNT) - 1)
 
-#define TWAI_CONFIG(tx_io_num, rx_io_num, op_mode) {.mode = op_mode, .tx_io = tx_io_num, .rx_io = rx_io_num,        \
-                                                                    .clkout_io = TWAI_IO_UNUSED, .bus_off_io = TWAI_IO_UNUSED,      \
-                                                                    .tx_queue_len = 100, .rx_queue_len = 100,                           \
-                                                                    .alerts_enabled = TWAI_ALERT_NONE,  .clkout_divider = 0,        \
-                                                                    .intr_flags = ESP_INTR_FLAG_LEVEL1}
+// The node driver queues a POINTER to the caller's twai_frame_t and transmits
+// from it later (no copy), so every in-flight TX needs to have long enough lifetime.
+// can_send() copies the message into a slot from this pool; on_tx_done frees
+// it. The pool size doubles as the driver tx_queue_depth, and a counting
+// semaphore (taken with the caller's timeout) provides the legacy
+// block-until-queue-space behavior.
+// 32 is the most the uint32_t slot bitmask can track, and buys ~7 ms of burst
+// absorption at 500 kbit/s -- the legacy 8-deep queue (~2 ms) overflowed on
+// ordinary vehicle-bus burst clusters.
+#define CAN_TX_SLOT_COUNT	32
+static can_tx_slot_t tx_slot[CAN_BUS_COUNT][CAN_TX_SLOT_COUNT];
+// Counting semaphore whose count == number of free TX slots
+// can_send() takes it with the caller's timeout.
+// can_on_tx_done() gives it back from ISR context.
+// Ordering rule: take BEFORE node_lock, never while holding it.
+static SemaphoreHandle_t tx_slot_sem[CAN_BUS_COUNT];
+// Bitmask that tracks which slots are free, guarded by tx_slot_num
+static uint32_t tx_slot_used[CAN_BUS_COUNT];
+// Spinlock for the slot bitmask above, which is the one piece of TX state
+// shared with ISR context (can_on_tx_done), so we can't use a mutex.
+static portMUX_TYPE tx_slot_mux = portMUX_INITIALIZER_UNLOCKED;
 
-
-static const twai_general_config_t g_config_normal = TWAI_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, TWAI_MODE_NORMAL);
-static const twai_general_config_t g_config_silent = TWAI_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, TWAI_MODE_LISTEN_ONLY);
-//static const twai_general_config_t g_config_no_ack = TWAI_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, TWAI_MODE_NO_ACK);
-
-static twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
-
-//block tx/rx
-void can_block(void)
+// Callback to receive frames from driver (ISR context): drain the frame out
+// of the hardware, tag it with its bus, and hand it to can_receive() via the
+// shared queue--all protocol work happens later in task context
+static bool can_on_rx_done(twai_node_handle_t handle, const twai_rx_done_event_data_t *edata, void *user_ctx)
 {
-	xEventGroupClearBits(s_can_event_group, CAN_ENABLE_BIT);
+	(void)edata;
+	// Bus id was registered as the callback's user_ctx in can_enable()
+	can_rx_item_t item = { .bus = (can_bus_t)(uintptr_t)user_ctx };
+	// Point the driver's output buffer directly at the queue item's payload
+	// array, so the data lands in its final place with no second copy
+	twai_frame_t rx_frame = {
+		.buffer = item.msg.data,
+		.buffer_len = sizeof(item.msg.data),
+	};
 
-	if( xTimerIsTimerActive( xCAN_EN_Timer ) != pdFALSE )
+	// Only legal inside this callback; pulls the pending frame from hardware
+	if (twai_node_receive_from_isr(handle, &rx_frame) != ESP_OK)
 	{
-		xTimerReset( xCAN_EN_Timer, 0 );
-		xTimerStop(xCAN_EN_Timer, 0);
+		return false;
 	}
-	vTaskDelay(pdMS_TO_TICKS(1));//wait for rx to finish
+
+	// Convert new twai_frame_t api that the MCP2515 driver uses to the legacy
+	// twai_message_t that the rest of the firmware uses.
+	// ss/self have no equivalent in the twai_frame_t api
+	item.msg.flags = 0;
+	item.msg.identifier = rx_frame.header.id;
+	item.msg.extd = rx_frame.header.ide;
+	item.msg.rtr = rx_frame.header.rtr;
+	// For classic CAN, dlc==len. This will need to be updated if we ever support FD
+	item.msg.data_length_code =
+			(rx_frame.header.dlc > TWAI_FRAME_MAX_DLC) ? TWAI_FRAME_MAX_DLC : rx_frame.header.dlc;
+
+	// Queue full = frame dropped
+	// task_woken -> tell the driver to context-switch on ISR exit if this
+	// send unblocked a higher-priority task (i.e. can_rx_task).
+	BaseType_t task_woken = pdFALSE;
+	xQueueSendFromISR(can_rx_queue, &item, &task_woken);
+	return (task_woken == pdTRUE);
 }
-//unblock tx/rx
-void can_unblock(void)
+
+// Callback when the driver finishes transmitting a frame (ISR context):
+// return its backing TX slot to the pool. This is the only thing that
+// replenishes the slots a can_send() may be blocked waiting on.
+static bool can_on_tx_done(twai_node_handle_t handle, const twai_tx_done_event_data_t *edata, void *user_ctx)
 {
-	if(can_cfg.bus_state == ON_BUS)
+	(void)handle;
+	// Bus id was registered as the callback's user_ctx in can_enable()
+	can_bus_t bus = (can_bus_t)(uintptr_t)user_ctx;
+	// The driver hands back the exact twai_frame_t pointer we submitted;
+	// recover the slot containing it
+	can_tx_slot_t *slot = __containerof(edata->done_tx_frame, can_tx_slot_t, frame);
+
+	portENTER_CRITICAL_ISR(&tx_slot_mux);
+	tx_slot_used[bus] &= ~BIT(slot - &tx_slot[bus][0]);
+	portEXIT_CRITICAL_ISR(&tx_slot_mux);
+
+	// Release the count so a blocked can_send() can claim the slot;
+	// task_woken as in can_on_rx_done
+	BaseType_t task_woken = pdFALSE;
+	xSemaphoreGiveFromISR(tx_slot_sem[bus], &task_woken);
+	return (task_woken == pdTRUE);
+}
+
+// Reset TX slot accounting to "all free". Only call with the bus node torn
+// down (or never created).
+static void can_tx_slots_reset(can_bus_t bus)
+{
+	portENTER_CRITICAL(&tx_slot_mux);
+	tx_slot_used[bus] = 0;
+	portEXIT_CRITICAL(&tx_slot_mux);
+	// Frames still queued in the driver at disable time are dropped without 
+	// an on_tx_done callback, so the semaphore must be refilled by hand.
+	while (xSemaphoreGive(tx_slot_sem[bus]) == pdTRUE)
+	{
+	}
+}
+
+// Best-effort translation of the stored legacy filter/mask (raw SJA1000
+// single-filter register values, as set by slcan Fxxx/Mxxx: std ID in bits
+// [31:21], mask bit 1 = "don't care") to the node API (bare 11-bit id, mask
+// bit 1 = "must match"). Extended-ID acceptance through the legacy register
+// layout is not representable; frames are filtered as standard IDs.
+// Must be called before twai_node_enable().
+static void can_apply_filter(can_bus_t bus)
+{
+	if (can_cfg[bus].mask == 0xFFFFFFFF)
+	{
+		return;	// legacy accept-all; node default is already accept-all
+	}
+
+	twai_mask_filter_config_t fcfg = {
+		.id = (can_cfg[bus].filter >> 21) & 0x7FF,
+		.mask = ((~can_cfg[bus].mask) >> 21) & 0x7FF,
+		.is_ext = false,
+	};
+
+	ESP_LOGW(TAG, "bus %d: legacy filter 0x%08lX/0x%08lX applied as std-id %03lX mask %03lX",
+			 bus, can_cfg[bus].filter, can_cfg[bus].mask, fcfg.id, fcfg.mask);
+
+	esp_err_t err = twai_node_config_mask_filter(can_node[bus], 0, &fcfg);
+	if (err != ESP_OK)
+	{
+		ESP_LOGE(TAG, "bus %d: filter config failed: %s", bus, esp_err_to_name(err));
+	}
+}
+
+#if HW_HAS_MCP2515
+static esp_err_t can_bus1_create_node(void)
+{
+	ESP_LOGW(TAG, "CAN_BUS_1 (MCP2515) not implemented yet");
+	return ESP_ERR_NOT_SUPPORTED;
+}
+#endif
+
+// Build the bus-0 on-chip node from the stored per-bus config. Mode flags
+// (silent/loopback) are creation-time-only in the node API--that's why
+// enable/disable is node create/delete instead of a persistent node.
+static esp_err_t can_bus0_create_node(void)
+{
+	twai_onchip_node_config_t config = {
+		.io_cfg = {
+			.tx = TX_GPIO_NUM,
+			.rx = RX_GPIO_NUM,
+			.quanta_clk_out = GPIO_NUM_NC,
+			.bus_off_indicator = GPIO_NUM_NC,
+		},
+		.bit_timing = {
+			.bitrate = can_bitrate_bps[can_cfg[CAN_BUS_0].rate],
+			.sp_permill = CAN_SAMPLE_POINT_PERMILL,
+		},
+		.fail_retry_cnt = can_cfg[CAN_BUS_0].auto_tx ? -1 : 0,	// -1 = retry forever
+		// == slot pool size, so a held tx_slot_sem count implies queue space
+		.tx_queue_depth = CAN_TX_SLOT_COUNT,
+		.intr_priority = 0,
+		.flags = {
+			.enable_listen_only = can_cfg[CAN_BUS_0].silent ? 1 : 0,
+			// self_test (no ACK needed) so loopback works partner-free
+			.enable_loopback = can_cfg[CAN_BUS_0].loopback ? 1 : 0,
+			.enable_self_test = can_cfg[CAN_BUS_0].loopback ? 1 : 0,
+		},
+	};
+
+	return twai_new_node_onchip(&config, &can_node[CAN_BUS_0]);
+}
+
+// Bring a bus up from its stored config: create node -> filter -> callbacks
+// -> enable -> publish the enable bit.
+void can_enable(can_bus_t bus)
+{
+	// s_can_event_group is NULL only before can_init() (config server
+	// starts earlier in app_main and could call in during that window)
+	if (bus >= CAN_BUS_COUNT || s_can_event_group == NULL)
 	{
 		return;
 	}
+	// node_lock synchronizes the enable sequence with
+	// can_send()/can_disable() touching the node handle.
+	xSemaphoreTake(node_lock[bus], portMAX_DELAY);
 
-	if( xTimerIsTimerActive( xCAN_EN_Timer ) == pdFALSE )
+	if (can_cfg[bus].bus_state == ON_BUS)
 	{
-		xTimerStart( xCAN_EN_Timer, 0 );
+		// Bus is already on
+		xSemaphoreGive(node_lock[bus]);
+		return;
+	}
+
+	esp_err_t err;
+	if (bus == CAN_BUS_0)
+	{
+		err = can_bus0_create_node();
 	}
 	else
 	{
-		xTimerReset( xCAN_EN_Timer, 0 );
-	}
-}
-
-
-void can_enable(void)
-{
-	if(can_cfg.bus_state == ON_BUS)
-	{
-		return;
-	}
-	
-	twai_timing_config_t *t_config;
-	t_config = (twai_timing_config_t *)&twai_timing_config[datarate];
-
-	f_config.acceptance_code = can_cfg.filter;
-	f_config.acceptance_mask = can_cfg.mask;
-	f_config.single_filter = 1;
-
-	if(can_cfg.silent)
-	{
-		ESP_ERROR_CHECK(twai_driver_install(&g_config_silent, (const twai_timing_config_t *)t_config, &f_config));
-	}
-	else
-	{
-//		ESP_LOGW(TAG, "start normal mode");
-		ESP_ERROR_CHECK(twai_driver_install(&g_config_normal, (const twai_timing_config_t *)t_config, &f_config));
-	}
-
-	ESP_ERROR_CHECK(twai_start());
-	twai_clear_receive_queue();
-	can_unblock();
-	can_cfg.bus_state = ON_BUS;
-#ifdef CAN_STDBY_GPIO_NUM
-	gpio_set_level(CAN_STDBY_GPIO_NUM, 0);
+#if HW_HAS_MCP2515
+		err = can_bus1_create_node();
+#else
+		err = ESP_ERR_NOT_SUPPORTED;
 #endif
-}
+	}
 
-void can_disable(void)
-{
-	if(can_cfg.bus_state == OFF_BUS)
+	if (err != ESP_OK)
 	{
+		ESP_LOGE(TAG, "bus %d: node create failed: %s", bus, esp_err_to_name(err));
+		can_node[bus] = NULL;
+		xSemaphoreGive(node_lock[bus]);
 		return;
 	}
-	else if(can_cfg.bus_state == ON_BUS)
-	{
+
+	// Filter config is only legal while the node is stopped, so it must
+	// happen here, before twai_node_enable()
+	can_apply_filter(bus);
+
+	// Register the ISR callbacks with the bus id as their user_ctx
+	twai_event_callbacks_t cbs = {
+		.on_rx_done = can_on_rx_done,
+		.on_tx_done = can_on_tx_done,
+	};
+	ESP_ERROR_CHECK(twai_node_register_event_callbacks(can_node[bus], &cbs, (void *)(uintptr_t)bus));
+
+	can_tx_slots_reset(bus);	// fresh node: all slots are free
+	ESP_ERROR_CHECK(twai_node_enable(can_node[bus]));
+
+	// Callers expect can_enable() to clear the RX queue on (re)start.
+	// The queue is shared, so this also drops any pending frames of the other bus.
+	// This is fine since enable only happens at boot/reconfig.
+	xQueueReset(can_rx_queue);
+
+	can_cfg[bus].bus_state = ON_BUS;
 #ifdef CAN_STDBY_GPIO_NUM
-		gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
+	if (bus == CAN_BUS_0)
+	{
+		gpio_set_level(CAN_STDBY_GPIO_NUM, 0);	// transceiver out of standby
+	}
 #endif
-		can_block();
-		twai_stop();
-		twai_driver_uninstall();
-		can_cfg.bus_state = OFF_BUS;
-	}
+	// Publish "bus up" last: unparks can_receive(), opens can_send()'s gate
+	xEventGroupSetBits(s_can_event_group, CAN_ENABLE_BIT(bus));
+
+	xSemaphoreGive(node_lock[bus]);
 }
 
-void can_set_silent(uint8_t flag)
+// Tear a bus down: stops the interrupt sources (no callbacks after this), then
+// delete frees the node.
+void can_disable(can_bus_t bus)
 {
-	if(can_cfg.bus_state == ON_BUS)
+	if (bus >= CAN_BUS_COUNT || s_can_event_group == NULL)
 	{
 		return;
 	}
 
-	can_cfg.silent = flag;
+	// The node is deleted with node_lock held so a concurrent can_send() can never touch a freed handle
+	xSemaphoreTake(node_lock[bus], portMAX_DELAY);
+
+	if (can_cfg[bus].bus_state != ON_BUS)
+	{
+		// Bus is already off
+		xSemaphoreGive(node_lock[bus]);
+		return;
+	}
+	// The enable bit goes first so new senders fail fast instead of piling up on the lock.
+	xEventGroupClearBits(s_can_event_group, CAN_ENABLE_BIT(bus));
+#ifdef CAN_STDBY_GPIO_NUM
+	if (bus == CAN_BUS_0)
+	{
+		gpio_set_level(CAN_STDBY_GPIO_NUM, 1);	// transceiver into standby
+	}
+#endif
+
+	twai_node_disable(can_node[bus]);
+	twai_node_delete(can_node[bus]);
+	can_node[bus] = NULL;
+	// Frames still queued in the driver are dropped since on_tx_done is no
+	// longer registered, so reset the tx slots
+	can_tx_slots_reset(bus);
+	can_cfg[bus].bus_state = OFF_BUS;
+
+	xSemaphoreGive(node_lock[bus]);
 }
-void can_set_loopback(uint8_t flag)
+
+// Config setters. As in the legacy driver, they are no-ops while the bus is
+// ON: values are latched into the node at the next can_enable(). Callers
+// that reconfigure at runtime (slcan/gvret/elm327) always disable first.
+
+void can_set_silent(can_bus_t bus, uint8_t flag)
 {
-	if(can_cfg.bus_state == ON_BUS)
+	if (bus >= CAN_BUS_COUNT || can_cfg[bus].bus_state == ON_BUS)
+	{
+		return;
+	}
+	can_cfg[bus].silent = flag;
+}
+
+void can_set_loopback(can_bus_t bus, uint8_t flag)
+{
+	if (bus >= CAN_BUS_COUNT || can_cfg[bus].bus_state == ON_BUS)
+	{
+		return;
+	}
+	can_cfg[bus].loopback = flag;
+}
+
+uint8_t can_is_silent(can_bus_t bus)
+{
+	if (bus >= CAN_BUS_COUNT)
+	{
+		return 0;
+	}
+	return can_cfg[bus].silent;
+}
+
+void can_set_auto_retransmit(can_bus_t bus, uint8_t flag)
+{
+	if (bus >= CAN_BUS_COUNT || can_cfg[bus].bus_state == ON_BUS)
+	{
+		return;
+	}
+	can_cfg[bus].auto_tx = flag;
+}
+
+void can_set_filter(can_bus_t bus, uint32_t f)
+{
+	if (bus >= CAN_BUS_COUNT || can_cfg[bus].bus_state == ON_BUS)
+	{
+		return;
+	}
+	can_cfg[bus].filter = f;
+}
+
+void can_set_mask(can_bus_t bus, uint32_t m)
+{
+	if (bus >= CAN_BUS_COUNT || can_cfg[bus].bus_state == ON_BUS)
+	{
+		return;
+	}
+	can_cfg[bus].mask = m;
+}
+
+void can_set_bitrate(can_bus_t bus, uint8_t rate)
+{
+	if (bus >= CAN_BUS_COUNT || can_cfg[bus].bus_state == ON_BUS)
+	{
+		return;
+	}
+	if (rate >= CAN_AUTO)	// auto-baud not supported; also guards table bounds
+	{
+		rate = CAN_500K;
+	}
+	can_cfg[bus].rate = rate;
+}
+
+uint8_t can_get_bitrate(can_bus_t bus)
+{
+	if (bus >= CAN_BUS_COUNT)
+	{
+		return CAN_500K;
+	}
+	return can_cfg[bus].rate;
+}
+
+// One-time OS-resource setup; touches no hardware (per-bus bring-up is
+// can_enable()). Idempotent so a stray second call can't leak the handles.
+void can_init(void)
+{
+	if (s_can_event_group != NULL)
 	{
 		return;
 	}
 
-	can_cfg.loopback = flag;
-}
+	s_can_event_group = xEventGroupCreate();
+	// Deeper than the legacy driver's 100: at 500 kbit/s a saturated bus
+	// delivers ~4 frames/ms, so 256 rides out multi-ms scheduling stalls of
+	// can_rx_task under TCP streaming load instead of silently dropping RX.
+	can_rx_queue = xQueueCreate(256, sizeof(can_rx_item_t));
 
-uint8_t can_is_silent(void)
-{
-	return can_cfg.silent;
-}
-void can_set_auto_retransmit(uint8_t flag)
-{
-	if(can_cfg.bus_state == ON_BUS)
+	for (int bus = 0; bus < CAN_BUS_COUNT; bus++)
 	{
-		return;
-	}
-
-//	auto_retransmit = flag;
-}
-
-void can_set_filter(uint32_t f)
-{
-	if(can_cfg.bus_state == ON_BUS)
-	{
-		return;
-	}
-
-	can_cfg.filter = f;
-}
-
-void can_set_mask(uint32_t m)
-{
-	if(can_cfg.bus_state == ON_BUS)
-	{
-		return;
-	}
-	can_cfg.mask = m;
-}
-
-void can_set_bitrate(uint8_t rate)
-{
-	if(can_cfg.bus_state == ON_BUS || can_cfg.auto_bitrate)
-	{
-		return;
-	}
-	datarate = rate;
-}
-uint8_t can_get_bitrate(void)
-{
-	return datarate;
-}
-static void vCAN_EN_Callback( TimerHandle_t xTimer )
-{
-	xEventGroupSetBits(s_can_event_group, CAN_ENABLE_BIT);
-}
-void can_init(uint8_t bitrate)
-{
-	if(s_can_event_group == NULL)
-	{
-		s_can_event_group = xEventGroupCreate();
-		xCAN_EN_Timer= xTimerCreate
-						   ( /* Just a text name, not used by the RTOS
-							 kernel. */
-							 "CANTimer",
-							 /* The timer period in ticks, must be
-							 greater than 0. */
-							 pdMS_TO_TICKS(10),
-							 /* The timers will auto-reload themselves
-							 when they expire. */
-							 pdFALSE,
-							 /* The ID is used to store a count of the
-							 number of times the timer has expired, which
-							 is initialised to 0. */
-							 ( void * ) 0,
-							 /* Each timer calls the same callback when
-							 it expires. */
-							 vCAN_EN_Callback
-						   );
-	}
-	if( xTimerIsTimerActive( xCAN_EN_Timer ) != pdFALSE )
-	{
-		xTimerStop( xCAN_EN_Timer, 0 );
-	}
-
-	can_cfg.auto_bitrate = 0;
-
-	if(bitrate == CAN_AUTO)
-	{
-		bitrate = CAN_500K;
-		// can_cfg.auto_bitrate = 1;
-		// can_cfg.bus_state = OFF_BUS;
-		// can_set_bitrate(CAN_100K);
+		node_lock[bus] = xSemaphoreCreateMutex();
+		tx_slot_sem[bus] = xSemaphoreCreateCounting(CAN_TX_SLOT_COUNT, CAN_TX_SLOT_COUNT);
+		can_cfg[bus] = (can_cfg_t){
+			.bus_state = OFF_BUS,
+			.auto_tx = 1,
+			.rate = CAN_500K,
+			.filter = 0,
+			.mask = 0xFFFFFFFF,
+		};
 	}
 }
 
-
-esp_err_t can_receive(twai_message_t *message, TickType_t ticks_to_wait)
+// Pop the next frame (any bus, global arrival order) from the shared queue;
+// *bus reports where it came from.
+esp_err_t can_receive(twai_message_t *message, can_bus_t *bus, TickType_t ticks_to_wait)
 {
-	esp_err_t ret;
-	static uint32_t rx_error;
-	static uint8_t store_silent_flag = 0;
-	static uint8_t bitrate_found = 1;
+	if (s_can_event_group == NULL)
+	{
+		return ESP_ERR_INVALID_STATE;
+	}
 
+	// Park until at least one bus is enabled
 	xEventGroupWaitBits(s_can_event_group,
-							CAN_ENABLE_BIT,
-							pdFALSE,
-							pdFALSE,
-							portMAX_DELAY);
+						CAN_ENABLE_BIT_ANY,
+						pdFALSE,	// don't consume the bits: they're state, not events
+						pdFALSE,	// wait-any: one live bus is enough
+						portMAX_DELAY);
 
-	// if(can_cfg.auto_bitrate)
-	// {
-	// 	ret = twai_receive(message, 0);
-
-	// 	if(ret == ESP_OK)
-	// 	{
-	// 		rx_error = 0;
-	// 		bitrate_found = 1;
-	// 		if(bitrate_found == 0)
-	// 		{
-	// 			bitrate_found = 1;
-	// 			if(store_silent_flag != can_cfg.silent)
-	// 			{
-	// 				can_cfg.silent = store_silent_flag;
-	// 				can_disable();
-	// 				can_enable();
-	// 			}
-	// 		}
-	// 	}
-	// 	else
-	// 	{
-	// 		rx_error++;
-	// 		if(bitrate_found == 1)
-	// 		{
-	// 			bitrate_found = 0;
-	// 			store_silent_flag = can_cfg.silent;
-	// 		}
-
-	// 		if(rx_error >=120)
-	// 		{
-	// 			ESP_LOGW(TAG, "try differnt baudrate");
-	// 			rx_error = 0;
-
-	// 			can_disable();
-	// 			can_cfg.silent = 1;
-	// 			datarate++;
-	// 			datarate %= (CAN_1000K+1);
-	// 			can_enable();
-	// 		}
-	// 	}
-	// 	return ret;
-	// }
-	// else
+	// The caller's timeout applies to the actual wait-for-data
+	can_rx_item_t item;
+	if (xQueueReceive(can_rx_queue, &item, ticks_to_wait) != pdTRUE)
 	{
-		return twai_receive(message, ticks_to_wait);
+		return ESP_ERR_TIMEOUT;
 	}
+
+	*message = item.msg;
+	if (bus != NULL)	// bus tag is optional
+	{
+		*bus = item.bus;
+	}
+	return ESP_OK;
 }
 
-esp_err_t can_send(twai_message_t *message, TickType_t ticks_to_wait)
+// Queue a frame for transmission. Fire-and-forget: the message is copied
+// into a pool slot the driver transmits from later, so ticks_to_wait is
+// spent waiting for a free slot--not for the frame to reach the wire.
+esp_err_t can_send(can_bus_t bus, twai_message_t *message, TickType_t ticks_to_wait)
 {
-//	xEventGroupWaitBits(s_can_event_group,
-//							CAN_ENABLE_BIT,
-//							pdFALSE,
-//							pdFALSE,
-//							portMAX_DELAY);
-	EventBits_t uxBits = xEventGroupGetBits(s_can_event_group);
-
-	if(uxBits & CAN_ENABLE_BIT)
+	if (bus >= CAN_BUS_COUNT || s_can_event_group == NULL)
 	{
-		return twai_transmit(message, ticks_to_wait);
+		return ESP_ERR_INVALID_STATE;
 	}
-	else return ESP_ERR_INVALID_STATE;
+
+	// Advisory fast-fail so "bus not open" returns instantly without
+	// blocking (gvret/slcan test for exactly this error); the
+	// authoritative re-check happens under node_lock below
+	if (!(xEventGroupGetBits(s_can_event_group) & CAN_ENABLE_BIT(bus)))
+	{
+		return ESP_ERR_INVALID_STATE;
+	}
+
+	// Claim a TX slot; this is where the caller's ticks_to_wait is spent.
+	// Ordering matters: never hold node_lock while blocking here, or a
+	// full TX queue could stall can_disable() indefinitely.
+	if (xSemaphoreTake(tx_slot_sem[bus], ticks_to_wait) != pdTRUE)
+	{
+		return ESP_ERR_TIMEOUT;
+	}
+
+	// Synchronize against enable/disable deleting the node out from under
+	// us. Safe to wait unbounded: every holder keeps this lock only for
+	// short non-blocking sections.
+	xSemaphoreTake(node_lock[bus], portMAX_DELAY);
+
+	if (can_cfg[bus].bus_state != ON_BUS || can_node[bus] == NULL)
+	{
+		xSemaphoreGive(node_lock[bus]);
+		xSemaphoreGive(tx_slot_sem[bus]);
+		return ESP_ERR_INVALID_STATE;
+	}
+
+	// Semaphore guarantees a free slot exists; find it. Completion order can
+	// diverge from allocation order when a transmit fails, hence the bitmask
+	// instead of a ring index.
+	can_tx_slot_t *slot = NULL;
+	portENTER_CRITICAL(&tx_slot_mux);
+	for (int i = 0; i < CAN_TX_SLOT_COUNT; i++)
+	{
+		if (!(tx_slot_used[bus] & BIT(i)))
+		{
+			tx_slot_used[bus] |= BIT(i);
+			slot = &tx_slot[bus][i];
+			break;
+		}
+	}
+	portEXIT_CRITICAL(&tx_slot_mux);
+	assert(slot != NULL);
+
+	// Copy legacy twai_message_t -> the slot's stable twai_frame_t + data
+	// (the driver only keeps a pointer, hence the copy into pool storage).
+	// RTR frames carry no payload: buffer_len must be 0 or the driver
+	// rejects the dlc/len mismatch. ss/self have no node-API equivalent.
+	uint8_t dlc = (message->data_length_code > TWAI_FRAME_MAX_DLC)
+					  ? TWAI_FRAME_MAX_DLC : message->data_length_code;
+	memset(&slot->frame, 0, sizeof(slot->frame));
+	slot->frame.header.id = message->identifier;
+	slot->frame.header.dlc = dlc;
+	slot->frame.header.ide = message->extd;
+	slot->frame.header.rtr = message->rtr;
+	memcpy(slot->data, message->data, dlc);
+	slot->frame.buffer = slot->data;
+	slot->frame.buffer_len = message->rtr ? 0 : dlc;
+
+	// Timeout 0: the slot semaphore already did the waiting (queue space is
+	// guaranteed), and staying non-blocking keeps the node_lock hold short
+	esp_err_t err = twai_node_transmit(can_node[bus], &slot->frame, 0);
+
+	xSemaphoreGive(node_lock[bus]);
+
+	if (err != ESP_OK)
+	{
+		// Frame never reached the driver: put the slot straight back
+		portENTER_CRITICAL(&tx_slot_mux);
+		tx_slot_used[bus] &= ~BIT(slot - &tx_slot[bus][0]);
+		portEXIT_CRITICAL(&tx_slot_mux);
+		xSemaphoreGive(tx_slot_sem[bus]);
+		// Callers test for ESP_ERR_INVALID_STATE (legacy "bus not enabled")
+		if (err != ESP_ERR_INVALID_STATE && err != ESP_ERR_TIMEOUT)
+		{
+			ESP_LOGE(TAG, "bus %d: transmit failed: %s", bus, esp_err_to_name(err));
+		}
+	}
+	return err;
 }
 
-bool can_is_enabled(void)
+bool can_is_enabled(can_bus_t bus)
 {
-	if(can_cfg.bus_state == ON_BUS)
+	if (bus >= CAN_BUS_COUNT)
 	{
-		return true;
+		return false;
 	}
-	else return false;
-//	EventBits_t uxBits = xEventGroupGetBits(s_can_event_group);
-//	return (uxBits & CAN_ENABLE_BIT);
+	return can_cfg[bus].bus_state == ON_BUS;
 }
 
+// True if any bus is up--one atomic read instead of a per-bus loop
+bool can_any_enabled(void)
+{
+	if (s_can_event_group == NULL)
+	{
+		return false;
+	}
+	return (xEventGroupGetBits(s_can_event_group) & CAN_ENABLE_BIT_ANY) != 0;
+}
+
+// Drops pending frames from ALL buses (the queue is shared); fine for its
+// one caller (elm327 clearing stale frames before a request on bus 0)
 void can_flush_rx(void)
 {
-    if (can_cfg.bus_state == ON_BUS) 
+	if (can_rx_queue != NULL)
 	{
-        twai_clear_receive_queue();
-    }
-}
-
-
-uint32_t can_msgs_to_rx(void)
-{
-	twai_status_info_t status_info;
-
-	twai_get_status_info(&status_info);
-
-	return status_info.msgs_to_rx;
+		xQueueReset(can_rx_queue);
+	}
 }
