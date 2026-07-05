@@ -282,7 +282,15 @@ static void can_rx_task(void *pvParameters)
             precondition_tick();
         }
 
-        while(can_receive(&rx_msg, &rx_bus, 0) ==  ESP_OK)
+		// Block up to 10 ms for the first frame (keeps the 40 ms precondition
+		// tick and LED housekeeping above running when idle), then drain the
+		// backlog without waiting. This blocking is what makes prio 7 safe: the
+		// task only outranks the TCP tasks while there is frame work to do.
+        if (can_receive(&rx_msg, &rx_bus, pdMS_TO_TICKS(10)) != ESP_OK)
+        {
+            continue;
+        }
+        do
         {
             precondition_can_rx_hook(&rx_msg);
             {
@@ -368,8 +376,7 @@ static void can_rx_task(void *pvParameters)
 					xQueueSend( xmsg_mqtt_rx_queue, ( void * ) &mqtt_rx_msg, pdMS_TO_TICKS(0) );
 				}
 			}
-        }
-        vTaskDelay(pdMS_TO_TICKS(1));
+        } while (can_receive(&rx_msg, &rx_bus, 0) == ESP_OK);
 	}
 }
 
@@ -563,7 +570,10 @@ void app_main(void)
 		ESP_LOGI(TAG, "Hardware version: %s", hardware_version);
     }
 	wc_mdns_init((char*)uid, hardware_version, firmware_version);
-    xTaskCreate(can_rx_task, "can_rx_task", 1024*3, (void*)AF_INET, 5, NULL);
+    // Prio 7: the CAN datapath must preempt the TCP streaming tasks (prio 5)
+    // instead of timeslicing with them. Safe only because can_rx_task blocks
+    // in can_receive() when idle (see the receive loop).
+    xTaskCreate(can_rx_task, "can_rx_task", 1024*3, (void*)AF_INET, 7, NULL);
     xTaskCreate(can_tx_task, "can_tx_task", 1024*3, (void*)AF_INET, 5, NULL);
 
 	if(config_server_get_sleep_config())
