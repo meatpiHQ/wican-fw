@@ -32,6 +32,10 @@
 #include "esp_twai_onchip.h"
 #include "can.h"
 #include "hw_config.h"
+#if HW_HAS_MCP2515
+#include "driver/spi_master.h"
+#include "esp_twai_mcp2515.h"
+#endif
 
 #define TAG 		__func__
 
@@ -283,6 +287,15 @@ static void can_apply_filter(can_bus_t bus)
 			 bus, can_cfg[bus].filter, can_cfg[bus].mask, fcfg.id, fcfg.mask);
 
 	esp_err_t err = twai_node_config_mask_filter(can_node[bus], 0, &fcfg);
+#if HW_HAS_MCP2515
+	// The MCP2515 has two independent RX filter groups and an unconfigured
+	// group defaults to accept-all (RXM1 = 0), which would bypass group 0
+	// entirely--mirror the filter into group 1 so it actually takes effect.
+	if (err == ESP_OK && bus == CAN_BUS_1)
+	{
+		err = twai_node_config_mask_filter(can_node[bus], 1, &fcfg);
+	}
+#endif
 	if (err != ESP_OK)
 	{
 		ESP_LOGE(TAG, "bus %d: filter config failed: %s", bus, esp_err_to_name(err));
@@ -290,10 +303,90 @@ static void can_apply_filter(can_bus_t bus)
 }
 
 #if HW_HAS_MCP2515
+
+// One-time bring-up shared by every node create/delete cycle: the SPI bus,
+// the RST pin state, and the GPIO ISR service all outlive the node
+// (twai_node_delete removes only the SPI device and the INT handler).
+// Ordering per the reference firmware: RST high -> spi_bus_initialize ->
+// gpio_install_isr_service -> twai_new_node_mcp2515.
+static esp_err_t can_mcp2515_bus_init(void)
+{
+	static bool bus_ready = false;
+
+	if (bus_ready)
+	{
+		return ESP_OK;
+	}
+
+	// RST is active-low: hold HIGH for normal run
+	gpio_config_t rst_cfg = {
+		.pin_bit_mask = BIT64(MCP2515_RST_GPIO_NUM),
+		.mode = GPIO_MODE_OUTPUT,
+		.pull_up_en = GPIO_PULLUP_DISABLE,
+		.pull_down_en = GPIO_PULLDOWN_DISABLE,
+		.intr_type = GPIO_INTR_DISABLE,
+	};
+	esp_err_t err = gpio_config(&rst_cfg);
+	if (err != ESP_OK)
+	{
+		return err;
+	}
+	gpio_set_level(MCP2515_RST_GPIO_NUM, 1);
+
+	spi_bus_config_t bus_cfg = {
+		.sclk_io_num = MCP2515_SCLK_GPIO_NUM,
+		.mosi_io_num = MCP2515_MOSI_GPIO_NUM,
+		.miso_io_num = MCP2515_MISO_GPIO_NUM,
+		.quadwp_io_num = GPIO_NUM_NC,
+		.quadhd_io_num = GPIO_NUM_NC,
+	};
+	err = spi_bus_initialize(MCP2515_SPI_HOST, &bus_cfg, SPI_DMA_CH_AUTO);
+	if (err != ESP_OK)
+	{
+		return err;
+	}
+
+	err = gpio_install_isr_service(0);
+	if (err != ESP_OK && err != ESP_ERR_INVALID_STATE)	// INVALID_STATE = already installed
+	{
+		return err;
+	}
+
+	bus_ready = true;
+	return ESP_OK;
+}
+
 static esp_err_t can_bus1_create_node(void)
 {
-	ESP_LOGW(TAG, "CAN_BUS_1 (MCP2515) not implemented yet");
-	return ESP_ERR_NOT_SUPPORTED;
+	esp_err_t err = can_mcp2515_bus_init();
+	if (err != ESP_OK)
+	{
+		return err;
+	}
+
+	twai_mcp2515_node_config_t config = {
+		.io_cfg = {
+			.int_gpio = MCP2515_INT_GPIO_NUM,
+			.cs_gpio = MCP2515_CS_GPIO_NUM,
+		},
+		.spi_clock_hz = MCP2515_SPI_CLOCK_HZ,
+		.oscillator_hz = MCP2515_OSCILLATOR_HZ,
+		.bit_timing = {
+			.bitrate = can_bitrate_bps[can_cfg[CAN_BUS_1].rate],
+			.sp_permill = CAN_SAMPLE_POINT_PERMILL,
+		},
+		// MCP2515 hardware supports exactly -1 (auto retry) / 0 (one-shot)
+		.fail_retry_cnt = can_cfg[CAN_BUS_1].auto_tx ? -1 : 0,
+		.timestamp_resolution_hz = 0,
+		.tx_queue_depth = CAN_TX_SLOT_COUNT,
+		.flags = {
+			// MCP2515 loopback is internal (no ACK needed)
+			.enable_loopback = can_cfg[CAN_BUS_1].loopback ? 1 : 0,
+			.enable_listen_only = can_cfg[CAN_BUS_1].silent ? 1 : 0,
+		},
+	};
+
+	return twai_new_node_mcp2515(MCP2515_SPI_HOST, &config, &can_node[CAN_BUS_1]);
 }
 #endif
 
@@ -381,14 +474,28 @@ void can_enable(can_bus_t bus)
 		.on_tx_done = can_on_tx_done,
 		.on_state_change = can_on_state_change,
 	};
-	ESP_ERROR_CHECK(twai_node_register_event_callbacks(can_node[bus], &cbs, (void *)(uintptr_t)bus));
+	err = twai_node_register_event_callbacks(can_node[bus], &cbs, (void *)(uintptr_t)bus);
+	if (err == ESP_OK)
+	{
+		can_tx_slots_reset(bus);	// fresh node: all slots are free
+		err = twai_node_enable(can_node[bus]);
+	}
+	if (err != ESP_OK)
+	{
+		// Don't panic: bus 1 comes up at every boot by default, and a wedged
+		// MCP2515 (created OK over SPI but refusing to enable) must degrade
+		// to a dead bus, not a boot loop.
+		ESP_LOGE(TAG, "bus %d: node enable failed: %s", bus, esp_err_to_name(err));
+		twai_node_delete(can_node[bus]);
+		can_node[bus] = NULL;
+		xSemaphoreGive(node_lock[bus]);
+		return;
+	}
 
-	can_tx_slots_reset(bus);	// fresh node: all slots are free
-	ESP_ERROR_CHECK(twai_node_enable(can_node[bus]));
-
-	// Callers expect can_enable() to clear the RX queue on (re)start.
-	// The queue is shared, so this also drops any pending frames of the other bus.
-	// This is fine since enable only happens at boot/reconfig.
+	// Clear the queue on enable. The queue is shared, so this also drops
+	// any pending frames of the other bus. This can happen at boot, or at
+	// runtime during bus recovery. In-flight frames on the other bus will be
+	// lost. TODO(ejones): maybe eventually we can split into one rx queue per bus?
 	xQueueReset(can_rx_queue);
 
 	can_cfg[bus].bus_state = ON_BUS;
@@ -479,6 +586,18 @@ void can_set_auto_retransmit(can_bus_t bus, uint8_t flag)
 	{
 		return;
 	}
+#if HW_HAS_MCP2515
+	// One-shot mode (auto_tx = 0) is unusable on the MCP2515: the driver
+	// only completes a frame (on_tx_done + start of the next queued TX) on
+	// TX0IF, which a failed one-shot transmit never raises (only MERRF), so
+	// every failure would leak a TX slot until the pool starves and bus-1 TX
+	// stalls for good. Keep retry-forever; nothing calls this today anyway.
+	if (bus == CAN_BUS_1 && flag == 0)
+	{
+		ESP_LOGW(TAG, "bus %d: one-shot TX unsupported on MCP2515, keeping auto-retransmit", bus);
+		return;
+	}
+#endif
 	can_cfg[bus].auto_tx = flag;
 }
 

@@ -119,6 +119,9 @@ const char device_config_default[] = R"json({
 "sta_security":"wpa3",
 "can_datarate":"500K",
 "can_mode":"normal",
+"can1_datarate":"500K",
+"can1_mode":"normal",
+"can1_en":"enable",
 "port_type":"tcp",
 "port":"3333",
 "ap_pass":"@meatpi#",
@@ -291,54 +294,53 @@ int8_t config_server_protocol(void)
 	return SLCAN;
 }
 
-int8_t config_server_get_can_rate(void)
+static int8_t can_rate_from_str(const char *datarate)
 {
-	ESP_LOGI(TAG, "device_config.can_datarate:%s", device_config.can_datarate);
-	if(strcmp(device_config.can_datarate, "5K") == 0)
+	if(strcmp(datarate, "5K") == 0)
 	{
 		return CAN_5K;
 	}
-	if(strcmp(device_config.can_datarate, "10K") == 0)
+	if(strcmp(datarate, "10K") == 0)
 	{
 		return CAN_10K;
 	}
-	if(strcmp(device_config.can_datarate, "20K") == 0)
+	if(strcmp(datarate, "20K") == 0)
 	{
 		return CAN_20K;
 	}
-	if(strcmp(device_config.can_datarate, "25K") == 0)
+	if(strcmp(datarate, "25K") == 0)
 	{
 		return CAN_25K;
 	}
-	else if(strcmp(device_config.can_datarate, "50K") == 0)
+	else if(strcmp(datarate, "50K") == 0)
 	{
 		return CAN_50K;
 	}
-	else if(strcmp(device_config.can_datarate, "100K") == 0)
+	else if(strcmp(datarate, "100K") == 0)
 	{
 		return CAN_100K;
 	}
-	else if(strcmp(device_config.can_datarate, "125K") == 0)
+	else if(strcmp(datarate, "125K") == 0)
 	{
 		return CAN_125K;
 	}
-	else if(strcmp(device_config.can_datarate, "250K") == 0)
+	else if(strcmp(datarate, "250K") == 0)
 	{
 		return CAN_250K;
 	}
-	else if(strcmp(device_config.can_datarate, "500K") == 0)
+	else if(strcmp(datarate, "500K") == 0)
 	{
 		return CAN_500K;
 	}
-	else if(strcmp(device_config.can_datarate, "800K") == 0)
+	else if(strcmp(datarate, "800K") == 0)
 	{
 		return CAN_800K;
 	}
-	else if(strcmp(device_config.can_datarate, "1000K") == 0)
+	else if(strcmp(datarate, "1000K") == 0)
 	{
 		return CAN_1000K;
 	}
-	else if(strcmp(device_config.can_datarate, "auto") == 0)
+	else if(strcmp(datarate, "auto") == 0)
 	{
 		return CAN_AUTO;
 	}
@@ -346,18 +348,47 @@ int8_t config_server_get_can_rate(void)
 	return -1;
 }
 
-
-int8_t config_server_get_can_mode(void)
+static int8_t can_mode_from_str(const char *mode)
 {
-	if(strcmp(device_config.can_mode, "normal") == 0)
+	if(strcmp(mode, "normal") == 0)
 	{
 		return CAN_NORMAL;
 	}
-	else if(strcmp(device_config.can_mode, "silent") == 0)
+	else if(strcmp(mode, "silent") == 0)
 	{
 		return CAN_SILENT;
 	}
 	return -1;
+}
+
+int8_t config_server_get_can_rate(void)
+{
+	ESP_LOGI(TAG, "device_config.can_datarate:%s", device_config.can_datarate);
+	return can_rate_from_str(device_config.can_datarate);
+}
+
+
+int8_t config_server_get_can_mode(void)
+{
+	return can_mode_from_str(device_config.can_mode);
+}
+
+int8_t config_server_get_can1_rate(void)
+{
+	ESP_LOGI(TAG, "device_config.can1_datarate:%s", device_config.can1_datarate);
+	int8_t rate = can_rate_from_str(device_config.can1_datarate);
+	// no bitrate autodetect on bus 1
+	return (rate == CAN_AUTO) ? -1 : rate;
+}
+
+int8_t config_server_get_can1_mode(void)
+{
+	return can_mode_from_str(device_config.can1_mode);
+}
+
+int8_t config_server_get_can1_en(void)
+{
+	return (strcmp(device_config.can1_en, "enable") == 0) ? 1 : 0;
 }
 
 int8_t config_server_get_port_type(void)
@@ -895,6 +926,12 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	cJSON_AddStringToObject(root, "ble_status", device_config.ble_status);
 	cJSON_AddStringToObject(root, "can_datarate", can_datarate_str[can_get_bitrate(CAN_BUS_0)]);
 	cJSON_AddStringToObject(root, "can_mode", device_config.can_mode);
+	cJSON_AddNumberToObject(root, "can_bus_count", CAN_BUS_COUNT);
+#if CAN_BUS_COUNT > 1
+	cJSON_AddStringToObject(root, "can1_datarate", device_config.can1_datarate);
+	cJSON_AddStringToObject(root, "can1_mode", device_config.can1_mode);
+	cJSON_AddStringToObject(root, "can1_en", device_config.can1_en);
+#endif
 	cJSON_AddStringToObject(root, "port_type", device_config.port_type);
 	cJSON_AddStringToObject(root, "port", device_config.port);
 	cJSON_AddStringToObject(root, "fw_version", fver);
@@ -2072,6 +2109,46 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	ESP_LOGE(TAG, "device_config.sleep_time: %s", device_config.sleep_time);
+	//*****
+
+	//*****
+	// Fall back to defaults instead of config_error. Ignored when CAN_BUS_COUNT == 1.
+	key = cJSON_GetObjectItem(root,"can1_datarate");
+	if(key == 0 || !cJSON_IsString(key) || can_rate_from_str(key->valuestring) == -1)
+	{
+		strcpy(device_config.can1_datarate, "500K");
+	}
+	else
+	{
+		strlcpy(device_config.can1_datarate, key->valuestring, sizeof(device_config.can1_datarate));
+	}
+	ESP_LOGI(TAG, "device_config.can1_datarate: %s", device_config.can1_datarate);
+	//*****
+
+	//*****
+	key = cJSON_GetObjectItem(root,"can1_mode");
+	if(key == 0 || !cJSON_IsString(key) || can_mode_from_str(key->valuestring) == -1)
+	{
+		strcpy(device_config.can1_mode, "normal");
+	}
+	else
+	{
+		strlcpy(device_config.can1_mode, key->valuestring, sizeof(device_config.can1_mode));
+	}
+	ESP_LOGI(TAG, "device_config.can1_mode: %s", device_config.can1_mode);
+	//*****
+
+	//*****
+	key = cJSON_GetObjectItem(root,"can1_en");
+	if(key == 0 || !cJSON_IsString(key))
+	{
+		strcpy(device_config.can1_en, "enable");
+	}
+	else
+	{
+		strlcpy(device_config.can1_en, key->valuestring, sizeof(device_config.can1_en));
+	}
+	ESP_LOGI(TAG, "device_config.can1_en: %s", device_config.can1_en);
 	//*****
 
 	//*****

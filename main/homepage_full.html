@@ -670,6 +670,43 @@
                             </select>
                         </td>
                     </tr>
+                    <!-- CAN1 rows: hidden unless /check_status reports can_bus_count > 1 -->
+                    <tr class="can1_row" style="display:none">
+                        <td>CAN1 Bitrate:</td>
+                        <td>
+                            <select name="can1_datarate" id="can1_datarate">
+                                <option value="5K">5K</option>
+                                <option value="10K">10K</option>
+                                <option value="20K">20K</option>
+                                <option value="25K">25K</option>
+                                <option value="50K">50K</option>
+                                <option value="100K">100K</option>
+                                <option value="125K">125K</option>
+                                <option value="250K">250K</option>
+                                <option value="500K" selected="selected">500K</option>
+                                <option value="800K">800K</option>
+                                <option value="1000K">1000K</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr class="can1_row" style="display:none">
+                        <td>CAN1 Mode:</td>
+                        <td>
+                            <select name="can1_mode" id="can1_mode">
+                                <option value="normal" selected="selected">Normal</option>
+                                <option value="silent">Silent</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr class="can1_row" style="display:none">
+                        <td>CAN1 Status:</td>
+                        <td>
+                            <select name="can1_en" id="can1_en">
+                                <option value="enable" selected="selected">Enable</option>
+                                <option value="disable">Disable</option>
+                            </select>
+                        </td>
+                    </tr>
                     <tr>
                         <td>Port Type:</td>
                         <td>
@@ -2468,6 +2505,21 @@ function loadAutoTable(jsonData) {
 			} else if(obj.can_mode == "silent") {
 				document.getElementById("can_mode_status").innerHTML = "Silent";
 			}
+			// CAN1 rows only shown on hardware with more than one bus.
+			// can_bus_count comes from /check_status, not /load_config: the
+			// latter is the raw stored config file, which never contains it.
+			if (obj.can_bus_count && obj.can_bus_count > 1) {
+				document.querySelectorAll(".can1_row").forEach(row => row.style.display = "");
+				if (obj.can1_datarate) {
+					document.getElementById("can1_datarate").value = obj.can1_datarate;
+				}
+				if (obj.can1_mode) {
+					document.getElementById("can1_mode").value = obj.can1_mode;
+				}
+				if (obj.can1_en) {
+					document.getElementById("can1_en").value = obj.can1_en;
+				}
+			}
 			if(obj.port_type == "tcp") {
 				document.getElementById("port_type_status").innerHTML = "TCP";
 			} else if(obj.port_type == "udp") {
@@ -2734,6 +2786,9 @@ function loadAutoTable(jsonData) {
         obj["sta_security"] = document.getElementById("sta_security").value;
 		obj["can_datarate"] = document.getElementById("can_datarate").value;
 		obj["can_mode"] = document.getElementById("can_mode").value;
+		obj["can1_datarate"] = document.getElementById("can1_datarate").value;
+		obj["can1_mode"] = document.getElementById("can1_mode").value;
+		obj["can1_en"] = document.getElementById("can1_en").value;
 		obj["port_type"] = document.getElementById("port_type").value;
 		obj["port"] = document.getElementById("tcp_port_value").value;
 		obj["ap_pass"] = document.getElementById("ap_pass_value").value;

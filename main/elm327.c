@@ -835,6 +835,8 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 		elm327_can_log(&txframe, ELM327_CAN_TX);
 	}
 	while( xQueueReceive(*can_rx_queue, ( void * ) &rx_frame, pdMS_TO_TICKS(1)) == pdPASS );
+	// Drains the shared RX queue, i.e. all buses--fine, since nothing
+	// consumes bus-1 frames while the ELM327/AutoPID protocol is active.
 	can_flush_rx();
 	can_send(CAN_BUS_0, &txframe, 1);
 	xEventGroupSetBits(elm327_event_group, ELM327_READY_TO_RECEIVE_CAN);

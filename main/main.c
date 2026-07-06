@@ -292,18 +292,24 @@ static void can_rx_task(void *pvParameters)
         }
         do
         {
-            precondition_can_rx_hook(&rx_msg);
+            /* No protocol is bus-aware yet; precondition and the
+             * single-bus protocols (slcan/realdash/elm327/mqtt/savvycan)
+             * see CAN_BUS_0 traffic only. */
+            if (rx_bus == CAN_BUS_0)
             {
-                twai_message_t fwd_msg = rx_msg;
-                if (precondition_fwd_hook(&fwd_msg) == FWD_MODIFIED) {
-                    can_send(rx_bus, &fwd_msg, 1);
+                precondition_can_rx_hook(&rx_msg);
+                {
+                    twai_message_t fwd_msg = rx_msg;
+                    if (precondition_fwd_hook(&fwd_msg) == FWD_MODIFIED) {
+                        can_send(rx_bus, &fwd_msg, 1);
+                    }
                 }
             }
 //        	num_msg++;
 
         	process_led(1);
 
-        	if(config_server_ws_connected())
+        	if(config_server_ws_connected() && rx_bus == CAN_BUS_0)
         	{
         		ucTCP_TX_Buffer.usLen = slcan_parse_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
 				if(config_server_ws_connected())
@@ -319,20 +325,29 @@ static void can_rx_task(void *pvParameters)
 
 				if(protocol == SLCAN)
 				{
-					ucTCP_TX_Buffer.usLen = slcan_parse_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
+					if(rx_bus == CAN_BUS_0)
+					{
+						ucTCP_TX_Buffer.usLen = slcan_parse_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
+					}
 				}
 				else if(protocol == REALDASH)
 				{
-					ucTCP_TX_Buffer.usLen = real_dash_set_66(&rx_msg, ucTCP_TX_Buffer.ucElement);
+					if(rx_bus == CAN_BUS_0)
+					{
+						ucTCP_TX_Buffer.usLen = real_dash_set_66(&rx_msg, ucTCP_TX_Buffer.ucElement);
+					}
 				}
 				else if(protocol == SAVVYCAN)
 				{
-					ucTCP_TX_Buffer.usLen = gvret_parse_can_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
+					if(rx_bus == CAN_BUS_0)
+					{
+						ucTCP_TX_Buffer.usLen = gvret_parse_can_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
+					}
 				}
 				else if(protocol == OBD_ELM327 || protocol == AUTO_PID)
 				{
 					// Let elm327.c decide which messages to process
-					if(elm327_ready_to_receive())
+					if(rx_bus == CAN_BUS_0 && elm327_ready_to_receive())
 					{
 						xQueueSend( xmsg_obd_rx_queue, ( void * ) &rx_msg, pdMS_TO_TICKS(0) );
 					}
@@ -360,7 +375,7 @@ static void can_rx_task(void *pvParameters)
 					}
 				}
 			}
-			if(mqtt_connected())
+			if(mqtt_connected() && rx_bus == CAN_BUS_0)
 			{
 				static mqtt_can_message_t mqtt_rx_msg;
 				if(mqtt_elm327_log_en == 0)
@@ -461,6 +476,34 @@ void app_main(void)
 	{
 		can_set_silent(CAN_BUS_0, 1);
 	}
+
+#if CAN_BUS_COUNT > 1
+	int8_t can1_datarate = config_server_get_can1_rate();
+
+	if(can1_datarate != -1)
+	{
+		can_set_bitrate(CAN_BUS_1, can1_datarate);
+	}
+	else
+	{
+		ESP_LOGE(TAG, "error going to default CAN_500K on bus 1");
+		can_set_bitrate(CAN_BUS_1, CAN_500K);
+	}
+
+	if(config_server_get_can1_mode() == CAN_NORMAL)
+	{
+		can_set_silent(CAN_BUS_1, 0);
+	}
+	else
+	{
+		can_set_silent(CAN_BUS_1, 1);
+	}
+
+	if(config_server_get_can1_en())
+	{
+		can_enable(CAN_BUS_1);
+	}
+#endif
 
 	protocol = config_server_protocol();
 //	protocol = OBD_ELM327;
