@@ -16,9 +16,3 @@ dependencies:
   #   # All dependencies of `main` are public by default.
   #   public: true
   joltwallet/littlefs: ^1.20.4
-  # MCP2515 node driver for CAN_BUS_1; only the custom board (S3) has the chip,
-  # so keep C3 builds from pulling it in. All uses are gated on HW_HAS_MCP2515.
-  espressif/esp_twai_mcp2515:
-    version: '^0.1.0'
-    rules:
-      - if: 'target in [esp32s3]'
