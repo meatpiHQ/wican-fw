@@ -19,6 +19,7 @@
  */
 #ifndef GVRET_h
 #define GVRET_h
+#include "can.h"
 
 #define CFG_BUILD_NUM   	618
 #define WIFI_BUFF_SIZE      2048
@@ -113,6 +114,6 @@ typedef struct  {
 
 void gvret_parse(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t *q);
 void gvret_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q));
-int8_t gvret_parse_can_frame(uint8_t *buf, twai_message_t *frame);
+int8_t gvret_parse_can_frame(uint8_t *buf, twai_message_t *frame, can_bus_t bus);
 
 #endif

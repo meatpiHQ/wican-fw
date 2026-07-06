@@ -292,9 +292,9 @@ static void can_rx_task(void *pvParameters)
         }
         do
         {
-            /* No protocol is bus-aware yet; precondition and the
-             * single-bus protocols (slcan/realdash/elm327/mqtt/savvycan)
-             * see CAN_BUS_0 traffic only. */
+            // Only GVRET/SavvyCAN is bus-aware; precondition and the
+            // single-bus protocols (slcan/realdash/elm327/mqtt) see
+            // CAN_BUS_0 traffic only.
             if (rx_bus == CAN_BUS_0)
             {
                 precondition_can_rx_hook(&rx_msg);
@@ -339,10 +339,7 @@ static void can_rx_task(void *pvParameters)
 				}
 				else if(protocol == SAVVYCAN)
 				{
-					if(rx_bus == CAN_BUS_0)
-					{
-						ucTCP_TX_Buffer.usLen = gvret_parse_can_frame(ucTCP_TX_Buffer.ucElement, &rx_msg);
-					}
+					ucTCP_TX_Buffer.usLen = gvret_parse_can_frame(ucTCP_TX_Buffer.ucElement, &rx_msg, rx_bus);
 				}
 				else if(protocol == OBD_ELM327 || protocol == AUTO_PID)
 				{

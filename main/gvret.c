@@ -90,33 +90,25 @@ uint8_t checksumCalc(uint8_t *buffer, int length)
     return valu;
 }
 
-void gvert_setup(EEPROMSettings *settings)
+static void gvret_setup_bus(can_bus_t bus, uint32_t speed, bool enabled, bool listen_only)
 {
-	can_disable(CAN_BUS_0);
-	ESP_LOGI(__func__, "settings->CAN0Speed: %lu", settings->CAN0Speed);
+	can_disable(bus);
+	ESP_LOGI(__func__, "bus %u speed: %lu", bus, speed);
 	for(uint8_t i = 0; i < sizeof(can_speed)/sizeof(uint32_t); i++)
 	{
-		if(can_speed[i] == settings->CAN0Speed)
+		if(can_speed[i] == speed)
 		{
-			can_set_bitrate(CAN_BUS_0, i);
-			ESP_LOGI(__func__, "CAN0 speed: %u", i);
+			can_set_bitrate(bus, i);
 			break;
 		}
 	}
 
-	if(settings->CAN0ListenOnly)
-	{
-		can_set_silent(CAN_BUS_0, 1);
-	}
-	else
-	{
-		can_set_silent(CAN_BUS_0, 0);
-	}
+	can_set_silent(bus, listen_only ? 1 : 0);
 
-	if(settings->CAN0_Enabled)
+	if(enabled)
 	{
-		can_enable(CAN_BUS_0);
-		ESP_LOGI(__func__, "can_enabled");
+		can_enable(bus);
+		ESP_LOGI(__func__, "bus %u enabled", bus);
 	}
 }
 
@@ -127,6 +119,7 @@ void gvret_parse(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t
 	static uint32_t build_int;
 
 	static uint8_t buff[20];
+	static uint8_t out_bus = 0;
 	static uint32_t busSpeed = 0;
 	static uint32_t now = 0;
 	static uint8_t temp8, in_byte;
@@ -235,7 +228,7 @@ void gvret_parse(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t
 				transmitBuffer[transmitBufferLength++] = settings.CAN0Speed >> 8;
 				transmitBuffer[transmitBufferLength++] = settings.CAN0Speed >> 16;
 				transmitBuffer[transmitBufferLength++] = settings.CAN0Speed >> 24;
-				transmitBuffer[transmitBufferLength++] = 0;
+				transmitBuffer[transmitBufferLength++] = settings.CAN1_Enabled + ((unsigned char) settings.CAN1ListenOnly << 4);
 				transmitBuffer[transmitBufferLength++] = settings.CAN1Speed;
 				transmitBuffer[transmitBufferLength++] = settings.CAN1Speed >> 8;
 				transmitBuffer[transmitBufferLength++] = settings.CAN1Speed >> 16;
@@ -285,7 +278,7 @@ void gvret_parse(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t
 			case PROTO_GET_NUMBUSES:
 				transmitBuffer[transmitBufferLength++] = 0xF1;
 				transmitBuffer[transmitBufferLength++] = 12;
-				transmitBuffer[transmitBufferLength++] = 1;//SysSettings.numBuses;
+				transmitBuffer[transmitBufferLength++] = SysSettings.numBuses;
 				gvret_response((char*)transmitBuffer, transmitBufferLength, q);
 				transmitBufferLength = 0;
 				state = IDLE;
@@ -340,7 +333,7 @@ void gvret_parse(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t
 					}
 					break;
 				case 4:
-//					out_bus = in_byte & 3;
+					out_bus = in_byte & 3;
 					break;
 				case 5:
 //					build_out_frame.length = in_byte & 0xF;
@@ -379,13 +372,19 @@ void gvret_parse(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t
 						//temp8 = checksumCalc(buff, step);
 						frame->rtr = 0;
 						frame->self = 0;
-						// 20 ms: long enough for a healthy bus to free TX slots (~250 us/frame
-						// @500K) so playback throttles to wire rate via TCP backpressure; short
-						// enough to stay bounded when the bus is sick. Drops are counted and
-						// logged in can_send().
-						can_send(CAN_BUS_0, frame, pdMS_TO_TICKS(20));
-//						if (out_bus == 0) canManager.sendFrame(&CAN0, build_out_frame);
-//						if (out_bus == 1) canManager.sendFrame(&CAN1, build_out_frame);
+
+						if(out_bus < CAN_BUS_COUNT)
+						{
+							// 20 ms: long enough for a healthy bus to free TX slots 
+							// (~250 us/frame @500K) so playback throttles to wire rate 
+							// via TCP backpressure; short enough to stay bounded when
+							// the bus is sick. Drops are counted and logged in can_send().
+							can_send((can_bus_t)out_bus, frame, pdMS_TO_TICKS(20));
+						}
+						else
+						{
+							ESP_LOGW(__func__, "TX dropped: no bus %u", out_bus);
+						}
 					}
 					break;
 			}
@@ -457,19 +456,7 @@ void gvret_parse(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t
 						} else { //disable first canbus
 							settings.CAN0_Enabled = false;
 						}
-						gvert_setup(&settings);
-//						if (settings.CAN0_Enabled)
-//						{
-//	//						CAN0.begin(settings.CAN0Speed, 255);
-//	//						if (settings.CAN0ListenOnly) CAN0.setListenOnlyMode(true);
-//	//						else CAN0.setListenOnlyMode(false);
-//	//						CAN0.watchFor();
-//							gvert_setup(&settings);
-//						}
-//						else
-//						{
-//	//						CAN0.disable();
-//						}
+						gvret_setup_bus(CAN_BUS_0, settings.CAN0Speed, settings.CAN0_Enabled, settings.CAN0ListenOnly);
 						break;
 					case 4:
 						build_int = in_byte;
@@ -510,22 +497,12 @@ void gvret_parse(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t
 							}
 							//CAN1.set_baudrate(build_int);
 							settings.CAN1Speed = busSpeed;
-						} else { //disable first canbus
+						} else { //disable second canbus
 							settings.CAN1_Enabled = false;
 						}
-
-	//					if (settings.CAN1_Enabled)
-	////					{
-	////						CAN1.begin(settings.CAN0Speed, 255);
-	////						if (settings.CAN1ListenOnly) CAN1.setListenOnlyMode(true);
-	////						else CAN1.setListenOnlyMode(false);
-	////						CAN1.watchFor();
-	//					}
-	//					else
-	//					{
-	////						CAN1.disable();
-	//					}
-
+#if CAN_BUS_COUNT > 1
+						gvret_setup_bus(CAN_BUS_1, settings.CAN1Speed, settings.CAN1_Enabled, settings.CAN1ListenOnly);
+#endif
 						state = IDLE;
 						//now, write out the new canbus settings to EEPROM
 						//EEPROM.writeBytes(0, &settings, sizeof(settings));
@@ -663,7 +640,7 @@ void gvret_parse(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t
     }
 }
 
-int8_t gvret_parse_can_frame(uint8_t *buf, twai_message_t *frame)
+int8_t gvret_parse_can_frame(uint8_t *buf, twai_message_t *frame, can_bus_t bus)
 {
 	uint8_t length = 0;
     if (frame->extd)
@@ -681,7 +658,7 @@ int8_t gvret_parse_can_frame(uint8_t *buf, twai_message_t *frame)
     buf[length++] = (uint8_t)(frame->identifier >> 8);
     buf[length++] = (uint8_t)(frame->identifier >> 16);
     buf[length++] = (uint8_t)(frame->identifier >> 24);
-    buf[length++] = frame->data_length_code;
+    buf[length++] = frame->data_length_code + (uint8_t)(bus << 4);
     for (int c = 0; c < frame->data_length_code; c++)
     {
         buf[length++] = frame->data[c];
@@ -767,7 +744,18 @@ void gvret_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q))
     }
     else settings.CAN0ListenOnly = false;
 
-    settings.CAN0Speed = can_speed[config_server_get_can_rate()];
+    settings.CAN0Speed = can_speed[can_get_bitrate(CAN_BUS_0)];
+
+    SysSettings.numBuses = CAN_BUS_COUNT;
+#if CAN_BUS_COUNT > 1
+    settings.CAN1_Enabled = can_is_enabled(CAN_BUS_1);
+    settings.CAN1ListenOnly = can_is_silent(CAN_BUS_1) ? true : false;
+    settings.CAN1Speed = can_speed[can_get_bitrate(CAN_BUS_1)];
+#else
+    settings.CAN1_Enabled = false;
+    settings.CAN1ListenOnly = false;
+    settings.CAN1Speed = 500000;
+#endif
 
     xgvert_tmr_semaphore = xSemaphoreCreateMutex();
     ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
