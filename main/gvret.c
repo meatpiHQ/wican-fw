@@ -379,10 +379,11 @@ void gvret_parse(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t
 						//temp8 = checksumCalc(buff, step);
 						frame->rtr = 0;
 						frame->self = 0;
-						if (ESP_ERR_INVALID_STATE == can_send(CAN_BUS_0, frame, 1))
-						{
-							ESP_LOGE(__func__, "can_send error");
-						}
+						// 20 ms: long enough for a healthy bus to free TX slots (~250 us/frame
+						// @500K) so playback throttles to wire rate via TCP backpressure; short
+						// enough to stay bounded when the bus is sick. Drops are counted and
+						// logged in can_send().
+						can_send(CAN_BUS_0, frame, pdMS_TO_TICKS(20));
 //						if (out_bus == 0) canManager.sendFrame(&CAN0, build_out_frame);
 //						if (out_bus == 1) canManager.sendFrame(&CAN1, build_out_frame);
 					}
