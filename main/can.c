@@ -110,6 +110,15 @@ static int64_t rx_drop_log_us[CAN_BUS_COUNT];
 static uint32_t tx_drop_count[CAN_BUS_COUNT];
 static int64_t tx_drop_log_us[CAN_BUS_COUNT];
 
+// Bus-off recovery: neither driver recovers on its own, so a state-change
+// callback (ISR) flags the bus and wakes a task that recreates the node.
+// Full recreate rather than twai_node_recover(): the frame in flight at
+// bus-off gets no on_tx_done, so bare recovery would leak one TX slot per
+// bus-off; teardown + can_tx_slots_reset starts clean.
+static TaskHandle_t can_recovery_task_handle = NULL;
+static volatile uint32_t can_busoff_pending;	// bitmask, set from ISR
+static uint32_t can_busoff_count[CAN_BUS_COUNT];
+
 // Callback to receive frames from driver (ISR context): drain the frame out
 // of the hardware, tag it with its bus, and hand it to can_receive() via the
 // shared queue--all protocol work happens later in task context
@@ -174,6 +183,67 @@ static bool can_on_tx_done(twai_node_handle_t handle, const twai_tx_done_event_d
 	BaseType_t task_woken = pdFALSE;
 	xSemaphoreGiveFromISR(tx_slot_sem[bus], &task_woken);
 	return (task_woken == pdTRUE);
+}
+
+static bool can_on_state_change(twai_node_handle_t handle, const twai_state_change_event_data_t *edata, void *user_ctx)
+{
+	(void)handle;
+	if (edata->new_sta != TWAI_ERROR_BUS_OFF)
+	{
+		return false;
+	}
+
+	can_bus_t bus = (can_bus_t)(uintptr_t)user_ctx;
+	__atomic_fetch_or(&can_busoff_pending, BIT(bus), __ATOMIC_SEQ_CST);
+
+	BaseType_t task_woken = pdFALSE;
+	if (can_recovery_task_handle != NULL)
+	{
+		vTaskNotifyGiveFromISR(can_recovery_task_handle, &task_woken);
+	}
+	return (task_woken == pdTRUE);
+}
+
+static void can_recovery_task(void *arg)
+{
+	(void)arg;
+	while (1)
+	{
+		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+		// Tear down first so can_send() fails fast (bus enable bit cleared)
+		// instead of burning its full timeout per frame against a dead node.
+		uint32_t pending = __atomic_exchange_n(&can_busoff_pending, 0, __ATOMIC_SEQ_CST);
+		for (int bus = 0; bus < CAN_BUS_COUNT; bus++)
+		{
+			if (!(pending & BIT(bus)) || !can_is_enabled((can_bus_t)bus))
+			{
+				pending &= ~BIT(bus);
+				continue;
+			}
+			can_busoff_count[bus]++;
+			ESP_LOGW(TAG, "bus %d: bus-off #%lu, recreating node (%lu TX dropped so far)",
+					 bus, can_busoff_count[bus], tx_drop_count[bus]);
+			can_disable((can_bus_t)bus);
+		}
+
+		if (pending == 0)
+		{
+			continue;
+		}
+
+		// Let the bus settle; also rate-limits recreate flapping when the
+		// fault (e.g. shorted bus) persists across recoveries.
+		vTaskDelay(pdMS_TO_TICKS(250));
+
+		for (int bus = 0; bus < CAN_BUS_COUNT; bus++)
+		{
+			if (pending & BIT(bus))
+			{
+				can_enable((can_bus_t)bus);
+			}
+		}
+	}
 }
 
 // Reset TX slot accounting to "all free". Only call with the bus node torn
@@ -309,6 +379,7 @@ void can_enable(can_bus_t bus)
 	twai_event_callbacks_t cbs = {
 		.on_rx_done = can_on_rx_done,
 		.on_tx_done = can_on_tx_done,
+		.on_state_change = can_on_state_change,
 	};
 	ESP_ERROR_CHECK(twai_node_register_event_callbacks(can_node[bus], &cbs, (void *)(uintptr_t)bus));
 
@@ -465,6 +536,7 @@ void can_init(void)
 	// delivers ~4 frames/ms, so 256 rides out multi-ms scheduling stalls of
 	// can_rx_task under TCP streaming load instead of silently dropping RX.
 	can_rx_queue = xQueueCreate(256, sizeof(can_rx_item_t));
+	xTaskCreate(can_recovery_task, "can_recovery", 3072, NULL, 6, &can_recovery_task_handle);
 
 	for (int bus = 0; bus < CAN_BUS_COUNT; bus++)
 	{
@@ -580,9 +652,11 @@ esp_err_t can_send(can_bus_t bus, twai_message_t *message, TickType_t ticks_to_w
 		return ESP_ERR_INVALID_STATE;
 	}
 
-	// Semaphore guarantees a free slot exists; find it. Completion order can
-	// diverge from allocation order when a transmit fails, hence the bitmask
-	// instead of a ring index.
+	// Semaphore normally guarantees a free slot exists; find it. Completion
+	// order can diverge from allocation order when a transmit fails, hence
+	// the bitmask instead of a ring index. The pool can still come up empty
+	// if can_tx_slots_reset() refilled the semaphore while we held a permit
+	// waiting on node_lock (bus recreated under us) -- drop, don't assert.
 	can_tx_slot_t *slot = NULL;
 	portENTER_CRITICAL(&tx_slot_mux);
 	for (int i = 0; i < CAN_TX_SLOT_COUNT; i++)
@@ -595,7 +669,12 @@ esp_err_t can_send(can_bus_t bus, twai_message_t *message, TickType_t ticks_to_w
 		}
 	}
 	portEXIT_CRITICAL(&tx_slot_mux);
-	assert(slot != NULL);
+	if (slot == NULL)
+	{
+		xSemaphoreGive(node_lock[bus]);
+		xSemaphoreGive(tx_slot_sem[bus]);	// no-op if reset already refilled it
+		return ESP_ERR_TIMEOUT;
+	}
 
 	// Copy legacy twai_message_t -> the slot's stable twai_frame_t + data
 	// (the driver only keeps a pointer, hence the copy into pool storage).
