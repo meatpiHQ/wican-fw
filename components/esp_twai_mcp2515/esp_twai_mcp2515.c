@@ -18,6 +18,8 @@
 #include "freertos/queue.h"
 #include "freertos/idf_additions.h"
 #include "freertos/event_groups.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "esp_twai.h"
 #include "esp_twai_mcp2515.h"
 #include "esp_private/twai_interface.h"
@@ -39,6 +41,13 @@ typedef struct {
     struct twai_node_base api_base;
     spi_device_handle_t spi_dev;
     gpio_num_t int_gpio;
+    /* interrupt work runs in this task, instead of the GPIO ISR like 
+     * upstream does, in order to fix the thread safety of 
+     * spi_device_polling_transmit. spi_mutex serializes every SPI
+     * transfer between the interrupt task and API callers. 
+     */
+    TaskHandle_t intr_task;
+    SemaphoreHandle_t spi_mutex;
     uint32_t timestamp_resolution_hz;
     twai_event_callbacks_t cbs;
     void *user_data;
@@ -113,7 +122,13 @@ static esp_err_t mcp2515_spi_transfer(twai_mcp2515_ctx_t *ctx, const uint8_t *tx
         .tx_buffer = tx,
         .rx_buffer = rx,
     };
-    return spi_device_polling_transmit(ctx->spi_dev, &t);
+    /* All SPI access funnels through here; the mutex is what makes the
+     * polling API safe against concurrent use. 
+     */
+    xSemaphoreTake(ctx->spi_mutex, portMAX_DELAY);
+    esp_err_t err = spi_device_polling_transmit(ctx->spi_dev, &t);
+    xSemaphoreGive(ctx->spi_mutex);
+    return err;
 }
 
 static esp_err_t mcp2515_write_reg(twai_mcp2515_ctx_t *ctx, uint8_t reg, uint8_t val)
@@ -340,9 +355,14 @@ static esp_err_t mcp2515_start_next_tx_from_queue_task(twai_mcp2515_ctx_t *ctx)
     return ESP_OK;
 }
 
-static void IRAM_ATTR mcp2515_gpio_isr(void *arg)
+/* This is the former gpio ISR body, now run in ctx->intr_task (task context). 
+ * The FromISR queue/event-group calls inside are non-blocking and legal from tasks;
+ * do_yield is meaningless here and ignored. Callbacks (on_rx_done/on_tx_done/...)
+ * consequently also run in task context, but still must be short since they
+ * block the interrupt work here.
+ */
+static void mcp2515_intr_work(twai_mcp2515_ctx_t *ctx)
 {
-    twai_mcp2515_ctx_t *ctx = (twai_mcp2515_ctx_t *)arg;
     BaseType_t do_yield = pdFALSE;
 
     do {
@@ -462,7 +482,32 @@ static void IRAM_ATTR mcp2515_gpio_isr(void *arg)
         }
     } while (gpio_get_level(ctx->int_gpio) == 0);
 
-    if (do_yield) {
+    (void)do_yield;
+}
+
+static void mcp2515_intr_task(void *arg)
+{
+    twai_mcp2515_ctx_t *ctx = (twai_mcp2515_ctx_t *)arg;
+    while (1) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        mcp2515_intr_work(ctx);
+    }
+}
+
+/* Notify-only ISR. A flag raised while mcp2515_intr_work() is
+ * still draining produces either a new edge (new notification)
+ * or is caught by the work loop's gpio_get_level() re-check,
+ * so no events are lost.
+ */
+static void IRAM_ATTR mcp2515_gpio_isr(void *arg)
+{
+    twai_mcp2515_ctx_t *ctx = (twai_mcp2515_ctx_t *)arg;
+    BaseType_t task_woken = pdFALSE;
+
+    if (ctx->intr_task) {
+        vTaskNotifyGiveFromISR(ctx->intr_task, &task_woken);
+    }
+    if (task_woken == pdTRUE) {
         portYIELD_FROM_ISR();
     }
 }
@@ -530,6 +575,18 @@ static esp_err_t mcp2515_node_delete(twai_node_handle_t node)
 
     gpio_isr_handler_remove(ctx->int_gpio);
     gpio_intr_disable(ctx->int_gpio);
+    if (ctx->intr_task) {
+        /* Holding spi_mutex guarantees the interrupt task is not mid-SPI
+         * when it dies (it is either between transfers or blocked on the
+         * mutex, both safe points to delete it at).
+         */
+        xSemaphoreTake(ctx->spi_mutex, portMAX_DELAY);
+        vTaskDelete(ctx->intr_task);
+        xSemaphoreGive(ctx->spi_mutex);
+    }
+    if (ctx->spi_mutex) {
+        vSemaphoreDelete(ctx->spi_mutex);
+    }
     if (ctx->spi_dev) {
         spi_bus_remove_device(ctx->spi_dev);
     }
@@ -759,7 +816,10 @@ esp_err_t twai_new_node_mcp2515(twai_mcp2515_spi_bus_handle_t bus, const twai_mc
     uint32_t tx_queue_depth = node_config->tx_queue_depth ? node_config->tx_queue_depth : 1;
     ctx->tx_queue = xQueueCreateWithCaps(tx_queue_depth, sizeof(twai_frame_t *), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     ctx->event_group = xEventGroupCreateWithCaps(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    ESP_GOTO_ON_FALSE(ctx->tx_queue && ctx->event_group, ESP_ERR_NO_MEM, err, TAG, "no_mem");
+    ctx->spi_mutex = xSemaphoreCreateMutex();
+    ESP_GOTO_ON_FALSE(ctx->tx_queue && ctx->event_group && ctx->spi_mutex, ESP_ERR_NO_MEM, err, TAG, "no_mem");
+    ESP_GOTO_ON_FALSE(xTaskCreate(mcp2515_intr_task, "mcp2515_intr", 4096, ctx, 10, &ctx->intr_task) == pdPASS,
+                      ESP_ERR_NO_MEM, err, TAG, "no_mem");
 
     // Configure SPI device for the node
     spi_device_interface_config_t devcfg = {
@@ -819,6 +879,12 @@ err:
     if (ctx) {
         if (ctx->int_gpio >= 0) {
             gpio_isr_handler_remove(ctx->int_gpio);
+        }
+        if (ctx->intr_task) {
+            vTaskDelete(ctx->intr_task);
+        }
+        if (ctx->spi_mutex) {
+            vSemaphoreDelete(ctx->spi_mutex);
         }
         if (ctx->spi_dev) {
             spi_bus_remove_device(ctx->spi_dev);
