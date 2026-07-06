@@ -152,7 +152,14 @@ void send_to_host(char* str, uint32_t len, QueueHandle_t *q)
 		xsend_buffer.usLen = len;
 	}
 	memcpy(xsend_buffer.ucElement, str, xsend_buffer.usLen);
-	xQueueSend( *q, ( void * ) &xsend_buffer, portMAX_DELAY );
+
+	// Wait at most 100 ms rather than forever, so a stalled TCP session can
+	// never wedge can_tx_task. The tcp tx task discards frames while
+	// disconnected, so a full queue clears quickly and 100 ms is enough.
+	if( xQueueSend( *q, ( void * ) &xsend_buffer, pdMS_TO_TICKS(100) ) != pdTRUE )
+	{
+		ESP_LOGW(TAG, "host TX queue full, response dropped");
+	}
 
 //	ESP_LOG_BUFFER_HEX(TAG, ucTCP_TX_Buffer.ucElement, xsend_buffer.usLen);
 	memset(xsend_buffer.ucElement, 0, sizeof(xsend_buffer.ucElement));

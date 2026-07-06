@@ -73,37 +73,32 @@ wait_skt_rx:
 					  portMAX_DELAY );/* Wait a maximum of 100ms for either bit to be set. */
 	while(1)
 	{
+		// Holding the semaphore is not necessary; recv and send on the same
+		// socket don't need to be synchronized.
 		rx_buffer.usLen = recv(sock, rx_buffer.ucElement, sizeof(rx_buffer.ucElement) - 1, 0);
-        if( xSemaphoreTake( xTCP_Socket_Semaphore, portMAX_DELAY ) == pdTRUE )
-        {
-        	//check if sock still connected?
-			if (rx_buffer.usLen < 0)
-			{
-				xEventGroupSetBits( xSocketEventGroup, PORT_CLOSED_BIT );
-				xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
-				ESP_LOGE(TAG, "Error occurred during receiving: errno %d", errno);
-				xSemaphoreGive( xTCP_Socket_Semaphore );
-				goto wait_skt_rx;
+		if (rx_buffer.usLen < 0)
+		{
+			xEventGroupSetBits( xSocketEventGroup, PORT_CLOSED_BIT );
+			xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
+			ESP_LOGE(TAG, "Error occurred during receiving: errno %d", errno);
+			goto wait_skt_rx;
 
-			} else if (rx_buffer.usLen == 0)
-			{
-				xEventGroupSetBits( xSocketEventGroup, PORT_CLOSED_BIT );
-				xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
-				ESP_LOGW(TAG, "Connection closed");
-				xSemaphoreGive( xTCP_Socket_Semaphore );
-				goto wait_skt_rx;
-			}
-			else
-			{
-				rx_buffer.dev_channel = DEV_WIFI;
-				rx_buffer.ucElement[rx_buffer.usLen] = 0; // Null-terminate whatever is received and treat it like a string
-//				ESP_LOGI(TAG, "Received %d bytes: %s", rx_buffer.usLen, rx_buffer.ucElement);
-		        //TODO: what happens if blocked for ever?
-				xQueueSend( *xRX_Queue, ( void * ) &rx_buffer, portMAX_DELAY );
-			}
-			xSemaphoreGive( xTCP_Socket_Semaphore );
-        }
-
+		} else if (rx_buffer.usLen == 0)
+		{
+			xEventGroupSetBits( xSocketEventGroup, PORT_CLOSED_BIT );
+			xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
+			ESP_LOGW(TAG, "Connection closed");
+			goto wait_skt_rx;
+		}
+		else
+		{
+			rx_buffer.dev_channel = DEV_WIFI;
+			rx_buffer.ucElement[rx_buffer.usLen] = 0; // Null-terminate whatever is received and treat it like a string
+//			ESP_LOGI(TAG, "Received %d bytes: %s", rx_buffer.usLen, rx_buffer.ucElement);
+			// Blocking here is the backpressure path:
+			// TCP's receive window closes and throttles the peer.
+			xQueueSend( *xRX_Queue, ( void * ) &rx_buffer, portMAX_DELAY );
+		}
 	}
 }
 
@@ -127,29 +122,20 @@ wait_skt_rx:
 	{
 //		 = recv(sock, rx_buffer.ucElement, sizeof(rx_buffer.ucElement) - 1, 0);
 		rx_buffer.usLen = recvfrom(listen_sock, rx_buffer.ucElement, sizeof(rx_buffer.ucElement) - 1, 0, (struct sockaddr *)&source_addr, &socklen);
-        if( xSemaphoreTake( xTCP_Socket_Semaphore, portMAX_DELAY ) == pdTRUE )
-        {
-        	//check if sock still connected?
-			if (rx_buffer.usLen < 0)
-			{
-				xEventGroupSetBits( xSocketEventGroup, PORT_CLOSED_BIT );
-				xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
-				ESP_LOGE(TAG, "Error occurred during receiving: errno %d", errno);
-				xSemaphoreGive( xTCP_Socket_Semaphore );
-				goto wait_skt_rx;
+		if (rx_buffer.usLen < 0)
+		{
+			xEventGroupSetBits( xSocketEventGroup, PORT_CLOSED_BIT );
+			xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
+			ESP_LOGE(TAG, "Error occurred during receiving: errno %d", errno);
+			goto wait_skt_rx;
 
-			}
-			else
-			{
-				rx_buffer.dev_channel = DEV_WIFI;
-				rx_buffer.ucElement[rx_buffer.usLen] = 0; // Null-terminate whatever is received and treat it like a string
-//				ESP_LOGI(TAG, "Received %d bytes: %s", rx_buffer.usLen, rx_buffer.ucElement);
-		        //TODO: what happens if blocked for ever?
-				xQueueSend( *xRX_Queue, ( void * ) &rx_buffer, portMAX_DELAY );
-			}
-			xSemaphoreGive( xTCP_Socket_Semaphore );
-        }
-
+		}
+		else
+		{
+			rx_buffer.dev_channel = DEV_WIFI;
+			rx_buffer.ucElement[rx_buffer.usLen] = 0; // Null-terminate whatever is received and treat it like a string
+			xQueueSend( *xRX_Queue, ( void * ) &rx_buffer, portMAX_DELAY );
+		}
 	}
 }
 
@@ -197,41 +183,35 @@ static void tcp_server_tx_task(void *pvParameters)
 //	int addr_family = (int)pvParameters;
 	static xdev_buffer tx_buffer;
 
-wait_skt_tx:
-	xEventGroupWaitBits(
-					  xSocketEventGroup,   /* The event group being tested. */
-					  PORT_OPEN_BIT, /* The bits within the event group to wait for. */
-					  pdFALSE,        /* BIT_0 & BIT_4 should be cleared before returning. */
-					  pdFALSE,       /* Don't wait for both bits, either bit will do. */
-					  portMAX_DELAY );/* Wait a maximum of 100ms for either bit to be set. */
-	ESP_LOGI(TAG, "Socket connected...");
 	while(1)
 	{
-		xQueuePeek(*xTX_Queue, ( void * ) &tx_buffer, portMAX_DELAY);
+		xQueueReceive(*xTX_Queue, ( void * ) &tx_buffer, portMAX_DELAY);
 
-		while(xQueuePeek(*xTX_Queue, ( void * ) &tx_buffer, 0) == pdTRUE)
+		// No client connected: discard the frame. Letting the queue fill would
+		// stall send_to_host()/can_tx_task long after the disconnect, and the
+		// next client would receive the dead session's leftover frames.
+		if (!(xEventGroupGetBits(xSocketEventGroup) & PORT_OPEN_BIT))
 		{
-			if( xSemaphoreTake( xTCP_Socket_Semaphore, portMAX_DELAY ) == pdTRUE )
+			continue;
+		}
+
+		if( xSemaphoreTake( xTCP_Socket_Semaphore, portMAX_DELAY ) == pdTRUE )
+		{
+			int to_write = tx_buffer.usLen;
+			while (to_write > 0)
 			{
-				int to_write = tx_buffer.usLen;
-				xQueueReceive(*xTX_Queue, ( void * ) &tx_buffer, 0);
-				while (to_write > 0)
+				int written = send(sock, tx_buffer.ucElement + (tx_buffer.usLen - to_write), to_write, 0);
+				if (written < 0)
 				{
-					int written = send(sock, tx_buffer.ucElement + (tx_buffer.usLen - to_write), to_write, 0);
-					if (written < 0)
-					{
-						ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
-						xEventGroupSetBits( xSocketEventGroup, PORT_CLOSED_BIT );
-						xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
-						xSemaphoreGive( xTCP_Socket_Semaphore );
-						goto wait_skt_tx;
-					}
-					to_write -= written;
+					ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
+					xEventGroupSetBits( xSocketEventGroup, PORT_CLOSED_BIT );
+					xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
+					break;
 				}
+				to_write -= written;
 			}
 			xSemaphoreGive( xTCP_Socket_Semaphore );
 		}
-		vTaskDelay(pdMS_TO_TICKS(1));
 	}
 }
 
@@ -321,6 +301,12 @@ accept_socket:
 			setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE, &keepIdle, sizeof(int));
 			setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &keepInterval, sizeof(int));
 			setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, &keepCount, sizeof(int));
+			// Bound how many GVRET commands can queue on-device, so keepalive replies stay
+			// within SavvyCAN's ~10 s watchdog even when a CAN bus is saturated.
+			// Once this fills, TCP flow control makes further data wait in the
+			// sender's own send buffer instead of piling up here; nothing is dropped.
+			int rcvBuf = 2048;
+			setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &rcvBuf, sizeof(int));
 			// Convert ip address to string
 			if (source_addr.ss_family == PF_INET)
 			{
