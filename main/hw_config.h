@@ -43,10 +43,9 @@
 
 #define TX_GPIO_NUM                 2
 #define RX_GPIO_NUM                 1
-// No CAN standby GPIO on the custom WiCAN: the VP233 (SN65HVD233) has no standby/enable
-// pin at all. This differs from the V300, which uses a VP230 (SN65HVD230)
-// whose RS pin (GPIO6) selects high-speed vs standby--hence it defines
-// CAN_STDBY_GPIO_NUM, but the custom WiCAN does not.
+// As per Ali, the transceiver standby mode (i.e. RS mode-select pin (pin 8))
+// is not working on the custom WiCAN rev 1.
+// As such, CAN_STDBY_GPIO_NUM is not defined here. 
 
 // -- Bus 1: MCP2515 (SPI2) -> SN65HVD233 #2 -- //
 
