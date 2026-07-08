@@ -1,0 +1,4 @@
+[submodule "esp-idf"]
+	path = esp-idf
+	url = git@github.com:L1Z3/esp-idf.git
+	branch = master
