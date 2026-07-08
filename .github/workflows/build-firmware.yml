@@ -1,0 +1,72 @@
+name: Build firmware
+
+# Builds both hardware variants against the vendored esp-idf fork
+# (L1Z3/esp-idf @ v5.5.3 + local TWAI patches). We can't use the stock
+# espressif/idf Docker images because they lack those patches, so we
+# install IDF straight from the checked-out submodule.
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'tmp/wip-custom-wican-forwarding-needs-review'
+
+# Cancel superseded runs on the same ref to save runner minutes.
+concurrency:
+  group: build-firmware-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: v300
+            target: esp32c3
+          - variant: custom
+            target: esp32s3
+
+    steps:
+      - name: Checkout (with esp-idf submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Cache ESP-IDF tools
+        uses: actions/cache@v4
+        with:
+          # install.sh drops toolchains + the python venv here.
+          path: ~/.espressif
+          key: espressif-${{ runner.os }}-${{ matrix.target }}-${{ hashFiles('esp-idf/tools/tools.json') }}
+          restore-keys: |
+            espressif-${{ runner.os }}-${{ matrix.target }}-
+
+      - name: Install ESP-IDF (${{ matrix.target }} toolchain)
+        run: ./esp-idf/install.sh ${{ matrix.target }}
+
+      - name: Build ${{ matrix.variant }}
+        id: build
+        run: |
+          . ./esp-idf/export.sh
+          ./build.sh ${{ matrix.variant }}
+          # The build stamps a name into project_description.json, e.g.
+          # wican-fw_custom_v420_eb-011-beta (wican-fw_<pref>_<git-describe>).
+          # Reuse it verbatim as the artifact name.
+          fw_name=$(python3 -c "import json; print(json.load(open('build.${{ matrix.variant }}/project_description.json'))['project_name'])")
+          echo "fw_name=$fw_name" >> "$GITHUB_OUTPUT"
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.build.outputs.fw_name }}
+          if-no-files-found: error
+          path: |
+            build.${{ matrix.variant }}/*.bin
+            build.${{ matrix.variant }}/bootloader/bootloader.bin
+            build.${{ matrix.variant }}/partition_table/partition-table.bin
+            build.${{ matrix.variant }}/flasher_args.json
