@@ -33,6 +33,10 @@ CONFIG_ESP_WIFI_11KV_SUPPORT=y
 CONFIG_FREERTOS_HZ=1000
 CONFIG_FREERTOS_ENABLE_BACKWARD_COMPATIBILITY=y
 CONFIG_LOG_COLORS=y
+# Default 10 slots is fully consumed by httpd alone (max_open_sockets 7 + 3
+# internal), so a browser on the config page starved the GVRET server's
+# accept() with ENFILE until the keep-alive connections idled out.
+CONFIG_LWIP_MAX_SOCKETS=16
 CONFIG_LWIP_TCP_SND_BUF_DEFAULT=20480
 CONFIG_LWIP_TCP_WND_DEFAULT=20480
 CONFIG_LWIP_TCP_RECVMBOX_SIZE=64
