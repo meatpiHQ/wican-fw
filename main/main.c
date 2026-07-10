@@ -1152,7 +1152,7 @@ void app_main(void)
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
 	#elif HARDWARE_VER == WICAN_PRO
-	led_set_level(0,0,200);
+	led_set_level(LED_IND_IDLE_R, LED_IND_IDLE_G, LED_IND_IDLE_B);
 	// Activity indicators (issue #19) take over from the boot baseline above.
 	// Started here, after elm327_init(), so the boot-time MIC3624 update's
 	// inline red blink never races the indicator task.

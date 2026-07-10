@@ -155,7 +155,7 @@ typedef struct _device_config
 	char csv_grid_hz[16];     // wide fixed-rate grid frequency, 1..50 Hz
 	char csv_require_engine[16]; // gate CSV logging on engine running (ECU answering): "enable" | "disable"
 	char imu_threshold[16];
-	char led_blink_ms[16];    // LED activity-indicator blink half-period, snapped to the AW2023 time table
+	char led_blink_ms[16];    // LED activity-indicator blink half-period (ms), normalized at load to led_indicator_snap_rate_ms()'s table
 	bool debug_enabled;
 }device_config_t;
 
@@ -216,7 +216,8 @@ int8_t config_server_get_sleep_time(uint32_t *sleep_time);
 int8_t config_server_get_wakeup_time(uint32_t *wakeup_time);
 wifi_security_t config_server_get_sta_security(void);
 int8_t config_server_get_csv_log(void);
-// LED indicator blink half-period in ms, always one of {130,260,380,510,770,1040}
+// LED indicator blink half-period in ms, always an entry of
+// led_indicator_snap_rate_ms()'s table (26-208 ms)
 int32_t config_server_get_led_blink_ms(void);
 int8_t config_server_get_log_period(uint32_t *log_period);
 // Wide CSV (Task #11): grid_mode 1=fixed / 0=event / -1=invalid; grid_hz writes *hz (1..50)

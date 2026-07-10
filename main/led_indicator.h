@@ -22,6 +22,7 @@
 #define LED_INDICATOR_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,17 +36,30 @@ extern "C" {
  * on can_tx_task, where the flash codecs run inline and a single AW2023
  * transaction can block up to 1 s (led.c redefines LED_I2C_TIMEOUT_MS). */
 
+// Idle baseline color (solid blue). Shared with app_main's end-of-boot paint
+// so "what idle looks like" has a single owner.
+#define LED_IND_IDLE_R 0
+#define LED_IND_IDLE_G 0
+#define LED_IND_IDLE_B 200
+
 // Create the indicator task. Call once, after led_init() and after the boot
 // LED baseline is set (end of app_main).
 void led_indicator_init(void);
 
 // Pause/resume indicator painting around a foreign LED owner (MIC3624 chip
-// update's inline red blink, sleep paths writing the LED off). suspend() takes
-// the paint mutex, so it returns only after any in-progress repaint finished —
-// the caller then owns the LED. Calls nest; resume() triggers a repaint (which
-// restores the idle color if nothing is active). Safe to call before init.
+// update's inline red blink, sleep paths writing the LED off, config mode's
+// 1 Hz alternation). suspend() takes the paint mutex, so it returns only after
+// any in-progress repaint finished — the caller then owns the LED. Calls nest;
+// resume() triggers a repaint (which restores the idle color if nothing is
+// active). Safe to call before init.
 void led_indicator_suspend(void);
 void led_indicator_resume(void);
+
+// Snap a blink half-period (ms) to the nearest entry of the allowed table
+// (26–208 ms, ~19 Hz to ~2.4 Hz — see led_indicator.c for the values and why).
+// config_server_load_cfg() normalizes the stored led_blink_ms with this once;
+// the table is mirrored by LED_BLINK_STEPS in main/web/src/main.js.
+int32_t led_indicator_snap_rate_ms(int32_t ms);
 
 // Current indicator state for /check_status:
 // "flash_red" | "datalog_blue" | "idle" | "deferred"

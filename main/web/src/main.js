@@ -9,6 +9,8 @@ const FW_RELEASES_URL = `https://github.com/${FW_UPDATE_REPO}/releases`;
 // is software-timed in led_indicator.c (the AW2023 pattern engine can't go
 // below 130 ms) — the slider stores an index into this list, the config stores
 // the ms value, and the firmware snaps anything else to the nearest entry.
+// Mirror of led_indicator_snap_rate_ms()'s table in main/led_indicator.c —
+// keep the two in sync. The slider max is derived from this list on load.
 const LED_BLINK_STEPS = [26, 52, 76, 102, 154, 208];
 function ledBlinkMsFromSlider() {
     const idx = parseInt(document.getElementById("led_blink_rate").value, 10) || 0;
@@ -2804,10 +2806,12 @@ xhttp.onload = async function() {
         document.getElementById("imu_threshold").value = obj.imu_threshold || "8";
         document.getElementById("imu_threshold_value").textContent = ((obj.imu_threshold || 8) * 3.9).toFixed(1) + ' mg';
         {   // LED activity-indicator blink rate: config stores ms, the slider stores an index
+            const slider = document.getElementById("led_blink_rate");
+            slider.max = LED_BLINK_STEPS.length - 1;   // the table owns the range, not the HTML
             const ms = parseInt(obj.led_blink_ms, 10);
             let idx = LED_BLINK_STEPS.indexOf(ms);
             if (idx < 0) idx = 1;   // unknown/missing -> 52 ms default
-            document.getElementById("led_blink_rate").value = idx;
+            slider.value = idx;
             updateLedBlinkLabel();
         }
 

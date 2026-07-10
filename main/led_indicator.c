@@ -28,27 +28,16 @@
 #include "can.h"
 #include "csv_logger.h"
 #include "config_server.h"
-#include "config_mode.h"
 #include "dev_status.h"
 
 #define TAG "LED_IND"
 
 #define LED_IND_TICK_MS         250
-// Software-blink half-period bounds. The AW2023 pattern engine bottoms out at
-// 130 ms per phase, so the blink is timed here in the task (1 kHz RTOS tick)
-// and the chip is driven as plain PWM — that is what allows rates down to
-// 26 ms (~19 Hz) that the hardware time table cannot express.
-#define LED_IND_MIN_RATE_MS     20
-#define LED_IND_MAX_RATE_MS     2000
 // Hold red across the FLASH_ACTIVE_BIT gaps between the ~128 KB 'X' chunks of
 // one logical fast-read, so a long ROM read shows steady red-blink, not flicker.
 #define LED_IND_RED_HOLD_US     (1500LL * 1000LL)
 #define LED_IND_RED_BRIGHTNESS  255
 #define LED_IND_BLUE_BRIGHTNESS 200
-// Idle baseline: same solid blue app_main sets at end of boot.
-#define LED_IND_IDLE_R 0
-#define LED_IND_IDLE_G 0
-#define LED_IND_IDLE_B 200
 
 typedef enum {
     IND_UNKNOWN = 0,   // pre-first-paint; forces an initial repaint
@@ -60,10 +49,32 @@ typedef enum {
 
 static SemaphoreHandle_t s_paint_mutex = NULL;
 static volatile ind_state_t s_state = IND_UNKNOWN;
-// Nested foreign-owner holds (MIC3624 update, sleep paths). Guarded by
-// s_paint_mutex once it exists; boot-time calls before init are single-task.
+// Nested foreign-owner holds (MIC3624 update, sleep paths, config mode).
+// Guarded by s_paint_mutex once it exists; boot-time calls before init are
+// single-task.
 static volatile int8_t s_suspend_count = 0;
-static bool s_suspended_early = false;   // suspend() arrived before init
+
+// The allowed software-blink half-periods, ~19 Hz to ~2.4 Hz. The AW2023
+// pattern engine bottoms out at 130 ms per phase, so the blink is timed in
+// led_indicator_task (1 kHz RTOS tick) and the chip is driven as plain PWM —
+// that is what allows rates the hardware time table cannot express. This
+// table is mirrored by LED_BLINK_STEPS in main/web/src/main.js.
+int32_t led_indicator_snap_rate_ms(int32_t ms)
+{
+    static const int32_t allowed[] = {26, 52, 76, 102, 154, 208};
+    int32_t best = allowed[0];
+    int32_t best_diff = (ms > best) ? (ms - best) : (best - ms);
+    for (size_t i = 1; i < sizeof(allowed)/sizeof(allowed[0]); i++)
+    {
+        int32_t diff = (ms > allowed[i]) ? (ms - allowed[i]) : (allowed[i] - ms);
+        if (diff < best_diff)
+        {
+            best_diff = diff;
+            best = allowed[i];
+        }
+    }
+    return best;
+}
 
 static const char *ind_state_str(ind_state_t st)
 {
@@ -87,7 +98,6 @@ void led_indicator_suspend(void)
     if (s_paint_mutex == NULL)
     {
         // Pre-init (boot-time MIC update): no task is painting yet.
-        s_suspended_early = true;
         s_suspend_count++;
         return;
     }
@@ -144,13 +154,15 @@ static void led_indicator_task(void *pvParameters)
         // the sleep paths additionally suspend() before writing the LED off.
         dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
 
-        int32_t cfg_ms = config_server_get_led_blink_ms();
-        if (cfg_ms < LED_IND_MIN_RATE_MS) cfg_ms = LED_IND_MIN_RATE_MS;
-        if (cfg_ms > LED_IND_MAX_RATE_MS) cfg_ms = LED_IND_MAX_RATE_MS;
-        const uint32_t rate_ms = (uint32_t)cfg_ms;
+        // Already normalized to the allowed table by config_server_load_cfg.
+        const uint32_t rate_ms = (uint32_t)config_server_get_led_blink_ms();
 
+        // Decide and paint under the mutex: once led_indicator_suspend()
+        // returns, this task must not touch the LED. The predicates are all
+        // lock-free flag reads, so holding the mutex across them is cheap.
+        xSemaphoreTake(s_paint_mutex, portMAX_DELAY);
         ind_state_t desired;
-        if (s_suspend_count > 0 || config_mode_active())
+        if (s_suspend_count > 0)
         {
             desired = IND_DEFERRED;
         }
@@ -172,14 +184,8 @@ static void led_indicator_task(void *pvParameters)
             desired = IND_IDLE;
         }
 
-        xSemaphoreTake(s_paint_mutex, portMAX_DELAY);
-        // Re-check under the mutex: a suspend() may have raced in, and the
-        // foreign owner (e.g. sleep writing the LED off) must not be
-        // repainted over.
-        if (s_suspend_count > 0)
-        {
-            desired = IND_DEFERRED;
-        }
+        // dev_status_is_awake() is a backstop for any sleep path without a
+        // suspend() hook — never paint over a LED the sleep code turned off.
         if (desired != IND_DEFERRED && dev_status_is_awake())
         {
             if (desired != s_state)
@@ -198,17 +204,18 @@ static void led_indicator_task(void *pvParameters)
                 ind_paint(desired, phase_on);
             }
         }
-        if (desired != s_state)
+        const ind_state_t prev = s_state;
+        s_state = desired;
+        xSemaphoreGive(s_paint_mutex);
+
+        if (desired != prev)
         {
             ESP_LOGI(TAG, "state %s -> %s (rate %lums)",
-                     ind_state_str(s_state), ind_state_str(desired), (unsigned long)rate_ms);
-            s_state = desired;
+                     ind_state_str(prev), ind_state_str(desired), (unsigned long)rate_ms);
         }
         // While blinking, the tick IS the half-period; rate changes from the
         // config getter take effect on the next toggle without a reprogram.
-        const bool fast_tick = (s_state == IND_FLASH_RED || s_state == IND_DATALOG_BLUE);
-        xSemaphoreGive(s_paint_mutex);
-
+        const bool fast_tick = (desired == IND_FLASH_RED || desired == IND_DATALOG_BLUE);
         vTaskDelay(pdMS_TO_TICKS(fast_tick ? rate_ms : LED_IND_TICK_MS));
     }
 }
@@ -228,7 +235,7 @@ void led_indicator_init(void)
     // Publish the mutex before the task exists (csv_logger boot-race lesson:
     // publish state before creating the task that reads it).
     s_paint_mutex = mutex;
-    if (s_suspended_early)
+    if (s_suspend_count > 0)
     {
         ESP_LOGI(TAG, "starting with %d pre-init suspend hold(s)", s_suspend_count);
     }

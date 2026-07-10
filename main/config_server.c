@@ -210,27 +210,6 @@ const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"st
 static device_config_t device_config;
 TimerHandle_t xrestartTimer;
 
-// Valid LED indicator blink half-periods (ms). The blink is timed in software
-// by led_indicator.c (the AW2023 pattern engine bottoms out at 130 ms), so the
-// table spans ~19 Hz to ~2.4 Hz. Snap any stored value to the nearest entry so
-// legacy configs (e.g. the old 130–1040 table) coerce to a valid rate.
-static int32_t led_blink_ms_snap(int32_t ms)
-{
-	static const int32_t allowed[] = {26, 52, 76, 102, 154, 208};
-	int32_t best = 52;
-	int32_t best_diff = INT32_MAX;
-	for (size_t i = 0; i < sizeof(allowed)/sizeof(allowed[0]); i++)
-	{
-		int32_t diff = (ms > allowed[i]) ? (ms - allowed[i]) : (allowed[i] - ms);
-		if (diff < best_diff)
-		{
-			best_diff = diff;
-			best = allowed[i];
-		}
-	}
-	return best;
-}
-
 static void config_server_schedule_reboot(restart_tracker_planned_reason_t reason,
 								  restart_tracker_source_t source,
 								  uint32_t flags)
@@ -2689,22 +2668,15 @@ static void config_server_load_cfg(char *cfg)
 	ESP_LOGI(TAG, "device_config.log_period: %s", device_config.log_period);
 	//*****
 
-	//*****
+	//***** led_blink_ms: single normalization point. Snapping garbage or legacy
+	//      values (e.g. the old 130-1040 hardware table) to the allowed table
+	//      here is what lets config_server_get_led_blink_ms() return the stored
+	//      value as-is.
 	key = cJSON_GetObjectItem(root,"led_blink_ms");
-	if(key == 0 || key->valuestring == NULL)
 	{
-		strlcpy(device_config.led_blink_ms, "52", sizeof(device_config.led_blink_ms));
-	}
-	else
-	{
-		strlcpy(device_config.led_blink_ms, key->valuestring, sizeof(device_config.led_blink_ms));
-	}
-	// Snap any garbage or legacy NVS value to the nearest allowed half-period
-	// so the LED indicator always runs a valid, visible blink.
-	{
-		char snapped[16];
-		snprintf(snapped, sizeof(snapped), "%ld", (long)led_blink_ms_snap(atoi(device_config.led_blink_ms)));
-		strlcpy(device_config.led_blink_ms, snapped, sizeof(device_config.led_blink_ms));
+		int32_t ms = (key != 0 && key->valuestring != NULL) ? atoi(key->valuestring) : 52;
+		snprintf(device_config.led_blink_ms, sizeof(device_config.led_blink_ms),
+				 "%ld", (long)led_indicator_snap_rate_ms(ms));
 	}
 	ESP_LOGI(TAG, "device_config.led_blink_ms: %s", device_config.led_blink_ms);
 	//*****
@@ -3437,7 +3409,8 @@ int8_t config_server_get_csv_log(void)
 
 int32_t config_server_get_led_blink_ms(void)
 {
-	return led_blink_ms_snap(atoi(device_config.led_blink_ms));
+	// Already normalized to led_indicator_snap_rate_ms()'s table at load time.
+	return atoi(device_config.led_blink_ms);
 }
 
 int8_t config_server_get_ap_auto_disable(void)

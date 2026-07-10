@@ -34,6 +34,7 @@
 #include "dev_status.h"
 #include "ble.h"
 #include "led.h"
+#include "led_indicator.h"
 #include <stdbool.h>
 #include "wifi_mgr.h"
 
@@ -43,15 +44,6 @@
 #define CONFIG_MODE_TICK_MS        1000   // Task tick period in milliseconds
 #define CONFIG_MODE_HOLD_SECONDS   5      // Seconds to hold the button to enter config mode
 #define LED_MAX_LEVEL              255
-
-// Read by led_indicator's task; written only here. Same volatile cross-core
-// pattern as csv_logger's csv_manual_mode (aligned bool load/store is atomic).
-static volatile bool s_in_config_mode = false;
-
-bool config_mode_active(void)
-{
-    return s_in_config_mode;
-}
 
 void config_mode_task(void *pvParameters)
 {
@@ -85,8 +77,11 @@ void config_mode_task(void *pvParameters)
                 wifi_mgr_set_ap_auto_disable(false);
                 wifi_mgr_set_mode(WIFI_MGR_MODE_APSTA);
                 wifi_mgr_enable();
+                // Own the LED for the 1 Hz alternation below, like every other
+                // foreign LED owner. Config mode lasts until reboot, so this
+                // hold is never resumed.
+                led_indicator_suspend();
                 in_config_mode = true;
-                s_in_config_mode = true;
 
                 hold_seconds = 0; // Avoid repeated triggers while holding
             }
