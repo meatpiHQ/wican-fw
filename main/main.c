@@ -342,7 +342,17 @@ static void can_rx_task(void *pvParameters)
 				{
 					if(tcp_port_open())
 					{
-						xQueueSend( xMsg_Tx_Queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) );
+						// Zero timeout: never let a stalled TCP session block CAN rx.
+						if(xQueueSend( xMsg_Tx_Queue, ( void * ) &ucTCP_TX_Buffer, pdMS_TO_TICKS(0) ) != pdTRUE)
+						{
+							// Count what never blocking for enqueue costs in terms of drops.
+							static uint32_t host_drop_cnt = 0;
+							if((++host_drop_cnt % 64U) == 1U)
+							{
+								ESP_LOGW(TAG, "host stream: %lu frames dropped (TX queue full)",
+								         (unsigned long)host_drop_cnt);
+							}
+						}
 					}
 					if(ble_connected())
 					{
