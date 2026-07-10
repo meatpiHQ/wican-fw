@@ -2,6 +2,30 @@
 
 Branch: `feature/led-activity-indicators` · Issue: [#19](https://github.com/cdufresne81/nc-flash-wican-fw/issues/19)
 
+## Status: implemented & bench-verified (2026-07-10)
+
+Implemented in `8afb11c`; all acceptance criteria demonstrated against the
+bench unit (192.168.1.169, build `v1.4.0-2-g8afb11c`). Notable results:
+
+- **AC8**: dry-run flash (3584 blocks, 8.4 s) showed `flash_red` for the whole
+  op. The LED then returned to `datalog_blue`, not `idle` — correct: the bench
+  had a live CSV session open, so this run also proved the red>blue overlap
+  arbitration (bare port-35001 command with no `op=pause`) end to end.
+- **AC9**: session open (396 rows) → `datalog_blue`; `op=pause` → `idle`;
+  `op=resume` restored auto mode.
+- **AC10 nuance**: `/store_config` always schedules a reboot (by design, all
+  keys), so "applies without reboot" is moot in the stock flow — the indicator
+  does read the getter at every pattern program (`led_indicator.c`, task loop),
+  so the value is live-applied from whatever `device_config` holds. Persistence
+  verified: 510 survived the reboot; restored to the 260 default after.
+- The old bench config.json predated the key; `/load_config` (raw file) showed
+  no `led_blink_ms` while the boot parser correctly defaulted it — the snap
+  coercion path is exercised on every legacy device.
+- A 3.5 MB `ledtest.bin` + `ledtest.json` remain staged in `/sdcard/roms/` on
+  the bench unit (reusable for future dry-run tests).
+
+The manual eyes-on checklist below remains open (needs a human at the device).
+
 Ready-to-paste goal condition:
 
 ```
