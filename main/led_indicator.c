@@ -34,6 +34,12 @@
 #define TAG "LED_IND"
 
 #define LED_IND_TICK_MS         250
+// Software-blink half-period bounds. The AW2023 pattern engine bottoms out at
+// 130 ms per phase, so the blink is timed here in the task (1 kHz RTOS tick)
+// and the chip is driven as plain PWM — that is what allows rates down to
+// 26 ms (~19 Hz) that the hardware time table cannot express.
+#define LED_IND_MIN_RATE_MS     20
+#define LED_IND_MAX_RATE_MS     2000
 // Hold red across the FLASH_ACTIVE_BIT gaps between the ~128 KB 'X' chunks of
 // one logical fast-read, so a long ROM read shows steady red-blink, not flicker.
 #define LED_IND_RED_HOLD_US     (1500LL * 1000LL)
@@ -107,45 +113,18 @@ void led_indicator_resume(void)
     xSemaphoreGive(s_paint_mutex);
 }
 
-// Program one indicator blink: symmetric hold/off at the user-configured rate,
-// explicit nonzero off time (led_fast_blink programs off=0, which can render
-// near-solid). Amplitude comes from the PWM level written after the pattern.
-static esp_err_t ind_start_blink(led_color_t color, uint8_t brightness, uint32_t rate_ms)
+// Paint one phase of the software blink: the state's channel at its brightness
+// or all channels dark. Blink amplitude and timing both live here — the AW2023
+// runs in plain PWM mode, no hardware pattern.
+static void ind_paint(ind_state_t state, bool phase_on)
 {
-    const led_pattern_ms_t blink = {
-        .rise_time_ms = 0,
-        .hold_time_ms = rate_ms,
-        .fall_time_ms = 0,
-        .off_time_ms  = rate_ms,
-        .delay_time_ms = 0,
-        .repeat_times = 0,   // forever
-    };
-    esp_err_t ret = led_set_pattern_ms(color, &blink);
-    if (ret != ESP_OK) return ret;
-    switch (color)
-    {
-        case LED_RED:   return led_set_level(brightness, 0, 0);
-        case LED_GREEN: return led_set_level(0, brightness, 0);
-        case LED_BLUE:
-        default:        return led_set_level(0, 0, brightness);
-    }
-}
-
-// Apply `next`. The MD (pattern-mode) bit survives led_set_level, so every
-// transition explicitly disables the patterns it is leaving before writing the
-// next state — otherwise the old channel keeps blinking the new color.
-static void ind_apply(ind_state_t next, uint32_t rate_ms)
-{
-    led_disable_pattern(LED_RED);
-    led_disable_pattern(LED_BLUE);
-
-    switch (next)
+    switch (state)
     {
         case IND_FLASH_RED:
-            ind_start_blink(LED_RED, LED_IND_RED_BRIGHTNESS, rate_ms);
+            led_set_level(phase_on ? LED_IND_RED_BRIGHTNESS : 0, 0, 0);
             break;
         case IND_DATALOG_BLUE:
-            ind_start_blink(LED_BLUE, LED_IND_BLUE_BRIGHTNESS, rate_ms);
+            led_set_level(0, 0, phase_on ? LED_IND_BLUE_BRIGHTNESS : 0);
             break;
         case IND_IDLE:
         default:
@@ -157,7 +136,7 @@ static void ind_apply(ind_state_t next, uint32_t rate_ms)
 static void led_indicator_task(void *pvParameters)
 {
     int64_t red_hold_until_us = 0;
-    uint32_t applied_rate_ms = 0;
+    bool phase_on = false;
 
     for (;;)
     {
@@ -165,7 +144,10 @@ static void led_indicator_task(void *pvParameters)
         // the sleep paths additionally suspend() before writing the LED off.
         dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
 
-        const uint32_t rate_ms = (uint32_t)config_server_get_led_blink_ms();
+        int32_t cfg_ms = config_server_get_led_blink_ms();
+        if (cfg_ms < LED_IND_MIN_RATE_MS) cfg_ms = LED_IND_MIN_RATE_MS;
+        if (cfg_ms > LED_IND_MAX_RATE_MS) cfg_ms = LED_IND_MAX_RATE_MS;
+        const uint32_t rate_ms = (uint32_t)cfg_ms;
 
         ind_state_t desired;
         if (s_suspend_count > 0 || config_mode_active())
@@ -190,32 +172,44 @@ static void led_indicator_task(void *pvParameters)
             desired = IND_IDLE;
         }
 
-        const bool blinking = (desired == IND_FLASH_RED || desired == IND_DATALOG_BLUE);
-        if (desired != s_state || (blinking && rate_ms != applied_rate_ms))
+        xSemaphoreTake(s_paint_mutex, portMAX_DELAY);
+        // Re-check under the mutex: a suspend() may have raced in, and the
+        // foreign owner (e.g. sleep writing the LED off) must not be
+        // repainted over.
+        if (s_suspend_count > 0)
         {
-            xSemaphoreTake(s_paint_mutex, portMAX_DELAY);
-            // Re-check under the mutex: a suspend() may have raced in, and the
-            // foreign owner (e.g. sleep writing the LED off) must not be
-            // repainted over.
-            if (s_suspend_count > 0)
-            {
-                desired = IND_DEFERRED;
-            }
-            if (desired != IND_DEFERRED && dev_status_is_awake())
-            {
-                ind_apply(desired, rate_ms);
-                applied_rate_ms = rate_ms;
-            }
+            desired = IND_DEFERRED;
+        }
+        if (desired != IND_DEFERRED && dev_status_is_awake())
+        {
             if (desired != s_state)
             {
-                ESP_LOGI(TAG, "state %s -> %s (rate %lums)",
-                         ind_state_str(s_state), ind_state_str(desired), (unsigned long)rate_ms);
-                s_state = desired;
+                // The MD (pattern-mode) bit survives led_set_level: clear both
+                // channels' patterns when (re)taking the LED so a leftover
+                // hardware pattern can't fight the software blink.
+                led_disable_pattern(LED_RED);
+                led_disable_pattern(LED_BLUE);
+                phase_on = true;   // enter blink states visibly on
+                ind_paint(desired, phase_on);
             }
-            xSemaphoreGive(s_paint_mutex);
+            else if (desired == IND_FLASH_RED || desired == IND_DATALOG_BLUE)
+            {
+                phase_on = !phase_on;
+                ind_paint(desired, phase_on);
+            }
         }
+        if (desired != s_state)
+        {
+            ESP_LOGI(TAG, "state %s -> %s (rate %lums)",
+                     ind_state_str(s_state), ind_state_str(desired), (unsigned long)rate_ms);
+            s_state = desired;
+        }
+        // While blinking, the tick IS the half-period; rate changes from the
+        // config getter take effect on the next toggle without a reprogram.
+        const bool fast_tick = (s_state == IND_FLASH_RED || s_state == IND_DATALOG_BLUE);
+        xSemaphoreGive(s_paint_mutex);
 
-        vTaskDelay(pdMS_TO_TICKS(LED_IND_TICK_MS));
+        vTaskDelay(pdMS_TO_TICKS(fast_tick ? rate_ms : LED_IND_TICK_MS));
     }
 }
 

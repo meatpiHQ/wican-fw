@@ -203,20 +203,21 @@ const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"st
 										\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\
 										\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\
 								\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\
-										\"csv_log\":\"disable\",\"log_filesystem\":\"littlefs\",\"log_storage\":\"sdcard\",\"log_period\":\"10\",\"csv_grid_mode\":\"fixed\",\"csv_grid_hz\":\"10\",\"csv_require_engine\":\"enable\",\"led_blink_ms\":\"260\"}";
+										\"csv_log\":\"disable\",\"log_filesystem\":\"littlefs\",\"log_storage\":\"sdcard\",\"log_period\":\"10\",\"csv_grid_mode\":\"fixed\",\"csv_grid_hz\":\"10\",\"csv_require_engine\":\"enable\",\"led_blink_ms\":\"52\"}";
 
 // const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\", \"ap_auto_disable\": \"disable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
 // const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\", \"ap_auto_disable\": \"disable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"periodic_wakeup\":\"disable\",\"wakeup_interval\":\"5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
 static device_config_t device_config;
 TimerHandle_t xrestartTimer;
 
-// Valid LED indicator blink half-periods: the AW2023 pattern-time steps that
-// read as a blink (led.c AW2023_TIME_MAP entries 1..6). Snap any stored value
-// to the nearest so the indicator never programs a 0 ms (near-solid) phase.
+// Valid LED indicator blink half-periods (ms). The blink is timed in software
+// by led_indicator.c (the AW2023 pattern engine bottoms out at 130 ms), so the
+// table spans ~19 Hz to ~2.4 Hz. Snap any stored value to the nearest entry so
+// legacy configs (e.g. the old 130–1040 table) coerce to a valid rate.
 static int32_t led_blink_ms_snap(int32_t ms)
 {
-	static const int32_t allowed[] = {130, 260, 380, 510, 770, 1040};
-	int32_t best = 260;
+	static const int32_t allowed[] = {26, 52, 76, 102, 154, 208};
+	int32_t best = 52;
 	int32_t best_diff = INT32_MAX;
 	for (size_t i = 0; i < sizeof(allowed)/sizeof(allowed[0]); i++)
 	{
@@ -2692,14 +2693,14 @@ static void config_server_load_cfg(char *cfg)
 	key = cJSON_GetObjectItem(root,"led_blink_ms");
 	if(key == 0 || key->valuestring == NULL)
 	{
-		strlcpy(device_config.led_blink_ms, "260", sizeof(device_config.led_blink_ms));
+		strlcpy(device_config.led_blink_ms, "52", sizeof(device_config.led_blink_ms));
 	}
 	else
 	{
 		strlcpy(device_config.led_blink_ms, key->valuestring, sizeof(device_config.led_blink_ms));
 	}
-	// Snap any garbage NVS value to the nearest AW2023-representable half-period
-	// so the LED indicator always programs a valid, visible blink.
+	// Snap any garbage or legacy NVS value to the nearest allowed half-period
+	// so the LED indicator always runs a valid, visible blink.
 	{
 		char snapped[16];
 		snprintf(snapped, sizeof(snapped), "%ld", (long)led_blink_ms_snap(atoi(device_config.led_blink_ms)));

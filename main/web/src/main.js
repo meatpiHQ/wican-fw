@@ -5,11 +5,11 @@
 const FW_UPDATE_REPO = 'cdufresne81/nc-flash-wican-fw';
 const FW_RELEASES_URL = `https://github.com/${FW_UPDATE_REPO}/releases`;
 
-// LED activity-indicator blink half-periods (ms). These are the AW2023 LED
-// controller's representable pattern times (led.c AW2023_TIME_MAP entries
-// 1..6) — the slider stores an index into this list, the config stores the ms
-// value, and the firmware snaps anything else to the nearest entry.
-const LED_BLINK_STEPS = [130, 260, 380, 510, 770, 1040];
+// LED activity-indicator blink half-periods (ms), ~19 Hz to ~2.4 Hz. The blink
+// is software-timed in led_indicator.c (the AW2023 pattern engine can't go
+// below 130 ms) — the slider stores an index into this list, the config stores
+// the ms value, and the firmware snaps anything else to the nearest entry.
+const LED_BLINK_STEPS = [26, 52, 76, 102, 154, 208];
 function ledBlinkMsFromSlider() {
     const idx = parseInt(document.getElementById("led_blink_rate").value, 10) || 0;
     return LED_BLINK_STEPS[Math.min(Math.max(idx, 0), LED_BLINK_STEPS.length - 1)];
@@ -2806,7 +2806,7 @@ xhttp.onload = async function() {
         {   // LED activity-indicator blink rate: config stores ms, the slider stores an index
             const ms = parseInt(obj.led_blink_ms, 10);
             let idx = LED_BLINK_STEPS.indexOf(ms);
-            if (idx < 0) idx = 1;   // unknown/missing -> 260 ms default
+            if (idx < 0) idx = 1;   // unknown/missing -> 52 ms default
             document.getElementById("led_blink_rate").value = idx;
             updateLedBlinkLabel();
         }
