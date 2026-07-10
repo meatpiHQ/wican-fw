@@ -772,6 +772,13 @@ bool csv_logger_is_active_file(const char *abspath)
            strcmp(abspath, csv_file_path) == 0;
 }
 
+bool csv_logger_session_active(void)
+{
+    // Cross-task snapshot for the blue LED activity indicator; aligned bool
+    // load is atomic on the S3 (same pattern as csv_manual_mode above).
+    return csv_session_active;
+}
+
 esp_err_t csv_logger_set_manual_override(bool enable)
 {
     if (enable)

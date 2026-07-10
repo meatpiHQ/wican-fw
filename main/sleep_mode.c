@@ -48,6 +48,7 @@
 #include "ver.h"
 #include "driver/rtc_io.h"
 #include "led.h"
+#include "led_indicator.h"
 #include "obd.h"
 #include "esp_adc/adc_oneshot.h"
 #include "dev_status.h"
@@ -822,6 +823,9 @@ void enter_deep_sleep(void)
 	}
     gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
 	ESP_LOGI(TAG, "Going to sleep now");
+	// Returns after any in-progress indicator repaint; nothing relights the
+	// LED between here and esp_deep_sleep_start().
+	led_indicator_suspend();
 	led_set_level(0,0,0);
     esp_wifi_stop();
     ble_disable();
@@ -963,6 +967,8 @@ void light_sleep_task(void *pvParameters)
                         can_disable();
                         wifi_mgr_deinit();
                         ble_disable();
+                        // Wake from STATE_SLEEPING always reboots, so no resume.
+                        led_indicator_suspend();
                         led_set_level(0,0,0);
                         // Update immediately to prevenet elm327 wakeup 
                         state_info.state = current_state;
@@ -1059,6 +1065,7 @@ void light_sleep_task(void *pvParameters)
                 state_info.voltage = battery_voltage;
                 xQueueOverwrite(sleep_state_queue, &state_info);
                 printf("\r\nUnexpected reset count: %lu, entering sleep mode to prevent potential boot loop...\r\n", restart_tracker_state.unexpected_reset_count);
+                led_indicator_suspend();
                 led_set_level(0,0,0);
                 led_pattern_ms_t breathing_pattern = {
                     .rise_time_ms = 1000,    // 1 second fade in

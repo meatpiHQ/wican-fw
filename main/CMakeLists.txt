@@ -18,6 +18,7 @@ set(srcs
     "sleep_mode.c"
     "expression_parser.c"
     "led.c"
+    "led_indicator.c"
     "obd.c"
     "wusb3801.c"
     "wc_mdns.c"

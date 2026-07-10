@@ -1883,6 +1883,12 @@
                         <td>Motion Threshold:</td>
                         <td class="slider-container"><input oninput="document.getElementById('imu_threshold_value').textContent = (this.value * 3.9).toFixed(1) + ' mg';submit_enable();" id="imu_threshold" max="32" min="1" name="imu_threshold" onchange="submit_enable();" step="1" type="range" value="8"> <span id="imu_threshold_value">31.2 mg</span></td>
                     </tr>
+                    <tr>
+                        <td>LED Blink Rate:</td>
+                        <td class="slider-container"><input oninput="updateLedBlinkLabel();submit_enable();" id="led_blink_rate" max="5" min="0" name="led_blink_rate" step="1" type="range" value="1"> <span id="led_blink_rate_value">52 ms (~9.6 Hz)</span>
+                            <div style="color:#6b7280;margin-top:4px;font-size:12px">Flash rate of the activity LED: red while an ECU flash/read is executing, blue while datalogging. Left = fastest.</div>
+                        </td>
+                    </tr>
                 </tbody>
             </table>
         </div>

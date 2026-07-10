@@ -98,6 +98,7 @@
 #include "obd2_standard_pids.h"
 #include "restart_tracker.h"
 #include "restart_tracker_http.h"
+#include "led_indicator.h"
 
 
 #define WIFI_CONNECTED_BIT			BIT0
@@ -202,7 +203,7 @@ const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"st
 										\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\
 										\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\
 								\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\
-										\"csv_log\":\"disable\",\"log_filesystem\":\"littlefs\",\"log_storage\":\"sdcard\",\"log_period\":\"10\",\"csv_grid_mode\":\"fixed\",\"csv_grid_hz\":\"10\",\"csv_require_engine\":\"enable\"}";
+										\"csv_log\":\"disable\",\"log_filesystem\":\"littlefs\",\"log_storage\":\"sdcard\",\"log_period\":\"10\",\"csv_grid_mode\":\"fixed\",\"csv_grid_hz\":\"10\",\"csv_require_engine\":\"enable\",\"led_blink_ms\":\"52\"}";
 
 // const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\", \"ap_auto_disable\": \"disable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
 // const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\", \"ap_auto_disable\": \"disable\",\"sta_ssid\":\"MeatPi\",\"sta_pass\":\"TomatoSauce\",\"sta_security\":\"wpa3\",\"can_datarate\":\"500K\",\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\"ble_status\":\"disable\",\"sleep_status\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"periodic_wakeup\":\"disable\",\"wakeup_interval\":\"5\",\"batt_alert\":\"disable\",\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_user\":\"meatpi\",\"mqtt_pass\":\"meatpi\",\"mqtt_tx_topic\":\"wican/%s/can/tx\",\"mqtt_rx_topic\":\"wican/%s/can/rx\",\"mqtt_status_topic\":\"wican/%s/can/status\"}";
@@ -1306,6 +1307,7 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	cJSON_AddStringToObject(root, "csv_require_engine", device_config.csv_require_engine);
 	cJSON_AddStringToObject(root, "log_storage", device_config.log_storage);
 	cJSON_AddStringToObject(root, "imu_threshold", device_config.imu_threshold);
+	cJSON_AddStringToObject(root, "led_blink_ms", device_config.led_blink_ms);
 	if(gpio_get_level(OBD_READY_PIN) == 1)
 	{
 		cJSON_AddStringToObject(root, "obd_chip_status", "Sleep");
@@ -1314,6 +1316,10 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	{
 		cJSON_AddStringToObject(root, "obd_chip_status", "Ready");
 	}
+	// LED activity indicator state (issue #19): remote units have no visible
+	// LED, and this is what lets the flash/datalog indications be verified
+	// over HTTP.
+	cJSON_AddStringToObject(root, "led_indicator", led_indicator_get_state_str());
 	char uptime_str[32];
 	dev_status_format_uptime(uptime_str, sizeof(uptime_str));
 	if(uptime_str[0] == '\0')
@@ -2662,6 +2668,19 @@ static void config_server_load_cfg(char *cfg)
 	ESP_LOGI(TAG, "device_config.log_period: %s", device_config.log_period);
 	//*****
 
+	//***** led_blink_ms: single normalization point. Snapping garbage or legacy
+	//      values (e.g. the old 130-1040 hardware table) to the allowed table
+	//      here is what lets config_server_get_led_blink_ms() return the stored
+	//      value as-is.
+	key = cJSON_GetObjectItem(root,"led_blink_ms");
+	{
+		int32_t ms = (key != 0 && key->valuestring != NULL) ? atoi(key->valuestring) : 52;
+		snprintf(device_config.led_blink_ms, sizeof(device_config.led_blink_ms),
+				 "%ld", (long)led_indicator_snap_rate_ms(ms));
+	}
+	ESP_LOGI(TAG, "device_config.led_blink_ms: %s", device_config.led_blink_ms);
+	//*****
+
 	//***** Wide CSV (Task #11): csv_grid_mode / csv_grid_hz. Garbage coerces to a safe default
 	//      so a bad NVS value can never select an invalid layout. (csv_format removed: Task #16.)
 	key = cJSON_GetObjectItem(root,"csv_grid_mode");
@@ -3386,6 +3405,12 @@ int8_t config_server_get_csv_log(void)
 	}
 
 	return -1;
+}
+
+int32_t config_server_get_led_blink_ms(void)
+{
+	// Already normalized to led_indicator_snap_rate_ms()'s table at load time.
+	return atoi(device_config.led_blink_ms);
 }
 
 int8_t config_server_get_ap_auto_disable(void)
