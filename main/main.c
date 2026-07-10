@@ -422,7 +422,8 @@ void app_main(void)
 #endif
 
     xMsg_Rx_Queue = xQueueCreate(16, sizeof( xdev_buffer) );
-    xMsg_Tx_Queue = xQueueCreate(16, sizeof( xdev_buffer) );
+    // 128 slots (~10 KB): bigger than upstream 16 in order to ride out wifi/lwip hiccups
+    xMsg_Tx_Queue = xQueueCreate(128, sizeof( xdev_buffer) );
     xmsg_ws_tx_queue = xQueueCreate(8, sizeof( xdev_buffer) );
 
 	esp_ota_mark_app_valid_cancel_rollback();
