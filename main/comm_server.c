@@ -30,6 +30,7 @@
 #include "nvs_flash.h"
 #include "esp_netif.h"
 #include "driver/gpio.h"
+#include "esp_timer.h"
 #include "lwip/err.h"
 #include "lwip/sockets.h"
 #include "lwip/sys.h"
@@ -182,6 +183,12 @@ static void tcp_server_tx_task(void *pvParameters)
 {
 //	int addr_family = (int)pvParameters;
 	static xdev_buffer tx_buffer;
+	// One queue item per send() couldn't keep up with a busy CAN bus: every
+	// ~20-byte GVRET frame paid a full trip through the lwip tcpip thread.
+	// Coalesce the queue backlog into one MSS-sized segment per send() instead.
+	// TCP only--all the stream protocols (gvret/slcan/elm327) tolerate
+	// arbitrary segmentation.
+	static uint8_t coalesce_buf[1460];
 
 	while(1)
 	{
@@ -195,12 +202,26 @@ static void tcp_server_tx_task(void *pvParameters)
 			continue;
 		}
 
+		int bytes_used = tx_buffer.usLen;
+		memcpy(coalesce_buf, tx_buffer.ucElement, bytes_used);
+		// Drain whatever is already queued while a worst-case item still fits.
+		while (bytes_used + DEV_BUFFER_LENGTH <= (int)sizeof(coalesce_buf) &&
+		       xQueueReceive(*xTX_Queue, ( void * ) &tx_buffer, 0) == pdTRUE)
+		{
+			memcpy(coalesce_buf + bytes_used, tx_buffer.ucElement, tx_buffer.usLen);
+			bytes_used += tx_buffer.usLen;
+		}
+
 		if( xSemaphoreTake( xTCP_Socket_Semaphore, portMAX_DELAY ) == pdTRUE )
 		{
-			int to_write = tx_buffer.usLen;
+			// While send() is stalled here (wifi retries, full lwip sndbuf), the
+			// producer's queue absorbs bus traffic before frames drop at the
+			// producer. Log stalls to correlate with drops.
+			int64_t send_start = esp_timer_get_time();
+			int to_write = bytes_used;
 			while (to_write > 0)
 			{
-				int written = send(sock, tx_buffer.ucElement + (tx_buffer.usLen - to_write), to_write, 0);
+				int written = send(sock, coalesce_buf + (bytes_used - to_write), to_write, 0);
 				if (written < 0)
 				{
 					ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
@@ -209,6 +230,12 @@ static void tcp_server_tx_task(void *pvParameters)
 					break;
 				}
 				to_write -= written;
+			}
+			int64_t send_us = esp_timer_get_time() - send_start;
+			if (send_us > 20000)
+			{
+				ESP_LOGW(TAG, "send() stalled %lld us, %u msgs queued behind it",
+				         send_us, (unsigned)uxQueueMessagesWaiting(*xTX_Queue));
 			}
 			xSemaphoreGive( xTCP_Socket_Semaphore );
 		}
