@@ -687,7 +687,7 @@ int8_t gvret_parse_can_frame(uint8_t *buf, twai_message_t *frame)
         buf[length++] = frame->data[c];
     }
     //temp = checksumCalc(buff, 11 + frame.length);
-    uint8_t temp = checksumCalc(transmitBuffer, 11 + frame->data_length_code);
+    uint8_t temp = checksumCalc(buf, 11 + frame->data_length_code);
     buf[length++] = temp;
 
     return (int8_t)length;
