@@ -1348,6 +1348,15 @@
                         </label>
                     </td>
                 </tr>
+                <tr class="can1_row" style="display:none">
+                    <td>CAN Connection Mode:</td>
+                    <td>
+                        <select id="can_fwd_mode" name="can_fwd_mode" onchange="submit_enable();">
+                            <option value="mitm">MITM (forward between buses)</option>
+                            <option value="parallel">Parallel (no forwarding)</option>
+                        </select>
+                    </td>
+                </tr>
             </table>
         </div>
 
@@ -2519,6 +2528,9 @@ function loadAutoTable(jsonData) {
 				if (obj.can1_en) {
 					document.getElementById("can1_en").value = obj.can1_en;
 				}
+				if (obj.can_fwd_mode) {
+					document.getElementById("can_fwd_mode").value = obj.can_fwd_mode;
+				}
 			}
 			if(obj.port_type == "tcp") {
 				document.getElementById("port_type_status").innerHTML = "TCP";
@@ -2789,6 +2801,7 @@ function loadAutoTable(jsonData) {
 		obj["can1_datarate"] = document.getElementById("can1_datarate").value;
 		obj["can1_mode"] = document.getElementById("can1_mode").value;
 		obj["can1_en"] = document.getElementById("can1_en").value;
+		obj["can_fwd_mode"] = document.getElementById("can_fwd_mode").value;
 		obj["port_type"] = document.getElementById("port_type").value;
 		obj["port"] = document.getElementById("tcp_port_value").value;
 		obj["ap_pass"] = document.getElementById("ap_pass_value").value;

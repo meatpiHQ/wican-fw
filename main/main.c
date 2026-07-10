@@ -239,6 +239,14 @@ static void can_rx_task(void *pvParameters)
 //	static uint32_t num_msg = 0;
 	static int64_t time_old = 0;
 	static int64_t precondition_tick_last = 0;
+	// MITM (bridge) vs parallel mode. Read once: a config change restarts
+	// the firmware, and the task is created after the config is loaded.
+	// Single-bus builds have nothing to bridge, so hardcode parallel there.
+#if CAN_BUS_COUNT > 1
+	const bool fwd_bridge_en = (config_server_get_fwd_en() != 0);
+#else
+	const bool fwd_bridge_en = false;
+#endif
 //	float bvoltage = 0;
 //	time_old = esp_timer_get_time();
 	while(1)
@@ -298,36 +306,44 @@ static void can_rx_task(void *pvParameters)
             precondition_can_rx_hook(&rx_msg, rx_bus);
             {
                 twai_message_t fwd_msg = rx_msg;
-#if CAN_BUS_COUNT > 1
-                // MITM bridge: forward all traffic to the other bus, with
-                // adaptive backpressure. This task gets preempted, then
-				// drains the RX queue in a batch that can momentarily overrun
-				// the 32-slot TX pool even though a slot frees every ~250us;
-				// waiting a couple ticks absorbs the batch instead of dropping
-				// it. But if the wait itself times out, the bus is saturated
-				// or wedged: fall back to fast-drop for 100ms so a dead bus 1
-				// can't throttle RX servicing (and bus-0 GVRET streaming).
+                can_bus_t fwd_bus;
+                fwd_result_t fwd_result;
+                bool fwd_wanted;
+                TickType_t fwd_wait;
                 static int64_t fwd_fastdrop_until_us[CAN_BUS_COUNT];
-                can_bus_t fwd_bus = (rx_bus == CAN_BUS_0) ? CAN_BUS_1 : CAN_BUS_0;
-                fwd_result_t fwd_result = precondition_fwd_hook(&fwd_msg, fwd_bus);
-                bool fwd_wanted = (fwd_result != FWD_BLOCK);
-                TickType_t fwd_wait =
-                    (esp_timer_get_time() < fwd_fastdrop_until_us[fwd_bus]) ? 0 : 2;
-#else
-                // Single bus: inject a modified duplicate alongside the original
-                can_bus_t fwd_bus = CAN_BUS_0;
-                fwd_result_t fwd_result = precondition_fwd_hook(&fwd_msg, fwd_bus);
-                bool fwd_wanted = (fwd_result == FWD_MODIFIED);
-                TickType_t fwd_wait = 1;
-#endif
+                if (fwd_bridge_en)
+                {
+                    // MITM bridge: forward all traffic to the other bus, with
+					// adaptive backpressure. This task gets preempted, then
+					// drains the RX queue in a batch that can momentarily overrun
+					// the 32-slot TX pool even though a slot frees every ~250us;
+					// waiting a couple ticks absorbs the batch instead of dropping
+					// it. But if the wait itself times out, the bus is saturated
+					// or wedged: fall back to fast-drop for 100ms so a dead bus 1
+					// can't throttle RX servicing (and bus-0 GVRET streaming).
+                    fwd_bus = (rx_bus == CAN_BUS_0) ? CAN_BUS_1 : CAN_BUS_0;
+                    fwd_result = precondition_fwd_hook(&fwd_msg, fwd_bus);
+                    fwd_wanted = (fwd_result != FWD_BLOCK);
+                    fwd_wait =
+                        (esp_timer_get_time() < fwd_fastdrop_until_us[fwd_bus]) ? 0 : 2;
+                }
+                else
+                {
+                    // Parallel mode (and single-bus builds): no bridging; inject
+                    // a modified duplicate alongside the original, on the bus it
+                    // arrived on. precondition_fwd_hook only modifies
+                    // CAR_BUS-bound frames, so bus 1 traffic is left alone.
+                    fwd_bus = rx_bus;
+                    fwd_result = precondition_fwd_hook(&fwd_msg, fwd_bus);
+                    fwd_wanted = (fwd_result == FWD_MODIFIED);
+                    fwd_wait = 1;
+                }
                 if (fwd_wanted && can_send(fwd_bus, &fwd_msg, fwd_wait) != ESP_OK)
                 {
-#if CAN_BUS_COUNT > 1
-                    if (fwd_wait != 0)
+                    if (fwd_bridge_en && fwd_wait != 0)
                     {
                         fwd_fastdrop_until_us[fwd_bus] = esp_timer_get_time() + 100000;
                     }
-#endif
                     static uint32_t fwd_drop_cnt = 0;
                     if ((++fwd_drop_cnt % 256U) == 1U)
                     {

@@ -122,6 +122,7 @@ const char device_config_default[] = R"json({
 "can1_datarate":"500K",
 "can1_mode":"normal",
 "can1_en":"enable",
+"can_fwd_mode":"mitm",
 "port_type":"tcp",
 "port":"3333",
 "ap_pass":"@meatpi#",
@@ -389,6 +390,13 @@ int8_t config_server_get_can1_mode(void)
 int8_t config_server_get_can1_en(void)
 {
 	return (strcmp(device_config.can1_en, "enable") == 0) ? 1 : 0;
+}
+
+// 1 = MITM mode (bridge/forward frames between the buses), 0 = parallel mode
+// (both buses tap the same wires; no forwarding)
+int8_t config_server_get_fwd_en(void)
+{
+	return (strcmp(device_config.can_fwd_mode, "parallel") == 0) ? 0 : 1;
 }
 
 int8_t config_server_get_port_type(void)
@@ -931,6 +939,7 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	cJSON_AddStringToObject(root, "can1_datarate", device_config.can1_datarate);
 	cJSON_AddStringToObject(root, "can1_mode", device_config.can1_mode);
 	cJSON_AddStringToObject(root, "can1_en", device_config.can1_en);
+	cJSON_AddStringToObject(root, "can_fwd_mode", device_config.can_fwd_mode);
 #endif
 	cJSON_AddStringToObject(root, "port_type", device_config.port_type);
 	cJSON_AddStringToObject(root, "port", device_config.port);
@@ -2149,6 +2158,19 @@ static void config_server_load_cfg(char *cfg)
 		strlcpy(device_config.can1_en, key->valuestring, sizeof(device_config.can1_en));
 	}
 	ESP_LOGI(TAG, "device_config.can1_en: %s", device_config.can1_en);
+	//*****
+
+	//*****
+	key = cJSON_GetObjectItem(root,"can_fwd_mode");
+	if(key == 0 || !cJSON_IsString(key) || strcmp(key->valuestring, "parallel") != 0)
+	{
+		strcpy(device_config.can_fwd_mode, "mitm");
+	}
+	else
+	{
+		strlcpy(device_config.can_fwd_mode, key->valuestring, sizeof(device_config.can_fwd_mode));
+	}
+	ESP_LOGI(TAG, "device_config.can_fwd_mode: %s", device_config.can_fwd_mode);
 	//*****
 
 	//*****

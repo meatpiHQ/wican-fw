@@ -97,6 +97,7 @@ typedef struct _device_config
 	char can1_datarate[65];
 	char can1_mode[65];
 	char can1_en[10];
+	char can_fwd_mode[10];
 	char port_type[65];
 	char port[65];
 	char ap_pass[65];
@@ -149,6 +150,7 @@ int8_t config_server_get_can_mode(void);
 int8_t config_server_get_can1_rate(void);
 int8_t config_server_get_can1_mode(void);
 int8_t config_server_get_can1_en(void);
+int8_t config_server_get_fwd_en(void);
 int8_t config_server_get_port_type(void);
 int32_t config_server_get_port(void);
 //void config_server_wifi_connected(bool flag);
