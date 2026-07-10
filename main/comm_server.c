@@ -77,18 +77,25 @@ wait_skt_rx:
 		// Holding the semaphore is not necessary; recv and send on the same
 		// socket don't need to be synchronized.
 		rx_buffer.usLen = recv(sock, rx_buffer.ucElement, sizeof(rx_buffer.ucElement) - 1, 0);
-		if (rx_buffer.usLen < 0)
+		if (rx_buffer.usLen <= 0)
 		{
-			xEventGroupSetBits( xSocketEventGroup, PORT_CLOSED_BIT );
+			if (rx_buffer.usLen < 0)
+			{
+				ESP_LOGE(TAG, "Error occurred during receiving: errno %d", errno);
+			}
+			else
+			{
+				ESP_LOGW(TAG, "Connection closed");
+			}
+			// Stop the tx task streaming into the dead session, and shut the fd
+			// down so the peer isn't left hanging until the server task reaps it.
 			xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
-			ESP_LOGE(TAG, "Error occurred during receiving: errno %d", errno);
-			goto wait_skt_rx;
-
-		} else if (rx_buffer.usLen == 0)
-		{
+			gpio_set_level(conn_led, LED_OFF);
+			shutdown(sock, SHUT_RDWR);
+			// PORT_CLOSED must be raised last, after this task is done touching
+			// the socket: the server task takes it as the ack that nobody is
+			// blocked in recv() and the fd can be closed/replaced safely.
 			xEventGroupSetBits( xSocketEventGroup, PORT_CLOSED_BIT );
-			xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
-			ESP_LOGW(TAG, "Connection closed");
 			goto wait_skt_rx;
 		}
 		else
@@ -225,8 +232,12 @@ static void tcp_server_tx_task(void *pvParameters)
 				if (written < 0)
 				{
 					ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
-					xEventGroupSetBits( xSocketEventGroup, PORT_CLOSED_BIT );
+					// Flag the session dead and kick the rx task out of recv() via
+					// shutdown; only the rx task raises PORT_CLOSED, so the server
+					// task can use that bit as proof nobody is blocked on this fd.
 					xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
+					gpio_set_level(conn_led, LED_OFF);
+					shutdown(sock, SHUT_RDWR);
 					break;
 				}
 				to_write -= written;
@@ -316,43 +327,90 @@ static void tcp_server_task(void *pvParameters)
 		if(!udp_enable)
 		{
 			ESP_LOGI(TAG, "Socket listening");
-accept_socket:
-			sock = accept(listen_sock, (struct sockaddr *)&source_addr, &addr_len);
-			if (sock < 0)
+			int new_sock = accept(listen_sock, (struct sockaddr *)&source_addr, &addr_len);
+			if (new_sock < 0)
 			{
 				ESP_LOGE(TAG, "Unable to accept connection: errno %d", errno);
-				goto accept_socket;
+				continue;
 			}
-			xEventGroupClearBits(xSocketEventGroup, PORT_CLOSED_BIT);// Set tcp keepalive option
-			setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &keepAlive, sizeof(int));
-			setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE, &keepIdle, sizeof(int));
-			setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &keepInterval, sizeof(int));
-			setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, &keepCount, sizeof(int));
+			// Set tcp keepalive option
+			setsockopt(new_sock, SOL_SOCKET, SO_KEEPALIVE, &keepAlive, sizeof(int));
+			setsockopt(new_sock, IPPROTO_TCP, TCP_KEEPIDLE, &keepIdle, sizeof(int));
+			setsockopt(new_sock, IPPROTO_TCP, TCP_KEEPINTVL, &keepInterval, sizeof(int));
+			setsockopt(new_sock, IPPROTO_TCP, TCP_KEEPCNT, &keepCount, sizeof(int));
 			// Bound how many GVRET commands can queue on-device, so keepalive replies stay
 			// within SavvyCAN's ~10 s watchdog even when a CAN bus is saturated.
 			// Once this fills, TCP flow control makes further data wait in the
 			// sender's own send buffer instead of piling up here; nothing is dropped.
 			int rcvBuf = 2048;
-			setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &rcvBuf, sizeof(int));
-			// Convert ip address to string
+			setsockopt(new_sock, SOL_SOCKET, SO_RCVBUF, &rcvBuf, sizeof(int));
+			// Convert ip address to string; keep the source port too, so a
+			// connection can be matched to a process on the client machine.
 			if (source_addr.ss_family == PF_INET)
 			{
 				inet_ntoa_r(((struct sockaddr_in *)&source_addr)->sin_addr, addr_str, sizeof(addr_str) - 1);
+				size_t ip_len = strlen(addr_str);
+				snprintf(addr_str + ip_len, sizeof(addr_str) - ip_len, ":%u",
+				         ntohs(((struct sockaddr_in *)&source_addr)->sin_port));
 			}
 			ESP_LOGI(TAG, "Socket accepted ip address: %s", addr_str);
+
+			// Prevent a TCP connect with no data from evicting a live session, as an
+			// extra measure to prevent non-GVRET clients from taking over.
+			if (sock >= 0 && (xEventGroupGetBits(xSocketEventGroup) & PORT_OPEN_BIT))
+			{
+				fd_set rfds;
+				struct timeval tv = { .tv_sec = 2, .tv_usec = 0 };
+				FD_ZERO(&rfds);
+				FD_SET(new_sock, &rfds);
+				uint8_t peek[16];
+				int peeked;
+				// MSG_PEEK leaves the hello bytes queued for the rx task.
+				if (select(new_sock + 1, &rfds, NULL, NULL, &tv) <= 0 ||
+				    (peeked = recv(new_sock, peek, sizeof(peek), MSG_PEEK)) <= 0)
+				{
+					ESP_LOGW(TAG, "Rejecting %s: session active and newcomer sent no data", addr_str);
+					close(new_sock);
+					continue;
+				}
+				ESP_LOGW(TAG, "New client %s, closing previous session; hello bytes:", addr_str);
+				ESP_LOG_BUFFER_HEXDUMP(TAG, peek, peeked, ESP_LOG_WARN);
+			}
+
+			// Take over from any previous session. If the old client vanished
+			// without a trace (wifi drop), its socket can sit ESTABLISHED for
+			// a while until keepalive/retransmit timeouts fire; a new client
+			// must not have to wait that out.
+			if (sock >= 0)
+			{
+				// Unblocks the rx task's recv() (and any stalled tx send()) no
+				// matter what state the old session is in.
+				shutdown(sock, SHUT_RDWR);
+				// Wait for the rx task to park (it raises PORT_CLOSED only after
+				// it is done with the socket) before invalidating the fd under it.
+				// The timeout only hits if the rx task is wedged somewhere other
+				// than recv(); reject the client rather than risk the fd.
+				if (!(xEventGroupWaitBits(xSocketEventGroup, PORT_CLOSED_BIT,
+				                          pdFALSE, pdFALSE, pdMS_TO_TICKS(5000)) & PORT_CLOSED_BIT))
+				{
+					ESP_LOGE(TAG, "Previous session did not release the socket, rejecting new client");
+					close(new_sock);
+					continue;
+				}
+				// The tx task sends while holding the socket semaphore; taking it
+				// here means it is not mid-send() on the fd we are about to close.
+				xSemaphoreTake(xTCP_Socket_Semaphore, portMAX_DELAY);
+				close(sock);
+				sock = new_sock;
+				xSemaphoreGive(xTCP_Socket_Semaphore);
+			}
+			else
+			{
+				sock = new_sock;
+			}
+			xEventGroupClearBits(xSocketEventGroup, PORT_CLOSED_BIT);
 			xEventGroupSetBits( xSocketEventGroup, PORT_OPEN_BIT );
 			gpio_set_level(conn_led, LED_ON);
-			xEventGroupWaitBits(
-					  xSocketEventGroup,   /* The event group being tested. */
-					  PORT_CLOSED_BIT, /* The bits within the event group to wait for. */
-					  pdFALSE,        /* BIT_0 & BIT_4 should be cleared before returning. */
-					  pdFALSE,       /* Don't wait for both bits, either bit will do. */
-					  portMAX_DELAY );/* Wait a maximum of 100ms for either bit to be set. */
-			xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
-			ESP_LOGI(TAG, "Socket disconnected...");
-			gpio_set_level(conn_led, LED_OFF);
-			shutdown(sock, 0);
-			close(sock);
 		}
 		else
 		{
