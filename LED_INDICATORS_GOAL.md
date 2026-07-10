@@ -23,6 +23,12 @@ bench unit (192.168.1.169, build `v1.4.0-2-g8afb11c`). Notable results:
   coercion path is exercised on every legacy device.
 - A 3.5 MB `ledtest.bin` + `ledtest.json` remain staged in `/sdcard/roms/` on
   the bench unit (reusable for future dry-run tests).
+- Side finding (pre-existing, not caused by this diff): AC10's back-to-back
+  config reboots tripped the CSV `RTC_NOINIT` crash guard — it survives warm
+  reboots, so every later warm boot skipped CSV. Recovered remotely:
+  `POST /csv_logger?op=start` (bypasses the guard) → 20 s (writer clears it) →
+  `POST /system_reboot` → CSV auto-start confirmed healthy (`manual_mode:auto`,
+  session open, `datalog_blue`).
 
 The manual eyes-on checklist below remains open (needs a human at the device).
 
