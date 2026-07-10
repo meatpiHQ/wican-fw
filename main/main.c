@@ -63,6 +63,7 @@
 #include "poll_log.h"
 #include "event_log.h"
 #include "led.h"
+#include "led_indicator.h"
 #include "obd.h"
 #include "wusb3801.h"
 #include "usb_host.h"
@@ -1152,6 +1153,10 @@ void app_main(void)
     gpio_set_level(PWR_LED_GPIO_NUM, 1);
 	#elif HARDWARE_VER == WICAN_PRO
 	led_set_level(0,0,200);
+	// Activity indicators (issue #19) take over from the boot baseline above.
+	// Started here, after elm327_init(), so the boot-time MIC3624 update's
+	// inline red blink never races the indicator task.
+	led_indicator_init();
 	// // led_enable_fade(LED_RED, 1, 0);
 	// led_pattern_ms_t breathing_pattern = {
 	// 	.rise_time_ms = 1000,    // 1 second fade in

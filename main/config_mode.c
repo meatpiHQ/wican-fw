@@ -44,6 +44,15 @@
 #define CONFIG_MODE_HOLD_SECONDS   5      // Seconds to hold the button to enter config mode
 #define LED_MAX_LEVEL              255
 
+// Read by led_indicator's task; written only here. Same volatile cross-core
+// pattern as csv_logger's csv_manual_mode (aligned bool load/store is atomic).
+static volatile bool s_in_config_mode = false;
+
+bool config_mode_active(void)
+{
+    return s_in_config_mode;
+}
+
 void config_mode_task(void *pvParameters)
 {
     // Track how many seconds the button has been held and LED/UI state
@@ -77,6 +86,7 @@ void config_mode_task(void *pvParameters)
                 wifi_mgr_set_mode(WIFI_MGR_MODE_APSTA);
                 wifi_mgr_enable();
                 in_config_mode = true;
+                s_in_config_mode = true;
 
                 hold_seconds = 0; // Avoid repeated triggers while holding
             }

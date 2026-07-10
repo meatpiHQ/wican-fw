@@ -142,6 +142,14 @@ char *csv_logger_get_status_json(void);
  */
 bool csv_logger_is_active_file(const char *abspath);
 
+/**
+ * @brief True while a CSV log session is open (file on SD, rows being accepted).
+ *
+ * Cross-task snapshot of the writer-task-owned session flag; drives the blue
+ * LED activity indicator (issue #19).
+ */
+bool csv_logger_session_active(void);
+
 /* HTTP endpoints (register in config_server):
  *   GET  /csv_status            -> logger status JSON (running, sd_mounted, session_active, rows_written...)
  *   GET  /csv_list              -> {"files":[{"name":..,"size":..}, ...]} of the SD-card CSV logs

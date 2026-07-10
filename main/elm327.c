@@ -1306,6 +1306,7 @@ void elm327_init(void (*send_to_host)(char*, uint32_t, QueueHandle_t *q), QueueH
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "led.h"
+#include "led_indicator.h"
 #include "hw_config.h"
 
 /* Defines and Constants */
@@ -2915,6 +2916,7 @@ esp_err_t elm327_update_obd(bool force_update)
 		}
 		// Response buffer is static; do not free
 		response = NULL;
+		led_indicator_suspend();
 		led_fast_blink(LED_RED, 255, true);
 
 		uint32_t line_count = 0;
@@ -3027,6 +3029,8 @@ esp_err_t elm327_update_obd(bool force_update)
 	elm327_disable_wake_commands();
 	
 	led_fast_blink(LED_RED, 0, false);
+	// Hand the LED back; the indicator repaints idle blue instead of leaving it dark.
+	led_indicator_resume();
 	ESP_LOGI(TAG, "ELM327 chip update DONE! Rebooting...");
 
 	return ret;
@@ -3062,6 +3066,7 @@ esp_err_t elm327_update_obd_from_file(const char* filename)
 		return ret;
 	}
 
+	led_indicator_suspend();
 	led_fast_blink(LED_RED, 255, true);
 
     uint32_t line_count = 0;
@@ -3141,7 +3146,9 @@ esp_err_t elm327_update_obd_from_file(const char* filename)
 	elm327_hardreset_chip();
 	elm327_disable_wake_commands();
 	led_fast_blink(LED_RED, 0, false);
-	
+	// Hand the LED back; the indicator repaints idle blue instead of leaving it dark.
+	led_indicator_resume();
+
     return ret;
 }
 

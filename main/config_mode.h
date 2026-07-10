@@ -21,6 +21,12 @@
 #ifndef CONFIG_MODE_H
 #define CONFIG_MODE_H
 
+#include <stdbool.h>
+
 void config_mode_init(void);
+
+// True once the button hold entered AP-config mode (the 1 Hz yellow/blue LED
+// alternation owns the LED until reboot). Lets the LED indicator defer.
+bool config_mode_active(void);
 
 #endif // CONFIG_MODE_H
