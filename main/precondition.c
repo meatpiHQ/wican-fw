@@ -64,40 +64,94 @@ static bool activation_button_state_prev = false;
 // is the status frame available? false if on unknown platform, true if we at any point receive a known status frame
 static bool status_frame_available = false;
 
+typedef enum {
+    // frame carries the current button state: pressed while (byte & mask) == value
+    MSG_STATE,
+    // frame is an event whose masked byte takes distinct press/release values
+    MSG_EVENT,
+} message_type_t;
+
 typedef struct {
     uint32_t frame_id;
-    uint8_t byte_index;
-    uint8_t byte_mask;
-    uint8_t byte_value;
+    message_type_t type;
+    union {
+        struct {
+            uint8_t byte_index;
+            uint8_t byte_mask;
+            uint8_t byte_value;
+        } state;
+        struct {
+            uint8_t byte_index;
+            uint8_t byte_mask;
+            // TODO(ejones): maybe use a bit set or some other
+            // way of representing any number of possibilities
+            uint8_t press_values[2];   // either value means pressed
+            uint8_t release_values[2]; // either value means released
+        } pair;
+    };
 } message_payload_t;
 
 // map of the buttons that can be used to activate preconditioning.
 // note: SW buttons (0x448) have a periodic idle message;
 //       AVN buttons (0x651/0x652) only send on press/release.
 const static message_payload_t activation_messages[NUM_PRECON_BUTTONS] = {
-    [SW_STAR]         = {0x448, 5, 0xF0, 0x10},
-    [AVN_STAR]        = {0x652, 1, 0x0F, 0x04},
-    [AVN_TUNER_IN]    = {0x651, 3, 0xF0, 0x40},
-    [AVN_VOL_IN]      = {0x651, 1, 0xF0, 0x40},
-    [SW_MODE]         = {0x448, 2, 0xF0, 0x40},
-    [SW_SPEAK]        = {0x448, 2, 0x0F, 0x01},
-    [SW_CALL]         = {0x448, 2, 0x0F, 0x04},
-    [SW_VOL_IN]       = {0x448, 3, 0x0F, 0x01},
-    [SW_VOL_UP]       = {0x448, 4, 0x0F, 0x01},
-    [SW_VOL_DOWN]     = {0x448, 3, 0xF0, 0x40},
-    [SW_SKIP_UP]      = {0x448, 3, 0xF0, 0x10},
-    [SW_SKIP_DOWN]    = {0x448, 3, 0x0F, 0x04},
-    [SW_OK]           = {0x448, 6, 0xF0, 0x10},
-    [AVN_MAP]         = {0x652, 0, 0xF0, 0x40},
-    [AVN_NAV]         = {0x652, 0, 0xF0, 0x10},
-    [AVN_MEDIA]       = {0x652, 0, 0x0F, 0x01},
-    [AVN_TUNER_UP]    = {0x652, 3, 0x0F, 0x04},
-    [AVN_TUNER_DOWN]  = {0x652, 3, 0x0F, 0x01},
-    [EV6_AVN_SETUP]   = {0x652, 1, 0x0F, 0x0D},
-    
+    [SW_STAR]         = {0x448, MSG_STATE, .state = {5, 0xF0, 0x10}},
+    [AVN_STAR]        = {0x652, MSG_EVENT,  .pair  = {1, 0x0F, {0x04, 0x07}, {0x00, 0x03}}},
+    [AVN_TUNER_IN]    = {0x651, MSG_EVENT,  .pair  = {3, 0xF0, {0x40, 0x70}, {0x00, 0x30}}},
+    [AVN_VOL_IN]      = {0x651, MSG_EVENT,  .pair  = {1, 0xF0, {0x40, 0x70}, {0x00, 0x30}}},
+    [SW_MODE]         = {0x448, MSG_STATE, .state = {2, 0xF0, 0x40}},
+    [SW_SPEAK]        = {0x448, MSG_STATE, .state = {2, 0x0F, 0x01}},
+    [SW_CALL]         = {0x448, MSG_STATE, .state = {2, 0x0F, 0x04}},
+    [SW_VOL_IN]       = {0x448, MSG_STATE, .state = {3, 0x0F, 0x01}},
+    [SW_VOL_UP]       = {0x448, MSG_STATE, .state = {4, 0x0F, 0x01}},
+    [SW_VOL_DOWN]     = {0x448, MSG_STATE, .state = {3, 0xF0, 0x40}},
+    [SW_SKIP_UP]      = {0x448, MSG_STATE, .state = {3, 0xF0, 0x10}},
+    [SW_SKIP_DOWN]    = {0x448, MSG_STATE, .state = {3, 0x0F, 0x04}},
+    [SW_OK]           = {0x448, MSG_STATE, .state = {6, 0xF0, 0x10}},
+    [AVN_MAP]         = {0x652, MSG_EVENT,  .pair  = {0, 0xF0, {0x40, 0x70}, {0x00, 0x30}}},
+    [AVN_NAV]         = {0x652, MSG_EVENT,  .pair  = {0, 0xF0, {0x10, 0xD0}, {0x00, 0xC0}}},
+    [AVN_MEDIA]       = {0x652, MSG_EVENT,  .pair  = {0, 0x0F, {0x01, 0x0D}, {0x00, 0x0C}}},
+    [AVN_TUNER_UP]    = {0x652, MSG_EVENT,  .pair  = {3, 0x0F, {0x04, 0x07}, {0x00, 0x03}}},
+    [AVN_TUNER_DOWN]  = {0x652, MSG_EVENT,  .pair  = {3, 0x0F, {0x01, 0x0D}, {0x00, 0x0C}}},
+    [EV6_AVN_SETUP]   = {0x652, MSG_EVENT,  .pair  = {1, 0x0F, {0x01, 0x0D}, {0x00, 0x0C}}},
 };
 _Static_assert(sizeof(activation_messages) / sizeof(activation_messages[0])
                == NUM_PRECON_BUTTONS, "button table size mismatch");
+
+static bool state_matches(const message_payload_t *msg, const twai_message_t *f) {
+    return (f->data[msg->state.byte_index] & msg->state.byte_mask) == msg->state.byte_value;
+}
+
+static bool pair_matches(const message_payload_t *msg, const twai_message_t *f, const uint8_t values[2]) {
+    uint8_t masked = f->data[msg->pair.byte_index] & msg->pair.byte_mask;
+    return masked == values[0] || masked == values[1];
+}
+
+static bool activation_is_press(const message_payload_t *msg, const twai_message_t *f) {
+    if (f->identifier != msg->frame_id) {
+        return false;
+    }
+    switch (msg->type) {
+        case MSG_STATE:
+            return state_matches(msg, f);
+        case MSG_EVENT:
+            return pair_matches(msg, f, msg->pair.press_values);
+    }
+    return false;
+}
+
+static bool activation_is_release(const message_payload_t *msg, const twai_message_t *f) {
+    if (f->identifier != msg->frame_id) {
+        return false;
+    }
+    switch (msg->type) {
+        case MSG_STATE:
+            return !state_matches(msg, f);
+        case MSG_EVENT:
+            return pair_matches(msg, f, msg->pair.release_values);
+    }
+    return false;
+}
 
 // 0x2AD on Ioniq 5/EV6, 0x0A82AA03 on Ioniq 6
 #define IS_STATUS_FRAME(frame_id) \
@@ -339,10 +393,9 @@ void precondition_can_rx_hook(twai_message_t *to_push, can_bus_t rx_bus) {
         return;
     }
     // listen for activation button press (rising edge only), and toggle preconditioning
-    message_payload_t button = activation_messages[precon_button_type];
-    if (to_push->identifier == button.frame_id) {
-        bool button_state = ((to_push->data[button.byte_index] & button.byte_mask) == button.byte_value);
-        if (button_state && !activation_button_state_prev) {
+    const message_payload_t *button = &activation_messages[precon_button_type];
+    if (activation_is_press(button, to_push)) {
+        if (!activation_button_state_prev) {
             uint32_t now = now_us();
             if (!precondition_requested) {
                 start_preconditioning(now);
@@ -350,7 +403,9 @@ void precondition_can_rx_hook(twai_message_t *to_push, can_bus_t rx_bus) {
                 stop_preconditioning(now);
             }
         }
-        activation_button_state_prev = button_state;
+        activation_button_state_prev = true;
+    } else if (activation_is_release(button, to_push)) {
+        activation_button_state_prev = false;
     }
 
 }
