@@ -69,11 +69,11 @@
 #define SW_SKIP_UP			10
 #define SW_SKIP_DOWN		11
 #define SW_OK				12
-#define AVNK_MAP			13
-#define AVNK_NAV			14
-#define AVNK_MEDIA			15
-#define AVNK_TUNER_UP		16
-#define AVNK_TUNER_DOWN		17
+#define AVN_MAP				13
+#define AVN_NAV				14
+#define AVN_MEDIA			15
+#define AVN_TUNER_UP		16
+#define AVN_TUNER_DOWN		17
 #define EV6_AVN_SETUP		18
 #define NUM_PRECOND_BUTTONS 19
 

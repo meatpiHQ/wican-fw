@@ -2957,25 +2957,25 @@ int8_t config_server_precon_button(void)
 	{
 		return SW_OK;
 	}
-	else if(strcmp(device_config.precon_button, "avnk_map") == 0)
+	else if(strcmp(device_config.precon_button, "avn_map") == 0)
 	{
-		return AVNK_MAP;
+		return AVN_MAP;
 	}
-	else if(strcmp(device_config.precon_button, "avnk_nav") == 0)
+	else if(strcmp(device_config.precon_button, "avn_nav") == 0)
 	{
-		return AVNK_NAV;
+		return AVN_NAV;
 	}
-	else if(strcmp(device_config.precon_button, "avnk_media") == 0)
+	else if(strcmp(device_config.precon_button, "avn_media") == 0)
 	{
-		return AVNK_MEDIA;
+		return AVN_MEDIA;
 	}
-	else if(strcmp(device_config.precon_button, "avnk_tuner_up") == 0)
+	else if(strcmp(device_config.precon_button, "avn_tuner_up") == 0)
 	{
-		return AVNK_TUNER_UP;
+		return AVN_TUNER_UP;
 	}
-	else if(strcmp(device_config.precon_button, "avnk_tuner_down") == 0)
+	else if(strcmp(device_config.precon_button, "avn_tuner_down") == 0)
 	{
-		return AVNK_TUNER_DOWN;
+		return AVN_TUNER_DOWN;
 	}
     else if(strcmp(device_config.precon_button, "ev6_avn_setup") == 0)
     {
