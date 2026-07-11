@@ -154,7 +154,8 @@ const char device_config_default[] = R"json({
 "mqtt_rx_topic":"wican/%s/can/rx",
 "mqtt_status_topic":"wican/%s/can/status",
 "precon_mode":"once",
-"precon_button":"sw_star"
+"precon_button":"sw_star",
+"precon_press":"short"
 })json";
 static device_config_t device_config;
 TimerHandle_t xrestartTimer;
@@ -2016,6 +2017,25 @@ static void config_server_load_cfg(char *cfg)
 	//*****
 
 	//*****
+	// key added after initial release; missing means a config saved by older
+	// firmware, so fall back to the default rather than rejecting the config
+	key = cJSON_GetObjectItem(root,"precon_press");
+	if(key == 0)
+	{
+		strcpy(device_config.precon_press, "short");
+	}
+	else if(strlen(key->valuestring) > sizeof(device_config.precon_press))
+	{
+		goto config_error;
+	}
+	else
+	{
+		strcpy(device_config.precon_press, key->valuestring);
+	}
+	ESP_LOGE(TAG, "device_config.precon_press: %s", device_config.precon_press);
+	//*****
+
+	//*****
 	key = cJSON_GetObjectItem(root,"mqtt_tx_topic");
 	if(key == 0 || (strlen(key->valuestring) > sizeof(device_config.mqtt_tx_topic)))
 	{
@@ -2999,4 +3019,13 @@ int8_t config_server_precon_mode(void)
 		return CONTINUOUS;
 	}
 	return ONCE;
+}
+
+int8_t config_server_precon_press(void)
+{
+	if(strcmp(device_config.precon_press, "long") == 0)
+	{
+		return PRESS_LONG;
+	}
+	return PRESS_SHORT;
 }

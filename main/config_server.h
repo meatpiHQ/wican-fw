@@ -55,6 +55,9 @@
 #define CONTINUOUS			0
 #define ONCE				1
 
+#define PRESS_SHORT			0
+#define PRESS_LONG			1
+
 #define BUTTON_DISABLED     -1
 #define SW_STAR				0
 #define AVN_STAR			1
@@ -136,6 +139,7 @@ typedef struct _device_config
 	char mqtt_status_topic[64];
     char precon_mode[16];
     char precon_button[32];
+    char precon_press[16];
 }device_config_t;
 
 
@@ -202,3 +206,4 @@ int8_t config_server_get_keep_alive(uint32_t *keep_alive);
 char *config_server_get_status_json(bool remove_sensitive_info);
 int8_t config_server_precon_button(void);
 int8_t config_server_precon_mode(void);
+int8_t config_server_precon_press(void);

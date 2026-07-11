@@ -1349,6 +1349,15 @@
                         </label>
                     </td>
                 </tr>
+                <tr>
+                    <td>Preconditioning Press Type:</td>
+                    <td>
+                        <select id="precon_press" name="precon_press" onchange="submit_enable();">
+                            <option value="short">Short Press</option>
+                            <option value="long">Long Press (hold 1s)</option>
+                        </select>
+                    </td>
+                </tr>
                 <tr class="can1_row" style="display:none">
                     <td>CAN Connection Mode:</td>
                     <td>
@@ -2850,6 +2859,7 @@ function loadAutoTable(jsonData) {
 		obj["mqtt_elm327_log"] = document.getElementById("mqtt_elm327_log").value;
         obj["precon_mode"] = document.getElementById("precon_mode").value;
         obj["precon_button"] = document.getElementById("precon_button").value;
+        obj["precon_press"] = document.getElementById("precon_press").value;
 		var configJSON = JSON.stringify(obj);
 		const xhttp = new XMLHttpRequest();
 		xhttp.onload = function() {
@@ -3167,6 +3177,8 @@ function loadAutoTable(jsonData) {
 			document.getElementById("mqtt_elm327_log").value = obj.mqtt_elm327_log;
             document.getElementById("precon_mode").value = obj.precon_mode;
             document.getElementById("precon_button").value = obj.precon_button;
+            // config saved by older firmware has no precon_press key
+            document.getElementById("precon_press").value = obj.precon_press || "short";
             syncPreconButtonToggle();
 			if(obj.batt_alert_time == "1") {
 				document.getElementById("batt_alert_time").selectedIndex = "0";

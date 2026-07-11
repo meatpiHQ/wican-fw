@@ -61,6 +61,10 @@ static bool precondition_started_confirmed = false;
 static bool precondition_stop_confirmed = true;
 // track previous state of activation button for edge detection
 static bool activation_button_state_prev = false;
+// timestamp of the activation button press edge, for short/long press detection
+static uint32_t activation_press_start_ts = 0U;
+// has the current hold already triggered? (long press mode fires once per hold)
+static bool activation_long_press_fired = false;
 // is the status frame available? false if on unknown platform, true if we at any point receive a known status frame
 static bool status_frame_available = false;
 
@@ -166,6 +170,7 @@ static bool activation_is_release(const message_payload_t *msg, const twai_messa
     (((status_byte) & STATUS_MASK) == 0x15U)
 
 #define PRECONDITION_DEBOUNCE_US 1000000U  // 1 second
+#define PRECONDITION_LONG_PRESS_US 1000000U  // short/long press threshold: 1 second
 #define PRECONDITION_START_PHASE1_TICKS 3U // 4003 message
 #define PRECONDITION_START_PHASE2_TICKS 3U // E007 message
 #define PRECONDITION_START_TICKS (PRECONDITION_START_PHASE1_TICKS + PRECONDITION_START_PHASE2_TICKS)
@@ -328,6 +333,27 @@ static int8_t cached_precon_button_type(void) {
     return precon_button_type;
 }
 
+// same caching rationale as cached_precon_button_type
+static int8_t cached_precon_press_type(void) {
+    static int8_t precon_press_type = PRESS_SHORT;
+    static bool loaded = false;
+    if (!loaded) {
+        precon_press_type = config_server_precon_press();
+        loaded = true;
+    }
+    return precon_press_type;
+}
+
+// toggle preconditioning on an activation event, with debounce between start and stop
+static void toggle_preconditioning(void) {
+    uint32_t now = now_us();
+    if (!precondition_requested) {
+        start_preconditioning(now);
+    } else if (ts_elapsed(now, precondition_requested_ts) > PRECONDITION_DEBOUNCE_US) {
+        stop_preconditioning(now);
+    }
+}
+
 void precondition_can_rx_hook(twai_message_t *to_push, can_bus_t rx_bus) {
     // 0x2AD/0x0A82AA03 status frame: second byte indicates precondition state
     //   Ioniq 5/6: 0x01 = off/idle, 0x05 = starting, 0x15 = fully running
@@ -392,19 +418,22 @@ void precondition_can_rx_hook(twai_message_t *to_push, can_bus_t rx_bus) {
         ESP_LOGE(TAG, "Invalid precondition button type: %d", precon_button_type);
         return;
     }
-    // listen for activation button press (rising edge only), and toggle preconditioning
+    // track activation button press/release edges. short press mode triggers on
+    // the release edge if the hold stayed under the threshold; long press mode
+    // triggers from precondition_tick once the hold crosses the threshold
     const message_payload_t *button = &activation_messages[precon_button_type];
     if (activation_is_press(button, to_push)) {
         if (!activation_button_state_prev) {
-            uint32_t now = now_us();
-            if (!precondition_requested) {
-                start_preconditioning(now);
-            } else if (ts_elapsed(now, precondition_requested_ts) > PRECONDITION_DEBOUNCE_US) {
-                stop_preconditioning(now);
-            }
+            activation_press_start_ts = now_us();
+            activation_long_press_fired = false;
         }
         activation_button_state_prev = true;
     } else if (activation_is_release(button, to_push)) {
+        if (activation_button_state_prev
+                && cached_precon_press_type() == PRESS_SHORT
+                && ts_elapsed(now_us(), activation_press_start_ts) < PRECONDITION_LONG_PRESS_US) {
+            toggle_preconditioning();
+        }
         activation_button_state_prev = false;
     }
 
@@ -414,6 +443,16 @@ void precondition_can_rx_hook(twai_message_t *to_push, can_bus_t rx_bus) {
 void precondition_tick(void) {
     uint32_t now = now_us();
     uint32_t time_since_last_attempt = ts_elapsed(now, precondition_last_attempt_ts);
+
+    // long press mode: trigger once when the hold crosses the threshold, without
+    // waiting for the release frame. state only becomes pressed via the rx hook,
+    // so this does nothing when the activation button is disabled
+    if (activation_button_state_prev && !activation_long_press_fired
+            && cached_precon_press_type() == PRESS_LONG
+            && ts_elapsed(now, activation_press_start_ts) >= PRECONDITION_LONG_PRESS_US) {
+        activation_long_press_fired = true;
+        toggle_preconditioning();
+    }
 
     // we can only do retry logic if we know the status frame
     if (status_frame_available) {
