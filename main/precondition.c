@@ -69,12 +69,12 @@ typedef struct {
     uint8_t byte_index;
     uint8_t byte_mask;
     uint8_t byte_value;
-} precond_button_t;
+} message_payload_t;
 
 // map of the buttons that can be used to activate preconditioning.
 // note: SW buttons (0x448) have a periodic idle message;
 //       AVN buttons (0x651/0x652) only send on press/release.
-const static precond_button_t activation_buttons[NUM_PRECOND_BUTTONS] = {
+const static message_payload_t activation_messages[NUM_PRECON_BUTTONS] = {
     [SW_STAR]         = {0x448, 5, 0xF0, 0x10},
     [AVN_STAR]        = {0x652, 1, 0x0F, 0x04},
     [AVN_TUNER_IN]    = {0x651, 3, 0xF0, 0x40},
@@ -96,8 +96,8 @@ const static precond_button_t activation_buttons[NUM_PRECOND_BUTTONS] = {
     [EV6_AVN_SETUP]   = {0x652, 1, 0x0F, 0x0D},
     
 };
-_Static_assert(sizeof(activation_buttons) / sizeof(activation_buttons[0])
-               == NUM_PRECOND_BUTTONS, "button table size mismatch");
+_Static_assert(sizeof(activation_messages) / sizeof(activation_messages[0])
+               == NUM_PRECON_BUTTONS, "button table size mismatch");
 
 // 0x2AD on Ioniq 5/EV6, 0x0A82AA03 on Ioniq 6
 #define IS_STATUS_FRAME(frame_id) \
@@ -334,12 +334,12 @@ void precondition_can_rx_hook(twai_message_t *to_push, can_bus_t rx_bus) {
         // activation button disabled in config; don't listen for any button press
         return;
     }
-    if (precon_button_type < 0 || precon_button_type >= NUM_PRECOND_BUTTONS) {
+    if (precon_button_type < 0 || precon_button_type >= NUM_PRECON_BUTTONS) {
         ESP_LOGE(TAG, "Invalid precondition button type: %d", precon_button_type);
         return;
     }
     // listen for activation button press (rising edge only), and toggle preconditioning
-    precond_button_t button = activation_buttons[precon_button_type];
+    message_payload_t button = activation_messages[precon_button_type];
     if (to_push->identifier == button.frame_id) {
         bool button_state = ((to_push->data[button.byte_index] & button.byte_mask) == button.byte_value);
         if (button_state && !activation_button_state_prev) {
