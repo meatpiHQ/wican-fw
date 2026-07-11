@@ -134,7 +134,7 @@ typedef struct _device_config
 	char mqtt_rx_topic[64];
 	char mqtt_status_topic[64];
     char precon_mode[16];
-    char precon_button[16];
+    char precon_button[32];
 }device_config_t;
 
 
