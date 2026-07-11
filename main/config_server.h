@@ -74,7 +74,8 @@
 #define AVNK_MEDIA			15
 #define AVNK_TUNER_UP		16
 #define AVNK_TUNER_DOWN		17
-#define NUM_PRECOND_BUTTONS 18
+#define EV6_AVN_SETUP		18
+#define NUM_PRECOND_BUTTONS 19
 
 typedef enum
 {

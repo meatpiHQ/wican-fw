@@ -2977,6 +2977,10 @@ int8_t config_server_precon_button(void)
 	{
 		return AVNK_TUNER_DOWN;
 	}
+    else if(strcmp(device_config.precon_button, "ev6_avn_setup") == 0)
+    {
+        return EV6_AVN_SETUP;
+    }
 	else if(strcmp(device_config.precon_button, "disabled") == 0)
 	{
 		return BUTTON_DISABLED;

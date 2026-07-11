@@ -93,6 +93,7 @@ const static precond_button_t activation_buttons[NUM_PRECOND_BUTTONS] = {
     [AVNK_MEDIA]      = {0x652, 0, 0x0F, 0x01},
     [AVNK_TUNER_UP]   = {0x652, 3, 0x0F, 0x04},
     [AVNK_TUNER_DOWN] = {0x652, 3, 0x0F, 0x01},
+    [EV6_AVN_SETUP]   = {0x652, 1, 0x0F, 0x0D},
     
 };
 _Static_assert(sizeof(activation_buttons) / sizeof(activation_buttons[0])
