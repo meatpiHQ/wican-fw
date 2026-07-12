@@ -11,7 +11,7 @@ on:
   push:
     branches:
       - main
-      - 'tmp/wip-custom-wican-forwarding-needs-review'
+      - wip-needs-review
 
 # Cancel superseded runs on the same ref to save runner minutes.
 concurrency:
