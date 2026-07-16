@@ -303,37 +303,75 @@ bool autopid_test_pid_parse_hex_byte_stream(const char *s, uint8_t *out, size_t 
         return false;
     *out_len = 0;
 
-    const unsigned char *p = (const unsigned char *)s;
-    while (*p)
+    /* Parse LINE BY LINE and strip the CAN-id header per line, exactly like
+     * the live parse_elm327_response heuristic: the first token's LENGTH says
+     * how the active ELM engine printed the id (the MIC3624 prints a 29-bit
+     * id as four spaced byte tokens "17 FE 00 7B", the internal engine as one
+     * 8-char token "17FE007B"). The old implementation kept every 2-hex-digit
+     * token, so the four spaced header bytes leaked into the data and shifted
+     * every expression by 4 bytes on WiCAN PRO (Test showed 1.6% for a real
+     * 60.4% SoC: B4 landed on the PCI byte). Header-token drop count:
+     *   1 char ("6", J1939 "prio PGN SA") -> drop 3 tokens (6 / 0FEEE / 80)
+     *   2 chars (spaced 29-bit)           -> drop 4 tokens (17 FE 00 7B)
+     *   3 chars ("7E8") / 8 ("17FE007B")  -> drop 1 token
+     * Remaining 2-hex-digit tokens on the line are data bytes. */
+    const char *line = s;
+    while (line && *line)
     {
-        while (*p && !isxdigit(*p))
-            p++;
-        if (!*p)
-            break;
+        const char *eol = line;
+        while (*eol && *eol != '\r' && *eol != '\n')
+            eol++;
 
-        const unsigned char *start = p;
-        size_t tok_len = 0;
-        while (*p && isxdigit(*p) && tok_len < 8)
+        /* tokenize this line */
+        const char *p = line;
+        int tok_index = 0;
+        int drop = -1;   /* tokens still to drop; -1 = undecided (first token) */
+        while (p < eol)
         {
-            tok_len++;
-            p++;
-        }
-
-        if (tok_len == 2)
-        {
-            if (*out_len >= out_max)
+            while (p < eol && !isxdigit((unsigned char)*p))
+                p++;
+            if (p >= eol)
                 break;
+            const char *start = p;
+            size_t tok_len = 0;
+            while (p < eol && isxdigit((unsigned char)*p))
+            {
+                tok_len++;
+                p++;
+            }
 
-            char tmp[3];
-            tmp[0] = (char)start[0];
-            tmp[1] = (char)start[1];
-            tmp[2] = '\0';
-            out[*out_len] = (uint8_t)strtoul(tmp, NULL, 16);
-            (*out_len)++;
+            if (tok_index == 0)
+            {
+                switch (tok_len)
+                {
+                case 1:  drop = 3; break;      /* J1939 prio + PGN + SA        */
+                case 2:  drop = 4; break;      /* spaced 29-bit id (MIC3624)   */
+                case 3:                         /* 11-bit id                    */
+                case 8:  drop = 1; break;      /* one-token 29-bit id          */
+                default: drop = 0; break;      /* no recognisable header       */
+                }
+            }
+            tok_index++;
+
+            if (drop > 0)
+            {
+                drop--;
+                continue;
+            }
+
+            if (tok_len == 2)
+            {
+                if (*out_len >= out_max)
+                    return (*out_len > 0);
+                char tmp[3] = { start[0], start[1], '\0' };
+                out[*out_len] = (uint8_t)strtoul(tmp, NULL, 16);
+                (*out_len)++;
+            }
         }
 
-        while (*p && isxdigit(*p))
-            p++;
+        while (*eol == '\r' || *eol == '\n')
+            eol++;
+        line = eol;
     }
 
     return (*out_len > 0);

@@ -97,21 +97,20 @@ static uint32_t elm327_autopid_cmd_buffer_len = 0;
 static int64_t elm327_autopid_last_cmd_time = 0;
 #endif
 
-static const uint8_t autopid_protocol_header_length[] = {
-    0, // 0: Automatic
-    3, // 1: SAE J1850 PWM (41.6 kbaud)
-    3, // 2: SAE J1850 VPW (10.4 kbaud)
-    3, // 3: ISO 9141-2 (5 baud init, 10.4 kbaud)
-    3, // 4: ISO 14230-4 KWP (5 baud init, 10.4 kbaud)
-    3, // 5: ISO 14230-4 KWP (fast init, 10.4 kbaud)
-    0, // 6: ISO 15765-4 CAN (11 bit ID, 500 kbaud)
-    9, // 7: ISO 15765-4 CAN (29 bit ID, 500 kbaud)
-    0, // 8: ISO 15765-4 CAN (11 bit ID, 250 kbaud)
-    9, // 9: ISO 15765-4 CAN (29 bit ID, 250 kbaud)
-    9, // A: SAE J1939 CAN (29 bit ID, 250 kbaud)
-    0, // B: USER1 CAN (11 bit ID, 125 kbaud)
-    0  // C: USER2 CAN (29 bit ID, 50 kbaud)
-};
+/* NOTE: header stripping in parse_elm327_response no longer keys on the
+ * protocol number. How many characters follow the first token of a response
+ * line depends on how the ACTIVE ELM ENGINE prints the CAN id, which differs
+ * per hardware: the MIC3624 (WiCAN PRO) prints a 29-bit id as four spaced byte
+ * tokens ("17 FE 00 7B 04 62 ..."), while the internal engine prints one
+ * 8-char token ("17FE007B 04 62 ..."). A protocol-number table cannot
+ * distinguish these, and mis-skipping shifts every expression's byte indices
+ * (e.g. VW MEB SoC on 17FC007B read the 0x62 response echo as data while
+ * 11-bit PIDs on the same car worked). The first token's LENGTH identifies the
+ * line format unambiguously, so the length heuristic is used for EVERY frame:
+ *   2 chars ("17" of a spaced 29-bit id)  -> skip the 9 remaining id chars
+ *   3 chars ("7E8", 11-bit)               -> no extra skip
+ *   8 chars ("17FE007B", one-token 29-bit)-> no extra skip
+ *   1 char  ("6", J1939 "prio PGN SA")    -> skip the 9 chars of "0FEEE 80 " */
 
 static double autopid_round_parameter_value(double value)
 {
@@ -2190,30 +2189,26 @@ void parse_elm327_response(char *buffer, response_t *response)
             }
 
             data_start++;
-            if (current_protocol_number == -1 || (current_protocol_number > sizeof(autopid_protocol_header_length)))
+            // The remaining id/header chars to skip depend on the LINE FORMAT,
+            // which the first token's length identifies unambiguously — the
+            // protocol number cannot (the MIC3624 prints a 29-bit id as four
+            // spaced byte tokens, the internal engine as one 8-char token; see
+            // the note at the top of this file). Always use the heuristic.
+            switch (header_length)
             {
-                // Handle different header formats
-                switch (header_length)
-                {
-                case 2:
-                    data_start += 9;
-                    ESP_LOGW(TAG, "2-byte header format: Adjusted data_start by 9");
-                    break;
-                case 3:
-                case 8:
-                    ESP_LOGW(TAG, "%d-byte header format: No adjustment needed", header_length);
-                    break;
-                default:
-                    ESP_LOGW(TAG, "Unexpected header length: %d, skipping frame", header_length);
-                    frame = strtok(NULL, "\r\n");
-                    continue;
-                }
-            }
-            else
-            {
-                // Adjust data_start based on protocol number
-                ESP_LOGI(TAG, "Adjusting data_start based on protocol number: %ld, header length: + %d", current_protocol_number, autopid_protocol_header_length[current_protocol_number]);
-                data_start += (uint8_t)autopid_protocol_header_length[current_protocol_number];
+            case 1:  // J1939 "6 0FEEE 80 <data>" — skip "0FEEE 80 "
+            case 2:  // spaced 29-bit id "17 FE 00 7B <data>" — skip "FE 00 7B "
+                data_start += 9;
+                ESP_LOGD(TAG, "%d-char header token: skipping 9 chars of id", header_length);
+                break;
+            case 3:  // 11-bit id "7E8 <data>"
+            case 8:  // one-token 29-bit id "17FE007B <data>"
+                ESP_LOGD(TAG, "%d-char header token: no adjustment needed", header_length);
+                break;
+            default:
+                ESP_LOGW(TAG, "Unexpected header length: %d, skipping frame", header_length);
+                frame = strtok(NULL, "\r\n");
+                continue;
             }
 
             // Store start position for copying data
