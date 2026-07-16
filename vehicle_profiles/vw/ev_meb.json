@@ -77,7 +77,7 @@
       "pid": "221E3B1E3D",
       "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
       "parameters": {
-        "HV_AV": "(((150000-[B10:B13])/100)*([B6:B7]/4))/1000"
+        "HV_AV": "(((150000-[B10:B13])/100)*([B5:B6]/4))/1000"
       }
     },
     {
@@ -91,7 +91,7 @@
       "pid": "221E3D",
       "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
       "parameters": {
-        "HV_A": "(150000-[B4:B7])/100"
+        "HV_A": "(150000-[B5:B9])/100"
       }
     }
   ]
