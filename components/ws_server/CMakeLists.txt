@@ -11,7 +11,7 @@ idf_component_register(
         esp_http_server
         freertos
         log
-        json
+        espressif__cjson
         cmdline
         wican_common
 )

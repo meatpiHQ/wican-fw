@@ -23,15 +23,23 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdbool.h>
-#include <mbedtls/ctr_drbg.h>
-#include <mbedtls/entropy.h>
 #include <mbedtls/ecp.h>
 #include <mbedtls/base64.h>
 #include <mbedtls/private_access.h>
 #include <esp_system.h>
+#include <esp_random.h>
 #include <esp_log.h>
 
 static const char *TAG_WG_KG = "VPN_KEYGEN";
+
+// mbedtls-compatible f_rng backed by the hardware RNG; replaces the
+// entropy/CTR_DRBG contexts whose headers were removed in Mbed TLS 4.x (IDF 6.0).
+static int keygen_rng(void *ctx, unsigned char *buf, size_t len)
+{
+    (void)ctx;
+    esp_fill_random(buf, len);
+    return 0;
+}
 
 static void secure_wipe(void *v, size_t n)
 {
@@ -103,36 +111,22 @@ esp_err_t vpn_keygen_generate_wireguard_keys(char *private_key_b64,
 
     esp_err_t err = ESP_FAIL;
 
-    mbedtls_entropy_context entropy;
-    mbedtls_ctr_drbg_context ctr_drbg;
     mbedtls_ecp_group grp;
     mbedtls_mpi d;
     mbedtls_ecp_point Q;
 
-    mbedtls_entropy_init(&entropy);
-    mbedtls_ctr_drbg_init(&ctr_drbg);
     mbedtls_ecp_group_init(&grp);
     mbedtls_mpi_init(&d);
     mbedtls_ecp_point_init(&Q);
 
-    const char *pers = "wican-wg-keygen";
-
-    int ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy,
-                                    (const unsigned char *)pers, strlen(pers));
-    if (ret != 0)
-    {
-        ESP_LOGE(TAG_WG_KG, "ctr_drbg_seed failed: -0x%04x", -ret);
-        goto cleanup;
-    }
-
-    ret = mbedtls_ecp_group_load(&grp, MBEDTLS_ECP_DP_CURVE25519);
+    int ret = mbedtls_ecp_group_load(&grp, MBEDTLS_ECP_DP_CURVE25519);
     if (ret != 0)
     {
         ESP_LOGE(TAG_WG_KG, "ecp_group_load failed: -0x%04x", -ret);
         goto cleanup;
     }
 
-    ret = mbedtls_ecp_gen_keypair(&grp, &d, &Q, mbedtls_ctr_drbg_random, &ctr_drbg);
+    ret = mbedtls_ecp_gen_keypair(&grp, &d, &Q, keygen_rng, NULL);
     if (ret != 0)
     {
         ESP_LOGE(TAG_WG_KG, "gen_keypair failed: -0x%04x", -ret);
@@ -217,8 +211,6 @@ cleanup:
     mbedtls_ecp_point_free(&Q);
     mbedtls_mpi_free(&d);
     mbedtls_ecp_group_free(&grp);
-    mbedtls_ctr_drbg_free(&ctr_drbg);
-    mbedtls_entropy_free(&entropy);
 
     return err;
 }

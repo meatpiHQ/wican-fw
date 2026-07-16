@@ -4,7 +4,10 @@ dependencies:
   nopnop2002/sqlite3:
     path: components/esp32-idf-sqlite3/
     git: https://github.com/nopnop2002/esp32-idf-sqlite3.git
+    version: bf5a8617a9c1933b525f9484ed7e328a1d8bd02f
   espressif/mdns: ^1.0.0
+  espressif/mqtt: '*'
+  espressif/cjson: ^1.7.19
   espressif/usb_host_cp210x_vcp: ^2.0.0
   espressif/usb_host_ftdi_vcp: ^2.0.0
   meatpihq/usb_host_ch34x_vcp:
