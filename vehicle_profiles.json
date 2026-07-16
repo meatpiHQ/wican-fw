@@ -261,7 +261,7 @@
           "parameters": [
             {
               "name": "HV_AV",
-              "expression": "(((150000-[B10:B13])/100)*([B6:B7]/4))/1000",
+              "expression": "(((150000-[B10:B13])/100)*([B5:B6]/4))/1000",
               "unit": "kW",
               "class": "power"
             }
@@ -287,7 +287,7 @@
           "parameters": [
             {
               "name": "HV_A",
-              "expression": "(150000-[B4:B7])/100",
+              "expression": "(150000-[B5:B9])/100",
               "unit": "A",
               "class": "current"
             }
