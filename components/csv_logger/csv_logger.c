@@ -884,6 +884,16 @@ static int csv_list_cmp_newest_first(const void *a, const void *b)
     return strcmp(eb->name, ea->name);
 }
 
+// Single source of the /csv_list item shape, shared by the sorted and fallback paths.
+static void csv_list_emit(cJSON *files, const char *name, long long size, long long mtime)
+{
+    cJSON *item = cJSON_CreateObject();
+    cJSON_AddStringToObject(item, "name", name);
+    cJSON_AddNumberToObject(item, "size", (double)size);
+    cJSON_AddNumberToObject(item, "mtime", (double)mtime);
+    cJSON_AddItemToArray(files, item);
+}
+
 static esp_err_t csv_list_handler(httpd_req_t *req)
 {
     cJSON *root = cJSON_CreateObject();
@@ -932,11 +942,7 @@ static esp_err_t csv_list_handler(httpd_req_t *req)
             else
             {
                 // Fallback (no scratch memory / overflow): emit unsorted so nothing is lost.
-                cJSON *item = cJSON_CreateObject();
-                cJSON_AddStringToObject(item, "name", entry->d_name);
-                cJSON_AddNumberToObject(item, "size", (double)fsize);
-                cJSON_AddNumberToObject(item, "mtime", (double)fmtime);
-                cJSON_AddItemToArray(files, item);
+                csv_list_emit(files, entry->d_name, fsize, fmtime);
             }
         }
         closedir(dir);
@@ -945,11 +951,7 @@ static esp_err_t csv_list_handler(httpd_req_t *req)
             qsort(ents, count, sizeof(csv_list_ent_t), csv_list_cmp_newest_first);
             for (size_t i = 0; i < count; i++)
             {
-                cJSON *item = cJSON_CreateObject();
-                cJSON_AddStringToObject(item, "name", ents[i].name);
-                cJSON_AddNumberToObject(item, "size", (double)ents[i].size);
-                cJSON_AddNumberToObject(item, "mtime", (double)ents[i].mtime);
-                cJSON_AddItemToArray(files, item);
+                csv_list_emit(files, ents[i].name, ents[i].size, ents[i].mtime);
             }
             free(ents);
         }
@@ -1002,7 +1004,21 @@ static esp_err_t csv_download_handler(httpd_req_t *req)
     snprintf(disp, sizeof(disp), "attachment; filename=%s", name);
     httpd_resp_set_hdr(req, "Content-Disposition", disp);
 
-    char *buf = malloc(2048);
+    // INTERNAL-only buffer, adaptive size -- same rationale as sdfm_download():
+    // downloads run alongside the SD writers, and a PSRAM buffer could fault
+    // during a flash-cache-disable window. Start at 8 KB for throughput and
+    // shrink rather than fail when internal RAM is tight next to WiFi+httpd.
+    size_t bufsz = 8 * 1024;
+    char *buf = NULL;
+    while (bufsz >= 1024)
+    {
+        buf = heap_caps_malloc(bufsz, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (buf != NULL)
+        {
+            break;
+        }
+        bufsz /= 2;
+    }
     if (buf == NULL)
     {
         fclose(f);
@@ -1012,7 +1028,7 @@ static esp_err_t csv_download_handler(httpd_req_t *req)
 
     size_t n;
     esp_err_t ret = ESP_OK;
-    while ((n = fread(buf, 1, 2048, f)) > 0)
+    while ((n = fread(buf, 1, bufsz, f)) > 0)
     {
         if (httpd_resp_send_chunk(req, buf, n) != ESP_OK)
         {
@@ -1020,7 +1036,7 @@ static esp_err_t csv_download_handler(httpd_req_t *req)
             break;
         }
     }
-    free(buf);
+    heap_caps_free(buf);
     fclose(f);
     httpd_resp_send_chunk(req, NULL, 0); // end of response
     return ret;

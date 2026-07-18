@@ -3163,13 +3163,6 @@ function consoleFmtSize(b) {
     return b + ' B';
 }
 
-function consoleFmtDate(mtime) {
-    if (!mtime) return '';
-    var d = new Date(mtime * 1000);
-    function p(n) { return (n < 10 ? '0' : '') + n; }
-    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
-}
-
 function consoleLoadTrips() {
     fetch('/csv_list')
         .then(function(r) { return r.json(); })
@@ -3183,7 +3176,7 @@ function consoleLoadTrips() {
             }
             box.innerHTML = files.map(function(f) {
                 var name = String(f.name || '');
-                var meta = consoleFmtSize(f.size) + (f.mtime ? ' \u2022 ' + consoleFmtDate(f.mtime) : '');
+                var meta = consoleFmtSize(f.size) + (f.mtime ? ' \u2022 ' + filesFmtDate(f.mtime) : '');
                 return '<div class="console-trip"><div><div class="t-name">' + name + '</div>' +
                        '<div class="t-meta">' + meta + '</div></div>' +
                        '<a class="t-dl" href="/download_csv?file=' + encodeURIComponent(name) + '" download>' +
