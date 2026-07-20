@@ -45,9 +45,9 @@ static void set_0x4e8_distance_flag(twai_message_t *packet, uint16_t distance_in
 // is the user currently requesting preconditioning to be active?
 static bool precondition_requested = false;
 // timestamp of when the user requested preconditioning
-static uint32_t precondition_requested_ts = 0U;
+static int64_t precondition_requested_ts = 0U;
 // timestamp of last attempt to send precondition message, used for retry logic
-static uint32_t precondition_last_attempt_ts = 0U;
+static int64_t precondition_last_attempt_ts = 0U;
 // number of ticks remaining to send precondition start/stop messages, used for initial burst logic
 static uint8_t precondition_start_ticks_remaining = 0U;
 static uint8_t precondition_stop_ticks_remaining = 0U;
@@ -62,7 +62,7 @@ static bool precondition_stop_confirmed = true;
 // track previous state of activation button for edge detection
 static bool activation_button_state_prev = false;
 // timestamp of the activation button press edge, for short/long press detection
-static uint32_t activation_press_start_ts = 0U;
+static int64_t activation_press_start_ts = 0U;
 // has the current hold already triggered? (long press mode fires once per hold)
 static bool activation_long_press_fired = false;
 // is the status frame available? false if on unknown platform, true if we at any point receive a known status frame
@@ -192,11 +192,11 @@ static bool activation_is_release(const message_payload_t *msg, const twai_messa
     (((elapsed) >= PRECONDITION_RETRY_US) ? 0U : \
      ((PRECONDITION_RETRY_US - (elapsed)) / 1000000U))
 
-static uint32_t now_us(void) {
-    return (uint32_t)esp_timer_get_time();
+static int64_t now_us(void) {
+    return esp_timer_get_time();
 }
 
-static uint32_t ts_elapsed(uint32_t now, uint32_t old) {
+static int64_t ts_elapsed(int64_t now, int64_t old) {
     return now - old;
 }
 
@@ -250,8 +250,8 @@ fwd_result_t precondition_fwd_hook(twai_message_t *to_send, can_bus_t fwd_bus) {
 
     // we are currently starting preconditioning and want to display the countdown flag.
     if (precondition_requested && !precondition_started_confirmed && fwd_bus == CAR_BUS) {
-        uint32_t now = now_us();
-        uint32_t time_since_last_attempt = ts_elapsed(now, precondition_last_attempt_ts);
+        int64_t now = now_us();
+        int64_t time_since_last_attempt = ts_elapsed(now, precondition_last_attempt_ts);
         if (to_send->identifier == 0x4E8U) {
             // i'm sorry for the nested ternary operators. i don't feel like fixing it right now
             set_0x4e8_distance_flag(
@@ -278,8 +278,8 @@ fwd_result_t precondition_fwd_hook(twai_message_t *to_send, can_bus_t fwd_bus) {
             && !precondition_stop_confirmed 
             && precondition_retries < PRECONDITION_MAX_RETRIES
             && fwd_bus == CAR_BUS) {
-        uint32_t now = now_us();
-        uint32_t time_since_last_attempt = ts_elapsed(now, precondition_last_attempt_ts);
+        int64_t now = now_us();
+        int64_t time_since_last_attempt = ts_elapsed(now, precondition_last_attempt_ts);
         if (to_send->identifier == 0x4E8U) {
             set_0x4e8_distance_flag(
                 to_send,
@@ -302,7 +302,7 @@ fwd_result_t precondition_fwd_hook(twai_message_t *to_send, can_bus_t fwd_bus) {
     return FWD_PASSTHROUGH;
 }
 
-static void start_preconditioning(uint32_t now) {
+static void start_preconditioning(int64_t now) {
     precondition_requested = true;
     precondition_requested_ts = now;
     precondition_last_attempt_ts = now;
@@ -312,7 +312,7 @@ static void start_preconditioning(uint32_t now) {
     precondition_retries = 0U;
 }
 
-static void stop_preconditioning(uint32_t now) {
+static void stop_preconditioning(int64_t now) {
     precondition_requested = false;
     precondition_last_attempt_ts = now;
     precondition_stop_ticks_remaining = PRECONDITION_STOP_TICKS;
@@ -346,7 +346,7 @@ static int8_t cached_precon_press_type(void) {
 
 // toggle preconditioning on an activation event, with debounce between start and stop
 static void toggle_preconditioning(void) {
-    uint32_t now = now_us();
+    int64_t now = now_us();
     if (!precondition_requested) {
         start_preconditioning(now);
     } else if (ts_elapsed(now, precondition_requested_ts) > PRECONDITION_DEBOUNCE_US) {
@@ -388,7 +388,7 @@ void precondition_can_rx_hook(twai_message_t *to_push, can_bus_t rx_bus) {
                 // it's possible that the car has reached the "Precondition complete" state.
                 // until we have a better way to distinguish that state from a real failure mode (TODO(ejones)),
                 // let's just assume everything is fine and reset our state
-                uint32_t now = now_us();
+                int64_t now = now_us();
                 stop_preconditioning(now);
                 // if we are in "once" mode, actually attempt to actively stop preconditioning.
                 // this should prevent preconditioning from restarting once the battery falls back below temp.
@@ -441,8 +441,8 @@ void precondition_can_rx_hook(twai_message_t *to_push, can_bus_t rx_bus) {
 
 // called every 40ms
 void precondition_tick(void) {
-    uint32_t now = now_us();
-    uint32_t time_since_last_attempt = ts_elapsed(now, precondition_last_attempt_ts);
+    int64_t now = now_us();
+    int64_t time_since_last_attempt = ts_elapsed(now, precondition_last_attempt_ts);
 
     // long press mode: trigger once when the hold crosses the threshold, without
     // waiting for the release frame. state only becomes pressed via the rx hook,
