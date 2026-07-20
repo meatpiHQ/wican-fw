@@ -23,6 +23,7 @@
         "HV_T_3": "S25",
         "HV_T_4": "S26",
         "HV_T_5": "S27",
+        "KWH_CHARGED": "((B47<<24)|(B49<<16)|(B50<<8)|B51)/10",
         "CHARGER_CONNECTED": "B14:5",
         "CHARGING": "B14:7",
         "CHARGING_DC": "B14:6"
@@ -33,7 +34,11 @@
       "pid_init": "ATSH7E4;ATFCSH7E4;",
       "parameters": {
         "SOH": "[B33:B34]/10",
-        "SOC_D": "B39/2"
+        "SOC_D": "B39/2",
+        "HV_AV": "[B25:B26]/100",
+        "HV_C_D_MIN": "[B36:B37]/10",
+        "HV_C_D_MIN_NO": "B38",
+        "HV_C_D_MAX_NO": "B35"
       }
     },
     {
@@ -63,6 +68,13 @@
       "parameters": {
         "TMP_A": "(B12/2)-40",
         "T_CAB": "(B11/2)-40"
+      }
+    },
+    {
+      "pid": "2101",
+      "pid_init": "ATSH7E2;ATFCSH7E2;",
+      "parameters": {
+        "SPEED": "((S20*256)+B19)/60"
       }
     }
   ]
