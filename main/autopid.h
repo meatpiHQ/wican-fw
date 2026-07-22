@@ -71,6 +71,7 @@ typedef struct
     int64_t timer;
     float value;
     bool failed;
+    int64_t last_update;    // esp_timer_get_time() (us) of last successful read, 0 = never
 }parameter_t;
 
 typedef struct 
@@ -104,6 +105,12 @@ typedef struct
     char* vehicle_model;
     bool ha_discovery_en;
     uint32_t cycle;     //To be removed when std pid gets its own period
+    // Cached-value republishing (issue #825): keep Home Assistant in sync with the
+    // last-known reading even when the ECU stops responding (e.g. car parked at home).
+    bool pub_cached_on_connect;     // republish last-known snapshot right after MQTT (re)connects
+    uint32_t republish_period;      // republish last-known snapshot every N seconds while online (0 = off)
+    bool pub_before_sleep;          // republish last-known snapshot once, just before going to sleep
+    bool cached_meta;               // add "_meta":{"age","stale"} to republished (cached) messages
     SemaphoreHandle_t mutex;
 }all_pids_t;
 
@@ -129,4 +136,6 @@ bool autopid_get_ecu_status(void);
 char* autopid_get_config(void);
 esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint32_t available_pids_size) ;
 void autopid_request_data(void);
+void autopid_publish_cached(bool include_meta);
+void autopid_publish_before_sleep(void);
 #endif
