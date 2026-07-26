@@ -1,0 +1,1478 @@
+{
+ "autopid": {
+  "values": {
+   "enabled": false,
+   "std_enabled": true,
+   "custom_enabled": true,
+   "specific_enabled": true,
+   "cli": true,
+   "dtc_enabled": false,
+   "dtc_allow_clear": false,
+   "dtc_pending": true,
+   "dtc_permanent": false,
+   "pause_mode": "requests_only",
+   "backend": "obd_chip",
+   "pause_below_mv": 0,
+   "min_event_interval_ms": 1000,
+   "dtc_scan_period_min": 0,
+   "std_init": "",
+   "custom_init": "",
+   "specific_init": "",
+   "std_protocol": "6",
+   "vehicle": "",
+   "dtc_init": "",
+   "dtc_rxheader": ""
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "std_enabled": {
+     "type": "boolean"
+    },
+    "custom_enabled": {
+     "type": "boolean"
+    },
+    "specific_enabled": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "dtc_enabled": {
+     "type": "boolean"
+    },
+    "dtc_allow_clear": {
+     "type": "boolean"
+    },
+    "dtc_pending": {
+     "type": "boolean"
+    },
+    "dtc_permanent": {
+     "type": "boolean"
+    },
+    "pause_mode": {
+     "type": "string",
+     "enum": [
+      "all",
+      "requests_only"
+     ]
+    },
+    "backend": {
+     "type": "string",
+     "enum": [
+      "obd_chip",
+      "elm327"
+     ]
+    },
+    "pause_below_mv": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 30000
+    },
+    "min_event_interval_ms": {
+     "type": "integer",
+     "minimum": 10,
+     "maximum": 600000
+    },
+    "dtc_scan_period_min": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 10080
+    },
+    "std_init": {
+     "type": "string"
+    },
+    "custom_init": {
+     "type": "string"
+    },
+    "specific_init": {
+     "type": "string"
+    },
+    "std_protocol": {
+     "type": "string"
+    },
+    "vehicle": {
+     "type": "string"
+    },
+    "dtc_init": {
+     "type": "string"
+    },
+    "dtc_rxheader": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ "battery_monitor": {
+  "values": {
+   "enabled": true,
+   "cli": true,
+   "poll_s": 3
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "poll_s": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 60
+    }
+   }
+  }
+ },
+ "ble_manager": {
+  "values": {
+   "enabled": false,
+   "pairing_at_boot": true,
+   "bonding": true,
+   "sc_only": true,
+   "conn_profile": "ios",
+   "passkey": 123456,
+   "tx_power_dbm": 9
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "pairing_at_boot": {
+     "type": "boolean"
+    },
+    "bonding": {
+     "type": "boolean"
+    },
+    "sc_only": {
+     "type": "boolean"
+    },
+    "conn_profile": {
+     "type": "string",
+     "enum": [
+      "ios",
+      "android_fast"
+     ]
+    },
+    "passkey": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 999999
+    },
+    "tx_power_dbm": {
+     "type": "integer",
+     "minimum": -12,
+     "maximum": 9
+    }
+   }
+  }
+ },
+ "bridge_manager": {
+  "values": {
+   "enabled": false,
+   "name": "",
+   "a": "",
+   "b": "",
+   "bridges": []
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "name": {
+     "type": "string"
+    },
+    "a": {
+     "type": "string"
+    },
+    "b": {
+     "type": "string"
+    },
+    "bridges": {
+     "type": "array",
+     "items": {}
+    }
+   }
+  }
+ },
+ "can_manager": {
+  "values": {
+   "enabled": false,
+   "silent": false,
+   "cli": true,
+   "baud": "500"
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "silent": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "baud": {
+     "type": "string",
+     "enum": [
+      "33",
+      "83",
+      "95",
+      "100",
+      "125",
+      "250",
+      "500",
+      "1000"
+     ]
+    }
+   }
+  }
+ },
+ "cmdline_manager": {
+  "values": {
+   "enabled": true,
+   "uart": true
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "uart": {
+     "type": "boolean"
+    }
+   }
+  }
+ },
+ "data_logger": {
+  "values": {
+   "enabled": false,
+   "can_log": false,
+   "can_ext": false,
+   "cli": true,
+   "format": "sqlite",
+   "autopid_log": "off",
+   "can_format": "binary",
+   "max_file_mb": 4,
+   "max_files": 100,
+   "batch_rows": 256,
+   "flush_ms": 1000,
+   "can_max_file_mb": 8,
+   "can_max_files": 50,
+   "ring_len": 2048,
+   "can_filter": "",
+   "can_mask": "7FF"
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "can_log": {
+     "type": "boolean"
+    },
+    "can_ext": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "sqlite",
+      "csv",
+      "binary",
+      "jsonl"
+     ]
+    },
+    "autopid_log": {
+     "type": "string",
+     "enum": [
+      "off",
+      "changed",
+      "all"
+     ]
+    },
+    "can_format": {
+     "type": "string",
+     "enum": [
+      "binary",
+      "csv",
+      "sqlite",
+      "mf4",
+      "blf",
+      "candump",
+      "asc",
+      "jsonl"
+     ]
+    },
+    "max_file_mb": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 32
+    },
+    "max_files": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 500
+    },
+    "batch_rows": {
+     "type": "integer",
+     "minimum": 16,
+     "maximum": 1024
+    },
+    "flush_ms": {
+     "type": "integer",
+     "minimum": 100,
+     "maximum": 60000
+    },
+    "can_max_file_mb": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 128
+    },
+    "can_max_files": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 500
+    },
+    "ring_len": {
+     "type": "integer",
+     "minimum": 512,
+     "maximum": 0
+    },
+    "can_filter": {
+     "type": "string"
+    },
+    "can_mask": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ "dev_status_manager": {
+  "values": {
+   "cli": true
+  },
+  "schema": {
+   "properties": {
+    "cli": {
+     "type": "boolean"
+    }
+   }
+  }
+ },
+ "event_manager": {
+  "values": {
+   "enabled": true,
+   "period_s": 60,
+   "name": "",
+   "timers": [],
+   "rules": []
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "period_s": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 604800
+    },
+    "name": {
+     "type": "string"
+    },
+    "timers": {
+     "type": "array",
+     "items": {}
+    },
+    "rules": {
+     "type": "array",
+     "items": {}
+    }
+   }
+  }
+ },
+ "external_storage": {
+  "values": {
+   "cli": true
+  },
+  "schema": {
+   "properties": {
+    "cli": {
+     "type": "boolean"
+    }
+   }
+  }
+ },
+ "filesystem": {
+  "values": {
+   "cli": true
+  },
+  "schema": {
+   "properties": {
+    "cli": {
+     "type": "boolean"
+    }
+   }
+  }
+ },
+ "ha_webhooks": {
+  "values": {
+   "enabled": false,
+   "gzip": false,
+   "manual_override": false,
+   "cli": true,
+   "data_mode": "changed",
+   "interval_s": 60,
+   "url": "",
+   "url2": "",
+   "cert_set": ""
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "gzip": {
+     "type": "boolean"
+    },
+    "manual_override": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "data_mode": {
+     "type": "string",
+     "enum": [
+      "changed",
+      "full"
+     ]
+    },
+    "interval_s": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 3600
+    },
+    "url": {
+     "type": "string"
+    },
+    "url2": {
+     "type": "string"
+    },
+    "cert_set": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ "imu_manager": {
+  "values": {
+   "enabled": true,
+   "smd": true,
+   "wom": true,
+   "cli": true,
+   "smd_sensitivity": 0,
+   "wom_threshold": 8,
+   "stationary_s": 3
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "smd": {
+     "type": "boolean"
+    },
+    "wom": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "smd_sensitivity": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 4
+    },
+    "wom_threshold": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 255
+    },
+    "stationary_s": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 3600
+    }
+   }
+  }
+ },
+ "interface_manager": {
+  "values": {
+   "enabled": true,
+   "sta_ble_handover": true,
+   "ap_ble_exclusive": true
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "sta_ble_handover": {
+     "type": "boolean"
+    },
+    "ap_ble_exclusive": {
+     "type": "boolean"
+    }
+   }
+  }
+ },
+ "iperf_manager": {
+  "values": {
+   "cli": true
+  },
+  "schema": {
+   "properties": {
+    "cli": {
+     "type": "boolean"
+    }
+   }
+  }
+ },
+ "j2534_server": {
+  "values": {
+   "enabled": false,
+   "allow_reflash": false,
+   "allow_lan": false,
+   "cli": true,
+   "port": 6809
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "allow_reflash": {
+     "type": "boolean"
+    },
+    "allow_lan": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "port": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 65535
+    }
+   }
+  }
+ },
+ "led_manager": {
+  "values": {
+   "enabled": true,
+   "cli": true,
+   "idle_mode": "solid",
+   "idle_r": 0,
+   "idle_g": 0,
+   "idle_b": 60
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "idle_mode": {
+     "type": "string",
+     "enum": [
+      "off",
+      "solid",
+      "blink_slow"
+     ]
+    },
+    "idle_r": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 255
+    },
+    "idle_g": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 255
+    },
+    "idle_b": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 255
+    }
+   }
+  }
+ },
+ "log_manager": {
+  "values": {
+   "console_enabled": true,
+   "ring_enabled": true,
+   "level": "info"
+  },
+  "schema": {
+   "properties": {
+    "console_enabled": {
+     "type": "boolean"
+    },
+    "ring_enabled": {
+     "type": "boolean"
+    },
+    "level": {
+     "type": "string",
+     "enum": [
+      "none",
+      "error",
+      "warn",
+      "info",
+      "debug",
+      "verbose"
+     ]
+    }
+   }
+  }
+ },
+ "mdns_manager": {
+  "values": {
+   "enabled": true
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    }
+   }
+  }
+ },
+ "mqtt_manager": {
+  "values": {
+   "enabled": false,
+   "keepalive_s": 30,
+   "url": "",
+   "username": "",
+   "broker_password": "",
+   "client_id": "",
+   "topic_prefix": "",
+   "ca_file": "",
+   "cert_set": ""
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "keepalive_s": {
+     "type": "integer",
+     "minimum": 5,
+     "maximum": 600
+    },
+    "url": {
+     "type": "string"
+    },
+    "username": {
+     "type": "string"
+    },
+    "broker_password": {
+     "type": "string"
+    },
+    "client_id": {
+     "type": "string"
+    },
+    "topic_prefix": {
+     "type": "string"
+    },
+    "ca_file": {
+     "type": "string"
+    },
+    "cert_set": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ "obd_chip": {
+  "values": {
+   "auto_sleep": false,
+   "baud": "2000000",
+   "monitor_policy": "manual",
+   "wake_voltage_mv": 13500,
+   "sleep_voltage_mv": 13200,
+   "sleep_time_min": 2
+  },
+  "schema": {
+   "properties": {
+    "auto_sleep": {
+     "type": "boolean"
+    },
+    "baud": {
+     "type": "string",
+     "enum": [
+      "115200",
+      "230400",
+      "460800",
+      "921600",
+      "2000000"
+     ]
+    },
+    "monitor_policy": {
+     "type": "string",
+     "enum": [
+      "manual",
+      "auto_interrupt"
+     ]
+    },
+    "wake_voltage_mv": {
+     "type": "integer",
+     "minimum": 8000,
+     "maximum": 16000
+    },
+    "sleep_voltage_mv": {
+     "type": "integer",
+     "minimum": 8000,
+     "maximum": 16000
+    },
+    "sleep_time_min": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 1440
+    }
+   }
+  }
+ },
+ "obd_gate": {
+  "values": {
+   "enabled": true
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    }
+   }
+  }
+ },
+ "restart_tracker": {
+  "values": {
+   "cli": true
+  },
+  "schema": {
+   "properties": {
+    "cli": {
+     "type": "boolean"
+    }
+   }
+  }
+ },
+ "rtc_manager": {
+  "values": {
+   "enabled": true,
+   "sntp": true,
+   "cli": true,
+   "sync_interval_h": 24,
+   "ntp_server": "pool.ntp.org",
+   "ntp_server2": ""
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "sntp": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "sync_interval_h": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 168
+    },
+    "ntp_server": {
+     "type": "string"
+    },
+    "ntp_server2": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ "script_engine": {
+  "values": {
+   "enabled": false,
+   "allow_reflash": false,
+   "cli": true,
+   "max_runtime_ms": 10000
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "allow_reflash": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "max_runtime_ms": {
+     "type": "integer",
+     "minimum": 100,
+     "maximum": 120000
+    }
+   }
+  }
+ },
+ "sleep_manager": {
+  "values": {
+   "enabled": false,
+   "periodic_wakeup": false,
+   "cli": true,
+   "sleep_mv": 13100,
+   "sleep_delay_min": 3,
+   "wakeup_interval_min": 30
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "periodic_wakeup": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "sleep_mv": {
+     "type": "integer",
+     "minimum": 8000,
+     "maximum": 15000
+    },
+    "sleep_delay_min": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 720
+    },
+    "wakeup_interval_min": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 1440
+    }
+   }
+  }
+ },
+ "socket_manager": {
+  "values": {
+   "enabled": false,
+   "port": 3333,
+   "max_clients": 2,
+   "keepalive_s": 30,
+   "name": "",
+   "servers": []
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "port": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 65535
+    },
+    "max_clients": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 4
+    },
+    "keepalive_s": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 600
+    },
+    "name": {
+     "type": "string"
+    },
+    "servers": {
+     "type": "array",
+     "items": {}
+    }
+   }
+  }
+ },
+ "uds_manager": {
+  "values": {
+   "cli": true,
+   "backend": "auto",
+   "p2_ms": 250,
+   "p2star_ms": 5000,
+   "tester_present_ms": 2000
+  },
+  "schema": {
+   "properties": {
+    "cli": {
+     "type": "boolean"
+    },
+    "backend": {
+     "type": "string",
+     "enum": [
+      "auto",
+      "obd_chip",
+      "elm327",
+      "isotp"
+     ]
+    },
+    "p2_ms": {
+     "type": "integer",
+     "minimum": 50,
+     "maximum": 5000
+    },
+    "p2star_ms": {
+     "type": "integer",
+     "minimum": 500,
+     "maximum": 30000
+    },
+    "tester_present_ms": {
+     "type": "integer",
+     "minimum": 500,
+     "maximum": 10000
+    }
+   }
+  }
+ },
+ "usb_acm_cli": {
+  "values": {
+   "enabled": false,
+   "cli": true
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    }
+   }
+  }
+ },
+ "usb_host_manager": {
+  "values": {
+   "enabled": false,
+   "prefer_usb_route": false,
+   "cli": true,
+   "role": "host",
+   "device_class": "ncm",
+   "ip_mode": "dhcp",
+   "static_ip": "",
+   "static_netmask": "255.255.255.0",
+   "static_gw": ""
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "prefer_usb_route": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "role": {
+     "type": "string",
+     "enum": [
+      "host",
+      "device"
+     ]
+    },
+    "device_class": {
+     "type": "string",
+     "enum": [
+      "ncm",
+      "rndis",
+      "cdc"
+     ]
+    },
+    "ip_mode": {
+     "type": "string",
+     "enum": [
+      "dhcp",
+      "static"
+     ]
+    },
+    "static_ip": {
+     "type": "string"
+    },
+    "static_netmask": {
+     "type": "string"
+    },
+    "static_gw": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ "vpn_manager": {
+  "values": {
+   "enabled": false,
+   "default_route": false,
+   "cli": true,
+   "type": "wireguard",
+   "port": 51820,
+   "keepalive_s": 25,
+   "ts_auth_key": "",
+   "ts_device_name": "",
+   "ts_control_url": "",
+   "private_key": "",
+   "peer_public_key": "",
+   "preshared_key": "",
+   "address": "",
+   "allowed_ip": "0.0.0.0",
+   "allowed_ip_mask": "0.0.0.0",
+   "endpoint": "",
+   "dns": ""
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "default_route": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "type": {
+     "type": "string",
+     "enum": [
+      "wireguard",
+      "tailscale"
+     ]
+    },
+    "port": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 65535
+    },
+    "keepalive_s": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 3600
+    },
+    "ts_auth_key": {
+     "type": "string"
+    },
+    "ts_device_name": {
+     "type": "string"
+    },
+    "ts_control_url": {
+     "type": "string"
+    },
+    "private_key": {
+     "type": "string"
+    },
+    "peer_public_key": {
+     "type": "string"
+    },
+    "preshared_key": {
+     "type": "string"
+    },
+    "address": {
+     "type": "string"
+    },
+    "allowed_ip": {
+     "type": "string"
+    },
+    "allowed_ip_mask": {
+     "type": "string"
+    },
+    "endpoint": {
+     "type": "string"
+    },
+    "dns": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ "websocket_manager": {
+  "values": {
+   "enabled": false,
+   "mode": "binary",
+   "max_clients": 2,
+   "name": "",
+   "path": "/ws/",
+   "channels": []
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "mode": {
+     "type": "string",
+     "enum": [
+      "binary",
+      "text"
+     ]
+    },
+    "max_clients": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 4
+    },
+    "name": {
+     "type": "string"
+    },
+    "path": {
+     "type": "string"
+    },
+    "channels": {
+     "type": "array",
+     "items": {}
+    }
+   }
+  }
+ },
+ "wifi_manager": {
+  "values": {
+   "sta_trusted": true,
+   "sta_auto_reconnect": true,
+   "fallback1_trusted": true,
+   "fallback2_trusted": true,
+   "fallback3_trusted": true,
+   "fallback4_trusted": true,
+   "fallback5_trusted": true,
+   "ap_auto_disable": false,
+   "ap_hidden": false,
+   "cli": true,
+   "mode": "ap",
+   "sta_ip_mode": "dhcp",
+   "fallback1_ip_mode": "dhcp",
+   "fallback2_ip_mode": "dhcp",
+   "fallback3_ip_mode": "dhcp",
+   "fallback4_ip_mode": "dhcp",
+   "fallback5_ip_mode": "dhcp",
+   "ap_bandwidth": "ht20",
+   "ap_auth": "auto",
+   "power_save": "none",
+   "wifi_ram_profile": "full",
+   "sta_max_retry": -1,
+   "ap_channel": 6,
+   "ap_max_connections": 4,
+   "sta_roam_interval_s": 300,
+   "wifi_static_rx": 10,
+   "wifi_static_tx": 8,
+   "wifi_cache_tx": 32,
+   "sta_ssid": "",
+   "sta_password": "",
+   "hostname": "",
+   "sta_static_ip": "",
+   "sta_static_netmask": "255.255.255.0",
+   "sta_static_gw": "",
+   "sta_dns": "",
+   "fallback1_static_ip": "",
+   "fallback1_static_netmask": "255.255.255.0",
+   "fallback1_static_gw": "",
+   "fallback2_static_ip": "",
+   "fallback2_static_netmask": "255.255.255.0",
+   "fallback2_static_gw": "",
+   "fallback3_static_ip": "",
+   "fallback3_static_netmask": "255.255.255.0",
+   "fallback3_static_gw": "",
+   "fallback4_static_ip": "",
+   "fallback4_static_netmask": "255.255.255.0",
+   "fallback4_static_gw": "",
+   "fallback5_static_ip": "",
+   "fallback5_static_netmask": "255.255.255.0",
+   "fallback5_static_gw": "",
+   "fallback1_ssid": "",
+   "fallback1_password": "",
+   "fallback2_ssid": "",
+   "fallback2_password": "",
+   "fallback3_ssid": "",
+   "fallback3_password": "",
+   "fallback4_ssid": "",
+   "fallback4_password": "",
+   "fallback5_ssid": "",
+   "fallback5_password": "",
+   "ap_ssid": "",
+   "ap_ip": "192.168.80.1"
+  },
+  "schema": {
+   "properties": {
+    "sta_trusted": {
+     "type": "boolean"
+    },
+    "sta_auto_reconnect": {
+     "type": "boolean"
+    },
+    "fallback1_trusted": {
+     "type": "boolean"
+    },
+    "fallback2_trusted": {
+     "type": "boolean"
+    },
+    "fallback3_trusted": {
+     "type": "boolean"
+    },
+    "fallback4_trusted": {
+     "type": "boolean"
+    },
+    "fallback5_trusted": {
+     "type": "boolean"
+    },
+    "ap_auto_disable": {
+     "type": "boolean"
+    },
+    "ap_hidden": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "mode": {
+     "type": "string",
+     "enum": [
+      "off",
+      "sta",
+      "ap",
+      "apsta"
+     ]
+    },
+    "sta_ip_mode": {
+     "type": "string",
+     "enum": [
+      "dhcp",
+      "static"
+     ]
+    },
+    "fallback1_ip_mode": {
+     "type": "string",
+     "enum": [
+      "dhcp",
+      "static"
+     ]
+    },
+    "fallback2_ip_mode": {
+     "type": "string",
+     "enum": [
+      "dhcp",
+      "static"
+     ]
+    },
+    "fallback3_ip_mode": {
+     "type": "string",
+     "enum": [
+      "dhcp",
+      "static"
+     ]
+    },
+    "fallback4_ip_mode": {
+     "type": "string",
+     "enum": [
+      "dhcp",
+      "static"
+     ]
+    },
+    "fallback5_ip_mode": {
+     "type": "string",
+     "enum": [
+      "dhcp",
+      "static"
+     ]
+    },
+    "ap_bandwidth": {
+     "type": "string",
+     "enum": [
+      "ht20",
+      "ht40"
+     ]
+    },
+    "ap_auth": {
+     "type": "string",
+     "enum": [
+      "auto",
+      "open",
+      "wpa2",
+      "wpa2wpa3",
+      "wpa3"
+     ]
+    },
+    "power_save": {
+     "type": "string",
+     "enum": [
+      "none",
+      "min",
+      "max"
+     ]
+    },
+    "wifi_ram_profile": {
+     "type": "string",
+     "enum": [
+      "full",
+      "lean",
+      "custom"
+     ]
+    },
+    "sta_max_retry": {
+     "type": "integer",
+     "minimum": -1,
+     "maximum": 1000
+    },
+    "ap_channel": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 13
+    },
+    "ap_max_connections": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 10
+    },
+    "sta_roam_interval_s": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 86400
+    },
+    "wifi_static_rx": {
+     "type": "integer",
+     "minimum": 2,
+     "maximum": 25
+    },
+    "wifi_static_tx": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 64
+    },
+    "wifi_cache_tx": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 128
+    },
+    "sta_ssid": {
+     "type": "string"
+    },
+    "sta_password": {
+     "type": "string"
+    },
+    "hostname": {
+     "type": "string"
+    },
+    "sta_static_ip": {
+     "type": "string"
+    },
+    "sta_static_netmask": {
+     "type": "string"
+    },
+    "sta_static_gw": {
+     "type": "string"
+    },
+    "sta_dns": {
+     "type": "string"
+    },
+    "fallback1_static_ip": {
+     "type": "string"
+    },
+    "fallback1_static_netmask": {
+     "type": "string"
+    },
+    "fallback1_static_gw": {
+     "type": "string"
+    },
+    "fallback2_static_ip": {
+     "type": "string"
+    },
+    "fallback2_static_netmask": {
+     "type": "string"
+    },
+    "fallback2_static_gw": {
+     "type": "string"
+    },
+    "fallback3_static_ip": {
+     "type": "string"
+    },
+    "fallback3_static_netmask": {
+     "type": "string"
+    },
+    "fallback3_static_gw": {
+     "type": "string"
+    },
+    "fallback4_static_ip": {
+     "type": "string"
+    },
+    "fallback4_static_netmask": {
+     "type": "string"
+    },
+    "fallback4_static_gw": {
+     "type": "string"
+    },
+    "fallback5_static_ip": {
+     "type": "string"
+    },
+    "fallback5_static_netmask": {
+     "type": "string"
+    },
+    "fallback5_static_gw": {
+     "type": "string"
+    },
+    "fallback1_ssid": {
+     "type": "string"
+    },
+    "fallback1_password": {
+     "type": "string"
+    },
+    "fallback2_ssid": {
+     "type": "string"
+    },
+    "fallback2_password": {
+     "type": "string"
+    },
+    "fallback3_ssid": {
+     "type": "string"
+    },
+    "fallback3_password": {
+     "type": "string"
+    },
+    "fallback4_ssid": {
+     "type": "string"
+    },
+    "fallback4_password": {
+     "type": "string"
+    },
+    "fallback5_ssid": {
+     "type": "string"
+    },
+    "fallback5_password": {
+     "type": "string"
+    },
+    "ap_ssid": {
+     "type": "string"
+    },
+    "ap_ip": {
+     "type": "string"
+    }
+   }
+  }
+ }
+}

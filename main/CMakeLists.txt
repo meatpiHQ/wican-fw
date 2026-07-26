@@ -1,115 +1,31 @@
-# Component CMakeLists.txt configuration
-# See the ESP-IDF programming guide for detailed documentation
-
-# Define source files
-set(srcs
-    "main.c"
-    "comm_server.c"
-    "config_server.c"
-    "realdash.c"
-    "slcan.c"
-    "can.c"
-    "ble.c"
-    "wifi_network.c"
-    "gvret.c"
-    "wc_uart.c"
-    "mqtt.c"
-    "sleep_mode.c"
-    "expression_parser.c"
-    "led.c"
-    "obd.c"
-    "wusb3801.c"
-    "wc_mdns.c"
-    "wc_timer.c"
-    "sdcard.c"
-    "icm42670.c"
-    "imu.c"
-    "rtcm.c"
-    "console.c"
-    "hw_config.c"
-    "dev_status.c"
-    "obd2_standard_pids.c"
-    "smartconnect.c"
-    "vehicle.c"
-    "wifi_mgr.c"
-    "filesystem.c"
-    "safemode.c"
-    "multipart_upload.c"
-    "sync_sys_time.c"
-    "config_mode.c"
-)
-
-# Define required components
-set(requires
-    esp_timer
-    esp_wifi
-    nvs_flash
-    fatfs
-    vfs
-    driver
-    esp_driver_uart
-    esp-tls
-    esp_adc
-    esp_eth
-    log
-    app_update
-    esp_http_server
-    bt
-    spiffs
-    freertos
-    mqtt
-    espressif__cjson
-    wear_levelling
-    esp_http_client
-    spi_flash
-    obd_logger
-    https_client_mgr
-    unity
-    cmdline
-    zorxx__multipart-parser
-    debug_logs
-    cert_manager
-    vpn_manager
-    autopid
-    ha_webhooks
-    wican_common
-    ws_server
-    restart_tracker
-)
-
-# IDF 6.0 moved the USB CDC-ACM ROM console VFS (esp_vfs_cdcacm.h) out of
-# esp_vfs_console into its own component, which does not exist on IDF 5.x.
-if(${IDF_VERSION_MAJOR} GREATER_EQUAL 6)
-    list(APPEND requires esp_usb_cdc_rom_console)
-endif()
-
-# Register the component
 idf_component_register(
-    SRCS 
-        "console.c"
-        "rtcm.c"
-        "usb_host.cpp"
-        "ftp.c"
-        "elm327.c"
-        "obd.c"
-        "wusb3801.c"
-        "${srcs}"
-        INCLUDE_DIRS "." 
-        INCLUDE_DIRS        # Public include directories
-        PRIV_INCLUDE_DIRS   # Private include directories
-        REQUIRES "${requires}"
-        PRIV_REQUIRES       spi_flash # Private requirements
-        EMBED_FILES 
-        "web/src/homepage.html"
-        "web/src/dashboard.html"
-        "web/src/dashboard.js"
-        "web/src/lucide_icons.js"
-        "web/src/main.js"
-		"web/src/ws_client.js"
-		"web/src/terminal.js"
-        "web/src/dashboard_live.js"
-        "web/safemode.html"
-        # "obd_fw/V2.3.18.txt"
-        "obd_fw/V2.3.22.txt"
-        "logo.txt"
+    SRCS "main.c"
+         "main_bench.c"
+         "main_boot.c"
+         "main_cli.c"
+         "main_glue.c"
+         "main_heap.c"
+         "main_safemode.c"
+         "main_sleep.c"
+    INCLUDE_DIRS "."
+    EMBED_FILES "web/safemode.html"
+    REQUIRES api_http autopid ha_webhooks battery_monitor ble_manager bridge_manager
+             bridge_endpoints
+             can_manager ext_manager uds_manager script_engine
+             usb_acm_cli j2534_server
+             data_logger event_manager
+             cert_manager cmdline_manager dev_status_manager
+             external_storage filesystem http_client_manager
+             http_server_manager i2c_bus
+             imu_manager interface_manager iperf_manager led_manager
+             log_manager log_sinks mdns_manager
+             mqtt_can mqtt_manager obd_chip obd_gate ota_manager
+             restart_tracker rtc_manager settings_manager socket_manager
+             sleep_manager usb_host_manager vpn_manager
+             websocket_manager wifi_manager esp_driver_uart esp_netif
+             web_ui_v2
+             translator_slcan translator_realdash translator_gvret
+             esp_timer nvs_flash app_update spi_flash
+             button_manager multipart_upload esp_wifi esp_http_server
+             esp_partition esp_driver_gpio
 )

@@ -107,4 +107,4 @@ WiCAN-USB can also be used as a USB-to-CAN adapter when Wi-Fi connectivity is no
 
 ---
 
-© 2024 meatPi Electronics | www.meatpi.com | PO Box 5005 Clayton, VIC 3168, Australia
+© 2024 MeatPi Electronics | www.meatpi.com | PO Box 5005 Clayton, VIC 3168, Australia

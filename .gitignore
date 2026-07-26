@@ -1,5 +1,14 @@
 build/
 esp_idf_components/
+
+# clang-tidy static analysis (idf.py -B build_clang clang-check)
+build_clang/
+# public-shape verification builds (idf.py -B build_public, no pack overlay)
+build_public/
+# local dev tooling shim (dev machines only)
+test.ps1
+warnings.txt
+html_report/
 # Prerequisites
 *.d
 
@@ -62,8 +71,16 @@ docs/node_modules
 
 #managed components
 managed_components/
+
+# meatpi-components checkout (own git repo, auto-cloned by the root
+# CMakeLists — never commit it into this tree)
+components/meatpi/
 .vscode/
 
 # Clangd Cache
 .cache/
-tools/https_test_server/test_certs/
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+

@@ -1,0 +1,15 @@
+{
+  "name": "webui_preview",
+  "version": "1.0.0",
+  "main": "mock_api.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "jsdom": "^29.1.1"
+  }
+}

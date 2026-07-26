@@ -1,74 +1,92 @@
-# The following lines of boilerplate have to be in your project's
-# CMakeLists in this exact order for cmake to work correctly
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.16)
 
-include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-
-set(WICAN_V210 1)
-set(WICAN_V300 2)
-set(WICAN_USB_V100 3)
-set(WICAN_PRO 4)
-
-set(WICAN_V210_STR "OBD")
-set(WICAN_V300_STR "OBD")
-set(WICAN_USB_V100_STR "USB")
-set(WICAN_PRO_STR "OBD-PRO")
-
-# Set these without quotes, as they're string literals
-set(WICAN_V210_PREF "obd")
-set(WICAN_V300_PREF "obd")
-set(WICAN_USB_V100_PREF "usb")
-set(WICAN_PRO_PREF "obd_pro")
-
-add_definitions(-DWICAN_V210=${WICAN_V210})
-add_definitions(-DWICAN_V300=${WICAN_V300})
-add_definitions(-DWICAN_USB_V100=${WICAN_USB_V100})
-add_definitions(-DWICAN_PRO=${WICAN_PRO})
-
-add_definitions(-DWICAN_V210_STR="${WICAN_V210_STR}")
-add_definitions(-DWICAN_V300_STR="${WICAN_V300_STR}")
-add_definitions(-DWICAN_USB_V100_STR="${WICAN_USB_V100_STR}")
-add_definitions(-DWICAN_PRO_STR="${WICAN_PRO_STR}")
-
-execute_process(
-    COMMAND git describe --tags --always --dirty
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    OUTPUT_VARIABLE GIT_SHA
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-
-set(GIT_SHA1 "${GIT_SHA}")
-string(REPLACE "." "" GIT_SHA "${GIT_SHA}")
-
-add_definitions(-DGIT_SHA="${GIT_SHA1}")
-
-# Uncomment and use one of the following as needed
-# set(HARDWARE_VER ${WICAN_V210})
-# set(HARDWARE_VER ${WICAN_V300})
-# set(HARDWARE_VER ${WICAN_USB_V100})
-set(HARDWARE_VER ${WICAN_PRO})
-
-add_definitions(-DHARDWARE_VER=${HARDWARE_VER})
-
-set(PROJECT_PREF "wican-fw")
-
-# Set HW_PREF based on HARDWARE_VER
-if (HARDWARE_VER EQUAL ${WICAN_PRO})
-    set(HW_PREF "${WICAN_PRO_PREF}")
-    set(HW_VER "${WICAN_PRO_STR}")
-elseif (HARDWARE_VER EQUAL ${WICAN_USB_V100})
-    set(HW_PREF "${WICAN_USB_V100_PREF}")
-    set(HW_VER "${WICAN_USB_V100_STR}")
-elseif (HARDWARE_VER EQUAL ${WICAN_V210})
-    set(HW_PREF "${WICAN_V210_PREF}")
-    set(HW_VER "${WICAN_V210_STR}")
+# Components live in the meatpi-components repo
+# (github.com/meatpiHQ/meatpi-components). Clone it next to this
+# checkout, or point the MEATPI_COMPONENTS_PATH environment variable at
+# its components/ directory. The components/ dir in this repo holds
+# only non-component files (docs, legacy reference).
+if(DEFINED ENV{MEATPI_COMPONENTS_PATH})
+    file(TO_CMAKE_PATH "$ENV{MEATPI_COMPONENTS_PATH}" MEATPI_COMPONENTS_PATH)
+    if(NOT EXISTS "${MEATPI_COMPONENTS_PATH}")
+        message(FATAL_ERROR "MEATPI_COMPONENTS_PATH does not exist: "
+                            "${MEATPI_COMPONENTS_PATH}")
+    endif()
 else()
-    set(HW_PREF "${WICAN_V300_PREF}")
-    set(HW_VER "${WICAN_V300_STR}")
+    set(MEATPI_COMPONENTS_PATH "")
+    foreach(_cand
+            "${CMAKE_CURRENT_LIST_DIR}/components/meatpi/components"
+            "${CMAKE_CURRENT_LIST_DIR}/../meatpi-components/components"
+            "${CMAKE_CURRENT_LIST_DIR}/../../wican-fw-dev/meatpi-components/components")
+        get_filename_component(_cand "${_cand}" ABSOLUTE)
+        if(EXISTS "${_cand}")
+            set(MEATPI_COMPONENTS_PATH "${_cand}")
+            break()
+        endif()
+    endforeach()
+    if(NOT MEATPI_COMPONENTS_PATH)
+        # Not cloned yet — fetch it INTO this checkout (self-contained;
+        # components/meatpi/ is gitignored) so the search finds it on
+        # every future configure.
+        set(_meatpi_dest "${CMAKE_CURRENT_LIST_DIR}/components/meatpi")
+        set(_meatpi_url "https://github.com/meatpiHQ/meatpi-components.git")
+        if(DEFINED ENV{MEATPI_COMPONENTS_GIT_URL})
+            set(_meatpi_url "$ENV{MEATPI_COMPONENTS_GIT_URL}")
+        endif()
+        message(STATUS "meatpi-components not found — cloning "
+                       "${_meatpi_url} into ${_meatpi_dest}")
+        execute_process(
+            COMMAND ${CMAKE_COMMAND} -E env GIT_TERMINAL_PROMPT=0
+                    git clone "${_meatpi_url}" "${_meatpi_dest}"
+            RESULT_VARIABLE _meatpi_clone_rc)
+        if(_meatpi_clone_rc EQUAL 0 AND EXISTS "${_meatpi_dest}/components")
+            set(MEATPI_COMPONENTS_PATH "${_meatpi_dest}/components")
+        else()
+            message(FATAL_ERROR
+                "meatpi-components could not be cloned automatically — "
+                "clone github.com/meatpiHQ/meatpi-components to "
+                "components/meatpi in this checkout (or next to it), or "
+                "set MEATPI_COMPONENTS_PATH to its components/ directory")
+        endif()
+    endif()
+endif()
+message(STATUS "MeatPi components: ${MEATPI_COMPONENTS_PATH}")
+list(APPEND EXTRA_COMPONENT_DIRS "${MEATPI_COMPONENTS_PATH}")
+
+# Sibling component packs: any meatpi-components-<suffix> repo cloned
+# next to the resolved base repo is picked up as an overlay
+# automatically (appended AFTER the base, so a pack component with the
+# same name overrides the base one — e.g. its ext_manager). Purely
+# optional: a stock checkout has none and this is a no-op.
+get_filename_component(_meatpi_repos_dir
+                       "${MEATPI_COMPONENTS_PATH}/../.." ABSOLUTE)
+file(GLOB _meatpi_packs "${_meatpi_repos_dir}/meatpi-components-*/components")
+list(SORT _meatpi_packs)
+foreach(_dir IN LISTS _meatpi_packs)
+    list(APPEND EXTRA_COMPONENT_DIRS "${_dir}")
+    message(STATUS "Component pack overlay: ${_dir}")
+endforeach()
+
+# Optional component overlays: extra component dirs appended after the
+# bundled set (semicolon-separated). A later dir overrides an earlier
+# component with the same name — useful for local experiments or
+# alternative component implementations. Captured at configure time;
+# after changing it run `idf.py reconfigure` (or delete build/).
+if(DEFINED ENV{MEATPI_COMPONENT_OVERLAYS})
+    file(TO_CMAKE_PATH "$ENV{MEATPI_COMPONENT_OVERLAYS}" _meatpi_overlays)
+    foreach(_dir IN LISTS _meatpi_overlays)
+        if(NOT EXISTS "${_dir}")
+            message(FATAL_ERROR "component overlay dir does not exist: ${_dir}")
+        endif()
+        list(APPEND EXTRA_COMPONENT_DIRS "${_dir}")
+        message(STATUS "Component overlay: ${_dir}")
+    endforeach()
 endif()
 
-add_definitions(-DHARDWARE_VERSION="${HW_VER}")
+include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+project(wican-fw)
 
-# Form the project binary name
-set(PRJ_BIN "${PROJECT_PREF}_${HW_PREF}_${GIT_SHA}")
-project("${PRJ_BIN}")
+# Per-function stack-frame sizes (.su files next to every .obj) for the
+# stack audit (tools/stack_audit.py — TESTING.md "stack audit"). Build-time
+# artifact only; zero runtime cost. Motivated by the 2026-07-22 silent
+# PSRAM-stack overflow (autopid DTC job task).
+idf_build_set_property(COMPILE_OPTIONS "-fstack-usage" APPEND)
