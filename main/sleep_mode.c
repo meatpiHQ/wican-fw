@@ -847,6 +847,8 @@ void light_sleep_task(void *pvParameters)
     static wc_timer_t sleep_timer;
     static wc_timer_t wakeup_timer;
 	static uint32_t sleep_time;
+	static uint32_t first_sleep_time;
+	bool seen_charging = false;
 	static int8_t periodic_wakeup;
 	static uint32_t wakeup_interval;
 	static wc_timer_t periodic_wakeup_timer;
@@ -872,6 +874,16 @@ void light_sleep_task(void *pvParameters)
 	else
 	{
 		sleep_time *= 60000; //change min to ms
+	}
+
+	if(config_server_get_first_sleep_time(&first_sleep_time) == -1)
+	{
+		first_sleep_time = sleep_time; //fall back to the normal sleep delay
+		ESP_LOGW(TAG, "Failed to get first sleep time, using normal sleep time");
+	}
+	else
+	{
+		first_sleep_time *= 60000; //change min to ms
 	}
 
 	periodic_wakeup = config_server_get_periodic_wakeup();
@@ -920,6 +932,12 @@ void light_sleep_task(void *pvParameters)
             if(ret == ESP_OK)
             {
                 update_battery_voltage(&battery_voltage);
+                if (battery_voltage >= wakeup_voltage)
+                {
+                    // Alternator/engine seen running this power cycle. Used to
+                    // give the first go-to-sleep a longer grace period.
+                    seen_charging = true;
+                }
                 if (battery_voltage < sleep_voltage)
                 {
                     dev_status_clear_bits(DEV_WAKE_VOLTAGE_OK_BIT);
@@ -941,7 +959,10 @@ void light_sleep_task(void *pvParameters)
 					{
                         ESP_LOGW(TAG, "Battery voltage low (%.2fV), starting low voltage timer", battery_voltage);
                         current_state = STATE_LOW_VOLTAGE;
-                        wc_timer_set(&sleep_timer, sleep_time);
+                        // Use the longer "first sleep" grace period on the first
+                        // shutdown after driving; the short delay on later
+                        // periodic-wake cycles while parked.
+                        wc_timer_set(&sleep_timer, seen_charging ? first_sleep_time : sleep_time);
                     }
                     break;
 

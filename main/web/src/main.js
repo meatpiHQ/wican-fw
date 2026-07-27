@@ -3487,6 +3487,7 @@ async function postConfig() {
     obj["periodic_wakeup"] = document.getElementById("periodic_wakeup").value;
     obj["sleep_volt"] = document.getElementById("sleep_volt").value;
     obj["sleep_time"] = document.getElementById("sleep_time").value;
+    obj["first_sleep_time"] = document.getElementById("first_sleep_time").value;
     obj["wakeup_interval"] = document.getElementById("wakeup_interval").value;
     obj["batt_alert"] = document.getElementById("batt_alert").value;
     obj["batt_alert_ssid"] = document.getElementById("batt_alert_ssid").value;
@@ -4121,6 +4122,10 @@ xhttp.onload = async function() {
         document.getElementById("sleep_volt_value").textContent = obj.sleep_volt;
         document.getElementById("sleep_time").value = obj.sleep_time;
         document.getElementById('sleep_time_value').textContent = obj.sleep_time;
+        if (obj.first_sleep_time !== undefined) {
+            document.getElementById("first_sleep_time").value = obj.first_sleep_time;
+            document.getElementById('first_sleep_time_value').textContent = obj.first_sleep_time;
+        }
         document.getElementById("wakeup_interval").value = obj.wakeup_interval;
         document.getElementById('wakeup_interval_value').textContent = obj.wakeup_interval;
         document.getElementById("batt_alert").value = "disable";

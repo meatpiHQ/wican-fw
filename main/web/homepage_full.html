@@ -1756,15 +1756,29 @@
                         <span id="sleep_volt_value">13.2</span>V
                     </td>
                 </tr>
+                <tr id="first_sleep_time_row">
+                    <td>First sleep after:</td>
+                    <td class="slider-container">
+                        <input type="range"
+                               id="first_sleep_time"
+                               name="first_sleep_time"
+                               value="30"
+                               min="1"
+                               max="60"
+                               step="1"
+                               oninput="document.getElementById('first_sleep_time_value').textContent = this.value;submit_enable();">
+                        <span id="first_sleep_time_value">30</span>min
+                    </td>
+                </tr>
                 <tr>
                     <td>Sleep After:</td>
                     <td class="slider-container">
-                        <input type="range" 
-                               id="sleep_time" 
-                               name="sleep_time" 
-                               value="5" 
-                               min="1" 
-                               max="30" 
+                        <input type="range"
+                               id="sleep_time"
+                               name="sleep_time"
+                               value="5"
+                               min="1"
+                               max="30"
                                step="1"
                                oninput="document.getElementById('sleep_time_value').textContent = this.value;submit_enable();">
                         <span id="sleep_time_value">5</span>min
