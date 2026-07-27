@@ -129,6 +129,7 @@ typedef struct _device_config
 	char sleep_volt[10];
 	char wakeup_volt[10];
 	char sleep_time[32];
+	char first_sleep_time[32];
 	char wakeup_time[32];
 	char periodic_wakeup[32];
 	char wakeup_interval[32];
@@ -236,6 +237,7 @@ int8_t config_server_mqtt_tx_en_config(void);
 int8_t config_server_mqtt_rx_en_config(void);
 int8_t config_server_get_wakeup_volt(float *wakeup_volt);
 int8_t config_server_get_sleep_time(uint32_t *sleep_time);
+int8_t config_server_get_first_sleep_time(uint32_t *first_sleep_time);
 int8_t config_server_get_wakeup_time(uint32_t *wakeup_time);
 wifi_security_t config_server_get_sta_security(void);
 int8_t config_server_get_logger_config(void);
