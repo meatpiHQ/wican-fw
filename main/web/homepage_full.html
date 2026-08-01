@@ -1794,6 +1794,18 @@
                     </td>
                 </tr>
                 <tr>
+                    <td>Car On PID Parameter:</td>
+                    <td>
+                        <input type="text"
+                               id="car_on_param"
+                               name="car_on_param"
+                               placeholder="e.g. LDC_A (leave empty to disable)"
+                               style="width:100%;box-sizing:border-box;"
+                               oninput="submit_enable();">
+                        <small style="color:#6c757d;">Autopid parameter name whose value &gt; 0.5 indicates car is "ON/READY" — suppresses sleep while active.</small>
+                    </td>
+                </tr>
+                <tr>
                     <td>Battery Alert:</td>
                     <td>
                         <select name="batt_alert" id="batt_alert" onchange="submit_enable();">
