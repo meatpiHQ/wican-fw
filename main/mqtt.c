@@ -391,6 +391,7 @@ static void mqtt_task(void *pvParameters)
 	mqtt_can_message_t tx_frame;
 	char mqtt_topic[64];
     char mqtt_elm327_topic[64];
+    char mqtt_canflt_topic[100];
 	uint64_t can_data = 0;
 
 	// sprintf(mqtt_topic, "wican/%s/can/rx", device_id);
@@ -475,6 +476,13 @@ static void mqtt_task(void *pvParameters)
                             sprintf(json_buffer, "{\"%s\": %lf}", mqtt_canflt_values[found_index].name, expression_result);
 
                             mqtt_publish(mqtt_topic, json_buffer, 0, 0, 0);
+
+                            if(config_server_mqtt_rx_individual_en())
+                            {
+                                sprintf(mqtt_canflt_topic, "%s/%s", mqtt_topic, mqtt_canflt_values[found_index].name);
+                                sprintf(tmp, "%lf", expression_result);
+                                mqtt_publish(mqtt_canflt_topic, tmp, 0, 0, (config_server_mqtt_rx_individual_retain()==1));
+                            }
                         }
                         else
                         {
