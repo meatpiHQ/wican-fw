@@ -1,0 +1,20 @@
+{
+    "car_model": "Honda: WN7",
+    "init": "ATSP7;ATST96;",
+    "pids": [
+        {
+            "pid": "22A8709",
+            "pid_init": "ATSHDAD4F1;",
+            "parameters": {
+                "SOC": "[B59:B60]*0.11266+2.457"
+            }
+        },
+        {
+            "pid": "22F0122",
+            "pid_init": "ATSHDADEF1;",
+            "parameters": {
+                "ODOMETER": "[B6:B7]*6553.6+[B9:B10]*0.1"
+            }
+        }
+    ]
+}
