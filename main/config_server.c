@@ -74,6 +74,8 @@
 #include "wc_mdns.h"
 #include "hw_config.h"
 #include "ha_webhooks.h"
+#include "precondition.h"
+#include "esp_timer.h"
 
 #define WIFI_CONNECTED_BIT			BIT0
 #define WS_CONNECTED_BIT			BIT1
@@ -969,6 +971,21 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 		cJSON_AddStringToObject(root, "batt_alert_port", device_config.batt_alert_port);
 		cJSON_AddStringToObject(root, "batt_mqtt_user", device_config.batt_mqtt_user);
 		cJSON_AddStringToObject(root, "batt_mqtt_pass", device_config.batt_mqtt_pass);
+	}
+
+	precondition_temperature_t temperature;
+	
+	if (precondition_get_battery_temperature(&temperature)) {
+        cJSON_AddBoolToObject(root, "battery_temp_valid", true);
+        cJSON_AddNumberToObject(root, "battery_temp_min_c", temperature.min_c);
+        cJSON_AddNumberToObject(root, "battery_temp_max_c", temperature.max_c);
+        cJSON_AddNumberToObject(
+            root,
+            "battery_temp_age_ms",
+            (esp_timer_get_time() - temperature.updated_at_us) / 1000
+        );
+	} else {
+        cJSON_AddBoolToObject(root, "battery_temp_valid", false);
 	}
 
 	{

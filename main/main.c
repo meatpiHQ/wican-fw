@@ -485,6 +485,8 @@ void app_main(void)
     xMsg_Tx_Queue = xQueueCreate(128, sizeof( xdev_buffer) );
     xmsg_ws_tx_queue = xQueueCreate(8, sizeof( xdev_buffer) );
 
+    precondition_init();
+
 	esp_ota_mark_app_valid_cancel_rollback();
 //    xmsg_obd_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
 

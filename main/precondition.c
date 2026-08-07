@@ -6,6 +6,8 @@
 #include "can.h"
 #include "precondition.h"
 #include "config_server.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 
 #define TAG __func__
 
@@ -67,6 +69,8 @@ static int64_t activation_press_start_ts = 0U;
 static bool activation_long_press_fired = false;
 // is the status frame available? false if on unknown platform, true if we at any point receive a known status frame
 static bool status_frame_available = false;
+
+static QueueHandle_t battery_temperature_queue = NULL;
 
 typedef enum {
     // frame carries the current button state: pressed while (byte & mask) == value
@@ -181,6 +185,13 @@ static bool activation_is_release(const message_payload_t *msg, const twai_messa
 #define PRECONDITION_MAX_RETRIES 4U
 #define PRECONDITION_STARTED_TIMEOUT_US 70000000U  // 70 seconds
 
+#define BATTERY_TEMPERATURE_FRAME_ID 0x152U
+#define BATTERY_TEMPERATURE_MIN_INDEX 0U
+#define BATTERY_TEMPERATURE_MAX_INDEX 1U
+#define BATTERY_TEMPERATURE_DATA_LENGTH 2U
+
+#define IS_BATTERY_TEMPERATURE_FRAME(frame_id) ((frame_id) == BATTERY_TEMPERATURE_FRAME_ID)
+
 #define CAR_BUS CAN_BUS_0
 #define HEAD_UNIT_BUS CAN_BUS_1
 
@@ -198,6 +209,11 @@ static int64_t now_us(void) {
 
 static int64_t ts_elapsed(int64_t now, int64_t old) {
     return now - old;
+}
+
+void precondition_init(void) {
+    battery_temperature_queue = xQueueCreate(1, sizeof(precondition_temperature_t));
+    configASSERT(battery_temperature_queue != NULL);
 }
 
 static void send_precondition_start_msg(uint8_t ticks_remaining) {
@@ -273,9 +289,9 @@ fwd_result_t precondition_fwd_hook(twai_message_t *to_send, can_bus_t fwd_bus) {
     }
 
     // we are currently trying to stop preconditioning and want to display the retry status.
-    if (!precondition_requested 
-            && status_frame_available 
-            && !precondition_stop_confirmed 
+    if (!precondition_requested
+            && status_frame_available
+            && !precondition_stop_confirmed
             && precondition_retries < PRECONDITION_MAX_RETRIES
             && fwd_bus == CAR_BUS) {
         int64_t now = now_us();
@@ -409,6 +425,18 @@ void precondition_can_rx_hook(twai_message_t *to_push, can_bus_t rx_bus) {
         }
     }
 
+    if (IS_BATTERY_TEMPERATURE_FRAME(to_push->identifier)
+            && rx_bus == CAR_BUS
+            && to_push->data_length_code >= BATTERY_TEMPERATURE_DATA_LENGTH) {
+        precondition_temperature_t temperature = {
+            .min_c = to_push->data[BATTERY_TEMPERATURE_MIN_INDEX],
+            .max_c = to_push->data[BATTERY_TEMPERATURE_MAX_INDEX],
+            .updated_at_us = esp_timer_get_time(),
+        };
+
+        xQueueOverwrite(battery_temperature_queue, &temperature);
+    }
+
     int8_t precon_button_type = cached_precon_button_type();
     if (precon_button_type == BUTTON_DISABLED) {
         // activation button disabled in config; don't listen for any button press
@@ -511,4 +539,12 @@ void precondition_tick(void) {
         send_precondition_stop_msg(precondition_stop_ticks_remaining);
         precondition_stop_ticks_remaining--;
     }
+}
+
+bool precondition_get_battery_temperature(precondition_temperature_t *out) {
+    if (out == NULL || battery_temperature_queue == NULL) {
+        return false;
+    }
+
+    return xQueuePeek(battery_temperature_queue, out, 0) == pdTRUE;
 }

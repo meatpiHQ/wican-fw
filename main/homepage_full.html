@@ -554,6 +554,10 @@
                     </td>
                 </tr>
                 <tr>
+                    <td>HV Battery Temperature:</td>
+                    <td><div id="battery_temp_status">Waiting for CAN data</div></td>
+                </tr>
+                <tr>
                     <td><input id="check_status_button" name="check_status_button" type="button" onclick="checkStatus()"
                             value="Check status" /></td>
                     <td>&nbsp;</td>
@@ -2505,6 +2509,17 @@ function loadAutoTable(jsonData) {
 	}
 	document.getElementById("defaultOpen").click();
 
+	function formatAge(ageMs) {
+        const seconds = Math.max(0, Math.round(ageMs / 1000));
+        if (seconds < 60) return `${seconds}s`;
+     	
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return `${minutes}m`;
+     	
+        const hours = Math.floor(minutes / 60);
+        return `${hours}h`;
+	}
+
 	function checkStatus() {
 		const xhttp = new XMLHttpRequest();
 		xhttp.onload = function() {
@@ -2546,6 +2561,11 @@ function loadAutoTable(jsonData) {
 				document.getElementById("port_type_status").innerHTML = "TCP";
 			} else if(obj.port_type == "udp") {
 				document.getElementById("port_type_status").innerHTML = "UDP";
+			}
+			if (obj.battery_temp_valid) {
+				document.getElementById("battery_temp_status").textContent = `Min: ${obj.battery_temp_min_c} °C; Max: ${obj.battery_temp_max_c} °C; (${formatAge(obj.battery_temp_age_ms)} ago)`;
+			} else {
+				document.getElementById("battery_temp_status").textContent = "Waiting for CAN data";
 			}
 			document.getElementById("port_status").innerHTML = obj.port;
 			document.getElementById("fw_version").innerHTML = obj.fw_version;
