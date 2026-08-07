@@ -1,0 +1,12 @@
+{
+  "car_model": "Hyundai: Ioniq Hybrid EV (2016-2019)",
+  "init": "ATSP6;ATAT1;ATST96;ATSH7E4;ATFCSH7E4;ATFCSD300000;ATFCSM1;",
+  "pids": [
+    {
+      "pid": "2101",
+      "parameters": {
+        "SOC": "B9/2"
+      }
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "car_model": "BYD: Atto 2/Atto 3/Yuan Plus EV/Dolphin/Seal/Seal U/Sealion/M6/eMax 7/海豚/Denza D9/Denza N7/Sealion 7 EV (EU version, only before 2024.10 update)",
+  "init": "ATSP6;ATAT1;ATST96;ATSH7E7;ATFCSH7E7;ATFCSD300000;ATFCSM1;",
+  "pids": [
+    {
+      "pid": "220005",
+      "parameters": {
+        "SOC_D": "B4"
+      }
+    },
+    {
+      "pid": "221FFE",
+      "parameters": {
+        "HV_CAPACITY": "(((B7*256)+B6)/100)"
+      }
+    },
+    {
+      "pid": "221FFC",
+      "parameters": {
+        "SOC": "((((B5*256)+B4)*100)/10000)",
+        "BATT_CAPACITY": "(((B7*256)+B6)/100)"
+      }
+    },
+    {
+      "pid": "220008",
+      "parameters": {
+        "HV_V": "((B5*256)+B4)"
+      }
+    },
+    {
+      "pid": "220009",
+      "parameters": {
+        "HV_A": "((((B5*256)+B4)*0.1)-500)"
+      }
+    }
+  ]
+}
