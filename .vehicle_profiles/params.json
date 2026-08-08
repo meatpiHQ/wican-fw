@@ -2628,6 +2628,98 @@
       "class": "temperature"
     }
   },
+  "TYRE_1_POS": {
+    "description": "Tyre 1 Position (1=FL 2=FR 3=RL 4=RR)",
+    "settings": {
+      "class": "none",
+      "unit": "none",
+      "min": "1"
+    }
+  },
+  "TYRE_1_PRESS": {
+    "description": "Tyre 1 Pressure",
+    "settings": {
+      "class": "pressure",
+      "unit": "psi",
+      "min": "0"
+    }
+  },
+  "TYRE_1_TEMP": {
+    "description": "Tyre 1 Temperature",
+    "settings": {
+      "class": "temperature",
+      "unit": "°C"
+    }
+  },
+  "TYRE_2_POS": {
+    "description": "Tyre 2 Position (1=FL 2=FR 3=RL 4=RR)",
+    "settings": {
+      "class": "none",
+      "unit": "none",
+      "min": "1"
+    }
+  },
+  "TYRE_2_PRESS": {
+    "description": "Tyre 2 Pressure",
+    "settings": {
+      "class": "pressure",
+      "unit": "psi",
+      "min": "0"
+    }
+  },
+  "TYRE_2_TEMP": {
+    "description": "Tyre 2 Temperature",
+    "settings": {
+      "class": "temperature",
+      "unit": "°C"
+    }
+  },
+  "TYRE_3_POS": {
+    "description": "Tyre 3 Position (1=FL 2=FR 3=RL 4=RR)",
+    "settings": {
+      "class": "none",
+      "unit": "none",
+      "min": "1"
+    }
+  },
+  "TYRE_3_PRESS": {
+    "description": "Tyre 3 Pressure",
+    "settings": {
+      "class": "pressure",
+      "unit": "psi",
+      "min": "0"
+    }
+  },
+  "TYRE_3_TEMP": {
+    "description": "Tyre 3 Temperature",
+    "settings": {
+      "class": "temperature",
+      "unit": "°C"
+    }
+  },
+  "TYRE_4_POS": {
+    "description": "Tyre 4 Position (1=FL 2=FR 3=RL 4=RR)",
+    "settings": {
+      "class": "none",
+      "unit": "none",
+      "min": "1"
+    }
+  },
+  "TYRE_4_PRESS": {
+    "description": "Tyre 4 Pressure",
+    "settings": {
+      "class": "pressure",
+      "unit": "psi",
+      "min": "0"
+    }
+  },
+  "TYRE_4_TEMP": {
+    "description": "Tyre 4 Temperature",
+    "settings": {
+      "class": "temperature",
+      "unit": "°C"
+    }
+  },
   "TYRE_P_FL": {
     "description": "Tyre Pressure Front Left",
     "settings": {

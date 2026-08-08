@@ -6,28 +6,28 @@
     {
       "pid": "2220212",
       "parameters": {
-        "TIRE1_POS_FL_FR_RL_RR": "B6",
-        "TIRE2_POS_FL_FR_RL_RR": "B7",
-        "TIRE3_POS_FL_FR_RL_RR": "B10",
-        "TIRE4_POS_FL_FR_RL_RR": "B11"
+        "TYRE_1_POS": "B6",
+        "TYRE_2_POS": "B7",
+        "TYRE_3_POS": "B10",
+        "TYRE_4_POS": "B11"
       }
     },
     {
       "pid": "2210053",
       "parameters": {
-        "TIRE1_PRESS": "(B7 / 4) - 7.35",
-        "TIRE2_PRESS": "(B11 / 4) - 7.35",
-        "TIRE3_PRESS": "(B13 / 4) - 7.35",
-        "TIRE4_PRESS": "(B15 / 4) - 7.35"
+        "TYRE_1_PRESS": "(B7 / 4) - 7.35",
+        "TYRE_2_PRESS": "(B11 / 4) - 7.35",
+        "TYRE_3_PRESS": "(B13 / 4) - 7.35",
+        "TYRE_4_PRESS": "(B15 / 4) - 7.35"
       }
     },
     {
       "pid": "2210042",
       "parameters": {
-        "TIRE1_TEMP": "(B6 *1.8) - 40.00",
-        "TIRE2_TEMP": "(B7 *1.8) - 40.00",
-        "TIRE3_TEMP": "(B10 *1.8) - 40.00",
-        "TIRE4_TEMP": "(B11 *1.8) - 40.00"
+        "TYRE_1_TEMP": "B6 - 40.00",
+        "TYRE_2_TEMP": "B7 - 40.00",
+        "TYRE_3_TEMP": "B10 - 40.00",
+        "TYRE_4_TEMP": "B11 - 40.00"
       }
     }
   ]
