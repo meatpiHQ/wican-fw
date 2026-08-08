@@ -98,7 +98,7 @@ def determine_class(long_name, unit):
     has_power = re.search('power', long_name)
     has_temp = re.search('temperature', long_name, flags=re.IGNORECASE)
     has_press = re.search('pressure', long_name, flags=re.IGNORECASE)
-    has_speed = re.search('pressure', long_name, flags=re.IGNORECASE)
+    has_speed = re.search('speed', long_name, flags=re.IGNORECASE)
     if(unit.casefold() == 'km' or unit.casefold() == 'mi'):
         return 'distance'
     elif(has_power or unit.casefold() == 'kw' or unit.casefold == 'w'):
@@ -111,6 +111,8 @@ def determine_class(long_name, unit):
         return 'pressure'
     elif(unit.casefold() == 'v' or has_V or has_batt or has_soc):
         return 'battery'
+    elif(unit.casefold() == 'km/h' or has_speed):
+        return 'speed'
     else:
         return 'none'
 
