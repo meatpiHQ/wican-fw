@@ -91,6 +91,7 @@ def format_shortname(short_name):
     return short_name.upper()
 
 def determine_class(long_name, unit):
+    unit_casefold = unit.casefold()
     has_batt = re.search('battery', long_name, flags=re.IGNORECASE)
     has_curr = re.search('current', long_name)
     has_soc = re.search('state of charge', long_name, flags=re.IGNORECASE)
@@ -99,19 +100,19 @@ def determine_class(long_name, unit):
     has_temp = re.search('temperature', long_name, flags=re.IGNORECASE)
     has_press = re.search('pressure', long_name, flags=re.IGNORECASE)
     has_speed = re.search('speed', long_name, flags=re.IGNORECASE)
-    if(unit.casefold() == 'km' or unit.casefold() == 'mi'):
+    if(unit_casefold == 'km' or unit_casefold == 'mi'):
         return 'distance'
-    elif(has_power or unit.casefold() == 'kw' or unit.casefold == 'w'):
+    elif(has_power or unit_casefold == 'kw' or unit_casefold == 'w'):
         return 'power'
-    elif(has_curr or unit.casefold() == 'a'):
+    elif(has_curr or unit_casefold == 'a'):
         return 'current'
-    elif(unit.casefold() == 'c' or unit.casefold == '°c' or unit.casefold() == 'f' or unit.casefold() == '°f' or has_temp):
+    elif(unit_casefold in ('c', '°c', 'f', '°f') or has_temp):
         return 'temperature'
-    elif(unit.casefold() == 'psi' or unit.casefold() == 'kpa' or has_press):
+    elif(unit_casefold == 'psi' or unit_casefold == 'kpa' or has_press):
         return 'pressure'
-    elif(unit.casefold() == 'v' or has_V or has_batt or has_soc):
+    elif(unit_casefold == 'v' or has_V or has_batt or has_soc):
         return 'battery'
-    elif(unit.casefold() == 'km/h' or has_speed):
+    elif(unit_casefold == 'km/h' or has_speed):
         return 'speed'
     else:
         return 'none'
@@ -167,35 +168,39 @@ def replace_double_letters(letters: str, expr: str, offset: int):
     return re.sub(rf"\b{letters}\b",f"B{val}",expr)
 
 
-# Main script logic
-fname = sys.argv[1]
-pids = np.loadtxt(fname,delimiter=',',dtype='str',comments='~',skiprows=1)
+def main():
+    fname = sys.argv[1]
+    pids = np.loadtxt(fname,delimiter=',',dtype='str',comments='~',skiprows=1)
 
-# Try to load mapping from params.csv in the same directory as this script
-mapping_path = str(Path(__file__).parent / 'params.csv')
-name_mapping = load_name_mapping(mapping_path)
+    # Try to load mapping from params.csv in the same directory as this script
+    mapping_path = str(Path(__file__).parent / 'params.csv')
+    name_mapping = load_name_mapping(mapping_path)
 
-pid_groups = []
-params = {}
-for line in pids:
-    if("val" in line[3] or len(line[2]) == 0):
-        continue
-    pid = line[2].lstrip('0x') 
-    pid_in_list = [group.pid == pid for group in pid_groups]
-    if(any(pid_in_list)):
-        group = np.array(pid_groups)[pid_in_list][0]
-    else:
-        group = PID_group(pid)
-        pid_groups.append(group)
-    group.add_parameter(line, params, name_mapping)
+    pid_groups = []
+    params = {}
+    for line in pids:
+        if("val" in line[3] or len(line[2]) == 0):
+            continue
+        pid = line[2].lstrip('0x')
+        pid_in_list = [group.pid == pid for group in pid_groups]
+        if(any(pid_in_list)):
+            group = np.array(pid_groups)[pid_in_list][0]
+        else:
+            group = PID_group(pid)
+            pid_groups.append(group)
+        group.add_parameter(line, params, name_mapping)
 
-json_dict = {"pids" : []}
-for group in pid_groups:
-    json_dict["pids"].append(group.make_json_dict())
+    json_dict = {"pids" : []}
+    for group in pid_groups:
+        json_dict["pids"].append(group.make_json_dict())
 
-new_fname = Path(fname).with_suffix('.json')
-new_params_fname = Path(fname).with_suffix('.params.json')
-with open(new_fname,'w') as f:
-    json.dump(json_dict, f, indent=2)
-with open(new_params_fname,'w') as f:
-    json.dump(params, f, indent=2)
+    new_fname = Path(fname).with_suffix('.json')
+    new_params_fname = Path(fname).with_suffix('.params.json')
+    with open(new_fname,'w') as f:
+        json.dump(json_dict, f, indent=2)
+    with open(new_params_fname,'w') as f:
+        json.dump(params, f, indent=2)
+
+
+if __name__ == "__main__":
+    main()
