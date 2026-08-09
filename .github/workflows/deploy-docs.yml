@@ -12,18 +12,18 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
       - run: corepack enable
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "24"
       # Pick your own package manager and build script
       - run: |
           cd docs
           npm install
           NUXT_APP_BASE_URL=/wican-fw/ npx nuxt build --preset github_pages
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: ./docs/.output/public
   # Deployment job
@@ -43,4 +43,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
