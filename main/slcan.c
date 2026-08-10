@@ -48,6 +48,7 @@
 static const char serial[] = "N43010123\r";
 static const char version[] = "V2011\r";
 static const char ack[] = "\r";
+static const char nack[] = "\a";
 static const char status[] = "F00\r";
 
 static char *slcan_buffer = NULL;
@@ -580,6 +581,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 			{
 				if(slcan_buffer[i] == '\r')
 				{
+					uint8_t tx_failed = 0;
 					if(cmd == SL_REMOTE_STD || cmd == SL_DATA_STD || cmd == SL_REMOTE_EXT || cmd == SL_DATA_EXT)
 					{
 						esp_err_t tx_err;
@@ -593,9 +595,10 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 							frame->self = 0;
 						}
 
-						tx_err = can_send(frame, pdMS_TO_TICKS(50));
+						tx_err = can_send(frame, pdMS_TO_TICKS(200));
 						if (tx_err != ESP_OK)
 						{
+							tx_failed = 1;
 							ESP_LOGE(TAG, "can_send failed: %s id=0x%lX",
 									 esp_err_to_name(tx_err), (unsigned long)frame->identifier);
 						}
@@ -633,7 +636,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 						}
 						default:
 						{
-							slcan_response((char*)ack, 0, q);
+							slcan_response(tx_failed ? (char*)nack : (char*)ack, 0, q);
 							break;
 //							return (char*)ack;
 						}
