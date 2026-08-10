@@ -20,6 +20,7 @@
 
 #include <string.h>
 #include <sys/param.h>
+#include <errno.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
@@ -207,31 +208,47 @@ wait_skt_tx:
 	ESP_LOGI(TAG, "Socket connected...");
 	while(1)
 	{
-		xQueuePeek(*xTX_Queue, ( void * ) &tx_buffer, portMAX_DELAY);
+		xQueueReceive(*xTX_Queue, ( void * ) &tx_buffer, portMAX_DELAY);
 
-		while(xQueuePeek(*xTX_Queue, ( void * ) &tx_buffer, 0) == pdTRUE)
+		int to_write = tx_buffer.usLen;
+		int stall_loops = 0;
+		while (to_write > 0)
 		{
-			if( xSemaphoreTake( xTCP_Socket_Semaphore, portMAX_DELAY ) == pdTRUE )
+			if( !(xEventGroupGetBits(xSocketEventGroup) & PORT_OPEN_BIT) )
 			{
-				int to_write = tx_buffer.usLen;
-				xQueueReceive(*xTX_Queue, ( void * ) &tx_buffer, 0);
-				while (to_write > 0)
+				goto wait_skt_tx;
+			}
+
+			if( xSemaphoreTake( xTCP_Socket_Semaphore, portMAX_DELAY ) != pdTRUE )
+			{
+				goto wait_skt_tx;
+			}
+
+			int written = send(sock, tx_buffer.ucElement + (tx_buffer.usLen - to_write), to_write, MSG_DONTWAIT);
+			if (written <= 0)
+			{
+				if (written < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
 				{
-					int written = send(sock, tx_buffer.ucElement + (tx_buffer.usLen - to_write), to_write, 0);
-					if (written < 0)
-					{
-						ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
-						xEventGroupSetBits( xSocketEventGroup, PORT_CLOSED_BIT );
-						xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
-						xSemaphoreGive( xTCP_Socket_Semaphore );
-						goto wait_skt_tx;
-					}
-					to_write -= written;
+					ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
+					xEventGroupSetBits( xSocketEventGroup, PORT_CLOSED_BIT );
+					xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
+					xSemaphoreGive( xTCP_Socket_Semaphore );
+					goto wait_skt_tx;
 				}
+				/* Peer isn't reading — release sock lock so RX can still accept host commands. */
+				xSemaphoreGive( xTCP_Socket_Semaphore );
+				if (++stall_loops > 400) /* ~2s at 5ms */
+				{
+					ESP_LOGW(TAG, "TCP TX stalled, dropping %d bytes", tx_buffer.usLen);
+					break;
+				}
+				vTaskDelay(pdMS_TO_TICKS(5));
+				continue;
 			}
 			xSemaphoreGive( xTCP_Socket_Semaphore );
+			to_write -= written;
+			stall_loops = 0;
 		}
-		vTaskDelay(pdMS_TO_TICKS(1));
 	}
 }
 
