@@ -168,8 +168,12 @@ void can_enable(void)
 		return;
 	}
 	twai_clear_receive_queue();
-	can_unblock();
 	can_cfg.bus_state = ON_BUS;
+	/*
+	 * Enable TX/RX immediately. Delayed can_unblock() left CAN_ENABLE_BIT clear for
+	 * ~10ms after SLCAN 'O', so early can_send() failed (host TX never reached the bus).
+	 */
+	xEventGroupSetBits(s_can_event_group, CAN_ENABLE_BIT);
 	vTaskDelay(pdMS_TO_TICKS(2));
 	gpio_set_level(CAN_STDBY_GPIO_NUM, 0);
 }
@@ -376,12 +380,12 @@ esp_err_t can_receive(twai_message_t *message, TickType_t ticks_to_wait)
 
 esp_err_t can_send(twai_message_t *message, TickType_t ticks_to_wait)
 {
-//	xEventGroupWaitBits(s_can_event_group,
-//							CAN_ENABLE_BIT,
-//							pdFALSE,
-//							pdFALSE,
-//							portMAX_DELAY);
-	EventBits_t uxBits = xEventGroupGetBits(s_can_event_group);
+	EventBits_t uxBits = xEventGroupWaitBits(
+		s_can_event_group,
+		CAN_ENABLE_BIT,
+		pdFALSE,
+		pdFALSE,
+		pdMS_TO_TICKS(50));
 	esp_err_t ret;
 	twai_status_info_t status_info;
 
