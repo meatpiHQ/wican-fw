@@ -6,7 +6,11 @@
             "pid": "22A8709",
             "pid_init": "ATSHDAD4F1;",
             "parameters": {
-                "SOC": "[B59:B60]*0.11266+2.457"
+                "SOC": "[B52:B53]*0.01",
+                "HV_V": "[B19:B20]*0.1",
+                "HV_A": "((S21*256)+B22)*0.1",
+                "BATT_TEMP": "B47-40",
+                "SOH": "B61"
             }
         },
         {
@@ -14,6 +18,23 @@
             "pid_init": "ATSHDADEF1;",
             "parameters": {
                 "ODOMETER": "[B6:B7]*6553.6+[B9:B10]*0.1"
+            }
+        },
+        {
+            "pid": "22CFA29",
+            "pid_init": "ATSHDADEF1;",
+            "parameters": {
+                "SOC_D": "B39",
+                "OUTSIDE_TEMPERATURE": "B26",
+                "HV_C_V_MAX": "[B41:B42]/5000",
+                "HV_C_V_MIN": "[B43:B44]/5000"
+            }
+        },
+        {
+            "pid": "22DB009",
+            "pid_init": "ATSHDACBF1;",
+            "parameters": {
+                "CHARGER_CONNECTED": "(B15-1)/2"
             }
         }
     ]
