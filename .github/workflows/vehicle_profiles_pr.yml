@@ -56,6 +56,10 @@ jobs:
           name: vehicle_profiles.json
           path: ${{ github.workspace }}/vehicle_profiles.json # Relative to the working-directory
 
+      - name: Add artifact link to job summary
+        if: success()
+        run: echo "[Download merged vehicle_profiles.json artifact](${{ steps.upload.outputs.artifact-url }})" >> "$GITHUB_STEP_SUMMARY"
+
   comment-on-pr:
     needs: vehicle-profiles-check
     if: needs.vehicle-profiles-check.result == 'success' && github.event.pull_request.head.repo.full_name == github.repository
