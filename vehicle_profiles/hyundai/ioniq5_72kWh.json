@@ -5,7 +5,7 @@
   "pids": [
     {
       "pid": "220102",
-      "pid_init": "ATSH7E4",
+      "pid_init": "ATSH7E4;",
       "parameters": {
         "HV_C_V_001": "B10/50",
         "HV_C_V_002": "B11/50",
@@ -43,7 +43,7 @@
     },
     {
       "pid": "220103",
-      "pid_init": "ATSH7E4",
+      "pid_init": "ATSH7E4;",
       "parameters": {
         "HV_C_V_033": "B10/50",
         "HV_C_V_034": "B11/50",
@@ -81,7 +81,7 @@
     },
     {
       "pid": "220104",
-      "pid_init": "ATSH7E4",
+      "pid_init": "ATSH7E4;",
       "parameters": {
         "HV_C_V_065": "B10/50",
         "HV_C_V_066": "B11/50",
@@ -119,7 +119,7 @@
     },
     {
       "pid": "22010A",
-      "pid_init": "ATSH7E4",
+      "pid_init": "ATSH7E4;",
       "parameters": {
         "HV_C_V_097": "B10/50",
         "HV_C_V_098": "B11/50",
@@ -157,7 +157,7 @@
     },
     {
       "pid": "22010B",
-      "pid_init": "ATSH7E4",
+      "pid_init": "ATSH7E4;",
       "parameters": {
         "HV_C_V_129": "B10/50",
         "HV_C_V_130": "B11/50",
@@ -195,7 +195,7 @@
     },
     {
       "pid": "22010C",
-      "pid_init": "ATSH7E4",
+      "pid_init": "ATSH7E4;",
       "parameters": {
         "HV_C_V_161": "B10/50",
         "HV_C_V_162": "B11/50",

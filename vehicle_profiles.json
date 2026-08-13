@@ -565,7 +565,7 @@
       "pids": [
         {
           "pid": "2283341",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "SOC",
@@ -579,7 +579,7 @@
         },
         {
           "pid": "2241A31",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "BATT_CAPACITY",
@@ -1513,7 +1513,7 @@
         },
         {
           "pid": "22B002",
-          "pid_init": "ATSH7C6;ATFCSH7C6",
+          "pid_init": "ATSH7C6;ATFCSH7C6;",
           "parameters": [
             {
               "name": "ODOMETER",
@@ -2121,7 +2121,7 @@
         },
         {
           "pid": "22B0025",
-          "pid_init": "ATSH7C6;ATFCSH7C6",
+          "pid_init": "ATSH7C6;ATFCSH7C6;",
           "parameters": [
             {
               "name": "ODOMETER",
@@ -3172,7 +3172,7 @@
         },
         {
           "pid": "220102",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "HV_C_V_001",
@@ -3434,7 +3434,7 @@
         },
         {
           "pid": "220103",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "HV_C_V_033",
@@ -3696,7 +3696,7 @@
         },
         {
           "pid": "220104",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "HV_C_V_065",
@@ -3958,7 +3958,7 @@
         },
         {
           "pid": "22010A",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "HV_C_V_097",
@@ -4220,7 +4220,7 @@
         },
         {
           "pid": "22010B",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "HV_C_V_129",
@@ -4482,7 +4482,7 @@
         },
         {
           "pid": "22010C",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "HV_C_V_161",
@@ -5167,7 +5167,7 @@
         },
         {
           "pid": "220102",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "HV_C_V_001",
@@ -5429,7 +5429,7 @@
         },
         {
           "pid": "220103",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "HV_C_V_033",
@@ -5691,7 +5691,7 @@
         },
         {
           "pid": "220104",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "HV_C_V_065",
@@ -5953,7 +5953,7 @@
         },
         {
           "pid": "22010A",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "HV_C_V_097",
@@ -6215,7 +6215,7 @@
         },
         {
           "pid": "22010B",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "HV_C_V_129",
@@ -6477,7 +6477,7 @@
         },
         {
           "pid": "22010C",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "HV_C_V_161",
@@ -8604,7 +8604,7 @@
         },
         {
           "pid": "220102",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "HV_C_V_001",
@@ -8866,7 +8866,7 @@
         },
         {
           "pid": "220103",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "HV_C_V_033",
@@ -9128,7 +9128,7 @@
         },
         {
           "pid": "220104",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "HV_C_V_065",
@@ -9390,7 +9390,7 @@
         },
         {
           "pid": "22010A",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "HV_C_V_097",
@@ -9652,7 +9652,7 @@
         },
         {
           "pid": "22010B",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "HV_C_V_129",
@@ -9914,7 +9914,7 @@
         },
         {
           "pid": "22010C",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "HV_C_V_161",
@@ -10254,7 +10254,7 @@
         },
         {
           "pid": "22B002",
-          "pid_init": "ATSH7C6;ATFCSH7C6",
+          "pid_init": "ATSH7C6;ATFCSH7C6;",
           "parameters": [
             {
               "name": "ODOMETER",
@@ -11196,7 +11196,7 @@
       "pids": [
         {
           "pid": "22E0021",
-          "pid_init": "ATSH7E3",
+          "pid_init": "ATSH7E3;",
           "parameters": [
             {
               "name": "SOC",
@@ -11444,7 +11444,7 @@
       "pids": [
         {
           "pid": "2283341",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "SOC",
@@ -11458,7 +11458,7 @@
         },
         {
           "pid": "2241A31",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "HV_CAPACITY",
@@ -11476,7 +11476,7 @@
       "pids": [
         {
           "pid": "2283341",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "SOC",
@@ -11490,7 +11490,7 @@
         },
         {
           "pid": "2245F9",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "HV_CAPACITY",
@@ -11508,7 +11508,7 @@
         },
         {
           "pid": "22434F",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "BATT_TEMP",
@@ -11522,7 +11522,7 @@
         },
         {
           "pid": "224369",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "AC_C_C",
@@ -11534,7 +11534,7 @@
         },
         {
           "pid": "224368",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "AC_C_V",
@@ -11546,7 +11546,7 @@
         },
         {
           "pid": "224533",
-          "pid_init": "ATSH7E4",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "CHARGING_R_A",
@@ -12782,7 +12782,7 @@
     },
     {
       "car_model": "Xpeng: P5/P7/G6/G9/X9",
-      "init": "ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH704;ATCRA784;ATFCSH704;ATFCSM1",
+      "init": "ATH1;ATSP6;ATS0;ATM0;ATAT1;ATSH704;ATCRA784;ATFCSH704;ATFCSM1;",
       "pids": [
         {
           "pid": "2211091",
