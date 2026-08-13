@@ -10507,6 +10507,690 @@
       ]
     },
     {
+      "car_model": "Land Rover: Range Rover Evoque L538",
+      "init": "ATSP6;ATST64;ATSH7DF;",
+      "pids": [
+        {
+          "pid": "010C1",
+          "pid_init": "ATSH7DF;",
+          "parameters": [
+            {
+              "name": "ENGINE_RPM",
+              "expression": "[B3:B4]/4",
+              "unit": "RPM",
+              "class": "frequency"
+            }
+          ]
+        },
+        {
+          "pid": "010D1",
+          "pid_init": "ATSH7DF;",
+          "parameters": [
+            {
+              "name": "SPEED",
+              "expression": "B3",
+              "unit": "km/h",
+              "class": "speed"
+            }
+          ]
+        },
+        {
+          "pid": "01051",
+          "pid_init": "ATSH7DF;",
+          "parameters": [
+            {
+              "name": "COOLANT_TMP",
+              "expression": "B3-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "010F1",
+          "pid_init": "ATSH7DF;",
+          "parameters": [
+            {
+              "name": "INTAKE_AIR_TMP",
+              "expression": "B3-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "01461",
+          "pid_init": "ATSH7DF;",
+          "parameters": [
+            {
+              "name": "OUTSIDE_TEMPERATURE",
+              "expression": "B3-40",
+              "unit": "°C",
+              "class": "temperature",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "01101",
+          "pid_init": "ATSH7DF;",
+          "parameters": [
+            {
+              "name": "MAF",
+              "expression": "[B3:B4]/100",
+              "unit": "g/s",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "012F1",
+          "pid_init": "ATSH7DF;",
+          "parameters": [
+            {
+              "name": "FUEL",
+              "expression": "B3/2.55",
+              "unit": "%",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "01231",
+          "pid_init": "ATSH7DF;",
+          "parameters": [
+            {
+              "name": "FUEL_PRESSURE",
+              "expression": "[B3:B4]*10",
+              "unit": "kPa",
+              "class": "pressure"
+            }
+          ]
+        },
+        {
+          "pid": "01421",
+          "pid_init": "ATSH7DF;",
+          "parameters": [
+            {
+              "name": "LV_V",
+              "expression": "[B3:B4]/1000",
+              "unit": "V",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "01041",
+          "pid_init": "ATSH7DF;",
+          "parameters": [
+            {
+              "name": "ENGINE_LOAD",
+              "expression": "B3*100/255",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "010B1",
+          "pid_init": "ATSH7DF;",
+          "parameters": [
+            {
+              "name": "INTAKE_MAN_PRESS",
+              "expression": "B3",
+              "unit": "kPa",
+              "class": "pressure"
+            }
+          ]
+        },
+        {
+          "pid": "01331",
+          "pid_init": "ATSH7DF;",
+          "parameters": [
+            {
+              "name": "BARO_PRESSURE",
+              "expression": "B3",
+              "unit": "kPa",
+              "class": "pressure"
+            }
+          ]
+        },
+        {
+          "pid": "011F1",
+          "pid_init": "ATSH7DF;",
+          "parameters": [
+            {
+              "name": "RUN_TIME",
+              "expression": "[B3:B4]",
+              "unit": "s",
+              "class": "duration",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "01241",
+          "pid_init": "ATSH7DF;",
+          "parameters": [
+            {
+              "name": "LAMBDA",
+              "expression": "[B3:B4]/32768",
+              "unit": "",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "012C1",
+          "pid_init": "ATSH7DF;",
+          "parameters": [
+            {
+              "name": "EGR_DUTY",
+              "expression": "B3*100/255",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "200"
+            }
+          ]
+        },
+        {
+          "pid": "012D1",
+          "pid_init": "ATSH7DF;",
+          "parameters": [
+            {
+              "name": "EGR_ERROR",
+              "expression": "B3*100/128-100",
+              "unit": "%",
+              "class": "none",
+              "min": "-100",
+              "max": "99"
+            }
+          ]
+        },
+        {
+          "pid": "01311",
+          "pid_init": "ATSH7DF;",
+          "parameters": [
+            {
+              "name": "DIST_SINCE_CLR",
+              "expression": "[B3:B4]",
+              "unit": "km",
+              "class": "distance",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "01491",
+          "pid_init": "ATSH7DF;",
+          "parameters": [
+            {
+              "name": "ACC_PEDAL_D",
+              "expression": "B3*100/255",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "014A1",
+          "pid_init": "ATSH7DF;",
+          "parameters": [
+            {
+              "name": "ACC_PEDAL_E",
+              "expression": "B3*100/255",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "014C1",
+          "pid_init": "ATSH7DF;",
+          "parameters": [
+            {
+              "name": "THROTTLE_CMD",
+              "expression": "B3*100/255",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22DD01",
+          "pid_init": "ATSH7E0;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B4:B6]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "222B06",
+          "pid_init": "ATSH760;",
+          "parameters": [
+            {
+              "name": "WHEEL_SPD_FR",
+              "expression": "B4",
+              "unit": "km/h",
+              "class": "speed",
+              "min": "0",
+              "max": "200"
+            }
+          ]
+        },
+        {
+          "pid": "222B07",
+          "pid_init": "ATSH760;",
+          "parameters": [
+            {
+              "name": "WHEEL_SPD_FL",
+              "expression": "B4",
+              "unit": "km/h",
+              "class": "speed",
+              "min": "0",
+              "max": "200"
+            }
+          ]
+        },
+        {
+          "pid": "222B08",
+          "pid_init": "ATSH760;",
+          "parameters": [
+            {
+              "name": "WHEEL_SPD_RR",
+              "expression": "B4",
+              "unit": "km/h",
+              "class": "speed",
+              "min": "0",
+              "max": "200"
+            }
+          ]
+        },
+        {
+          "pid": "222B09",
+          "pid_init": "ATSH760;",
+          "parameters": [
+            {
+              "name": "WHEEL_SPD_RL",
+              "expression": "B4",
+              "unit": "km/h",
+              "class": "speed",
+              "min": "0",
+              "max": "200"
+            }
+          ]
+        },
+        {
+          "pid": "2203F4",
+          "pid_init": "ATSH7E0;",
+          "parameters": [
+            {
+              "name": "EGT_1",
+              "expression": "B4*5",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2203F5",
+          "pid_init": "ATSH7E0;",
+          "parameters": [
+            {
+              "name": "EGT_2",
+              "expression": "B4*5",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2203F6",
+          "pid_init": "ATSH7E0;",
+          "parameters": [
+            {
+              "name": "EGT_3",
+              "expression": "B4*5",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "220405",
+          "pid_init": "ATSH7E0;",
+          "parameters": [
+            {
+              "name": "DPF_DIFF_PRES",
+              "expression": "B4",
+              "unit": "kPa",
+              "class": "pressure"
+            }
+          ]
+        },
+        {
+          "pid": "22042C",
+          "pid_init": "ATSH7E0;",
+          "parameters": [
+            {
+              "name": "DPF_SOOT_MASS",
+              "expression": "[B4:B5]/655.35",
+              "unit": "g",
+              "class": "none",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "220434",
+          "pid_init": "ATSH7E0;",
+          "parameters": [
+            {
+              "name": "DPF_DIST_SINCE_REGEN",
+              "expression": "[B4:B7]/655.35",
+              "unit": "km",
+              "class": "distance",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "220542",
+          "pid_init": "ATSH7E0;",
+          "parameters": [
+            {
+              "name": "DIST_SINCE_OIL_SERVICE",
+              "expression": "[B4:B5]",
+              "unit": "km",
+              "class": "distance",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "2203DF",
+          "pid_init": "ATSH7E0;",
+          "parameters": [
+            {
+              "name": "BOOST_ACT_POS_D",
+              "expression": "[B4:B5]/655.35",
+              "unit": "%",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "221310",
+          "pid_init": "ATSH7E0;",
+          "parameters": [
+            {
+              "name": "ENGINE_OIL_TEMP",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "221674",
+          "pid_init": "ATSH7E0;",
+          "parameters": [
+            {
+              "name": "TRAN_F_TEMP",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2216A8",
+          "pid_init": "ATSH7E0;",
+          "parameters": [
+            {
+              "name": "INTAKE_AIR_TEMP_2",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "22168E",
+          "pid_init": "ATSH7E0;",
+          "parameters": [
+            {
+              "name": "FUEL_TEMP",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2216AE",
+          "pid_init": "ATSH7E0;",
+          "parameters": [
+            {
+              "name": "EXH_BACK_PRES",
+              "expression": "[B4:B5]",
+              "unit": "none",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "221433",
+          "pid_init": "ATSH7E0;",
+          "parameters": [
+            {
+              "name": "EXH_BACK_PRES_DUTY",
+              "expression": "B4*100/255",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "221450",
+          "pid_init": "ATSH7E0;",
+          "parameters": [
+            {
+              "name": "GLOW_PLUG_TIME",
+              "expression": "[B4:B5]",
+              "unit": "s",
+              "class": "duration",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "221451",
+          "pid_init": "ATSH7E0;",
+          "parameters": [
+            {
+              "name": "GLOW_PLUG_LAMP_TIME",
+              "expression": "[B4:B5]",
+              "unit": "s",
+              "class": "duration",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "222B00",
+          "pid_init": "ATSH760;",
+          "parameters": [
+            {
+              "name": "PARK_BRAKE",
+              "expression": "B4",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            }
+          ]
+        },
+        {
+          "pid": "222B0D",
+          "pid_init": "ATSH760;",
+          "parameters": [
+            {
+              "name": "BRAKE_PRES",
+              "expression": "[B4:B5]",
+              "unit": "none",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "222B11",
+          "pid_init": "ATSH760;",
+          "parameters": [
+            {
+              "name": "LAT_ACCEL",
+              "expression": "[B4:B5]",
+              "unit": "none",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "223201",
+          "pid_init": "ATSH760;",
+          "parameters": [
+            {
+              "name": "STEER_ANGLE",
+              "expression": "([B4:B5]-32768)/10",
+              "unit": "deg",
+              "class": "none",
+              "min": "-720",
+              "max": "720"
+            }
+          ]
+        },
+        {
+          "pid": "222076",
+          "pid_init": "ATSH751;",
+          "parameters": [
+            {
+              "name": "TYRE_P_FL",
+              "expression": "B5*0.19915",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "222077",
+          "pid_init": "ATSH751;",
+          "parameters": [
+            {
+              "name": "TYRE_P_FR",
+              "expression": "B5*0.19915",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "222078",
+          "pid_init": "ATSH751;",
+          "parameters": [
+            {
+              "name": "TYRE_P_RR",
+              "expression": "B5*0.19915",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "222079",
+          "pid_init": "ATSH751;",
+          "parameters": [
+            {
+              "name": "TYRE_P_RL",
+              "expression": "B5*0.19915",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "224027",
+          "pid_init": "ATSH726;",
+          "parameters": [
+            {
+              "name": "BATT_AGE",
+              "expression": "[B4:B5]",
+              "unit": "none",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "224028",
+          "pid_init": "ATSH726;",
+          "parameters": [
+            {
+              "name": "LV_SOC",
+              "expression": "B4",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "224029",
+          "pid_init": "ATSH726;",
+          "parameters": [
+            {
+              "name": "BATT_TEMP",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "80"
+            }
+          ]
+        },
+        {
+          "pid": "22402B",
+          "pid_init": "ATSH726;",
+          "parameters": [
+            {
+              "name": "LV_A",
+              "expression": "([B4:B5]-32768)/256",
+              "unit": "A",
+              "class": "current"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Maxus: T90/EUNIC5/EUNIC6/EUNIC9/EV30/EG10/eDeliver3/eDeliver9",
       "init": "ATSP6;ATST96;",
       "pids": [
