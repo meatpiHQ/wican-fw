@@ -99,6 +99,7 @@
 #include "obd2_standard_pids.h"
 #include "restart_tracker.h"
 #include "restart_tracker_http.h"
+#include "esp_mac.h"
 
 #include <ws_router.h>
 #include "ws_server.h"
@@ -1880,6 +1881,24 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	cJSON_AddStringToObject(root, "mqtt_rx_topic", device_config.mqtt_rx_topic);
 	cJSON_AddStringToObject(root, "mqtt_status_topic", device_config.mqtt_status_topic);
 	cJSON_AddStringToObject(root, "device_id", device_id);
+	{
+		char bluetooth_id[32] = {0};
+		if (device_id != NULL && device_id[0] != '\0')
+		{
+			snprintf(bluetooth_id, sizeof(bluetooth_id), "WiC_%s", device_id);
+		}
+		cJSON_AddStringToObject(root, "bluetooth_id", bluetooth_id[0] ? bluetooth_id : "N/A");
+
+		uint8_t wifi_mac[6] = {0};
+		char wifi_mac_str[18] = {0};
+		if (esp_read_mac(wifi_mac, ESP_MAC_WIFI_STA) == ESP_OK)
+		{
+			snprintf(wifi_mac_str, sizeof(wifi_mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
+					 wifi_mac[0], wifi_mac[1], wifi_mac[2],
+					 wifi_mac[3], wifi_mac[4], wifi_mac[5]);
+		}
+		cJSON_AddStringToObject(root, "wifi_mac", wifi_mac_str[0] ? wifi_mac_str : "N/A");
+	}
 	cJSON_AddStringToObject(root, "subnet_overlap", dev_status_is_bit_set(DEV_STA_AP_OVERLAP_BIT) ? "yes" : "no");
 
 	if(autopid_get_ecu_status())
