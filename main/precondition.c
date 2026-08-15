@@ -300,10 +300,10 @@ static struct {
 } button;
 
 static QueueHandle_t battery_temperature_queue = NULL;
+static QueueHandle_t precondition_state_queue = NULL;
+static QueueHandle_t precondition_toggle_queue = NULL;
 
 // ********************* config caches *********************
-
-// TODO(ejones): deduplicate this code?
 // Cache the configured activation button type. A config change restarts the
 // whole firmware, so the value is effectively constant for the lifetime of
 // the process. Read it once on the first CAN message rather than on every frame.
@@ -1090,15 +1090,60 @@ static const sm_hooks_t precondition_global_hooks = {
 
 // ********************* public API *********************
 
+// push the current state into the queue so the web UI can read it with xQueuePeek
+static void push_precondition_state(void) {
+    if (precondition_state_queue == NULL) {
+        return;
+    }
+    precondition_state_t state = {
+        .requested = sm_in(&precon_sm, &S_REQUESTED) && !sm_in(&precon_sm, &S_MANAGED),
+        .started_confirmed = sm_in(&precon_sm, &S_ACTIVE) || sm_in(&precon_sm, &S_MANAGED),
+        .BMU_managed = sm_in(&precon_sm, &S_MANAGED),
+    };
+    xQueueOverwrite(precondition_state_queue, &state);
+}
+
+// web UI polls this with xQueuePeek to display preconditioning status
+bool precondition_get_state(precondition_state_t *out) {
+    if (out == NULL || precondition_state_queue == NULL) {
+        return false;
+    }
+    return xQueuePeek(precondition_state_queue, out, 0) == pdTRUE;
+}
+
+// called from the web UI (http server task); hand off to the CAN task via a
+// queue so the precondition state machine stays single-writer (see main.c can_rx_task)
+void precondition_toggle_request(void) {
+    if (precondition_toggle_queue == NULL) {
+        return;
+    }
+    uint8_t cmd = 1;
+    xQueueOverwrite(precondition_toggle_queue, &cmd);
+}
+
 void precondition_init(void) {
     battery_temperature_queue = xQueueCreate(1, sizeof(precondition_temperature_t));
     configASSERT(battery_temperature_queue != NULL);
+    precondition_state_queue = xQueueCreate(1, sizeof(precondition_state_t));
+    configASSERT(precondition_state_queue != NULL);
+    precondition_toggle_queue = xQueueCreate(1, sizeof(uint8_t));
+    configASSERT(precondition_toggle_queue != NULL);
     sm_init(&precon_sm, "precondition", &S_IDLE, &precondition_global_hooks);
+    push_precondition_state();
 }
 
 // called every 40ms
 void precondition_tick(void) {
+    // web UI toggle requests are handled here, on the CAN task, so the
+    // precondition state machine stays single-writer
+    uint8_t toggle_cmd = 0;
+    if (precondition_toggle_queue != NULL
+            && xQueueReceive(precondition_toggle_queue, &toggle_cmd, 0) == pdTRUE) {
+        sm_send_event(&precon_sm, EV_TOGGLE);
+    }
+
     sm_tick(&precon_sm);
+    push_precondition_state();
 }
 
 void precondition_can_rx_hook(twai_message_t *to_push, can_bus_t rx_bus) {

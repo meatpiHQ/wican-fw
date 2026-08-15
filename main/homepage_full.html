@@ -558,6 +558,18 @@
                     <td><div id="battery_temp_status">Waiting for CAN data</div></td>
                 </tr>
                 <tr>
+                    <td>Preconditioning Requested:</td>
+                    <td><div id="precondition_requested_status">No</div></td>
+                </tr>
+                <tr>
+                    <td>Preconditioning Active:</td>
+                    <td><div id="precondition_active_status">No</div></td>
+                </tr>
+                <tr>
+                    <td>Preconditioning Managed By Car:</td>
+                    <td><div id="precondition_bmu_managed_status">No</div></td>
+                </tr>
+                <tr>
                     <td><input id="check_status_button" name="check_status_button" type="button" onclick="checkStatus()"
                             value="Check status" /></td>
                     <td>&nbsp;</td>
@@ -1361,6 +1373,13 @@
                             <option value="short">Short Press</option>
                             <option value="long">Long Press (hold 1s)</option>
                         </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Activate Preconditioning:</td>
+                    <td>
+                        <input id="precon_activate_button" name="precon_activate_button" type="button"
+                            onclick="preconActivate()" value="Activate" />
                     </td>
                 </tr>
                 <tr class="can1_row" style="display:none">
@@ -2568,6 +2587,9 @@ function loadAutoTable(jsonData) {
 			} else {
 				document.getElementById("battery_temp_status").textContent = "Waiting for CAN data";
 			}
+			document.getElementById("precondition_requested_status").textContent = obj.precondition_requested ? "Yes" : "No";
+			document.getElementById("precondition_active_status").textContent = obj.precondition_started_confirmed ? "Yes" : "No";
+			document.getElementById("precondition_bmu_managed_status").textContent = obj.precondition_bmu_managed ? "Yes" : "No";
 			document.getElementById("port_status").innerHTML = obj.port;
 			document.getElementById("fw_version").innerHTML = obj.fw_version;
 			document.getElementById("hw_version").innerHTML = obj.hw_version;
@@ -2914,6 +2936,18 @@ function loadAutoTable(jsonData) {
         showNotification("Rebooting please reconnect...", "yellow");
 		xhttp.open("POST", "/system_reboot");
 		xhttp.send("reboot");
+	}
+
+	function preconActivate() {
+		const xhttp = new XMLHttpRequest();
+		xhttp.onload = function() {
+            showNotification(this.responseText, "green");
+		};
+        xhttp.onerror = function() {
+            showNotification("Failed to toggle preconditioning", "red");
+        };
+		xhttp.open("POST", "/precondition_toggle");
+		xhttp.send();
 	}
 
     function send_system_command(command) {

@@ -49,6 +49,14 @@ BaseType_t xQueuePeek(QueueHandle_t qh, void *item, TickType_t w) {
     memcpy(item, q->data, q->size);
     return 1;
 }
+BaseType_t xQueueReceive(QueueHandle_t qh, void *item, TickType_t w) {
+    (void)w;
+    fake_queue_t *q = qh;
+    if (!q->has) return 0;
+    memcpy(item, q->data, q->size);
+    q->has = 0;
+    return 1;
+}
 
 static int8_t cfg_button = SW_STAR;
 static int8_t cfg_mode = ONCE;

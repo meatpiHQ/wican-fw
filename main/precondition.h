@@ -18,4 +18,13 @@ typedef struct {
 
 bool precondition_get_battery_temperature(precondition_temperature_t *out);
 
+typedef struct {
+    bool requested;
+    bool started_confirmed;
+    bool BMU_managed;
+} precondition_state_t;
+
+void precondition_toggle_request(void);
+bool precondition_get_state(precondition_state_t *out);
+
 #endif
