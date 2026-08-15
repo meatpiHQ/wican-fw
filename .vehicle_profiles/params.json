@@ -173,6 +173,20 @@
       "class": "none"
     }
   },
+  "DTC_COUNT": {
+    "description": "Number of stored Diagnostic Trouble Codes",
+    "settings": {
+      "unit": "none",
+      "class": "none"
+    }
+  },
+  "ENGINE_LOAD": {
+    "description": "Calculated Engine Load",
+    "settings": {
+      "unit": "%",
+      "class": "none"
+    }
+  },
   "ENGINE_OIL_PRES": {
     "description": "Engine Oil Pressure",
     "settings": {
@@ -2505,6 +2519,13 @@
       "class": "temperature"
     }
   },
+  "INTAKE_MAP": {
+    "description": "Intake Manifold Absolute Pressure",
+    "settings": {
+      "unit": "kPa",
+      "class": "pressure"
+    }
+  },
   "KWH_CHARGED": {
     "description": "Total kWh Charged (Cumulative Energy Charged)",
     "settings": {
@@ -2521,6 +2542,13 @@
       "class": "energy",
       "min": "0",
       "max": "1000000"
+    }
+  },
+  "LTFT": {
+    "description": "Long Term Fuel Trim",
+    "settings": {
+      "unit": "%",
+      "class": "none"
     }
   },
   "LV_A": {
@@ -2550,6 +2578,13 @@
     "description": "Mass Airflow Sensor",
     "settings": {
       "unit": "g/s",
+      "class": "none"
+    }
+  },
+  "MIL_ON": {
+    "description": "Malfunction Indicator Lamp (Check Engine Light)",
+    "settings": {
+      "unit": "none",
       "class": "none"
     }
   },
@@ -2791,6 +2826,13 @@
     "description": "throttle position",
     "settings": {
       "unit": "%",
+      "class": "none"
+    }
+  },
+  "TIMING_ADV": {
+    "description": "Timing Advance",
+    "settings": {
+      "unit": "deg",
       "class": "none"
     }
   },
