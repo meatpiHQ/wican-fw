@@ -1042,7 +1042,10 @@ const xelm327_cmd_t elm327_commands[] = {
 
 void elm327_lock(void)
 {
-	xSemaphoreTake(elm327_mutex, pdMS_TO_TICKS(portMAX_DELAY));
+	// Take forever: pdMS_TO_TICKS(portMAX_DELAY) overflows in 32-bit to a
+	// finite ~71-minute timeout, and the discarded return value meant a
+	// timed-out caller proceeded without the lock.
+	xSemaphoreTake(elm327_mutex, portMAX_DELAY);
 }
 void elm327_unlock(void)
 {
