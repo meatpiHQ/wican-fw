@@ -140,6 +140,42 @@
       "class": "temperature"
     }
   },
+  "COOLANT_T_EM": {
+    "description": "Coolant temperature before the e-machine",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-100",
+      "max": "400"
+    }
+  },
+  "COOLANT_T_PE": {
+    "description": "Coolant temperature before the power electronics",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-100",
+      "max": "400"
+    }
+  },
+  "DCDC_HV_A": {
+    "description": "DC-DC converter traction-side (HV) current",
+    "settings": {
+      "unit": "A",
+      "class": "current",
+      "min": "-2000",
+      "max": "2000"
+    }
+  },
+  "DCDC_OUT_V": {
+    "description": "DC-DC converter regulated output voltage",
+    "settings": {
+      "unit": "V",
+      "class": "voltage",
+      "min": "0",
+      "max": "1000"
+    }
+  },
   "DIST_SINCE_FULL_CHARGE": {
     "description": "Distance Traveled Since Last Full Charge",
     "settings": {
@@ -288,6 +324,42 @@
     "settings": {
       "unit": "kW",
       "class": "power"
+    }
+  },
+  "HV_A_CHG_MAX": {
+    "description": "HV battery maximum dynamic charge current limit",
+    "settings": {
+      "unit": "A",
+      "class": "current",
+      "min": "0",
+      "max": "2000"
+    }
+  },
+  "HV_A_CHG_PRED": {
+    "description": "HV battery predicted charge current limit",
+    "settings": {
+      "unit": "A",
+      "class": "current",
+      "min": "0",
+      "max": "2000"
+    }
+  },
+  "HV_A_DIS_MAX": {
+    "description": "HV battery maximum dynamic discharge current limit",
+    "settings": {
+      "unit": "A",
+      "class": "current",
+      "min": "0",
+      "max": "2000"
+    }
+  },
+  "HV_A_DIS_PRED": {
+    "description": "HV battery predicted discharge current limit",
+    "settings": {
+      "unit": "A",
+      "class": "current",
+      "min": "0",
+      "max": "2000"
     }
   },
   "HV_CAPACITY": {
@@ -2113,6 +2185,42 @@
       "max": "80"
     }
   },
+  "HV_ISO_BAT_N": {
+    "description": "Insulation resistance, negative pole, HV battery",
+    "settings": {
+      "unit": "kΩ",
+      "class": "none",
+      "min": "0",
+      "max": "100000"
+    }
+  },
+  "HV_ISO_BAT_P": {
+    "description": "Insulation resistance, positive pole, HV battery",
+    "settings": {
+      "unit": "kΩ",
+      "class": "none",
+      "min": "0",
+      "max": "100000"
+    }
+  },
+  "HV_ISO_N": {
+    "description": "Insulation resistance, negative pole, HV system",
+    "settings": {
+      "unit": "kΩ",
+      "class": "none",
+      "min": "0",
+      "max": "100000"
+    }
+  },
+  "HV_ISO_P": {
+    "description": "Insulation resistance, positive pole, HV system",
+    "settings": {
+      "unit": "kΩ",
+      "class": "none",
+      "min": "0",
+      "max": "100000"
+    }
+  },
   "HV_KWH_R": {
     "description": "Battery Remaining Energy",
     "settings": {
@@ -2458,11 +2566,25 @@
       "class": "temperature"
     }
   },
+  "HV_T_MAX_NO": {
+    "description": "HV Battery which cell is hottest",
+    "settings": {
+      "unit": "none",
+      "class": "none"
+    }
+  },
   "HV_T_MIN": {
     "description": "Lowest temp reading from HV Battery",
     "settings": {
       "unit": "°C",
       "class": "temperature"
+    }
+  },
+  "HV_T_MIN_NO": {
+    "description": "HV Battery which cell is coldest",
+    "settings": {
+      "unit": "none",
+      "class": "none"
     }
   },
   "HV_V": {
@@ -2479,6 +2601,33 @@
     "settings": {
       "unit": "W",
       "class": "power"
+    }
+  },
+  "IGBT_T_U": {
+    "description": "Power electronics IGBT module temperature, phase U",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-100",
+      "max": "400"
+    }
+  },
+  "IGBT_T_V": {
+    "description": "Power electronics IGBT module temperature, phase V",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-100",
+      "max": "400"
+    }
+  },
+  "IGBT_T_W": {
+    "description": "Power electronics IGBT module temperature, phase W",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-100",
+      "max": "400"
     }
   },
   "IGNITION": {
@@ -2503,6 +2652,15 @@
     "settings": {
       "unit": "°C",
       "class": "temperature"
+    }
+  },
+  "INVERTER_TEMP": {
+    "description": "Pulse-controlled inverter temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-100",
+      "max": "400"
     }
   },
   "KWH_CHARGED": {
@@ -2530,12 +2688,38 @@
       "class": "current"
     }
   },
+  "LV_A_GEN": {
+    "description": "Current from the generator / DC-DC into the 12V system",
+    "settings": {
+      "unit": "A",
+      "class": "current",
+      "min": "-500",
+      "max": "500"
+    }
+  },
+  "LV_R_INT": {
+    "description": "12V battery internal resistance",
+    "settings": {
+      "unit": "none",
+      "class": "none",
+      "min": "0"
+    }
+  },
   "LV_SOC": {
     "description": "12v Battery State of Charge",
     "settings": {
       "unit": "%",
       "class": "battery",
       "min": "0",
+      "max": "100"
+    }
+  },
+  "LV_T": {
+    "description": "12V battery sensor temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
       "max": "100"
     }
   },
@@ -2546,11 +2730,38 @@
       "class": "battery"
     }
   },
+  "LV_V_REST": {
+    "description": "12V battery resting (open-circuit) voltage",
+    "settings": {
+      "unit": "V",
+      "class": "voltage",
+      "min": "0",
+      "max": "20"
+    }
+  },
   "MAF": {
     "description": "Mass Airflow Sensor",
     "settings": {
       "unit": "g/s",
       "class": "none"
+    }
+  },
+  "MOTOR_RPM": {
+    "description": "Electric machine rotor speed",
+    "settings": {
+      "unit": "rpm",
+      "class": "speed",
+      "min": "-10000",
+      "max": "20000"
+    }
+  },
+  "MOTOR_TEMP": {
+    "description": "Electric machine (traction motor) temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-100",
+      "max": "400"
     }
   },
   "OCTANE_RATIO_L": {
@@ -2792,6 +3003,15 @@
     "settings": {
       "unit": "%",
       "class": "none"
+    }
+  },
+  "TIME_AT_100_SOC": {
+    "description": "Cumulative time the HV battery has spent at 100% SoC",
+    "settings": {
+      "unit": "d",
+      "class": "none",
+      "min": "0",
+      "max": "100000"
     }
   },
   "TMP_A": {
