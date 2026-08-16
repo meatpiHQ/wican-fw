@@ -247,10 +247,15 @@ void send_to_host(char* str, uint32_t len, QueueHandle_t *q)
         memcpy(xsend_buffer.ucElement, str + bytes_sent, bytes_to_send);
         xsend_buffer.usLen = bytes_to_send;
 		ESP_LOG_BUFFER_HEXDUMP(TAG, xsend_buffer.ucElement, bytes_to_send, ESP_LOG_INFO);
-        // Send the buffer to the queue with a timeout
-        if (xQueueSend(*q, (void*)&xsend_buffer, pdMS_TO_TICKS(100)) != pdPASS)
+        /*
+         * Never block forever here. Host TX (SLCAN ACKs + CAN RX ASCII) shares this queue
+         * with tcp/ble/uart drain tasks. python-can's send() does not read the socket, so
+         * on a busy CAN bus a blocking xQueueSend would freeze can_tx_task.
+         */
+        if (xQueueSend(*q, (void*)&xsend_buffer, pdMS_TO_TICKS(20)) != pdPASS)
         {
-            ESP_LOGE(TAG, "Failed to send data to queue");
+            ESP_LOGW(TAG, "host TX queue full, dropping %d bytes (waiting=%u)",
+                     xsend_buffer.usLen, (unsigned)uxQueueMessagesWaiting(*q));
             return;
         }
 
@@ -269,6 +274,10 @@ static void can_tx_task(void *pvParameters)
 
 		memset(ucTCP_RX_Buffer.ucElement,0, DEV_BUFFER_LENGTH);
 		xQueueReceive(xMsg_Rx_Queue, &ucTCP_RX_Buffer, portMAX_DELAY);
+
+		dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
+
+		memset(&tx_msg, 0, sizeof(tx_msg));
 		ESP_LOGI(TAG, "----------");
 		ESP_LOG_BUFFER_HEXDUMP(TAG, ucTCP_RX_Buffer.ucElement, ucTCP_RX_Buffer.usLen, ESP_LOG_INFO);
 		ESP_LOGI(TAG, "----------");
@@ -734,7 +743,7 @@ void app_main(void)
 	#endif
 	#if HARDWARE_VER == WICAN_V300 || HARDWARE_VER == WICAN_USB_V100
 	xMsg_Rx_Queue = xQueueCreate(32, sizeof( xdev_buffer) );
-    xMsg_Tx_Queue = xQueueCreate(32, sizeof( xdev_buffer) );
+    xMsg_Tx_Queue = xQueueCreate(64, sizeof( xdev_buffer) );
     xmsg_ws_tx_queue = xQueueCreate(32, sizeof( xdev_buffer) );
 	#elif HARDWARE_VER == WICAN_PRO
 	static xdev_buffer* xMsg_Rx_Queue_Storage;
@@ -747,7 +756,7 @@ void app_main(void)
 	size_t xdev_buffer_size = sizeof( xdev_buffer);
 	
     xMsg_Rx_Queue_Storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
-    xMsg_Tx_Queue_Storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
+    xMsg_Tx_Queue_Storage = (xdev_buffer *)heap_caps_malloc(64 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
     xmsg_ws_tx_queue_Storage = (xdev_buffer *)heap_caps_malloc(32 * xdev_buffer_size, MALLOC_CAP_SPIRAM);
 
     // Check if memory allocation was successful
@@ -759,7 +768,7 @@ void app_main(void)
 
     // Create the static queues
     xMsg_Rx_Queue = xQueueCreateStatic(32, xdev_buffer_size, (uint8_t *)xMsg_Rx_Queue_Storage, &xMsg_Rx_Queue_Buffer);
-    xMsg_Tx_Queue = xQueueCreateStatic(32, xdev_buffer_size, (uint8_t *)xMsg_Tx_Queue_Storage, &xMsg_Tx_Queue_Buffer);
+    xMsg_Tx_Queue = xQueueCreateStatic(64, xdev_buffer_size, (uint8_t *)xMsg_Tx_Queue_Storage, &xMsg_Tx_Queue_Buffer);
     xmsg_ws_tx_queue = xQueueCreateStatic(32, xdev_buffer_size, (uint8_t *)xmsg_ws_tx_queue_Storage, &xmsg_ws_tx_queue_Buffer);
 
     // Check if queues were created successfully
@@ -769,7 +778,6 @@ void app_main(void)
         return;
     }
 	#endif
-
 
 	esp_ota_mark_app_valid_cancel_rollback();
 //    xmsg_obd_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
