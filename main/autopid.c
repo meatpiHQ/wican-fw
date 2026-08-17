@@ -1692,11 +1692,14 @@ static void autopid_task(void *pvParameters)
                                         evaluate_expression((uint8_t*)param->expression, 
                                                             elm327_response.data, 0, &result))
                                         {
-                                            if (param->min != FLT_MAX && result < param->min) {
-                                                ESP_LOGW(TAG, "Parameter %s value %.2f below min %.2f - ignoring", 
+                                            if (!isfinite(result)) {
+                                                ESP_LOGW(TAG, "Parameter %s value is not finite - ignoring",
+                                                        param->name);
+                                            } else if (param->min != FLT_MAX && result < param->min) {
+                                                ESP_LOGW(TAG, "Parameter %s value %.2f below min %.2f - ignoring",
                                                         param->name, result, param->min);
                                             } else if (param->max != FLT_MAX && result > param->max) {
-                                                ESP_LOGW(TAG, "Parameter %s value %.2f above max %.2f - ignoring", 
+                                                ESP_LOGW(TAG, "Parameter %s value %.2f above max %.2f - ignoring",
                                                         param->name, result, param->max);
                                             } else {
                                                 result = round(result * 100.0) / 100.0;
@@ -1724,6 +1727,10 @@ static void autopid_task(void *pvParameters)
                                                     if(param_name && strcmp(param_name + 1, pid_info->params[p].name) == 0)
                                                     {
                                                         esp_err_t err = ESP_FAIL;
+                                                        // extract_signal_value writes straight into param->value; keep
+                                                        // the last good reading so a non-finite decode below can be
+                                                        // reverted instead of leaking into the next webhook snapshot.
+                                                        double prev_value = param->value;
 
                                                         ESP_LOGI(TAG, "Processing parameter: %s", pid_info->params[p].name);
                                                         if(elm327_response.priority_data != NULL && elm327_response.priority_data != 0)
@@ -1747,6 +1754,12 @@ static void autopid_task(void *pvParameters)
  
                                                         if (err != ESP_OK) {
                                                             ESP_LOGE(TAG, "Failed to extract signal: %s", esp_err_to_name(err));
+                                                            break;
+                                                        }
+                                                        if (!isfinite(param->value)) {
+                                                            ESP_LOGW(TAG, "Parameter %s value is not finite - ignoring",
+                                                                    param->name);
+                                                            param->value = prev_value;
                                                             break;
                                                         }
                                                         param->value = roundf(param->value * 100.0) / 100.0;
