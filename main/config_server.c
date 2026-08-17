@@ -3035,6 +3035,10 @@ int8_t config_server_precon_mode(void)
 	{
 		return CONTINUOUS;
 	}
+	else if(strcmp(device_config.precon_mode, "persistent") == 0)
+	{
+		return PERSISTENT;
+	}
 	return ONCE;
 }
 

@@ -52,8 +52,9 @@
 #define OBD_ELM327			3
 #define AUTO_PID			4
 
-#define CONTINUOUS			0
-#define ONCE				1
+#define ONCE				0
+#define CONTINUOUS			1
+#define PERSISTENT			2
 
 #define PRESS_SHORT			0
 #define PRESS_LONG			1
