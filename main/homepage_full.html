@@ -636,6 +636,39 @@
                             </select>
                         </td>
                     </tr>
+                    <tr>
+                        <td>IP Config:</td>
+                        <td>
+                            <select id="sta_ip_mode" name="sta_ip_mode" disabled onchange="sta_ip_mode_toggle(); submit_enable();">
+                                <option value="dhcp">DHCP</option>
+                                <option value="static">Static</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr class="sta_static_row">
+                        <td>IP Address:</td>
+                        <td>
+                            <input type="text" id="sta_static_ip" name="sta_static_ip" placeholder="192.168.1.50" disabled />
+                        </td>
+                    </tr>
+                    <tr class="sta_static_row">
+                        <td>Netmask:</td>
+                        <td>
+                            <input type="text" id="sta_netmask" name="sta_netmask" placeholder="255.255.255.0" disabled />
+                        </td>
+                    </tr>
+                    <tr class="sta_static_row">
+                        <td>Gateway:</td>
+                        <td>
+                            <input type="text" id="sta_gateway" name="sta_gateway" placeholder="192.168.1.1" disabled />
+                        </td>
+                    </tr>
+                    <tr class="sta_static_row">
+                        <td>DNS (optional):</td>
+                        <td>
+                            <input type="text" id="sta_dns" name="sta_dns" placeholder="192.168.1.1" disabled />
+                        </td>
+                    </tr>
                 </table>
 
                 <div class="divider"></div>
@@ -2279,21 +2312,50 @@ function loadAutoTable(jsonData) {
 
 	function sta_enable() {}
 
+	function is_ipv4(s) {
+		if(typeof s != "string") return false;
+		var parts = s.split(".");
+		if(parts.length != 4) return false;
+		for(var i = 0; i < 4; i++) {
+			if(!/^\d{1,3}$/.test(parts[i])) return false;
+			if(parts[i].length > 1 && parts[i][0] == "0") return false;
+			var n = parseInt(parts[i], 10);
+			if(n < 0 || n > 255) return false;
+		}
+		return true;
+	}
+
+	function sta_ip_mode_toggle() {
+		var isStatic = document.getElementById("sta_ip_mode").value == "static";
+		var staDisabled = document.getElementById("sta_ip_mode").disabled;
+		var rows = document.getElementsByClassName("sta_static_row");
+		for(var i = 0; i < rows.length; i++) {
+			rows[i].style.display = isStatic ? "" : "none";
+			var input = rows[i].querySelector("input");
+			if(input) {
+				input.disabled = staDisabled || !isStatic;
+			}
+		}
+	}
+
 	function submit_enable() {
         console.log("sumbit_enable");
 		if(document.getElementById("wifi_mode").value == "AP") {
 			document.getElementById("ssid_value").disabled = true;
 			document.getElementById("pass_value").disabled = true;
             document.getElementById("sta_security").disabled = true;
+            document.getElementById("sta_ip_mode").disabled = true;
 			document.getElementById("ble_status").disabled = false;
             document.getElementById("ap_auto_disable").disabled = true;
 		} else {
 			document.getElementById("ssid_value").disabled = false;
 			document.getElementById("pass_value").disabled = false;
             document.getElementById("sta_security").disabled = false;
+            document.getElementById("sta_ip_mode").disabled = false;
 			document.getElementById("ble_status").disabled = true;
 			document.getElementById("ble_status").selectedIndex = "1";
 		}
+        sta_ip_mode_toggle();
 		if(document.getElementById("ble_status").selectedIndex == "0") {
 			document.getElementById("ble_warning_div").style.display = "block";
 			document.getElementById("mqtt_en").value = "disable";
@@ -2336,6 +2398,13 @@ function loadAutoTable(jsonData) {
 			document.getElementById("submit_button").disabled = true;
 		} else if(document.getElementById("batt_alert_volt").value < 8 || document.getElementById("batt_alert_volt").value > 15) {
             showNotification("Alert Voltage Value, min=8.0 max=15.0", "red");
+			document.getElementById("submit_button").disabled = true;
+		} else if(document.getElementById("wifi_mode").value != "AP" && document.getElementById("sta_ip_mode").value == "static" &&
+                (!is_ipv4(document.getElementById("sta_static_ip").value) ||
+                 !is_ipv4(document.getElementById("sta_netmask").value) ||
+                 !is_ipv4(document.getElementById("sta_gateway").value) ||
+                 (document.getElementById("sta_dns").value.length > 0 && !is_ipv4(document.getElementById("sta_dns").value)))) {
+            showNotification("Static IP/netmask/gateway must be valid IPv4", "red");
 			document.getElementById("submit_button").disabled = true;
 		}
         else {
@@ -2661,6 +2730,17 @@ function loadAutoTable(jsonData) {
 		obj["sta_ssid"] = document.getElementById("ssid_value").value;
 		obj["sta_pass"] = document.getElementById("pass_value").value;
         obj["sta_security"] = document.getElementById("sta_security").value;
+        if(document.getElementById("sta_ip_mode").value == "static") {
+            obj["sta_static_ip"] = document.getElementById("sta_static_ip").value;
+            obj["sta_netmask"] = document.getElementById("sta_netmask").value;
+            obj["sta_gateway"] = document.getElementById("sta_gateway").value;
+            obj["sta_dns"] = document.getElementById("sta_dns").value;
+        } else {
+            obj["sta_static_ip"] = "";
+            obj["sta_netmask"] = "";
+            obj["sta_gateway"] = "";
+            obj["sta_dns"] = "";
+        }
 		obj["can_datarate"] = document.getElementById("can_datarate").value;
 		obj["can_mode"] = document.getElementById("can_mode").value;
 		obj["port_type"] = document.getElementById("port_type").value;
@@ -2894,11 +2974,13 @@ function loadAutoTable(jsonData) {
 				document.getElementById("ssid_value").disabled = false;
 				document.getElementById("pass_value").disabled = false;
                 document.getElementById("sta_security").disabled = false;
+                document.getElementById("sta_ip_mode").disabled = false;
                 document.getElementById("ap_auto_disable").disabled = false;
 			} else if(obj.wifi_mode == "AP") {
 				document.getElementById("wifi_mode").selectedIndex = "0";
 				document.getElementById("ssid_value").disabled = true;
 				document.getElementById("pass_value").disabled = true;
+                document.getElementById("sta_ip_mode").disabled = true;
                 document.getElementById("ap_auto_disable").disabled = true;
 			}
 
@@ -2913,8 +2995,16 @@ function loadAutoTable(jsonData) {
 			document.getElementById("ap_ch_value").selectedIndex = ch.toString();
 			document.getElementById("ssid_value").value = obj.sta_ssid;
 			document.getElementById("pass_value").value = obj.sta_pass;
-            document.getElementById("sta_security").value = obj.sta_security || "wpa3";	
-            
+            document.getElementById("sta_security").value = obj.sta_security || "wpa3";
+
+            document.getElementById("sta_static_ip").value = obj.sta_static_ip || "";
+            document.getElementById("sta_netmask").value = obj.sta_netmask || "";
+            document.getElementById("sta_gateway").value = obj.sta_gateway || "";
+            document.getElementById("sta_dns").value = obj.sta_dns || "";
+            document.getElementById("sta_ip_mode").value =
+                (obj.sta_static_ip && obj.sta_gateway && obj.sta_netmask) ? "static" : "dhcp";
+            sta_ip_mode_toggle();
+
             const webhookEnEl = document.getElementById("webhook_en");
             if (webhookEnEl) {
                 const webhookModeFromCfg = obj.webhook_en || "enable";
