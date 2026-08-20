@@ -6,12 +6,11 @@ This is a fork of the [WiCAN firmware repository](https://github.com/meatpihq/wi
 
 # Building
 
-1. Clone ESP-IDF = v5.5.3: `cd <your-packages-directory> && git clone -b v5.5.3 --recursive https://github.com/espressif/esp-idf.git`
-2. Install ESP-IDF: `cd esp-idf && ./install.sh`
+1. Clone this repo recursively: `git clone --recursive https://github.com/L1Z3/wicant-i-precondition.git`
+2. Install ESP-IDF: `cd wicant-i-precondition/esp-idf && ./install.sh`
 3. Export the environment: `. ./export.sh`
-4. Clone this repository: `cd .. && git clone https://github.com/L1Z3/wicant-i-precondition.git`
-5. Open project and build: `cd wicant-i-precondition && ./build.sh v300`
-6. Flash: use http interface or if using USB: `idf.py flash`
+4. Open project and build: `cd .. && ./build.sh v300`
+5. Flash: use http interface or if using USB: `idf.py flash`
 
 # WiCAN-OBD-C3 Information
 
