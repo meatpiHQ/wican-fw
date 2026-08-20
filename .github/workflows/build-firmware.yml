@@ -12,6 +12,7 @@ on:
     branches:
       - main
       - wip-needs-review
+      - state-machine-rewrite
 
 # Cancel superseded runs on the same ref to save runner minutes.
 concurrency:
@@ -19,6 +20,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Host-side unit tests (test/host): plain C against stubbed ESP-IDF
+  # headers, so they need neither the submodule checkout nor a toolchain.
+  host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and run host tests
+        run: make -C test/host
+
   build:
     runs-on: ubuntu-latest
     strategy:

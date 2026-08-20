@@ -485,8 +485,6 @@ void app_main(void)
     xMsg_Tx_Queue = xQueueCreate(128, sizeof( xdev_buffer) );
     xmsg_ws_tx_queue = xQueueCreate(8, sizeof( xdev_buffer) );
 
-    precondition_init();
-
 	esp_ota_mark_app_valid_cancel_rollback();
 //    xmsg_obd_rx_queue = xQueueCreate(100, sizeof( twai_message_t) );
 
@@ -499,6 +497,9 @@ void app_main(void)
             derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
 	
 	config_server_start(&xmsg_ws_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, (char*)&uid[0]);
+	// must run after config_server_start: entering the initial state reads the
+	// precon mode from the config
+	precondition_init();
 	slcan_init(&send_to_host);
 
 	int8_t can_datarate = config_server_get_can_rate();

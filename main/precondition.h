@@ -1,15 +1,9 @@
 #ifndef __PRECONDITION_H__
 #define __PRECONDITION_H__
 
-#include "driver/twai.h"
 #include <stdbool.h>
 #include <stdint.h>
-
-typedef enum {
-    FWD_BLOCK,
-    FWD_MODIFIED,
-    FWD_PASSTHROUGH,
-} fwd_result_t;
+#include "hsm.h"
 
 void precondition_init(void);
 void precondition_can_rx_hook(twai_message_t *to_push, can_bus_t rx_bus);
