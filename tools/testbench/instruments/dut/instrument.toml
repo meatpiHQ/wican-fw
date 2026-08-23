@@ -1,0 +1,14 @@
+label = "DUT"
+desc = "WiCAN Pro (ESP32-S3) on the bench hotspot, 12 V from the PSU"
+doc = "Console COM7 (2 Mbaud, opening it resets the DUT — no COM probe). Canonical lease ${dut.ip}; the probe falls back to the newest dnsmasq lease."
+
+[config]
+ip = "10.42.0.62"
+# firmware image staged for OTA legs (push-ota-image action / ota-cycle
+# flow) — path relative to this repo's root. Override in
+# benchboard.local.toml to bench a different checkout's build.
+fw_bin = "build/wican-fw.bin"
+
+[health]
+cmd = "ssh ${pi.ssh} \"curl -sf -m 5 http://${ip}/api/status -o /dev/null && echo DUT OK ${ip} || (ip=$(sudo sh -c 'cat /var/lib/NetworkManager/dnsmasq-wint0.leases /var/lib/NetworkManager/dnsmasq-wtest0.leases 2>/dev/null' | awk '{print $3}' | tail -1); curl -sf -m 5 http://$ip/api/status -o /dev/null && echo DUT OK $ip)\""
+timeout_s = 30

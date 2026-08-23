@@ -1,0 +1,5 @@
+pytest>=8
+pyserial>=3.5
+# OBD bench PCAN scripts (obd_bench_check / obd_vt_isotp_check / monitor-injection)
+python-can>=4.3
+can-isotp>=2.0

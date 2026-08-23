@@ -1,0 +1,14 @@
+# rpi001 — never let a bench USB WiFi stick autosuspend. A suspended
+# stick drops beacons / stalls scans and surfaces as random mid-test
+# flake that looks like a firmware bug, so this is load-bearing.
+#
+# Was vendor-only "0bda" (Realtek RTL8822CU era). 2026-07-31 the sticks
+# became MT7612U (0e8d:7612) and that rule silently stopped covering
+# them — match BOTH vendors so a future swap back, or a mixed pair,
+# stays covered. 0bda also matches the RTS5411/0411 hubs on this rig;
+# pinning a hub's power/control to "on" is harmless.
+#
+# Deployed to /etc/udev/rules.d/ by deploy_bench_pi.sh. Takes effect at
+# the next enumeration of the device (reboot, or replug).
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="0bda", TEST=="power/control", ATTR{power/control}="on"
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="0e8d", TEST=="power/control", ATTR{power/control}="on"

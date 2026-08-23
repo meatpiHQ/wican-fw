@@ -1,0 +1,18 @@
+# Everything under tools/testbench/ is deployed to and EXECUTED ON the
+# bench Pi (Linux). This repo is worked on from Windows with
+# core.autocrlf=true, which checks these out as CRLF — and a shell script
+# with CRLF fails on the Pi in a maximally confusing way: `set -e` becomes
+# `set: -: invalid option`, `cd .` becomes `cd $'.\r'`, and an install(1)
+# target picks up a trailing CR so files land under a CR-named path
+# instead of the real one (seen 2026-07-31).
+#
+# Pin LF so a Windows checkout still produces deployable files.
+*.sh        text eol=lf
+*.rules     text eol=lf
+*.service   text eol=lf
+*.py        text eol=lf
+
+# extensionless Pi-side executables (tools/testbench/pi/)
+bench-health      text eol=lf
+bench-recover     text eol=lf
+bench-radio-reset text eol=lf

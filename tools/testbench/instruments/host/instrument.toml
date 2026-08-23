@@ -1,0 +1,9 @@
+label = "host-only"
+desc = "no hardware — runs that may execute alongside bench runs"
+doc = "A pure lock tag: entries declaring only 'host' never contend with hardware runs."
+
+[config]
+# wican-fw firmware checkout (webui-smoke's tools/webui_preview lives
+# there) — path relative to this repo's root. Override in
+# benchboard.local.toml to smoke another checkout.
+fw_root = "."

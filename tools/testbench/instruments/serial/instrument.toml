@@ -1,0 +1,17 @@
+label = "Flash port"
+desc = "UART0 USB-serial adapter for esptool (target test apps)"
+optional = true
+doc = "External USB-UART wired to the DUT's UART0 — the ONLY reliable esptool port (COM7 enters download mode but never syncs, and OPENING COM7 RESETS THE DUT; COM6/7 vanish entirely when the USB connector is in NCM/host role). Probe is enumeration-only, it never opens a port. Ports re-enumerate; when in doubt re-check with a PSU on/off diff. Override flash_port/fw_build in benchboard.local.toml."
+
+[config]
+flash_port = "COM1175"
+# 2000000 fails to connect on this rig; 460800 is the proven rate
+baud = "460800"
+# main-firmware build dir to RESTORE after a target test app run
+# (target-cycle flow cleanup) — path relative to this repo's root.
+# Override in benchboard.local.toml to restore another checkout's build.
+fw_build = "build"
+
+[health]
+cmd = "${python} \"${dir}/probe.py\" --port ${flash_port}"
+timeout_s = 15

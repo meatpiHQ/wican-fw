@@ -1,0 +1,10 @@
+label = "rpi001"
+desc = "Bench Pi: role radios wint0/wtest0/wtest1, ethernet control plane 192.168.90.2"
+doc = "bench-health = RIG OK/FAULT incl. per-radio BSSID truth-test (TESTBENCH.md §2). ${pi.ssh} is the ssh alias other cmds use."
+
+[config]
+ssh = "rpi001"
+
+[health]
+cmd = "ssh ${ssh} bench-health"
+timeout_s = 90

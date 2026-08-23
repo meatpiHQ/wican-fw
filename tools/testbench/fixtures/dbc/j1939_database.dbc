@@ -1,0 +1,157 @@
+VERSION ""
+
+
+NS_ : 
+	NS_DESC_
+	CM_
+	BA_DEF_
+	BA_
+	VAL_
+	CAT_DEF_
+	CAT_
+	FILTER
+	BA_DEF_DEF_
+	EV_DATA_
+	ENVVAR_DATA_
+	SGTYPE_
+	SGTYPE_VAL_
+	BA_DEF_SGTYPE_
+	BA_SGTYPE_
+	SIG_TYPE_REF_
+	VAL_TABLE_
+	SIG_GROUP_
+	SIG_VALTYPE_
+	SIGTYPE_VALTYPE_
+	BO_TX_BU_
+	BA_DEF_REL_
+	BA_REL_
+	BA_DEF_DEF_REL_
+	BU_SG_REL_
+	BU_EV_REL_
+	BU_BO_REL_
+	SG_MUL_VAL_
+
+BS_:
+
+BU_:
+
+
+BO_ 0 PGN_0000: 8 Vector__XXX
+ SG_ EngineRequestedTorqueHiRes : 40|4@1+ (0.125,0) [0|0.875] "%" Vector__XXX
+
+BO_ 2364540158 EEC1: 8 Vector__XXX
+ SG_ EngineTorqueMode : 0|4@1+ (1,0) [0|15] "" Vector__XXX
+ SG_ ActualEnginePercentTorque_HR : 4|4@1+ (0.125,0) [0|0.875] "%" Vector__XXX
+ SG_ DriversDemandEngineTorque : 8|8@1- (1,-125) [-125|125] "%" Vector__XXX
+ SG_ ActualEnginePercentTorque : 16|8@1- (1,-125) [-125|125] "%" Vector__XXX
+ SG_ EngineSpeed : 24|16@1+ (0.125,0) [0|8031.875] "rpm" Vector__XXX
+ SG_ EngineDemandPercentTorque : 56|8@1- (1,-125) [-125|125] "%" Vector__XXX
+
+BO_ 2364539903 EEC2: 8 Vector__XXX
+ SG_ AccelPedal1LowIdleSwitch : 0|2@1+ (1,0) [0|3] "" Vector__XXX
+ SG_ AccelPedalKickdownSwitch : 2|2@1+ (1,0) [0|3] "" Vector__XXX
+ SG_ RoadSpeedLimitStatus : 4|2@1+ (1,0) [0|3] "" Vector__XXX
+ SG_ AccelPedal2LowIdleSwitch : 6|2@1+ (1,0) [0|3] "" Vector__XXX
+ SG_ AccelPedalPosition1 : 8|8@1+ (0.4,0) [0|100] "%" Vector__XXX
+
+BO_ 2566844926 CCVS1: 8 Vector__XXX
+ SG_ WheelBasedVehicleSpeed : 8|16@1+ (0.00390625,0) [0|250.996] "km/h" Vector__XXX
+
+BO_ 2566842110 TD: 8 Vector__XXX
+ SG_ Seconds : 0|8@1+ (0.25,0) [0|62.5] "s" Vector__XXX
+ SG_ Minutes : 8|8@1+ (1,0) [0|250] "min" Vector__XXX
+ SG_ Hours : 16|8@1+ (1,0) [0|250] "hr" Vector__XXX
+ SG_ Month : 24|8@1+ (1,0) [0|250] "month" Vector__XXX
+ SG_ Day : 32|8@1+ (0.25,0) [0|62.5] "day" Vector__XXX
+ SG_ Year : 40|8@1+ (1,1985) [1985|2235] "year" Vector__XXX
+
+BO_ 2566842877 LFI: 8 Vector__XXX
+ SG_ EngineTripFuel : 0|32@1+ (0.5,0) [0|2105540607.5] "L" Vector__XXX
+ SG_ EngineTotalFuelUsed : 32|32@1+ (0.5,0) [0|2105540607.5] "L" Vector__XXX
+
+BO_ 2566844415 EFL_P1: 8 Vector__XXX
+ SG_ EngineFuelDeliveryPressure : 0|8@1+ (4,0) [0|1000] "kPa" Vector__XXX
+ SG_ EngineOilLevel : 16|8@1+ (0.4,0) [0|100] "%" Vector__XXX
+ SG_ EngineOilPressure : 24|8@1+ (4,0) [0|1000] "kPa" Vector__XXX
+ SG_ EngineCrankcasePressure : 32|16@1+ (0.0078125,-250) [-250|251.99] "kPa" Vector__XXX
+ SG_ EngineCoolantPressure : 48|8@1+ (2,0) [0|500] "kPa" Vector__XXX
+ SG_ EngineCoolantLevel : 56|8@1+ (0.4,0) [0|100] "%" Vector__XXX
+
+BO_ 2566845951 AMB: 8 Vector__XXX
+ SG_ BarometricPressure : 0|8@1+ (0.5,0) [0|125] "kPa" Vector__XXX
+ SG_ CabInteriorTemperature : 8|16@1+ (0.03125,-273) [-273|1735] "degC" Vector__XXX
+ SG_ AmbientAirTemperature : 24|16@1+ (0.03125,-273) [-273|1735] "degC" Vector__XXX
+ SG_ EngineAirInletTemperature : 40|8@1+ (1,-40) [-40|210] "degC" Vector__XXX
+ SG_ RoadSurfaceTemperature : 48|16@1+ (0.03125,-273) [-273|1735] "degC" Vector__XXX
+
+
+CM_ BO_ 0 "PGN 0: Proprietary / Control";
+CM_ SG_ 0 EngineRequestedTorqueHiRes "SPN 4191";
+CM_ BO_ 2364540158 "PGN 61444: Electronic Engine Controller 1";
+CM_ BO_ 2364539903 "PGN 61443: Electronic Engine Controller 2";
+CM_ BO_ 2566844926 "PGN 65265: Cruise Control/Vehicle Speed 1";
+CM_ BO_ 2566842110 "PGN 65254: Time / Date";
+CM_ BO_ 2566842877 "PGN 65257: Fuel Information";
+CM_ BO_ 2566844415 "PGN 65263: Engine Fluids & Pressure";
+CM_ BO_ 2566845951 "PGN 65269: Ambient Conditions";
+
+BA_DEF_ SG_  "SPN" INT 0 524287;
+BA_DEF_ BO_  "VFrameFormat" ENUM  "StandardCAN","ExtendedCAN","reserved","J1939PG";
+BA_DEF_  "ProtocolType" STRING ;
+BA_DEF_  "BusType" STRING ;
+
+BA_DEF_DEF_  "SPN" 0;
+BA_DEF_DEF_  "VFrameFormat" "J1939PG";
+BA_DEF_DEF_  "ProtocolType" "J1939";
+BA_DEF_DEF_  "BusType" "CAN";
+
+BA_ "ProtocolType" "J1939";
+BA_ "BusType" "CAN";
+
+BA_ "VFrameFormat" BO_ 0 3;
+BA_ "VFrameFormat" BO_ 2364540158 3;
+BA_ "VFrameFormat" BO_ 2364539903 3;
+BA_ "VFrameFormat" BO_ 2566844926 3;
+BA_ "VFrameFormat" BO_ 2566842110 3;
+BA_ "VFrameFormat" BO_ 2566842877 3;
+BA_ "VFrameFormat" BO_ 2566844415 3;
+BA_ "VFrameFormat" BO_ 2566845951 3;
+
+BA_ "SPN" SG_ 0 EngineRequestedTorqueHiRes 4191;
+BA_ "SPN" SG_ 2364540158 EngineTorqueMode 899;
+BA_ "SPN" SG_ 2364540158 ActualEnginePercentTorque_HR 4154;
+BA_ "SPN" SG_ 2364540158 DriversDemandEngineTorque 512;
+BA_ "SPN" SG_ 2364540158 ActualEnginePercentTorque 513;
+BA_ "SPN" SG_ 2364540158 EngineSpeed 190;
+BA_ "SPN" SG_ 2364540158 EngineDemandPercentTorque 2432;
+BA_ "SPN" SG_ 2364539903 AccelPedal1LowIdleSwitch 558;
+BA_ "SPN" SG_ 2364539903 AccelPedalKickdownSwitch 559;
+BA_ "SPN" SG_ 2364539903 RoadSpeedLimitStatus 1437;
+BA_ "SPN" SG_ 2364539903 AccelPedal2LowIdleSwitch 2970;
+BA_ "SPN" SG_ 2364539903 AccelPedalPosition1 91;
+BA_ "SPN" SG_ 2566844926 WheelBasedVehicleSpeed 84;
+BA_ "SPN" SG_ 2566842110 Seconds 959;
+BA_ "SPN" SG_ 2566842110 Minutes 960;
+BA_ "SPN" SG_ 2566842110 Hours 961;
+BA_ "SPN" SG_ 2566842110 Month 963;
+BA_ "SPN" SG_ 2566842110 Day 962;
+BA_ "SPN" SG_ 2566842110 Year 964;
+BA_ "SPN" SG_ 2566842877 EngineTripFuel 182;
+BA_ "SPN" SG_ 2566842877 EngineTotalFuelUsed 250;
+BA_ "SPN" SG_ 2566844415 EngineFuelDeliveryPressure 94;
+BA_ "SPN" SG_ 2566844415 EngineOilLevel 98;
+BA_ "SPN" SG_ 2566844415 EngineOilPressure 100;
+BA_ "SPN" SG_ 2566844415 EngineCrankcasePressure 101;
+BA_ "SPN" SG_ 2566844415 EngineCoolantPressure 109;
+BA_ "SPN" SG_ 2566844415 EngineCoolantLevel 111;
+BA_ "SPN" SG_ 2566845951 BarometricPressure 108;
+BA_ "SPN" SG_ 2566845951 CabInteriorTemperature 170;
+BA_ "SPN" SG_ 2566845951 AmbientAirTemperature 171;
+BA_ "SPN" SG_ 2566845951 EngineAirInletTemperature 172;
+BA_ "SPN" SG_ 2566845951 RoadSurfaceTemperature 79;
+
+VAL_ 2364540158 EngineTorqueMode 15 "Not available" 0 "No request" ;
+VAL_ 2364539903 AccelPedal1LowIdleSwitch 3 "Not available" 2 "Error" 1 "In low idle" 0 "Not in low idle" ;
+VAL_ 2364539903 AccelPedalKickdownSwitch 3 "Not available" 2 "Error" 1 "Kickdown active" 0 "Kickdown passive" ;
+VAL_ 2364539903 RoadSpeedLimitStatus 3 "Not available" 2 "Error" 1 "Not active" 0 "Active" ;
+VAL_ 2364539903 AccelPedal2LowIdleSwitch 3 "Not available" 2 "Error" 1 "In low idle" 0 "Not in low idle" ;

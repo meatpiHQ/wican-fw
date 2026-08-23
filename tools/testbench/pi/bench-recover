@@ -1,0 +1,80 @@
+#!/bin/bash
+# bench-recover — run the recovery ladder bottom-up (plan §4.3).
+#   probe -> targeted level 0 per failed component -> re-probe
+#         -> still faulty: level 1 Pi reboot (with marker) -> (post-boot
+#            re-probe happens naturally via bench-startup + next caller)
+# Idempotent and safe to call mid-run from benchlib or test.ps1.
+# Exit: 0 = rig healthy (possibly after recovery), 2 = unrecovered
+# (reboot already spent or reboot suppressed), 3 = rebooting now.
+BENCH_TAG=bench-recover
+. /usr/local/lib/bench-lib.sh
+
+NO_REBOOT=0
+[ "$1" = "--no-reboot" ] && NO_REBOOT=1
+MARKER="$BENCH_STATE_DIR/last-recover-reboot"
+sudo mkdir -p "$BENCH_STATE_DIR"
+
+probe() { bench-health; }
+
+out=$(probe) && { echo "$out"; exit 0; }
+echo "$out"
+blog "rig faulty - running ladder"
+
+# ---- level 0: targeted per failed component ------------------------------
+echo "$out" | grep "^RIG FAULT" | while read -r _ _ comp reason; do
+    comp=${comp%:}
+    case "$comp" in
+        wican-bench-w0|hotspot)
+            bench-radio-reset wint0
+            con_active "$HOTSPOT_PRIMARY" ||
+                sudo nmcli connection up "$HOTSPOT_PRIMARY" >/dev/null 2>&1
+            ;;
+        wican-bench)            bench-radio-reset wtest0 ;;
+        wint0|wtest0|wtest1)    bench-radio-reset "$comp" ;;
+        mosquitto)              sudo systemctl restart mosquitto ;;
+        ble)                    sudo usbreset 2357:0604 2>/dev/null ;;
+        eth)                    sudo nmcli connection up "$ETH_CON" ;;
+        *)                      blog "no level-0 action for '$comp'" ;;
+    esac
+done
+sleep 3
+
+out=$(probe) && { blog "healed at level 0"; echo "$out"; exit 0; }
+echo "$out"
+
+# ---- harder level 0: USB-reset any still-faulty stick radio --------------
+echo "$out" | grep "^RIG FAULT" | while read -r _ _ comp reason; do
+    comp=${comp%:}
+    case "$comp" in
+        wican-bench-w0|hotspot) : ;;  # internal radio - nothing below reboot
+        wican-bench)            bench-radio-reset wtest0 --usb ;;
+        wtest0|wtest1)          bench-radio-reset "$comp" --usb ;;
+    esac
+done
+sleep 3
+
+out=$(probe) && { blog "healed at level 0b (usbreset)"; echo "$out"; exit 0; }
+echo "$out"
+
+# ---- level 1: Pi reboot ---------------------------------------------------
+if [ "$NO_REBOOT" = 1 ]; then
+    blog "UNRECOVERED (reboot suppressed by --no-reboot)"
+    exit 2
+fi
+
+# reboot-loop guard: if we already rebooted for recovery <10 min ago and
+# the rig is STILL faulty, a second reboot won't help — needs hands.
+if [ -f "$MARKER" ]; then
+    age=$(( $(date +%s) - $(stat -c %Y "$MARKER") ))
+    if [ "$age" -lt 600 ]; then
+        blog "UNRECOVERED: rebooted ${age}s ago and still faulty - needs hands"
+        exit 2
+    fi
+fi
+
+blog "escalating to level 1: Pi reboot"
+echo "level-1 reboot $(date -Is): $out" | sudo tee "$MARKER" >/dev/null
+sudo systemd-run --on-active=2 shutdown -r now >/dev/null 2>&1 ||
+    (sleep 2 && sudo reboot) &
+echo "RIG REBOOTING"
+exit 3

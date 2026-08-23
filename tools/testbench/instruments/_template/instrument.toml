@@ -1,0 +1,19 @@
+# Template instrument — copy this folder, rename it to your instrument id
+# (the folder name IS the id), then fill in the fields. See ../README.md.
+label = "My tool"
+desc = "one-line description shown in the chip tooltip"
+optional = false          # true = absent shows grey, not a red fault
+doc = "longer notes: where it is plugged in, gotchas, safety limits"
+
+[config]
+# machine-specific knobs — users override these in benchboard.local.toml:
+#   [instruments.<id>.config]
+#   port = "COM9"
+port = "COM1"
+
+[health]
+# exit 0 = healthy; LAST stdout line = chip status; must be side-effect
+# free. ${python} = the BenchBoard interpreter, ${dir} = this folder,
+# ${port} = the [config] value (after local overrides).
+cmd = "${python} \"${dir}/probe.py\" --port ${port}"
+timeout_s = 15

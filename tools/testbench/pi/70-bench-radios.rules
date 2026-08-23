@@ -1,0 +1,23 @@
+# rpi001 bench radio role names (bench standardization plan phase 4,
+# 2026-07-26). Persistent names by MAC so scripts and docs say the ROLE,
+# not "whichever wlanN enumerated first today" (the two USB sticks are
+# identical and swapped names across boots).
+#
+#   wint0  = internal brcmfmac  — hotspot-primary (wican-bench-w0, DUT net)
+#   wtest0 = USB stick #1       — hotspot twin (wican-bench) / HIL second AP
+#   wtest1 = USB stick #2       — home-LAN uplink (non-load-bearing) / spare
+#
+# 2026-07-31: the RTL8822CU sticks (0bda:c812) were retired for MT7612U
+# (0e8d:7612) — the chipset swap the standardization plan called for to
+# kill the wedge-as-AP class. Roles assigned by USB topology: wtest0 (the
+# load-bearing twin) is the stick on the direct hub port 4-1.4; wtest1 is
+# the one behind the chained hubs at 4-1.1.1.1. Changing MACs here ALSO
+# requires updating bench_iface() in bench-lib.sh and the MAC-pinned NM
+# profiles (wican-bench, "Nachos_8042_5G 2") — deploy_bench_pi.sh re-pins
+# those automatically.
+#
+# Deployed to /etc/udev/rules.d/70-bench-radios.rules by deploy_bench_pi.sh.
+# A rename only applies at (re)enumeration — reboot after installing.
+SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="2c:cf:67:f5:b6:60", NAME="wint0"
+SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="90:de:80:88:cf:08", NAME="wtest0"
+SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="90:de:80:88:ce:5f", NAME="wtest1"

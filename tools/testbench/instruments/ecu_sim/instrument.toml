@@ -1,0 +1,10 @@
+label = "ECU sim"
+desc = "2nd WiCAN Pro as ECU simulator, REST at 192.168.8.1 over the PC USB NCM link"
+doc = "Feeds the DUT CAN bus with OBD responses; REST API sets DTCs/PIDs."
+
+[config]
+url = "http://192.168.8.1/"
+
+[health]
+cmd = "${python} \"${dir}/probe.py\" --url ${url}"
+timeout_s = 20

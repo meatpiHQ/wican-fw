@@ -1,0 +1,11 @@
+label = "DUT USB link"
+desc = "DUT CDC-NCM device link (only when the USB mux is in device mode)"
+optional = true
+doc = "One ping to the DUT's USB address; down is normal when the mux is in host mode."
+
+[config]
+ip = "192.168.82.1"
+
+[health]
+cmd = "${python} \"${dir}/probe.py\" --ip ${ip}"
+timeout_s = 20

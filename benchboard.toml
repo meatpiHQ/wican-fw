@@ -1,0 +1,381 @@
+# BenchBoard manifest for WiCAN Pro v6 (see docs/benchboard_plan.md and
+# tools/benchboard/README.md).
+#
+# PORTABLE BY DESIGN: instruments (bench equipment) live as one folder
+# each under tools/testbench/instruments/. Machine-specific values (COM
+# ports, IPs, your device id) are NOT edited here — put them in
+# benchboard.local.toml (gitignored; copy benchboard.local.example.toml).
+# ${python} = the interpreter running BenchBoard; ${<ins>.<key>} = an
+# instrument's (locally-overridden) config value.
+
+[project]
+name = "WiCAN Pro v6"
+instruments_dir = "tools/testbench/instruments"
+
+# ---------------------------------------------------------------- actions
+[[action]]
+id = "sync-pi"
+name = "Sync repo -> Pi"
+cmd = "bash tools/testbench/sync_pi.sh"
+timeout_s = 300
+doc = "tar components+tools (with the meatpi-components overlay) to the Pi's ~/wican. Run after editing any Pi-side bench script."
+
+[[action]]
+id = "bench-recover"
+name = "Rig recovery ladder"
+cmd = "ssh ${pi.ssh} bench-recover"
+timeout_s = 600
+doc = "probe -> profile bounce -> usbreset -> Pi reboot (marker + loop guard)."
+
+[[action]]
+id = "push-ota-image"
+name = "Push wican-fw build -> Pi:/tmp"
+cmd = "scp ${dut.fw_bin} ${pi.ssh}:/tmp/wican-fw.bin"
+timeout_s = 120
+doc = "Stage the current build for the system-bench OTA leg. The image path = ${dut.fw_bin} (instruments/dut config) — override it in benchboard.local.toml [instruments.dut.config] to bench another checkout's build."
+
+# ---------------------------------------------------------------- flows
+[[flow]]
+id = "ota-cycle"
+name = "OTA cycle: stage image + full system bench"
+group = "system"
+instruments = ["dut", "pi", "ecu_sim"]
+timeout_s = 2700
+doc = "Reference flow (plan §5c): stage the current build on the Pi, run the full journey incl. the OTA leg, always end with a rig verdict."
+
+  [[flow.param]]
+  name = "id"
+  label = "device id"
+  default = "14c19f44e349"
+
+  [[flow.step]]
+  name = "stage image on the Pi"
+  cmd = "scp ${dut.fw_bin} ${pi.ssh}:/tmp/wican-fw.bin"
+  timeout_s = 120
+
+  [[flow.step]]
+  name = "system bench + OTA leg"
+  cmd = "ssh ${pi.ssh} \"cd ~/wican/tools/testbench/system && python3 -u system_bench.py --id {id} --ota /tmp/wican-fw.bin\""
+  expect = "SYSTEM BENCH PASS"
+  timeout_s = 2400
+
+  [[flow.cleanup]]
+  name = "rig verdict"
+  cmd = "ssh ${pi.ssh} bench-health"
+  timeout_s = 90
+
+[[flow]]
+id = "target-cycle"
+name = "Target test app -> restore main fw"
+group = "system"
+instruments = ["dut", "pi", "serial"]
+timeout_s = 1500
+doc = "Flash ONE component's on-target test app (test.ps1 target), capture its verdict over serial, then ALWAYS reflash the main firmware and wait for the DUT to come back online — even when the test app fails mid-run. Valid components: settings_manager, filesystem, http_server_manager, wifi_manager, log_manager, dev_status_manager, restart_tracker, obd_chip, api_http, socket_manager, bridge_manager, ble_manager."
+
+  [[flow.param]]
+  name = "comp"
+  label = "component"
+  default = "settings_manager"
+
+  [[flow.step]]
+  name = "flash + run the test app"
+  cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1 target {comp} -Port ${serial.flash_port}"
+  expect = "RESULT: PASS"
+  timeout_s = 900
+
+  [[flow.cleanup]]
+  name = "restore main firmware"
+  cmd = "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Set-Location '${serial.fw_build}'; & '${python}' -m esptool --chip esp32s3 -p ${serial.flash_port} -b ${serial.baud} --before default-reset --after hard-reset write-flash '@flash_args'\""
+  timeout_s = 300
+
+  [[flow.cleanup]]
+  name = "DUT back online"
+  cmd = "ssh ${pi.ssh} \"for i in $(seq 60); do curl -sf -m 3 http://${dut.ip}/api/status -o /dev/null && echo DUT BACK ONLINE && exit 0; sleep 2; done; echo DUT DID NOT RETURN; exit 1\""
+  timeout_s = 150
+
+# ---------------------------------------------------------------- system
+[[test]]
+id = "system-bench"
+name = "System bench (full journey)"
+group = "system"
+file = "tools/testbench/system/system_bench.py"
+cmd = "ssh ${pi.ssh} \"cd ~/wican/tools/testbench/system && python3 -u system_bench.py --id {id} --secs {secs} {no_degraded}\""
+instruments = ["dut", "pi", "ecu_sim"]
+timeout_s = 1800
+verdict_pass = "SYSTEM BENCH PASS"
+verdict_fail = "SYSTEM BENCH FAIL"
+doc = "Factory-AP onboarding -> configure -> STA -> OBD -> perf -> health -> WS -> degraded legs. Run sync-pi first if scripts changed."
+
+  [[test.param]]
+  name = "id"
+  label = "device id"
+  default = "14c19f44e349"
+  [[test.param]]
+  name = "secs"
+  label = "perf secs"
+  type = "int"
+  default = 30
+  [[test.param]]
+  name = "no_degraded"
+  label = "skip degraded legs"
+  type = "bool"
+  default = false
+  help = "--no-degraded"
+
+[[test]]
+id = "system-bench-ota"
+name = "System bench + OTA leg"
+group = "system"
+file = "tools/testbench/system/system_bench.py"
+cmd = "ssh ${pi.ssh} \"cd ~/wican/tools/testbench/system && python3 -u system_bench.py --id {id} --ota {ota}\""
+instruments = ["dut", "pi", "ecu_sim"]
+timeout_s = 2400
+verdict_pass = "SYSTEM BENCH PASS"
+verdict_fail = "SYSTEM BENCH FAIL"
+doc = "Full flow + OTA upload/flip/health. Run push-ota-image first."
+
+  [[test.param]]
+  name = "id"
+  label = "device id"
+  default = "14c19f44e349"
+  [[test.param]]
+  name = "ota"
+  label = "image on Pi"
+  default = "/tmp/wican-fw.bin"
+
+[[test]]
+id = "stackaudit"
+name = "Stack + memory audit"
+group = "system"
+cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1 stackaudit"
+instruments = ["dut", "pi", "ecu_sim"]
+timeout_s = 1800
+doc = "Static .su frame analysis + runtime watermarks/heap floors (test.ps1 stackaudit)."
+
+[[test]]
+id = "logsinks"
+name = "Log sinks conservation"
+group = "system"
+cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1 logsinks"
+instruments = ["dut", "pi", "ecu_sim"]
+timeout_s = 1800
+doc = "TCP tail / UDP push / ws_log / SD devlog exactly-N conservation."
+
+[[test]]
+id = "host-tests"
+name = "Host unit suites (on the Pi)"
+group = "system"
+cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1 host {component}"
+instruments = ["pi"]
+timeout_s = 3600
+doc = "All components/*/host_test on the IDF linux target; optional single component."
+
+  [[test.param]]
+  name = "component"
+  label = "component (empty = all)"
+  default = ""
+
+[[test]]
+id = "live"
+name = "Live checks vs composed fw"
+group = "system"
+cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1 live"
+instruments = ["dut", "pi", "ecu_sim"]
+timeout_s = 3600
+doc = "cli_ws + ws_live + dbc_real + stack audit + wifi gate sweep (test.ps1 live)."
+
+[[test]]
+id = "hil"
+name = "WiFi HIL pytest suite"
+group = "wifi"
+cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1 hil"
+instruments = ["dut", "pi", "ecu_sim"]
+timeout_s = 3600
+doc = "Real STA connect/reconnect/fallback/ban vs the Pi APs (error budgets enforced)."
+
+[[test]]
+id = "perf"
+name = "Performance battery"
+group = "system"
+cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1 perf"
+instruments = ["dut", "pi", "ecu_sim"]
+timeout_s = 3600
+doc = "MQTT RTT/drain, WS echo + OBD-poll, BLE A/B (test.ps1 perf)."
+
+[[test]]
+id = "webui-smoke"
+name = "Web UI jsdom smoke (all routes)"
+group = "system"
+cmd = "${python} make_preview.py && node smoke.mjs"
+cwd = "${host.fw_root}/tools/webui_preview"
+instruments = ["host"]
+timeout_s = 300
+verdict_pass = "SMOKE PASS"
+doc = "Regenerates preview.html from web_ui_v2/web/index.html + mocks (a stale checked-in preview must never green-wash the smoke), then walks every route under jsdom. Needs node + one-time `npm install` in ${host.fw_root}/tools/webui_preview."
+[[test]]
+id = "cli-ws"
+name = "CLI over WebSocket"
+group = "wifi"
+file = "tools/testbench/wifi/cli_ws_test.py"
+cmd = "ssh ${pi.ssh} \"cd ~/wican && python3 -u tools/testbench/wifi/cli_ws_test.py {dut_ip}\""
+instruments = ["dut", "pi", "ecu_sim"]
+timeout_s = 300
+verdict_pass = "CLI WS PASS"
+doc = "Command transcript over /ws/cli incl. the system -t task monitor."
+
+  [[test.param]]
+  name = "dut_ip"
+  label = "DUT IP"
+  default = "${dut.ip}"
+
+[[test]]
+id = "ws-live"
+name = "OBD over WebSocket (live)"
+group = "wifi"
+file = "tools/testbench/wifi/ws_live_test.py"
+cmd = "ssh ${pi.ssh} \"cd ~/wican && python3 -u tools/testbench/wifi/ws_live_test.py {dut_ip}\""
+instruments = ["dut", "pi", "ecu_sim"]
+timeout_s = 600
+verdict_pass = "WS LIVE PASS"
+doc = "ELM over /ws/obd with autopid groups paused/restored around it."
+
+  [[test.param]]
+  name = "dut_ip"
+  label = "DUT IP"
+  default = "${dut.ip}"
+
+# ---------------------------------------------------------------- can
+[[test]]
+id = "dbc-real"
+name = "Real-DBC parser cross-check"
+group = "can"
+file = "tools/testbench/can/dbc_real_test.py"
+cmd = "ssh ${pi.ssh} \"cd ~/wican && python3 -u tools/testbench/can/dbc_real_test.py {dut_ip}\""
+instruments = ["dut", "pi", "ecu_sim"]
+timeout_s = 900
+verdict_pass = "DBC REAL PASS"
+doc = "Uploads the fixture DBCs, diffs every signal against the host reference."
+
+  [[test.param]]
+  name = "dut_ip"
+  label = "DUT IP"
+  default = "${dut.ip}"
+
+[[test]]
+id = "canfan"
+name = "CAN-jack fan-out (slcan + MQTT)"
+group = "can"
+file = "tools/testbench/can/canfan_bench_test.py"
+cmd = "${python} -u tools/testbench/can/canfan_bench_test.py {pcan}"
+instruments = ["dut", "pi", "pcan"]
+timeout_s = 1200
+verdict_pass = "CANFAN BENCH PASS"
+verdict_fail = "CANFAN BENCH FAIL"
+doc = "Storm N frames -> BOTH consumers must see >=95% simultaneously."
+
+  [[test.param]]
+  name = "pcan"
+  label = "PCAN channel"
+  type = "choice"
+  choices = ["PCAN_USBBUS1", "PCAN_USBBUS2"]
+  default = "${pcan.channel}"
+
+[[test]]
+id = "can-conservation"
+name = "CAN counter conservation"
+group = "can"
+file = "tools/testbench/can/can_conservation_test.py"
+cmd = "${python} -u tools/testbench/can/can_conservation_test.py"
+instruments = ["dut", "pi", "pcan"]
+timeout_s = 1200
+verdict_pass = "CAN CONSERVATION PASS"
+doc = "Exactly-5000-frame accounting at 3 load tiers (performance-truth net)."
+
+# ---------------------------------------------------------------- obd
+[[test]]
+id = "autopid-period0"
+name = "autopid at period_ms=0"
+group = "obd"
+file = "tools/testbench/obd/autopid_period0_bench.py"
+cmd = "ssh ${pi.ssh} \"cd ~/wican/tools/testbench/obd && python3 -u autopid_period0_bench.py\""
+instruments = ["dut", "pi", "ecu_sim"]
+timeout_s = 900
+verdict_pass = "AUTOPID PERIOD0 PASS"
+doc = "Max-rate polling window vs baseline; HTTP responsiveness + heap drift + health nets."
+
+[[test]]
+id = "dtc-freeze"
+name = "DTC freeze frame (mode 02)"
+group = "obd"
+file = "tools/testbench/obd/dtc_freeze_bench_test.py"
+cmd = "${python} -u tools/testbench/obd/dtc_freeze_bench_test.py"
+instruments = ["dut", "pi", "ecu_sim"]
+timeout_s = 1200
+verdict_pass = "DTC FREEZE BENCH PASS"
+doc = "REST-set DTC+RPM on the ECU sim -> scan -> report.freeze decode; 3 submit-reboots."
+
+# ---------------------------------------------------------------- ble
+[[test]]
+id = "obd-ble-bridge"
+name = "OBD over BLE (phone path)"
+group = "ble"
+file = "tools/testbench/ble/obd_ble_bridge_test.py"
+cmd = "ssh ${pi.ssh} \"cd ~/wican/tools/testbench/ble && sudo PYTHONPATH=/home/meatpi/.local/lib/python3.11/site-packages python3 -u obd_ble_bridge_test.py\""
+instruments = ["dut", "pi", "ecu_sim"]
+timeout_s = 900
+verdict_pass = "OBD BLE BRIDGE PASS"
+doc = "br_ble_obd bridge + pair + ATI/0100 over FFF1/FFF2, WiFi-resume, restore."
+
+[[test]]
+id = "blesec"
+name = "BLE bonding + security"
+group = "ble"
+cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1 blesec"
+instruments = ["dut", "pi", "usbdev"]
+timeout_s = 1800
+doc = "Wrong-passkey gate, MITM pair, bond persistence across reboot (test.ps1 blesec)."
+
+# ---------------------------------------------------------------- sleep
+[[test]]
+id = "sleep"
+name = "Sleep bench (PSU ladder)"
+group = "sleep"
+file = "tools/testbench/sleep/sleep_bench_test.py"
+cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1 sleep"
+instruments = ["dut", "pi", "psu"]
+timeout_s = 1800
+doc = "Voltage ladder -> light-sleep entry by supply current -> voltage wake."
+
+[[test]]
+id = "sleepmatrix"
+name = "Sleep robustness matrix (~90 min)"
+group = "sleep"
+file = "tools/testbench/sleep/sleep_matrix_test.py"
+cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1 sleepmatrix"
+instruments = ["dut", "pi", "psu"]
+timeout_s = 9000
+doc = "Sleep entry under load, one scenario per subsystem incl. betty VPN soaks."
+
+# ---------------------------------------------------------------- usb
+[[test]]
+id = "dwc2"
+name = "DWC2 kill-vs-ISR hammer"
+group = "usb"
+file = "tools/testbench/usb/dwc2_hammer_test.py"
+cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1 dwc2"
+instruments = ["dut", "usbdev"]
+timeout_s = 1800
+doc = "ACM kill floods + NCM OUT blasts vs the 2026-07-17 crash class."
+
+# ---------------------------------------------------------------- suites
+[[suite]]
+id = "quick-live"
+name = "Quick live sanity"
+tests = ["cli-ws", "ws-live", "dbc-real"]
+doc = "~10 min: is the composed firmware alive and sane on the bench?"
+
+[[suite]]
+id = "acceptance"
+name = "Bench acceptance (the 07-26 four)"
+tests = ["system-bench", "obd-ble-bridge", "autopid-period0", "canfan"]
+doc = "The rig-standardization acceptance set; ~30 min."

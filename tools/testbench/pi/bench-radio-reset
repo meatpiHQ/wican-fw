@@ -1,0 +1,91 @@
+#!/bin/bash
+# bench-radio-reset — recovery ladder level 0 for one radio (plan §4).
+#   bench-radio-reset <wint0|wtest0|wtest1> [--usb]
+# Level 0a: bounce the NM profile(s) on that radio (the fix that healed
+# both phantom-AP incidents). Level 0b (--usb, or automatically when the
+# bounce alone did not restore the interface): usbreset the stick so it
+# re-enumerates without a Pi reboot. wint0 is not USB — --usb is a no-op.
+BENCH_TAG=bench-radio-reset
+. /usr/local/lib/bench-lib.sh
+
+role="$1"
+do_usb=0
+[ "$2" = "--usb" ] && do_usb=1
+
+case "$role" in wint0|wtest0|wtest1) ;; *)
+    echo "usage: bench-radio-reset <wint0|wtest0|wtest1> [--usb]"; exit 64 ;;
+esac
+
+ifc=$(bench_iface "$role")
+
+if [ -z "$ifc" ] && [ "$role" != wint0 ]; then
+    blog "$role: interface absent - going straight to USB reset"
+    do_usb=1
+fi
+
+# profiles active on this radio (to restore after a USB reset)
+active_cons=""
+if [ -n "$ifc" ]; then
+    active_cons=$(nmcli -t -f NAME,DEVICE connection show --active |
+                  awk -F: -v d="$ifc" '$2==d{print $1}')
+fi
+
+# ---- level 0a: profile bounce -------------------------------------------
+if [ -n "$ifc" ] && [ "$do_usb" = 0 ]; then
+    for con in $active_cons; do
+        blog "$role/$ifc: bouncing profile '$con'"
+        sudo nmcli connection down "$con" >/dev/null 2>&1
+        sleep 2
+        sudo nmcli connection up "$con" >/dev/null 2>&1 && sleep 4
+    done
+    [ -n "$active_cons" ] && exit 0
+    blog "$role/$ifc: no active profile to bounce"
+    exit 0
+fi
+
+# ---- level 0b: USB re-enumeration ---------------------------------------
+if [ "$role" = wint0 ]; then
+    blog "wint0 is the internal radio - no USB path; bouncing profiles only"
+    for con in $active_cons; do
+        sudo nmcli connection down "$con" >/dev/null 2>&1; sleep 2
+        sudo nmcli connection up "$con" >/dev/null 2>&1
+    done
+    exit 0
+fi
+
+if [ -n "$ifc" ] && busdev=$(usb_busdev "$ifc"); then
+    blog "$role/$ifc: usbreset $busdev"
+    sudo usbreset "$busdev"
+else
+    # interface gone — reset by product name (both sticks are 0bda:c812;
+    # only reachable path when we can't tell them apart is: reset the one
+    # whose netdev vanished, i.e. any 0bda:c812 with no net child.
+    reset_done=0
+    for d in /sys/bus/usb/devices/*; do
+        [ "$(cat "$d/idVendor" 2>/dev/null)" = "0bda" ] || continue
+        [ "$(cat "$d/idProduct" 2>/dev/null)" = "c812" ] || continue
+        ls "$d"/*/net/* >/dev/null 2>&1 && continue   # healthy: has a netdev
+        busdev=$(printf '%03d/%03d' "$(cat "$d/busnum")" "$(cat "$d/devnum")")
+        blog "$role: netdev-less stick at $busdev - usbreset"
+        sudo usbreset "$busdev"
+        reset_done=1
+    done
+    [ "$reset_done" = 0 ] && { blog "$role: no resettable stick found"; exit 1; }
+fi
+
+# wait for re-enumeration, then restore profiles
+for i in $(seq 1 15); do
+    sleep 2
+    ifc=$(bench_iface "$role") && break
+done
+
+if [ -z "$ifc" ]; then
+    blog "$role: did NOT re-enumerate after usbreset"
+    exit 1
+fi
+
+blog "$role: back as $ifc - restoring profiles"
+for con in $active_cons; do
+    sudo nmcli connection up "$con" >/dev/null 2>&1
+done
+exit 0

@@ -1,0 +1,12 @@
+[Unit]
+Description=WiCAN bench canonical boot-state assertion (BENCH READY)
+After=NetworkManager.service NetworkManager-wait-online.service
+Wants=NetworkManager-wait-online.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/bench-startup.sh
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

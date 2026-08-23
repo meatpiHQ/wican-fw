@@ -1,0 +1,101 @@
+#!/bin/bash
+# bench-health — machine-readable rig verdict for rpi001 (plan §4.1).
+# Seconds to run. Output: "RIG OK" or one "RIG FAULT <component>: <reason>"
+# line per fault (plus non-fatal "RIG WARN" lines). Exit 0 = OK, 1 = fault.
+# Called by bench-recover, benchlib.rig_verdict(), and humans.
+#
+# --fast skips the on-air truth scans (~10 s saved) — use only where a
+# beacon lie is impossible (e.g. right after a scan already proved it).
+BENCH_TAG=bench-health
+. /usr/local/lib/bench-lib.sh
+
+FAST=0
+[ "$1" = "--fast" ] && FAST=1
+faults=0
+fault() { echo "RIG FAULT $1: $2"; faults=$((faults + 1)); }
+warn()  { echo "RIG WARN $1: $2"; }
+
+# --- control plane (ethernet) --------------------------------------------
+if ! ip -4 addr show eth0 2>/dev/null | grep -q "$ETH_ADDR"; then
+    fault eth "eth0 missing $ETH_ADDR (profile $ETH_CON)"
+fi
+
+# --- radio presence -------------------------------------------------------
+for role in wint0 wtest0 wtest1; do
+    if ! ifc=$(bench_iface "$role"); then
+        fault "$role" "interface absent (USB stick unplugged/dead?)"
+    fi
+done
+
+# --- DUT hotspot (the load-bearing radio surface) -------------------------
+# Canonical: wican-bench-w0 active on wint0. The wtest0 twin is optional —
+# verified only when active. autoconnect=no on w0 = deliberately parked
+# (HIL park_persistent) — then neither is required.
+hs_checked=0
+for con in "$HOTSPOT_PRIMARY" "$HOTSPOT_TWIN"; do
+    con_active "$con" || continue
+    hs_checked=1
+    hs_if=$(con_device "$con")
+
+    if ! iw dev "$hs_if" info 2>/dev/null | grep -q "type AP"; then
+        fault "$con" "activated on $hs_if but not in AP mode"
+        continue
+    fi
+
+    if [ "$FAST" = 0 ]; then
+        hs_mac=$(cat "/sys/class/net/$hs_if/address" 2>/dev/null)
+        if scanner=$(pick_scanner "$hs_if"); then
+            if ! bssid_on_air "$scanner" "$hs_mac"; then
+                # one retry — a single scan can miss a live AP
+                if ! bssid_on_air "$scanner" "$hs_mac"; then
+                    fault "$con" "activated on $hs_if but BSSID $hs_mac NOT on air (phantom AP, scanner=$scanner)"
+                fi
+            fi
+        else
+            warn "$con" "no free radio to truth-scan with"
+        fi
+    fi
+
+    if ! sudo test -e "/var/lib/NetworkManager/dnsmasq-$hs_if.leases"; then
+        warn "$con" "no dnsmasq lease file yet (no client has ever joined)"
+    fi
+done
+
+if ! con_active "$HOTSPOT_PRIMARY"; then
+    if [ "$(nmcli -g connection.autoconnect connection show "$HOTSPOT_PRIMARY" 2>/dev/null)" = "no" ]; then
+        warn hotspot "parked (autoconnect=no) - deliberate, not a fault"
+    elif [ "$hs_checked" = 1 ]; then
+        fault hotspot "$HOTSPOT_PRIMARY down - running on the twin only (degraded)"
+    else
+        fault hotspot "no DUT hotspot active ($HOTSPOT_PRIMARY / $HOTSPOT_TWIN)"
+    fi
+fi
+
+# --- services -------------------------------------------------------------
+systemctl is-active --quiet mosquitto || fault mosquitto "not active"
+
+# --- BLE adapter ----------------------------------------------------------
+[ -e /sys/class/bluetooth/hci0 ] || fault ble "hci0 absent (UB500 unplugged/dead?)"
+
+# --- disk / tmpfs ---------------------------------------------------------
+root_pct=$(df --output=pcent / | tail -1 | tr -dc 0-9)
+[ "${root_pct:-0}" -ge 90 ] && fault disk "root ${root_pct}% full"
+tmp_pct=$(df --output=pcent /tmp | tail -1 | tr -dc 0-9)
+[ "${tmp_pct:-0}" -ge 90 ] && warn disk "/tmp ${tmp_pct}% full"
+
+# --- uplink (non-load-bearing — never a fault) ----------------------------
+if con_active "$UPLINK_CON"; then
+    ping -c1 -W2 192.168.0.1 >/dev/null 2>&1 ||
+        warn uplink "active but gateway unreachable (convenience only)"
+else
+    warn uplink "$UPLINK_CON not active (apt/pip offline; tests unaffected)"
+fi
+
+if [ "$faults" = 0 ]; then
+    echo "RIG OK"
+    exit 0
+fi
+# definitive LAST line for fault runs too — status displays that show
+# the tail (BenchBoard instrument chips) must never end on a WARN line
+echo "RIG FAULT: $faults fault(s), see above"
+exit 1

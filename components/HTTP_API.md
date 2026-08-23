@@ -418,21 +418,6 @@ conversation at a time, fair turn-taking, fail-open (a wedged holder
 can't block the other side; holds self-expire at 2 s). Disable only
 for test setups that WANT concurrent conversations.
 
-Related surfaces (settings, not routes; **add-on pack — present in
-official firmware builds, absent in stock source builds**):
-`/api/settings/elm327_emu` (`enabled` — gates the ENGINES only; the
-jacks `elm0`/`elm1` are registered whenever the pack is present, so
-bridge configs naming them always validate on such builds. Engines are
-lazy, created when a bridge attaches). Bridge any transport to them
-(e.g. bridge `br_elm0 = elm0<->obd0`, the default TCP:35000 server;
-socket jacks follow the CONFIGURED server names) and the client talks
-to a real ELM327 whose vehicle side is this CAN bus (`/api/bridges`
-enumerates, `elm` CLI shows per-instance counters).
-`/api/settings/autopid` has `backend` (`obd_chip` | `elm327`, schema
-v2) — the alternate backend frees autopid from the MIC claim arbiter
-so polling coexists with emulator clients; without the pack it falls
-back to `obd_chip` with a log line.
-
 ## 6e11. UDS terminal — `uds_manager` registers its own route (2026-07-07)
 
 | Route | Method | Behavior |

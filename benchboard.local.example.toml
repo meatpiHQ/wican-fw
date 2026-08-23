@@ -1,0 +1,34 @@
+# BenchBoard per-machine overrides — COPY THIS FILE to
+# benchboard.local.toml (gitignored) and edit for YOUR bench. Everything
+# here is optional; without the file the tracked defaults apply.
+# Full format: tools/testbench/instruments/README.md.
+
+# --- your rig's ports/addresses (override any instrument [config] key) --
+#[instruments.psu.config]
+#port = "COM7"                # where YOUR OWON PSU is
+
+#[instruments.pcan.config]
+#channel = "PCAN_USBBUS1"
+
+#[instruments.pi.config]
+#ssh = "mypi"                 # your ~/.ssh/config alias for the bench Pi
+
+#[instruments.dut.config]
+#ip = "10.42.0.62"
+
+#[instruments.serial.config]
+#flash_port = "COM10"         # your UART0 USB-serial (esptool) port
+#fw_build = "../other-checkout/build"            # main fw to restore
+
+#[instruments.host.config]
+#fw_root = "../other-checkout"                   # webui-smoke checkout
+
+# --- equipment you don't have (chip hidden, dependent tests blocked
+#     with a clear message instead of a confusing failure) ---------------
+#[instruments.psu]
+#enabled = false
+
+# --- your device: overrides the default of every test param with this
+#     name, across all tests --------------------------------------------
+#[defaults]
+#id = "aabbccddeeff"          # your WiCAN's device id

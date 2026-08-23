@@ -1,0 +1,11 @@
+label = "PCAN"
+desc = "PEAK PCAN-USB on the DUT CAN bus (500k)"
+doc = "python-can 'pcan' interface; probe opens+closes the bus (read-only, no TX)."
+
+[config]
+channel = "PCAN_USBBUS2"
+bitrate = 500000
+
+[health]
+cmd = "${python} \"${dir}/probe.py\" --channel ${channel} --bitrate ${bitrate}"
+timeout_s = 30
