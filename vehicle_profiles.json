@@ -10527,6 +10527,26 @@
       ]
     },
     {
+      "car_model": "Mazda: EZ-6/6e",
+      "init": "ATSP6;ATAT1;ATST96;ATSH7A1;ATFCSH7A1;ATFCSD300000;ATFCSM1;",
+      "pids": [
+        {
+          "pid": "22F1AF",
+          "pid_init": "ATSH7E2;",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "[B4:B5]/10",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "MG: MG5/Marvel/ZS",
       "init": "ATSP6;ATST64;",
       "pids": [
