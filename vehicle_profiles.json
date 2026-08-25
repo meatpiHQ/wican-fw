@@ -10543,6 +10543,19 @@
               "max": "100"
             }
           ]
+        },
+        {
+          "pid": "22F1AE",
+          "pid_init": "ATSH7E2;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B4:B7]/10",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
         }
       ]
     },
