@@ -30,6 +30,7 @@
 #include "sleep_manager.h"
 #include "usb_host_manager.h"
 #include "usb_acm_cli.h"
+#include "espnetlink_link.h"
 #include "j2534_server.h"
 #include "iperf_manager.h"
 #include "vpn_manager.h"
@@ -187,6 +188,7 @@ void app_main(void)
     main_boot_init("sleep_manager_init", sleep_manager_init);
     main_boot_init("usb_host_manager_init", usb_host_manager_init);
     main_boot_init("usb_acm_cli_init", usb_acm_cli_init);
+    main_boot_init("espnetlink_link_init", espnetlink_link_init);
     main_boot_init("j2534_server_init", j2534_server_init);
     main_boot_init("cmdline_manager_init", cmdline_manager_init);
     main_boot_init("button_manager_init", button_manager_init);
@@ -219,6 +221,8 @@ void app_main(void)
     main_boot_init("usb_host_manager_register_http",
               usb_host_manager_register_http);
     main_boot_init("usb_acm_cli_register_http", usb_acm_cli_register_http);
+    main_boot_init("espnetlink_link_register_http",
+              espnetlink_link_register_http);
     main_boot_init("j2534_server_register_http",
               j2534_server_register_http);
     main_boot_init("can_manager_register_http", can_manager_register_http);
@@ -300,8 +304,14 @@ void app_main(void)
        ETH_CONNECTED bit exactly like the STA */
     main_boot_start("usb_host_manager", usb_host_manager_start);
     main_boot_start("usb_acm_cli", usb_acm_cli_start);
-    /* glue: dongle GPS fixes -> autopid parameters (gps_*), so they flow
-       to HA / logger / dashboard / rules like any polled value */
+    /* the ESPNetLink dongle as the internet uplink: zero-touch pairing
+       over USB, then its WiFi AP (USB = power only) or USB-Ethernet;
+       AFTER wifi_manager + usb_host_manager (it reads both) */
+    main_boot_start("espnetlink_link", espnetlink_link_start);
+    /* glue: dongle GPS fixes (console poll OR the HTTP poll over the
+       AP/USB) -> autopid parameters (gps_*), so they flow to HA / logger /
+       dashboard / rules like any polled value; and the HTTP cache backs
+       /api/gps when there is no console */
     main_glue_wire_gps();
     main_boot_start("j2534_server", j2534_server_start);
     /* glue: button long-press -> config mode (AP up, BLE off);

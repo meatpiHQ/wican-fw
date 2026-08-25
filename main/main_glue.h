@@ -15,7 +15,8 @@ void main_glue_wire_ota_led(void);
 /** BLE console lines run through cmdline_manager (async). */
 void main_glue_wire_ble_cli(void);
 
-/** Dongle GPS fixes become autopid parameters (gps_*). */
+/** Dongle GPS fixes (console or HTTP poll) become autopid parameters
+ *  (gps_*); the HTTP cache backs /api/gps without a console. */
 void main_glue_wire_gps(void);
 
 /** Autopid samples feed data_logger's params stream. */

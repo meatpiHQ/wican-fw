@@ -12,7 +12,7 @@ idf_component_register(
     REQUIRES api_http autopid ha_webhooks battery_monitor ble_manager bridge_manager
              bridge_endpoints
              can_manager ext_manager uds_manager script_engine
-             usb_acm_cli j2534_server
+             usb_acm_cli espnetlink_link j2534_server
              data_logger event_manager
              cert_manager cmdline_manager dev_status_manager
              external_storage filesystem http_client_manager

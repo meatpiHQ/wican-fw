@@ -23,6 +23,7 @@
 #include "ota_manager.h"
 #include "restart_tracker.h"
 #include "usb_acm_cli.h"
+#include "espnetlink_link.h"
 #include "wifi_manager.h"
 
 #include "main_glue.h"
@@ -83,8 +84,9 @@ void main_glue_wire_ble_cli(void)
     ble_manager_set_cli_handler(on_ble_cli_line);
 }
 
-/** Composition glue: the ESPNetLink dongle's GPS fixes (usb_acm_cli's poll)
- *  become first-class autopid parameters, so a fix reaches HA
+/** Composition glue: the ESPNetLink dongle's GPS fixes (usb_acm_cli's
+ *  console poll, or espnetlink_link's HTTP poll over the dongle's AP / USB
+ *  link) become first-class autopid parameters, so a fix reaches HA
  *  (autopid_data), the data_logger, the dashboard and event rules with no
  *  per-consumer GPS code. Only a live fix is published; the last known
  *  position persists in autopid's cache. Poll-task context — non-blocking. */
@@ -107,6 +109,10 @@ static void gps_to_autopid(const usb_acm_gps_t *g)
 void main_glue_wire_gps(void)
 {
     usb_acm_cli_set_gps_sink(gps_to_autopid);
+    espnetlink_link_set_gps_sink(gps_to_autopid);
+    /* /api/gps (usb_acm_cli's route) serves the HTTP-polled fix when the
+       console has none — the WiFi-modem topology has no console at all */
+    usb_acm_cli_set_gps_fallback(espnetlink_link_gps_get);
 }
 
 /** Composition glue: autopid samples -> the logger's params stream
