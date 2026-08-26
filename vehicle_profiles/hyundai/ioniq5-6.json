@@ -58,7 +58,7 @@
         "KWH_DISCHARGED": "((B53<<24)+(B54<<16)+(B55<<8)+B57)/10",
         "DM_R_RPM": "((S36)*256)+B37",
         "CHARGING": "B15:7",
-        "CAPACITOR": "((B63<<8)+B35)",
+        "CAPACITOR": "((S63<<8)+B65)",
         "RESISTANCE": "([B41:B42])",
         "HV_C_V_MAX": "B31/50",
         "HV_C_V_MAX_NO": "B33",
