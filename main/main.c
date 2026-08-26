@@ -155,8 +155,22 @@ void send_to_host(char* str, uint32_t len, QueueHandle_t *q)
 	{
 		xsend_buffer.usLen = len;
 	}
+	if(xsend_buffer.usLen > DEV_BUFFER_LENGTH)
+	{
+		xsend_buffer.usLen = DEV_BUFFER_LENGTH;
+	}
 	memcpy(xsend_buffer.ucElement, str, xsend_buffer.usLen);
-	xQueueSend( *q, ( void * ) &xsend_buffer, portMAX_DELAY );
+	/*
+	 * Never block forever here. Host TX (SLCAN ACKs + CAN RX ASCII) shares this queue with
+	 * tcp/ble/uart drain tasks. python-can's send() does not read the socket, so on a busy
+	 * CAN bus the peer TCP window can close, the drain task stalls, and a blocking
+	 * xQueueSend would freeze can_tx_task — stopping further SLCAN TX after a short burst.
+	 */
+	if(xQueueSend( *q, ( void * ) &xsend_buffer, pdMS_TO_TICKS(20) ) != pdTRUE)
+	{
+		ESP_LOGW(TAG, "host TX queue full, dropping %d bytes (waiting=%u)",
+				 xsend_buffer.usLen, (unsigned)uxQueueMessagesWaiting(*q));
+	}
 
 //	ESP_LOG_BUFFER_HEX(TAG, ucTCP_TX_Buffer.ucElement, xsend_buffer.usLen);
 	memset(xsend_buffer.ucElement, 0, sizeof(xsend_buffer.ucElement));
@@ -175,6 +189,7 @@ static void can_tx_task(void *pvParameters)
 
 		dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
 
+		memset(&tx_msg, 0, sizeof(tx_msg));
 		ESP_LOGI(TAG, "----------");
 		ESP_LOG_BUFFER_HEXDUMP(TAG, ucTCP_RX_Buffer.ucElement, ucTCP_RX_Buffer.usLen, ESP_LOG_INFO);
 		ESP_LOGI(TAG, "----------");
@@ -395,7 +410,7 @@ void app_main(void)
     gpio_set_level(CAN_STDBY_GPIO_NUM, 1);
 
     xMsg_Rx_Queue = xQueueCreate(16, sizeof( xdev_buffer) );
-    xMsg_Tx_Queue = xQueueCreate(16, sizeof( xdev_buffer) );
+    xMsg_Tx_Queue = xQueueCreate(64, sizeof( xdev_buffer) );
     xmsg_ws_tx_queue = xQueueCreate(8, sizeof( xdev_buffer) );
 
 	esp_ota_mark_app_valid_cancel_rollback();

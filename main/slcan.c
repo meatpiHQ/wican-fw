@@ -48,6 +48,7 @@
 static const char serial[] = "N43010123\r";
 static const char version[] = "V2011\r";
 static const char ack[] = "\r";
+static const char nack[] = "\a";
 static const char status[] = "F00\r";
 
 static char *slcan_buffer = NULL;
@@ -150,43 +151,51 @@ static uint8_t ascii_to_num(uint8_t a)
 	return x;
 }
 
+static uint8_t slcan_frame_index = 0;
+static uint8_t slcan_frame_id[8] = {0};
+static uint8_t slcan_frame_data_nibble = 0;
+static uint8_t slcan_frame_state = SL_FRAME_ID;
+
+static void slcan_frame_parser_reset(void)
+{
+	slcan_frame_index = 0;
+	slcan_frame_data_nibble = 0;
+	slcan_frame_state = SL_FRAME_ID;
+	memset(slcan_frame_id, 0, sizeof(slcan_frame_id));
+}
+
 static uint8_t slcan_set_frame(uint8_t byte, twai_message_t *frame, uint8_t msg_type)
 {
-	static uint8_t index = 0;
-	static uint8_t id[8] = {0,0,0,0,0,0,0,0};
-	static uint8_t data = 0;
-	static uint8_t frame_state = SL_FRAME_ID;
-
-	switch(frame_state)
+	switch(slcan_frame_state)
 	{
 		case SL_FRAME_ID:
 		{
 			if(msg_type == SL_DATA_EXT || msg_type == SL_REMOTE_EXT)
 			{
-				id[index++] = ascii_to_num(byte);
+				slcan_frame_id[slcan_frame_index++] = ascii_to_num(byte);
 
-				if(index == 8)
+				if(slcan_frame_index == 8)
 				{
 					frame->extd = 1;
-					frame->identifier = (((id[6]<<4)+id[7]) & 0xFF) |
-							((((id[4]<<4)+id[5]) << 8) & 0x0000FF00) |
-							((((id[2]<<4)+id[3]) << 16) & 0x00FF0000) |
-							((((id[0]<<4)+id[1]) << 24) & 0xFF000000);
-					frame_state = SL_FRAME_DLC;
-					index = 0;
+					frame->identifier = (((slcan_frame_id[6]<<4)+slcan_frame_id[7]) & 0xFF) |
+							((((slcan_frame_id[4]<<4)+slcan_frame_id[5]) << 8) & 0x0000FF00) |
+							((((slcan_frame_id[2]<<4)+slcan_frame_id[3]) << 16) & 0x00FF0000) |
+							((((slcan_frame_id[0]<<4)+slcan_frame_id[1]) << 24) & 0xFF000000);
+					slcan_frame_state = SL_FRAME_DLC;
+					slcan_frame_index = 0;
 				}
 			}
 			else
 			{
-				id[index++] = ascii_to_num(byte);
+				slcan_frame_id[slcan_frame_index++] = ascii_to_num(byte);
 
-				if(index == 3)
+				if(slcan_frame_index == 3)
 				{
 					frame->extd = 0;
-					frame->identifier = (((id[1]<<4)+id[2]) & 0xFF) |
-							((id[0]<<8) & 0x00000F00) ;
-					frame_state = SL_FRAME_DLC;
-					index = 0;
+					frame->identifier = (((slcan_frame_id[1]<<4)+slcan_frame_id[2]) & 0xFF) |
+							((slcan_frame_id[0]<<8) & 0x00000F00) ;
+					slcan_frame_state = SL_FRAME_DLC;
+					slcan_frame_index = 0;
 				}
 			}
 			return 0;
@@ -197,36 +206,30 @@ static uint8_t slcan_set_frame(uint8_t byte, twai_message_t *frame, uint8_t msg_
 
 			if(msg_type == SL_REMOTE_STD || msg_type == SL_REMOTE_EXT)
 			{
-				frame_state = SL_FRAME_ID;
-				index = 0;
-				data = 0;
-				memset(id, 0,sizeof(id));
+				slcan_frame_parser_reset();
 				return 1;
 			}
 
-			frame_state = SL_FRAME_DATA;
+			slcan_frame_state = SL_FRAME_DATA;
 			return 0;
 		}
 		case SL_FRAME_DATA:
 		{
 
-			if((index+1)%2)
+			if((slcan_frame_index+1)%2)
 			{
-				data = ascii_to_num(byte);
+				slcan_frame_data_nibble = ascii_to_num(byte);
 			}
 			else
 			{
-				frame->data[index/2] = (data<<4)+ascii_to_num(byte);
+				frame->data[slcan_frame_index/2] = (slcan_frame_data_nibble<<4)+ascii_to_num(byte);
 			}
 
-			index++;
+			slcan_frame_index++;
 
-			if(index == frame->data_length_code*2)
+			if(slcan_frame_index == frame->data_length_code*2)
 			{
-				frame_state = SL_FRAME_ID;
-				index = 0;
-				data = 0;
-				memset(id, 0,sizeof(id));
+				slcan_frame_parser_reset();
 				return 1;
 			}
 
@@ -239,7 +242,7 @@ static uint8_t slcan_set_frame(uint8_t byte, twai_message_t *frame, uint8_t msg_
 char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHandle_t *q)
 {
 //	twai_message_t frame;
-	uint8_t i;
+	uint32_t i;
 	static uint8_t state = SL_HEADER;
 	static uint8_t cmd = SL_NONE;
 //	static uint8_t ext_flag = 0;
@@ -252,19 +255,34 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 	static uint32_t buffer_index = 0;
 
 	time_now = esp_timer_get_time();
-    memcpy(&slcan_buffer[buffer_index], buf, len);
-    buffer_index += len;
-	
-	if(time_now - time_old > 100*1000)
+
+	/* Idle gap: drop incomplete prior command before appending the new chunk. */
+	if(time_old != 0 && (time_now - time_old > 100*1000))
 	{
 		state = SL_HEADER;
 		cmd = SL_NONE;
-//		ext_flag = 0;
 		cmd_ret = SL_NONE;
 		msg_index = 0;
 		buffer_index = 0;
+		slcan_frame_parser_reset();
 	}
-	for(i = 0; i < len; i++)
+
+	if(buffer_index + len > SLCAN_BUFFER_SIZE)
+	{
+		ESP_LOGW(TAG, "SLCAN buffer overflow, resetting parser");
+		state = SL_HEADER;
+		cmd = SL_NONE;
+		cmd_ret = SL_NONE;
+		msg_index = 0;
+		buffer_index = 0;
+		slcan_frame_parser_reset();
+	}
+
+	memcpy(&slcan_buffer[buffer_index], buf, len);
+	buffer_index += len;
+	time_old = time_now;
+
+	for(i = 0; i < buffer_index; i++)
 	{
 		switch(state)
 		{
@@ -423,7 +441,6 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 			}
 			case SL_BODY:
 			{
-				time_old = time_now;
 				if(cmd == SL_SPEED || cmd == SL_MUTE || cmd == SL_AUTO ||
 					cmd == SL_TSTAMP || cmd == SL_ACP_CODE || cmd == SL_MASK_REG)
 				{
@@ -564,8 +581,11 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 			{
 				if(slcan_buffer[i] == '\r')
 				{
+					uint8_t tx_failed = 0;
 					if(cmd == SL_REMOTE_STD || cmd == SL_DATA_STD || cmd == SL_REMOTE_EXT || cmd == SL_DATA_EXT)
 					{
+						esp_err_t tx_err;
+
 						if(loopback)
 						{
 							frame->self = 1;
@@ -575,11 +595,17 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 							frame->self = 0;
 						}
 
-						if (ESP_ERR_INVALID_STATE == can_send(frame, 1))
+						tx_err = can_send(frame, pdMS_TO_TICKS(200));
+						if (tx_err != ESP_OK)
 						{
-							//ESP_LOGE(TAG, "can_send error");
+							tx_failed = 1;
+							ESP_LOGE(TAG, "can_send failed: %s id=0x%lX",
+									 esp_err_to_name(tx_err), (unsigned long)frame->identifier);
 						}
-						ESP_LOGI(TAG, "can_send");
+						else
+						{
+							ESP_LOGI(TAG, "can_send ok id=0x%lX", (unsigned long)frame->identifier);
+						}
 					}
 					cmd_ret = cmd;
 					msg_index = 0;
@@ -610,7 +636,7 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 						}
 						default:
 						{
-							slcan_response((char*)ack, 0, q);
+							slcan_response(tx_failed ? (char*)nack : (char*)ack, 0, q);
 							break;
 //							return (char*)ack;
 						}
@@ -621,14 +647,19 @@ char* slcan_parse_str(uint8_t *buf, uint8_t len, twai_message_t *frame, QueueHan
 			}
 		}
 	}
-    // Clear the processed bytes from the buffer
+    // Keep only unconsumed bytes (incomplete trailing command).
     if (i < buffer_index)
     {
         memmove(slcan_buffer, &slcan_buffer[i], buffer_index - i);
         buffer_index -= i;
     }
+    else if (state == SL_HEADER && cmd == SL_NONE)
+    {
+        buffer_index = 0;
+    }
     else
     {
+        /* Mid-command: bytes were absorbed into parser state; drop the raw buffer. */
         buffer_index = 0;
     }
 
