@@ -2119,7 +2119,7 @@
       "unit": "Wh",
       "class": "energy",
       "min": "0",
-      "max": "77000"
+      "max": "120000"
     }
   },
   "HV_RELAY": {
@@ -2471,7 +2471,7 @@
       "unit": "V",
       "class": "voltage",
       "min": "200",
-      "max": "480"
+      "max": "900"
     }
   },
   "HV_W": {
