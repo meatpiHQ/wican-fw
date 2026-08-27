@@ -43,6 +43,10 @@
 #define KEEPALIVE_INTERVAL          5
 #define KEEPALIVE_COUNT             3
 
+// Cap for the TX coalescing buffer: a few MTU-sized batches fit and the
+// memory stays off the heap.
+#define COALESCE_BUFFER_SIZE        1024
+
 #define PORT_CLOSED_BIT			BIT0
 #define PORT_OPEN_BIT			BIT1
 
@@ -191,6 +195,23 @@ wait_skt_tx:
 	}
 }
 
+// Send the whole buffer, looping over partial writes. Returns 0 on
+// success, -1 on a socket error.
+static int tcp_send_all(int sock, const uint8_t *data, uint32_t len)
+{
+	while (len > 0)
+	{
+		int written = send(sock, data, len, 0);
+		if (written < 0)
+		{
+			return -1;
+		}
+		data += written;
+		len -= written;
+	}
+	return 0;
+}
+
 static void tcp_server_tx_task(void *pvParameters)
 {
 //	int addr_family = (int)pvParameters;
@@ -198,26 +219,42 @@ static void tcp_server_tx_task(void *pvParameters)
 
 wait_skt_tx:
 	xEventGroupWaitBits(
-					  xSocketEventGroup,   /* The event group being tested. */
-					  PORT_OPEN_BIT, /* The bits within the event group to wait for. */
-					  pdFALSE,        /* BIT_0 & BIT_4 should be cleared before returning. */
-					  pdFALSE,       /* Don't wait for both bits, either bit will do. */
-					  portMAX_DELAY );/* Wait a maximum of 100ms for either bit to be set. */
+				  xSocketEventGroup,   /* The event group being tested. */
+				  PORT_OPEN_BIT, /* The bits within the event group to wait for. */
+				  pdFALSE,        /* BIT_0 & BIT_4 should be cleared before returning. */
+				  pdFALSE,       /* Don't wait for both bits, either bit will do. */
+				  portMAX_DELAY );/* Wait a maximum of 100ms for either bit to be set. */
 	ESP_LOGI(TAG, "Socket connected...");
 	while(1)
 	{
 		xQueuePeek(*xTX_Queue, ( void * ) &tx_buffer, portMAX_DELAY);
 
-		while(xQueuePeek(*xTX_Queue, ( void * ) &tx_buffer, 0) == pdTRUE)
+		if( xSemaphoreTake( xTCP_Socket_Semaphore, portMAX_DELAY ) == pdTRUE )
 		{
-			if( xSemaphoreTake( xTCP_Socket_Semaphore, portMAX_DELAY ) == pdTRUE )
+			// Coalesce everything currently queued into one send(). ELM327
+			// responses arrive one xdev_buffer per CAN frame, so a 25-frame
+			// ISO-TP reply would otherwise be 26 tiny segments.
+			// static: the task stack is 4096 bytes and this is a singleton
+			// task, serialised by the socket semaphore.
+			static uint8_t coalesced[COALESCE_BUFFER_SIZE];
+			uint32_t total = 0;
+			while (xQueueReceive(*xTX_Queue, ( void * ) &tx_buffer, 0) == pdPASS)
 			{
-				int to_write = tx_buffer.usLen;
-				xQueueReceive(*xTX_Queue, ( void * ) &tx_buffer, 0);
-				while (to_write > 0)
+				// usLen is signed; clamp it so the bounds check below
+				// cannot wrap and overflow the buffer.
+				if (tx_buffer.usLen <= 0)
 				{
-					int written = send(sock, tx_buffer.ucElement + (tx_buffer.usLen - to_write), to_write, 0);
-					if (written < 0)
+					continue;
+				}
+				if ((uint32_t)tx_buffer.usLen > sizeof(tx_buffer.ucElement))
+				{
+					ESP_LOGW(TAG, "TX entry length %d exceeds %u, truncating",
+						 tx_buffer.usLen, (unsigned)sizeof(tx_buffer.ucElement));
+					tx_buffer.usLen = sizeof(tx_buffer.ucElement);
+				}
+				if (total + (uint32_t)tx_buffer.usLen > sizeof(coalesced))
+				{
+					if (tcp_send_all(sock, coalesced, total) < 0)
 					{
 						ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
 						xEventGroupSetBits( xSocketEventGroup, PORT_CLOSED_BIT );
@@ -225,12 +262,22 @@ wait_skt_tx:
 						xSemaphoreGive( xTCP_Socket_Semaphore );
 						goto wait_skt_tx;
 					}
-					to_write -= written;
+					total = 0;
 				}
+				memcpy(coalesced + total, tx_buffer.ucElement, tx_buffer.usLen);
+				total += tx_buffer.usLen;
 			}
+			if (total > 0 && tcp_send_all(sock, coalesced, total) < 0)
+			{
+				ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
+				xEventGroupSetBits( xSocketEventGroup, PORT_CLOSED_BIT );
+				xEventGroupClearBits( xSocketEventGroup, PORT_OPEN_BIT );
+				xSemaphoreGive( xTCP_Socket_Semaphore );
+				goto wait_skt_tx;
+			}
+			// Error paths above already gave the semaphore before the goto.
 			xSemaphoreGive( xTCP_Socket_Semaphore );
 		}
-		vTaskDelay(pdMS_TO_TICKS(1));
 	}
 }
 
