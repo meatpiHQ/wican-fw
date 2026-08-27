@@ -942,6 +942,42 @@
                     </td>
                 </tr>
             </table>
+            <div class="section-title" style="margin-top:1rem;">Cached Republish (last-known values)</div>
+            <table class="form-table">
+                <tr>
+                    <td>Publish cached on MQTT connect:</td>
+                    <td>
+                        <select id="pub_cached_on_connect" name="pub_cached_on_connect" onchange="enableAutoStoreButton();submit_enable();">
+                            <option value="disable">Disable</option>
+                            <option value="enable">Enable</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Republish period (s, 0 = off):</td>
+                    <td>
+                        <input type="number" id="republish_period" name="republish_period" min="0" max="86400" value="0" oninput="enableAutoStoreButton();submit_enable();">
+                    </td>
+                </tr>
+                <tr>
+                    <td>Publish before sleep:</td>
+                    <td>
+                        <select id="pub_before_sleep" name="pub_before_sleep" onchange="enableAutoStoreButton();submit_enable();">
+                            <option value="disable">Disable</option>
+                            <option value="enable">Enable</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Add age/stale metadata:</td>
+                    <td>
+                        <select id="cached_meta" name="cached_meta" onchange="enableAutoStoreButton();submit_enable();">
+                            <option value="disable">Disable</option>
+                            <option value="enable">Enable</option>
+                        </select>
+                    </td>
+                </tr>
+            </table>
             <div class="section-title">Standard PIDs</div>
             <table class="form-table">
                 <tr>
@@ -1927,7 +1963,11 @@ function loadAutoTable(jsonData) {
             setElementValue("standard_pids", data.standard_pids, 'disable');
             setElementValue("ecu_protocol", data.ecu_protocol, '6');
             setElementValue("group_dest_type", data.group_dest_type, 'Default');
-            
+            setElementValue("pub_cached_on_connect", data.pub_cached_on_connect, 'disable');
+            setElementValue("republish_period", data.republish_period, '0');
+            setElementValue("pub_before_sleep", data.pub_before_sleep, 'disable');
+            setElementValue("cached_meta", data.cached_meta, 'disable');
+
             if (data.pids && Array.isArray(data.pids)) {
                 data.pids.forEach((pidData, index) => {
                     console.log(`Loading PID ${index}:`, pidData);
@@ -2035,6 +2075,11 @@ function loadAutoTable(jsonData) {
             const carModelField = document.getElementById("car_model");
             const standard_pidsValue = document.getElementById("standard_pids")?.value || 'disable';
             const ecu_protocolValue = document.getElementById("ecu_protocol")?.value || '6';
+            const pubCachedOnConnectValue = document.getElementById("pub_cached_on_connect")?.value || 'disable';
+            const pubBeforeSleepValue = document.getElementById("pub_before_sleep")?.value || 'disable';
+            const cachedMetaValue = document.getElementById("cached_meta")?.value || 'disable';
+            let republishPeriodValue = document.getElementById("republish_period")?.value || '0';
+            if (!/^\d+$/.test(republishPeriodValue)) { republishPeriodValue = '0'; }
             const carModelValue = carModelField?.value || '';
             if (carSpecificValue== "enable" && (!carModelValue || carModelValue.length === 0 || carModelValue === "Not Selected")) {
                 throw new Error("Car model must be selected");
@@ -2156,7 +2201,11 @@ function loadAutoTable(jsonData) {
                 pids: custom_pid_data,
                 std_pids: std_pid_data,
                 standard_pids: standard_pidsValue,
-                ecu_protocol: ecu_protocolValue
+                ecu_protocol: ecu_protocolValue,
+                pub_cached_on_connect: pubCachedOnConnectValue,
+                republish_period: republishPeriodValue,
+                pub_before_sleep: pubBeforeSleepValue,
+                cached_meta: cachedMetaValue
             };
 
             // Send to server

@@ -1014,6 +1014,204 @@ void autopid_data_publish(void) {
     }
 }
 
+// Append "_meta":{"age":<seconds>,"stale":<bool>} to a cached snapshot so consumers
+// (e.g. Home Assistant) can tell a republished cached value from a fresh reading.
+// age is the age of the oldest value in the message (-1 if never read this boot).
+static void cached_add_meta(cJSON *root, int64_t now_us, int64_t oldest_update_us, bool any_stale)
+{
+    if (!root)
+    {
+        return;
+    }
+    cJSON *meta = cJSON_CreateObject();
+    if (!meta)
+    {
+        return;
+    }
+    int64_t age_s = (oldest_update_us > 0) ? (now_us - oldest_update_us) / 1000000 : -1;
+    cJSON_AddNumberToObject(meta, "age", (double)age_s);
+    cJSON_AddBoolToObject(meta, "stale", any_stale);
+    cJSON_AddItemToObject(root, "_meta", meta);
+}
+
+/*
+ * Republish the last-known ("cached") value of every parameter, even when the ECU is
+ * currently unreachable (e.g. the car is parked at home and no longer answering, but
+ * WiFi/MQTT are up). This keeps Home Assistant in sync with the value from the last
+ * successful read instead of showing nothing / a value from the previous drive.
+ *
+ * Routing mirrors the normal publish path so consumers see the same topics/format:
+ *   - grouping enabled + MQTT topic -> one JSON snapshot to the group destination
+ *   - otherwise                     -> one message per parameter that has an MQTT destination
+ * When include_meta is set, a "_meta" object with age/stale info is appended. See issue #825.
+ */
+void autopid_publish_cached(bool include_meta)
+{
+    if (!all_pids || !all_pids->mutex)
+    {
+        return;
+    }
+
+    // Nothing to do if MQTT isn't usable; mqtt_publish() would drop the message anyway.
+    if (config_server_mqtt_en_config() != 1 || !mqtt_connected())
+    {
+        return;
+    }
+
+    int64_t now = esp_timer_get_time();
+
+    if (xSemaphoreTake(all_pids->mutex, portMAX_DELAY) != pdTRUE)
+    {
+        return;
+    }
+
+    bool group_mode = (all_pids->grouping &&
+                       strcmp("enable", all_pids->grouping) == 0 &&
+                       all_pids->group_destination_type == DEST_MQTT_TOPIC);
+
+    if (group_mode)
+    {
+        cJSON *root = cJSON_CreateObject();
+        if (root)
+        {
+            bool any = false;
+            bool any_stale = false;
+            int64_t oldest_update = 0;
+
+            for (uint32_t i = 0; i < all_pids->pid_count; i++)
+            {
+                pid_data2_t *curr_pid = &all_pids->pids[i];
+                for (uint32_t j = 0; j < curr_pid->parameters_count; j++)
+                {
+                    parameter_t *param = &curr_pid->parameters[j];
+                    if (param->name && param->value != FLT_MAX)
+                    {
+                        if (param->sensor_type == BINARY_SENSOR)
+                        {
+                            cJSON_AddStringToObject(root, param->name, param->value > 0 ? "on" : "off");
+                        }
+                        else
+                        {
+                            cJSON_AddNumberToObject(root, param->name, param->value);
+                        }
+                        any = true;
+
+                        if (param->last_update > 0 &&
+                            (oldest_update == 0 || param->last_update < oldest_update))
+                        {
+                            oldest_update = param->last_update;
+                        }
+                        if (param->last_update == 0 ||
+                            (now - param->last_update) > ((int64_t)param->period * 1000))
+                        {
+                            any_stale = true;
+                        }
+                    }
+                }
+            }
+
+            if (any)
+            {
+                limitJsonDecimalPrecision(root);
+                if (include_meta)
+                {
+                    cached_add_meta(root, now, oldest_update, any_stale);
+                }
+                char *json_str = cJSON_PrintUnformatted(root);
+                if (json_str)
+                {
+                    if (all_pids->group_destination && strlen(all_pids->group_destination) > 0)
+                    {
+                        mqtt_publish(all_pids->group_destination, json_str, 0, 0, 1);
+                    }
+                    else
+                    {
+                        mqtt_publish(config_server_get_mqtt_rx_topic(), json_str, 0, 0, 1);
+                    }
+                    free(json_str);
+                    ESP_LOGI(TAG, "Published cached snapshot (group)");
+                    DEBUG_LOGI(TAG, "Published cached snapshot (group)");
+                }
+            }
+            cJSON_Delete(root);
+        }
+    }
+    else
+    {
+        // Per-parameter routing: mirror publish_parameter_mqtt() but from cached values.
+        for (uint32_t i = 0; i < all_pids->pid_count; i++)
+        {
+            pid_data2_t *curr_pid = &all_pids->pids[i];
+            for (uint32_t j = 0; j < curr_pid->parameters_count; j++)
+            {
+                parameter_t *param = &curr_pid->parameters[j];
+                if (!param->name || param->value == FLT_MAX)
+                {
+                    continue;
+                }
+
+                char *payload = NULL;
+
+                if (param->destination_type == DEST_MQTT_TOPIC)
+                {
+                    cJSON *param_json = cJSON_CreateObject();
+                    if (param_json)
+                    {
+                        if (param->sensor_type == BINARY_SENSOR)
+                        {
+                            cJSON_AddStringToObject(param_json, param->name, param->value > 0 ? "on" : "off");
+                        }
+                        else
+                        {
+                            cJSON_AddNumberToObject(param_json, param->name, param->value);
+                        }
+                        limitJsonDecimalPrecision(param_json);
+                        if (include_meta)
+                        {
+                            bool stale = (param->last_update == 0 ||
+                                          (now - param->last_update) > ((int64_t)param->period * 1000));
+                            cached_add_meta(param_json, now, param->last_update, stale);
+                        }
+                        payload = cJSON_PrintUnformatted(param_json);
+                        cJSON_Delete(param_json);
+                    }
+                }
+                else if (param->destination_type == DEST_MQTT_WALLBOX)
+                {
+                    asprintf(&payload, "%.2f", param->value);
+                }
+
+                if (payload)
+                {
+                    if (param->destination && strlen(param->destination) > 0)
+                    {
+                        mqtt_publish(param->destination, payload, 0, 0, 1);
+                    }
+                    else
+                    {
+                        mqtt_publish(config_server_get_mqtt_rx_topic(), payload, 0, 0, 1);
+                    }
+                    free(payload);
+                }
+            }
+        }
+        ESP_LOGI(TAG, "Published cached snapshot (per-parameter)");
+        DEBUG_LOGI(TAG, "Published cached snapshot (per-parameter)");
+    }
+
+    xSemaphoreGive(all_pids->mutex);
+}
+
+// Called from the sleep path just before WiFi/MQTT are torn down.
+void autopid_publish_before_sleep(void)
+{
+    if (!all_pids || !all_pids->pub_before_sleep)
+    {
+        return;
+    }
+    autopid_publish_cached(all_pids->cached_meta);
+}
+
 bool autopid_get_ecu_status(void)
 {
 	EventBits_t uxBits;
@@ -1518,6 +1716,8 @@ static void autopid_task(void *pvParameters)
     static char default_init[] = "ati\rate0\rath1\ratl0\rats1\ratsp6\ratst96\r";
     wc_timer_t ecu_check_timer;
     wc_timer_t group_cycle_timer;
+    wc_timer_t republish_timer = 0;
+    bool prev_mqtt_connected = false;
 
     ESP_LOGI(TAG, "Autopid Task Started");
     DEBUG_LOGI(TAG, "Autopid Task Started");
@@ -1575,7 +1775,26 @@ static void autopid_task(void *pvParameters)
 
         dev_status_wait_for_bits(DEV_AWAKE_BIT, portMAX_DELAY);
 
-        if (xEventGroupGetBits(xautopid_event_group) & AUTOPID_POLLING_DISABLED_BIT) 
+        // --- Cached-value republishing triggers (issue #825) ---
+        // Keep Home Assistant in sync with the last-known reading even when the ECU has
+        // stopped answering (car parked) but WiFi/MQTT are up.
+        bool mqtt_now = mqtt_connected();
+        if (all_pids->pub_cached_on_connect && mqtt_now && !prev_mqtt_connected)
+        {
+            ESP_LOGI(TAG, "MQTT (re)connected - publishing cached snapshot");
+            DEBUG_LOGI(TAG, "MQTT (re)connected - publishing cached snapshot");
+            autopid_publish_cached(all_pids->cached_meta);
+            wc_timer_set(&republish_timer, (uint64_t)all_pids->republish_period * 1000);
+        }
+        prev_mqtt_connected = mqtt_now;
+
+        if (all_pids->republish_period > 0 && mqtt_now && wc_timer_is_expired(&republish_timer))
+        {
+            wc_timer_set(&republish_timer, (uint64_t)all_pids->republish_period * 1000);
+            autopid_publish_cached(all_pids->cached_meta);
+        }
+
+        if (xEventGroupGetBits(xautopid_event_group) & AUTOPID_POLLING_DISABLED_BIT)
         {
             xEventGroupWaitBits(xautopid_event_group, AUTOPID_REQUEST_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
         }
@@ -1700,9 +1919,10 @@ static void autopid_task(void *pvParameters)
                                                         param->name, result, param->max);
                                             } else {
                                                 result = round(result * 100.0) / 100.0;
-                                                ESP_LOGI(TAG, "Parameter %s result: %.2f", 
+                                                ESP_LOGI(TAG, "Parameter %s result: %.2f",
                                                         param->name, result);
                                                 param->value = result;
+                                                param->last_update = esp_timer_get_time();
                                                 publish_parameter_mqtt(param);
                                             }
                                         }
@@ -1755,6 +1975,7 @@ static void autopid_task(void *pvParameters)
                                                                         param->value, 
                                                                         pid_info->params[p].unit);
                                                         param->value = roundf(param->value * 100.0) / 100.0;
+                                                        param->last_update = esp_timer_get_time();
                                                         publish_parameter_mqtt(param);
                                                         break;
                                                     }
@@ -1898,6 +2119,10 @@ all_pids_t* load_all_pids(void){
             cJSON* specific_pids_item = cJSON_GetObjectItem(root, "car_specific");
             cJSON* group_destination_item = cJSON_GetObjectItem(root, "destination");
             cJSON* group_dest_type_item = cJSON_GetObjectItem(root, "group_dest_type");
+            cJSON* pub_on_connect_item = cJSON_GetObjectItem(root, "pub_cached_on_connect");
+            cJSON* republish_period_item = cJSON_GetObjectItem(root, "republish_period");
+            cJSON* pub_before_sleep_item = cJSON_GetObjectItem(root, "pub_before_sleep");
+            cJSON* cached_meta_item = cJSON_GetObjectItem(root, "cached_meta");
 
             if (init_item && init_item->valuestring) {
                 all_pids->custom_init = strdup(init_item->valuestring);
@@ -1926,7 +2151,29 @@ all_pids_t* load_all_pids(void){
             all_pids->group_destination_type = group_dest_type_item && group_dest_type_item->valuestring ?
                             (strcmp(group_dest_type_item->valuestring, "MQTT_Topic") == 0 ? DEST_MQTT_TOPIC :
                             DEST_DEFAULT) : DEST_DEFAULT;
-            
+
+            // Cached-value republishing (issue #825). All opt-in; defaults keep legacy behaviour.
+            all_pids->pub_cached_on_connect = (pub_on_connect_item && pub_on_connect_item->valuestring) ?
+                            (strcmp(pub_on_connect_item->valuestring, "enable") == 0) : false;
+            all_pids->pub_before_sleep = (pub_before_sleep_item && pub_before_sleep_item->valuestring) ?
+                            (strcmp(pub_before_sleep_item->valuestring, "enable") == 0) : false;
+            all_pids->cached_meta = (cached_meta_item && cached_meta_item->valuestring) ?
+                            (strcmp(cached_meta_item->valuestring, "enable") == 0) : false;
+            if (republish_period_item)
+            {
+                if (cJSON_IsNumber(republish_period_item))
+                {
+                    all_pids->republish_period = (uint32_t)republish_period_item->valueint;
+                }
+                else if (republish_period_item->valuestring)
+                {
+                    all_pids->republish_period = (uint32_t)atoi(republish_period_item->valuestring);
+                }
+            }
+            ESP_LOGI(TAG, "Cached republish: on_connect=%d, period=%lus, before_sleep=%d, meta=%d",
+                    all_pids->pub_cached_on_connect, all_pids->republish_period,
+                    all_pids->pub_before_sleep, all_pids->cached_meta);
+
             // Load custom pids
             cJSON* pids = cJSON_GetObjectItem(root, "pids");
             if (pids) {

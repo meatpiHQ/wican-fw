@@ -58,6 +58,7 @@
 #include "ver.h"
 #include "math.h"
 #include "dev_status.h"
+#include "autopid.h"
 
 #define TAG 			  __func__
 
@@ -399,6 +400,10 @@ static void adc_task(void *pvParameters)
 
 					if((esp_timer_get_time() - sleep_detect_time) > sleep_time)
 					{
+						// Flush the last-known AutoPID values while WiFi/MQTT are still up,
+						// so Home Assistant gets a final snapshot before sleep (issue #825).
+						autopid_publish_before_sleep();
+						vTaskDelay(pdMS_TO_TICKS(100));
 						sleep_state = SLEEP_STATE;
 	//    	    		wifi_network_deinit();
 	//    	    		ble_disable();
