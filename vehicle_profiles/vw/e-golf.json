@@ -1,17 +1,932 @@
 {
   "car_model": "VW: e-Golf",
   "init": "ATSP6;ATST96;ATSH7E5;",
+  "comment": "RANGE is the number shown on the dash, in the unit the dash uses: kilometres on European cars, miles on US ones. Change the unit on that parameter if your car shows miles.",
   "pids": [
     {
       "pid": "22028C1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
       "parameters": {
-        "SOC": "((B4-20)*10)/22"
+        "SOC": "[B4:B4]/2.55"
       }
     },
     {
-      "pid": "2202BD",
+      "pid": "2222031",
+      "pid_init": "ATSP6;ATSH714;ATCRA77E;",
       "parameters": {
-        "ODOMETER": "[B5:B7]"
+        "ODOMETER": "[B4:B6]"
+      }
+    },
+    {
+      "pid": "222AB62",
+      "pid_init": "ATSP6;ATSH710;ATFCSH710;ATFCSD300000;ATFCSM1;ATCRA77A;",
+      "parameters": {
+        "RANGE": "[B5:B6]"
+      }
+    },
+    {
+      "pid": "2215122",
+      "pid_init": "ATSP6;ATSH710;ATFCSH710;ATFCSD300000;ATFCSM1;ATCRA77A;",
+      "parameters": {
+        "HV_KWH_R": "[B5:B6]*25"
+      }
+    },
+    {
+      "pid": "2274481",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "CHARGING": "B4:2"
+      }
+    },
+    {
+      "pid": "221DDA2",
+      "pid_init": "ATSP6;ATSH765;ATFCSH765;ATFCSD300000;ATFCSM1;ATCRA7CF;",
+      "parameters": {
+        "AC_PLUG": "B5:0"
+      }
+    },
+    {
+      "pid": "22F4461",
+      "pid_init": "ATSP6;ATSH7E0;ATCRA7E8;",
+      "parameters": {
+        "OUTSIDE_TEMPERATURE": "B4-40"
+      }
+    },
+    {
+      "pid": "221E323",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;ATFCSH7E5;ATFCSD300000;ATFCSM1;",
+      "parameters": {
+        "HV_AH_CHARGED": "((B5<<24)|(B6<<16)|(B7<<8)|B9)/549.31642",
+        "KWH_CHARGED": "((B14<<24)|(B15<<16)|(B17<<8)|B18)/8583.07212",
+        "HV_AH_DISCHARGED": "0-[S10:S13]/549.31642",
+        "KWH_DISCHARGED": "0-[S19:S22]/8583.07212"
+      }
+    },
+    {
+      "pid": "221E3D1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_A": "([B4:B5]-2044)/4"
+      }
+    },
+    {
+      "pid": "221E3B1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_V": "[B4:B5]/4"
+      }
+    },
+    {
+      "pid": "221E0E1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_T_MAX": "[B4:B5]/64",
+        "HV_T_MAX_NO": "[B6:B7]"
+      }
+    },
+    {
+      "pid": "221E0F1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_T_MIN": "[B4:B5]/64",
+        "HV_T_MIN_NO": "[B6:B7]"
+      }
+    },
+    {
+      "pid": "222A0B1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "BATT_TEMP": "(B4/2)-40"
+      }
+    },
+    {
+      "pid": "221E331",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_MAX": "[B4:B5]/4096",
+        "HV_C_V_MAX_NO": "[B6:B7]"
+      }
+    },
+    {
+      "pid": "221E341",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_MIN": "[B4:B5]/4096",
+        "HV_C_V_MIN_NO": "[B6:B7]"
+      }
+    },
+    {
+      "pid": "22149A1",
+      "pid_init": "ATSP6;ATSH7E0;ATCRA7E8;",
+      "parameters": {
+        "MOTOR_RPM": "[S4:S5]/2"
+      }
+    },
+    {
+      "pid": "222A071",
+      "pid_init": "ATSP6;ATSH710;ATFCSH710;ATFCSD300000;ATFCSM1;ATCRA77A;",
+      "parameters": {
+        "LV_V": "[B4:B5]/1000+4"
+      }
+    },
+    {
+      "pid": "222A091",
+      "pid_init": "ATSP6;ATSH710;ATFCSH710;ATFCSD300000;ATFCSM1;ATCRA77A;",
+      "parameters": {
+        "LV_A": "[S4:S7]/1000"
+      }
+    },
+    {
+      "pid": "222A0C1",
+      "pid_init": "ATSP6;ATSH710;ATFCSH710;ATFCSD300000;ATFCSM1;ATCRA77A;",
+      "parameters": {
+        "LV_SOC": "[B4:B4]"
+      }
+    },
+    {
+      "pid": "222A101",
+      "pid_init": "ATSP6;ATSH710;ATFCSH710;ATFCSD300000;ATFCSM1;ATCRA77A;",
+      "parameters": {
+        "LV_V_REST": "[B4:B4]/10+9"
+      }
+    },
+    {
+      "pid": "222A0A1",
+      "pid_init": "ATSP6;ATSH710;ATFCSH710;ATFCSD300000;ATFCSM1;ATCRA77A;",
+      "parameters": {
+        "LV_T": "[B4:B4]-40"
+      }
+    },
+    {
+      "pid": "222A0E1",
+      "pid_init": "ATSP6;ATSH710;ATFCSH710;ATFCSD300000;ATFCSM1;ATCRA77A;",
+      "parameters": {
+        "LV_R_INT": "[S4:S4]/5"
+      }
+    },
+    {
+      "pid": "222A1C1",
+      "pid_init": "ATSP6;ATSH710;ATFCSH710;ATFCSD300000;ATFCSM1;ATCRA77A;",
+      "parameters": {
+        "LV_A_GEN": "[B4:B5]/10"
+      }
+    },
+    {
+      "pid": "221E2C1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_D_MAX": "[B4:B5]/100",
+        "HV_C_D_MAX_NO": "[B6:B7]"
+      }
+    },
+    {
+      "pid": "221E2D1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_D_MIN": "[B4:B5]/100",
+        "HV_C_D_MIN_NO": "[B6:B7]"
+      }
+    },
+    {
+      "pid": "221E171",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_ISO_P": "[B4:B5]*10"
+      }
+    },
+    {
+      "pid": "221E191",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_ISO_N": "[B4:B5]*10"
+      }
+    },
+    {
+      "pid": "221E181",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_ISO_BAT_P": "[B4:B5]*10"
+      }
+    },
+    {
+      "pid": "221E1A1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_ISO_BAT_N": "[B4:B5]*10"
+      }
+    },
+    {
+      "pid": "221E1B1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_A_CHG_MAX": "[B4:B5]"
+      }
+    },
+    {
+      "pid": "221E1C1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_A_DIS_MAX": "[B4:B5]"
+      }
+    },
+    {
+      "pid": "221E1D1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_A_CHG_PRED": "[B4:B5]"
+      }
+    },
+    {
+      "pid": "221E1E1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_A_DIS_PRED": "[B4:B5]"
+      }
+    },
+    {
+      "pid": "223E941",
+      "pid_init": "ATSP6;ATSH7E6;ATCRA7EE;",
+      "parameters": {
+        "MOTOR_TEMP": "[B4:B5]/64"
+      }
+    },
+    {
+      "pid": "2246641",
+      "pid_init": "ATSP6;ATSH7E6;ATCRA7EE;",
+      "parameters": {
+        "IGBT_T_U": "[B4:B5]/64"
+      }
+    },
+    {
+      "pid": "2246631",
+      "pid_init": "ATSP6;ATSH7E6;ATCRA7EE;",
+      "parameters": {
+        "IGBT_T_V": "[B4:B5]/64"
+      }
+    },
+    {
+      "pid": "2246621",
+      "pid_init": "ATSP6;ATSH7E6;ATCRA7EE;",
+      "parameters": {
+        "IGBT_T_W": "[B4:B5]/64"
+      }
+    },
+    {
+      "pid": "2211161",
+      "pid_init": "ATSP6;ATSH7E0;ATCRA7E8;",
+      "parameters": {
+        "INVERTER_TEMP": "[S4:S5]/10-273.1"
+      }
+    },
+    {
+      "pid": "2216121",
+      "pid_init": "ATSP6;ATSH7E0;ATCRA7E8;",
+      "parameters": {
+        "COOLANT_T_EM": "[S4:S5]/10-273.1"
+      }
+    },
+    {
+      "pid": "2216151",
+      "pid_init": "ATSP6;ATSH7E0;ATCRA7E8;",
+      "parameters": {
+        "COOLANT_T_PE": "[S4:S5]/10-273.1"
+      }
+    },
+    {
+      "pid": "22465C1",
+      "pid_init": "ATSP6;ATSH7E6;ATCRA7EE;",
+      "parameters": {
+        "DCDC_OUT_V": "[S4:S5]/512"
+      }
+    },
+    {
+      "pid": "2246501",
+      "pid_init": "ATSP6;ATSH7E6;ATCRA7EE;",
+      "parameters": {
+        "DCDC_HV_A": "[S4:S5]/512"
+      }
+    },
+    {
+      "pid": "2274BE",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "TIME_AT_100_SOC": "([B114:B117]+[B141:B143]*256+B145+[B169:B172])/86400"
+      }
+    },
+    {
+      "pid": "221E401",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_001": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E411",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_002": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E421",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_003": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E431",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_004": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E441",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_005": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E451",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_006": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E461",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_007": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E471",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_008": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E481",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_009": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E491",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_010": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E4A1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_011": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E4B1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_012": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E4C1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_013": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E4D1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_014": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E4E1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_015": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E4F1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_016": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E501",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_017": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E511",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_018": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E521",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_019": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E531",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_020": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E541",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_021": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E551",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_022": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E561",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_023": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E571",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_024": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E581",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_025": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E591",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_026": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E5A1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_027": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E5B1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_028": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E5C1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_029": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E5D1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_030": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E5E1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_031": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E5F1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_032": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E601",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_033": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E611",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_034": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E621",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_035": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E631",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_036": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E641",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_037": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E651",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_038": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E661",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_039": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E671",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_040": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E681",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_041": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E691",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_042": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E6A1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_043": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E6B1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_044": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E6C1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_045": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E6D1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_046": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E6E1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_047": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E6F1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_048": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E701",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_049": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E711",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_050": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E721",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_051": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E731",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_052": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E741",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_053": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E751",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_054": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E761",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_055": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E771",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_056": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E781",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_057": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E791",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_058": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E7A1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_059": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E7B1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_060": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E7C1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_061": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E7D1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_062": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E7E1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_063": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E7F1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_064": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E801",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_065": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E811",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_066": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E821",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_067": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E831",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_068": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E841",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_069": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E851",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_070": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E861",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_071": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E871",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_072": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E881",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_073": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E891",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_074": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E8A1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_075": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E8B1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_076": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E8C1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_077": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E8D1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_078": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E8E1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_079": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E8F1",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_080": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E901",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_081": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E911",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_082": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E921",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_083": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E931",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_084": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E941",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_085": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E951",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_086": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E961",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_087": "[B4:B5]/1000+1"
+      }
+    },
+    {
+      "pid": "221E971",
+      "pid_init": "ATSP6;ATSH7E5;ATCRA7ED;",
+      "parameters": {
+        "HV_C_V_088": "[B4:B5]/1000+1"
       }
     }
   ]
