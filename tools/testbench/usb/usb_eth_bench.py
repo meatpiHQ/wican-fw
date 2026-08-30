@@ -3,7 +3,9 @@
 
 Physical setup required: the DUT's USB connector in HOST mode with the
 USB-Ethernet adapter plugged, cabled to the Pi's eth0 (the `eth-bench`
-NetworkManager shared profile serves DHCP 10.42.1.x). If the connector
+NetworkManager shared profile serves DHCP 10.42.1.x) -- or, since
+2026-08-26, to a USB-Ethernet adapter on the Pi (`eth1`, shared profile
+`eth-bench-usb`, 10.42.2.x). If the connector
 is wired to a PC instead (CH342 device role), this bench cannot run —
 test.ps1's bench preflight detects that and SKIPs the leg.
 
@@ -18,7 +20,17 @@ import sys
 import time
 import urllib.request
 
-DUT = sys.argv[1] if len(sys.argv) > 1 else "10.42.0.62"
+# DUT control address over WiFi. Comma-separated candidates are tried in
+# order at every (re)connect: the bench hotspot SSID is served by TWO Pi
+# radios (wint0 10.42.0.x, wtest0 10.42.1.x) and the DUT may re-join
+# either one after the reboot leg (2026-08-26).
+DUTS = (sys.argv[1] if len(sys.argv) > 1 else "10.42.0.62").split(",")
+DUT = DUTS[0]
+# Subnet the Pi's NetworkManager *shared* profile hands out on the wire
+# (optional 2nd arg). Any shared profile is 10.42.x.y (eth0 `eth-bench`
+# served 10.42.1.x, the eth1 USB-adapter profile `eth-bench-usb` serves
+# 10.42.2.x), so the default accepts either; pass e.g. "10.42.2." to pin.
+ETH_PREFIX = sys.argv[2] if len(sys.argv) > 2 else "10.42."
 
 
 def api(host, path, method="GET", body=None, timeout=10):
@@ -32,13 +44,21 @@ def api(host, path, method="GET", body=None, timeout=10):
 
 
 def wait_online(timeout=240):
+    """Find the DUT on any candidate address; rebinds the global DUT."""
+    global DUT
     end = time.time() + timeout
     while time.time() < end:
-        try:
-            return api(DUT, "/api/status", timeout=3)
-        except Exception:
-            time.sleep(2)
-    raise SystemExit(f"FAIL: DUT {DUT} offline after {timeout}s")
+        for cand in DUTS:
+            try:
+                st = api(cand, "/api/status", timeout=3)
+            except Exception:
+                continue
+            if cand != DUT:
+                print(f"DUT moved: {DUT} -> {cand}")
+                DUT = cand
+            return st
+        time.sleep(2)
+    raise SystemExit(f"FAIL: DUT {DUTS} offline after {timeout}s")
 
 
 fails = []
@@ -52,7 +72,8 @@ def check(name, ok, detail=""):
 
 
 def main():
-    # 1. Baseline USB status over WiFi
+    # 1. Baseline USB status over WiFi (locate the DUT among the candidates)
+    wait_online(60)
     usb = api(DUT, "/api/usb")
     print("usb status:", json.dumps(usb))
     check("enabled+present+host_active",
@@ -61,7 +82,7 @@ def main():
     check("eth_connected", usb.get("eth_connected"))
     check("driver reported", bool(usb.get("driver")), usb.get("driver", "?"))
     eth_ip = usb.get("ip", "")
-    check("dhcp ip", eth_ip.startswith("10.42.1."), eth_ip or "?")
+    check("dhcp ip", eth_ip.startswith(ETH_PREFIX), eth_ip or "?")
     if not eth_ip:
         raise SystemExit("USB ETH TARGET FAIL: no eth ip")
 
@@ -95,7 +116,7 @@ def main():
         try:
             usb2 = api(DUT, "/api/usb", timeout=5)
             if usb2.get("eth_connected") and \
-               usb2.get("ip", "").startswith("10.42.1."):
+               usb2.get("ip", "").startswith(ETH_PREFIX):
                 break
         except Exception:
             pass
