@@ -34,7 +34,8 @@
             "pid": "22DB009",
             "pid_init": "ATSHDACBF1;",
             "parameters": {
-                "CHARGER_CONNECTED": "(B15-1)/2"
+                "CHARGER_CONNECTED": "(B15-1)/2",
+                "CHARGING": "B14-1"
             }
         }
     ]
