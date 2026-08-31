@@ -1,0 +1,379 @@
+{
+  "car_model": "Land Rover: Range Rover Evoque L538",
+  "note": "Gen.1 2012-2017 2.0/2.2 diesel, captured on a 2015 car",
+  "comment": "Derived from an ELM327 capture of a 2015 Evoque L538 (VIN SALVA2AC4F*, ECM cal EJ32-12K532-VSF, protocol reported by ATDPN as A6 = ISO 15765-4 CAN 11bit/500k). Standard PIDs are sent to 7DF with a 1-response suffix so the ELM returns as soon as the ECM (7E8) answers instead of waiting for the TCM (7E9) too. The mode-22 PIDs need the header moved off 7DF (7E0 for the ECM, 760 for the ABS), so every group carries an explicit pid_init to keep the header deterministic regardless of poll order. A plain ATSH is enough - the capture needed no ATCRA or ATFCSH for either module. Supported-PID masks reported by this ECM: 0100=983B2013, 0120=B01BA001, 0140=C4DF0000, giving 01,04,05,0B,0C,0D,0F,10,13,1C,1F,20,21,23,24,2C,2D,2F,30,31,33,40,41,42,46,49,4A,4C,4D,4E,4F,50 - note 0111 (throttle position), 0106 (STFT), 0143 (absolute load), 015A (relative pedal position) and 01A6 (odometer) are NOT supported, which is why the generic ICE profile only partly works here. Driver demand therefore comes from 0149/014A (pedal D/E) and 014C is the intake throttle flap the ECM commands, not driver demand - hence THROTTLE_CMD rather than THROTTLE. Mask-supported but deliberately left out as pure diagnostic counters rather than live telemetry: 0121 (distance with MIL on), 0130 (warm-ups since clear), 014D/014E (time with MIL on / since clear) and 0150 (max MAF). The ECM 03xx-05xx block was decoded by replaying the capture against a Car Scanner session on the same car that names these sensors: 2203F4/F5/F6 = exhaust gas temperature 1/2/3 at B4*5 celsius (F4 rises 216->412 C with rpm as a pre-turbo sensor should, F5 is damped, F6 near-flat post-DPF; the capture's final poll F4=0x19 gives exactly the 125 C the scanner showed at the same odometer), 220405 = DPF differential pressure in kPa (0 at idle, rising monotonically to 7 by 2000 rpm), 22042C = accumulated soot mass and 220434 = distance since the last DPF regeneration, both scaled /655.35 - 220434 tracks the odometer to within 0.4 km over an 84 km span and reads 132.03 km against the scanner's 132.03 km - and 220542 = distance since oil service in raw km (23781 km, matching both the scanner and the odometer's constant 49046 km offset). 2203DF is the one guess in that block: /655.35 puts it at 41-79% running and exactly 50.0% engine-off, consistent with the boost pressure actuator desired position the scanner reports, but it was never confirmed against a matching sample. 220396 answers 0000 in all 128 samples including under load, so it is genuinely unused. Odometer 22DD01 and the four ABS wheel speeds 222B06-222B09 are cross-checked against the OBDb community database (github.com/OBDb), which names them identically for Ford - beware that the same 22DD01 DID is trip distance with a /10 scale on the instrument cluster (720) rather than the ECM. Note the wheel speed left/right order is not the intuitive one: 06=FR, 07=FL, 08=RR, 09=RL. Still unidentified and left out: ABS 223302 (2B, 0x219E) and TCM 221E69 (1B, 0x58). See README.md for the full capture analysis. IMPORTANT: everything from 221310 onward is an UNVERIFIED candidate added for discovery - sourced from the OBDb community database and a legacy Ford EEC PID dictionary, never polled on this car. Expect some to return NO DATA, and treat every scale as a hypothesis: temperatures assume the modern Ford B4-40 celsius convention rather than the legacy imperial formulas, EXH_BACK_PRES / BRAKE_PRES / LAT_ACCEL / BATT_AGE are deliberately raw because their documented formulas are corrupt or absent, and STEER_ANGLE assumes offset-binary tenths. Deliberately NOT added because they would publish a second, unverified value over an already-verified sensor on the same or a parallel module: 22113C (duplicate EGR_DUTY from 012C), 221172 and 22402A (duplicate LV_V from 0142), 2216C1 (duplicate FUEL from 012F), 221670 and 22168C (duplicate FUEL_PRESSURE from 0123), 229924 (duplicate OUTSIDE_TEMPERATURE from 0146), and the Ford BCM TPMS block 222813-222816 (duplicate of the 751 set used here).",
+  "init": "ATSP6;ATST64;ATSH7DF;",
+  "pids": [
+    {
+      "pid": "010C1",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "ENGINE_RPM": "[B3:B4]/4"
+      }
+    },
+    {
+      "pid": "010D1",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "SPEED": "B3"
+      }
+    },
+    {
+      "pid": "01051",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "COOLANT_TMP": "B3-40"
+      }
+    },
+    {
+      "pid": "010F1",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "INTAKE_AIR_TMP": "B3-40"
+      }
+    },
+    {
+      "pid": "01461",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "OUTSIDE_TEMPERATURE": "B3-40"
+      }
+    },
+    {
+      "pid": "01101",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "MAF": "[B3:B4]/100"
+      }
+    },
+    {
+      "pid": "012F1",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "FUEL": "B3/2.55"
+      }
+    },
+    {
+      "pid": "01231",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "FUEL_PRESSURE": "[B3:B4]*10"
+      }
+    },
+    {
+      "pid": "01421",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "LV_V": "[B3:B4]/1000"
+      }
+    },
+    {
+      "pid": "01041",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "ENGINE_LOAD": "B3*100/255"
+      }
+    },
+    {
+      "pid": "010B1",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "INTAKE_MAN_PRESS": "B3"
+      }
+    },
+    {
+      "pid": "01331",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "BARO_PRESSURE": "B3"
+      }
+    },
+    {
+      "pid": "011F1",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "RUN_TIME": "[B3:B4]"
+      }
+    },
+    {
+      "pid": "01241",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "LAMBDA": "[B3:B4]/32768"
+      }
+    },
+    {
+      "pid": "012C1",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "EGR_DUTY": "B3*100/255"
+      }
+    },
+    {
+      "pid": "012D1",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "EGR_ERROR": "B3*100/128-100"
+      }
+    },
+    {
+      "pid": "01311",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "DIST_SINCE_CLR": "[B3:B4]"
+      }
+    },
+    {
+      "pid": "01491",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "ACC_PEDAL_D": "B3*100/255"
+      }
+    },
+    {
+      "pid": "014A1",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "ACC_PEDAL_E": "B3*100/255"
+      }
+    },
+    {
+      "pid": "014C1",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "THROTTLE_CMD": "B3*100/255"
+      }
+    },
+    {
+      "pid": "22DD01",
+      "pid_init": "ATSH7E0;",
+      "parameters": {
+        "ODOMETER": "[B4:B6]"
+      }
+    },
+    {
+      "pid": "222B06",
+      "pid_init": "ATSH760;",
+      "parameters": {
+        "WHEEL_SPD_FR": "B4"
+      }
+    },
+    {
+      "pid": "222B07",
+      "pid_init": "ATSH760;",
+      "parameters": {
+        "WHEEL_SPD_FL": "B4"
+      }
+    },
+    {
+      "pid": "222B08",
+      "pid_init": "ATSH760;",
+      "parameters": {
+        "WHEEL_SPD_RR": "B4"
+      }
+    },
+    {
+      "pid": "222B09",
+      "pid_init": "ATSH760;",
+      "parameters": {
+        "WHEEL_SPD_RL": "B4"
+      }
+    },
+    {
+      "pid": "2203F4",
+      "pid_init": "ATSH7E0;",
+      "parameters": {
+        "EGT_1": "B4*5"
+      }
+    },
+    {
+      "pid": "2203F5",
+      "pid_init": "ATSH7E0;",
+      "parameters": {
+        "EGT_2": "B4*5"
+      }
+    },
+    {
+      "pid": "2203F6",
+      "pid_init": "ATSH7E0;",
+      "parameters": {
+        "EGT_3": "B4*5"
+      }
+    },
+    {
+      "pid": "220405",
+      "pid_init": "ATSH7E0;",
+      "parameters": {
+        "DPF_DIFF_PRES": "B4"
+      }
+    },
+    {
+      "pid": "22042C",
+      "pid_init": "ATSH7E0;",
+      "parameters": {
+        "DPF_SOOT_MASS": "[B4:B5]/655.35"
+      }
+    },
+    {
+      "pid": "220434",
+      "pid_init": "ATSH7E0;",
+      "parameters": {
+        "DPF_DIST_SINCE_REGEN": "[B4:B7]/655.35"
+      }
+    },
+    {
+      "pid": "220542",
+      "pid_init": "ATSH7E0;",
+      "parameters": {
+        "DIST_SINCE_OIL_SERVICE": "[B4:B5]"
+      }
+    },
+    {
+      "pid": "2203DF",
+      "pid_init": "ATSH7E0;",
+      "parameters": {
+        "BOOST_ACT_POS_D": "[B4:B5]/655.35"
+      }
+    },
+    {
+      "pid": "221310",
+      "pid_init": "ATSH7E0;",
+      "parameters": {
+        "ENGINE_OIL_TEMP": "B4-40"
+      }
+    },
+    {
+      "pid": "221674",
+      "pid_init": "ATSH7E0;",
+      "parameters": {
+        "TRAN_F_TEMP": "B4-40"
+      }
+    },
+    {
+      "pid": "2216A8",
+      "pid_init": "ATSH7E0;",
+      "parameters": {
+        "INTAKE_AIR_TEMP_2": "B4-40"
+      }
+    },
+    {
+      "pid": "22168E",
+      "pid_init": "ATSH7E0;",
+      "parameters": {
+        "FUEL_TEMP": "B4-40"
+      }
+    },
+    {
+      "pid": "2216AE",
+      "pid_init": "ATSH7E0;",
+      "parameters": {
+        "EXH_BACK_PRES": "[B4:B5]"
+      }
+    },
+    {
+      "pid": "221433",
+      "pid_init": "ATSH7E0;",
+      "parameters": {
+        "EXH_BACK_PRES_DUTY": "B4*100/255"
+      }
+    },
+    {
+      "pid": "221450",
+      "pid_init": "ATSH7E0;",
+      "parameters": {
+        "GLOW_PLUG_TIME": "[B4:B5]"
+      }
+    },
+    {
+      "pid": "221451",
+      "pid_init": "ATSH7E0;",
+      "parameters": {
+        "GLOW_PLUG_LAMP_TIME": "[B4:B5]"
+      }
+    },
+    {
+      "pid": "222B00",
+      "pid_init": "ATSH760;",
+      "parameters": {
+        "PARK_BRAKE": "B4"
+      }
+    },
+    {
+      "pid": "222B0D",
+      "pid_init": "ATSH760;",
+      "parameters": {
+        "BRAKE_PRES": "[B4:B5]"
+      }
+    },
+    {
+      "pid": "222B11",
+      "pid_init": "ATSH760;",
+      "parameters": {
+        "LAT_ACCEL": "[B4:B5]"
+      }
+    },
+    {
+      "pid": "223201",
+      "pid_init": "ATSH760;",
+      "parameters": {
+        "STEER_ANGLE": "([B4:B5]-32768)/10"
+      }
+    },
+    {
+      "pid": "222076",
+      "pid_init": "ATSH751;",
+      "parameters": {
+        "TYRE_P_FL": "B5*0.19915"
+      }
+    },
+    {
+      "pid": "222077",
+      "pid_init": "ATSH751;",
+      "parameters": {
+        "TYRE_P_FR": "B5*0.19915"
+      }
+    },
+    {
+      "pid": "222078",
+      "pid_init": "ATSH751;",
+      "parameters": {
+        "TYRE_P_RR": "B5*0.19915"
+      }
+    },
+    {
+      "pid": "222079",
+      "pid_init": "ATSH751;",
+      "parameters": {
+        "TYRE_P_RL": "B5*0.19915"
+      }
+    },
+    {
+      "pid": "224027",
+      "pid_init": "ATSH726;",
+      "parameters": {
+        "BATT_AGE": "[B4:B5]"
+      }
+    },
+    {
+      "pid": "224028",
+      "pid_init": "ATSH726;",
+      "parameters": {
+        "LV_SOC": "B4"
+      }
+    },
+    {
+      "pid": "224029",
+      "pid_init": "ATSH726;",
+      "parameters": {
+        "BATT_TEMP": "B4-40"
+      }
+    },
+    {
+      "pid": "22402B",
+      "pid_init": "ATSH726;",
+      "parameters": {
+        "LV_A": "([B4:B5]-32768)/256"
+      }
+    }
+  ]
+}
