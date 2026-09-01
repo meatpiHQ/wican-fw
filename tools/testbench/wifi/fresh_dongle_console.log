@@ -1,0 +1,1070 @@
+    0.34 ��}�����02
+    0.34 D (118) boot.esp32s3: spi_speed 0f
+    0.34 D (121) boot.esp32s3: spi_size 04
+    0.34 I (124) boot.esp32s3: Boot SPI Speed : 80MHz
+    0.34 I (128) boot.esp32s3: SPI Mode       : QOUT
+    0.34 I (132) boot.esp32s3: SPI Flash Size : 16MB
+    0.34 D (136) boot: Enabling RTCWDT(9000 ms)
+    0.34 I (139) boot: Enabling RNG early entropy source...
+    0.34 D (144) bootloader_flash: rodata starts from paddr=0x00008000, size=0xc00, will be mapped to vaddr=0x3c000000
+    0.34 V (153) bootloader_flash: after mapping, starting from paddr=0x00000000 and vaddr=0x3c000000, 0x10000 bytes are mapped
+    0.34 D (164) boot: mapped partition table 0x8000 at 0x3c008000
+    0.34 D (169) flash_parts: partition table verified, 9 entries
+    0.34 I (174) boot: Partition Table:
+    0.34 I (177) boot: ## Label            Usage          Type ST Offset   Length
+    0.34 D (183) boot: load partition table entry 0x3c008000
+    0.34 D (188) boot: type=1 subtype=2
+    0.34 I (191) boot:  0 nvs              WiFi data        01 02 00009000 00020000
+    0.34 D (197) boot: load partition table entry 0x3c008020
+    0.34 D (202) boot: type=1 subtype=0
+    0.34 I (205) boot:  1 otadata          OTA data         01 00 00029000 00002000
+    0.34 D (211) boot: load partition table entry 0x3c008040
+    0.34 D (216) boot: type=1 subtype=1
+    0.34 I (219) boot:  2 phy_init         RF data          01 01 0002b000 00001000
+    0.34 D (225) boot: load partition table entry 0x3c008060
+    0.34 D (230) boot: type=0 subtype=10
+    0.34 I (233) boot:  3 ota_0            OTA app          00 10 00030000 00500000
+    0.34 D (239) boot: load partition table entry 0x3c008080
+    0.34 D (244) boot: type=0 subtype=11
+    8.86 I (247) boot:  4 ota_1            OTA app          00 11 �ESP-ROM:esp32s3-20210327
+    8.86 Build:Mar 27 2021
+    8.86 rst:0x1 (POWERON),boot:0x2a (SPI_FAST_FLASH_BOOT)
+    8.86 SPIWP:0xee
+    8.86 mode:DIO, clock div:1
+    8.86 load:0x3fce2820,len:0x23e4
+    8.86 load:0x403c8700,len:0x11cc
+    8.86 load:0x403cb700,len:0x36ec
+    8.86 entry 0x403c89a4
+    8.86 I (28) boot: ESP-IDF v6.0.2 2nd stage bootloader
+    8.86 I (28) boot: compile time Aug 21 2026 23:23:55
+    8.86 I (28) boot: Multicore bootloader
+    8.86 D (28) bootloader_flash: non-XMC chip detected by SFDP Read (46), skip.
+    8.86 D (34) bootloader_flash: mmu set block paddr=0x00000000 (was 0xffffffff)
+    8.86 D (41) bootloader_flash: mmu set block paddr=0x00000000 (was 0xffffffff)
+    8.86 D (47) bootloader_flash: mmu set block paddr=0x00000000 (was 0xffffffff)
+    8.86 D (53) bootloader_flash: mmu set block paddr=0x00000000 (was 0xffffffff)
+    8.86 D (60) bootloader_flash: mmu set block paddr=0x00000000 (was 0xffffffff)
+    8.86 D (66) bootloader_flash: mmu set block paddr=0x00000000 (was 0xffffffff)
+    8.86 I (73) boot: chip revision: v0.2
+    8.86 I (76) boot: efuse block revision: v1.3
+    8.86 D (79) qio_mode: Probing for QIO mode enable...
+    8.86 D (84) qio_mode: Raw SPI flash chip id 0x464018
+    8.86 D (88) qio_mode: Manufacturer ID 0x46 chip ID 0x4018
+    8.86 I (92) qio_mode: Enabling default flash chip QIO
+    8.86 D (97) qio_mode: Initial flash chip status 0x2
+    8.86 D (101) qio_mode: QIO mode already enabled in flash
+    8.86 D (106) qio_mode: Enabling QIO mode...
+    8.86 D (109) boot.esp32s3: magic e9
+    8.86 D (112) boot.esp32s3: segments 03
+    8.86 D (115) boot.esp32s3: spi_mode 02
+    8.86 D (118) boot.esp32s3: spi_speed 0f
+    8.86 D (121) boot.esp32s3: spi_size 04
+    8.86 I (124) boot.esp32s3: Boot SPI Speed : 80MHz
+    8.86 I (128) boot.esp32s3: SPI Mode       : QOUT
+    8.86 I (132) boot.esp32s3: SPI Flash Size : 16MB
+    8.86 D (136) boot: Enabling RTCWDT(9000 ms)
+    8.86 I (139) boot: Enabling RNG early entropy source...
+    8.86 D (144) bootloader_flash: rodata starts from paddr=0x00008000, size=0xc00, will be mapped to vaddr=0x3c000000
+    8.86 V (153) bootloader_flash: after mapping, starting from paddr=0x00000000 and vaddr=0x3c000000, 0x10000 bytes are mapped
+    8.86 D (164) boot: mapped partition table 0x8000 at 0x3c008000
+    8.86 D (169) flash_parts: partition table verified, 9 entries
+    8.86 I (174) boot: Partition Table:
+    8.86 I (177) boot: ## Label            Usage          Type ST Offset   Length
+    8.86 D (183) boot: load partition table entry 0x3c008000
+    8.86 D (188) boot: type=1 subtype=2
+    8.86 I (191) boot:  0 nvs              WiFi data        01 02 00009000 00020000
+    8.86 D (197) boot: load partition table entry 0x3c008020
+    8.86 D (202) boot: type=1 subtype=0
+    8.86 I (205) boot:  1 otadata          OTA data         01 00 00029000 00002000
+    8.86 D (211) boot: load partition table entry 0x3c008040
+    8.86 D (216) boot: type=1 subtype=1
+    8.86 I (219) boot:  2 phy_init         RF data          01 01 0002b000 00001000
+    8.86 D (225) boot: load partition table entry 0x3c008060
+    8.86 D (230) boot: type=0 subtype=10
+    8.86 I (233) boot:  3 ota_0            OTA app          00 10 00030000 00500000
+    8.86 D (239) boot: load partition table entry 0x3c008080
+    8.86 D (244) boot: type=0 subtype=11
+    8.86 I (247) boot:  4 ota_1            OTA app          00 11 00530000 00500000
+    8.86 D (253) boot: load partition table entry 0x3c0080a0
+    8.86 D (258) boot: type=1 subtype=83
+    8.86 I (261) boot:  5 settings         Unknown data     01 83 00a30000 00040000
+    8.86 D (267) boot: load partition table entry 0x3c0080c0
+    8.86 D (272) boot: type=1 subtype=83
+    8.86 I (275) boot:  6 storage          Unknown data     01 83 00a70000 00400000
+    8.86 D (281) boot: load partition table entry 0x3c0080e0
+    8.86 D (286) boot: type=1 subtype=3
+    8.86 I (289) boot:  7 coredump         Unknown data     01 03 00e70000 00040000
+    8.86 I (295) boot: End of partition table
+    8.86 D (299) boot: OTA data offset 0x29000
+    8.86 D (302) bootloader_flash: rodata starts from paddr=0x00029000, size=0x2000, will be mapped to vaddr=0x3c000000
+    8.86 V (312) bootloader_flash: after mapping, starting from paddr=0x00020000 and vaddr=0x3c000000, 0x10000 bytes are mapped
+    8.86 D (322) boot: otadata[0]: sequence values 0xffffffff
+    8.86 D (327) boot: otadata[1]: sequence values 0xffffffff
+    8.86 D (332) boot: OTA sequence numbers both empty (all-0xFF) or partition table does not have bootable ota_apps (app_count=2)
+    8.86 I (342) boot: No factory image, trying OTA 0
+    9.43 D (346) boot: Trying partition index 0 offs 0x30000 size 0x500000
+    9.43 D (352) esp_image: reading image header @ 0x30000
+    9.43 D (357) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+    9.43 D (363) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+    9.43 D (370) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+    9.43 D (376) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+    9.43 D (383) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+    9.43 D (389) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+    9.43 D (396) esp_image: image header: 0xe9 0x07 0x02 0x04 40376138
+    9.43 V (401) esp_image: loading segment header 0 at offset 0x30018
+    9.43 D (406) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+    9.43 D (413) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+    9.43 V (420) esp_image: segment data length 0x70a74 data starts 0x30020
+    9.43 V (425) esp_image: MMU page size 0x10000
+    9.43 V (429) esp_image: segment 0 map_segment 1 segment_data_offs 0x30020 load_addr 0x3c140020
+    9.43 I (437) esp_image: segment 0: paddr=00030020 vaddr=3c140020 size=70a74h (461428) map
+    9.43 D (444) esp_image: free data page_count 0x00000200
+    9.43 D (449) bootloader_flash: rodata starts from paddr=0x00030020, size=0x70a74, will be mapped to vaddr=0x3c000000
+    9.43 V (459) bootloader_flash: after mapping, starting from paddr=0x00030000 and vaddr=0x3c000000, 0x80000 bytes are mapped
+    9.43 V (545) esp_image: loading segment header 1 at offset 0xa0a94
+    9.43 D (545) bootloader_flash: mmu set block paddr=0x000a0000 (was 0xffffffff)
+    9.43 D (546) bootloader_flash: mmu set block paddr=0x000a0000 (was 0xffffffff)
+    9.43 V (552) esp_image: segment data length 0x74cc data starts 0xa0a9c
+    9.43 V (558) esp_image: MMU page size 0x10000
+    9.43 V (562) esp_image: segment 1 map_segment 0 segment_data_offs 0xa0a9c load_addr 0x3fca1600
+    9.43 I (569) esp_image: segment 1: paddr=000a0a9c vaddr=3fca1600 size=074cch ( 29900) load
+    9.43 D (577) esp_image: free data page_count 0x00000200
+    9.43 D (582) bootloader_flash: rodata starts from paddr=0x000a0a9c, size=0x74cc, will be mapped to vaddr=0x3c000000
+    9.43 V (591) bootloader_flash: after mapping, starting from paddr=0x000a0000 and vaddr=0x3c000000, 0x10000 bytes are mapped
+    9.43 V (607) esp_image: loading segment header 2 at offset 0xa7f68
+    9.43 D (608) bootloader_flash: mmu set block paddr=0x000a0000 (was 0xffffffff)
+    9.43 D (614) bootloader_flash: mmu set block paddr=0x000a0000 (was 0xffffffff)
+    9.43 V (620) esp_image: segment data length 0x80a8 data starts 0xa7f70
+    9.43 V (626) esp_image: MMU page size 0x10000
+    9.43 V (630) esp_image: segment 2 map_segment 0 segment_data_offs 0xa7f70 load_addr 0x40374000
+    9.43 I (638) esp_image: segment 2: paddr=000a7f70 vaddr=40374000 size=080a8h ( 32936) load
+    9.43 D (645) esp_image: free data page_count 0x00000200
+    9.43 D (650) bootloader_flash: rodata starts from paddr=0x000a7f70, size=0x80a8, will be mapped to vaddr=0x3c000000
+    9.43 V (659) bootloader_flash: after mapping, starting from paddr=0x000a0000 and vaddr=0x3c000000, 0x20000 bytes are mapped
+    9.43 V (677) esp_image: loading segment header 3 at offset 0xb0018
+    9.43 D (677) bootloader_flash: mmu set block paddr=0x000b0000 (was 0xffffffff)
+    9.43 D (682) bootloader_flash: mmu set block paddr=0x000b0000 (was 0xffffffff)
+    9.43 V (688) esp_image: segment data length 0x137844 data starts 0xb0020
+    9.43 V (694) esp_image: MMU page size 0x10000
+    9.43 V (698) esp_image: segment 3 map_segment 1 segment_data_offs 0xb0020 load_addr 0x42000020
+    9.43 I (706) esp_image: segment 3: paddr=000b0020 vaddr=42000020 size=137844h (1275972) map
+    9.43 D (713) esp_image: free data page_count 0x00000200
+    9.43 D (718) bootloader_flash: rodata starts from paddr=0x000b0020, size=0x137844, will be mapped to vaddr=0x3c000000
+    9.43 V (728) bootloader_flash: after mapping, starting from paddr=0x000b0000 and vaddr=0x3c000000, 0x140000 bytes are mapped
+    9.79 V (947) esp_image: loading segment header 4 at offset 0x1e7864
+    9.79 D (948) bootloader_flash: mmu set block paddr=0x001e0000 (was 0xffffffff)
+    9.79 D (948) bootloader_flash: mmu set block paddr=0x001e0000 (was 0xffffffff)
+    9.79 V (955) esp_image: segment data length 0x15520 data starts 0x1e786c
+    9.79 V (961) esp_image: MMU page size 0x10000
+    9.79 V (964) esp_image: segment 4 map_segment 0 segment_data_offs 0x1e786c load_addr 0x4037c0a8
+    9.79 I (972) esp_image: segment 4: paddr=001e786c vaddr=4037c0a8 size=15520h ( 87328) load
+    9.79 D (980) esp_image: free data page_count 0x00000200
+    9.79 D (985) bootloader_flash: rodata starts from paddr=0x001e786c, size=0x15520, will be mapped to vaddr=0x3c000000
+    9.79 V (994) bootloader_flash: after mapping, starting from paddr=0x001e0000 and vaddr=0x3c000000, 0x20000 bytes are mapped
+    9.79 V (1023) esp_image: loading segment header 5 at offset 0x1fcd8c
+    9.79 D (1023) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+    9.79 D (1024) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+    9.79 V (1030) esp_image: segment data length 0x24 data starts 0x1fcd94
+    9.79 V (1036) esp_image: MMU page size 0x10000
+    9.79 V (1040) esp_image: segment 5 map_segment 0 segment_data_offs 0x1fcd94 load_addr 0x50000000
+    9.79 I (1048) esp_image: segment 5: paddr=001fcd94 vaddr=50000000 size=00024h (    36) load
+    9.79 D (1056) esp_image: free data page_count 0x00000200
+    9.79 D (1060) bootloader_flash: rodata starts from paddr=0x001fcd94, size=0x24, will be mapped to vaddr=0x3c000000
+    9.79 V (1070) bootloader_flash: after mapping, starting from paddr=0x001f0000 and vaddr=0x3c000000, 0x10000 bytes are mapped
+    9.79 V (1080) esp_image: loading segment header 6 at offset 0x1fcdb8
+    9.79 D (1086) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+    9.79 D (1093) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+    9.79 V (1099) esp_image: segment data length 0x6c data starts 0x1fcdc0
+    9.79 V (1105) esp_image: MMU page size 0x10000
+    9.79 V (1109) esp_image: segment 6 map_segment 0 segment_data_offs 0x1fcdc0 load_addr 0x600fe000
+    9.79 I (1117) esp_image: segment 6: paddr=001fcdc0 vaddr=600fe000 size=0006ch (   108) load
+    9.79 D (1125) esp_image: free data page_count 0x00000200
+    9.79 D (1129) bootloader_flash: rodata starts from paddr=0x001fcdc0, size=0x6c, will be mapped to vaddr=0x3c000000
+    9.79 V (1139) bootloader_flash: after mapping, starting from paddr=0x001f0000 and vaddr=0x3c000000, 0x10000 bytes are mapped
+    9.79 V (1149) esp_image: image start 0x00030000 end of last section 0x001fce2c
+    9.79 D (1156) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+    9.79 D (1162) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+    9.79 D (1169) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+    9.79 D (1176) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+    9.79 D (1182) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+    9.79 D (1189) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+    9.79 D (1195) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+    9.79 D (1202) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+    9.79 D (1209) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+    9.79 D (1215) boot: Calculated hash: bc28275a3ed8640f7f5559be7977d807318782576fa5e9f3ccfaee8838dfa5e7
+    9.79 I (1236) boot: Loaded app from partition at offset 0x30000
+    9.79 I (1239) boot: Set actual ota_seq=1 in otadata[0]
+    9.79 I (1239) boot: Disabling RNG early entropy source...
+    9.79 D (1239) boot: Mapping segment 0 as DROM
+    9.79 D (1243) boot: Mapping segment 3 as IROM
+    9.79 D (1246) boot: calling set_cache_and_start_app
+    9.79 D (1250) boot: configure drom and irom and start
+    9.79 V (1255) boot: rodata starts from paddr=0x00030020, vaddr=0x3c140020, size=0x70a74
+    9.79 V (1262) boot: after mapping rodata, starting from paddr=0x00030000 and vaddr=0x3c140000, 0x80000 bytes are mapped
+    9.79 V (1272) boot: mapped one page of the rodata, from paddr=0x00030000 and vaddr=0x3dff0000, 0x10000 bytes are mapped
+    9.79 V (1282) boot: text starts from paddr=0x000b0020, vaddr=0x42000020, size=0x137844
+    9.79 V (1289) boot: after mapping text, starting from paddr=0x000b0000 and vaddr=0x42000000, 0x140000 bytes are mapped
+   10.19 D (1299) boot: start: 0x40376138
+   10.19 I (1314) octal_psram: vendor id    : 0x0d (AP)
+   10.19 I (1315) octal_psram: dev id       : 0x02 (generation 3)
+   10.19 I (1315) octal_psram: density      : 0x03 (64 Mbit)
+   10.19 I (1320) octal_psram: good-die     : 0x01 (Pass)
+   10.19 I (1325) octal_psram: Latency      : 0x01 (Fixed)
+   10.19 I (1331) octal_psram: VCC          : 0x01 (3V)
+   10.19 I (1336) octal_psram: SRF          : 0x01 (Fast Refresh)
+   10.19 I (1342) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+   10.19 I (1348) octal_psram: BurstLen     : 0x01 (32 Byte)
+   10.19 I (1353) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+   10.19 I (1359) octal_psram: DriveStrength: 0x00 (1/1)
+   10.19 I (1365) MSPI Timing: Enter psram timing tuning
+   10.19 I (1370) esp_psram: Found 8MB PSRAM device
+   10.19 I (1375) esp_psram: Speed: 80MHz
+   10.19 I (1379) cpu_start: Multicore app
+   10.19 I (1397) cpu_start: GPIO 44 and 43 are used as console UART I/O pins
+   10.19 I (1398) cpu_start: Pro cpu start user code
+   10.19 I (1398) cpu_start: cpu freq: 240000000 Hz
+   10.19 I (1403) app_init: Application information:
+   10.19 I (1408) app_init: Project name:     espnetlink-fw_v122-40-g83df4ae-
+   10.19 I (1415) app_init: App version:      v1.22-40-g83df4ae-dirty
+   10.19 I (1421) app_init: Compile time:     Aug 24 2026 16:01:44
+   10.19 I (1427) app_init: ELF file SHA256:  b0e3397f7...
+   10.19 I (1433) app_init: ESP-IDF:          v6.0.2
+   10.19 I (1437) efuse_init: Min chip rev:     v0.0
+   10.19 I (1442) efuse_init: Max chip rev:     v0.99 
+   10.19 I (1447) efuse_init: Chip rev:         v0.2
+   10.19 I (1452) heap_init: Initializing. RAM available for dynamic allocation:
+   10.19 I (1460) heap_init: At 3FCBA620 len 0002F0F0 (188 KiB): RAM
+   10.19 I (1466) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+   10.19 I (1472) heap_init: At 3FCF0000 len 00008000 (32 KiB): DRAM
+   10.19 I (1478) heap_init: At 600FE06C len 00001F7C (7 KiB): RTCRAM
+   10.19 I (1485) esp_psram: Adding pool of 7952K of PSRAM memory to heap allocator
+   10.19 I (1493) spi_flash: detected chip: generic
+   10.19 I (1497) spi_flash: flash io: qout
+   10.19 I (1501) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+   10.19 I (1508) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+   10.19 I (1516) esp_core_dump_flash: Init core dump to flash
+   10.19 I (1522) esp_core_dump_flash: Found partition 'coredump' @ e70000 262144 bytes
+   10.19 I (1530) main_task: Started on CPU0
+   10.19 I (1534) esp_psram: Reserving pool of 32K of internal memory for DMA/internal allocations
+   10.19 I (1543) main_task: Calling app_main()
+   10.19 W (1547) main: Reset reason: 1
+   10.19 I (1551) log_manager: pipeline up (queue 64x256, ring 16 KiB, sync until start)
+   10.19 W (1559) restart_tracker: prev state invalid: magic=a8aaaaaa ver=2868816618 len=3098208894 crc=aaaa8e8a want=11e52f23
+   10.19 I (1570) restart_tracker: boot #1 (fresh state): reset=poweron planned=none/unknown, unexpected=0
+   10.19 I (1580) dev_status_manager: up (partition=ota_0, version=v1.22-40-g83df4ae-dirty)
+   10.19 E (1623) esp_littlefs: ./managed_components/joltwallet__littlefs/src/littlefs/lfs.c:1383:error: Corrupted dir pair at {0x0, 0x1}
+   10.19 
+   10.19 W (1625) esp_littlefs: mount failed,  (-84). formatting...
+   10.19 I (1659) api_http: routes registered (/api/settings)
+   10.19 I (1662) i2c_bus: bus up (SDA 48, SCL 47)
+   10.19 I (1672) wifi_manager: /api/wifi routes registered
+   10.19 I (1673) imu_manager: /api/imu registered
+   10.19 I (1673) vpn_manager: /api/vpn registered
+   10.19 I (1676) cert_manager: /api/certs routes registered
+   10.19 I (1682) web_ui: web UI registered
+   10.19 E (1687) esp_littlefs: ./managed_components/joltwallet__littlefs/src/littlefs/lfs.c:1383:error: Corrupted dir pair at {0x0, 0x1}
+   10.19 
+   10.19 W (1698) esp_littlefs: mount failed,  (-84). formatting...
+   10.49 I (1714) filesystem: mounted /data (8 KiB used / 4096 KiB)
+   10.49 I (1807) wifi_manager: config applied: mode=2 sta_networks=0 ap_ssid=ESPNetLink_894A5D
+   11.21 I (2524) wifi_modem: usb_mode=auto ap_share=1
+   11.91 I (3097) log_manager: started
+   11.91 W (3171) wifi_modem: per-device AP password provisioned (12 chars) — read it with `wifi_modem -k`
+   11.91 W (3227) main: per-device AP password provisioned - rebooting once to apply
+   12.32 I (3477) restart_tracker: restarting: config_apply/unknown
+   12.32 ESP-ROM:esp32s3-20210327
+   12.32 Build:Mar 27 2021
+   12.32 rst:0xc (RTC_SW_CPU_RST),boot:0x2a (SPI_FAST_FLASH_BOOT)
+   12.32 Saved PC:0x40382eb1
+   12.32 SPIWP:0xee
+   12.32 mode:DIO, clock div:1
+   12.32 load:0x3fce2820,len:0x23e4
+   12.32 load:0x403c8700,len:0x11cc
+   12.32 load:0x403cb700,len:0x36ec
+   12.32 entry 0x403c89a4
+   12.32 I (29) boot: ESP-IDF v6.0.2 2nd stage bootloader
+   12.32 I (30) boot: compile time Aug 21 2026 23:23:55
+   12.32 I (30) boot: Multicore bootloader
+   12.32 D (30) bootloader_flash: non-XMC chip detected by SFDP Read (46), skip.
+   12.32 D (36) bootloader_flash: mmu set block paddr=0x00000000 (was 0xffffffff)
+   12.32 D (43) bootloader_flash: mmu set block paddr=0x00000000 (was 0xffffffff)
+   12.32 D (49) bootloader_flash: mmu set block paddr=0x00000000 (was 0xffffffff)
+   12.32 D (55) bootloader_flash: mmu set block paddr=0x00000000 (was 0xffffffff)
+   12.32 D (62) bootloader_flash: mmu set block paddr=0x00000000 (was 0xffffffff)
+   12.32 D (68) bootloader_flash: mmu set block paddr=0x00000000 (was 0xffffffff)
+   12.32 I (75) boot: chip revision: v0.2
+   12.32 I (78) boot: efuse block revision: v1.3
+   12.32 D (81) qio_mode: Probing for QIO mode enable...
+   12.32 D (85) qio_mode: Raw SPI flash chip id 0x464018
+   12.32 D (90) qio_mode: Manufacturer ID 0x46 chip ID 0x4018
+   12.32 I (94) qio_mode: Enabling default flash chip QIO
+   12.32 D (99) qio_mode: Initial flash chip status 0x2
+   12.32 D (103) qio_mode: QIO mode already enabled in flash
+   12.32 D (107) qio_mode: Enabling QIO mode...
+   12.32 D (111) boot.esp32s3: magic e9
+   12.32 D (114) boot.esp32s3: segments 03
+   12.32 D (117) boot.esp32s3: spi_mode 02
+   12.32 D (120) boot.esp32s3: spi_speed 0f
+   12.32 D (123) boot.esp32s3: spi_size 04
+   12.32 I (126) boot.esp32s3: Boot SPI Speed : 80MHz
+   12.32 I (130) boot.esp32s3: SPI Mode       : QOUT
+   12.32 I (134) boot.esp32s3: SPI Flash Size : 16MB
+   12.32 D (138) boot: Enabling RTCWDT(9000 ms)
+   12.32 I (141) boot: Enabling RNG early entropy source...
+   12.32 D (146) bootloader_flash: rodata starts from paddr=0x00008000, size=0xc00, will be mapped to vaddr=0x3c000000
+   12.32 V (155) bootloader_flash: after mapping, starting from paddr=0x00000000 and vaddr=0x3c000000, 0x10000 bytes are mapped
+   12.32 D (166) boot: mapped partition table 0x8000 at 0x3c008000
+   12.32 D (171) flash_parts: partition table verified, 9 entries
+   12.32 I (176) boot: Partition Table:
+   12.32 I (179) boot: ## Label            Usage          Type ST Offset   Length
+   12.32 D (185) boot: load partition table entry 0x3c008000
+   12.32 D (190) boot: type=1 subtype=2
+   12.32 I (193) boot:  0 nvs              WiFi data        01 02 00009000 00020000
+   12.32 D (199) boot: load partition table entry 0x3c008020
+   12.32 D (204) boot: type=1 subtype=0
+   12.32 I (207) boot:  1 otadata          OTA data         01 00 00029000 00002000
+   12.32 D (213) boot: load partition table entry 0x3c008040
+   12.32 D (218) boot: type=1 subtype=1
+   12.32 I (220) boot:  2 phy_init         RF data          01 01 0002b000 00001000
+   12.32 D (227) boot: load partition table entry 0x3c008060
+   12.32 D (232) boot: type=0 subtype=10
+   12.32 I (235) boot:  3 ota_0            OTA app          00 10 00030000 00500000
+   12.32 D (241) boot: load partition table entry 0x3c008080
+   12.32 D (246) boot: type=0 subtype=11
+   12.32 I (249) boot:  4 ota_1            OTA app          00 11 00530000 00500000
+   12.32 D (255) boot: load partition table entry 0x3c0080a0
+   12.32 D (260) boot: type=1 subtype=83
+   12.32 I (263) boot:  5 settings         Unknown data     01 83 00a30000 00040000
+   12.32 D (269) boot: load partition table entry 0x3c0080c0
+   12.32 D (274) boot: type=1 subtype=83
+   12.32 I (277) boot:  6 storage          Unknown data     01 83 00a70000 00400000
+   12.32 D (283) boot: load partition table entry 0x3c0080e0
+   12.32 D (288) boot: type=1 subtype=3
+   12.32 I (291) boot:  7 coredump         Unknown data     01 03 00e70000 00040000
+   12.32 I (297) boot: End of partition table
+   12.32 D (301) boot: OTA data offset 0x29000
+   12.32 D (304) bootloader_flash: rodata starts from paddr=0x00029000, size=0x2000, will be mapped to vaddr=0x3c000000
+   12.32 V (314) bootloader_flash: after mapping, starting from paddr=0x00020000 and vaddr=0x3c000000, 0x10000 bytes are mapped
+   12.32 D (324) boot: otadata[0]: sequence values 0x00000001
+   12.32 D (329) boot: otadata[1]: sequence values 0xffffffff
+   12.32 D (334) boot_comm: Only otadata[0] is valid
+   12.32 D (337) boot: Active otadata[0]
+   12.32 D (340) boot: Mapping seq 0 -> OTA slot 0
+   12.91 D (344) boot: Trying partition index 0 offs 0x30000 size 0x500000
+   12.91 D (350) esp_image: reading image header @ 0x30000
+   12.91 D (354) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+   12.91 D (361) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+   12.91 D (367) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+   12.91 D (374) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+   12.91 D (380) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+   12.91 D (387) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+   12.91 D (393) esp_image: image header: 0xe9 0x07 0x02 0x04 40376138
+   12.91 V (399) esp_image: loading segment header 0 at offset 0x30018
+   12.91 D (404) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+   12.91 D (411) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+   12.91 V (417) esp_image: segment data length 0x70a74 data starts 0x30020
+   12.91 V (423) esp_image: MMU page size 0x10000
+   12.91 V (427) esp_image: segment 0 map_segment 1 segment_data_offs 0x30020 load_addr 0x3c140020
+   12.91 I (435) esp_image: segment 0: paddr=00030020 vaddr=3c140020 size=70a74h (461428) map
+   12.91 D (442) esp_image: free data page_count 0x00000200
+   12.91 D (447) bootloader_flash: rodata starts from paddr=0x00030020, size=0x70a74, will be mapped to vaddr=0x3c000000
+   12.91 V (457) bootloader_flash: after mapping, starting from paddr=0x00030000 and vaddr=0x3c000000, 0x80000 bytes are mapped
+   12.91 V (543) esp_image: loading segment header 1 at offset 0xa0a94
+   12.91 D (543) bootloader_flash: mmu set block paddr=0x000a0000 (was 0xffffffff)
+   12.91 D (543) bootloader_flash: mmu set block paddr=0x000a0000 (was 0xffffffff)
+   12.91 V (550) esp_image: segment data length 0x74cc data starts 0xa0a9c
+   12.91 V (556) esp_image: MMU page size 0x10000
+   12.91 V (559) esp_image: segment 1 map_segment 0 segment_data_offs 0xa0a9c load_addr 0x3fca1600
+   12.91 I (567) esp_image: segment 1: paddr=000a0a9c vaddr=3fca1600 size=074cch ( 29900) load
+   12.91 D (575) esp_image: free data page_count 0x00000200
+   12.91 D (579) bootloader_flash: rodata starts from paddr=0x000a0a9c, size=0x74cc, will be mapped to vaddr=0x3c000000
+   12.91 V (589) bootloader_flash: after mapping, starting from paddr=0x000a0000 and vaddr=0x3c000000, 0x10000 bytes are mapped
+   12.91 V (605) esp_image: loading segment header 2 at offset 0xa7f68
+   12.91 D (605) bootloader_flash: mmu set block paddr=0x000a0000 (was 0xffffffff)
+   12.91 D (611) bootloader_flash: mmu set block paddr=0x000a0000 (was 0xffffffff)
+   12.91 V (618) esp_image: segment data length 0x80a8 data starts 0xa7f70
+   12.91 V (624) esp_image: MMU page size 0x10000
+   12.91 V (627) esp_image: segment 2 map_segment 0 segment_data_offs 0xa7f70 load_addr 0x40374000
+   12.91 I (635) esp_image: segment 2: paddr=000a7f70 vaddr=40374000 size=080a8h ( 32936) load
+   12.91 D (643) esp_image: free data page_count 0x00000200
+   12.91 D (647) bootloader_flash: rodata starts from paddr=0x000a7f70, size=0x80a8, will be mapped to vaddr=0x3c000000
+   12.91 V (657) bootloader_flash: after mapping, starting from paddr=0x000a0000 and vaddr=0x3c000000, 0x20000 bytes are mapped
+   12.91 V (674) esp_image: loading segment header 3 at offset 0xb0018
+   12.91 D (675) bootloader_flash: mmu set block paddr=0x000b0000 (was 0xffffffff)
+   12.91 D (680) bootloader_flash: mmu set block paddr=0x000b0000 (was 0xffffffff)
+   12.91 V (686) esp_image: segment data length 0x137844 data starts 0xb0020
+   12.91 V (692) esp_image: MMU page size 0x10000
+   12.91 V (696) esp_image: segment 3 map_segment 1 segment_data_offs 0xb0020 load_addr 0x42000020
+   12.91 I (704) esp_image: segment 3: paddr=000b0020 vaddr=42000020 size=137844h (1275972) map
+   12.91 D (711) esp_image: free data page_count 0x00000200
+   12.91 D (716) bootloader_flash: rodata starts from paddr=0x000b0020, size=0x137844, will be mapped to vaddr=0x3c000000
+   12.91 V (726) bootloader_flash: after mapping, starting from paddr=0x000b0000 and vaddr=0x3c000000, 0x140000 bytes are mapped
+   13.31 V (945) esp_image: loading segment header 4 at offset 0x1e7864
+   13.31 D (945) bootloader_flash: mmu set block paddr=0x001e0000 (was 0xffffffff)
+   13.31 D (946) bootloader_flash: mmu set block paddr=0x001e0000 (was 0xffffffff)
+   13.31 V (953) esp_image: segment data length 0x15520 data starts 0x1e786c
+   13.31 V (959) esp_image: MMU page size 0x10000
+   13.31 V (962) esp_image: segment 4 map_segment 0 segment_data_offs 0x1e786c load_addr 0x4037c0a8
+   13.31 I (970) esp_image: segment 4: paddr=001e786c vaddr=4037c0a8 size=15520h ( 87328) load
+   13.31 D (978) esp_image: free data page_count 0x00000200
+   13.31 D (982) bootloader_flash: rodata starts from paddr=0x001e786c, size=0x15520, will be mapped to vaddr=0x3c000000
+   13.31 V (992) bootloader_flash: after mapping, starting from paddr=0x001e0000 and vaddr=0x3c000000, 0x20000 bytes are mapped
+   13.31 V (1021) esp_image: loading segment header 5 at offset 0x1fcd8c
+   13.31 D (1021) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+   13.31 D (1022) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+   13.31 V (1028) esp_image: segment data length 0x24 data starts 0x1fcd94
+   13.31 V (1034) esp_image: MMU page size 0x10000
+   13.31 V (1038) esp_image: segment 5 map_segment 0 segment_data_offs 0x1fcd94 load_addr 0x50000000
+   13.31 I (1046) esp_image: segment 5: paddr=001fcd94 vaddr=50000000 size=00024h (    36) load
+   13.31 D (1053) esp_image: free data page_count 0x00000200
+   13.31 D (1058) bootloader_flash: rodata starts from paddr=0x001fcd94, size=0x24, will be mapped to vaddr=0x3c000000
+   13.31 V (1068) bootloader_flash: after mapping, starting from paddr=0x001f0000 and vaddr=0x3c000000, 0x10000 bytes are mapped
+   13.31 V (1078) esp_image: loading segment header 6 at offset 0x1fcdb8
+   13.31 D (1084) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+   13.31 D (1090) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+   13.31 V (1097) esp_image: segment data length 0x6c data starts 0x1fcdc0
+   13.31 V (1103) esp_image: MMU page size 0x10000
+   13.31 V (1107) esp_image: segment 6 map_segment 0 segment_data_offs 0x1fcdc0 load_addr 0x600fe000
+   13.31 I (1115) esp_image: segment 6: paddr=001fcdc0 vaddr=600fe000 size=0006ch (   108) load
+   13.31 D (1122) esp_image: free data page_count 0x00000200
+   13.31 D (1127) bootloader_flash: rodata starts from paddr=0x001fcdc0, size=0x6c, will be mapped to vaddr=0x3c000000
+   13.31 V (1136) bootloader_flash: after mapping, starting from paddr=0x001f0000 and vaddr=0x3c000000, 0x10000 bytes are mapped
+   13.31 V (1147) esp_image: image start 0x00030000 end of last section 0x001fce2c
+   13.31 D (1154) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+   13.31 D (1160) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+   13.31 D (1167) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+   13.31 D (1173) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+   13.31 D (1180) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+   13.31 D (1187) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+   13.31 D (1193) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+   13.31 D (1200) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+   13.31 D (1206) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+   13.31 D (1213) boot: Calculated hash: bc28275a3ed8640f7f5559be7977d807318782576fa5e9f3ccfaee8838dfa5e7
+   13.31 I (1234) boot: Loaded app from partition at offset 0x30000
+   13.31 I (1234) boot: Disabling RNG early entropy source...
+   13.31 D (1234) boot: Mapping segment 0 as DROM
+   13.31 D (1236) boot: Mapping segment 3 as IROM
+   13.31 D (1240) boot: calling set_cache_and_start_app
+   13.31 D (1244) boot: configure drom and irom and start
+   13.31 V (1248) boot: rodata starts from paddr=0x00030020, vaddr=0x3c140020, size=0x70a74
+   13.31 V (1255) boot: after mapping rodata, starting from paddr=0x00030000 and vaddr=0x3c140000, 0x80000 bytes are mapped
+   13.31 V (1265) boot: mapped one page of the rodata, from paddr=0x00030000 and vaddr=0x3dff0000, 0x10000 bytes are mapped
+   13.31 V (1276) boot: text starts from paddr=0x000b0020, vaddr=0x42000020, size=0x137844
+   13.31 V (1283) boot: after mapping text, starting from paddr=0x000b0000 and vaddr=0x42000000, 0x140000 bytes are mapped
+   13.31 D (1293) boot: start: 0x40376138
+   13.83 I (1308) octal_psram: vendor id    : 0x0d (AP)
+   13.83 I (1308) octal_psram: dev id       : 0x02 (generation 3)
+   13.83 I (1308) octal_psram: density      : 0x03 (64 Mbit)
+   13.83 I (1313) octal_psram: good-die     : 0x01 (Pass)
+   13.83 I (1318) octal_psram: Latency      : 0x01 (Fixed)
+   13.83 I (1324) octal_psram: VCC          : 0x01 (3V)
+   13.83 I (1329) octal_psram: SRF          : 0x01 (Fast Refresh)
+   13.83 I (1335) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+   13.83 I (1341) octal_psram: BurstLen     : 0x01 (32 Byte)
+   13.83 I (1346) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+   13.83 I (1353) octal_psram: DriveStrength: 0x00 (1/1)
+   13.83 I (1358) MSPI Timing: Enter psram timing tuning
+   13.83 I (1364) esp_psram: Found 8MB PSRAM device
+   13.83 I (1368) esp_psram: Speed: 80MHz
+   13.83 I (1372) cpu_start: Multicore app
+   13.83 I (1391) cpu_start: GPIO 44 and 43 are used as console UART I/O pins
+   13.83 I (1391) cpu_start: Pro cpu start user code
+   13.83 I (1391) cpu_start: cpu freq: 240000000 Hz
+   13.83 I (1396) app_init: Application information:
+   13.83 I (1401) app_init: Project name:     espnetlink-fw_v122-40-g83df4ae-
+   13.83 I (1408) app_init: App version:      v1.22-40-g83df4ae-dirty
+   13.83 I (1414) app_init: Compile time:     Aug 24 2026 16:01:44
+   13.83 I (1421) app_init: ELF file SHA256:  b0e3397f7...
+   13.83 I (1426) app_init: ESP-IDF:          v6.0.2
+   13.83 I (1431) efuse_init: Min chip rev:     v0.0
+   13.83 I (1436) efuse_init: Max chip rev:     v0.99 
+   13.83 I (1441) efuse_init: Chip rev:         v0.2
+   13.83 I (1446) heap_init: Initializing. RAM available for dynamic allocation:
+   13.83 I (1453) heap_init: At 3FCBA620 len 0002F0F0 (188 KiB): RAM
+   13.83 I (1459) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+   13.83 I (1465) heap_init: At 3FCF0000 len 00008000 (32 KiB): DRAM
+   13.83 I (1471) heap_init: At 600FE06C len 00001F7C (7 KiB): RTCRAM
+   13.83 I (1478) esp_psram: Adding pool of 7952K of PSRAM memory to heap allocator
+   13.83 I (1486) spi_flash: detected chip: generic
+   13.83 I (1490) spi_flash: flash io: qout
+   13.83 I (1495) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+   13.83 I (1502) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+   13.83 I (1509) esp_core_dump_flash: Init core dump to flash
+   13.83 I (1515) esp_core_dump_flash: Found partition 'coredump' @ e70000 262144 bytes
+   13.83 I (1523) main_task: Started on CPU0
+   13.83 I (1527) esp_psram: Reserving pool of 32K of internal memory for DMA/internal allocations
+   13.83 I (1536) main_task: Calling app_main()
+   13.83 W (1540) main: Reset reason: 3
+   13.83 I (1544) log_manager: pipeline up (queue 64x256, ring 16 KiB, sync until start)
+   13.83 I (1553) restart_tracker: boot #2 (history kept): reset=software planned=config_apply/unknown, unexpected=0
+   13.83 I (1562) dev_status_manager: up (partition=ota_0, version=v1.22-40-g83df4ae-dirty)
+   13.83 I (1627) api_http: routes registered (/api/settings)
+   13.83 I (1630) i2c_bus: bus up (SDA 48, SCL 47)
+   13.83 I (1641) wifi_manager: /api/wifi routes registered
+   13.83 I (1641) imu_manager: /api/imu registered
+   13.83 I (1641) vpn_manager: /api/vpn registered
+   13.83 I (1645) cert_manager: /api/certs routes registered
+   13.83 I (1650) web_ui: web UI registered
+   13.83 I (1656) filesystem: mounted /data (8 KiB used / 4096 KiB)
+   14.27 I (2103) wifi_manager: config applied: mode=2 sta_networks=0 ap_ssid=ESPNetLink_894A5D
+   15.42 I (3254) wifi_modem: usb_mode=auto ap_share=1
+   15.81 I (3436) log_manager: started
+   15.81 I (3437) wifi_modem: usb_mode=auto: mux left on the DIP route (SEL1=1 SEL2=0)
+   15.81 I (3438) gps: Initializing AGNSS assistance (deferred to background)...
+   15.81 I (3444) gps: Waiting for GPS UART traffic before AGNSS init...
+   15.81 I (3444) ota_manager: ready (running from ota_0)
+   15.81 I (3451) cert_manager: started (0 sets)
+   15.81 I (3496) imu_manager: started (SMD on sens 0; WoM on thr 8 ~31mg; stationary after 3s; polling 200 ms)
+   15.81 I (3497) wifi_manager: wifi ram profile=0 (rx=10 tx=0 cache=0)
+   15.81 I (3502) pp: pp rom version: e7ae62f
+   15.81 I (3506) net80211: net80211 rom version: e7ae62f
+   15.81 I (3513) wifi:wifi driver task: 3fcd4c84, prio:23, stack:6656, core=0
+   15.81 I (3520) wifi:wifi firmware version: 00ad238
+   15.81 I (3520) wifi:wifi certification version: v7.0
+   15.81 I (3520) wifi:config NVS flash: enabled
+   15.81 I (3520) wifi:config nano formatting: disabled
+   15.81 I (3520) wifi:Init data frame dynamic rx buffer num: 32
+   15.81 I (3520) wifi:Init static rx mgmt buffer num: 5
+   15.81 I (3520) wifi:Init management short buffer num: 32
+   15.81 I (3520) wifi:Init dynamic tx buffer num: 32
+   15.81 I (3521) wifi:Init static tx FG buffer num: 2
+   15.81 I (3521) wifi:Init static rx buffer size: 1600
+   15.81 I (3521) wifi:Init static rx buffer num: 10
+   15.81 I (3521) wifi:Init dynamic rx buffer num: 32
+   15.81 I (3522) wifi_init: rx ba win: 6
+   15.81 I (3522) wifi_init: accept mbox: 6
+   15.81 I (3522) wifi_init: tcpip mbox: 64
+   15.81 I (3522) wifi_init: udp mbox: 6
+   15.81 I (3522) wifi_init: tcp mbox: 16
+   15.81 I (3522) wifi_init: tcp tx win: 32768
+   15.81 I (3522) wifi_init: tcp rx win: 32768
+   15.81 I (3522) wifi_init: tcp mss: 1440
+   15.81 I (3522) wifi_init: WiFi IRAM OP enabled
+   15.81 I (3522) wifi_init: WiFi RX IRAM OP enabled
+   15.81 I (3522) wifi:(2.4G)set country: cc=01  schan=1 nchan=14 policy=0
+   15.81 I (3594) phy_init: phy_version 712,87e8c20e,Apr 13 2026,18:51:10
+   15.81 W (3594) phy_init: failed to load RF calibration data (0x1102), falling back to full calibration
+   15.81 I (3636) phy_init: Saving new calibration data due to checksum failure or outdated calibration data, mode(2)
+   15.81 I (3647) wifi:mode : softAP (20:6e:f1:89:4a:5d)
+   15.81 I (3650) wifi:Total power save buffer number: 16
+   15.81 I (3651) wifi:Init max length of beacon: 752/752
+   15.81 I (3651) wifi:Init max length of beacon: 752/752
+   15.81 I (3652) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.80.1[I/USB] cherryusb, version: v1.5.2
+   15.81 [I/USB] ========== dwc2 dcd params ==========
+   15.81 [I/USB] CID:00000000
+   15.81 [I/USB] GSNPSID:4f54400a
+   15.81 [I/USB] GHWCFG1:00000000
+   15.81 [I/USB] GHWCFG2:224dd930
+   15.81 [I/USB] GHWCFG3:00c804b5
+   15.81 [I/USB] GHWCFG4:d3f0a030
+   15.81 [I/USB] dwc2 h
+   15.81 as 7 endpoints and dfifo depth(32-bit words) is 200
+   15.81 [I/USB] fifo0 size:0010, offset:0058
+   15.81 [I/USB] fifo1 size:0010, offset:0068
+   15.81 [I/USB] fifo2 size:0010, offset:0078
+   15.81 [I/USB] fifo3 size:0010, offset:0088
+   15.81 [I/USB] fifo4 size:0010, offset:0098
+   15.81 [I/USB] fifo5 size:0010, offset:00a8
+   15.81 [I/USB] fifo6 size:0010, offset:00b8
+   15.81 I (3652) wifi_manager: AP started
+   15.81 I (3656) wifi:Total power save buffer number: 16
+   15.81 I (3657) wifi_manager: AP stopped
+   15.81 I (3657) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.80.1
+   15.81 I (3658) wifi_manager: AP started
+   15.81 I (3658) wifi:Set ps type: 0, coexist: 0
+   15.81 
+   15.81 I (3658) wifi_manager: started (mode=2, 0 STA candidates)
+   15.81 I (3659) wifi_modem: DNS proxy listening on the AP address, UDP/53
+   15.81 I (3660) wifi_modem: AP sharing armed: NAPT on 192.168.80.1, DNS offered = AP (proxy)
+   15.81 I (3663) http_server_manager: listening on :80 (42 routes, 1 asset tables)
+   15.81 I (3665) mdns_mem: mDNS task will be created from internal RAM
+   15.81 I (3666) mdns_manager: advertising espnetlink_206ef1894a5d.local (_meatpi._tcp port 80) as ESPNetLink-WebServer
+   16.06 I (3666) vpn_manager: disabled in settings
+   16.06 I (3666) ha_webhooks: up (enabled=0, interval 60s, mode changed)
+   16.06 I (3666) cmdline_manager: started (25 commands; uart console off)
+   16.06 I (3667) usb_dev_ethernet: Starting CherryUSB CDC-NCM+CDC (netif MAC 22:6E:F1:89:4A:5C, host adapter MAC 22:6E:F1:89:4A:5D)
+   16.06 I (3729) main_task: Returned from app_main()
+   16.06 I (3729) main: LTE config: APN='internet' user='(none)' pin=(none)
+   16.06 I (3730) main: Starting LTE upstream PPPoS...
+   16.06 I (3730) lte_upstream_pppos: PPPoS start: apn='internet' hwfc=on baud=3000000 share_usb=no
+   16.06 I (3730) lte_upstream_pppos: Initializing modem via modem_manager...
+   16.06 I (3730) modem_manager: Initializing modem manager
+   16.06 I (3730) modem_manager: Modem status: OFF -> powering ON
+   16.06 I (3730) modem_manager: Powering modem ON
+   16.06 I (3842) usb_dev_ethernet: USB disconnected/reset
+   16.35 I (4163) usb_dev_ethernet: USB configured
+   16.35 I (4167) usb_dev_ethernet: NCM link up (data alt 1)
+   16.35 I (4168) usb_dev_ethernet: DHCP server started on UDP/67 (usbnet netif, router+DNS not offered)
+   16.35 I (4178) gps: GPS UART traffic detected; waiting 1000 ms for PAIR readiness
+   16.93 I (4530) uart: ESP_INTR_FLAG_IRAM flag not set while CONFIG_UART_ISR_IN_IRAM is enabled, flag updated
+   16.93 I (4669) usb_dev_ethernet: RX DHCP DISCOVER (op=1 htype=1 hlen=6 chaddr=22:6E:F1:89:4A:5D xid=0xABA0BE45 flags=0x0000) 0.0.0.0:68 -> 255.255.255.255:67 ci=0.0.0.0 yi=0.0.0.0 si=0.0.0.0 opt54=- opt1=- opt3=- opt6=- prl(dns=1 router=1 subnet=1)
+   16.93 I (4670) usb_dev_ethernet: TX DHCP OFFER (op=2 htype=1 hlen=6 chaddr=22:6E:F1:89:4A:5D xid=0xABA0BE45 flags=0x0000) 192.168.7.1:67 -> 192.168.7.2:68 ci=0.0.0.0 yi=192.168.7.2 si=0.0.0.0 opt54=192.168.7.1 opt1=255.255.255.0 opt3=- opt6=192.168.7.1 pI (4672) usb_dev_ethernet: RX DHCP REQUEST (op=1 htype=1 hlen=6 chaddr=22:6E:F1:89:4A:5D xid=0xABA0BE45 flags=0x0000) 0.0.0.0:68 -> 255.255.255.255:67 ci=0.0.0.0 yi=0.0.0.0 si=0.0.0.0 opt54=192.168.7.1 opt1=- opt3=- opt6=- prl(dns=1 router=1 subnetI (4673) usb_dev_ethernet: TX DHCP ACK (op=2 htype=1 hlen=6 chaddr=22:6E:F1:89:4A:5D xid=0xABA0BE45 flags=0x0000) 192.168.7.1:67 -> 192.168.7.2:68 ci=0.0.0.0 yi=192.168.7.2 si=0.0.0.0 opt54=192.168.7.1 opt1=255.255.255.0 opt3=- opt6=192.168.7.1 prlI (4673) usb_dev_ethernet: DHCP lease 192.168.7.2 -> 22:6E:F1:89:4A:5D
+   17.35 I (5178) gps: GPS PAIR readiness delay elapsed; continuing AGNSS init
+   18.14 I (5679) gps: Querying EASY status (PAIR491)...
+   18.14 W (5733) gps: EASY status query rejected by module ($PAIR001,491,3*34) – treating EASY as unsupported
+   18.14 I (5735) gps: Querying EPOC status (PAIR508)...
+   18.14 I (5792) gps: EPOC: enabled=1 constellation=0x3 (want 0x3)
+   18.14 I (5794) gps: PAIR70 sent, waiting for ACK...
+   18.14 I (5847) gps: PAIR70 ACK OK
+   18.14 I (5847) gps: Static nav threshold set: 5 dm/s
+   18.14 I (5903) gps: AIC: enabled=1 (want 1)
+   18.14 I (5903) gps: No cached position in NVS – skipping PAIR600
+   18.14 I (5977) wifi_modem: AP credentials handed to the USB host
+   18.77 I (6438) modem_manager: AT access at 3000000 baud (hwfc=on) established
+   18.77 I (6439) modem_manager: Current IFC: 2,2
+   18.77 I (6440) modem_manager: Current IPR: 3000000
+   18.77 I (6440) modem_manager: Querying modem version (AT+GMR/ATI)
+   18.77 I (6441) modem_manager: BG95M5LAR02A03
+   18.77 I (6441) modem_manager: Tearing down UART driver
+   18.77 I (6441) modem_manager: Modem ready at 3000000 baud with HW flow control
+   18.77 I (6442) uart: ESP_INTR_FLAG_IRAM flag not set while CONFIG_UART_ISR_IN_IRAM is enabled, flag updated
+   18.77 I (6442) uart: queue free spaces: 30
+   18.77 I (6446) lte_upstream_pppos: PDP context set: APN='internet' – modem will register automatically
+   18.77 I (6447) lte_upstream_pppos: SIM ready (IMSI: 505015634201328) after 1 attempts
+   18.77 I (6448) lte_upstream_pppos: AT+QCFG="iotopmode" -> +QCFG: "iotopmode",0 (already correct)
+   18.77 I (6449) lte_upstream_pppos: AT+QCFG="nwscanmode" -> +QCFG: "nwscanmode",3 (already correct)
+   18.77 I (6450) lte_upstream_pppos: AT+CPSMS=0 -> AT+CPSMS=0
+   18.77 W (6450) lte_upstream_pppos: AT+CEDRXS=0 failed: ESP_FAIL
+   18.77 I (6451) lte_upstream_pppos: SIM IMSI  : 505015634201328
+   18.77 I (6451) lte_upstream_pppos: SIM ICCID : +CCID: 89610140000735834363
+   18.77 I (6452) lte_upstream_pppos: AT+CGDCONT? -> +CGDCONT: 1,"IP","internet","0.0.0.0",0,0,0
+   18.77 I (6453) lte_upstream_pppos: AT+QCFG=band -> +QCFG: "band",0xf,0x100002000000000f0e189f,0x10004200000000090e189f
+   18.77 I (6454) lte_upstream_pppos: AT+QCFG=nwscanseq -> +QCFG: "nwscanseq",020301
+   18.77 I (6456) lte_upstream_pppos: AT+QCFG=nwscanmode -> +QCFG: "nwscanmode",3
+   18.77 I (6457) lte_upstream_pppos: AT+QCFG=iotopmode -> +QCFG: "iotopmode",0
+   18.77 I (6459) lte_upstream_pppos: AT+QCSQ -> +QCSQ: "NOSERVICE"
+   18.77 W (6460) lte_upstream_pppos: Waiting for LTE registration... (CEREG state=4 rssi=99 ber=99)
+   19.15 I (6970) wifi_modem: USB data CUT at the mux by the host (readback SEL1=1 SEL2=1) - cable is power only
+   19.15 I (6981) wifi_modem: boot-cut hint armed (next boot: USB data cut)
+   19.15 I (6981) wifi_modem: host requested usb_data=0 (applying)
+   20.63 W (8461) lte_upstream_pppos: Waiting for LTE registration... (CEREG state=2 rssi=99 ber=99)
+   22.74 I (10463) lte_upstream_pppos: LTE registered (CEREG state=1, rssi=99 ber=99)
+   22.74 W (10474) uart_terminal: Rx Break
+   22.74 W (10565) CMUX: Restarting CMUX state machine (reason: 0)
+   22.74 I (10565) CMUX: Protocol recovered
+   23.16 I (10918) lte_upstream_pppos: CMUX mode active – PPP on data channel, AT commands on control channel
+   23.16 I (10920) lte_upstream_pppos: PPPoS dial started (waiting for IP events)...
+   23.16 I (10924) esp-netif_lwip-ppp: ppp: Connected
+   23.16 I (10925) wifi_modem: PPP up: upstream DNS 101.168.244.100
+   23.16 I (10925) lte_upstream_pppos: PPP GOT IP
+   23.16 I (10925) lte_upstream_pppos: IP      : 10.69.69.180
+   23.16 I (10925) lte_upstream_pppos: Netmask : 255.255.255.255
+   23.16 I (10925) lte_upstream_pppos: Gateway : 10.64.64.64
+   23.16 I (10925) lte_upstream_pppos: DNS1    : 101.168.244.100
+   23.16 I (10925) lte_upstream_pppos: DNS2    : 101.168.244.102
+   23.16 I (10925) lte_upstream_pppos: PPP status: OK
+   23.16 I (10926) lte_upstream_pppos: QLTS response: +QLTS: "2026/08/31,01:21:51+40,0"
+   23.16 I (10927) lte_upstream_pppos: System time set to UTC 2026-08-30 15:21:51
+   24.13 I (11903) gps: Injecting system UTC: 2026-08-30 15:21:51
+   24.13 I (11906) gps: PAIR590 sent, waiting for ACK...
+   24.13 I (11963) gps: PAIR590 ACK OK
+   24.13 I (11963) gps: Reference time injected
+   27.18 I (14975) wifi:station: 68:ee:8f:5a:65:3c join, AID=1, bgn, 20
+   27.18 I (14993) wifi_manager: AP client 68:ee:8f:5a:65:3c joined (1 total)
+   27.18 I (15007) esp_netif_lwip: DHCP server assigned IP to a client, IP is: 192.168.80.2
+   28.62 I (16447) wifi:<ba-add>idx:2 (ifx:1, 68:ee:8f:5a:65:3c), tid:0, ssn:0, winSize:64
+   38.11 I (25922) lte_upstream_pppos: QLTS response: +QLTS: "2026/08/31,01:22:06+40,0"
+   38.11 I (25923) lte_upstream_pppos: System time set to UTC 2026-08-30 15:22:06
+   38.11 I (25927) lte_upstream_pppos: Operator: "ALDI Mobile"  Network type: eMTC (QNWINFO, act=8)
+   90.61 I (78445) gps: Cached position: lat=-37.905191 lon=145.145109 alt=93.1
+   98.12 I (85932) lte_upstream_pppos: QLTS response: +QLTS: "2026/08/31,01:23:06+40,0"
+   98.12 I (85933) lte_upstream_pppos: System time set to UTC 2026-08-30 15:23:06
+   98.12 I (85935) lte_upstream_pppos: Operator: "ALDI Mobile"  Network type: eMTC (QNWINFO, act=8)
+  100.27 E BOD�ESP-ROM:esp32s3-20210327
+  100.27 Build:Mar 27 2021
+  100.27 rst:0x1 (POWERON),boot:0x2a (SPI_FAST_FLASH_BOOT)
+  100.27 SPIWP:0xee
+  100.27 mode:DIO, clock div:1
+  100.27 load:0x3fce2820,len:0x23e4
+  100.27 load:0x403c8700,len:0x11cc
+  100.27 load:0x403cb700,len:0x36ec
+  100.27 entry 0x403c89a4
+  100.27 I (28) boot: ESP-IDF v6.0.2 2nd stage bootloader
+  100.27 I (28) boot: compile time Aug 21 2026 23:23:55
+  100.27 I (28) boot: Multicore bootloader
+  100.27 D (28) bootloader_flash: non-XMC chip detected by SFDP Read (46), skip.
+  100.27 D (34) bootloader_flash: mmu set block paddr=0x00000000 (was 0xffffffff)
+  100.27 D (41) bootloader_flash: mmu set block paddr=0x00000000 (was 0xffffffff)
+  100.27 D (47) bootloader_flash: mmu set block paddr=0x00000000 (was 0xffffffff)
+  100.27 D (53) bootloader_flash: mmu set block paddr=0x00000000 (was 0xffffffff)
+  100.27 D (60) bootloader_flash: mmu set block paddr=0x00000000 (was 0xffffffff)
+  100.27 D (66) bootloader_flash: mmu set block paddr=0x00000000 (was 0xffffffff)
+  100.27 I (73) boot: chip revision: v0.2
+  100.27 I (76) boot: efuse block revision: v1.3
+  100.27 D (79) qio_mode: Probing for QIO mode enable...
+  100.27 D (84) qio_mode: Raw SPI flash chip id 0x464018
+  100.27 D (88) qio_mode: Manufacturer ID 0x46 chip ID 0x4018
+  100.27 I (92) qio_mode: Enabling default flash chip QIO
+  100.27 D (97) qio_mode: Initial flash chip status 0x2
+  100.27 D (101) qio_mode: QIO mode already enabled in flash
+  100.27 D (106) qio_mode: Enabling QIO mode...
+  100.27 D (109) boot.esp32s3: magic e9
+  100.27 D (112) boot.esp32s3: segments 03
+  100.27 D (115) boot.esp32s3: spi_mode 02
+  100.27 D (118) boot.esp32s3: spi_speed 0f
+  100.27 D (121) boot.esp32s3: spi_size 04
+  100.27 I (124) boot.esp32s3: Boot SPI Speed : 80MHz
+  100.27 I (128) boot.esp32s3: SPI Mode       : QOUT
+  100.27 I (132) boot.esp32s3: SPI Flash Size : 16MB
+  100.27 D (136) boot: Enabling RTCWDT(9000 ms)
+  100.27 I (139) boot: Enabling RNG early entropy source...
+  100.27 D (144) bootloader_flash: rodata starts from paddr=0x00008000, size=0xc00, will be mapped to vaddr=0x3c000000
+  100.27 V (153) bootloader_flash: after mapping, starting from paddr=0x00000000 and vaddr=0x3c000000, 0x10000 bytes are mapped
+  100.27 D (164) boot: mapped partition table 0x8000 at 0x3c008000
+  100.27 D (169) flash_parts: partition table verified, 9 entries
+  100.27 I (174) boot: Partition Table:
+  100.27 I (177) boot: ## Label            Usage          Type ST Offset   Length
+  100.27 D (183) boot: load partition table entry 0x3c008000
+  100.27 D (188) boot: type=1 subtype=2
+  100.27 I (191) boot:  0 nvs              WiFi data        01 02 00009000 00020000
+  100.27 D (197) boot: load partition table entry 0x3c008020
+  100.27 D (202) boot: type=1 subtype=0
+  100.27 I (205) boot:  1 otadata          OTA data         01 00 00029000 00002000
+  100.27 D (211) boot: load partition table entry 0x3c008040
+  100.27 D (216) boot: type=1 subtype=1
+  100.27 I (219) boot:  2 phy_init         RF data          01 01 0002b000 00001000
+  100.27 D (225) boot: load partition table entry 0x3c008060
+  100.27 D (230) boot: type=0 subtype=10
+  100.27 I (233) boot:  3 ota_0            OTA app          00 10 00030000 00500000
+  100.27 D (239) boot: load partition table entry 0x3c008080
+  100.27 D (244) boot: type=0 subtype=11
+  100.27 I (247) boot:  4 ota_1            OTA app          00 11 00530000 00500000
+  100.27 D (253) boot: load partition table entry 0x3c0080a0
+  100.27 D (258) boot: type=1 subtype=83
+  100.27 I (261) boot:  5 settings         Unknown data     01 83 00a30000 00040000
+  100.27 D (267) boot: load partition table entry 0x3c0080c0
+  100.27 D (272) boot: type=1 subtype=83
+  100.27 I (275) boot:  6 storage          Unknown data     01 83 00a70000 00400000
+  100.27 D (281) boot: load partition table entry 0x3c0080e0
+  100.27 D (286) boot: type=1 subtype=3
+  100.27 I (289) boot:  7 coredump         Unknown data     01 03 00e70000 00040000
+  100.27 I (295) boot: End of partition table
+  100.27 D (299) boot: OTA data offset 0x29000
+  100.27 D (302) bootloader_flash: rodata starts from paddr=0x00029000, size=0x2000, will be mapped to vaddr=0x3c000000
+  100.27 V (312) bootloader_flash: after mapping, starting from paddr=0x00020000 and vaddr=0x3c000000, 0x10000 bytes are mapped
+  100.27 D (322) boot: otadata[0]: sequence values 0x00000001
+  100.27 D (327) boot: otadata[1]: sequence values 0xffffffff
+  100.27 D (332) boot_comm: Only otadata[0] is valid
+  100.27 D (335) boot: Active otadata[0]
+  100.27 D (338) boot: Mapping seq 0 -> OTA slot 0
+  100.27 D (342) boot: Trying partition index 0 offs 0x30000 size 0x500000
+  100.83 D (348) esp_image: reading image header @ 0x30000
+  100.83 D (352) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+  100.83 D (359) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+  100.83 D (365) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+  100.83 D (372) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+  100.83 D (378) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+  100.83 D (385) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+  100.83 D (391) esp_image: image header: 0xe9 0x07 0x02 0x04 40376138
+  100.83 V (397) esp_image: loading segment header 0 at offset 0x30018
+  100.83 D (402) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+  100.83 D (409) bootloader_flash: mmu set block paddr=0x00030000 (was 0xffffffff)
+  100.83 V (415) esp_image: segment data length 0x70a74 data starts 0x30020
+  100.83 V (421) esp_image: MMU page size 0x10000
+  100.83 V (425) esp_image: segment 0 map_segment 1 segment_data_offs 0x30020 load_addr 0x3c140020
+  100.83 I (433) esp_image: segment 0: paddr=00030020 vaddr=3c140020 size=70a74h (461428) map
+  100.83 D (440) esp_image: free data page_count 0x00000200
+  100.83 D (445) bootloader_flash: rodata starts from paddr=0x00030020, size=0x70a74, will be mapped to vaddr=0x3c000000
+  100.83 V (455) bootloader_flash: after mapping, starting from paddr=0x00030000 and vaddr=0x3c000000, 0x80000 bytes are mapped
+  100.83 V (541) esp_image: loading segment header 1 at offset 0xa0a94
+  100.83 D (541) bootloader_flash: mmu set block paddr=0x000a0000 (was 0xffffffff)
+  100.83 D (541) bootloader_flash: mmu set block paddr=0x000a0000 (was 0xffffffff)
+  100.83 V (548) esp_image: segment data length 0x74cc data starts 0xa0a9c
+  100.83 V (554) esp_image: MMU page size 0x10000
+  100.83 V (557) esp_image: segment 1 map_segment 0 segment_data_offs 0xa0a9c load_addr 0x3fca1600
+  100.83 I (565) esp_image: segment 1: paddr=000a0a9c vaddr=3fca1600 size=074cch ( 29900) load
+  100.83 D (573) esp_image: free data page_count 0x00000200
+  100.83 D (577) bootloader_flash: rodata starts from paddr=0x000a0a9c, size=0x74cc, will be mapped to vaddr=0x3c000000
+  100.83 V (587) bootloader_flash: after mapping, starting from paddr=0x000a0000 and vaddr=0x3c000000, 0x10000 bytes are mapped
+  100.83 V (603) esp_image: loading segment header 2 at offset 0xa7f68
+  100.83 D (603) bootloader_flash: mmu set block paddr=0x000a0000 (was 0xffffffff)
+  100.83 D (610) bootloader_flash: mmu set block paddr=0x000a0000 (was 0xffffffff)
+  100.83 V (616) esp_image: segment data length 0x80a8 data starts 0xa7f70
+  100.83 V (622) esp_image: MMU page size 0x10000
+  100.83 V (625) esp_image: segment 2 map_segment 0 segment_data_offs 0xa7f70 load_addr 0x40374000
+  100.83 I (633) esp_image: segment 2: paddr=000a7f70 vaddr=40374000 size=080a8h ( 32936) load
+  100.83 D (641) esp_image: free data page_count 0x00000200
+  100.83 D (645) bootloader_flash: rodata starts from paddr=0x000a7f70, size=0x80a8, will be mapped to vaddr=0x3c000000
+  100.83 V (655) bootloader_flash: after mapping, starting from paddr=0x000a0000 and vaddr=0x3c000000, 0x20000 bytes are mapped
+  100.83 V (672) esp_image: loading segment header 3 at offset 0xb0018
+  100.83 D (673) bootloader_flash: mmu set block paddr=0x000b0000 (was 0xffffffff)
+  100.83 D (678) bootloader_flash: mmu set block paddr=0x000b0000 (was 0xffffffff)
+  100.83 V (684) esp_image: segment data length 0x137844 data starts 0xb0020
+  100.83 V (690) esp_image: MMU page size 0x10000
+  100.83 V (694) esp_image: segment 3 map_segment 1 segment_data_offs 0xb0020 load_addr 0x42000020
+  100.83 I (702) esp_image: segment 3: paddr=000b0020 vaddr=42000020 size=137844h (1275972) map
+  100.83 D (709) esp_image: free data page_count 0x00000200
+  100.83 D (714) bootloader_flash: rodata starts from paddr=0x000b0020, size=0x137844, will be mapped to vaddr=0x3c000000
+  100.83 V (724) bootloader_flash: after mapping, starting from paddr=0x000b0000 and vaddr=0x3c000000, 0x140000 bytes are mapped
+  101.23 V (943) esp_image: loading segment header 4 at offset 0x1e7864
+  101.23 D (944) bootloader_flash: mmu set block paddr=0x001e0000 (was 0xffffffff)
+  101.23 D (944) bootloader_flash: mmu set block paddr=0x001e0000 (was 0xffffffff)
+  101.23 V (951) esp_image: segment data length 0x15520 data starts 0x1e786c
+  101.23 V (957) esp_image: MMU page size 0x10000
+  101.23 V (960) esp_image: segment 4 map_segment 0 segment_data_offs 0x1e786c load_addr 0x4037c0a8
+  101.23 I (968) esp_image: segment 4: paddr=001e786c vaddr=4037c0a8 size=15520h ( 87328) load
+  101.23 D (976) esp_image: free data page_count 0x00000200
+  101.23 D (980) bootloader_flash: rodata starts from paddr=0x001e786c, size=0x15520, will be mapped to vaddr=0x3c000000
+  101.23 V (990) bootloader_flash: after mapping, starting from paddr=0x001e0000 and vaddr=0x3c000000, 0x20000 bytes are mapped
+  101.23 V (1019) esp_image: loading segment header 5 at offset 0x1fcd8c
+  101.23 D (1019) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+  101.23 D (1020) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+  101.23 V (1026) esp_image: segment data length 0x24 data starts 0x1fcd94
+  101.23 V (1032) esp_image: MMU page size 0x10000
+  101.23 V (1036) esp_image: segment 5 map_segment 0 segment_data_offs 0x1fcd94 load_addr 0x50000000
+  101.23 I (1044) esp_image: segment 5: paddr=001fcd94 vaddr=50000000 size=00024h (    36) load
+  101.23 D (1052) esp_image: free data page_count 0x00000200
+  101.23 D (1056) bootloader_flash: rodata starts from paddr=0x001fcd94, size=0x24, will be mapped to vaddr=0x3c000000
+  101.23 V (1066) bootloader_flash: after mapping, starting from paddr=0x001f0000 and vaddr=0x3c000000, 0x10000 bytes are mapped
+  101.23 V (1076) esp_image: loading segment header 6 at offset 0x1fcdb8
+  101.23 D (1082) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+  101.23 D (1088) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+  101.23 V (1095) esp_image: segment data length 0x6c data starts 0x1fcdc0
+  101.23 V (1101) esp_image: MMU page size 0x10000
+  101.23 V (1105) esp_image: segment 6 map_segment 0 segment_data_offs 0x1fcdc0 load_addr 0x600fe000
+  101.24 I (1113) esp_image: segment 6: paddr=001fcdc0 vaddr=600fe000 size=0006ch (   108) load
+  101.24 D (1120) esp_image: free data page_count 0x00000200
+  101.24 D (1125) bootloader_flash: rodata starts from paddr=0x001fcdc0, size=0x6c, will be mapped to vaddr=0x3c000000
+  101.24 V (1135) bootloader_flash: after mapping, starting from paddr=0x001f0000 and vaddr=0x3c000000, 0x10000 bytes are mapped
+  101.24 V (1145) esp_image: image start 0x00030000 end of last section 0x001fce2c
+  101.24 D (1152) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+  101.24 D (1158) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+  101.24 D (1165) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+  101.24 D (1171) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+  101.24 D (1178) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+  101.24 D (1185) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+  101.24 D (1191) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+  101.24 D (1198) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+  101.24 D (1204) bootloader_flash: mmu set block paddr=0x001f0000 (was 0xffffffff)
+  101.24 D (1211) boot: Calculated hash: bc28275a3ed8640f7f5559be7977d807318782576fa5e9f3ccfaee8838dfa5e7
+  101.24 I (1232) boot: Loaded app from partition at offset 0x30000
+  101.24 I (1232) boot: Disabling RNG early entropy source...
+  101.24 D (1232) boot: Mapping segment 0 as DROM
+  101.24 D (1234) boot: Mapping segment 3 as IROM
+  101.24 D (1238) boot: calling set_cache_and_start_app
+  101.24 D (1242) boot: configure drom and irom and start
+  101.24 V (1246) boot: rodata starts from paddr=0x00030020, vaddr=0x3c140020, size=0x70a74
+  101.24 V (1253) boot: after mapping rodata, starting from paddr=0x00030000 and vaddr=0x3c140000, 0x80000 bytes are mapped
+  101.24 V (1264) boot: mapped one page of the rodata, from paddr=0x00030000 and vaddr=0x3dff0000, 0x10000 bytes are mapped
+  101.24 V (1274) boot: text starts from paddr=0x000b0020, vaddr=0x42000020, size=0x137844
+  101.24 V (1281) boot: after mapping text, starting from paddr=0x000b0000 and vaddr=0x42000000, 0x140000 bytes are mapped
+  101.24 D (1291) boot: start: 0x40376138
+  101.77 I (1306) octal_psram: vendor id    : 0x0d (AP)
+  101.77 I (1306) octal_psram: dev id       : 0x02 (generation 3)
+  101.77 I (1306) octal_psram: density      : 0x03 (64 Mbit)
+  101.77 I (1311) octal_psram: good-die     : 0x01 (Pass)
+  101.77 I (1317) octal_psram: Latency      : 0x01 (Fixed)
+  101.77 I (1322) octal_psram: VCC          : 0x01 (3V)
+  101.77 I (1327) octal_psram: SRF          : 0x01 (Fast Refresh)
+  101.77 I (1333) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+  101.77 I (1339) octal_psram: BurstLen     : 0x01 (32 Byte)
+  101.77 I (1344) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+  101.77 I (1351) octal_psram: DriveStrength: 0x00 (1/1)
+  101.77 I (1356) MSPI Timing: Enter psram timing tuning
+  101.77 I (1362) esp_psram: Found 8MB PSRAM device
+  101.77 I (1366) esp_psram: Speed: 80MHz
+  101.77 I (1370) cpu_start: Multicore app
+  101.77 I (1389) cpu_start: GPIO 44 and 43 are used as console UART I/O pins
+  101.77 I (1389) cpu_start: Pro cpu start user code
+  101.77 I (1390) cpu_start: cpu freq: 240000000 Hz
+  101.77 I (1394) app_init: Application information:
+  101.77 I (1399) app_init: Project name:     espnetlink-fw_v122-40-g83df4ae-
+  101.77 I (1406) app_init: App version:      v1.22-40-g83df4ae-dirty
+  101.77 I (1413) app_init: Compile time:     Aug 24 2026 16:01:44
+  101.77 I (1419) app_init: ELF file SHA256:  b0e3397f7...
+  101.77 I (1424) app_init: ESP-IDF:          v6.0.2
+  101.77 I (1429) efuse_init: Min chip rev:     v0.0
+  101.77 I (1434) efuse_init: Max chip rev:     v0.99 
+  101.77 I (1439) efuse_init: Chip rev:         v0.2
+  101.77 I (1444) heap_init: Initializing. RAM available for dynamic allocation:
+  101.77 I (1451) heap_init: At 3FCBA620 len 0002F0F0 (188 KiB): RAM
+  101.77 I (1457) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+  101.77 I (1463) heap_init: At 3FCF0000 len 00008000 (32 KiB): DRAM
+  101.77 I (1470) heap_init: At 600FE06C len 00001F7C (7 KiB): RTCRAM
+  101.77 I (1476) esp_psram: Adding pool of 7952K of PSRAM memory to heap allocator
+  101.77 I (1484) spi_flash: detected chip: generic
+  101.77 I (1488) spi_flash: flash io: qout
+  101.77 I (1493) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+  101.77 I (1500) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+  101.77 I (1507) esp_core_dump_flash: Init core dump to flash
+  101.77 I (1513) esp_core_dump_flash: Found partition 'coredump' @ e70000 262144 bytes
+  101.77 I (1521) main_task: Started on CPU0
+  101.77 I (1525) esp_psram: Reserving pool of 32K of internal memory for DMA/internal allocations
+  101.77 I (1534) main_task: Calling app_main()
+  101.77 W (1538) main: Reset reason: 1
+  101.77 I (1542) log_manager: pipeline up (queue 64x256, ring 16 KiB, sync until start)
+  101.77 W (1550) restart_tracker: prev state invalid: magic=6204024a ver=2105345 len=8389162 crc=08ea29be want=ee863f8b
+  101.77 I (1561) restart_tracker: boot #1 (fresh state): reset=poweron planned=none/unknown, unexpected=0
+  101.77 I (1570) dev_status_manager: up (partition=ota_0, version=v1.22-40-g83df4ae-dirty)
+  101.77 I (1637) api_http: routes registered (/api/settings)
+  101.77 I (1640) i2c_bus: bus up (SDA 48, SCL 47)
+  101.77 I (1650) wifi_manager: /api/wifi routes registered
+  101.77 I (1651) imu_manager: /api/imu registered
+  101.77 I (1651) vpn_manager: /api/vpn registered
+  101.77 I (1654) cert_manager: /api/certs routes registered
+  101.77 I (1660) web_ui: web UI registered
+  101.77 I (1668) filesystem: mounted /data (16 KiB used / 4096 KiB)
+  102.11 I (2013) wifi_manager: config applied: mode=2 sta_networks=0 ap_ssid=ESPNetLink_894A5D
+  103.68 I (3301) wifi_modem: usb_mode=auto ap_share=1
+  103.68 I (3422) log_manager: started
+  103.68 I (3423) wifi_modem: boot-cut hint: USB DATA CUT at boot (readback SEL1=1 SEL2=1) - GPS acquires with a quiet bus; auto-restore in 60 s unless a station joins the AP
+  103.68 I (3431) gps: Initializing AGNSS assistance (deferred to background)...
+  103.68 I (3437) gps: Waiting for GPS UART traffic before AGNSS init...
+  103.68 I (3438) ota_manager: ready (running from ota_0)
+  103.68 I (3439) cert_manager: started (0 sets)
+  103.68 I (3484) imu_manager: started (SMD on sens 0; WoM on thr 8 ~31mg; stationary after 3s; polling 200 ms)
+  103.68 I (3485) wifi_manager: wifi ram profile=0 (rx=10 tx=0 cache=0)
+  103.68 I (3490) pp: pp rom version: e7ae62f
+  103.68 I (3494) net80211: net80211 rom version: e7ae62f
+  103.68 I (3500) wifi:wifi driver task: 3fcd4d00, prio:23, stack:6656, core=0
+  103.68 I (3508) wifi:wifi firmware version: 00ad238
+  103.68 I (3508) wifi:wifi certification version: v7.0
+  103.68 I (3508) wifi:config NVS flash: enabled
+  103.68 I (3508) wifi:config nano formatting: disabled
+  103.68 I (3508) wifi:Init data frame dynamic rx buffer num: 32
+  103.68 I (3508) wifi:Init static rx mgmt buffer num: 5
+  103.68 I (3508) wifi:Init management short buffer num: 32
+  103.68 I (3508) wifi:Init dynamic tx buffer num: 32
+  103.68 I (3508) wifi:Init static tx FG buffer num: 2
+  103.68 I (3509) wifi:Init static rx buffer size: 1600
+  103.68 I (3509) wifi:Init static rx buffer num: 10
+  103.68 I (3509) wifi:Init dynamic rx buffer num: 32
+  103.68 I (3510) wifi_init: rx ba win: 6
+  103.68 I (3510) wifi_init: accept mbox: 6
+  103.68 I (3510) wifi_init: tcpip mbox: 64
+  103.68 I (3510) wifi_init: udp mbox: 6
+  103.68 I (3510) wifi_init: tcp mbox: 16
+  103.68 I (3510) wifi_init: tcp tx win: 32768
+  103.68 I (3510) wifi_init: tcp rx win: 32768
+  103.68 I (3510) wifi_init: tcp mss: 1440
+  103.68 I (3510) wifi_init: WiFi IRAM OP enabled
+  103.68 I (3510) wifi_init: WiFi RX IRAM OP enabled
+  103.68 I (3510) wifi:(2.4G)set country: cc=01  schan=1 nchan=14 policy=0
+  103.68 I (3581) phy_init: phy_version 712,87e8c20e,Apr 13 2026,18:51:10
+  103.68 I (3615) wifi:mode : softAP (20:6e:f1:89:4a:5d)
+  103.68 I (3618) wifi:Total power save buffer number: 16
+  103.68 I (3619) wifi:Init max length of beacon: 752/752
+  103.68 I (3619) wifi:Init max length of beacon: 752/752
+  103.68 I (3620) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.80.1[0[I/USB] cherryusb, version: v1.5.2
+  103.68 [I/USB] ========== dwc2 dcd params ==========
+  103.68 [I/USB] CID:00000000
+  103.68 [I/USB] GSNPSID:4f54400a
+  103.68 [I/USB] GHWCFG1:00000000
+  103.68 [I/USB] GHWCFG2:224dd930
+  103.68 [I/USB] GHWCFG3:00c804b5
+  103.68 [I/m
+  103.68 I (3620) wifi_manager: AP started
+  103.68 I (3624) wifi:Total power save buffer number: 16
+  103.68 I (3625) wifi_manager: AP stopped
+  103.68 I (3625) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.80.1
+  103.68 I (3626) wifi_manager: AP started
+  103.68 I (3626) wifi:Set ps type: 0, coexist: 0
+  103.68 
+  103.68 I (3626) wifi_manager: started (mode=2, 0 STA candidates)
+  103.68 I (3627) wifi_modem: DNS proxy listening on the AP address, UDP/53
+  103.68 I (3628) wifi_modem: AP sharing armed: NAPT on 192.168.80.1, DNS offered = AP (proxy)
+  103.68 I (3631) http_server_manager: listening on :80 (42 routes, 1 asset tables)
+  103.68 I (3633) mdns_mem: mDNS task will be created from internal RAM
+  103.68 I (3634) mdns_manager: advertising espnetlink_206ef1894a5d.local (_meatpi._tcp port 80) as ESPNetLink-WebServer
+  103.68 I (3634) vpn_manager: disabled in settings
+  103.68 I (3634) ha_webhooks: up (enabled=0, interval 60s, mode changed)
+  103.68 I (3634) cmdline_manager: started (25 commands; uart console off)
+  103.68 I (3635) usb_dev_ethernet: Starting CherryUSB CDC-NCM+CDC (netif MAC 22:6E:F1:89:4A:5C, host adapter MAC 22:6E:F1:89:4A:5D)
+  103.68 I (3660) gps: GPS UART traffic detected; waiting 1000 ms for PAIR readiness
+  103.68 USB] GHWCFG4:d3f0a030
+  103.96 [I/USB] dwc2 has 7 endpoints and dfifo depth(32-bit words) is 200
+  103.96 [I/USB] fifo0 size:0010, offset:0058
+  103.96 [I/USB] fifo1 size:0010, offset:0068
+  103.96 [I/USB] fifo2 size:0010, offset:0078
+  103.96 [I/USB] fifo3 size:0010, offset:0088
+  103.96 [I/USB] fifo4 size:0010, offset:0098
+  103.96 [I/USB] fifo5 size:0010, offset:00a8
+  103.96 [I/USB] fifo6 size:0010, offset:00b8
+  103.96 I (3811) main_task: Returned from app_main()
+  103.96 I (3811) main: LTE config: APN='internet' user='(none)' pin=(none)
+  103.96 I (3811) main: Starting LTE upstream PPPoS...
+  103.96 I (3811) lte_upstream_pppos: PPPoS start: apn='internet' hwfc=on baud=3000000 share_usb=no
+  103.96 I (3811) lte_upstream_pppos: Initializing modem via modem_manager...
+  103.96 I (3811) modem_manager: Initializing modem manager
+  103.96 I (3811) modem_manager: Modem status: OFF -> powering ON
+  103.96 I (3811) modem_manager: Powering modem ON
+  104.75 I (4611) uart: ESP_INTR_FLAG_IRAM flag not set while CONFIG_UART_ISR_IN_IRAM is enabled, flag updated
+  104.75 I (4660) gps: GPS PAIR readiness delay elapsed; continuing AGNSS init
+  105.54 I (5161) gps: Querying EASY status (PAIR491)...
+  105.54 W (5215) gps: EASY status query rejected by module ($PAIR001,491,3*34) – treating EASY as unsupported
+  105.54 I (5216) gps: Querying EPOC status (PAIR508)...
+  105.54 I (5273) gps: EPOC: enabled=1 constellation=0x3 (want 0x3)
+  105.54 I (5275) gps: PAIR70 sent, waiting for ACK...
+  105.54 I (5328) gps: PAIR70 ACK OK
+  105.54 I (5328) gps: Static nav threshold set: 5 dm/s
+  105.54 I (5384) gps: AIC: enabled=1 (want 1)
+  105.54 I (5385) gps: Injecting cached position: lat=-37.905191 lon=145.145109 alt=93.0
+  105.54 I (5391) gps: PAIR600 sent, waiting for ACK...
+  105.54 I (5450) gps: PAIR600 ACK OK
+  106.82 I (6559) modem_manager: AT access at 3000000 baud (hwfc=on) established
+  106.82 I (6560) modem_manager: Current IFC: 2,2
+  106.82 I (6561) modem_manager: Current IPR: 3000000
+  106.82 I (6561) modem_manager: Querying modem version (AT+GMR/ATI)
+  106.82 I (6562) modem_manager: BG95M5LAR02A03
+  106.82 I (6562) modem_manager: Tearing down UART driver
+  106.82 I (6562) modem_manager: Modem ready at 3000000 baud with HW flow control
+  106.82 I (6563) uart: ESP_INTR_FLAG_IRAM flag not set while CONFIG_UART_ISR_IN_IRAM is enabled, flag updated
+  106.82 I (6563) uart: queue free spaces: 30
+  106.82 I (6567) lte_upstream_pppos: PDP context set: APN='internet' – modem will register automatically
+  106.82 I (6568) lte_upstream_pppos: SIM ready (IMSI: 505015634201328) after 1 attempts
+  106.82 I (6569) lte_upstream_pppos: AT+QCFG="iotopmode" -> +QCFG: "iotopmode",0 (already correct)
+  106.82 I (6570) lte_upstream_pppos: AT+QCFG="nwscanmode" -> +QCFG: "nwscanmode",3 (already correct)
+  106.82 I (6571) lte_upstream_pppos: AT+CPSMS=0 -> AT+CPSMS=0
+  106.82 W (6571) lte_upstream_pppos: AT+CEDRXS=0 failed: ESP_FAIL
+  106.82 I (6572) lte_upstream_pppos: SIM IMSI  : 505015634201328
+  106.82 I (6572) lte_upstream_pppos: SIM ICCID : +CCID: 89610140000735834363
+  106.82 I (6573) lte_upstream_pppos: AT+CGDCONT? -> +CGDCONT: 1,"IP","internet","0.0.0.0",0,0,0
+  106.82 I (6574) lte_upstream_pppos: AT+QCFG=band -> +QCFG: "band",0xf,0x100002000000000f0e189f,0x10004200000000090e189f
+  106.82 I (6574) lte_upstream_pppos: AT+QCFG=nwscanseq -> +QCFG: "nwscanseq",020301
+  106.82 I (6575) lte_upstream_pppos: AT+QCFG=nwscanmode -> +QCFG: "nwscanmode",3
+  106.82 I (6576) lte_upstream_pppos: AT+QCFG=iotopmode -> +QCFG: "iotopmode",0
+  106.82 I (6577) lte_upstream_pppos: AT+QCSQ -> +QCSQ: "NOSERVICE"
+  106.82 W (6577) lte_upstream_pppos: Waiting for LTE registration... (CEREG state=4 rssi=99 ber=99)
+  108.67 W (8578) lte_upstream_pppos: Waiting for LTE registration... (CEREG state=2 rssi=99 ber=99)
+  110.89 I (10579) lte_upstream_pppos: LTE registered (CEREG state=1, rssi=99 ber=99)
+  110.89 W (10590) uart_terminal: Rx Break
+  110.89 W (10680) CMUX: Restarting CMUX state machine (reason: 0)
+  110.89 I (10681) CMUX: Protocol recovered
+  110.89 I (10718) lte_upstream_pppos: CMUX mode active – PPP on data channel, AT commands on control channel
+  110.89 I (10719) lte_upstream_pppos: PPPoS dial started (waiting for IP events)...
+  110.89 I (10723) esp-netif_lwip-ppp: ppp: Connected
+  110.89 I (10724) wifi_modem: PPP up: upstream DNS 101.168.244.101
+  110.89 I (10724) lte_upstream_pppos: PPP GOT IP
+  110.89 I (10724) lte_upstream_pppos: IP      : 10.195.42.43
+  110.89 I (10724) lte_upstream_pppos: Netmask : 255.255.255.255
+  110.89 I (10724) lte_upstream_pppos: Gateway : 10.64.64.64
+  110.89 I (10724) lte_upstream_pppos: DNS1    : 101.168.244.101
+  110.89 I (10724) lte_upstream_pppos: DNS2    : 101.168.244.103
+  110.89 I (10725) lte_upstream_pppos: PPP status: OK
+  110.89 I (10726) lte_upstream_pppos: QLTS response: +QLTS: "2026/08/31,01:23:19+40,0"
+  110.89 I (10726) lte_upstream_pppos: System time set to UTC 2026-08-30 15:23:19
+  111.61 I (11450) gps: Injecting system UTC: 2026-08-30 15:23:19
+  111.61 I (11453) gps: PAIR590 sent, waiting for ACK...
+  111.61 I (11510) gps: PAIR590 ACK OK
+  111.61 I (11510) gps: Reference time injected
+  125.83 I (25720) lte_upstream_pppos: QLTS response: +QLTS: "2026/08/31,01:23:34+40,0"
+  125.83 I (25721) lte_upstream_pppos: System time set to UTC 2026-08-30 15:23:34
+  125.83 I (25723) lte_upstream_pppos: Operator: "ALDI Mobile"  Network type: eMTC (QNWINFO, act=8)
+  163.82 W (63626) wifi_modem: boot-cut: no station joined the AP within 60 s - restoring USB data (a PC on the cable?)
+  163.82 I (63626) wifi_modem: USB data RESTORED to the DIP route (SEL1=1 SEL2=0)
+  163.82 I (63717) wifi_modem: boot-cut hint cleared (next boot: USB data on)
+  163.82 I (63726) usb_dev_ethernet: USB disconnected/reset
+  164.15 I (64047) usb_dev_ethernet: USB configured
+  164.15 I (64051) usb_dev_ethernet: NCM link up (data alt 1)
+  164.15 I (64052) usb_dev_ethernet: DHCP server started on UDP/67 (usbnet netif, router+DNS not offered)
+  164.74 I (64553) usb_dev_ethernet: RX DHCP DISCOVER (op=1 htype=1 hlen=6 chaddr=22:6E:F1:89:4A:5D xid=0x384DA15D flags=0x0000) 0.0.0.0:68 -> 255.255.255.255:67 ci=0.0.0.0 yi=0.0.0.0 si=0.0.0.0 opt54=- opt1=- opt3=- opt6=- prl(dns=1 router=1 subnet=1)
+  164.74 I (64554) usb_dev_ethernet: TX DHCP OFFER (op=2 htype=1 hlen=6 chaddr=22:6E:F1:89:4A:5D xid=0x384DA15D flags=0x0000) 192.168.7.1:67 -> 192.168.7.2:68 ci=0.0.0.0 yi=192.168.7.2 si=0.0.0.0 opt54=192.168.7.1 opt1=255.255.255.0 opt3=- opt6=192.168.7.1 I (64556) usb_dev_ethernet: RX DHCP REQUEST (op=1 htype=1 hlen=6 chaddr=22:6E:F1:89:4A:5D xid=0x384DA15D flags=0x0000) 0.0.0.0:68 -> 255.255.255.255:67 ci=0.0.0.0 yi=0.0.0.0 si=0.0.0.0 opt54=192.168.7.1 opt1=- opt3=- opt6=- prl(dns=1 router=1 subneI (64557) usb_dev_ethernet: TX DHCP ACK (op=2 htype=1 hlen=6 chaddr=22:6E:F1:89:4A:5D xid=0x384DA15D flags=0x0000) 192.168.7.1:67 -> 192.168.7.2:68 ci=0.0.0.0 yi=192.168.7.2 si=0.0.0.0 opt54=192.168.7.1 opt1=255.255.255.0 opt3=- opt6=192.168.7.1 prI (64557) usb_dev_ethernet: DHCP lease 192.168.7.2 -> 22:6E:F1:89:4A:5D
+  166.28 I (66186) wifi_modem: AP credentials handed to the USB host
+  166.71 I (66615) wifi_modem: boot-cut hint armed (next boot: USB data cut)
+  166.71 I (66615) wifi_modem: host requested usb_data=0 (applying)
+  167.12 I (66996) wifi:station: 68:ee:8f:5a:65:3c join, AID=1, bgn, 20
+  167.12 I (67002) wifi_modem: USB data CUT at the mux by the host (readback SEL1=1 SEL2=1) - cable is power only
+  167.12 I (67012) wifi_manager: AP client 68:ee:8f:5a:65:3c joined (1 total)
+  167.12 I (67022) esp_netif_lwip: DHCP server assigned IP to a client, IP is: 192.168.80.2
+  168.53 I (68439) gps: Cached position: lat=-37.905143 lon=145.145106 alt=78.2
+  168.78 I (68686) wifi:<ba-add>idx:2 (ifx:1, 68:ee:8f:5a:65:3c), tid:0, ssn:0, winSize:64
