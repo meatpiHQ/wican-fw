@@ -1367,8 +1367,8 @@ static SemaphoreHandle_t xuart1_semaphore = NULL;
 // extern const unsigned char obd_fw_start[] asm("_binary_V2_3_18_txt_start");
 // extern const unsigned char obd_fw_end[]   asm("_binary_V2_3_18_txt_end");
 // V2.3.22
-extern const unsigned char obd_fw_start[] asm("_binary_V2_3_22_txt_start");
-extern const unsigned char obd_fw_end[]   asm("_binary_V2_3_22_txt_end");
+extern const unsigned char obd_fw_start[] asm("_binary_V2_3_24_txt_start");
+extern const unsigned char obd_fw_end[]   asm("_binary_V2_3_24_txt_end");
 
 static char *update_resp_buf = NULL;
 
@@ -1577,7 +1577,7 @@ static void elm327_powerpin_commands(void)
 		// VTVERS
 		elm327_uart_write_bytes(UART_NUM_1, "VTVERS\r", strlen("VTVERS\r"));
 		uart_read_until_pattern(UART_NUM_1, rx_buffer, ELM327_CMD_BUFFER_SIZE - 1, "\r>", UART_TIMEOUT_MS);
-		if (strstr(rx_buffer, OBD_FW_VER_V22) == NULL)
+		if (strstr(rx_buffer, OBD_FW_VER_V24) == NULL)
 		{
 			xSemaphoreGive(xuart1_semaphore);
 			free(rx_buffer);
@@ -2997,7 +2997,7 @@ esp_err_t elm327_check_obd_device()
 		{
 			device_status.in_normal_state = true;
 			device_status.device_type = 0x3624;
-			if (strstr(response, OBD_FW_VER_V22) != NULL)
+			if (strstr(response, OBD_FW_VER_V24) != NULL)
 			{
 				ESP_LOGI(TAG, "ELM327 OBD Firmware is already up to date.");
 			}
