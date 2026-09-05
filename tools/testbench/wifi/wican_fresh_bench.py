@@ -54,10 +54,10 @@ CURL = (f"curl -s -m 10 --retry 2 --retry-delay 2 --compressed "
 E_WHITELIST = ("Invalid MMIE", "select() timeout",
                "Failed to open a new connection",
                "Connection failed, sock < 0",
-               # first boot after erase-flash: littlefs formats the empty
-               # partition (logs E first) and dev_status_manager's
-               # boot-fault counter reacts to it — inherent to the erase
-               "Corrupted dir pair", "FAULT boot_errors",
+               # (2026-09-05: "Corrupted dir pair" / "FAULT boot_errors" on
+               # the first boot after an erase are NO LONGER whitelisted —
+               # filesystem + settings_manager format a blank partition
+               # quietly now; seeing them again is a regression)
                # espnetlink's HTTP client racing the dongle's cut/reboot
                # while it pairs in the background (transition noise)
                "tcp_read error", "delayed connect error")

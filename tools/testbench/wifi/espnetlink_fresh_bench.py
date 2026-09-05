@@ -51,13 +51,13 @@ CURL = f"curl -s -m 10 --retry 2 --retry-delay 2 --interface {USER_IF}"
 E_WHITELIST = ("Invalid MMIE", "select() timeout",
                "Failed to open a new connection",
                "Connection failed, sock < 0",
-               "tcp_read error",   # the cut severs the link mid-read
-               # first boot after erase-flash: littlefs finds an empty
-               # partition, logs E, formats — inherent to the erase
-               "Corrupted dir pair",
-               # ...and dev_status_manager's boot-fault counter reacts to
-               # exactly those lines (a product wart worth its own fix)
-               "FAULT boot_errors")
+               "tcp_read error")   # the cut severs the link mid-read
+               # (2026-09-05: the first-boot "Corrupted dir pair" /
+               # "FAULT boot_errors" lines are fixed in the WiCAN firmware
+               # — blank partitions are formatted before the mount — and
+               # are no longer whitelisted here. NOTE the dongle firmware
+               # still logs them on ITS first boot after an erase; port
+               # the same guard there before running this bench fresh.)
 
 fails = []
 
