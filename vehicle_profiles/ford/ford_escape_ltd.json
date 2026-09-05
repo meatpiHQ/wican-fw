@@ -1,0 +1,140 @@
+{
+  "car_model": "Ford: Escape 2010 2.5L (LTD)",
+  "init": "",
+  "pids": [
+    {
+      "pid": "22D102",
+      "pid_init": "ATTP6;STPTOT100;ATSH000720;STCAFCP720,728;",
+      "parameters": {
+        "BATTERY_VOLTAGE": "B4/10"
+      }
+    },
+	{
+      "pid": "226182",
+      "pid_init": "ATTP6;STPTOT100;STP53;STPBR125000;STPTOT100;ATSH000720;STCAFCP720,728;",
+      "parameters": {
+        "ODOMETER_MI": "([B4:B7]) * .002"
+      }
+    },
+	{
+      "pid": "0105",
+      "pid_init": "ATTP6;STPTOT100;ATSH0007DF;ATCRA7E8;STCAFCP7E0,7E8;",
+      "parameters": {
+        "COOLANT_TMP": "B3-40"
+      }
+    },
+    {
+      "pid": "010F",
+      "pid_init": "ATTP6;STPTOT100;ATSH0007DF;ATCRA7E8;STCAFCP7E0,7E8;",
+      "parameters": {
+        "INTAKE_AIR_TMP": "B3-40"
+      }
+    },
+	{
+      "pid": "0110",
+      "pid_init": "ATTP6;STPTOT100;ATSH0007DF;ATCRA7E8;STCAFCP7E0,7E8;",
+      "parameters": {
+        "MAF": "[B3:B4]*0.01"
+      }
+    },
+    {
+      "pid": "22F42F",
+      "pid_init": "ATTP6;STPTOT100;ATSH0007E0;STCAFCP7E0,7E8;",
+      "parameters": {
+        "FUEL": "(B4/255) * 100"
+      }
+    },
+	{
+      "pid": "012F",
+      "pid_init": "ATTP6;STPTOT100;ATSH0007DF;ATCRA7E8;STCAFCP7E0,7E8;",
+      "parameters": {
+        "FUEL_LVL": "(B4/255) * 100"
+      }
+    },
+	{
+      "pid": "22D106",
+      "pid_init": "ATTP6;STPTOT100;STP53;STPBR125000;STPTOT100;ATSH000727;STCAFCP727,72F;",
+      "parameters": {
+        "SPEED": "B4*1.60934",
+		"SPEED_MPH": "B4"
+      }
+    },
+	{
+      "pid": "22F40C",
+      "pid_init": "ATTP6;STPTOT100;ATSH0007E0;STCAFCP7E0,7E8;",
+      "parameters": {
+        "ENGINE_RPM": "((B4*256)+B5)/4"
+      }
+    },
+	{
+      "pid": "224140",
+      "pid_init": "ATTP6;STPTOT100;STP53;STPBR125000;STPTOT100;ATSH000726;STCAFCP726,72E;",
+      "parameters": {
+        "TYRE_P_FL": "[B4:B5] * 0.05"
+      }
+    },
+    {
+      "pid": "224141",
+      "pid_init": "ATTP6;STPTOT100;STP53;STPBR125000;STPTOT100;ATSH000726;STCAFCP726,72E;",
+      "parameters": {
+        "TYRE_P_RL": "[B4:B5] * 0.05"
+      }
+    },
+    {
+      "pid": "224142",
+      "pid_init": "ATTP6;STPTOT100;STP53;STPBR125000;STPTOT100;ATSH000726;STCAFCP726,72E;",
+      "parameters": {
+        "TYRE_P_FR": "((B4*256)+B5)/20"
+      }
+    },
+    {
+      "pid": "224143",
+      "pid_init": "ATTP6;STPTOT100;STP53;STPBR125000;STPTOT100;ATSH000726;STCAFCP726,72E;",
+      "parameters": {
+        "TYRE_P_RR": "[B4:B5] * 0.05"
+      }
+    },
+    {
+      "pid": "221E1C",
+      "pid_init": "ATTP6;STPTOT100;ATSH0007E0;STCAFCP7E0,7E8;",
+      "parameters": {
+        "TRAN_F_TEMP": "((B4*256)+B5)/16"
+      }
+    },
+    {
+      "pid": "22F446",
+      "pid_init": "ATTP6;STPTOT100;ATSH0007E0;STCAFCP7E0,7E8;",
+      "parameters": {
+        "TMP_A": "((B4 * 0.9) - 40)"
+      }
+    },
+	{
+      "pid": "229927",
+      "pid_init": "ATTP6;STPTOT100;STP53;STPBR125000;STPTOT100;ATSH000733;STCAFCP733,73B;",
+      "parameters": {
+        "CABIN_TEMPERATURE": "((B4 * 0.9) - 40)"
+      }
+    },
+	{
+      "pid": "229928",
+      "pid_init": "ATTP6;STPTOT100;STP53;STPBR125000;STPTOT100;ATSH000733;STCAFCP733,73B;",
+      "parameters": {
+        "OUTSIDE_TEMPERATURE": "((B4 * 0.9) - 40)"
+      }
+    },
+    {
+      "pid": "222900",
+      "pid_init": "ATTP6;STPTOT100;STP53;STPBR125000;STPTOT100;ATSH000726;STCAFCP726,72E;",
+      "parameters": {
+        "PARK_BRAKE": "B4"
+      }
+    },
+	    {
+      "pid": "22099B",
+      "pid_init": "ATTP6;STPTOT100;ATSH0007E0;STCAFCP7E0,7E8;",
+      "parameters": {
+        "AC_COMP": "B4"
+      }
+    }
+  ]
+}
