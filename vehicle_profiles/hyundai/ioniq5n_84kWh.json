@@ -1,0 +1,6 @@
+{
+  "car_model": "Hyundai: Ioniq 5 N 84kWh (2025)",
+  "init": "ATSH7E4;ATST96;",
+  "extends": "hyundai/ioniq5-6_77kWh.json",
+  "note": "Same E-GMP BMS layout as the Ioniq 5/6 77kWh (192 cells). Byte map cross-checked against an independent 2025 Ioniq 5 N decode (timurrrr/hyundai-n)."
+}
