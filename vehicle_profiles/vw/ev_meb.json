@@ -1,6 +1,6 @@
 {
   "car_model": "Audi: EV MEB: ID.3, ID.4, ID.5, ID.6, ID.7, ID.Buzz, Enyaq, Elroq, Q4 E-tron, Q6 e-tron, Cupra Born, Cupra Tavascan, Porsche Macan EV, Ford Explorer EV, Capri EV",
-  "init": "ATAT1;ATST96;ATSHFC007B;ATFCSHFC007B;ATFCSD300000;ATFCSM1;",
+  "init": "ATAT1;ATST96;",
   "pids": [
     {
       "pid": "22028C",
@@ -19,7 +19,7 @@
     },
     {
       "pid": "22295A",
-      "pid_init": "ATSP7;ATAR;ATCP18;ATSHDB33F1;ATSHFC0076;ATCP17;ATCRA17FE0076;ATFCSH17FC0076;",
+      "pid_init": "ATSP7;ATCP17;ATSHFC0076;ATCRA17FE0076;ATFCSH17FC0076;ATFCSD300000;ATFCSM1;",
       "parameters": {
         "ODOMETER": "[B4:B6]"
       }
@@ -32,7 +32,7 @@
       }
     },
     {
-      "pid": "2242DB1",
+      "pid": "2242DB",
       "pid_init": "ATSP6;ATSH746;ATFCSH746;ATFCSD300000;ATFCSM1;ATCRA7B0;",
       "parameters": {
         "CO2": "B5*100"
@@ -47,7 +47,7 @@
     },
     {
       "pid": "222A0B1",
-      "pid_init": "ATFCSM0;ATAR;ATSP7;ATSHDB33F1;ATSHFC007B;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSM1;",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
       "parameters": {
         "BATT_TEMP": "((B4/2)-40)"
       }
@@ -68,30 +68,30 @@
     },
     {
       "pid": "227448",
-      "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
       "parameters": {
         "CHARGING": "B4:2"
       }
     },
     {
       "pid": "221E3B1E3D",
-      "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
       "parameters": {
-        "HV_AV": "(((150000-[B10:B13])/100)*([B6:B7]/4))/1000"
+        "HV_AV": "(((150000-[B10:B13])/100)*([B5:B6]/4))/1000"
       }
     },
     {
       "pid": "221E3B",
-      "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
       "parameters": {
         "HV_V": "(((B4*256)+B5)/4)"
       }
     },
     {
       "pid": "221E3D",
-      "pid_init": "ATSP7;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
       "parameters": {
-        "HV_A": "(150000-[B4:B7])/100"
+        "HV_A": "(150000-[B5:B9])/100"
       }
     }
   ]

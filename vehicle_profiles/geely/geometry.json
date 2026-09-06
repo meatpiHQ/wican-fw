@@ -1,0 +1,12 @@
+{
+  "car_model": "Geely: Geometry C",
+  "init": "ATSP0;ATAT1;ATST96;ATSH7E2;ATFCSH7E2;ATFCSD300000;ATFCSM1;",
+  "pids": [
+    {
+      "pid": "224B35",
+      "parameters": {
+        "SOC": "[B4:B5]/10"
+      }
+    }
+  ]
+}
