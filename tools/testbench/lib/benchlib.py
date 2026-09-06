@@ -44,8 +44,8 @@ BENCH_PSK_FALLBACK = os.environ.get("WICAN_BENCH_PSK", "")
 
 # radio roles (udev-pinned on rpi001 since 2026-07-26); legacy fallbacks
 # let this library run against a Pi that predates the rename
-ROLE_HOTSPOT = ("wint0", "wlan0")    # wican-bench-w0 (internal radio)
-ROLE_TWIN = ("wtest0", "wlan1")      # wican-bench (USB stick twin)
+ROLE_HOTSPOT = ("wtest0", "wlan1")   # wican-bench (USB stick — primary since 2026-09-06)
+ROLE_TWIN = ("wint0", "wlan0")       # wican-bench-w0 (internal radio — failover only; goes deaf in AP mode)
 
 
 class RigFault(Exception):

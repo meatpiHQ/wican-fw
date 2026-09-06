@@ -26,21 +26,31 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
   await sleep(900);
   const cards = [...d().querySelectorAll(".section")];
   const titles = cards.map((c) => (c.querySelector("h3") || {}).textContent || "");
-  check("card order Behaviour->HA->Destinations->Parameters(last)",
-    JSON.stringify(titles.slice(0, 4).map((t) => t.trim().split("\n")[0])).includes("Behaviour") &&
-    titles.findIndex((t) => /Home Assistant/.test(t)) < titles.findIndex((t) => /Destinations/.test(t)) &&
-    titles.findIndex((t) => /Destinations/.test(t)) < titles.findIndex((t) => /Parameters/.test(t)));
+  /* tabbed page (2026-09-05/06): Settings -> Parameters -> Data destinations -> Home Assistant */
+  const tabs = [...d().querySelectorAll(".subtabs .subtab")].map((a) => a.textContent.trim());
+  check("tab order Settings->Parameters->Data destinations->Home Assistant (" + tabs.join(",") + ")",
+    JSON.stringify(tabs) === JSON.stringify(["Settings", "Parameters", "Data destinations", "Home Assistant"]));
+  check("first card is Automate settings", /Automate settings/.test(titles[0] || ""));
   /* advanced fields must appear BELOW the essentials, not interleaved */
   const haCard = cards.find((c) => /Home Assistant/.test((c.querySelector("h3") || {}).textContent));
   const haKeys = [...haCard.querySelectorAll(".frow[data-key]")].map((r) => r.dataset.key);
   check("advanced rows sorted below essentials (HA card)",
     haKeys.indexOf("url") > haKeys.indexOf("data_mode") && haKeys.indexOf("manual_override") > haKeys.indexOf("interval_s"));
   check("no stray null in webhook stats", !/\bnull\b/.test(haCard.textContent));
-  const behaviourRows = [...cards[0].querySelectorAll(".frow[data-key]")];
-  const visible = behaviourRows.filter((r) => r.style.display !== "none").map((r) => r.dataset.key);
-  check("behaviour essentials only (" + visible.join(",") + ")",
+  const pollingRows = [...cards[0].querySelectorAll(".frow[data-key]")];
+  const visible = pollingRows.filter((r) => r.style.display !== "none").map((r) => r.dataset.key);
+  check("polling essentials only (" + visible.join(",") + ")",
     visible.length <= 6 && visible.includes("enabled") && !visible.includes("std_init"));
-  check("staged badges present", d().body.textContent.includes("Submit to apply"));
+  const allPollingKeys = pollingRows.map((r) => r.dataset.key);
+  check("PID-group / vehicle keys are NOT on the Polling card",
+    !["std_enabled", "std_init", "std_protocol", "custom_init", "specific_init", "vehicle"].some((k) => allPollingKeys.includes(k)));
+  check("pause threshold is the 3-way choice (sleep voltage / custom / never)",
+    [...cards[0].querySelectorAll("select option")].some((o) => /sleep voltage/.test(o.textContent)) &&
+    !!cards[0].querySelector('input[type="range"][min="12"][max="14.5"][step="0.1"]'));
+  const stdProto = d().querySelector('.frow[data-key="std_protocol"]');
+  check("std protocol/init rows head the Standard PIDs pane", !!stdProto && !cards[0].contains(stdProto) &&
+    !!d().querySelector('.frow[data-key="std_init"]') && !!d().querySelector('.frow[data-key="std_enabled"]'));
+  check("no per-card 'Submit to apply' badges", ![...d().querySelectorAll(".chip")].some((c) => /Submit to apply/.test(c.textContent)));
   check("live badge present", d().body.textContent.includes("Applies live"));
   /* parameters are collapsible: hidden by default, caret expands */
   const expandAll = async () => {
@@ -52,10 +62,10 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
   await expandAll();
   check("expression column present after expand", !!d().querySelector('input[placeholder="(B2*256+B3)/4"]'));
   check("unit column present after expand", !!d().querySelector('input[placeholder="rpm"]'));
-  check("destinations cycle in seconds", d().body.textContent.includes("Every s"));
-  check("destinations enable toggle", (() => {
-    const dest = cards.find((c) => /Destinations/.test((c.querySelector("h3") || {}).textContent));
-    return dest && dest.querySelectorAll("select").length >= 2;
+  check("destinations cycle in seconds", d().body.textContent.includes("Every (s)"));
+  check("destinations enable switch + type select", (() => {
+    const dest = cards.find((c) => /destinations/i.test((c.querySelector("h3") || {}).textContent));
+    return dest && dest.querySelectorAll(".switch").length >= 1 && dest.querySelectorAll("select").length >= 1;
   })());
   /* scan flow: click Scan PIDs -> wait past mock 2.5 s -> results modal */
   const scanBtn = [...d().querySelectorAll("button")].find((b) => b.textContent.trim() === "Scan PIDs");
@@ -96,18 +106,20 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
   const carSel = [...d().querySelectorAll("select")].find((s) => [...s.options].some((o) => /Ioniq2017/.test(o.textContent)));
   check("car dropdown populated from vehicle_profiles.json", !!carSel);
   if (carSel) {
+    const btns = () => [...d().querySelectorAll("button")].map((b) => b.textContent.trim());
+    check("Fetch latest button, no Load Profile button",
+      btns().some((t) => t.includes("Fetch latest")) && !btns().includes("Load Profile"));
     carSel.value = "Hyundai: Ioniq2017";
     carSel.dispatchEvent(new w.Event("change"));
-    await sleep(100);
-    const loadBtn = [...d().querySelectorAll("button")].find((b) => b.textContent === "Load Profile");
-    check("Load Profile enabled after select", loadBtn && !loadBtn.disabled);
-    check("vehicle-init field prefilled from profile",
-      [...d().querySelectorAll("input")].some((i) => (i.placeholder || "").includes("vehicle init") && i.value.length > 0));
+    await sleep(500);   /* selecting IS the load: config PUT + staging */
+    check("vehicle name + init rows head the Vehicle Specific pane",
+      !!d().querySelector('.frow[data-key="vehicle"]') && !!d().querySelector('.frow[data-key="specific_init"]'));
     check("no RX Hdr column on vehicle tab", !d().querySelector('input[placeholder="7E8"]'));
     check("drag-drop profile zone on vehicle tab", !!d().querySelector("#view .drop") &&
       [...d().querySelectorAll("label")].some((l) => l.textContent.includes("Choose File")));
-    loadBtn.click();
-    await sleep(300);
+    check("selecting a profile stages the car name + init into the group rows",
+      (d().querySelector('.frow[data-key="vehicle"] input') || {}).value === "Hyundai: Ioniq2017" &&
+      ((d().querySelector('.frow[data-key="specific_init"] input') || {}).value || "").length > 0);
     await expandAll();
     const exprs = [...d().querySelectorAll("input")].map((i) => i.value);
     check("profile PIDs imported with B-index shift (B39->B38)", exprs.some((v) => v === "B38/2"));

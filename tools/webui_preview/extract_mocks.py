@@ -17,7 +17,9 @@ import os
 import re
 import sys
 
-ROOT = os.path.join(os.path.dirname(__file__), "..", "..", "components")
+# MEATPI_COMPONENTS_PATH wins (same rule as the firmware build); the in-tree
+# components/ folder is only a fallback for exotic checkouts
+ROOT = os.environ.get("MEATPI_COMPONENTS_PATH") or os.path.join(os.path.dirname(__file__), "..", "..", "components")
 
 RX_DESC = re.compile(r'\.name\s*=\s*"([a-z0-9_]+)"')
 RX_BOOL = re.compile(r'SETTINGS_BOOL\s*\(\s*"([^"]+)"\s*,\s*(true|false)\s*\)')

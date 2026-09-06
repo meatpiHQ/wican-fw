@@ -5,23 +5,29 @@
    "std_enabled": true,
    "custom_enabled": true,
    "specific_enabled": true,
+   "pause_follow_sleep": true,
    "cli": true,
    "dtc_enabled": false,
    "dtc_allow_clear": false,
    "dtc_pending": true,
    "dtc_permanent": false,
+   "dtc_freeze": true,
+   "dtc_uds_ext": false,
+   "std_protocol": "6",
    "pause_mode": "requests_only",
-   "backend": "obd_chip",
+   "dtc_protocol": "obd",
    "pause_below_mv": 0,
    "min_event_interval_ms": 1000,
    "dtc_scan_period_min": 0,
+   "dtc_uds_mask": 8,
    "std_init": "",
    "custom_init": "",
    "specific_init": "",
-   "std_protocol": "6",
    "vehicle": "",
    "dtc_init": "",
-   "dtc_rxheader": ""
+   "dtc_rxheader": "",
+   "dtc_uds_txid": "7E0",
+   "dtc_uds_rxid": "7E8"
   },
   "schema": {
    "properties": {
@@ -35,6 +41,9 @@
      "type": "boolean"
     },
     "specific_enabled": {
+     "type": "boolean"
+    },
+    "pause_follow_sleep": {
      "type": "boolean"
     },
     "cli": {
@@ -52,6 +61,22 @@
     "dtc_permanent": {
      "type": "boolean"
     },
+    "dtc_freeze": {
+     "type": "boolean"
+    },
+    "dtc_uds_ext": {
+     "type": "boolean"
+    },
+    "std_protocol": {
+     "type": "string",
+     "enum": [
+      "0",
+      "6",
+      "7",
+      "8",
+      "9"
+     ]
+    },
     "pause_mode": {
      "type": "string",
      "enum": [
@@ -59,17 +84,18 @@
       "requests_only"
      ]
     },
-    "backend": {
+    "dtc_protocol": {
      "type": "string",
      "enum": [
-      "obd_chip",
-      "elm327"
+      "obd",
+      "uds",
+      "auto"
      ]
     },
     "pause_below_mv": {
      "type": "integer",
      "minimum": 0,
-     "maximum": 30000
+     "maximum": 14500
     },
     "min_event_interval_ms": {
      "type": "integer",
@@ -81,6 +107,11 @@
      "minimum": 0,
      "maximum": 10080
     },
+    "dtc_uds_mask": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 255
+    },
     "std_init": {
      "type": "string"
     },
@@ -90,9 +121,6 @@
     "specific_init": {
      "type": "string"
     },
-    "std_protocol": {
-     "type": "string"
-    },
     "vehicle": {
      "type": "string"
     },
@@ -100,6 +128,12 @@
      "type": "string"
     },
     "dtc_rxheader": {
+     "type": "string"
+    },
+    "dtc_uds_txid": {
+     "type": "string"
+    },
+    "dtc_uds_rxid": {
      "type": "string"
     }
    }
@@ -196,6 +230,24 @@
     "bridges": {
      "type": "array",
      "items": {}
+    }
+   }
+  }
+ },
+ "button_manager": {
+  "values": {
+   "enabled": true,
+   "hold_s": 5
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "hold_s": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 30
     }
    }
   }
@@ -369,6 +421,65 @@
    }
   }
  },
+ "espnetlink": {
+  "values": {
+   "enabled": true,
+   "auto_pair": true,
+   "cli": true,
+   "mode": "wifi_modem",
+   "gps_poll_s": 2,
+   "health_poll_s": 10,
+   "cut_retries": 2,
+   "ssid": "",
+   "device_id": "",
+   "host": ""
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "auto_pair": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "mode": {
+     "type": "string",
+     "enum": [
+      "wifi_modem",
+      "usb_ncm",
+      "usb_rndis"
+     ]
+    },
+    "gps_poll_s": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 60
+    },
+    "health_poll_s": {
+     "type": "integer",
+     "minimum": 5,
+     "maximum": 300
+    },
+    "cut_retries": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 5
+    },
+    "ssid": {
+     "type": "string"
+    },
+    "device_id": {
+     "type": "string"
+    },
+    "host": {
+     "type": "string"
+    }
+   }
+  }
+ },
  "event_manager": {
   "values": {
    "enabled": true,
@@ -470,6 +581,22 @@
      "type": "string"
     },
     "cert_set": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ "http_server_manager": {
+  "values": {
+   "auth_enabled": false,
+   "auth_password": ""
+  },
+  "schema": {
+   "properties": {
+    "auth_enabled": {
+     "type": "boolean"
+    },
+    "auth_password": {
      "type": "string"
     }
    }
@@ -585,8 +712,8 @@
    "cli": true,
    "idle_mode": "solid",
    "idle_r": 0,
-   "idle_g": 0,
-   "idle_b": 60
+   "idle_g": 204,
+   "idle_b": 255
   },
   "schema": {
    "properties": {
@@ -646,6 +773,68 @@
       "debug",
       "verbose"
      ]
+    }
+   }
+  }
+ },
+ "log_sinks": {
+  "values": {
+   "tcp_enabled": false,
+   "udp_enabled": false,
+   "ws_enabled": false,
+   "file_enabled": false,
+   "cli": true,
+   "tcp_port": 5515,
+   "udp_port": 5514,
+   "file_max_kb": 512,
+   "file_keep": 4,
+   "file_flush_s": 60,
+   "udp_host": ""
+  },
+  "schema": {
+   "properties": {
+    "tcp_enabled": {
+     "type": "boolean"
+    },
+    "udp_enabled": {
+     "type": "boolean"
+    },
+    "ws_enabled": {
+     "type": "boolean"
+    },
+    "file_enabled": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "tcp_port": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 65535
+    },
+    "udp_port": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 65535
+    },
+    "file_max_kb": {
+     "type": "integer",
+     "minimum": 64,
+     "maximum": 4096
+    },
+    "file_keep": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 0
+    },
+    "file_flush_s": {
+     "type": "integer",
+     "minimum": 5,
+     "maximum": 3600
+    },
+    "udp_host": {
+     "type": "string"
     }
    }
   }
@@ -711,6 +900,7 @@
  "obd_chip": {
   "values": {
    "auto_sleep": false,
+   "auto_update": true,
    "baud": "2000000",
    "monitor_policy": "manual",
    "wake_voltage_mv": 13500,
@@ -720,6 +910,9 @@
   "schema": {
    "properties": {
     "auto_sleep": {
+     "type": "boolean"
+    },
+    "auto_update": {
      "type": "boolean"
     },
     "baud": {
@@ -741,18 +934,18 @@
     },
     "wake_voltage_mv": {
      "type": "integer",
-     "minimum": 8000,
-     "maximum": 16000
+     "minimum": 12000,
+     "maximum": 15000
     },
     "sleep_voltage_mv": {
      "type": "integer",
-     "minimum": 8000,
-     "maximum": 16000
+     "minimum": 12000,
+     "maximum": 14000
     },
     "sleep_time_min": {
      "type": "integer",
      "minimum": 1,
-     "maximum": 1440
+     "maximum": 60
     }
    }
   }
@@ -843,11 +1036,11 @@
  },
  "sleep_manager": {
   "values": {
-   "enabled": false,
+   "enabled": true,
    "periodic_wakeup": false,
    "cli": true,
    "sleep_mv": 13100,
-   "sleep_delay_min": 3,
+   "sleep_delay_min": 5,
    "wakeup_interval_min": 30
   },
   "schema": {
@@ -863,17 +1056,17 @@
     },
     "sleep_mv": {
      "type": "integer",
-     "minimum": 8000,
-     "maximum": 15000
+     "minimum": 12000,
+     "maximum": 14000
     },
     "sleep_delay_min": {
      "type": "integer",
      "minimum": 1,
-     "maximum": 720
+     "maximum": 30
     },
     "wakeup_interval_min": {
      "type": "integer",
-     "minimum": 1,
+     "minimum": 5,
      "maximum": 1440
     }
    }
@@ -936,7 +1129,6 @@
      "enum": [
       "auto",
       "obd_chip",
-      "elm327",
       "isotp"
      ]
     },
@@ -976,7 +1168,7 @@
  },
  "usb_host_manager": {
   "values": {
-   "enabled": false,
+   "enabled": true,
    "prefer_usb_route": false,
    "cli": true,
    "role": "host",
@@ -1217,7 +1409,7 @@
    "fallback5_ssid": "",
    "fallback5_password": "",
    "ap_ssid": "",
-   "ap_ip": "192.168.80.1"
+   "ap_ip": "192.168.0.10"
   },
   "schema": {
    "properties": {

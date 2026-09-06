@@ -2,15 +2,16 @@
 # wican-bench beacon watchdog v2 (role names, 2026-07-26; v1 2026-07-17).
 # nmcli "activated" lies — verify the SSID is genuinely ON AIR by scanning
 # from a second radio; bounce the hotspot if not, and fail over between
-# the internal radio (wican-bench-w0/wint0, PRIMARY — the sticks are the
-# unreliable parties) and the USB twin (wican-bench/wtest0) if the bounce
-# does not heal it. Respects HIL parking: autoconnect=no on the primary =
-# deliberately down. Escalates to bench-recover when both twins fail.
+# the USB stick (wican-bench/wtest0, PRIMARY since 2026-09-06 — the
+# internal brcmfmac radio goes deaf in AP mode) and the internal twin
+# (wican-bench-w0/wint0) if the bounce does not heal it. Respects HIL
+# parking: autoconnect=no on the primary = deliberately down. Escalates
+# to bench-recover when both twins fail.
 BENCH_TAG=wican-bench-watchdog
 . /usr/local/lib/bench-lib.sh
 
-PRIMARY="$HOTSPOT_PRIMARY"    # wican-bench-w0 (wint0)
-FAILOVER="$HOTSPOT_TWIN"      # wican-bench (wtest0)
+PRIMARY="$HOTSPOT_PRIMARY"    # wican-bench (wtest0, USB stick)
+FAILOVER="$HOTSPOT_TWIN"      # wican-bench-w0 (wint0, internal — failover only)
 
 # parked on purpose? (HIL park_persistent sets autoconnect no)
 if [ "$(nmcli -g connection.autoconnect connection show "$PRIMARY" 2>/dev/null)" = "no" ]; then

@@ -39,7 +39,13 @@
   live under **`/ws/`** (websocket_manager; paths are settings-defined and
   must start `/ws/`). These are the TWO reserved namespaces; the
   `http_server_manager` catch-all serves assets for every other path.
-  Specific routes always win over the catch-all (§9.3).
+  Specific routes always win over the catch-all (§9.3). The catch-all
+  also serves two on-demand asset folders registered by `web_ui_v2`
+  (2026-09-06): `/cache/*` → `/data/cache` and `/sdcache/*` →
+  `/sd/cache` (MIME by extension, ETag/304, `Cache-Control: max-age=3600`).
+  The UI fills them through `/api/fs/upload` — today the dashboard's
+  uPlot chart library under `cache/www/` — and nothing there is needed
+  for the firmware to work; a missing file is a plain 404.
 - **JSON in, JSON out** (`application/json`), except the log-ring dump
   (`text/plain`). Errors: `{"error":"<human message>"}` with 4xx/5xx.
 - **GET never mutates. Mutations are PUT/POST/DELETE.** Reboot-affecting
@@ -148,7 +154,7 @@ picker (REVIEW §6.1):
 |---|---|---|
 | `/api/fs/list?path=/data/web` | GET | `{"path":"/data/web","entries":[{"name":"x.svg","dir":false,"size":123},…]}`; 400 on invalid path (component's own validation) |
 | `/api/fs/info?path=/data` | GET | `{"total":N,"used":N}` |
-| `/api/fs/download?path=…` | GET | streamed file, `Content-Disposition: attachment` (logs/configs to the browser) |
+| `/api/fs/download?path=…` | GET | streamed file, `Content-Disposition: attachment` (logs/configs to the browser); 409 `file in use` for a file a writer holds open (the logger's active file — pause `/api/logger/gate` first, 2026-09-07) |
 | `/api/fs/upload?path=…` | POST | multipart (HTML form) or raw body, **STREAMED — no size cap** beyond free space (8 MB live-verified to /sd); ATOMIC (temp+rename at commit); 503 while another transfer runs |
 | `/api/fs/file?path=…` | DELETE | delete a file / empty dir |
 | `/api/fs/mkdir?path=…` | POST | create dir + parents |
@@ -248,8 +254,9 @@ not running (disabled, or its endpoint isn't registered).
 The tables live in a FILE, not settings (profiles exceed the settings
 16-item array cap); the `autopid` settings component holds only the
 knobs (enable, per-type enables, init strings, pause voltage,
-`min_event_interval_ms`, and — schema v2, 2026-07-07 — `backend` =
-`obd_chip`|`elm327`, see §6e10) and stays reboot-to-apply.
+`min_event_interval_ms`) and stays reboot-to-apply. (Schema v2's
+`backend` field was removed 2026-09-06 — the OBD chip is the only
+transport; a stored value is ignored.)
 
 ### 6e4b. DTC check / report / clear
 
@@ -328,7 +335,7 @@ The rule editor's vocabulary comes entirely from discovery (API-first
 |---|---|---|
 | `/api/logger` | GET | `{"enabled","running","paused","storage_ok","file":"dl_<epoch>.db","file_rows","files","queued","written","dropped","errors","rotations","can":{"enabled","file":"can_<epoch>.wdl","file_rows","files","queued","frames_written","frames_dropped","rotations"},"dir":"/sd/logs"}` — top level = the params stream, `can{}` = the CAN-frames stream (2026-07-09 two-stream addendum) |
 | `/api/logger/gate` | POST | runtime (non-persisted) logging gate for BOTH streams — the HTTP twin of the `logger.enable`/`logger.disable` event actions (API-first §1b): `{"enabled":bool}` → `{"ok":true}`; observable as `paused` in the GET. A reboot restores the configured state. Added 2026-07-07 |
-| `/api/logger/export` | GET | incremental pull of the PARAMS stream, `format=jsonl` only (400 otherwise): `?stream=params&since=<epoch>:<off>&limit=N` streams raw jsonl lines from the rotated files starting at the cursor, briefly gating the logger if it must read the ACTIVE file; final chunk is `{"_cursor":"epoch:off","more":bool}` — feed `_cursor` back as `since` to tail. Poll-based exporter for integrations that can't mount the SD |
+| `/api/logger/export` | GET | incremental pull of the PARAMS stream, `format=jsonl` or `csv` (400 otherwise; csv rows stream as-is, the header row is skipped by the name filter, the trailing meta line stays JSON — 2026-09-06): `?stream=params&since=<epoch>:<off>&limit=N[&name=<param>]` (2026-09-06: `name` keeps only that parameter's records — full `source.name` or the part after the last `.`; the cursor still walks every line, at most 512 KB read and 64 KB emitted per request — the dashboard's chart history uses it) streams raw jsonl lines from the rotated files starting at the cursor, briefly gating the logger if it must read the ACTIVE file; final chunk is `{"_cursor":"epoch:off","more":bool}` — feed `_cursor` back as `since` to tail. Poll-based exporter for integrations that can't mount the SD |
 
 Config = `/api/settings/data_logger` (v2): per-stream engine choice
 (`format` = params: sqlite|csv|binary|jsonl; `can_format` = CAN:
@@ -414,16 +421,16 @@ Config = `/api/settings/espnetlink` (v2): `enabled` (true), `mode` (`wifi_modem`
 | `/api/can` | GET | `{"enabled":bool,"running":bool,"silent":bool,"baud_kbps":N,"state":"running"/"bus_off"/"recovering"/"stopped","tx":N,"rx":N,"tx_errors":N,"rx_errors":N,"arb_lost":N,"bus_errors":N,"rx_missed":N,"dispatch_drops":N,"bus_off":N,"recoveries":N}` — the native TWAI bus (WiCAN Pro TX=GPIO2/RX=GPIO1/STDBY=GPIO38), shared by every CAN consumer. `tx_errors`/`rx_errors` are the live TEC/REC; `rx_missed` = wire frames lost to a full TWAI RX queue (RX task starved), `dispatch_drops` = drop-oldest evictions across subscriber queues (a consumer's drain starved) — both 0 in healthy operation, they localize any frame-loss report. Bus-off recovery is AUTOMATIC (2026-07-10): re-enter as soon as hardware recovery completes; rapid re-offense backs the restart off 1→2→4…30 s (escalation resets after 60 s of stability). `bus_off`/`recoveries` count episodes; `state` reads `recovering` from bus-off until the restart lands |
 
 Config = `/api/settings/can_manager` (`enabled` default false, `baud`
-enum 33…1000 kbit/s, `silent`, `cli`). The bus is SHARED: software AT
-engines (add-on packs), autopid's `elm327` backend, and the
-slcan/gvret/internal-CAN consumers all multiplex it — unlike the
-single-master MIC3624, multiple clients run CONCURRENTLY.
+enum 33…1000 kbit/s, `silent`, `cli`). The bus is SHARED: the
+slcan/gvret/internal-CAN consumers, firmware ISO-TP (UDS / J2534) and
+any add-on jacks all multiplex it — unlike the single-master MIC3624,
+multiple clients run CONCURRENTLY.
 
 `/api/settings/obd_gate` (`enabled` default TRUE, 2026-07-11): the
-bus-conversation gate. The MIC chip and the ESP-side ELM engines share
+bus-conversation gate. The MIC chip and any ESP-side requester share
 ONE physical CAN bus; overlapping request/response conversations
-mis-attribute responses (a BLE app polling the chip + autopid's
-`elm327` backend = bad data). The gate serializes them — one
+mis-attribute responses (a BLE app polling the chip + a second poller
+= bad data). The gate serializes them — one
 conversation at a time, fair turn-taking, fail-open (a wedged holder
 can't block the other side; holds self-expire at 2 s). Disable only
 for test setups that WANT concurrent conversations.
@@ -435,22 +442,26 @@ for test setups that WANT concurrent conversations.
 | `/api/uds/request` | POST | one UDS (ISO 14229) request→final response over the selected transport. Body `{"tx_id","rx_id"(hex str or int),"ext"?:bool,"data":"22 F1 90"(hex),"p2_ms"?,"p2star_ms"?,"session"?:bool}` → `{"ok",response":"62 F1 90 …"(hex),"length","positive":bool,"sid","nrc"?,"nrc_name"?,"pending","elapsed_ms","backend"}`. Handles the 0x78 responsePending loop + NRC decode; 409 while another UDS transaction is in flight |
 
 Config = `/api/settings/uds_manager` (`backend` =
-`auto`|`obd_chip`|`elm327`|`isotp`, default **auto** = isotp when
+`auto`|`obd_chip`|`isotp`, default **auto** = isotp when
 can_manager is running else obd_chip; `p2_ms`, `p2star_ms`,
-`tester_present_ms`, `cli`). Backends: **isotp** (firmware ISO-TP over
-native CAN — the proven, recommended path, ≤8 KB multi-frame PDUs;
-needs the ISO-TP provider from the add-on pack, else falls back to
-obd_chip); **obd_chip** (the MIC via AT — reaches the OBD-connector
-bus); **elm327** (a dedicated software AT engine — add-on pack,
-experimental). `uds` CLI: `uds -t 7E0 -r 7E8 22 F1 90`.
+`tester_present_ms`, `cli`; schema v2, 2026-09-06: the former
+`elm327` value migrates to `auto`). Backends: **isotp** (firmware
+ISO-TP over native CAN — the proven, recommended path, ≤8 KB
+multi-frame PDUs; needs the ISO-TP provider from the add-on pack, else
+falls back to obd_chip); **obd_chip** (the MIC via AT — reaches the
+OBD-connector bus). `uds` CLI: `uds -t 7E0 -r 7E8 22 F1 90`.
 
 ## 6e12. Scripting — `script_engine` registers its own route (2026-07-07)
 
 | Route | Method | Behavior |
 |---|---|---|
-| `/api/scripts` | GET | `{"scripts":[{"name","size"}…],"dir":"/data/scripts","busy":bool}` — stored scripts for the UI. File CRUD rides the generic `/api/fs` surface (`upload?path=/data/scripts/x.be`, `download`, DELETE `file`) |
-| `/api/scripts/run` | POST | `{"src":"berry …"}` (inline) or `{"name":"uds_diag"}` (stored `/data/scripts/<name>.be`) → `{"ok","output"}`; 404 unknown name, 409 busy/disabled |
+| `/api/scripts` | GET | `{"scripts":[{"name","size"}…],"dir":"/data/scripts","busy":bool,"enabled":bool,"max_runtime_ms":N}` — stored scripts for the UI. File CRUD rides the generic `/api/fs` surface (`upload?path=/data/scripts/x.be`, `download`, DELETE `file`) |
+| `/api/scripts/run` | POST | `{"src":"berry …"}` (inline, ≤ 8 KB) or `{"name":"uds_diag"}` (stored `/data/scripts/<name>.be`) → `{"ok","output"}` (≤ 4 KB; on failure `ERROR: <type>: <message>` + Berry's stack traceback, `string:<line>:` names the inline line); 404 unknown name, 409 busy/disabled |
+| `/api/scripts/check` | POST | `{"src"}` → compile only, nothing runs: `{"ok":true}` or `{"ok":false,"error":"syntax_error: string:3: …"}`; 409 busy/disabled (2026-09-07) |
 | `/api/scripts/stop` | POST | kill switch for the running script → `{"ok":true}` |
+| `/api/scripts/reference` | GET | the engine describes itself for the Scripts page (2026-09-07): `{language, enabled, allow_reflash, limits{src_max,file_max,out_max,sleep_max_ms,name_max,resp_max_bytes,max_runtime_ms}, groups[{id,title}], bindings[{name,sig,group,ret,doc,ex}], globals[{name,doc}], primer[{title,code,note}], errors[{match,hint}], rules{action,with,event}}` — the tables live in `script_engine_doc.c`, cross-checked against the binding table at boot and host-tested |
+| `/api/scripts/examples` | GET | `{"examples":[{id,title,desc,needs,level,size}]}` — the built-in example gallery (`script_engine_examples.c`; `needs` = `""` \| `vehicle` \| `dtc` \| `can`) |
+| `/api/scripts/examples?id=` | GET | one example's Berry source, `text/plain`; 404 unknown (the list handler with a query: one URI-table slot) |
 
 
 Event wiring (2026-07-07 pm): rules may use the sugar body `{"on":"source.event","script":"name"}` (parser rewrites to the `script.run {name}` action) — the trigger event reaches the script as `evt_source`/`evt_name`/`evt_<key>` globals; scripts emit `script.done {value}` via `emit()` (a declared source rules can chain on). `uds.request {tx,rx,req,ext?}` is an action too, publishing `uds.response {ok,nrc,len,data,req}` (data truncated to the event kv limit — full payloads belong in a script's `uds()` binding). Actions run on the event dispatcher and BLOCK it for the transaction — same contract as `http.post`; keep event-triggered scripts short.
@@ -502,7 +513,7 @@ Config = `/api/settings/j2534_server` (`enabled` default false, `port` default 6
 
 | Route | Method | Behavior |
 |---|---|---|
-| `/api/wifi/status` | GET | `{"enabled":…,"sta_connected":…,"ip":"10.0.0.5","ap_started":…,"clients":N,"ap_ip":"192.168.0.10","dns":["…","…"]}` (wraps the status getters; `ap_ip` = live AP gateway, reflects the configurable `ap_ip` setting, omitted when AP is down). **AP config (v4): `ap_ip`/`ap_hidden`/`ap_bandwidth`/`ap_auth`; WiFi RAM profile (v5): `wifi_ram_profile` full/lean/custom — lean frees ~14 KB internal at no throughput cost, runtime via `esp_wifi_init`. Via `/api/settings/wifi_manager` — see wifi_manager/HTTP_API.md** |
+| `/api/wifi/status` | GET | `{"enabled":…,"sta_connected":…,"ip":"10.0.0.5","ap_started":…,"clients":N,"ap_ip":"192.168.0.10","dns":["…","…"],"sta_attempt":{"ssid","reason","fail_count","deprioritised"}}` (`sta_attempt` since 2026-09-06: the last station attempt — its entry, the `WIFI_REASON_*` of the last disconnect (0 = none), recent consecutive failed connection attempts (any reason but "not found"), and whether that entry is now tried only after the other networks on the list — the memory fades after 2 minutes; no time-based ban exists any more) (wraps the status getters; `ap_ip` = live AP gateway, reflects the configurable `ap_ip` setting, omitted when AP is down). **AP config (v4): `ap_ip`/`ap_hidden`/`ap_bandwidth`/`ap_auth`; WiFi RAM profile (v5): `wifi_ram_profile` full/lean/custom — lean frees ~14 KB internal at no throughput cost, runtime via `esp_wifi_init`. Via `/api/settings/wifi_manager` — see wifi_manager/HTTP_API.md** |
 | `/api/wifi/scan` | GET | the `wifi_manager_scan_networks()` JSON verbatim (`{"networks":[…]}`); blocking ≈2 s — the UI shows a spinner |
 
 Config strictly via `/api/settings/wifi_manager` — no bespoke config routes.

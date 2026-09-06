@@ -286,9 +286,9 @@ void app_main(void)
     /* arbitration AFTER both radios exist (it actuates them) */
     main_boot_start("interface_manager", interface_manager_start);
     /* AFTER obd_chip + battery_monitor: it polls one, watches the other */
-    /* CAN bus up before its consumers (add-on engines + autopid's
-     * alternate backend need the shared handle); pack endpoints are
-     * registered before bridge_manager pulls them */
+    /* CAN bus up before its consumers (firmware ISO-TP + add-on jacks
+     * need the shared handle); pack endpoints are registered before
+     * bridge_manager pulls them */
     main_boot_start("can_manager", can_manager_start);
     main_boot_start("ext_manager", ext_manager_start);
     main_boot_start("uds_manager", uds_manager_start);

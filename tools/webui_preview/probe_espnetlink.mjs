@@ -28,11 +28,18 @@ const check = (n, ok, extra) => { console.log((ok ? "PASS " : "FAIL ") + n + (ex
   const title = (c) => ((c.querySelector("h3") || {}).textContent || "").trim().split("\n")[0];
   const titles = cards.map(title);
 
-  check("ESPNetLink Status card present", titles.some((t) => /ESPNetLink Status/.test(t)), titles.join(" | "));
+  /* USB page is tabbed (Status / Settings / Dongle console) since 2026-09-05;
+     the status card is titled just "ESPNetLink" */
+  check("ESPNetLink status card present", titles.some((t) => /^ESPNetLink$/.test(t)), titles.join(" | "));
   check("ESPNetLink Console card present", titles.some((t) => /ESPNetLink Console/.test(t)));
 
-  const stat = cards.find((c) => /ESPNetLink Status/.test(title(c)));
-  const txt = stat ? stat.textContent : "";
+  const stat = cards.find((c) => /^ESPNetLink$/.test(title(c)));
+  if (!stat) { console.log("PROBE FAIL (no status card)"); process.exit(1); }
+  /* the LTE + GPS panels moved to their own card in the 2026-09-05 USB rework */
+  const lg = cards.find((c) => /LTE & GPS/.test(title(c)));
+  check("LTE & GPS card present", !!lg, titles.join(" | "));
+  if (!lg) { console.log("PROBE FAIL (no LTE & GPS card)"); process.exit(1); }
+  const txt = lg.textContent;
 
   // LTE panel rendered from lte -j
   check("LTE operator rendered", /ALDI Mobile/.test(txt), txt.slice(0, 120));
@@ -47,7 +54,7 @@ const check = (n, ok, extra) => { console.log((ok ? "PASS " : "FAIL ") + n + (ex
   check("GPS heading rendered", /27[01]°/.test(txt));
 
   // full-JSON details populated
-  const pres = [...stat.querySelectorAll("pre")].map((p) => p.textContent);
+  const pres = [...lg.querySelectorAll("pre")].map((p) => p.textContent);
   check("LTE full-JSON details populated", pres.some((t) => /"modem_model": "BG95-M5"/.test(t)));
   check("GPS full-JSON details populated (/api/gps shape)",
     pres.some((t) => /"accuracy"/.test(t) && /"valid": true/.test(t)));

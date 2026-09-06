@@ -3,8 +3,8 @@
 # not "whichever wlanN enumerated first today" (the two USB sticks are
 # identical and swapped names across boots).
 #
-#   wint0  = internal brcmfmac  — hotspot-primary (wican-bench-w0, DUT net)
-#   wtest0 = USB stick #1       — hotspot twin (wican-bench) / HIL second AP
+#   wint0  = internal brcmfmac  — hotspot failover only (wican-bench-w0; goes deaf in AP mode, 2026-09-06)
+#   wtest0 = USB stick #1       — hotspot PRIMARY (wican-bench, DUT net) / HIL second AP
 #   wtest1 = USB stick #2       — home-LAN uplink (non-load-bearing) / spare
 #
 # 2026-07-31: the RTL8822CU sticks (0bda:c812) were retired for MT7612U

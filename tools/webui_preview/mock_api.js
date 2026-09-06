@@ -34,14 +34,19 @@
       version: 1,
       groups: [{ name: "default", enabled_default: true, period_ms: 1000 }],
       pids: [
-        { name: "RPM", cmd: "010C1", group: "default", period_ms: 1000, type: "std", parameters: [{ name: "RPM", expression: "(B2*256+B3)/4", unit: "rpm" }] },
-        { name: "Speed", cmd: "010D1", group: "default", period_ms: 1000, type: "std", parameters: [{ name: "Speed", expression: "B2", unit: "km/h", class: "speed" }] },
-        { name: "Coolant", cmd: "01051", group: "default", period_ms: 5000, type: "std", parameters: [{ name: "Coolant", expression: "B2-40", unit: "°C", class: "temperature" }] },
+        { name: "RPM", cmd: "010C1", group: "default", period_ms: 1000, type: "std", parameters: [{ name: "RPM", expression: "(B2*256+B3)/4", unit: "rpm", min: 0, max: 8000 }] },
+        { name: "Speed", cmd: "010D1", group: "default", period_ms: 1000, type: "std", parameters: [{ name: "Speed", expression: "B2", unit: "km/h", class: "speed", min: 0, max: 255 }] },
+        { name: "Coolant", cmd: "01051", group: "default", period_ms: 5000, type: "std", parameters: [{ name: "Coolant", expression: "B2-40", unit: "°C", class: "temperature", min: -40, max: 215 }] },
         { name: "OilTemp", cmd: "2101AF1", group: "default", period_ms: 2000, type: "custom", parameters: [{ name: "OilTemp", expression: "B4-40", unit: "°C" }] },
       ],
       filters: [{ id: "0x18DAF110", name: "SOC_BMS", expression: "B5/2", unit: "%", monitor_ms: 1000 }],
     },
     dash: { RPM: 843, Speed: 0, Coolant: 88, SOC_BMS: 71.5 },
+    polls: 1200, groupOn: true,
+    files: { "/data/scripts/hello.be": "# hello.be\nlog('hello from the mock')\n" },   /* /api/fs upload/download/delete of small text files (dashboard layout, scripts) */
+    scriptBusy: false, runs: 0, checks: 0, stops: 0,   /* the Scripts page */
+    gateCalls: 0, loggerFile: "",   /* the dashboard history pauses the gate to read the active file */
+    logEpoch: Math.floor(Date.now() / 1000) - 7200,   /* the fresh log files' epoch, fixed at load */
   };
 
   const STD_ROWS = [
@@ -84,7 +89,8 @@
     "/api/faults": () => J({ faults: S.__faults || (S.__faults = [
       { code: "registry_headroom", detail: "bridge_tr at 3/4", count: 1,
         first_time: 1784400000, last_time: 1784400000 }]) }),
-    "/api/wifi/status": () => J({ enabled: true, sta_connected: true, ip: "10.42.0.62", ap_started: true, clients: 0, ap_ip: "192.168.80.1", dns: ["10.42.0.1", "1.1.1.1"] }),
+    "/api/wifi/status": () => J({ enabled: true, sta_connected: true, ip: "10.42.0.62", ap_started: true, clients: 0, ap_ip: "192.168.80.1", dns: ["10.42.0.1", "1.1.1.1"],
+      sta_attempt: { ssid: "HomeWiFi", reason: 204, fail_count: 3, deprioritised: true } }),
     "/api/webhook": () => J({ url: S.ha_webhooks.values.url, enabled: true, interval: 15, manual_override: false, data_mode: "changed", gzip: false, status: "ok", last_post: new Date().toISOString(), retries: 0, success_count: 512, fail_count: 3, last_error: "", last_error_time: "" }),
     "/api/vpn": () => J({ state: "connected", type: "wireguard", endpoint: "vpn.example.com:51820", ts_ip: "", ts_peers: 0, connects: 1, failures: 0, uptime_s: 8040 }),
     "/api/usb": () => J({ enabled: true, device_present: true, host_active: true, eth_connected: true, driver: "cdc_ncm", ip: "192.168.7.2", attaches: 1 }),
@@ -92,14 +98,16 @@
     "/api/gps": () => J({ valid: true, latitude: -37.905350, longitude: 145.145047, accuracy: 6, altitude: 88.8, speed: 1.0, heading: 270.5, satellites: 7, age_ms: 1200 }),
     "/api/battery": () => J({ voltage: 12.52 }),
     "/api/can": () => J({ enabled: true, state: "running", running: true, baud_kbps: 500, silent: false, bitrate: 500000, mode: "normal", tx: 1543, rx: 89231, tx_err: 0, rx_err: 0, bus_off: 0, recoveries: 0, rx_missed: 0, dispatch_drops: 0 }),
-    "/api/autopid": () => J({
-      groups: [{ name: "default", enabled: true, period_ms: 1000 }],
+    "/api/autopid": () => { state.polls += state.groupOn ? 4 : 0; const nowUs = Date.now() * 1000; return J({
+      groups: [{ name: "default", enabled: state.groupOn, period_ms: 1000 }],
       params: Object.entries(state.dash).map(([name, value]) => ({
         name, value: value + (Math.random() - 0.5) * (name === "RPM" ? 40 : 2),
         unit: { RPM: "rpm", Speed: "km/h", Coolant: "°C", SOC_BMS: "%" }[name] || "",
-      })),
-      stats: { running: true },
-    }),
+        ts_us: nowUs - (name === "SOC_BMS" ? 45e6 : 800e3),   /* SOC_BMS deliberately stale */
+      })).concat([{ name: "gps_speed", unit: "km/h", value: 61.6, ts_us: nowUs - 1.2e6, external: true }]),
+      stats: { running: state.groupOn, paused_voltage: false, polls_ok: state.polls, polls_failed: 2, pids: 4, filters: 1,
+        period_floor_ms: 50, sub_floor_pids: 0, now_us: nowUs },
+    }); },
     "/api/events/sources": () => J([
       { event: "timer.tick", description: "A named timer fired" },
       { event: "autopid.param", description: "A parameter value updated" },
@@ -117,7 +125,11 @@
     "/api/autopid/dtc": () => J({ enabled: false, codes: [], last_scan: null }),
     "/api/autopid/dtc/db": () => J({ dbs: [] }),
     "/api/autopid/dbc": () => J({ dbcs: [] }),
-    "/api/logger": () => J({ enabled: false, gate: "open", stream: "params", format: "jsonl", file: "", bytes: 0, rows: 0, drops: 0 }),
+    "/api/logger": () => J({ enabled: false, running: false, paused: false, storage_ok: false, file: state.loggerFile, file_rows: 0, files: 0, queued: 0,
+      written: 0, dropped: 0, errors: 0, rotations: 0,
+      can: { enabled: false, file: "", file_rows: 0, files: 0, queued: 0, frames_written: 0, frames_dropped: 0, rotations: 0 }, dir: "/sd/logs" }),
+    "/api/fs/info": () => J({ total: 3038806016, used: 327680 }),
+    "/api/rtc": () => J({ time: new Date().toISOString(), valid: true, rtc: null, sntp: { enabled: true, server: "pool.ntp.org", last_sync: null } }),
     "/api/logs/status": () => J({ dropped: 0, sinks: { ring: true, uart: true } }),
     "/api/logs/ring": () => T("I (1234) main: WiCAN v6 preview mock\nI (1240) wifi_manager: STA got IP 10.42.0.62\nI (2001) autopid: started (3 pids / default group)\nW (9004) event_manager: rule low_batt disabled\n"),
     "/api/status/tasks": () => J({ cores: 2, total_us: 23785179, tasks: [
@@ -141,12 +153,49 @@
         { ts: now() - 5, source: "timer", name: "tick", data: { timer: "dest1" }, fired: ["dest1"] },
       ],
     }),
-    "/api/scripts": () => J({ scripts: [{ name: "hello.be", size: 120 }] }),
+    "/api/scripts": () => J({
+      scripts: Object.keys(state.files).filter((p) => p.startsWith("/data/scripts/") && p.endsWith(".be")).map((p) => ({ name: p.slice(14), size: state.files[p].length })),
+      dir: "/data/scripts", busy: state.scriptBusy, enabled: !!(S.script_engine && S.script_engine.values.enabled), max_runtime_ms: 10000 }),
+    /* the engine's self-description (a subset of the firmware's tables; shapes identical) */
+    "/api/scripts/reference": () => J({
+      language: "Berry 1.1.0", enabled: !!(S.script_engine && S.script_engine.values.enabled), allow_reflash: false,
+      limits: { src_max: 8192, file_max: 65536, out_max: 4096, sleep_max_ms: 60000, name_max: 40, resp_max_bytes: 128, max_runtime_ms: 10000 },
+      groups: [{ id: "basics", title: "Output & timing" }, { id: "obd", title: "OBD-II / UDS, one request at a time" }, { id: "session", title: "UDS conversation on a claimed bus" }],
+      bindings: [
+        { name: "log", sig: "log(msg)", group: "basics", ret: "nil", doc: "Print a line to the run output and the device log. Numbers need str().", ex: "log('rpm ' + str(rpm))" },
+        { name: "sleep_ms", sig: "sleep_ms(ms)", group: "basics", ret: "nil", doc: "Pause for up to 60 000 ms. The run budget keeps counting while asleep.", ex: "sleep_ms(500)" },
+        { name: "uds", sig: "uds(tx, rx, hexreq)", group: "obd", ret: "response hex string, or nil", doc: "One request to an ECU over ISO-TP with 11-bit CAN ids. Sets uds_ok and uds_nrc.", ex: "var r = uds(0x7E0, 0x7E8, '01 0C')" },
+        { name: "obd_request", sig: "obd_request(hexreq[, timeout_ms])", group: "session", ret: "response hex string, or nil", doc: "Send a UDS request on the claimed connection and wait for the final answer.", ex: "var r = obd_request('22 F1 90')" },
+      ],
+      globals: [{ name: "uds_ok", doc: "1 when the last request got an answer." }, { name: "uds_nrc", doc: "The negative response code, or -1." }, { name: "evt_<field>", doc: "One global per field of the trigger event." }],
+      primer: [{ title: "Variables", code: "var rpm = 0\nrpm += 1", note: "Declare with var." }, { title: "Loops", code: "for i : 0..4  log(str(i))  end", note: "0..4 is inclusive." }],
+      errors: [{ match: "obd_claim() first", hint: "Call obd_claim(tx, rx) before obd_request()." }, { match: "syntax_error", hint: "Every block ends with end. The line number is in the message." }, { match: "my_error", hint: "A raise in the script." }],
+      rules: { action: "script.run", with: "{\"name\": \"<script>\"}", event: "script.done" },
+    }),
+    "/api/scripts/examples": (full) => {
+      const id = new URLSearchParams((full || "").split("?")[1] || "").get("id");
+      if (id === "hello") return T("# Hello, WiCAN - the basics.\nlog('Hello from WiCAN')\nfor i : 1..3\n  log(str(i))\nend\n");
+      if (id === "vin") return T("# Read the VIN.\nvar r = uds(0x7DF, 0x7E8, '09 02')\nlog(str(r))\n");
+      if (id) return T("no such example", 404);
+      return J({ examples: [
+        { id: "hello", title: "Hello, WiCAN", desc: "Output, variables, loops and timing. Runs without a vehicle.", needs: "", level: 1, size: 812 },
+        { id: "vin", title: "Read the VIN", desc: "Mode 09 first, UDS data identifier F190 as the fallback, decoded to text.", needs: "vehicle", level: 1, size: 1040 },
+      ] });
+    },
     "/api/j2534": () => J({ enabled: false, allow_reflash: false, allow_lan: false, sessions: 0 }),
     "/api/sleep": () => J({ state: "awake", voltage: 12.52, sleep_v: 12.2, wake_v: 13.2 }),
-    "/api/fs/list": () => J({ path: "/data", entries: [
-      { name: "autopid", dir: true, size: 0 }, { name: "config.json", dir: false, size: 1420 },
-    ] }),
+    "/api/fs/list": (full) => (/\/sd\/logs/.test(full || "")
+      ? J({ path: "/sd/logs", entries: [
+          { name: "dl_" + String(state.logEpoch).padStart(10, "0") + ".jsonl", dir: false, size: 240000 },
+          { name: "dl_" + String(state.logEpoch).padStart(10, "0") + ".csv", dir: false, size: 120000 },
+          { name: "dl_" + String(state.logEpoch).padStart(10, "0") + ".wdl", dir: false, size: 4096 },
+          { name: "dl_" + String(state.logEpoch).padStart(10, "0") + ".db", dir: false, size: 28672 },
+          { name: "dl_1784563543.db", dir: false, size: 28672 }, { name: "can_1784563543.wdl", dir: false, size: 0 },
+          { name: "dl_1784329639.jsonl", dir: false, size: 42480 }, { name: "can_1783689511.asc", dir: false, size: 1498 },
+        ] })
+      : J({ path: "/data", entries: [
+          { name: "autopid", dir: true, size: 0 }, { name: "config.json", dir: false, size: 1420 },
+        ] })),
     "/api/autopid/std_scan": () => J(state.scan),
     "/api/autopid/std_scan/result": () => (state.scan.status === "done"
       ? J({ version: 1, protocol: "6", supported: STD_ROWS, found: STD_ROWS.length, ts: now() })
@@ -156,7 +205,7 @@
     "/api/settings": () => J(settingsList()),
   };
 
-  async function handle(path, opts) {
+  async function handle(path, opts, full) {
     const method = ((opts && opts.method) || "GET").toUpperCase();
     const body = opts && typeof opts.body === "string" ? (() => { try { return JSON.parse(opts.body); } catch { return null; } })() : null;
 
@@ -167,6 +216,48 @@
       return J({ ok: true });
     }
     if (method === "PUT" && path === "/api/autopid/config") { state.autopidCfg = body || state.autopidCfg; return J({ ok: true }); }
+    const q = new URLSearchParams((full || "").split("?")[1] || "");
+    if (method === "POST" && path === "/api/fs/upload") {
+      let txt = ""; try { txt = typeof opts.body === "string" ? opts.body : new TextDecoder().decode(opts.body); } catch (e) { txt = ""; }
+      state.files[q.get("path")] = txt; return J({ ok: true, path: q.get("path"), size: txt.length });
+    }
+    if (method === "DELETE" && path === "/api/fs/file") { delete state.files[q.get("path")]; return J({ ok: true }); }
+    if (method === "POST" && path === "/api/scripts/run") {
+      state.runs++;
+      if (!(S.script_engine && S.script_engine.values.enabled)) return J({ ok: false, error: "busy or script_engine disabled" }, 409);
+      const src = (body && body.src) || (body && body.name ? state.files["/data/scripts/" + body.name] : "") || "";
+      if (/raise/.test(src)) return J({ ok: false, output: "before the error\n\nERROR: my_error: boom\nstack traceback:\n\tstring:3: in function `main`\n" });
+      return J({ ok: true, output: "hello from the mock\nsum 1..10 = 55\n" });
+    }
+    if (method === "POST" && path === "/api/scripts/check") {
+      state.checks++;
+      if (!(S.script_engine && S.script_engine.values.enabled)) return J({ ok: false, error: "busy or script_engine disabled" }, 409);
+      return /syntax/.test((body && body.src) || "") ? J({ ok: false, error: "syntax_error: string:2: unexpected symbol near 'end'\n" }) : J({ ok: true });
+    }
+    if (method === "POST" && path === "/api/scripts/stop") { state.stops++; return J({ ok: true }); }
+    if (method === "GET" && path === "/api/logger/export") {
+      /* the params stream: 120 points, 30 s apart, for the requested name — NDJSON or CSV rows */
+      const fmt = S.data_logger && S.data_logger.values.format;
+      if (fmt !== "jsonl" && fmt !== "csv") return T("params stream is not jsonl or csv", 400);
+      const name = q.get("name") || "RPM", nowMs = Date.now(), base = state.dash[name] != null ? state.dash[name] : 50;
+      let out = fmt === "csv" ? "ts_ms,param,value\n" : "";
+      for (let i = 120; i >= 1; i--) {
+        const ts = nowMs - i * 30000, value = base + Math.sin(i / 7) * (name === "RPM" ? 300 : 5);
+        out += fmt === "csv" ? ts + ",autopid." + name + "," + value.toFixed(6) + "\n" : JSON.stringify({ ts, param: "autopid." + name, value }) + "\n";
+      }
+      return T(out + JSON.stringify({ _cursor: "0:0", more: false }) + "\n");
+    }
+    if (method === "POST" && path === "/api/logger/gate") { state.gateCalls++; return J({ ok: true }); }
+    if (method === "GET" && path === "/api/fs/download") {
+      const p = q.get("path");
+      /* a binary log fixture the probe injects (window.__WDL_FIXTURE__: Uint8Array) */
+      if (/\.wdl$/.test(p || "") && window.__WDL_FIXTURE__) {
+        const buf = window.__WDL_FIXTURE__.buffer.slice(window.__WDL_FIXTURE__.byteOffset, window.__WDL_FIXTURE__.byteOffset + window.__WDL_FIXTURE__.byteLength);
+        return { ok: true, status: 200, headers: { get: () => "application/octet-stream" }, arrayBuffer: async () => buf, text: async () => "", json: async () => { throw new Error("binary"); } };
+      }
+      const t = state.files[p]; return t != null ? T(t) : J({ error: "not found" }, 404);
+    }
+    if (method === "POST" && path === "/api/autopid/group") { if (body && typeof body.enabled === "boolean") state.groupOn = body.enabled; return J({ ok: true }); }
     if (method === "POST" && path === "/api/settings/submit") return J({ reboot: false });
     if (method === "POST" && path === "/api/restart") return J({ ok: true });
     if (method === "POST" && path === "/api/faults/clear") { S.__faults = []; return J({ cleared: true }); }
@@ -223,15 +314,16 @@
     }
 
     if (path.endsWith("/vehicle_profiles.json")) return J({"cars": [{"car_model": "AAA: Generic", "init": "ATSP6;", "pids": [{"pid": "010C1", "parameters": [{"name": "EngineRPM", "expression": "[B3:B4]*0.25", "unit": "RPM", "class": "frequency"}]}, {"pid": "010D1", "parameters": [{"name": "VehicleSpeed", "expression": "B3", "unit": "km/h", "class": "speed"}]}, {"pid": "01051", "parameters": [{"name": "Coolant", "expression": "B3-40", "unit": "°C", "class": "temperature"}]}, {"pid": "012F1", "parameters": [{"name": "FuelLevel", "expression": "B3/2.55", "unit": "%", "class": "none"}]}, {"pid": "010F1", "parameters": [{"name": "IntakeAirTemp", "expression": "B3-40", "unit": "°C", "class": "temperature"}]}, {"pid": "01111", "parameters": [{"name": "Throttle", "expression": "B3/2.55", "unit": "%", "class": "none"}]}, {"pid": "01101", "parameters": [{"name": "MAF", "expression": "[B3:B4]*0.01", "unit": "g/s", "class": "none"}]}, {"pid": "010A1", "parameters": [{"name": "FuelPressure", "expression": "B3*3", "unit": "kPa", "class": "pressure"}]}, {"pid": "01061", "parameters": [{"name": "ShortTermFuelTrim", "expression": "(B3/1.28)-100", "unit": "%", "class": "none"}]}, {"pid": "01A61", "parameters": [{"name": "Odometer", "expression": "[B3:B6]", "unit": "km", "class": "distance"}]}]}, {"car_model": "Hyundai: Ioniq2017", "init": "ATSP6;ATSH7E4;ATST96;", "pids": [{"pid": "21057", "parameters": [{"name": "SOC_DISPLAY", "expression": "B39/2", "unit": "%", "class": "battery"}, {"name": "SOH", "expression": "[B33:B34]/10", "unit": "%", "class": ""}]}, {"pid": "2101", "parameters": [{"name": "SOC_BMS", "expression": "B09/2", "unit": "%", "class": "battery"}, {"name": "Charger_Connected", "expression": "B14:5", "unit": "", "class": ""}, {"name": "Charging", "expression": "B14:7", "unit": "", "class": ""}, {"name": "HV_Charger_Connected", "expression": "B14:6", "unit": "", "class": ""}]}]}, {"car_model": "Kia/Hyundai: Niro/Soul/Kona", "init": "ATST96;", "pids": [{"pid_init": "ATSH7E4;", "pid": "2201019", "parameters": [{"name": "SOC_BMS", "expression": "B10/2", "unit": "%", "class": "battery"}, {"name": "Max_REGEN", "expression": "[B11:B12]/100", "unit": "kW", "class": "power"}, {"name": "Max_Power", "expression": "[B13:B14]/100", "unit": "kW", "class": "power"}, {"name": "Batt_Current", "expression": "(65536-([B17:B18]))/10", "unit": "A", "class": "current"}, {"name": "HV_Volts", "expression": "[B19:B20]/10", "unit": "V", "class": "voltage"}, {"name": "HV_Power", "expression": "([B19:B20]/10)*((65536-([B17:B18]))/10)", "unit": "W", "class": "power"}, {"name": "Batt_MaxT", "expression": "B21", "unit": "°C", "class": "temperature"}, {"name": "Batt_MinT", "expression": "B22", "unit": "°C", "class": "temperature"}, {"name": "Batt_Temp_1", "expression": "B23", "unit": "°C", "class": "temperature"}, {"name": "Batt_Temp_2", "expression": "B25", "unit": "°C", "class": "temperature"}, {"name": "Batt_Temp_3", "expression": "B26", "unit": "°C", "class": "temperature"}, {"name": "Batt_Temp_4", "expression": "B27", "unit": "°C", "class": "temperature"}, {"name": "Batt_InletT", "expression": "B30", "unit": "°C", "class": "temperature"}, {"name": "Max_Cell_V", "expression": "B31/50", "unit": "V", "class": "voltage"}, {"name": "Max_Cell_V_No", "expression": "B33", "unit": "none", "class": "none"}, {"name": "Min_Cell_V", "expression": "B34/50", "unit": "V", "class": "voltage"}, {"name": "Min_Cell_V_No", "expression": "B35", "unit": "none", "class": "none"}, {"name": "Aux_Batt_Volts", "expression": "B38*0.1", "unit": "V", "class": "voltage"}]}, {"pid_init": "ATSH7E4;", "pid": "2201057", "parameters": [{"name": "SOH", "expression": "[B34:B35]/10", "unit": "%", "class": "battery"}, {"name": "SOC_D", "expression": "B41/2", "unit": "%", "class": "battery"}, {"name": "Min_Cell_Det_No", "expression": "B39", "unit": "none", "class": "none"}, {"name": "Max_Cell_Det_No", "expression": "B36", "unit": "none", "class": "none"}, {"name": "Min_Cell_Det", "expression": "[B37:B38]/10", "unit": "%", "class": "battery"}]}, {"pid_init": "ATSH7E2;", "pid": "21014", "parameters": [{"name": "GearSelector_Raw", "expression": "B10", "unit": "none", "class": "none"}, {"name": "Speed_Vehicle", "expression": "[B19:B20]/100", "unit": "%", "class": "battery"}, {"name": "Car_Ready", "expression": "B26:3", "unit": "none", "class": "none"}, {"name": "Car_ParkBreak", "expression": "B26:5", "unit": "none", "class": "none"}]}]}]});
-    if (FIXED[path]) return FIXED[path]();
+    if (FIXED[path]) return FIXED[path](full || path);
     return J({ error: "mock: " + method + " " + path + " not implemented" }, 404);
   }
 
+  window.__mockState = state;   /* probes read counters (gate calls) and set the active log file */
   window.fetch = (url, opts) => {
     const u = String(url);
     const path = u.startsWith("http") ? new URL(u).pathname + (new URL(u).search || "") : u;
     const clean = path.split("?")[0];
-    return Promise.resolve(handle(clean, opts));
+    return Promise.resolve(handle(clean, opts, path));
   };
 
   /* ---- WebSocket mock: /ws/can emits slcan frames; others stay quiet ---- */

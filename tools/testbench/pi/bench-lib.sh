@@ -9,8 +9,8 @@ export PATH="/usr/local/bin:/usr/sbin:/sbin:$PATH"
 
 BENCH_STATE_DIR=/var/lib/bench
 SSID="WICAN_TEST_AP"
-HOTSPOT_PRIMARY="wican-bench-w0"   # internal radio — most reliable beacons
-HOTSPOT_TWIN="wican-bench"         # USB stick twin
+HOTSPOT_PRIMARY="wican-bench"      # USB stick (wtest0) — the internal brcmfmac radio goes deaf in AP mode (2026-09-06)
+HOTSPOT_TWIN="wican-bench-w0"      # internal radio (wint0) — failover only, keep parked (autoconnect no)
 UPLINK_CON="Nachos_8042_5G 2"      # non-load-bearing convenience uplink
 ETH_CON="eth-bench"
 ETH_ADDR="192.168.90.2"

@@ -28,9 +28,10 @@ for role in wint0 wtest0 wtest1; do
 done
 
 # --- DUT hotspot (the load-bearing radio surface) -------------------------
-# Canonical: wican-bench-w0 active on wint0. The wtest0 twin is optional —
-# verified only when active. autoconnect=no on w0 = deliberately parked
-# (HIL park_persistent) — then neither is required.
+# Canonical (2026-09-06): wican-bench active on wtest0 (USB stick). The
+# wint0 twin is failover only (the internal brcmfmac radio goes deaf in AP
+# mode) — verified only when active. autoconnect=no on the primary =
+# deliberately parked (HIL park_persistent) — then neither is required.
 hs_checked=0
 for con in "$HOTSPOT_PRIMARY" "$HOTSPOT_TWIN"; do
     con_active "$con" || continue
