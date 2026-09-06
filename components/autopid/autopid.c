@@ -693,7 +693,7 @@ static void autopid_data_update(autopid_config_t *pids)
 char *autopid_data_read(void)
 {
     // json_str must be freed by the caller
-    static char *json_str = NULL;
+    char *json_str = NULL;
 
     if (!autopid_data.mutex)
     {
