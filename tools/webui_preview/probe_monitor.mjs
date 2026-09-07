@@ -62,9 +62,13 @@ const last = (a) => a[a.length - 1];
     { db: "demo", msg: "ENGINE_DATA", id: 0x123, name: "CoolantTemp", unit: "C", start: 23, len: 8, order: "motorola", signed: false, factor: 1, offset: -40, min: -40, max: 215 }];
   nav("#/power"); await sleep(300); nav("#/monitor"); await sleep(1500);
 
-  /* ---- opens paused ---- */
-  check("the page opens paused: Resume offered, status paused, no LIVE badge, the list says so", !!btn($("#view .pm-toolbar"), /Resume/) && /paused/.test(status()) && !$(".nav-badge") && /Paused: press Resume/.test(txt(tbl("rx"))), status());
-  btn($("#view .pm-toolbar"), /Resume/).click(); await sleep(300);
+  /* ---- opens disconnected ---- */
+  const hdr = () => $("#view .pm-chip").parentElement;
+  check("the page opens disconnected: Connect… offered, status offline, chip Not connected, no LIVE badge, the list says so", !!btn(hdr(), /Connect…/) && /offline/.test(status()) && /Not connected/.test(txt($("#view .pm-chip"))) && !$(".nav-badge") && /Not connected: press Connect/.test(txt(tbl("rx"))), status());
+  check("no socket was opened", M().wsCanOpened === undefined || M().wsCanOpened === 0);
+  btn(hdr(), /Connect…/).click(); await sleep(50);
+  check("Connect… opens the connect dialog", !!dlg() && /Connect to CAN bus/.test(txt(dlg())));
+  btn(dlg(), /^Connect$/).click(); await sleep(300);
 
   /* ---- layout ---- */
   check("page title and three sub-tabs", /CAN Monitor/.test(txt($("#view h1, #view .page h2, #view .ph h1")) || txt($("#view"))) && ["monitor", "trace", "settings"].every((id) => !!subtab(id)));
@@ -82,8 +86,8 @@ const last = (a) => a[a.length - 1];
   const ch = wm && (wm.channels || []).find((c) => c.path === "/ws/can"), br = bm && (bm.bridges || []).find((b) => b.a === "can");
   check("Enable stages the CAN bus, the ws_can channel and a slcan bridge", st.count() === 3 && cm && cm.enabled === true && ch && ch.enabled && br && br.b === ch.name && br.translator === "slcan" && br.enabled, { cm, ch, br });
   check("the banner turns into the not-active-yet note", !!$("#view .pm-wiring .banner.info") && !$("#view .pm-wiring .banner.warn"));
-  st.revert(); await sleep(1600);   /* revert re-routes: a fresh page instance (paused again) */
-  btn($("#view .pm-toolbar"), /Resume/).click(); await sleep(1700);
+  st.revert(); await sleep(1600);   /* revert re-routes: a fresh page instance (offline again) */
+  btn(hdr(), /Connect…/).click(); await sleep(50); btn(dlg(), /^Connect$/).click(); await sleep(1700);
 
   /* ---- receive list ---- */
   const rx = rows("rx");

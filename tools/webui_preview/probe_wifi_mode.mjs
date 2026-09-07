@@ -57,6 +57,19 @@ const row = (k) => $('#view .frow[data-key="' + k + '"]');
   check("WiFi off shows the USB/Bluetooth warning and folds both cards", /USB or Bluetooth/.test($("#view").textContent) && !shown(row("ap_ssid")) && !shown(row("sta_ssid")));
   tile("apsta").click(); await sleep(150);
   check("back to Access point + Station: both cards open, warning gone", shown(row("ap_ssid")) && shown(row("sta_ssid")) && $$("#view .note.warn").every((n) => !/USB or Bluetooth/.test(n.textContent) || n.style.display === "none"));
+  /* radio arbitration lives in the WiFi tab (2026-09-07) */
+  const im = cardByTitle("Radio Arbitration");
+  check("Radio Arbitration card sits in the WiFi tab with its three switches and the Bluetooth note", !!im && ["enabled", "sta_ble_handover", "ap_ble_exclusive"].every((k) => !!row(k) && im.contains(row(k))) && /share one radio/.test(im.textContent));
+  check("the switches carry plain-words labels", /Pause the station while a phone is connected over Bluetooth/.test(row("sta_ble_handover").textContent) && /Pause the access point while a phone is connected over Bluetooth/.test(row("ap_ble_exclusive").textContent));
+  /* the AP auto-off recommendation (mock: apsta, ap_auto_disable off) */
+  const nudge = () => $$("#view .banner.info").find((b) => /turn the access point off while the station is connected/i.test(b.textContent));
+  check("with Access point + Station and auto-off unset, the recommendation shows and the switch is outside the advanced fold", !!nudge() && nudge().style.display !== "none" && shown(row("ap_auto_disable")) && /Turn the access point off while the station is connected/.test(row("ap_auto_disable").textContent));
+  tile("sta").click(); await sleep(150);
+  check("Station only hides the recommendation", nudge().style.display === "none");
+  tile("apsta").click(); await sleep(150);
+  [...nudge().querySelectorAll("button")].find((b) => /Turn it on/.test(b.textContent)).click(); await sleep(150);
+  const pend = w.eval("store").pending.get("wifi_manager");
+  check("Turn it on stages ap_auto_disable, ticks the switch and hides the recommendation", pend && pend.ap_auto_disable === true && row("ap_auto_disable").querySelector('input[type="checkbox"]').checked && nudge().style.display === "none");
   w.eval("store").pending.clear(); w.eval("store").dirty.clear(); w.eval("renderSubmit()");
   check("no page errors", errs.length === 0, errs.slice(0, 2));
   console.log(fails ? `FAILED ${fails}` : "ALL PASS");

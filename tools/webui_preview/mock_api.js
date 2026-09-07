@@ -384,6 +384,7 @@
   window.WebSocket = class {
     constructor(url) {
       this.url = String(url); this.readyState = 0; this._timers = [];
+      if (this.url.includes("/ws/can")) state.wsCanOpened = (state.wsCanOpened || 0) + 1;   /* the monitor must not open one until Connect */
       setTimeout(() => {
         /* state.wsCanRefuse: the channel is disabled on the device (handshake refused) */
         if (state.wsCanRefuse && this.url.includes("/ws/can")) { this.readyState = 3; this.onclose && this.onclose({}); return; }
