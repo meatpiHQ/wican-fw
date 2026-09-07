@@ -48,6 +48,7 @@
 - [Build](#build)
 - [Description](#description)
 - [ELM327 OBD2 Protocol](#elm327-obd2-protocol)
+- [J2534 PassThru Driver](#j2534-passthru-driver)
 - [Firmware Update](https://meatpihq.github.io/wican-fw/config/firmware-update)
   - [OTA](https://meatpihq.github.io/wican-fw/config/firmware-update)
   - [USB Flash](https://meatpihq.github.io/wican-fw/config/firmware-update)
@@ -59,6 +60,10 @@
 - When the BLE is connected, the device configuration access point will be disabled i.e you won't be able to configure the device unless you disconnect the BLE, by turning off the BLE on your phone or device.
 - If AP+Station mode is enabled, only use station IP to communicate with the device and AP must be used for configuration only.
   
+# **J2534 PassThru Driver**
+
+WiCAN PRO can act as an SAE J2534-1 PassThru interface for Windows diagnostic and reflash tools, over USB or WiFi. The Windows driver installer is in [drivers/j2534](drivers/j2534/) (see its README for setup) and is also attached to each firmware release.
+
 # **API**
 [API Documentation](https://drive.google.com/drive/folders/1qJelUAHGrn_YbNIP0Jk_KmNENG-hKbtl?usp=sharing)
 

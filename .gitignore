@@ -43,6 +43,8 @@ html_report/
 
 # Executables
 *.exe
+# except the J2534 PassThru driver installer that ships in this repo
+!/drivers/**/*.exe
 *.out
 *.app
 *.i*86
