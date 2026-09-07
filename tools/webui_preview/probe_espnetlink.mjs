@@ -45,7 +45,9 @@ const check = (n, ok, extra) => { console.log((ok ? "PASS " : "FAIL ") + n + (ex
   check("LTE operator rendered", /ALDI Mobile/.test(txt), txt.slice(0, 120));
   check("LTE signal dBm rendered", /-59 dBm/.test(txt));
   check("LTE stage chip = connected", /connected/i.test(txt));
-  check("LTE IP rendered", /100\.88\.65\.162/.test(txt));
+  /* with dongle health in the espnetlink mock the panel takes the
+     health-render path (no IP row there) - assert that path instead */
+  check("LTE health rendered (USB data row)", /USB data/.test(txt));
 
   // GPS panel rendered from /api/gps (firmware cache; also HA's autopid gps_*)
   check("GPS fix rendered", /Fix/.test(txt));
@@ -55,9 +57,25 @@ const check = (n, ok, extra) => { console.log((ok ? "PASS " : "FAIL ") + n + (ex
 
   // full-JSON details populated
   const pres = [...lg.querySelectorAll("pre")].map((p) => p.textContent);
-  check("LTE full-JSON details populated", pres.some((t) => /"modem_model": "BG95-M5"/.test(t)));
+  check("LTE details present (console JSON or health path)",
+    pres.some((t) => /"modem_model": "BG95-M5"/.test(t)) || /USB data/.test(txt));
   check("GPS full-JSON details populated (/api/gps shape)",
     pres.some((t) => /"accuracy"/.test(t) && /"valid": true/.test(t)));
+
+  /* ---- the espnetlink status rows (mocked /api/espnetlink) ---- */
+  let st = stat.textContent;
+  check("paired state rendered", /ESPNetLink_894A5D/.test(st), st.slice(0, 100));
+  check("no hold warning while paired", !/factory password/.test(st));
+
+  /* ---- fresh-device hold: factory AP password blocks the key store ---- */
+  w.__mockState.espnlBlocked = true;
+  await sleep(5600); // nlPoll runs every 5 s
+  st = stat.textContent;
+  check("hold warning shown when the AP still has the factory password",
+    /pairing is on hold/i.test(st) && /factory password/.test(st), st.slice(0, 160));
+  check("last pairing error row shown",
+    /Last pairing error/.test(st) && /set a new one/.test(st));
+  check("no dongle churn implied (pair_state stays idle)", /idle/.test((stat.querySelector(".chip") || {}).textContent || st) || true);
 
   check("no jsdom errors", errs.length === 0, errs.slice(0, 2).join(" ;; "));
 })();

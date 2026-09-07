@@ -46,6 +46,7 @@ USER_CON = "wican-fresh"           # temp Pi profile = the user's phone
 USER_IF = "wtest1"
 WICAN_AP_IP = "192.168.0.10"       # fresh WiCAN AP address (legacy default)
 WICAN_AP_PSK = "@meatpi#"          # fresh WiCAN AP password (wifi_manager default)
+NEW_AP_PSK = "bench-pass-1"        # what "the user" changes it to (the gate demands it)
 DONGLE_CON = "espnl-client"        # Pi profile for the dongle's AP
 CURL = f"curl -s -m 10 --retry 2 --retry-delay 2 --interface {USER_IF}"
 E_WHITELIST = ("Invalid MMIE", "select() timeout",
@@ -339,7 +340,44 @@ def main():
             note("user: phone re-joining the WiCAN AP after the reboot: "
                  + ("on" if phone_rejoin(40) else "NOT back"))
 
-        # ---- zero-touch pairing -----------------------------------------
+        # ---- the hold: pairing waits for a non-factory AP password ------
+        # (2026-09-07 field-hit: the key store is refused while the AP has
+        # the factory password; the firmware now HOLDS pairing and warns
+        # instead of churning into "Not an ESPNetLink / gave up")
+        hold = wc.wait_for(r"pairing is ON HOLD|on hold \(factory AP "
+                           r"password\)", 45, since=t_pair)
+        check("hold: zero-touch held while the AP has the factory password",
+              hold is not None, hold[1][-70:] if hold else "not seen")
+        st_h = espnl_status(wc)
+        check("hold: no pairing churn (machine stays idle)",
+              st_h.get("pair_state") in (None, "idle") and
+              not st_h.get("paired"), str(st_h)[:90])
+
+        # the user sets a new AP password over the AP (as the banner asks)
+        r = ssh_run(
+            f"sudo -n nmcli con up {USER_CON} >/dev/null 2>&1; sleep 2; "
+            f"doc=$({CURL} http://{WICAN_AP_IP}/api/settings/wifi_manager); "
+            f"body=$(echo \"$doc\" | python3 -c \"import json,sys;"
+            f"d=json.load(sys.stdin);d['ap_password']='{NEW_AP_PSK}';"
+            f"print(json.dumps(d))\"); "
+            f"{CURL} -X PUT -H 'Content-Type: application/json' "
+            f"-d \"$body\" http://{WICAN_AP_IP}/api/settings/wifi_manager; "
+            f"echo; {CURL} -X POST -d '{{}}' -H 'Content-Type: "
+            f"application/json' http://{WICAN_AP_IP}/api/settings/submit; "
+            f"echo")
+        note("user: set a new AP password + submit: "
+             + " ".join(r.stdout.split())[-90:])
+        rbpw = wc.wait_for(r"config applied: mode=", 90,
+                           since=time.time() - wc.t0 - 1)
+        check("user: WiCAN rebooted with the new AP password",
+              rbpw is not None)
+        t_pair = rbpw[0] if rbpw else time.time() - wc.t0
+        ssh_run(f"sudo -n nmcli con modify {USER_CON} "
+                f"802-11-wireless-security.psk '{NEW_AP_PSK}'")
+        note("user: phone re-joining with the new password: "
+             + ("on" if phone_rejoin(40) else "NOT back"))
+
+        # ---- zero-touch pairing (runs by itself after that restart) -----
         ident = wc.wait_for(r"espnetlink: identified ESPNetLink", 120,
                             since=t_pair)
         check("pair: dongle identified over USB", ident is not None,

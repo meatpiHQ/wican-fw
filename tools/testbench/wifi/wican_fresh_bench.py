@@ -47,6 +47,7 @@ USER_CON = "wican-fresh"           # temp Pi profile = the user's phone
 USER_IF = "wtest1"
 WICAN_AP_IP = "192.168.0.10"       # fresh WiCAN AP address (legacy default)
 WICAN_AP_PSK = "@meatpi#"          # wifi_manager default AP password
+NEW_AP_PSK = "bench-pass-1"        # the save gate refuses keeping the factory one
 HOME_CON = "wican-bench"           # the Pi hotspot playing "home"
 HOME_IF = "wtest0"
 CURL = (f"curl -s -m 10 --retry 2 --retry-delay 2 --compressed "
@@ -304,6 +305,7 @@ def main():
             f"body=$(echo \"$doc\" | python3 -c \"import json,sys;"
             f"d=json.load(sys.stdin);d['sta_ssid']='{home_ssid}';"
             f"d['sta_password']='{home_psk}';d['mode']='apsta';"
+            f"d['ap_password']='{NEW_AP_PSK}';"
             f"print(json.dumps(d))\"); "
             f"{CURL} -X PUT -H 'Content-Type: application/json' -d \"$body\" "
             f"http://{WICAN_AP_IP}/api/settings/wifi_manager; echo; "
@@ -326,8 +328,12 @@ def main():
         check("config: ONE planned reboot applies apsta + the home network",
               rb is not None)
         t_boot = rb[0] if rb else t_sub
-        ssh_run(f"sudo -n nmcli con up {USER_CON} >/dev/null 2>&1")
-        note("user: phone re-joined the WiCAN AP after the reboot")
+        # the save changed the AP password (the gate demands it): the
+        # phone must re-join with the new one
+        ssh_run(f"sudo -n nmcli con modify {USER_CON} "
+                f"802-11-wireless-security.psk '{NEW_AP_PSK}'; "
+                f"sudo -n nmcli con up {USER_CON} >/dev/null 2>&1")
+        note("user: phone re-joined the WiCAN AP with the new password")
 
         # ---- join the home network with the phone still on the AP --------
         got = con.wait_for(r"wifi_manager: .*(got ip|STA got IP|connected to)",
