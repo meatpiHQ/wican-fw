@@ -211,6 +211,7 @@
    "name": "",
    "a": "",
    "b": "",
+   "translator": "raw",
    "bridges": []
   },
   "schema": {
@@ -225,6 +226,9 @@
      "type": "string"
     },
     "b": {
+     "type": "string"
+    },
+    "translator": {
      "type": "string"
     },
     "bridges": {
@@ -314,7 +318,7 @@
    "max_file_mb": 4,
    "max_files": 100,
    "batch_rows": 256,
-   "flush_ms": 1000,
+   "flush_ms": 5000,
    "can_max_file_mb": 8,
    "can_max_files": 50,
    "ring_len": 2048,
@@ -606,10 +610,10 @@
   "values": {
    "enabled": true,
    "smd": true,
-   "wom": true,
+   "wom": false,
    "cli": true,
    "smd_sensitivity": 0,
-   "wom_threshold": 8,
+   "wom_threshold": 32,
    "stationary_s": 3
   },
   "schema": {
@@ -901,7 +905,6 @@
   "values": {
    "auto_sleep": false,
    "auto_update": true,
-   "baud": "2000000",
    "monitor_policy": "manual",
    "wake_voltage_mv": 13500,
    "sleep_voltage_mv": 13200,
@@ -914,16 +917,6 @@
     },
     "auto_update": {
      "type": "boolean"
-    },
-    "baud": {
-     "type": "string",
-     "enum": [
-      "115200",
-      "230400",
-      "460800",
-      "921600",
-      "2000000"
-     ]
     },
     "monitor_policy": {
      "type": "string",
@@ -1409,6 +1402,7 @@
    "fallback5_ssid": "",
    "fallback5_password": "",
    "ap_ssid": "",
+   "ap_password": "",
    "ap_ip": "192.168.0.10"
   },
   "schema": {
@@ -1505,7 +1499,6 @@
      "type": "string",
      "enum": [
       "auto",
-      "open",
       "wpa2",
       "wpa2wpa3",
       "wpa3"
@@ -1659,6 +1652,9 @@
      "type": "string"
     },
     "ap_ssid": {
+     "type": "string"
+    },
+    "ap_password": {
      "type": "string"
     },
     "ap_ip": {

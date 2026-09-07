@@ -66,7 +66,7 @@ def main():
     # the app script: jsdom cannot load external scripts, and the stub in
     # PAGES.<name> uses the chunk when it is already present
     chunks = ""
-    for name in ("scripts.js",):
+    for name in ("scripts.js", "files.js", "monitor.js"):
         cp = os.path.join(os.path.dirname(INDEX), name)
         if os.path.exists(cp):
             js = open(cp, encoding="utf-8").read()

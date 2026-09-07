@@ -27,7 +27,7 @@ RX_INT = re.compile(
     r'SETTINGS_INT(?:_REQ)?\s*\(\s*"([^"]+)"\s*,\s*(-?[\w* ()]+?)\s*,'
     r'\s*(-?[\w* ()]+?)\s*,\s*(-?[\w* ()]+?)\s*\)')
 RX_STR = re.compile(
-    r'SETTINGS_STR(?:_REQ)?\s*\(\s*"([^"]+)"\s*,\s*([\w() +-]+?)\s*,'
+    r'SETTINGS_STR(?:_REQ|_LEN)?\s*\(\s*"([^"]+)"\s*,\s*([\w() +-]+?)\s*,'
     r'(?:\s*[\w() +-]+?\s*,)?\s*"([^"]*)"\s*\)')
 RX_ENUM = re.compile(
     r'SETTINGS_STR_ENUM\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]*)"\s*\)')
@@ -69,7 +69,8 @@ def parse_file(path):
         if k in props:
             continue
         props[k] = {"type": "string"}
-        values[k] = m.group(3)
+        # secrets come back redacted from the real API (api_util_redact): mirror it
+        values[k] = "" if re.search(r"_password$|private_key|preshared_key|auth_key", k) else m.group(3)
     for m in RX_ARRAY.finditer(src):
         k = m.group(1)
         if k in props:

@@ -30,6 +30,11 @@
   const now = () => Math.floor(Date.now() / 1000);
   const state = {
     scan: { status: "idle", found: 0 },
+    /* this boot's restart record (probes swap it: power_wake / periodic_wake / panic …) */
+    lastRestart: { reason: "software", planned: true, planned_reason: "config_apply", source: "config_server" },
+    dirs: new Set(),            /* folders created through /api/fs/mkdir */
+    loggerRunning: false,       /* true -> /api/logger reports the active file (write-locked) */
+    sdMounted: true,            /* false -> /api/status says no card, /sd listings fail */
     autopidCfg: {
       version: 1,
       groups: [{ name: "default", enabled_default: true, period_ms: 1000 }],
@@ -76,7 +81,7 @@
 
   const FIXED = {
     "/api/status": () => J({
-      bits: { awake: true, sleep: false, sta_connected: true, mqtt_connected: true, ble_connected: false, sdcard_mounted: true, ble_enabled: false, sta_enabled: true, ap_enabled: true, autopid_enabled: true, home_mode: false, drive_mode: false, smartconnect: false, sta_ap_overlap: false, time_synced: true, vpn_enabled: true, wake_voltage_ok: true, eth_connected: false, autopid_idle: false, motion: false, sta_suspended: false, ap_suspended: false, ble_suspended: false },
+      bits: { awake: true, sleep: false, sta_connected: true, mqtt_connected: true, ble_connected: false, sdcard_mounted: state.sdMounted !== false, ble_enabled: false, sta_enabled: true, ap_enabled: true, autopid_enabled: true, home_mode: false, drive_mode: false, smartconnect: false, sta_ap_overlap: false, time_synced: true, vpn_enabled: true, wake_voltage_ok: true, eth_connected: false, autopid_idle: false, motion: false, sta_suspended: false, ap_suspended: false, ble_suspended: false },
       network_connected: true, uptime: "02:14:09", version: "v6.0.0-preview", partition: "ota_0",
       boot_count: 42, unexpected_resets: 1, device_id: "14c19f44e349",
       memory: { internal: { total: 274580, free: 71103, min_free: 63587, largest_block: 45056 }, psram: { total: 8272000, free: 7734508, min_free: 7524288, largest_block: 7274496 } },
@@ -89,7 +94,7 @@
     "/api/faults": () => J({ faults: S.__faults || (S.__faults = [
       { code: "registry_headroom", detail: "bridge_tr at 3/4", count: 1,
         first_time: 1784400000, last_time: 1784400000 }]) }),
-    "/api/wifi/status": () => J({ enabled: true, sta_connected: true, ip: "10.42.0.62", ap_started: true, clients: 0, ap_ip: "192.168.80.1", dns: ["10.42.0.1", "1.1.1.1"],
+    "/api/wifi/status": () => J({ enabled: true, sta_connected: true, ip: "10.42.0.62", ap_started: true, ap_default_password: state.apDefaultPassword === true, clients: 0, ap_ip: "192.168.80.1", dns: ["10.42.0.1", "1.1.1.1"],
       sta_attempt: { ssid: "HomeWiFi", reason: 204, fail_count: 3, deprioritised: true } }),
     "/api/webhook": () => J({ url: S.ha_webhooks.values.url, enabled: true, interval: 15, manual_override: false, data_mode: "changed", gzip: false, status: "ok", last_post: new Date().toISOString(), retries: 0, success_count: 512, fail_count: 3, last_error: "", last_error_time: "" }),
     "/api/vpn": () => J({ state: "connected", type: "wireguard", endpoint: "vpn.example.com:51820", ts_ip: "", ts_peers: 0, connects: 1, failures: 0, uptime_s: 8040 }),
@@ -97,7 +102,10 @@
     "/api/usb/acm": () => J({ connected: true }),
     "/api/gps": () => J({ valid: true, latitude: -37.905350, longitude: 145.145047, accuracy: 6, altitude: 88.8, speed: 1.0, heading: 270.5, satellites: 7, age_ms: 1200 }),
     "/api/battery": () => J({ voltage: 12.52 }),
-    "/api/can": () => J({ enabled: true, state: "running", running: true, baud_kbps: 500, silent: false, bitrate: 500000, mode: "normal", tx: 1543, rx: 89231, tx_err: 0, rx_err: 0, bus_off: 0, recoveries: 0, rx_missed: 0, dispatch_drops: 0 }),
+    /* the native CAN bus (state.canEnabled=false: a fresh device, bus off) */
+    "/api/can": () => J({ enabled: state.canEnabled !== false, running: state.canEnabled !== false, silent: false, baud_kbps: 500, state: state.canEnabled === false ? "stopped" : "running", tx: 1543, rx: 89231, tx_errors: 0, rx_errors: 0, arb_lost: 0, bus_errors: state.busErrors || 0, rx_missed: 0, dispatch_drops: 0, bus_off: 0, recoveries: 0 }),
+    "/api/bridges": () => J({ bridges: ((S.bridge_manager && S.bridge_manager.values.bridges) || []).map((b) => ({ ...b, up: b.enabled !== false, stats: { a2b_chunks: 0, b2a_chunks: 0, a2b_bytes: 0, b2a_bytes: 0, send_errors: 0, codec_errors: 0 } })) }),
+    "/api/ws": () => J({ channels: ((S.websocket_manager && S.websocket_manager.values.channels) || []).map((c) => ({ ...c, up: c.enabled !== false, stats: { clients: 0, frames_in: 0, frames_out: 0, bytes_in: 0, bytes_out: 0, rx_drops: 0, tx_drops: 0, refused: 0 } })) }),
     "/api/autopid": () => { state.polls += state.groupOn ? 4 : 0; const nowUs = Date.now() * 1000; return J({
       groups: [{ name: "default", enabled: state.groupOn, period_ms: 1000 }],
       params: Object.entries(state.dash).map(([name, value]) => ({
@@ -124,11 +132,16 @@
     "/api/events/values": () => J(["autopid.data", "autopid.RPM", "time.iso", "status.uptime", "battery.volts"]),
     "/api/autopid/dtc": () => J({ enabled: false, codes: [], last_scan: null }),
     "/api/autopid/dtc/db": () => J({ dbs: [] }),
-    "/api/autopid/dbc": () => J({ dbcs: [] }),
-    "/api/logger": () => J({ enabled: false, running: false, paused: false, storage_ok: false, file: state.loggerFile, file_rows: 0, files: 0, queued: 0,
+    /* DBC files + signals for the CAN Monitor's decode panel (state.dbcs / state.dbcSignals) */
+    "/api/autopid/dbc": () => J({ dbcs: state.dbcs || [], max: 4 }),
+    "/api/autopid/dbc/signals": (full) => { const q = new URLSearchParams((full || "").split("?")[1] || ""); const db = q.get("db");
+      const items = (state.dbcSignals || []).filter((s) => !db || s.db === db); return J({ total: items.length, items }); },
+    "/api/logger": () => J({ enabled: !!state.loggerRunning, running: !!state.loggerRunning, paused: false, storage_ok: false, file: state.loggerFile, file_rows: 0, files: 0, queued: 0,
       written: 0, dropped: 0, errors: 0, rotations: 0,
-      can: { enabled: false, file: "", file_rows: 0, files: 0, queued: 0, frames_written: 0, frames_dropped: 0, rotations: 0 }, dir: "/sd/logs" }),
-    "/api/fs/info": () => J({ total: 3038806016, used: 327680 }),
+      can: { enabled: false, file: "", file_rows: 0, files: 0, queued: 0, frames_written: 0, frames_dropped: 0, rotations: 0 },
+      salvaged: state.loggerSalvaged || 0, corrupt: state.loggerCorrupt || 0, dir: "/sd/logs" }),
+    "/api/fs/info": (full) => (/path=\/data/.test(full || "") ? J({ total: 6029312, used: 1060864 })
+      : !state.sdMounted ? J({ error: "invalid path" }, 400) : J({ total: 3038806016, used: 327680 })),
     "/api/rtc": () => J({ time: new Date().toISOString(), valid: true, rtc: null, sntp: { enabled: true, server: "pool.ntp.org", last_sync: null } }),
     "/api/logs/status": () => J({ dropped: 0, sinks: { ring: true, uart: true } }),
     "/api/logs/ring": () => T("I (1234) main: WiCAN v6 preview mock\nI (1240) wifi_manager: STA got IP 10.42.0.62\nI (2001) autopid: started (3 pids / default group)\nW (9004) event_manager: rule low_batt disabled\n"),
@@ -142,7 +155,7 @@
     ] }),
     "/api/certs": () => J({ sets: [{ name: "homeca", ca: true, cert: false, key: false }] }),
     "/api/restart/history": () => J({ boot_count: 42, unexpected_resets: 1, records: [
-      { seq: 42, reason: "software", planned: true, planned_reason: "config_apply", source: "config_server", flags: 0, boot_time: now() - 8040, time_valid: true, request_time: now() - 8041, request_uptime_ms: 120033 },
+      { seq: 42, ...state.lastRestart, flags: 0, boot_time: now() - 8040, time_valid: true, request_time: now() - 8041, request_uptime_ms: 120033 },
       { seq: 41, reason: "poweron", planned: false, planned_reason: "none", source: "unknown", flags: 0, boot_time: now() - 90000, time_valid: true, request_time: 0, request_uptime_ms: 0 },
     ] }),
     "/api/events/log": () => J({
@@ -184,18 +197,27 @@
     },
     "/api/j2534": () => J({ enabled: false, allow_reflash: false, allow_lan: false, sessions: 0 }),
     "/api/sleep": () => J({ state: "awake", voltage: 12.52, sleep_v: 12.2, wake_v: 13.2 }),
-    "/api/fs/list": (full) => (/\/sd\/logs/.test(full || "")
-      ? J({ path: "/sd/logs", entries: [
+    /* fixtures per folder + whatever probes uploaded (state.files) or created (state.dirs) */
+    "/api/fs/list": (full) => {
+      const p = ((new URLSearchParams((full || "").split("?")[1] || "")).get("path") || "/data").replace(/(.)\/$/, "$1");
+      if (!/^\/(data|sd)(\/|$)/.test(p) || (!state.sdMounted && /^\/sd/.test(p))) return J({ error: "invalid path" }, 400);
+      const fixed = p === "/sd/logs" ? [
           { name: "dl_" + String(state.logEpoch).padStart(10, "0") + ".jsonl", dir: false, size: 240000 },
           { name: "dl_" + String(state.logEpoch).padStart(10, "0") + ".csv", dir: false, size: 120000 },
           { name: "dl_" + String(state.logEpoch).padStart(10, "0") + ".wdl", dir: false, size: 4096 },
           { name: "dl_" + String(state.logEpoch).padStart(10, "0") + ".db", dir: false, size: 28672 },
           { name: "dl_1784563543.db", dir: false, size: 28672 }, { name: "can_1784563543.wdl", dir: false, size: 0 },
           { name: "dl_1784329639.jsonl", dir: false, size: 42480 }, { name: "can_1783689511.asc", dir: false, size: 1498 },
-        ] })
-      : J({ path: "/data", entries: [
-          { name: "autopid", dir: true, size: 0 }, { name: "config.json", dir: false, size: 1420 },
-        ] })),
+        ]
+        : p === "/sd" ? [{ name: "logs", dir: true, size: 0 }, { name: "fw", dir: true, size: 0 }, { name: "bench_ok.txt", dir: false, size: 33 }]
+        : p === "/data" ? [{ name: "autopid", dir: true, size: 0 }, { name: "scripts", dir: true, size: 0 }, { name: "config.json", dir: false, size: 1420 }]
+        : [];
+      const seen = new Set(fixed.map((e) => e.name)), extra = [];
+      const child = (k) => (k.startsWith(p + "/") && !k.slice(p.length + 1).includes("/")) ? k.slice(p.length + 1) : null;
+      for (const dname of state.dirs) { const n = child(dname); if (n && !seen.has(n)) { seen.add(n); extra.push({ name: n, dir: true, size: 0 }); } }
+      for (const f of Object.keys(state.files)) { const n = child(f); if (n && !seen.has(n)) { seen.add(n); extra.push({ name: n, dir: false, size: state.files[f].length }); } }
+      return J({ path: p, entries: [...fixed, ...extra] });
+    },
     "/api/autopid/std_scan": () => J(state.scan),
     "/api/autopid/std_scan/result": () => (state.scan.status === "done"
       ? J({ version: 1, protocol: "6", supported: STD_ROWS, found: STD_ROWS.length, ts: now() })
@@ -217,11 +239,27 @@
     }
     if (method === "PUT" && path === "/api/autopid/config") { state.autopidCfg = body || state.autopidCfg; return J({ ok: true }); }
     const q = new URLSearchParams((full || "").split("?")[1] || "");
+    if (method === "POST" && path === "/api/autopid/dbc") { const n = q.get("name") || "dbc"; state.dbcs = [...(state.dbcs || []), { name: n, messages: 1, signals: 1, bytes: String((opts && opts.body) || "").length }]; return J({ ok: true, name: n, messages: 1, signals: 1 }); }
+    if (method === "POST" && path === "/api/fs/mkdir") { const p = q.get("path"); if (!p) return J({ error: "invalid path" }, 400); state.dirs.add(p); return J({ ok: true }); }   /* query string, like the firmware */
     if (method === "POST" && path === "/api/fs/upload") {
-      let txt = ""; try { txt = typeof opts.body === "string" ? opts.body : new TextDecoder().decode(opts.body); } catch (e) { txt = ""; }
+      let txt = "";
+      try {
+        if (typeof opts.body === "string") txt = opts.body;
+        else if (opts.body && opts.body.get && opts.body.get("file")) txt = await opts.body.get("file").text();   /* FormData (XHR shim or fetch) */
+        else txt = new TextDecoder().decode(opts.body);
+      } catch (e) { txt = ""; }
       state.files[q.get("path")] = txt; return J({ ok: true, path: q.get("path"), size: txt.length });
     }
-    if (method === "DELETE" && path === "/api/fs/file") { delete state.files[q.get("path")]; return J({ ok: true }); }
+    if (method === "DELETE" && path === "/api/fs/file") {
+      const p = q.get("path") || "";
+      if (state.loggerRunning && p === "/sd/logs/" + state.loggerFile) return J({ error: "file in use" }, 409);
+      if (state.dirs.has(p)) {
+        const busy = Object.keys(state.files).some((f) => f.startsWith(p + "/")) || [...state.dirs].some((d) => d.startsWith(p + "/"));
+        if (busy) return J({ error: "invalid path" }, 400);   /* the firmware refuses non-empty folders the same way */
+        state.dirs.delete(p); return J({ ok: true });
+      }
+      delete state.files[p]; return J({ ok: true });
+    }
     if (method === "POST" && path === "/api/scripts/run") {
       state.runs++;
       if (!(S.script_engine && S.script_engine.values.enabled)) return J({ ok: false, error: "busy or script_engine disabled" }, 409);
@@ -309,7 +347,7 @@
     if (m) {
       const c = m[1];
       if (!S[c]) return J({ error: "unknown component" }, 404);
-      if (method === "PUT") { S[c].values = { ...body }; return J({ changed: true }); }
+      if (method === "PUT") { state.puts = (state.puts || 0) + 1; S[c].values = { ...body }; return J({ changed: true }); }
       return J({ ...S[c].values, degraded: false, pending_reboot: false });
     }
 
@@ -318,6 +356,22 @@
     return J({ error: "mock: " + method + " " + path + " not implemented" }, 404);
   }
 
+  /* XMLHttpRequest over the same mock — pages that want upload progress use XHR */
+  window.XMLHttpRequest = class {
+    constructor() { this.upload = {}; this.status = 0; this.responseText = ""; }
+    open(m, u) { this._m = m; this._u = u; }
+    setRequestHeader() {}
+    send(body) {
+      const rel = String(this._u).replace(/^https?:\/\/[^/]+/, "");
+      Promise.resolve(handle(rel.split("?")[0], { method: this._m, body }, rel))
+        .then(async (r) => {
+          if (this.upload.onprogress) this.upload.onprogress({ lengthComputable: true, loaded: 1, total: 1 });
+          this.status = r.status || 200; this.responseText = r.text ? await r.text() : "";
+          if (this.onload) this.onload();
+        })
+        .catch((e) => { if (this.onerror) this.onerror(e); });
+    }
+  };
   window.__mockState = state;   /* probes read counters (gate calls) and set the active log file */
   window.fetch = (url, opts) => {
     const u = String(url);
@@ -330,25 +384,36 @@
   window.WebSocket = class {
     constructor(url) {
       this.url = String(url); this.readyState = 0; this._timers = [];
-      setTimeout(() => { this.readyState = 1; this.onopen && this.onopen({}); this._start(); }, 60);
+      setTimeout(() => {
+        /* state.wsCanRefuse: the channel is disabled on the device (handshake refused) */
+        if (state.wsCanRefuse && this.url.includes("/ws/can")) { this.readyState = 3; this.onclose && this.onclose({}); return; }
+        this.readyState = 1; this.onopen && this.onopen({}); this._start();
+      }, 60);
     }
     _start() {
       if (this.url.includes("/ws/can")) {
+        /* state.wsCanPeriod: ms between frames (read when the socket opens); every
+           10th frame is a remote frame; the first four bytes are letters so the
+           monitor's ASCII column shows something readable */
         const ids = ["123", "2C4", "3E8", "18DAF110"];
+        let n = 0;
         this._timers.push(setInterval(() => {
           if (!this.onmessage) return;
-          const id = ids[Math.random() * ids.length | 0];
+          n++;
+          if (n % 10 === 0) { this.onmessage({ data: "r7DF0\r" }); return; }
+          const id = ids[n % ids.length];
           const dlc = 8; let data = "";
-          for (let i = 0; i < dlc; i++) data += (Math.random() * 256 | 0).toString(16).padStart(2, "0").toUpperCase();
+          for (let i = 0; i < dlc; i++) data += (i < 4 ? 0x41 + ((n + i) % 26) : (Math.random() * 256 | 0)).toString(16).padStart(2, "0").toUpperCase();
           const f = (id.length > 3 ? "T" : "t") + id + dlc + data;
           this.onmessage({ data: f + "\r" });
-        }, 120));
+        }, state.wsCanPeriod || 120));
       }
       if (this.url.includes("/ws/cli")) {
         setTimeout(() => this.onmessage && this.onmessage({ data: "WiCAN preview console (mock)\r\nwican> " }), 150);
       }
     }
     send(d) {
+      if (this.url.includes("/ws/can")) (state.wsSent = state.wsSent || []).push(String(d));   /* the monitor's transmit */
       if (this.url.includes("/ws/cli") && this.onmessage) {
         setTimeout(() => this.onmessage({ data: "(preview: no device)\r\nwican> " }), 80);
       }
