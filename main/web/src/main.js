@@ -2923,6 +2923,10 @@ function checkStatus() {
         if (restartBootCountEl) restartBootCountEl.innerHTML = (obj.restart_boot_count ?? 0);
         const restartUnexpectedCountEl = document.getElementById("restart_unexpected_reset_count");
         if (restartUnexpectedCountEl) restartUnexpectedCountEl.innerHTML = (obj.restart_unexpected_reset_count ?? 0);
+        const bluetoothIdEl = document.getElementById("bluetooth_id");
+        if (bluetoothIdEl) bluetoothIdEl.innerHTML = (obj.bluetooth_id || "N/A");
+        const wifiMacEl = document.getElementById("wifi_mac");
+        if (wifiMacEl) wifiMacEl.innerHTML = (obj.wifi_mac || "N/A");
         checkFirmwareUpdate();
     };
     xhttp.open("GET", "/check_status");
