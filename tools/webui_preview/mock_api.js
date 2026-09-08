@@ -100,13 +100,22 @@
     "/api/vpn": () => J({ state: "connected", type: "wireguard", endpoint: "vpn.example.com:51820", ts_ip: "", ts_peers: 0, connects: 1, failures: 0, uptime_s: 8040 }),
     "/api/usb": () => J({ enabled: true, device_present: true, host_active: true, eth_connected: true, driver: "cdc_ncm", ip: "192.168.7.2", attaches: 1 }),
     /* espnetlink_link: paired steady state by default; state.espnlBlocked
-       flips to the fresh-device hold (factory AP password, 2026-09-07) */
-    "/api/espnetlink": () => J(state.espnlBlocked
+       flips to the fresh-device hold (factory AP password, 2026-09-07);
+       state.espnlUnsupported to the stale-dongle-firmware case (bench
+       2026-09-08: a July build, api 6, 404 on the WiFi-modem routes) */
+    "/api/espnetlink": () => J(state.espnlUnsupported
+      ? { enabled: true, mode: "usb_rndis", auto_pair: true, paired: false, ssid: "", device_id: "206ef1894a5d", uplink: "espnetlink_usb", on_link: true, host: "192.168.7.1",
+          pair_blocked_factory_pw: false, last_error: "the dongle firmware cannot select the USB class (no usb_dev_ethernet settings): it stays on CDC-NCM. Update the dongle firmware",
+          dongle_fw: "v1.22-41-gf0e8804-dirty", dongle_api: 6, dongle_api_min: 7, health_unsupported: true,
+          usb: { attached: true, pair_state: "unsupported", cuts: 0, vbus_cycles: 0, errors: 1 }, gps: { valid: true, age_ms: 900, satellites: 13 }, dongle: { valid: false }, polls: 30, failures: 0, link_ups: 1 }
+      : state.espnlBlocked
       ? { enabled: true, mode: "wifi_modem", auto_pair: true, paired: false, ssid: "", device_id: "206ef1894a5d", uplink: "none", on_link: false, host: "",
           pair_blocked_factory_pw: true, last_error: "the access point still has the factory password: set a new one (8 to 63 characters)",
-          usb: { attached: true, pair_state: "idle", cuts: 0, vbus_cycles: 0, errors: 0 }, gps: { valid: false, age_ms: 0 }, dongle: { valid: false }, polls: 0, failures: 0, link_ups: 0 }
+          dongle_fw: "v1.22-41-gf2f6aa2", dongle_api: 7, dongle_api_min: 7, health_unsupported: false,
+          usb: { attached: true, pair_state: "hold", cuts: 0, vbus_cycles: 0, errors: 0 }, gps: { valid: false, age_ms: 0 }, dongle: { valid: false }, polls: 0, failures: 0, link_ups: 0 }
       : { enabled: true, mode: "wifi_modem", auto_pair: true, paired: true, ssid: "ESPNetLink_894A5D", device_id: "206ef1894a5d", uplink: "espnetlink", on_link: true, host: "192.168.80.1",
           pair_blocked_factory_pw: false, last_error: "",
+          dongle_fw: "v1.22-41-gf2f6aa2", dongle_api: 7, dongle_api_min: 7, health_unsupported: false,
           usb: { attached: false, pair_state: "idle", cuts: 0, vbus_cycles: 0, errors: 0 }, gps: { valid: true, age_ms: 1200, satellites: 7 },
           dongle: { valid: true, lte_connected: true, rssi_dbm: -59, operator: "ALDI Mobile", network_type: "eMTC", gps_fix: true, usb_data: false }, polls: 42, failures: 0, link_ups: 1 }),
     "/api/usb/acm": () => J({ connected: true }),

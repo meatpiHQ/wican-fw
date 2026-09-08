@@ -349,8 +349,11 @@ def main():
         check("hold: zero-touch held while the AP has the factory password",
               hold is not None, hold[1][-70:] if hold else "not seen")
         st_h = espnl_status(wc)
-        check("hold: no pairing churn (machine stays idle)",
-              st_h.get("pair_state") in (None, "idle") and
+        # 2026-09-08: the hold is decided after identify + key read, so
+        # the machine parks in "hold" (never a VBUS cycle) - "idle" is the
+        # older attach-edge hold
+        check("hold: no pairing churn (machine idle or parked in hold)",
+              st_h.get("pair_state") in (None, "idle", "hold") and
               not st_h.get("paired"), str(st_h)[:90])
 
         # the user sets a new AP password over the AP (as the banner asks)
@@ -382,6 +385,13 @@ def main():
                             since=t_pair)
         check("pair: dongle identified over USB", ident is not None,
               f"{ident[0]:.0f} s" if ident else "not seen")
+        # the dongle build under test must be current: a July test build
+        # (api 6, no WiFi-modem routes) passed identify and then 404'd
+        # everything (field + bench 2026-09-08)
+        m_api = re.search(r"api (\d+)\)", ident[1]) if ident else None
+        check("pair: dongle firmware is current (api >= 7)",
+              m_api is not None and int(m_api.group(1)) >= 7,
+              ident[1][-70:] if ident else "not seen")
         creds = wc.wait_for(r"espnetlink: credentials ok|stored; reboot "
                             r"after the cut|paired with", 90, since=t_pair)
         check("pair: credentials read + stored", creds is not None,

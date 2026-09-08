@@ -182,6 +182,14 @@ def dongle_get_class(tries=5):
     return d.get("class") if isinstance(d, dict) else None
 
 
+def dongle_get_share(tries=5):
+    """`lte_upstream_pppos.ncm_share` as persisted on the dongle: a freshly
+    erased dongle ships it False, so the FIRST USB-mode entry must submit
+    it (one dongle reboot) - leg 1 expects a reboot iff this was False."""
+    d = pi_json(f"http://{DONGLE_IP}/api/settings/lte_upstream_pppos", tries)
+    return d.get("ncm_share") if isinstance(d, dict) else None
+
+
 def dongle_set_class(cls, budget_s=90):
     """PUT + submit on the DONGLE and WAIT for it: poll until the class
     reads back as `cls` on a fresh boot. Synchronous by observation."""
@@ -347,6 +355,9 @@ def main():
         # ---- 1: wifi -> usb_ncm ------------------------------------------
         if leg_entry_ok(con, "leg1", "wifi_modem"):
             up_before = (dongle_health() or {}).get("uptime_s", 0)
+            share_before = dongle_get_share()
+            note(f"leg1: dongle ncm_share before the switch: {share_before}"
+                 " (False = fresh dongle, the ensure pass submits it once)")
             t_leg = time.time()
             ok, b0, u0 = switch(con, "leg1", "usb_ncm")
             if ok:
@@ -363,12 +374,22 @@ def main():
                 check("leg1: boot-cut hint cleared by the restore",
                       h is not None and h.get("boot_cut") is False,
                       str(h.get("boot_cut") if h else None))
-                check("leg1: no dongle reboot (ensure pass idempotent)",
-                      h is not None and up_before > 0 and
-                      h["uptime_s"] >= up_before +
-                      (time.time() - t_leg) - 30,
-                      f"uptime {up_before} -> "
-                      f"{h['uptime_s'] if h else '?'}")
+                survived = (h is not None and up_before > 0 and
+                            h["uptime_s"] >= up_before +
+                            (time.time() - t_leg) - 30)
+                if share_before is False:
+                    # bench 2026-09-08 on a freshly erased dongle: the
+                    # ensure pass had to set ncm_share=true, ONE reboot
+                    check("leg1: fresh dongle: ncm_share submitted once "
+                          "(one dongle reboot)", h is not None and
+                          not survived and dongle_get_share() is True,
+                          f"uptime {up_before} -> "
+                          f"{h['uptime_s'] if h else '?'}")
+                else:
+                    check("leg1: no dongle reboot (ensure pass idempotent)",
+                          survived,
+                          f"uptime {up_before} -> "
+                          f"{h['uptime_s'] if h else '?'}")
                 p1 = espnl_status(con)
                 time.sleep(8)
                 p2 = espnl_status(con)

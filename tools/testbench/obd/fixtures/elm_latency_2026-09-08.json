@@ -1,0 +1,13 @@
+{
+  "note": "ELM327 request-loop latency on the bench (ECU simulator, RPM 800 on 7E8; 200 requests per row; probe run on rpi001 over the wican-bench hotspot against the WiCAN Pro obd0 TCP:35000). 'before' = component firmware at 33006d6 with the RX task's 20 ms uart_read_bytes budget and autopid co-mastering the chip (11 std PIDs/s); 'after' = the 2026-09-08 fix set (autopid yields to the app, event-driven chip RX, TCP_NODELAY, cmd engine per-request subscribe, baseline restore on resume). 'bad' = answers that were not a clean reply to the request (autopid's lines, STOPPED, NO DATA). Reference rows: a vLinker FS (MIC3322 V2.3.02, FTDI FT-X, 1 Mbaud) on the same simulator bus, measured from the PC over USB with the FTDI latency timer at its 16 ms default (its hinted p50 of 15.9 ms with stdev 0.1 IS that timer). Same day: the vLinker passed the ATMA flood at 1000 and 2500 frames/s and hit BUFFER FULL at 4000 (its 1 Mbaud UART tops out ~100 KB/s; the WiCAN's MIC3624 at 2 Mbaud passed 4000), and matched the WiCAN on the 4 KB VT legs (tx 4064 B 594 ms, rx 4094 B 556 ms, byte-exact).",
+  "rows": [
+    {"label": "before, autopid polling", "cmd": "010C 1", "rate_hz": 34.67, "min": 22.1, "p50": 26.0, "p95": 32.6, "max": 154.5, "bad": 8, "n": 200},
+    {"label": "before, autopid polling", "cmd": "010C",   "rate_hz": 16.36, "min": 21.6, "p50": 69.2, "p95": 95.3, "max": 141.1, "bad": 80, "n": 200},
+    {"label": "before, autopid paused",  "cmd": "010C 1", "rate_hz": 36.77, "min": 23.4, "p50": 26.1, "p95": 33.4, "max": 40.1,  "bad": 0, "n": 200},
+    {"label": "before, autopid paused",  "cmd": "010C",   "rate_hz": 13.21, "min": 65.1, "p50": 72.0, "p95": 94.7, "max": 158.5, "bad": 0, "n": 200},
+    {"label": "after, autopid configured", "cmd": "010C 1", "rate_hz": 128.96, "min": 3.6, "p50": 5.2, "p95": 13.8, "max": 214.2, "bad": 0, "n": 200},
+    {"label": "after, autopid configured", "cmd": "010C",   "rate_hz": 23.43, "min": 32.7, "p50": 37.6, "p95": 69.6, "max": 137.2, "bad": 0, "n": 200},
+    {"label": "vLinker FS, USB COM39 @1M (FTDI, 16 ms latency timer)", "cmd": "010C 1", "rate_hz": 62.53, "min": 15.3, "p50": 15.9, "p95": 16.0, "max": 16.2, "bad": 0, "n": 200},
+    {"label": "vLinker FS, USB COM39 @1M (FTDI, 16 ms latency timer)", "cmd": "010C",   "rate_hz": 20.27, "min": 31.6, "p50": 47.8, "p95": 79.8, "max": 208.1, "bad": 0, "n": 200}
+  ]
+}

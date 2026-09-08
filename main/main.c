@@ -209,6 +209,7 @@ void app_main(void)
               battery_monitor_register_http);
     main_boot_init("led_manager_register_http", led_manager_register_http);
     main_boot_init("autopid_register_http", autopid_register_http);
+    main_boot_init("obd_chip_register_http", obd_chip_register_http);
     main_boot_init("ha_webhooks_register_http", ha_webhooks_register_http);
     main_boot_init("event_manager_register_http", event_manager_register_http);
     main_boot_init("rtc_manager_register_http", rtc_manager_register_http);

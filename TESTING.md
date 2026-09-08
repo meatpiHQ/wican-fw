@@ -36,8 +36,8 @@ serial markers for target apps, pytest verdict for HIL):
 | `.\test.ps1 conserve` | **Counter-conservation benches** (CAN / USB-NCM / WiFi → `* CONSERVATION PASS`): exactly-N accounting against a known generator, the §7 performance-truth net | PCAN; NCM leg needs the device-role flip |
 | `.\test.ps1 dwc2` | **DWC2 kill-vs-ISR race hammer** (`dwc2_hammer_test.py` → `DWC2 HAMMER PASS`, ~10 min): ACM mixed-timeout kill floods + NCM OUT blasts + mid-flight teardown churn vs the 2026-07-17 crash class | espnetlink dongle on the USB host port |
 | `python tools\testbench\wifi\wican_fresh_bench.py --wican COMx --psu COMz` | **WiCAN Pro out-of-the-box scenario** (→ `WICAN FRESH PASS`, ~5 min): erase-flash + flash, PSU cold boot with the console captured from power-on; asserts the first-boot defaults (wifi_manager mode=ap, 0 STA networks, derived `WiCAN_<id>` AP, USB host enabled, espnetlink wifi_modem unpaired), then plays the new user: the Pi joins the AP with the default `@meatpi#`, loads the web UI + `/api/settings` + the wifi_manager schema, stages home WiFi (the Pi `wican-bench` hotspot) + apsta through the settings API exactly as the UI does, submits (ONE planned reboot) and expects the STA on the home network WHILE the phone stays on the AP, the AP still up, the API still answering; planned reboots only, 0 E lines. `--no-erase` re-runs on an already-fresh unit. Bench 2026-08-31: PASS (STA on the home network 9–34 s after the config reboot; a dongle on the connector pairs in the background = one extra planned reboot, accounted for) | WiCAN console + PSU + rpi001 (`wtest0` hotspot, `wtest1` free) |
-| `python tools\testbench\wifi\espnetlink_fresh_bench.py --wican COMx --dongle COMy --psu COMz` | **ESPNetLink out-of-the-box scenario** (→ `ESPNL FRESH PASS`, ~8 min): erase-flash + flash BOTH devices, PSU cold boot with both consoles captured from power-on, the Pi joins the fresh `WiCAN_<id>` AP as the user's phone and STAYS there; asserts the dongle's first-boot AP-password provisioning, the PAIRING HOLD while the WiCAN AP still has the factory password (machine idle + warning, 2026-09-07), the user's mandatory AP-password change (reboot), then identify → credentials → store (wifi mode ap→apsta) → cut → ONE WiCAN reboot, then the STA joining the dongle AP + uplink=espnetlink WHILE the client sits on the WiCAN AP (field-hit 2026-08-31: the AP-client STA pause blocked the first association forever), the user's view via `GET /api/espnetlink` over the WiCAN AP, the stored key read back (and pushed into the Pi's `espnl-client` profile — the fresh dongle has a new password), planned-reboots-only, 0 E lines on both consoles. `--no-client` = bare from-scratch path; `--no-erase` = re-run on the already-fresh pair. Also plays the deterministic AP-client hazard (phone parked, `espnetlink repair` VBUS-cycles the dongle, the STA must re-join ≤150 s — unfixed wifi_manager: never; fixed: +68 s). Bench 2026-08-31: PASS (zero-touch pairing 18–21 s from power-on, STA on the dongle AP at ~29 s) | both consoles + PSU + rpi001 (`wtest1` free) |
-| `python tools\testbench\wifi\espnetlink_mode_bench.py` | **ESPNetLink transport-mode switching** (→ `ESPNL MODE PASS`, ~15 min): the full `espnetlink.mode` transition matrix — wifi_modem → usb_ncm (AP-path `usb_data` restore un-cuts the boot-cut dongle, `boot_cut` clears, NO dongle reboot, driver cdc_ncm) → usb_rndis (class flip = exactly ONE dongle reboot, re-enum RNDIS) → wifi_modem (cut, `boot_cut` re-armed, dongle NOT rebooted — a live GPS fix survives) → usb_rndis DIRECT (restore + class flip in ONE ensure pass, still one dongle reboot) → restore. Every WiCAN reboot must be planned (restart_tracker `unexpected resets` may not grow); all assertions are OBSERVED state over the console + the dongle's `/api/wifi_modem` (HTTP statuses are advisory — fresh-AP associations lose response status lines routinely); the WiCAN's STA address is read live from the console (DHCP lease moves after cold cycles). `wifi:Invalid MMIE` (esp_wifi PMF noise) and the IDF HTTP client's single connect-failure triplet (a poll racing the dongle's planned mid-transition reboot) are whitelisted. Bench 2026-08-25: PASS, 0 unexpected resets, 0 E lines | DUT console COM1175 + rpi001 (`espnl-client`) + paired dongle |
+| `python tools\testbench\wifi\espnetlink_fresh_bench.py --wican COMx --dongle COMy --psu COMz` | **ESPNetLink out-of-the-box scenario** (→ `ESPNL FRESH PASS`, ~8 min): erase-flash + flash BOTH devices, PSU cold boot with both consoles captured from power-on, the Pi joins the fresh `WiCAN_<id>` AP as the user's phone and STAYS there; asserts the dongle's first-boot AP-password provisioning, the PAIRING HOLD while the WiCAN AP still has the factory password (identify + key read, then parked in `hold` with the warning, no VBUS cycle, 2026-09-08; the dongle build under test must report `api >= 7`, a stale dongle binary fails here instead of masquerading as a WiCAN bug), the user's mandatory AP-password change (reboot), then identify → credentials → store (wifi mode ap→apsta) → cut → ONE WiCAN reboot, then the STA joining the dongle AP + uplink=espnetlink WHILE the client sits on the WiCAN AP (field-hit 2026-08-31: the AP-client STA pause blocked the first association forever), the user's view via `GET /api/espnetlink` over the WiCAN AP, the stored key read back (and pushed into the Pi's `espnl-client` profile — the fresh dongle has a new password), planned-reboots-only, 0 E lines on both consoles. `--no-client` = bare from-scratch path; `--no-erase` = re-run on the already-fresh pair. Also plays the deterministic AP-client hazard (phone parked, `espnetlink repair` VBUS-cycles the dongle, the STA must re-join ≤150 s — unfixed wifi_manager: never; fixed: +68 s). Bench 2026-08-31: PASS (zero-touch pairing 18–21 s from power-on, STA on the dongle AP at ~29 s) | both consoles + PSU + rpi001 (`wtest1` free) |
+| `python tools\testbench\wifi\espnetlink_mode_bench.py` | **ESPNetLink transport-mode switching** (→ `ESPNL MODE PASS`, ~15 min): the full `espnetlink.mode` transition matrix — wifi_modem → usb_ncm (AP-path `usb_data` restore un-cuts the boot-cut dongle, `boot_cut` clears, NO dongle reboot, driver cdc_ncm) → usb_rndis (class flip = exactly ONE dongle reboot, re-enum RNDIS) → wifi_modem (cut, `boot_cut` re-armed, dongle NOT rebooted — a live GPS fix survives) → usb_rndis DIRECT (restore + class flip in ONE ensure pass, still one dongle reboot) → restore. Every WiCAN reboot must be planned (restart_tracker `unexpected resets` may not grow); all assertions are OBSERVED state over the console + the dongle's `/api/wifi_modem` (HTTP statuses are advisory — fresh-AP associations lose response status lines routinely); the WiCAN's STA address is read live from the console (DHCP lease moves after cold cycles). `wifi:Invalid MMIE` (esp_wifi PMF noise) and the IDF HTTP client's single connect-failure triplet (a poll racing the dongle's planned mid-transition reboot) are whitelisted. Bench 2026-08-25: PASS, 0 unexpected resets, 0 E lines. Bench 2026-09-08: PASS 31/31 on a freshly erased dongle (current tree, api 7) + the reworked WiCAN pairing states; leg 1 now expects ONE dongle reboot iff the dongle's `lte_upstream_pppos.ncm_share` was still False before the switch (a fresh dongle submits it once), no reboot otherwise | DUT console COM1175 + rpi001 (`espnl-client`) + paired dongle |
 | `python tools\testbench\wifi\espnetlink_roam_bench.py` | **ESPNetLink roaming scenario** (→ `ESPNL ROAM PASS`, ~8 min): the drive-away / drive-home story in `espnetlink.mode=wifi_modem` — away on the dongle (uplink=espnetlink, GPS polls + fix) → a temp Pi hotspot broadcasts the DUT's OWN primary SSID/key, read from `/api/settings/backup` ("drive home") → roam-to-preferred lands within `sta_roam_interval_s`+120 s, uplink=wifi, dongle polls STOP → hotspot down ("drive away") → fallback to the dongle ≤150 s with the GPS fix surviving (the dongle is never rebooted) → home again, zero console E lines. Console-observed only (a client on the DUT's AP pauses its STA reconnects); the temp AP pins `ipv4.addresses 10.42.9.1/24` (NM's default shared subnet collides with the other hotspot and rolls the fresh AP back). Bench 2026-08-24: roam-home 116/66 s, fallback 18 s, fix valid +3 s | DUT console COM1175 + rpi001 (wtest0 borrowed for the run, `wican-bench` restored after) + paired dongle |
 | `.\test.ps1 logsinks` | **External log sinks conservation** (`log_sinks_bench_test.py` → `LOG SINKS BENCH PASS`, runs ON the Pi; also a `live` stage): gates-closed defaults (port closed, counters zero, ws_log migration present), then per-sink conservation vs the `logsinks emit` known generator — TCP tail exactly-N, UDP collector exactly-N, `/ws/log` stream, SD file content + rotation + retention, per-sink `in == out + dropped` identity, restore. Reboots the DUT 3× | main fw on DUT + rpi001 + SD card + ws_cli enabled |
 | `.\test.ps1 all` | host + every target app + hil (live/perf are separate — `all` leaves a test app, not the main firmware, on the DUT) | both |
@@ -351,6 +351,125 @@ hold the bench at >= 13.5 V, or set `pause_follow_sleep=false` (or an
 explicit low `pause_below_mv`) for the run and restore after. Boot log
 line `autopid: request pause follows sleep voltage (13.10 V)` confirms
 the follow mode is active (verified on hw 2026-07-21).
+
+## ELM327 app responsiveness bench (PC-run, 2026-09-08)
+
+`python tools\testbench\obd\elm_app_bench.py [dut[:port]] [--dut-ip 10.42.1.194]`
+(→ `ELM APP PASS`, ~1 min; the request loop `elm_latency_probe.py` is
+copied to rpi001 and runs there over the hotspot, the API is read
+through the tunnel). Born from the field report "Car Scanner feels slow,
+the RPM dial is choppy, values jump" against the component firmware.
+Reproduced on the bench BEFORE the fix with autopid polling its 11
+standard PIDs beside the app: 80 of 200 hint-less `010C` requests (8 of
+200 hinted `010C 1`) came back with autopid's own lines (`0105 / 41 05
+82`), `STOPPED` or `NO DATA` — the chip fans every line out to every
+subscriber and an app command landing mid-poll stops the poll — versus
+0 of 200 with autopid paused; and every response carried the RX task's
+20 ms `uart_read_bytes` budget (hinted p50 26 ms for a ~3 ms chip
+answer). Fix: autopid yields the chip while a bridged client is active
+(10 s idle window, legacy parity), the chip RX task reads on UART
+events, `TCP_NODELAY` on socket clients. Legs: preflight (autopid
+enabled + polling, obd0 up) → hinted loop beside the configured autopid
+(zero foreign/STOPPED/NO DATA, p50 ≤ 12 ms, p95 ≤ 40 ms, ≥ 40 req/s,
+`paused_client` seen, `polls_ok` frozen) → hint-less loop (clean, p95 ≤
+120 ms — the chip's own multi-ECU wait) → resume ≤ 15 s AND the resumed
+polls succeed (the app leaves the chip with `ATS0`/`ATH1`/…; the poller
+re-sends its protocol prelude — without that every resumed poll failed
+to parse, 110 failures in a row on the first fixed build). Needs the ECU
+simulator answering on the chip's bus, `autopid.enabled` with PIDs
+configured, `obd0` + `br_tcp_obd` (defaults). **Bench 2026-09-08: PASS**
+— hinted loop 129 req/s, p50 5.2 ms, p95 13.8 ms (one 214 ms WiFi
+outlier in 200), 0 foreign answers, `paused_client` seen, `polls_ok`
+frozen; hint-less loop 23.4 req/s, p50 37.6 ms, p95 69.6 ms, 0 foreign
+answers; resume 9.7 s after the last command, +41 ok / +0 failed polls
+after it; 0 new `E (` lines on that boot. Before the fix on the same
+rig: hinted p50 26 ms at 35 req/s with 8/200 foreign answers, hint-less
+p50 69 ms at 16 req/s with 80/200.
+
+**Reference-adapter comparison** — `tools/testbench/obd/elm_compare.py`
+prints one markdown table: the stored before/after rows
+(`tools/testbench/obd/fixtures/elm_latency_2026-09-08.json`) plus live
+rows for any `--tcp label=host[:port]` (a WiCAN) and `--serial
+label=COMx[:baud]` (a USB ELM adapter such as an OBDLink SX/EX on the
+same simulator bus; needs pyserial). Same probe, same two request
+patterns (`010C 1` fast mode, plain `010C`), 200 requests each.
+Procedure for the OBDLink: plug it into the simulator's OBD socket and
+the PC, find its COM port (`python -m serial.tools.list_ports -v`), for
+an FTDI-based adapter set the port's latency timer to 1 ms in Device
+Manager (the 16 ms default lands on every response), then
+`python tools\testbench\obd\elm_compare.py --serial obdlink=COMx:115200`.
+Compare the hinted rows for the transport floor and the hint-less rows
+for the chip's multi-ECU wait; the WiCAN's TCP row belongs on the Pi or
+a PC on the DUT's WiFi, not through the ssh tunnel.
+**Reference run 2026-09-08, vLinker FS** (MIC3322 V2.3.02 behind an FTDI
+FT-X, COM39 @ 1 000 000 baud, replacing the WiCAN on the simulator bus;
+`atma_flood_bench.py`/`vt_large_bench.py` take `--serial COM39:1000000`
+for the same legs): hinted `010C 1` p50 15.9 ms at 62.5 req/s with stdev
+0.1 — a flat floor that is the FTDI latency timer's 16 ms default, not the
+chip (the WiCAN after the fix: 5.2 ms at 129 req/s over WiFi); hint-less
+`010C` p50 47.8 ms vs the WiCAN's 37.6; ATMA flood PASS at 1000 and 2500
+frames/s (exactly-N) and `BUFFER FULL` after 2047 frames at 4000/s — its
+1 Mbaud UART carries ~100 KB/s and 4000 frame lines/s need 116 KB/s,
+where the WiCAN's chip at 2 Mbaud passed; 4 KB VT legs byte-exact both
+ways (tx 4064 B 594 ms, rx 4094 B 556 ms, the same ~420 ms ATST-dominated
+floor as the WiCAN's 630/557 ms). Set the FTDI latency timer to 1 ms
+before quoting its hinted latency against the WiCAN.
+
+## Large-payload OBD bench: VTFullyRequestCk / 4 KB ISO-TP (PC-run, PCAN, 2026-09-08)
+
+`python tools\testbench\obd\vt_large_bench.py [dut[:port]] [--dut-ip 10.42.1.194] --ecu pcan [--pcan PCAN_USBBUS2] [--tx 64,512,2048,4064] [--rx 64,512,2048,4094] [--capture-args "--no-headers --spaces"]`
+(→ `VT LARGE PASS`, ~2.5 min; v6.0.2 IDF venv python). The MIC chip's
+4 KB ISO-TP paths end to end through the product path (TCP:35000 → bridge
+→ UART → chip → CAN; `vt_large_capture.py` runs on rpi001) against
+`pcan_memory_ecu.py`, a python-can/isotp UDS "memory ECU" on 7E4/7EC
+(byte at address A = A & 0xFF; `0x23` serves it up to 4094 B, `0x36`/`0x3D`
+verify what they receive and send the tester box's `7F 36 78` pending
+first). The simulator's ECU is switched off for the run through its own
+settings API (it answers the whole 7E0–7E7 range) and restored after.
+Default framing = the MTPS-OBD tester's (`wican_pro_tester/MTPS-OBD+Log.TXT`):
+`ATH1 ATS0 ATCAF1 ATAL`, `ATSH7E4`, `VTFullyRequestCk<LLLL>36<bsc><data><CCCC>`,
+NO `1` hint on the reads. Legs: tx 64/512/2048/4064 B (the ECU must
+answer `76 xx` after its pending = every byte verified), rx
+64/512/2048/4094 B (byte-exact at the client), UART overflow / fan-out /
+socket drop counters, byte conservation both ways, and the command-engine
+path via `/api/autopid/test` (WARN: that route's raw buffer is
+AP_RESP_MAX 1024 chars). **Bench 2026-09-08: PASS in both header modes**
+— tx 4064 B: 8 157-char line, chip transmit ~220 ms (+ the ATST wait ≈
+630 ms wall); rx 4094 B: 586 raw lines / 11.7 KB (headers on) or 587 `N:`
+rows / 14.7 KB (headers off), ~555 ms wall, 0 overflows, 0 drops, bytes
+conserved (chip rx == socket out). Chip facts learned: the `1` hint ends
+a multi-frame response after its FIRST FRAME with headers on (2 KB → `NO
+DATA`); assembly + automatic flow control only for 7E0–7E7/7E8–7EF
+(740/748 printed raw First Frames, `ATFCSH/FCSD/FCSM1` did not help);
+the engine accumulator OBD_RESP_MAX was 4 KB and truncated these
+(`response … exceeded 4096 bytes`) — now 16 KB. Open: autopid's own
+AP_RESP_MAX (1024 chars) caps what the runner / test route can read.
+
+## ATMA flood bench (PC-run, PCAN, 2026-09-08)
+
+`python tools\testbench\obd\atma_flood_bench.py [dut[:port]] [--dut-ip 10.42.1.194] --source pcan [--pcan PCAN_USBBUS2] [--rate 2500] [--count 10000] [--id 0x123]`
+(→ `ATMA FLOOD PASS`, ~30 s; use the v6.0.2 IDF venv python — python-can
++ isotp live there). Streams a CAN flood through the MIC chip's monitor
+mode (`ATH1 ATS1 ATCAF0 ATMA`) to an ELM app on TCP:35000 (`atma_capture.py`
+runs on rpi001, the app's seat) and places every lost frame at a hop:
+PCAN sends `--count` frames whose data bytes 0..3 are a big-endian
+counter (exactly-N: every counter once, in order), `/api/obd_chip` gives
+the chip's UART bytes, overflows and per-subscriber fan-out drops,
+`/api/bridges` + `/api/sockets` the pump and socket counters, and the
+native TWAI's `/api/can` `rx` is the on-bus witness that separates a
+chip-side loss from a bus-side one. `--source sim` uses the simulator's
+`broadcast_enabled` instead (static payload, 5 ms floor — rate and line
+integrity only). **Bench 2026-09-08 (final build): PASS at 1000, 2500 and
+4000 frames/s** — 5000 / 10000 / 12000 frames, every counter seen once
+in order, 0 malformed lines, 0 UART overflows, 0 fan-out drops, 0 socket
+drops, bytes conserved chip → socket → client (348 KB at 4000/s = the
+chip printing 56 KB/s with headers on), witness == sent. Before the
+raw-bridge coalescing the same 2500/s run dropped 6052 chunks at the TCP
+bridge's fan-out queue (one socket send per ~29-byte frame line) and
+delivered 3684 of 10000 with spliced lines; the first coalescing cut
+panicked (`prvNotifyQueueSetContainer`) — a member queue was read without
+the queue set — fixed. Needs PCAN_USBBUS2 on the DUT bus, `can_manager`
+running for the witness (optional), autopid may stay enabled (it yields).
 
 ## Autopid DTC/DBC PCAN benches (PC-run, 2026-07-22)
 
