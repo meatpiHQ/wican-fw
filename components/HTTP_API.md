@@ -575,5 +575,5 @@ Config strictly via `/api/settings/wifi_manager` — no bespoke config routes.
 | `/ws/*` (WebSocket channels) | `websocket_manager` (service) | http_server_manager (private) |
 | `/api/autopid/dtc*` | `autopid` (feature layer, §6e4b) | http_server_manager (private) |
 | `/api/autopid/dbc*` | `autopid` (feature layer, §6e4c) | http_server_manager (private) |
-| `/api/webhook` | `ha_webhooks` (feature layer) — HA integration discovery push (GET/POST/DELETE); outbound telemetry `{status,autopid_data,config}` poster. See `ha_webhooks/HTTP_API.md` | http_server_manager (private) |
+| `/api/webhook` | `ha_webhooks` (feature layer) — HA integration discovery push (GET/POST/DELETE); outbound telemetry `{status,autopid_data,config,gps}` poster (`gps` = the contract §5.4 block for HA's Location tracker, 2026-09-09). See `ha_webhooks/HTTP_API.md` | http_server_manager (private) |
 | future: `/api/can/*`, `/api/obd/*`, … | their feature components | http_server_manager (private) |

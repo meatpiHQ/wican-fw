@@ -198,9 +198,10 @@ def main():
         sys.exit(1)
 
     dut = api("/api/status")[1]
-    autopid_on = dut["bits"].get("autopid_enabled")
-    check("DUT autopid enabled (poster gate)", autopid_on,
-          "enable autopid on the bench first" if not autopid_on else "")
+    # informational only: since 2026-09-08 the poster does NOT gate on
+    # autopid (a fresh device ships it off and must still push status);
+    # the autopid-off path is ha_webhook_gate_bench.py
+    print("INFO: DUT autopid_enabled =", dut["bits"].get("autopid_enabled"))
 
     start_receiver(PORT, outfile)
     try:
