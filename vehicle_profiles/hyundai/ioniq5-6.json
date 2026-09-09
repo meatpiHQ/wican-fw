@@ -99,7 +99,7 @@
       "pid": "22B002",
       "pid_init": "ATSH7C6;",
       "parameters": {
-        "ODOMETER_MI": "[B17:B18]",
+        "ODOMETER_MI": "(B15*65536+B17*256+B18)",
         "ODOMETER": "[B12:B14]"
       }
     },
