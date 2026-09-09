@@ -259,7 +259,7 @@ def replace_single_letters(letter: str, expr: str, offset: int):
     return re.sub(rf"\b{letter}\b",f"B{val}",expr)
 
 def replace_double_letters(letters: str, expr: str, offset: int):
-    val = ord(letters.lower()[1])-ord('a')+4+offset+26
+    val = 26*(ord(letters.lower()[0])-ord('a'))+ord(letters.lower()[1])-ord('a')+4+offset+26
     frame_type = (val-1) // 7 
     val += frame_type
     return re.sub(rf"\b{letters}\b",f"B{val}",expr)
