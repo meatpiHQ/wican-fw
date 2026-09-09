@@ -56,10 +56,10 @@
         "HV_AH_DISCHARGED": "((B44<<24)+(B45<<16)+(B46<<8)+B47)/10",
         "KWH_CHARGED": "((B49<<24)+(B50<<16)+(B51<<8)+B52)/10",
         "KWH_DISCHARGED": "((B53<<24)+(B54<<16)+(B55<<8)+B57)/10",
-        "DM_R_RPM": "((S36)*256)+B37",
+        "DM_R_RPM": "((S66)*256)+B67",
         "CHARGING": "B15:7",
-        "CAPACITOR": "((B63<<8)+B35)",
-        "RESISTANCE": "([B41:B42])",
+        "CAPACITOR": "((B63<<8)+B65)",
+        "RESISTANCE": "([B70:B71])",
         "HV_C_V_MAX": "B31/50",
         "HV_C_V_MAX_NO": "B33",
         "HV_C_V_MIN": "B34/50",
@@ -99,7 +99,7 @@
       "pid": "22B002",
       "pid_init": "ATSH7C6;",
       "parameters": {
-        "ODOMETER_MI": "[B17:B18]",
+        "ODOMETER_MI": "(B15*65536+B17*256+B18)",
         "ODOMETER": "[B12:B14]"
       }
     },
