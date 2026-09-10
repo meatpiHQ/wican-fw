@@ -11589,7 +11589,7 @@
           "parameters": [
             {
               "name": "HV_V",
-              "expression": "[B4:B5]*0.2",
+              "expression": "[B4:B5]*0.5",
               "unit": "V",
               "class": "voltage",
               "min": "200",
