@@ -128,20 +128,40 @@ void can_enable(void)
 	f_config.acceptance_mask = can_cfg.mask;
 	f_config.single_filter = 1;
 
+	esp_err_t err;
 	if(can_cfg.silent)
 	{
-		ESP_ERROR_CHECK(twai_driver_install(&g_config_silent, (const twai_timing_config_t *)t_config, &f_config));
+		err = twai_driver_install(&g_config_silent, (const twai_timing_config_t *)t_config, &f_config);
 	}
 	else
 	{
 //		ESP_LOGW(TAG, "start normal mode");
-		ESP_ERROR_CHECK(twai_driver_install(&g_config_normal, (const twai_timing_config_t *)t_config, &f_config));
+		err = twai_driver_install(&g_config_normal, (const twai_timing_config_t *)t_config, &f_config);
 	}
 
-	ESP_ERROR_CHECK(twai_start());
+	if(err != ESP_OK)
+	{
+		// A cold-boot TWAI install race must not ESP_ERROR_CHECK-panic the
+		// whole device: this adapter is powered from switched 12V and boots
+		// on every trip with no way to see a crash log on-car.
+		ESP_LOGE(TAG, "twai_driver_install failed: %s", esp_err_to_name(err));
+		return;
+	}
+
+	err = twai_start();
+	if(err != ESP_OK)
+	{
+		ESP_LOGE(TAG, "twai_start failed: %s", esp_err_to_name(err));
+		twai_driver_uninstall();
+		return;
+	}
+
 	twai_clear_receive_queue();
 	can_unblock();
 	can_cfg.bus_state = ON_BUS;
+	// Let the transceiver settle before dropping STDBY; enabling it in the
+	// same breath as twai_start() has been observed to race on power-up.
+	vTaskDelay(pdMS_TO_TICKS(2));
 	gpio_set_level(CAN_STDBY_GPIO_NUM, 0);
 }
 
