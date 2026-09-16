@@ -321,9 +321,21 @@
     if (method === "POST" && path === "/api/vpn/keygen") return J({ public_key: "MockPubKey000000000000000000000000000000000=" });
     if (method === "POST" && path === "/api/autopid/dtc/scan") return J({ ok: true });
     if (method === "POST" && path === "/api/autopid/test") {
+      // 2026-09-16 shape: one shot decodes every expression; "transcript"
+      // lists each exchange as the firmware ran it (type init, PID init,
+      // ATCRA, request, ATCRA off)
       const expr = body && body.expression;
-      return J({ ok: true, raw: "7EC 10 27 62 01 01 FF F7 E7\n7EC 21 FF 84 84 84 84 84 84", elapsed_ms: 42,
-        value: expr ? Math.round(Math.random() * 900) / 10 : undefined });
+      const exprs = body && Array.isArray(body.expressions) ? body.expressions : null;
+      const raw = "7EC 10 27 62 01 01 FF F7 E7\n7EC 21 FF 84 84 84 84 84 84";
+      const sent = [];
+      for (const chain of [body && body.init]) for (const c of String(chain || "").split(";")) if (c.trim()) sent.push(c.trim());
+      if (body && body.rxheader) sent.push("ATCRA" + body.rxheader);
+      const transcript = sent.map((c) => "> " + c + "\n< OK\n").join("") +
+        "> " + ((body && body.cmd) || "") + "\n< " + raw.replace(/\n/g, " ") + "\n" +
+        (body && body.rxheader ? "> ATCRA\n< OK\n" : "");
+      const rnd = () => Math.round(Math.random() * 900) / 10;
+      return J({ ok: true, raw, elapsed_ms: 42, transcript, payload: "62 01 01 FF F7 E7 FF 84 84 84 84 84 84",
+        value: expr ? rnd() : undefined, values: exprs ? exprs.map(() => rnd()) : undefined });
     }
     if (method === "POST" && path === "/api/usb/acm/cmd") {
       // canned dongle-console replies captured from a live ESPNetLink

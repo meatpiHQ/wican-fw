@@ -129,12 +129,17 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
       ["SOC_BMS","Charger_Connected","Charging","HV_Charger_Connected"].every((n) => vals.includes(n)));
     /* PID init editing + one-shot Test button + Add PID on vehicle tab */
     check("PID init editable on PID row", [...d().querySelectorAll("input")].some((i) => (i.placeholder || "") === "ATSP6;ATSH7E4;"));
-    const testBtn = [...d().querySelectorAll("button")].find((b) => b.textContent === "Test");
+    /* every pane stays in the DOM (built once, toggled): pick the Test of
+       the imported 2101 row, not the Standard pane's first row */
+    const vehRow = [...d().querySelectorAll(".pidrow")].find((r) => [...r.querySelectorAll("input")].some((i) => i.value === "2101"));
+    const testBtn = vehRow ? [...vehRow.querySelectorAll("button")].find((b) => b.textContent === "Test") : null;
     check("Test button present", !!testBtn);
     if (testBtn) {
       testBtn.click(); await sleep(500);
       const tm = (d().querySelector("#modal-root") || {}).textContent || "";
-      check("test modal shows raw reply + value", /Raw reply/.test(tm) && /7EC 10 27/.test(tm));
+      /* 2026-09-16: the modal shows the exchange (> sent / < received), the payload and the decoded values */
+      check("test modal shows sent/received transcript + reply", /Sent \(>\) and received/.test(tm) && /> 2101/.test(tm) && /7EC 10 27/.test(tm));
+      check("test modal decodes every parameter in one shot", /Decoded/.test(tm) && /SOC_BMS/.test(tm) && /Charging/.test(tm));
       const closeBtn = [...d().querySelectorAll("#modal-root button")].find((b) => b.textContent === "Close");
       if (closeBtn) { closeBtn.click(); await sleep(150); }
     }

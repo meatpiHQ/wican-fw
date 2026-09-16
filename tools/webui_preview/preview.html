@@ -1991,9 +1991,21 @@
     if (method === "POST" && path === "/api/vpn/keygen") return J({ public_key: "MockPubKey000000000000000000000000000000000=" });
     if (method === "POST" && path === "/api/autopid/dtc/scan") return J({ ok: true });
     if (method === "POST" && path === "/api/autopid/test") {
+      // 2026-09-16 shape: one shot decodes every expression; "transcript"
+      // lists each exchange as the firmware ran it (type init, PID init,
+      // ATCRA, request, ATCRA off)
       const expr = body && body.expression;
-      return J({ ok: true, raw: "7EC 10 27 62 01 01 FF F7 E7\n7EC 21 FF 84 84 84 84 84 84", elapsed_ms: 42,
-        value: expr ? Math.round(Math.random() * 900) / 10 : undefined });
+      const exprs = body && Array.isArray(body.expressions) ? body.expressions : null;
+      const raw = "7EC 10 27 62 01 01 FF F7 E7\n7EC 21 FF 84 84 84 84 84 84";
+      const sent = [];
+      for (const chain of [body && body.init]) for (const c of String(chain || "").split(";")) if (c.trim()) sent.push(c.trim());
+      if (body && body.rxheader) sent.push("ATCRA" + body.rxheader);
+      const transcript = sent.map((c) => "> " + c + "\n< OK\n").join("") +
+        "> " + ((body && body.cmd) || "") + "\n< " + raw.replace(/\n/g, " ") + "\n" +
+        (body && body.rxheader ? "> ATCRA\n< OK\n" : "");
+      const rnd = () => Math.round(Math.random() * 900) / 10;
+      return J({ ok: true, raw, elapsed_ms: 42, transcript, payload: "62 01 01 FF F7 E7 FF 84 84 84 84 84 84",
+        value: expr ? rnd() : undefined, values: exprs ? exprs.map(() => rnd()) : undefined });
     }
     if (method === "POST" && path === "/api/usb/acm/cmd") {
       // canned dongle-console replies captured from a live ESPNetLink
@@ -4073,31 +4085,34 @@ PAGES.automate=async(view,sub)=>{
     const pidType=pd=>pd.type==="std"?"std":pd.type==="specific"?"specific":"custom";
     /* one-shot test through the REAL runner path (init chain, rxheader,
        expression). POST /api/autopid/test, one call per parameter */
+    /* ONE shot per PID (type init + PID init + ATCRA + request, exactly
+       what a poll sends; every parameter decoded from that one reply)
+       and the modal shows the exchange: "> sent" / "< received" lines
+       from the firmware's transcript, the payload, the decoded values
+       (meatpi 2026-09-16: "show what is being sent and what is received") */
     async function testPid(pd,btn){
       const params=(pd.parameters||[]).filter(pr=>pr&&pr.expression);
       btn.disabled=true;const was=btn.textContent;btn.textContent="Testing…";
       try{
-        const base={cmd:pd.cmd||"",init:pd.init||"",rxheader:pd.rxheader||""};
-        const rows=[];let raw="",elapsed=null;
-        const shot=async body=>{const r=await api("/api/autopid/test",{method:"POST",body});
-          if(r.ok===false)throw new Error(r.error||"request failed");return r;};
-        if(!params.length){
-          const r=await shot(base);
-          raw=r.raw||"";elapsed=r.elapsed_ms;
-        }
-        for(const pr of params){
-          const r=await shot({...base,expression:pr.expression});
-          raw=r.raw||raw;elapsed=r.elapsed_ms;
-          rows.push({name:pr.name||"—",value:r.value,unit:pr.unit||""});
-        }
+        const r=await api("/api/autopid/test",{method:"POST",body:{cmd:pd.cmd||"",init:pd.init||"",rxheader:pd.rxheader||"",
+          type:pidType(pd),expressions:params.map(pr=>pr.expression)}});
+        const vals=Array.isArray(r.values)?r.values:(params.length===1?[r.value]:[]);
+        const rows=params.map((pr,i)=>({name:pr.name||"—",value:vals[i],unit:pr.unit||""}));
+        const tr=String(r.transcript||"").split("\n").filter(Boolean);
+        const lines=tr.length?tr.map(l=>h("div",{class:l[0]===">"?"in":""},l))
+          :[h("div",{class:"in"},"> "+(pd.cmd||"")),h("div",{},"< "+(r.raw||"(no data)"))];
+        const ms=r.elapsed_ms!=null?Number(r.elapsed_ms).toFixed(1)+" ms":"";
         modal({title:"Test: "+(pd.name||pd.cmd),body:h("div",{},
-          rows.length?h("div",{style:"margin-bottom:10px"},...rows.map(r0=>
-            h("div",{class:"rowflex",style:"gap:8px;padding:4px 0;border-bottom:1px solid var(--border)"},
+          h("div",{class:"help",style:"margin-bottom:4px"},"Sent (>) and received (<)"+(ms?" · the request answered in "+ms:"")),
+          h("div",{class:"console",style:"height:auto;min-height:56px;max-height:240px;overflow:auto;padding:8px 10px;font-family:var(--mono);font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-all"},...lines),
+          r.error?h("div",{class:"help",style:"color:var(--danger);margin-top:6px"},r.error):null,
+          r.payload?h("div",{class:"help",style:"margin-top:6px"},"Payload after the service echo: ",h("span",{class:"mono"},r.payload)):null,
+          rows.length?h("div",{style:"margin-top:10px"},
+            h("div",{class:"help",style:"margin-bottom:2px"},"Decoded"),
+            ...rows.map(r0=>h("div",{class:"rowflex",style:"gap:8px;padding:4px 0;border-bottom:1px solid var(--border)"},
               h("span",{style:"flex:1;font-weight:600"},r0.name),
               h("b",{class:"mono"},r0.value==null?"—":String(r0.value)),
-              h("span",{class:"help"},r0.unit)))):null,
-          h("div",{class:"help"},"Raw reply"+(elapsed!=null?" · "+elapsed+" ms":"")),
-          h("div",{class:"console",style:"max-height:120px;padding:8px;margin-top:4px"},raw||"(no data)")),
+              h("span",{class:"help"},r0.unit)))):null),
           actions:[{label:"Close",kind:"pri"}]});
       }catch(e){toast("Test failed: "+e.message,"err");}
       btn.disabled=false;btn.textContent=was;
