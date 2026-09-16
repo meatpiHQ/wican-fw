@@ -42,6 +42,7 @@
 #include "can_manager.h"
 #include "cmdline_manager.h"
 #include "ext_manager.h"
+#include "can_isotp_esp.h"
 #include "uds_manager.h"
 #include "script_engine.h"
 #include "dev_status_manager.h"
@@ -172,6 +173,11 @@ void app_main(void)
     /* optional add-on packs register their settings/jacks/providers
        here (no-op in stock builds — see ext_manager.h) */
     main_boot_init("ext_manager_init", ext_manager_init);
+    /* the public build's native ISO-TP provider (esp_isotp over
+       can_manager): registers ONLY when no pack did (single-writer
+       slot), so right after ext_manager_init and before the slot's
+       consumers (uds_manager, j2534_server) start */
+    main_boot_init("can_isotp_esp_init", can_isotp_esp_init);
     main_boot_init("uds_manager_init", uds_manager_init);
     main_boot_init("script_engine_init", script_engine_init);
     main_boot_init("led_manager_init", led_manager_init);
