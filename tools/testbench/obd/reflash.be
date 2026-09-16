@@ -1,6 +1,6 @@
 # reflash.be — script-driven ECU reflash from an SD firmware file.
 #
-# Reads /sd/fw/ecu.bin and flashes it to the ECU at 0x7E0/0x7E8 using the
+# Reads /sd/fw/ecu.bin and flashes it to the ECU at TX/RX (7E0/7E8) using the
 # ISO 14229 programming sequence the WiCAN ECU simulator implements:
 #   prog session -> security access -> fingerprint -> erase ->
 #   RequestDownload -> TransferData(stream) -> TransferExit ->
@@ -13,6 +13,8 @@
 
 import string
 
+var TX = 0x7E0            # request id  (run_be.py --tx retargets, e.g. the
+var RX = 0x7E8            # response id  PCAN reflash ECU on 7E2/7EA)
 var PATH = "/sd/fw/ecu.bin"
 var BLOCK = 128          # <= the ECU's advertised max block (258 for the sim)
 
@@ -34,7 +36,7 @@ var fwlen = obd_file_size(PATH)
 if fwlen == nil || fwlen == 0  return fail("no firmware at " + PATH) end
 log("firmware " + str(fwlen) + " bytes, " + str(BLOCK) + "-byte blocks")
 
-if obd_claim(0x7E0, 0x7E8) == 0  return fail("cannot claim the bus") end
+if obd_claim(TX, RX) == 0  return fail("cannot claim the bus") end
 
 # --- programming session + security access (sim: key = seed XOR 0xFF) ---
 obd_request("1002")

@@ -354,10 +354,10 @@ def selftest():
 
 # ---- PCAN runner (ISO-TP over the bus) -----------------------------------
 
-def run_pcan(duration, scenario):
+def run_pcan(duration, scenario, req_id=0x7E0, resp_id=0x7E8):
     import can
 
-    REQ, RESP = 0x7E0, 0x7E8
+    REQ, RESP = req_id, resp_id
     bus = can.Bus(interface="pcan", channel="PCAN_USBBUS2", bitrate=500000)
     ecu = ReflashEcu(scenario)
     print(f"Reflash ECU on PCAN_USBBUS2: req 0x{REQ:03X} -> 0x{RESP:03X}, "
@@ -437,6 +437,10 @@ def main():
     ap.add_argument("--selftest", action="store_true",
                     help="run the state machine against every scenario (no HW)")
     ap.add_argument("--list", action="store_true", help="list scenarios")
+    ap.add_argument("--req", type=lambda v: int(v, 16), default=0x7E0,
+                    help="request id (hex, default 7E0); pick a pair the ECU simulator does not answer, e.g. --req 7E2 --resp 7EA")
+    ap.add_argument("--resp", type=lambda v: int(v, 16), default=0x7E8,
+                    help="response id (hex, default 7E8)")
     args = ap.parse_args()
 
     if args.list:
@@ -446,7 +450,7 @@ def main():
     if args.selftest:
         selftest()
         return
-    run_pcan(args.duration, args.scenario)
+    run_pcan(args.duration, args.scenario, req_id=args.req, resp_id=args.resp)
 
 
 if __name__ == "__main__":

@@ -37,12 +37,12 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # source roots scanned for task creations (order = report order)
 SRC_ROOTS = [
     os.path.join(REPO, "main"),
+    # REPO/../.. is wican-fw-dev (the public clone sits in public-dev/)
+    # the tree build.ps1 builds against (MEATPI_COMPONENTS_PATH)
+    os.environ.get("MEATPI_COMPONENTS_PATH") or os.path.normpath(os.path.join(
+        REPO, "..", "..", "components", "meatpi-components", "components")),
     os.path.normpath(os.path.join(
-        REPO, "..", "..", "wican-fw-dev", "meatpi-components",
-        "components")),
-    os.path.normpath(os.path.join(
-        REPO, "..", "..", "wican-fw-dev", "meatpi-components-internal",
-        "components")),
+        REPO, "..", "..", "meatpi-components-internal", "components")),
 ]
 
 TASK_RE = re.compile(

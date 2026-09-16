@@ -13,7 +13,17 @@ import socket
 import struct
 import sys
 
-_pos = [a for a in sys.argv[1:] if not a.startswith("--")]
+_pos = [a for i, a in enumerate(sys.argv[1:], 1) if not a.startswith("--")
+        and not (i >= 2 and sys.argv[i - 1] in ("--tx", "--rx"))]
+
+
+def _opt(name, default):
+    """--name value  (only the reflash leg uses these)"""
+    if name in sys.argv:
+        i = sys.argv.index(name)
+        if i + 1 < len(sys.argv):
+            return sys.argv[i + 1]
+    return default
 DUT = _pos[0] if len(_pos) > 0 else "10.42.0.62"
 PORT = int(_pos[1]) if len(_pos) > 1 else 6809
 
@@ -147,10 +157,19 @@ def reflash():
 
     c.call(HELLO)
     c.call(OPEN)
-    # CONNECT ISO15765 with tx=7E0 rx=7E8 (extended CONNECT payload)
-    payload = struct.pack("<IIIII", PROT_ISO15765, 0, 500000, 0x7E0, 0x7E8)
+    # CONNECT ISO15765 with tx/rx (extended CONNECT payload); --tx/--rx
+    # (hex) pick the pair, default 7E0/7E8 (the reflash ECU actor's
+    # --req/--resp must match; use a pair the ECU simulator does not
+    # answer when it cannot be switched off, e.g. 7E2/7EA)
+    tx = int(_opt("--tx", "7E0"), 16)
+    rx = int(_opt("--rx", "7E8"), 16)
+    payload = struct.pack("<IIIII", PROT_ISO15765, 0, 500000, tx, rx)
     st, ch, _ = c.call(CONNECT, payload=payload)
-    check("CONNECT ISO15765 (tx 7E0 / rx 7E8)", st == NOERROR)
+    check("CONNECT ISO15765 (tx %03X / rx %03X)" % (tx, rx), st == NOERROR)
+    if st != NOERROR or ch is None:
+        print("J2534 REFLASH FAIL: CONNECT refused (0x%X) - is the rx id already"
+              " held by a UDS session, or the ISO-TP provider missing?" % st)
+        return
 
     def last(rxs):
         return rxs[-1].hex(" ").upper() if rxs else "(none)"
