@@ -233,14 +233,14 @@ not running (disabled, or its endpoint isn't registered).
 |---|---|---|
 | `/api/bridges` | GET | `{"bridges":[{"name","a","b","translator","enabled","up","stats":{"a2b_chunks","b2a_chunks","a2b_bytes","b2a_bytes","send_errors","codec_errors"}}]}` |
 | `/api/sockets` | GET | `{"servers":[{"name","proto","port","enabled","up","stats":{"clients","bytes_in","bytes_out","rx_drops","tx_drops","reconnects","refused"}}]}` |
-| `/api/obd_chip` | GET | (2026-09-08, `obd_chip` own route) `{"ready","claim":"none\|command\|monitor\|exclusive","client_idle_ms","uart":{"rx_bytes","rx_chunks","rx_max_chunk","rx_overflows","rx_buffered","tx_bytes"},"subscribers":[{"idx","name","dropped","queued","depth"}]}` — the MIC chip's wire + fan-out counters (several subscribers share the name `bridge`; `idx` tells them apart): read before/after a stream to place a loss (chip → UART ring `rx_overflows` → fan-out `dropped` per subscriber → `/api/bridges` → `/api/sockets`). `client_idle_ms` = ms since a bridged app last wrote (autopid yields below 10 s) |
+| `/api/obd_chip` | GET | (2026-09-08, `obd_chip` own route) `{"ready","claim":"none\|command\|monitor\|exclusive","client_idle_ms","uart":{"rx_bytes","rx_chunks","rx_max_chunk","rx_overflows","rx_buffered","tx_bytes"},"subscribers":[{"idx","name","dropped","queued","depth"}]}` — the MIC chip's wire + fan-out counters (several subscribers share the name `bridge`; `idx` tells them apart): read before/after a stream to place a loss (chip → UART ring `rx_overflows` → fan-out `dropped` per subscriber → `/api/bridges` → `/api/sockets`). `client_idle_ms` = ms since a bridged app last wrote (autopid yields below 10 s); `eeprom_guard`: `{"rewrites","blocked"}` (2026-09-16: the driver rewrites ATSP->ATTP / ATM1->ATM0 on every TX path and refuses ATPP/ATSD/ATCV/STWBR; a refused raw command gets the ELM `?` back, a refused `obd_chip_request()` returns ESP_ERR_NOT_SUPPORTED) |
 | `/api/ws` | GET | `{"channels":[{"name","path","mode","max_clients","enabled","up","stats":{"clients","frames_in","frames_out","bytes_in","bytes_out","rx_drops","tx_drops","refused"}}]}` |
 
 ## 6e4. AutoPID — `autopid` registers its own routes (2026-07-06)
 
 | Route | Method | Behavior |
 |---|---|---|
-| `/api/autopid` | GET | dashboard view: `{"groups":[{"name","enabled","period_ms"}],"params":[{"name","unit","value"\|null,"ts_us"}],"stats":{"running","paused_voltage","paused_client","polls_ok","polls_failed","pids","filters","period_floor_ms","sub_floor_pids","now_us"}}` — value age = `now_us - ts_us`; `sub_floor_pids > 0` = periods configured below the measured ~53 ms/request chip floor (accepted, can't be honored — UI should warn; see `autopid/BENCHMARKS.md`); `paused_client` (2026-09-08) = the poller is yielding the chip to an external ELM app (a bridged TCP/BLE/USB/WS client wrote within the last 10 s — legacy `DEV_AUTOPID_ELM327_APP_BIT` parity), `running` is false meanwhile |
+| `/api/autopid` | GET | dashboard view: `{"groups":[{"name","enabled","period_ms"}],"params":[{"name","unit","value"\|null,"ts_us"}],"stats":{"running","paused_voltage","paused_client","paused_diag"(a diagnostic tool holds the bus: the UDS Tool / J2534 Exclusive bus option, 2026-09-16),"polls_ok","polls_failed","pids","filters","period_floor_ms","sub_floor_pids","now_us"}}` — value age = `now_us - ts_us`; `sub_floor_pids > 0` = periods configured below the measured ~53 ms/request chip floor (accepted, can't be honored — UI should warn; see `autopid/BENCHMARKS.md`); `paused_client` (2026-09-08) = the poller is yielding the chip to an external ELM app (a bridged TCP/BLE/USB/WS client wrote within the last 10 s — legacy `DEV_AUTOPID_ELM327_APP_BIT` parity), `running` is false meanwhile |
 | `/api/autopid/data` | GET | the LEGACY-shape flat snapshot `{"Name":value,…}` (only parameters that have polled at least once) |
 | `/api/autopid/config` | GET | the PID/filter tables file verbatim (`{"groups":[],"pids":[],"filters":[]}` when none saved) |
 | `/api/autopid/config` | PUT | full tables JSON ≤256 KB — validated (expressions dry-run, group refs, bounds), atomically saved to `/data/autopid/config.json`, then reloaded **LIVE** (no reboot). 400 + `{"error":…}` on any invalid entry; the old tables keep running |
@@ -440,17 +440,26 @@ for test setups that WANT concurrent conversations.
 
 | Route | Method | Behavior |
 |---|---|---|
-| `/api/uds/request` | POST | one UDS (ISO 14229) request→final response over the selected transport. Body `{"tx_id","rx_id"(hex str or int),"ext"?:bool,"data":"22 F1 90"(hex),"p2_ms"?,"p2star_ms"?,"session"?:bool}` → `{"ok",response":"62 F1 90 …"(hex),"length","positive":bool,"sid","nrc"?,"nrc_name"?,"pending","elapsed_ms","backend"}`. Handles the 0x78 responsePending loop + NRC decode; 409 while another UDS transaction is in flight |
+| `/api/uds` | GET | the live path without sending anything: `{"backend_setting","backend_active":"isotp"\|"obd_chip","provider":"esp_isotp"\|"add-on"\|"none","can_running","exclusive"(runtime switch),"exclusive_default"(the setting),"holding","autopid_paused","session_active","exclusive_idle_ms","max_request":64,"max_response":4096,"last":{"age_ms","ok","error"?,"tx_id","rx_id","req_sid","sid","positive","nrc"?,"nrc_name"?,"pending","elapsed_ms","backend"}\|null,"provider_stats"?:{"sessions_open","pdus_tx","pdus_rx","frames_fed","tx_timeouts","rx_dropped"}}` (2026-09-16) |
+| `/api/uds` | POST | `{"exclusive":bool}` — the runtime **Exclusive bus** switch (boot default = the `exclusive` setting): while the tool is in use (a request, then `exclusive_idle_ms` = 10 s of idle, or an open session) AutoPID polling and DTC scans stay off the bus (obd_gate's diagnostics hold; `/api/autopid` shows `stats.paused_diag`). Answers with the GET status (2026-09-16) |
+| `/api/uds/session` | POST | `{"action":"begin","tx_id","rx_id","ext"?}` opens a tester-present session (3E 80 every `tester_present_ms`; requests ride the held claim; the Exclusive hold, when on, lasts for the session); `{"action":"end"}` closes it. Answers with the status + `ok`; 409 while another transaction/session owns the bus (2026-09-16) |
+| `/api/uds/request` | POST | one UDS (ISO 14229) request→final response over the selected transport. Body `{"tx_id","rx_id"(hex str or int),"ext"?:bool,"data":"22 F1 90"(hex, ≤64 bytes),"p2_ms"?,"p2star_ms"?(alias `timeout_ms`),"session"?:bool}` → `{"ok",response":"62 F1 90 …"(hex),"length","positive":bool,"sid","nrc"?,"nrc_name"?,"pending","elapsed_ms","backend"}`. `response` carries the WHOLE PDU (up to 4096 bytes, 2026-09-16). Handles the 0x78 responsePending loop + NRC decode; 409 while another UDS transaction is in flight. 2026-09-16: the obd_chip transport holds the chip for its whole AT transaction (`obd_chip_txn_begin`, autopid's poll waits instead of interleaving) and a reply whose SID is not the request's is refused with `ESP_ERR_INVALID_RESPONSE` (a stray from another requester), on either transport |
 
 Config = `/api/settings/uds_manager` (`backend` =
 `auto`|`obd_chip`|`isotp`, default **auto** = isotp when
 can_manager is running else obd_chip; `p2_ms`, `p2star_ms`,
-`tester_present_ms`, `cli`; schema v2, 2026-09-06: the former
+`tester_present_ms`, `exclusive` (boot default of the Exclusive bus switch,
+default **true**, 2026-09-16), `cli`; schema v2, 2026-09-06: the former
 `elm327` value migrates to `auto`). Backends: **isotp** (firmware
 ISO-TP over native CAN — the proven, recommended path, ≤8 KB
-multi-frame PDUs; needs the ISO-TP provider from the add-on pack, else
-falls back to obd_chip); **obd_chip** (the MIC via AT — reaches the
-OBD-connector bus). `uds` CLI: `uds -t 7E0 -r 7E8 22 F1 90`.
+multi-frame PDUs; the public build carries its own provider,
+`can_isotp_esp` (esp_isotp over can_manager, since 2026-09-16), an add-on
+pack's provider takes precedence; without CAN running it falls back to
+obd_chip); **obd_chip** (the MIC via AT — reaches the
+OBD-connector bus; 2026-09-16: one AT line per request in a steady
+conversation, the ELM response-count digit so the chip answers in ~3 ms
+instead of waiting out ATST, `7F xx 78` lines counted as `pending`; single-
+frame requests ≤64 bytes only). `uds` CLI: `uds -t 7E0 -r 7E8 22 F1 90`.
 
 ## 6e12. Scripting — `script_engine` registers its own route (2026-07-07)
 
@@ -468,7 +477,10 @@ OBD-connector bus). `uds` CLI: `uds -t 7E0 -r 7E8 22 F1 90`.
 Event wiring (2026-07-07 pm): rules may use the sugar body `{"on":"source.event","script":"name"}` (parser rewrites to the `script.run {name}` action) — the trigger event reaches the script as `evt_source`/`evt_name`/`evt_<key>` globals; scripts emit `script.done {value}` via `emit()` (a declared source rules can chain on). `uds.request {tx,rx,req,ext?}` is an action too, publishing `uds.response {ok,nrc,len,data,req}` (data truncated to the event kv limit — full payloads belong in a script's `uds()` binding). Actions run on the event dispatcher and BLOCK it for the transaction — same contract as `http.post`; keep event-triggered scripts short.
 
 Config = `/api/settings/script_engine` (`enabled` default false,
-`max_runtime_ms`, `cli`). The Berry bindings ARE the scripting API
+`max_runtime_ms`, `allow_reflash` default false, `exclusive` default **true**
+— from a script's first ECU access to the end of the run AutoPID polling
+and DTC scans stay off the bus (obd_gate's diagnostics hold, independent of
+the UDS Tool's switch; `GET /api/scripts/reference` echoes it), `cli`). The Berry bindings ARE the scripting API
 (SCRIPTING.md): `uds(tx,rx,hexreq)` / `uds_ext(...)` → response hex (or
 nil), with `uds_ok`/`uds_nrc` globals; `can_tx(id,ext,hex)`;
 `emit(source,name,key,value)`; `log`, `sleep_ms`, `millis`. `script`
@@ -506,9 +518,10 @@ details + benchmarks in `websocket_manager/`).
 
 | Route | Method | Behavior |
 |---|---|---|
-| `/api/j2534` | GET | `{"enabled","port","listening","client_connected","device_open","channels","frames_rx","frames_tx","phase"}` — SAE J2534 PassThru server status |
+| `/api/j2534` | GET | `{"enabled","port","listening","client_connected","device_open","channels","frames_rx","frames_tx","allow_reflash","allow_lan","exclusive","autopid_paused","phase"}` — SAE J2534 PassThru server status; `exclusive` = the runtime Exclusive bus switch (AutoPID off the bus while a tester is attached), `autopid_paused` = the pollers acknowledged it (2026-09-16) |
+| `/api/j2534` | POST | `{"exclusive":bool}` — the runtime Exclusive bus switch (boot default = the `exclusive` setting, default **true**); applies at once, also to an attached tester. Answers with the status (2026-09-16) |
 
-Config = `/api/settings/j2534_server` (`enabled` default false, `port` default 6809, **`allow_reflash` default false** = reject UDS memory-transfer services (34/35/36/37) so a tool can diagnose but not write ECU firmware, **`allow_lan` default false** = accept only on WiCAN's SoftAP + USB-device (NCM) netifs, refusing STA / USB-Ethernet uplinks since the transport is unauthenticated, `cli`). Status `/api/j2534` echoes `allow_reflash`/`allow_lan`. WiCAN as a SAE J2534-1 PassThru device: a PC diagnostic/reflash tool drives WiCAN's CAN bus via the companion Windows DLL over a versioned wire protocol — the driver ships as an **installer attached to firmware releases** and in this repo under `drivers/j2534/` (real-tool validated with the DrewTech J2534-1 tool, incl. a real reflash via the PassThru* API). Reachable over TCP on WiFi / USB-Ethernet / **USB-device (CDC-NCM)**: with `usb_host_manager.role=device` WiCAN is a USB NIC to the PC — DHCP at 192.168.82.1/24, so the DLL target is `WICAN_J2534_HOST=192.168.82.1` over the cable. Transports (all carry the SAME protocol, all TCP): USB-device CDC-NCM (IP-over-USB), WiFi, USB-Ethernet. ISO15765 channels require the ISO-TP provider (add-on pack — present in official builds); raw CAN channels work everywhere. `j2534` CLI mirrors the status.
+Config = `/api/settings/j2534_server` (`enabled` default false, `port` default 6809, **`allow_reflash` default false** = reject UDS memory-transfer services (34/35/36/37) so a tool can diagnose but not write ECU firmware, **`allow_lan` default false** = accept only on WiCAN's SoftAP + USB-device (NCM) netifs, refusing STA / USB-Ethernet uplinks since the transport is unauthenticated, `cli`). Status `/api/j2534` echoes `allow_reflash`/`allow_lan`. WiCAN as a SAE J2534-1 PassThru device: a PC diagnostic/reflash tool drives WiCAN's CAN bus via the companion Windows DLL over a versioned wire protocol — the driver ships as an **installer attached to firmware releases** and in this repo under `drivers/j2534/` (real-tool validated with the DrewTech J2534-1 tool, incl. a real reflash via the PassThru* API). Reachable over TCP on WiFi / USB-Ethernet / **USB-device (CDC-NCM)**: with `usb_host_manager.role=device` WiCAN is a USB NIC to the PC — DHCP at 192.168.82.1/24, so the DLL target is `WICAN_J2534_HOST=192.168.82.1` over the cable. Transports (all carry the SAME protocol, all TCP): USB-device CDC-NCM (IP-over-USB), WiFi, USB-Ethernet. ISO15765 channels use the ISO-TP provider slot: the public build's native `can_isotp_esp` (esp_isotp over can_manager, 2026-09-16) or an add-on pack's; they need `can_manager.enabled`. Raw CAN channels work everywhere. One session per rx id: a UDS request to the same ECU holds it for 5 s after the last request. `j2534` CLI mirrors the status.
 
 ## 7. WiFi — `wifi_manager` registers its own routes
 
