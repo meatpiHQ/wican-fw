@@ -689,6 +689,7 @@
    "enabled": false,
    "allow_reflash": false,
    "allow_lan": false,
+   "exclusive": true,
    "cli": true,
    "port": 6809
   },
@@ -701,6 +702,9 @@
      "type": "boolean"
     },
     "allow_lan": {
+     "type": "boolean"
+    },
+    "exclusive": {
      "type": "boolean"
     },
     "cli": {
@@ -1009,6 +1013,7 @@
   "values": {
    "enabled": false,
    "allow_reflash": false,
+   "exclusive": true,
    "cli": true,
    "max_runtime_ms": 10000
   },
@@ -1018,6 +1023,9 @@
      "type": "boolean"
     },
     "allow_reflash": {
+     "type": "boolean"
+    },
+    "exclusive": {
      "type": "boolean"
     },
     "cli": {
@@ -1110,6 +1118,7 @@
  },
  "uds_manager": {
   "values": {
+   "exclusive": true,
    "cli": true,
    "backend": "auto",
    "p2_ms": 250,
@@ -1118,6 +1127,9 @@
   },
   "schema": {
    "properties": {
+    "exclusive": {
+     "type": "boolean"
+    },
     "cli": {
      "type": "boolean"
     },
@@ -1700,6 +1712,11 @@
   const now = () => Math.floor(Date.now() / 1000);
   const state = {
     scan: { status: "idle", found: 0 },
+    /* the UDS Tool's live path + exclusive switch (GET/POST /api/uds) */
+    uds: { backend_setting: "auto", backend_active: "isotp", provider: "esp_isotp", can_running: true,
+           exclusive: true, exclusive_default: true, holding: false, autopid_paused: false, session_active: false,
+           exclusive_idle_ms: 10000, max_request: 64, max_response: 4096, last: null },
+    j2534Exclusive: true,
     /* this boot's restart record (probes swap it: power_wake / periodic_wake / panic …) */
     lastRestart: { reason: "software", planned: true, planned_reason: "config_apply", source: "config_server" },
     dirs: new Set(),            /* folders created through /api/fs/mkdir */
@@ -1884,7 +1901,10 @@
         { id: "vin", title: "Read the VIN", desc: "Mode 09 first, UDS data identifier F190 as the fallback, decoded to text.", needs: "vehicle", level: 1, size: 1040 },
       ] });
     },
-    "/api/j2534": () => J({ enabled: false, allow_reflash: false, allow_lan: false, sessions: 0 }),
+    "/api/j2534": () => J({ enabled: false, port: 6809, listening: false, client_connected: false, device_open: false, channels: 0,
+                            frames_rx: 0, frames_tx: 0, allow_reflash: false, allow_lan: false, exclusive: !!state.j2534Exclusive,
+                            autopid_paused: false, phase: "2 (CAN + ISO15765 channels)" }),
+    "/api/uds": () => J(state.uds),
     "/api/sleep": () => J({ state: "awake", voltage: 12.52, sleep_v: 12.2, wake_v: 13.2 }),
     /* fixtures per folder + whatever probes uploaded (state.files) or created (state.dirs) */
     "/api/fs/list": (full) => {
@@ -1921,6 +1941,39 @@
     const body = opts && typeof opts.body === "string" ? (() => { try { return JSON.parse(opts.body); } catch { return null; } })() : null;
 
     /* mutations */
+    if (method === "POST" && path === "/api/uds") {
+      if (body && typeof body.exclusive === "boolean") { state.uds.exclusive = body.exclusive; if (!body.exclusive) { state.uds.holding = false; state.uds.autopid_paused = false; } }
+      return J(state.uds);
+    }
+    if (method === "POST" && path === "/api/uds/session") {
+      const on = !!(body && body.action === "begin");
+      state.uds.session_active = on;
+      if (on && state.uds.exclusive) { state.uds.holding = true; state.uds.autopid_paused = true; }
+      return J({ ...state.uds, ok: true });
+    }
+    if (method === "POST" && path === "/api/uds/request") {
+      const req = String((body && body.data) || "").trim().toUpperCase().replace(/\s+/g, " ");
+      const sid = parseInt(req.split(" ")[0] || "0", 16);
+      let resp;
+      if (req === "22 F1 90") resp = "62 F1 90 " + [..."1WCAN0FW0P0000001"].map((c) => c.charCodeAt(0).toString(16).toUpperCase()).join(" ");
+      else if (req === "10 02") resp = "50 02 00 32 01 F4";
+      else if (sid === 0x3E) resp = "7E 00";
+      else if (sid === 0x19) resp = "59 02 FF";
+      else resp = "7F " + sid.toString(16).toUpperCase().padStart(2, "0") + " 31";
+      const bytes = resp.split(" ");
+      const negative = bytes[0] === "7F";
+      const r = { ok: true, response: resp, length: bytes.length, positive: !negative, sid: parseInt(negative ? bytes[1] : bytes[0], 16),
+                  pending: 0, elapsed_ms: 24, backend: state.uds.backend_active };
+      if (negative) { r.nrc = 0x31; r.nrc_name = "requestOutOfRange"; }
+      if (state.uds.exclusive) { state.uds.holding = true; state.uds.autopid_paused = true; }
+      state.uds.last = { age_ms: 0, ok: true, tx_id: String((body && body.tx_id) || "7E0"), rx_id: String((body && body.rx_id) || "7E8"),
+                         req_sid: sid, sid: r.sid, positive: r.positive, pending: 0, elapsed_ms: 24, backend: r.backend };
+      return J(r);
+    }
+    if (method === "POST" && path === "/api/j2534") {
+      if (body && typeof body.exclusive === "boolean") state.j2534Exclusive = body.exclusive;
+      return FIXED["/api/j2534"]();
+    }
     if (method === "POST" && path === "/api/autopid/std_scan") {
       state.scan = { status: "running", found: 0 };
       setTimeout(() => { state.scan = { status: "done", found: STD_ROWS.length }; }, 2500);
@@ -3040,7 +3093,7 @@ const LABELS={
   /* j2534_server / script_engine / uds_manager */
   "j2534_server.port":"TCP port",allow_reflash:"Allow ECU flashing",allow_lan:"Expose on LAN",
   max_runtime_ms:"Max script runtime (ms)","script_engine.enabled":"Scripting","uds_manager.backend":"Transport",p2_ms:"P2 timeout (ms)",p2star_ms:"P2* timeout (ms)",
-  tester_present_ms:"Tester-present interval (ms)",
+  tester_present_ms:"Tester-present interval (ms)","uds_manager.exclusive":"Exclusive bus at boot","j2534_server.exclusive":"Exclusive bus at boot","script_engine.exclusive":"Exclusive bus for scripts",
   /* log_manager / log_sinks */
   level:"Log level",console_enabled:"Console output",ring_enabled:"Keep log ring",
   tcp_enabled:"TCP sink",tcp_port:"TCP port",udp_enabled:"UDP sink",udp_host:"UDP host",udp_port:"UDP port",ws_enabled:"WebSocket sink",
@@ -3059,6 +3112,12 @@ const HELP={
   "script_engine.enabled":"Lets scripts run: from the Scripts page, from rules (script.run) and the console. Restart to apply.",
   "script_engine.max_runtime_ms":"A run is stopped when it takes longer than this. Sleeps count.",
   "script_engine.allow_reflash":"Lets scripts use the UDS reprogramming services (0x34–0x37, obd_transfer_file). Keep off unless you flash ECUs.",
+  "uds_manager.exclusive":"Boot default of the Exclusive bus switch on the UDS Tool page. On: while the tool is in use (a request, then 10 s of idle, or an open session) AutoPID polling and DTC scans stay off the bus.",
+  "j2534_server.exclusive":"Boot default of the Exclusive bus switch on the J2534 page. On: while a diagnostic tool is connected, AutoPID polling and DTC scans stay off the bus.",
+  "script_engine.exclusive":"On: from a script's first ECU request to the end of the run, AutoPID polling and DTC scans stay off the bus. Off: they keep polling around the script's requests. Restart to apply.",
+  "uds_manager.backend":"Automatic uses native CAN ISO-TP when the CAN bus is on, else the OBD chip (single-frame requests, shares the chip with AutoPID).",
+  "uds_manager.p2_ms":"How long to wait for the first response frame.",
+  "uds_manager.p2star_ms":"How long to wait for the final response after the ECU answers response pending (0x78). Restart to apply; the page sends its own per request.",
   "wifi_manager.mode":"Station joins your WiFi. Access point lets a phone connect directly to the WiCAN. Access point + Station does both.",
   ap_ssid:()=>"Leave blank for the default WiCAN_"+((conn.info&&conn.info.device_id)||"<device id>")+".",
   ap_password:"8 to 63 characters. Blank keeps the current password, unless it is still the factory one (@meatpi#), which must be replaced before WiFi settings can be saved.",
@@ -6037,22 +6096,91 @@ PAGES.scripts=async(view,sub)=>{
 };
 
 /* ---- UDS tool ---- */
+/* ISO 14229 requests to one ECU: the live path (native CAN ISO-TP or the OBD
+   chip) from GET /api/uds, the Exclusive bus switch (POST /api/uds: AutoPID
+   off the bus while the tool is in use), 11/29-bit addressing, a tester-
+   present session (POST /api/uds/session), and a TERMINAL of every request
+   (›) and reply (‹) with the decode inline — kept across page visits (last
+   300 lines), a sent line clicks back into the form — plus the component's
+   settings card. */
 PAGES.uds=async(view)=>{
-  const p=page(view,null,"UDS Tool","Send an ISO-TP UDS request");
-  const tx=h("input",{class:"mono",value:"7E0"}),rx=h("input",{class:"mono",value:"7E8"}),
-    data=h("input",{class:"mono",value:"10 02",placeholder:"hex bytes, e.g. 22 F1 90"}),to=h("input",{type:"number",value:"1000",min:50,max:30000,step:50,title:"Wait for the final response (50–30000 ms)"});
-  const out=h("div",{class:"console",style:"height:180px"});
-  const send=async(bytes)=>{const req=bytes||data.value;out.append(h("div",{class:"in"},`› ${tx.value}→${rx.value}  ${req}`));
-    try{const r=await api("/api/uds/request",{method:"POST",body:{tx_id:parseInt(tx.value,16),rx_id:parseInt(rx.value,16),data:req.trim(),timeout_ms:Number(to.value)||1000}});out.append(h("div",{},JSON.stringify(r)));}
-    catch(e){out.append(h("div",{class:"er"},"error: "+e.message));}out.scrollTop=out.scrollHeight;};
+  const p=page(view,null,"UDS Tool","Send ISO 14229 requests to an ECU");
+  const hex2=(n)=>"0x"+(Number(n)||0).toString(16).toUpperCase().padStart(2,"0");
+  /* the live path + the exclusive switch */
+  const statusEl=h("div",{});let st=null;
+  async function status(){st=await tryGet("/api/uds");if(!st)return;
+    const native=st.backend_active==="isotp";
+    const provider=st.provider==="esp_isotp"?"native CAN ISO-TP":st.provider==="add-on"?"native CAN ISO-TP (add-on pack)":"none";
+    const idleS=Math.round((st.exclusive_idle_ms||10000)/1000);
+    statusEl.replaceChildren(section("Path & bus",null,
+      h("div",{class:"rowflex",style:"gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center"},
+        native?chip("over native CAN","ok"):chip(st.can_running?"over the OBD chip":"over the OBD chip, native CAN is off",st.can_running?"":"warn"),
+        chip("transport: "+(st.backend_setting||"auto"),""),chip("provider: "+provider,""),
+        st.session_active?chip("session open (tester present)","info"):null,
+        st.autopid_paused?chip("AutoPID paused","warn"):null),
+      h("div",{class:"rowflex",style:"gap:12px;flex-wrap:wrap;align-items:center"},
+        switchCtl(!!st.exclusive,v=>{api("/api/uds",{method:"POST",body:{exclusive:v}}).then(()=>status()).catch(e=>toast(e.message,"err"));},{yes:"Exclusive bus: on",no:"Exclusive bus: off",title:"While the tool is in use, AutoPID polling and DTC scans stay off the bus"}),
+        h("span",{class:"help"},st.exclusive?"AutoPID stays off the bus from a request until "+idleS+" s of idle, or while a session is open.":"AutoPID keeps polling between requests. Turn on for a bus to yourself; the boot default is in the settings below.")),
+      !native?banner("info","info","The OBD chip path shares the chip with AutoPID and takes single-frame requests only. Enable the CAN bus (CAN bus settings) for native ISO-TP: multi-frame, faster, independent of AutoPID."):null));}
+  await status();
+  /* request */
+  const tx=h("input",{class:"mono",value:"7E0",title:"Request CAN ID (hex)"}),rx=h("input",{class:"mono",value:"7E8",title:"Response CAN ID (hex)"}),
+    ext=h("input",{type:"checkbox",title:"29-bit extended CAN IDs"}),
+    data=h("input",{class:"mono",value:"22 F1 90",placeholder:"hex bytes, e.g. 22 F1 90"}),
+    to=h("input",{type:"number",value:"5000",min:500,max:30000,step:100,title:"P2*: how long to wait for the final response after the ECU answers 'response pending' (0x78)"});
+  const sessionSw=switchCtl(false,async v=>{try{const body=v?{action:"begin",tx_id:tx.value.trim(),rx_id:rx.value.trim(),ext:ext.checked}:{action:"end"};
+      const r=await api("/api/uds/session",{method:"POST",body});if(r&&r.ok===false){toast(r.error||"session refused","err");sessionSw.load(false);}await status();}
+    catch(e){toast(e.message,"err");sessionSw.load(false);}},{yes:"Session open",no:"No session",title:"Tester present keeps the ECU in its session between your requests (security access, programming)"});
+  /* the terminal: every request and reply of this browser, newest at the
+     bottom, kept across page visits (localStorage, the last 300 lines) */
+  const TERM_KEY="wican-uds-term",TERM_MAX=300;
+  const loadTerm=()=>{try{return JSON.parse(localStorage.getItem(TERM_KEY)||"[]");}catch{return [];}};
+  const saveTerm=(a)=>{try{localStorage.setItem(TERM_KEY,JSON.stringify(a.slice(-TERM_MAX)));}catch{}};
+  let termLog=loadTerm(),verbose=false;
+  const term=h("div",{class:"console",style:"height:52vh;min-height:280px"});
+  const hhmmss=(t)=>{const d=new Date(t);return [d.getHours(),d.getMinutes(),d.getSeconds()].map(x=>String(x).padStart(2,"0")).join(":");};
+  const ascii=(bytes)=>bytes.map(b=>(b>=32&&b<127)?String.fromCharCode(b):".").join("");
+  function renderEntry(e){
+    term.append(h("div",{class:"in",style:"cursor:pointer",title:"Click to load this request back into the form",
+      onclick:()=>{tx.value=e.tx;rx.value=e.rx;ext.checked=!!e.ext;data.value=e.req;}},
+      hhmmss(e.t)+"  › "+e.tx+"→"+e.rx+(e.ext?" (29-bit)":"")+"  "+e.req));
+    if(e.err){term.append(h("div",{class:"er"},hhmmss(e.t)+"  ‹ error: "+e.err));return;}
+    if(!e.r){term.append(h("div",{class:"dim"},"          …"));return;}
+    const r=e.r;
+    if(!r.ok){term.append(h("div",{class:"er"},hhmmss(e.t)+"  ‹ no response: "+(r.error||"error")+" · "+(r.backend||"?")));return;}
+    const bytes=(r.response||"").trim().split(/\s+/).filter(Boolean).map(x=>parseInt(x,16));
+    const sidReq=parseInt(e.req.trim().split(/\s+/)[0],16);
+    const text=(r.positive&&(sidReq===0x22||sidReq===0x09)&&bytes.length>3)?'  "'+ascii(bytes.slice(3))+'"':"";
+    const tag=r.positive?"positive":"NEGATIVE "+hex2(r.nrc)+" "+(r.nrc_name||"");
+    const meta="   "+tag+" · "+r.length+" B · "+r.elapsed_ms+" ms"+(r.pending?" · "+r.pending+"× pending":"")+" · "+(r.backend||"?");
+    term.append(h("div",{class:r.positive?"":"wn"},hhmmss(e.t)+"  ‹ "+r.response+text,h("span",{class:"dim"},meta)));
+    if(verbose)term.append(h("pre",{class:"dim",style:"margin:0 0 4px 30px;white-space:pre-wrap;font-size:11px"},JSON.stringify(r)));
+  }
+  function renderTerm(){term.replaceChildren();
+    if(!termLog.length)term.append(h("div",{class:"dim"},"No requests yet. Every request (›) and reply (‹) lands here; scroll up for older ones, click a sent line to load it back into the form."));
+    termLog.forEach(renderEntry);term.scrollTop=term.scrollHeight;}
+  const send=async(bytes)=>{const req=(bytes||data.value).trim();if(!req)return;
+    const body={tx_id:tx.value.trim(),rx_id:rx.value.trim(),ext:ext.checked,data:req,p2star_ms:Number(to.value)||5000};
+    const e={t:Date.now(),tx:body.tx_id,rx:body.rx_id,ext:body.ext,req,r:null,err:null};
+    termLog.push(e);if(termLog.length>TERM_MAX)termLog=termLog.slice(-TERM_MAX);renderTerm();
+    try{e.r=await api("/api/uds/request",{method:"POST",body});}catch(err){e.err=err.message;}
+    saveTerm(termLog);renderTerm();status();};
+  const verboseBtn=h("button",{class:"btn sm gh",type:"button",onclick:()=>{verbose=!verbose;verboseBtn.replaceChildren(verbose?"Hide raw JSON":"Raw JSON");renderTerm();}},"Raw JSON");
+  const clearBtn=h("button",{class:"btn sm gh",type:"button",title:"Forget the terminal's lines (this browser only)",onclick:()=>{termLog=[];saveTerm(termLog);renderTerm();}},"Clear");
   const quick=(lbl,bytes)=>h("button",{class:"btn sm",onclick:()=>{data.value=bytes;send(bytes);}},lbl);
-  p.append(section("Request",null,
-    h("div",{class:"frow"},h("label",{},"Tx / Rx ID"),h("div",{class:"ctl rowflex"},tx,h("span",{class:"dim"},"→"),rx)),
+  p.append(statusEl,section("Request",null,
+    h("div",{class:"frow"},h("label",{},"Tx / Rx ID"),h("div",{class:"ctl rowflex",style:"gap:8px;align-items:center"},tx,h("span",{class:"dim"},"→"),rx,h("label",{class:"help",style:"display:flex;gap:4px;align-items:center;white-space:nowrap"},ext,"29-bit"))),
     h("div",{class:"frow"},h("label",{},"Request bytes"),h("div",{class:"ctl"},data)),
-    h("div",{class:"frow"},h("label",{},"Timeout (ms)"),h("div",{class:"ctl rowflex"},h("div",{style:"max-width:120px"},to),h("span",{class:"grow"}),h("button",{class:"btn pri",onclick:()=>send()},ic("play"),"Send"))),
-    h("div",{class:"rowflex",style:"gap:8px;margin-top:6px"},h("span",{class:"help"},"Quick:"),quick("Session 10 02","10 02"),quick("Read VIN 22 F1 90","22 F1 90"),quick("Tester Present 3E 00","3E 00"))),
-    section("Response",null,out));
-  return null;
+    h("div",{class:"frow"},h("label",{},"Final response timeout (P2*)"),h("div",{class:"ctl rowflex",style:"gap:8px;align-items:center;flex-wrap:wrap"},h("div",{style:"max-width:120px"},to),h("span",{class:"help"},"ms"),h("span",{class:"grow"}),sessionSw,h("button",{class:"btn pri",onclick:()=>send()},ic("play"),"Send"))),
+    h("div",{class:"rowflex",style:"gap:8px;margin-top:6px;flex-wrap:wrap"},h("span",{class:"help"},"Quick:"),quick("Session 10 02","10 02"),quick("Read VIN 22 F1 90","22 F1 90"),quick("Tester present 3E 00","3E 00"),quick("Read DTCs 19 02 09","19 02 09"))),
+    sectionTools("Terminal",[verboseBtn,clearBtn],term));
+  renderTerm();
+  data.addEventListener("keydown",ev=>{if(ev.key==="Enter")send();});
+  /* the settings card: transport, timing, the exclusive boot default */
+  const formEl=h("div",{});p.append(formEl);
+  try{const rows=await settingsForm("uds_manager");formEl.replaceChildren(sectionTools("UDS settings",[],...rows));}catch(e){formEl.replaceChildren(banner("crit","alert",e.message));}
+  const t=setInterval(()=>{if(conn.state==="online")status();},4000);
+  return()=>{clearInterval(t);const inp=sessionSw.querySelector("input");if(inp&&inp.checked)api("/api/uds/session",{method:"POST",body:{action:"end"}}).catch(()=>{});};
 };
 
 /* ---- J2534 ---- */
@@ -6067,6 +6195,9 @@ PAGES.j2534=async(view)=>{
           j.client_connected?chip("client connected","ok"):chip("no client",""),
           j.allow_reflash?chip("ECU flashing ALLOWED","warn"):chip("ECU flashing blocked","ok"),
           j.allow_lan?chip("LAN exposed","warn"):chip("AP/USB only","ok")),
+        h("div",{class:"rowflex",style:"gap:12px;margin-bottom:12px;flex-wrap:wrap;align-items:center"},
+          switchCtl(!!j.exclusive,v=>{api("/api/j2534",{method:"POST",body:{exclusive:v}}).then(()=>status()).catch(e=>toast(e.message,"err"));},{yes:"Exclusive bus: on",no:"Exclusive bus: off",title:"While a tool is connected, AutoPID polling and DTC scans stay off the bus"}),
+          j.autopid_paused?chip("AutoPID paused","warn"):h("span",{class:"help"},j.exclusive?"AutoPID pauses while a tool is connected.":"AutoPID keeps polling alongside a connected tool. Turn on for a bus to yourself; the boot default is in the settings below.")),
         kv([["Phase",j.phase],["Channels",j.channels],["Frames rx/tx",j.frames_rx+" / "+j.frames_tx]])),
       banner("info","shield",h("b",{},"Safety default: "),"with ECU flashing blocked, a connected tool can read and diagnose but cannot write firmware; with LAN exposure off, the port is reachable only on WiCAN's own AP or USB link."));}
   await status();

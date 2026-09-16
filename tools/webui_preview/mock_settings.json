@@ -685,6 +685,7 @@
    "enabled": false,
    "allow_reflash": false,
    "allow_lan": false,
+   "exclusive": true,
    "cli": true,
    "port": 6809
   },
@@ -697,6 +698,9 @@
      "type": "boolean"
     },
     "allow_lan": {
+     "type": "boolean"
+    },
+    "exclusive": {
      "type": "boolean"
     },
     "cli": {
@@ -1005,6 +1009,7 @@
   "values": {
    "enabled": false,
    "allow_reflash": false,
+   "exclusive": true,
    "cli": true,
    "max_runtime_ms": 10000
   },
@@ -1014,6 +1019,9 @@
      "type": "boolean"
     },
     "allow_reflash": {
+     "type": "boolean"
+    },
+    "exclusive": {
      "type": "boolean"
     },
     "cli": {
@@ -1106,6 +1114,7 @@
  },
  "uds_manager": {
   "values": {
+   "exclusive": true,
    "cli": true,
    "backend": "auto",
    "p2_ms": 250,
@@ -1114,6 +1123,9 @@
   },
   "schema": {
    "properties": {
+    "exclusive": {
+     "type": "boolean"
+    },
     "cli": {
      "type": "boolean"
     },

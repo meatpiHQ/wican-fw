@@ -30,6 +30,11 @@
   const now = () => Math.floor(Date.now() / 1000);
   const state = {
     scan: { status: "idle", found: 0 },
+    /* the UDS Tool's live path + exclusive switch (GET/POST /api/uds) */
+    uds: { backend_setting: "auto", backend_active: "isotp", provider: "esp_isotp", can_running: true,
+           exclusive: true, exclusive_default: true, holding: false, autopid_paused: false, session_active: false,
+           exclusive_idle_ms: 10000, max_request: 64, max_response: 4096, last: null },
+    j2534Exclusive: true,
     /* this boot's restart record (probes swap it: power_wake / periodic_wake / panic …) */
     lastRestart: { reason: "software", planned: true, planned_reason: "config_apply", source: "config_server" },
     dirs: new Set(),            /* folders created through /api/fs/mkdir */
@@ -214,7 +219,10 @@
         { id: "vin", title: "Read the VIN", desc: "Mode 09 first, UDS data identifier F190 as the fallback, decoded to text.", needs: "vehicle", level: 1, size: 1040 },
       ] });
     },
-    "/api/j2534": () => J({ enabled: false, allow_reflash: false, allow_lan: false, sessions: 0 }),
+    "/api/j2534": () => J({ enabled: false, port: 6809, listening: false, client_connected: false, device_open: false, channels: 0,
+                            frames_rx: 0, frames_tx: 0, allow_reflash: false, allow_lan: false, exclusive: !!state.j2534Exclusive,
+                            autopid_paused: false, phase: "2 (CAN + ISO15765 channels)" }),
+    "/api/uds": () => J(state.uds),
     "/api/sleep": () => J({ state: "awake", voltage: 12.52, sleep_v: 12.2, wake_v: 13.2 }),
     /* fixtures per folder + whatever probes uploaded (state.files) or created (state.dirs) */
     "/api/fs/list": (full) => {
@@ -251,6 +259,39 @@
     const body = opts && typeof opts.body === "string" ? (() => { try { return JSON.parse(opts.body); } catch { return null; } })() : null;
 
     /* mutations */
+    if (method === "POST" && path === "/api/uds") {
+      if (body && typeof body.exclusive === "boolean") { state.uds.exclusive = body.exclusive; if (!body.exclusive) { state.uds.holding = false; state.uds.autopid_paused = false; } }
+      return J(state.uds);
+    }
+    if (method === "POST" && path === "/api/uds/session") {
+      const on = !!(body && body.action === "begin");
+      state.uds.session_active = on;
+      if (on && state.uds.exclusive) { state.uds.holding = true; state.uds.autopid_paused = true; }
+      return J({ ...state.uds, ok: true });
+    }
+    if (method === "POST" && path === "/api/uds/request") {
+      const req = String((body && body.data) || "").trim().toUpperCase().replace(/\s+/g, " ");
+      const sid = parseInt(req.split(" ")[0] || "0", 16);
+      let resp;
+      if (req === "22 F1 90") resp = "62 F1 90 " + [..."1WCAN0FW0P0000001"].map((c) => c.charCodeAt(0).toString(16).toUpperCase()).join(" ");
+      else if (req === "10 02") resp = "50 02 00 32 01 F4";
+      else if (sid === 0x3E) resp = "7E 00";
+      else if (sid === 0x19) resp = "59 02 FF";
+      else resp = "7F " + sid.toString(16).toUpperCase().padStart(2, "0") + " 31";
+      const bytes = resp.split(" ");
+      const negative = bytes[0] === "7F";
+      const r = { ok: true, response: resp, length: bytes.length, positive: !negative, sid: parseInt(negative ? bytes[1] : bytes[0], 16),
+                  pending: 0, elapsed_ms: 24, backend: state.uds.backend_active };
+      if (negative) { r.nrc = 0x31; r.nrc_name = "requestOutOfRange"; }
+      if (state.uds.exclusive) { state.uds.holding = true; state.uds.autopid_paused = true; }
+      state.uds.last = { age_ms: 0, ok: true, tx_id: String((body && body.tx_id) || "7E0"), rx_id: String((body && body.rx_id) || "7E8"),
+                         req_sid: sid, sid: r.sid, positive: r.positive, pending: 0, elapsed_ms: 24, backend: r.backend };
+      return J(r);
+    }
+    if (method === "POST" && path === "/api/j2534") {
+      if (body && typeof body.exclusive === "boolean") state.j2534Exclusive = body.exclusive;
+      return FIXED["/api/j2534"]();
+    }
     if (method === "POST" && path === "/api/autopid/std_scan") {
       state.scan = { status: "running", found: 0 };
       setTimeout(() => { state.scan = { status: "done", found: STD_ROWS.length }; }, 2500);
