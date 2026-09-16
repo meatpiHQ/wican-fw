@@ -2556,6 +2556,48 @@ input[type="range"]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px var
 .applybar{display:none!important}
 .tools{display:flex;gap:8px;align-items:center}
 
+/* PID lists (Automate > Parameters, 2026-09-16): rows, not a fixed-width grid */
+.pidl{display:flex;flex-direction:column;gap:6px;min-width:0}
+.pidl input{height:32px;font-size:13px;padding:0 9px}
+.pidl input.bad{border-color:var(--danger)}
+.pidl-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
+.pidl-tools .flt{flex:1 1 200px;max-width:280px}
+.pidl-head{display:grid;grid-template-columns:var(--pidcols);gap:8px;padding:2px 10px 6px;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text-3)}
+.pidl-rows{display:flex;flex-direction:column;gap:6px}
+.pidrow{border:1px solid var(--border);border-radius:10px;background:var(--surface);min-width:0}
+.pidrow.open{border-color:var(--border-strong)}
+.pidrow.off>.main{opacity:.55}
+.pidrow>.main{display:grid;grid-template-columns:var(--pidcols);gap:8px;align-items:center;padding:7px 10px;min-width:0}
+.pidrow>.main>*{min-width:0}
+.pidrow .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pidrow .req{font-family:var(--mono);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pidrow .vals{display:flex;align-items:center;gap:8px;min-width:0}
+.pidrow .caret{padding:4px 7px;font-size:12px;white-space:nowrap;flex:none}
+.pidrow .val{font-family:var(--mono);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pidrow .val.none,.prm .lv.none{color:var(--text-3);font-family:var(--ui);font-size:12px}
+.pidrow .acts{display:flex;gap:2px;justify-content:flex-end}
+.pidrow .acts .btn{padding:5px 8px}
+.pidrow .det{border-top:1px solid var(--border);padding:10px 10px 12px;background:var(--surface-2);border-radius:0 0 10px 10px}
+.pidrow .det .fields{display:grid;grid-template-columns:minmax(120px,1fr) 110px minmax(180px,2fr);gap:8px 12px;margin-bottom:12px}
+.pidrow .det .fields label,.pidrow .det .dlabel{display:block;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);margin-bottom:4px}
+.pidrow .det .dlabel{margin-bottom:2px}
+.prm{display:grid;grid-template-columns:36px minmax(110px,1fr) minmax(150px,1.6fr) 72px 92px 34px;gap:8px;align-items:center;padding:3px 0;min-width:0}
+.prm>*{min-width:0}
+.prm.off input,.prm.off .lv{opacity:.55}
+.prm-head{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text-3);padding:4px 0 2px}
+.prm .r,.prm .lv{text-align:right}
+.prm .lv{font-family:var(--mono);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pidl-err{color:var(--danger);margin-top:4px}
+@media(max-width:860px){
+  .pidl-head{display:none}
+  .pidrow>.main{display:flex;flex-wrap:wrap}
+  .pidrow>.main>*{flex:1 1 140px}
+  .pidrow>.main>.switch,.pidrow>.main>.acts{flex:none}
+  .pidrow>.main>.acts{margin-left:auto}
+  .pidrow .det .fields{grid-template-columns:1fr 1fr}
+  .prm{grid-template-columns:36px minmax(90px,1fr) minmax(120px,1.4fr) 64px 80px 34px}
+}
+
 /* ================= 5. RESPONSIVE (design 860/480) ================= */
 @media(max-width:860px){
   #app{grid-template-columns:1fr;grid-template-rows:auto auto 1fr;grid-template-areas:"mast" "menu" "content"}
@@ -3027,7 +3069,7 @@ const HELP={
   custom_init:"AT command chain sent once before custom-PID polling starts: optional, ';'-separated.",
   specific_init:"AT command chain sent once before vehicle-specific polling starts, ahead of the per-PID inits: optional, ';'-separated.",
   std_protocol:"Used for standard PIDs and the PID scan. Most cars since 2008 use CAN 11-bit 500 kbit/s; 29-bit filters need a 29-bit protocol.",
-  vehicle:"Name of the loaded vehicle profile: set when you pick a profile below, editable.",
+  vehicle:"Name of the loaded vehicle profile: set when you pick your car above, editable.",
   min_event_interval_ms:"Rate limit for parameter-change events fed to rules.",
   "espnetlink.mode":"WiFi modem keeps the dongle's USB as power only (best GPS reception). USB Ethernet keeps the data lines on and uses the cable as the uplink.",
   auto_pair:"Read the dongle's AP key over USB automatically the first time it is plugged in.",
@@ -3985,8 +4027,8 @@ PAGES.automate=async(view,sub)=>{
     let cfg=await api("/api/autopid/config");
     if(typeof cfg==="string"){try{cfg=JSON.parse(cfg);}catch{cfg={};}}
     cfg.pids=cfg.pids||[];cfg.groups=cfg.groups&&cfg.groups.length?cfg.groups:[{name:"default",enabled_default:true,period_ms:1000}];
-    async function saveCfg(){try{await api("/api/autopid/config",{method:"PUT",body:cfg});toast("Configuration applied","ok");}
-      catch(e){toast("Config rejected: "+e.message,"err");}}
+    async function saveCfg(){try{await api("/api/autopid/config",{method:"PUT",body:cfg});markDirty(false);setApplyMsg("");toast("Configuration applied","ok");}
+      catch(e){setApplyMsg(e.message);toast("Config rejected: "+e.message,"err");}}
     /* scan-results picker: firmware stores ready-made config rows —
        review, tick, merge into the table (then Apply). */
     function offerScanResults(r){
@@ -4060,54 +4102,126 @@ PAGES.automate=async(view,sub)=>{
       }catch(e){toast("Test failed: "+e.message,"err");}
       btn.disabled=false;btn.textContent=was;
     }
+    /* ---- PID tables (reworked 2026-09-16) -------------------------------
+       One list per PID type. A row = enable switch, name + request (+ RX
+       header where it applies), the live value(s) the poller currently
+       holds, Test and delete. Expanding a row shows its details (group,
+       cycle, init) and the parameter table WITH headers: per-value switch,
+       name, expression, unit, live value, delete. No fixed table width: the
+       grid wraps under 860 px. Live values come from GET /api/autopid every
+       2.5 s while the page is open and update in place (typing is never
+       interrupted). Edits mark the table "Unsaved edits" until Apply. */
+    const live={};const liveSubs=new Set();let liveTimer=null,liveSince=0;
+    async function pollLive(){
+      /* the page is built before the router attaches it: only stop once it has been on screen */
+      if(!view.isConnected){if(Date.now()-liveSince>8000){clearInterval(liveTimer);liveTimer=null;}return;}
+      const r=await tryGet("/api/autopid");
+      if(r&&Array.isArray(r.params)){
+        for(const p of r.params)live[p.name]={value:p.value,unit:p.unit};
+        for(const f of liveSubs)f();
+      }
+    }
+    function startLive(){if(!liveTimer){liveSince=Date.now();liveTimer=setInterval(pollLive,2500);pollLive();}}
+    const fmtNum=x=>{if(Number.isInteger(x))return String(x);const a=Math.abs(x);const s=x.toFixed(a<10?3:a<100?2:1);return s.includes(".")?s.replace(/\.?0+$/,""):s;};
+    const fmtLive=(name,unit)=>{const l=live[name];if(!l||l.value==null)return null;
+      const v=typeof l.value==="number"?fmtNum(l.value):String(l.value);const u=unit||l.unit;return u?v+" "+u:v;};
+    let cfgDirty=false;const dirtyWatch=new Set();
+    function markDirty(v=true){cfgDirty=v;for(const f of dirtyWatch)f(v);}
+    const applyWatch=new Set();
+    function setApplyMsg(t){for(const f of applyWatch)f(t);}
     function pidTable(type,emptyMsg){
-      const tbl=h("div",{});
-      const open=new Set(); /* PIDs with their parameter rows expanded */
       const hasRx=type!=="specific";
       const lock=type==="std"; /* SAE names/commands come from the scan */
-      const grid="grid-template-columns:40px 1fr 100px 120px "+(hasRx?"90px ":"")+"1.2fr 84px 54px 34px 34px";
-      const rebuild=()=>{
-        const mine=cfg.pids.filter(pd=>pidType(pd)===type);
-        tbl.replaceChildren(h("div",{class:"scroll"},h("div",{style:"min-width:"+(hasRx?"960":"890")+"px"},
-          h("div",{style:"display:grid;"+grid+";gap:10px;padding:0 6px 8px;font-size:11px;font-weight:800;letter-spacing:.05em;color:var(--text-3);text-transform:uppercase"},
-            h("span",{}),h("span",{},"PID Name"),h("span",{},"Group"),h("span",{},"Command"),
-            ...(hasRx?[h("span",{},"RX Hdr")]:[]),
-            h("span",{},"PID Init"),h("span",{},"Cycle ms"),h("span",{}),h("span",{}),h("span",{})),
-          ...mine.flatMap(pd=>{
-            pd.parameters=pd.parameters&&pd.parameters.length?pd.parameters:[{name:pd.name||"",expression:"",unit:""}];
-            const isOpen=open.has(pd);
-            const caret=h("button",{class:"btn sm gh",style:"padding:4px 5px;justify-content:center",
-              title:(isOpen?"Hide":"Show")+" the "+pd.parameters.length+" parameter(s) decoded from this PID",
-              onclick:()=>{isOpen?open.delete(pd):open.add(pd);rebuild();}},
-              isOpen?"▾":"▸ "+pd.parameters.length);
-            const testBtn=h("button",{class:"btn sm",style:"width:100%;justify-content:center;padding:3px 0;font-size:11px;background:var(--accent);border-color:var(--accent);color:#fff",
-              title:"Send this PID once through the real polling path (init, expressions) and show the reply: vehicle must be on"},"Test");
-            testBtn.onclick=()=>testPid(pd,testBtn);
-            const pidRow=h("div",{style:"display:grid;"+grid+";gap:10px;padding:8px 6px 4px;align-items:center;border-top:2px solid var(--border)"},
-              caret,
-              lock?h("span",{style:"font-weight:600;padding:0 2px",title:"Standard-PID names come from the SAE table"},pd.name||"—")
-                  :h("input",{value:pd.name||"",onchange:e=>{pd.name=e.target.value;}}),
-              h("input",{value:pd.group||"default",onchange:e=>{pd.group=e.target.value;}}),
-              lock?h("span",{class:"mono",style:"padding:0 2px",title:"Standard-PID commands come from the scan"},pd.cmd||"")
-                  :h("input",{class:"mono",value:pd.cmd||"",placeholder:"010C1",title:"The OBD/UDS request sent on the bus",onchange:e=>{pd.cmd=e.target.value;}}),
-              ...(hasRx?[h("input",{class:"mono",value:pd.rxheader||"",placeholder:"7E8",title:"Optional reply-header filter when several ECUs answer",onchange:e=>{pd.rxheader=e.target.value;}})]:[]),
-              h("input",{class:"mono",value:pd.init||"",placeholder:"ATSP6;ATSH7E4;",title:"Optional AT prelude sent before this PID's request whenever the poller switches to it",onchange:e=>{pd.init=e.target.value;}}),
-              h("input",{class:"mono",type:"number",value:pd.period_ms||0,title:"0 = use the group's period",onchange:e=>{pd.period_ms=Number(e.target.value)||0;}}),
-              testBtn,
-              h("button",{class:"btn sm gh",title:"Add a parameter decoded from this PID's reply",onclick:()=>{pd.parameters.push({name:"",expression:"",unit:""});open.add(pd);rebuild();}},ic("plus")),
-              h("button",{class:"btn sm gh danger",title:"Remove this PID and all its parameters",onclick:()=>{cfg.pids.splice(cfg.pids.indexOf(pd),1);rebuild();}},ic("trash")));
-            const paramRows=isOpen?pd.parameters.map(pr=>
-              h("div",{style:"display:grid;grid-template-columns:40px 1fr 1.6fr 110px 34px;gap:10px;padding:2px 6px;align-items:center"},
-                h("span",{class:"help",style:"text-align:right;padding-right:4px"},"↳"),
-                h("input",{value:pr.name||"",placeholder:"ParameterName",onchange:e=>{pr.name=e.target.value;}}),
-                h("input",{class:"mono",value:pr.expression||"",placeholder:"(B2*256+B3)/4",title:"Decode expression over the reply bytes (B0..Bn); B14:5 selects a bit",onchange:e=>{pr.expression=e.target.value;}}),
-                h("input",{class:"mono",value:pr.unit||"",placeholder:"rpm",title:"Unit shown on the dashboard / sent to Home Assistant",onchange:e=>{pr.unit=e.target.value;}}),
-                pd.parameters.length>1?h("button",{class:"btn sm gh danger",title:"Remove this parameter",onclick:()=>{pd.parameters.splice(pd.parameters.indexOf(pr),1);rebuild();}},ic("trash")):h("span",{}))):[];
-            return[pidRow,...paramRows];
-          }),
-          mine.length?null:h("div",{class:"empty"},emptyMsg))));
+      const tbl=h("div",{class:"pidl",style:"--pidcols:40px minmax(110px,1.3fr) minmax(84px,1fr) "+(hasRx?"66px ":"")+"minmax(140px,1.2fr) 88px"});
+      const open=new Set(); /* PIDs with their details expanded */
+      let filter="";
+      const cells=new Map(); /* live cells -> refresh fn */
+      const paramNames=pd=>(pd.parameters||[]).map(p=>p.name).filter(Boolean);
+      const mine=()=>cfg.pids.filter(pd=>pidType(pd)===type);
+      const matches=pd=>{if(!filter)return true;const f=filter.toLowerCase();
+        return[pd.name,pd.cmd,...paramNames(pd)].some(s=>String(s||"").toLowerCase().includes(f));};
+      const countChip=h("span",{class:"help"});
+      const dirtyChip=h("span",{class:"chip warn",style:"display:none"},h("i",{class:"d"}),"Unsaved edits");
+      dirtyWatch.add(v=>{dirtyChip.style.display=v?"":"none";});
+      const errLine=h("div",{class:"help pidl-err",style:"display:none"});
+      applyWatch.add(t=>{errLine.textContent=t?"Rejected: "+t:"";errLine.style.display=t?"":"none";});
+      const flt=h("input",{class:"flt",placeholder:"Filter by name, request or parameter",oninput:e=>{filter=e.target.value.trim();rebuild(true);}});
+      const tools=h("div",{class:"pidl-tools"},flt,
+        h("button",{class:"btn sm gh",type:"button",onclick:()=>{mine().forEach(pd=>open.add(pd));rebuild(true);}},"Expand all"),
+        h("button",{class:"btn sm gh",type:"button",onclick:()=>{open.clear();rebuild(true);}},"Collapse all"),
+        h("span",{class:"grow"}),countChip,dirtyChip);
+      const list=h("div",{class:"pidl-rows"});
+      let attached=false; /* unsubscribe only once the table has been on the page and left it */
+      const refreshLive=()=>{if(tbl.isConnected)attached=true;else if(attached){liveSubs.delete(refreshLive);return;}for(const f of cells.values())f();};
+      liveSubs.add(refreshLive);
+      const liveCell=(el,fn)=>{cells.set(el,()=>fn(el));fn(el);return el;};
+      const pidRow=pd=>{
+        pd.parameters=pd.parameters&&pd.parameters.length?pd.parameters:[{name:pd.name||"",expression:"",unit:""}];
+        const isOpen=open.has(pd);
+        const on=pd.enabled!==false;
+        const n=pd.parameters.length;
+        const row=h("div",{class:"pidrow"+(on?"":" off")+(isOpen?" open":"")});
+        const sw=switchCtl(on,v=>{pd.enabled=v;row.classList.toggle("off",!v);markDirty();},{sm:true,noText:true,title:"Poll this PID"});
+        const caret=h("button",{class:"btn sm gh caret",type:"button",
+          title:(isOpen?"Hide":"Show")+" the "+n+" parameter"+(n===1?"":"s")+" decoded from this PID"+(n>1?": "+paramNames(pd).slice(0,6).join(", ")+(n>6?" and more":""):""),
+          onclick:()=>{isOpen?open.delete(pd):open.add(pd);rebuild(true);}},(isOpen?"▾ ":"▸ ")+n+(n===1?" parameter":" parameters"));
+        const summary=liveCell(h("span",{class:"val"}),el=>{
+          if(n===1){const v=fmtLive(pd.parameters[0].name,pd.parameters[0].unit);el.textContent=v||"no data";el.classList.toggle("none",!v);}
+          else{const k=pd.parameters.filter(p=>fmtLive(p.name)!=null).length;el.textContent=k?k+" of "+n+" live":"no data";el.classList.toggle("none",!k);}});
+        const testBtn=h("button",{class:"btn sm gh",type:"button",title:"Send this PID once through the real polling path (init, expressions) and show the reply: vehicle must be on"},"Test");
+        testBtn.onclick=()=>testPid(pd,testBtn);
+        row.append(h("div",{class:"main"},
+          sw,
+          lock?h("span",{class:"nm",title:(pd.name||"")+" (standard-PID names come from the SAE table)"},pd.name||"—")
+              :h("input",{value:pd.name||"",placeholder:"PID name",onchange:e=>{pd.name=e.target.value;markDirty();}}),
+          lock?h("span",{class:"req",title:"Standard-PID commands come from the scan"},pd.cmd||"")
+              :h("input",{class:"mono",value:pd.cmd||"",placeholder:"010C1",title:"The OBD/UDS request sent on the bus",onchange:e=>{pd.cmd=e.target.value;markDirty();}}),
+          ...(hasRx?[h("input",{class:"mono",value:pd.rxheader||"",placeholder:"7E8",title:"Optional reply-header filter when several ECUs answer",onchange:e=>{pd.rxheader=e.target.value;markDirty();}})]:[]),
+          h("div",{class:"vals"},caret,summary),
+          h("div",{class:"acts"},testBtn,
+            h("button",{class:"btn sm gh danger",type:"button",title:"Remove this PID and all its parameters",onclick:()=>{cfg.pids.splice(cfg.pids.indexOf(pd),1);markDirty();rebuild(true);}},ic("trash")))));
+        if(isOpen){
+          const fld=(label,ctl)=>h("div",{},h("label",{},label),ctl);
+          const fields=h("div",{class:"fields"},
+            fld("Group",h("input",{value:pd.group||"default",onchange:e=>{pd.group=e.target.value||"default";markDirty();}})),
+            fld("Cycle (ms)",h("input",{class:"mono",type:"number",min:"0",value:pd.period_ms||0,title:"0 = the group's rate",onchange:e=>{pd.period_ms=Number(e.target.value)||0;markDirty();}})),
+            fld("PID init (optional AT chain)",h("input",{class:"mono",value:pd.init||"",placeholder:"ATSP6;ATSH7E4;",title:"Sent before this PID's request whenever the poller switches to it",onchange:e=>{pd.init=e.target.value;markDirty();}})));
+          const prmHead=h("div",{class:"prm prm-head"},h("span",{}),h("span",{},"Parameter"),h("span",{},"Expression"),h("span",{},"Unit"),h("span",{class:"r"},"Live"),h("span",{}));
+          const prmRows=pd.parameters.map(pr=>{
+            const pon=pr.enabled!==false;
+            const prow=h("div",{class:"prm"+(pon?"":" off")});
+            const psw=switchCtl(pon,v=>{pr.enabled=v;prow.classList.toggle("off",!v);markDirty();},{sm:true,noText:true,title:"Include this parameter"});
+            const expr=h("input",{class:"mono"+((pr.expression||"").trim()?"":" bad"),value:pr.expression||"",placeholder:"(B2*256+B3)/4",
+              title:"Decode expression over the reply bytes (B0..Bn); B14:5 selects a bit",
+              oninput:e=>{e.target.classList.toggle("bad",!e.target.value.trim());},onchange:e=>{pr.expression=e.target.value;markDirty();}});
+            prow.append(psw,
+              h("input",{value:pr.name||"",placeholder:"ParameterName",onchange:e=>{pr.name=e.target.value;markDirty();refreshLive();}}),
+              expr,
+              h("input",{class:"mono",value:pr.unit||"",placeholder:"rpm",title:"Unit shown on the dashboard / sent to Home Assistant",onchange:e=>{pr.unit=e.target.value;markDirty();refreshLive();}}),
+              liveCell(h("span",{class:"lv"}),el=>{const v=fmtLive(pr.name,pr.unit);el.textContent=v||"no data";el.classList.toggle("none",!v);}),
+              pd.parameters.length>1?h("button",{class:"btn sm gh danger",type:"button",title:"Remove this parameter",onclick:()=>{pd.parameters.splice(pd.parameters.indexOf(pr),1);markDirty();rebuild(true);}},ic("trash")):h("span",{}));
+            return prow;});
+          row.append(h("div",{class:"det"},fields,
+            h("div",{class:"dlabel"},"Parameters decoded from the reply"),
+            prmHead,...prmRows,
+            h("div",{style:"margin-top:8px"},h("button",{class:"btn sm",type:"button",onclick:()=>{pd.parameters.push({name:"",expression:"",unit:""});markDirty();rebuild(true);}},ic("plus"),"Add parameter"))));
+        }
+        return row;};
+      const rebuild=keep=>{
+        if(!keep){filter="";flt.value="";}
+        cells.clear();
+        const all=mine();const shown=all.filter(matches);
+        const nv=all.reduce((a,pd)=>a+((pd.parameters&&pd.parameters.length)||1),0);
+        countChip.textContent=all.length+" PID"+(all.length===1?"":"s")+" · "+nv+" parameter"+(nv===1?"":"s")+(filter?" · "+shown.length+" shown":"");
+        list.replaceChildren(
+          shown.length?h("div",{class:"pidl-head"},h("span",{}),h("span",{},"PID"),h("span",{},"Request"),...(hasRx?[h("span",{},"RX ID")]:[]),h("span",{},"Parameters"),h("span",{})):null,
+          ...shown.map(pidRow),
+          all.length?(shown.length?null:h("div",{class:"empty"},"No PID matches the filter")):h("div",{class:"empty"},emptyMsg));
+        refreshLive();
       };
-      rebuild();tbl.rebuild=rebuild;
+      tbl.append(tools,list,errLine);
+      rebuild();tbl.rebuild=()=>rebuild(true);
+      startLive();
       return tbl;
     }
     function pidsPane(){
@@ -4159,15 +4273,28 @@ PAGES.automate=async(view,sub)=>{
     /* the published profiles carry a latin-1 degree sign that decodes to
        U+FFFD ("�C"): normalise units on import (meatpi 2026-09-06) */
     const fixUnit=u=>typeof u==="string"?u.replace(/\uFFFD/g,"°"):u;
+    /* profiles are community data and the firmware keys its value cache by
+       parameter name, so a table with a repeated name is refused whole
+       ("duplicate parameter name"). A single typo in the published file
+       (Ioniq5/6 + EV6: cell 158 labelled HV_C_V_168 twice, 2026-09-16)
+       blocked the entire import: rename repeats (_2, _3 …) against
+       everything already in the table and report them instead. Returns
+       the list of renames for the toast. */
     function importProfile(car){
       /* replace the vehicle-specific PID set; std/custom stay */
       cfg.pids=cfg.pids.filter(pd=>pidType(pd)!=="specific");
+      const taken=new Set(cfg.pids.flatMap(pd=>(pd.parameters||[]).map(pr=>pr.name)));
+      const renamed=[];
+      const uniq=n=>{if(!n||!taken.has(n)){taken.add(n);return n;}
+        let k=2;while(taken.has(n+"_"+k))k++;taken.add(n+"_"+k);renamed.push(n+" to "+n+"_"+k);return n+"_"+k;};
       for(const pp of(car.pids||[])){
-        const prm=(pp.parameters||[]).map(x=>({...x,unit:fixUnit(x.unit),expression:shiftExpr(x.expression)}));
+        const prm=(pp.parameters||[]).map(x=>({...x,name:uniq(String(x.name||"")),unit:fixUnit(x.unit),expression:shiftExpr(x.expression)}));
         cfg.pids.push({name:(prm.length===1&&prm[0].name)||pp.pid,cmd:pp.pid,
           init:pp.pid_init||"",group:"default",period_ms:0,type:"specific",parameters:prm});
       }
+      return renamed;
     }
+    const renameNote=renamed=>{if(renamed.length)toast(renamed.length+" duplicate parameter name"+(renamed.length>1?"s":"")+" in this profile renamed: "+renamed.slice(0,3).join(", ")+(renamed.length>3?" and more":""),"");};
     function vehPane(){
       const tbl=pidTable("specific","No vehicle profile loaded: pick your car above");
       const state={cars:null,car:null,busy:false};
@@ -4186,13 +4313,14 @@ PAGES.automate=async(view,sub)=>{
       const loadCar=async car=>{
         if(!car||state.busy)return;
         state.busy=true;sel.disabled=true;
-        importProfile(car);
+        const renamed=importProfile(car);
         try{await api("/api/autopid/config",{method:"PUT",body:cfg});}
         catch(e){state.busy=false;sel.disabled=false;info.textContent="";return toast("Profile rejected: "+e.message,"err");}
         stageCar(car);
         tbl.rebuild();
         info.textContent=(car.pids||[]).length+" PIDs loaded";
         toast(car.car_model+" loaded: "+(car.pids||[]).length+" PIDs (name + init staged: Submit Changes)","ok");
+        renameNote(renamed);
         state.busy=false;sel.disabled=false;};
       const sel=h("select",{style:"flex:1 1 260px;width:auto;min-width:260px",onchange:e=>{
         state.car=(state.cars||[]).find(c=>c.car_model===e.target.value)||null;
@@ -4234,9 +4362,9 @@ PAGES.automate=async(view,sub)=>{
               ...state.cars.map(c=>h("option",{value:c.car_model},c.car_model)));
             toast("Profile list loaded: pick your car","ok");
           }else if(j&&j.car_model){ /* a single car profile */
-            state.car=j;importProfile(j);
+            state.car=j;const renamed=importProfile(j);
             await api("/api/autopid/config",{method:"PUT",body:cfg});
-            stageCar(j);tbl.rebuild();toast(j.car_model+" applied","ok");
+            stageCar(j);tbl.rebuild();toast(j.car_model+" applied","ok");renameNote(renamed);
           }else{ /* a full device config export */
             await api("/api/autopid/config",{method:"PUT",body:j});
             cfg=j;cfg.pids=cfg.pids||[];tbl.rebuild();toast("Configuration applied","ok");
@@ -4254,7 +4382,11 @@ PAGES.automate=async(view,sub)=>{
         h("div",{style:"display:flex;gap:10px;justify-content:center"},
           h("label",{class:"btn sm"},"Choose File",fileInput),
           h("a",{class:"btn sm gh",href:"https://github.com/meatpiHQ/wican-fw",target:"_blank"},"Profile repository")));
-      return h("div",{},groupHead("specific"),h("div",{style:"margin:-8px 0 14px"},selWrap),tbl,
+      const rows=groupRows.specific?[...groupRows.specific]:[];
+      const en=rows.find(r=>r.dataset&&r.dataset.key==="specific_enabled")||rows[0]||null;
+      /* Your car sits right under the enable switch, ahead of the name + init it fills (meatpi 2026-09-16) */
+      const head=h("div",{style:"margin-bottom:14px"},en,selWrap,...rows.filter(r=>r!==en));
+      return h("div",{},head,tbl,
         h("div",{class:"rowflex",style:"gap:8px;margin-top:12px;flex-wrap:wrap"},
           h("button",{class:"btn sm",onclick:()=>{cfg.pids.push({name:"NewPID",cmd:"22F1901",group:"default",period_ms:0,type:"specific",init:"",parameters:[{name:"NewPID",expression:"B3",unit:""}]});tbl.rebuild();}},ic("plus"),"Add PID"),
           h("span",{class:"grow"}),
