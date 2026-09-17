@@ -1321,6 +1321,25 @@
       ]
     },
     {
+      "car_model": "Geely: EX5 2026",
+      "init": "ATSP7;ATSHD01635;ATCP1D;ATCRA1EC6AE80;ATFCSH1DD01635;ATFCSD300000;ATFCSM1;",
+      "pids": [
+        {
+          "pid": "2248011",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "([B7:B8]/470)-(117/20)",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Geely: Geometry C",
       "init": "ATSP0;ATAT1;ATST96;ATSH7E2;ATFCSH7E2;ATFCSD300000;ATFCSM1;",
       "pids": [
