@@ -16,6 +16,7 @@
 #include "bridge_manager.h"
 #include "cmdline_manager.h"
 #include "dev_status_manager.h"
+#include "event_manager.h"
 #include "log_manager.h"
 #include "settings_manager.h"
 
@@ -175,6 +176,12 @@ void main_boot_health_report(void)
     bridge_manager_capacity(&eu, &ec, &tu, &tc);
     cap_check("bridge_ep", (size_t)eu, (size_t)ec);
     cap_check("bridge_tr", (size_t)tu, (size_t)tc);
+
+    size_t su, sc, au, ac;
+
+    event_manager_capacity(&su, &sc, &au, &ac);
+    cap_check("events_src", su, sc);
+    cap_check("events_act", au, ac);
 
     printf("WICAN FAULTS active=%d\n",
            dev_status_manager_faults(NULL, 0));

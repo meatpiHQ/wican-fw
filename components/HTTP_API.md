@@ -329,6 +329,8 @@ The rule editor's vocabulary comes entirely from discovery (API-first
 | `/api/events/actions` | GET | registered actions: `[{"name":"mqtt.publish","params_schema":{…}}]` — the schema drives the `with` form |
 | `/api/events/values` | GET | pull-value names (`"autopid."` trailing dot = prefix family) |
 | `/api/events/log` | GET | `{"stats":{running,published,dropped,fired,action_errors,suppressed,blocking_dropped},"events":[{source,name,ts_us,data{},fired:[rule names]}]}` — last 32 events, oldest first; THE rule-debugging view. `blocking_dropped` = slow (network/bus) action jobs dropped-oldest when the worker-pool queue was full |
+| `/api/status` (`health.caps`, 2026-09-17) | GET | `events_src` and `events_act` joined `settings` / `cmdline` / `bridge_ep`: the rules engine's source and action registries (`{used, cap}`), also on the `WICAN CAPS` boot line — headroom < 2 latches `registry_headroom` (standard §12) |
+| `/api/events/rules` | GET | per-rule runtime for the Rules page's badges (2026-09-17): `[{name, enabled, undo, active, fired, last_fired_age_s}]` — `active` = a while-rule (`undo:true`) whose action is in effect, `last_fired_age_s` -1 = never. Rules themselves live in the `event_manager` settings (`when[].value` = a live-value condition, `undo` = reverse when the conditions stop holding; `GET /api/events/actions` carries `undoable` per action) |
 
 ## 6e6. Data logger — `data_logger` registers its own route (2026-07-07)
 

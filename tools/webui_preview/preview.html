@@ -1822,20 +1822,34 @@
       stats: { running: state.groupOn, paused_voltage: false, polls_ok: state.polls, polls_failed: 2, pids: 4, filters: 1,
         period_floor_ms: 50, sub_floor_pids: 0, now_us: nowUs },
     }); },
+    /* the registry as the firmware serves it (2026-09-17): keys per event, params_schema + undoable per action, value prefixes */
     "/api/events/sources": () => J([
-      { event: "timer.tick", description: "A named timer fired" },
-      { event: "autopid.param", description: "A parameter value updated" },
-      { event: "imu.bump", description: "Bump/impact detected" },
-      { event: "imu.motion", description: "Motion state changed" },
-      { event: "battery.threshold", description: "Voltage crossed a watch threshold" },
-      { event: "status.bit", description: "A device status bit changed" },
-      { event: "vpn.state", description: "VPN connection state changed" },
+      { event: "timer.tick", description: "settings-defined periodic timers", keys: [{ key: "timer", type: "string" }] },
+      { event: "autopid.param", description: "a parameter changed", keys: [{ key: "param", type: "string" }, { key: "value", type: "number" }, { key: "unit", type: "string" }, { key: "group", type: "string" }] },
+      { event: "autopid.pid_failed", description: "a poll failed", keys: [{ key: "pid", type: "string" }, { key: "streak", type: "integer" }] },
+      { event: "autopid.dtc", description: "a NEW trouble code appeared", keys: [{ key: "code", type: "string" }, { key: "status", type: "string" }, { key: "mil", type: "boolean" }] },
+      { event: "wifi.sta", description: "the STA link came up (connected=true, ssid) or dropped", keys: [{ key: "connected", type: "boolean" }, { key: "ssid", type: "string" }] },
+      { event: "imu.bump", description: "Bump/impact detected", keys: [{ key: "axes", type: "string" }] },
+      { event: "imu.motion", description: "Motion state changed", keys: [{ key: "state", type: "string" }] },
+      { event: "battery.threshold", description: "Voltage crossed a watch threshold", keys: [{ key: "edge", type: "string" }, { key: "volts", type: "number" }] },
+      { event: "status.bit", description: "A device status bit changed", keys: [{ key: "bit", type: "string" }, { key: "set", type: "boolean" }] },
+      { event: "mqtt.rx", description: "an MQTT message arrived", keys: [{ key: "topic", type: "string" }, { key: "payload", type: "string" }] },
+      { event: "vpn.state", description: "VPN connection state changed", keys: [{ key: "state", type: "string" }] },
     ]),
     "/api/events/actions": () => J([
-      { name: "mqtt.publish" }, { name: "http.post" }, { name: "led.alert" },
-      { name: "logger.gate" }, { name: "can.send" },
+      { name: "log.note", params_schema: { type: "object", properties: { message: { type: "string" } } }, undoable: false },
+      { name: "mqtt.publish", params_schema: { type: "object", properties: { topic: { type: "string" }, payload: { type: "string" }, qos: { type: "integer" }, retain: { type: "boolean" } } }, undoable: false },
+      { name: "http.post", params_schema: { type: "object", properties: { url: { type: "string" }, body: { type: "string" } } }, undoable: false },
+      { name: "autopid.group", params_schema: { type: "object", properties: { group: { type: "string" }, enabled: { type: "boolean" }, period_ms: { type: "integer", minimum: 0 } }, required: ["group", "enabled"] }, undoable: true },
+      { name: "led.indicate", params_schema: { type: "object", properties: { r: { type: "integer" }, g: { type: "integer" }, b: { type: "integer" }, mode: { type: "string", enum: ["solid", "off", "blink_slow", "blink_fast"] } } }, undoable: true },
+      { name: "led.clear", params_schema: { type: "object", properties: {} }, undoable: false },
+      { name: "script.run", params_schema: { type: "object", properties: { name: { type: "string" } } }, undoable: false },
+      { name: "obd.request", params_schema: { type: "object", properties: { cmd: { type: "string" } } }, undoable: false },
+      { name: "autopid.dtc_scan", params_schema: { type: "object", properties: {} }, undoable: false },
+      { name: "logger.gate", params_schema: { type: "object", properties: { enabled: { type: "boolean" }, reason: { type: "string" } } }, undoable: false },
     ]),
-    "/api/events/values": () => J(["autopid.data", "autopid.RPM", "time.iso", "status.uptime", "battery.volts"]),
+    "/api/events/values": () => J(["autopid.data", "autopid.", "battery.voltage", "time.iso", "time.epoch", "wifi.ssid", "wifi.connected"]),
+    "/api/events/rules": () => J(((S.event_manager && S.event_manager.values.rules) || []).map((r, i) => ({ name: r.name, enabled: r.enabled !== false, undo: !!r.undo, active: false, fired: i === 0 ? 3 : 0, last_fired_age_s: i === 0 ? 120 : -1 }))),
     "/api/autopid/dtc": () => J({ enabled: false, codes: [], last_scan: null }),
     "/api/autopid/dtc/db": () => J({ dbs: [] }),
     /* DBC files + signals for the CAN Monitor's decode panel (state.dbcs / state.dbcSignals) */
@@ -2634,6 +2648,45 @@ input[type="range"]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px var
 .vp-row .tick{width:16px;height:16px;color:var(--primary)}
 .vp-row mark{background:var(--mono-hot);color:var(--mono-hot-text);border-radius:3px;padding:0 1px}
 .vp-foot{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+/* Rules & Events (2026-09-17): the sentence list + the rule builder */
+.modal.rule{max-width:720px}
+.rl{display:flex;flex-direction:column;gap:6px}
+.rl-row{display:grid;grid-template-columns:44px 1fr auto auto;gap:10px;align-items:center;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);min-width:0}
+.rl-row.off .rl-s,.rl-row.off .rl-t{opacity:.55}
+.rl-s{font-size:13.5px;color:var(--text);line-height:1.45;min-width:0}
+.rl-s b{font-weight:700}
+.rl-s .arrow{color:var(--text-3);margin:0 4px}
+.rl-t{font-family:var(--mono);font-size:11.5px;color:var(--text-3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rl-t .auto{color:var(--text-2)}
+.rl-acts{display:flex;gap:2px}
+.rl-acts .btn{padding:5px 8px}
+.rb-grid{display:grid;grid-template-columns:118px 1fr;gap:8px 14px;align-items:center;padding:6px 0}
+.rb-grid>label{color:var(--text-2);font-weight:600;font-size:13.5px}
+.rb-grid .help{grid-column:2}
+.rb-in{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rb-in>select,.rb-in>input,.rb-in>textarea{width:auto;flex:1 1 160px;min-width:0}
+.rb-in>textarea{flex-basis:100%}
+.rb-in .unit{font-size:12.5px;color:var(--text-3);flex:none}
+.rb-in .w88{flex:0 0 88px}
+.cond{display:grid;grid-template-columns:1fr 150px 120px 34px;gap:8px;align-items:center;margin-top:8px}
+.cond .and{grid-column:1 / -1;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text-3);margin:2px 0 -4px 2px}
+.cond select,.cond input{width:100%}
+.cond .fld{position:relative}
+.cond .fld .live{position:absolute;right:30px;top:11px}
+.live{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border-radius:5px;padding:1px 5px;vertical-align:1px}
+.preview{margin-top:14px;padding:11px 13px;background:var(--primary-tint);border:1px solid color-mix(in srgb,var(--primary) 25%,transparent);border-radius:9px;display:flex;gap:9px;align-items:flex-start;font-size:13px;color:var(--text-2);line-height:1.5}
+.preview svg{width:15px;height:15px;flex:none;margin-top:2px;color:var(--primary)}
+.preview b{color:var(--text)}
+.preview .arrow{color:var(--text-3);margin:0 5px}
+.rb-foot{display:flex;align-items:center;gap:8px;margin-top:6px}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--text-3);white-space:nowrap}
+.badge .d{width:7px;height:7px;border-radius:50%;background:var(--success)}
+.badge.never .d{background:var(--border-strong)}
+.menu{position:absolute;right:0;top:40px;background:var(--surface);border:1px solid var(--border-strong);border-radius:10px;box-shadow:var(--shadow-lg);padding:6px;min-width:290px;z-index:5;text-align:left}
+.menu .mi{display:block;width:100%;padding:8px 10px;border:none;border-radius:7px;font:inherit;font-size:13px;color:var(--text);background:transparent;text-align:left;cursor:pointer}
+.menu .mi:hover{background:var(--surface-2)}
+.menu .mi small{display:block;color:var(--text-3);font-size:11.5px;margin-top:1px}
+.menu .mh{padding:6px 10px 4px;font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)}
 #offline{position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:85;display:none;
   align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border-strong);border-radius:10px;
   padding:10px 16px;box-shadow:var(--shadow-lg);font-weight:600;font-size:13px}
@@ -2842,6 +2895,8 @@ const IC={
   book:'<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
   check:'<polyline points="20 6 9 17 4 12"/>',
   search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  copy:'<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  x:'<path d="M18 6 6 18M6 6l12 12"/>',
   save:'<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/>',
   stop:'<rect x="6" y="6" width="12" height="12" rx="1"/>',
 };
@@ -6158,65 +6213,352 @@ PAGES.events=async(view,sub)=>{
   const logStats=h("span",{class:"ldesc"});const logEl=h("div",{class:"console",style:"height:34vh"});
   const disc=h("div",{style:"display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px"});
   const[sources,actions,values]=await Promise.all(["/api/events/sources","/api/events/actions","/api/events/values"].map(tryGet));
-  /* ---- the rule editor (was: "edit JSON in All Settings") ---- */
+  /* ---- the rule builder (meatpi 2026-09-17, the Rules Builder canvas):
+     plain-language pickers over the registry (sources/actions/values), a
+     condition list with LIVE values, an undo switch for "while" rules, a
+     preview sentence, templates, and Edit as JSON as the escape hatch.
+     Stored shape is the engine's: on/match/when/do/with/undo/cooldown_ms;
+     `when` entries with `value:"${...}"` read a live value when the rule
+     fires (firmware 2026-09-17), `undo:true` reverses undoable actions. */
   try{
     const ev=await api("/api/settings/event_manager");
     delete ev.degraded;delete ev.pending_reboot;
     ev.rules=ev.rules||[];ev.timers=ev.timers||[];
     const stageIt=()=>store.stage("event_manager",ev);
-    const srcOpts=(sources||[]).map(x=>x.event);
+    const srcList=sources||[];
+    const actList=actions||[];
+    const srcOpts=srcList.map(x=>x.event);
     if(!srcOpts.includes("timer.tick"))srcOpts.unshift("timer.tick");
-    const actOpts=(actions||[]).map(a=>a.name);
-    const defWith=a=>a==="mqtt.publish"?{topic:"~/events",payload:"${data}"}
-      :a==="http.post"?{url:"http://host/path",body:"${data}"}:{};
-    const editRule=(rule,isNew)=>{
-      const nameIn=h("input",{value:rule.name||"",placeholder:"rule_name",maxlength:15,disabled:!isNew});
-      const onSel=h("select",{},...srcOpts.map(sv=>h("option",{value:sv,selected:sv===rule.on},sv)));
-      const doSel=h("select",{onchange:e=>{withTa.value=JSON.stringify(rule.with&&Object.keys(rule.with).length?rule.with:defWith(e.target.value),null,1);}},
-        ...actOpts.map(a=>h("option",{value:a,selected:a===rule.do},a)));
-      const matchTa=h("input",{class:"mono",value:rule.match?JSON.stringify(rule.match):"",placeholder:'optional, e.g. {"timer":"t1"} or {"param":"RPM","above":3000}'});
-      const withTa=h("textarea",{class:"mono",style:"min-height:90px"},JSON.stringify(rule.with||defWith(rule.do||actOpts[0]||""),null,1));
-      const body=h("div",{},
-        h("div",{class:"frow"},h("label",{},"Name"),h("div",{class:"ctl"},nameIn)),
-        h("div",{class:"frow"},h("label",{},"When"),h("div",{class:"ctl"},onSel),h("div",{class:"help"},"The trigger event. timer.tick fires on a timer you define below or in Automate.")),
-        h("div",{class:"frow"},h("label",{},"Only if"),h("div",{class:"ctl"},matchTa),h("div",{class:"help"},"Match conditions on the event's fields (JSON, empty = always).")),
-        h("div",{class:"frow"},h("label",{},"Do"),h("div",{class:"ctl"},doSel)),
-        h("div",{class:"frow"},h("label",{},"With"),h("div",{class:"ctl"},withTa),h("div",{class:"help"},"Action parameters. ${...} templates expand event fields and live values.")));
-      modal({title:isNew?"Add rule":"Edit rule: "+rule.name,body,actions:[
-        {label:"Cancel"},
-        {label:isNew?"Add":"Save",kind:"pri",fn:()=>{
-          const name=(nameIn.value||"").trim();
-          if(!name)return toast("Rule needs a name","err");
-          if(isNew&&ev.rules.some(r=>r.name===name))return toast("Name already used","err");
-          let match=null,withObj=null;
-          try{match=matchTa.value.trim()?JSON.parse(matchTa.value):null;}catch{return toast("Only-if is not valid JSON","err");}
-          try{withObj=JSON.parse(withTa.value||"{}");}catch{return toast("With is not valid JSON","err");}
-          const r=isNew?{name}:rule;
-          r.on=onSel.value;r.do=doSel.value;
-          if(match)r.match=match;else delete r.match;
-          r.with=withObj;
-          if(isNew)ev.rules.push(r);
-          stageIt();rebuildRules();
-          toast("Rule staged: press Submit Changes to apply","ok");}},
-      ]});
+    const actOpts=actList.map(a=>a.name);
+    const actUndoable=n=>{const a=actList.find(x=>x.name===n);return !!(a&&a.undoable);};
+    const srcKeys=on=>((srcList.find(x=>x.event===on)||{}).keys)||[];
+    /* the lists the pickers are filled from */
+    const apCfg=await tryGet("/api/autopid/config");
+    const apPids=(apCfg&&apCfg.pids)||[];
+    const params=[...new Set(apPids.flatMap(pd=>(pd.parameters||[]).map(p=>p.name)).filter(Boolean))].sort();
+    const groups=((apCfg&&apCfg.groups)||[]).map(g=>g.name);
+    if(!groups.length)groups.push("default");
+    const groupRate=g=>{const x=((apCfg&&apCfg.groups)||[]).find(y=>y.name===g);return x&&x.period_ms?x.period_ms:1000;};
+    const wifiS=await tryGet("/api/settings/wifi_manager");
+    const ssids=[];
+    if(wifiS)for(const[k,v]of Object.entries(wifiS)){
+      if(/ssid$/.test(k)&&typeof v==="string"&&v&&!/^ap_/.test(k))ssids.push(v);
+      if(Array.isArray(v))v.forEach(x=>{if(x&&typeof x.ssid==="string"&&x.ssid)ssids.push(x.ssid);});}
+    const bits=Object.keys((conn.status&&conn.status.bits)||{});
+    const scr=await tryGet("/api/scripts");
+    const scripts=Array.isArray(scr)?scr.map(x=>x.name||x).filter(Boolean):((scr&&scr.scripts)||[]).map(x=>x.name||x);
+    /* live values: the registry's names, prefixes expanded (autopid. = the parameters) */
+    const LIVE_LABEL={"wifi.ssid":"WiFi network name","wifi.connected":"WiFi connected","battery.voltage":"Battery voltage",
+      "time.epoch":"Time (epoch seconds)","time.iso":"Time (ISO)"};
+    const liveNames=[];
+    for(const v of(values||[])){
+      if(typeof v!=="string")continue;
+      if(v.endsWith(".")){if(v==="autopid.")params.forEach(p=>liveNames.push("autopid."+p));}
+      else if(v!=="autopid.data")liveNames.push(v);}
+    const liveLabel=n=>LIVE_LABEL[n]||(n.startsWith("autopid.")?n.slice(8):n);
+    const fmtPeriod=ms=>{ms=Number(ms)||0;if(ms<1000)return ms+" ms";if(ms%60000===0)return(ms/60000)+" min";const s=ms/1000;return(Number.isInteger(s)?s:s.toFixed(1))+" s";};
+    /* ---- vocabulary: registry names -> plain language ------------------------------
+       match = which thing (param, pid, topic, bit, timer); state = a direction/
+       state the trigger carries (goes into `when` so an undo rule sees the
+       opposite event too) */
+    const TRIG=[
+      {id:"wifi_up",on:"wifi.sta",label:"WiFi connects to a network",fields:[{key:"ssid",label:"Network",kind:"ssid",state:true}],state:{connected:true}},
+      {id:"wifi_down",on:"wifi.sta",label:"WiFi disconnects",state:{connected:false}},
+      {id:"param",on:"autopid.param",label:"A parameter changes",fields:[{key:"param",label:"Parameter",kind:"param",match:true}]},
+      {id:"pid_failed",on:"autopid.pid_failed",label:"A poll keeps failing",fields:[{key:"pid",label:"PID (optional)",kind:"text",match:true}]},
+      {id:"dtc",on:"autopid.dtc",label:"A new trouble code appears"},
+      {id:"dtc_scan",on:"autopid.dtc_scan",label:"A trouble-code scan finishes"},
+      {id:"scan_done",on:"autopid.scan_done",label:"The standard-PID scan finishes"},
+      {id:"battery",on:"battery.threshold",label:"Battery crosses a threshold",fields:[{key:"edge",label:"Direction",kind:"enum",state:true,opts:[["below","drops below 12.0 V"],["above","rises above 12.5 V"]]}]},
+      {id:"motion",on:"imu.motion",label:"Motion starts or stops",fields:[{key:"state",label:"State",kind:"enum",state:true,opts:[["active","starts (active)"],["stationary","stops (stationary)"]]}]},
+      {id:"bump",on:"imu.bump",label:"A bump is felt"},
+      {id:"bit",on:"status.bit",label:"A device flag changes",fields:[{key:"bit",label:"Flag",kind:"bit",match:true},{key:"set",label:"Becomes",kind:"enum",state:true,bool:true,opts:[["true","set"],["false","cleared"]]}]},
+      {id:"mqtt",on:"mqtt.rx",label:"An MQTT message arrives",fields:[{key:"topic",label:"Topic",kind:"text",match:true}]},
+      {id:"timer",on:"timer.tick",label:"Every N seconds",fields:[{key:"timer",label:"Every",kind:"period_s"}]},
+    ].filter(t=>srcOpts.includes(t.on));
+    srcOpts.forEach(on=>{if(!TRIG.some(t=>t.on===on))TRIG.push({id:"g:"+on,on,label:on,generic:true});});
+    const ACT=[
+      {id:"rate",do:"autopid.group",label:"Set a group's polling rate",fields:[{key:"group",label:"Group",kind:"group"},{key:"period_ms",label:"Poll every",kind:"period_ms"}],fixed:{enabled:true}},
+      {id:"enable",do:"autopid.group",label:"Enable a PID group",fields:[{key:"group",label:"Group",kind:"group"}],fixed:{enabled:true}},
+      {id:"disable",do:"autopid.group",label:"Disable a PID group",fields:[{key:"group",label:"Group",kind:"group"}],fixed:{enabled:false}},
+      {id:"mqtt",do:"mqtt.publish",label:"Publish to MQTT",fields:[{key:"topic",label:"Topic",kind:"text",def:"~/events"},{key:"payload",label:"Payload",kind:"textarea",def:"${data}"}]},
+      {id:"http",do:"http.post",label:"POST to a URL",fields:[{key:"url",label:"URL",kind:"text",def:"http://host/path"},{key:"body",label:"Body",kind:"textarea",def:"${data}"}]},
+      {id:"led",do:"led.indicate",label:"LED alert",fields:[{key:"rgb",label:"Colour",kind:"color"},{key:"mode",label:"Mode",kind:"enum",opts:[["solid","solid"],["blink_slow","blink slowly"],["blink_fast","blink fast"]]}]},
+      {id:"led_clear",do:"led.clear",label:"Clear the LED alert"},
+      {id:"note",do:"log.note",label:"Note in the log",fields:[{key:"message",label:"Message",kind:"text",def:"${source}.${name}"}]},
+      {id:"obd",do:"obd.request",label:"Send an OBD command",fields:[{key:"cmd",label:"Command",kind:"text",def:"010C"}]},
+      {id:"uds",do:"uds.request",label:"Send a UDS request",fields:[{key:"tx",label:"TX ID",kind:"text",def:"7E0"},{key:"rx",label:"RX ID",kind:"text",def:"7E8"},{key:"req",label:"Request",kind:"text",def:"22F190"}]},
+      {id:"script",do:"script.run",label:"Run a script",fields:[{key:"name",label:"Script",kind:"script"}]},
+      {id:"dtc_scan",do:"autopid.dtc_scan",label:"Scan trouble codes"},
+      {id:"dtc_clear",do:"autopid.dtc_clear",label:"Clear trouble codes"},
+    ].filter(a=>actOpts.includes(a.do));
+    actOpts.forEach(name=>{if(!ACT.some(a=>a.do===name)){
+      const props=((actList.find(a=>a.name===name)||{}).params_schema||{}).properties||{};
+      ACT.push({id:"g:"+name,do:name,label:name,generic:true,fields:Object.entries(props).map(([k,p])=>({key:k,label:k,
+        kind:p.enum?"enum":p.type==="boolean"?"bool":(p.type==="integer"||p.type==="number")?"number":"text",opts:p.enum?p.enum.map(v=>[String(v),String(v)]):null}))});}});
+    const OPS=[["==","is"],["!=","is not"],[">","is above"],[">=","is at least"],["<","is below"],["<=","is at most"],["changed","changed"],["contains","contains"]];
+    const opTxt=op=>(OPS.find(o=>o[0]===op)||[op,op])[1];
+    /* ---- reading a stored rule back into the vocabulary ---- */
+    const whenGet=(rule,key)=>(rule.when||[]).find(c=>c.key===key&&c.op==="==");
+    const detectTrig=rule=>{
+      const cands=TRIG.filter(t=>t.on===rule.on);
+      if(rule.on==="wifi.sta"){const c=whenGet(rule,"connected");return TRIG.find(t=>t.id===(c&&c.val===false?"wifi_down":"wifi_up"))||cands[0];}
+      return cands[0]||null;};
+    const detectAct=rule=>{
+      const w=rule.with||{};
+      if(rule.do==="autopid.group")return ACT.find(a=>a.id===(w.period_ms!=null?"rate":(w.enabled===false?"disable":"enable")));
+      return ACT.find(a=>a.do===rule.do)||null;};
+    const stateKeys=trig=>[...Object.keys((trig&&trig.state)||{}),...((trig&&trig.fields)||[]).filter(f=>f.state).map(f=>f.key)];
+    const userConds=(rule,trig)=>{const sk=stateKeys(trig);return(rule.when||[]).filter(c=>!(c.key&&sk.includes(c.key)&&c.op==="=="));};
+    const fieldVal=(rule,f)=>{if(f.match)return rule.match&&rule.match[f.key]!=null?String(rule.match[f.key]):"";
+      const c=whenGet(rule,f.key);return c?String(c.val):"";};
+    const fieldSet=(rule,f,v)=>{
+      if(f.match){rule.match=rule.match||{};if(v==="")delete rule.match[f.key];else rule.match[f.key]=v;if(!Object.keys(rule.match).length)delete rule.match;return;}
+      rule.when=(rule.when||[]).filter(c=>!(c.key===f.key&&c.op==="=="));
+      if(v!=="")rule.when.unshift({key:f.key,op:"==",val:f.bool?v==="true":v});};
+    /* ---- the sentence (list + preview) ---- */
+    const valTxt=v=>typeof v==="boolean"?(v?"true":"false"):String(v);
+    const condTxt=(rule,trig,c)=>{
+      let field;
+      if(c.value)field=liveLabel(String(c.value).replace(/^\$\{|\}$/g,""));
+      else if(c.key==="value"&&rule.on==="autopid.param")field="it";
+      else field=c.key;
+      return field+" "+opTxt(c.op)+(c.op==="changed"?"":" "+valTxt(c.val));};
+    const sentence=(rule,timers)=>{
+      const trig=detectTrig(rule),act=detectAct(rule),w=rule.with||{},m=rule.match||{};
+      const B=t=>h("b",{},String(t));
+      let head=[];
+      switch(trig&&trig.id){
+        case"wifi_up":{const s=whenGet(rule,"ssid");head=["When WiFi connects to ",B(s?s.val:"any network")];break;}
+        case"wifi_down":head=["When WiFi disconnects"];break;
+        case"param":head=["When ",B(m.param||"a parameter")," changes"];break;
+        case"pid_failed":head=["When ",m.pid?B(m.pid):"a poll"," keeps failing"];break;
+        case"dtc":head=["When a new trouble code appears"];break;
+        case"dtc_scan":head=["When a trouble-code scan finishes"];break;
+        case"scan_done":head=["When the standard-PID scan finishes"];break;
+        case"battery":{const e=whenGet(rule,"edge");head=["When the battery ",B(e&&e.val==="above"?"rises above 12.5 V":e?"drops below 12.0 V":"crosses a threshold")];break;}
+        case"motion":{const s=whenGet(rule,"state");head=["When motion ",B(s?(s.val==="active"?"starts":"stops"):"starts or stops")];break;}
+        case"bump":head=["When a bump is felt"];break;
+        case"bit":{const s=whenGet(rule,"set");head=["When the flag ",B(m.bit||"?")," is ",B(s?(s.val?"set":"cleared"):"set or cleared")];break;}
+        case"mqtt":head=["When MQTT ",B(m.topic||"any topic")," arrives"];break;
+        case"timer":{const t=(timers||[]).find(x=>x.name===m.timer);head=["Every ",B(t?t.period_s+" s":(m.timer||"tick"))];break;}
+        default:head=["When ",B(rule.on||"?")];}
+      const conds=userConds(rule,trig).map(c=>condTxt(rule,trig,c));
+      if(conds.length)head.push(" and "+conds.join(" and "));
+      head.push(h("span",{class:"arrow"},"\u2192"));
+      switch(act&&act.id){
+        case"rate":head.push("poll the ",B(w.group||"?")," group every ",B(fmtPeriod(w.period_ms)));break;
+        case"enable":head.push("enable the ",B(w.group||"?")," group");break;
+        case"disable":head.push("disable the ",B(w.group||"?")," group");break;
+        case"mqtt":head.push("publish to MQTT ",B(w.topic||"?"));break;
+        case"http":head.push("POST to ",B(w.url||"?"));break;
+        case"led":head.push("LED alert");break;
+        case"led_clear":head.push("clear the LED alert");break;
+        case"note":head.push("note in the log");break;
+        case"obd":head.push("send OBD ",B(w.cmd||"?"));break;
+        case"uds":head.push("send UDS ",B(w.req||"?")," to ",B(w.tx||"?"));break;
+        case"script":head.push("run script ",B(w.name||"?"));break;
+        case"dtc_scan":head.push("scan trouble codes");break;
+        case"dtc_clear":head.push("clear trouble codes");break;
+        default:head.push(rule.do||"?");}
+      if(rule.undo){
+        const back=act&&act.id==="rate"?", back to the configured rate":act&&act.id==="enable"?", disable it again":act&&act.id==="disable"?", enable it again":act&&act.id==="led"?", clear it":", undo";
+        head.push(back+" when that stops being true");}
+      return head;};
+    /* ---- the builder ---- */
+    const RULE_NAME=/^[A-Za-z0-9_]{1,15}$/;
+    const suggestName=()=>{let i=1;while(ev.rules.some(r=>r.name==="rule"+i))i++;return"rule"+i;};
+    const editRule=(rule0,isNew)=>{
+      const rule=JSON.parse(JSON.stringify(rule0));
+      if(isNew&&!rule.name)rule.name=suggestName();
+      if(!rule.on)rule.on=srcOpts[0]||"timer.tick";
+      if(!rule.do)rule.do=actOpts[0]||"log.note";
+      let timerPeriod=(()=>{const t=ev.timers.find(x=>rule.match&&x.name===rule.match.timer);return t?t.period_s:5;})();
+      let jsonMode=false;
+      const wrap=h("div",{});
+      const jsonTa=h("textarea",{class:"mono",style:"min-height:280px"});
+      const sel=(opts,cur,onch,cls)=>h("select",{class:cls||"",onchange:e=>onch(e.target.value)},...opts.map(([v,l])=>h("option",{value:v,selected:String(v)===String(cur)},l)));
+      const fieldCtl=(f,val,onch)=>{
+        switch(f.kind){
+          case"ssid":return sel([["","any network"],...ssids.map(s=>[s,s]),...(val&&!ssids.includes(val)?[[val,val]]:[])],val,onch);
+          case"param":return sel([["","choose"],...params.map(p=>[p,p]),...(val&&!params.includes(val)?[[val,val]]:[])],val,onch);
+          case"group":return sel(groups.map(g=>[g,g]).concat(val&&!groups.includes(val)?[[val,val]]:[]),val||groups[0],onch);
+          case"bit":return sel([["","choose"],...bits.map(b=>[b,b]),...(val&&!bits.includes(val)?[[val,val]]:[])],val,onch);
+          case"script":return scripts.length?sel([["","choose"],...scripts.map(s=>[s,s]),...(val&&!scripts.includes(val)?[[val,val]]:[])],val,onch)
+            :h("input",{value:val||"",placeholder:"script name",onchange:e=>onch(e.target.value)});
+          case"enum":return sel(f.opts,val||f.opts[0][0],onch);
+          case"bool":return sel([["true","yes"],["false","no"]],val||"false",onch);
+          case"number":return h("input",{class:"mono",type:"number",value:val??"",onchange:e=>onch(e.target.value)});
+          case"textarea":return h("textarea",{class:"mono",style:"min-height:60px",onchange:e=>onch(e.target.value)},val||"");
+          case"color":{const hex="#"+[0,1,2].map(i=>("0"+Number((val||[255,80,0])[i]).toString(16)).slice(-2)).join("");
+            return h("input",{type:"color",value:hex,style:"width:64px;padding:2px;height:37px;flex:none",onchange:e=>onch([1,3,5].map(i=>parseInt(e.target.value.substr(i,2),16)))});}
+          default:return h("input",{class:/cmd|req|tx|rx|topic|url/.test(f.key)?"mono":"",value:val||"",placeholder:f.def||"",onchange:e=>onch(e.target.value)});}};
+      const periodCtl=(ms,onch)=>{
+        let unit=ms>=60000&&ms%60000===0?"min":ms<1000?"ms":"s";
+        const num=h("input",{class:"mono w88",type:"number",min:"0",step:"any",value:unit==="min"?ms/60000:unit==="ms"?ms:ms/1000,style:"flex:0 0 88px"});
+        const u=sel([["s","s"],["ms","ms"],["min","min"]],unit,v=>{unit=v;fire();});
+        const fire=()=>{const n=Number(num.value)||0;onch(Math.round(unit==="min"?n*60000:unit==="ms"?n:n*1000));};
+        num.onchange=fire;
+        return[num,u];};
+      const render=()=>{
+        const trig=detectTrig(rule)||TRIG[0],act=detectAct(rule)||ACT[0];
+        rule.with=rule.with||{};
+        /* trigger picker + its fields */
+        const trigSel=sel(TRIG.map(t=>[t.id,t.label]),trig.id,id=>{
+          const t=TRIG.find(x=>x.id===id);
+          rule.on=t.on;delete rule.match;rule.when=userConds(rule,trig);
+          if(t.state)for(const[k,v]of Object.entries(t.state))rule.when.unshift({key:k,op:"==",val:v});
+          if(t.id==="timer"){rule.match={timer:rule.match&&rule.match.timer||rule.name};}
+          render();});
+        const trigFields=[];
+        for(const f of(trig.fields||[])){
+          if(f.kind==="period_s"){
+            const num=h("input",{class:"mono w88",type:"number",min:"1",value:timerPeriod,style:"flex:0 0 88px",onchange:e=>{timerPeriod=Math.max(1,Math.round(Number(e.target.value)||1));paint();}});
+            trigFields.push(h("label",{},f.label),h("div",{class:"rb-in"},num,h("span",{class:"unit"},"seconds"),h("span",{class:"help"},"A timer named after the rule.")));
+            continue;}
+          trigFields.push(h("label",{},f.label),h("div",{class:"rb-in"},fieldCtl(f,fieldVal(rule,f),v=>{fieldSet(rule,f,v);paint();}),
+            f.kind==="ssid"?h("span",{class:"help"},"Your saved networks, or any."):f.kind==="param"?h("span",{class:"help"},"Names come from the PIDs you poll."):null));}
+        /* conditions: the trigger's own fields + live values */
+        const conds=userConds(rule,trig);
+        const evFields=srcKeys(rule.on).map(k=>k.key).filter(k=>!stateKeys(trig).includes(k)&&!(trig.fields||[]).some(f=>f.match&&f.key===k));
+        const fieldOpts=[...evFields.map(k=>["k:"+k,(k==="value"&&rule.on==="autopid.param"&&rule.match&&rule.match.param?rule.match.param:k)+" (this event)"]),
+          ...liveNames.map(n=>["v:"+n,liveLabel(n)+" (live)"])];
+        const condRows=[];
+        conds.forEach((c,i)=>{
+          if(i)condRows.push(h("div",{class:"and"},"and"));
+          const cur=c.value?"v:"+String(c.value).replace(/^\$\{|\}$/g,""):"k:"+(c.key||"");
+          const fsel=sel(fieldOpts.concat(fieldOpts.some(o=>o[0]===cur)?[]:[[cur,cur.slice(2)]]),cur,v=>{
+            if(v.startsWith("v:")){delete c.key;c.value="${"+v.slice(2)+"}";}else{delete c.value;c.key=v.slice(2);}paint();});
+          const fld=h("div",{class:"fld"},fsel,c.value?h("span",{class:"live"},"live"):null);
+          const osel=sel(OPS,c.op||"==",v=>{c.op=v;if(v==="changed")delete c.val;render();});
+          const vin=h("input",{class:"mono",value:c.op==="changed"?"":valTxt(c.val==null?"":c.val),disabled:c.op==="changed",placeholder:c.op==="changed"?"":"value",
+            onchange:e=>{const t=e.target.value.trim();c.val=t===""?"":(t==="true"?true:t==="false"?false:(t!==""&&!isNaN(Number(t))?Number(t):t));paint();}});
+          condRows.push(fld,osel,vin,h("button",{class:"btn sm gh",type:"button",title:"Remove condition",onclick:()=>{rule.when=(rule.when||[]).filter(x=>x!==c);render();}},ic("x")));});
+        const addCond=h("button",{class:"btn sm gh",type:"button",disabled:(rule.when||[]).length>=4,onclick:()=>{
+          rule.when=rule.when||[];const first=fieldOpts[0]||["k:value","value"];
+          const c={op:"==",val:""};if(first[0].startsWith("v:"))c.value="${"+first[0].slice(2)+"}";else c.key=first[0].slice(2);
+          rule.when.push(c);render();}},ic("plus"),"Add condition");
+        /* action picker + its fields */
+        const actSel=sel(ACT.map(a=>[a.id,a.label]),act.id,id=>{
+          const a=ACT.find(x=>x.id===id);rule.do=a.do;rule.with={...(a.fixed||{})};
+          (a.fields||[]).forEach(f=>{if(f.def!=null)rule.with[f.key]=f.def;});
+          if(a.id==="rate")rule.with.period_ms=10000;
+          if(!actUndoable(a.do))delete rule.undo;
+          render();});
+        const actFields=[];
+        for(const f of(act.fields||[])){
+          if(f.kind==="period_ms"){
+            actFields.push(h("label",{},f.label),h("div",{class:"rb-in"},...periodCtl(rule.with.period_ms||10000,ms=>{rule.with.period_ms=ms;paint();}),
+              h("span",{class:"unit"},"configured: "+fmtPeriod(groupRate(rule.with.group||groups[0])))));
+            continue;}
+          if(f.kind==="color"){
+            actFields.push(h("label",{},f.label),h("div",{class:"rb-in"},fieldCtl(f,[rule.with.r??255,rule.with.g??80,rule.with.b??0],rgb=>{[rule.with.r,rule.with.g,rule.with.b]=rgb;paint();})));
+            continue;}
+          const val=rule.with[f.key];
+          actFields.push(h("label",{},f.label),h("div",{class:"rb-in"},fieldCtl(f,val==null?"":(typeof val==="object"?JSON.stringify(val):String(val)),v=>{
+            rule.with[f.key]=f.kind==="number"?Number(v):f.kind==="bool"?v==="true":v;paint();}),
+            f.kind==="group"?h("span",{class:"help"},"Groups come from the Parameters tab."):null,
+            f.kind==="textarea"?h("span",{class:"help"},"${value}, ${param}, ${autopid.data}, ${battery.voltage} and the other values expand here."):null));}
+        /* undo: only for actions that can reverse themselves */
+        const undoRow=actUndoable(rule.do)?h("div",{class:"rb-grid"},h("label",{},"Undo"),
+          h("div",{},switchCtl(!!rule.undo,v=>{if(v)rule.undo=true;else delete rule.undo;paint();},{yes:"Undo when it stops being true",no:"Stays until something else changes it"})),
+          h("div",{class:"help"},act.id==="rate"?"Back to the group's configured rate when the conditions no longer hold.":act.id==="led"?"Clears the alert when the conditions no longer hold.":"Puts the group back to its configured state when the conditions no longer hold.")):null;
+        const nameIn=h("input",{value:rule.name||"",placeholder:"short_name",maxlength:15,style:"flex:0 1 260px",disabled:!isNew,onchange:e=>{rule.name=e.target.value.trim();paint();}});
+        const preview=h("div",{class:"preview"},ic("info"),h("span",{}));
+        const paint=()=>{preview.lastChild.replaceChildren(...sentence(rule,ev.timers.filter(t=>!(rule.match&&t.name===rule.match.timer)).concat(rule.on==="timer.tick"?[{name:rule.match&&rule.match.timer||rule.name,period_s:timerPeriod}]:[])),".");};
+        const form=h("div",{},
+          h("div",{class:"rb-grid"},h("label",{},"Name"),h("div",{class:"rb-in"},nameIn,h("span",{class:"help"},"Letters, digits, underscore. 15 max."))),
+          h("div",{class:"subhead"},"When"),
+          h("div",{class:"rb-grid"},h("label",{},"Trigger"),h("div",{class:"rb-in"},trigSel),...trigFields),
+          h("div",{class:"subhead"},"Only if"),
+          conds.length?h("div",{class:"cond"},...condRows):h("div",{class:"help",style:"margin-top:6px"},"No conditions: the rule runs every time the trigger fires."),
+          h("div",{style:"margin-top:8px"},addCond),
+          h("div",{class:"help",style:"margin-top:4px"},"All conditions must be true. ",h("span",{class:"live"},"live")," fields are read the moment the rule fires, the others come from the trigger itself."),
+          h("div",{class:"subhead"},"Then"),
+          h("div",{class:"rb-grid"},h("label",{},"Action"),h("div",{class:"rb-in"},actSel),...actFields),
+          undoRow,preview,
+          h("div",{class:"rb-foot"},h("button",{class:"btn sm gh",type:"button",onclick:()=>toggleJson(true)},ic("code"),"Edit as JSON"),h("span",{class:"help"},"for anything the form cannot say")));
+        paint();
+        wrap.replaceChildren(form);};
+      const jsonView=h("div",{},
+        h("p",{},"The rule as the device stores it. A condition with ",h("code",{},"value")," reads a live value when the rule fires; ",h("code",{},"undo")," reverses the action when the conditions stop holding."),
+        jsonTa,
+        h("div",{class:"rb-foot"},h("button",{class:"btn sm gh",type:"button",onclick:()=>toggleJson(false)},ic("chevron"),"Back to the form"),h("span",{class:"help"},"the form re-reads this; unknown keys are kept")));
+      const toggleJson=on=>{
+        if(on){jsonTa.value=JSON.stringify(rule,null,2);jsonMode=true;wrap.replaceChildren(jsonView);return;}
+        let j;try{j=JSON.parse(jsonTa.value);}catch(e){return toast("Not valid JSON: "+e.message,"err");}
+        for(const k of Object.keys(rule))delete rule[k];Object.assign(rule,j);jsonMode=false;render();};
+      const commit=()=>{
+        if(jsonMode){let j;try{j=JSON.parse(jsonTa.value);}catch(e){toast("Not valid JSON: "+e.message,"err");return false;}
+          for(const k of Object.keys(rule))delete rule[k];Object.assign(rule,j);}
+        const name=(rule.name||"").trim();
+        if(!RULE_NAME.test(name))return toast("Name: letters, digits, underscore, 15 max","err"),false;
+        if(isNew&&ev.rules.some(r=>r.name===name))return toast("Name already used","err"),false;
+        if((rule.when||[]).length>4)return toast("At most 4 conditions","err"),false;
+        if(rule.on==="timer.tick"){
+          const tname=(rule.match&&rule.match.timer)||name;rule.match={...(rule.match||{}),timer:tname};
+          const t=ev.timers.find(x=>x.name===tname);
+          if(t)t.period_s=timerPeriod;else{if(ev.timers.length>=4)return toast("At most 4 timers","err"),false;ev.timers.push({name:tname,period_s:timerPeriod});}}
+        if(rule.when&&!rule.when.length)delete rule.when;
+        if(rule.match&&!Object.keys(rule.match).length)delete rule.match;
+        if(!actUndoable(rule.do))delete rule.undo;
+        if(isNew)ev.rules.push(rule);else{for(const k of Object.keys(rule0))delete rule0[k];Object.assign(rule0,rule);}
+        stageIt();rebuildRules();
+        toast("Rule staged: press Submit Changes to apply","ok");
+        return true;};
+      render();
+      const close=modal({title:isNew?"Add rule":"Edit rule: "+rule.name,body:wrap,actions:[
+        {label:"Cancel"},{label:isNew?"Add rule":"Save",kind:"pri",fn:()=>{}}]});
+      const m=$("#modal-root .modal");if(m)m.classList.add("rule");
+      /* Add/Save must validate before the modal closes: replace the button
+         (modal() closes on click through its own listener) */
+      const ok=$("#modal-root .acts button.pri");
+      if(ok){const nb=ok.cloneNode(true);ok.replaceWith(nb);nb.onclick=()=>{if(commit())close();};}
     };
+    /* ---- templates ---- */
+    const TEMPLATES=[
+      {label:"Slow down polling at home",small:"WiFi connects to a network: poll a group every 10 s",make:()=>({name:"home_slow",on:"wifi.sta",when:[{key:"connected",op:"==",val:true},...(ssids[0]?[{key:"ssid",op:"==",val:ssids[0]}]:[])],do:"autopid.group",with:{group:groups[0],enabled:true,period_ms:10000},undo:true})},
+      {label:"Poll extra PIDs only while charging",small:"A parameter condition enables a group, undone after",make:()=>({name:"charge_poll",on:"autopid.param",match:{param:params.find(p=>/charg/i.test(p))||params[0]||"CHARGING"},when:[{key:"value",op:"==",val:1}],do:"autopid.group",with:{group:groups[1]||groups[0],enabled:true},undo:true})},
+      {label:"Alert on a value",small:"Parameter above a limit: publish to MQTT",make:()=>({name:"alert_high",on:"autopid.param",match:{param:params[0]||"RPM"},when:[{key:"value",op:">",val:100}],do:"mqtt.publish",with:{topic:"~/alerts",payload:"{\"${param}\":${value}}"},cooldown_ms:60000})},
+      {label:"Blink the LED on a new trouble code",small:"DTC found: LED alert",make:()=>({name:"dtc_led",on:"autopid.dtc",do:"led.indicate",with:{r:255,g:80,b:0,mode:"blink_slow"}})},
+    ].filter(t=>{const r=t.make();return srcOpts.includes(r.on)&&actOpts.includes(r.do);});
+    let menuEl=null;
+    const closeMenu=()=>{if(menuEl){menuEl.remove();menuEl=null;}};
+    const tplBtn=h("button",{class:"btn sm gh",type:"button",onclick:e=>{e.stopPropagation();if(menuEl)return closeMenu();
+      menuEl=h("div",{class:"menu"},h("div",{class:"mh"},"Start from a template"),
+        ...TEMPLATES.map(t=>h("button",{class:"mi",type:"button",onclick:()=>{closeMenu();const r=t.make();if(ev.rules.some(x=>x.name===r.name))r.name="";editRule(r,true);}},t.label,h("small",{},t.small))),
+        h("div",{class:"mh"},"Or"),h("button",{class:"mi",type:"button",onclick:()=>{closeMenu();editRule({},true);}},"Blank rule",h("small",{},"Pick the trigger, conditions and action yourself")));
+      tplBtn.parentElement.append(menuEl);document.addEventListener("click",closeMenu,{once:true});}},ic("chevron"),"Templates");
+    /* ---- the list ---- */
+    let runtime={};
+    const ageTxt=s=>s<0?"":s<60?"just now":s<3600?Math.round(s/60)+" min ago":s<86400?Math.round(s/3600)+" h ago":Math.round(s/86400)+" d ago";
+    const badge=r=>{const rt=runtime[r.name];
+      if(!rt||!rt.fired)return h("span",{class:"badge never"},h("span",{class:"d"}),r.enabled===false?"paused":"never fired");
+      return h("span",{class:"badge"},h("span",{class:"d"}),"fired "+fmt.num(rt.fired)+"\u00d7"+(rt.last_fired_age_s>=0?" \u00b7 "+ageTxt(rt.last_fired_age_s):"")+(rt.active?" \u00b7 active":""));};
     const rebuildRules=()=>{
       rulesEl.replaceChildren(
-        ev.rules.length?dataTable([
-          {label:"On",get:r=>switchCtl(r.enabled!==false,v=>{r.enabled=v;stageIt();},{sm:true,noText:true,title:"Enable or pause this rule"})},
-          {label:"Name",mono:true,get:r=>r.name+(/^dest\d+$/.test(r.name)?" ·auto":"")},
-          {label:"When",mono:true,key:"on"},
-          {label:"Do",mono:true,key:"do"},
-          {label:"",get:r=>h("div",{class:"rowflex",style:"justify-content:flex-end;gap:6px"},
-            h("button",{class:"btn sm gh",title:"Edit",onclick:()=>editRule(r,false)},ic("settings")),
-            h("button",{class:"btn sm gh danger",title:"Delete rule",onclick:()=>{
-              ev.rules=ev.rules.filter(x=>x!==r);ev.timers=ev.timers.filter(t=>t.name!==r.name);stageIt();rebuildRules();}},ic("trash")))}
-        ],ev.rules):h("div",{class:"empty"},"No rules. Add Rule connects a trigger to an action"),
-        h("div",{class:"help",style:"margin-top:8px"},"Rules marked ·auto were created by Automate → Data Destinations."));
+        ev.rules.length?h("div",{class:"rl"},...ev.rules.map(r=>{
+          const row=h("div",{class:"rl-row"+(r.enabled===false?" off":"")});
+          row.append(switchCtl(r.enabled!==false,v=>{r.enabled=v;row.classList.toggle("off",!v);stageIt();},{sm:true,noText:true,title:"Enable or pause this rule"}),
+            h("div",{},h("div",{class:"rl-s"},...sentence(r,ev.timers)),
+              h("div",{class:"rl-t"},r.name,/^dest\d+$/.test(r.name)?h("span",{class:"auto"}," \u00b7auto"):null," \u00b7 "+(r.on||"?")+" \u2192 "+(r.do||"?")+(r.undo?" \u00b7 undo":"")+(r.cooldown_ms?" \u00b7 cooldown "+fmtPeriod(r.cooldown_ms):""))),
+            badge(r),
+            h("div",{class:"rl-acts"},
+              h("button",{class:"btn sm gh",type:"button",title:"Edit",onclick:()=>editRule(r,false)},ic("settings")),
+              h("button",{class:"btn sm gh",type:"button",title:"Duplicate",onclick:()=>{const c=JSON.parse(JSON.stringify(r));let n=(c.name||"rule").slice(0,13),i=2;while(ev.rules.some(x=>x.name===n+"_"+i))i++;c.name=n+"_"+i;editRule(c,true);}},ic("copy")),
+              h("button",{class:"btn sm gh danger",type:"button",title:"Delete rule",onclick:()=>{
+                ev.rules=ev.rules.filter(x=>x!==r);ev.timers=ev.timers.filter(t=>t.name!==r.name);stageIt();rebuildRules();}},ic("trash"))));
+          return row;})):h("div",{class:"empty"},"No rules yet. Add Rule connects a trigger to an action, or start from a template"),
+        h("div",{class:"help",style:"margin-top:10px"},"Rules run on the device and take effect after Submit Changes. Rules marked \u00b7auto were created by Automate \u2192 Data Destinations."));
     };
+    const refreshRuntime=async()=>{const rt=await tryGet("/api/events/rules");if(Array.isArray(rt)){runtime={};rt.forEach(x=>{runtime[x.name]=x;});
+      rulesEl.querySelectorAll(".badge").forEach((b,i)=>{const r=ev.rules[i];if(r)b.replaceWith(badge(r));});}};
+    await refreshRuntime();
     rebuildRules();
-    const addBtn=h("button",{class:"btn pri sm",onclick:()=>editRule({on:srcOpts[0]||"timer.tick",do:actOpts[0]||"mqtt.publish"},true)},ic("plus"),"Add Rule");
-    paneRules.append(cardTools("Rules","pulse",[addBtn],rulesEl));
+    const rtTimer=setInterval(()=>{if(!rulesEl.isConnected){clearInterval(rtTimer);return;}refreshRuntime();},5000);
+    const addBtn=h("button",{class:"btn pri sm",onclick:()=>editRule({},true)},ic("plus"),"Add Rule");
+    const tools=h("span",{style:"position:relative;display:inline-flex;gap:8px"},tplBtn,addBtn);
+    paneRules.append(cardTools("Rules","pulse",[tools],rulesEl));
   }catch(e){paneRules.append(banner("crit","alert","Rules: "+e.message));}
   paneLive.append(sectionTools("Live events",[logStats],logEl));
   paneRef.append(disc);

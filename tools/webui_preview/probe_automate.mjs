@@ -251,7 +251,8 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
   check("Add Rule button", !!addRule);
   if (addRule) { addRule.click(); await sleep(150); }
   const m2 = (d().querySelector("#modal-root") || {}).textContent || "";
-  check("rule editor modal (When/Do/With)", /When/.test(m2) && /Do/.test(m2) && /With/.test(m2));
+  /* 2026-09-17: the plain-language builder (Trigger / Only if / Then) replaced the When/Do/With JSON modal */
+  check("rule builder modal (Trigger/Only if/Then)", /Trigger/.test(m2) && /Only if/.test(m2) && /Then/.test(m2) && !/With/.test(m2));
   if (errs.length) { console.log("JS errors:"); errs.forEach((e) => console.log("  " + e)); process.exitCode = 1; }
   console.log(process.exitCode ? "PROBE FAIL" : "PROBE PASS");
   process.exit(process.exitCode || 0);
