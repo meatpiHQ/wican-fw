@@ -1,156 +1,164 @@
 # Hyundai Ioniq Electric 38kWh (2020–2021) — WiCAN AutoPID Profile
 
-## Vehicle Information
+## Vehicle
 
-|                |                                          |
-| -------------- | ---------------------------------------- |
-| **Make/Model** | Hyundai Ioniq Electric (AE EV)           |
-| **Battery**    | 38.3 kWh, 88 cells in series             |
-| **Years**      | 2020–2021 facelift                       |
-| **Tested on**  | 2021 Ioniq Electric 38kWh                |
-| **CAN bus**    | 500 kbps, 11-bit ID (ISO 15765-4, ATSP6) |
+| | |
+|---|---|
+| **Make / Model** | Hyundai Ioniq Electric (AE) |
+| **Battery** | 38.3 kWh (88S2P, 88 cells) |
+| **Model years** | 2020–2021 (facelift, 38kWh variant) |
+| **OBD protocol** | ISO 15765-4 (CAN 11-bit, 500 kbps) |
 
-## Compatibility
+## Profile
 
-> [!WARNING]
-> This profile was developed and tested on a **2021 Ioniq Electric 38kWh** only.
->
-> It is **not compatible** with:
->
-> - **2017–2019 Ioniq Electric 28kWh** — different battery (fewer cells), different byte positions
-> - **Ioniq Hybrid / Plug-in Hybrid** — different powertrain architecture
->
-> If you have an earlier model, some parameters may show incorrect values. Contributions welcome!
+| File | PIDs | Parameters | Polling |
+|------|------|------------|---------|
+| `hyundai_ioniq_electric_38kwh_2021.json` | 6 | 33 | ~1 s cycle |
 
 ## Parameters
 
-### BMS — Battery Management System (ECU 0x7E4)
+### MCU — Motor Control Unit (0x7E2)
 
-| Parameter          | Schema Name     | PID     | Formula                        | Unit | Description                    |
-| ------------------ | --------------- | ------- | ------------------------------ | ---- | ------------------------------ |
-| State of Charge    | `SOC`           | 2201019 | B10/2                          | %    | BMS internal SOC               |
-| Displayed SOC      | `SOC_D`         | 2201057 | B33/2                          | %    | Dashboard SOC                  |
-| State of Health    | `SOH`           | 2201057 | [B34:B35]/10                   | %    | Battery degradation            |
-| HV Voltage         | `HV_V`          | 2201019 | [B19:B20]/10                   | V    | Pack voltage                   |
-| HV Current         | `HV_A`          | 2201019 | [B17:B18]/10                   | A    | Discharge current (unsigned\*) |
-| HV Power           | `HV_W`          | 2201019 | HV_V × HV_A                    | W    | Calculated power               |
-| Max Cell Voltage   | `HV_C_V_MAX`    | 2201019 | B31/50                         | V    | Highest cell                   |
-| Max Cell ID        | `HV_C_V_MAX_NO` | 2201019 | B30                            | —    | Cell number                    |
-| Min Cell Voltage   | `HV_C_V_MIN`    | 2201019 | B34/50                         | V    | Lowest cell                    |
-| Min Cell ID        | `HV_C_V_MIN_NO` | 2201019 | B33                            | —    | Cell number                    |
-| Battery Temp Max   | `HV_T_MAX`      | 2201019 | B22-40                         | °C   | Hottest module                 |
-| Battery Temp Min   | `HV_T_MIN`      | 2201019 | B23-40                         | °C   | Coldest module                 |
-| Coolant Inlet Temp | `HV_T_I`        | 2201019 | B26-40                         | °C   | Battery cooling loop           |
-| 12V Battery        | `LV_V`          | 2201019 | B38/10                         | V    | Auxiliary battery              |
-| Energy Charged     | `KWH_CHARGED`   | 2201019 | ([B49:B50]×65536+[B51:B52])/10 | kWh  | Lifetime total                 |
-| AC Charging        | `CHARGING`      | 2201019 | (B15&32)/32                    | 0/1  | AC charger active              |
-| DC Charging        | `CHARGING_DC`   | 2201019 | (B15&64)/64                    | 0/1  | DC fast charge active          |
-| Drive Mode         | `DRIVE_MODE`    | 2201057 | B31                            | —    | Current drive mode             |
+PID `21014` — Vehicle dynamics (4 response frames)
 
-\* HV current is unsigned. During regenerative braking, values wrap around (e.g. ~6500 = negative current). Post-process with: `if value > 3000: current = value - 6553.6`
+| Parameter | Formula | Unit | Description |
+|-----------|---------|------|-------------|
+| SPEED | `(S20*256+B19)*0.01609344` | km/h | Vehicle speed. Signed little-endian int16 in hundredths of mph. Resolution: 0.016 km/h. Negative = reverse. |
+| ENGINE_RPM | `(S20*256+B19)*0.967711` | RPM | Motor RPM. Fixed gear ratio ≈ 60.1 RPM per km/h. |
+| GEAR | `B10` | — | 0x21 = Park, 0x22 = Neutral, 0x28 = Drive |
+| THROTTLE | `B12` | — | Accelerator pedal position (0–255) |
 
-### MCU — Motor Control Unit (ECU 0x7E2)
+### BMS — Battery Management System (0x7E4)
 
-| Parameter         | Schema Name | PID  | Formula      | Unit | Description                                         |
-| ----------------- | ----------- | ---- | ------------ | ---- | --------------------------------------------------- |
-| Gear State        | `GEAR`      | 2101 | B10          | —    | Raw gear byte (0x59=Park, 0x80=Drive, 0x82=Reverse) |
-| Accelerator Pedal | `THROTTLE`  | 2101 | B13          | —    | 6=off, 32=full demand                               |
-| Speed Proxy       | `SPEED`     | 2101 | B20×3.97+2.3 | km/h | Estimated speed (±3 km/h, ~4 km/h steps)            |
+PID `2201019` — Main battery data (9 response frames)
 
-> [!NOTE] > **Speed and RPM:** The Ioniq Electric's VCU (0x7E0) is on a separate CAN bus not accessible through the OBD-II diagnostic port's primary bus. Standard OBD-II PIDs 0x0C (RPM) and 0x0D (speed) are therefore unavailable from any adapter that connects to the diagnostic CAN bus (pins 6/14). The `SPEED` parameter is a proxy derived from MCU byte d14, validated against GPS at R=0.997 across 67 km of driving (3 drive sessions). It provides ~4 km/h resolution, sufficient for efficiency analysis but not for real-time dashboards.
+| Parameter | Formula | Unit | Description |
+|-----------|---------|------|-------------|
+| SOC | `B10/2` | % | State of charge (BMS raw) |
+| HV_V | `[B19:B20]/10` | V | HV pack voltage |
+| HV_A | `(S17*256+B18)/10` | A | HV pack current (signed — negative = regen/discharge) |
+| HV_W | `((S17*256+B18)/10)*([B19:B20]/10)` | W | HV power (computed from current × voltage) |
+| HV_T_MAX | `B22` | °C | Highest module temperature |
+| HV_T_MIN | `B23` | °C | Lowest module temperature |
+| HV_T_I | `B26` | °C | Inlet coolant temperature |
+| HV_C_V_MAX | `B31/50` | V | Highest cell voltage |
+| HV_C_V_MAX_NO | `B30` | — | Cell number of highest voltage |
+| HV_C_V_MIN | `B34/50` | V | Lowest cell voltage |
+| HV_C_V_MIN_NO | `B33` | — | Cell number of lowest voltage |
+| CHARGING | `(B15&32)/32` | bool | AC charging active |
+| CHARGING_DC | `(B15&64)/64` | bool | DC fast charging active |
+| LV_V | `B38/10` | V | 12V auxiliary battery voltage |
+| KWH_CHARGED | `([B49:B50]*65536+[B51:B52])/10` | kWh | Cumulative energy charged (lifetime) |
 
-### Climate — FATC (ECU 0x7B3)
+PID `2201057` — SOH and drive mode (7 response frames)
 
-| Parameter         | Schema Name | PID     | Formula  | Unit | Description          |
-| ----------------- | ----------- | ------- | -------- | ---- | -------------------- |
-| Cabin Temperature | `T_CAB`     | 2201006 | B11/2-40 | °C   | Interior temperature |
+| Parameter | Formula | Unit | Description |
+|-----------|---------|------|-------------|
+| SOH | `[B34:B35]/10` | % | State of health |
+| SOC_D | `B33/2` | % | Display SOC (dashboard value) |
+| DRIVE_MODE | `B31` | — | Drive mode selector |
 
-### TPMS — Tire Pressure (ECU 0x7A0)
+### TPMS — Tire Pressure Monitoring (0x7A0)
 
-| Parameter            | Schema Name | PID    | Formula | Unit | Description |
-| -------------------- | ----------- | ------ | ------- | ---- | ----------- |
-| Front Left Pressure  | `TYRE_P_FL` | 22C00B | B10/5   | psi  |             |
-| Front Right Pressure | `TYRE_P_FR` | 22C00B | B14/5   | psi  |             |
-| Rear Left Pressure   | `TYRE_P_RL` | 22C00B | B19/5   | psi  |             |
-| Rear Right Pressure  | `TYRE_P_RR` | 22C00B | B23/5   | psi  |             |
-| Front Left Temp      | `TYRE_T_FL` | 22C00B | B11-50  | °C   |             |
-| Front Right Temp     | `TYRE_T_FR` | 22C00B | B15-50  | °C   |             |
-| Rear Left Temp       | `TYRE_T_RL` | 22C00B | B20-50  | °C   |             |
-| Rear Right Temp      | `TYRE_T_RR` | 22C00B | B24-50  | °C   |             |
+PID `22C00B4` — Tire data (4 response frames)
 
-### Cluster (ECU 0x7C6)
+Each tire is encoded as 4 bytes: `[pressure] [temperature] [status] [0x00]`, preceded by a 4-byte header (FF FF 00 00). Pressure raw unit is 0.2 PSI.
 
-| Parameter | Schema Name | PID    | Formula   | Unit | Description    |
-| --------- | ----------- | ------ | --------- | ---- | -------------- |
-| Odometer  | `ODOMETER`  | 22B002 | [B13:B14] | km   | Total distance |
+| Parameter | Formula | Unit | Description |
+|-----------|---------|------|-------------|
+| TYRE_P_FL | `B10/72.5` | bar | Front left pressure |
+| TYRE_P_FR | `B14/72.5` | bar | Front right pressure |
+| TYRE_P_RL | `B19/72.5` | bar | Rear left pressure |
+| TYRE_P_RR | `B23/72.5` | bar | Rear right pressure |
+| TYRE_T_FL | `B11-50` | °C | Front left temperature |
+| TYRE_T_FR | `B15-50` | °C | Front right temperature |
+| TYRE_T_RL | `B20-50` | °C | Rear left temperature |
+| TYRE_T_RR | `B25-50` | °C | Rear right temperature |
+
+Note: The CF3 sequence byte (0x23) at B24 sits between RR pressure (B23) and RR temperature (B25).
+
+### HVAC — Climate Control (0x7B3)
+
+PID `2201006` — Climate data (6 response frames)
+
+| Parameter | Formula | Unit | Description |
+|-----------|---------|------|-------------|
+| T_CAB | `B11/2-40` | °C | Cabin temperature |
+| TMP_A | `B12/2-40` | °C | Outside ambient temperature |
+
+### CLU — Instrument Cluster (0x7C6)
+
+PID `22B0023` — Dashboard data (3 response frames)
+
+| Parameter | Formula | Unit | Description |
+|-----------|---------|------|-------------|
+| ODOMETER | `[B13:B14]` | km | Odometer reading (16-bit, max 65535 km) |
 
 ## ECU Map
 
-| ECU  | Request ID | Response ID | CAN Bus                | Name                                      |
-| ---- | ---------- | ----------- | ---------------------- | ----------------------------------------- |
-| BMS  | 0x7E4      | 0x7EC       | Diagnostic (pins 6/14) | Battery Management System                 |
-| MCU  | 0x7E2      | 0x7EA       | Diagnostic (pins 6/14) | Motor Control Unit                        |
-| —    | 0x7E3      | 0x7EB       | Diagnostic (pins 6/14) | Unknown (responds to Tester Present)      |
-| —    | 0x7E5      | 0x7ED       | Diagnostic (pins 6/14) | Unknown (responds to Tester Present)      |
-| VCU  | 0x7E0      | 0x7E8       | Separate bus           | Vehicle Control Unit — **not accessible** |
-| FATC | 0x7B3      | 0x7BB       | Diagnostic (pins 6/14) | Climate Control                           |
-| TPMS | 0x7A0      | 0x7A8       | Diagnostic (pins 6/14) | Tire Pressure Monitoring                  |
-| CLU  | 0x7C6      | 0x7CE       | Diagnostic (pins 6/14) | Instrument Cluster                        |
+| ECU | Request → Response | Accessible | Notes |
+|-----|-------------------|------------|-------|
+| MCU | 0x7E2 → 0x7EA | ✓ | Motor Control Unit — speed, RPM, pedals, gear |
+| BMS | 0x7E4 → 0x7EC | ✓ | Battery — SOC, voltage, current, cells, temps |
+| HVAC | 0x7B3 → 0x7BB | ✓ | Climate — cabin and outside temps |
+| TPMS | 0x7A0 → 0x7A8 | ✓ | Tire pressures and temperatures |
+| CLU | 0x7C6 → 0x7CE | ✓ | Instrument cluster — odometer |
+| OBC | 0x7E5 → 0x7ED | ✓ | On-board charger (not yet decoded) |
+| VCU | 0x7E0 → 0x7E8 | ✗ | Not on OBD-II diagnostic bus (behind gateway) |
 
-## Known Limitations
+## Speed Formula Details
 
-| Item                    | Details                                                                                                            |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| **Motor RPM**           | Not available — VCU is on a separate CAN bus                                                                       |
-| **True vehicle speed**  | Not available — `SPEED` proxy from MCU d14 (±3 km/h)                                                               |
-| **HV current sign**     | Unsigned encoding; regen shows as overflow (>6000A)                                                                |
-| **Cell voltages**       | All 88 cells validated but not included — parameter names need to be added to WiCAN schema first (see Future Work) |
-| **Outside temperature** | Byte position unconfirmed — removed pending validation                                                             |
-| **Battery current**     | Not found in BMS 0x0101 (bytes 5–8 always zero); likely in BMS 0x0102–0x0104                                       |
+The speed signal was reverse-engineered by correlating raw MCU bytes with Car Scanner Pro's decoded VMCU speed across 922 synchronised samples, achieving **R = 1.0000** (zero error on every sample).
 
-## Installation
+The MCU stores vehicle speed as a **signed 16-bit little-endian value in hundredths of a mph**:
 
-1. Open the WiCAN web interface
-2. Go to **Automate** → **Vehicle Specific**
-3. Upload the JSON file, or select the profile from the dropdown after it's merged
-4. Reboot the WiCAN
+```
+raw = signed(B20) × 256 + B19
+speed_kmh = raw × 0.01609344
+speed_mph = raw × 0.01
+```
 
-## Future Work
+The WiCAN formula uses `S20` (signed byte prefix) for the high byte:
+```
+SPEED = (S20*256+B19)*0.01609344
+```
 
-- [ ] Add 88 individual cell voltage parameters (requires schema PR to add `HV_C_V_01`–`HV_C_V_88` to allowed names)
-- [ ] Identify battery current signal in BMS DIDs 0x0102–0x0104
-- [ ] Explore unknown ECUs 0x7E3 and 0x7E5 (OBC? EPCU?)
-- [ ] Validate outside temperature byte position
+The constant `0.01609344 = 1.609344 / 100` is the exact km-per-mile conversion divided by 100.
 
-## Methodology
+- **Resolution:** 0.016 km/h (0.01 mph)
+- **Range:** tested 0–110 km/h forward, −1 km/h creep in Neutral
+- **Zero speed:** B19 = 0x00, B20 = 0x00
 
-All byte positions were determined through systematic reverse engineering:
+ENGINE_RPM uses the same raw int16 multiplied by the fixed gear ratio constant (0.967711), derived from correlating BMS Drive Motor Speed with VMCU speed across multiple drive sessions.
 
-1. **PID discovery** — Service 0x22 DID sweeps across BMS, MCU, HVAC, TPMS, and Cluster ECUs using SavvyCAN and python-can
-2. **Raw log analysis** — Car Scanner Pro ELM327 logs parsed to identify ISO-TP frame boundaries and byte positions
-3. **GPS ground truth** — Three drive sessions (67.1 km total) with concurrent GPS logging to validate speed proxy (R=0.997) and disprove earlier incorrect mappings
-4. **Cross-validation** — All formulas verified against Car Scanner Pro decoded values and physical measurements (dashboard SOC, tire pressure gauge)
+## B-Index Convention
 
-## Credits
+WiCAN's expression parser uses **0-based indexing**: `Bn = data[n]`. The data array is the raw concatenation of all CAN frame bytes (after stripping the CAN ID header), including ISO-TP PCI bytes and consecutive frame sequence bytes. This means:
 
-Developed through extensive reverse engineering and testing by:
+- B0 = first byte of the first frame (typically the PCI byte 0x10 for multi-frame)
+- CF sequence bytes (0x21, 0x22, 0x23...) appear in the data stream and must be skipped when mapping parameters
+- For signed single bytes, use the `S` prefix: `S17` reads `data[17]` as int8 (−128 to 127)
+- For signed multi-byte ranges, use `[S start:S end]` (big-endian only, start ≤ end)
+- For little-endian int16, manually compose: `S_high*256+B_low`
 
-- **Sándor Balikó** ([@sbaliko](https://github.com/sbaliko)) — vehicle owner, PID discovery, formula development, and validation
-- **Claude** (Anthropic) — log analysis, byte mapping, GPS correlation, and documentation
+## Architecture Notes
 
-Special thanks to:
+The Ioniq Electric uses a **gateway-filtered OBD-II bus**. The gateway ECU blocks all broadcast CAN traffic — only diagnostic request/response pairs pass through the OBD-II connector. This means:
 
-- [WiCAN / MeatPi](https://github.com/meatpiHQ/wican-fw) for the OBD-II WiFi adapter
-- [Car Scanner Pro](https://www.carscanner.info/) used for initial PID discovery and cross-validation
-- [JejuSoul/OBD-PIDs-for-HKMC-EVs](https://github.com/JejuSoul/OBD-PIDs-for-HKMC-EVs) community reference
+- Standard OBD-II speed/RPM (Mode 01 PIDs 0x0D/0x0C via VCU 0x7E0) are **not accessible**
+- Passive CAN sniffing captures zero broadcast frames
+- Speed must be read from MCU service 0x21 PID 0x01 as described above
 
-## Version History
+## Hardware Tested
 
-| Version | Date       | Changes                                                                                                                                                               |
-| ------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| v1.0    | 2026-02-07 | Initial release with cell voltages and custom parameter names                                                                                                         |
-| v2.0    | 2026-03-03 | Schema-compliant names, fixed B-number errors (HV_V, T_CAB, cell IDs), added speed proxy, tire temps, power calculation. Removed cell voltages pending schema update. |
+- WiCAN Pro (firmware v4.50, ELM327 via WiFi/BLE)
+- vLinker MC (STN2120 v5.8.1, ELM327 via Bluetooth)
+- RH02 USB-to-CAN (SLCAN via python-can)
 
-## License
+## Validation
 
-This profile is provided as-is for the WiCAN community. Feel free to use and modify.
+All 33 parameters verified on a 2021 Hyundai Ioniq Electric 38kWh (European market) across multiple drive sessions from March–June 2026, including GPS-correlated speed validation (R = 0.98 over 502 driving samples, 778 total WiCAN samples).
+
+## Compatibility
+
+This profile was developed on a 2021 model. It should work on 2020–2021 Ioniq Electric 38kWh (facelift). The 28kWh pre-facelift model may use different byte positions. The Kona Electric and Niro EV share a similar platform and may have compatible BMS PIDs, but the MCU byte mapping should be verified independently.
