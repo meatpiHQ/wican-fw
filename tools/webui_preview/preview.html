@@ -1763,7 +1763,7 @@
   });
 
   const settingsList = () => ({
-    components: Object.keys(S).sort().map((n) => ({ name: n, version: 1, degraded: false, pending_reboot: false })),
+    components: Object.keys(S).sort().map((n) => ({ name: n, version: 1, degraded: false, pending_reboot: !!S[n].pending })),
   });
 
   const FIXED = {
@@ -2039,7 +2039,7 @@
     }
     if (method === "POST" && path === "/api/autopid/group") { if (body && typeof body.enabled === "boolean") state.groupOn = body.enabled; return J({ ok: true }); }
     if (method === "POST" && path === "/api/settings/submit") return J({ reboot: false });
-    if (method === "POST" && path === "/api/restart") return J({ ok: true });
+    if (method === "POST" && path === "/api/restart") { Object.values(S).forEach((x) => { x.pending = false; }); return J({ ok: true }); }
     if (method === "POST" && path === "/api/faults/clear") { S.__faults = []; return J({ cleared: true }); }
     if (method === "POST" && path === "/api/vpn/keygen") return J({ public_key: "MockPubKey000000000000000000000000000000000=" });
     if (method === "POST" && path === "/api/autopid/dtc/scan") return J({ ok: true });
@@ -2101,7 +2101,7 @@
     if (m) {
       const c = m[1];
       if (!S[c]) return J({ error: "unknown component" }, 404);
-      if (method === "PUT") { state.puts = (state.puts || 0) + 1; S[c].values = { ...body }; return J({ changed: true }); }
+      if (method === "PUT") { state.puts = (state.puts || 0) + 1; S[c].values = { ...body }; S[c].pending = true; return J({ changed: true }); }
       return J({ ...S[c].values, degraded: false, pending_reboot: false });
     }
 
@@ -2611,6 +2611,22 @@ input[type="range"]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px var
 .modal h3{font-size:16px;font-weight:700;margin-bottom:8px}
 .modal p{color:var(--text-2);font-size:13.5px;margin:0 0 16px}
 .modal .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.modal.wide{max-width:640px}
+/* vehicle profile picker (Automate > Parameters > Vehicle Specific, 2026-09-17) */
+.vp-search{position:relative}
+.vp-search svg{position:absolute;left:11px;top:50%;width:15px;height:15px;transform:translateY(-50%);color:var(--text-3);pointer-events:none}
+.vp-search input{padding-left:34px}
+.vp-list{margin-top:10px;max-height:352px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+.vp-row{display:grid;grid-template-columns:18px 1fr auto;gap:10px;align-items:center;padding:10px 12px;border-top:1px solid var(--border);cursor:pointer;font-size:13.5px}
+.vp-row:first-child{border-top:none}
+.vp-row:hover{background:var(--surface-2)}
+.vp-row.sel{background:var(--primary-tint)}
+.vp-row .nm{font-weight:600;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vp-row .nm .mk{color:var(--text-2)}
+.vp-row .meta{font-family:var(--mono);font-size:12px;color:var(--text-3);white-space:nowrap}
+.vp-row .tick{width:16px;height:16px;color:var(--primary)}
+.vp-row mark{background:var(--mono-hot);color:var(--mono-hot-text);border-radius:3px;padding:0 1px}
+.vp-foot{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
 #offline{position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:85;display:none;
   align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border-strong);border-radius:10px;
   padding:10px 16px;box-shadow:var(--shadow-lg);font-weight:600;font-size:13px}
@@ -2818,6 +2834,7 @@ const IC={
   code:'<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
   book:'<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
   check:'<polyline points="20 6 9 17 4 12"/>',
+  search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   save:'<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/>',
   stop:'<rect x="6" y="6" width="12" height="12" rx="1"/>',
 };
@@ -2891,9 +2908,28 @@ function sleepAckModal(){return new Promise(res=>{
   const ok=$("#modal-root .acts button.pri");
   if(ok){ok.disabled=true;cb.onchange=()=>{ok.disabled=!cb.checked;};}
 });}
+/* Apply Configuration on the Parameters card also saves the card's settings
+   (meatpi 2026-09-17): this modal makes the restart they need explicit and
+   carries the sleep-off acknowledgement when sleep is off. Resolves "later",
+   "now", or null (dismissed = nothing saved). */
+function settingsSaveModal(){return new Promise(res=>{
+  const sleepOff=sleepWillBeEnabled()===false;
+  const cb=sleepOff?h("input",{type:"checkbox"}):null;
+  const body=h("div",{},
+    h("p",{},"The PIDs are live. The group switches, init chains and the vehicle profile are settings: they are saved now and take effect after a restart (about 15 s)."),
+    sleepOff?banner("warn","alert","Sleep mode is OFF: the WiCAN stays awake and can drain the vehicle battery when the engine is off."):null,
+    cb?h("label",{style:"display:flex;gap:9px;align-items:flex-start;margin-top:12px;cursor:pointer;font-size:13px;line-height:1.4"},cb,
+      h("span",{},"I understand that the WiCAN will not sleep and the vehicle battery may be drained.")):null);
+  let done=false;const fin=v=>{if(!done){done=true;res(v);}};
+  modal({title:"Configuration applied",body,actions:[{label:"Save, restart later",fn:()=>fin("later")},{label:"Save and restart now",kind:"pri",fn:()=>fin("now")}]});
+  const root=$("#modal-root");const prev=root.onclick;
+  root.onclick=e=>{if(e.target===root){prev&&prev(e);fin(null);}};
+  if(cb){const btns=[...root.querySelectorAll(".acts button")];btns.forEach(b=>b.disabled=true);cb.onchange=()=>btns.forEach(b=>b.disabled=!cb.checked);}
+});}
 const store={
   pending:new Map(),dirty:new Set(),
   stage(c,v){this.pending.set(c,v);this.dirty.add(c);renderSubmit();},
+  unstage(c){this.pending.delete(c);this.dirty.delete(c);renderSubmit();},
   count(){return this.dirty.size;},
   summary(){return[...this.dirty].map(niceName).join(", ");},
   revert(){this.pending.clear();this.dirty.clear();renderSubmit();route();},
@@ -2950,6 +2986,8 @@ function setConn(s,txt){
   if(prev==="reboot"&&s==="online"){toast("Device back online","ok");refreshSleep();route();}
   else if(prev==="offline"&&s==="online"){refreshSleep();route();}
 }
+async function refreshSettingsList(){const list=await tryGet("/api/settings");if(list&&list.components)conn.settings=list.components;}
+async function restartNow(){try{await api("/api/restart",{method:"POST"});}catch{}expectReboot("Restarting");}
 function expectReboot(reason="Rebooting"){conn.rebootUntil=Date.now()+95000;setConn("reboot",reason+", waiting for the device…");}
 async function ping(){
   try{const st=await api("/api/status");conn.status=st;
@@ -3059,7 +3097,7 @@ const LABELS={
   /* autopid */
   std_enabled:"Poll standard PIDs",custom_enabled:"Poll custom PIDs",specific_enabled:"Poll vehicle-specific PIDs",
   std_init:"Standard PID init commands",custom_init:"Custom PID init commands",specific_init:"Vehicle init commands",std_protocol:"OBD protocol",
-  vehicle:"Vehicle",pause_below_mv:"Pause below (V)",pause_follow_sleep:"Pause at the sleep voltage",pause_mode:"Pause mode",
+  vehicle:"Vehicle profile",pause_below_mv:"Pause below (V)",pause_follow_sleep:"Pause at the sleep voltage",pause_mode:"Pause mode",
   min_event_interval_ms:"Min event interval (ms)",
   dtc_enabled:"DTC scanning",dtc_allow_clear:"Allow clearing codes",dtc_scan_period_min:"Scan every (min)",
   dtc_pending:"Include pending codes",dtc_permanent:"Include permanent codes",dtc_freeze:"Read freeze frame",
@@ -3140,7 +3178,7 @@ const HELP={
   custom_init:"AT command chain sent once before custom-PID polling starts: optional, ';'-separated.",
   specific_init:"AT command chain sent once before vehicle-specific polling starts, ahead of the per-PID inits: optional, ';'-separated.",
   std_protocol:"Used for standard PIDs and the PID scan. Most cars since 2008 use CAN 11-bit 500 kbit/s; 29-bit filters need a 29-bit protocol.",
-  vehicle:"Name of the loaded vehicle profile: set when you pick your car above, editable.",
+  vehicle:"Name of the vehicle profile on this device. Choose profile searches the latest published list; the name stays editable.",
   min_event_interval_ms:"Rate limit for parameter-change events fed to rules.",
   "espnetlink.mode":"WiFi modem keeps the dongle's USB as power only (best GPS reception). USB Ethernet keeps the data lines on and uses the cable as the uplink.",
   auto_pair:"Read the dongle's AP key over USB automatically the first time it is plugged in.",
@@ -3207,7 +3245,7 @@ const PLACEHOLDER={
   "espnetlink.device_id":"set by pairing",static_ip:"192.168.1.50",static_netmask:"255.255.255.0",static_gw:"192.168.1.1",
   sta_static_ip:"192.168.1.50",sta_static_netmask:"255.255.255.0",sta_static_gw:"192.168.1.1",sta_dns:"optional, e.g. 1.1.1.1",dns:"e.g. 1.1.1.1",
   client_id:"optional",topic_prefix:"optional",can_filter:"7E8",can_mask:"7FF",address:"10.0.0.2",allowed_ip:"0.0.0.0",allowed_ip_mask:"0.0.0.0",
-  udp_host:"192.168.1.10",vehicle:"e.g. Hyundai Ioniq 5",std_init:"ATSP6;",custom_init:"optional AT chain",specific_init:"optional AT chain",
+  udp_host:"192.168.1.10",vehicle:"No profile loaded",std_init:"ATSP6;",custom_init:"optional AT chain",specific_init:"optional AT chain",
   dtc_init:"optional AT chain",dtc_rxheader:"7E8",dtc_uds_txid:"7E0",dtc_uds_rxid:"7E8",pub_topic:"~/can/rx",sub_topic:"~/can/tx",
   ca_file:"optional",auth_password:"8+ characters",
 };
@@ -3958,7 +3996,7 @@ function tabbedPage(container,base,tabs,sub){
   subNav={base,show};
   container.append(strip,panes);show(active);
 }
-const liveBadge=()=>h("span",{class:"chip ok",title:"Changes apply immediately on the device: no restart"},h("span",{class:"d"}),"Applies live");
+const liveBadge=()=>h("span",{class:"chip ok",title:"Apply Configuration takes effect immediately: no restart"},h("span",{class:"d"}),"Applies live");
 PAGES.automate=async(view,sub)=>{
   const p=page(view,null,"Automate","What to poll from the vehicle, and where the data goes.");
   const wrap=h("div",{class:"pane"});p.append(wrap);
@@ -3971,12 +4009,16 @@ PAGES.automate=async(view,sub)=>{
      this page so the staged PUT carries all edits together. */
   const GROUP_KEYS={std:["std_enabled","std_protocol","std_init"],custom:["custom_enabled","custom_init"],specific:["specific_enabled","vehicle","specific_init"]};
   const PAUSE_KEYS=["pause_below_mv","pause_follow_sleep"];
-  let av=null,sch=null;
+  let av=null,sch=null,avErr=null;
   const stageAv=()=>store.stage("autopid",av);
   /* 1. settings: master switch + pause rules (tab "Settings", card "Automate settings" — meatpi 2026-09-06) */
   try{
-    sch=await api("/api/settings/autopid/schema");
-    av=await api("/api/settings/autopid");delete av.degraded;delete av.pending_reboot;
+    /* one retry (meatpi 2026-09-17): the page re-routes on the first ping after a
+       restart, when a request can still be refused; a failure here used to drop
+       every group row of the Parameters card silently (banner on a hidden tab) */
+    const load=async p=>{try{return await api(p);}catch(e){await new Promise(r=>setTimeout(r,800));return await api(p);}};
+    sch=await load("/api/settings/autopid/schema");
+    av=await load("/api/settings/autopid");delete av.degraded;delete av.pending_reboot;
     const moved=new Set([].concat(...Object.values(GROUP_KEYS),PAUSE_KEYS));
     const keys=Object.keys((sch&&sch.properties)||{}).filter(k=>!k.startsWith("dtc_")&&!moved.has(k));
     let syncPause=()=>{};
@@ -4010,7 +4052,7 @@ PAGES.automate=async(view,sub)=>{
     const body=at>=0?[...rows.slice(0,at),pauseRow,sliderRow,...rows.slice(at)]:[...rows,pauseRow,sliderRow];
     paneBeh.append(card("Automate settings","zap",...body,
       note("","Values land on the Dashboard and flow to rules, the logger and the data destinations. Which PIDs are polled is set on the Parameters tab.")));
-  }catch(e){paneBeh.append(banner("crit","alert","AutoPID: "+e.message));}
+  }catch(e){avErr=e.message;paneBeh.append(banner("crit","alert","AutoPID: "+e.message));}
   /* 2. Home Assistant */
   try{
     const haVals=await api("/api/settings/ha_webhooks");
@@ -4078,6 +4120,15 @@ PAGES.automate=async(view,sub)=>{
   }catch(e){paneDest.append(banner("crit","alert","Destinations: "+e.message));}
   /* 4. parameters — the big editor card gets its own tab */
   const paramsCard=h("div",{});paneParams.append(paramsCard);
+  if(!av||!sch)paneParams.prepend(banner("crit","alert","The group switches, init chains and vehicle profile could not be loaded"+(avErr?" ("+avErr+")":"")+". ",
+    h("button",{class:"btn sm",type:"button",style:"margin-left:6px",onclick:()=>route()},"Retry")));
+  /* settings saved from this card wait for a restart (standard 4.2): say so
+     here, not only in the sidebar's Restart pending notice */
+  const pendNote=h("div",{});paneParams.prepend(pendNote);
+  const paintPending=()=>{const p=conn.settings.some(c=>c.name==="autopid"&&c.pending_reboot);
+    pendNote.replaceChildren(p?banner("warn","alert","Settings saved on this card (group switches, init chains, vehicle profile) take effect after a restart. ",
+      h("a",{href:"#",onclick:async e=>{e.preventDefault();if(await confirmModal("Restart WiCAN now?","Reboot"))restartNow();}},"Restart now"),"."):null);};
+  await refreshSettingsList();paintPending();
   tabbedPage(wrap,"automate",[
     {id:"settings",el:paneBeh},
     {id:"parameters",el:paneParams},
@@ -4098,8 +4149,29 @@ PAGES.automate=async(view,sub)=>{
     let cfg=await api("/api/autopid/config");
     if(typeof cfg==="string"){try{cfg=JSON.parse(cfg);}catch{cfg={};}}
     cfg.pids=cfg.pids||[];cfg.groups=cfg.groups&&cfg.groups.length?cfg.groups:[{name:"default",enabled_default:true,period_ms:1000}];
-    async function saveCfg(){try{await api("/api/autopid/config",{method:"PUT",body:cfg});markDirty(false);setApplyMsg("");toast("Configuration applied","ok");}
-      catch(e){setApplyMsg(e.message);toast("Config rejected: "+e.message,"err");}}
+    /* Apply Configuration = everything on this card (meatpi 2026-09-17): the
+       PIDs go live, and the card's staged settings (group switches, init
+       chains, vehicle profile) are SAVED as well, so a refresh keeps them; the
+       restart they need (standard 4.2: settings apply at boot) is offered in
+       the same modal, "later" leaves the Restart pending notices. Before, they
+       were only staged for Submit and a refresh after Apply emptied the
+       Vehicle profile + init fields (Ali, 2026-09-17). */
+    async function saveCfg(){
+      try{await api("/api/autopid/config",{method:"PUT",body:cfg});}
+      catch(e){setApplyMsg(e.message);toast("Config rejected: "+e.message,"err");return;}
+      markDirty(false);
+      if(!(av&&store.pending.has("autopid"))){setApplyMsg("");toast("Configuration applied","ok");return;}
+      const when=await settingsSaveModal();
+      if(!when){setApplyMsg("");toast("PIDs applied. The settings are not saved: Apply again or Submit Changes","");return;}
+      let r=null;
+      try{r=await api("/api/settings/autopid",{method:"PUT",body:av});}
+      catch(e){setApplyMsg(e.message);toast("PIDs applied, but the settings were rejected: "+e.message,"err");return;}
+      store.unstage("autopid");setApplyMsg("");
+      const changed=!(r&&r.changed===false);
+      if(!changed){toast("Configuration applied","ok");return;}
+      if(when==="now"){toast("Configuration applied, restarting","ok");restartNow();return;}
+      toast("Configuration applied. Settings saved: restart to apply them","ok");
+      await refreshSettingsList();paintPending();buildMenu(curSection);}
     /* scan-results picker: firmware stores ready-made config rows —
        review, tick, merge into the table (then Apply). */
     function offerScanResults(r){
@@ -4369,80 +4441,127 @@ PAGES.automate=async(view,sub)=>{
       return renamed;
     }
     const renameNote=renamed=>{if(renamed.length)toast(renamed.length+" duplicate parameter name"+(renamed.length>1?"s":"")+" in this profile renamed: "+renamed.slice(0,3).join(", ")+(renamed.length>3?" and more":""),"");};
+    /* Vehicle Specific (meatpi 2026-09-17): ONE "Vehicle profile" row (the
+       vehicle setting, editable) with a Choose profile button that opens a
+       search dialog over the latest published list. Picking a profile only
+       STAGES it on this page: the vehicle-specific PIDs are replaced in the
+       table (Apply Configuration sends them), the name + init + enable are
+       staged for Submit Changes (settings apply after the restart, standard
+       4.2). Nothing reaches the device on its own (the old "Your car"
+       dropdown PUT the config the moment it changed). */
     function vehPane(){
-      const tbl=pidTable("specific","No vehicle profile loaded: pick your car above");
-      const state={cars:null,car:null,busy:false};
-      const selWrap=h("div",{class:"frow"});  /* aligned with the group rows above */
-      /* the car-level name + init chain are autopid settings — the shared
-         group rows above the picker show and edit them; loading a profile
-         stages the car's values into the same object */
+      const tbl=pidTable("specific","No vehicle profile loaded: choose a profile above, or add PIDs by hand");
+      const state={cars:null,source:null};
+      const maxName=(sch&&sch.properties&&sch.properties.vehicle&&sch.properties.vehicle.maxLength)||63;
+      const rows=groupRows.specific||null;
+      const vehRow=rows?rows.find(r=>r.dataset&&r.dataset.key==="vehicle"):null;
+      let staged=null; /* {car,snap}: what Discard puts back */
+      const banner=h("div",{class:"banner info",style:"margin-top:12px;display:none"});
+      const paintBanner=state=>{ /* false = staged; "unsaved" = PIDs applied but the settings save was declined */
+        if(!staged){banner.style.display="none";return;}
+        const n=(staged.car.pids||[]).length;const unsaved=state==="unsaved";
+        banner.className="banner "+(unsaved?"warn":"info");
+        banner.replaceChildren(ic(unsaved?"alert":"info"),
+          unsaved?h("span",{},h("b",{},staged.car.car_model),": PIDs applied, but the profile name and init commands above are not saved yet. Press Apply Configuration again and save, or Submit Changes.")
+                 :h("span",{},h("b",{},staged.car.car_model)," is staged, not applied: "+n+" PID"+(n===1?"":"s")+" replace the vehicle-specific table, and the profile name and init commands above are filled in. Standard and custom PIDs are kept. Apply Configuration sends it all; the name and init commands take effect after the restart it offers."),
+          h("span",{class:"grow"}),
+          unsaved?null:h("button",{class:"btn sm gh",type:"button",title:"Put back what the device has now",onclick:()=>discard()},"Discard"));
+        banner.style.display="";};
+      applyWatch.add(t=>{if(t||!staged||!tbl.isConnected)return;
+        if(store.pending.has("autopid"))paintBanner("unsaved");else{staged=null;paintBanner(false);}});
       const stageCar=car=>{if(!av)return;
-        av.vehicle=car.car_model;av.specific_init=car.init||"";av.specific_enabled=true;
-        stageAv();if(groupRows.specific)groupRows.specific.load();};
-      const info=h("span",{class:"help"});
-      /* selecting a profile IS the load (meatpi 2026-09-06): the vehicle-
-         specific PID set is replaced live and the car's name + init are
-         staged for Submit: no separate Load button. Fetch latest
-         re-reads the published list, bypassing caches. */
-      const loadCar=async car=>{
-        if(!car||state.busy)return;
-        state.busy=true;sel.disabled=true;
+        av.vehicle=String(car.car_model||"").slice(0,maxName);av.specific_init=car.init||"";av.specific_enabled=true;
+        stageAv();if(rows)rows.load();};
+      const snapshot=()=>({pids:cfg.pids.filter(pd=>pidType(pd)==="specific").map(pd=>JSON.parse(JSON.stringify(pd))),
+        vehicle:av?av.vehicle:"",init:av?av.specific_init:"",en:av?av.specific_enabled:true,dirty:cfgDirty,pending:store.pending.has("autopid")});
+      const stageProfile=car=>{
+        if(!car)return;
+        const snap=staged?staged.snap:snapshot(); /* a second pick still discards back to the first snapshot */
         const renamed=importProfile(car);
-        try{await api("/api/autopid/config",{method:"PUT",body:cfg});}
-        catch(e){state.busy=false;sel.disabled=false;info.textContent="";return toast("Profile rejected: "+e.message,"err");}
         stageCar(car);
-        tbl.rebuild();
-        info.textContent=(car.pids||[]).length+" PIDs loaded";
-        toast(car.car_model+" loaded: "+(car.pids||[]).length+" PIDs (name + init staged: Submit Changes)","ok");
-        renameNote(renamed);
-        state.busy=false;sel.disabled=false;};
-      const sel=h("select",{style:"flex:1 1 260px;width:auto;min-width:260px",onchange:e=>{
-        state.car=(state.cars||[]).find(c=>c.car_model===e.target.value)||null;
-        if(state.car)loadCar(state.car);else info.textContent="";}},
-        h("option",{value:""},"Loading profiles…"));
-      const fetchBtn=h("button",{class:"btn sm",type:"button",title:"Re-read the published vehicle_profiles.json",
-        onclick:()=>fetchProfiles(true)},ic("refresh"),"Fetch latest");
-      const fetchProfiles=async fresh=>{
-        fetchBtn.disabled=true;info.textContent="Fetching…";
-        try{
-          const res=await fetch(fresh?PROFILES_URL+"?t="+Date.now():PROFILES_URL,fresh?{cache:"no-store"}:undefined);
-          if(!res.ok)throw new Error("HTTP "+res.status);
-          const j=await res.json();
-          state.cars=(j&&j.cars)||[];
-          if(!state.cars.length)throw new Error("no cars in profile file");
-          sel.replaceChildren(h("option",{value:""},"Select your vehicle"),
-            ...state.cars.map(c=>h("option",{value:c.car_model},c.car_model)));
-          /* first load: show the car this device is already set up for;
-             after Fetch latest leave it unselected so picking the same
-             car re-loads the fresh profile */
-          const cur=av&&av.vehicle;
-          if(!fresh&&cur&&state.cars.some(c=>c.car_model===cur)){sel.value=cur;state.car=state.cars.find(c=>c.car_model===cur);}
-          info.textContent=state.cars.length+" profiles"+(fresh?" · fetched "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"");
-        }catch(e){
-          sel.replaceChildren(h("option",{value:""},"profile list unavailable"));
-          info.textContent="Could not fetch vehicle_profiles.json ("+e.message+"): use the file upload below.";
-        }
-        fetchBtn.disabled=false;};
-      selWrap.append(h("label",{},"Your car"),h("div",{class:"ctl"},h("div",{class:"rowflex",style:"gap:8px;flex-wrap:wrap"},sel,fetchBtn,info)),
-        h("div",{class:"help"},"Selecting a profile replaces the vehicle-specific PIDs right away and stages the car's name and init commands for Submit. Fetch latest re-reads the published list; or drop a profile file below."));
-      fetchProfiles(false);
+        markDirty();tbl.rebuild();
+        staged={car,snap};paintBanner(false);
+        toast(car.car_model+" staged: "+(car.pids||[]).length+" PIDs. Apply Configuration sends them","ok");
+        if(String(car.car_model||"").length>maxName)toast("Profile name shortened to "+maxName+" characters (device limit)","");
+        renameNote(renamed);};
+      const discard=()=>{
+        if(!staged)return;const s=staged.snap;
+        cfg.pids=cfg.pids.filter(pd=>pidType(pd)!=="specific").concat(s.pids);
+        if(av){av.vehicle=s.vehicle;av.specific_init=s.init;av.specific_enabled=s.en;
+          if(s.pending)stageAv();else store.unstage("autopid");
+          if(rows)rows.load();}
+        staged=null;paintBanner(false);markDirty(s.dirty);tbl.rebuild();
+        toast("Profile discarded","");};
+      /* ---- the picker dialog ---- */
+      const nParams=c=>(c.pids||[]).reduce((a,p)=>a+((p.parameters||[]).length||0),0);
+      const fetchList=async fresh=>{
+        const res=await fetch(fresh?PROFILES_URL+"?t="+Date.now():PROFILES_URL,fresh?{cache:"no-store"}:undefined);
+        if(!res.ok)throw new Error("HTTP "+res.status);
+        const j=await res.json();const cars=(j&&j.cars)||[];
+        if(!cars.length)throw new Error("no cars in profile file");
+        state.cars=cars;state.source="fetched "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});};
+      const openPicker=async()=>{
+        let sel=null,q="",shown=[],okBtn=null;
+        const status=h("span",{class:"help",style:"font-size:12.5px"});
+        const list=h("div",{class:"vp-list"});
+        const foot=h("span",{class:"help"});
+        const input=h("input",{placeholder:"Search by make or model",oninput:e=>{q=e.target.value.trim().toLowerCase();render();}});
+        const hl=s=>{const i=q?s.toLowerCase().indexOf(q):-1;return i<0?[s]:[s.slice(0,i),h("mark",{},s.slice(i,i+q.length)),s.slice(i+q.length)];};
+        const nameEl=full=>{const i=full.indexOf(": ");
+          return i<0?h("span",{class:"nm",title:full},...hl(full))
+                     :h("span",{class:"nm",title:full},h("span",{class:"mk"},...hl(full.slice(0,i+1)))," ",...hl(full.slice(i+2)));};
+        const row=c=>{const on=sel===c;const t=on?ic("check"):h("span",{});if(on)t.classList.add("tick");
+          return h("div",{class:"vp-row"+(on?" sel":""),onclick:()=>{sel=c;render();},ondblclick:()=>{sel=c;use();}},
+            t,nameEl(String(c.car_model||"")),h("span",{class:"meta"},(c.pids||[]).length+" PIDs · "+nParams(c)+" parameters"));};
+        const render=()=>{
+          const cars=state.cars||[];
+          shown=cars.filter(c=>!q||String(c.car_model||"").toLowerCase().includes(q));
+          if(sel&&!shown.includes(sel))sel=null;
+          list.replaceChildren(...shown.map(row),shown.length?null:h("div",{class:"empty"},cars.length?"No profile matches the search":"No profiles loaded"));
+          foot.textContent=cars.length?(q?shown.length+" of "+cars.length+" profiles match.":cars.length+" profiles."):"";
+          if(okBtn)okBtn.disabled=!sel;
+          const el=list.querySelector(".vp-row.sel");if(el&&el.scrollIntoView)el.scrollIntoView({block:"nearest"});};
+        const move=d=>{if(!shown.length)return;let i=shown.indexOf(sel);i=Math.min(shown.length-1,Math.max(0,i+d));sel=shown[i];render();};
+        const fetchBtn=h("button",{class:"btn sm gh",type:"button",title:"Re-read the published vehicle_profiles.json",onclick:()=>load(true)},ic("refresh"),"Fetch latest");
+        const load=async fresh=>{
+          fetchBtn.disabled=true;status.textContent="Fetching the published list…";
+          try{await fetchList(fresh);status.textContent="From the published list: "+state.cars.length+" profiles, "+state.source+".";}
+          catch(e){status.textContent="Could not fetch the published list ("+e.message+"). Drop a profile file on the page instead.";}
+          fetchBtn.disabled=false;render();};
+        const cur=(av&&av.vehicle)||"";
+        const body=h("div",{},
+          h("div",{class:"rowflex",style:"gap:8px;margin-bottom:12px;flex-wrap:wrap"},status,h("span",{class:"grow"}),fetchBtn),
+          h("div",{class:"vp-search"},ic("search"),input),list,
+          h("div",{class:"vp-foot"},foot,h("span",{class:"grow"}),cur?h("span",{class:"help"},"On this device now: ",h("b",{style:"color:var(--text-2)"},cur)):null));
+        const close=modal({title:"Choose a vehicle profile",body,actions:[{label:"Cancel"},{label:"Use this profile",kind:"pri",fn:()=>stageProfile(sel)}]});
+        const m=$("#modal-root .modal");if(m)m.classList.add("wide");
+        okBtn=$("#modal-root .acts button.pri");
+        const use=()=>{if(!sel)return;close();stageProfile(sel);};
+        body.onkeydown=e=>{if(e.key==="ArrowDown"){e.preventDefault();move(1);}else if(e.key==="ArrowUp"){e.preventDefault();move(-1);}
+          else if(e.key==="Enter"){e.preventDefault();use();}else if(e.key==="Escape"){e.preventDefault();close();}};
+        if(state.cars){status.textContent=(state.source?"From the published list: ":"From the loaded file: ")+state.cars.length+" profiles"+(state.source?", "+state.source:"")+".";render();}
+        else await load(false);
+        setTimeout(()=>input.focus(),30);};
+      /* the Choose profile button rides on the settings row's control (the
+         rows are built once and moved between pane rebuilds: wrap once,
+         re-point the handler every time) */
+      if(vehRow){const ctl=vehRow.querySelector(".ctl");const inp=ctl&&ctl.querySelector("input");
+        let btn=ctl&&ctl.querySelector(".vp-choose");
+        if(inp&&!btn){btn=h("button",{class:"btn sm vp-choose",type:"button",title:"Search the published vehicle profiles"},ic("car"),"Choose profile");
+          inp.style.flex="1 1 320px";inp.style.width="auto";
+          ctl.replaceChildren(h("div",{class:"rowflex",style:"gap:8px;flex-wrap:wrap"},inp,btn));}
+        if(btn)btn.onclick=()=>openPicker();}
+      /* file drop: the published file fills the picker, a single car is
+         staged like a pick, a config export is loaded into the tables (all
+         wait for Apply) */
       const applyFile=async f=>{
         if(!f)return;
         try{
           const j=JSON.parse(await f.text());
-          if(j&&j.cars){ /* the whole published file */
-            state.cars=j.cars;
-            sel.replaceChildren(h("option",{value:""},"Select your vehicle"),
-              ...state.cars.map(c=>h("option",{value:c.car_model},c.car_model)));
-            toast("Profile list loaded: pick your car","ok");
-          }else if(j&&j.car_model){ /* a single car profile */
-            state.car=j;const renamed=importProfile(j);
-            await api("/api/autopid/config",{method:"PUT",body:cfg});
-            stageCar(j);tbl.rebuild();toast(j.car_model+" applied","ok");renameNote(renamed);
-          }else{ /* a full device config export */
-            await api("/api/autopid/config",{method:"PUT",body:j});
-            cfg=j;cfg.pids=cfg.pids||[];tbl.rebuild();toast("Configuration applied","ok");
-          }
+          if(j&&j.cars){state.cars=j.cars;state.source=null;toast("Profile list loaded from the file: "+j.cars.length+" profiles","ok");openPicker();}
+          else if(j&&j.car_model){stageProfile(j);}
+          else{cfg=j;cfg.pids=cfg.pids||[];cfg.groups=cfg.groups&&cfg.groups.length?cfg.groups:[{name:"default",enabled_default:true,period_ms:1000}];
+            markDirty();tbl.rebuild();toast("Configuration loaded: press Apply Configuration to send it","ok");}
         }catch(err){toast("File rejected: "+err.message,"err");}};
       const fileInput=h("input",{type:"file",accept:".json",style:"display:none",
         onchange:e=>{applyFile(e.target.files[0]);e.target.value="";}});
@@ -4456,17 +4575,13 @@ PAGES.automate=async(view,sub)=>{
         h("div",{style:"display:flex;gap:10px;justify-content:center"},
           h("label",{class:"btn sm"},"Choose File",fileInput),
           h("a",{class:"btn sm gh",href:"https://github.com/meatpiHQ/wican-fw",target:"_blank"},"Profile repository")));
-      const rows=groupRows.specific?[...groupRows.specific]:[];
-      const en=rows.find(r=>r.dataset&&r.dataset.key==="specific_enabled")||rows[0]||null;
-      /* Your car sits right under the enable switch, ahead of the name + init it fills (meatpi 2026-09-16) */
-      const head=h("div",{style:"margin-bottom:14px"},en,selWrap,...rows.filter(r=>r!==en));
-      return h("div",{},head,tbl,
+      return h("div",{},groupHead("specific"),tbl,banner,
         h("div",{class:"rowflex",style:"gap:8px;margin-top:12px;flex-wrap:wrap"},
-          h("button",{class:"btn sm",onclick:()=>{cfg.pids.push({name:"NewPID",cmd:"22F1901",group:"default",period_ms:0,type:"specific",init:"",parameters:[{name:"NewPID",expression:"B3",unit:""}]});tbl.rebuild();}},ic("plus"),"Add PID"),
+          h("button",{class:"btn sm",onclick:()=>{cfg.pids.push({name:"NewPID",cmd:"22F1901",group:"default",period_ms:0,type:"specific",init:"",parameters:[{name:"NewPID",expression:"B3",unit:""}]});markDirty();tbl.rebuild();}},ic("plus"),"Add PID"),
           h("span",{class:"grow"}),
           h("button",{class:"btn pri sm",onclick:saveCfg},"Apply Configuration")),
         dropZone,
-        note("","Profiles carry the PIDs, decode expressions and init strings for a specific vehicle. Selecting a profile replaces the vehicle-specific PIDs (standard and custom PIDs are kept) and stages the car's name and init commands above. Submit Changes to apply them. Fetch latest re-reads the published list."));
+        note("","Profiles carry the PIDs, decode expressions and init strings for a specific vehicle. Choosing a profile stages it on this page: the vehicle-specific PIDs are replaced (standard and custom PIDs are kept) and the name and init commands above are filled in. Apply Configuration sends the PIDs and saves the name and init commands; those take effect after the restart it offers."));
     }
     function cusPane(){
       const ta=h("textarea",{style:"min-height:280px"},JSON.stringify(cfg,null,2));

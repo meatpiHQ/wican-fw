@@ -81,7 +81,7 @@
   });
 
   const settingsList = () => ({
-    components: Object.keys(S).sort().map((n) => ({ name: n, version: 1, degraded: false, pending_reboot: false })),
+    components: Object.keys(S).sort().map((n) => ({ name: n, version: 1, degraded: false, pending_reboot: !!S[n].pending })),
   });
 
   const FIXED = {
@@ -357,7 +357,7 @@
     }
     if (method === "POST" && path === "/api/autopid/group") { if (body && typeof body.enabled === "boolean") state.groupOn = body.enabled; return J({ ok: true }); }
     if (method === "POST" && path === "/api/settings/submit") return J({ reboot: false });
-    if (method === "POST" && path === "/api/restart") return J({ ok: true });
+    if (method === "POST" && path === "/api/restart") { Object.values(S).forEach((x) => { x.pending = false; }); return J({ ok: true }); }
     if (method === "POST" && path === "/api/faults/clear") { S.__faults = []; return J({ cleared: true }); }
     if (method === "POST" && path === "/api/vpn/keygen") return J({ public_key: "MockPubKey000000000000000000000000000000000=" });
     if (method === "POST" && path === "/api/autopid/dtc/scan") return J({ ok: true });
@@ -419,7 +419,7 @@
     if (m) {
       const c = m[1];
       if (!S[c]) return J({ error: "unknown component" }, 404);
-      if (method === "PUT") { state.puts = (state.puts || 0) + 1; S[c].values = { ...body }; return J({ changed: true }); }
+      if (method === "PUT") { state.puts = (state.puts || 0) + 1; S[c].values = { ...body }; S[c].pending = true; return J({ changed: true }); }
       return J({ ...S[c].values, degraded: false, pending_reboot: false });
     }
 

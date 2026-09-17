@@ -94,7 +94,8 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
     await sleep(200);
   }
   check("re-adding scan results does not duplicate", stdSpans().filter((t) => t === "010C1").length === 1);
-  /* vehicle-specific tab: dropdown -> load profile -> B-shift check */
+  /* vehicle-specific tab (2026-09-17): ONE Vehicle profile row + Choose
+     profile dialog; picking only stages (no PUT until Apply) */
   const segBtns = [...d().querySelectorAll(".seg button")];
   check("four parameter tabs", segBtns.length >= 4 && segBtns.some((b) => b.textContent === "Custom PIDs"));
   check("tab order Standard->Vehicle->Custom->Raw",
@@ -103,23 +104,52 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
   const vehBtn = segBtns.find((b) => b.textContent === "Vehicle Specific");
   vehBtn.click();
   await sleep(400);
-  const carSel = [...d().querySelectorAll("select")].find((s) => [...s.options].some((o) => /Ioniq2017/.test(o.textContent)));
-  check("car dropdown populated from vehicle_profiles.json", !!carSel);
-  if (carSel) {
-    const btns = () => [...d().querySelectorAll("button")].map((b) => b.textContent.trim());
-    check("Fetch latest button, no Load Profile button",
-      btns().some((t) => t.includes("Fetch latest")) && !btns().includes("Load Profile"));
-    carSel.value = "Hyundai: Ioniq2017";
-    carSel.dispatchEvent(new w.Event("change"));
-    await sleep(500);   /* selecting IS the load: config PUT + staging */
-    check("vehicle name + init rows head the Vehicle Specific pane",
-      !!d().querySelector('.frow[data-key="vehicle"]') && !!d().querySelector('.frow[data-key="specific_init"]'));
+  const origFetch = w.fetch; let cfgPuts = 0;
+  w.fetch = (u, o) => { if (o && o.method === "PUT" && /\/api\/autopid\/config/.test(String(u))) cfgPuts++; return origFetch(u, o); };
+  const vehRowEl = d().querySelector('.frow[data-key="vehicle"]');
+  check("Vehicle profile row heads the pane (renamed from Vehicle)",
+    !!vehRowEl && /Vehicle profile/.test((vehRowEl.querySelector("label") || {}).textContent || "") &&
+    !!d().querySelector('.frow[data-key="specific_init"]') && !!d().querySelector('.frow[data-key="specific_enabled"]'));
+  check("no Your car dropdown any more",
+    ![...d().querySelectorAll("select")].some((s) => [...s.options].some((o) => /Select your vehicle|Ioniq2017/.test(o.textContent))) &&
+    ![...d().querySelectorAll(".frow>label")].some((l) => l.textContent.trim() === "Your car"));
+  const chooseBtn = vehRowEl && [...vehRowEl.querySelectorAll("button")].find((b) => /Choose profile/.test(b.textContent));
+  check("Choose profile button next to the field", !!chooseBtn);
+  const vehInput = () => d().querySelector('.frow[data-key="vehicle"] input');
+  const initInput = () => d().querySelector('.frow[data-key="specific_init"] input');
+  const modalEl = () => d().querySelector("#modal-root");
+  const deviceName = (vehInput() || {}).value;
+  if (chooseBtn) {
+    chooseBtn.click();
+    await sleep(600);   /* the mock serves vehicle_profiles.json: 3 cars */
+    check("picker dialog opens with the fetched list",
+      /Choose a vehicle profile/.test(modalEl().textContent) && modalEl().querySelectorAll(".vp-row").length === 3 &&
+      /3 profiles, fetched/.test(modalEl().textContent));
+    check("Fetch latest lives in the dialog", [...modalEl().querySelectorAll("button")].some((b) => /Fetch latest/.test(b.textContent)));
+    check("footer names the profile on the device", new RegExp("On this device now: " + deviceName).test(modalEl().textContent));
+    const search = modalEl().querySelector(".vp-search input");
+    search.value = "ioniq"; search.dispatchEvent(new w.Event("input"));
+    await sleep(50);
+    check("search filters the list (1 of 3 match)", modalEl().querySelectorAll(".vp-row").length === 1 &&
+      /Ioniq2017/.test(modalEl().querySelector(".vp-row").textContent) && /1 of 3 profiles match/.test(modalEl().textContent) &&
+      !!modalEl().querySelector(".vp-row mark"));
+    const okBtn = [...modalEl().querySelectorAll(".acts button")].find((b) => /Use this profile/.test(b.textContent));
+    check("Use this profile disabled until a row is selected", !!okBtn && okBtn.disabled === true);
+    modalEl().querySelector(".vp-row").click();
+    await sleep(50);
+    check("clicking a row selects it (tick, button enabled)", !!modalEl().querySelector(".vp-row.sel .tick") && okBtn.disabled === false);
+    okBtn.click();
+    await sleep(300);
+    check("dialog closed after Use this profile", !modalEl().querySelector(".modal"));
+    check("profile staged into the field + init (not applied)",
+      (vehInput() || {}).value === "Hyundai: Ioniq2017" && ((initInput() || {}).value || "").length > 0 && cfgPuts === 0);
+    const bannerEl = () => [...d().querySelectorAll(".banner.info")].find((b) => /staged|applied/.test(b.textContent) && b.style.display !== "none");
+    check("staged banner + Unsaved edits chip",
+      !!bannerEl() && /is staged, not applied/.test(bannerEl().textContent) && /Apply Configuration/.test(bannerEl().textContent) &&
+      [...d().querySelectorAll(".chip.warn")].some((c) => /Unsaved edits/.test(c.textContent) && c.style.display !== "none"));
     check("no RX Hdr column on vehicle tab", !d().querySelector('input[placeholder="7E8"]'));
     check("drag-drop profile zone on vehicle tab", !!d().querySelector("#view .drop") &&
       [...d().querySelectorAll("label")].some((l) => l.textContent.includes("Choose File")));
-    check("selecting a profile stages the car name + init into the group rows",
-      (d().querySelector('.frow[data-key="vehicle"] input') || {}).value === "Hyundai: Ioniq2017" &&
-      ((d().querySelector('.frow[data-key="specific_init"] input') || {}).value || "").length > 0);
     await expandAll();
     const exprs = [...d().querySelectorAll("input")].map((i) => i.value);
     check("profile PIDs imported with B-index shift (B39->B38)", exprs.some((v) => v === "B38/2"));
@@ -127,8 +157,48 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
     check("multi-parameter PID grouped: ONE 2101 row, 4 params under it",
       vals.filter((v) => v === "2101").length === 2 && /* cmd + pid-name inputs */
       ["SOC_BMS","Charger_Connected","Charging","HV_Charger_Connected"].every((n) => vals.includes(n)));
+    /* Discard puts the device's state back */
+    const discardBtn = bannerEl() && [...bannerEl().querySelectorAll("button")].find((b) => b.textContent === "Discard");
+    check("Discard button on the banner", !!discardBtn);
+    if (discardBtn) {
+      discardBtn.click(); await sleep(200);
+      check("Discard restores name + table, hides the banner",
+        (vehInput() || {}).value === deviceName && ![...d().querySelectorAll("input")].some((i) => i.value === "2101") && !bannerEl() &&
+        d().querySelector("#submitlabel").textContent === "Saved");
+    }
+    /* pick again, then Apply: PIDs go, name/init stay staged for Submit */
+    chooseBtn.click(); await sleep(200);
+    const s2 = modalEl().querySelector(".vp-search input"); s2.value = "ioniq"; s2.dispatchEvent(new w.Event("input")); await sleep(50);
+    s2.dispatchEvent(new w.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); await sleep(50);
+    check("ArrowDown selects the first match", !!modalEl().querySelector(".vp-row.sel"));
+    s2.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Enter", bubbles: true })); await sleep(300);
+    check("Enter stages the selection", !modalEl().querySelector(".modal") && (vehInput() || {}).value === "Hyundai: Ioniq2017");
+    const applyBtns = [...d().querySelectorAll("button.btn.pri")].filter((b) => b.textContent === "Apply Configuration");
+    const applyBtn = applyBtns[applyBtns.length - 1]; /* the seg panes are rebuilt on switch: one Apply button in the DOM */
+    let setPuts = 0;
+    const f2 = w.fetch; w.fetch = (u, o) => { if (o && o.method === "PUT" && /\/api\/settings\/autopid$/.test(String(u))) setPuts++; return f2(u, o); };
+    if (applyBtn) { applyBtn.click(); await sleep(400); }
+    const am = modalEl().textContent || "";
+    check("Apply PUTs the config once, then offers to save the settings + restart",
+      cfgPuts === 1 && setPuts === 0 && /Configuration applied/.test(am) && /take effect after a restart/.test(am) &&
+      [...modalEl().querySelectorAll(".acts button")].map((b) => b.textContent).join("|") === "Save, restart later|Save and restart now");
+    const later = [...modalEl().querySelectorAll(".acts button")].find((b) => /restart later/.test(b.textContent));
+    if (later) { later.click(); await sleep(400); }
+    check("Save, restart later: settings PUT once, header Saved, staged banner gone, restart notice on the card",
+      setPuts === 1 && d().querySelector("#submitlabel").textContent === "Saved" && !bannerEl() &&
+      [...d().querySelectorAll(".banner.warn")].some((b) => /take effect after a restart/.test(b.textContent) && /Restart now/.test(b.textContent)));
+    /* the refresh that emptied the fields (Ali, 2026-09-17): leave the page and come back */
+    w.location.hash = "#/dashboard"; w.dispatchEvent(new w.Event("hashchange")); await sleep(600);
+    w.location.hash = "#/automate/parameters"; w.dispatchEvent(new w.Event("hashchange")); await sleep(900);
+    [...d().querySelectorAll(".seg button")].find((b) => b.textContent === "Vehicle Specific").click(); await sleep(400);
+    check("after a page reload the profile name + init are still there",
+      (vehInput() || {}).value === "Hyundai: Ioniq2017" && ((initInput() || {}).value || "").length > 0);
+    check("restart notice survives the reload (device reports pending_reboot)",
+      [...d().querySelectorAll(".banner.warn")].some((b) => /take effect after a restart/.test(b.textContent)));
+    /* stage an edit again so the unsaved-changes guard below has something to guard */
+    const ii = initInput(); if (ii) { ii.value = "ATSP6;"; ii.dispatchEvent(new w.Event("change")); await sleep(100); }
     /* PID init editing + one-shot Test button + Add PID on vehicle tab */
-    check("PID init editable on PID row", [...d().querySelectorAll("input")].some((i) => (i.placeholder || "") === "ATSP6;ATSH7E4;"));
+    check("PID init editable on PID row", (await (async () => { await expandAll(); return [...d().querySelectorAll("input")].some((i) => (i.placeholder || "") === "ATSP6;ATSH7E4;"); })()));
     /* every pane stays in the DOM (built once, toggled): pick the Test of
        the imported 2101 row, not the Standard pane's first row */
     const vehRow = [...d().querySelectorAll(".pidrow")].find((r) => [...r.querySelectorAll("input")].some((i) => i.value === "2101"));
@@ -150,7 +220,7 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
       check("new specific PID row appended", [...d().querySelectorAll("input")].some((i) => i.value === "NewPID"));
     }
     /* std/custom sets survive: check the Custom tab still has OilTemp */
-    segBtns.find((b) => b.textContent === "Custom PIDs").click();
+    [...d().querySelectorAll(".seg button")].find((b) => b.textContent === "Custom PIDs").click();
     await sleep(250);
     const cust = [...d().querySelectorAll("input")].map((i) => i.value);
     check("custom PIDs survived the import", cust.includes("OilTemp"));
