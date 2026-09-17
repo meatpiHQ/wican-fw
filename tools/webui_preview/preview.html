@@ -2616,14 +2616,21 @@ input[type="range"]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px var
 .vp-search{position:relative}
 .vp-search svg{position:absolute;left:11px;top:50%;width:15px;height:15px;transform:translateY(-50%);color:var(--text-3);pointer-events:none}
 .vp-search input{padding-left:34px}
-.vp-list{margin-top:10px;max-height:352px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
-.vp-row{display:grid;grid-template-columns:18px 1fr auto;gap:10px;align-items:center;padding:10px 12px;border-top:1px solid var(--border);cursor:pointer;font-size:13.5px}
-.vp-row:first-child{border-top:none}
+.vp-cols{display:grid;grid-template-columns:212px 1fr;margin-top:10px;border:1px solid var(--border);border-radius:10px;background:var(--surface);overflow:hidden}
+.vp-col{max-height:352px;overflow-y:auto;min-width:0}
+.vp-col+.vp-col{border-left:1px solid var(--border)}
+.vp-colhead{position:sticky;top:0;z-index:1;background:var(--surface);padding:8px 12px 6px;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text-3);border-bottom:1px solid var(--border)}
+.vp-make{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;cursor:pointer;font-size:13.5px;font-weight:600;color:var(--text)}
+.vp-make:hover{background:var(--surface-2)}
+.vp-make.sel{background:var(--primary-tint);color:var(--primary)}
+.vp-make .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vp-make .cnt{font-family:var(--mono);font-size:11.5px;color:var(--text-3);background:var(--surface-3);border-radius:10px;padding:1px 7px;flex:none}
+.vp-make.sel .cnt{background:var(--primary);color:var(--on-primary)}
+.vp-row{display:grid;grid-template-columns:18px 1fr;gap:10px;align-items:center;padding:9px 12px;border-top:1px solid var(--border);cursor:pointer;font-size:13.5px}
+.vp-colhead+.vp-row{border-top:none}
 .vp-row:hover{background:var(--surface-2)}
 .vp-row.sel{background:var(--primary-tint)}
 .vp-row .nm{font-weight:600;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.vp-row .nm .mk{color:var(--text-2)}
-.vp-row .meta{font-family:var(--mono);font-size:12px;color:var(--text-3);white-space:nowrap}
 .vp-row .tick{width:16px;height:16px;color:var(--primary)}
 .vp-row mark{background:var(--mono-hot);color:var(--mono-hot-text);border-radius:3px;padding:0 1px}
 .vp-foot{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
@@ -4283,6 +4290,7 @@ PAGES.automate=async(view,sub)=>{
       let filter="";
       const cells=new Map(); /* live cells -> refresh fn */
       const paramNames=pd=>(pd.parameters||[]).map(p=>p.name).filter(Boolean);
+      const groupRate=pd=>{const g=(cfg.groups||[]).find(x=>x.name===(pd.group||"default"));const p=g?(Number(g.period_ms)||0):1000;return p?p+" ms":"max rate";};
       const mine=()=>cfg.pids.filter(pd=>pidType(pd)===type);
       const matches=pd=>{if(!filter)return true;const f=filter.toLowerCase();
         return[pd.name,pd.cmd,...paramNames(pd)].some(s=>String(s||"").toLowerCase().includes(f));};
@@ -4330,7 +4338,10 @@ PAGES.automate=async(view,sub)=>{
           const fld=(label,ctl)=>h("div",{},h("label",{},label),ctl);
           const fields=h("div",{class:"fields"},
             fld("Group",h("input",{value:pd.group||"default",onchange:e=>{pd.group=e.target.value||"default";markDirty();}})),
-            fld("Cycle (ms)",h("input",{class:"mono",type:"number",min:"0",value:pd.period_ms||0,title:"0 = the group's rate",onchange:e=>{pd.period_ms=Number(e.target.value)||0;markDirty();}})),
+            /* period_ms 0 = inherit the group's rate (autopid README): show that
+               rate as the placeholder instead of a bare 0 (Ali, 2026-09-17: "the
+               cycle time for every PID is 0" after loading a profile) */
+            fld("Cycle (ms)",h("input",{class:"mono",type:"number",min:"0",value:pd.period_ms||"",placeholder:"group: "+groupRate(pd),title:"Empty = the group's rate, "+groupRate(pd)+". A value here overrides it for this PID only.",onchange:e=>{pd.period_ms=Number(e.target.value)||0;markDirty();}})),
             fld("PID init (optional AT chain)",h("input",{class:"mono",value:pd.init||"",placeholder:"ATSP6;ATSH7E4;",title:"Sent before this PID's request whenever the poller switches to it",onchange:e=>{pd.init=e.target.value;markDirty();}})));
           const prmHead=h("div",{class:"prm prm-head"},h("span",{}),h("span",{},"Parameter"),h("span",{},"Expression"),h("span",{},"Unit"),h("span",{class:"r"},"Live"),h("span",{}));
           const prmRows=pd.parameters.map(pr=>{
@@ -4500,46 +4511,74 @@ PAGES.automate=async(view,sub)=>{
         const j=await res.json();const cars=(j&&j.cars)||[];
         if(!cars.length)throw new Error("no cars in profile file");
         state.cars=cars;state.source="fetched "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});};
+      /* the picker (meatpi 2026-09-17, "Option A"): the published names follow
+         "Make: Model" (first word when there is no colon), so the dialog shows
+         the makes on the left and the chosen make's models on the right, with
+         one search over both (typing kona lands on Hyundai > Kona). No PID or
+         parameter counts (Ali). Arrow keys move through the models, Left/Right
+         through the makes, Enter uses, Esc closes. */
+      const splitName=full=>{const s=String(full||"").trim();const i=s.indexOf(":");
+        if(i>0)return{make:s.slice(0,i).trim(),model:s.slice(i+1).trim()||s};
+        const w=s.split(/\s+/);return{make:w[0]||"",model:w.slice(1).join(" ")||w[0]||""};};
       const openPicker=async()=>{
-        let sel=null,q="",shown=[],okBtn=null;
+        let sel=null,mk=null,q="",shownMk=[],shownM=[],okBtn=null;
         const status=h("span",{class:"help",style:"font-size:12.5px"});
-        const list=h("div",{class:"vp-list"});
+        const colM=h("div",{class:"vp-col"}),colD=h("div",{class:"vp-col"});
         const foot=h("span",{class:"help"});
-        const input=h("input",{placeholder:"Search by make or model",oninput:e=>{q=e.target.value.trim().toLowerCase();render();}});
+        const input=h("input",{placeholder:"Search make or model",oninput:e=>{q=e.target.value.trim().toLowerCase();render();}});
         const hl=s=>{const i=q?s.toLowerCase().indexOf(q):-1;return i<0?[s]:[s.slice(0,i),h("mark",{},s.slice(i,i+q.length)),s.slice(i+q.length)];};
-        const nameEl=full=>{const i=full.indexOf(": ");
-          return i<0?h("span",{class:"nm",title:full},...hl(full))
-                     :h("span",{class:"nm",title:full},h("span",{class:"mk"},...hl(full.slice(0,i+1)))," ",...hl(full.slice(i+2)));};
-        const row=c=>{const on=sel===c;const t=on?ic("check"):h("span",{});if(on)t.classList.add("tick");
-          return h("div",{class:"vp-row"+(on?" sel":""),onclick:()=>{sel=c;render();},ondblclick:()=>{sel=c;use();}},
-            t,nameEl(String(c.car_model||"")),h("span",{class:"meta"},(c.pids||[]).length+" PIDs · "+nParams(c)+" parameters"));};
+        const hit=s=>!q||String(s).toLowerCase().includes(q);
+        const groups=()=>{const g=new Map();
+          for(const c of(state.cars||[])){const p=splitName(c.car_model);c._make=p.make;c._model=p.model;
+            if(!g.has(p.make))g.set(p.make,[]);g.get(p.make).push(c);}
+          return[...g.entries()].sort((a,b)=>a[0].localeCompare(b[0],undefined,{sensitivity:"base"}));};
         const render=()=>{
-          const cars=state.cars||[];
-          shown=cars.filter(c=>!q||String(c.car_model||"").toLowerCase().includes(q));
-          if(sel&&!shown.includes(sel))sel=null;
-          list.replaceChildren(...shown.map(row),shown.length?null:h("div",{class:"empty"},cars.length?"No profile matches the search":"No profiles loaded"));
-          foot.textContent=cars.length?(q?shown.length+" of "+cars.length+" profiles match.":cars.length+" profiles."):"";
+          const all=groups();
+          const makes=all.filter(([m,cars])=>hit(m)||cars.some(c=>hit(c._model)));
+          shownMk=makes.map(([m])=>m);
+          if(mk&&!shownMk.includes(mk))mk=null;
+          if(!mk&&q&&makes.length)mk=makes[0][0];
+          const cur=makes.find(([m])=>m===mk);
+          shownM=cur?cur[1].filter(c=>hit(mk)||hit(c._model)):[];
+          if(sel&&!shownM.includes(sel))sel=null;
+          if(!sel&&q&&shownM.length===1)sel=shownM[0];
+          colM.replaceChildren(h("div",{class:"vp-colhead"},"Make · "+all.length),
+            ...makes.map(([m,cars])=>h("div",{class:"vp-make"+(m===mk?" sel":""),title:m,onclick:()=>{mk=m;sel=null;render();}},
+              h("span",{class:"nm"},...hl(m)),h("span",{class:"cnt"},String(cars.length)))),
+            makes.length?null:h("div",{class:"empty"},(state.cars||[]).length?"No make or model matches":"No profiles loaded"));
+          colD.replaceChildren(h("div",{class:"vp-colhead"},mk?mk+" · "+(cur?cur[1].length:0)+(cur&&cur[1].length===1?" profile":" profiles"):"Model"),
+            ...shownM.map(c=>{const on=sel===c;const t=on?ic("check"):h("span",{});if(on)t.classList.add("tick");
+              return h("div",{class:"vp-row"+(on?" sel":""),title:c.car_model,onclick:()=>{sel=c;render();},ondblclick:()=>{sel=c;use();}},t,h("span",{class:"nm"},...hl(c._model)));}),
+            mk?(shownM.length?null:h("div",{class:"empty"},"No model matches")):h("div",{class:"empty"},"Pick a make"));
+          const n=(state.cars||[]).length;
+          foot.textContent=!n?"":q?makes.reduce((a,[m,cars])=>a+(hit(m)?cars.length:cars.filter(c=>hit(c._model)).length),0)+" of "+n+" profiles match."
+            :mk?(cur?cur[1].length:0)+" "+mk+" profile"+(cur&&cur[1].length===1?".":"s."):n+" profiles in "+all.length+" makes.";
           if(okBtn)okBtn.disabled=!sel;
-          const el=list.querySelector(".vp-row.sel");if(el&&el.scrollIntoView)el.scrollIntoView({block:"nearest"});};
-        const move=d=>{if(!shown.length)return;let i=shown.indexOf(sel);i=Math.min(shown.length-1,Math.max(0,i+d));sel=shown[i];render();};
+          for(const el of[colM.querySelector(".vp-make.sel"),colD.querySelector(".vp-row.sel")])if(el&&el.scrollIntoView)el.scrollIntoView({block:"nearest"});};
+        const move=d=>{if(!shownM.length)return;let i=shownM.indexOf(sel);i=Math.min(shownM.length-1,Math.max(0,i+d));sel=shownM[i];render();};
+        const moveMake=d=>{if(!shownMk.length)return;let i=shownMk.indexOf(mk);i=Math.min(shownMk.length-1,Math.max(0,i+d));mk=shownMk[i];sel=null;render();};
         const fetchBtn=h("button",{class:"btn sm gh",type:"button",title:"Re-read the published vehicle_profiles.json",onclick:()=>load(true)},ic("refresh"),"Fetch latest");
         const load=async fresh=>{
           fetchBtn.disabled=true;status.textContent="Fetching the published list…";
           try{await fetchList(fresh);status.textContent="From the published list: "+state.cars.length+" profiles, "+state.source+".";}
           catch(e){status.textContent="Could not fetch the published list ("+e.message+"). Drop a profile file on the page instead.";}
-          fetchBtn.disabled=false;render();};
+          fetchBtn.disabled=false;preselect();render();};
         const cur=(av&&av.vehicle)||"";
+        /* open on the car the device runs now, when it is in the list */
+        const preselect=()=>{if(sel||q||!cur)return;const c=(state.cars||[]).find(x=>x.car_model===cur);if(c){mk=splitName(c.car_model).make;sel=c;}};
         const body=h("div",{},
           h("div",{class:"rowflex",style:"gap:8px;margin-bottom:12px;flex-wrap:wrap"},status,h("span",{class:"grow"}),fetchBtn),
-          h("div",{class:"vp-search"},ic("search"),input),list,
+          h("div",{class:"vp-search"},ic("search"),input),
+          h("div",{class:"vp-cols"},colM,colD),
           h("div",{class:"vp-foot"},foot,h("span",{class:"grow"}),cur?h("span",{class:"help"},"On this device now: ",h("b",{style:"color:var(--text-2)"},cur)):null));
         const close=modal({title:"Choose a vehicle profile",body,actions:[{label:"Cancel"},{label:"Use this profile",kind:"pri",fn:()=>stageProfile(sel)}]});
         const m=$("#modal-root .modal");if(m)m.classList.add("wide");
         okBtn=$("#modal-root .acts button.pri");
         const use=()=>{if(!sel)return;close();stageProfile(sel);};
         body.onkeydown=e=>{if(e.key==="ArrowDown"){e.preventDefault();move(1);}else if(e.key==="ArrowUp"){e.preventDefault();move(-1);}
+          else if(e.key==="ArrowRight"){e.preventDefault();moveMake(1);}else if(e.key==="ArrowLeft"){e.preventDefault();moveMake(-1);}
           else if(e.key==="Enter"){e.preventDefault();use();}else if(e.key==="Escape"){e.preventDefault();close();}};
-        if(state.cars){status.textContent=(state.source?"From the published list: ":"From the loaded file: ")+state.cars.length+" profiles"+(state.source?", "+state.source:"")+".";render();}
+        if(state.cars){status.textContent=(state.source?"From the published list: ":"From the loaded file: ")+state.cars.length+" profiles"+(state.source?", "+state.source:"")+".";preselect();render();}
         else await load(false);
         setTimeout(()=>input.focus(),30);};
       /* the Choose profile button rides on the settings row's control (the

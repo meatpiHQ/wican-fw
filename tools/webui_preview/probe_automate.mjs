@@ -122,22 +122,25 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
   if (chooseBtn) {
     chooseBtn.click();
     await sleep(600);   /* the mock serves vehicle_profiles.json: 3 cars */
-    check("picker dialog opens with the fetched list",
-      /Choose a vehicle profile/.test(modalEl().textContent) && modalEl().querySelectorAll(".vp-row").length === 3 &&
-      /3 profiles, fetched/.test(modalEl().textContent));
+    /* Option A (2026-09-17): makes left, models right, no PID/parameter counts */
+    check("picker dialog opens with the makes of the fetched list (models wait for a make)",
+      /Choose a vehicle profile/.test(modalEl().textContent) && modalEl().querySelectorAll(".vp-make").length === 3 &&
+      modalEl().querySelectorAll(".vp-row").length === 0 && /Pick a make/.test(modalEl().textContent) &&
+      /3 profiles, fetched/.test(modalEl().textContent) && !/parameters/.test(modalEl().textContent));
+    const okBtn = [...modalEl().querySelectorAll(".acts button")].find((b) => /Use this profile/.test(b.textContent));
+    check("Use this profile disabled until a model is selected", !!okBtn && okBtn.disabled === true);
+    modalEl().querySelectorAll(".vp-make")[1].click(); await sleep(50);
+    check("clicking a make lists its models", /Hyundai · 1 profile/.test(modalEl().textContent) &&
+      modalEl().querySelectorAll(".vp-row").length === 1 && /Ioniq2017/.test(modalEl().querySelector(".vp-row").textContent) && okBtn.disabled === true);
     check("Fetch latest lives in the dialog", [...modalEl().querySelectorAll("button")].some((b) => /Fetch latest/.test(b.textContent)));
     check("footer names the profile on the device", new RegExp("On this device now: " + deviceName).test(modalEl().textContent));
     const search = modalEl().querySelector(".vp-search input");
     search.value = "ioniq"; search.dispatchEvent(new w.Event("input"));
     await sleep(50);
-    check("search filters the list (1 of 3 match)", modalEl().querySelectorAll(".vp-row").length === 1 &&
+    check("search narrows makes + models and auto-selects a single match (1 of 3)",
+      modalEl().querySelectorAll(".vp-make").length === 1 && modalEl().querySelectorAll(".vp-row").length === 1 &&
       /Ioniq2017/.test(modalEl().querySelector(".vp-row").textContent) && /1 of 3 profiles match/.test(modalEl().textContent) &&
-      !!modalEl().querySelector(".vp-row mark"));
-    const okBtn = [...modalEl().querySelectorAll(".acts button")].find((b) => /Use this profile/.test(b.textContent));
-    check("Use this profile disabled until a row is selected", !!okBtn && okBtn.disabled === true);
-    modalEl().querySelector(".vp-row").click();
-    await sleep(50);
-    check("clicking a row selects it (tick, button enabled)", !!modalEl().querySelector(".vp-row.sel .tick") && okBtn.disabled === false);
+      !!modalEl().querySelector(".vp-row mark") && !!modalEl().querySelector(".vp-row.sel .tick") && okBtn.disabled === false);
     okBtn.click();
     await sleep(300);
     check("dialog closed after Use this profile", !modalEl().querySelector(".modal"));
@@ -199,6 +202,10 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
     const ii = initInput(); if (ii) { ii.value = "ATSP6;"; ii.dispatchEvent(new w.Event("change")); await sleep(100); }
     /* PID init editing + one-shot Test button + Add PID on vehicle tab */
     check("PID init editable on PID row", (await (async () => { await expandAll(); return [...d().querySelectorAll("input")].some((i) => (i.placeholder || "") === "ATSP6;ATSH7E4;"); })()));
+    /* 2026-09-17: imported PIDs inherit the group's rate (period_ms 0): the Cycle field shows it as a placeholder, never a bare 0 */
+    check("imported PIDs show the group's rate as the Cycle placeholder, not 0",
+      [...d().querySelectorAll('input[type="number"]')].some((i) => i.placeholder === "group: 1000 ms" && i.value === "") &&
+      ![...d().querySelectorAll('input[type="number"]')].some((i) => i.placeholder === "" && i.value === "0"));
     /* every pane stays in the DOM (built once, toggled): pick the Test of
        the imported 2101 row, not the Standard pane's first row */
     const vehRow = [...d().querySelectorAll(".pidrow")].find((r) => [...r.querySelectorAll("input")].some((i) => i.value === "2101"));
