@@ -4,9 +4,16 @@ import argparse
 import sys
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--port", default="COM2016")
+ap.add_argument("--port", default="auto", help="auto = the FTDI port detect_ports.py finds")
 ap.add_argument("--baud", type=int, default=115200)
 args = ap.parse_args()
+
+from pathlib import Path  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
+import bench_ports  # noqa: E402
+
+args.port = bench_ports.resolve(args.port, "psu", "COM2016")
 
 import serial  # noqa: E402 — pyserial (IDF venv has it)
 

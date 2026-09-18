@@ -33,7 +33,7 @@ Legs:
                --end-volts output ON (>= 13.2 keeps the DUT awake)
 
 Usage (dev host):
-  python tools/testbench/sleep_bench_test.py [--psu-port COM2016]
+  python tools/testbench/sleep_bench_test.py [--psu-port auto|COMx]
       [--dut-ip auto] [--bench-host rpi001] [--end-volts 13.5]
 Expected final line: SLEEP BENCH PASS
 """
@@ -46,6 +46,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import bench_ports  # noqa: E402  (COM ports by role, tools/testbench/detect_ports.py)
 
 from owon_psu import OwonPsu   # noqa: E402
 
@@ -192,7 +193,8 @@ def mA(amps):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--psu-port", default="COM2016")
+    ap.add_argument("--psu-port", default="auto",
+                    help="OWON port; auto = the FTDI port detect_ports.py finds")
     ap.add_argument("--dut-ip", default="auto",
                     help="DUT IP, or 'auto' = newest bench-hotspot lease")
     ap.add_argument("--bench-host", default="rpi001")
@@ -203,7 +205,7 @@ def main():
     dut = PiHttp(args.bench_host, args.dut_ip)
 
     # ---- 0. PSU ----------------------------------------------------------
-    psu = OwonPsu(args.psu_port)
+    psu = OwonPsu(bench_ports.resolve(args.psu_port, "psu", "COM2016"))
     check("psu_idn", "P4305" in psu.idn, psu.idn)
     check("psu_volt_ceiling", True, "VOLT:LIM 15.000 programmed")
     ilim = psu.current_limit()

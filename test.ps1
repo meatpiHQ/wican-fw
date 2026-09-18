@@ -15,17 +15,23 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'sleep', 'sleepmatrix', 'conserve', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'sleep', 'sleepmatrix', 'conserve', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
-    [string]$Port = 'COM10',  # UART0 external USB-serial = console/flash;
-                              # works in EVERY USB-connector mode. COM7/COM6 =
-                              # CH342 A/B — only exist while the connector is
-                              # cabled to the PC (device role); gone when it
-                              # hosts the USB-Ethernet adapter / a dongle.
+    [string]$Port = 'COM10',  # UART0 external USB-serial = console/flash
+                              # ('auto' = whatever the preflight detects);
+                              # works in EVERY USB-connector mode. COM numbers
+                              # drift on every re-plug, so the preflight falls
+                              # back BY PnP NAME: the CH344 quad-UART channel B
+                              # (the rig's WiCAN UART0: 2 Mbaud console, 460800
+                              # flash), then CH342 A (the DUT's own connector
+                              # cabled to the PC, device role; gone when it
+                              # hosts the USB-Ethernet adapter / a dongle).
     [string]$BenchHost = 'rpi001',
-    [string]$DutIp = '10.42.0.62',
-    [string]$DeviceId = '14c19f44e349',
+    [string]$DutIp = '',      # '' = resolve the DUT on the Pi: its hotspot DHCP
+                              # lease (hostname wican_<DeviceId>), then mDNS;
+                              # pass an address to pin it
+    [string]$DeviceId = '68ee8f5a653d',   # the bench unit (2026-09-19)
     [string]$FwRepo,          # wican-fw checkout; default: WICAN_FW_PATH env,
                               # then known sibling locations (see below)
     [switch]$Flash,
@@ -149,6 +155,9 @@ function Invoke-BenchCheck {
         Ports    = @([System.IO.Ports.SerialPort]::GetPortNames())
         Serial   = $null     # usable console/flash port for target/hil
         Ch342    = @()       # CH342 COM names => connector is in DEVICE role
+        Ch344B   = @()       # CH344 quad-UART channel B = the rig's WiCAN UART0
+        Ftdi     = @()       # FTDI 'USB Serial Port' (the OWON PSU on this rig)
+        EcuSim   = @()       # 'MeatPi USB-CAN Device' = the ECU simulator's CDC
         PiOk     = $false
         DutOnline = $false
         DutVersion = ''
@@ -161,18 +170,44 @@ function Invoke-BenchCheck {
     }
     $script:bench = $b
 
-    # CH342 by PnP name (COM numbers drift: 7/6 today, 2029/30 historically)
+    # every serial fixture by WHAT it is: tools/testbench/detect_ports.py, the
+    # one detector the manual benches share (COM numbers drift on each re-plug:
+    # CH342 7/6 today, 2029/30 historically; the CH344 quad-UART went COM12-15
+    # -> COM252-255 on 2026-09-19). Enumeration only: nothing is opened, because
+    # opening the WiCAN console resets the DUT. The run refreshes
+    # tools/testbench/bench_ports.json for the scripts that read it.
+    $det = $null
     try {
-        $b.Ch342 = @(Get-CimInstance Win32_PnPEntity -ErrorAction Stop |
-            Where-Object { $_.Name -match 'CH342' -and $_.Name -match '\(COM\d+\)' } |
-            ForEach-Object { ($_.Name -replace '.*\((COM\d+)\).*', '$1') })
+        $raw = & python "$repo\tools\testbench\detect_ports.py" --json 2>$null
+        if ($raw) { $det = ($raw | Out-String | ConvertFrom-Json) }
     } catch {}
+    if ($det) {
+        $r = $det.roles
+        if ($r.wican_console) { $b.Ch344B = @($r.wican_console.port) }
+        if ($r.ch342_console) { $b.Ch342 = @($r.ch342_console.port) }
+        if ($r.ch342_obd)     { $b.Ch342 += @($r.ch342_obd.port) }
+        if ($r.psu)           { $b.Ftdi = @($r.psu.port) }
+        elseif ($det.candidates.psu) { $b.Ftdi = @($det.candidates.psu | ForEach-Object { $_.port }) }
+        if ($r.ecu_sim_cdc)   { $b.EcuSim = @($r.ecu_sim_cdc.port) }
+    } else {
+        # no python/pyserial: the same classification by PnP name, inline
+        try {
+            $pnp = @(Get-CimInstance Win32_PnPEntity -ErrorAction Stop |
+                Where-Object { $_.Name -match '\(COM\d+\)' })
+            $com = { param($e) ($e.Name -replace '.*\((COM\d+)\).*', '$1') }
+            $b.Ch342  = @($pnp | Where-Object { $_.Name -match 'CH342' } | ForEach-Object { & $com $_ })
+            $b.Ch344B = @($pnp | Where-Object { $_.Name -match 'SERIAL-B.*CH344' } | ForEach-Object { & $com $_ })
+            $b.Ftdi   = @($pnp | Where-Object { $_.Name -match '^USB Serial Port' } | ForEach-Object { & $com $_ })
+            $b.EcuSim = @($pnp | Where-Object { $_.Name -match 'MeatPi USB-CAN' } | ForEach-Object { & $com $_ })
+        } catch {}
+    }
 
-    # console/flash port: the requested -Port, else the UART0 adapter, else CH342 A
-    foreach ($cand in (@($Port, 'COM10') + $b.Ch342)) {
+    # console/flash port: the requested -Port, else the UART0 adapter, else the
+    # CH344 channel B, else CH342 A
+    foreach ($cand in (@($Port, 'COM10') + $b.Ch344B + $b.Ch342)) {
         if ($b.Ports -contains $cand) { $b.Serial = $cand; break }
     }
-    if ($b.Serial -and $b.Serial -ne $Port) {
+    if ($b.Serial -and $b.Serial -ne $Port -and $Port -ne 'auto') {
         Write-Host "bench: -Port $Port not present, using $($b.Serial)" -ForegroundColor Yellow
         $script:Port = $b.Serial
     }
@@ -209,14 +244,21 @@ function Invoke-BenchCheck {
     elseif ($b.Espnetlink) { $wiring = 'connector -> espnetlink LTE dongle (RNDIS + ACM console)' }
     elseif ($b.UsbEth) { $wiring = 'connector -> USB-Ethernet adapter (host mode)' }
     elseif ($b.UsbDevicePresent) { $wiring = 'connector -> a USB device (host mode, not eth)' }
-    Write-Host "bench: serial=$(if ($b.Serial) { $b.Serial } else { 'NONE' })  pi=$($b.PiOk)  dut=$(if ($b.DutOnline) { $b.DutVersion } else { 'OFFLINE' })  broker=$($b.Broker)  ncm=$($b.UsbNcm)" -ForegroundColor Cyan
-    Write-Host "bench: $wiring" -ForegroundColor Cyan
-    $script:conditions += "preflight: $wiring; serial=$($b.Serial); dut=$(if ($b.DutOnline) { $b.DutVersion } else { 'offline' }); broker=$($b.Broker); ncm=$($b.UsbNcm)"
+    $how = ''
+    if ($b.Serial -and $b.Ch344B -contains $b.Serial) { $how = ' (CH344 B)' }
+    elseif ($b.Serial -and $b.Ch342 -contains $b.Serial) { $how = ' (CH342 A)' }
+    $serialTxt = if ($b.Serial) { "$($b.Serial)$how" } else { 'NONE' }
+    $dutTxt = if ($b.DutOnline) { "$($b.DutVersion) @ $DutIp" } else { "OFFLINE @ $DutIp" }
+    $ftdiTxt = if ($b.Ftdi) { $b.Ftdi -join '/' } else { 'none' }
+    $ecuTxt = if ($b.EcuSim) { $b.EcuSim -join '/' } else { 'none' }
+    Write-Host "bench: serial=$serialTxt  pi=$($b.PiOk)  dut=$dutTxt  broker=$($b.Broker)  ncm=$($b.UsbNcm)" -ForegroundColor Cyan
+    Write-Host "bench: $wiring; ftdi(psu)=$ftdiTxt  ecu_sim_cdc=$ecuTxt" -ForegroundColor Cyan
+    $script:conditions += "preflight: $wiring; serial=$serialTxt; dut=$(if ($b.DutOnline) { $b.DutVersion } else { 'offline' }) @ $DutIp; broker=$($b.Broker); ncm=$($b.UsbNcm); ftdi=$ftdiTxt; ecu_sim_cdc=$ecuTxt"
 
     # hard requirements per kind
     if (-not $b.PiOk) { throw "bench: $BenchHost unreachable - every kind needs the Pi" }
     if ($What -in @('target', 'hil', 'all') -and -not $b.Serial) {
-        throw "bench: no console/flash COM port (tried $Port, COM10, CH342). Plug the UART0 adapter or cable the connector to the PC."
+        throw "bench: no console/flash COM port (tried $Port, COM10, CH344 channel B, CH342). Plug the UART0 adapter / the CH344 or cable the connector to the PC."
     }
     if ($What -in @('live', 'perf', 'usbeth', 'espnetlink') -and -not $b.DutOnline) {
         throw "bench: DUT $DutIp offline via the Pi (composed main flashed? hotspot up?)"
@@ -230,6 +272,28 @@ function Invoke-BenchCheck {
     if ($What -eq 'espnetlink' -and -not $b.Espnetlink) {
         throw "bench: espnetlink not detected ($wiring). Plug the LTE dongle into the WiCAN USB connector + enable usb_host_manager & usb_acm_cli."
     }
+}
+
+# The DUT's hotspot lease moves; resolve it by device id on the Pi: the
+# newest dnsmasq lease with hostname wican_<id> (the STA side, on the
+# hotspot - what every bench leg wants), then the mDNS _wican._tcp record
+# (avahi-browse; `getent hosts` returns ONE of the DUT's addresses at random)
+# minus the DUT's own AP subnet 192.168.0.x, which avahi also advertises
+# and which the Pi can reach only through the radio parked on that AP.
+# Falls back to the historical bench address so URLs stay well-formed
+# when the Pi is down (the preflight then reports pi=False).
+function Resolve-DutIp {
+    # no double quotes in the remote command: PowerShell 5.1 mangles them on the way to ssh
+    $remote = ('ip=$(sudo sh -c ''cat /var/lib/NetworkManager/dnsmasq-*.leases 2>/dev/null'' | awk -v h=wican_{0} ''$4==h{{print $3}}'' | tail -1); ' +
+               'if [ x$ip = x ]; then ip=$(timeout 8 avahi-browse -rtp _wican._tcp 2>/dev/null | awk -F'';'' -v h=wican_{0}.local ''length($1)==1 && $7==h && $8 !~ /^192.168.0./ {{print $8}}'' | head -1); fi; ' +
+               'echo DUT_IP=$ip') -f $DeviceId
+    $out = & ssh -o BatchMode=yes -o ConnectTimeout=8 $BenchHost $remote 2>$null
+    if (($out | Out-String) -match 'DUT_IP=(\d+\.\d+\.\d+\.\d+)') {
+        Write-Host "bench: DUT wican_$DeviceId resolved to $($Matches[1]) via $BenchHost" -ForegroundColor DarkGray
+        return $Matches[1]
+    }
+    Write-Host "bench: could not resolve wican_$DeviceId on $BenchHost - using 10.42.0.62 (pass -DutIp to pin)" -ForegroundColor Yellow
+    return '10.42.0.62'
 }
 
 # Legs that drive the DUT over the USB-NCM mgmt link call this first and
@@ -668,6 +732,7 @@ function Show-Inventory {
     Write-Host "target apps (.\test.ps1 target <component>):" -ForegroundColor Cyan
     foreach ($t in $targets) { Write-Host "  $t" }
     Write-Host 'other kinds:' -ForegroundColor Cyan
+    Write-Host '  check  - the bench preflight alone (~10 s): serial fixtures by PnP name, DUT address, Pi, broker'
     Write-Host '  hil    - WiFi hardware-in-the-loop pytest (add -Flash the first time)'
     Write-Host '  live   - cli_ws + ws_obd + dbc_real + stack_audit + usb-eth (auto-skip) vs the composed main'
     Write-Host '  stackaudit - static frame-vs-stack audit (tools/stack_audit.py) + live task watermarks/heap floors'
@@ -687,6 +752,7 @@ function Show-Inventory {
 Use-IdfEnv
 try {
     $benchOk = $true
+    if ($What -ne 'list' -and -not $DutIp) { $DutIp = Resolve-DutIp }
     if ($What -ne 'list' -and -not $SkipBenchCheck) {
         Invoke-Stage 'bench preflight' { Invoke-BenchCheck }
         if ($script:anyFail) {
@@ -696,6 +762,7 @@ try {
     }
     if ($benchOk) { switch ($What) {
         'list'   { Show-Inventory }
+        'check'  { Write-Host 'bench: preflight only - the quick bench check, no test kind ran' -ForegroundColor DarkGray }
         'host'   { Invoke-Stage "host suites$(if ($Component) { " ($Component)" })" { Invoke-HostSuites $Component } }
         'target' {
             if (-not $Component) { throw "usage: .\test.ps1 target <component>  (one of: $($targets -join ', '))" }

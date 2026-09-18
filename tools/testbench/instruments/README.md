@@ -24,7 +24,8 @@ optional = true                # absent = grey chip, not a red fault
 doc      = "free-form notes shown in the UI tooltip"
 
 [config]                       # machine-specific knobs, all overridable
-port = "COM2016"               # in benchboard.local.toml
+port = "auto"                 # or a COM number in benchboard.local.toml;
+                               # `auto` = tools/testbench/detect_ports.py
 
 [health]                       # side-effect-free health probe
 cmd = "${python} \"${dir}/probe.py\" --port ${port}"

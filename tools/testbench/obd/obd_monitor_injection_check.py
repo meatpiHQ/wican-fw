@@ -7,7 +7,7 @@ the prompt returns.
 
 Usage:
     python tools/testbench/obd_monitor_injection_check.py \
-        [--bridge COM6] [--pcan PCAN_USBBUS2]
+        [--bridge auto|COMx] [--pcan PCAN_USBBUS2]
 
 Needs: the obd_chip test app running on the DUT (bridge up after TEST DONE),
 python-can + PCAN drivers, pyserial.
@@ -21,6 +21,11 @@ import time
 
 import can
 import serial
+
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import bench_ports  # noqa: E402  (COM ports by role, tools/testbench/detect_ports.py)
 
 INJECT_ID = 0x123
 INJECT_DATA = [0xDE, 0xAD, 0xBE, 0xEF, 0x11, 0x22, 0x33, 0x44]
@@ -46,9 +51,10 @@ def snapshot():
 def main():
     global stop
     ap = argparse.ArgumentParser()
-    ap.add_argument("--bridge", default="COM6")
+    ap.add_argument("--bridge", default="auto")  # auto = the CH342 usb_obd port detect_ports.py finds
     ap.add_argument("--pcan", default="PCAN_USBBUS2")
     args = ap.parse_args()
+    args.bridge = bench_ports.resolve(args.bridge, "ch342_obd", "COM6")
 
     s = serial.Serial(args.bridge, 115200, timeout=0.2)
     bus = can.Bus(interface="pcan", channel=args.pcan, bitrate=500000)

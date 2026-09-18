@@ -21,7 +21,7 @@ if none) and the prompt.
 
 Usage:
     python tools/testbench/obd_vt_isotp_check.py \
-        [--bridge COM6] [--pcan PCAN_USBBUS2] [--size 4095]
+        [--bridge auto|COMx] [--pcan PCAN_USBBUS2] [--size 4095]
 
 Needs: the obd_chip test app running on the DUT (bridge up after TEST DONE),
 python-can + PCAN drivers, can-isotp, pyserial.
@@ -36,6 +36,11 @@ import time
 import can
 import isotp
 import serial
+
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import bench_ports  # noqa: E402  (COM ports by role, tools/testbench/detect_ports.py)
 
 serial_buf = bytearray()
 serial_lock = threading.Lock()
@@ -65,11 +70,12 @@ def on_isotp_error(error):
 def main():
     global stop
     ap = argparse.ArgumentParser()
-    ap.add_argument("--bridge", default="COM6")
+    ap.add_argument("--bridge", default="auto")  # auto = the CH342 usb_obd port detect_ports.py finds
     ap.add_argument("--pcan", default="PCAN_USBBUS2")
     ap.add_argument("--size", type=int, default=4095,
                     help="payload bytes (max 4095)")
     args = ap.parse_args()
+    args.bridge = bench_ports.resolve(args.bridge, "ch342_obd", "COM6")
 
     payload = bytes(i % 256 for i in range(args.size))
     cmd = ("VTFullyRequestCk" + format(len(payload), "04X") +

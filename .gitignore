@@ -9,6 +9,8 @@ build_public/
 test-reports/
 # per-machine bench overrides (copy benchboard.local.example.toml)
 benchboard.local.toml
+# the port detector's last record (tools/testbench/detect_ports.py)
+tools/testbench/bench_ports.json
 warnings.txt
 html_report/
 # Prerequisites

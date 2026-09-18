@@ -9,6 +9,7 @@ exit 0 = healthy, last stdout line = the chip status.
 """
 import argparse
 import sys
+from pathlib import Path
 
 
 def list_ports():
@@ -39,8 +40,13 @@ def list_ports():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--port", required=True)
+    ap.add_argument("--port", default="auto",
+                    help="auto = the console port detect_ports.py finds (CH344 B, else CH342 A)")
     args = ap.parse_args()
+    if args.port.lower() == "auto":
+        sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
+        import bench_ports  # noqa: E402
+        args.port = bench_ports.resolve("auto", ("wican_console", "ch342_console"), "COM10")
     ports = list_ports()
     if args.port in ports:
         desc = ports[args.port]

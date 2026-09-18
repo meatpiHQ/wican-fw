@@ -11,8 +11,8 @@ suite moves on. `wifi_ghost` runs LAST (its restore goes through the
 DUT's own AP via the Pi).
 
 Usage:  python tools/testbench/sleep_matrix_test.py
-            [--only baseline,mqtt,...] [--psu-port COM2016]
-            [--bench-host rpi001] [--elm-port COM6]
+            [--only baseline,mqtt,...] [--psu-port auto|COMx]
+            [--bench-host rpi001] [--elm-port auto|COMx]
 Expected final line: SLEEP MATRIX PASS
 """
 import argparse
@@ -25,6 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))          # sleep_bench_test
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import bench_ports  # noqa: E402  (COM ports by role, tools/testbench/detect_ports.py)
 
 from owon_psu import OwonPsu            # noqa: E402
 from sleep_bench_test import PiHttp, mA  # noqa: E402
@@ -88,7 +89,7 @@ class Rig:
         self.psu.output(True)
         try:
             from dut import Dut
-            d = Dut("COM7", 2000000)
+            d = Dut(bench_ports.resolve("auto", ("wican_console", "ch342_console"), "COM7"), 2000000)
             d.hard_reset()
             d.expect(r"WICAN BOOT", 40)
             d.close()
@@ -795,12 +796,14 @@ SCENARIOS = [
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--psu-port", default="COM2016")
+    ap.add_argument("--psu-port", default="auto")
     ap.add_argument("--bench-host", default="rpi001")
-    ap.add_argument("--elm-port", default="COM6")
+    ap.add_argument("--elm-port", default="auto")
     ap.add_argument("--only", default="",
                     help="comma-separated scenario keys")
     args = ap.parse_args()
+    args.psu_port = bench_ports.resolve(args.psu_port, "psu", "COM2016")
+    args.elm_port = bench_ports.resolve(args.elm_port, "ch342_obd", "COM6")
     only = {k.strip() for k in args.only.split(",") if k.strip()}
 
     rig = Rig(args)

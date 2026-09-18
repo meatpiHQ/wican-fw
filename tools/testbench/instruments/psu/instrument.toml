@@ -1,10 +1,10 @@
 label = "OWON PSU"
 desc = "OWON P4305 car-battery sim (15 V HARD ceiling; keep >= 13.2 V when sleep enabled)"
 optional = true
-doc = "SCPI over RS232. The sleep benches drive it via ${psu.port}."
+doc = "SCPI over RS232. The sleep benches drive it via ${psu.port}; `auto` = the FTDI port tools/testbench/detect_ports.py finds (COM numbers drift)."
 
 [config]
-port = "COM2016"
+port = "auto"
 baud = 115200
 
 [health]

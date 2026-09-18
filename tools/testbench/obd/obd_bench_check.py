@@ -2,7 +2,7 @@
 
 Run AFTER flashing the bench-probe app (it bridges UART2 <-> chip):
 
-    python tools/testbench/obd_bench_check.py [--bridge COM6] [--pcan PCAN_USBBUS1]
+    python tools/testbench/obd_bench_check.py [--bridge auto|COMx] [--pcan PCAN_USBBUS1]
 
 Checks:
   1. USB bridge channel B -> ESP32 UART2 -> chip: send ATI, expect ELM + '>'
@@ -14,6 +14,11 @@ import sys
 import time
 
 import serial
+
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import bench_ports  # noqa: E402  (COM ports by role, tools/testbench/detect_ports.py)
 
 OK = True
 
@@ -91,9 +96,10 @@ def check_pcan(channel: str) -> None:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--bridge", default="COM6")
+    ap.add_argument("--bridge", default="auto")  # auto = the CH342 usb_obd port detect_ports.py finds
     ap.add_argument("--pcan", default="PCAN_USBBUS2")  # BUS2 is on the bench bus
     args = ap.parse_args()
+    args.bridge = bench_ports.resolve(args.bridge, "ch342_obd", "COM6")
 
     check_bridge(args.bridge)
     check_pcan(args.pcan)
