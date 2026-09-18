@@ -3488,6 +3488,7 @@ async function postConfig() {
     obj["sleep_volt"] = document.getElementById("sleep_volt").value;
     obj["sleep_time"] = document.getElementById("sleep_time").value;
     obj["wakeup_interval"] = document.getElementById("wakeup_interval").value;
+    obj["car_on_param"] = document.getElementById("car_on_param").value.trim();
     obj["batt_alert"] = document.getElementById("batt_alert").value;
     obj["batt_alert_ssid"] = document.getElementById("batt_alert_ssid").value;
     obj["batt_alert_pass"] = document.getElementById("batt_alert_pass").value;
@@ -4123,6 +4124,7 @@ xhttp.onload = async function() {
         document.getElementById('sleep_time_value').textContent = obj.sleep_time;
         document.getElementById("wakeup_interval").value = obj.wakeup_interval;
         document.getElementById('wakeup_interval_value').textContent = obj.wakeup_interval;
+        document.getElementById("car_on_param").value = obj.car_on_param || "";
         document.getElementById("batt_alert").value = "disable";
         document.getElementById("batt_alert_ssid").value = obj.batt_alert_ssid;
         document.getElementById("batt_alert_pass").value = obj.batt_alert_pass;

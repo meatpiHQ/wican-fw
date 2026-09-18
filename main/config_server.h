@@ -132,6 +132,7 @@ typedef struct _device_config
 	char wakeup_time[32];
 	char periodic_wakeup[32];
 	char wakeup_interval[32];
+	char car_on_param[64]; // autopid parameter name to detect car *ON*
 	char batt_alert[32];
 	char batt_alert_ssid[65];
 	char batt_alert_pass[65];
@@ -245,6 +246,7 @@ log_filesystem_t config_server_get_log_filesystem(void);
 int8_t config_server_get_ap_auto_disable(void);
 int8_t config_server_get_periodic_wakeup(void);
 int8_t config_server_get_wakeup_interval(uint32_t *wakeup_interval);
+const char *config_server_get_car_on_param(void);
 int8_t config_server_get_imu_threshold(uint8_t *imu_threshold);
 bool config_server_is_debug_enabled(void);
 bool config_server_get_mqtt_security_enabled(void);

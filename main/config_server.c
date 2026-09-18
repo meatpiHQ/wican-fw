@@ -1801,6 +1801,7 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	cJSON_AddStringToObject(root, "wakeup_volt", device_config.wakeup_volt);
 	cJSON_AddStringToObject(root, "periodic_wakeup", device_config.periodic_wakeup);
 	cJSON_AddStringToObject(root, "wakeup_interval", device_config.wakeup_interval);
+	cJSON_AddStringToObject(root, "car_on_param", device_config.car_on_param);
 
 	cJSON_AddStringToObject(root, "batt_alert", device_config.batt_alert);
 	if(!remove_sensitive_info)
@@ -3313,7 +3314,20 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	ESP_LOGI(TAG, "device_config.wakeup_interval: %s", device_config.wakeup_interval);
-	//*****	
+	//*****
+
+	//*****
+	key = cJSON_GetObjectItem(root, "car_on_param");
+	if (key == 0 || key->valuestring == NULL)
+	{
+		device_config.car_on_param[0] = '\0'; // disabled by default
+	}
+	else
+	{
+		strlcpy(device_config.car_on_param, key->valuestring, sizeof(device_config.car_on_param));
+	}
+	ESP_LOGI(TAG, "device_config.car_on_param: %s", device_config.car_on_param);
+	//*****
 
 
 	//*****
@@ -3872,6 +3886,11 @@ int8_t config_server_get_wakeup_interval(uint32_t *wakeup_interval)
     
     *wakeup_interval = (uint32_t)wk_int;
     return 1;
+}
+
+const char *config_server_get_car_on_param(void)
+{
+    return device_config.car_on_param[0] != '\0' ? device_config.car_on_param : NULL;
 }
 
 int8_t config_server_get_battery_alert_config(void)
