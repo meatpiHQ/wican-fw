@@ -565,10 +565,15 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
                         }
                     }
 
+                    // cycle==0 is meaningful here: it selects event-driven publishing
+                    // (publish whenever a parameter value changes) in autopid.c. Preserve an
+                    // explicit 0; only fall back to the 10s periodic default when the field
+                    // is absent/blank. (Do NOT reuse this for the param-poll period, which
+                    // must stay non-zero.)
                     if (cycle_item2 && cycle_item2->valuestring && strlen(cycle_item2->valuestring) > 0)
                         gd->cycle = (uint32_t)atoi(cycle_item2->valuestring);
-                    else if (cycle_item2 && cycle_item2->valueint)
-                        gd->cycle = (uint32_t)cycle_item2->valueint;
+                    else if (cycle_item2 && cJSON_IsNumber(cycle_item2))
+                        gd->cycle = (uint32_t)cycle_item2->valueint; // includes explicit 0
                     else
                         gd->cycle = 10000;
 
@@ -662,9 +667,8 @@ static void parse_auto_pid_json(autopid_config_t *autopid_config, int *pid_index
                         }
                     }
 
-                    // Normalize cycle: treat 0 as default 10000 ms
-                    if (gd->cycle == 0)
-                        gd->cycle = 10000;
+                    // NOTE: cycle==0 is intentionally preserved here (event-driven publishing);
+                    // it is no longer normalized to 10000 ms. See cycle parsing above.
                     gd->publish_timer = 0; // immediate eligibility
                     gd->consec_failures = 0;
                     gd->backoff_ms = 0;
