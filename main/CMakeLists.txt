@@ -9,7 +9,7 @@ idf_component_register(
          "main_sleep.c"
     INCLUDE_DIRS "."
     EMBED_FILES "web/safemode.html"
-    REQUIRES api_http autopid ha_webhooks battery_monitor ble_manager bridge_manager
+    REQUIRES api_http autopid ha_webhooks data_destinations battery_monitor ble_manager bridge_manager
              bridge_endpoints
              can_manager can_isotp_esp ext_manager uds_manager script_engine
              usb_acm_cli espnetlink_link j2534_server

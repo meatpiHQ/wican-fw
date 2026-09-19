@@ -65,7 +65,8 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
   check("destinations cycle in seconds", d().body.textContent.includes("Every (s)"));
   check("destinations enable switch + type select", (() => {
     const dest = cards.find((c) => /destinations/i.test((c.querySelector("h3") || {}).textContent));
-    return dest && dest.querySelectorAll(".switch").length >= 1 && dest.querySelectorAll("select").length >= 1;
+    return dest && dest.querySelectorAll(".switch").length >= 2 && dest.querySelectorAll("select").length >= 3 &&
+      [...dest.querySelectorAll("button")].some((b) => b.textContent.trim() === "Test");
   })());
   /* scan flow: click Scan PIDs -> wait past mock 2.5 s -> results modal */
   const scanBtn = [...d().querySelectorAll("button")].find((b) => b.textContent.trim() === "Scan PIDs");

@@ -13,6 +13,11 @@
   ov("ble_manager", { enabled: false });
   ov("mqtt_manager", { enabled: true, broker: "mqtt://10.42.0.1:1883", topic_prefix: "wican" });
   ov("ha_webhooks", { enabled: true, url: "http://homeassistant.local:8123/api/webhook/8f4a21be", interval_s: 15 });
+  ov("data_destinations", { enabled: true, destinations: [
+    { name: "dest1", type: "mqtt", enabled: true, url: "~/autopid", period_s: 5, auth: "none", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "", cert_set: "", car_model: "", retain: true, full_first: true },
+    { name: "cloud", type: "https", enabled: true, url: "https://telemetry.example.com/wican", period_s: 30, auth: "bearer", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "src=wican", cert_set: "homeca", car_model: "", retain: true, full_first: true },
+    { name: "abrp", type: "abrp", enabled: false, url: "", period_s: 10, auth: "api_key_query", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "", cert_set: "", car_model: "hyundai:ioniq5:22:77", retain: true, full_first: true },
+  ] });
   ov("autopid", { enabled: true, vehicle: "Corolla 2021" });
   ov("data_logger", { enabled: false });
   ov("vpn_manager", { enabled: true, type: "wireguard", address: "10.66.0.2", endpoint: "vpn.example.com", port: 51820 });
@@ -101,6 +106,11 @@
         first_time: 1784400000, last_time: 1784400000 }]) }),
     "/api/wifi/status": () => J({ enabled: true, sta_connected: true, ip: "10.42.0.62", ap_started: true, ap_default_password: state.apDefaultPassword === true, clients: 0, ap_ip: "192.168.80.1", dns: ["10.42.0.1", "1.1.1.1"],
       sta_attempt: { ssid: "HomeWiFi", reason: 204, fail_count: 3, deprioritised: true } }),
+    "/api/destinations": () => J({ enabled: S.data_destinations.values.enabled !== false, running: true, network: true, mqtt: true,
+      destinations: (S.data_destinations.values.destinations || []).map((d, i) => ({ name: d.name, type: d.type, enabled: d.enabled !== false, url: d.url, period_s: d.period_s, auth: d.auth,
+        has_token: i === 1, has_api_key: false, cert_set: d.cert_set, success: i === 0 ? 412 : 0, fail: i === 1 ? 3 : 0, skipped_offline: 0, consecutive_failures: i === 1 ? 3 : 0,
+        backoff_s: i === 1 ? 10 : 0, next_in_s: 4, last_status: i === 1 ? 503 : (i === 0 ? 0 : 0), last_error: i === 1 ? "http=503" : "", last_error_time: i === 1 ? new Date().toISOString() : "",
+        last_ok_time: i === 0 ? new Date().toISOString() : "", full_sent: i === 1 })) }),
     "/api/webhook": () => J({ url: S.ha_webhooks.values.url, enabled: true, interval: 15, manual_override: false, data_mode: "changed", gzip: false, status: "ok", last_post: new Date().toISOString(), retries: 0, success_count: 512, fail_count: 3, last_error: "", last_error_time: "" }),
     "/api/vpn": () => J({ state: "connected", type: "wireguard", endpoint: "vpn.example.com:51820", ts_ip: "", ts_peers: 0, connects: 1, failures: 0, uptime_s: 8040 }),
     "/api/usb": () => J({ enabled: true, device_present: true, host_active: true, eth_connected: true, driver: "cdc_ncm", ip: "192.168.7.2", attaches: 1 }),
@@ -375,6 +385,11 @@
     if (method === "POST" && path === "/api/faults/clear") { S.__faults = []; return J({ cleared: true }); }
     if (method === "POST" && path === "/api/vpn/keygen") return J({ public_key: "MockPubKey000000000000000000000000000000000=" });
     if (method === "POST" && path === "/api/autopid/dtc/scan") return J({ ok: true });
+    if (method === "POST" && path === "/api/destinations/test") {
+      const d = (S.data_destinations.values.destinations || []).find((x) => x.name === (body && body.name));
+      if (!d) return J({ error: "unknown destination" }, 404);
+      return J({ ok: d.name !== "cloud", status: d.type === "mqtt" ? 0 : (d.name === "cloud" ? 503 : 200), elapsed_ms: 87, error: d.name === "cloud" ? "http=503" : "" });
+    }
     if (method === "POST" && path === "/api/autopid/test") {
       // 2026-09-16 shape: one shot decodes every expression; "transcript"
       // lists each exchange as the firmware ran it (type init, PID init,

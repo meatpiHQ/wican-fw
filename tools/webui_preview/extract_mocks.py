@@ -32,6 +32,10 @@ RX_STR = re.compile(
 RX_ENUM = re.compile(
     r'SETTINGS_STR_ENUM\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]*)"\s*\)')
 RX_ARRAY = re.compile(r'SETTINGS_ARRAY(?:_ANY)?\s*\(\s*"([^"]+)"')
+# SETTINGS_ARRAY("key", max, ITEM_TABLE, ...) -> the item table's rows
+RX_ARRAY_ITEMS = re.compile(r'SETTINGS_ARRAY\s*\(\s*"([^"]+)"\s*,\s*([\w* ()]+?)\s*,\s*(\w+)\s*,')
+RX_TABLE = re.compile(r'settings_field_t\s+(\w+)\s*\[\]\s*=\s*\{(.*?)\};', re.S)
+SECRET_RX = r"_password$|private_key|preshared_key|auth_key|_token$|api_key$"
 
 
 def ceval(expr):
@@ -43,14 +47,9 @@ def ceval(expr):
         return 0
 
 
-def parse_file(path):
-    src = open(path, encoding="utf-8", errors="replace").read()
-    name_m = re.search(r'\.name\s*=\s*"([a-z0-9_]+)"', src)
-    if not name_m:
-        return None, None, None
-    comp = name_m.group(1)
+def parse_rows(src):
+    """(props, values) for the SETTINGS_* rows found in `src`."""
     props, values = {}, {}
-
     for m in RX_BOOL.finditer(src):
         props[m.group(1)] = {"type": "boolean"}
         values[m.group(1)] = m.group(2) == "true"
@@ -70,14 +69,41 @@ def parse_file(path):
             continue
         props[k] = {"type": "string"}
         # secrets come back redacted from the real API (api_util_redact): mirror it
-        values[k] = "" if re.search(r"_password$|private_key|preshared_key|auth_key", k) else m.group(3)
+        values[k] = "" if re.search(SECRET_RX, k) else m.group(3)
     for m in RX_ARRAY.finditer(src):
         k = m.group(1)
         if k in props:
             continue
         props[k] = {"type": "array", "items": {}}
         values[k] = []
+    return props, values
 
+
+def parse_file(path):
+    src = open(path, encoding="utf-8", errors="replace").read()
+    name_m = re.search(r'\.name\s*=\s*"([a-z0-9_]+)"', src)
+    if not name_m:
+        return None, None, None
+    comp = name_m.group(1)
+    # item tables first (they are separate arrays in the same file): their
+    # rows must NOT leak into the top-level object
+    tables = {m.group(1): m.group(2) for m in RX_TABLE.finditer(src)}
+    item_names = set()
+    for m in RX_ARRAY_ITEMS.finditer(src):
+        item_names.add(m.group(3))
+    top_src = src
+    for name in item_names:
+        top_src = top_src.replace(tables.get(name, ""), "")
+    props, values = parse_rows(top_src)
+    for m in RX_ARRAY_ITEMS.finditer(src):
+        key, max_items, table = m.group(1), ceval(m.group(2)), m.group(3)
+        if table not in tables or key not in props:
+            continue
+        iprops, ivalues = parse_rows(tables[table])
+        req = re.findall(r'SETTINGS_(?:STR|STR_ENUM|INT)_REQ\s*\(\s*"([^"]+)"', tables[table])
+        props[key] = {"type": "array", "maxItems": max_items or 16,
+                      "items": {"type": "object", "properties": iprops, "required": req},
+                      "item_defaults": ivalues}
     return comp, props, values
 
 

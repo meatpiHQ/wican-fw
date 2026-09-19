@@ -207,33 +207,45 @@
  },
  "bridge_manager": {
   "values": {
-   "enabled": false,
-   "name": "",
-   "a": "",
-   "b": "",
-   "translator": "raw",
    "bridges": []
   },
   "schema": {
    "properties": {
-    "enabled": {
-     "type": "boolean"
-    },
-    "name": {
-     "type": "string"
-    },
-    "a": {
-     "type": "string"
-    },
-    "b": {
-     "type": "string"
-    },
-    "translator": {
-     "type": "string"
-    },
     "bridges": {
      "type": "array",
-     "items": {}
+     "maxItems": 16,
+     "items": {
+      "type": "object",
+      "properties": {
+       "enabled": {
+        "type": "boolean"
+       },
+       "name": {
+        "type": "string"
+       },
+       "a": {
+        "type": "string"
+       },
+       "b": {
+        "type": "string"
+       },
+       "translator": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "name",
+       "a",
+       "b"
+      ]
+     },
+     "item_defaults": {
+      "enabled": false,
+      "name": "",
+      "a": "",
+      "b": "",
+      "translator": "raw"
+     }
     }
    }
   }
@@ -302,6 +314,96 @@
     },
     "uart": {
      "type": "boolean"
+    }
+   }
+  }
+ },
+ "data_destinations": {
+  "values": {
+   "enabled": true,
+   "cli": true,
+   "destinations": []
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "destinations": {
+     "type": "array",
+     "maxItems": 16,
+     "items": {
+      "type": "object",
+      "properties": {
+       "enabled": {
+        "type": "boolean"
+       },
+       "retain": {
+        "type": "boolean"
+       },
+       "full_first": {
+        "type": "boolean"
+       },
+       "period_s": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 86400
+       },
+       "name": {
+        "type": "string"
+       },
+       "url": {
+        "type": "string"
+       },
+       "auth_token": {
+        "type": "string"
+       },
+       "auth_name": {
+        "type": "string"
+       },
+       "basic_username": {
+        "type": "string"
+       },
+       "basic_password": {
+        "type": "string"
+       },
+       "api_key": {
+        "type": "string"
+       },
+       "query": {
+        "type": "string"
+       },
+       "cert_set": {
+        "type": "string"
+       },
+       "car_model": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "name",
+       "type"
+      ]
+     },
+     "item_defaults": {
+      "enabled": true,
+      "retain": true,
+      "full_first": true,
+      "period_s": 5,
+      "name": "",
+      "url": "",
+      "auth_token": "",
+      "auth_name": "",
+      "basic_username": "",
+      "basic_password": "",
+      "api_key": "",
+      "query": "",
+      "cert_set": "",
+      "car_model": ""
+     }
     }
    }
   }
@@ -487,8 +589,6 @@
  "event_manager": {
   "values": {
    "enabled": true,
-   "period_s": 60,
-   "name": "",
    "timers": [],
    "rules": []
   },
@@ -497,17 +597,30 @@
     "enabled": {
      "type": "boolean"
     },
-    "period_s": {
-     "type": "integer",
-     "minimum": 1,
-     "maximum": 604800
-    },
-    "name": {
-     "type": "string"
-    },
     "timers": {
      "type": "array",
-     "items": {}
+     "maxItems": 16,
+     "items": {
+      "type": "object",
+      "properties": {
+       "period_s": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 604800
+       },
+       "name": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "name",
+       "period_s"
+      ]
+     },
+     "item_defaults": {
+      "period_s": 60,
+      "name": ""
+     }
     },
     "rules": {
      "type": "array",
@@ -1075,39 +1188,51 @@
  },
  "socket_manager": {
   "values": {
-   "enabled": false,
-   "port": 3333,
-   "max_clients": 2,
-   "keepalive_s": 30,
-   "name": "",
    "servers": []
   },
   "schema": {
    "properties": {
-    "enabled": {
-     "type": "boolean"
-    },
-    "port": {
-     "type": "integer",
-     "minimum": 1,
-     "maximum": 65535
-    },
-    "max_clients": {
-     "type": "integer",
-     "minimum": 1,
-     "maximum": 4
-    },
-    "keepalive_s": {
-     "type": "integer",
-     "minimum": 0,
-     "maximum": 600
-    },
-    "name": {
-     "type": "string"
-    },
     "servers": {
      "type": "array",
-     "items": {}
+     "maxItems": 16,
+     "items": {
+      "type": "object",
+      "properties": {
+       "enabled": {
+        "type": "boolean"
+       },
+       "port": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 65535
+       },
+       "max_clients": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 4
+       },
+       "keepalive_s": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 600
+       },
+       "name": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "name",
+       "proto",
+       "port"
+      ]
+     },
+     "item_defaults": {
+      "enabled": false,
+      "port": 3333,
+      "max_clients": 2,
+      "keepalive_s": 30,
+      "name": ""
+     }
     }
    }
   }
@@ -1314,39 +1439,50 @@
  },
  "websocket_manager": {
   "values": {
-   "enabled": false,
-   "mode": "binary",
-   "max_clients": 2,
-   "name": "",
-   "path": "/ws/",
    "channels": []
   },
   "schema": {
    "properties": {
-    "enabled": {
-     "type": "boolean"
-    },
-    "mode": {
-     "type": "string",
-     "enum": [
-      "binary",
-      "text"
-     ]
-    },
-    "max_clients": {
-     "type": "integer",
-     "minimum": 1,
-     "maximum": 4
-    },
-    "name": {
-     "type": "string"
-    },
-    "path": {
-     "type": "string"
-    },
     "channels": {
      "type": "array",
-     "items": {}
+     "maxItems": 16,
+     "items": {
+      "type": "object",
+      "properties": {
+       "enabled": {
+        "type": "boolean"
+       },
+       "mode": {
+        "type": "string",
+        "enum": [
+         "binary",
+         "text"
+        ]
+       },
+       "max_clients": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 4
+       },
+       "name": {
+        "type": "string"
+       },
+       "path": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "name",
+       "path"
+      ]
+     },
+     "item_defaults": {
+      "enabled": false,
+      "mode": "binary",
+      "max_clients": 2,
+      "name": "",
+      "path": "/ws/"
+     }
     }
    }
   }

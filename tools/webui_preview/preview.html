@@ -211,33 +211,45 @@
  },
  "bridge_manager": {
   "values": {
-   "enabled": false,
-   "name": "",
-   "a": "",
-   "b": "",
-   "translator": "raw",
    "bridges": []
   },
   "schema": {
    "properties": {
-    "enabled": {
-     "type": "boolean"
-    },
-    "name": {
-     "type": "string"
-    },
-    "a": {
-     "type": "string"
-    },
-    "b": {
-     "type": "string"
-    },
-    "translator": {
-     "type": "string"
-    },
     "bridges": {
      "type": "array",
-     "items": {}
+     "maxItems": 16,
+     "items": {
+      "type": "object",
+      "properties": {
+       "enabled": {
+        "type": "boolean"
+       },
+       "name": {
+        "type": "string"
+       },
+       "a": {
+        "type": "string"
+       },
+       "b": {
+        "type": "string"
+       },
+       "translator": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "name",
+       "a",
+       "b"
+      ]
+     },
+     "item_defaults": {
+      "enabled": false,
+      "name": "",
+      "a": "",
+      "b": "",
+      "translator": "raw"
+     }
     }
    }
   }
@@ -306,6 +318,96 @@
     },
     "uart": {
      "type": "boolean"
+    }
+   }
+  }
+ },
+ "data_destinations": {
+  "values": {
+   "enabled": true,
+   "cli": true,
+   "destinations": []
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "destinations": {
+     "type": "array",
+     "maxItems": 16,
+     "items": {
+      "type": "object",
+      "properties": {
+       "enabled": {
+        "type": "boolean"
+       },
+       "retain": {
+        "type": "boolean"
+       },
+       "full_first": {
+        "type": "boolean"
+       },
+       "period_s": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 86400
+       },
+       "name": {
+        "type": "string"
+       },
+       "url": {
+        "type": "string"
+       },
+       "auth_token": {
+        "type": "string"
+       },
+       "auth_name": {
+        "type": "string"
+       },
+       "basic_username": {
+        "type": "string"
+       },
+       "basic_password": {
+        "type": "string"
+       },
+       "api_key": {
+        "type": "string"
+       },
+       "query": {
+        "type": "string"
+       },
+       "cert_set": {
+        "type": "string"
+       },
+       "car_model": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "name",
+       "type"
+      ]
+     },
+     "item_defaults": {
+      "enabled": true,
+      "retain": true,
+      "full_first": true,
+      "period_s": 5,
+      "name": "",
+      "url": "",
+      "auth_token": "",
+      "auth_name": "",
+      "basic_username": "",
+      "basic_password": "",
+      "api_key": "",
+      "query": "",
+      "cert_set": "",
+      "car_model": ""
+     }
     }
    }
   }
@@ -491,8 +593,6 @@
  "event_manager": {
   "values": {
    "enabled": true,
-   "period_s": 60,
-   "name": "",
    "timers": [],
    "rules": []
   },
@@ -501,17 +601,30 @@
     "enabled": {
      "type": "boolean"
     },
-    "period_s": {
-     "type": "integer",
-     "minimum": 1,
-     "maximum": 604800
-    },
-    "name": {
-     "type": "string"
-    },
     "timers": {
      "type": "array",
-     "items": {}
+     "maxItems": 16,
+     "items": {
+      "type": "object",
+      "properties": {
+       "period_s": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 604800
+       },
+       "name": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "name",
+       "period_s"
+      ]
+     },
+     "item_defaults": {
+      "period_s": 60,
+      "name": ""
+     }
     },
     "rules": {
      "type": "array",
@@ -1079,39 +1192,51 @@
  },
  "socket_manager": {
   "values": {
-   "enabled": false,
-   "port": 3333,
-   "max_clients": 2,
-   "keepalive_s": 30,
-   "name": "",
    "servers": []
   },
   "schema": {
    "properties": {
-    "enabled": {
-     "type": "boolean"
-    },
-    "port": {
-     "type": "integer",
-     "minimum": 1,
-     "maximum": 65535
-    },
-    "max_clients": {
-     "type": "integer",
-     "minimum": 1,
-     "maximum": 4
-    },
-    "keepalive_s": {
-     "type": "integer",
-     "minimum": 0,
-     "maximum": 600
-    },
-    "name": {
-     "type": "string"
-    },
     "servers": {
      "type": "array",
-     "items": {}
+     "maxItems": 16,
+     "items": {
+      "type": "object",
+      "properties": {
+       "enabled": {
+        "type": "boolean"
+       },
+       "port": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 65535
+       },
+       "max_clients": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 4
+       },
+       "keepalive_s": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 600
+       },
+       "name": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "name",
+       "proto",
+       "port"
+      ]
+     },
+     "item_defaults": {
+      "enabled": false,
+      "port": 3333,
+      "max_clients": 2,
+      "keepalive_s": 30,
+      "name": ""
+     }
     }
    }
   }
@@ -1318,39 +1443,50 @@
  },
  "websocket_manager": {
   "values": {
-   "enabled": false,
-   "mode": "binary",
-   "max_clients": 2,
-   "name": "",
-   "path": "/ws/",
    "channels": []
   },
   "schema": {
    "properties": {
-    "enabled": {
-     "type": "boolean"
-    },
-    "mode": {
-     "type": "string",
-     "enum": [
-      "binary",
-      "text"
-     ]
-    },
-    "max_clients": {
-     "type": "integer",
-     "minimum": 1,
-     "maximum": 4
-    },
-    "name": {
-     "type": "string"
-    },
-    "path": {
-     "type": "string"
-    },
     "channels": {
      "type": "array",
-     "items": {}
+     "maxItems": 16,
+     "items": {
+      "type": "object",
+      "properties": {
+       "enabled": {
+        "type": "boolean"
+       },
+       "mode": {
+        "type": "string",
+        "enum": [
+         "binary",
+         "text"
+        ]
+       },
+       "max_clients": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 4
+       },
+       "name": {
+        "type": "string"
+       },
+       "path": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "name",
+       "path"
+      ]
+     },
+     "item_defaults": {
+      "enabled": false,
+      "mode": "binary",
+      "max_clients": 2,
+      "name": "",
+      "path": "/ws/"
+     }
     }
    }
   }
@@ -1695,6 +1831,11 @@
   ov("ble_manager", { enabled: false });
   ov("mqtt_manager", { enabled: true, broker: "mqtt://10.42.0.1:1883", topic_prefix: "wican" });
   ov("ha_webhooks", { enabled: true, url: "http://homeassistant.local:8123/api/webhook/8f4a21be", interval_s: 15 });
+  ov("data_destinations", { enabled: true, destinations: [
+    { name: "dest1", type: "mqtt", enabled: true, url: "~/autopid", period_s: 5, auth: "none", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "", cert_set: "", car_model: "", retain: true, full_first: true },
+    { name: "cloud", type: "https", enabled: true, url: "https://telemetry.example.com/wican", period_s: 30, auth: "bearer", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "src=wican", cert_set: "homeca", car_model: "", retain: true, full_first: true },
+    { name: "abrp", type: "abrp", enabled: false, url: "", period_s: 10, auth: "api_key_query", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "", cert_set: "", car_model: "hyundai:ioniq5:22:77", retain: true, full_first: true },
+  ] });
   ov("autopid", { enabled: true, vehicle: "Corolla 2021" });
   ov("data_logger", { enabled: false });
   ov("vpn_manager", { enabled: true, type: "wireguard", address: "10.66.0.2", endpoint: "vpn.example.com", port: 51820 });
@@ -1783,6 +1924,11 @@
         first_time: 1784400000, last_time: 1784400000 }]) }),
     "/api/wifi/status": () => J({ enabled: true, sta_connected: true, ip: "10.42.0.62", ap_started: true, ap_default_password: state.apDefaultPassword === true, clients: 0, ap_ip: "192.168.80.1", dns: ["10.42.0.1", "1.1.1.1"],
       sta_attempt: { ssid: "HomeWiFi", reason: 204, fail_count: 3, deprioritised: true } }),
+    "/api/destinations": () => J({ enabled: S.data_destinations.values.enabled !== false, running: true, network: true, mqtt: true,
+      destinations: (S.data_destinations.values.destinations || []).map((d, i) => ({ name: d.name, type: d.type, enabled: d.enabled !== false, url: d.url, period_s: d.period_s, auth: d.auth,
+        has_token: i === 1, has_api_key: false, cert_set: d.cert_set, success: i === 0 ? 412 : 0, fail: i === 1 ? 3 : 0, skipped_offline: 0, consecutive_failures: i === 1 ? 3 : 0,
+        backoff_s: i === 1 ? 10 : 0, next_in_s: 4, last_status: i === 1 ? 503 : (i === 0 ? 0 : 0), last_error: i === 1 ? "http=503" : "", last_error_time: i === 1 ? new Date().toISOString() : "",
+        last_ok_time: i === 0 ? new Date().toISOString() : "", full_sent: i === 1 })) }),
     "/api/webhook": () => J({ url: S.ha_webhooks.values.url, enabled: true, interval: 15, manual_override: false, data_mode: "changed", gzip: false, status: "ok", last_post: new Date().toISOString(), retries: 0, success_count: 512, fail_count: 3, last_error: "", last_error_time: "" }),
     "/api/vpn": () => J({ state: "connected", type: "wireguard", endpoint: "vpn.example.com:51820", ts_ip: "", ts_peers: 0, connects: 1, failures: 0, uptime_s: 8040 }),
     "/api/usb": () => J({ enabled: true, device_present: true, host_active: true, eth_connected: true, driver: "cdc_ncm", ip: "192.168.7.2", attaches: 1 }),
@@ -2057,6 +2203,11 @@
     if (method === "POST" && path === "/api/faults/clear") { S.__faults = []; return J({ cleared: true }); }
     if (method === "POST" && path === "/api/vpn/keygen") return J({ public_key: "MockPubKey000000000000000000000000000000000=" });
     if (method === "POST" && path === "/api/autopid/dtc/scan") return J({ ok: true });
+    if (method === "POST" && path === "/api/destinations/test") {
+      const d = (S.data_destinations.values.destinations || []).find((x) => x.name === (body && body.name));
+      if (!d) return J({ error: "unknown destination" }, 404);
+      return J({ ok: d.name !== "cloud", status: d.type === "mqtt" ? 0 : (d.name === "cloud" ? 503 : 200), elapsed_ms: 87, error: d.name === "cloud" ? "http=503" : "" });
+    }
     if (method === "POST" && path === "/api/autopid/test") {
       // 2026-09-16 shape: one shot decodes every expression; "transcript"
       // lists each exchange as the firmware ran it (type init, PID init,
@@ -3166,6 +3317,7 @@ const LABELS={
   dtc_init:"DTC init",dtc_rxheader:"DTC reply header",dtc_protocol:"DTC protocol",dtc_uds_txid:"UDS TX ID",dtc_uds_rxid:"UDS RX ID",
   dtc_uds_ext:"UDS extended IDs",dtc_uds_mask:"UDS status mask",
   /* ha_webhooks */
+  "data_destinations.enabled":"Destinations","data_destinations.destinations":"Destinations",
   "ha_webhooks.url":"Webhook URL",url2:"Failover URL",interval_s:"Push interval (s)",data_mode:"Data to push",gzip:"Gzip compression",
   manual_override:"Manual URL override",
   /* imu_manager / interface_manager */
@@ -4071,7 +4223,7 @@ PAGES.automate=async(view,sub)=>{
      this page so the staged PUT carries all edits together. */
   const GROUP_KEYS={std:["std_enabled","std_protocol","std_init"],custom:["custom_enabled","custom_init"],specific:["specific_enabled","vehicle","specific_init"]};
   const PAUSE_KEYS=["pause_below_mv","pause_follow_sleep"];
-  let av=null,sch=null,avErr=null;
+  let av=null,sch=null,avErr=null,destTimer=null;
   const stageAv=()=>store.stage("autopid",av);
   /* 1. settings: master switch + pause rules (tab "Settings", card "Automate settings" — meatpi 2026-09-06) */
   try{
@@ -4135,50 +4287,138 @@ PAGES.automate=async(view,sub)=>{
       h("div",{class:"frow"},h("label",{},"Webhook stats"),h("div",{class:"ctl"},statsEl)),
       note("","The WebHook URL, failover URL and interval are managed by the Home Assistant integration while enabled: it registers itself via POST /api/webhook. Gzip compresses pushes (needs an integration from 2026-07 or newer).")));
   }catch(e){paneHa.append(banner("crit","alert","Home Assistant: "+e.message));}
-  /* 4. destinations = event_manager timer rules created by this page */
+  /* 4. destinations = the data_destinations settings table (reboot-to-apply)
+     + live counters from GET /api/destinations. Types: MQTT topic, HTTP,
+     HTTPS (with a cert_manager set), ABRP telemetry. Older destinations
+     that this page used to create as event_manager timer rules can be
+     imported once. */
   try{
-    const ev=await api("/api/settings/event_manager");
-    delete ev.degraded;delete ev.pending_reboot;
-    ev.rules=ev.rules||[];ev.timers=ev.timers||[];
-    const isDest=n=>/^dest\d+$/.test(n);
-    const model=()=>ev.rules.filter(r=>isDest(r.name)).map(r=>{
-      const t=ev.timers.find(x=>x.name===r.name);
-      return{name:r.name,type:r.do==="mqtt.publish"?"MQTT":"HTTP",
-        url:r.do==="mqtt.publish"?(r.with&&r.with.topic||""):(r.with&&r.with.url||""),
-        cycle:t?t.period_s:0,on:r.enabled!==false};});
+    const dv=await api("/api/settings/data_destinations");delete dv.degraded;delete dv.pending_reboot;
+    dv.destinations=Array.isArray(dv.destinations)?dv.destinations:[];
+    const dsch=await tryGet("/api/settings/data_destinations/schema");
+    const maxItems=(dsch&&dsch.properties&&dsch.properties.destinations&&dsch.properties.destinations.maxItems)||8;
+    let certSets=[];try{const r=await api("/api/certs");certSets=(r.sets||[]).map(x=>x.name);}catch{}
+    const stageIt=()=>store.stage("data_destinations",dv);
+    const TYPES=[["mqtt","MQTT"],["http","HTTP"],["https","HTTPS"],["abrp","ABRP"]];
+    const AUTHS=[["none","None"],["bearer","Bearer token"],["api_key_header","API key in a header"],["api_key_query","API key in the query string"],["basic","Basic (username / password)"]];
+    const ABRP_AUTHS=[["api_key_query","api_key query parameter (default)"],["api_key_header","Authorization: APIKEY header"]];
+    const PH={mqtt:"~/autopid",http:"http://host/path",https:"https://host/path",abrp:"https://api.iternio.com/1/tlm/send (default)"};
+    const live={};  /* name -> counters from /api/destinations */
+    const expanded=new Set();
     const listEl=h("div",{});
-    const stageIt=()=>store.stage("event_manager",ev);
-    const rebuild=()=>{
-      const rows=model();
-      listEl.replaceChildren(
-        h("div",{class:"scroll"},h("div",{style:"min-width:600px"},
-          h("div",{style:"display:grid;grid-template-columns:64px 110px 1fr 100px 44px;gap:10px;padding:0 6px 8px;font-size:11px;font-weight:800;letter-spacing:.05em;color:var(--text-3);text-transform:uppercase"},
-            h("span",{},"On"),h("span",{},"Type"),h("span",{},"Topic or URL"),h("span",{},"Every (s)"),h("span",{})),
-          ...rows.map(d=>{
-            const rule=ev.rules.find(r=>r.name===d.name);
-            const timer=ev.timers.find(t=>t.name===d.name);
-            return h("div",{style:"display:grid;grid-template-columns:64px 110px 1fr 100px 44px;gap:10px;padding:6px;align-items:center;border-top:1px solid var(--border)"},
-              switchCtl(d.on,v=>{rule.enabled=v;stageIt();},{sm:true,noText:true,title:"Pause this destination without deleting it"}),
-              h("select",{onchange:e=>{const mq=e.target.value==="MQTT";rule.do=mq?"mqtt.publish":"http.post";
-                rule.with=mq?{topic:d.url||"~/autopid",payload:"${autopid.data}"}:{url:d.url||"http://",body:"${autopid.data}"};stageIt();rebuild();}},
-                h("option",{selected:d.type==="MQTT"},"MQTT"),h("option",{selected:d.type==="HTTP"},"HTTP")),
-              h("input",{class:"mono",value:d.url,placeholder:d.type==="MQTT"?"~/topic":"http://host/path",onchange:e=>{
-                if(rule.do==="mqtt.publish")rule.with.topic=e.target.value;else rule.with.url=e.target.value;stageIt();}}),
-              h("input",{class:"mono",type:"number",min:1,value:d.cycle,title:"Publish period in seconds (minimum 1)",onchange:e=>{if(timer)timer.period_s=Math.max(1,Math.round(Number(e.target.value)||1));stageIt();}}),
-              h("button",{class:"btn sm gh danger",title:"Remove destination",onclick:()=>{
-                ev.rules=ev.rules.filter(r=>r.name!==d.name);ev.timers=ev.timers.filter(t=>t.name!==d.name);stageIt();rebuild();}},ic("trash")));
-          }),
-          rows.length?null:h("div",{class:"empty"},"No destinations: cyclic pushes of the live parameter set to MQTT or HTTP"))));
+    const newName=()=>{let i=1;while(dv.destinations.some(d=>d.name==="dest"+i))i++;return "dest"+i;};
+    const blank=()=>({name:newName(),type:"mqtt",enabled:true,url:"~/autopid",period_s:5,auth:"none",auth_token:"",auth_name:"",basic_username:"",basic_password:"",api_key:"",query:"",cert_set:"",car_model:"",retain:true,full_first:true});
+    const statusChip=d=>{const l=live[d.name];
+      if(!l)return h("span",{class:"help",title:"Not on the device yet: apply and restart"},"new");
+      if(l.consecutive_failures>0)return chip("Fail "+fmt.num(l.fail)+(l.backoff_s?" · wait "+l.backoff_s+"s":""),"crit");
+      if(l.skipped_offline>0&&!l.success)return chip("Offline "+fmt.num(l.skipped_offline),"warn");
+      return chip("OK "+fmt.num(l.success)+(l.fail?" · Fail "+fmt.num(l.fail):""),l.success?"ok":"");};
+    const secretInput=(d,key,has,ph)=>{
+      const inp=h("input",{type:"password",autocomplete:"new-password",value:d[key]||"",placeholder:has?"stored, leave blank to keep":ph,
+        oninput:e=>{d[key]=e.target.value;stageIt();}});
+      return h("div",{class:"rowflex"},h("div",{class:"grow"},inp),h("button",{class:"btn sm gh",type:"button",title:"Show / hide",onclick:()=>inp.type=inp.type==="password"?"text":"password"},"show"));};
+    const frow=(label,ctl,help)=>h("div",{class:"frow"},h("label",{},label),h("div",{class:"ctl"},ctl),help?h("div",{class:"help"},help):null);
+    const sel=(opts,cur,onchange)=>h("select",{onchange:e=>onchange(e.target.value)},...opts.map(([v,t])=>h("option",{value:v,selected:cur===v},t)));
+    const details=d=>{
+      const l=live[d.name]||{};
+      const rows=[];
+      if(d.type==="mqtt"){
+        rows.push(frow("Retained",switchCtl(d.retain!==false,v=>{d.retain=v;stageIt();},{sm:true}),"A retained message gives a new subscriber the last snapshot at once."));
+      }else if(d.type==="abrp"){
+        rows.push(frow("ABRP user token",secretInput(d,"auth_token",l.has_token,"from the ABRP app: Settings → Live data → Generic"),"Required. Identifies your car in A Better Routeplanner."));
+        rows.push(frow("ABRP API key",secretInput(d,"api_key",l.has_api_key,"the Iternio developer api_key"),"Sent as the api_key query parameter, or as an Authorization: APIKEY header below."));
+        rows.push(frow("API key placement",sel(ABRP_AUTHS,d.auth==="api_key_header"?"api_key_header":"api_key_query",v=>{d.auth=v;d.auth_name="";stageIt();})));
+        rows.push(frow("Car model",h("input",{value:d.car_model||"",placeholder:"e.g. hyundai:ioniq5:22:77",oninput:e=>{d.car_model=e.target.value;stageIt();}}),"ABRP's car_model id (optional). Sent in every telemetry record."));
+        rows.push(frow("Certificate set",sel([["","Built-in CA bundle"],...certSets.map(n=>[n,n])],d.cert_set||"",v=>{d.cert_set=v;stageIt();}),"Only for a private ABRP-compatible endpoint; api.iternio.com uses the built-in bundle."));
+        rows.push(frow("Extra query",h("input",{class:"mono",value:d.query||"",placeholder:"k=v&k2=v2",oninput:e=>{d.query=e.target.value;stageIt();}})));
+      }else{
+        const authSel=sel(AUTHS,d.auth||"none",v=>{d.auth=v;d.auth_name="";stageIt();rebuild();});
+        rows.push(frow("Authentication",authSel));
+        if(d.auth==="bearer")rows.push(frow("Bearer token",secretInput(d,"auth_token",l.has_token,"token"),"Sent as Authorization: Bearer <token>."));
+        if(d.auth==="api_key_header"||d.auth==="api_key_query"){
+          rows.push(frow(d.auth==="api_key_header"?"Header name":"Query parameter",h("input",{class:"mono",value:d.auth_name||"",placeholder:d.auth==="api_key_header"?"x-api-key":"api_key",oninput:e=>{d.auth_name=e.target.value;stageIt();}})));
+          rows.push(frow("API key",secretInput(d,"auth_token",l.has_token,"key")));}
+        if(d.auth==="basic"){
+          rows.push(frow("Username",h("input",{value:d.basic_username||"",oninput:e=>{d.basic_username=e.target.value;stageIt();}})));
+          rows.push(frow("Password",secretInput(d,"basic_password",l.has_token,"password")));}
+        rows.push(frow("Extra query",h("input",{class:"mono",value:d.query||"",placeholder:"k=v&k2=v2",oninput:e=>{d.query=e.target.value;stageIt();}}),"Appended to the URL on every request."));
+        if(d.type==="https")rows.push(frow("Certificate set",sel([["","Built-in CA bundle"],...certSets.map(n=>[n,n])],d.cert_set||"",v=>{d.cert_set=v;stageIt();}),
+          "A set with a CA verifies a private server; add a client certificate and key for mutual TLS. Manage sets under System → Certificates."));
+        rows.push(frow("First push",switchCtl(d.full_first!==false,v=>{d.full_first=v;stageIt();},{sm:true,yes:"Config + status + data",no:"Data only"}),
+          "With the first option the first successful push also carries the PID tables and a device status block, so the receiver knows what it gets; every later push is {\"autopid_data\": {...}}."));
+      }
+      const st=live[d.name];
+      const stat=st?h("div",{class:"help",style:"margin-top:6px"},
+        "OK "+fmt.num(st.success)+" · Fail "+fmt.num(st.fail)+" · Offline skips "+fmt.num(st.skipped_offline)+
+        (st.backoff_s?" · backing off "+st.backoff_s+" s":"")+(st.next_in_s!=null?" · next in "+st.next_in_s+" s":"")+
+        (st.last_ok_time?" · last OK "+st.last_ok_time:"")+(st.last_error?" · last error: "+st.last_error+(st.last_error_time?" ("+st.last_error_time+")":""):"")):null;
+      return h("div",{class:"dest-details",style:"grid-column:1/-1;padding:4px 6px 10px 70px"},...rows,stat);
     };
+    const testOne=async(d,btn)=>{
+      if(!live[d.name])return toast("Apply Configuration and restart first: the device tests the saved table","warn");
+      btn.disabled=true;const was=btn.textContent;btn.textContent="Testing…";
+      try{const r=await api("/api/destinations/test",{method:"POST",body:{name:d.name}});
+        toast(d.name+": "+(r.ok?"delivered"+(r.status?" (HTTP "+r.status+")":"")+" in "+r.elapsed_ms+" ms":"failed: "+(r.error||"?")),r.ok?"ok":"err");
+        await pollStats();}
+      catch(e){toast(d.name+": "+e.message,"err");}
+      btn.disabled=false;btn.textContent=was;};
+    const GRID="display:grid;grid-template-columns:64px 100px 1fr 90px 120px 120px;gap:10px;align-items:center";
+    const rebuild=()=>{
+      listEl.replaceChildren(
+        h("div",{class:"scroll"},h("div",{style:"min-width:720px"},
+          h("div",{style:GRID+";padding:0 6px 8px;font-size:11px;font-weight:800;letter-spacing:.05em;color:var(--text-3);text-transform:uppercase"},
+            h("span",{},"On"),h("span",{},"Type"),h("span",{},"Topic or URL"),h("span",{},"Every (s)"),h("span",{},"Status"),h("span",{})),
+          ...dv.destinations.flatMap(d=>{
+            const caret=h("button",{class:"btn sm gh",title:"Options",onclick:()=>{if(expanded.has(d.name))expanded.delete(d.name);else expanded.add(d.name);rebuild();}},expanded.has(d.name)?"▾":"▸");
+            const testBtn=h("button",{class:"btn sm gh",title:"Deliver once now (uses the saved table)",onclick:e=>testOne(d,e.currentTarget)},"Test");
+            const row=h("div",{style:GRID+";padding:6px;border-top:1px solid var(--border)"},
+              switchCtl(d.enabled!==false,v=>{d.enabled=v;stageIt();},{sm:true,noText:true,title:"Pause this destination without deleting it"}),
+              sel(TYPES,d.type||"mqtt",v=>{d.type=v;if(v==="mqtt"&&!/^~\//.test(d.url||"")&&!(d.url||"").includes("/"))d.url="~/autopid";
+                if(v!=="mqtt"&&/^~\//.test(d.url||""))d.url="";if(v==="abrp"&&(d.auth||"none")==="none")d.auth="api_key_query";if(v!=="abrp"&&d.auth==="api_key_query"&&!d.auth_token)d.auth="none";stageIt();rebuild();}),
+              h("input",{class:"mono","data-dest-url":d.name,value:d.url||"",placeholder:PH[d.type]||"",title:d.type==="abrp"?"Leave empty for Iternio's endpoint":"",oninput:e=>{d.url=e.target.value;stageIt();}}),
+              h("input",{class:"mono",type:"number",min:1,max:86400,value:d.period_s||5,title:"Publish period in seconds (minimum 1)",onchange:e=>{d.period_s=Math.min(86400,Math.max(1,Math.round(Number(e.target.value)||1)));e.target.value=d.period_s;stageIt();}}),
+              h("div",{"data-dest-status":d.name},statusChip(d)),
+              h("div",{class:"rowflex",style:"gap:4px;justify-content:flex-end"},caret,testBtn,
+                h("button",{class:"btn sm gh danger",title:"Remove destination",onclick:()=>{dv.destinations=dv.destinations.filter(x=>x!==d);expanded.delete(d.name);stageIt();rebuild();}},ic("trash"))));
+            return expanded.has(d.name)?[row,details(d)]:[row];}),
+          dv.destinations.length?null:h("div",{class:"empty"},"No destinations: cyclic pushes of the live parameter set to MQTT, HTTP, HTTPS or ABRP"))));
+      addBtn.disabled=dv.destinations.length>=maxItems;
+    };
+    const addBtn=h("button",{class:"btn pri sm",onclick:()=>{if(dv.destinations.length>=maxItems)return toast("Up to "+maxItems+" destinations","warn");
+      const d=blank();dv.destinations.push(d);expanded.add(d.name);stageIt();rebuild();}},ic("plus"),"Add Destination");
+    /* live counters: every 5 s while the page is open */
+    const pollStats=async()=>{const r=await tryGet("/api/destinations");if(!r)return;
+      for(const k of Object.keys(live))delete live[k];
+      for(const e of (r.destinations||[]))live[e.name]=e;
+      for(const el of listEl.querySelectorAll("[data-dest-status]")){const d=dv.destinations.find(x=>x.name===el.dataset.destStatus);if(d)el.replaceChildren(statusChip(d));}
+      linkEl.replaceChildren(r.enabled===false?chip("Destinations off",""):null,
+        chip(r.network?"Network up":"No network",r.network?"ok":"warn"),
+        dv.destinations.some(d=>d.type==="mqtt")?chip(r.mqtt?"MQTT connected":"MQTT not connected",r.mqtt?"ok":"warn"):null);};
+    const linkEl=h("div",{class:"rowflex",style:"flex-wrap:wrap;gap:8px"});
+    await pollStats();
+    destTimer=setInterval(()=>{if(conn.state==="online")pollStats();},5000);
     rebuild();
-    const addBtn=h("button",{class:"btn pri sm",onclick:()=>{
-      let i=1;while(ev.rules.some(r=>r.name==="dest"+i))i++;
-      const name="dest"+i;
-      ev.timers.push({name,period_s:5});
-      ev.rules.push({name,on:"timer.tick",match:{timer:name},do:"mqtt.publish",with:{topic:"~/autopid",payload:"${autopid.data}"}});
-      stageIt();rebuild();}},ic("plus"),"Add Destination");
-    paneDest.append(cardTools("Data Destinations","send",[addBtn],listEl,
-      note("","Each destination publishes ${autopid.data} (all live parameters as JSON) on its own cycle. In MQTT topics, ~ expands to this device's base topic. Conditions, templates and other event sources live under Rules & Events.")));
+    /* older firmware/UI: destinations were event_manager timer rules named destN */
+    let legacyEl=null;
+    try{
+      const ev=await api("/api/settings/event_manager");delete ev.degraded;delete ev.pending_reboot;
+      const isDest=n=>/^dest\d+$/.test(n);
+      const old=(ev.rules||[]).filter(r=>isDest(r.name));
+      if(old.length)legacyEl=banner("warn","alert",old.length+" destination"+(old.length>1?"s":"")+" from an earlier version still run as timer rules (Rules & Events). ",
+        h("button",{class:"btn sm",style:"margin-left:6px",onclick:()=>{
+          for(const r of old){const t=(ev.timers||[]).find(x=>x.name===r.name);
+            const mq=r.do==="mqtt.publish";const name=dv.destinations.some(d=>d.name===r.name)?newName():r.name;
+            dv.destinations.push(Object.assign(blank(),{name,type:mq?"mqtt":((r.with&&r.with.url||"").startsWith("https://")?"https":"http"),
+              url:mq?(r.with&&r.with.topic||"~/autopid"):(r.with&&r.with.url||""),period_s:t?t.period_s:5,enabled:r.enabled!==false,full_first:false}));}
+          ev.rules=(ev.rules||[]).filter(r=>!isDest(r.name));ev.timers=(ev.timers||[]).filter(t=>!isDest(t.name));
+          store.stage("event_manager",ev);stageIt();legacyEl.remove();rebuild();toast("Imported: Apply Configuration to save both","ok");}},"Import and remove the rules"));
+    }catch{}
+    paneDest.append(cardTools("Data Destinations","send",[addBtn],
+      h("div",{class:"frow"},h("label",{},"Destinations"),h("div",{class:"ctl"},switchCtl(dv.enabled!==false,v=>{dv.enabled=v;stageIt();},{yes:"Enabled",no:"Paused"})),
+        h("div",{class:"help"},"Master switch. Each row below has its own switch.")),
+      h("div",{class:"frow"},h("label",{},"Links"),h("div",{class:"ctl"},linkEl)),
+      legacyEl,listEl,
+      note("","Each destination sends the live parameter set on its own cycle. MQTT: a topic, ~ expands to this device's base topic. HTTP and HTTPS: a JSON POST with optional authentication, extra query parameters and, for HTTPS, a certificate set from System → Certificates. ABRP: telemetry for A Better Routeplanner (the user token from the ABRP app plus an Iternio API key). A failing endpoint is retried with a growing interval; a lost network only pauses the sends. Changes apply after a restart; Test uses the table the device is running.")));
   }catch(e){paneDest.append(banner("crit","alert","Destinations: "+e.message));}
   /* 4. parameters — the big editor card gets its own tab */
   const paramsCard=h("div",{});paneParams.append(paramsCard);
@@ -4695,7 +4935,7 @@ PAGES.automate=async(view,sub)=>{
       [liveBadge(),h("a",{class:"btn sm gh",href:"#/dashboard",title:"See the live values these parameters produce"},"View on Dashboard")],
       seg,paneEl));
   }catch(e){paramsCard.replaceWith(banner("crit","alert","Parameters: "+e.message));}
-  return null;
+  return()=>{if(destTimer)clearInterval(destTimer);};
 };
 
 /* ---- Power Saving ---- */
@@ -5942,7 +6182,7 @@ async function certsCard(){
       h("div",{class:"rowflex",style:"flex-wrap:wrap;gap:8px"},
         pickBtn("ca","CA certificate…"),pickBtn("cert","Client certificate…"),pickBtn("key","Client key…"),upBtn)),
       h("div",{class:"help"},"Any subset per upload, 8 KB max per part. A set needs at least a CA to verify servers; add BOTH client certificate and key for mutual TLS.")),
-    note("","Up to 10 named sets, stored under /data/certs. Key material can never be read back through this page or the API. MQTT and Home Assistant select a set via their “Cert Set” option; changes take effect on the next connection (reboot to be sure)."));
+    note("","Up to 10 named sets, stored under /data/certs. Key material can never be read back through this page or the API. MQTT, Home Assistant and HTTPS data destinations select a set via their “Cert Set” option; changes take effect on the next connection (reboot to be sure)."));
 }
 
 PAGES.system=async(view,sub)=>{
@@ -6825,7 +7065,7 @@ PAGES.allsettings=async(view)=>{
   return null;
 };
 /* ============================================================ BOOT */
-const NICE={wifi_manager:"Wi-Fi",ble_manager:"Bluetooth",mqtt_manager:"MQTT",autopid:"AutoPID",vpn_manager:"VPN",data_logger:"Logger",sleep_manager:"Power saving",event_manager:"Automation rules",can_manager:"CAN bus",j2534_server:"J2534",usb_host_manager:"USB",led_manager:"LED",socket_manager:"Socket servers",bridge_manager:"Bridges",websocket_manager:"WebSocket channels",script_engine:"Scripts",obd_chip:"OBD chip",battery_monitor:"Battery",imu_manager:"Motion (IMU)",rtc_manager:"Clock",mdns_manager:"mDNS",cert_manager:"Certificates",usb_acm_cli:"Dongle console (USB serial)",espnetlink:"ESPNetLink",uds_manager:"UDS",interface_manager:"Radio arbitration",dev_status_manager:"Status flags",external_storage:"SD card",filesystem:"Filesystem",restart_tracker:"Restart tracking",log_manager:"Logging",cmdline_manager:"Console",ha_webhooks:"Home Assistant",mqtt_can:"CAN over MQTT",http_server_manager:"Web server",obd_gate:"OBD gate",iperf_manager:"iPerf (throughput test)",log_sinks:"Log sinks",button_manager:"Button"};
+const NICE={wifi_manager:"Wi-Fi",ble_manager:"Bluetooth",mqtt_manager:"MQTT",autopid:"AutoPID",vpn_manager:"VPN",data_logger:"Logger",sleep_manager:"Power saving",event_manager:"Automation rules",can_manager:"CAN bus",j2534_server:"J2534",usb_host_manager:"USB",led_manager:"LED",socket_manager:"Socket servers",bridge_manager:"Bridges",websocket_manager:"WebSocket channels",script_engine:"Scripts",obd_chip:"OBD chip",battery_monitor:"Battery",imu_manager:"Motion (IMU)",rtc_manager:"Clock",mdns_manager:"mDNS",cert_manager:"Certificates",usb_acm_cli:"Dongle console (USB serial)",espnetlink:"ESPNetLink",uds_manager:"UDS",interface_manager:"Radio arbitration",dev_status_manager:"Status flags",external_storage:"SD card",filesystem:"Filesystem",restart_tracker:"Restart tracking",log_manager:"Logging",cmdline_manager:"Console",ha_webhooks:"Home Assistant",data_destinations:"Data destinations",mqtt_can:"CAN over MQTT",http_server_manager:"Web server",obd_gate:"OBD gate",iperf_manager:"iPerf (throughput test)",log_sinks:"Log sinks",button_manager:"Button"};
 const HIDE=new Set(["main_bench"]);
 function niceName(n){return NICE[n]||n.replace(/_manager$/,"").replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase());}
 async function boot(){

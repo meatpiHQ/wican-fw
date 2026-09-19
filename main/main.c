@@ -26,6 +26,7 @@
 #include "api_http.h"
 #include "autopid.h"
 #include "ha_webhooks.h"
+#include "data_destinations.h"
 #include "data_logger.h"
 #include "sleep_manager.h"
 #include "usb_host_manager.h"
@@ -203,6 +204,8 @@ void app_main(void)
         components that declare sources/actions in their inits */
     main_boot_init("autopid_init", autopid_init); /* /data mounted above */
     main_boot_init("ha_webhooks_init", ha_webhooks_init); /* HA telemetry link */
+    main_boot_init("data_destinations_init", data_destinations_init); /* MQTT /
+        HTTP(S) / ABRP cyclic pushes of the autopid snapshot */
     main_boot_init("data_logger_init", data_logger_init);
     main_boot_init("ota_manager_init", ota_manager_init); /* before api_http */
     main_boot_init("api_http_init", api_http_init);
@@ -217,6 +220,8 @@ void app_main(void)
     main_boot_init("autopid_register_http", autopid_register_http);
     main_boot_init("obd_chip_register_http", obd_chip_register_http);
     main_boot_init("ha_webhooks_register_http", ha_webhooks_register_http);
+    main_boot_init("data_destinations_register_http",
+              data_destinations_register_http);
     main_boot_init("event_manager_register_http", event_manager_register_http);
     main_boot_init("rtc_manager_register_http", rtc_manager_register_http);
     main_boot_init("data_logger_register_http", data_logger_register_http);
@@ -303,6 +308,9 @@ void app_main(void)
     bool apid_ok = main_boot_start("autopid", autopid_start);
     /* HA telemetry poster — reads autopid's snapshot + cached config */
     main_boot_start("ha_webhooks", ha_webhooks_start);
+    /* data destinations poster - autopid snapshot -> MQTT / HTTP(S) / ABRP
+       (network- and broker-gated inside; mqtt_manager started above) */
+    main_boot_start("data_destinations", data_destinations_start);
     /* AFTER external_storage: its writer follows the card mount state */
     main_boot_start("data_logger", data_logger_start);
     /* glue: autopid samples -> the logger's params stream */

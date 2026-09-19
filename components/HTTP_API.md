@@ -516,6 +516,23 @@ bridge to whatever endpoint the `bridge_manager` settings pair them with
 (OBD-over-WS live-verified 2026-07-04; shipped-default flip 2026-07-05;
 details + benchmarks in `websocket_manager/`).
 
+## 6e14. Data destinations — `data_destinations` registers its own routes (2026-09-19)
+
+The Automate → Data destinations page: cyclic pushes of the live autopid
+snapshot to MQTT topics, HTTP/HTTPS endpoints (bearer / API-key header or
+query / basic auth, extra query parameters, a cert_manager set for
+private CAs or mutual TLS) and the ABRP (Iternio) telemetry API — the v6
+home of the legacy autopid `destinations[]`. The table itself is a
+settings component (`/api/settings/data_destinations`, reboot-to-apply,
+≤ 8 rows; `auth_token` / `api_key` / `basic_password` are redacted on
+GET and kept-when-empty on PUT — api_http matches array rows by `name`,
+then by index). See `data_destinations/README.md`.
+
+| Route | Method | Behavior |
+|---|---|---|
+| `/api/destinations` | GET | `{"enabled","running","network","mqtt","destinations":[{"name","type","enabled","url","period_s","auth","has_token","has_api_key","cert_set","success","fail","skipped_offline","consecutive_failures","backoff_s","next_in_s","last_status","last_error","last_error_time","last_ok_time","full_sent"}]}` — the APPLIED table with live counters: `skipped_offline` = due laps skipped because the link the type needs was down (no network / broker not connected — never a failure, never a backoff); `consecutive_failures` ≥ 3 engages the backoff ladder (`backoff_s`: 10 → 20 → 40 → max(8 × period, 60) s, 10 min cap, cleared by one success); `full_sent` = the HTTP(S) config+status first push landed. 503 before the settings apply |
+| `/api/destinations/test` | POST | `{"name":"dest1"}` → deliver that destination ONCE, now, on the poster task (ignores cycle/backoff, books the counters like a scheduled push): `{"ok","status" (HTTP, 0 for MQTT/transport),"elapsed_ms","error"}`. 404 unknown name (a row not yet applied), 409 while another test runs or the poster is off, 504 when the poster did not answer within 20 s |
+
 ## 6e13. J2534 PassThru — `j2534_server` (groundwork, 2026-07-07)
 
 | Route | Method | Behavior |
@@ -590,5 +607,6 @@ Config strictly via `/api/settings/wifi_manager` — no bespoke config routes.
 | `/ws/*` (WebSocket channels) | `websocket_manager` (service) | http_server_manager (private) |
 | `/api/autopid/dtc*` | `autopid` (feature layer, §6e4b) | http_server_manager (private) |
 | `/api/autopid/dbc*` | `autopid` (feature layer, §6e4c) | http_server_manager (private) |
+| `/api/destinations`, `/api/destinations/test` | `data_destinations` (feature layer, §6e14) — MQTT / HTTP(S) / ABRP cyclic pushes of the autopid snapshot; the table is the `data_destinations` settings component | http_server_manager (private) |
 | `/api/webhook` | `ha_webhooks` (feature layer) — HA integration discovery push (GET/POST/DELETE); outbound telemetry `{status,autopid_data,config,gps}` poster (`gps` = the contract §5.4 block for HA's Location tracker, 2026-09-09). See `ha_webhooks/HTTP_API.md` | http_server_manager (private) |
 | future: `/api/can/*`, `/api/obd/*`, … | their feature components | http_server_manager (private) |
