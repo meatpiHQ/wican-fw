@@ -3,7 +3,7 @@
 .dram0.bss / .dram0.data bytes, symbol by symbol, so PSRAM candidates
 (big buffers that no ISR / flash-cache-off path touches) can be picked.
 
-  python tools/ram_map.py [--map build/wican-fw.map] [--min 256] [--top 60] [--component autopid]
+  python tools/ram_map.py [--map build/wican-fw_obd_pro_<git>.map] [--min 256] [--top 60] [--component autopid]
 """
 import argparse
 import re
@@ -61,11 +61,17 @@ def parse(path):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--map", default="build/wican-fw.map")
+    ap.add_argument("--map", default=None,
+                    help="linker map (default: the current build's, via tools/fw_bin.py)")
     ap.add_argument("--min", type=int, default=256)
     ap.add_argument("--top", type=int, default=60)
     ap.add_argument("--component", default="")
     a = ap.parse_args()
+    if a.map is None:
+        import os, sys
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from fw_bin import resolve
+        a.map = resolve("build", "map")
     rows = parse(a.map)
     rows = [r for r in rows if r[0] > 0]
     per = defaultdict(int)

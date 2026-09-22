@@ -5,9 +5,11 @@ doc = "Console COM7 (2 Mbaud, opening it resets the DUT — no COM probe). Canon
 [config]
 ip = "10.42.0.62"
 # firmware image staged for OTA legs (push-ota-image action / ota-cycle
-# flow) — path relative to this repo's root. Override in
-# benchboard.local.toml to bench a different checkout's build.
-fw_bin = "build/wican-fw.bin"
+# flow): a build DIR (tools/fw_bin.py picks the versioned image named in
+# its project_description.json - wican-fw_obd_pro_<git>.bin) or an explicit
+# .bin, relative to this repo's root. Override in benchboard.local.toml to
+# bench a different checkout's build.
+fw_bin = "build"
 
 [health]
 cmd = "ssh ${pi.ssh} \"curl -sf -m 5 http://${ip}/api/status -o /dev/null && echo DUT OK ${ip} || (ip=$(sudo sh -c 'cat /var/lib/NetworkManager/dnsmasq-wint0.leases /var/lib/NetworkManager/dnsmasq-wtest0.leases 2>/dev/null' | awk '{print $3}' | tail -1); curl -sf -m 5 http://$ip/api/status -o /dev/null && echo DUT OK $ip)\""

@@ -30,9 +30,9 @@ doc = "probe -> profile bounce -> usbreset -> Pi reboot (marker + loop guard)."
 [[action]]
 id = "push-ota-image"
 name = "Push wican-fw build -> Pi:/tmp"
-cmd = "scp ${dut.fw_bin} ${pi.ssh}:/tmp/wican-fw.bin"
+cmd = "python tools/fw_bin.py ${dut.fw_bin} --scp ${pi.ssh}:/tmp/wican-fw.bin"
 timeout_s = 120
-doc = "Stage the current build for the system-bench OTA leg. The image path = ${dut.fw_bin} (instruments/dut config) — override it in benchboard.local.toml [instruments.dut.config] to bench another checkout's build."
+doc = "Stage the current build for the system-bench OTA leg. ${dut.fw_bin} (instruments/dut config) is a build DIR or an explicit .bin; tools/fw_bin.py resolves the versioned image (wican-fw_obd_pro_<git>.bin) the last configure produced. Override it in benchboard.local.toml [instruments.dut.config] to bench another checkout's build."
 
 # ---------------------------------------------------------------- flows
 [[flow]]
@@ -50,7 +50,7 @@ doc = "Reference flow (plan §5c): stage the current build on the Pi, run the fu
 
   [[flow.step]]
   name = "stage image on the Pi"
-  cmd = "scp ${dut.fw_bin} ${pi.ssh}:/tmp/wican-fw.bin"
+  cmd = "python tools/fw_bin.py ${dut.fw_bin} --scp ${pi.ssh}:/tmp/wican-fw.bin"
   timeout_s = 120
 
   [[flow.step]]

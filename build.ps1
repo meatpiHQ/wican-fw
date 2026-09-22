@@ -13,7 +13,9 @@
 #  - Git Bash / MSYS: idf.py prints "MSys/Mingw is no longer supported",
 #    builds NOTHING and still exits 0 - a flash then re-writes the OLD
 #    binary. This script refuses to run there.
-#  - Flashing needs the IDF venv's esptool (v5 flags) at 460800 only.
+#  - Flashing needs the IDF venv's esptool (v5 flags) at 460800 only, and
+#    goes through build\flash_args so it always takes the image of THIS
+#    build (the file name changes with every commit, old ones pile up).
 
 param(
     [string]$Flash = "",
@@ -55,10 +57,16 @@ if ($Clean) {
 python "$env:IDF_PATH\tools\idf.py" build
 if ($LASTEXITCODE -ne 0) { Write-Error "build failed (exit $LASTEXITCODE)" }
 
-# sanity: did ninja actually produce a fresh binary?
-$bin = Join-Path $PSScriptRoot 'build\wican-fw.bin'
+# sanity: did ninja actually produce a fresh binary? The image name carries
+# the git describe (build\wican-fw_obd_pro_<tag>.bin - root CMakeLists.txt),
+# so resolve it from build\project_description.json; older images from
+# earlier commits stay in build\ and are listed so nobody flashes one by hand.
+$bin = python (Join-Path $PSScriptRoot 'tools\fw_bin.py')
+if ($LASTEXITCODE -ne 0 -or -not $bin) { Write-Error "no current image in build\ (see tools\fw_bin.py output above)" }
+$stale = Get-ChildItem (Join-Path $PSScriptRoot 'build') -Filter 'wican-fw*.bin' | Where-Object { $_.FullName -ne $bin }
+foreach ($s in $stale) { Write-Warning "older image left in build\: $($s.Name) (flash_args does not use it; delete freely)" }
 $age = (Get-Date) - (Get-Item $bin).LastWriteTime
-"OK: build\wican-fw.bin ($([math]::Round((Get-Item $bin).Length/1MB,2)) MB, written $([math]::Round($age.TotalMinutes,1)) min ago)"
+"OK: build\$(Split-Path $bin -Leaf) ($([math]::Round((Get-Item $bin).Length/1MB,2)) MB, written $([math]::Round($age.TotalMinutes,1)) min ago)"
 if ($age.TotalMinutes -gt 30) {
     Write-Warning "the binary is older than this run should allow - the build may not have rebuilt anything it should have (check build\.ninja_log)"
 }
