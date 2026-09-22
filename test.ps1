@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'sleep', 'sleepmatrix', 'conserve', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [string]$Port = 'COM10',  # UART0 external USB-serial = console/flash
@@ -740,6 +740,12 @@ function Show-Inventory {
     Write-Host '  perf   - mqtt rtt/drain, ws latency/obd_poll, ble A/B'
     Write-Host '  usbeth - USB-Ethernet bench (needs the adapter on the USB connector)'
     Write-Host '  espnetlink - LTE dongle bench: RNDIS data path + CDC-ACM modem console'
+    Write-Host '  blesec     - BLE bonding + security (gate / pair / persist) on the Pi UB500'
+    Write-Host '  blehttp    - the HTTP API over BLE: storage (/data + /sd), settings, UDS, errors (BLE API PASS + BLE STORAGE PASS)'
+    Write-Host '  blej2534   - J2534 PassThru over BLE: CAN, filters, ISO15765, reflash gate, second tester refused'
+    Write-Host '  blecanraw  - binary CAN records over BLE (can <-raw-> ble bridge): live bus, answered requests, 29-bit'
+    Write-Host '  blephy     - BLE 5 settings: 1M vs 2M PHY throughput/RTT, legacy + extended advertising sets'
+    Write-Host '  blethru    - BLE throughput with the ECU simulator as the central (notify/write/read/tunnel vs the esp-idf reference)'
     Write-Host '  all    - host + every target app + hil'
     Write-Host ''
     Write-Host 'Every kind starts with a BENCH PREFLIGHT (skip: -SkipBenchCheck): COM'
@@ -816,6 +822,94 @@ try {
                 & $py -u "$repo\tools\testbench\ble\ble_security_test.py" --usb 192.168.82.1 --restore 2>&1 | Out-Null
                 if (-not ($out | Select-String -Quiet 'BLE SECURITY PASS')) { throw 'no BLE SECURITY PASS (UB500 present? bleak on the Pi?)' }
                 $script:note = 'BLE SECURITY PASS'
+            }
+        }
+        'blehttp' {
+            # The HTTP API over BLE (ble_http): storage, settings, UDS, errors,
+            # disconnect mid-upload, through the FFF3/FFF4 tunnel. Runs ON the
+            # Pi (UB500 + bleak) via the ble_pi_run.py wrapper; 2 planned
+            # reboots (configure + restore); the restore stage always runs.
+            Invoke-Stage 'live blehttp (HTTP API over BLE incl. storage)' {
+                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $out = & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_http_pi.py --dut $DutIp --stage configure 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                $out += & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_http_pi.py --stage ble 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                $out += & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_http_pi.py --stage restore 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                Save-StageLog 'live_blehttp' $out
+                foreach ($m in ($out | Select-String '^METRIC (\S+)=(\S+) (\S+)')) { Add-Metric $m.Matches[0].Groups[1].Value ([double]$m.Matches[0].Groups[2].Value) $m.Matches[0].Groups[3].Value }
+                if (-not ($out | Select-String -Quiet 'BLE STORAGE PASS')) { throw 'no BLE STORAGE PASS (see the storage legs in the log)' }
+                if (-not ($out | Select-String -Quiet '^BLE API PASS')) { throw 'no BLE API PASS (UB500 present? link gate? see the log)' }
+                $script:note = 'BLE API PASS + BLE STORAGE PASS'
+            }
+        }
+        'blej2534' {
+            # J2534 PassThru over BLE (ble_j2534): HELLO/OPEN, CAN + filters,
+            # ISO15765 + the reflash gate, a second tester refused, link drop
+            # releases the server. Runs ON the Pi; 2 planned reboots.
+            Invoke-Stage 'live blej2534 (J2534 PassThru over BLE)' {
+                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $out = & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_j2534_pi.py --dut $DutIp --stage configure 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                $out += & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_j2534_pi.py --stage ble 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                $out += & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_j2534_pi.py --stage restore 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                Save-StageLog 'live_blej2534' $out
+                foreach ($m in ($out | Select-String '^METRIC (\S+)=(\S+) (\S+)')) { Add-Metric $m.Matches[0].Groups[1].Value ([double]$m.Matches[0].Groups[2].Value) $m.Matches[0].Groups[3].Value }
+                if (-not ($out | Select-String -Quiet '^BLE J2534 PASS')) { throw 'no BLE J2534 PASS (j2534_server enabled? ECU sim on the bus? see the log)' }
+                $script:note = 'BLE J2534 PASS'
+            }
+        }
+        'blecanraw' {
+            # Binary CAN over BLE: the can <-raw-> ble bridge on the data pipe
+            # (live bus records, 20 answered requests, a 29-bit write). Runs
+            # ON the Pi; 2 planned reboots.
+            Invoke-Stage 'live blecanraw (binary CAN records over BLE)' {
+                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $out = & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_can_raw_pi.py --dut $DutIp --stage configure 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                $out += & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_can_raw_pi.py --stage ble 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                $out += & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_can_raw_pi.py --stage restore 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                Save-StageLog 'live_blecanraw' $out
+                foreach ($m in ($out | Select-String '^METRIC (\S+)=(\S+) (\S+)')) { Add-Metric $m.Matches[0].Groups[1].Value ([double]$m.Matches[0].Groups[2].Value) $m.Matches[0].Groups[3].Value }
+                if (-not ($out | Select-String -Quiet '^BLE CAN RAW PASS')) { throw 'no BLE CAN RAW PASS (can_manager enabled? ECU sim on the bus? see the log)' }
+                $script:note = 'BLE CAN RAW PASS'
+            }
+        }
+        'blephy' {
+            # BLE 5 as settings (ble_manager v4 `phy` / `advertising`). Pi
+            # side: settings + reboots, the advertising sets under btmon, a
+            # 1M link check, restore. The PHY transfer legs run from THIS
+            # PC's Bluetooth adapter (ble_phy_pc.py): the Pi's UB500 cannot
+            # hold a 2M link with the S3, the Intel adapter can. 3 planned
+            # reboots; the PC pairs once (the script provides the passkey
+            # through a WinRT custom pairing ceremony).
+            Invoke-Stage 'live blephy (BLE 5 PHY + advertising sets)' {
+                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $pypc = 'C:\Espressif\tools\python\v5.5.3\venv\Scripts\python.exe'   # has bleak (WinRT)
+                $out = & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_phy_bench_pi.py --dut $DutIp --stage configure 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                $out += & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_phy_bench_pi.py --stage adv 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                $out += & $pypc -u "$repo\tools\testbench\ble\ble_phy_pc.py" --phy 1m 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                $out += & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_phy_bench_pi.py --stage switch 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                $out += & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_phy_bench_pi.py --stage adv 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                $out += & $pypc -u "$repo\tools\testbench\ble\ble_phy_pc.py" --phy 2m 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                $out += & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_phy_bench_pi.py --stage restore 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                Save-StageLog 'live_blephy' $out
+                foreach ($m in ($out | Select-String '^METRIC (\S+)=(\S+) (\S+)')) { Add-Metric $m.Matches[0].Groups[1].Value ([double]$m.Matches[0].Groups[2].Value) $m.Matches[0].Groups[3].Value }
+                $stagesOk = @($out | Select-String '^STAGE \w+ OK').Count -eq 5
+                $legsOk = ($out | Select-String -Quiet '^PC PHY LEG 1m PASS') -and ($out | Select-String -Quiet '^PC PHY LEG 2m PASS')
+                if (-not ($stagesOk -and $legsOk)) { throw 'no BLE PHY PASS (a Pi stage failed or a PC leg did not negotiate its PHY: see the log)' }
+                Write-Host 'BLE PHY PASS'
+                $script:note = 'BLE PHY PASS'
+            }
+        }
+        'blethru' {
+            # BLE throughput with the ECU simulator as the CENTRAL
+            # (ble_central_bench over USB-NCM 192.168.8.1): throughput_app
+            # link tuning, notify/write/read + tunnel legs on 1M then 2M.
+            # The DUT is read over WiFi before/after each link. ~10 min.
+            Invoke-Stage 'live blethru (simulator central: BLE throughput)' {
+                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $out = & $py -u "$repo\tools\testbench\ble\ble_sim_central_bench.py" --dut $DutIp 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                Save-StageLog 'live_blethru' $out
+                foreach ($m in ($out | Select-String '^METRIC (\S+)=(\S+) (\S+)')) { Add-Metric $m.Matches[0].Groups[1].Value ([double]$m.Matches[0].Groups[2].Value) $m.Matches[0].Groups[3].Value }
+                if (-not ($out | Select-String -Quiet '^BLE THROUGHPUT PASS')) { throw 'no BLE THROUGHPUT PASS (simulator on USB-NCM with ble_central_bench? DUT BLE on? see the log)' }
+                $script:note = 'BLE THROUGHPUT PASS'
             }
         }
         'sleep'  {
