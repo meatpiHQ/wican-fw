@@ -8,6 +8,8 @@
  *        then the radios, storage last.
  */
 #include "autopid.h"
+#include "ble_http.h"
+#include "ble_j2534.h"
 #include "ble_manager.h"
 #include "can_manager.h"
 #include "data_logger.h"
@@ -36,10 +38,12 @@ static void on_prepare_sleep(void)
     (void)mqtt_manager_stop();
     (void)vpn_manager_stop();
     (void)mdns_manager_stop();
+    (void)ble_j2534_stop();
     (void)j2534_server_stop();
     (void)usb_acm_cli_stop();
     (void)usb_host_manager_stop();
     (void)wifi_manager_stop();
+    (void)ble_http_stop();
     (void)ble_manager_stop();
     (void)external_storage_stop();
     (void)led_manager_stop(); /* LED dark through the naps (legacy

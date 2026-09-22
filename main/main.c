@@ -37,6 +37,8 @@
 #include "vpn_manager.h"
 #include "main_sleep.h"
 #include "battery_monitor.h"
+#include "ble_http.h"
+#include "ble_j2534.h"
 #include "ble_manager.h"
 #include "cert_manager.h"
 #include "bridge_manager.h"
@@ -197,6 +199,10 @@ void app_main(void)
     main_boot_init("usb_acm_cli_init", usb_acm_cli_init);
     main_boot_init("espnetlink_link_init", espnetlink_link_init);
     main_boot_init("j2534_server_init", j2534_server_init);
+    /* BLE stream-channel consumers: settings/log descriptors only here;
+       their channels register in _start(), before ble_manager_start() */
+    main_boot_init("ble_http_init", ble_http_init);
+    main_boot_init("ble_j2534_init", ble_j2534_init);
     main_boot_init("cmdline_manager_init", cmdline_manager_init);
     main_boot_init("button_manager_init", button_manager_init);
     main_boot_init("interface_manager_init", interface_manager_init);
@@ -237,6 +243,7 @@ void app_main(void)
               espnetlink_link_register_http);
     main_boot_init("j2534_server_register_http",
               j2534_server_register_http);
+    main_boot_init("ble_manager_register_http", ble_manager_register_http);
     main_boot_init("can_manager_register_http", can_manager_register_http);
     main_boot_init("uds_manager_register_http", uds_manager_register_http);
     main_boot_init("script_engine_register_http", script_engine_register_http);
@@ -294,6 +301,9 @@ void app_main(void)
        obd=1 in the boot line = launch ok, chip outcome = the component's
        own "started:"/"bring-up failed" log lines */
     bool obd_ok = main_boot_start("obd_chip", obd_chip_start);
+    /* channels MUST register before the GATT table is built (below) */
+    main_boot_start("ble_http", ble_http_start);
+    main_boot_start("ble_j2534", ble_j2534_start);
     bool ble_ok = main_boot_start("ble_manager", ble_manager_start);
     /* arbitration AFTER both radios exist (it actuates them) */
     main_boot_start("interface_manager", interface_manager_start);

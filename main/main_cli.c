@@ -13,6 +13,7 @@
  *           exist yet (only the composition root knows what's missing).
  */
 #include <inttypes.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -20,6 +21,7 @@
 #include "esp_app_desc.h"
 #include "esp_attr.h"
 #include "esp_chip_info.h"
+#include "esp_event.h"
 #include "esp_flash.h"
 #include "esp_private/esp_clk.h"
 #include "esp_system.h"
@@ -46,6 +48,7 @@ static struct
     struct arg_lit *info;
     struct arg_lit *memory;
     struct arg_lit *tasks;
+    struct arg_lit *events;
     struct arg_end *end;
 } s_system_args;
 
@@ -147,7 +150,7 @@ static int system_tasks(void)
 
     uint64_t window = (tot1 - tot0) * CONFIG_FREERTOS_NUMBER_OF_CORES;
 
-    cmdline_printf("name              st core prio stack-hw   cpu%%\n");
+    cmdline_printf("name              st core prio stack-hw   cpu%%  stack\n");
 
     for (size_t i = 0; i < n1; i++)
     {
@@ -176,13 +179,14 @@ static int system_tasks(void)
             snprintf(core, sizeof(core), "%d", t1[i].core);
         }
 
-        cmdline_printf("%-16s  %c  %3s  %3u %8u %3u.%u\n", t1[i].name,
+        cmdline_printf("%-16s  %c  %3s  %3u %8u %3u.%u  %s\n", t1[i].name,
                        t1[i].state, core, (unsigned)t1[i].prio,
-                       (unsigned)t1[i].stack_hw, pct10 / 10, pct10 % 10);
+                       (unsigned)t1[i].stack_hw, pct10 / 10, pct10 % 10,
+                       t1[i].stack_ext ? "PSRAM" : "internal");
     }
 
     cmdline_printf("tasks: %u  (st: X run R ready B blocked S suspended;"
-                   " stack-hw = never-used bytes)\n",
+                   " stack-hw = never-used bytes; stack = where it lives)\n",
                    (unsigned)n1);
     cmdline_printf("OK\n");
     return 0;
@@ -236,6 +240,42 @@ static int cmd_system(int argc, char **argv)
     if (s_system_args.tasks->count > 0)
     {
         return system_tasks();
+    }
+
+    if (s_system_args.events->count > 0)
+    {
+#if CONFIG_ESP_EVENT_LOOP_PROFILING
+        /* per-handler invocation counts and run time of every event loop:
+           the handler that blocks the default loop (`httpd: Failed to post
+           esp_http_server event: ESP_ERR_TIMEOUT`) shows up by its time */
+        /* the console layer captures cmdline_printf, not the task's stdout
+           (a `system -e` printed nothing on the UART, 2026-09-22): render
+           into a memory stream and hand the text over */
+        char *text = NULL;
+        size_t text_len = 0;
+        FILE *mem = open_memstream(&text, &text_len);
+
+        if (mem == NULL)
+        {
+            cmdline_printf("Error: no memory for the dump\n");
+            return 1;
+        }
+
+        esp_event_dump(mem);
+        fclose(mem);
+
+        if (text != NULL)
+        {
+            cmdline_printf("%s", text);
+            free(text);
+        }
+
+        cmdline_printf("OK\n");
+        return 0;
+#else
+        cmdline_printf("Error: CONFIG_ESP_EVENT_LOOP_PROFILING is off\n");
+        return 1;
+#endif
     }
 
     cmdline_printf("Error: No valid subcommand\n");
@@ -484,7 +524,9 @@ esp_err_t main_cli_register(void)
     s_system_args.memory = arg_lit0("m", "memory", "Get heap memory info");
     s_system_args.tasks =
         arg_lit0("t", "tasks", "Get task stack headroom");
-    s_system_args.end = arg_end(5);
+    s_system_args.events =
+        arg_lit0("e", "events", "Dump event-loop handler statistics");
+    s_system_args.end = arg_end(6);
 
     static const esp_console_cmd_t CMDS[] =
     {

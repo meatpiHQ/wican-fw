@@ -13,6 +13,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 
+#include "ble_manager.h"
 #include "bridge_manager.h"
 #include "cmdline_manager.h"
 #include "dev_status_manager.h"
@@ -182,6 +183,9 @@ void main_boot_health_report(void)
     event_manager_capacity(&su, &sc, &au, &ac);
     cap_check("events_src", su, sc);
     cap_check("events_act", au, ac);
+
+    ble_manager_channel_capacity(&used, &cap);
+    cap_check("ble_ch", used, cap);
 
     printf("WICAN FAULTS active=%d\n",
            dev_status_manager_faults(NULL, 0));
