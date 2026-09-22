@@ -42,7 +42,19 @@ safety gates also default to off:
   on the WiCAN's own hotspot and the USB network link, because the transport
   is unauthenticated.
 
-Status: `GET /api/j2534`. Details in `components/HTTP_API.md`.
+Status: `GET /api/j2534` (its `transport` field says which link the
+attached tool came in on). Details in `components/HTTP_API.md`.
+
+## The wire protocol and the other transports
+
+The DLL, the bench scripts and phone apps all speak the same versioned
+wire protocol, specified in one place:
+`components/j2534_server/J2534_WIRE_PROTOCOL.md` (framing, every
+message, status codes, byte-exact examples, transport bindings). Besides
+TCP the WiCAN serves it over the USB COM port (CDC-ACM) and, since
+2026-09-21, over **BLE** for mobile apps (stream channel FFF5/FFF6, see
+`components/ble_manager/BLE_API.md`); one tool at a time across all of
+them.
 
 ## Source
 
