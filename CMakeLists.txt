@@ -83,7 +83,51 @@ if(DEFINED ENV{MEATPI_COMPONENT_OVERLAYS})
 endif()
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(wican-fw)
+
+# ---- binary name: wican-fw_<hw prefix>_<git describe, dots stripped> ------
+# Same scheme as the legacy tree (github.com/meatpiHQ/wican-fw wican-pro
+# branch): e.g. build/wican-fw_obd_pro_v600p_alfa-01-24-g0641c25.bin. The
+# hardware prefix follows CONFIG_WICAN_HW_VERSION in sdkconfig (falls back to
+# sdkconfig.defaults, then to the Pro). The app's own version string
+# (esp_app_desc) is IDF's git describe of the same commit, dots kept.
+# Every commit/dirty state yields a new file name, so old images pile up in
+# build/; build/flash_args and build/project_description.json (app_bin)
+# always name the current one - tools/fw_bin.py resolves it for scripts.
+execute_process(
+    COMMAND git describe --tags --always --dirty
+    WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
+    OUTPUT_VARIABLE WICAN_GIT_DESC
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET)
+if(NOT WICAN_GIT_DESC)
+    set(WICAN_GIT_DESC "nogit")
+endif()
+string(REPLACE "." "" WICAN_GIT_TAG "${WICAN_GIT_DESC}")
+
+set(WICAN_HW_CFG "")
+foreach(_cfg "${CMAKE_CURRENT_LIST_DIR}/sdkconfig"
+             "${CMAKE_CURRENT_LIST_DIR}/sdkconfig.defaults")
+    if(EXISTS "${_cfg}")
+        file(STRINGS "${_cfg}" _hw_line REGEX "^CONFIG_WICAN_HW_VERSION=")
+        if(_hw_line)
+            string(REGEX REPLACE "^CONFIG_WICAN_HW_VERSION=\"?([^\"]*)\"?$"
+                   "\\1" WICAN_HW_CFG "${_hw_line}")
+            break()
+        endif()
+    endif()
+endforeach()
+string(TOUPPER "${WICAN_HW_CFG}" _hw_upper)
+if(_hw_upper MATCHES "USB")
+    set(WICAN_HW_PREF "usb")
+elseif(_hw_upper STREQUAL "" OR _hw_upper MATCHES "PRO")
+    set(WICAN_HW_PREF "obd_pro")
+else()
+    set(WICAN_HW_PREF "obd")
+endif()
+
+set(WICAN_PRJ_BIN "wican-fw_${WICAN_HW_PREF}_${WICAN_GIT_TAG}")
+message(STATUS "WiCAN binary: ${WICAN_PRJ_BIN}.bin (hw '${WICAN_HW_CFG}', git ${WICAN_GIT_DESC})")
+project("${WICAN_PRJ_BIN}")
 
 # Per-function stack-frame sizes (.su files next to every .obj) for the
 # stack audit (tools/stack_audit.py — TESTING.md "stack audit"). Build-time
