@@ -162,6 +162,61 @@ timeout_s = 1800
 doc = "TCP tail / UDP push / ws_log / SD devlog exactly-N conservation."
 
 [[test]]
+id = "blehttp"
+name = "HTTP API over BLE (storage, settings, UDS)"
+group = "ble"
+file = "tools/testbench/ble/ble_http_pi.py"
+cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1 blehttp"
+instruments = ["dut", "pi", "ecu_sim"]
+timeout_s = 1800
+verdict_pass = "BLE API PASS"
+doc = "ble_http tunnel FFF3/FFF4: /api/fs/* on /data + /sd (1 KB..512 KB byte-exact, WiFi SHA-256 witness), settings round trip, UDS over the tunnel, tunnel errors, disconnect mid-upload. Also prints BLE STORAGE PASS."
+
+[[test]]
+id = "blej2534"
+name = "J2534 PassThru over BLE"
+group = "ble"
+file = "tools/testbench/ble/ble_j2534_pi.py"
+cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1 blej2534"
+instruments = ["dut", "pi", "ecu_sim"]
+timeout_s = 1800
+verdict_pass = "BLE J2534 PASS"
+doc = "ble_j2534 channel FFF5/FFF6: HELLO/OPEN, CAN write answered by the ECU simulator, PASS/BLOCK filters, ISO15765 VIN + 10 02, reflash gate, second TCP tester refused (DEVICE_IN_USE), link drop releases the server."
+
+[[test]]
+id = "blecanraw"
+name = "Binary CAN records over BLE"
+group = "ble"
+file = "tools/testbench/ble/ble_can_raw_pi.py"
+cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1 blecanraw"
+instruments = ["dut", "pi", "ecu_sim"]
+timeout_s = 1200
+verdict_pass = "BLE CAN RAW PASS"
+doc = "can <-raw-> ble bridge on FFF1/FFF2: live bus as 6..14 B records (records/s, bytes/record, no malformed), 20 x 7DF 0100 answered from 7E8, a 29-bit record on the bus, bridge drop stats."
+
+[[test]]
+id = "blephy"
+name = "BLE 5 PHY + advertising sets"
+group = "ble"
+file = "tools/testbench/ble/ble_phy_bench_pi.py"
+cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1 blephy"
+instruments = ["dut", "pi", "pc_bluetooth"]
+timeout_s = 1800
+verdict_pass = "BLE PHY PASS"
+doc = "ble_manager v4 `phy`/`advertising`. Pi (ble_phy_bench_pi.py): settings + 3 reboots, legacy/extended advertising reports counted by btmon, a 1M link check, restore. PC adapter (ble_phy_pc.py, WinRT passkey pairing): 64 KB upload + 3 x 64 KB download + 10 x RTT through the HTTP tunnel on 1M then 2M with the live PHY read through the tunnel. The Pi's UB500 cannot hold a 2M link with the S3 (known rig limit, WARN)."
+
+[[test]]
+id = "blethru"
+name = "BLE throughput (simulator central)"
+group = "ble"
+file = "tools/testbench/ble/ble_sim_central_bench.py"
+cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1 blethru"
+instruments = ["dut", "ecu_sim"]
+timeout_s = 1500
+verdict_pass = "BLE THROUGHPUT PASS"
+doc = "The ECU simulator runs ble_central_bench (NimBLE central, MTU 517, DLE 251, 7.5 ms, PHY 1m then 2m): notify 60 s (the DUT blasts FFF1 via POST /api/ble/blast through the tunnel), write 60 s to FFF2, read 10 s, tunnel up/down 64 KB + 512 KB byte-exact. PASS = 1M notify >= 300 kbps and write >= 400 kbps (esp-idf throughput_app ~340/~500), tunnels exact, 0 pairing failures."
+
+[[test]]
 id = "host-tests"
 name = "Host unit suites (on the Pi)"
 group = "system"
