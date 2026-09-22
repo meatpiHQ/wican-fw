@@ -15,7 +15,15 @@ CONFIG_COMPILER_ORPHAN_SECTIONS_PLACE=y
 CONFIG_BT_ENABLED=y
 CONFIG_BT_BTU_TASK_STACK_SIZE=4096
 CONFIG_BT_ALLOCATION_FROM_SPIRAM_FIRST=y
+# BLE 5.0: the NimBLE 5.0 feature set is compiled in (BT_NIMBLE_50_FEATURE_SUPPORT)
+# and the S3 controller supports 2M/coded PHY in hardware; extended advertising
+# is compiled in too (+1.8 KB flash, 0 B internal RAM measured 2026-09-21) so
+# the PHY and the advertising set are USER SETTINGS (ble_manager phy /
+# advertising), defaults = 4.2 behaviour. The Bluedroid-only line below is inert.
 CONFIG_BT_BLE_50_FEATURES_SUPPORTED=n
+CONFIG_BT_NIMBLE_EXT_ADV=y
+CONFIG_BT_NIMBLE_MAX_EXT_ADV_INSTANCES=2
+CONFIG_BT_NIMBLE_EXT_ADV_MAX_SIZE=256
 CONFIG_BT_BLE_42_FEATURES_SUPPORTED=y
 CONFIG_BT_CTRL_BLE_MAX_ACT=10
 CONFIG_BT_CTRL_HW_CCA_VAL=20
@@ -101,6 +109,10 @@ CONFIG_MDNS_MEMORY_ALLOC_SPIRAM=y
 # below (ble_manager picks its GATT backend from this choice).
 CONFIG_BT_NIMBLE_ENABLED=y
 CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL=y
+# CCCD store = notify chars (FFF1, CLI OUT, FFF3, FFF5, Service Changed)
+# x MAX_BONDS 3; the Kconfig default 8 lost subscriptions once the stream
+# channels (ble_http, ble_j2534) were appended (2026-09-21).
+CONFIG_BT_NIMBLE_MAX_CCCDS=16
 
 # sys_evt stack: the v6.0.2 default (2304) overflowed live in the WiFi HIL
 # app's got-IP handler path (2026-07-06) — pin the classic 4608. Main's
@@ -153,3 +165,20 @@ CONFIG_SPI_FLASH_ENABLE_COUNTERS=y
 # default stays 0. The WICAN_CAN_ISR_CORE shim remains for slot-pool
 # headroom / future retest (flip + rebuild to move ISR+rx to core 1).
 CONFIG_WICAN_CAN_ISR_CORE=0
+
+# 2026-09-22: NimBLE mbuf pools (PSRAM, MEM_ALLOC_MODE_EXTERNAL): 12/24 blocks starved a
+# notify stream (host counted PDUs the air never saw); 32/48 = the simulator's order
+CONFIG_BT_NIMBLE_MSYS_1_BLOCK_COUNT=32
+CONFIG_BT_NIMBLE_MSYS_2_BLOCK_COUNT=48
+
+# 2026-09-22: the controller allocated every ACL TX buffer from the internal heap at TX time
+# (0 static); with ~8 KB free a failed allocation dropped the PDU silently (btmon arbiter:
+# host counted PDUs the air never saw). 12 = the Kconfig maximum, ~3 KB internal at init.
+CONFIG_BT_CTRL_BLE_STATIC_ACL_TX_BUF_NB=12
+
+# 2026-09-22 internal-RAM cliff (TASK_internal_ram.md): the controller keeps 828 B per
+# activity; a peripheral needs one connection + two advertising instances + one spare.
+CONFIG_BT_CTRL_BLE_MAX_ACT=4
+# per-handler run counts/time for `system --events`: names the handler that wedges the
+# default event loop instead of inferring it from "Failed to post ... ESP_ERR_TIMEOUT"
+CONFIG_ESP_EVENT_LOOP_PROFILING=y
