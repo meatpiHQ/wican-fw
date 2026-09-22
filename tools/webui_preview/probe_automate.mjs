@@ -75,12 +75,25 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
   await sleep(4500);
   const modalTxt = (d().querySelector("#modal-root") || {}).textContent || "";
   check("scan results modal with PIDs", /supported PIDs reported/.test(modalTxt) && /Engine RPM/.test(modalTxt));
+  /* 2026-09-22: nothing is ticked by default; the user picks the PIDs.
+     Already-configured rows are disabled so they cannot be re-added. */
+  const firstBoxes = [...d().querySelectorAll('#modal-root input[type="checkbox"]')];
+  check("scan results start unticked", firstBoxes.length > 0 && firstBoxes.every((b) => !b.checked));
+  check("already-configured scan rows are disabled",
+    firstBoxes.some((b) => b.disabled) && firstBoxes.some((b) => !b.disabled));
+  const stdSpans = () => [...d().querySelectorAll("span")].map((s) => s.textContent);
   const addSel = [...d().querySelectorAll("#modal-root button")].find((b) => b.textContent === "Add selected");
   check("add-selected action", !!addSel);
   if (addSel) addSel.click();
   await sleep(200);
-  const stdSpans = () => [...d().querySelectorAll("span")].map((s) => s.textContent);
-  check("rows merged into table (dedup respected)",
+  check("add with nothing ticked adds nothing", !stdSpans().includes("Intake MAP") && !d().querySelector("#modal-root .modal"));
+  scanBtn.click();
+  await sleep(4500);
+  [...d().querySelectorAll('#modal-root input[type="checkbox"]')].forEach((b) => { if (!b.disabled) b.checked = true; });
+  const addSel2 = [...d().querySelectorAll("#modal-root button")].find((b) => b.textContent === "Add selected");
+  if (addSel2) addSel2.click();
+  await sleep(200);
+  check("ticked rows merged into table (dedup respected)",
     stdSpans().includes("Intake MAP") && stdSpans().filter((t) => t === "010C1").length === 1);
   check("std names/commands are read-only text",
     ![...d().querySelectorAll("input")].some((i) => i.value === "Intake MAP" || i.value === "010C1"));

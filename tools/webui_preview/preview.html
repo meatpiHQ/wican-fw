@@ -165,6 +165,78 @@
    }
   }
  },
+ "ble_central_bench": {
+  "values": {
+   "enabled": false,
+   "dle": true,
+   "cli": true,
+   "phy": "1m",
+   "passkey": 123456,
+   "mtu": 517,
+   "conn_itvl_units": 6,
+   "ce_len_units": 24,
+   "target": "WiC_"
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "dle": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "phy": {
+     "type": "string",
+     "enum": [
+      "1m",
+      "2m"
+     ]
+    },
+    "passkey": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 999999
+    },
+    "mtu": {
+     "type": "integer",
+     "minimum": 23,
+     "maximum": 517
+    },
+    "conn_itvl_units": {
+     "type": "integer",
+     "minimum": 6,
+     "maximum": 3200
+    },
+    "ce_len_units": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 65535
+    },
+    "target": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ "ble_http": {
+  "values": {
+   "enabled": true,
+   "cli": true
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    }
+   }
+  }
+ },
  "ble_manager": {
   "values": {
    "enabled": false,
@@ -172,6 +244,8 @@
    "bonding": true,
    "sc_only": true,
    "conn_profile": "ios",
+   "phy": "1m",
+   "advertising": "legacy",
    "passkey": 123456,
    "tx_power_dbm": 9
   },
@@ -194,6 +268,23 @@
      "enum": [
       "ios",
       "android_fast"
+     ]
+    },
+    "phy": {
+     "type": "string",
+     "enum": [
+      "1m",
+      "2m",
+      "coded",
+      "auto"
+     ]
+    },
+    "advertising": {
+     "type": "string",
+     "enum": [
+      "legacy",
+      "extended",
+      "both"
      ]
     },
     "passkey": {
@@ -1513,7 +1604,7 @@
    "ap_bandwidth": "ht20",
    "ap_auth": "auto",
    "power_save": "none",
-   "wifi_ram_profile": "full",
+   "wifi_ram_profile": "lean",
    "sta_max_retry": -1,
    "ap_channel": 6,
    "ap_max_connections": 4,
@@ -3824,6 +3915,8 @@ PAGES.status=async(view)=>{
         ["AP Address",w&&w.ap_ip?w.ap_ip:"—"],
         ["AP Clients",w?(w.ap_started?String(w.clients||0):"AP off"):"—"],
         ["mDNS",(st.device_id||(conn.info&&conn.info.device_id))?("wican_"+(st.device_id||conn.info.device_id)+".local"):"—"],
+        ["Bluetooth ID",st.bluetooth_id||(st.device_id||(conn.info&&conn.info.device_id)?("WiC_"+(st.device_id||conn.info.device_id)):"—")],
+        ["WiFi MAC",st.wifi_mac||(conn.info&&conn.info.mac)||"—"],
         ["MQTT",b.mqtt_connected?"Connected":"Off"],
         ["VPN",vpn?(vpn.state||"disabled"):"—"]])),
       card("System","cpu",kv([
@@ -4475,7 +4568,8 @@ PAGES.automate=async(view,sub)=>{
       toast("Configuration applied. Settings saved: restart to apply them","ok");
       await refreshSettingsList();paintPending();buildMenu(curSection);}
     /* scan-results picker: firmware stores ready-made config rows —
-       review, tick, merge into the table (then Apply). */
+       review, tick, merge into the table (then Apply). Nothing is ticked
+       by default: the user picks what to poll (2026-09-22). */
     function offerScanResults(r){
       const rows=(r&&r.supported)||[];
       if(!rows.length)return toast("Scan stored no supported PIDs","err");
@@ -4483,7 +4577,7 @@ PAGES.automate=async(view,sub)=>{
       const have=new Set(cfg.pids.map(p=>norm(p.cmd)));
       const boxes=rows.map(row=>{
         const dup=have.has(norm(row.cmd));
-        const cb=h("input",{type:"checkbox",checked:!dup});
+        const cb=h("input",{type:"checkbox",checked:false,disabled:dup});
         const prm=(row.parameters&&row.parameters[0])||{};
         return{row,cb,el:h("label",{style:"display:grid;grid-template-columns:24px 130px 1fr 90px;gap:8px;align-items:center;padding:5px 4px;border-top:1px solid var(--border);cursor:pointer;opacity:"+(dup?".55":"1")},
           cb,h("span",{class:"mono"},row.cmd),h("span",{},row.name+(dup?", already configured":"")),

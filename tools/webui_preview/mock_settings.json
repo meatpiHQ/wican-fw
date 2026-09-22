@@ -161,6 +161,78 @@
    }
   }
  },
+ "ble_central_bench": {
+  "values": {
+   "enabled": false,
+   "dle": true,
+   "cli": true,
+   "phy": "1m",
+   "passkey": 123456,
+   "mtu": 517,
+   "conn_itvl_units": 6,
+   "ce_len_units": 24,
+   "target": "WiC_"
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "dle": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "phy": {
+     "type": "string",
+     "enum": [
+      "1m",
+      "2m"
+     ]
+    },
+    "passkey": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 999999
+    },
+    "mtu": {
+     "type": "integer",
+     "minimum": 23,
+     "maximum": 517
+    },
+    "conn_itvl_units": {
+     "type": "integer",
+     "minimum": 6,
+     "maximum": 3200
+    },
+    "ce_len_units": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 65535
+    },
+    "target": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ "ble_http": {
+  "values": {
+   "enabled": true,
+   "cli": true
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    }
+   }
+  }
+ },
  "ble_manager": {
   "values": {
    "enabled": false,
@@ -168,6 +240,8 @@
    "bonding": true,
    "sc_only": true,
    "conn_profile": "ios",
+   "phy": "1m",
+   "advertising": "legacy",
    "passkey": 123456,
    "tx_power_dbm": 9
   },
@@ -190,6 +264,23 @@
      "enum": [
       "ios",
       "android_fast"
+     ]
+    },
+    "phy": {
+     "type": "string",
+     "enum": [
+      "1m",
+      "2m",
+      "coded",
+      "auto"
+     ]
+    },
+    "advertising": {
+     "type": "string",
+     "enum": [
+      "legacy",
+      "extended",
+      "both"
      ]
     },
     "passkey": {
@@ -1509,7 +1600,7 @@
    "ap_bandwidth": "ht20",
    "ap_auth": "auto",
    "power_save": "none",
-   "wifi_ram_profile": "full",
+   "wifi_ram_profile": "lean",
    "sta_max_retry": -1,
    "ap_channel": 6,
    "ap_max_connections": 4,
