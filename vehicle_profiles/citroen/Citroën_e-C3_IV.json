@@ -1,0 +1,342 @@
+{
+  "car_model": "Citroën e-C3 IV",
+  "init": "ATSP6;ATST96;ATSH79B;ATFCSH79B;ATFCSD300000;ATFCSM1",
+  "pids": [
+    {
+      "pid": "22D423",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "Odometer",
+          "expression": "[B5:B6]",
+          "unit": "km",
+          "class": "distance",
+          "min": "0",
+          "max": "300000"
+        }
+      ]
+    },
+    {
+      "pid": "22D498",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "BMS SOC",
+          "expression": "[B4:B5]/10",
+          "unit": "%",
+          "class": "battery",
+          "min": "0",
+          "max": "100"
+        }
+      ]
+    },
+    {
+      "pid": "22D4E2",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "Cell-Max",
+          "expression": "[B4:B5]/1000",
+          "unit": "V",
+          "class": "voltage",
+          "min": "0",
+          "max": "5"
+        }
+      ]
+    },
+    {
+      "pid": "22D4DF",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "Cell-Min",
+          "expression": "[B4:B5]/1000",
+          "unit": "V",
+          "class": "voltage",
+          "min": "0",
+          "max": "5"
+        }
+      ]
+    },
+    {
+      "pid": "22D4E3",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "Max-Cellnumber",
+          "expression": "B4+1",
+          "unit": "",
+          "class": "none",
+          "min": "1",
+          "max": "100"
+        }
+      ]
+    },
+    {
+      "pid": "22D4E1",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "Min-Cellnumber",
+          "expression": "B4+1",
+          "unit": "",
+          "class": "none",
+          "min": "1",
+          "max": "100"
+        }
+      ]
+    },
+    {
+      "pid": "22D510",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "Cell-TotalVoltage",
+          "expression": "[B4:B5]/10",
+          "unit": "V",
+          "class": "voltage",
+          "min": "0",
+          "max": "500"
+        }
+      ]
+    },
+    {
+      "pid": "22D4D8",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "Charging_voltage_limit",
+          "expression": "[B4:B5]/10",
+          "unit": "V",
+          "class": "voltage",
+          "min": "0",
+          "max": "500"
+        }
+      ]
+    },
+    {
+      "pid": "22D4B1",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "Battery_Max_Voltage",
+          "expression": "[B4:B5]/10",
+          "unit": "V",
+          "class": "voltage",
+          "min": "0",
+          "max": "500"
+        }
+      ]
+    },
+    {
+      "pid": "22D4B2",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "Battery_Min_Voltage",
+          "expression": "[B4:B5]/10",
+          "unit": "V",
+          "class": "voltage",
+          "min": "0",
+          "max": "500"
+        }
+      ]
+    },
+    {
+      "pid": "22D50D",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "Cell-SOC max",
+          "expression": "[B4:B5]/10",
+          "unit": "%",
+          "class": "battery",
+          "min": "0",
+          "max": "100"
+        }
+      ]
+    },
+    {
+      "pid": "22D50C",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "Cell-SOC min",
+          "expression": "[B4:B5]/10",
+          "unit": "%",
+          "class": "battery",
+          "min": "0",
+          "max": "100"
+        }
+      ]
+    },
+    {
+      "pid": "22D409",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "SOH capacitive",
+          "expression": "B4",
+          "unit": "%",
+          "class": "battery",
+          "min": "0",
+          "max": "100"
+        }
+      ]
+    },
+    {
+      "pid": "22D483",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "SOH resistiv",
+          "expression": "B4",
+          "unit": "%",
+          "class": "battery",
+          "min": "0",
+          "max": "100"
+        }
+      ]
+    },
+    {
+      "pid": "22D410",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "discharge current",
+          "expression": "[B4:B5]/10",
+          "unit": "A",
+          "class": "current",
+          "min": "-500",
+          "max": "500"
+        }
+      ]
+    },
+    {
+      "pid": "22DA81",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "cycles",
+          "expression": "B5",
+          "unit": "",
+          "class": "none",
+          "min": "0",
+          "max": "5000"
+        }
+      ]
+    },
+    {
+      "pid": "22D4ED",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "Battery-Temperature",
+          "expression": "B4-40",
+          "unit": "°C",
+          "class": "temperature",
+          "min": "-40",
+          "max": "100"
+        }
+      ]
+    },
+    {
+      "pid": "22D500",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "loadtime 20 %",
+          "expression": "[B4:B5]",
+          "unit": "min",
+          "class": "time",
+          "min": "0",
+          "max": "1440"
+        }
+      ]
+    },
+    {
+      "pid": "22D501",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "loadtime 50 %",
+          "expression": "[B4:B5]",
+          "unit": "min",
+          "class": "time",
+          "min": "0",
+          "max": "1440"
+        }
+      ]
+    },
+    {
+      "pid": "22D502",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "loadtime 80 %",
+          "expression": "[B4:B5]",
+          "unit": "min",
+          "class": "time",
+          "min": "0",
+          "max": "1440"
+        }
+      ]
+    },
+    {
+      "pid": "22D503",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "loadtime 100 %",
+          "expression": "[B4:B5]",
+          "unit": "min",
+          "class": "time",
+          "min": "0",
+          "max": "1440"
+        }
+      ]
+    },
+    {
+      "pid": "22D4F0",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "Actual Capacity",
+          "expression": "[B4:B5]/10",
+          "unit": "Ah",
+          "class": "battery",
+          "min": "0",
+          "max": "100"
+        }
+      ]
+    },
+    {
+      "pid": "22D517",
+      "pid_init": "ATSH6A2;ATFCSH6A2;ATCRA682;",
+      "parameters": [
+        {
+          "name": "Battery-powerlimit 30 s",
+          "expression": "[B4:B5]/32",
+          "unit": "A",
+          "class": "current",
+          "min": "-500",
+          "max": "500"
+        }
+      ]
+    },
+    {
+      "pid": "22D577",
+      "pid_init": "ATSH6A2;ATFCSH6A2;ATCRA682;",
+      "parameters": [
+        {
+          "name": "Battery output power",
+          "expression": "[B4:B5]",
+          "unit": "kW",
+          "class": "power",
+          "min": "-200",
+          "max": "200"
+        }
+      ]
+    }
+  ]
+}
