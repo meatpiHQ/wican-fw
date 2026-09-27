@@ -35,7 +35,7 @@
       "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
       "parameters": [
         {
-          "name": "Zell-Max",
+          "name": "Cell Max",
           "expression": "[B4:B5]/1000",
           "unit": "V",
           "class": "voltage",
@@ -49,7 +49,7 @@
       "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
       "parameters": [
         {
-          "name": "Zell-Min",
+          "name": "Cell Min",
           "expression": "[B4:B5]/1000",
           "unit": "V",
           "class": "voltage",
@@ -63,7 +63,7 @@
       "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
       "parameters": [
         {
-          "name": "Max-Zellnummer",
+          "name": "Max Cell Number",
           "expression": "B4+1",
           "unit": "",
           "class": "none",
@@ -77,7 +77,7 @@
       "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
       "parameters": [
         {
-          "name": "Min-Zellnummer",
+          "name": "Min Cell Number",
           "expression": "B4+1",
           "unit": "",
           "class": "none",
@@ -91,7 +91,7 @@
       "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
       "parameters": [
         {
-          "name": "Zell-Gesamtspannung",
+          "name": "Total Cell Voltage",
           "expression": "[B4:B5]/10",
           "unit": "V",
           "class": "voltage",
@@ -105,7 +105,7 @@
       "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
       "parameters": [
         {
-          "name": "Lade-Spannungsgrenze",
+          "name": "Charge Voltage Limit",
           "expression": "[B4:B5]/10",
           "unit": "V",
           "class": "voltage",
@@ -119,7 +119,7 @@
       "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
       "parameters": [
         {
-          "name": "Batterie-Maxspannung",
+          "name": "Battery Max Voltage",
           "expression": "[B4:B5]/10",
           "unit": "V",
           "class": "voltage",
@@ -133,7 +133,7 @@
       "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
       "parameters": [
         {
-          "name": "Batterie-Minspannung",
+          "name": "Battery Min Voltage",
           "expression": "[B4:B5]/10",
           "unit": "V",
           "class": "voltage",
@@ -147,7 +147,7 @@
       "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
       "parameters": [
         {
-          "name": "Zell-SOC max",
+          "name": "Cell SOC Max",
           "expression": "[B4:B5]/10",
           "unit": "%",
           "class": "battery",
@@ -161,7 +161,7 @@
       "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
       "parameters": [
         {
-          "name": "Zell-SOC min",
+          "name": "Cell SOC Min",
           "expression": "[B4:B5]/10",
           "unit": "%",
           "class": "battery",
@@ -175,7 +175,7 @@
       "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
       "parameters": [
         {
-          "name": "SOH kapazitiv",
+          "name": "Capacitive SOH",
           "expression": "B4",
           "unit": "%",
           "class": "battery",
@@ -189,7 +189,7 @@
       "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
       "parameters": [
         {
-          "name": "SOH resistiv",
+          "name": "Resistive SOH",
           "expression": "B4",
           "unit": "%",
           "class": "battery",
@@ -203,7 +203,7 @@
       "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
       "parameters": [
         {
-          "name": "Entladestrom",
+          "name": "Discharge Current",
           "expression": "[B4:B5]/10",
           "unit": "A",
           "class": "current",
@@ -217,7 +217,7 @@
       "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
       "parameters": [
         {
-          "name": "Ladezyklen",
+          "name": "Charge Cycles",
           "expression": "B5",
           "unit": "",
           "class": "none",
@@ -231,7 +231,7 @@
       "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
       "parameters": [
         {
-          "name": "Batterie-Temperatur",
+          "name": "Battery Temperature",
           "expression": "B4-40",
           "unit": "°C",
           "class": "temperature",
@@ -245,7 +245,7 @@
       "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
       "parameters": [
         {
-          "name": "Ladezeit 20 %",
+          "name": "Charge Time 20%",
           "expression": "[B4:B5]",
           "unit": "min",
           "class": "time",
@@ -259,7 +259,7 @@
       "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
       "parameters": [
         {
-          "name": "Ladezeit 50 %",
+          "name": "Charge Time 50%",
           "expression": "[B4:B5]",
           "unit": "min",
           "class": "time",
@@ -273,7 +273,7 @@
       "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
       "parameters": [
         {
-          "name": "Ladezeit 80 %",
+          "name": "Charge Time 80%",
           "expression": "[B4:B5]",
           "unit": "min",
           "class": "time",
@@ -287,7 +287,7 @@
       "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
       "parameters": [
         {
-          "name": "Ladezeit 100 %",
+          "name": "Charge Time 100%",
           "expression": "[B4:B5]",
           "unit": "min",
           "class": "time",
@@ -315,7 +315,7 @@
       "pid_init": "ATSH6A2;ATFCSH6A2;ATCRA682;",
       "parameters": [
         {
-          "name": "Batterie-Stromlimit 30 s",
+          "name": "Battery Current Limit 30s",
           "expression": "[B4:B5]/32",
           "unit": "A",
           "class": "current",
@@ -329,7 +329,7 @@
       "pid_init": "ATSH6A2;ATFCSH6A2;ATCRA682;",
       "parameters": [
         {
-          "name": "Batterie-Ausgangsleistung",
+          "name": "Battery Output Power",
           "expression": "[B4:B5]",
           "unit": "kW",
           "class": "power",
