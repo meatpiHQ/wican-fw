@@ -619,9 +619,4 @@
       ]
     }
   ],
-  "source": {
-    "dataset": "25.09.2026",
-    "basis": "Car Scanner log (13) plus screenshots 17:06-17:08",
-    "scope": "Only values directly correlated between raw PID responses and displayed sensor values were added/corrected."
-  }
 }
