@@ -248,7 +248,7 @@
           "name": "Charge Time 20%",
           "expression": "[B4:B5]",
           "unit": "min",
-          "class": "time",
+          "class": "duration",
           "min": "0",
           "max": "1440"
         }
@@ -262,7 +262,7 @@
           "name": "Charge Time 50%",
           "expression": "[B4:B5]",
           "unit": "min",
-          "class": "time",
+          "class": "duration",
           "min": "0",
           "max": "1440"
         }
@@ -276,7 +276,7 @@
           "name": "Charge Time 80%",
           "expression": "[B4:B5]",
           "unit": "min",
-          "class": "time",
+          "class": "duration",
           "min": "0",
           "max": "1440"
         }
@@ -290,7 +290,7 @@
           "name": "Charge Time 100%",
           "expression": "[B4:B5]",
           "unit": "min",
-          "class": "time",
+          "class": "duration",
           "min": "0",
           "max": "1440"
         }
@@ -304,7 +304,7 @@
           "name": "Traction battery Total Energy Capacity",
           "expression": "[B4:B5]*32",
           "unit": "Wh",
-          "class": "battery",
+          "class": "energy_storage",
           "min": "0",
           "max": "60000"
         }
@@ -388,7 +388,7 @@
           "name": "Actual Energy",
           "expression": "[B4:B5]*32",
           "unit": "Wh",
-          "class": "battery",
+          "class": "energy_storage",
           "min": "0",
           "max": "60000"
         }
@@ -402,7 +402,7 @@
           "name": "Total Capacity Decrease",
           "expression": "[B4:B5]/16",
           "unit": "%",
-          "class": "battery",
+          "class": "",
           "min": "0",
           "max": "100"
         }
@@ -416,7 +416,7 @@
           "name": "Power Loss",
           "expression": "[B4:B5]/16",
           "unit": "%",
-          "class": "battery",
+          "class": "",
           "min": "0",
           "max": "100"
         }
@@ -430,7 +430,7 @@
           "name": "Time during battery overvoltage",
           "expression": "[B4:B5]",
           "unit": "h",
-          "class": "time",
+          "class": "duration",
           "min": "0",
           "max": "100000"
         }
