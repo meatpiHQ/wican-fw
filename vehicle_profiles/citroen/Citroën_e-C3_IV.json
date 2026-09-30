@@ -10,7 +10,6 @@
           "name": "Odometer",
           "expression": "[B5:B6]",
           "unit": "km",
-          "class": "distance",
           "min": "0",
           "max": "300000"
         }
@@ -24,7 +23,6 @@
           "name": "BMS SOC",
           "expression": "[B4:B5]/10",
           "unit": "%",
-          "class": "battery",
           "min": "0",
           "max": "100"
         }
@@ -38,7 +36,6 @@
           "name": "Cell Max",
           "expression": "[B4:B5]/1000",
           "unit": "V",
-          "class": "voltage",
           "min": "0",
           "max": "5"
         }
@@ -52,7 +49,6 @@
           "name": "Cell Min",
           "expression": "[B4:B5]/1000",
           "unit": "V",
-          "class": "voltage",
           "min": "0",
           "max": "5"
         }
@@ -66,7 +62,6 @@
           "name": "Max Cell Number",
           "expression": "B4+1",
           "unit": "",
-          "class": "none",
           "min": "1",
           "max": "100"
         }
@@ -80,7 +75,6 @@
           "name": "Min Cell Number",
           "expression": "B4+1",
           "unit": "",
-          "class": "none",
           "min": "1",
           "max": "100"
         }
@@ -94,7 +88,6 @@
           "name": "Total Cell Voltage",
           "expression": "[B4:B5]/10",
           "unit": "V",
-          "class": "voltage",
           "min": "0",
           "max": "500"
         }
@@ -108,7 +101,6 @@
           "name": "Charge Voltage Limit",
           "expression": "[B4:B5]/10",
           "unit": "V",
-          "class": "voltage",
           "min": "0",
           "max": "500"
         }
@@ -122,7 +114,6 @@
           "name": "Battery Max Voltage",
           "expression": "[B4:B5]/10",
           "unit": "V",
-          "class": "voltage",
           "min": "0",
           "max": "500"
         }
@@ -136,7 +127,6 @@
           "name": "Battery Min Voltage",
           "expression": "[B4:B5]/10",
           "unit": "V",
-          "class": "voltage",
           "min": "0",
           "max": "500"
         }
@@ -150,7 +140,6 @@
           "name": "Cell SOC Max",
           "expression": "[B4:B5]/10",
           "unit": "%",
-          "class": "battery",
           "min": "0",
           "max": "100"
         }
@@ -164,7 +153,6 @@
           "name": "Cell SOC Min",
           "expression": "[B4:B5]/10",
           "unit": "%",
-          "class": "battery",
           "min": "0",
           "max": "100"
         }
@@ -178,7 +166,6 @@
           "name": "Capacitive SOH",
           "expression": "B4",
           "unit": "%",
-          "class": "battery",
           "min": "0",
           "max": "100"
         }
@@ -192,7 +179,6 @@
           "name": "Resistive SOH",
           "expression": "B4",
           "unit": "%",
-          "class": "battery",
           "min": "0",
           "max": "100"
         }
@@ -206,7 +192,6 @@
           "name": "Discharge Current",
           "expression": "[B4:B5]/10",
           "unit": "A",
-          "class": "current",
           "min": "-500",
           "max": "500"
         }
@@ -220,7 +205,6 @@
           "name": "Charge Cycles",
           "expression": "B5",
           "unit": "",
-          "class": "none",
           "min": "0",
           "max": "5000"
         }
@@ -234,7 +218,6 @@
           "name": "Battery Temperature",
           "expression": "B4-40",
           "unit": "°C",
-          "class": "temperature",
           "min": "-40",
           "max": "100"
         }
@@ -248,7 +231,6 @@
           "name": "Charge Time 20%",
           "expression": "[B4:B5]",
           "unit": "min",
-          "class": "duration",
           "min": "0",
           "max": "1440"
         }
@@ -262,7 +244,6 @@
           "name": "Charge Time 50%",
           "expression": "[B4:B5]",
           "unit": "min",
-          "class": "duration",
           "min": "0",
           "max": "1440"
         }
@@ -276,7 +257,6 @@
           "name": "Charge Time 80%",
           "expression": "[B4:B5]",
           "unit": "min",
-          "class": "duration",
           "min": "0",
           "max": "1440"
         }
@@ -290,7 +270,6 @@
           "name": "Charge Time 100%",
           "expression": "[B4:B5]",
           "unit": "min",
-          "class": "duration",
           "min": "0",
           "max": "1440"
         }
@@ -304,7 +283,6 @@
           "name": "Traction battery Total Energy Capacity",
           "expression": "[B4:B5]*32",
           "unit": "Wh",
-          "class": "energy_storage",
           "min": "0",
           "max": "60000"
         }
@@ -318,7 +296,6 @@
           "name": "Battery Current Limit 30s",
           "expression": "[B4:B5]/32",
           "unit": "A",
-          "class": "current",
           "min": "-500",
           "max": "500"
         }
@@ -332,7 +309,6 @@
           "name": "Battery Output Power",
           "expression": "[B4:B5]",
           "unit": "kW",
-          "class": "power",
           "min": "-200",
           "max": "200"
         }
@@ -346,7 +322,6 @@
           "name": "Vehicle speed",
           "expression": "[B4:B5]/74.8",
           "unit": "km/h",
-          "class": "speed",
           "min": "0",
           "max": "250"
         }
@@ -360,7 +335,6 @@
           "name": "Cell max-min voltage difference",
           "expression": "[B4:B5]/1000",
           "unit": "V",
-          "class": "voltage",
           "min": "0",
           "max": "1"
         }
@@ -374,7 +348,6 @@
           "name": "Difference sum cell voltages - battery module voltage",
           "expression": "[B4:B5]/1000",
           "unit": "V",
-          "class": "voltage",
           "min": "-5",
           "max": "5"
         }
@@ -388,7 +361,6 @@
           "name": "Actual Energy",
           "expression": "[B4:B5]*32",
           "unit": "Wh",
-          "class": "energy_storage",
           "min": "0",
           "max": "60000"
         }
@@ -402,7 +374,6 @@
           "name": "Total Capacity Decrease",
           "expression": "[B4:B5]/16",
           "unit": "%",
-          "class": "",
           "min": "0",
           "max": "100"
         }
@@ -416,7 +387,6 @@
           "name": "Power Loss",
           "expression": "[B4:B5]/16",
           "unit": "%",
-          "class": "",
           "min": "0",
           "max": "100"
         }
@@ -430,7 +400,6 @@
           "name": "Time during battery overvoltage",
           "expression": "[B4:B5]",
           "unit": "h",
-          "class": "duration",
           "min": "0",
           "max": "100000"
         }
@@ -444,7 +413,6 @@
           "name": "Min Temperature Module Number",
           "expression": "B4+1",
           "unit": "",
-          "class": "none",
           "min": "1",
           "max": "100"
         }
@@ -458,7 +426,6 @@
           "name": "Max Temperature Module Number",
           "expression": "B4+1",
           "unit": "",
-          "class": "none",
           "min": "1",
           "max": "100"
         }
@@ -472,7 +439,6 @@
           "name": "Traction battery Temperature Sensor 01",
           "expression": "B4-40",
           "unit": "°C",
-          "class": "temperature",
           "min": "-40",
           "max": "100"
         }
@@ -486,7 +452,6 @@
           "name": "Traction battery Temperature Sensor 02",
           "expression": "B4-40",
           "unit": "°C",
-          "class": "temperature",
           "min": "-40",
           "max": "100"
         }
@@ -500,7 +465,6 @@
           "name": "Traction battery Temperature Sensor 03",
           "expression": "B4-40",
           "unit": "°C",
-          "class": "temperature",
           "min": "-40",
           "max": "100"
         }
@@ -514,7 +478,6 @@
           "name": "Traction battery Temperature Sensor 04",
           "expression": "B4-40",
           "unit": "°C",
-          "class": "temperature",
           "min": "-40",
           "max": "100"
         }
@@ -528,7 +491,6 @@
           "name": "Traction battery Temperature Sensor 05",
           "expression": "B4-40",
           "unit": "°C",
-          "class": "temperature",
           "min": "-40",
           "max": "100"
         }
@@ -542,7 +504,6 @@
           "name": "Traction battery Temperature Sensor 06",
           "expression": "B4-40",
           "unit": "°C",
-          "class": "temperature",
           "min": "-40",
           "max": "100"
         }
@@ -556,7 +517,6 @@
           "name": "Traction battery Temperature Sensor 07",
           "expression": "B4-40",
           "unit": "°C",
-          "class": "temperature",
           "min": "-40",
           "max": "100"
         }
@@ -570,7 +530,6 @@
           "name": "Traction battery Temperature Sensor 08",
           "expression": "B4-40",
           "unit": "°C",
-          "class": "temperature",
           "min": "-40",
           "max": "100"
         }
@@ -584,7 +543,6 @@
           "name": "Traction battery Temperature Sensor 09",
           "expression": "B4-40",
           "unit": "°C",
-          "class": "temperature",
           "min": "-40",
           "max": "100"
         }
@@ -598,7 +556,6 @@
           "name": "Traction battery Temperature Sensor 10",
           "expression": "B4-40",
           "unit": "°C",
-          "class": "temperature",
           "min": "-40",
           "max": "100"
         }
@@ -612,7 +569,6 @@
           "name": "Traction battery Temperature Sensor 11",
           "expression": "B4-40",
           "unit": "°C",
-          "class": "temperature",
           "min": "-40",
           "max": "100"
         }
@@ -626,7 +582,6 @@
           "name": "Traction battery Temperature Sensor 12",
           "expression": "B4-40",
           "unit": "°C",
-          "class": "temperature",
           "min": "-40",
           "max": "100"
         }
@@ -640,7 +595,6 @@
           "name": "Traction battery Temperature Sensor 13",
           "expression": "B4-40",
           "unit": "°C",
-          "class": "temperature",
           "min": "-40",
           "max": "100"
         }
@@ -654,7 +608,6 @@
           "name": "Traction battery Temperature Sensor 14",
           "expression": "B4-40",
           "unit": "°C",
-          "class": "temperature",
           "min": "-40",
           "max": "100"
         }
@@ -668,7 +621,6 @@
           "name": "Traction battery Temperature Sensor 15",
           "expression": "B4-40",
           "unit": "°C",
-          "class": "temperature",
           "min": "-40",
           "max": "100"
         }
@@ -682,7 +634,6 @@
           "name": "Traction battery Temperature Sensor 16",
           "expression": "B4-40",
           "unit": "°C",
-          "class": "temperature",
           "min": "-40",
           "max": "100"
         }
