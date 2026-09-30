@@ -35,9 +35,11 @@ class Link:
     """One byte stream to an ELM adapter: TCP socket or serial port."""
 
     def __init__(self, host=None, port=35000, serial_port=None,
-                 baud=115200):
-        self.kind = "serial" if serial_port else "tcp"
-        if serial_port:
+                 baud=115200, ble=None, ble_write=None, ble_notify=None):
+        self.kind = "serial" if serial_port else "ble" if ble else "tcp"
+        if ble:
+            self._ble_open(ble, ble_write, ble_notify)
+        elif serial_port:
             try:
                 import serial  # pyserial
             except ImportError:
@@ -56,20 +58,102 @@ class Link:
         time.sleep(0.3)
         self.drain()
 
+    # ---- BLE (a vLinker / OBDLink / clone with a GATT serial pipe) --------
+    # UNTESTED against real hardware as of 2026-09-23: written for the
+    # vLinker comparison leg, verify on the bench before quoting numbers.
+    # Runs bleak on its own thread + event loop so the synchronous
+    # request loop above stays identical for every transport.
+    BLE_KNOWN = [  # (write uuid, notify uuid) pairs seen on ELM-class dongles
+        # vLinker MC / OBDLink: service 18F0, 2AF1 write, 2AF0 notify (verified 2026-09-23)
+        ("00002af1-0000-1000-8000-00805f9b34fb", "00002af0-0000-1000-8000-00805f9b34fb"),
+        ("0000fff2-0000-1000-8000-00805f9b34fb", "0000fff1-0000-1000-8000-00805f9b34fb"),
+        ("6e400002-b5a3-f393-e0a9-e50e24dcca9e", "6e400003-b5a3-f393-e0a9-e50e24dcca9e"),
+        ("0000ffe1-0000-1000-8000-00805f9b34fb", "0000ffe1-0000-1000-8000-00805f9b34fb"),
+    ]
+
+    def _ble_open(self, addr, write_uuid, notify_uuid):
+        import asyncio
+        import queue
+        import threading
+        try:
+            from bleak import BleakClient
+        except ImportError:
+            sys.exit("bleak is required for --ble (pip install bleak)")
+        self._q = queue.Queue()
+        self._loop = asyncio.new_event_loop()
+        self._ready = threading.Event()
+        self._err = None
+
+        def runner():
+            asyncio.set_event_loop(self._loop)
+            self._loop.run_forever()
+
+        threading.Thread(target=runner, daemon=True).start()
+
+        async def connect():
+            self._client = BleakClient(addr, timeout=20)
+            await self._client.connect()
+            chars = {}
+            for svc in self._client.services:
+                for ch in svc.characteristics:
+                    chars[ch.uuid.lower()] = ch
+            w, n = write_uuid, notify_uuid
+            if not (w and n):
+                for kw, kn in self.BLE_KNOWN:
+                    if kw in chars and kn in chars:
+                        w, n = kw, kn
+                        break
+            if not (w and n):
+                ws = [u for u, c in chars.items()
+                      if "write" in c.properties or "write-without-response" in c.properties]
+                ns = [u for u, c in chars.items() if "notify" in c.properties]
+                if ws and ns:
+                    w, n = ws[0], ns[0]
+            if not (w and n):
+                raise RuntimeError(f"no write+notify pair found; chars: "
+                                   f"{ {u: c.properties for u, c in chars.items()} }")
+            self._w = chars[w]
+            self._wwr = "write-without-response" in chars[w].properties
+            await self._client.start_notify(chars[n], lambda _, d: self._q.put(bytes(d)))
+            self.name = f"ble:{addr} w={w[:8]} n={n[:8]} mtu={self._client.mtu_size}"
+
+        fut = asyncio.run_coroutine_threadsafe(connect(), self._loop)
+        try:
+            fut.result(timeout=40)
+        except Exception as e:
+            sys.exit(f"BLE connect failed: {e}")
+
+    def _ble_write(self, data):
+        import asyncio
+        # ELM dongles take at most one MTU per write; 20 B is always safe
+        for i in range(0, len(data), 20):
+            fut = asyncio.run_coroutine_threadsafe(
+                self._client.write_gatt_char(self._w, data[i:i + 20], response=not self._wwr),
+                self._loop)
+            fut.result(timeout=5)
+
     def drain(self):
         try:
             if self.kind == "tcp":
                 self.sock.settimeout(0.3)
                 self.sock.recv(4096)
+            elif self.kind == "ble":
+                import queue
+                while True:
+                    self._q.get(timeout=0.3)
             else:
                 self.ser.timeout = 0.3
                 self.ser.read(4096)
         except (socket.timeout, OSError):
             pass
+        except Exception:  # queue.Empty
+            pass
 
     def send(self, data):
         if self.kind == "tcp":
             self.sock.sendall(data)
+        elif self.kind == "ble":
+            self._ble_write(data)
         else:
             self.ser.write(data)
             self.ser.flush()
@@ -85,6 +169,12 @@ class Link:
             if not data:
                 raise ConnectionError("closed")
             return data
+        if self.kind == "ble":
+            import queue
+            try:
+                return self._q.get(timeout=max(timeout, 0.001))
+            except queue.Empty:
+                return b""
         self.ser.timeout = timeout
         data = self.ser.read(1)
         if data:
@@ -94,6 +184,14 @@ class Link:
     def close(self):
         if self.kind == "tcp":
             self.sock.close()
+        elif self.kind == "ble":
+            import asyncio
+            try:
+                asyncio.run_coroutine_threadsafe(self._client.disconnect(),
+                                                 self._loop).result(timeout=10)
+            except Exception:
+                pass
+            self._loop.call_soon_threadsafe(self._loop.stop)
         else:
             self.ser.close()
 
@@ -116,6 +214,10 @@ def xact(link, cmd, timeout=3.0):
         buf += data
         if buf.rstrip().endswith(b">"):
             break
+        if b"SEARCHING" in buf and timeout < 20.0:
+            # ATSP0 protocol search (6 s on the MIC, longer on some clones):
+            # abandoning it early makes every later request STOPPED/restart
+            timeout = 20.0
     t1 = reads[-1][0]
     gaps = [(reads[i][0] - reads[i - 1][0]) * 1000 for i in range(1, len(reads))]
     return ((t1 - t0) * 1000, len(reads), gaps, buf.decode(errors="replace"))
@@ -138,8 +240,12 @@ def is_bad(text, cmd):
             or want not in flat)
 
 
-def run_loop(link, cmd, n, quiet=False, init=INIT):
-    """The request loop. Returns (summary dict, raw samples)."""
+def run_loop(link, cmd, n, quiet=False, init=INIT, per_cmd=False):
+    """The request loop. Returns (summary dict, raw samples).
+
+    @p cmd is one command (repeated @p n times) or a LIST played round
+    robin (a Car Scanner style dashboard cycle) for @p n requests in
+    total; with n <= 0 a list is played exactly once (tap replay)."""
     for c in init:
         if not c:
             continue
@@ -148,26 +254,35 @@ def run_loop(link, cmd, n, quiet=False, init=INIT):
             print(f"init {c:8s} -> {rtt if rtt is None else round(rtt, 1)} ms "
                   f"{text.strip()!r}"[:120])
 
+    cmds = [cmd] if isinstance(cmd, str) else list(cmd)
+    if n <= 0:
+        n = len(cmds)
     rtts, readcounts, allgaps, timeouts, bad = [], [], [], 0, 0
     raw = []
     t_start = time.perf_counter()
     for i in range(n):
-        rtt, reads, gaps, text = xact(link, cmd)
-        raw.append({"i": i, "rtt": rtt, "reads": reads, "gaps": gaps,
-                    "text": text})
+        c = cmds[i % len(cmds)]
+        at = c.upper().startswith(("AT", "ST", "VT"))
+        rtt, reads, gaps, text = xact(link, c, timeout=6.0 if at else 3.0)
+        raw.append({"i": i, "cmd": c, "rtt": rtt, "reads": reads,
+                    "gaps": gaps, "text": text})
         if rtt is None:
             timeouts += 1
             bad += 1
             continue
-        if is_bad(text, cmd):
+        if not at and is_bad(text, c):
             bad += 1
+        if at:
+            continue  # replayed AT commands don't count as polls
         rtts.append(rtt)
         readcounts.append(reads)
         allgaps.extend(gaps)
     elapsed = time.perf_counter() - t_start
 
     summary = {
-        "target": link.name, "cmd": cmd, "n": n, "ok": len(rtts),
+        "target": link.name,
+        "cmd": cmd if isinstance(cmd, str) else f"{len(cmds)} cmds",
+        "n": n, "ok": len(rtts),
         "timeouts": timeouts, "bad": bad,
         "rate_hz": round(len(rtts) / elapsed, 2) if elapsed else 0,
         "min": round(min(rtts), 1) if rtts else None,
@@ -180,6 +295,24 @@ def run_loop(link, cmd, n, quiet=False, init=INIT):
         "multi_read": sum(1 for r in readcounts if r > 1),
         "gaps_gt30": sum(1 for g in allgaps if g > 30),
     }
+    if per_cmd or len(cmds) > 1:
+        by = {}
+        for x in raw:
+            if x["rtt"] is None or x["cmd"].upper().startswith(("AT", "ST", "VT")):
+                continue
+            by.setdefault(x["cmd"], []).append(x["rtt"])
+        summary["per_cmd"] = {
+            c: {"n": len(v), "p50": round(pct(v, 50), 1),
+                "p95": round(pct(v, 95), 1),
+                "bad": sum(1 for x in raw if x["cmd"] == c and x["rtt"] is not None
+                           and is_bad(x["text"], c))}
+            for c, v in by.items()}
+        # dashboard refresh: how often the FIRST command of the cycle
+        # comes around (= the app's gauge update rate for that PID)
+        lead = next((c for c in cmds
+                     if not c.upper().startswith(("AT", "ST", "VT"))), cmds[0])
+        firsts = [x for x in raw if x["cmd"] == lead and x["rtt"] is not None]
+        summary["cycle_hz"] = round(len(firsts) / elapsed, 2) if elapsed else 0
     return summary, raw
 
 
@@ -193,17 +326,41 @@ def main():
     ap.add_argument("--cmd", default="010C")
     ap.add_argument("--hint", action="store_true",
                     help="append the ELM 'expected responses' hint ' 1'")
+    ap.add_argument("--cmds", default="",
+                    help="comma list played round robin instead of --cmd "
+                         "(a dashboard cycle, e.g. 010C,010D,0105,0111); "
+                         "--hint applies to each")
+    ap.add_argument("--replay", default="", metavar="TAP_LOG",
+                    help="play the exact command sequence recorded by "
+                         "elm_tcp_tap.py (AT commands included, once; "
+                         "--init defaults to nothing)")
+    ap.add_argument("--ble", default="", metavar="ADDR",
+                    help="BLE ELM dongle address (vLinker etc., bleak)")
+    ap.add_argument("--ble-write", default="", help="write char uuid")
+    ap.add_argument("--ble-notify", default="", help="notify char uuid")
     ap.add_argument("--label", default="")
     ap.add_argument("--raw", default="")
-    ap.add_argument("--init", default=",".join(INIT))
+    ap.add_argument("--init", default=None)
     a = ap.parse_args()
-    if not a.host and not a.serial:
-        ap.error("give HOST or --serial COMx")
+    if not a.host and not a.serial and not a.ble:
+        ap.error("give HOST, --serial COMx or --ble ADDR")
 
     link = Link(host=a.host, port=a.port, serial_port=a.serial or None,
-                baud=a.baud)
-    cmd = a.cmd + (" 1" if a.hint else "")
-    summary, raw = run_loop(link, cmd, a.n, init=a.init.split(","))
+                baud=a.baud, ble=a.ble or None, ble_write=a.ble_write or None,
+                ble_notify=a.ble_notify or None)
+    if a.replay:
+        sys.path.insert(0, __import__("os").path.dirname(__file__))
+        from elm_tcp_tap import parse_log, commands
+        # the app's stream in order, AT commands and polls interleaved
+        cmd = [c for _, c in commands(parse_log(a.replay))]
+        n = 0 if a.n == 200 else a.n  # default: play the log once
+        init = (a.init or "").split(",")
+    else:
+        cmd = ([c + (" 1" if a.hint else "") for c in a.cmds.split(",")]
+               if a.cmds else a.cmd + (" 1" if a.hint else ""))
+        n = a.n
+        init = (",".join(INIT) if a.init is None else a.init).split(",")
+    summary, raw = run_loop(link, cmd, n, init=init)
     summary["label"] = a.label
     # the older field names the bench parses
     summary["nodata"] = sum(1 for x in raw if "NO DATA" in x["text"])
