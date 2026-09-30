@@ -381,6 +381,48 @@
       ]
     },
     {
+      "pid": "22D511",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "Actual Energy",
+          "expression": "[B4:B5]*32",
+          "unit": "Wh",
+          "class": "battery",
+          "min": "0",
+          "max": "60000"
+        }
+      ]
+    },
+    {
+      "pid": "22D52A",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "Total Capacity Decrease",
+          "expression": "[B4:B5]/16",
+          "unit": "%",
+          "class": "battery",
+          "min": "0",
+          "max": "100"
+        }
+      ]
+    },
+    {
+      "pid": "22D4D4",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "Power Loss",
+          "expression": "[B4:B5]/16",
+          "unit": "%",
+          "class": "battery",
+          "min": "0",
+          "max": "100"
+        }
+      ]
+    },
+    {
       "pid": "22D4DA",
       "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
       "parameters": [
@@ -391,6 +433,34 @@
           "class": "time",
           "min": "0",
           "max": "100000"
+        }
+      ]
+    },
+    {
+      "pid": "22D4F1",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "Min Temperature Module Number",
+          "expression": "B4+1",
+          "unit": "",
+          "class": "none",
+          "min": "1",
+          "max": "100"
+        }
+      ]
+    },
+    {
+      "pid": "22D4F2",
+      "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+      "parameters": [
+        {
+          "name": "Max Temperature Module Number",
+          "expression": "B4+1",
+          "unit": "",
+          "class": "none",
+          "min": "1",
+          "max": "100"
         }
       ]
     },
@@ -618,5 +688,5 @@
         }
       ]
     }
-  ],
+  ]
 }
