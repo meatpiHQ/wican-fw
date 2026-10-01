@@ -304,7 +304,7 @@
           "name": "Traction battery Total Energy Capacity",
           "expression": "[B4:B5]*32",
           "unit": "Wh",
-          "class": "battery",
+          "class": "energy",
           "min": "0",
           "max": "60000"
         }
@@ -388,7 +388,7 @@
           "name": "Actual Energy",
           "expression": "[B4:B5]*32",
           "unit": "Wh",
-          "class": "battery",
+          "class": "energy",
           "min": "0",
           "max": "60000"
         }
