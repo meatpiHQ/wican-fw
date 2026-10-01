@@ -14149,6 +14149,698 @@
           ]
         }
       ]
+    },
+    {
+      "car_model": "Citroën e-C3 IV",
+      "init": "ATSP6;ATST96;ATSH79B;ATFCSH79B;ATFCSD300000;ATFCSM1;",
+      "pids": [
+        {
+          "pid": "22D423",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B5:B6]",
+              "unit": "km",
+              "class": "distance",
+              "min": "0",
+              "max": "300000"
+            }
+          ]
+        },
+        {
+          "pid": "22D498",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "[B4:B5]/10",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D4E2",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_C_V_MAX",
+              "expression": "[B4:B5]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5"
+            }
+          ]
+        },
+        {
+          "pid": "22D4DF",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_C_V_MIN",
+              "expression": "[B4:B5]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5"
+            }
+          ]
+        },
+        {
+          "pid": "22D4E3",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_C_V_MAX_NO",
+              "expression": "B4+1",
+              "unit": "",
+              "class": "none",
+              "min": "1",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D4E1",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_C_V_MIN_NO",
+              "expression": "B4+1",
+              "unit": "",
+              "class": "none",
+              "min": "1",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D510",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "TOTAL_CELL_VOLTAGE",
+              "expression": "[B4:B5]/10",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "500"
+            }
+          ]
+        },
+        {
+          "pid": "22D4D8",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "CHARGE_VOLTAGE_LIMIT",
+              "expression": "[B4:B5]/10",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "500"
+            }
+          ]
+        },
+        {
+          "pid": "22D4B1",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "BATTERY_MAX_VOLTAGE",
+              "expression": "[B4:B5]/10",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "500"
+            }
+          ]
+        },
+        {
+          "pid": "22D4B2",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "BATTERY_MIN_VOLTAGE",
+              "expression": "[B4:B5]/10",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "500"
+            }
+          ]
+        },
+        {
+          "pid": "22D50D",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "CELL_SOC_MAX",
+              "expression": "[B4:B5]/10",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D50C",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "CELL_SOC_MIN",
+              "expression": "[B4:B5]/10",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D409",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "SOH",
+              "expression": "B4",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D483",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "RESISTIVE_SOH",
+              "expression": "B4",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D410",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_A",
+              "expression": "[B4:B5]/10",
+              "unit": "A",
+              "class": "current",
+              "min": "-500",
+              "max": "500"
+            }
+          ]
+        },
+        {
+          "pid": "22DA81",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "CHARGE_CYCLES",
+              "expression": "B5",
+              "unit": "",
+              "class": "none",
+              "min": "0",
+              "max": "5000"
+            }
+          ]
+        },
+        {
+          "pid": "22D4ED",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "BATT_TEMP",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D500",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "CHARGE_TIME_20",
+              "expression": "[B4:B5]",
+              "unit": "min",
+              "class": "none",
+              "min": "0",
+              "max": "1440"
+            }
+          ]
+        },
+        {
+          "pid": "22D501",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "CHARGE_TIME_50",
+              "expression": "[B4:B5]",
+              "unit": "min",
+              "class": "none",
+              "min": "0",
+              "max": "1440"
+            }
+          ]
+        },
+        {
+          "pid": "22D502",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "CHARGE_TIME_80",
+              "expression": "[B4:B5]",
+              "unit": "min",
+              "class": "none",
+              "min": "0",
+              "max": "1440"
+            }
+          ]
+        },
+        {
+          "pid": "22D503",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "CHARGE_TIME_100",
+              "expression": "[B4:B5]",
+              "unit": "min",
+              "class": "none",
+              "min": "0",
+              "max": "1440"
+            }
+          ]
+        },
+        {
+          "pid": "22D4F0",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_CAPACITY_WH",
+              "expression": "[B4:B5]*32",
+              "unit": "Wh",
+              "class": "energy",
+              "min": "0",
+              "max": "60000"
+            }
+          ]
+        },
+        {
+          "pid": "22D517",
+          "pid_init": "ATSH6A2;ATFCSH6A2;ATCRA682;",
+          "parameters": [
+            {
+              "name": "BATTERY_CURRENT_LIMIT_30S",
+              "expression": "[B4:B5]/32",
+              "unit": "A",
+              "class": "current",
+              "min": "-500",
+              "max": "500"
+            }
+          ]
+        },
+        {
+          "pid": "22D577",
+          "pid_init": "ATSH6A2;ATFCSH6A2;ATCRA682;",
+          "parameters": [
+            {
+              "name": "BATTERY_OUTPUT_POWER",
+              "expression": "[B4:B5]",
+              "unit": "kW",
+              "class": "power",
+              "min": "-200",
+              "max": "200"
+            }
+          ]
+        },
+        {
+          "pid": "22D422",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "SPEED",
+              "expression": "[B4:B5]/74.8",
+              "unit": "km/h",
+              "class": "speed",
+              "min": "0",
+              "max": "250"
+            }
+          ]
+        },
+        {
+          "pid": "22D512",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "CELL_VOLTAGE_DELTA",
+              "expression": "[B4:B5]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "1"
+            }
+          ]
+        },
+        {
+          "pid": "22D514",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "CELL_MODULE_VOLTAGE_DELTA",
+              "expression": "[B4:B5]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "-5",
+              "max": "5"
+            }
+          ]
+        },
+        {
+          "pid": "22D511",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "ACTUAL_ENERGY",
+              "expression": "[B4:B5]*32",
+              "unit": "Wh",
+              "class": "energy",
+              "min": "0",
+              "max": "60000"
+            }
+          ]
+        },
+        {
+          "pid": "22D52A",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "TOTAL_CAPACITY_DECREASE",
+              "expression": "[B4:B5]/16",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D4D4",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "POWER_LOSS",
+              "expression": "[B4:B5]/16",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D4DA",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "BATTERY_OVERVOLTAGE_TIME",
+              "expression": "[B4:B5]",
+              "unit": "h",
+              "class": "none",
+              "min": "0",
+              "max": "100000"
+            }
+          ]
+        },
+        {
+          "pid": "22D4F1",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_T_MIN_NO",
+              "expression": "B4+1",
+              "unit": "",
+              "class": "none",
+              "min": "1",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D4F2",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_T_MAX_NO",
+              "expression": "B4+1",
+              "unit": "",
+              "class": "none",
+              "min": "1",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D4C8",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_T_1",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D4C9",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_T_2",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D4CA",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_T_3",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D4CB",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_T_4",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D4CC",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_T_5",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D4CD",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_T_6",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D4CE",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_T_7",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D4CF",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_T_8",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D4D0",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_T_9",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D4D1",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_T_10",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D4D2",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_T_11",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D536",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_T_12",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D537",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_T_13",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D538",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_T_14",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D539",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_T_15",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D53A",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_T_16",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100"
+            }
+          ]
+        }
+      ]
     }
   ]
 }
