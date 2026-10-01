@@ -11856,6 +11856,60 @@
       ]
     },
     {
+      "car_model": "Toyota: bZ4X 2022-2025",
+      "init": "ATSP6;ATST96;",
+      "pids": [
+        {
+          "pid": "221F5B1",
+          "pid_init": "ATSH7D2;ATCRA7DA;",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "B4/2.55",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "221F9A2",
+          "pid_init": "ATSH7D2;ATCRA7DA;",
+          "parameters": [
+            {
+              "name": "HV_V",
+              "expression": "((B7*256)+B9)*0.015625",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "480"
+            },
+            {
+              "name": "HV_A",
+              "expression": "[S10:S11]*0.1",
+              "unit": "A",
+              "class": "current"
+            }
+          ]
+        },
+        {
+          "pid": "22181A2",
+          "pid_init": "ATSH747;ATCRA74F;",
+          "parameters": [
+            {
+              "name": "HV_C_V_001",
+              "expression": "[B5:B6]/13107",
+              "unit": "V",
+              "class": "battery",
+              "min": "0",
+              "max": "10"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Toyota: Hilux",
       "init": "ATST96;ATSP6;",
       "pids": [
