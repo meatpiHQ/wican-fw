@@ -1,0 +1,28 @@
+CONFIG_IDF_TARGET="esp32p4"
+
+# the board: ESP32-P4-Function-EV with the OLD P4 silicon (chip revision v0.1).
+# IDF 6 builds for v3.x by default and the bootloader refuses to flash a v0.1
+# chip; revisions below 3.0 are a separate, mutually exclusive build.
+CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
+CONFIG_ESP32P4_REV_MIN_1=y
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+
+# USB CDC-NCM device on the high-speed OTG port (esp_tinyusb)
+CONFIG_TINYUSB_NET_MODE_NCM=y
+
+# WiFi lives on the board's ESP32-C6 over SDIO (esp_hosted: the Function EV board profile)
+CONFIG_ESP_HOSTED_CP_TARGET_ESP32C6=y
+CONFIG_ESP_HOSTED_P4_DEV_BOARD_FUNC_BOARD=y
+CONFIG_ESP_HOSTED_SDIO_HOST_INTERFACE=y
+
+# console on UART0 (the CP2102N on the board's USB-UART port)
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+# The pre-3.0 memory layout hands the 8 KB TCM ("SPM", 0x30100000) to the
+# general heap; a 6 KB main-task stack landed there and the first flash
+# operation asserted (esp_task_stack_is_sane_cache_disabled). A stack larger
+# than the region cannot be placed in it; app_main also reserves the rest.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# the bench reads the association log: keep INFO
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y

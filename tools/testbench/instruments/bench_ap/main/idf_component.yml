@@ -1,0 +1,14 @@
+## IDF Component Manager Manifest File
+dependencies:
+  # the USB CDC-NCM network device on the P4's high-speed OTG port
+  espressif/esp_tinyusb:
+    version: "^2.0.0"
+  # the P4 has no radio: WiFi lives on the board's ESP32-C6 over esp_hosted
+  espressif/esp_wifi_remote:
+    version: ">=0.10,<2.0"
+    rules:
+      - if: "target in [esp32p4]"
+  espressif/esp_hosted:
+    version: "~2"
+    rules:
+      - if: "target in [esp32p4]"
