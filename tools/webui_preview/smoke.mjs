@@ -8,7 +8,7 @@ import { JSDOM, VirtualConsole } from "jsdom";
 const here = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(here, "preview.html"), "utf-8");
 
-const ROUTES = ["status", "settings", "automate", "power", "logger",
+const ROUTES = ["setup", "status", "settings", "automate", "power", "logger",
   "dashboard", "monitor", "terminal", "advanced", "system", "vpn", "usb",
   "about", "dtc", "dbc", "events", "scripts", "uds", "j2534", "files",
   "logs", "sysmon", "allsettings"];

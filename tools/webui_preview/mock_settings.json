@@ -1066,6 +1066,7 @@
  "mqtt_manager": {
   "values": {
    "enabled": false,
+   "connect_on": "wifi",
    "keepalive_s": 30,
    "url": "",
    "username": "",
@@ -1079,6 +1080,13 @@
    "properties": {
     "enabled": {
      "type": "boolean"
+    },
+    "connect_on": {
+     "type": "string",
+     "enum": [
+      "wifi",
+      "any"
+     ]
     },
     "keepalive_s": {
      "type": "integer",
@@ -1245,6 +1253,8 @@
    "periodic_wakeup": false,
    "cli": true,
    "sleep_mv": 13100,
+   "wake_mv": 13200,
+   "wake_delay_ms": 500,
    "sleep_delay_min": 5,
    "wakeup_interval_min": 30
   },
@@ -1263,6 +1273,16 @@
      "type": "integer",
      "minimum": 12000,
      "maximum": 14000
+    },
+    "wake_mv": {
+     "type": "integer",
+     "minimum": 12100,
+     "maximum": 15000
+    },
+    "wake_delay_ms": {
+     "type": "integer",
+     "minimum": 100,
+     "maximum": 5000
     },
     "sleep_delay_min": {
      "type": "integer",
@@ -1590,7 +1610,7 @@
    "ap_auto_disable": false,
    "ap_hidden": false,
    "cli": true,
-   "mode": "ap",
+   "mode": "apsta",
    "sta_ip_mode": "dhcp",
    "fallback1_ip_mode": "dhcp",
    "fallback2_ip_mode": "dhcp",

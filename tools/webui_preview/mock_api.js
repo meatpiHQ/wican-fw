@@ -35,6 +35,18 @@
   const now = () => Math.floor(Date.now() / 1000);
   const state = {
     scan: { status: "idle", found: 0 },
+    /* Quick Setup (2026-10-01): a probe presets window.__mockPreset before
+       the page boots (fresh device = factory AP password); the vehicle
+       identity file, the broker bit and HA's registration are toggles */
+    apDefaultPassword: (window.__mockPreset || {}).apDefaultPassword === true,
+    staConnected: (window.__mockPreset || {}).staConnected !== false,
+    mqttConnected: true,
+    webhookUrl: undefined,            /* undefined = the ha_webhooks setting */
+    vehicle: (window.__mockPreset || {}).vehicle || null,   /* null = no vehicle.json yet */
+    /* the vehicle STORE (second pass): entries keyed by VIN or fp:<hash> */
+    vehicles: (window.__mockPreset || {}).vehicles || { current: "", vehicles: [] },
+    /* the battery the wizard's Battery and sleep step watches: a probe moves it (14.3 = charging, 12.8 = resting) */
+    batteryV: typeof (window.__mockPreset || {}).batteryV === "number" ? window.__mockPreset.batteryV : 12.52,
     /* the UDS Tool's live path + exclusive switch (GET/POST /api/uds) */
     uds: { backend_setting: "auto", backend_active: "isotp", provider: "esp_isotp", can_running: true,
            exclusive: true, exclusive_default: true, holding: false, autopid_paused: false, session_active: false,
@@ -91,7 +103,7 @@
 
   const FIXED = {
     "/api/status": () => J({
-      bits: { awake: true, sleep: false, sta_connected: true, mqtt_connected: true, ble_connected: false, sdcard_mounted: state.sdMounted !== false, ble_enabled: false, sta_enabled: true, ap_enabled: true, autopid_enabled: true, home_mode: false, drive_mode: false, smartconnect: false, sta_ap_overlap: false, time_synced: true, vpn_enabled: true, wake_voltage_ok: true, eth_connected: false, autopid_idle: false, motion: false, sta_suspended: false, ap_suspended: false, ble_suspended: false },
+      bits: { awake: true, sleep: false, sta_connected: state.staConnected !== false, mqtt_connected: state.mqttConnected !== false, ble_connected: false, sdcard_mounted: state.sdMounted !== false, ble_enabled: false, sta_enabled: true, ap_enabled: true, autopid_enabled: true, home_mode: false, drive_mode: false, smartconnect: false, sta_ap_overlap: false, time_synced: true, vpn_enabled: true, wake_voltage_ok: true, eth_connected: false, autopid_idle: false, motion: false, sta_suspended: false, ap_suspended: false, ble_suspended: false },
       network_connected: true, uptime: "02:14:09", version: "v6.0.0-preview", partition: "ota_0",
       boot_count: 42, unexpected_resets: 1, device_id: "14c19f44e349",
       memory: { internal: { total: 274580, free: 71103, min_free: 63587, largest_block: 45056 }, psram: { total: 8272000, free: 7734508, min_free: 7524288, largest_block: 7274496 } },
@@ -104,14 +116,14 @@
     "/api/faults": () => J({ faults: S.__faults || (S.__faults = [
       { code: "registry_headroom", detail: "bridge_tr at 3/4", count: 1,
         first_time: 1784400000, last_time: 1784400000 }]) }),
-    "/api/wifi/status": () => J({ enabled: true, sta_connected: true, ip: "10.42.0.62", ap_started: true, ap_default_password: state.apDefaultPassword === true, clients: 0, ap_ip: "192.168.80.1", dns: ["10.42.0.1", "1.1.1.1"],
+    "/api/wifi/status": () => J({ enabled: true, sta_connected: state.staConnected !== false, ip: state.staConnected !== false ? "10.42.0.62" : "", ap_started: true, ap_default_password: state.apDefaultPassword === true, clients: 0, ap_ip: "192.168.80.1", dns: ["10.42.0.1", "1.1.1.1"],
       sta_attempt: { ssid: "HomeWiFi", reason: 204, fail_count: 3, deprioritised: true } }),
     "/api/destinations": () => J({ enabled: S.data_destinations.values.enabled !== false, running: true, network: true, mqtt: true,
       destinations: (S.data_destinations.values.destinations || []).map((d, i) => ({ name: d.name, type: d.type, enabled: d.enabled !== false, url: d.url, period_s: d.period_s, auth: d.auth,
         has_token: i === 1, has_api_key: false, cert_set: d.cert_set, success: i === 0 ? 412 : 0, fail: i === 1 ? 3 : 0, skipped_offline: 0, consecutive_failures: i === 1 ? 3 : 0,
         backoff_s: i === 1 ? 10 : 0, next_in_s: 4, last_status: i === 1 ? 503 : (i === 0 ? 0 : 0), last_error: i === 1 ? "http=503" : "", last_error_time: i === 1 ? new Date().toISOString() : "",
         last_ok_time: i === 0 ? new Date().toISOString() : "", full_sent: i === 1 })) }),
-    "/api/webhook": () => J({ url: S.ha_webhooks.values.url, enabled: true, interval: 15, manual_override: false, data_mode: "changed", gzip: false, status: "ok", last_post: new Date().toISOString(), retries: 0, success_count: 512, fail_count: 3, last_error: "", last_error_time: "" }),
+    "/api/webhook": () => J({ url: state.webhookUrl !== undefined ? state.webhookUrl : S.ha_webhooks.values.url, enabled: true, interval: 15, manual_override: false, data_mode: "changed", gzip: false, status: "ok", last_post: new Date().toISOString(), retries: 0, success_count: 512, fail_count: 3, last_error: "", last_error_time: "" }),
     "/api/vpn": () => J({ state: "connected", type: "wireguard", endpoint: "vpn.example.com:51820", ts_ip: "", ts_peers: 0, connects: 1, failures: 0, uptime_s: 8040 }),
     "/api/usb": () => J({ enabled: true, device_present: true, host_active: true, eth_connected: true, driver: "cdc_ncm", ip: "192.168.7.2", attaches: 1 }),
     /* espnetlink_link: paired steady state by default; state.espnlBlocked
@@ -135,7 +147,7 @@
           dongle: { valid: true, lte_connected: true, rssi_dbm: -59, operator: "ALDI Mobile", network_type: "eMTC", gps_fix: true, usb_data: false }, polls: 42, failures: 0, link_ups: 1 }),
     "/api/usb/acm": () => J({ connected: true }),
     "/api/gps": () => J({ valid: true, latitude: -37.905350, longitude: 145.145047, accuracy: 6, altitude: 88.8, speed: 1.0, heading: 270.5, satellites: 7, age_ms: 1200 }),
-    "/api/battery": () => J({ voltage: 12.52 }),
+    "/api/battery": () => J({ voltage: state.batteryV }),
     /* the native CAN bus (state.canEnabled=false: a fresh device, bus off) */
     "/api/can": () => J({ enabled: state.canEnabled !== false, running: state.canEnabled !== false, silent: false, baud_kbps: 500, state: state.canEnabled === false ? "stopped" : "running", tx: 1543, rx: 89231, tx_errors: 0, rx_errors: 0, arb_lost: 0, bus_errors: state.busErrors || 0, rx_missed: 0, dispatch_drops: 0, bus_off: 0, recoveries: 0 }),
     "/api/bridges": () => J({ bridges: ((S.bridge_manager && S.bridge_manager.values.bridges) || []).map((b) => ({ ...b, up: b.enabled !== false, stats: { a2b_chunks: 0, b2a_chunks: 0, a2b_bytes: 0, b2a_bytes: 0, send_errors: 0, codec_errors: 0 } })) }),
@@ -247,7 +259,7 @@
                             frames_rx: 0, frames_tx: 0, allow_reflash: false, allow_lan: false, exclusive: !!state.j2534Exclusive,
                             autopid_paused: false, phase: "2 (CAN + ISO15765 channels)" }),
     "/api/uds": () => J(state.uds),
-    "/api/sleep": () => J({ state: "awake", voltage: 12.52, sleep_v: 12.2, wake_v: 13.2 }),
+    "/api/sleep": () => { const sm = (S.sleep_manager && S.sleep_manager.values) || {}; return J({ enabled: sm.enabled !== false, state: "normal", voltage: state.batteryV, sleep_v: (sm.sleep_mv || 13100) / 1000, wake_v: (sm.wake_mv || 13200) / 1000, naps: 0 }); },
     /* fixtures per folder + whatever probes uploaded (state.files) or created (state.dirs) */
     "/api/fs/list": (full) => {
       const p = ((new URLSearchParams((full || "").split("?")[1] || "")).get("path") || "/data").replace(/(.)\/$/, "$1");
@@ -271,8 +283,13 @@
     },
     "/api/autopid/std_scan": () => J(state.scan),
     "/api/autopid/std_scan/result": () => (state.scan.status === "done"
-      ? J({ version: 1, protocol: "6", supported: STD_ROWS, found: STD_ROWS.length, ts: now() })
+      ? J({ version: 1, protocol: "6", protocol_detected: "6", vin: "1WCAN0FW0P0000001", fingerprint: "9a3f17c2", supported: STD_ROWS, found: STD_ROWS.length, ts: now(),
+            key: "1WCAN0FW0P0000001", known: !!(state.vehicles.vehicles.find((v) => v.key === "1WCAN0FW0P0000001") || {}).profile,
+            name: (state.vehicles.vehicles.find((v) => v.key === "1WCAN0FW0P0000001") || {}).name || "" })
       : J({ error: "no scan stored" }, 404)),
+    /* the vehicle store (autopid second pass, 2026-10-01) */
+    "/api/autopid/vehicles": () => J({ current: state.vehicles.current, max: 8,
+      vehicles: state.vehicles.vehicles.map((v) => ({ ...v, current: v.key === state.vehicles.current })) }),
     "/api/autopid/std_table": () => J({ version: 1, supported: STD_ROWS, found: STD_ROWS.length }),
     "/api/autopid/config": () => J(state.autopidCfg),
     "/api/settings": () => J(settingsList()),
@@ -316,10 +333,44 @@
       if (body && typeof body.exclusive === "boolean") state.j2534Exclusive = body.exclusive;
       return FIXED["/api/j2534"]();
     }
-    if (method === "POST" && path === "/api/autopid/std_scan") {
-      state.scan = { status: "running", found: 0 };
-      setTimeout(() => { state.scan = { status: "done", found: STD_ROWS.length }; }, 2500);
-      return J({ ok: true });
+    if (method === "POST" && (path === "/api/autopid/std_scan" || path === "/api/autopid/vehicles/detect")) {
+      /* three phases like the firmware: protocol detect, VIN, support bitmaps;
+         at the end the store gets (or recognises) the simulator's car */
+      if (state.scan.status === "running") return J({ error: "scan running" }, 409);
+      state.scan = { status: "running", phase: "protocol", found: 0 };
+      setTimeout(() => { state.scan = { status: "running", phase: "vin", found: 0 }; }, 800);
+      setTimeout(() => { state.scan = { status: "running", phase: "pids", found: 0 }; }, 1600);
+      setTimeout(() => {
+        state.scan = { status: "done", phase: "idle", found: STD_ROWS.length, ts: now(), stored: true };
+        const key = "1WCAN0FW0P0000001";
+        let e = state.vehicles.vehicles.find((v) => v.key === key);
+        if (!e) {
+          e = { key, vin: key, fingerprint: "9a3f17c2", name: "", protocol: "6", chip_protocol: "6", profile: "", specific_init: "",
+                std_supported: STD_ROWS.length, pending_profile: true, first_seen: now(), last_seen: now(), scan_ts: now() };
+          state.vehicles.vehicles.push(e);
+        } else { e.last_seen = now(); e.scan_ts = now(); e.std_supported = STD_ROWS.length; }
+        state.vehicles.current = key;
+      }, 2500);
+      return J({ started: true }, 202);
+    }
+    let vm = path.match(/^\/api\/autopid\/vehicles\/([^/]+)(\/activate)?$/);
+    if (vm) {
+      const key = decodeURIComponent(vm[1]);
+      const e = state.vehicles.vehicles.find((v) => v.key === key);
+      if (!e) return J({ error: "unknown vehicle" }, 404);
+      if (method === "PUT" && !vm[2]) {
+        if (body && typeof body.name === "string") e.name = body.name;
+        if (body && typeof body.profile === "string") { e.profile = body.profile; e.pending_profile = false; e.specific_init = typeof body.specific_init === "string" ? body.specific_init : (body.profile ? e.specific_init : ""); }
+        else if (body && typeof body.specific_init === "string") e.specific_init = body.specific_init;
+        state.vehiclePuts = (state.vehiclePuts || []).concat([{ key, body }]);
+        return J({ ...e, current: e.key === state.vehicles.current });
+      }
+      if (method === "POST" && vm[2]) { state.vehicles.current = key; return J({ ok: true }); }
+      if (method === "DELETE" && !vm[2]) {
+        state.vehicles.vehicles = state.vehicles.vehicles.filter((v) => v.key !== key);
+        if (state.vehicles.current === key) state.vehicles.current = "";
+        return T("", 204);
+      }
     }
     if (method === "PUT" && path === "/api/autopid/config") { state.autopidCfg = body || state.autopidCfg; return J({ ok: true }); }
     const q = new URLSearchParams((full || "").split("?")[1] || "");
@@ -434,9 +485,12 @@
       if (cmd.startsWith("ver")) return wrap("ESPNetLink USB CLI (CDC-ACM)\r\nFW v1.22-31 (preview)\r\nESP-IDF v6.0.2\r\nOK");
       return wrap("OK");
     }
+    /* the firmware key is auth_mode (wifi_manager_status.c), not auth */
     if (path === "/api/wifi/scan") return J({ networks: [
-      { ssid: "HomeWiFi", rssi: -48, auth: "wpa2", channel: 6 },
-      { ssid: "Neighbor", rssi: -77, auth: "wpa2", channel: 11 },
+      { ssid: "HomeWiFi", rssi: -48, auth_mode: "WPA2_PSK", channel: 6, bssid: "aa:bb:cc:00:00:01" },
+      { ssid: "HomeWiFi", rssi: -61, auth_mode: "WPA2_PSK", channel: 1, bssid: "aa:bb:cc:00:00:02" },
+      { ssid: "Neighbor", rssi: -77, auth_mode: "WPA2_WPA3_PSK", channel: 11, bssid: "aa:bb:cc:00:00:03" },
+      { ssid: "CafeFree", rssi: -70, auth_mode: "OPEN", channel: 6, bssid: "aa:bb:cc:00:00:04" },
     ] });
     if (path === "/api/settings/backup") return T("{\"mock\":true}");
     if (path === "/api/settings/factory_reset") return J({ ok: true });
