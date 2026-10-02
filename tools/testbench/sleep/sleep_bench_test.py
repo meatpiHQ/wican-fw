@@ -46,6 +46,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "wifi"))
 import bench_ports  # noqa: E402  (COM ports by role, tools/testbench/detect_ports.py)
 
 from owon_psu import OwonPsu   # noqa: E402
@@ -167,14 +168,23 @@ class PiHttp:
         return state
 
     def set_sleep_delay(self, minutes):
-        """Stage sleep_delay_min, submit (reboots), wait for the DUT."""
+        return self.set_sleep(minutes)
+
+    def set_sleep(self, minutes, sleep_mv=None, wake_mv=None, wake_delay_ms=None, enabled=True):
+        """Stage sleep_delay_min (and the v3 pair, the v4 hold, the switch), submit (reboots), wait."""
         assert self.wait_up(timeout_s=45), "DUT unreachable"  # fresh IP
         cur = self.get("/api/settings/sleep_manager")
         assert cur, "settings unreachable"
         cur.pop("degraded", None)
         cur.pop("pending_reboot", None)
-        cur["enabled"] = True
+        cur["enabled"] = enabled
         cur["sleep_delay_min"] = minutes
+        if sleep_mv is not None:
+            cur["sleep_mv"] = sleep_mv
+        if wake_mv is not None and "wake_mv" in cur:   # sleep_manager v3 (2026-10-01)
+            cur["wake_mv"] = wake_mv
+        if wake_delay_ms is not None and "wake_delay_ms" in cur:   # v4 (2026-10-01)
+            cur["wake_delay_ms"] = wake_delay_ms
         r = self.put_json("/api/settings/sleep_manager", cur)
         assert r is not None and "error" not in r, f"PUT failed: {r}"
         if not r.get("changed"):
@@ -182,13 +192,46 @@ class PiHttp:
         r = self.post("/api/settings/submit")
         assert r and r.get("reboot"), f"submit failed: {r}"
         time.sleep(8)  # let it actually go down before polling up
-        st = self.wait_up()
+        st = self.wait_up(timeout_s=150)
         assert st, "DUT did not come back after submit-reboot"
         return st
 
 
 def mA(amps):
     return f"{amps * 1000:.0f} mA"
+
+
+def console_hold(con, since):
+    """The wake hold as the DEVICE logs it: seconds between the ladder's
+    "state: wake_pending" line and "waking by reboot (voltage recovered)".
+    The supply current cannot time this (its own detection latency is ~8 s:
+    reboot, boot ramp, sampling); the console can. None when not captured."""
+    if con is None:
+        return None
+    pend = con.wait_for(r"sleep_manager: state: wake_pending", 90, since=since)
+    if not pend:
+        return None
+    wake = con.wait_for(r"sleep_manager: waking by reboot \(voltage recovered\)", 60, since=pend[0])
+    if not wake:
+        return None
+    return wake[0] - pend[0]
+
+
+def console_mark(con):
+    snap = con.snapshot() if con is not None else []
+    return snap[-1][0] if snap else 0.0
+
+
+def newest_record(dut, tries=4):
+    """/api/restart/history right after a wake boot can answer empty once
+    (the server is up before every route is); read it a few times."""
+    for _ in range(tries):
+        hist = dut.get("/api/restart/history")
+        recs = (hist or {}).get("records") or []
+        if recs:
+            return recs[0]
+        time.sleep(3)
+    return {}
 
 
 def main():
@@ -204,7 +247,16 @@ def main():
     args = ap.parse_args()
     dut = PiHttp(args.bench_host, args.dut_ip)
 
-    # ---- 0. PSU ----------------------------------------------------------
+    # ---- 0. PSU + console ----------------------------------------------------
+    # the console (2026-10-01) times the wake hold from the device's own log;
+    # opening it may reset the DUT, which the power cycle below redoes anyway
+    con = None
+    try:
+        from wican_fresh_bench import Console
+        con = Console(bench_ports.resolve("auto", "wican_console"), 2000000)
+        print("console captured on", con.port if hasattr(con, "port") else "the WiCAN console")
+    except Exception as e:  # noqa: BLE001
+        print(f"NOTE: no console capture ({e}); the wake hold is not timed")
     psu = OwonPsu(bench_ports.resolve(args.psu_port, "psu", "COM2016"))
     check("psu_idn", "P4305" in psu.idn, psu.idn)
     check("psu_volt_ceiling", True, "VOLT:LIM 15.000 programmed")
@@ -302,12 +354,23 @@ def main():
               "HTTP dead while asleep" if gone is None
               else "DUT still answering HTTP?!")
 
-        psu.set_voltage(V_AWAKE)  # recovery: naps see it, 1 s stable
+        t_up = time.time()
+        mark_default = console_mark(con)
+        psu.set_voltage(V_AWAKE)  # recovery: naps see it, stable for wake_delay_ms
         wake_gate = avg + 0.030   # back toward the awake baseline
         awake = psu.wait_current(lambda a: a >= wake_gate,
                                  timeout_s=60)
+        lat_default = time.time() - t_up if awake is not None else None
         check("voltage_wake_current", awake is not None,
-              mA(awake) if awake else "no wake on recovery")
+              f"{mA(awake)} after {lat_default:.1f} s (default hold)" if awake
+              else "no wake on recovery")
+        hold_default = console_hold(con, mark_default)
+        if hold_default is not None:
+            # wake_delay_ms 500 + the ladder's 1 s loop; the 0.1 s floor would show < 1.2 s
+            check("voltage_wake_hold_default", 0.3 <= hold_default <= 2.6,
+                  f"wake_pending -> reboot {hold_default:.2f} s (wake after 0.5 s)")
+        else:
+            print("NOTE: default hold not timed (no console lines)")
 
         st = dut.wait_up()
         check("voltage_wake_reachable", st is not None)
@@ -315,29 +378,178 @@ def main():
             check("voltage_wake_state",
                   st.get("state") in ("normal", "wake_pending"),
                   st.get("state"))
-        hist = dut.get("/api/restart/history")
-        recs = (hist or {}).get("records") or [{}]
-        rec = recs[0]
+        rec = newest_record(dut)
         check("voltage_wake_reason",
               rec.get("planned_reason") == "power_wake"
               and rec.get("source") == "sleep_mode",
               json.dumps(rec)[:120])
     else:
+        lat_default = None
+        hold_default = None
         psu.set_voltage(V_AWAKE)
         dut.wait_up()
 
-    # ---- 4. RESTORE ------------------------------------------------------
-    print("restoring sleep_delay_min=5 (submit-reboot) ...")
+    # ---- 3b. WAKE VOLTAGE (sleep_manager v3, 2026-10-01) -----------------
+    # the user's own wake voltage: with sleep 12.9 V / wake 13.4 V a step to
+    # 13.2 V (between the two) must NOT wake the device; 13.6 V must
+    # and (v4, "wake up after") the same wake with a 5 s hold must take at
+    # least 5 s longer than the nap granularity allows with the default
+    cur = dut.get("/api/settings/sleep_manager") or {}
+    has_hold = "wake_delay_ms" in cur
+    if "wake_mv" in cur:
+        print("setting sleep 12.9 V / wake 13.4 V, delay 1 min"
+              + (", wake after 5 s" if has_hold else "") + " (submit-reboot) ...")
+        try:
+            st = dut.set_sleep(1, sleep_mv=12900, wake_mv=13400,
+                               wake_delay_ms=5000 if has_hold else None)
+        except AssertionError as e:
+            st = None
+            check("wakev_applied", False, str(e))
+        if st is not None:
+            check("wakev_applied",
+                  abs(st.get("sleep_v", 0) - 12.9) < 0.006 and abs(st.get("wake_v", 0) - 13.4) < 0.006,
+                  json.dumps(st)[:100])
+            dut.wait_state("normal", timeout_s=30)
+            time.sleep(10)                               # let the radios settle after the reboot
+            # the leg's OWN awake baseline (after a settings reboot the draw differs
+            # from the first leg's: the earlier run called 89 mA "asleep" against a
+            # 156 mA baseline and moved on before the countdown had finished)
+            awake2 = statistics.mean(psu.sample_current(4))
+            gate2 = awake2 - 0.030
+            psu.set_voltage(V_SLEEPY)                    # 12.5 V < 12.9 V
+            t_drop = time.time()
+            entry = None
+            while time.time() - t_drop < 60 + 90:
+                a = psu.meas_current()
+                # asleep = the current is down AND the device no longer answers;
+                # never before the 1 min countdown could have run
+                if time.time() - t_drop >= 55 and a < gate2 and dut.get("/api/sleep", timeout_s=3) is None:
+                    entry = a
+                    break
+                time.sleep(2)
+            took = time.time() - t_drop
+            check("wakev_sleep_entry", entry is not None,
+                  f"asleep after {took:.0f} s ({mA(entry)}, awake {mA(awake2)})" if entry
+                  else f"no entry in {took:.0f} s (awake {mA(awake2)}, last {mA(a)})")
+            if entry is not None:
+                sleep2 = statistics.mean(psu.sample_current(6))
+                psu.set_voltage(13.2)                    # between sleep and wake
+                time.sleep(40)                           # ~20 naps see it
+                s = psu.sample_current(8)
+                avg = statistics.mean(s)
+                check("wakev_between_stays_asleep", avg < sleep2 + 0.025,
+                      f"13.2 V held 40 s: avg {mA(avg)} (asleep {mA(sleep2)}, awake {mA(awake2)})")
+                check("wakev_between_offline", dut.get("/api/sleep", timeout_s=4) is None)
+                t_up = time.time()
+                mark_hold = console_mark(con)
+                psu.set_voltage(13.6)                    # above 13.4 V
+                awake = psu.wait_current(lambda a: a >= sleep2 + 0.030, timeout_s=60)
+                lat_hold = time.time() - t_up if awake is not None else None
+                check("wakev_wake_current", awake is not None,
+                      f"{mA(awake)} after {lat_hold:.1f} s" if awake else "no wake above 13.6 V")
+                if has_hold and awake is not None:
+                    # the 5 s hold, timed by the device itself (wake_pending -> reboot);
+                    # the supply-current latency above is only informational
+                    hold5 = console_hold(con, mark_hold)
+                    if hold5 is None:
+                        check("wakev_hold_5s", False, "no console lines to time the hold")
+                    else:
+                        check("wakev_hold_5s", 4.5 <= hold5 <= 7.6,
+                              f"wake_pending -> reboot {hold5:.2f} s (wake after 5 s)")
+                        if hold_default is not None:
+                            check("wakev_hold_vs_default", hold5 - hold_default >= 3.0,
+                                  f"5 s hold {hold5:.2f} s vs default hold {hold_default:.2f} s")
+                st2 = dut.wait_up()
+                check("wakev_wake_reachable", st2 is not None)
+                rec = newest_record(dut)
+                check("wakev_wake_reason",
+                      rec.get("planned_reason") == "power_wake" and rec.get("source") == "sleep_mode",
+                      json.dumps(rec)[:120])
+            psu.set_voltage(V_AWAKE)
+            dut.wait_up()
+    else:
+        print("NOTE: firmware without wake_mv (sleep_manager < v3): wake-voltage leg skipped")
+
+    # ---- 3c. CRITICAL FLOOR (Ali, 2026-10-01) ------------------------------
+    # sleep DISABLED in settings, 11.75 V on the supply: under 11.90 V for
+    # 120 s the device must sleep anyway (and stay reachable until then);
+    # 14 V wakes it as a planned power_wake
+    print("disabling sleep in settings (submit-reboot) for the critical-floor leg ...")
     try:
-        dut.set_sleep_delay(5)
-        check("restore_settings", True)
+        st = dut.set_sleep(1, enabled=False)
     except AssertionError as e:
-        check("restore_settings", False, str(e))
+        st = None
+        check("floor_disabled_applied", False, str(e))
+    if st is not None:
+        check("floor_disabled_applied", st.get("enabled") is False, json.dumps(st)[:80])
+        time.sleep(20)                                   # past the 15 s boot grace
+        awake3 = statistics.mean(psu.sample_current(4))
+        mark_floor = console_mark(con)
+        psu.set_voltage(11.75)
+        t_drop = time.time()
+        answered_before = 0        # HTTP answers seen between 30 s and 100 s under the floor
+        entry = None
+        while time.time() - t_drop < 120 + 90:
+            a = psu.meas_current()
+            el = time.time() - t_drop
+            if 30 <= el <= 100 and dut.get("/api/sleep", timeout_s=3) is not None:
+                answered_before += 1
+            if el >= 100 and a < awake3 - 0.030 and dut.get("/api/sleep", timeout_s=3) is None:
+                entry = a
+                break
+            time.sleep(2)
+        took = time.time() - t_drop
+        # awake until the delay ran out: HTTP answered at least once in 30..100 s, or the
+        # device's own line came >= 110 s after the drop (the hotspot path can be flaky)
+        line = con.wait_for(r"critical battery: [0-9.]+ V under 11\.90 V for 120 s", 5, since=mark_floor) if con is not None else None
+        line_delay = (line[0] - mark_floor) if line else None
+        check("floor_awake_before_delay", answered_before > 0 or (line_delay is not None and line_delay >= 110),
+              f"HTTP answers in 30..100 s: {answered_before}; device line {line_delay:.0f} s after the drop" if line_delay is not None
+              else f"HTTP answers in 30..100 s: {answered_before}; no device line")
+        check("floor_sleep_entry", entry is not None and took <= 200,
+              f"asleep after {took:.0f} s with sleep DISABLED ({mA(entry)}, awake {mA(awake3)})" if entry
+              else f"no entry in {took:.0f} s (awake {mA(awake3)}, last {mA(a)})")
+        check("floor_console_line", line is not None or con is None, (line[1].strip()[:110] if line else "no critical-battery line"))
+        if entry is not None:
+            sleep3 = statistics.mean(psu.sample_current(5))
+            time.sleep(30)
+            check("floor_stays_asleep", dut.get("/api/sleep", timeout_s=3) is None and statistics.mean(psu.sample_current(4)) < sleep3 + 0.025)
+            psu.set_voltage(V_AWAKE)
+            awake = psu.wait_current(lambda a: a >= sleep3 + 0.030, timeout_s=60)
+            check("floor_wake_current", awake is not None, mA(awake) if awake else "no wake at 14 V")
+            st3 = dut.wait_up(150)
+            check("floor_wake_reachable", st3 is not None)
+            rec = newest_record(dut)
+            check("floor_wake_reason",
+                  rec.get("planned_reason") == "power_wake" and rec.get("source") == "sleep_mode",
+                  json.dumps(rec)[:120])
+        else:
+            psu.set_voltage(V_AWAKE)
+            dut.wait_up(150)
+
+    # ---- 4. RESTORE ------------------------------------------------------
+    print("restoring sleep_delay_min=5, sleep 13.1 V / wake 13.2 V, wake after 0.5 s (submit-reboot) ...")
+    err = None
+    for attempt in range(3):          # the hotspot path can be flaky right after a wake boot
+        try:
+            dut.set_sleep(5, sleep_mv=13100, wake_mv=13200, wake_delay_ms=500)
+            err = None
+            break
+        except AssertionError as e:
+            err = str(e)
+            dut.wait_up(60)
+    check("restore_settings", err is None, err or "")
 
     psu.set_voltage(args.end_volts)
     psu.output(True)
     print(f"bench left at {args.end_volts} V, output ON")
     psu.close()
+    if con is not None:
+        e = con.e_lines()
+        print(f"console E lines during the run: {len(e)}")
+        for l in e[:8]:
+            print("  E:", l.strip()[:140])
+        con.close()
 
     if fails:
         print("SLEEP BENCH FAIL: " + ", ".join(fails))

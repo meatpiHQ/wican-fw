@@ -19,7 +19,7 @@
 
 | # | key | Condition live at entry | Soak | Status |
 |---|-----|--------------------------|------|--------|
-| 0 | `baseline` | idle APSTA on the bench hotspot | 90 s | runner |
+| 0 | `baseline` | idle APSTA on the bench AP (the `bench_ap` P4 since 2026-10-02) | 90 s | runner |
 | 1 | `mqtt` | mqtt_manager connected to the Pi broker | 90 s | runner |
 | 2 | `net_traffic` | HTTP hammer (≈5 req/s) + a held TCP:35000 socket through entry | 90 s | runner |
 | 3 | `tcp_poll` | continuous ELM `010C` polling over TCP:35000 (the "sleeps while polling the ECU" bug) | 90 s | runner |
@@ -31,16 +31,20 @@
 | 8a | `wg_betty_soak` | WireGuard against the **PUBLIC betty VPS** endpoint (real internet/NAT path — the closest reproduction of the historical delayed-panic conditions; `wg_public_soak.sh up split` → cycle → `down`) | **600 s** | runner |
 | 8b | `ts_betty_soak` | Tailscale via the **PUBLIC headscale on betty** (`ts_public_soak.sh up` runs the register/tunnel legs, then cycle → `down`) | **600 s** | runner |
 | 9 | `kitchen_sink` | mqtt + logger + tcp_poll simultaneously | 300 s | runner |
-| 10 | `wifi_ghost` | STA configured for an ABSENT SSID — connect-retry loop at entry (runs LAST: restore goes through the DUT's AP) | 90 s | runner |
+| 10 | `wifi_ghost` | the configured network is ABSENT: connect-retry loop live at entry. Since 2026-10-02 the `bench_ap` P4 plays the vanished network (`ap off`; the DUT's settings are untouched), the AP returns while the DUT sleeps and the wake reboot must rejoin on its own; current-only cycle, forensics deferred to the rejoin (exactly one reboot, zero unexpected). SKIPs without the P4: the old form changed the DUT's SSID and restored it by joining the DUT's own AP from the Pi's wtest0 with a password that had rotated, and re-armed the hotspot's autoconnect in its finally. Runs LAST (the one scenario that takes the DUT off the bench net) | 90 s | runner |
 | 11 | `autopid_poll` | REAL autopid polling (configured profile + ECU sim): wire-proof of polling (sim rxlog), **`pause_follow_sleep` request-silence below sleep_mv (0 req/8 s) + resume**, then sleep entry mid-poll | 90 s | runner — PASS 2026-07-21 (14 req/6 s live, 0 paused, 12 resumed, clean cycle) |
-| 12 | `script_engine` | a Berry script mid-run | 90 s | TODO (needs a script start API on the bench) |
-| 12b | `forced_sleep` | `sleep test 30` driven over **ws_cli** (the CLI input path on this rig — console input is dead): full entry + ~30 s of naps + wake-by-test-timer, `power_wake` record | ~35 s | runner — PASS 2026-07-21 |
-| 13 | `periodic_critical` | periodic check-in wake (1-min interval fires while asleep at 12.5 V) **+ the < 11.90 V CRITICAL floor** (at 11.75 V: 3+ intervals of proven silence — nothing but voltage recovery may touch a critical battery) | 150 s + 210 s | runner — PASS 2026-07-21 |
-| 14 | `bootloop_guard` | **the LAST-LINE battery defense** (legacy parity, hardened 2026-07-21): ≥3 unexpected resets below 12.10 V parks the device asleep — evaluated every loop AND with sleep **disabled** in settings (the guard task now always runs); panics injected via `restart_tracker --panic` over ws_cli; wake = normal voltage recovery; counter clears only on real power loss (PSRAM-retained) | 60 s | runner |
-| 15 | `usb_host_active` | USB-Ethernet / espnetlink dongle in host mode at entry | 90 s | TODO (needs the connector rewired — excludes COM6/7 legs) |
+| 12 | `script_engine` | a Berry script mid-run (`POST /api/scripts/run`, a sleep loop up to the runtime cap) | 90 s | runner (2026-10-01) |
+| 12b | `forced_sleep` | `sleep test 30` over the **held console** (since 2026-10-02; the ws_cli channel ships parked, `/ws/cli` is a 404, which was the `CLI refused` of the 2026-10-01 runs): full entry + ~30 s of naps + wake-by-test-timer, `power_wake` record. SKIPs without a console | ~35 s | runner — PASS 2026-07-21 (ws_cli) |
+| 13 | `periodic_critical` | periodic check-in wake (5-min interval, the schema's minimum since 2026-09-06, fires while asleep at 12.5 V) **+ the < 11.90 V CRITICAL floor** (at 11.75 V: an interval and a half of proven silence — nothing but voltage recovery may touch a critical battery) | 390 s + 450 s | runner — PASS 2026-07-21 (1-min interval); 2026-10-01 re-timed for the 5-min minimum |
+| 14 | `bootloop_guard` | **the LAST-LINE battery defense** (legacy parity, hardened 2026-07-21): ≥3 unexpected resets below 12.10 V parks the device asleep — evaluated every loop AND with sleep **disabled** in settings (the guard task now always runs); panics injected via `restart_tracker --panic` over the console (counted as expected by the forensics); wake = normal voltage recovery; counter clears only on real power loss (PSRAM-retained); the cleanup (sleep re-enabled + the counter power cycle) runs in a `finally` since 2026-10-02 (a failed run had left sleep DISABLED for the four scenarios after it) | 60 s | runner |
+| 15 | `usb_dongle` | USB host active with a device on the connector (the ESPNetLink dongle) at entry; the host must come back after the wake | 90 s | runner (2026-10-01; this path PANICKED before the CherryUSB deinit fix, see cherryusb/PROVENANCE.md) |
 | 16 | `sd_absent` | external_storage unmounted/absent card at entry | 90 s | TODO |
 | 17 | `ota_staged` | OTA image uploaded but device sleeps before the reboot | — | TODO (define expected: sleep wins? reboot wins?) |
 | 18 | `button_config_mode` | runtime config-mode AP (button hold) active when voltage drops | 90 s | TODO (needs the physical button or a GPIO rig) |
+| 19 | `j2534_on` | J2534 server listening on TCP 6809 at entry | 90 s | runner (2026-10-01) |
+| 20 | `ble_idle_on` | BLE platform on, advertising, no central (the connected case is #6) | 90 s | runner (2026-10-01) |
+| 21 | `destinations` | data_destinations publishing the configured rows (MQTT to the Pi) at entry | 90 s | runner (2026-10-01, SKIP without a configured row) |
+| 22 | `critical_floor` | sleep DISABLED in settings, 11.75 V: the critical floor (under 11.90 V for 120 s) must sleep the device anyway, keep it asleep, and 14 V must wake it (`power_wake`) | ~3 min | runner (2026-10-01, Ali's floor) |
 
 Chip-stays-asleep coverage: every scenario's forensics fail on an
 `internal_recovery` record (= the OBD chip refused to stay asleep and
@@ -51,11 +55,23 @@ ECU-sim note: the sim shares the PSU feed (~40 mA standing) — all
 current assertions are deltas against each scenario's own awake
 baseline.
 
+Rig note (2026-10-01, revised 2026-10-02): the runner checks the DUT is reachable before every scenario and recovers first (console reset, then a cycle of the bench AP), so one lost scenario no longer cascades into the rest; the 2026-10-01 runs lost 13 scenarios that way after four passes. **The runner no longer touches the Pi's own radios**: the bench AP is the `bench_ap` P4 instrument (`tools/testbench/instruments/bench_ap/`, `wican-bench-usb` active on the Pi), recover() and wifi_ghost drive it through `bench_ap_cli.py`, and without it recover() only resets the DUT and wifi_ghost SKIPs. The P4's console log (`/tmp/bench_ap.console.log`) gives the association forensics the matrix lacked. The bench CLI (`sleep test`, `restart_tracker --panic`) goes over the DUT console the runner already holds; the ws_cli channel ships parked.
+
 Betty-leg note: set `WG_BENCH_DNS=<server name>` in the environment to
 make the DUT's WG endpoint / TS control URL a DNS NAME instead of an
 IP — that exercises the firmware's DNS-resolution path during VPN
 bring-up and teardown (relevant to the still-open lwip-DNS-UAF, see
 [[wican-wireguard-fixes]] context). Without it the legs run IP-only.
+
+**Run log** — 2026-10-02 11:24 (the four scenarios that had run with sleep disabled behind the old bootloop_guard cleanup): usb_dongle, j2534_on, ble_idle_on, destinations PASS in 14 min (entry 66 to 69 s, 47 to 48 mA asleep, clean wakes and forensics, the USB host back after the usb_dongle wake). Build tally after runs 3 to 5: 18 of 22 PASS; left elm_monitor (COM6), the two betty legs, ts_soak (SKIP by design).
+
+**Run log** — 2026-10-02 11:15 (the three harness-blocked scenarios, Pi radios out): forced_sleep, bootloop_guard, wifi_ghost PASS in 8 min; forced_sleep timed wake after 38 s; bootloop_guard 3 injected panics, guard sleep at 47 mA, counter cleared by the finally's power cycle; wifi_ghost asleep 70 s after the drop with the P4 AP off, rejoined on the wake reboot after `ap on`. With run 3 that is 14 of the 22 scenarios PASS on this build; left: elm_monitor (COM6), the betty legs, ts_soak (SKIP by design), and the rerun of the four scenarios that ran with sleep disabled after the old bootloop_guard (usb_dongle, j2534_on, ble_idle_on, destinations).
+
+**Run log** — 2026-10-02 09:26 (over the `bench_ap` P4 link, console forensics, microlink join fix): 11 PASS incl. wg_soak 600 s, autopid_poll, kitchen_sink, periodic_critical, critical_floor; no panic, no reachability cascade; left: COM6, betty unreachable, the ws_cli path (forced_sleep, bootloop_guard), the sleep-disabled cascade after bootloop_guard, the wifi_ghost restore's wrong AP name.
+
+**Run log** — 2026-10-01 23:08 (second run, Pi rebooted): baseline, net_traffic, tcp_poll, periodic_critical PASS; logger_can, ble_client, wg_soak (600 s) slept and woke cleanly, HTTP steps after the wake lost to the hotspot path; bootloop_guard could not inject panics over ws_cli and left sleep disabled, cascading into usb_dongle/j2534_on/ble_idle_on/destinations; critical_floor failed in that degraded state but passed a console-attached reproduction with BLE on; wifi_ghost's restore looked for the wrong AP SSID. The runner needs a console capture (forensics) before the next run.
+
+**Run log** — 2026-10-01 (final build of the Quick Setup / sleep_manager v4 day, after the CherryUSB deinit fix): baseline, mqtt, net_traffic, tcp_poll **PASS**; the remaining scenarios were lost to the rig (station off the hotspot after a wake reboot: three failed attempts deprioritise the entry and the dongle AP is the fallback it lands on) and must be re-run with the dongle off the connector. Before the fix the sleep bench itself could not enter sleep (panic at entry with the USB host active).
 
 **Run log** — 2026-07-21 (fw: can_core rendezvous + esp_timer policy
 clock + battery read_now + LED-off + obd hard-reset-in-resleep):

@@ -17,6 +17,7 @@ Expected final line: SLEEP MATRIX PASS
 """
 import argparse
 import json
+import re
 import statistics
 import subprocess
 import sys
@@ -51,6 +52,70 @@ class Rig:
         self.psu = OwonPsu(args.psu_port)
         self.dut = PiHttp(args.bench_host, "auto")
         self.reboots = 0  # config reboots we caused (forensics budget)
+        # the WiCAN console (2026-10-02): without it the 2026-10-01 runs could
+        # not say WHY a scenario failed (the critical-floor "no entry" was a
+        # VPN restart panic resetting the floor's timer). A console open may
+        # reset the DUT once; recover() needs the port too, so the Dut there
+        # reopens it only while this is closed.
+        self.con = None
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "wifi"))
+            from wican_fresh_bench import Console
+            self.con = Console(bench_ports.resolve("auto", ("wican_console", "ch342_console"), "COM7"), 2000000)
+            print("console captured for forensics")
+        except Exception as e:  # noqa: BLE001
+            print(f"(no console capture: {e})")
+        self.con_mark = 0.0
+        self.expected_panics = 0  # bootloop_guard injects its own
+        self._bench_ap_active = None
+
+    def bench_ap(self, cmd, timeout=60):
+        """A console command to the bench_ap P4 instrument (via the Pi's
+        daemon). Since 2026-10-02 this is the ONLY access point the runner
+        touches: the Pi's mt76 radios (assoc-status stall, reason 204, the
+        twin-hotspot re-activation) are no longer part of the bench."""
+        return self.pi("python3 ~/wican/tools/testbench/pi/bench_ap_cli.py "
+                       f"'{cmd}'", timeout=timeout)
+
+    def bench_ap_active(self):
+        """True when the Pi serves the DUT through the P4 (wican-bench-usb)."""
+        if self._bench_ap_active is None:
+            rc, _ = self.pi("nmcli -t -f NAME con show --active "
+                            "| grep -qx wican-bench-usb")
+            self._bench_ap_active = (rc == 0)
+        return self._bench_ap_active
+
+    def cli(self, line, pattern, timeout=6.0):
+        """A bench CLI line to the DUT over the held console; the line the
+        reply matches, or None. The ws_cli channel is parked by default
+        (/ws/cli answers 404), so without a console the scenario is skipped
+        rather than guessed."""
+        if not self.con:
+            raise SkipScenario("needs the console (ws_cli ships parked: "
+                               "/ws/cli is a 404 unless enabled)")
+        return self.con.cmd(line, pattern, timeout)
+
+    def mark(self):
+        """Remember where the console is (start of a scenario)."""
+        snap = self.con.snapshot() if self.con else []
+        self.con_mark = snap[-1][0] if snap else 0.0
+        self.expected_panics = 0
+
+    def forensics(self, key):
+        """Panics since the mark are failures; print the lines that explain one."""
+        if not self.con:
+            return None
+        lines = [(t, x) for t, x in self.con.snapshot() if t >= self.con_mark]
+        panics = [x for _, x in lines if "Guru Meditation" in x or "assert failed" in x or "abort()" in x]
+        if self.expected_panics and len(panics) <= self.expected_panics:
+            print(f"  console ({key}): {len(panics)} injected panic(s), as the scenario intended")
+            panics = []
+        keep = [x for _, x in lines if re.search(r"Guru|Backtrace|panic|assert|abort\(\)|sleep_manager|vpn_manager|tailscale|boot #|critical battery", x)]
+        if keep:
+            print(f"  console ({key}): {len(lines)} lines since the scenario started; the telling ones:")
+            for x in keep[-14:]:
+                print("    ", x.strip()[:150])
+        return panics
 
     # ---- DUT config ------------------------------------------------------
 
@@ -87,6 +152,8 @@ class Rig:
         """Whatever state the DUT is in: hard reset via COM7 + 13.5 V."""
         self.psu.set_voltage(13.5)
         self.psu.output(True)
+        had_con = self.con is not None
+        self.console_pause()
         try:
             from dut import Dut
             d = Dut(bench_ports.resolve("auto", ("wican_console", "ch342_console"), "COM7"), 2000000)
@@ -95,18 +162,42 @@ class Rig:
             d.close()
         except Exception as e:
             print(f"  (recover: console reset failed: {e})")
-        self.dut.wait_up(180)
+        if had_con:
+            try:
+                from wican_fresh_bench import Console
+                self.con = Console(bench_ports.resolve("auto", ("wican_console", "ch342_console"), "COM7"), 2000000)
+            except Exception as e:  # noqa: BLE001
+                print(f"  (recover: console not reopened: {e})")
+        if self.dut.wait_up(90) is None:
+            # the DUT cannot rejoin: cycle the bench AP, i.e. the bench_ap P4
+            # (a console command). Nothing here touches the Pi's own radios.
+            if self.bench_ap_active():
+                print("  (recover: DUT still away; cycling bench_ap)")
+                self.bench_ap("ap off")
+                time.sleep(3)
+                self.bench_ap("ap on")
+            else:
+                print("  (recover: DUT still away and no bench_ap instrument "
+                      "is serving; the Pi radios are not used)")
+            self.dut.wait_up(150)
+
+    def console_pause(self):
+        if self.con:
+            self.con.close()
+            self.con = None
 
 
 # ---- the sleep/soak/wake core (shared by every scenario) -----------------
 
 def sleep_cycle(rig, key, soak_s=90, entry_extra_s=90, offline_ok=False,
-                wake_http=True, seq_base=None):
+                wake_http=True, seq_base=None, before_wake=None):
     """Drop -> entry -> soak -> wake -> forensics. Raises on failure.
     offline_ok: don't require HTTP to be answering before/after (BLE
-    suspends WiFi; the ghost-SSID DUT is off the bench net entirely).
+    suspends WiFi; the ghost DUT is off the bench net entirely).
     wake_http=False skips every HTTP assert (current-only cycle);
-    seq_base overrides the forensic baseline captured here."""
+    seq_base overrides the forensic baseline captured here;
+    before_wake runs after the clean soak, before the voltage rises
+    (wifi_ghost brings the bench AP back while the DUT still sleeps)."""
     dut, psu = rig.dut, rig.psu
 
     # forensic baseline right before the drop
@@ -148,6 +239,9 @@ def sleep_cycle(rig, key, soak_s=90, entry_extra_s=90, offline_ok=False,
                 raise AssertionError("DUT answering HTTP mid-soak")
         time.sleep(2)
 
+    if before_wake is not None:
+        before_wake()
+        time.sleep(5)
     print(f"  soak clean; waking at {V_AWAKE} V")
     psu.set_voltage(V_AWAKE)
     awake = psu.wait_current(lambda a: a >= sleep_a + 0.030, timeout_s=60)
@@ -421,119 +515,65 @@ def s_kitchen_sink(rig):
 
 
 def s_wifi_ghost(rig):
-    """STA aimed at an absent SSID — connect-retry loop live at entry.
-    RUNS LAST: the DUT drops off the bench hotspot; the cycle is
-    current-only and restore + forensics go through the DUT's own AP."""
-    st = rig.dut.get("/api/status") or {}
-    dev_id = st.get("device_id") or st.get("id")
+    """The configured network is ABSENT: the station's connect-retry loop
+    is live at sleep entry. Since 2026-10-02 the bench_ap P4 plays the
+    vanished network (`ap off`): no DUT setting changes, no Pi radio, no
+    join of the DUT's own AP (the old restore needed the Pi's wtest0, a
+    password that had rotated, and re-armed the hotspot's autoconnect).
+    The AP comes back while the DUT sleeps (home again before the
+    ignition); the wake reboot must rejoin on its own. Current-only
+    cycle (the DUT is off the net); forensics deferred to the rejoin.
+    RUNS LAST: the one scenario that takes the DUT off the bench net."""
+    if not rig.bench_ap_active():
+        raise SkipScenario("needs the bench_ap instrument (the Pi radios "
+                           "are not used by this runner)")
     hist = rig.dut.get("/api/restart/history") or {}
     seq0 = ((hist.get("records") or [{}])[0]).get("seq", -1)
+    unexpected0 = hist.get("unexpected_resets", -1)
 
-    rig.put_settings("wifi_manager", {"sta_ssid": "WICAN_GHOST_AP",
-                                      "sta_password": "nosuchnet123"},
-                     wait=False)
-    # from here the DUT is off the bench net — current is the truth
-    time.sleep(25)  # reboot + let the retry loop get going
+    rc, out = rig.bench_ap("ap off")
+    assert rc == 0, f"bench_ap 'ap off' failed: {out[-120:]}"
+    print("  bench AP off; letting the DUT's retry loop get going")
+    time.sleep(25)
+    assert rig.dut.get("/api/sleep", timeout_s=3) is None, \
+        "DUT still answering with the bench AP off"
     try:
-        sleep_cycle(rig, "wifi_ghost", offline_ok=True, wake_http=False)
+        sleep_cycle(rig, "wifi_ghost", offline_ok=True, wake_http=False,
+                    before_wake=lambda: rig.bench_ap("ap on"))
     finally:
-        _wifi_ghost_restore(rig, dev_id)
-    # deferred forensics now that it is back on the bench hotspot:
-    # config reboot + wake reboot + restore reboot = seq0 + 3, zero
-    # unexpected, wake record (one below the restore's config_apply)
+        rig.bench_ap("ap on")  # idempotent on the P4
+    st = rig.dut.wait_up(180)
+    assert st, "DUT did not rejoin the bench AP after the wake reboot"
+
+    # deferred forensics: exactly one reboot (the wake), zero unexpected
     hist = rig.dut.get("/api/restart/history") or {}
     recs = hist.get("records") or []
-    seqs = {r.get("seq"): r for r in recs}
-    wake = seqs.get(seq0 + 2)
-    assert wake and wake.get("planned_reason") == "power_wake", \
-        f"wake record missing/wrong at seq {seq0 + 2}: " \
-        f"{json.dumps(recs)[:200]}"
+    newest = recs[0] if recs else {}
+    assert newest.get("planned_reason") == "power_wake" \
+        and newest.get("seq") == seq0 + 1, \
+        f"wake record wrong (expected seq {seq0 + 1} power_wake): " \
+        f"{json.dumps(newest)[:160]}"
+    assert hist.get("unexpected_resets") == unexpected0, \
+        f"unexpected resets grew: {unexpected0} -> " \
+        f"{hist.get('unexpected_resets')}"
     for r in recs:
         if r.get("seq", 0) <= seq0:
             continue  # older sessions' records stay in the ring
         assert r.get("planned_reason") != "internal_recovery", \
             "OBD chip refused to stay asleep"
-        assert r.get("seq", 0) <= seq0 + 3, \
-            f"extra reboot: {json.dumps(r)[:100]}"
-
-
-def _wifi_ghost_restore(rig, dev_id):
-    """Join the DUT's AP from the Pi, point STA back at the bench."""
-    ap = f"WiCAN_{dev_id}" if dev_id else "WiCAN_14c19f44e349"
-    print(f"  restoring wifi via the DUT AP ({ap}) ...")
-    # HOLD autoconnect off for the whole join window: a bare `down`
-    # lasts seconds before NM re-activates wican-bench, and once wtest0
-    # is back in AP (hotspot) mode its scans come up empty — every
-    # retry then fails with "No network with SSID ... found" (stranded
-    # the DUT 2026-07-22, full matrix run)
-    rig.pi("sudo nmcli connection modify wican-bench "
-           "connection.autoconnect no; "
-           "sudo nmcli connection down wican-bench 2>/dev/null; true")
-    # the AP needs time to come up after the wake reboot, and fresh
-    # scans come back thin — retry with rescans (cost a stranded DUT
-    # 2026-07-21 when a single early scan missed it)
-    rc, out = 1, "never scanned"
-    try:
-        for _ in range(5):
-            rig.pi("sudo nmcli device wifi rescan ifname wtest0 "
-                   "2>/dev/null; sleep 6; true")
-            rc, out = rig.pi(f"sudo nmcli device wifi connect '{ap}' "
-                             f"password '@meatpi#' ifname wtest0 "
-                             f"name wican-dut", timeout=90)
-            if rc == 0:
-                break
-    finally:
-        if rc != 0:  # joined path re-enables in the restore finally
-            rig.pi("sudo nmcli connection modify wican-bench "
-                   "connection.autoconnect yes; "
-                   "sudo nmcli connection up wican-bench "
-                   "2>/dev/null; true")
-    assert rc == 0, f"could not join DUT AP: {out[-120:]}"
-    rig.pi("sudo nmcli connection modify wican-dut "
-           "ipv4.never-default yes ipv4.route-metric 4000 "
-           "ipv4.routes 192.168.0.10/32")
-    # route pinning applies on (re)activation only
-    rig.pi("sudo nmcli connection up wican-dut", timeout=60)
-    time.sleep(5)
-    try:
-        cfg_cmd = ("curl -s -m 8 http://192.168.0.10/api/settings/"
-                   "wifi_manager")
-        rc, cur = rig.pi(cfg_cmd)
-        cfg = json.loads(cur)
-        cfg.pop("degraded", None)
-        cfg.pop("pending_reboot", None)
-        # the REAL bench PSK, read live: settings GETs redact secrets
-        # (merging "" back would clobber the stored one) and hardcoded
-        # constants go stale — the once-documented value was rotated
-        # away and stranded the DUT once (2026-07-21)
-        rc, psk = rig.pi("sudo nmcli -s -g 802-11-wireless-security.psk"
-                         " connection show wican-bench")
-        assert rc == 0 and psk, "could not read the bench PSK"
-        cfg.update({"sta_ssid": "WICAN_TEST_AP",
-                    "sta_password": psk})
-        rig.pi("curl -s -m 8 -X PUT -H 'Content-Type: application/json'"
-               " -d @- http://192.168.0.10/api/settings/wifi_manager",
-               stdin=json.dumps(cfg))
-        rig.pi("curl -s -m 15 -X POST "
-               "http://192.168.0.10/api/settings/submit")
-    finally:
-        rig.pi("sudo nmcli connection delete wican-dut 2>/dev/null; "
-               "sudo nmcli connection modify wican-bench "
-               "connection.autoconnect yes; "
-               "sudo nmcli connection up wican-bench 2>/dev/null; true")
-    time.sleep(10)
-    assert rig.dut.wait_up(180), "DUT never rejoined the bench hotspot"
+    print("  rejoined the bench AP after the wake; forensics clean")
 
 
 def s_periodic_critical(rig):
     """Periodic check-in wake + the < 11.90 V CRITICAL floor.
-    Control leg at 12.5 V: periodic_wakeup (1 min) MUST fire while
-    sleeping (awake current burst). Critical leg at 11.75 V (DUT reads
-    ~11.68 < SM_CRITICAL_V): periodic wake MUST stay suppressed for
-    3+ intervals — only voltage recovery may touch a critical battery."""
+    Control leg at 12.5 V: periodic_wakeup (5 min, the schema's minimum
+    since 2026-09-06) MUST fire while sleeping (awake current burst).
+    Critical leg at 11.75 V (DUT reads ~11.68 < SM_CRITICAL_V): periodic
+    wake MUST stay suppressed for an interval and a half — only voltage
+    recovery may touch a critical battery."""
     rig.put_settings("sleep_manager",
                      {"enabled": True, "periodic_wakeup": True,
-                      "wakeup_interval_min": 1, "sleep_delay_min": 1})
+                      "wakeup_interval_min": 5, "sleep_delay_min": 1})
 
     def enter_and_measure(v_hold):
         rig.psu.set_voltage(V_AWAKE)
@@ -565,16 +605,16 @@ def s_periodic_critical(rig):
         # control: periodic wake must fire within ~1 min of entry
         awake_a, sleep_a = enter_and_measure(V_SLEEPY)
         print(f"  control: asleep {mA(sleep_a)} at {V_SLEEPY} V; "
-              f"watching for the 1-min periodic wake")
-        assert burst_watch(sleep_a, 150), \
+              f"watching for the 5-min periodic wake")
+        assert burst_watch(sleep_a, 390), \
             "periodic wake never fired at 12.5 V"
         print("  control: periodic wake fired")
 
         # critical: below 11.90 V nothing may wake it but voltage
         awake_a, sleep_a = enter_and_measure(11.75)
         print(f"  critical: asleep {mA(sleep_a)} at 11.75 V; "
-              f"3+ intervals of silence expected")
-        assert not burst_watch(sleep_a, 210), \
+              f"an interval and a half of silence expected")
+        assert not burst_watch(sleep_a, 450), \
             "periodic wake fired BELOW the critical floor"
         print("  critical: no periodic wake (correct)")
 
@@ -655,25 +695,12 @@ def s_autopid_poll(rig):
 
 
 def s_forced_sleep(rig):
-    """`sleep test 30` over ws_cli: the forced-entry bench hook — full
-    entry sequence + exactly ~30 s of naps + wake-by-test-timer reboot
-    (closes bench follow-up (a): console input is dead on this rig,
-    ws_cli is the input path)."""
-    ip = rig.dut.base.split("//")[1]
-    script = "\n".join([
-        "import websocket,time",
-        "ws=websocket.create_connection('ws://%s/ws/cli',timeout=5)" % ip,
-        "ws.settimeout(3)",
-        "ws.send('sleep test 30\\n')",
-        "out=''",
-        "t0=time.time()",
-        "while time.time()-t0<4:",
-        "    try: out+=ws.recv()",
-        "    except Exception: break",
-        "print(out[:200])",
-    ]) + "\n"
-    rc, out = rig.pi("python3 -", stdin=script)
-    assert "entering test sleep" in out, f"CLI refused: {out[:150]}"
+    """`sleep test 30` over the console: the forced-entry bench hook, the
+    full entry sequence + ~30 s of naps + wake-by-test-timer reboot.
+    (Until 2026-10-02 this went over ws_cli, which ships parked: the
+    "CLI refused" of the 2026-10-01 runs was its 404.)"""
+    hit = rig.cli("sleep test 30", r"entering test sleep|TEST sleep", 8)
+    assert hit, "the CLI did not acknowledge `sleep test 30`"
 
     awake_a = statistics.mean(rig.psu.sample_current(3))
     entry = rig.psu.wait_current(lambda a: a < awake_a - 0.030,
@@ -699,8 +726,31 @@ def s_bootloop_guard(rig):
     """The LAST-LINE battery defense: >=3 unexpected resets below
     12.10 V must park the device asleep — with sleep DISABLED in
     settings (the guard is setting-independent, legacy parity).
-    Panics are injected via `restart_tracker --panic` over ws_cli."""
+    Panics are injected via `restart_tracker --panic` over the console."""
     rig.put_settings("sleep_manager", {"enabled": False})
+    try:
+        _bootloop_guard_body(rig)
+    finally:
+        # cleanup: re-enable sleep, then a REAL power cycle to wipe the
+        # PSRAM-retained counter (warm resets keep it by design). In a finally
+        # since 2026-10-02: a failed run left sleep DISABLED for every scenario
+        # after it.
+        rig.psu.set_voltage(V_AWAKE)
+        rig.dut.wait_up(150)
+        try:
+            rig.put_settings("sleep_manager", {"enabled": True})
+        except AssertionError as e:
+            print(f"  (cleanup: could not re-enable sleep: {e})")
+        rig.psu.output(False)
+        time.sleep(3)
+        rig.psu.set_voltage(V_AWAKE)
+        rig.psu.output(True)
+        assert rig.dut.wait_up(180), "DUT lost after counter power-cycle"
+        assert (rig.dut.get("/api/restart/history") or {}).get(
+            "unexpected_resets") == 0, "counter did not clear"
+
+
+def _bootloop_guard_body(rig):
     rig.psu.set_voltage(12.05)  # DUT reads ~11.98: < 12.10 guard gate,
     time.sleep(4)               # > 11.90 critical floor
 
@@ -709,13 +759,8 @@ def s_bootloop_guard(rig):
         return h.get("unexpected_resets", -1)
 
     def panic():
-        ip = rig.dut.base.split("//")[1]
-        script = (
-            "import websocket,time\n"
-            "ws=websocket.create_connection('ws://%s/ws/cli',timeout=4)\n"
-            "ws.send('restart_tracker --panic\\n')\n"
-            "time.sleep(1.5)\n" % ip)
-        rig.pi("python3 - 2>/dev/null || true", stdin=script)
+        rig.expected_panics += 1  # forensics must not count these
+        rig.cli("restart_tracker --panic", r"Guru Meditation|panic", 4)
 
     c0 = count()
     assert c0 >= 0, "restart history unreachable"
@@ -757,16 +802,150 @@ def s_bootloop_guard(rig):
     print(f"  wake clean; unexpected_resets="
           f"{hist.get('unexpected_resets')}")
 
-    # cleanup: re-enable sleep, then a REAL power cycle to wipe the
-    # PSRAM-retained counter (warm resets keep it by design)
-    rig.put_settings("sleep_manager", {"enabled": True})
-    rig.psu.output(False)
-    time.sleep(3)
-    rig.psu.set_voltage(V_AWAKE)
-    rig.psu.output(True)
-    assert rig.dut.wait_up(180), "DUT lost after counter power-cycle"
-    assert (rig.dut.get("/api/restart/history") or {}).get(
-        "unexpected_resets") == 0, "counter did not clear"
+
+
+# ---- scenarios added 2026-10-01 (the subsystems that arrived after July) ----
+
+def s_usb_dongle(rig):
+    """USB host active with a device on the connector at entry (the
+    ESPNetLink dongle on this rig): the path that panicked on 2026-10-01
+    (CherryUSB deinit inside a critical section; see cherryusb/PROVENANCE.md).
+    Needs the dongle plugged; SKIP otherwise. After the wake the host must
+    come back by itself."""
+    usb = rig.dut.get("/api/usb") or {}
+    if not usb.get("host_active"):
+        raise SkipScenario("no USB device on the connector (host not active)")
+    nl = rig.dut.get("/api/espnetlink") or {}
+    print(f"  host active ({usb.get('vid')}:{usb.get('pid')}, driver {usb.get('driver')!r}), "
+          f"espnetlink paired={nl.get('paired')} uplink={nl.get('uplink')}")
+    sleep_cycle(rig, "usb_dongle")
+    t0 = time.time()
+    while time.time() - t0 < 60:
+        usb = rig.dut.get("/api/usb") or {}
+        if usb.get("host_active"):
+            break
+        time.sleep(3)
+    assert usb.get("host_active"), f"USB host did not come back after the wake: {usb}"
+    print("  USB host back after the wake")
+
+
+def s_j2534_on(rig):
+    """J2534 server listening (TCP 6809) at entry; restored off."""
+    changed = rig.put_settings("j2534_server", {"enabled": True})
+    try:
+        st = rig.dut.get("/api/j2534") or {}
+        assert st.get("listening"), f"J2534 not listening: {st}"
+        sleep_cycle(rig, "j2534_on")
+    finally:
+        if changed:
+            rig.put_settings("j2534_server", {"enabled": False})
+
+
+def s_ble_idle_on(rig):
+    """BLE platform on (ble_manager + the BLE channels) with NO central:
+    advertising at entry. ble_client covers the connected case."""
+    changed = rig.put_settings("ble_manager", {"enabled": True})
+    try:
+        st = rig.dut.get("/api/ble") or {}
+        assert st.get("enabled"), f"BLE not enabled: {st}"
+        sleep_cycle(rig, "ble_idle_on", offline_ok=True)
+    finally:
+        if changed:
+            rig.put_settings("ble_manager", {"enabled": False})
+
+
+def s_destinations(rig):
+    """data_destinations publishing (the configured rows, MQTT to the Pi
+    broker) at entry; SKIP when no row is configured."""
+    st = rig.dut.get("/api/destinations")
+    assert st is not None, "/api/destinations unreachable"
+    rows = [d for d in (st.get("destinations") or []) if d.get("enabled")]
+    if not rows:
+        raise SkipScenario("no enabled destination configured on the DUT")
+    rig.put_settings("mqtt_manager", {"enabled": True,
+                                      "url": f"mqtt://{rig.dut_gw()}:1883"})
+    changed = rig.put_settings("data_destinations", {"enabled": True})
+    time.sleep(8)
+    try:
+        st = rig.dut.get("/api/destinations") or {}
+        assert st.get("running"), f"destinations not running: {st}"
+        sleep_cycle(rig, "destinations")
+    finally:
+        if changed:
+            rig.put_settings("data_destinations", {"enabled": False})
+
+
+def s_critical_floor(rig):
+    """Sleep DISABLED in settings, 11.75 V: the critical floor (under 11.90 V
+    for 120 s, 2026-10-01) must put the device to sleep anyway, keep it
+    asleep, and 14 V must wake it (power_wake). Restores sleep enabled."""
+    rig.put_settings("sleep_manager", {"enabled": False})
+    try:
+        assert rig.dut.wait_up(120), "DUT not up with sleep disabled"
+        time.sleep(20)                               # past the 15 s boot grace
+        awake_a = statistics.mean(rig.psu.sample_current(4))
+        hist0 = rig.dut.get("/api/restart/history") or {}
+        seq0 = ((hist0.get("records") or [{}])[0]).get("seq", -1)
+        rig.psu.set_voltage(11.75)
+        t0 = time.time()
+        entry = None
+        while time.time() - t0 < 120 + 90:
+            a = rig.psu.meas_current()
+            if time.time() - t0 >= 100 and a < awake_a - 0.030 and rig.dut.get("/api/sleep", timeout_s=3) is None:
+                entry = a
+                break
+            time.sleep(2)
+        took = time.time() - t0
+        assert entry is not None, f"floor never slept the device ({took:.0f} s, awake {mA(awake_a)})"
+        assert took <= 200, f"floor took {took:.0f} s (expected ~120)"
+        print(f"  asleep after {took:.0f} s with sleep DISABLED ({mA(entry)})")
+        sleep_a = statistics.mean(rig.psu.sample_current(5))
+        time.sleep(40)
+        assert rig.dut.get("/api/sleep", timeout_s=3) is None, "woke up at 11.75 V"
+        rig.psu.set_voltage(V_AWAKE)
+        awake = rig.psu.wait_current(lambda a: a >= sleep_a + 0.030, timeout_s=60)
+        assert awake is not None, "no wake on recovery"
+        st = rig.dut.wait_up(150)
+        assert st, "DUT unreachable after the wake"
+        hist = rig.dut.get("/api/restart/history") or {}
+        newest = (hist.get("records") or [{}])[0]
+        assert newest.get("planned_reason") == "power_wake", f"wrong wake record: {json.dumps(newest)[:100]}"
+        assert newest.get("seq") == seq0 + 1, f"extra reboots (seq {seq0} -> {newest.get('seq')})"
+        assert hist.get("unexpected_resets") == hist0.get("unexpected_resets"), "unexpected resets grew"
+        print(f"  wake clean ({mA(awake)}), record power_wake")
+    finally:
+        rig.psu.set_voltage(V_AWAKE)
+        rig.dut.wait_up(150)
+        rig.put_settings("sleep_manager", {"enabled": True})
+
+
+def s_script_engine(rig):
+    """A Berry script mid-run at entry (POST /api/scripts/run with a loop
+    that sleeps up to the engine's runtime cap); SKIP when scripts are off."""
+    ref = rig.dut.get("/api/scripts")
+    assert ref is not None, "/api/scripts unreachable"
+    if not ref.get("enabled"):
+        raise SkipScenario("script_engine disabled")
+    lim = ((rig.dut.get("/api/scripts/reference") or {}).get("limits") or {})
+    step = min(int(lim.get("sleep_max_ms") or 1000), 1000)
+    src = "var i = 0\nwhile i < 400\n  sleep_ms(%d)\n  i += 1\nend\n" % step
+    ip = rig.dut.base.split("//")[1]
+    script = "\n".join([
+        "import json,urllib.request",
+        "req=urllib.request.Request('http://%s/api/scripts/run',data=json.dumps({'src':%r}).encode(),headers={'Content-Type':'application/json'})" % (ip, src),
+        "try:",
+        "    print(urllib.request.urlopen(req,timeout=2).read()[:80])",
+        "except Exception as e:",
+        "    print('started (no reply in 2 s is expected):',e)",
+    ]) + "\n"
+    rig.pi("nohup python3 - >/tmp/sleep_script.log 2>&1 &", stdin=script)
+    time.sleep(4)
+    st = rig.dut.get("/api/scripts") or {}
+    assert st.get("busy"), f"script not running: {st}"
+    try:
+        sleep_cycle(rig, "script_engine")
+    finally:
+        rig.dut.post("/api/scripts/stop")
 
 
 class SkipScenario(Exception):
@@ -790,7 +969,14 @@ SCENARIOS = [
     ("forced_sleep", s_forced_sleep),
     ("periodic_critical", s_periodic_critical),
     ("bootloop_guard", s_bootloop_guard),
-    ("wifi_ghost", s_wifi_ghost),   # keep LAST (offline restore path)
+    # 2026-10-01: the subsystems that arrived after July
+    ("usb_dongle", s_usb_dongle),
+    ("j2534_on", s_j2534_on),
+    ("ble_idle_on", s_ble_idle_on),
+    ("destinations", s_destinations),
+    ("script_engine", s_script_engine),
+    ("critical_floor", s_critical_floor),
+    ("wifi_ghost", s_wifi_ghost),   # keep LAST (takes the DUT off the net)
 ]
 
 
@@ -819,14 +1005,28 @@ def main():
         if only and key not in only:
             continue
         print(f"\n=== {key} ===")
+        if rig.dut.wait_up(60) is None:
+            print("  DUT unreachable before the scenario; recovering first")
+            rig.recover()
+            if rig.dut.wait_up(60) is None:
+                print("  FAIL: DUT unreachable (not run)")
+                results.append((key, "FAIL", "DUT unreachable before the scenario (not run)"))
+                continue
+        rig.mark()
         try:
             fn(rig)
-            results.append((key, "PASS", ""))
+            panics = rig.forensics(key) or []
+            if panics:
+                print(f"  FAIL: {len(panics)} panic(s) on the console during the scenario")
+                results.append((key, "FAIL", f"{len(panics)} panic(s) on the console: {panics[0][:80]}"))
+            else:
+                results.append((key, "PASS", ""))
         except SkipScenario as e:
             print(f"  SKIP: {e}")
             results.append((key, "SKIP", str(e)))
         except Exception as e:
             print(f"  FAIL: {e}")
+            rig.forensics(key)
             results.append((key, "FAIL", str(e)[:120]))
             rig.recover()
 

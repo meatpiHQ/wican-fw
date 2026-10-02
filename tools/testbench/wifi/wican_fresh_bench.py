@@ -7,7 +7,8 @@ come up on the home network while the phone is still on its AP.
 
   erase   esptool erase-flash + write-flash (skip with --no-erase)
   boot    PSU cold cycle, console captured from power-on; first-boot
-          defaults asserted from the log + console: wifi_manager mode=ap,
+          defaults asserted from the log + console: wifi_manager mode=apsta
+          (since 2026-10-01; the station side idles with 0 networks),
           0 STA networks, derived AP SSID `WiCAN_<id>`, USB host enabled
           (zero-touch ESPNetLink), espnetlink enabled + wifi_modem
   user    the Pi joins `WiCAN_<id>` / @meatpi# (the wifi_manager default)
@@ -249,8 +250,11 @@ def main():
         m = re.search(r"mode=(\d+) sta_networks=(\d+) ap_ssid=(WiCAN_\w+)",
                       hit[1]) if hit else None
         ap_ssid = m.group(3) if m else ""
-        check("defaults: wifi_manager mode=ap, 0 STA networks, derived "
-              "AP SSID", m is not None and m.group(1) == "2" and
+        # fresh default is AP + STATION since 2026-10-01 (mode=3): the station
+        # interface exists so a scan needs no mode flip, and with 0 networks
+        # nothing tries to connect
+        check("defaults: wifi_manager mode=apsta, 0 STA networks, derived "
+              "AP SSID", m is not None and m.group(1) == "3" and
               m.group(2) == "0", hit[1][-60:] if hit else "not seen")
         started = con.wait_for(r"wifi_manager: started \(mode=", 60)
         check("defaults: wifi_manager started", started is not None)
