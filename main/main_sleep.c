@@ -13,6 +13,7 @@
 #include "ble_manager.h"
 #include "can_manager.h"
 #include "data_logger.h"
+#include "espnetlink_link.h"
 #include "ext_manager.h"
 #include "led_manager.h"
 #include "uds_manager.h"
@@ -41,7 +42,11 @@ static void on_prepare_sleep(void)
     (void)ble_j2534_stop();
     (void)j2534_server_stop();
     (void)usb_acm_cli_stop();
-    (void)usb_host_manager_stop();
+    /* 2026-10-01: the dongle link task polls the uplink; park it before
+       the USB host and WiFi go (it printed "uplink: wifi -> none" after
+       "components down" on the sleep bench) */
+    (void)espnetlink_link_stop();
+    (void)usb_host_manager_stop(); /* waits for its teardown (bounded) */
     (void)wifi_manager_stop();
     (void)ble_http_stop();
     (void)ble_manager_stop();
