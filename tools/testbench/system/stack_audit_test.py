@@ -100,8 +100,8 @@ def exercise_deep_paths():
     # exercises the settings/fs writer paths and a fresh boot.
     _, ap_before = api("/api/settings/autopid")
     if not isinstance(ap_before, dict):
-        print("  (autopid settings unreadable — skipping dtc-job leg)")
-        return None
+        print("  (autopid settings unreadable: skipping the dtc-job leg)")
+        return None, []
     ap_before.pop("degraded", None)
     ap_before.pop("pending_reboot", None)
 
@@ -114,10 +114,11 @@ def exercise_deep_paths():
         api("/api/settings/autopid", "PUT", cfg)
         print("  (arming dtc via submit-reboot…)")
         if not submit_and_wait():
-            print("  (DUT did not come back — skipping dtc-job leg)")
-            return None
+            print("  (DUT did not come back: skipping the dtc-job leg)")
+            return None, []
         time.sleep(15)  # obd_chip boot provisioning holds the chip
 
+    hws = []
     code, _ = api("/api/autopid/dtc/scan", "POST", {})
     if code == 202:
         ran = True
@@ -127,6 +128,15 @@ def exercise_deep_paths():
             if isinstance(g, dict) and not g.get("scanning"):
                 break
             time.sleep(0.5)
+        # read the ring NOW: it holds 16 KB, and the restore reboot below
+        # adds a whole boot's lines (2026-10-03: a boot grew by a few lines
+        # and the job's line had rolled out by the time it was read after
+        # the reboot)
+        time.sleep(1)
+        code, ring = api("/api/logs/ring")
+        text = ring if isinstance(ring, str) else json.dumps(ring)
+        hws = [int(m) for m in
+               __import__("re").findall(r"dtc job stack_hw=(\d+)", text)]
     else:
         print(f"  (dtc scan not started: {code})")
 
@@ -139,7 +149,7 @@ def exercise_deep_paths():
         # RING which survives warm resets (PSRAM ring)
 
     time.sleep(2)
-    return ran
+    return ran, hws
 
 
 def main():
@@ -189,11 +199,7 @@ def main():
           psram.get("min_free"))
 
     # ---- leg 2: the ephemeral dtc job task (reboot cycle + ring) ----
-    dtc_ran = exercise_deep_paths()
-    code, ring = api("/api/logs/ring")
-    text = ring if isinstance(ring, str) else json.dumps(ring)
-    hws = [int(m) for m in
-           __import__("re").findall(r"dtc job stack_hw=(\d+)", text)]
+    dtc_ran, hws = exercise_deep_paths()
     if dtc_ran:
         check("dtc job watermark logged", len(hws) >= 1,
               f"{len(hws)} log lines")
@@ -201,7 +207,7 @@ def main():
             check(f"dtc job headroom >= {JOB_FAIL_B} B",
                   min(hws) >= JOB_FAIL_B, f"min {min(hws)} B")
     else:
-        print("  (dtc job leg skipped — scan could not start)")
+        print("  (dtc job leg skipped: the scan could not start)")
 
     # ---- leg 4: no faults raised by the exercise ----
     code, f = api("/api/faults")

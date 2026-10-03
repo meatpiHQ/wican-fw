@@ -58,6 +58,7 @@
 #include "web_ui_v2.h"
 #include "imu_manager.h"
 #include "interface_manager.h"
+#include "j1939.h"
 #include "led_manager.h"
 #include "log_manager.h"
 #include "log_sinks.h"
@@ -173,6 +174,8 @@ void app_main(void)
     main_boot_init("log_sinks_init", log_sinks_init);
     main_boot_init("bridge_manager_init", bridge_manager_init);
     main_boot_init("can_manager_init", can_manager_init);
+    /* the J1939 listener reads the native bus: descriptors only here */
+    main_boot_init("j1939_init", j1939_init);
     /* optional add-on packs register their settings/jacks/providers
        here (no-op in stock builds — see ext_manager.h) */
     main_boot_init("ext_manager_init", ext_manager_init);
@@ -245,6 +248,7 @@ void app_main(void)
               j2534_server_register_http);
     main_boot_init("ble_manager_register_http", ble_manager_register_http);
     main_boot_init("can_manager_register_http", can_manager_register_http);
+    main_boot_init("j1939_register_http", j1939_register_http);
     main_boot_init("uds_manager_register_http", uds_manager_register_http);
     main_boot_init("script_engine_register_http", script_engine_register_http);
     /* CLI commands: each component registers its own INSIDE its settings
@@ -312,6 +316,9 @@ void app_main(void)
      * need the shared handle); pack endpoints are registered before
      * bridge_manager pulls them */
     main_boot_start("can_manager", can_manager_start);
+    /* subscribes to the bus that just came up (it never transmits); before
+       autopid, which reads its values */
+    main_boot_start("j1939", j1939_start);
     main_boot_start("ext_manager", ext_manager_start);
     main_boot_start("uds_manager", uds_manager_start);
     main_boot_start("script_engine", script_engine_start);
@@ -384,7 +391,9 @@ void app_main(void)
 
     dev_status_memory_t mem;
 
-    if (dev_status_manager_memory(&mem) == ESP_OK)
+    /* deep: the PSRAM heap is walked for its largest block, 3 to 4 ms with
+       interrupts off. Once, here; the watch below does not. */
+    if (dev_status_manager_memory_deep(&mem) == ESP_OK)
     {
         printf("WICAN MEM internal_free=%lu internal_largest=%lu "
                "psram_free=%lu psram_largest=%lu\n",
@@ -410,14 +419,14 @@ void app_main(void)
         if (dev_status_manager_memory(&mem) == ESP_OK)
         {
             ESP_LOGD(TAG, "mem: int %lu/%lu (largest %lu, min %lu) "
-                     "psram %lu/%lu (largest %lu)",
+                     "psram %lu/%lu (min %lu)",
                      (unsigned long)mem.internal.free,
                      (unsigned long)mem.internal.total,
                      (unsigned long)mem.internal.largest_block,
                      (unsigned long)mem.internal.min_free,
                      (unsigned long)mem.psram.free,
                      (unsigned long)mem.psram.total,
-                     (unsigned long)mem.psram.largest_block);
+                     (unsigned long)mem.psram.min_free);
         }
     }
 }

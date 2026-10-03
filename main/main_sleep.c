@@ -18,6 +18,7 @@
 #include "led_manager.h"
 #include "uds_manager.h"
 #include "external_storage.h"
+#include "j1939.h"
 #include "mdns_manager.h"
 #include "mqtt_manager.h"
 #include "sleep_manager.h"
@@ -32,6 +33,7 @@
 static void on_prepare_sleep(void)
 {
     (void)autopid_stop();
+    (void)j1939_stop(); /* gives its bus subscription back first */
     (void)uds_manager_stop();
     (void)ext_manager_stop();
     (void)can_manager_stop();

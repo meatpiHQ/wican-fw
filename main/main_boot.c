@@ -9,15 +9,19 @@
 #include "esp_intr_alloc.h"
 #include <stdio.h>
 
+#include "esp_attr.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 
 #include "ble_manager.h"
 #include "bridge_manager.h"
+#include "can_manager.h"
 #include "cmdline_manager.h"
 #include "dev_status_manager.h"
 #include "event_manager.h"
+#include "http_server_manager.h"
+#include "j1939.h"
 #include "log_manager.h"
 #include "settings_manager.h"
 
@@ -39,10 +43,12 @@ typedef struct
     uint32_t    ms;
 } ram_step_t;
 
-static ram_step_t s_ram_map[96]; /* 64 overflowed once register_http +
-                                    start steps grew — a full boot is
-                                    ~80 recorded steps now */
+/* 96 overflowed without a word: a boot is 131 steps since 2026-10-03, so
+   the last 32 start steps (obd_chip, ble, can, autopid ... http) were never
+   on the map. PSRAM: written by the boot task only, read once. */
+static ram_step_t s_ram_map[192] EXT_RAM_BSS_ATTR;
 static size_t s_ram_map_n;
+static size_t s_ram_map_lost;    /* steps that found the table full */
 
 static uint32_t internal_free_now(void)
 {
@@ -60,6 +66,10 @@ static void ram_map_record(const char *name, uint32_t before,
         s_ram_map[s_ram_map_n].ms =
             (uint32_t)((esp_timer_get_time() - t_start_us) / 1000);
         s_ram_map_n++;
+    }
+    else
+    {
+        s_ram_map_lost++;
     }
 }
 
@@ -81,6 +91,13 @@ void main_boot_ram_map_print(void)
             printf("WICAN BOOTTIME %s=%lu\n", s_ram_map[i].name,
                    (unsigned long)s_ram_map[i].ms);
         }
+    }
+
+    if (s_ram_map_lost > 0)
+    {
+        /* the map is a diagnostic: say so, do not latch a fault */
+        ESP_LOGW(TAG, "boot RAM map full: %u steps not recorded",
+                 (unsigned)s_ram_map_lost);
     }
 }
 
@@ -186,6 +203,14 @@ void main_boot_health_report(void)
 
     ble_manager_channel_capacity(&used, &cap);
     cap_check("ble_ch", used, cap);
+    can_manager_capacity(&used, &cap);
+    cap_check("can_subs", used, cap);
+    http_server_manager_capacity(&used, &cap);
+    cap_check("http_routes", used, cap);
+    j1939_capacity(&used, &cap);
+    cap_check("j1939_msgs", used, cap);
+    j1939_tp_capacity(&used, &cap);
+    cap_check("j1939_tp", used, cap);
 
     printf("WICAN FAULTS active=%d\n",
            dev_status_manager_faults(NULL, 0));

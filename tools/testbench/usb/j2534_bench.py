@@ -34,6 +34,7 @@ HDR = struct.Struct("<HBBHHI")  # magic, ver, type, seq, channel, length
 PROT_CAN, PROT_ISO15765, PROT_J1850VPW = 5, 6, 1
 NOERROR, ERR_NOT_SUPPORTED, ERR_DEVICE_NOT_CONNECTED = 0x00, 0x01, 0x08
 ERR_INVALID_MSG = 0x0A
+ERR_INVALID_BAUDRATE = 0x18
 MSG = struct.Struct("<IIIIII")  # protocol, rx_status, tx_flags, ts, extra, size
 
 fails = []
@@ -127,6 +128,14 @@ def main():
     st, _, _ = c.call(CONNECT,
                      payload=struct.pack("<III", PROT_J1850VPW, 0, 0))
     check("CONNECT unsupported → ERR_NOT_SUPPORTED", st == ERR_NOT_SUPPORTED)
+
+    # the bus has its bitrate (the device's CAN setting, or what it read off
+    # the wire): a tester that asks for another one is told so, not served at
+    # the wrong rate (2026-10-03). 123 kbit/s is no bus's.
+    st, _, _ = c.call(CONNECT,
+                     payload=struct.pack("<III", PROT_CAN, 0, 123000))
+    check("CONNECT at another bitrate → ERR_INVALID_BAUDRATE",
+          st == ERR_INVALID_BAUDRATE, hex(st))
 
     # WRITE_MSGS is wired (Phase 2): an empty write is handled, not a hang
     st, _, _ = c.call(WRITE_MSGS, channel=ch1, payload=struct.pack("<I", 0))

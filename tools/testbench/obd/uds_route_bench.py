@@ -10,6 +10,12 @@ Requests (against the bench ECU simulator on 7E0/7E8):
   3E 00  -> 7E 00              tester present
   10 02  -> 50 02 ..           session control
   22 F1 90 -> 62 F1 90 .. or 7F 22 xx   read DID (either is a valid answer)
+A positive 62 F1 90 must be the WHOLE answer: 20 bytes (3 + the 17-character
+VIN), a multi-frame message. Found 2026-10-02: the chip transport's
+response-count digit cut every multi-frame answer after its first frame and
+the route returned those 6 bytes as ok:true; this bench accepted them
+because it only looked at the SID. --vin-len sets the expected length (0 =
+do not check, for an ECU with another VIN DID size).
 
 Found 2026-09-16: over the MIC (backend obd_chip) with autopid polling the
 route flipped between ok, ESP_ERR_INVALID_RESPONSE and a 14 s timeout (1 of
@@ -19,7 +25,7 @@ can_manager/TASK_isotp_public.md fixes that; this is its regression.
 
 usage: uds_route_bench.py <base-url> [--n 20] [--expect-backend obd_chip|isotp]
                           [--max-median-ms 600] [--tx 7E0 --rx 7E8]
-                          [--req "22 01 01"]
+                          [--req "22 01 01"] [--vin-len 20]
   e.g. python tools/testbench/obd/uds_route_bench.py http://localhost:8081
        python tools/testbench/obd/uds_route_bench.py http://localhost:8081 --tx 7E4 --rx 7EC --req "22 01 01"
   --req repeats ONE request N times against --tx/--rx (use it when the
@@ -67,19 +73,24 @@ def main():
     tx, rx = opt("--tx", "7E0"), opt("--rx", "7E8")
     one = opt("--req")
     min_ok_pct = float(opt("--min-ok-pct", 90))
+    vin_len = int(opt("--vin-len", 20))
+    # (request, accepted answer SIDs, exact length of a POSITIVE answer or 0)
     if one:
         sid = int(one.split()[0], 16)
-        plan = [(one, (sid + 0x40, 0x7F))]
+        plan = [(one, (sid + 0x40, 0x7F), 0)]
     else:
-        plan = [("3E 00", (0x7E,)), ("10 02", (0x50,)), ("22 F1 90", (0x62, 0x7F))]
+        plan = [("3E 00", (0x7E,), 2), ("10 02", (0x50,), 0),
+                ("22 F1 90", (0x62, 0x7F), vin_len)]
     print("target %s -> %s, plan %s" % (tx, rx, [p[0] for p in plan]))
     # HARD gate: a request must NEVER come back ok:true with a payload that
     # is not its own answer (a stray from another requester returned as the
-    # answer = corrupt data). The transaction hold + SID check guarantee 0.
+    # answer = corrupt data), nor with a PART of its answer (a multi-frame
+    # message cut short). The transaction hold + SID check + the announced
+    # ISO-TP length guarantee 0.
     corrupt = []
     fails, times, backends = [], [], set()
     for i in range(n):
-        data, ok_sids = plan[i % len(plan)]
+        data, ok_sids, want_len = plan[i % len(plan)]
         t0 = time.time()
         st, body = http(base, "POST", "/api/uds/request",
                         {"tx_id": tx, "rx_id": rx, "data": data})
@@ -95,6 +106,12 @@ def main():
         good = ok and sid in ok_sids
         if ok and not good:
             corrupt.append("#%d %s -> ok but %s (SID not ours)" % (i + 1, data, resp))
+        nbytes = len(resp.split())
+        if good and want_len and sid != 0x7F and \
+                (nbytes != want_len or d.get("length") != want_len):
+            good = False
+            corrupt.append("#%d %s -> ok but %d of %d bytes (%s)" % (
+                i + 1, data, nbytes, want_len, resp))
         if good:
             times.append(d.get("elapsed_ms", wall))
         else:

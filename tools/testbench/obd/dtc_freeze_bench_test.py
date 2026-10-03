@@ -71,6 +71,18 @@ def sim_api(path, method="GET", body=None):
         return json.loads(t) if t.strip().startswith("{") else t
 
 
+def sim_rpm():
+    """The simulator's engine speed (mode 01 PID 0C); None when it does
+    not list one."""
+    doc = sim_api("/api/ecu/pids")
+    for p in doc.get("standard", []) if isinstance(doc, dict) else []:
+        if p.get("mode") == "01" and str(p.get("pid", "")).upper() in ("C", "0C"):
+            for x in p.get("params", []):
+                if x.get("name") == "rpm":
+                    return x.get("value")
+    return None
+
+
 def sim_set_dtcs(stored, mil=True):
     sim_api("/api/ecu/dtcs", "POST",
             {"mil_on": mil,
@@ -135,6 +147,7 @@ def main():
 
     # ---- configure: OBD protocol, freeze ON (the default — set
     # explicitly so the leg is self-describing) ----
+    rpm_before = sim_rpm()
     sim_set_dtcs(["P0301"], mil=True)
     sim_api("/api/ecu/pids/01/0C", "POST", {"rpm": 3000})
     cfg = dict(ap_before)
@@ -206,6 +219,12 @@ def main():
     # ---- leg 4: restore ----
     print("leg 4/4: restore original config…", flush=True)
     sim_api("/api/ecu/dtcs", "DELETE")
+    # the engine speed too: the next bench reads 800 rpm from this simulator
+    # (2026-10-03: the matrix bench failed on 3000 right after this one)
+    if rpm_before is not None:
+        sim_api("/api/ecu/pids/01/0C", "POST", {"rpm": rpm_before})
+        check("simulator engine speed restored", sim_rpm() == rpm_before,
+              f"{sim_rpm()} (was {rpm_before})")
     api(ip, "/api/settings/autopid", "PUT", ap_before)
     print("restoring; rebooting…")
     ip = submit_and_wait(ip)

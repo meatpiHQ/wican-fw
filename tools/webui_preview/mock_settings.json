@@ -13,7 +13,7 @@
    "dtc_permanent": false,
    "dtc_freeze": true,
    "dtc_uds_ext": false,
-   "std_protocol": "6",
+   "std_protocol": "0",
    "pause_mode": "requests_only",
    "dtc_protocol": "obd",
    "pause_below_mv": 0,
@@ -380,6 +380,7 @@
     "baud": {
      "type": "string",
      "enum": [
+      "auto",
       "33",
       "83",
       "95",
@@ -880,6 +881,36 @@
    "properties": {
     "cli": {
      "type": "boolean"
+    }
+   }
+  }
+ },
+ "j1939": {
+  "values": {
+   "enabled": false,
+   "cli": true,
+   "mode": "listen",
+   "address": 249
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "mode": {
+     "type": "string",
+     "enum": [
+      "listen",
+      "active"
+     ]
+    },
+    "address": {
+     "type": "integer",
+     "minimum": 128,
+     "maximum": 253
     }
    }
   }

@@ -153,6 +153,11 @@ CONFIG_TWAI_ISR_IN_IRAM_LEGACY=y
 # 2026-07-21): the node ISR + our on_rx_done/on_state_change callbacks
 # must stay cache-safe or flash ops eat frames again.
 CONFIG_TWAI_ISR_CACHE_SAFE=y
+# The transmit entry in IRAM too (2026-10-03, TASK_j1939_wwh.md phase 6):
+# can_core's tx_done callback re-queues a frame the single-shot controller
+# lost (twai_node_transmit from the interrupt); without this the call
+# lands in flash and a lost frame during a flash write is a cache panic.
+CONFIG_TWAI_IO_FUNC_IN_IRAM=y
 
 # Flash-op counters (2026-07-19): the wear/abuse tripwire — dev_status
 # exposes them, the boot report prints them, the bench asserts budgets

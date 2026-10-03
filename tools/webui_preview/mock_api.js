@@ -19,6 +19,8 @@
     { name: "abrp", type: "abrp", enabled: false, url: "", period_s: 10, auth: "api_key_query", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "", cert_set: "", car_model: "hyundai:ioniq5:22:77", retain: true, full_first: true },
   ] });
   ov("autopid", { enabled: true, vehicle: "Corolla 2021" });
+  if ((window.__mockPreset || {}).j1939Active === true) ov("j1939", { enabled: true, mode: "active" });
+  else if ((window.__mockPreset || {}).j1939Listening === true) ov("j1939", { enabled: true });
   ov("data_logger", { enabled: false });
   ov("vpn_manager", { enabled: true, type: "wireguard", address: "10.66.0.2", endpoint: "vpn.example.com", port: 51820 });
   ov("usb_host_manager", { enabled: true, role: "host" });
@@ -47,6 +49,15 @@
     vehicles: (window.__mockPreset || {}).vehicles || { current: "", vehicles: [] },
     /* the battery the wizard's Battery and sleep step watches: a probe moves it (14.3 = charging, 12.8 = resting) */
     batteryV: typeof (window.__mockPreset || {}).batteryV === "number" ? window.__mockPreset.batteryV : 12.52,
+    /* the CAN link and autopid's bus guard (2026-10-03): null = a healthy 500k bus, nothing parked */
+    canLink: (window.__mockPreset || {}).can || null,
+    busGuard: (window.__mockPreset || {}).busGuard || null,
+    /* trouble codes (2026-10-03): null = DTC off, no scan yet; "obd" = an
+       OBD-II car with codes; "wwh" = an ISO 27145 vehicle, two ECUs */
+    dtc: (window.__mockPreset || {}).dtc || null,
+    dtcReport: null,                  /* set by a clear */
+    /* the car a detection finds: "wwh" = an ISO 27145 van on 29-bit ids */
+    detect: (window.__mockPreset || {}).detect || "obd2",
     /* the UDS Tool's live path + exclusive switch (GET/POST /api/uds) */
     uds: { backend_setting: "auto", backend_active: "isotp", provider: "esp_isotp", can_running: true,
            exclusive: true, exclusive_default: true, holding: false, autopid_paused: false, session_active: false,
@@ -57,7 +68,7 @@
     dirs: new Set(),            /* folders created through /api/fs/mkdir */
     loggerRunning: false,       /* true -> /api/logger reports the active file (write-locked) */
     sdMounted: true,            /* false -> /api/status says no card, /sd listings fail */
-    autopidCfg: {
+    autopidCfg: (window.__mockPreset || {}).autopidCfg || {
       version: 1,
       groups: [{ name: "default", enabled_default: true, period_ms: 1000 }],
       pids: [
@@ -86,6 +97,97 @@
     parameters: [{ name: name.replaceAll(" ", "_"), expression: expr, unit, class: "" }],
   }));
 
+  /* an ISO 27145 vehicle's scan rows: service 22, the data one byte
+     further in, each row addressed to the ECU that owns the value */
+  const WWH_ROWS = [
+    ["22F404", "CalcEngineLoad", "B3*0.3921568692", "%", "ATSH18DA00F1"],
+    ["22F405", "EngineCoolantTemp", "B3-40", "degC", "ATSH18DA00F1"],
+    ["22F40C", "EngineRPM", "[B3:B4]*0.25", "rpm", "ATSH18DA00F1"],
+    ["22F40D", "VehicleSpeed", "B3", "km/h", "ATSH18DA00F1"],
+    ["22F43C", "CatTempBank1Sens1", "[B3:B4]*0.1-40", "degC", "ATSH18DA3DF1"],
+  ].map(([cmd, name, expr, unit, init]) => ({
+    pid: parseInt(cmd.slice(4), 16), cmd, name, init,
+    parameters: [{ name, expression: expr, unit, class: "" }],
+  }));
+  const WWH_VIN = "1WCANWWH0TRUCK001";
+  /* a J1939 truck's rows (TASK_j1939_wwh.md phase 5): one row per SPN of the
+     built-in table, PGN:<hex> commands, little-endian expressions */
+  const J1939_ROWS = [
+    ["F004", 190, "EngineSpeed", "(B3+B4*256)*0.125", "rpm", "none", 0, 8031.875],
+    ["F004", 513, "ActualEnginePercentTorque", "B2-125", "%", "none", -125, 125],
+    ["F003", 91, "AccelPedalPosition1", "B1*0.4", "%", "none", 0, 100],
+    ["FEF1", 84, "WheelBasedVehicleSpeed", "(B1+B2*256)*0.00390625", "km/h", "speed", 0, 250.99609375],
+    ["FEEE", 110, "EngineCoolantTemperature", "B0-40", "degC", "temperature", -40, 210],
+    ["FEEF", 100, "EngineOilPressure", "B3*4", "kPa", "pressure", 0, 1000],
+    ["FEE5", 247, "EngineTotalHours", "(B0+B1*256+B2*65536+B3*16777216)*0.05", "hours", "duration", 0, 210554060.75],
+  ].map(([pgn, spn, name, expression, unit, cls, min, max]) => ({
+    pgn, spn, cmd: "PGN:" + pgn, name, parameters: [{ name, expression, unit, class: cls, min, max }],
+  }));
+  const J1939_VIN = "1WCANJ1939TRUCK01";
+  const j1939Listening = () => (window.__mockPreset || {}).j1939Listening === true;
+  /* phase 6: `mode active`, the address claimed (the listener is up then) */
+  const j1939Active = () => (window.__mockPreset || {}).j1939Active === true;
+  const scanRows = () => (state.detect === "wwh" ? WWH_ROWS : state.detect === "j1939" ? J1939_ROWS : STD_ROWS);
+  const scanCar = () => (state.detect === "wwh"
+    ? { key: WWH_VIN, protocol: "7", dialect: "uds", fingerprint: "2429aa55", ecus: "18DAF13D:80000001,18DAF100:981B8003", j1939: false }
+    : state.detect === "j1939"
+    /* a J1939-only truck: no chip protocol; the VIN comes from the listener (BAM), the
+       sample path without it knows the controllers alone */
+    ? { key: j1939Listening() ? J1939_VIN : "fp:9be17165", vin: j1939Listening() ? J1939_VIN : "", protocol: "", dialect: "j1939", fingerprint: "9be17165", ecus: "0:0,B:0", j1939: true }
+    : { key: "1WCAN0FW0P0000001", protocol: "6", dialect: "obd2", fingerprint: "9a3f17c2", ecus: "7E8:183F8003", j1939: false });
+
+  /* GET /api/autopid/dtc, the shape of 2026-10-03: `path`, and a report
+     with `sources` (the lamp per ECU) and `items` (who reported what) */
+  const DTC_EMPTY = { valid: false, ts: 0, mil: false, mil_count: 0, ecus: 0, protocol: "obd",
+                      stored: [], pending: [], permanent: [], new: [], sources: [], items: [] };
+  const DTC_REPORTS = {
+    obd: { valid: true, ts: 1790960000, mil: true, mil_count: 2, ecus: 1, protocol: "obd",
+           stored: ["P0300", "P0420"], pending: ["P0171"], permanent: [], new: [],
+           sources: [{ ecu: "7E8", mil: true, count: 2 }],
+           items: [{ code: "P0300", kind: "stored", ecu: "7E8" }, { code: "P0420", kind: "stored", ecu: "7E8" },
+                   { code: "P0171", kind: "pending", ecu: "7E8" }],
+           desc: { P0300: "Random/Multiple Cylinder Misfire Detected", P0420: "Catalyst System Efficiency Below Threshold" } },
+    wwh: { valid: true, ts: 1790960000, mil: true, mil_count: 2, ecus: 2, protocol: "wwh",
+           stored: ["P0420", "P20EE"], pending: ["P2463-1F"], permanent: ["P0420"], new: [],
+           sources: [{ ecu: "18DAF100", mil: true, count: 1 }, { ecu: "18DAF13D", mil: true, count: 1 }],
+           items: [{ code: "P0420", kind: "stored", ecu: "18DAF100", status: 8, severity: 2 },
+                   { code: "P20EE", kind: "stored", ecu: "18DAF13D", status: 12, severity: 2 },
+                   { code: "P2463-1F", kind: "pending", ecu: "18DAF100", status: 4, severity: 4 },
+                   { code: "P0420", kind: "permanent", ecu: "18DAF100", status: 8 }],
+           desc: { P0420: "Catalyst System Efficiency Below Threshold" } },
+    /* a J1939 truck (phase 5): the DM1 of two controllers, heard, not asked */
+    j1939: { valid: true, ts: 1790960000, mil: true, mil_count: 3, ecus: 2, protocol: "j1939", j1939: true,
+             lamps: { mil: true, rsl: false, awl: true, pl: false },
+             stored: ["SPN110-0", "SPN3226-4", "SPN520192-31"], pending: [], permanent: [], new: [],
+             sources: [{ sa: 0, lamps: { mil: true, rsl: false, awl: true, pl: false }, mil: true, count: 2 },
+                       { sa: 11, lamps: { mil: false, rsl: false, awl: false, pl: false }, mil: false, count: 1 }],
+             items: [{ code: "SPN110-0", kind: "stored", sa: 0, oc: 5 }, { code: "SPN3226-4", kind: "stored", sa: 0, oc: 1 },
+                     { code: "SPN520192-31", kind: "stored", sa: 11 }],
+             desc: {} },
+  };
+  /* phase 6, active mode: the previously active codes (DM2, asked for at the
+     scan) join the report as pending items */
+  const j1939ActiveReport = () => Object.assign(JSON.parse(JSON.stringify(DTC_REPORTS.j1939)), {
+    pending: ["SPN100-1"],
+    items: DTC_REPORTS.j1939.items.concat([{ code: "SPN100-1", kind: "pending", sa: 0, oc: 2 }]) });
+  const dtcDoc = () => ({ enabled: !!state.dtc, allow_clear: !!state.dtc, scanning: false,
+                          path: state.dtc === "wwh" ? "wwh" : state.dtc === "j1939" ? "j1939" : "obd",
+                          report: state.dtcReport || (state.dtc === "j1939" && j1939Active() ? j1939ActiveReport()
+                                                      : state.dtc ? DTC_REPORTS[state.dtc] : DTC_EMPTY) });
+  /* GET /api/j1939: the listener (phase 4), off on a new device; `mode`,
+     `claim` and `tx` since active mode (phase 6) */
+  const j1939Claim = () => (j1939Active()
+    ? { state: "claimed", address: 249, preferred: 249, tx_ready: true, name: "3C651A0000810080", claims_sent: 1, contests: 0, won: 0, lost: 0, held: 0, requests_answered: 0, cannot: 0 }
+    : { state: "idle", address: 254, preferred: 249, tx_ready: j1939Listening(), name: "3C651A0000810080", claims_sent: 0, contests: 0, won: 0, lost: 0, held: 0, requests_answered: 0, cannot: 0 });
+  const j1939Tx = () => ({ frames: j1939Active() ? 7 : 0, failed: 0, requests: j1939Active() ? 4 : 0, acks: 0, nacks: 0, nacks_sent: 0, tp_to_me: j1939Active() ? 1 : 0, tp_cts: j1939Active() ? 1 : 0, tp_eoma: j1939Active() ? 1 : 0, tp_aborts: 0, tp_reply_lost: 0 });
+  const j1939Doc = () => (j1939Listening() || j1939Active()
+    ? { enabled: true, state: "listening", bus: "j1939", mode: j1939Active() ? "active" : "listen", claim: j1939Claim(), tx: j1939Tx(), vin: J1939_VIN, can: { running: true, baud_kbps: 250, link: "verified", listen_only: !j1939Active() },
+        stats: { rx_frames: 3545, rx_data: 3473, rx_tp_cm: 16, rx_tp_dt: 48, rx_diag: 0, rx_foreign: 0, queue_drops: 0, messages: 3489, not_kept: 0, evicted: 0, long_evicted: 0, entries: 19, entries_max: 384, sources: 2, tp_open: 0, tp_max: 8 },
+        tp: { started: 16, completed: 16, seq_errors: 0, timeouts: 0, aborted: 0, replaced: 0, open: 0, no_session: 0, orphan_dt: 0, bad_cm: 0 } }
+    : { enabled: false, state: "off", bus: "unknown", mode: "listen", claim: j1939Claim(), tx: j1939Tx(), vin: null, can: { running: false, baud_kbps: 500, link: "stopped", listen_only: true },
+        stats: { rx_frames: 0, rx_data: 0, rx_tp_cm: 0, rx_tp_dt: 0, rx_diag: 0, rx_foreign: 0, queue_drops: 0, messages: 0, not_kept: 0, evicted: 0, long_evicted: 0, entries: 0, entries_max: 384, sources: 0, tp_open: 0, tp_max: 8 },
+        tp: { started: 0, completed: 0, seq_errors: 0, timeouts: 0, aborted: 0, replaced: 0, open: 0, no_session: 0, orphan_dt: 0, bad_cm: 0 } });
+
   const J = (o, status = 200) => ({
     ok: status < 300, status,
     headers: { get: (k) => (k.toLowerCase() === "content-type" ? "application/json" : null) },
@@ -106,7 +208,7 @@
       bits: { awake: true, sleep: false, sta_connected: state.staConnected !== false, mqtt_connected: state.mqttConnected !== false, ble_connected: false, sdcard_mounted: state.sdMounted !== false, ble_enabled: false, sta_enabled: true, ap_enabled: true, autopid_enabled: true, home_mode: false, drive_mode: false, smartconnect: false, sta_ap_overlap: false, time_synced: true, vpn_enabled: true, wake_voltage_ok: true, eth_connected: false, autopid_idle: false, motion: false, sta_suspended: false, ap_suspended: false, ble_suspended: false },
       network_connected: true, uptime: "02:14:09", version: "v6.0.0-preview", partition: "ota_0",
       boot_count: 42, unexpected_resets: 1, device_id: "14c19f44e349",
-      memory: { internal: { total: 274580, free: 71103, min_free: 63587, largest_block: 45056 }, psram: { total: 8272000, free: 7734508, min_free: 7524288, largest_block: 7274496 } },
+      memory: { internal: { total: 274580, free: 71103, min_free: 63587, largest_block: 45056 }, psram: { total: 8272000, free: 7734508, min_free: 7524288 } }, /* no largest_block for PSRAM in the polled status (2026-10-03) */
       temp_c: 38.4,
       health: { log_errors: 0, log_warnings: 7,
         flash: { writes: 0, write_bytes: 0, erases: 0, erase_bytes: 0 },
@@ -149,7 +251,11 @@
     "/api/gps": () => J({ valid: true, latitude: -37.905350, longitude: 145.145047, accuracy: 6, altitude: 88.8, speed: 1.0, heading: 270.5, satellites: 7, age_ms: 1200 }),
     "/api/battery": () => J({ voltage: state.batteryV }),
     /* the native CAN bus (state.canEnabled=false: a fresh device, bus off) */
-    "/api/can": () => J({ enabled: state.canEnabled !== false, running: state.canEnabled !== false, silent: false, baud_kbps: 500, state: state.canEnabled === false ? "stopped" : "running", tx: 1543, rx: 89231, tx_errors: 0, rx_errors: 0, arb_lost: 0, bus_errors: state.busErrors || 0, rx_missed: 0, dispatch_drops: 0, bus_off: 0, recoveries: 0 }),
+    /* 2026-10-03: the node listens before it talks; state.canLink (a probe's
+       window.__mockPreset.can, or set later) overrides the link fields */
+    "/api/can": () => J({ enabled: state.canEnabled !== false, running: state.canEnabled !== false, silent: false, baud_auto: false, baud_kbps: 500, baud_detected: 500, state: state.canEnabled === false ? "stopped" : "running", listen_only: state.canEnabled === false, verified: state.canEnabled !== false, tx: 1543, rx: 89231, tx_errors: 0, rx_errors: 0, arb_lost: 0, bus_errors: state.busErrors || 0, rx_missed: 0, dispatch_drops: 0, rx_bad: 0, rx_deaf: 0, tx_refused: 0, link_switches: 0, link_demotions: 0, bus_off: 0, recoveries: 0,
+      err: { stuff: 0, form: 0, bit: 0, ack: 0, other: 0 }, probe: { result: "none", baud_kbps: 0, frames: 0, age_ms: 0 },
+      subscribers: [{ idx: 0, name: "bridge", drops: 0 }, { idx: 1, name: "logger", drops: 0 }], subscribers_max: 16, ...(state.canLink || {}) }),
     "/api/bridges": () => J({ bridges: ((S.bridge_manager && S.bridge_manager.values.bridges) || []).map((b) => ({ ...b, up: b.enabled !== false, stats: { a2b_chunks: 0, b2a_chunks: 0, a2b_bytes: 0, b2a_bytes: 0, send_errors: 0, codec_errors: 0 } })) }),
     "/api/ws": () => J({ channels: ((S.websocket_manager && S.websocket_manager.values.channels) || []).map((c) => ({ ...c, up: c.enabled !== false, stats: { clients: 0, frames_in: 0, frames_out: 0, bytes_in: 0, bytes_out: 0, rx_drops: 0, tx_drops: 0, refused: 0 } })) }),
     "/api/autopid": () => { state.polls += state.groupOn ? 4 : 0; const nowUs = Date.now() * 1000; return J({
@@ -159,8 +265,13 @@
         unit: { RPM: "rpm", Speed: "km/h", Coolant: "°C", SOC_BMS: "%" }[name] || "",
         ts_us: nowUs - (name === "SOC_BMS" ? 45e6 : 800e3),   /* SOC_BMS deliberately stale */
       })).concat([{ name: "gps_speed", unit: "km/h", value: 61.6, ts_us: nowUs - 1.2e6, external: true }]),
-      stats: { running: state.groupOn, paused_voltage: false, polls_ok: state.polls, polls_failed: 2, pids: 4, filters: 1,
+      stats: { running: state.groupOn && !state.busGuard, paused_voltage: false, paused_bus: !!state.busGuard, paused_diag: false, polls_ok: state.polls, polls_failed: 2, pids: 4, filters: 1,
+        passive_ok: 0, passive_failed: 0, passive_published: 0, passive_requested: 0, passive_refused: 0, j1939_listening: j1939Listening() || j1939Active(), j1939_active: j1939Active(),
         period_floor_ms: 50, sub_floor_pids: 0, now_us: nowUs },
+      /* the bus guard (2026-10-03): state.busGuard = a parked poller's reason */
+      bus_guard: state.busGuard
+        ? { bus: "live", bus_kbps: 250, verdict: "park", parked: true, reason: state.busGuard }
+        : { bus: "silent", bus_kbps: 0, verdict: "allow", parked: false, reason: "vehicle bus silent" },
     }); },
     /* the registry as the firmware serves it (2026-09-17): keys per event, params_schema + undoable per action, value prefixes */
     "/api/events/sources": () => J([
@@ -190,7 +301,7 @@
     ]),
     "/api/events/values": () => J(["autopid.data", "autopid.", "battery.voltage", "time.iso", "time.epoch", "wifi.ssid", "wifi.connected"]),
     "/api/events/rules": () => J(((S.event_manager && S.event_manager.values.rules) || []).map((r, i) => ({ name: r.name, enabled: r.enabled !== false, undo: !!r.undo, active: false, fired: i === 0 ? 3 : 0, last_fired_age_s: i === 0 ? 120 : -1 }))),
-    "/api/autopid/dtc": () => J({ enabled: false, codes: [], last_scan: null }),
+    "/api/autopid/dtc": () => J(dtcDoc()),
     "/api/autopid/dtc/db": () => J({ dbs: [] }),
     /* DBC files + signals for the CAN Monitor's decode panel (state.dbcs / state.dbcSignals) */
     "/api/autopid/dbc": () => J({ dbcs: state.dbcs || [], max: 4 }),
@@ -282,10 +393,15 @@
       return J({ path: p, entries: [...fixed, ...extra] });
     },
     "/api/autopid/std_scan": () => J(state.scan),
+    "/api/j1939": () => J(j1939Doc()),
     "/api/autopid/std_scan/result": () => (state.scan.status === "done"
-      ? J({ version: 1, protocol: "6", protocol_detected: "6", vin: "1WCAN0FW0P0000001", fingerprint: "9a3f17c2", supported: STD_ROWS, found: STD_ROWS.length, ts: now(),
-            key: "1WCAN0FW0P0000001", known: !!(state.vehicles.vehicles.find((v) => v.key === "1WCAN0FW0P0000001") || {}).profile,
-            name: (state.vehicles.vehicles.find((v) => v.key === "1WCAN0FW0P0000001") || {}).name || "" })
+      ? J({ version: 1, protocol: "0", protocol_detected: scanCar().protocol, dialect: scanCar().dialect, vin: scanCar().vin !== undefined ? scanCar().vin : scanCar().key,
+            fingerprint: scanCar().fingerprint, supported: scanRows(), found: scanRows().length, ts: now(),
+            ...(state.detect === "wwh" ? { uds_protocol_id: 1 } : {}),
+            /* the network step (phase 5): on every detection since 2026-10-03 */
+            j1939: !!scanCar().j1939, j1939_listening: j1939Listening(), bus_kbps: state.detect === "j1939" ? 250 : 500,
+            key: scanCar().key, known: !!(state.vehicles.vehicles.find((v) => v.key === scanCar().key) || {}).profile,
+            name: (state.vehicles.vehicles.find((v) => v.key === scanCar().key) || {}).name || "" })
       : J({ error: "no scan stored" }, 404)),
     /* the vehicle store (autopid second pass, 2026-10-01) */
     "/api/autopid/vehicles": () => J({ current: state.vehicles.current, max: 8,
@@ -340,15 +456,17 @@
       state.scan = { status: "running", phase: "protocol", found: 0 };
       setTimeout(() => { state.scan = { status: "running", phase: "vin", found: 0 }; }, 800);
       setTimeout(() => { state.scan = { status: "running", phase: "pids", found: 0 }; }, 1600);
+      setTimeout(() => { state.scan = { status: "running", phase: "network", found: 0 }; }, 2100);
       setTimeout(() => {
-        state.scan = { status: "done", phase: "idle", found: STD_ROWS.length, ts: now(), stored: true };
-        const key = "1WCAN0FW0P0000001";
+        state.scan = { status: "done", phase: "idle", found: scanRows().length, ts: now(), stored: true };
+        const car = scanCar(), key = car.key;
         let e = state.vehicles.vehicles.find((v) => v.key === key);
         if (!e) {
-          e = { key, vin: key, fingerprint: "9a3f17c2", name: "", protocol: "6", chip_protocol: "6", profile: "", specific_init: "",
-                std_supported: STD_ROWS.length, pending_profile: true, first_seen: now(), last_seen: now(), scan_ts: now() };
+          e = { key, vin: car.vin !== undefined ? car.vin : key, fingerprint: car.fingerprint, name: "", protocol: car.protocol, chip_protocol: car.protocol,
+                dialect: car.dialect, j1939: !!car.j1939, ecus: car.ecus, profile: "", specific_init: "",
+                std_supported: scanRows().length, pending_profile: true, first_seen: now(), last_seen: now(), scan_ts: now() };
           state.vehicles.vehicles.push(e);
-        } else { e.last_seen = now(); e.scan_ts = now(); e.std_supported = STD_ROWS.length; }
+        } else { e.last_seen = now(); e.scan_ts = now(); e.std_supported = scanRows().length; }
         state.vehicles.current = key;
       }, 2500);
       return J({ started: true }, 202);
@@ -435,7 +553,16 @@
     if (method === "POST" && path === "/api/restart") { Object.values(S).forEach((x) => { x.pending = false; }); return J({ ok: true }); }
     if (method === "POST" && path === "/api/faults/clear") { S.__faults = []; return J({ cleared: true }); }
     if (method === "POST" && path === "/api/vpn/keygen") return J({ public_key: "MockPubKey000000000000000000000000000000000=" });
-    if (method === "POST" && path === "/api/autopid/dtc/scan") return J({ ok: true });
+    if (method === "POST" && path === "/api/autopid/dtc/scan") return J({ started: true }, 202);
+    if (method === "POST" && path === "/api/autopid/dtc/clear") {
+      /* everything goes but the permanent codes; the lamps go out */
+      const r = dtcDoc().report, before = r.stored.length;
+      state.dtcReport = { ...r, mil: false, mil_count: 0, stored: [], pending: [], new: [],
+                          sources: r.sources.map((s) => ({ ...s, mil: false, count: 0 })),
+                          items: r.items.filter((it) => it.kind === "permanent") };
+      state.lastDtcClear = body;
+      return J({ ok: true, cleared: true, before, after: 0 });
+    }
     if (method === "POST" && path === "/api/destinations/test") {
       const d = (S.data_destinations.values.destinations || []).find((x) => x.name === (body && body.name));
       if (!d) return J({ error: "unknown destination" }, 404);
@@ -528,6 +655,7 @@
     }
   };
   window.__mockState = state;   /* probes read counters (gate calls) and set the active log file */
+  window.__mockSettings = S;    /* probes read what a page staged / PUT (values per component) */
   window.fetch = (url, opts) => {
     const u = String(url);
     const path = u.startsWith("http") ? new URL(u).pathname + (new URL(u).search || "") : u;

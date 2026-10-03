@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'wwh', 'eutruck', 'j1939', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [string]$Port = 'COM10',  # UART0 external USB-serial = console/flash
@@ -746,6 +746,10 @@ function Show-Inventory {
     Write-Host '  blecanraw  - binary CAN records over BLE (can <-raw-> ble bridge): live bus, answered requests, 29-bit'
     Write-Host '  blephy     - BLE 5 settings: 1M vs 2M PHY throughput/RTT, legacy + extended advertising sets'
     Write-Host '  blethru    - BLE throughput with the ECU simulator as the central (notify/write/read/tunnel vs the esp-idf reference)'
+    Write-Host '  autobaud   - CAN listen-before-talk, auto bit rate and the autopid bus guard: PCAN keeps the bus alive and counts error frames (~8 min)'
+    Write-Host '  wwh        - OBD over UDS (ISO 27145 / SAE J1979-2): a PCAN vehicle is detected, polled, its codes read and cleared; the car switch both ways (~10 min)'
+    Write-Host '  eutruck    - end to end on an EU truck: the PCAN adapter plays WWH-OBD ECUs and a J1939 network at once; from an OBD-II car through the wizard path (detection, the one restart, values of both sets at the API and the broker, one DTC report with 19 42 and DM1 codes, the legislated clear) and back to the car (~6 min)'
+    Write-Host '  j1939      - the J1939 listener on native CAN: a PCAN truck is read value for value (BAM, DM1, 250k and 500k), the DUT never transmits; then exactly-N conservation up to line rate; then AutoPID on the truck (detection, PGN rows, broker, an ELM app beside them, DM1 in the DTC report); then active mode (address claim and contention, requests incl. RTS/CTS as destination, NACKs, a bus flood, ? rows, DM2 and the clear, a diagnostics hold, listen mode) (~30 min)'
     Write-Host '  all    - host + every target app + hil'
     Write-Host ''
     Write-Host 'Every kind starts with a BENCH PREFLIGHT (skip: -SkipBenchCheck): COM'
@@ -962,6 +966,133 @@ try {
                 $out = & 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe' -u "$repo\tools\testbench\wifi\wifi_conservation_test.py" 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 Save-StageLog 'wifi_conservation' $out
                 if (-not ($out | Select-String -Quiet 'WIFI CONSERVATION PASS')) { throw 'no WIFI CONSERVATION PASS (iperf on the Pi?)' }
+            }
+        }
+        'autobaud' {
+            # CAN listen-before-talk + the autopid bus guard
+            # (TASK_j1939_wwh.md phase 2, ~20 min, 17 DUT restarts). Runs on
+            # the PC: the PCAN adapter on the DUT's bus is the judge, the ECU
+            # simulator (USB-NCM, 192.168.8.1) is the ACK source. The bench
+            # polls the DUT's HTTP several times a second, so it gets a
+            # tunnel of its own through the Pi instead of ssh + curl.
+            Invoke-Stage 'CAN auto-baud + bus guard' {
+                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\can\can_autobaud_bench.py" 'localhost:18081' 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'can_autobaud' $out
+                    if (-not ($out | Select-String -Quiet 'CAN AUTOBAUD PASS')) { throw 'no CAN AUTOBAUD PASS (PCAN wired? simulator on 192.168.8.1?)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                }
+            }
+        }
+        'eutruck' {
+            # End to end on an EU truck (TASK_j1939_wwh.md phase 7, ~6 min,
+            # 3 DUT restarts): the PCAN adapter plays WWH-OBD ECUs AND a J1939
+            # network in one process (actors/pcan_wwh_ecu.py --truck), the
+            # DUT walks the wizard's path from an OBD-II car to the truck and
+            # back; the ECU simulator is the ACK source and the car.
+            Invoke-Stage 'EU truck end to end' {
+                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $logdir = Join-Path $repo 'test-reports\logs'
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\obd\eu_truck_e2e_bench.py" 'localhost:18081' '--logdir' $logdir 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'eu_truck_e2e' $out
+                    if (-not ($out | Select-String -Quiet '^EU TRUCK E2E PASS')) { throw 'no EU TRUCK E2E PASS (PCAN wired? simulator on 192.168.8.1?)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                }
+            }
+        }
+        'wwh' {
+            # OBD over UDS as an autopid dialect (TASK_j1939_wwh.md phase 3,
+            # ~10 min, about 14 DUT restarts). Runs on the PC: the PCAN
+            # adapter is the vehicle (actors/pcan_wwh_ecu.py) and its log is
+            # the wire's side of every check; the ECU simulator (USB-NCM,
+            # 192.168.8.1) is the ACK source and the OBD-II car of the last
+            # leg. The actor's logs land beside the stage log.
+            Invoke-Stage 'WWH-OBD (ISO 27145 / J1979-2)' {
+                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $logdir = Join-Path $repo 'test-reports\logs'
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\obd\wwh_obd_bench.py" 'localhost:18081' '--logdir' $logdir 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'wwh_obd' $out
+                    if (-not ($out | Select-String -Quiet 'WWH OBD PASS')) { throw 'no WWH OBD PASS (PCAN wired? simulator on 192.168.8.1?)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                }
+            }
+        }
+        'j1939' {
+            # The J1939 listener on the native CAN bus (TASK_j1939_wwh.md
+            # phase 4) and AutoPID on a J1939 vehicle (phase 5). Runs on the
+            # PC: the PCAN adapter is the truck (actors/pcan_j1939_truck.py),
+            # the ECU simulator (USB-NCM, 192.168.8.1) only acknowledges.
+            # Three stages: the listener bench (~3 min, 4 DUT restarts),
+            # counter conservation at 250k and 500k up to line rate (~9 min,
+            # 3 restarts), then AutoPID on the truck (~10 min, 7 restarts;
+            # the obd0 ELM bridge is tunnelled too for its app leg).
+            $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+            $logdir = Join-Path $repo 'test-reports\logs'
+            Invoke-Stage 'J1939 listener' {
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\can\j1939_bench.py" 'localhost:18081' '--logdir' $logdir 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'j1939_listener' $out
+                    if (-not ($out | Select-String -Quiet '^J1939 PASS')) { throw 'no J1939 PASS (PCAN wired? simulator on 192.168.8.1?)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                }
+            }
+            Invoke-Stage 'J1939 conservation' {
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\can\j1939_conservation_test.py" 'localhost:18081' 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'j1939_conservation' $out
+                    if (-not ($out | Select-String -Quiet '^J1939 CONSERVATION PASS')) { throw 'no J1939 CONSERVATION PASS' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                }
+            }
+            Invoke-Stage 'AutoPID J1939' {
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", '-L', "18082:${DutIp}:35000", $BenchHost)
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (ports 18081/18082 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\obd\autopid_j1939_bench.py" 'localhost:18081' '--elm' 'localhost:18082' '--logdir' $logdir 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'autopid_j1939' $out
+                    if (-not ($out | Select-String -Quiet '^AUTOPID J1939 PASS')) { throw 'no AUTOPID J1939 PASS' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                }
+            }
+            # phase 6: the node talks (address claim, requests, DM2 / the
+            # clear, the transport protocol as a destination); 18083 is the
+            # J2534 TCP port, a bare tester connection = the diagnostics hold
+            Invoke-Stage 'J1939 active' {
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", '-L', "18083:${DutIp}:6809", $BenchHost)
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (ports 18081/18083 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\can\j1939_active_bench.py" 'localhost:18081' '--diag' 'localhost:18083' '--logdir' $logdir 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'j1939_active' $out
+                    if (-not ($out | Select-String -Quiet '^J1939 ACTIVE PASS')) { throw 'no J1939 ACTIVE PASS' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                }
             }
         }
         'all'    {

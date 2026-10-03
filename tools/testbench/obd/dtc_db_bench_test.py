@@ -11,7 +11,8 @@ Legs:
   5. rejects: garbage file 400, bad name 400
   6. persistence + enrichment: enable dtc + reboot (dbs reload from
      flash), ECU-sim scan -> report carries the "desc" map
-  7. Berry dtc_desc()
+  7. Berry dtc_desc() (the script engine is switched on with leg 6's
+     restart when the DUT has it off, and put back at the end)
   8. delete all -> list empty, lookup null; settings restored
 
 Run on the PC (IDF venv python; needs python-can for leg 6):
@@ -158,6 +159,14 @@ def main():
                    "dtc_init": "ATS1;ATH0;ATST96;ATTP6;ATSH7DF",
                    "dtc_rxheader": "7E9"})
     api("/api/settings/autopid", "PUT", ap_cfg)
+    # leg 7 runs a script: the engine has to be on for this boot (it is off
+    # in the bench DUT's settings since 2026-10-01)
+    _, se_before = api("/api/settings/script_engine")
+    se_before.pop("degraded", None)
+    se_before.pop("pending_reboot", None)
+    if not se_before.get("enabled"):
+        api("/api/settings/script_engine", "PUT",
+            dict(se_before, enabled=True))
     api("/api/settings/submit", "POST")
     print("rebooting for dtc_enabled…")
     time.sleep(3)
@@ -214,9 +223,10 @@ def main():
     code, r = api("/api/scripts/run", "POST",
                   {"src": "log(str(dtc_desc('p0171'))) "
                           "log(str(dtc_desc('P9999')))"})
-    out = r.get("output", "")
+    out = r.get("output", "") if isinstance(r, dict) else ""
     check("leg7 Berry dtc_desc hit + miss",
-          "System Too Lean" in out and "nil" in out, out.replace("\n", "|"))
+          "System Too Lean" in out and "nil" in out,
+          out.replace("\n", "|") or r)
 
     # ---- leg 8: delete + restore ----
     for n in ("generic", "0_override", "mfr", "eu"):
@@ -228,6 +238,7 @@ def main():
     check("leg8 lookup null after delete", r.get("P0420", "x") is None, r)
 
     api("/api/settings/autopid", "PUT", ap_before)
+    api("/api/settings/script_engine", "PUT", se_before)
     api("/api/settings/submit", "POST")
     print("restoring settings…")
     time.sleep(3)

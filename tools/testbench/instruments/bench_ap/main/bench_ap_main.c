@@ -15,7 +15,7 @@
  * back, change channel, and log every association with a timestamp.
  *
  * Console (UART0, 115200, the CP2102N on the board's USB-UART port):
- *   ap                      status: ssid, channel, state, stations (mac, rssi), counters
+ *   ap                      status: ssid, channel, state, stations (mac, rssi), counters, heap
  *   ap on | ap off          start / stop the soft-AP (the USB side stays up)
  *   ap kick <mac>           deauthenticate one station
  *   ap channel <1..13>      change channel (restarts the AP)
@@ -137,18 +137,44 @@ static esp_err_t usb_rx(void *buffer, uint16_t len, void *ctx)
     return ESP_OK;
 }
 
-/* TinyUSB is done with a frame we handed it: give the WiFi buffer back */
-static void usb_tx_done(void *buffer, void *ctx)
+/* the WiFi buffer TinyUSB holds right now; NULL once it gave it back */
+static void *volatile s_tx_owned;
+
+/* TinyUSB copied a frame we handed it: give the WiFi buffer back. The FIRST
+ * argument is the buff_free_arg of tinyusb_net_send_sync() (the WiFi buffer),
+ * the second the config's user_context (unused here, NULL). The first image
+ * freed the second one: free(NULL), so every forwarded frame stayed on the
+ * heap and the board asserted in esp_hosted's sdio_process_rx_task
+ * (copy_payload = malloc failed) after ~330 KB from the stations
+ * (2026-10-02: six resets in a day, 3 s under a download). */
+static void usb_tx_done(void *eb, void *ctx)
 {
-    (void)buffer;
-    esp_wifi_internal_free_rx_buffer(ctx);
+    (void)ctx;
+    s_tx_owned = NULL;
+    esp_wifi_internal_free_rx_buffer(eb);
 }
 
-/* a frame arrived at the AP from a station: over USB to the Pi */
+/* a frame arrived at the AP from a station: over USB to the Pi. Called from
+ * one task (esp_hosted's rx task); usb_tx_done() runs in the TinyUSB task
+ * before tinyusb_net_send_sync() returns, or never for this frame. Who owns
+ * the buffer afterwards is read from s_tx_owned, not from the return code:
+ * a send that timed out may still have gone out. */
 static esp_err_t ap_rx(void *buffer, uint16_t len, void *eb)
 {
-    if (!s_usb_up || tinyusb_net_send_sync(buffer, len, eb, pdMS_TO_TICKS(50)) != ESP_OK)
+    if (!s_usb_up)
     {
+        s_drop_usb_tx++;
+        esp_wifi_internal_free_rx_buffer(eb);
+        return ESP_OK;
+    }
+
+    s_tx_owned = eb;
+    (void)tinyusb_net_send_sync(buffer, len, eb, pdMS_TO_TICKS(50));
+
+    if (s_tx_owned == eb)
+    {
+        /* TinyUSB never took it (not mounted, no room, timeout): ours to free */
+        s_tx_owned = NULL;
         s_drop_usb_tx++;
         esp_wifi_internal_free_rx_buffer(eb);
         return ESP_OK;
@@ -311,6 +337,11 @@ static void print_status(void)
     printf("frames: usb->ap %lu  ap->usb %lu  dropped ap-tx %lu usb-tx %lu\n",
            (unsigned long)s_usb_to_ap, (unsigned long)s_ap_to_usb,
            (unsigned long)s_drop_ap_tx, (unsigned long)s_drop_usb_tx);
+    /* a forwarder that leaks dies within minutes of bench traffic: the heap
+       belongs in the status so the bench sees it before the assert */
+    printf("heap: free %lu  min %lu  largest %u\n",
+           (unsigned long)esp_get_free_heap_size(), (unsigned long)esp_get_minimum_free_heap_size(),
+           (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
     printf("uptime: %llu s\n", (unsigned long long)(esp_timer_get_time() / 1000000));
 }
 

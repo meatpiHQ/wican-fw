@@ -98,7 +98,8 @@ static int system_memory(void)
 {
     dev_status_memory_t mem;
 
-    if (dev_status_manager_memory(&mem) != ESP_OK)
+    /* deep: somebody asked (the PSRAM walk holds interrupts off 3 to 4 ms) */
+    if (dev_status_manager_memory_deep(&mem) != ESP_OK)
     {
         cmdline_printf("Error: memory info unavailable\n");
         return 1;

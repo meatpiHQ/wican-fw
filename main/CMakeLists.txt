@@ -12,7 +12,7 @@ idf_component_register(
     REQUIRES api_http autopid ha_webhooks data_destinations battery_monitor ble_manager bridge_manager
              ble_http ble_j2534
              bridge_endpoints
-             can_manager can_isotp_esp ext_manager uds_manager script_engine
+             can_manager j1939 can_isotp_esp ext_manager uds_manager script_engine
              usb_acm_cli espnetlink_link j2534_server
              data_logger event_manager
              cert_manager cmdline_manager dev_status_manager

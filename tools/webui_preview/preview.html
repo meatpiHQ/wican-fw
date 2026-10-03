@@ -17,7 +17,7 @@
    "dtc_permanent": false,
    "dtc_freeze": true,
    "dtc_uds_ext": false,
-   "std_protocol": "6",
+   "std_protocol": "0",
    "pause_mode": "requests_only",
    "dtc_protocol": "obd",
    "pause_below_mv": 0,
@@ -384,6 +384,7 @@
     "baud": {
      "type": "string",
      "enum": [
+      "auto",
       "33",
       "83",
       "95",
@@ -884,6 +885,36 @@
    "properties": {
     "cli": {
      "type": "boolean"
+    }
+   }
+  }
+ },
+ "j1939": {
+  "values": {
+   "enabled": false,
+   "cli": true,
+   "mode": "listen",
+   "address": 249
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "mode": {
+     "type": "string",
+     "enum": [
+      "listen",
+      "active"
+     ]
+    },
+    "address": {
+     "type": "integer",
+     "minimum": 128,
+     "maximum": 253
     }
    }
   }
@@ -1948,6 +1979,8 @@
     { name: "abrp", type: "abrp", enabled: false, url: "", period_s: 10, auth: "api_key_query", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "", cert_set: "", car_model: "hyundai:ioniq5:22:77", retain: true, full_first: true },
   ] });
   ov("autopid", { enabled: true, vehicle: "Corolla 2021" });
+  if ((window.__mockPreset || {}).j1939Active === true) ov("j1939", { enabled: true, mode: "active" });
+  else if ((window.__mockPreset || {}).j1939Listening === true) ov("j1939", { enabled: true });
   ov("data_logger", { enabled: false });
   ov("vpn_manager", { enabled: true, type: "wireguard", address: "10.66.0.2", endpoint: "vpn.example.com", port: 51820 });
   ov("usb_host_manager", { enabled: true, role: "host" });
@@ -1976,6 +2009,15 @@
     vehicles: (window.__mockPreset || {}).vehicles || { current: "", vehicles: [] },
     /* the battery the wizard's Battery and sleep step watches: a probe moves it (14.3 = charging, 12.8 = resting) */
     batteryV: typeof (window.__mockPreset || {}).batteryV === "number" ? window.__mockPreset.batteryV : 12.52,
+    /* the CAN link and autopid's bus guard (2026-10-03): null = a healthy 500k bus, nothing parked */
+    canLink: (window.__mockPreset || {}).can || null,
+    busGuard: (window.__mockPreset || {}).busGuard || null,
+    /* trouble codes (2026-10-03): null = DTC off, no scan yet; "obd" = an
+       OBD-II car with codes; "wwh" = an ISO 27145 vehicle, two ECUs */
+    dtc: (window.__mockPreset || {}).dtc || null,
+    dtcReport: null,                  /* set by a clear */
+    /* the car a detection finds: "wwh" = an ISO 27145 van on 29-bit ids */
+    detect: (window.__mockPreset || {}).detect || "obd2",
     /* the UDS Tool's live path + exclusive switch (GET/POST /api/uds) */
     uds: { backend_setting: "auto", backend_active: "isotp", provider: "esp_isotp", can_running: true,
            exclusive: true, exclusive_default: true, holding: false, autopid_paused: false, session_active: false,
@@ -1986,7 +2028,7 @@
     dirs: new Set(),            /* folders created through /api/fs/mkdir */
     loggerRunning: false,       /* true -> /api/logger reports the active file (write-locked) */
     sdMounted: true,            /* false -> /api/status says no card, /sd listings fail */
-    autopidCfg: {
+    autopidCfg: (window.__mockPreset || {}).autopidCfg || {
       version: 1,
       groups: [{ name: "default", enabled_default: true, period_ms: 1000 }],
       pids: [
@@ -2015,6 +2057,97 @@
     parameters: [{ name: name.replaceAll(" ", "_"), expression: expr, unit, class: "" }],
   }));
 
+  /* an ISO 27145 vehicle's scan rows: service 22, the data one byte
+     further in, each row addressed to the ECU that owns the value */
+  const WWH_ROWS = [
+    ["22F404", "CalcEngineLoad", "B3*0.3921568692", "%", "ATSH18DA00F1"],
+    ["22F405", "EngineCoolantTemp", "B3-40", "degC", "ATSH18DA00F1"],
+    ["22F40C", "EngineRPM", "[B3:B4]*0.25", "rpm", "ATSH18DA00F1"],
+    ["22F40D", "VehicleSpeed", "B3", "km/h", "ATSH18DA00F1"],
+    ["22F43C", "CatTempBank1Sens1", "[B3:B4]*0.1-40", "degC", "ATSH18DA3DF1"],
+  ].map(([cmd, name, expr, unit, init]) => ({
+    pid: parseInt(cmd.slice(4), 16), cmd, name, init,
+    parameters: [{ name, expression: expr, unit, class: "" }],
+  }));
+  const WWH_VIN = "1WCANWWH0TRUCK001";
+  /* a J1939 truck's rows (TASK_j1939_wwh.md phase 5): one row per SPN of the
+     built-in table, PGN:<hex> commands, little-endian expressions */
+  const J1939_ROWS = [
+    ["F004", 190, "EngineSpeed", "(B3+B4*256)*0.125", "rpm", "none", 0, 8031.875],
+    ["F004", 513, "ActualEnginePercentTorque", "B2-125", "%", "none", -125, 125],
+    ["F003", 91, "AccelPedalPosition1", "B1*0.4", "%", "none", 0, 100],
+    ["FEF1", 84, "WheelBasedVehicleSpeed", "(B1+B2*256)*0.00390625", "km/h", "speed", 0, 250.99609375],
+    ["FEEE", 110, "EngineCoolantTemperature", "B0-40", "degC", "temperature", -40, 210],
+    ["FEEF", 100, "EngineOilPressure", "B3*4", "kPa", "pressure", 0, 1000],
+    ["FEE5", 247, "EngineTotalHours", "(B0+B1*256+B2*65536+B3*16777216)*0.05", "hours", "duration", 0, 210554060.75],
+  ].map(([pgn, spn, name, expression, unit, cls, min, max]) => ({
+    pgn, spn, cmd: "PGN:" + pgn, name, parameters: [{ name, expression, unit, class: cls, min, max }],
+  }));
+  const J1939_VIN = "1WCANJ1939TRUCK01";
+  const j1939Listening = () => (window.__mockPreset || {}).j1939Listening === true;
+  /* phase 6: `mode active`, the address claimed (the listener is up then) */
+  const j1939Active = () => (window.__mockPreset || {}).j1939Active === true;
+  const scanRows = () => (state.detect === "wwh" ? WWH_ROWS : state.detect === "j1939" ? J1939_ROWS : STD_ROWS);
+  const scanCar = () => (state.detect === "wwh"
+    ? { key: WWH_VIN, protocol: "7", dialect: "uds", fingerprint: "2429aa55", ecus: "18DAF13D:80000001,18DAF100:981B8003", j1939: false }
+    : state.detect === "j1939"
+    /* a J1939-only truck: no chip protocol; the VIN comes from the listener (BAM), the
+       sample path without it knows the controllers alone */
+    ? { key: j1939Listening() ? J1939_VIN : "fp:9be17165", vin: j1939Listening() ? J1939_VIN : "", protocol: "", dialect: "j1939", fingerprint: "9be17165", ecus: "0:0,B:0", j1939: true }
+    : { key: "1WCAN0FW0P0000001", protocol: "6", dialect: "obd2", fingerprint: "9a3f17c2", ecus: "7E8:183F8003", j1939: false });
+
+  /* GET /api/autopid/dtc, the shape of 2026-10-03: `path`, and a report
+     with `sources` (the lamp per ECU) and `items` (who reported what) */
+  const DTC_EMPTY = { valid: false, ts: 0, mil: false, mil_count: 0, ecus: 0, protocol: "obd",
+                      stored: [], pending: [], permanent: [], new: [], sources: [], items: [] };
+  const DTC_REPORTS = {
+    obd: { valid: true, ts: 1790960000, mil: true, mil_count: 2, ecus: 1, protocol: "obd",
+           stored: ["P0300", "P0420"], pending: ["P0171"], permanent: [], new: [],
+           sources: [{ ecu: "7E8", mil: true, count: 2 }],
+           items: [{ code: "P0300", kind: "stored", ecu: "7E8" }, { code: "P0420", kind: "stored", ecu: "7E8" },
+                   { code: "P0171", kind: "pending", ecu: "7E8" }],
+           desc: { P0300: "Random/Multiple Cylinder Misfire Detected", P0420: "Catalyst System Efficiency Below Threshold" } },
+    wwh: { valid: true, ts: 1790960000, mil: true, mil_count: 2, ecus: 2, protocol: "wwh",
+           stored: ["P0420", "P20EE"], pending: ["P2463-1F"], permanent: ["P0420"], new: [],
+           sources: [{ ecu: "18DAF100", mil: true, count: 1 }, { ecu: "18DAF13D", mil: true, count: 1 }],
+           items: [{ code: "P0420", kind: "stored", ecu: "18DAF100", status: 8, severity: 2 },
+                   { code: "P20EE", kind: "stored", ecu: "18DAF13D", status: 12, severity: 2 },
+                   { code: "P2463-1F", kind: "pending", ecu: "18DAF100", status: 4, severity: 4 },
+                   { code: "P0420", kind: "permanent", ecu: "18DAF100", status: 8 }],
+           desc: { P0420: "Catalyst System Efficiency Below Threshold" } },
+    /* a J1939 truck (phase 5): the DM1 of two controllers, heard, not asked */
+    j1939: { valid: true, ts: 1790960000, mil: true, mil_count: 3, ecus: 2, protocol: "j1939", j1939: true,
+             lamps: { mil: true, rsl: false, awl: true, pl: false },
+             stored: ["SPN110-0", "SPN3226-4", "SPN520192-31"], pending: [], permanent: [], new: [],
+             sources: [{ sa: 0, lamps: { mil: true, rsl: false, awl: true, pl: false }, mil: true, count: 2 },
+                       { sa: 11, lamps: { mil: false, rsl: false, awl: false, pl: false }, mil: false, count: 1 }],
+             items: [{ code: "SPN110-0", kind: "stored", sa: 0, oc: 5 }, { code: "SPN3226-4", kind: "stored", sa: 0, oc: 1 },
+                     { code: "SPN520192-31", kind: "stored", sa: 11 }],
+             desc: {} },
+  };
+  /* phase 6, active mode: the previously active codes (DM2, asked for at the
+     scan) join the report as pending items */
+  const j1939ActiveReport = () => Object.assign(JSON.parse(JSON.stringify(DTC_REPORTS.j1939)), {
+    pending: ["SPN100-1"],
+    items: DTC_REPORTS.j1939.items.concat([{ code: "SPN100-1", kind: "pending", sa: 0, oc: 2 }]) });
+  const dtcDoc = () => ({ enabled: !!state.dtc, allow_clear: !!state.dtc, scanning: false,
+                          path: state.dtc === "wwh" ? "wwh" : state.dtc === "j1939" ? "j1939" : "obd",
+                          report: state.dtcReport || (state.dtc === "j1939" && j1939Active() ? j1939ActiveReport()
+                                                      : state.dtc ? DTC_REPORTS[state.dtc] : DTC_EMPTY) });
+  /* GET /api/j1939: the listener (phase 4), off on a new device; `mode`,
+     `claim` and `tx` since active mode (phase 6) */
+  const j1939Claim = () => (j1939Active()
+    ? { state: "claimed", address: 249, preferred: 249, tx_ready: true, name: "3C651A0000810080", claims_sent: 1, contests: 0, won: 0, lost: 0, held: 0, requests_answered: 0, cannot: 0 }
+    : { state: "idle", address: 254, preferred: 249, tx_ready: j1939Listening(), name: "3C651A0000810080", claims_sent: 0, contests: 0, won: 0, lost: 0, held: 0, requests_answered: 0, cannot: 0 });
+  const j1939Tx = () => ({ frames: j1939Active() ? 7 : 0, failed: 0, requests: j1939Active() ? 4 : 0, acks: 0, nacks: 0, nacks_sent: 0, tp_to_me: j1939Active() ? 1 : 0, tp_cts: j1939Active() ? 1 : 0, tp_eoma: j1939Active() ? 1 : 0, tp_aborts: 0, tp_reply_lost: 0 });
+  const j1939Doc = () => (j1939Listening() || j1939Active()
+    ? { enabled: true, state: "listening", bus: "j1939", mode: j1939Active() ? "active" : "listen", claim: j1939Claim(), tx: j1939Tx(), vin: J1939_VIN, can: { running: true, baud_kbps: 250, link: "verified", listen_only: !j1939Active() },
+        stats: { rx_frames: 3545, rx_data: 3473, rx_tp_cm: 16, rx_tp_dt: 48, rx_diag: 0, rx_foreign: 0, queue_drops: 0, messages: 3489, not_kept: 0, evicted: 0, long_evicted: 0, entries: 19, entries_max: 384, sources: 2, tp_open: 0, tp_max: 8 },
+        tp: { started: 16, completed: 16, seq_errors: 0, timeouts: 0, aborted: 0, replaced: 0, open: 0, no_session: 0, orphan_dt: 0, bad_cm: 0 } }
+    : { enabled: false, state: "off", bus: "unknown", mode: "listen", claim: j1939Claim(), tx: j1939Tx(), vin: null, can: { running: false, baud_kbps: 500, link: "stopped", listen_only: true },
+        stats: { rx_frames: 0, rx_data: 0, rx_tp_cm: 0, rx_tp_dt: 0, rx_diag: 0, rx_foreign: 0, queue_drops: 0, messages: 0, not_kept: 0, evicted: 0, long_evicted: 0, entries: 0, entries_max: 384, sources: 0, tp_open: 0, tp_max: 8 },
+        tp: { started: 0, completed: 0, seq_errors: 0, timeouts: 0, aborted: 0, replaced: 0, open: 0, no_session: 0, orphan_dt: 0, bad_cm: 0 } });
+
   const J = (o, status = 200) => ({
     ok: status < 300, status,
     headers: { get: (k) => (k.toLowerCase() === "content-type" ? "application/json" : null) },
@@ -2035,7 +2168,7 @@
       bits: { awake: true, sleep: false, sta_connected: state.staConnected !== false, mqtt_connected: state.mqttConnected !== false, ble_connected: false, sdcard_mounted: state.sdMounted !== false, ble_enabled: false, sta_enabled: true, ap_enabled: true, autopid_enabled: true, home_mode: false, drive_mode: false, smartconnect: false, sta_ap_overlap: false, time_synced: true, vpn_enabled: true, wake_voltage_ok: true, eth_connected: false, autopid_idle: false, motion: false, sta_suspended: false, ap_suspended: false, ble_suspended: false },
       network_connected: true, uptime: "02:14:09", version: "v6.0.0-preview", partition: "ota_0",
       boot_count: 42, unexpected_resets: 1, device_id: "14c19f44e349",
-      memory: { internal: { total: 274580, free: 71103, min_free: 63587, largest_block: 45056 }, psram: { total: 8272000, free: 7734508, min_free: 7524288, largest_block: 7274496 } },
+      memory: { internal: { total: 274580, free: 71103, min_free: 63587, largest_block: 45056 }, psram: { total: 8272000, free: 7734508, min_free: 7524288 } }, /* no largest_block for PSRAM in the polled status (2026-10-03) */
       temp_c: 38.4,
       health: { log_errors: 0, log_warnings: 7,
         flash: { writes: 0, write_bytes: 0, erases: 0, erase_bytes: 0 },
@@ -2078,7 +2211,11 @@
     "/api/gps": () => J({ valid: true, latitude: -37.905350, longitude: 145.145047, accuracy: 6, altitude: 88.8, speed: 1.0, heading: 270.5, satellites: 7, age_ms: 1200 }),
     "/api/battery": () => J({ voltage: state.batteryV }),
     /* the native CAN bus (state.canEnabled=false: a fresh device, bus off) */
-    "/api/can": () => J({ enabled: state.canEnabled !== false, running: state.canEnabled !== false, silent: false, baud_kbps: 500, state: state.canEnabled === false ? "stopped" : "running", tx: 1543, rx: 89231, tx_errors: 0, rx_errors: 0, arb_lost: 0, bus_errors: state.busErrors || 0, rx_missed: 0, dispatch_drops: 0, bus_off: 0, recoveries: 0 }),
+    /* 2026-10-03: the node listens before it talks; state.canLink (a probe's
+       window.__mockPreset.can, or set later) overrides the link fields */
+    "/api/can": () => J({ enabled: state.canEnabled !== false, running: state.canEnabled !== false, silent: false, baud_auto: false, baud_kbps: 500, baud_detected: 500, state: state.canEnabled === false ? "stopped" : "running", listen_only: state.canEnabled === false, verified: state.canEnabled !== false, tx: 1543, rx: 89231, tx_errors: 0, rx_errors: 0, arb_lost: 0, bus_errors: state.busErrors || 0, rx_missed: 0, dispatch_drops: 0, rx_bad: 0, rx_deaf: 0, tx_refused: 0, link_switches: 0, link_demotions: 0, bus_off: 0, recoveries: 0,
+      err: { stuff: 0, form: 0, bit: 0, ack: 0, other: 0 }, probe: { result: "none", baud_kbps: 0, frames: 0, age_ms: 0 },
+      subscribers: [{ idx: 0, name: "bridge", drops: 0 }, { idx: 1, name: "logger", drops: 0 }], subscribers_max: 16, ...(state.canLink || {}) }),
     "/api/bridges": () => J({ bridges: ((S.bridge_manager && S.bridge_manager.values.bridges) || []).map((b) => ({ ...b, up: b.enabled !== false, stats: { a2b_chunks: 0, b2a_chunks: 0, a2b_bytes: 0, b2a_bytes: 0, send_errors: 0, codec_errors: 0 } })) }),
     "/api/ws": () => J({ channels: ((S.websocket_manager && S.websocket_manager.values.channels) || []).map((c) => ({ ...c, up: c.enabled !== false, stats: { clients: 0, frames_in: 0, frames_out: 0, bytes_in: 0, bytes_out: 0, rx_drops: 0, tx_drops: 0, refused: 0 } })) }),
     "/api/autopid": () => { state.polls += state.groupOn ? 4 : 0; const nowUs = Date.now() * 1000; return J({
@@ -2088,8 +2225,13 @@
         unit: { RPM: "rpm", Speed: "km/h", Coolant: "°C", SOC_BMS: "%" }[name] || "",
         ts_us: nowUs - (name === "SOC_BMS" ? 45e6 : 800e3),   /* SOC_BMS deliberately stale */
       })).concat([{ name: "gps_speed", unit: "km/h", value: 61.6, ts_us: nowUs - 1.2e6, external: true }]),
-      stats: { running: state.groupOn, paused_voltage: false, polls_ok: state.polls, polls_failed: 2, pids: 4, filters: 1,
+      stats: { running: state.groupOn && !state.busGuard, paused_voltage: false, paused_bus: !!state.busGuard, paused_diag: false, polls_ok: state.polls, polls_failed: 2, pids: 4, filters: 1,
+        passive_ok: 0, passive_failed: 0, passive_published: 0, passive_requested: 0, passive_refused: 0, j1939_listening: j1939Listening() || j1939Active(), j1939_active: j1939Active(),
         period_floor_ms: 50, sub_floor_pids: 0, now_us: nowUs },
+      /* the bus guard (2026-10-03): state.busGuard = a parked poller's reason */
+      bus_guard: state.busGuard
+        ? { bus: "live", bus_kbps: 250, verdict: "park", parked: true, reason: state.busGuard }
+        : { bus: "silent", bus_kbps: 0, verdict: "allow", parked: false, reason: "vehicle bus silent" },
     }); },
     /* the registry as the firmware serves it (2026-09-17): keys per event, params_schema + undoable per action, value prefixes */
     "/api/events/sources": () => J([
@@ -2119,7 +2261,7 @@
     ]),
     "/api/events/values": () => J(["autopid.data", "autopid.", "battery.voltage", "time.iso", "time.epoch", "wifi.ssid", "wifi.connected"]),
     "/api/events/rules": () => J(((S.event_manager && S.event_manager.values.rules) || []).map((r, i) => ({ name: r.name, enabled: r.enabled !== false, undo: !!r.undo, active: false, fired: i === 0 ? 3 : 0, last_fired_age_s: i === 0 ? 120 : -1 }))),
-    "/api/autopid/dtc": () => J({ enabled: false, codes: [], last_scan: null }),
+    "/api/autopid/dtc": () => J(dtcDoc()),
     "/api/autopid/dtc/db": () => J({ dbs: [] }),
     /* DBC files + signals for the CAN Monitor's decode panel (state.dbcs / state.dbcSignals) */
     "/api/autopid/dbc": () => J({ dbcs: state.dbcs || [], max: 4 }),
@@ -2211,10 +2353,15 @@
       return J({ path: p, entries: [...fixed, ...extra] });
     },
     "/api/autopid/std_scan": () => J(state.scan),
+    "/api/j1939": () => J(j1939Doc()),
     "/api/autopid/std_scan/result": () => (state.scan.status === "done"
-      ? J({ version: 1, protocol: "6", protocol_detected: "6", vin: "1WCAN0FW0P0000001", fingerprint: "9a3f17c2", supported: STD_ROWS, found: STD_ROWS.length, ts: now(),
-            key: "1WCAN0FW0P0000001", known: !!(state.vehicles.vehicles.find((v) => v.key === "1WCAN0FW0P0000001") || {}).profile,
-            name: (state.vehicles.vehicles.find((v) => v.key === "1WCAN0FW0P0000001") || {}).name || "" })
+      ? J({ version: 1, protocol: "0", protocol_detected: scanCar().protocol, dialect: scanCar().dialect, vin: scanCar().vin !== undefined ? scanCar().vin : scanCar().key,
+            fingerprint: scanCar().fingerprint, supported: scanRows(), found: scanRows().length, ts: now(),
+            ...(state.detect === "wwh" ? { uds_protocol_id: 1 } : {}),
+            /* the network step (phase 5): on every detection since 2026-10-03 */
+            j1939: !!scanCar().j1939, j1939_listening: j1939Listening(), bus_kbps: state.detect === "j1939" ? 250 : 500,
+            key: scanCar().key, known: !!(state.vehicles.vehicles.find((v) => v.key === scanCar().key) || {}).profile,
+            name: (state.vehicles.vehicles.find((v) => v.key === scanCar().key) || {}).name || "" })
       : J({ error: "no scan stored" }, 404)),
     /* the vehicle store (autopid second pass, 2026-10-01) */
     "/api/autopid/vehicles": () => J({ current: state.vehicles.current, max: 8,
@@ -2269,15 +2416,17 @@
       state.scan = { status: "running", phase: "protocol", found: 0 };
       setTimeout(() => { state.scan = { status: "running", phase: "vin", found: 0 }; }, 800);
       setTimeout(() => { state.scan = { status: "running", phase: "pids", found: 0 }; }, 1600);
+      setTimeout(() => { state.scan = { status: "running", phase: "network", found: 0 }; }, 2100);
       setTimeout(() => {
-        state.scan = { status: "done", phase: "idle", found: STD_ROWS.length, ts: now(), stored: true };
-        const key = "1WCAN0FW0P0000001";
+        state.scan = { status: "done", phase: "idle", found: scanRows().length, ts: now(), stored: true };
+        const car = scanCar(), key = car.key;
         let e = state.vehicles.vehicles.find((v) => v.key === key);
         if (!e) {
-          e = { key, vin: key, fingerprint: "9a3f17c2", name: "", protocol: "6", chip_protocol: "6", profile: "", specific_init: "",
-                std_supported: STD_ROWS.length, pending_profile: true, first_seen: now(), last_seen: now(), scan_ts: now() };
+          e = { key, vin: car.vin !== undefined ? car.vin : key, fingerprint: car.fingerprint, name: "", protocol: car.protocol, chip_protocol: car.protocol,
+                dialect: car.dialect, j1939: !!car.j1939, ecus: car.ecus, profile: "", specific_init: "",
+                std_supported: scanRows().length, pending_profile: true, first_seen: now(), last_seen: now(), scan_ts: now() };
           state.vehicles.vehicles.push(e);
-        } else { e.last_seen = now(); e.scan_ts = now(); e.std_supported = STD_ROWS.length; }
+        } else { e.last_seen = now(); e.scan_ts = now(); e.std_supported = scanRows().length; }
         state.vehicles.current = key;
       }, 2500);
       return J({ started: true }, 202);
@@ -2364,7 +2513,16 @@
     if (method === "POST" && path === "/api/restart") { Object.values(S).forEach((x) => { x.pending = false; }); return J({ ok: true }); }
     if (method === "POST" && path === "/api/faults/clear") { S.__faults = []; return J({ cleared: true }); }
     if (method === "POST" && path === "/api/vpn/keygen") return J({ public_key: "MockPubKey000000000000000000000000000000000=" });
-    if (method === "POST" && path === "/api/autopid/dtc/scan") return J({ ok: true });
+    if (method === "POST" && path === "/api/autopid/dtc/scan") return J({ started: true }, 202);
+    if (method === "POST" && path === "/api/autopid/dtc/clear") {
+      /* everything goes but the permanent codes; the lamps go out */
+      const r = dtcDoc().report, before = r.stored.length;
+      state.dtcReport = { ...r, mil: false, mil_count: 0, stored: [], pending: [], new: [],
+                          sources: r.sources.map((s) => ({ ...s, mil: false, count: 0 })),
+                          items: r.items.filter((it) => it.kind === "permanent") };
+      state.lastDtcClear = body;
+      return J({ ok: true, cleared: true, before, after: 0 });
+    }
     if (method === "POST" && path === "/api/destinations/test") {
       const d = (S.data_destinations.values.destinations || []).find((x) => x.name === (body && body.name));
       if (!d) return J({ error: "unknown destination" }, 404);
@@ -2457,6 +2615,7 @@
     }
   };
   window.__mockState = state;   /* probes read counters (gate calls) and set the active log file */
+  window.__mockSettings = S;    /* probes read what a page staged / PUT (values per component) */
   window.fetch = (url, opts) => {
     const u = String(url);
     const path = u.startsWith("http") ? new URL(u).pathname + (new URL(u).search || "") : u;
@@ -3424,6 +3583,19 @@ function sectionTools(legend,tools,...body){
 function kv(pairs){return h("dl",{class:"kv"},...pairs.filter(p=>p&&p[1]!=null).flatMap(([k,v])=>
   [h("dt",{},k),h("dd",{},v&&v.nodeType?v:String(v))]));}
 function chip(txt,kind){return h("span",{class:"chip "+(kind||"")},h("span",{class:"d"}),txt);}
+/* /api/can: the CAN node listens before it talks. state is detecting |
+   listening | mismatch until the link has its verdict, then running |
+   bus_off | recovering; listen_only is what the node may do right now,
+   whatever the setting asks for. */
+function canRateText(c){return c.baud_auto&&!c.verified?"Auto":c.baud_kbps+"K";}
+function canStateText(c){
+  if(!c.running)return c.enabled?"stopped":"disabled";
+  if(c.state==="bus_off"||c.state==="recovering")return"BUS-OFF · auto-recovering";
+  if(c.state==="detecting")return"Listening for the bit rate";
+  if(c.state==="listening")return"Listening · no traffic yet";
+  if(c.state==="mismatch")return(c.baud_auto?"No bit rate reads this bus":"Bus runs at another bit rate")+" · listen-only";
+  return(c.listen_only?"Listen-only":"Normal")+" · active";
+}
 function onoff(b,yes="On",no="Off"){return chip(b?yes:no,b?"ok":"");}
 function tile(k,v,unit,opt={}){return h("div",{class:"tile "+(opt.kind||"")},
   h("div",{class:"th"},h("span",{class:"tk"},k),opt.icon?h("span",{class:"ti"},ic(opt.icon)):null),
@@ -3485,7 +3657,9 @@ const LABELS={
   passkey:"Pairing passkey",tx_power_dbm:"TX power (dBm)",pairing_at_boot:"Allow pairing at boot",bonding:"Remember paired devices",
   sc_only:"Secure connections only",conn_profile:"Connection profile",
   /* can_manager (the obd_chip group has no UI at all — meatpi 2026-09-07) */
-  "can_manager.baud":"Bit rate (kbit/s)",silent:"Listen-only (silent) mode",
+  "can_manager.baud":"Bit rate",silent:"Listen-only (silent) mode",
+  /* j1939 (2026-10-03) */
+  "j1939.enabled":"J1939 on the CAN interface","j1939.mode":"Mode","j1939.address":"Preferred address",
   /* mqtt_manager */
   "mqtt_manager.url":"Broker URL",username:"Username",broker_password:"Password",client_id:"Client ID",topic_prefix:"Topic prefix",
   ca_file:"CA file",cert_set:"Certificate set",keepalive_s:"Keep-alive (s)",connect_on:"Connect when",
@@ -3572,10 +3746,11 @@ const HELP={
   periodic_wakeup:"Wake briefly at a fixed interval while sleeping (for example to report position).",
   pause_below_mv:"Polling stops below this battery voltage and resumes 0.3 V above it. 0 = no fixed threshold.",
   pause_follow_sleep:"With no fixed threshold, pause PID requests whenever the battery is below the Power Saving sleep voltage; they resume above its wake-up voltage.",
+  pause_mode:"What a voltage pause stops. Pause requests only: the J1939 rows, read from WiCAN's own CAN listener and transmitting nothing, keep running. Pause everything: those stop too.",
   std_init:"AT command chain sent once before standard-PID polling starts: optional, ';'-separated.",
   custom_init:"AT command chain sent once before custom-PID polling starts: optional, ';'-separated.",
   specific_init:"AT command chain sent once before vehicle-specific polling starts, ahead of the per-PID inits: optional, ';'-separated.",
-  std_protocol:"Used for standard PIDs and the PID scan. Most cars since 2008 use CAN 11-bit 500 kbit/s; 29-bit filters need a 29-bit protocol.",
+  std_protocol:"Used for standard PIDs and the PID scan. Automatic lets the chip find the vehicle's protocol. A fixed protocol is never sent onto a bus that runs at another bit rate: polling pauses instead. 29-bit filters need a 29-bit protocol.",
   vehicle:"Name of the vehicle profile on this device. Choose profile searches the latest published list; the name stays editable.",
   min_event_interval_ms:"Rate limit for parameter-change events fed to rules.",
   "espnetlink.mode":"WiFi modem keeps the dongle's USB as power only (best GPS reception). USB Ethernet keeps the data lines on and uses the cable as the uplink.",
@@ -3588,6 +3763,10 @@ const HELP={
   allow_reflash:"Lets a connected tool write ECU firmware. Keep off unless you are flashing.",
   allow_lan:"Reachable from any network the WiCAN is on, not only its own AP / USB link.",
   silent:"Receive only: the WiCAN never acknowledges frames on the bus.",
+  "can_manager.baud":"The WiCAN always listens first and only talks once it has read frames at this bit rate. Automatic takes the bit rate from the traffic; on a bus that stays silent until asked, choose the bit rate yourself.",
+  "j1939.enabled":"Reads the SAE J1939 network of trucks, buses and machines on the CAN interface above (it must be on): the parameter groups the controllers broadcast, their trouble codes (DM1), the VIN.",
+  "j1939.mode":"Listen: never a frame on the bus, the vehicle cannot tell WiCAN is there. Active: WiCAN joins the network as a diagnostic tool with an address of its own, so it can ask for groups that are only sent on request, read previously active codes (DM2) and clear codes (DM11, DM3). Active needs the CAN interface in normal mode (listen-only off).",
+  "j1939.address":"The address WiCAN claims first in active mode: 249 and 250 are the off-board diagnostic tool addresses of SAE J1939. Another node with a stronger claim on it moves WiCAN to the next free address by itself.",
   can_filter:"Hex CAN ID to record (blank = all frames).",
   can_mask:"Hex mask: a frame is recorded when (ID AND mask) equals (filter AND mask).",
   can_log:"Copies frames from the CAN bus as they arrive: the bus must be on (Settings → CAN bus).",
@@ -3616,6 +3795,7 @@ const HELP={
 };
 const ENUMS={
   "wifi_manager.mode":{off:"Off",sta:"Station only (join a network)",ap:"Access point only",apsta:"Access point + Station"},
+  "j1939.mode":{listen:"Listen only (never transmits)",active:"Active (claims an address, can ask and clear)"},
   ap_auth:{auto:"Automatic (WPA2)",wpa2:"WPA2",wpa2wpa3:"WPA2 / WPA3",wpa3:"WPA3"},
   ap_bandwidth:{ht20:"20 MHz",ht40:"40 MHz"},power_save:{none:"Off (best latency)",min:"Minimum",max:"Maximum"},
   wifi_ram_profile:{full:"Full",lean:"Lean (recommended with Bluetooth)",custom:"Custom"},
@@ -3634,7 +3814,7 @@ const ENUMS={
   "vpn_manager.type":{wireguard:"WireGuard",tailscale:"Tailscale"},
   dtc_protocol:{obd:"OBD (modes 03 / 07 / 0A)",uds:"UDS (service 0x19)",auto:"Automatic"},
   "autopid.std_protocol":{"0":"Automatic (chip detects)","6":"CAN 11-bit 500 kbit/s (ISO 15765-4, protocol 6)","7":"CAN 29-bit 500 kbit/s (ISO 15765-4, protocol 7)","8":"CAN 11-bit 250 kbit/s (ISO 15765-4, protocol 8)","9":"CAN 29-bit 250 kbit/s (ISO 15765-4, protocol 9)"},
-  "can_manager.baud":v=>v+" kbit/s",
+  "can_manager.baud":v=>v==="auto"?"Automatic (from the bus traffic)":v+" kbit/s",
 };
 const PLACEHOLDER={
   ap_ssid:()=>"WiCAN_"+((conn.info&&conn.info.device_id)||"<device id>")+" (default)",
@@ -4135,7 +4315,7 @@ PAGES.status=async(view)=>{
     const mode=b.sta_connected?(w&&w.ap_started?"AP+STA":"STA"):(w&&w.ap_started?"AP":"—");
     cardsEl.replaceChildren(
       tile("Connection",mode,null,{icon:"wifi",cap:w?(b.sta_connected?("IP "+(w.ip||"—")):(w.ap_started?((w.clients||0)+" client(s) on AP"):"interface down")):"—"}),
-      tile("CAN Bus",can?can.baud_kbps+"K":"—",null,{icon:"activity",cap:can?(can.running?(can.state==="bus_off"||can.state==="recovering"?"BUS-OFF · auto-recovering":(can.silent?"Listen-only · active":"Normal · active")):"stopped"):"disabled",kind:can&&(can.state==="bus_off"||can.state==="recovering")?"crit":""}),
+      tile("CAN Bus",can?canRateText(can):"—",null,{icon:"activity",cap:can?canStateText(can):"disabled",kind:can&&(can.state==="bus_off"||can.state==="recovering")?"crit":can&&can.state==="mismatch"?"warn":""}),
       tile("Battery",v!=null?v.toFixed(1):"—","V",{icon:"battery",cap:v!=null?(v<11.8?"LOW":"Vehicle nominal"):"—",kind:v!=null&&v<11.8?"crit":v!=null&&v<12?"warn":""}),
       tile("Uptime",st.uptime||fmt.dur(st.uptime_s),null,{icon:"clock",cap:"Boot count "+(st.boot_count??"—")}));
     colsEl.replaceChildren(
@@ -4445,7 +4625,21 @@ PAGES.settings=async(view,sub)=>{
       apBits.style.display=ap?"":"none";apOff.style.display=ap?"none":"";paintLive();};
     let syncNudge=()=>{},syncApNudge=()=>{};
     const wifiDirty=()=>{syncSta();syncNudge();syncApNudge();};
-    const[apRows,staRows,bleRows,canRows,mqttRows,imRows]=await Promise.all([
+    /* J1939 (2026-10-03): the component's settings and a live line on where
+       its address claim stands; absent in builds without the component */
+    const jLive=h("div",{class:"help",style:"margin-top:6px"});
+    const paintJ1939=async()=>{const j=await tryGet("/api/j1939");if(!j){jLive.textContent="";return;}
+      const cl=j.claim||{};
+      const txt=j.state==="off"?"Off."
+        :j.state==="no_bus"?"Enabled, but the CAN interface is off: nothing to listen to."
+        :j.mode!=="active"?"Listening"+(j.bus==="j1939"?" to a J1939 network":"")+", never transmits."
+        :cl.state==="claimed"?"Active: address "+cl.address+" is WiCAN's"+(cl.lost?" (moved "+cl.lost+" time"+(cl.lost===1?"":"s")+" after a stronger claim)":"")+"; "+(j.tx?j.tx.requests:0)+" requests sent."
+        :cl.state==="claiming"?"Active: claiming address "+cl.address+"."
+        :cl.state==="cannot_claim"?"Active, but every address was taken by a stronger claim: listening only."
+        :cl.tx_ready===false?"Active, but the CAN interface does not let WiCAN transmit (listen-only mode, or no frame has proven the bit rate yet): listening only."
+        :"Active: waiting to claim an address.";
+      jLive.replaceChildren(h("span",{},txt));};
+    const[apRows,staRows,bleRows,canRows,mqttRows,imRows,j1939Rows]=await Promise.all([
       settingsForm("wifi_manager",AP_KEYS,{...shared,onDirty:wifiDirty,
         advanced:["ap_ip","ap_channel","ap_bandwidth","ap_hidden",
           "ap_max_connections","power_save",
@@ -4468,7 +4662,9 @@ PAGES.settings=async(view,sub)=>{
           "mqtt_manager",mv)),
       /* radio arbitration (interface_manager) lives here since 2026-09-07
          (meatpi: "these should be in wifi settings"); absent in some builds */
-      settingsForm("interface_manager",null,{}).catch(()=>[])]);
+      settingsForm("interface_manager",null,{}).catch(()=>[]),
+      settingsForm("j1939",null,{advanced:["address","cli"]}).catch(()=>[])]);
+    if(j1939Rows.length)paintJ1939();
     // lean-RAM nudge: full WiFi buffers + BLE on = the one combo that
     // eats internal-RAM headroom; lean is free throughput-wise.
     const bleOn=await api("/api/settings/ble_manager")
@@ -4509,7 +4705,9 @@ PAGES.settings=async(view,sub)=>{
         imRows.length?card("Radio Arbitration","bt",...imRows,imNote):null)},
       {id:"bluetooth",el:h("div",{class:"pane"},card("Bluetooth","bt",...bleRows))},
       {id:"can",el:h("div",{class:"pane"},card("CAN Interface","activity",...canRows,
-        note("","Classic CAN 2.0: 11-bit (standard) and 29-bit (extended) identifiers supported. Listen-only mode never acknowledges frames on the bus.")))},
+        note("","Classic CAN 2.0: 11-bit (standard) and 29-bit (extended) identifiers supported. Listen-only mode never acknowledges frames on the bus.")),
+        j1939Rows.length?card("J1939 (trucks, buses, machines)","activity",...j1939Rows,jLive,
+          note("","The parameter groups a J1939 vehicle broadcasts become AutoPID rows (Vehicle > PIDs, cmd PGN:<hex>) and its trouble codes appear on the DTC page. Listen mode is enough for all of that. Active mode lets WiCAN ask: on-request groups (PGN rows marked ?), previously active codes and the clear; the CAN interface must then be in normal mode, not listen-only.")):null)},
       {id:"connections",el:h("div",{class:"pane"},await bridgesCard())},
       {id:"mqtt",el:h("div",{class:"pane"},card("MQTT","send",...mqttRows))},
     ],sub);
@@ -4593,7 +4791,7 @@ PAGES.automate=async(view,sub)=>{
       h("option",{value:"custom"},"Below a voltage I choose"),
       h("option",{value:"never"},"Never"));
     const pauseRow=h("div",{class:"frow"},h("label",{},"Pause polling"),h("div",{class:"ctl"},pauseSel),
-      h("div",{class:"help"},"Polling stops while the battery is below the threshold and resumes 0.3 V above it; CAN filters and monitoring keep running."));
+      h("div",{class:"help"},"Polling stops while the battery is below the threshold and resumes 0.3 V above it; the Pause mode below says whether the J1939 rows (read from WiCAN's own CAN listener, nothing transmitted) keep running meanwhile."));
     const sliderRow=h("div",{class:"frow"},h("label",{},"Pause below (V)"),h("div",{class:"ctl"},pauseSlider));
     syncPause=()=>{pauseSel.value=pauseMode();const on=!!av.enabled;
       pauseRow.style.display=on?"":"none";sliderRow.style.display=(on&&pauseMode()==="custom")?"":"none";};
@@ -4813,6 +5011,11 @@ PAGES.automate=async(view,sub)=>{
     /* scan-results picker: firmware stores ready-made config rows —
        review, tick, merge into the table (then Apply). Nothing is ticked
        by default: the user picks what to poll (2026-09-22). */
+    /* the ECU a row addresses by itself (its init sets the request header):
+       "ECU 58" for 18DA58F1, "ECU 7E0" on 11-bit ids; "" for a row asked of
+       every ECU */
+    const rowEcu=pd=>{const m=/(?:^|;)\s*AT\s*SH\s*(?:18DA([0-9A-F]{2})F1|(7E[0-7]))\s*(?:;|$)/i.exec(String((pd&&pd.init)||""));
+      return m?"ECU "+(m[1]||m[2]).toUpperCase():"";};
     function offerScanResults(r){
       const rows=(r&&r.supported)||[];
       if(!rows.length)return toast("Scan stored no supported PIDs","err");
@@ -4823,7 +5026,7 @@ PAGES.automate=async(view,sub)=>{
         const cb=h("input",{type:"checkbox",checked:false,disabled:dup});
         const prm=(row.parameters&&row.parameters[0])||{};
         return{row,cb,el:h("label",{style:"display:grid;grid-template-columns:24px 130px 1fr 90px;gap:8px;align-items:center;padding:5px 4px;border-top:1px solid var(--border);cursor:pointer;opacity:"+(dup?".55":"1")},
-          cb,h("span",{class:"mono"},row.cmd),h("span",{},row.name+(dup?", already configured":"")),
+          cb,h("span",{class:"mono"},row.cmd),h("span",{},row.name+(rowEcu(row)?" · "+rowEcu(row):"")+(dup?", already configured":"")),
           h("span",{class:"mono",style:"color:var(--text-3)"},prm.unit||""))};
       });
       const body=h("div",{},
@@ -4841,8 +5044,14 @@ PAGES.automate=async(view,sub)=>{
             const key=norm(b.row.cmd);
             if(now.has(key))continue;
             now.add(key);
-            cfg.pids.push({name:b.row.name,cmd:b.row.cmd,group:"default",period_ms:1000,type:"std",
-              parameters:(b.row.parameters||[]).map(p=>({...p}))});n++;}
+            /* a scan row of an ISO 27145 car names the ECU that owns the
+               value (init = its address): dropped here, the row would be
+               asked of every ECU at once (2026-10-03) */
+            const add={name:b.row.name,cmd:b.row.cmd,group:"default",period_ms:1000,type:"std",
+              parameters:(b.row.parameters||[]).map(p=>({...p}))};
+            if(b.row.init)add.init=b.row.init;
+            if(b.row.rxheader)add.rxheader=b.row.rxheader;
+            cfg.pids.push(add);n++;}
           paneEl.replaceChildren(pidsPane());
           toast(n?n+" PIDs added: press Apply Configuration to activate":"Nothing new to add",n?"ok":"");}},
       ]});
@@ -4853,6 +5062,12 @@ PAGES.automate=async(view,sub)=>{
        multi-parameter PIDs (Hyundai/Kia SOC+SOH+flags from one 2101)
        render as parameter rows GROUPED under their PID. */
     const pidType=pd=>pd.type==="std"?"std":pd.type==="specific"?"specific":"custom";
+    /* a J1939 parameter group (cmd "PGN:<hex>[@<source>][?]", 2026-10-03): read
+       from the J1939 listener's store, never asked through the OBD chip; init
+       and RX ID do not apply to it */
+    const isPgn=pd=>/^\s*PGN:/i.test(String((pd&&pd.cmd)||""));
+    const pgnLabel=pd=>{const m=/^\s*PGN:\s*([0-9A-F]{1,5})(?:@(0x[0-9A-F]+|\d+))?(\?)?\s*$/i.exec(String((pd&&pd.cmd)||""));
+      if(!m)return"J1939";return"J1939 group "+m[1].toUpperCase()+(m[2]?" from source "+m[2]:"")+(m[3]?", asked for (J1939 active mode)":", broadcast");};
     /* one-shot test through the REAL runner path (init chain, rxheader,
        expression). POST /api/autopid/test, one call per parameter */
     /* ONE shot per PID (type init + PID init + ATCRA + request, exactly
@@ -4954,15 +5169,16 @@ PAGES.automate=async(view,sub)=>{
         const summary=liveCell(h("span",{class:"val"}),el=>{
           if(n===1){const v=fmtLive(pd.parameters[0].name,pd.parameters[0].unit);el.textContent=v||"no data";el.classList.toggle("none",!v);}
           else{const k=pd.parameters.filter(p=>fmtLive(p.name)!=null).length;el.textContent=k?k+" of "+n+" live":"no data";el.classList.toggle("none",!k);}});
-        const testBtn=h("button",{class:"btn sm gh",type:"button",title:"Send this PID once through the real polling path (init, expressions) and show the reply: vehicle must be on"},"Test");
+        const testBtn=h("button",{class:"btn sm gh",type:"button",title:isPgn(pd)?"Decode the newest message of this group in the J1939 listener's store":"Send this PID once through the real polling path (init, expressions) and show the reply: vehicle must be on"},"Test");
         testBtn.onclick=()=>testPid(pd,testBtn);
         row.append(h("div",{class:"main"},
           sw,
           lock?h("span",{class:"nm",title:(pd.name||"")+" (standard-PID names come from the SAE table)"},pd.name||"—")
               :h("input",{value:pd.name||"",placeholder:"PID name",onchange:e=>{pd.name=e.target.value;markDirty();}}),
-          lock?h("span",{class:"req",title:"Standard-PID commands come from the scan"},pd.cmd||"")
-              :h("input",{class:"mono",value:pd.cmd||"",placeholder:"010C1",title:"The OBD/UDS request sent on the bus",onchange:e=>{pd.cmd=e.target.value;markDirty();}}),
-          ...(hasRx?[h("input",{class:"mono",value:pd.rxheader||"",placeholder:"7E8",title:"Optional reply-header filter when several ECUs answer",onchange:e=>{pd.rxheader=e.target.value;markDirty();}})]:[]),
+          lock?h("span",{class:"req",title:isPgn(pd)?pgnLabel(pd)+": read from the J1939 listener, nothing is asked":"Standard-PID commands come from the scan"+(rowEcu(pd)?": this one is asked of "+rowEcu(pd)+" alone":"")},pd.cmd||"",isPgn(pd)?h("span",{class:"dim"}," · J1939"):rowEcu(pd)?h("span",{class:"dim"}," · "+rowEcu(pd)):null)
+              :h("input",{class:"mono",value:pd.cmd||"",placeholder:"010C1",title:isPgn(pd)?pgnLabel(pd)+". PGN:<hex>[@<source>][?]: a J1939 group read from the listener":"The OBD/UDS request sent on the bus, or PGN:<hex> for a J1939 group",onchange:e=>{pd.cmd=e.target.value;if(isPgn(pd)){delete pd.rxheader;delete pd.init;}markDirty();rebuild(true);}}),
+          ...(hasRx?[isPgn(pd)?h("span",{class:"dim",title:"A J1939 group has no reply header: it is heard, not asked"},"J1939")
+              :h("input",{class:"mono",value:pd.rxheader||"",placeholder:"7E8",title:"Optional reply-header filter when several ECUs answer",onchange:e=>{pd.rxheader=e.target.value;markDirty();}})]:[]),
           h("div",{class:"vals"},caret,summary),
           h("div",{class:"acts"},testBtn,
             h("button",{class:"btn sm gh danger",type:"button",title:"Remove this PID and all its parameters",onclick:()=>{cfg.pids.splice(cfg.pids.indexOf(pd),1);markDirty();rebuild(true);}},ic("trash")))));
@@ -4974,7 +5190,8 @@ PAGES.automate=async(view,sub)=>{
                rate as the placeholder instead of a bare 0 (Ali, 2026-09-17: "the
                cycle time for every PID is 0" after loading a profile) */
             fld("Cycle (ms)",h("input",{class:"mono",type:"number",min:"0",value:pd.period_ms||"",placeholder:"group: "+groupRate(pd),title:"Empty = the group's rate, "+groupRate(pd)+". A value here overrides it for this PID only.",onchange:e=>{pd.period_ms=Number(e.target.value)||0;markDirty();}})),
-            fld("PID init (optional AT chain)",h("input",{class:"mono",value:pd.init||"",placeholder:"ATSP6;ATSH7E4;",title:"Sent before this PID's request whenever the poller switches to it",onchange:e=>{pd.init=e.target.value;markDirty();}})));
+            isPgn(pd)?fld("J1939",h("span",{class:"help",style:"display:block;padding-top:6px"},pgnLabel(pd)+". No init, no reply header: the listener keeps the newest message of every group, this row decodes it (B0 = the first data byte)."))
+              :fld("PID init (optional AT chain)",h("input",{class:"mono",value:pd.init||"",placeholder:"ATSP6;ATSH7E4;",title:"Sent before this PID's request whenever the poller switches to it",onchange:e=>{pd.init=e.target.value;markDirty();}})));
           const prmHead=h("div",{class:"prm prm-head"},h("span",{}),h("span",{},"Parameter"),h("span",{},"Expression"),h("span",{},"Unit"),h("span",{class:"r"},"Live"),h("span",{}));
           const prmRows=pd.parameters.map(pr=>{
             const pon=pr.enabled!==false;
@@ -5040,10 +5257,22 @@ PAGES.automate=async(view,sub)=>{
         const r=await tryGet("/api/autopid/std_scan/result");
         if(r&&r.supported)offerScanResults(r);else toast("No stored scan result: run Scan PIDs first","");}},"Last Scan Results");
       const applyBtn=h("button",{class:"btn pri sm",onclick:saveCfg},"Apply Configuration");
-      return h("div",{},groupHead("std"),tbl,
+      /* the J1939 listener (2026-10-03): shown when PGN rows exist or the
+         listener is up; refreshed with the live values */
+      const jl=h("div",{});
+      const paintJ=async()=>{
+        const hasPgn=cfg.pids.some(isPgn);
+        const j=await tryGet("/api/j1939");
+        if(!j||(!hasPgn&&j.state!=="listening")){jl.replaceChildren();return;}
+        const st=j.stats||{};
+        const txt=j.state==="listening"?"listening at "+((j.can||{}).baud_kbps||"?")+" kbit/s, bus "+(j.bus||"unknown")+": "+(st.messages||0)+" messages, "+(st.entries||0)+" groups from "+(st.sources||0)+" source"+(st.sources===1?"":"s")+(j.vin?", VIN "+j.vin:"")
+          :j.state==="no_bus"?"enabled, but the native CAN bus is off (Settings > CAN)":"off (Settings > J1939)";
+        jl.replaceChildren(h("div",{class:"rowflex",style:"gap:8px;margin-bottom:10px;flex-wrap:wrap"},chip("J1939 listener",j.state==="listening"?"ok":hasPgn?"warn":""),h("span",{class:"help"},txt)));};
+      liveSubs.add(()=>{if(tbl.isConnected)paintJ();});paintJ();
+      return h("div",{},groupHead("std"),jl,tbl,
         h("div",{class:"rowflex",style:"gap:8px;margin-top:12px;flex-wrap:wrap"},
           scanBtn,lastBtn,h("span",{class:"grow"}),applyBtn),
-        note("","SAE-standard PIDs the vehicle reports as supported. Scan discovers them and fills in the decode automatically; hand-written requests belong on the Custom PIDs tab."));
+        note("","SAE-standard PIDs the vehicle reports as supported, and on a J1939 vehicle the standard groups its controllers broadcast. Scan discovers them and fills in the decode automatically; hand-written requests belong on the Custom PIDs tab."));
     }
     function custPane(){
       const tbl=pidTable("custom","No custom PIDs. Add PID to poll any request with your own decode expression");
@@ -5051,8 +5280,9 @@ PAGES.automate=async(view,sub)=>{
       return h("div",{},groupHead("custom"),tbl,
         h("div",{class:"rowflex",style:"gap:8px;margin-top:12px;flex-wrap:wrap"},
           h("button",{class:"btn sm",onclick:()=>{cfg.pids.push({name:"NewPID",cmd:"010C1",group:"default",period_ms:1000,type:"custom",parameters:[{name:"NewPID",expression:"B2",unit:""}]});paneEl.replaceChildren(custPane());}},ic("plus"),"Add PID"),
+          h("button",{class:"btn sm",title:"A J1939 parameter group read from the listener (trucks): PGN:<hex>[@<source>][?]",onclick:()=>{cfg.pids.push({name:"EngineSpeed",cmd:"PGN:F004",group:"default",period_ms:1000,type:"custom",parameters:[{name:"EngineSpeed",expression:"(B3+B4*256)*0.125",unit:"rpm"}]});paneEl.replaceChildren(custPane());}},ic("plus"),"Add PGN"),
           h("span",{class:"grow"}),applyBtn),
-        note("","Command is the raw OBD/UDS request (e.g. 010C1 or 22F1901); expand a PID (▸) to edit the parameters decoding its reply bytes (B0…Bn). Passive CAN filters: Raw Config."));
+        note("","Command is the raw OBD/UDS request (e.g. 010C1 or 22F1901); expand a PID (▸) to edit the parameters decoding its reply bytes (B0…Bn). A J1939 group is PGN:<hex>, with @<source> to pin one controller and ? for a group sent on request only: in J1939 active mode (Settings > CAN) WiCAN asks for it at the row's period, once a second at most; in listen mode the row shows what another node asked for. Groups are read from the J1939 listener, B0 is the first data byte and words are little-endian (B3+B4*256). Passive CAN filters: Raw Config."));
     }
     /* shared helpers since 2026-10-01: profileToPids / vehicleProfilePicker
        (top level) serve this page and Quick Setup */
@@ -5202,7 +5432,7 @@ PAGES.power=async(view)=>{
         chip(st.state||"normal",st.state==="normal"?"ok":"warn"),
         st.voltage!=null?chip(st.voltage.toFixed(1)+" V","info"):null):null,
       ...rows,
-      note("warn","Disabling sleep continuously drains the vehicle battery when the engine is off. Only disable for testing.")));
+      note("warn","Disabling sleep continuously drains the vehicle battery when the engine is off. Only disable for testing. One guard stays on regardless: a battery under 11.9 V for 2 minutes puts the device to sleep anyway.")));
   }catch(e){wrap.append(banner("crit","alert",e.message));}
   return null;
 };
@@ -5680,6 +5910,7 @@ PAGES.dashboard=async(view)=>{
   const p=page(view,null,"Dashboard","Live values of the parameters Automate polls.",[stateEl,editBtn]);
   const groupsEl=h("div",{class:"rowflex",style:"gap:8px;flex-wrap:wrap"}),statsEl=h("div",{class:"dstats"});
   const stripEl=h("div",{class:"dash-strip"},groupsEl,statsEl);
+  const busEl=h("div",{style:"display:none"});   /* the bus guard's word while it parks the chip */
   const editBar=h("div",{class:"dash-edit",style:"display:none"},
     h("span",{},ic("info"),"Drag tiles to reorder. The gear on a tile picks its widget, range, warnings and width. Hidden tiles stay here, faded, until you show them again."),
     h("span",{class:"grow"}),
@@ -5687,7 +5918,7 @@ PAGES.dashboard=async(view)=>{
     h("button",{class:"btn sm pri",type:"button",onclick:()=>setEdit(false)},"Done"));
   const cardsEl=h("div",{class:"tiles"});
   const emptyEl=h("div",{class:"section",style:"display:none"},h("div",{class:"empty"}));
-  p.append(stripEl,editBar,cardsEl,emptyEl,
+  p.append(busEl,stripEl,editBar,cardsEl,emptyEl,
     note("","Each gauge spans the parameter's min / max from Automate → Parameters unless you set a custom range; without either the bar follows the values seen this session. Group switches are temporary: the configured state returns after a restart. Customise keeps the layout on the WiCAN, so every phone and PC sees the same dashboard."));
   const hist=DASH_HIST,range=new Map(),tiles=new Map();
   let meta=new Map(),metaNames="",groups=[],groupsSig="",prev=null,rateTxt=null,editing=false,dragName=null,saveT=null;
@@ -5875,7 +6106,10 @@ PAGES.dashboard=async(view)=>{
     if(!a){stateEl.replaceChildren(chip("Unavailable","crit"));stripEl.style.display="none";showEmpty("Automate is not answering.");return;}
     const st=a.stats||{},bits=(conn.status&&conn.status.bits)||{};
     const off=bits.autopid_enabled===false;
-    stateEl.replaceChildren(off?chip("Automate off",""):st.paused_voltage?chip("Paused: battery below the threshold","warn"):st.running?chip("Polling","ok"):chip("Not polling",""));
+    const parked=!off&&!!st.paused_bus,why=(a.bus_guard&&a.bus_guard.reason)||"the vehicle bus runs at another bit rate than the OBD protocol in use";
+    stateEl.replaceChildren(off?chip("Automate off",""):st.paused_voltage?chip("Paused: battery below the threshold","warn"):parked?chip("Paused: nothing is sent to this bus","warn"):st.running?chip("Polling","ok"):chip("Not polling",""));
+    busEl.style.display=parked?"":"none";
+    if(parked)busEl.replaceChildren(banner("warn","alert",h("b",{},"Polling is paused to protect the vehicle bus. "),why.charAt(0).toUpperCase()+why.slice(1)+". ",h("a",{href:"#/automate/settings"},"Open Automate settings")));
     if(off){stripEl.style.display="none";showEmpty(h("span",{},"Automate is off: turn polling on under ",h("a",{href:"#/automate/settings"},"Automate → Settings"),"."));return;}
     if(!(a.params||[]).length){stripEl.style.display="none";showEmpty(h("span",{},"Nothing to show yet: add parameters under ",h("a",{href:"#/automate/parameters"},"Automate → Parameters"),"."));return;}
     stripEl.style.display="";paintGroups(a);paintStats(st);
@@ -6537,8 +6771,29 @@ PAGES.dtc=async(view,sub)=>{
     const d=await tryGet("/api/autopid/dtc");
     if(!d){repEl.replaceChildren(section("Trouble codes",null,h("div",{class:"empty"},"DTC unavailable")));return;}
     const r=d.report||{};const desc=r.desc||{};
+    /* `items` (2026-10-03) keep every ECU's word apart; the category arrays
+       are the merged view older firmware has alone */
     const rows=[];const push=(codes,st)=>{(codes||[]).forEach(c=>rows.push({code:c,status:st,desc:desc[c]}));};
-    push(r.stored,"stored");push(r.pending,"pending");push(r.permanent,"permanent");
+    /* a DM1 code of a J1939 controller (2026-10-03) names its source address
+       and occurrence count instead of an ECU id; `kind` stored = active */
+    /* J1939 active mode (phase 6) asks DM2 as well: its codes are
+       "previously active", kept as pending items */
+    if(Array.isArray(r.items)&&r.items.length)r.items.forEach(it=>rows.push({code:it.code,status:it.sa!=null?(it.kind==="pending"?"previously active":"active"):it.kind,ecu:it.sa!=null?"SA "+it.sa:(it.ecu||""),oc:it.oc,desc:desc[it.code]}));
+    else{push(r.stored,"stored");push(r.pending,"pending");push(r.permanent,"permanent");}
+    const hasEcu=rows.some(x=>x.ecu);
+    const hasOc=rows.some(x=>x.oc!=null);
+    const lamps=(r.sources||[]).filter(s=>s.mil&&(s.ecu||s.sa!=null)).map(s=>s.sa!=null?"SA "+s.sa:s.ecu);
+    /* the path a scan or clear takes now (firmware says; older: OBD-II) */
+    const path=d.path||r.protocol||"obd";
+    /* on a J1939 vehicle the j1939 component's mode decides what a clear is
+       (listen: nothing is sent; active: DM11 and DM3 on the network) */
+    const jd=path==="j1939"?await tryGet("/api/j1939"):null;
+    const jActive=!!(jd&&jd.mode==="active");
+    const jClaimed=jActive&&jd.claim&&jd.claim.state==="claimed";
+    const PATH={wwh:"OBD on UDS (ISO 27145)",uds:"UDS, one ECU",j1939:jActive?"J1939 (DM1 heard, DM2 asked)":"J1939, heard (DM1)"};
+    /* the four J1939 lamps (SAE J1939-73) when a J1939 network is in the report */
+    const LAMP={mil:["MIL","malfunction indicator"],rsl:["Stop","red stop lamp: stop the vehicle"],awl:["Warning","amber warning lamp"],pl:["Protect","protect lamp: a non-electronic subsystem"]};
+    const lampChips=r.j1939&&r.lamps?Object.keys(LAMP).map(k=>chip(LAMP[k][0]+(r.lamps[k]?" ON":" off"),r.lamps[k]?(k==="rsl"?"crit":"warn"):"")).map((c,i)=>{c.title=Object.values(LAMP)[i][1];return c;}):[];
     const scanBtn=h("button",{class:"btn pri sm",disabled:d.scanning||!d.enabled,onclick:async()=>{
       try{await api("/api/autopid/dtc/scan",{method:"POST",body:{}});toast("Scan started","ok");
         clearInterval(scanTimer);scanTimer=setInterval(async()=>{const g=await tryGet("/api/autopid/dtc");
@@ -6547,24 +6802,49 @@ PAGES.dtc=async(view,sub)=>{
     repEl.replaceChildren(sectionTools("Trouble codes",[scanBtn],
       h("div",{class:"rowflex",style:"gap:8px;margin-bottom:12px;flex-wrap:wrap"},
         onoff(d.enabled,"DTC enabled","DTC disabled"),
-        r.valid?chip(r.mil?"MIL ON · "+r.mil_count+" code(s)":"MIL off",r.mil?"crit":"ok"):chip("no scan yet",""),
+        r.valid&&!r.j1939?chip(r.mil?"MIL ON · "+r.mil_count+" code(s)":"MIL off",r.mil?"crit":"ok"):r.valid?chip(r.mil_count+" active code(s)",r.mil_count?"crit":"ok"):chip("no scan yet",""),
+        ...lampChips,
         d.scanning?chip("scanning…","info"):null,
+        PATH[path]?chip(PATH[path],""):null,
+        r.j1939&&path!=="j1939"?chip("J1939 network as well",""):null,
         d.allow_clear?chip("clearing allowed","warn"):chip("clearing locked","ok")),
       !d.enabled?banner("info","alert","DTC scanning is disabled: turn on ",h("b",{},"DTC scanning")," on the Settings tab, then Submit (reboot to apply)."):null,
       r.error?banner("warn","alert",r.error):null,
       r.valid?dataTable([
         {label:"Code",get:x=>h("a",{href:"#",class:"mono",onclick:e=>{e.preventDefault();addCode(x.code);}},x.code)},
-        {label:"Status",get:x=>chip(x.status,x.status==="stored"?"crit":x.status==="pending"?"warn":"")},
-        {label:"Description",get:x=>x.desc||h("span",{class:"dim"},"no database entry")},
+        {label:"Status",get:x=>chip(x.status,x.status==="stored"||x.status==="active"?"crit":x.status==="pending"||x.status==="previously active"?"warn":"")},
+        ...(hasEcu?[{label:"ECU",get:x=>h("span",{class:"mono"},x.ecu||"")}]:[]),
+        ...(hasOc?[{label:"Count",get:x=>h("span",{class:"mono"},x.oc!=null?String(x.oc):"")}]:[]),
+        {label:"Description",get:x=>x.desc||h("span",{class:"dim"},x.code.startsWith("SPN")?"SPN-FMI, see the J1939-73 tables":"no database entry")},
       ],rows,{empty:"No trouble codes, all clear"}):null,
+      r.valid&&r.j1939?h("p",{class:"help"},"J1939 codes read SPN-FMI (suspect parameter number and failure mode); the active ones are heard from each controller's DM1 broadcast"+(jActive?", the previously active ones are asked for (DM2) at every scan.":"; WiCAN asks nothing on the J1939 network in listen mode.")):null,
+      r.valid&&lamps.length&&(r.sources||[]).length>1?h("p",{class:"help"},"The lamp is requested by ",h("span",{class:"mono"},lamps.join(", ")),"."):null,
       r.valid&&r.ts?h("p",{class:"help"},"Last scan: "+new Date(r.ts*1000).toLocaleString()):null));
-    clearEl.replaceChildren(section("Clear codes","mode 04: conditions gate the wipe",
-      banner("warn","alert",h("b",{},"Mode 04 clears ALL codes"),", freeze frame, readiness monitors, and the MIL; it cannot clear one code alone. ",
+    /* what a clear is on this path: OBD-II and OBD on UDS wipe everything,
+       a manufacturer's UDS clears the listed codes one by one */
+    const CLEAR={
+      obd:{sub:"mode 04: conditions gate the wipe",head:"Mode 04 clears ALL codes",tail:", freeze frame, readiness monitors, and the MIL; it cannot clear one code alone. ",ask:"Send mode 04?"},
+      wwh:{sub:"service 14, emissions group: conditions gate the wipe",head:"This clears ALL emission codes of every ECU",tail:", readiness and the MIL (service 14, group FFFF33); it cannot clear one code alone, and permanent codes stay until the vehicle has verified the repair. ",ask:"Clear the emission codes of every ECU?"},
+      uds:{sub:"service 14 on the configured ECU",head:"Service 14 clears the listed codes",tail:" one by one on the configured ECU, or all of its codes when the list is empty. ",ask:"Send service 14?"},
+      j1939:{sub:"DM11 and DM3 to every controller heard",head:"DM11 clears the active codes of every controller",tail:" and DM3 the previously active ones (a request each controller acknowledges); it cannot clear one code alone. ",ask:"Send DM11 and DM3 to every controller on the network?"}}[path]||null;
+    const CL=CLEAR||{sub:"",head:"Clear",tail:" ",ask:"Clear?"};
+    if(path==="j1939"&&!jActive){
+      clearEl.replaceChildren(section("Clear codes","not available in J1939 listen mode",
+        banner("info","info",h("b",{},"WiCAN only listens on this vehicle. "),"The codes above are what its controllers broadcast (DM1); clearing them (DM11, DM3) is a request on the J1939 network, which listen mode never sends. Set the J1939 mode to Active on the Settings tab (CAN) to clear codes; they also clear themselves when the fault is gone and the controller stops reporting it.")));
+      return;
+    }
+    if(path==="j1939"&&!jClaimed){
+      clearEl.replaceChildren(section("Clear codes",CL.sub,
+        banner("warn","alert",h("b",{},"No address on the network yet. "),"WiCAN is in J1939 active mode but holds no address ("+((jd.claim||{}).state||"idle")+"): the CAN interface may be in listen-only mode, or the claim is still pending. Nothing can be asked or cleared until then.")));
+      return;
+    }
+    clearEl.replaceChildren(section("Clear codes",CL.sub,
+      banner("warn","alert",h("b",{},CL.head),CL.tail,
         h("b",{},"if_only")," refuses when a code NOT in your list is present (protects evidence); ",h("b",{},"if_any")," clears when at least one listed code is present."),
       h("div",{class:"frow"},h("label",{},"Codes"),h("div",{class:"ctl"},codesInp)),
       h("div",{class:"frow"},h("label",{},"Mode"),h("div",{class:"ctl rowflex"},h("div",{style:"max-width:160px"},modeSel),h("span",{class:"grow"}),
         h("button",{class:"btn danger",disabled:!d.allow_clear,onclick:async()=>{
-          if(!await confirmModal("Send mode 04? With mode \""+modeSel.value+"\""+(codesInp.value?" for "+codesInp.value:"")+". Readiness monitors reset.","Clear DTCs"))return;
+          if(!await confirmModal(CL.ask+" With mode \""+modeSel.value+"\""+(codesInp.value?" for "+codesInp.value:"")+". Readiness monitors reset.","Clear DTCs"))return;
           try{const r2=await api("/api/autopid/dtc/clear",{method:"POST",body:{confirm:true,codes:codesInp.value||undefined,mode:modeSel.value}});
             toast(r2.cleared?`Cleared (${r2.before} → ${r2.after})`:"Condition not met, nothing cleared",r2.cleared?"ok":"err");refresh();}
           catch(e){toast(e.message,"err");}}},ic("trash"),"Clear"))),
@@ -7282,7 +7562,9 @@ PAGES.sysmon=async(view)=>{
     if(m)heapEl.replaceChildren(...[["Internal RAM","the scarce heap: radio stacks live here",m.internal],["PSRAM","bulk heap",m.psram]].map(([label,desc,hp])=>
       section(label,desc,
         meter(hp.total-hp.free,hp.total),
-        kv([["In use",fmt.bytes(hp.total-hp.free)+" of "+fmt.bytes(hp.total)],["Free now",fmt.bytes(hp.free)],["Lowest ever",fmt.bytes(hp.min_free)],["Largest free block",fmt.bytes(hp.largest_block)]]))));
+        kv([["In use",fmt.bytes(hp.total-hp.free)+" of "+fmt.bytes(hp.total)],["Free now",fmt.bytes(hp.free)],["Lowest ever",fmt.bytes(hp.min_free)],
+          /* the PSRAM heap's largest block is not in the polled status (measuring it stops interrupts for milliseconds) */
+          ...(hp.largest_block!=null?[["Largest free block",fmt.bytes(hp.largest_block)]]:[])]))));
     const STATE={X:["running","ok"],R:["ready","ok"],B:["blocked",""],S:["suspended","warn"],D:["deleted","crit"]};
     taskEl.replaceChildren(section("Tasks","stack headroom = bytes NEVER used (small = near overflow); CPU % measured between refreshes",
       dataTable([
@@ -8074,7 +8356,15 @@ const CSS=`/* CAN Monitor (2026-09-07, after the "WiCAN PRO Monitor" design) */
 @media(max-width:900px){.pm-decode{width:230px}}`;
 document.head.append(h("style",{},CSS));
 
-const BAUDS=[["33","33 kbit/s"],["83","83 kbit/s"],["95","95 kbit/s"],["100","100 kbit/s"],["125","125 kbit/s"],["250","250 kbit/s"],["500","500 kbit/s"],["1000","1 Mbit/s"]];
+/* /api/can: the node listens before it talks (state detecting | listening |
+   mismatch until its verdict; listen_only = what it may do right now) */
+const canRate=c=>c.baud_auto&&!c.verified?"auto":(c.baud_kbps>=1000?(c.baud_kbps/1000)+"M":c.baud_kbps+"k");
+const canNote=c=>c.state==="detecting"?" · detecting":c.state==="mismatch"?" · other bit rate":c.state==="listening"?" · listening":c.listen_only||c.silent?" · listen-only":"";
+const canWhyNoTx=c=>c.silent?"The bus is in listen-only mode: nothing is sent"
+  :c.state==="mismatch"?"The bus runs at another bit rate than the one set here: nothing is sent"
+  :c.state==="detecting"?"No bit rate detected yet: nothing is sent until the bus shows traffic"
+  :"The CAN node is still listening before it talks: nothing is sent yet";
+const BAUDS=[["auto","Automatic"],["33","33 kbit/s"],["83","83 kbit/s"],["95","95 kbit/s"],["100","100 kbit/s"],["125","125 kbit/s"],["250","250 kbit/s"],["500","500 kbit/s"],["1000","1 Mbit/s"]];
 const PREF_KEY="wican.canmon.v1";
 const TRACE_LIMITS=[300,1000,3000];
 const COLW={rx:[96,88,40,300,120,72,64],tx:[34,96,80,38,210,80,52,68,130,104],tr:[90,52,110,90,40,400]};
@@ -8149,7 +8439,7 @@ PAGES.__monitor=async(view,sub)=>{
   function paintStatus(){
     const c=S.can,on=S.connected;
     sbDot.classList.toggle("on",on);sbConn.textContent=on?(S.paused?"paused":"connected"):"offline";
-    sbBus.textContent=c&&c.enabled?"CAN "+(c.baud_kbps>=1000?(c.baud_kbps/1000)+"M":c.baud_kbps+"k")+(c.silent?" · silent":""):"CAN off";
+    sbBus.textContent=c&&c.enabled?"CAN "+canRate(c)+canNote(c):"CAN off";
     const rate=S.rateWin.length,kbps=c&&c.baud_kbps?c.baud_kbps:500;
     S.stats.rxps=rate;S.stats.load=Math.min(99,Math.round(rate*111/(kbps*10)));
     sbLoadBar.style.width=S.stats.load+"%";sbLoad.textContent=S.stats.load+"%";
@@ -8350,7 +8640,7 @@ PAGES.__monitor=async(view,sub)=>{
       h("div",{},h("span",{},"IP address"),h("span",{class:"mono"},w.ip||location.hostname)),
       h("div",{},h("span",{},"WiFi mode"),h("span",{},mode)),
       h("div",{},h("span",{},"Uptime"),h("span",{class:"mono"},st.uptime||"?")),
-      h("div",{},h("span",{},"Bus"),h("span",{class:"mono"},S.can&&S.can.enabled?S.can.state+" · "+S.can.baud_kbps+" kbit/s":"disabled")));
+      h("div",{},h("span",{},"Bus"),h("span",{class:"mono"},S.can&&S.can.enabled?S.can.state+" · "+(S.can.baud_auto&&!S.can.verified?"automatic":S.can.baud_kbps+" kbit/s")+(S.can.listen_only?" · listen-only":""):"disabled")));
   }
   function paintDbcCard(){
     const msgs=S.dbcs.reduce((a,d)=>a+(d.messages||0),0);
@@ -8495,7 +8785,7 @@ PAGES.__monitor=async(view,sub)=>{
   function sendRow(i,quiet){
     const r=S.tx[i];if(!r)return false;
     if(!S.ws||S.ws.readyState!==1){if(!quiet)toast("Not connected to the CAN bus","err");return false;}
-    if(S.can&&S.can.silent){if(!quiet)toast("The bus is in listen-only mode: nothing is sent","err");return false;}
+    if(S.can&&(S.can.listen_only||S.can.silent)){if(!quiet)toast(canWhyNoTx(S.can),"err");return false;}
     S.ws.send(encode(r));r.count++;r._last=performance.now();S.stats.total++;
     if(txCells[i])txCells[i].textContent=String(r.count);
     const idn=parseInt(r.id,16),ext=r.ext||idn>0x7FF;
@@ -8662,6 +8952,9 @@ const STEPS=[
 ];
 const IDS=STEPS.map(s=>s.id);
 const PROTO={"6":"CAN 11-bit 500 kbit/s","7":"CAN 29-bit 500 kbit/s","8":"CAN 11-bit 250 kbit/s","9":"CAN 29-bit 250 kbit/s"};
+/* how a car wants its legislated data asked (the vehicle store's `dialect`):
+   only the newer one is worth a word, OBD-II is what everybody expects */
+const DIALECT={uds:"OBD on UDS (ISO 27145)",j1939:"J1939"};
 const HA_REPO="https://github.com/jay-oswald/ha-wican";
 const SKIP_KEY="wican-setup-skip";
 
@@ -9235,25 +9528,35 @@ SCREENS.vehicle=async()=>{
       if(!D.vehicles)out.push(note("","This firmware keeps one vehicle only (no vehicle store): the result is stored, but moving WiCAN between cars needs a new scan each time."));
     }else if(phase==="detecting"){
       out.push(sub("1. Detecting the vehicle"));
-      const phases=[["protocol","Detecting the OBD protocol","The chip tries the CAN protocols in turn, then 0100 and ATDPN tell which one answered. Up to 20 s on some cars."],["vin","Reading the VIN","Mode 09 PID 02, then UDS 22 F190. Without either, the car is identified by the set of ECUs that answered."],["pids","Finding the standard PIDs","Support bitmaps 0100, 0120, 0140 and up, every ECU that answers. Stored under this vehicle."]];
+      const phases=[["protocol","Detecting the OBD protocol","WiCAN asks on each CAN protocol in turn, first the OBD-II way (0100), then the way of newer vans and trucks (ISO 27145: 22 F400). A few seconds."],["vin","Reading the VIN","Mode 09 PID 02, then UDS 22 F190 (22 F802 on an ISO 27145 vehicle). Without either, the car is identified by the set of ECUs that answered."],["pids","Finding the standard PIDs","The support bitmaps of every ECU that answers (0100, 0120 and up, or 22 F400 and up). Stored under this vehicle."],["network","Listening to the vehicle network","Is this a J1939 network (trucks, buses, agricultural machines)? WiCAN only listens here: the controllers that broadcast, the groups they send, the VIN when one is broadcast."]];
       const ph=W.scanStatus&&W.scanStatus.phase;const idx=Math.max(0,phases.findIndex(p=>p[0]===ph));
       phases.forEach((p,i)=>out.push(check(i<idx?"ok":i===idx?"run":"","info",p[1],p[2],i<idx?chip("Done","ok"):i===idx?chip("Working",""):null)));
     }else{
       /* result */
       out.push(sub("1. Vehicle detected"));
       const known=!!(v.known&&v.profile);
+      const j1939Only=v.dialect==="j1939";
       if(known)out.push(banner("ok","check",h("b",{},"Welcome back: "+(v.name||defaultName(v))+". "),"WiCAN set this car up before and already switched to its profile, PIDs and protocol. Nothing to do here unless you want to change something."));
+      else if(j1939Only)out.push(banner("ok","check",h("b",{},"J1939 vehicle. "),"This vehicle speaks SAE J1939, the network of trucks, buses and agricultural machines. Its controllers broadcast their values; WiCAN listens and never asks. "+(v.std_supported||0)+" standard parameters were heard and stored under this vehicle."+(v.vin?"":" No VIN was broadcast: it is remembered by the set of controllers on its network.")));
       else if(!v.vin)out.push(banner("info","info",h("b",{},"New vehicle. "),"This car gave no VIN, so WiCAN remembers it by the set of ECUs that answered (that works for one car; two identical models would look the same). Give it a name below."));
       else out.push(banner("ok","check",h("b",{},v.known?"Vehicle recognised. ":"New vehicle. "),"WiCAN stored the protocol, VIN and "+(v.std_supported||0)+" standard PIDs under this car. Pick a profile below so it can read the vehicle-specific values too."));
+      if(v.j1939&&!v.j1939Listening)out.push(banner("warn","alert",h("b",{},"One more restart for the J1939 listener. "),"The J1939 network is read by WiCAN's own CAN controller, which is off on a new device. Finish turns it on in listen-only mode (it never transmits) together with the J1939 listener; the values arrive after that restart."));
+      else if(v.j1939&&!j1939Only)out.push(banner("info","info",h("b",{},"A J1939 network as well. "),"This vehicle answers OBD requests and broadcasts J1939 groups. Both sets of parameters are stored under it."));
       const nameInp=h("input",{id:"qs-veh-name",value:W.vehName,placeholder:"e.g. Family car",style:"max-width:260px",oninput:e=>{W.vehName=e.target.value;}});
       out.push(h("dl",{class:"qs-kv"},
-        h("dt",{},"VIN"),h("dd",{},v.vin?[h("code",{},v.vin),chip("Read from the car","ok")]:[chip("VIN not available","warn"),h("span",{},"identified by its ECUs"+(v.fingerprint?" ("+v.fingerprint+")":""))]),
-        h("dt",{},"OBD protocol"),h("dd",{},protoName(v.protocol),PROTO[String(v.protocol)]?chip("Detected","ok"):chip("Automatic","")),
-        h("dt",{},"Standard PIDs"),h("dd",{},(v.std_supported||0)+" supported",chip("Stored","ok")),
+        h("dt",{},"VIN"),h("dd",{},v.vin?[h("code",{},v.vin),chip(j1939Only?"Broadcast by the vehicle":"Read from the car","ok")]:[chip("VIN not available","warn"),h("span",{},(j1939Only?"identified by its controllers":"identified by its ECUs")+(v.fingerprint?" ("+v.fingerprint+")":""))]),
+        h("dt",{},j1939Only?"Network":"OBD protocol"),h("dd",{},j1939Only?[h("span",{id:"qs-veh-dialect"},"SAE J1939"+(v.busKbps?", "+v.busKbps+" kbit/s":"")),chip("Heard","ok")]:[protoName(v.protocol),DIALECT[v.dialect]?h("span",{id:"qs-veh-dialect"},DIALECT[v.dialect]):null,PROTO[String(v.protocol)]?chip("Detected","ok"):chip("Automatic",""),v.j1939?chip("J1939 network","ok"):null]),
+        h("dt",{},j1939Only?"Standard parameters":"Standard PIDs"),h("dd",{},(v.std_supported||0)+(j1939Only?" heard":" supported"),chip("Stored","ok")),
         h("dt",{},"Name"),h("dd",{},nameInp,h("span",{class:"help",style:"font-size:12px"},"shown on the Status page and in Home Assistant"))));
-      /* 2. profile */
-      out.push(sub("2. Vehicle profile"));
+      /* 2. profile (a J1939-only vehicle has no OBD requests for a profile to add) */
+      if(j1939Only&&!known){
+        if(W.profChoice===null){W.profChoice="none";W.profCar=null;}
+        out.push(sub("2. Vehicle profile"));
+        out.push(note("","Profiles carry OBD requests, which a J1939 vehicle does not answer. The standard J1939 parameters are stored already; more groups can be added as PGN rows under Automate > Parameters."));
+      }
       const chosen=W.profChoice==="car"?W.profCar:null;
+      if(!(j1939Only&&!known)){
+      out.push(sub("2. Vehicle profile"));
       const testBtn=btn("Test profile",()=>testProfile(chosen||(known?{car_model:v.profile,fromStore:true}:null)),"sm",{icon:"refresh",disabled:!(chosen||known)});
       if(known&&W.profChoice===null){
         out.push(h("div",{class:"qs-pick"},h("span",{class:"sel"},ic("car"),v.profile),btn("Change profile",()=>picker.open(),"sm",{icon:"search"}),testBtn,btn("Scan again",startDetect,"sm",{icon:"refresh"})));
@@ -9276,6 +9579,7 @@ SCREENS.vehicle=async()=>{
         if(chosen){const pm=profileProtocol(chosen);if(pm&&PROTO[String(v.protocol)]&&pm!==String(v.protocol))out.push(banner("warn","alert",h("b",{},"Protocol mismatch. "),"This profile expects "+protoName(pm)+" but the car answered on "+protoName(v.protocol)+". It may still work for some requests; test it first."));}
         out.push(note("","A profile adds the values the standard PIDs do not carry (battery state of charge, charging power). It is saved under this car: WiCAN applies it again whenever this car answers, and never to another car."));
       }
+      }
     }
     /* the store */
     const list=entries();
@@ -9283,7 +9587,7 @@ SCREENS.vehicle=async()=>{
       out.push(sub("Vehicles this WiCAN knows"));
       if(list.length){
         out.push(h("div",{class:"qs-nets"},...list.map(e=>h("div",{class:"qs-net",style:"grid-template-columns:1fr auto auto;cursor:default"},
-          h("span",{},h("b",{},e.name||defaultName(e)||"Unnamed vehicle"),h("br"),h("span",{class:"help"},(e.vin||("no VIN, ECU set "+(e.fingerprint||"")))+" · "+protoName(e.protocol)+" · "+(e.profile||"no profile")+" · "+(e.std_supported||0)+" std PIDs"+(e.last_seen?" · seen "+fmtAge(e.last_seen):""))),
+          h("span",{},h("b",{},e.name||defaultName(e)||"Unnamed vehicle"),h("br"),h("span",{class:"help"},(e.vin||("no VIN, "+(e.dialect==="j1939"?"controller set ":"ECU set ")+(e.fingerprint||"")))+" · "+(e.dialect==="j1939"?"SAE J1939":protoName(e.protocol)+(DIALECT[e.dialect]?", "+DIALECT[e.dialect]:"")+(e.j1939?", J1939 network":""))+" · "+(e.profile||"no profile")+" · "+(e.std_supported||0)+(e.dialect==="j1939"?" std parameters":" std PIDs")+(e.last_seen?" · seen "+fmtAge(e.last_seen):""))),
           e.current?chip("Current","pri"):e.pending_profile?chip("Profile pending","warn"):h("span",{}),
           btn("Forget",async()=>{if(!await confirmModal("Forget "+(e.name||e.vin||"this vehicle")+" and its PIDs?","Forget vehicle"))return;
             try{await api("/api/autopid/vehicles/"+encodeURIComponent(e.key),{method:"DELETE"});toast("Forgotten","ok");D.vehicles=await tryGet("/api/autopid/vehicles");render();}catch(ex){toast(ex.message,"err");}},"sm gh")))));
@@ -9314,12 +9618,13 @@ SCREENS.vehicle=async()=>{
         clearInterval(t);
         const r=await tryGet("/api/autopid/std_scan/result");
         D.vehicles=await tryGet("/api/autopid/vehicles");
-        if(!s||s.status==="failed"||!r||(!(r.supported||[]).length&&!r.vin&&!r.protocol_detected)){W.vehPhase="noanswer";render();return;}
+        if(!s||s.status==="failed"||!r||(!(r.supported||[]).length&&!r.vin&&!r.protocol_detected&&!r.j1939)){W.vehPhase="noanswer";render();return;}
         const list=entries();
         const key=r.key||r.vin||(r.fingerprint?"fp:"+r.fingerprint:"");
         const e=list.find(x=>x.key===key)||list.find(x=>x.current)||{};
-        W.veh={key:e.key||key,vin:r.vin||e.vin||"",fingerprint:r.fingerprint||e.fingerprint||"",protocol:r.protocol_detected||e.protocol||r.protocol||"",
-          std_supported:(r.supported||[]).length||e.std_supported||0,known:!!(r.known||e.profile),name:r.name||e.name||"",profile:e.profile||"",specific_init:e.specific_init||"",pending_profile:e.pending_profile};
+        W.veh={key:e.key||key,vin:r.vin||e.vin||"",fingerprint:r.fingerprint||e.fingerprint||"",protocol:r.protocol_detected||e.protocol||r.protocol||"",dialect:r.dialect||e.dialect||"obd2",
+          std_supported:(r.supported||[]).length||e.std_supported||0,known:!!(r.known||e.profile),name:r.name||e.name||"",profile:e.profile||"",specific_init:e.specific_init||"",pending_profile:e.pending_profile,
+          j1939:!!(r.j1939||e.j1939),j1939Listening:r.j1939_listening!==false,busKbps:r.bus_kbps||0};
         W.scanResult=r;W.vehName=W.veh.name||defaultName(W.veh);
         await loadProfiles();
         W.vehPhase="result";render();
@@ -9642,7 +9947,7 @@ SCREENS.polling=async()=>{
     pauseBox.append(radio("qs-pause","qs-pause-never",p.pause==="never","Never pause","WiCAN keeps asking while the car is parked.",()=>{p.pause="never";render();}));
     out.push(pauseBox);
     if(p.pause==="never")out.push(banner("warn","alert",h("b",{},"This keeps the car's modules awake. "),"With the engine off for days it can drain the 12 V battery. Pick this only for a bench or a car on a charger."));
-    out.push(sw("qs-pauseall","While paused, also stop listening","Off: passive CAN listening and the filters keep running while requests are paused. On: the OBD chip is left completely alone.",p.pauseAll,false,v=>{p.pauseAll=v;render();}));
+    out.push(sw("qs-pauseall","While paused, also stop listening","Off: the J1939 rows, which are read from WiCAN's own CAN listener and transmit nothing, keep running while requests are paused. On: they stop too and nothing is read at all.",p.pauseAll,false,v=>{p.pauseAll=v;render();}));
     out.push(sub("3. What to read"));
     const nStd=(W.veh&&W.veh.std_supported)||0;
     out.push(sw("qs-std","Standard PIDs","Speed, RPM, coolant, fuel level and the other values every car reports."+(nStd?" The scan found "+nStd+" of them on this car.":""),p.std,false,v=>{p.std=v;render();}));
@@ -9712,6 +10017,19 @@ async function finishVehicle(finishBtn,errEl,maxName){
     av.dtc_enabled=!!p.dtc;
     av.dtc_scan_period_min=p.dtc?Math.max(5,p.dtcMin):0;
     store.stage("autopid",av);
+    /* 3b. a J1939 network heard with the listener off: the native CAN controller
+       listen-only (it never transmits) at the bitrate the detection measured, and
+       the J1939 listener, in the same restart */
+    if(v.j1939&&!v.j1939Listening){
+      const cm=strip(await api("/api/settings/can_manager"));
+      cm.enabled=true;cm.silent=true;
+      const kb=String(v.busKbps||"");
+      cm.baud=(cm.baud==="auto"||!kb)?"auto":kb;
+      store.stage("can_manager",cm);
+      const jl=strip(await api("/api/settings/j1939"));
+      jl.enabled=true;
+      store.stage("j1939",jl);
+    }
     /* 4. the Battery and sleep step: the measured pair switches Power Saving on (wake_mv only
        when this firmware has it; an older one derives wake = sleep + 0.1 V) */
     if(W.pwr.measured){
@@ -9725,7 +10043,7 @@ async function finishVehicle(finishBtn,errEl,maxName){
     paint();
     await store.commit("Quick Setup: applying vehicle settings");
   }catch(e){
-    store.unstage("autopid");store.unstage("sleep_manager");finishBtn.disabled=false;
+    store.unstage("autopid");store.unstage("sleep_manager");store.unstage("can_manager");store.unstage("j1939");finishBtn.disabled=false;
     errEl.replaceChildren(banner("crit","alert",h("b",{},"WiCAN did not accept the vehicle setup: "),e.message||String(e)));
   }
 }
@@ -9746,7 +10064,7 @@ SCREENS.done=async()=>{
     else if(W.use!=="wifi"){const wh=await tryGet("/api/webhook");kv.push(h("dt",{},"Home Assistant"),h("dd",{},chip(wh&&wh.url?"Connected":"Waiting for discovery",wh&&wh.url?"ok":"warn")));}
     const vehOn=ap&&ap.enabled;
     kv.push(h("dt",{},"Vehicle"),h("dd",{},!vehOn?chip("Not set up",""):[v&&v.name?h("b",{},v.name):null,(v&&v.profile)||ap.vehicle?h("code",{},(v&&v.profile)||ap.vehicle):chip("Standard PIDs only",""),
-      v&&v.vin?h("span",{},"VIN ",h("code",{},v.vin)):null,v&&PROTO[String(v.protocol)]?h("span",{},PROTO[String(v.protocol)]):(ap.std_protocol==="0"?chip("Protocol: follows the car",""):null),
+      v&&v.vin?h("span",{},"VIN ",h("code",{},v.vin)):null,v&&v.dialect==="j1939"?h("span",{},"SAE J1939, listening"):v&&PROTO[String(v.protocol)]?h("span",{},PROTO[String(v.protocol)]+(DIALECT[v.dialect]?", "+DIALECT[v.dialect]:"")+(v.j1939?", J1939 network":"")):(ap.std_protocol==="0"?chip("Protocol: follows the car",""):null),
       v&&v.pending_profile?chip("Profile pending","warn"):null]));
     if(vehOn&&!W.noVeh){const pp=W.poll;const rate=pp.rate==="custom"?pp.rateCustom:pp.rate;
       const pauseTxt=pp.pause==="sleep"?"pauses with Power Saving":pp.pause==="custom"?"pauses below "+pp.pauseV.toFixed(1)+" V":"never pauses";

@@ -63,22 +63,35 @@ python tools/testbench/pi/bench_ap_cli.py "ap set WICAN_TEST_AP <the hotspot PSK
 ## Build and flash
 
 ```
-# PC (native PowerShell, IDF 6.0.2 env). Two traps: esp_wifi_remote picks its
-# Kconfig by ESP_IDF_VERSION and wants "6.0" (with "6.0.2" it includes nothing and
-# WIFI_INIT_CONFIG_DEFAULT fails on CONFIG_WIFI_RMT_*), and this directory is deep
-# enough to hit Windows' object-path limit: build into a short directory.
-cd tools\testbench\instruments\bench_ap
-$env:ESP_IDF_VERSION='6.0'; $env:ESP_ROM_ELF_DIR='C:\Espressif\tools\esp-rom-elfs\20241011/'
-idf.py -B C:\Users\Ali\idf_tmp\bap set-target esp32p4; idf.py -B C:\Users\Ali\idf_tmp\bap build
-# push to the Pi and flash through the UART port:
-python flash_from_pi.py --build C:\Users\Ali\idf_tmp\bap
+# PC (native PowerShell). build.ps1 sets the IDF 6.0.2 environment for the P4
+# and carries the traps: esp_wifi_remote picks its Kconfig by ESP_IDF_VERSION
+# and wants "6.0" (with "6.0.2" it includes nothing and WIFI_INIT_CONFIG_DEFAULT
+# fails on CONFIG_WIFI_RMT_*), this directory is deep enough to hit Windows'
+# object-path limit (the build goes to C:\Users\Ali\idf_tmp\bap), and the P4
+# needs the riscv32 toolchain on the PATH (the firmware's build.ps1 has xtensa).
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\testbench\instruments\bench_ap\build.ps1
+# first time only: idf.py -B C:\Users\Ali\idf_tmp\bap set-target esp32p4
 ```
+
+Flashing goes through the UART the console daemon holds open, so the daemon
+stops first and `bench_ap_net.sh up` starts it again afterwards (its open
+resets the board once more, expected):
+
+```
+ssh rpi001 'cp -a ~/bench_ap_build ~/bench_ap_build.prev; pkill -f "[b]ench_ap_daemon.py"'
+python tools\testbench\instruments\bench_ap\flash_from_pi.py --build C:\Users\Ali\idf_tmp\bap
+ssh rpi001 'bash ~/wican/tools/testbench/pi/bench_ap_net.sh up'
+ssh rpi001 'cd ~/wican/tools/testbench/pi && python3 bench_ap_cli.py "ap"'   # stations, counters, heap
+```
+
+`~/bench_ap_build.prev` on the Pi is the roll-back image: `cd` into it and run
+the esptool line `flash_from_pi.py` uses.
 
 ## Console commands (UART, `bench_ap>` prompt)
 
 | Command | Does |
 |---|---|
-| `ap` | status: ssid, channel, on/off, stations (mac, rssi), frame counters, uptime |
+| `ap` | status: ssid, channel, on/off, stations (mac, rssi), frame counters, heap (`free`, `min`, `largest`), uptime |
 | `ap on` / `ap off` | start / stop the soft-AP (the USB side stays up) |
 | `ap kick <mac>` | deauthenticate one station |
 | `ap channel <1..13>` | change channel (restarts the AP), stored |
@@ -135,3 +148,37 @@ with the log timestamp; the bench parses them.
   `ap` listed it with rssi=-47; `ap kick` -> `-sta ... reason=4`, back in 10 s;
   `ap off` -> unreachable in 8 s, `ap on` -> back in 5 s. Frame counters moved
   both ways (usb->ap 132, ap->usb 116 at that point), zero drops.
+
+## The forwarder leaked every frame (found and fixed 2026-10-02, evening)
+
+Symptom: `assert failed: sdio_process_rx_task sdio_drv.c:1397 (copy_payload)`
+and a software reset, nine times on its first day (09:33, 10:49, 13:19, 16:42,
+22:03, 22:23, 22:28, 22:58, 23:05). After each reset the AP is back in 4 s with an empty
+station table and the DUT stays in a zombie association (its console says
+connected, nothing passes) until the AP is cycled (`ap off`, `ap on`). The
+AutoPID matrix bench died in leg 5 every run, and the old C6 slave firmware
+was the suspect.
+
+Cause: the assert is esp_hosted failing to `malloc` the copy of a received
+frame: the P4's heap was empty. `usb_tx_done(buffer, ctx)` freed its SECOND
+argument. esp_tinyusb calls the callback as `(buff_free_arg, user_context)`:
+the WiFi buffer is the first, the second was NULL, so `free(NULL)` and every
+frame forwarded from a station to the Pi stayed on the heap. The board has
+about 414 KB free after boot (no PSRAM configured), so it died after about
+that much station traffic: hours on a quiet bench, 5 minutes into a matrix run.
+
+Reproduction (old image): 20 downloads of the DUT's 16 KB log ring through the
+AP, 327,680 bytes in 3 s, and the board asserted during the 21st.
+
+Fix: the callback frees its first argument, and `ap_rx()` decides who owns a
+buffer from a flag the callback clears, not from the return code of
+`tinyusb_net_send_sync()` (a send that timed out may still have gone out; the
+return code alone would free twice or never). `ap` prints the heap so a leak
+shows long before an assert.
+
+Proof (new image): 400 downloads, 6,553,600 bytes in 46 s, no reset, zero
+drops, `heap: free 413900` before and `412844` after (`min 401868`).
+
+Still open: the C6 slave firmware is old (`Host [2.12.0] > Co-proc [0.0.0]`),
+and the DUT's zombie association after an AP that vanishes and returns (the
+DUT's side: wifi_manager does not notice an AP that forgot it).

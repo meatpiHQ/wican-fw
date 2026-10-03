@@ -8,8 +8,10 @@ simulator (WiCAN ECU Simulator box, 500k/11-bit) answers:
   010D -> 0 km/h                 0162 -> 7F 01 31 (unsupported)
   physical 7E0/7E8 AND 7E1/7E9 (a second ECU) for mode 01
   UDS 22 F190 (VIN "1WCAN0FW0P0000001", multi-frame) + 22 F187 on 7E0
-  broadcast (settings ecu_sim.broadcast_enabled): id 0x0C0, data
-  0C 80 00 00 00 00 00 00 (raw RPM 800) — the filter legs' frame source.
+  broadcast (settings ecu_sim.broadcast_enabled): id 0x0C0, SEVEN data
+  bytes 0C 80 00 00 00 00 00 (raw RPM 800) — the filter legs' frame
+  source. Nothing on the bench bus ACKs it while the chip monitors, so it
+  is retransmitted at line rate (see discover_broadcast).
 
 Legs:
   0  preflight: chip chain (0100), autopid enabled, snapshots
@@ -29,6 +31,11 @@ Legs:
 
   python autopid_matrix_bench.py [dut host[:port]] [--sim 192.168.8.1]
                                  [--sim-restore asis|on|off]
+                                 [--ack-pcan PCAN_USBBUS2]
+  --ack-pcan holds a PCAN channel open as a normal node during leg 5: it
+  ACKs the simulator's broadcast, which then runs at its configured period
+  (what a car's other ECUs do) instead of being retransmitted at line rate.
+  Without it leg 5 measures the filter window on a saturated bus.
 Expected final line: AUTOPID MATRIX PASS (a WARN line marks the open
 filter-on-a-flooded-bus finding — see the autopid README).
 """
@@ -42,6 +49,7 @@ import urllib.request
 DUT = "localhost:8081"
 SIM = "192.168.8.1"
 SIM_RESTORE = "asis"
+ACK_PCAN = None
 args = [a for a in sys.argv[1:]]
 i = 0
 while i < len(args):
@@ -49,6 +57,8 @@ while i < len(args):
         SIM = args[i + 1]; i += 2
     elif args[i] == "--sim-restore":
         SIM_RESTORE = args[i + 1]; i += 2
+    elif args[i] == "--ack-pcan":
+        ACK_PCAN = args[i + 1]; i += 2
     else:
         DUT = args[i]; i += 1
 BASE = "http://" + DUT
@@ -279,10 +289,24 @@ EXP_FLT = {"mx_flt_rpm": 800.0, "mx_flt_b1": 128.0}
 
 
 def discover_broadcast(secs=2.5):
-    """Watch the bus through the chip (ELM `ATMA`, headers + spaces on)
-    and return (frame_id, payload_bytes) of the dominant broadcast frame
-    with a full 8-byte payload, or None. Pauses the poller's groups for
-    the look (runtime toggle) and restores them."""
+    """Watch the bus through the chip (ELM `ATMA`, headers + spaces on,
+    automatic formatting OFF) and return (frame_id, payload_bytes) of the
+    dominant broadcast frame with two data bytes or more, or None. Pauses
+    the poller's groups for the look (runtime toggle) and restores them.
+
+    2026-10-02: the look used to demand 8 data bytes and whatever
+    formatting the chip was left in. The simulator's 0x0C0 frame has SEVEN
+    bytes (profile data "0C800000000000"), and with ATCAF1 (the chip's
+    default, what a poll leaves behind) the monitor prints
+    `0C0 0C 80 00 00 00 00 00 <DATA ERROR`: nothing matched and the leg
+    failed while the filter below decoded the frame fine. ATCAF0 is set
+    here and ATCAF1 put back.
+
+    Why the bus looks flooded during the look: the monitoring chip does not
+    ACK (silent monitoring), nothing else on the bench bus does either, so
+    the simulator retransmits its frame for ever at line rate (measured
+    with PCAN: 3400 frames/s listen-only, 10 to 20 per second as soon as
+    PCAN is a normal node that ACKs). A car has other ECUs to ACK."""
     try:
         import websocket  # websocket-client
     except ImportError:
@@ -309,21 +333,34 @@ def discover_broadcast(secs=2.5):
                 except Exception:
                     pass
             return out.decode(errors="replace")
-        for c in ("ATH1", "ATS1", "ATCRA"):
+        for c in ("ATH1", "ATS1", "ATCAF0", "ATCRA"):
             ws.send_binary((c + "\r").encode()); drain(0.6)
         ws.send_binary(b"ATMA\r")
         raw = drain(secs)
-        ws.send_binary(b" "); drain(0.8)
-        for c in ("ATCRA", "ATH0"):
-            ws.send_binary((c + "\r").encode()); drain(0.6)
+        # stop the monitor and wait for the chip's prompt: at line rate the
+        # text backlog takes a while to drain, and a restore command sent
+        # into a running monitor only stops it (its first character) and
+        # is lost
+        ws.send_binary(b"\r")
+        tail = ""
+        end = time.time() + 6
+        while time.time() < end and not tail.rstrip().endswith(">"):
+            tail += drain(0.5)
+        if not tail.rstrip().endswith(">"):
+            print("note: the monitor did not return to the prompt in 6 s")
+        for c in ("ATCRA", "ATCAF1", "ATH0"):
+            ws.send_binary((c + "\r").encode())
+            if "OK" not in drain(0.6):
+                print(f"note: {c} not acknowledged after the bus look")
         ws.close()
     finally:
         for g in groups:
             api("/api/autopid/group", "POST", {"name": g, "enabled": True})
     frames = Counter()
-    for m in re.finditer(r"(?:^|\r)([0-9A-F]{3}) ((?:[0-9A-F]{2} ){8})", raw):
+    for m in re.finditer(r"(?:^|\r)([0-9A-F]{3}) ((?:[0-9A-F]{2} ){2,8})(?=\r|$)", raw):
         frames[(int(m.group(1), 16), m.group(2).strip())] += 1
     if not frames:
+        print("  bus look: no frame recognised in", repr(raw[:120]))
         return None
     (fid, pay), n = frames.most_common(1)[0]
     print(f"  broadcast on the bus: id 0x{fid:03X} payload {pay} ({n} frames in {secs} s)")
@@ -485,6 +522,15 @@ def main():
         api("/api/settings/ecu_sim", "PUT", v, base="http://" + SIM)
         api("/api/settings/submit", "POST", base="http://" + SIM)   # the simulator reboots
         time.sleep(20); wait_device(90, base="http://" + SIM); time.sleep(5)
+    ack_bus = None
+    if ACK_PCAN:
+        try:
+            import can  # python-can
+            ack_bus = can.Bus(interface="pcan", channel=ACK_PCAN, bitrate=500000)
+            print(f"  {ACK_PCAN} on the bus as a normal node (ACKs the broadcast)")
+        except Exception as e:  # noqa: BLE001
+            print(f"note: --ack-pcan {ACK_PCAN} not available ({e}); leg 5 runs without an ACK source")
+    metric("leg5_ack_source", ACK_PCAN if ack_bus else "none")
     # the simulator's broadcast set is not fixed (seen 0x0C0 with the
     # raw RPM, later 0x1A0/0x100 with zero payloads) — calibrate the
     # filter on whatever dominant frame is on the bus right now
@@ -524,6 +570,8 @@ def main():
     if stdn and bc and bc[0] == 0x0C0:
         check("leg5 filter value equals the polled PID (same RPM on the bus)",
               near(data().get("mx_flt_rpm"), 800.0) and near(data().get(stdn), 800.0), (data().get("mx_flt_rpm"), data().get(stdn)))
+    if ack_bus is not None:
+        ack_bus.shutdown()
 
     # ---- leg 6: type gates (reboot) ----
     cfg = {"groups": [DEFAULT_GROUP, STD_GROUP, CUST_GROUP, SPEC_GROUP],
