@@ -1,15 +1,15 @@
-"""BLE bench client for ble_manager — runs ON rpi001 (BlueZ + bleak).
+"""BLE bench client for ble_manager: runs ON rpi001 (BlueZ + bleak).
 
 Scenarios against the ble_manager test app (ble<->echo bridge + stand-in
 CLI handler):
 
-  1. scan      — find "WiC_<id>", verify FFF0 advertised
-  2. pair      — bond with the static passkey (BlueZ agent), verify the
+  1. scan:       find "WiC_<id>", verify FFF0 advertised
+  2. pair:       bond with the static passkey (BlueZ agent), verify the
                  Device Information strings (MEATPI.COM / WiCAN-PRO / serial)
-  3. echo      — subscribe FFF1, write FFF2, assert byte-exact echo
-  4. cli       — subscribe CLI OUT, write a line to CLI IN, expect the
+  3. echo:       subscribe FFF1, write FFF2, assert byte-exact echo
+  4. cli:        subscribe CLI OUT, write a line to CLI IN, expect the
                  stand-in handler's UPPER-CASED reply
-  5. perf      — RTT (p50/p95) and notify throughput through the echo bridge
+  5. perf:       RTT (p50/p95) and notify throughput through the echo bridge
 
 Pairing note: the device is IO_CAP_OUT with a STATIC passkey (settings,
 default 123456). BlueZ needs a KeyboardOnly-ish agent to enter it; this
@@ -30,7 +30,7 @@ import time
 
 from bleak import BleakClient, BleakScanner
 
-# on-air contract (ble_manager_gatt.c — legacy-preserved)
+# on-air contract (ble_manager_gatt.c: legacy-preserved)
 UUID_FFF1 = "0000fff1-0000-1000-8000-00805f9b34fb"   # notify: data OUT
 UUID_FFF2 = "0000fff2-0000-1000-8000-00805f9b34fb"   # write: data IN
 UUID_CLI_OUT = "0200dec0-01ef-bc9a-5678-1234deadf0be"

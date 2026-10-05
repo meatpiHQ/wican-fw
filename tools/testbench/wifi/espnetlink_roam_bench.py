@@ -16,7 +16,7 @@ Scenario (espnetlink_link in `mode=wifi_modem`, paired, dongle cut):
 the DUT's OWN primary SSID + password (read once from
 GET /api/settings/backup over the DUT's AP, never printed). wtest0's
 normal profile (wican-bench) is parked for the run and restored after.
-The DUT is observed over the SERIAL console only — a client on the
+The DUT is observed over the SERIAL console only: a client on the
 DUT's AP would pause its STA reconnects (wifi_manager's AP-client rule)
 and falsify the scenario.
 

@@ -1,4 +1,4 @@
-/* Probe (2026-09-07, meatpi): WiFi settings UX — the mode is a tile selector above the
+/* Probe (2026-09-07, meatpi): WiFi settings UX, the mode is a tile selector above the
    cards (not a row in the Access Point card), each card folds to a note when the mode
    does not use it, live chips show the radio state, and "open" is not an AP security
    option. Runs over the mock API (mock WiFi mode: apsta, station connected, AP up). */

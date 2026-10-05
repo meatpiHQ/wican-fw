@@ -2,19 +2,19 @@
 """Runtime stack + memory audit vs the composed main firmware.
 
 The permanent net for the 2026-07-22 lesson: a PSRAM-stacked task that
-overflows does NOT panic — it silently corrupts neighbouring .bss (the
+overflows does NOT panic, it silently corrupts neighbouring .bss (the
 autopid DTC job task shipped that way). Internal-RAM stacks panic
 instead, and internal-RAM exhaustion breaks WiFi auth + SDMMC DMA
 together. This bench catches ALL of those classes:
 
-  1. task watermarks — /api/status/tasks stack_hw (bytes NEVER used)
+  1. task watermarks: /api/status/tasks stack_hw (bytes NEVER used)
      for every live task, asserted after EXERCISING the deep paths
      (DTC scan job, test-a-PID chip transaction, a settings write).
      FAIL < 512 B, WARN < 1024 B (the web UI's own thresholds).
-  2. ephemeral job tasks — they exit before the snapshot, so the fw
+  2. ephemeral job tasks: they exit before the snapshot, so the fw
      logs "dtc job stack_hw=<n> B" at job exit; read back via
      /api/logs/ring and asserted >= 512.
-  3. heap floors, BOTH placements — /api/status memory.*.min_free +
+  3. heap floors, BOTH placements: /api/status memory.*.min_free +
      largest_block: internal min_free >= 20 KB, internal largest_block
      >= 16 KB (WiFi auth + SDMMC DMA), psram min_free >= 1 MB.
 
@@ -72,7 +72,7 @@ def submit_and_wait(secs=75):
     try:
         api("/api/settings/submit", "POST")
     except Exception:
-        pass  # the reboot can cut the response — that's success
+        pass  # the reboot can cut the response, that's success
     time.sleep(5)
     end = time.time() + secs
     while time.time() < end:
@@ -96,7 +96,7 @@ def exercise_deep_paths():
 
     # DTC scan job: the task that shipped overflowing. The dtc gate is
     # applied at settings-apply time, so this is a full staged-PUT +
-    # submit-reboot cycle (and another one to restore) — which also
+    # submit-reboot cycle (and another one to restore), which also
     # exercises the settings/fs writer paths and a fresh boot.
     _, ap_before = api("/api/settings/autopid")
     if not isinstance(ap_before, dict):
@@ -107,7 +107,7 @@ def exercise_deep_paths():
 
     ran = False
     if ap_before.get("dtc_enabled"):
-        ran = True  # already armed — no reboot needed
+        ran = True  # already armed, no reboot needed
     else:
         cfg = dict(ap_before)
         cfg.update({"dtc_enabled": True})
@@ -144,7 +144,7 @@ def exercise_deep_paths():
         api("/api/settings/autopid", "PUT", ap_before)
         print("  (restoring settings via submit-reboot…)")
         submit_and_wait()
-        # NOTE: the restore reboot resets task watermarks — the dtc job
+        # NOTE: the restore reboot resets task watermarks, the dtc job
         # ran on the PREVIOUS boot, but its watermark lives in the log
         # RING which survives warm resets (PSRAM ring)
 

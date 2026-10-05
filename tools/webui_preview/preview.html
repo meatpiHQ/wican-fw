@@ -2513,7 +2513,7 @@
     }
     if (method === "POST" && path === "/api/scripts/stop") { state.stops++; return J({ ok: true }); }
     if (method === "GET" && path === "/api/logger/export") {
-      /* the params stream: 120 points, 30 s apart, for the requested name — NDJSON or CSV rows */
+      /* the params stream: 120 points, 30 s apart, for the requested name, NDJSON or CSV rows */
       const fmt = S.data_logger && S.data_logger.values.format;
       if (fmt !== "jsonl" && fmt !== "csv") return T("params stream is not jsonl or csv", 400);
       const name = q.get("name") || "RPM", nowMs = Date.now(), base = state.dash[name] != null ? state.dash[name] : 50;
@@ -2573,7 +2573,7 @@
     }
     if (method === "POST" && path === "/api/usb/acm/cmd") {
       // canned dongle-console replies captured from a live ESPNetLink
-      // (v1.22, BG95-M5) — echo + payload + esp> prompt, as on the wire
+      // (v1.22, BG95-M5): echo + payload + esp> prompt, as on the wire
       const cmd = (body && body.cmd) || "";
       const wrap = (b) => J({ ok: true, response: cmd + "\r\n\r\r\n" + b + "\r\r\nOK\r\r\nesp> ", connected: true });
       if (cmd.startsWith("lte -j")) return wrap(JSON.stringify({
@@ -2624,7 +2624,7 @@
     return J({ error: "mock: " + method + " " + path + " not implemented" }, 404);
   }
 
-  /* XMLHttpRequest over the same mock — pages that want upload progress use XHR */
+  /* XMLHttpRequest over the same mock: pages that want upload progress use XHR */
   window.XMLHttpRequest = class {
     constructor() { this.upload = {}; this.status = 0; this.responseText = ""; }
     open(m, u) { this._m = m; this._u = u; }
@@ -2694,7 +2694,7 @@
   console.log("[wican-preview] mock api installed:", Object.keys(S).length, "components");
 })();
 </script>
-<script>document.addEventListener('DOMContentLoaded',()=>{const b=document.createElement('div');b.style.cssText='position:fixed;bottom:10px;right:10px;z-index:9999;background:#c1810b;color:#fff;font:600 11px system-ui;padding:4px 10px;border-radius:6px;opacity:.92';b.textContent='PREVIEW — mock data, no device';document.body.append(b);});</script>
+<script>document.addEventListener('DOMContentLoaded',()=>{const b=document.createElement('div');b.style.cssText='position:fixed;bottom:10px;right:10px;z-index:9999;background:#c1810b;color:#fff;font:600 11px system-ui;padding:4px 10px;border-radius:6px;opacity:.92';b.textContent='PREVIEW: mock data, no device';document.body.append(b);});</script>
 
 <!-- Fixed layout viewport: phones render the SAME desktop layout (sidebar +
      cards) zoomed to fit, exactly like Chrome's "Desktop site": no need to
@@ -2935,7 +2935,7 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--primary);outline-of
   display:inline-flex;align-items:center;justify-content:center;flex:none}
 .cico svg{width:15px;height:15px}
 
-/* form rows — label column top-aligned to the control's first line so tall
+/* form rows: label column top-aligned to the control's first line so tall
    controls (lists, backup networks, sliders) keep the label at the top */
 .frow{display:grid;grid-template-columns:200px 1fr;gap:5px 20px;align-items:start;padding:8px 0}
 .frow>label{color:var(--text-2);font-weight:600;font-size:13.5px;padding-top:9px;line-height:1.4}
@@ -3091,7 +3091,7 @@ input[type="range"]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px var
 
 /* CAN monitor: its styles live in web/monitor.js (chunk, 2026-09-07) */
 
-/* subtabs (long pages) — the strip only shows on narrow windows; on the
+/* subtabs (long pages): the strip only shows on narrow windows; on the
    sidebar layout the nav accordion (.nav-sub) is the tab control */
 .subtabs{display:none;flex-wrap:wrap;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:3px;gap:2px;align-self:flex-start}
 .subtab{padding:7px 16px;border-radius:7px;font-size:13px;font-weight:700;color:var(--text-2);cursor:pointer;white-space:nowrap}
@@ -3280,7 +3280,7 @@ input[type="range"]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px var
       <span class="cdot"></span>
       <span class="cid" id="cp-id">WiCAN</span>
       <span class="cbar"></span>
-      <span class="cip" id="cp-ip">—</span>
+      <span class="cip" id="cp-ip">-</span>
       <span class="ctag" id="cp-tag">…</span>
       <span class="chip crit" id="cp-faults" style="display:none;cursor:pointer" title="Latched device fault codes: click for details"></span>
     </div>
@@ -3343,11 +3343,11 @@ function toast(msg,kind=""){const t=h("div",{class:"toast "+kind},
   h("span",{html:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>'}),msg);
   $("#toasts").append(t);setTimeout(()=>{t.style.opacity=0;setTimeout(()=>t.remove(),250);},3200);}
 const fmt={
-  bytes(n){if(n==null)return"—";if(n>=1073741824)return(n/1073741824).toFixed(2)+" GB";if(n>=1048576)return(n/1048576).toFixed(2)+" MB";if(n>=1024)return(n/1024).toFixed(1)+" KB";return n+" B";},
-  dur(s){if(s==null)return"—";s=Math.floor(s);const d=(s/86400|0);s%=86400;const H=(s/3600|0);s%=3600;const m=(s/60|0);return(d?d+"d ":"")+(H||d?H+"h ":"")+m+"m";},
-  num(n){return n==null?"—":n.toLocaleString();},
+  bytes(n){if(n==null)return"-";if(n>=1073741824)return(n/1073741824).toFixed(2)+" GB";if(n>=1048576)return(n/1048576).toFixed(2)+" MB";if(n>=1024)return(n/1024).toFixed(1)+" KB";return n+" B";},
+  dur(s){if(s==null)return"-";s=Math.floor(s);const d=(s/86400|0);s%=86400;const H=(s/3600|0);s%=3600;const m=(s/60|0);return(d?d+"d ":"")+(H||d?H+"h ":"")+m+"m";},
+  num(n){return n==null?"-":n.toLocaleString();},
 };
-/* icons — lucide-style strokes from the design */
+/* icons: lucide-style strokes from the design */
 const IC={
   signal:'<path d="M2 20h.01M7 20v-4M12 20v-8M17 20V8M22 20V6"/>',
   settings:'<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
@@ -3635,7 +3635,7 @@ function dataTable(cols,rows,opt={}){
     h("thead",{},h("tr",{},...cols.map(c=>h("th",{class:c.align==="right"?"num":""},c.label)))),
     h("tbody",{},...rows.map(r=>h("tr",{},...cols.map(c=>{
       let v=typeof c.get==="function"?c.get(r):r[c.key];
-      return h("td",{"data-k":c.label,class:(c.align==="right"?"num":"")+(c.mono?" mono":"")},v&&v.nodeType?v:(v==null?"—":String(v)));
+      return h("td",{"data-k":c.label,class:(c.align==="right"?"num":"")+(c.mono?" mono":"")},v&&v.nodeType?v:(v==null?"-":String(v)));
     })))));
   if(!rows.length)return h("div",{class:"empty"},opt.empty||"Nothing here");
   return h("div",{class:"scroll"},t);
@@ -3682,7 +3682,7 @@ const LABELS={
   /* ble_manager */
   passkey:"Pairing passkey",tx_power_dbm:"TX power (dBm)",pairing_at_boot:"Allow pairing at boot",bonding:"Remember paired devices",
   sc_only:"Secure connections only",conn_profile:"Connection profile",
-  /* can_manager (the obd_chip group has no UI at all — meatpi 2026-09-07) */
+  /* can_manager (the obd_chip group has no UI at all: meatpi 2026-09-07) */
   "can_manager.baud":"Bit rate",silent:"Listen-only (silent) mode",
   /* j1939 (2026-10-03) */
   "j1939.enabled":"J1939 on the CAN interface","j1939.mode":"Mode","j1939.address":"Preferred address",
@@ -3864,7 +3864,7 @@ function enumLabel(key,comp,v){const m=dictGet(ENUMS,comp,key);
   const s=String(v);if(!/[a-z]/.test(s))return s;
   return s.split("_").map((w,i)=>ACRO.has(w)?w.toUpperCase():(i===0?w[0].toUpperCase()+w.slice(1):w)).join(" ");}
 function fieldPlaceholder(key,comp){const v=dictGet(PLACEHOLDER,comp,key);return typeof v==="function"?v():v;}
-/* toggle switch — the boolean control everywhere (was an Enable/Disable dropdown) */
+/* toggle switch: the boolean control everywhere (was an Enable/Disable dropdown) */
 function switchCtl(on,onchange,opt={}){
   const inp=h("input",{type:"checkbox",checked:!!on,onchange:e=>{txt.textContent=e.target.checked?(opt.yes||"On"):(opt.no||"Off");onchange(e.target.checked);}});
   const txt=h("span",{class:"swl"},on?(opt.yes||"On"):(opt.no||"Off"));
@@ -3929,7 +3929,7 @@ function formRow(key,spec,state,onDirty,comp){
   }else{
     const secret=SECRET.test(key);
     const inp=h("input",{type:secret?"password":"text",value:cur??"",maxlength:spec.maxLength,autocomplete:secret?"new-password":"off",
-      /* secrets come back redacted ("") — say so instead of looking empty */
+      /* secrets come back redacted (""): say so instead of looking empty */
       placeholder:secret?"•••••• (unchanged, type to replace)":(fieldPlaceholder(key,comp)||undefined),
       onchange:e=>set(e.target.value)});
     ctl=secret?h("div",{class:"rowflex"},h("div",{class:"grow"},inp),h("button",{class:"btn sm gh",type:"button",title:"Show / hide",onclick:()=>inp.type=inp.type==="password"?"text":"password"},"show")):inp;
@@ -3981,7 +3981,7 @@ async function settingsForm(component,keys,opts={}){
   let advOn=false,sync=()=>{};
   const onDirty=()=>{store.stage(component,values);sync();opts.onDirty&&opts.onDirty();};
   const rows=list.map(k=>{const r=formRow(k,props[k],values,onDirty,component);r.dataset.key=k;return r;});
-  /* advanced rows sit BELOW the essentials — revealing them must not
+  /* advanced rows sit BELOW the essentials, revealing them must not
      reshuffle the fields the user already sees (stable sort) */
   rows.sort((a,b)=>(adv.has(a.dataset.key)?1:0)-(adv.has(b.dataset.key)?1:0));
   let advRow=null;
@@ -4308,7 +4308,7 @@ const WAKE_SOURCE={web_ui:"web UI",cmdline:"command line",console:"console",mqtt
 const WAKE_RESET={poweron:"Power-on",external:"External reset",software:"Software restart",panic:"Crash (panic)",deepsleep:"Woke from deep sleep",
   brownout:"Brown-out (supply dipped)",interrupt_wdt:"Interrupt watchdog",task_wdt:"Task watchdog",wdt:"Watchdog",sdio:"SDIO reset"};
 function wakeSource(r){
-  if(!r)return "—";
+  if(!r)return "-";
   if(r.planned){const t=WAKE_PLANNED[r.planned_reason]||("Planned restart ("+(r.planned_reason||"?")+")");
     const s=WAKE_SOURCE[r.source];return s&&!/_wake$/.test(r.planned_reason||"")?t+" · "+s:t;}
   const t=WAKE_RESET[r.reason]||("Reset ("+(r.reason||"unknown")+")");
@@ -4372,7 +4372,7 @@ PAGES.status=async(view)=>{
   const colsEl=h("div",{class:"cols2"});
   const hintEl=h("div",{}); /* Quick Setup pointer while vehicle data is off */
   p.append(cardsEl,hintEl,colsEl);
-  /* this boot's cause is fixed for the whole boot — fetched once, not every refresh */
+  /* this boot's cause is fixed for the whole boot, fetched once, not every refresh */
   const hist=await tryGet("/api/restart/history");
   const recs=(hist&&hist.records)||[];
   const wake=wakeSource(recs.find(r=>hist&&r.seq===hist.boot_count)||recs[0]);
@@ -4395,31 +4395,31 @@ PAGES.status=async(view)=>{
     conn.vehicleName=curV?(curV.name||curV.vin||""):"";
     const[w,batt,can,vpn,rtc,imu]=await Promise.all(["/api/wifi/status","/api/battery","/api/can","/api/vpn","/api/rtc","/api/imu"].map(tryGet));
     const v=batt&&batt.voltage;
-    const mode=b.sta_connected?(w&&w.ap_started?"AP+STA":"STA"):(w&&w.ap_started?"AP":"—");
+    const mode=b.sta_connected?(w&&w.ap_started?"AP+STA":"STA"):(w&&w.ap_started?"AP":"-");
     cardsEl.replaceChildren(
-      tile("Connection",mode,null,{icon:"wifi",cap:w?(b.sta_connected?("IP "+(w.ip||"—")):(w.ap_started?((w.clients||0)+" client(s) on AP"):"interface down")):"—"}),
-      tile("CAN Bus",can?canRateText(can):"—",null,{icon:"activity",cap:can?canStateText(can):"disabled",kind:can&&(can.state==="bus_off"||can.state==="recovering")?"crit":can&&can.state==="mismatch"?"warn":""}),
-      tile("Battery",v!=null?v.toFixed(1):"—","V",{icon:"battery",cap:v!=null?(v<11.8?"LOW":"Vehicle nominal"):"—",kind:v!=null&&v<11.8?"crit":v!=null&&v<12?"warn":""}),
-      tile("Uptime",st.uptime||fmt.dur(st.uptime_s),null,{icon:"clock",cap:"Boot count "+(st.boot_count??"—")}));
+      tile("Connection",mode,null,{icon:"wifi",cap:w?(b.sta_connected?("IP "+(w.ip||"-")):(w.ap_started?((w.clients||0)+" client(s) on AP"):"interface down")):"-"}),
+      tile("CAN Bus",can?canRateText(can):"-",null,{icon:"activity",cap:can?canStateText(can):"disabled",kind:can&&(can.state==="bus_off"||can.state==="recovering")?"crit":can&&can.state==="mismatch"?"warn":""}),
+      tile("Battery",v!=null?v.toFixed(1):"-","V",{icon:"battery",cap:v!=null?(v<11.8?"LOW":"Vehicle nominal"):"-",kind:v!=null&&v<11.8?"crit":v!=null&&v<12?"warn":""}),
+      tile("Uptime",st.uptime||fmt.dur(st.uptime_s),null,{icon:"clock",cap:"Boot count "+(st.boot_count??"-")}));
     colsEl.replaceChildren(
       card("Network","wifi",kv([
         ["WiFi Mode",mode],
         ["Station",b.sta_connected?"Connected":"Not connected"],
-        ["IP Address",w&&w.ip?w.ip:"—"],
-        ["AP Address",w&&w.ap_ip?w.ap_ip:"—"],
-        ["AP Clients",w?(w.ap_started?String(w.clients||0):"AP off"):"—"],
-        ["mDNS",(st.device_id||(conn.info&&conn.info.device_id))?("wican_"+(st.device_id||conn.info.device_id)+".local"):"—"],
-        ["Bluetooth ID",st.bluetooth_id||(st.device_id||(conn.info&&conn.info.device_id)?("WiC_"+(st.device_id||conn.info.device_id)):"—")],
-        ["WiFi MAC",st.wifi_mac||(conn.info&&conn.info.mac)||"—"],
+        ["IP Address",w&&w.ip?w.ip:"-"],
+        ["AP Address",w&&w.ap_ip?w.ap_ip:"-"],
+        ["AP Clients",w?(w.ap_started?String(w.clients||0):"AP off"):"-"],
+        ["mDNS",(st.device_id||(conn.info&&conn.info.device_id))?("wican_"+(st.device_id||conn.info.device_id)+".local"):"-"],
+        ["Bluetooth ID",st.bluetooth_id||(st.device_id||(conn.info&&conn.info.device_id)?("WiC_"+(st.device_id||conn.info.device_id)):"-")],
+        ["WiFi MAC",st.wifi_mac||(conn.info&&conn.info.mac)||"-"],
         ["MQTT",b.mqtt_connected?"Connected":"Off"],
-        ["VPN",vpn?(vpn.state||"disabled"):"—"]])),
+        ["VPN",vpn?(vpn.state||"disabled"):"-"]])),
       card("System","cpu",kv([
-        ["Firmware",st.version||"—"],
-        ["Partition",st.partition||"—"],
-        ["Clock",rtc?(rtc.valid?rtc.time:"not set, waiting for an internet time sync"):"—"],
-        ["Boot count",st.boot_count??"—"],
+        ["Firmware",st.version||"-"],
+        ["Partition",st.partition||"-"],
+        ["Clock",rtc?(rtc.valid?rtc.time:"not set, waiting for an internet time sync"):"-"],
+        ["Boot count",st.boot_count??"-"],
         ["Last wake-up",wake],
-        ["Unexpected resets",st.unexpected_resets??"—"],
+        ["Unexpected resets",st.unexpected_resets??"-"],
         ["Last crash",crashed?h("span",{},crashWords(crashed.crash)+" · boot "+crashed.seq+" ",
           h("a",{href:"#",onclick:e=>{e.preventDefault();crashDetails(crashed,hist,st.version);}},"Details"),
           hist.report&&sameCrash(hist.report.crash,crashed.crash)?[" · ",reportLink()]:null)
@@ -4427,10 +4427,10 @@ PAGES.status=async(view)=>{
         crashed&&hist.report&&!sameCrash(hist.report.crash,crashed.crash)?["Stored crash report",
           h("span",{},crashWords(hist.report.crash)+" · "+crashReportWhen(hist.report)+" ",reportLink())]:null,
         ["OBD chip",b.awake===false?"Asleep":"Ready"],
-        ["Motion (IMU)",imu?(imu.activity+(imu.temp!=null?" · "+imu.temp+" °C":"")):"—"],
+        ["Motion (IMU)",imu?(imu.activity+(imu.temp!=null?" · "+imu.temp+" °C":"")):"-"],
         ["SD card",b.sdcard_mounted?"Mounted":"Not mounted"],
-        ["Internal RAM free",st.memory?fmt.bytes(st.memory.internal.free):"—"],
-        ["Die temperature",st.temp_c!=null?st.temp_c.toFixed(1)+" °C":"—"]])));
+        ["Internal RAM free",st.memory?fmt.bytes(st.memory.internal.free):"-"],
+        ["Die temperature",st.temp_c!=null?st.temp_c.toFixed(1)+" °C":"-"]])));
   }
   await refresh();const t=setInterval(()=>{if(conn.state==="online")refresh();},4000);return()=>clearInterval(t);
 };
@@ -4848,7 +4848,7 @@ PAGES.automate=async(view,sub)=>{
   const PAUSE_KEYS=["pause_below_mv","pause_follow_sleep"];
   let av=null,sch=null,avErr=null,destTimer=null;
   const stageAv=()=>store.stage("autopid",av);
-  /* 1. settings: master switch + pause rules (tab "Settings", card "Automate settings" — meatpi 2026-09-06) */
+  /* 1. settings: master switch + pause rules (tab "Settings", card "Automate settings", meatpi 2026-09-06) */
   try{
     /* one retry (meatpi 2026-09-17): the page re-routes on the first ping after a
        restart, when a request can still be refused; a failure here used to drop
@@ -4860,7 +4860,7 @@ PAGES.automate=async(view,sub)=>{
     const keys=Object.keys((sch&&sch.properties)||{}).filter(k=>!k.startsWith("dtc_")&&!moved.has(k));
     let syncPause=()=>{};
     const rows=await settingsForm("autopid",keys,{values:av,schema:sch,advancedExcept:["enabled","pause_mode"],onDirty:()=>syncPause()});
-    /* pause threshold — firmware semantics: pause_below_mv>0 is a fixed
+    /* pause threshold: firmware semantics: pause_below_mv>0 is a fixed
        threshold; 0 follows the Power Saving sleep voltage when
        pause_follow_sleep is set, otherwise never pauses. One choice plus
        a 12.0–14.5 V / 0.1 V slider (a 12 V vehicle battery) replaces the
@@ -4902,7 +4902,7 @@ PAGES.automate=async(view,sub)=>{
       statsEl.replaceChildren(
         chip("OK: "+fmt.num(wh.success_count||0),"ok"),
         chip("Fail: "+fmt.num(wh.fail_count||0),(wh.fail_count||0)>0?"crit":""),
-        chip("Status: "+(wh.status||"—"),bad?"crit":(wh.status==="ok"?"ok":"")),
+        chip("Status: "+(wh.status||"-"),bad?"crit":(wh.status==="ok"?"ok":"")),
         ...(wh.status==="rejected"?[h("span",{class:"help",style:"color:var(--crit)"},"Home Assistant rejected this device's identity: pushes are paused until it re-registers.")]:[]),
         wh.url?h("span",{class:"help",style:"overflow-wrap:anywhere"},"URL: ",h("b",{class:"mono",style:"color:var(--text)"},wh.url)):h("span",{class:"help"},"Not registered: the HA integration registers itself when it discovers the device"));};
     await paint();
@@ -5043,7 +5043,7 @@ PAGES.automate=async(view,sub)=>{
       legacyEl,listEl,
       note("","Each destination sends the live parameter set on its own cycle. MQTT: a topic, ~ expands to this device's base topic. HTTP and HTTPS: a JSON POST with optional authentication, extra query parameters and, for HTTPS, a certificate set from System → Certificates. ABRP: telemetry for A Better Routeplanner (the user token from the ABRP app plus an Iternio API key). A failing endpoint is retried with a growing interval; a lost network only pauses the sends. Changes apply after a restart; Test uses the table the device is running.")));
   }catch(e){paneDest.append(banner("crit","alert","Destinations: "+e.message));}
-  /* 4. parameters — the big editor card gets its own tab */
+  /* 4. parameters: the big editor card gets its own tab */
   const paramsCard=h("div",{});paneParams.append(paramsCard);
   if(!av||!sch)paneParams.prepend(banner("crit","alert","The group switches, init chains and vehicle profile could not be loaded"+(avErr?" ("+avErr+")":"")+". ",
     h("button",{class:"btn sm",type:"button",style:"margin-left:6px",onclick:()=>route()},"Retry")));
@@ -5097,7 +5097,7 @@ PAGES.automate=async(view,sub)=>{
       if(when==="now"){toast("Configuration applied, restarting","ok");restartNow();return;}
       toast("Configuration applied. Settings saved: restart to apply them","ok");
       await refreshSettingsList();paintPending();buildMenu(curSection);}
-    /* scan-results picker: firmware stores ready-made config rows —
+    /* scan-results picker: firmware stores ready-made config rows,
        review, tick, merge into the table (then Apply). Nothing is ticked
        by default: the user picks what to poll (2026-09-22). */
     /* the ECU a row addresses by itself (its init sets the request header):
@@ -5147,7 +5147,7 @@ PAGES.automate=async(view,sub)=>{
     }
     /* one editable table per PID type (std / custom / specific).
        TWO-LEVEL: a PID is ONE request; each of its parameters is a
-       value decoded from the same reply (name + expression + unit) —
+       value decoded from the same reply (name + expression + unit):
        multi-parameter PIDs (Hyundai/Kia SOC+SOH+flags from one 2101)
        render as parameter rows GROUPED under their PID. */
     const pidType=pd=>pd.type==="std"?"std":pd.type==="specific"?"specific":"custom";
@@ -5171,7 +5171,7 @@ PAGES.automate=async(view,sub)=>{
         const r=await api("/api/autopid/test",{method:"POST",body:{cmd:pd.cmd||"",init:pd.init||"",rxheader:pd.rxheader||"",
           type:pidType(pd),expressions:params.map(pr=>pr.expression)}});
         const vals=Array.isArray(r.values)?r.values:(params.length===1?[r.value]:[]);
-        const rows=params.map((pr,i)=>({name:pr.name||"—",value:vals[i],unit:pr.unit||""}));
+        const rows=params.map((pr,i)=>({name:pr.name||"-",value:vals[i],unit:pr.unit||""}));
         const tr=String(r.transcript||"").split("\n").filter(Boolean);
         const lines=tr.length?tr.map(l=>h("div",{class:l[0]===">"?"in":""},l))
           :[h("div",{class:"in"},"> "+(pd.cmd||"")),h("div",{},"< "+(r.raw||"(no data)"))];
@@ -5185,7 +5185,7 @@ PAGES.automate=async(view,sub)=>{
             h("div",{class:"help",style:"margin-bottom:2px"},"Decoded"),
             ...rows.map(r0=>h("div",{class:"rowflex",style:"gap:8px;padding:4px 0;border-bottom:1px solid var(--border)"},
               h("span",{style:"flex:1;font-weight:600"},r0.name),
-              h("b",{class:"mono"},r0.value==null?"—":String(r0.value)),
+              h("b",{class:"mono"},r0.value==null?"-":String(r0.value)),
               h("span",{class:"help"},r0.unit)))):null),
           actions:[{label:"Close",kind:"pri"}]});
       }catch(e){toast("Test failed: "+e.message,"err");}
@@ -5262,7 +5262,7 @@ PAGES.automate=async(view,sub)=>{
         testBtn.onclick=()=>testPid(pd,testBtn);
         row.append(h("div",{class:"main"},
           sw,
-          lock?h("span",{class:"nm",title:(pd.name||"")+" (standard-PID names come from the SAE table)"},pd.name||"—")
+          lock?h("span",{class:"nm",title:(pd.name||"")+" (standard-PID names come from the SAE table)"},pd.name||"-")
               :h("input",{value:pd.name||"",placeholder:"PID name",onchange:e=>{pd.name=e.target.value;markDirty();}}),
           lock?h("span",{class:"req",title:isPgn(pd)?pgnLabel(pd)+": read from the J1939 listener, nothing is asked":"Standard-PID commands come from the scan"+(rowEcu(pd)?": this one is asked of "+rowEcu(pd)+" alone":"")},pd.cmd||"",isPgn(pd)?h("span",{class:"dim"}," · J1939"):rowEcu(pd)?h("span",{class:"dim"}," · "+rowEcu(pd)):null)
               :h("input",{class:"mono",value:pd.cmd||"",placeholder:"010C1",title:isPgn(pd)?pgnLabel(pd)+". PGN:<hex>[@<source>][?]: a J1939 group read from the listener":"The OBD/UDS request sent on the bus, or PGN:<hex> for a J1939 group",onchange:e=>{pd.cmd=e.target.value;if(isPgn(pd)){delete pd.rxheader;delete pd.init;}markDirty();rebuild(true);}}),
@@ -5527,7 +5527,7 @@ PAGES.power=async(view)=>{
 };
 
 /* ---- Logger ---- */
-/* Two streams — polled parameters and raw CAN frames — each with its own
+/* Two streams (polled parameters and raw CAN frames) each with its own
    format, rotation and retention. Reworked 2026-09-06 (meatpi): a status
    that reads the real card state, one chip per state and per-stream
    figures; settings split per stream with progressive disclosure, live
@@ -5668,7 +5668,7 @@ PAGES.logger=async(view)=>{
   }catch(e){formEl.replaceChildren(banner("crit","alert",e.message));}
 
   /* ---- status: one glance, then the figures per stream ---- */
-  const modeName=()=>dev?({off:"Off (rules only)",changed:"When a value changes",all:"Every poll"}[dev.autopid_log]||dev.autopid_log):"—";
+  const modeName=()=>dev?({off:"Off (rules only)",changed:"When a value changes",all:"Every poll"}[dev.autopid_log]||dev.autopid_log):"-";
   const streamBlock=(t,i,rows)=>h("div",{class:"lg-stream"},h("h4",{},ic(i),t),kv(rows));
   const drop=n=>n?chip(fmt.num(n),"crit"):"0";
   async function status(){
@@ -5692,8 +5692,8 @@ PAGES.logger=async(view)=>{
       h("a",{href:"#/files/sd/logs"},"File Manager"),"."));
     if(!l.enabled)body.push(h("div",{class:"empty",style:"padding:12px 0 2px"},"Logging is off: turn it on below and choose what to record."));
     else body.push(h("div",{class:"cols2"},
-      streamBlock("Vehicle parameters","gauge",[["Mode",modeName()],["File",l.file||"—"],["Rows written",fmt.num(l.written)],["Dropped",drop(l.dropped)],["Files on card",fmt.num(l.files)],["Rotations",fmt.num(l.rotations)]]),
-      streamBlock("CAN frames","activity",can.enabled?[["Bus",canBusOn()===false?chip("CAN bus off","warn"):canBusOn()?chip("On","ok"):"—"],["File",can.file||"—"],["Frames written",fmt.num(can.frames_written)],["Dropped",drop(can.frames_dropped)],["Files on card",fmt.num(can.files)],["Rotations",fmt.num(can.rotations)]]
+      streamBlock("Vehicle parameters","gauge",[["Mode",modeName()],["File",l.file||"-"],["Rows written",fmt.num(l.written)],["Dropped",drop(l.dropped)],["Files on card",fmt.num(l.files)],["Rotations",fmt.num(l.rotations)]]),
+      streamBlock("CAN frames","activity",can.enabled?[["Bus",canBusOn()===false?chip("CAN bus off","warn"):canBusOn()?chip("On","ok"):"-"],["File",can.file||"-"],["Frames written",fmt.num(can.frames_written)],["Dropped",drop(can.frames_dropped)],["Files on card",fmt.num(can.files)],["Rotations",fmt.num(can.rotations)]]
         :[["Recording",chip("Off","")]])));
     statusEl.replaceChildren(cardTools("Status","harddrive",[...gate,folderBtn()],...body));
     active=new Set([l.file,can.file].filter(Boolean));
@@ -5709,14 +5709,14 @@ PAGES.logger=async(view)=>{
     const r=await tryGet("/api/fs/list?path="+enc(LOG_DIR));
     if(!r){filesWrap.replaceChildren(h("div",{class:"empty"},"No log folder yet: it is created when the logger first runs."));return;}
     const ents=(r.entries||[]).filter(e=>!e.dir).map(e=>{const m=e.name.match(/^(dl|can)_(\d+)\.(\w+)$/);
-      return{name:e.name,size:e.size,stream:m?(m[1]==="dl"?"Parameters":"CAN frames"):"—",epoch:m?Number(m[2]):0,ext:m?m[3]:(e.name.split(".").pop()||"")};})
+      return{name:e.name,size:e.size,stream:m?(m[1]==="dl"?"Parameters":"CAN frames"):"-",epoch:m?Number(m[2]):0,ext:m?m[3]:(e.name.split(".").pop()||"")};})
       .sort((a,b)=>b.epoch-a.epoch||b.name.localeCompare(a.name));
     const MAXN=8,show=ents.slice(0,MAXN);
     const tbl=dataTable([
       {label:"File",get:e=>h("span",{class:"rowflex",style:"gap:8px"},h("span",{class:"mono"},e.name),active.has(e.name)?chip("recording","ok"):null)},
       {label:"Stream",get:e=>e.stream},
       {label:"Format",get:e=>LOG_EXT_NAME[e.ext]||e.ext.toUpperCase()},
-      {label:"Started",get:e=>e.epoch>1e9?new Date(e.epoch*1000).toLocaleString():"—"},
+      {label:"Started",get:e=>e.epoch>1e9?new Date(e.epoch*1000).toLocaleString():"-"},
       {label:"Size",align:"right",get:e=>fmt.bytes(e.size)},
       {label:"",get:e=>active.has(e.name)?h("span",{class:"help",title:"The file being written is locked: pause logging to download it"},"in use"):
         h("a",{class:"btn sm gh",title:"Download",href:API+"/api/fs/download?path="+enc(LOG_DIR+"/"+e.name),download:e.name},ic("download"))}],
@@ -5759,7 +5759,7 @@ const UI_STORES=[{id:"data",label:"internal flash",dir:"/data/cache/www",uri:"/c
   {id:"sd",label:"SD card",dir:"/sd/cache/www",uri:"/sdcache/www/",info:"/api/fs/info?path=/sd"}];
 /* Optional libraries the page installs on demand (2026-09-06): pinned
    builds, verified by size + FNV-1a before they are stored (crypto.subtle
-   is unavailable over plain http), kept under <store>/cache/www —
+   is unavailable over plain http), kept under <store>/cache/www,
    internal flash first, the SD card when flash is short: and loaded
    from /cache/www/ or /sdcache/www/. uPlot draws the chart tiles;
    sql.js (WebAssembly) reads SQLite parameter logs for the history. */
@@ -5897,7 +5897,7 @@ async function fetchLogFile(name,active,paused){
   }
   finally{if(gated)await gate(true);}
 }
-/* .wdl ("WDL1", little-endian): 0x01 def u16 id,u8 len,name · 0x02 param i64 ts_ms,u16 id,f64 · 0x03 frame i64 ts,u32 id,u8 dlc,data — a torn tail ends the file */
+/* .wdl ("WDL1", little-endian): 0x01 def u16 id,u8 len,name · 0x02 param i64 ts_ms,u16 id,f64 · 0x03 frame i64 ts,u32 id,u8 dlc,data, a torn tail ends the file */
 function decodeWdl(buf){
   const u8=new Uint8Array(buf),dv=new DataView(buf),out=new Map(),names=new Map(),dec=new TextDecoder();
   if(u8.length<4||String.fromCharCode(u8[0],u8[1],u8[2],u8[3])!=="WDL1")return out;
@@ -6119,7 +6119,7 @@ PAGES.dashboard=async(view)=>{
     const series=hh=>{const cut=Date.now()/1000-win;const rows=hh.filter(x=>x.w>=cut);return[rows.map(x=>x.w),rows.map(x=>x.v)];};
     function chartPaint(hh){
       if(!window.uPlot){
-        /* the box is re-rendered when its state changes (loading -> missing) — keyed on data-mode, not on its presence */
+        /* the box is re-rendered when its state changes (loading -> missing), keyed on data-mode, not on its presence */
         if(UI_RES.uplot.state==="missing"){if(chartEl.dataset.mode!=="missing"){chartEl.dataset.mode="missing";chartEl.replaceChildren(h("div",{class:"installbox"},"Charts need the uPlot library (52 KB), stored on the WiCAN once.",
           h("button",{class:"btn sm pri",type:"button",onclick:async()=>{if(await installResource(UI_RES.uplot))refresh();}},ic("download"),"Install")));}}
         else if(UI_RES.uplot.state!=="loading"){chartEl.dataset.mode="loading";chartEl.replaceChildren(h("div",{class:"installbox"},"Loading the chart library…"));ensureResource(UI_RES.uplot).then(()=>refresh());}
@@ -6158,7 +6158,7 @@ PAGES.dashboard=async(view)=>{
         if(rangeEl){rangeEl.style.display=lo==null?"none":"";if(lo!=null){rangeEl.children[0].textContent=fmtVal("",lo);rangeEl.children[1].textContent=src==="seen"?"seen this session":"";rangeEl.children[2].textContent=fmtVal("",hi);}}
         if(dialEl)dialPaint(dialEl,frac,vtxt,u,lo,hi,c2);
         if(chartEl)chartPaint(hh);
-        srcEl.textContent=ext?"External (GPS)":m.kind==="filter"?"Filter "+m.pid:m.pid?"PID "+m.pid:"—";srcEl.title=m.kind==="pid"&&m.group?"group "+m.group:"";
+        srcEl.textContent=ext?"External (GPS)":m.kind==="filter"?"Filter "+m.pid:m.pid?"PID "+m.pid:"-";srcEl.title=m.kind==="pid"&&m.group?"group "+m.group:"";
         ageEl.className=stale?"crit":"";ageEl.textContent=age==null?"":stale?"stale · "+fmtAge(age):fmtAge(age)+" ago";
       },
       destroy(){if(chart){try{chart.destroy();}catch(e){}chart=null;}if(ro){ro.disconnect();ro=null;}}};
@@ -6393,8 +6393,8 @@ PAGES.vpn=async(view)=>{
     badge.className="chip "+(v.state==="connected"?"ok":v.state==="disabled"?"":"warn");
     badge.replaceChildren(h("span",{class:"d"}),v.state==="connected"?"Connected":(v.state||"disabled"));
     dbgRows.replaceChildren(kv([
-      ["Type",v.type||"—"],["State",v.state||"—"],["Endpoint",(v.endpoint&&!/^:\d*$/.test(v.endpoint))?v.endpoint:"—"],
-      ["Tailscale IP",v.ts_ip||"—"],["Peers",v.ts_peers],["Connects",v.connects],
+      ["Type",v.type||"-"],["State",v.state||"-"],["Endpoint",(v.endpoint&&!/^:\d*$/.test(v.endpoint))?v.endpoint:"-"],
+      ["Tailscale IP",v.ts_ip||"-"],["Peers",v.ts_peers],["Connects",v.connects],
       ["Failures",v.failures],["Uptime",fmt.dur(v.uptime_s)]]));}
   await status();
   try{
@@ -6426,7 +6426,7 @@ PAGES.vpn=async(view)=>{
       h("div",{class:"help"},"Standard wg-quick file: [Interface]/[Peer] keys map onto the fields below. Tailscale needs no file: just the auth key.")));
     const syncKey=()=>{const wg=vals.enabled&&vals.type!=="tailscale";
       keyRow.style.display=wg?"":"none";impRow.style.display=wg?"":"none";};
-    /* ONE mode dropdown: Disabled / WireGuard / Tailscale — only the
+    /* ONE mode dropdown: Disabled / WireGuard / Tailscale, only the
        selected backend's fields show (meatpi 2026-07-11) */
     const rows=await settingsForm("vpn_manager",[...WG,...TS,"cli"],{values:vals,schema,onDirty:syncKey,
       advanced:["preshared_key","allowed_ip","allowed_ip_mask","keepalive_s","default_route","dns","ts_control_url"],
@@ -6476,13 +6476,13 @@ PAGES.usb=async(view,sub)=>{
     stEl.replaceChildren(kv([
       ["Connector role",u.host_active?"ESP host (OTG)":"Serial / device"],
       ["Device present",u.device_present?"yes":"no"],
-      ["USB device",u.vid&&u.vid!=="0000"?(u.vid+":"+u.pid+(u.vid==="303a"&&u.pid==="4007"?" (ESPNetLink)":"")):"—"],
-      ["Ethernet uplink",u.eth_connected?"connected":"—"],
-      ["Driver",u.eth_connected?(DRV[u.driver]||u.driver||"—"):"—"],
-      ["IP",u.ip||"—"],
-      ["VBUS",u.host_active?(u.vbus?"on":"off"):"—"],
+      ["USB device",u.vid&&u.vid!=="0000"?(u.vid+":"+u.pid+(u.vid==="303a"&&u.pid==="4007"?" (ESPNetLink)":"")):"-"],
+      ["Ethernet uplink",u.eth_connected?"connected":"-"],
+      ["Driver",u.eth_connected?(DRV[u.driver]||u.driver||"-"):"-"],
+      ["IP",u.ip||"-"],
+      ["VBUS",u.host_active?(u.vbus?"on":"off"):"-"],
       ["Enumerations",u.attaches],
-      ["Dongle console",acm?(acm.connected?"connected":"not bound"):"—"]]));
+      ["Dongle console",acm?(acm.connected?"connected":"not bound"):"-"]]));
     const on=!!(acm&&acm.connected);
     acmOn=on;
     consEl.style.display=on?"":"none";consOff.style.display=on?"none":"";
@@ -6499,12 +6499,12 @@ PAGES.usb=async(view,sub)=>{
     const usbMode=e.mode==="usb_ncm"||e.mode==="usb_rndis";
     const modeLabel=e.mode==="usb_ncm"?"USB Ethernet (NCM)":e.mode==="usb_rndis"?"USB Ethernet (RNDIS)":"WiFi modem (USB = power only)";
     /* idle in a USB mode is simply "no link yet", not a cut */
-    const ps=(pst==="idle"&&usbMode)?["Waiting for the USB-Ethernet link",""]:(PST[pst]||[pst||"—",""]);
+    const ps=(pst==="idle"&&usbMode)?["Waiting for the USB-Ethernet link",""]:(PST[pst]||[pst||"-",""]);
     const d=e.dongle||{},g=e.gps||{};
     /* the dongle firmware level (bench 2026-09-08: a stale dongle build
        looked like "Not an ESPNetLink" until /api/info was surfaced) */
     const fwOld=!!(e.dongle_api&&e.dongle_api_min&&e.dongle_api<e.dongle_api_min);
-    const fwCell=e.dongle_fw?(fwOld?chip(e.dongle_fw+" (API "+e.dongle_api+", this WiCAN expects "+e.dongle_api_min+")","warn"):e.dongle_fw+" (API "+e.dongle_api+")"):"—";
+    const fwCell=e.dongle_fw?(fwOld?chip(e.dongle_fw+" (API "+e.dongle_api+", this WiCAN expects "+e.dongle_api_min+")","warn"):e.dongle_fw+" (API "+e.dongle_api+")"):"-";
     /* the class the mode asks for versus what the host actually bound */
     const wantDrv=e.mode==="usb_rndis"?"rndis":e.mode==="usb_ncm"?"cdc_ncm":null;
     const clsMismatch=!!(wantDrv&&u.eth_connected&&(u.driver==="cdc_ncm"||u.driver==="rndis")&&u.driver!==wantDrv);
@@ -6521,13 +6521,13 @@ PAGES.usb=async(view,sub)=>{
       ["Pairing",chip(ps[0],ps[1])],
       ...(e.last_error&&!errInNote?[["Last pairing error",chip(e.last_error,"warn")]]:[]),
       ["Dongle AP",usbMode?"not used in USB Ethernet mode":(e.ssid||"not paired")],
-      ["Device ID",e.device_id||"—"],
+      ["Device ID",e.device_id||"-"],
       ["Dongle firmware",fwCell],
-      ["Dongle address",e.host||"—"],
+      ["Dongle address",e.host||"-"],
       ["USB attached",(e.usb||{}).attached?"yes":"no"],
-      ["LTE",d.valid?(d.lte_connected?chip((d.operator||"connected")+(d.network_type?" · "+d.network_type:"")+(d.rssi_dbm?" · "+d.rssi_dbm+" dBm":""),"ok"):chip("not connected","warn")):(e.health_unsupported?chip("no health API in this dongle firmware","warn"):"—")],
-      ["GPS (dongle)",d.valid?(d.gps_fix?chip("fix","ok"):chip("no fix","")):"—"],
-      ["GPS (cached fix)",g.valid?(g.satellites+" sats · "+(g.age_ms/1000).toFixed(1)+" s old"):"—"],
+      ["LTE",d.valid?(d.lte_connected?chip((d.operator||"connected")+(d.network_type?" · "+d.network_type:"")+(d.rssi_dbm?" · "+d.rssi_dbm+" dBm":""),"ok"):chip("not connected","warn")):(e.health_unsupported?chip("no health API in this dongle firmware","warn"):"-")],
+      ["GPS (dongle)",d.valid?(d.gps_fix?chip("fix","ok"):chip("no fix","")):"-"],
+      ["GPS (cached fix)",g.valid?(g.satellites+" sats · "+(g.age_ms/1000).toFixed(1)+" s old"):"-"],
       ["Counters","cuts "+((e.usb||{}).cuts??0)+" · VBUS cycles "+((e.usb||{}).vbus_cycles??0)+" · errors "+((e.usb||{}).errors??0)+" · polls "+(e.polls??0)+" / failed "+(e.failures??0)]];
     nlKv.replaceChildren(...notes,kv(nlRows));
   }
@@ -6554,7 +6554,7 @@ PAGES.usb=async(view,sub)=>{
     h("div",{class:"rowflex",style:"gap:8px;margin-top:6px"},h("button",{class:"btn sm",onclick:manualPair},ic("key"),"Pair")));
 
   /* ---- ESPNetLink structured status (legacy usb_host tab parity):
-     LTE + GPS panels. GPS always from the firmware cache (/api/gps —
+     LTE + GPS panels. GPS always from the firmware cache (/api/gps:
      console poll OR the HTTP poll over the dongle's AP/USB); LTE from
      the dongle health poll, or the `lte -j` console when it is bound. ---- */
   const lteKv=h("div",{}),gpsKv=h("div",{});
@@ -6571,22 +6571,22 @@ PAGES.usb=async(view,sub)=>{
   lteKv.append(h("div",{class:"help"},"Waiting for first poll…"));
   gpsKv.append(h("div",{class:"help"},"Waiting for first poll…"));
   function renderLte(l){
-    const st=l.stage||"—";
+    const st=l.stage||"-";
     lteKv.replaceChildren(kv([
       ["Stage",chip(st,st==="connected"?"ok":/connect|start/.test(st)?"warn":"")],
-      ["Operator",l.operator||"—"],
-      ["Signal",l.status_valid&&l.rssi_dbm?l.rssi_dbm+" dBm":"—"],
-      ["Network",l.network_type||"—"],
-      ["IP",(l.ip&&l.ip!=="0.0.0.0")?l.ip:"—"],
-      ["SIM",l.sim_status||"—"],
-      ["Modem",l.modem_model?(l.modem_model+(l.modem_fw?" · "+l.modem_fw:"")):"—"]]));
+      ["Operator",l.operator||"-"],
+      ["Signal",l.status_valid&&l.rssi_dbm?l.rssi_dbm+" dBm":"-"],
+      ["Network",l.network_type||"-"],
+      ["IP",(l.ip&&l.ip!=="0.0.0.0")?l.ip:"-"],
+      ["SIM",l.sim_status||"-"],
+      ["Modem",l.modem_model?(l.modem_model+(l.modem_fw?" · "+l.modem_fw:"")):"-"]]));
   }
   function renderLteHealth(d){
     lteKv.replaceChildren(kv([
       ["Stage",chip(d.lte_connected?"connected":"not connected",d.lte_connected?"ok":"warn")],
-      ["Operator",d.operator||"—"],
-      ["Signal",d.rssi_dbm?d.rssi_dbm+" dBm":"—"],
-      ["Network",d.network_type||"—"],
+      ["Operator",d.operator||"-"],
+      ["Signal",d.rssi_dbm?d.rssi_dbm+" dBm":"-"],
+      ["Network",d.network_type||"-"],
       ["USB data",d.usb_data?"on":"off (power only)"]]));
   }
   function renderGps(g){
@@ -6594,13 +6594,13 @@ PAGES.usb=async(view,sub)=>{
        gps_* params: this card just mirrors the firmware GPS cache. */
     gpsKv.replaceChildren(kv([
       ["Fix",chip(g.valid?"Fix":"No fix",g.valid?"ok":"")],
-      ["Satellites",g.valid?(g.satellites??"—"):"—"],
-      ["Location",g.valid?(g.latitude.toFixed(6)+", "+g.longitude.toFixed(6)):"—"],
-      ["Speed",g.valid?(g.speed*3.6).toFixed(1)+" km/h":"—"],
-      ["Heading",g.valid?(g.heading??0).toFixed(0)+"°":"—"],
-      ["Altitude",g.valid?(g.altitude??0).toFixed(0)+" m":"—"],
-      ["Accuracy",g.valid&&g.accuracy?"±"+g.accuracy+" m":"—"],
-      ["Age",g.valid?(g.age_ms/1000).toFixed(1)+" s":"—"]]));
+      ["Satellites",g.valid?(g.satellites??"-"):"-"],
+      ["Location",g.valid?(g.latitude.toFixed(6)+", "+g.longitude.toFixed(6)):"-"],
+      ["Speed",g.valid?(g.speed*3.6).toFixed(1)+" km/h":"-"],
+      ["Heading",g.valid?(g.heading??0).toFixed(0)+"°":"-"],
+      ["Altitude",g.valid?(g.altitude??0).toFixed(0)+" m":"-"],
+      ["Accuracy",g.valid&&g.accuracy?"±"+g.accuracy+" m":"-"],
+      ["Age",g.valid?(g.age_ms/1000).toFixed(1)+" s":"-"]]));
   }
   function nlExtract(txt){
     const a=txt.indexOf("{"),b=txt.lastIndexOf("}");
@@ -6705,9 +6705,9 @@ async function certsCard(){
     try{const r=await api("/api/certs");
       listEl.replaceChildren(dataTable([
         {label:"Name",get:s=>h("b",{class:"mono",style:"font-weight:600"},s.name)},
-        {label:"CA",get:s=>s.ca?chip("yes","ok"):h("span",{class:"help"},"—")},
-        {label:"Client Cert",get:s=>s.cert?chip("yes","ok"):h("span",{class:"help"},"—")},
-        {label:"Client Key",get:s=>s.key?chip("yes","ok"):h("span",{class:"help"},"—")},
+        {label:"CA",get:s=>s.ca?chip("yes","ok"):h("span",{class:"help"},"-")},
+        {label:"Client Cert",get:s=>s.cert?chip("yes","ok"):h("span",{class:"help"},"-")},
+        {label:"Client Key",get:s=>s.key?chip("yes","ok"):h("span",{class:"help"},"-")},
         {label:"",align:"right",get:s=>h("button",{class:"btn sm gh danger",onclick:async()=>{
           if(!await confirmModal("Delete certificate set \""+s.name+"\"? Consumers referencing it fall back to the built-in CA bundle at the next connection.","Delete set"))return;
           try{await api("/api/certs?set="+encodeURIComponent(s.name),{method:"DELETE"});toast("Deleted","ok");refresh();}
@@ -6765,7 +6765,7 @@ PAGES.system=async(view,sub)=>{
       /* how that boot ran (2026-10-05): parked asleep by the crash-loop brake, or safe mode */
       {label:"Type",get:r=>h("span",{},r.planned?chip(r.planned_reason||"planned","info"):chip("unexpected","warn"),
         /^park/.test(r.mode||"")?[" ",chip("parked","warn")]:r.mode==="safe"?[" ",chip("safe mode","info")]:null)},
-      {label:"Source",mono:true,key:"source"}],hist.records.slice(0,12)):h("p",{},"—"),
+      {label:"Source",mono:true,key:"source"}],hist.records.slice(0,12)):h("p",{},"-"),
       actions:[{label:"Close"}]});}},"Restart History");
   paneMaint.append(card("Maintenance","refresh",
     h("div",{class:"rowflex",style:"flex-wrap:wrap;gap:10px"},
@@ -6813,8 +6813,8 @@ PAGES.system=async(view,sub)=>{
     catch(e){msg.textContent="Failed: "+e.message;msg.style.color="var(--danger)";flashBtn.disabled=false;}};
   paneFw.append(card("Firmware Update","upload",
     h("div",{style:"display:flex;align-items:center;justify-content:space-between;padding:11px 13px;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;margin-bottom:14px"},
-      h("div",{},h("div",{style:"font-size:13px;color:var(--text-2)"},"Installed"),h("div",{class:"mono",style:"font-weight:700"},st.version||"—")),
-      h("div",{style:"text-align:right"},h("div",{style:"font-size:13px;color:var(--text-2)"},"Partition"),h("div",{class:"mono",style:"font-weight:700"},st.partition||"—"))),
+      h("div",{},h("div",{style:"font-size:13px;color:var(--text-2)"},"Installed"),h("div",{class:"mono",style:"font-weight:700"},st.version||"-")),
+      h("div",{style:"text-align:right"},h("div",{style:"font-size:13px;color:var(--text-2)"},"Partition"),h("div",{class:"mono",style:"font-weight:700"},st.partition||"-"))),
     h("div",{class:"drop"},
       h("div",{style:"font-size:13.5px;color:var(--text-2);margin-bottom:10px"},"Select a firmware ",h("b",{class:"mono"},".bin")," file to flash."),
       h("div",{style:"display:flex;gap:10px;justify-content:center"},fileBtn,flashBtn),prog),
@@ -6831,17 +6831,17 @@ PAGES.system=async(view,sub)=>{
 PAGES.about=async(view)=>{
   const p=page(view,null,"About","Device and firmware information.");
   const wrap=h("div",{});p.append(wrap);
-  /* identity only — live figures (uptime, clock, motion, boot count) live
+  /* identity only: live figures (uptime, clock, motion, boot count) live
      on the Status page (meatpi 2026-09-05) */
   const[st,info]=await Promise.all(["/api/status","/api/info"].map(tryGet));
   const inf=info||conn.info||{};
   wrap.append(card(inf.model||"WiCAN Pro","info",
     kv([
-      ["Firmware version",(st&&st.version)||inf.fw_version||"—"],
-      ["Hardware",inf.hw_version||"—"],
-      ["Device ID",inf.device_id||(st&&st.device_id)||"—"],
-      ["MAC address",inf.mac||"—"],
-      ["API level",inf.api_level!=null?String(inf.api_level):"—"]]),
+      ["Firmware version",(st&&st.version)||inf.fw_version||"-"],
+      ["Hardware",inf.hw_version||"-"],
+      ["Device ID",inf.device_id||(st&&st.device_id)||"-"],
+      ["MAC address",inf.mac||"-"],
+      ["API level",inf.api_level!=null?String(inf.api_level):"-"]]),
     h("div",{style:"margin-top:16px;font-size:12.5px;color:var(--text-3)"},
       "Designed by ",h("a",{href:"https://www.meatpi.com",target:"_blank"},"meatpi.com"),
       " · Firmware releases and documentation: ",h("a",{href:"https://github.com/meatpiHQ/wican-fw",target:"_blank"},"github.com/meatpiHQ/wican-fw"))));
@@ -7460,8 +7460,8 @@ PAGES.scripts=async(view,sub)=>{
    chip) from GET /api/uds, the Exclusive bus switch (POST /api/uds: AutoPID
    off the bus while the tool is in use), 11/29-bit addressing, a tester-
    present session (POST /api/uds/session), and a TERMINAL of every request
-   (›) and reply (‹) with the decode inline — kept across page visits (last
-   300 lines), a sent line clicks back into the form — plus the component's
+   (›) and reply (‹) with the decode inline, kept across page visits (last
+   300 lines), a sent line clicks back into the form, plus the component's
    settings card. */
 PAGES.uds=async(view)=>{
   const p=page(view,null,"UDS Tool","Send ISO 14229 requests to an ECU");
@@ -7616,7 +7616,7 @@ PAGES.sysmon=async(view)=>{
        latched in NVS until MANUALLY cleared: a fault that fired once in
        the field stays visible here */
     const faults=(fl&&fl.faults)||[];
-    const ftime=t=>t>0?new Date(t*1000).toLocaleString():"—";
+    const ftime=t=>t>0?new Date(t*1000).toLocaleString():"-";
     faultsEl.replaceChildren(section("Fault codes",
       "structural problems latch here and survive reboots until cleared, like DTCs in a car",
       ...(faults.length===0?[h("div",{class:"help"},"No fault codes, device healthy.")]:[
@@ -7650,10 +7650,10 @@ PAGES.sysmon=async(view)=>{
     tilesEl.replaceChildren(
       tile("CPU load",busy==null?"…":busy.toFixed(1),"%",{kind:busy>85?"crit":busy>60?"warn":""}),
       tile("Tasks",rows.length,null),
-      tile("Internal free",m?fmt.bytes(m.internal.free):"—",null,{cap:m?"min ever "+fmt.bytes(m.internal.min_free):null,kind:m&&m.internal.free<20480?"crit":m&&m.internal.free<40960?"warn":""}),
-      tile("Die temp",st.temp_c!=null?st.temp_c.toFixed(1):"—","°C",{kind:st.temp_c>75?"crit":st.temp_c>60?"warn":""}),
-      tile("Log errors",st.health?String(st.health.log_errors):"—",null,{cap:st.health?st.health.log_warnings+" warnings":null,kind:st.health&&st.health.log_errors>0?"crit":""}),
-      tile("Flash erases",st.health&&st.health.flash?String(st.health.flash.erases):"—",null,{cap:"since boot",kind:""}));
+      tile("Internal free",m?fmt.bytes(m.internal.free):"-",null,{cap:m?"min ever "+fmt.bytes(m.internal.min_free):null,kind:m&&m.internal.free<20480?"crit":m&&m.internal.free<40960?"warn":""}),
+      tile("Die temp",st.temp_c!=null?st.temp_c.toFixed(1):"-","°C",{kind:st.temp_c>75?"crit":st.temp_c>60?"warn":""}),
+      tile("Log errors",st.health?String(st.health.log_errors):"-",null,{cap:st.health?st.health.log_warnings+" warnings":null,kind:st.health&&st.health.log_errors>0?"crit":""}),
+      tile("Flash erases",st.health&&st.health.flash?String(st.health.flash.erases):"-",null,{cap:"since boot",kind:""}));
     if(m)heapEl.replaceChildren(...[["Internal RAM","the scarce heap: radio stacks live here",m.internal],["PSRAM","bulk heap",m.psram]].map(([label,desc,hp])=>
       section(label,desc,
         meter(hp.total-hp.free,hp.total),
@@ -7703,7 +7703,7 @@ async function boot(){
 }
 boot();
 </script>
-<script>/* web_ui_v2 — the Scripts page as an on-demand chunk (2026-09-07).
+<script>/* web_ui_v2: the Scripts page as an on-demand chunk (2026-09-07).
    Loaded by index.html's PAGES.scripts stub from /ui/scripts.js (embedded,
    gzipped; web_ui_v2/CMakeLists.txt minifies it with the same rjsmin as the
    page) the first time the page opens. A classic script: it shares the
@@ -8022,7 +8022,7 @@ PAGES.__scripts=async(view,sub)=>{
 };
 })();
 </script>
-<script>/* web_ui_v2 — the File Manager page as an on-demand chunk (2026-09-07, meatpi:
+<script>/* web_ui_v2: the File Manager page as an on-demand chunk (2026-09-07, meatpi:
    "improve the UI and UX of the Files tab, rename it File Manager").
    Loaded by index.html's PAGES.files stub from /ui/files.js the first time the
    page opens (embedded, gzipped; web_ui_v2/CMakeLists.txt minifies it with the
@@ -8090,7 +8090,7 @@ const EXT_HINT={corrupt:"set aside by the logger: the file was corrupt; what cou
 
 PAGES.__files=async(view)=>{
   const p=page(view,null,"File Manager","Browse, upload, download and tidy the internal flash and the SD card.");
-  /* the fs API validates paths literally — never percent-encode the slashes */
+  /* the fs API validates paths literally: never percent-encode the slashes */
   const enc=s=>encodeURIComponent(s).replace(/%2F/gi,"/");
   const join=(a,b)=>(a==="/"?"":a.replace(/\/$/,""))+"/"+b;
   const parent=x=>x.split("/").slice(0,-1).join("/")||"/";
@@ -8204,7 +8204,7 @@ PAGES.__files=async(view)=>{
           e.dir?h("a",{href:"#",class:"fn",title:"Open "+full,onclick:ev=>{ev.preventDefault();go(full);}},e.name):h("span",{class:"fn"},e.name),
           act.has(e.name)?chip("in use","warn"):null),
           known?h("div",{class:"fm-desc"},known):null);}},
-      {label:"Size",align:"right",get:e=>e.dir?"—":fmt.bytes(e.size)},
+      {label:"Size",align:"right",get:e=>e.dir?"-":fmt.bytes(e.size)},
       {label:"",get:e=>h("div",{class:"fm-acts"},...actions(e,act.has(e.name)))}
     ],list,{responsive:false});
     body.replaceChildren(t,path===((S.logger||{}).dir||"")?note("",["These are the logger's files. The ",h("a",{href:"#/logger"},"Logger page")," charts and exports them; the file being written is locked until logging is paused."]):null);
@@ -8308,7 +8308,7 @@ PAGES.__files=async(view)=>{
 };
 })();
 </script>
-<script>/* web_ui_v2 — the CAN Monitor page as an on-demand chunk. Rebuilt 2026-09-07
+<script>/* web_ui_v2: the CAN Monitor page as an on-demand chunk. Rebuilt 2026-09-07
    after Ali's Claude Design "WiCAN PRO Monitor" (Downloads/WiCAN PRO web UI
    design): a PCAN-View style analyzer with three tabs.
      Monitor  : toolbar (ID filter, Pause, Clear), a RECEIVE list grouped by

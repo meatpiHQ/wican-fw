@@ -7,13 +7,13 @@ the zero-touch pairing runs. Nothing is pre-configured on either device.
   erase  both devices' flash (esptool erase-flash) and flash both builds
   boot   PSU cold cycle, both consoles captured from power-on
   user   the Pi joins the fresh WiCAN AP as soon as it appears and STAYS
-         there (--no-client skips this — the bare from-scratch path)
+         there (--no-client skips this: the bare from-scratch path)
   pair   identify -> credentials -> store (wifi mode ap -> apsta) -> cut
          -> ONE WiCAN reboot
   join   after that reboot the STA must join the dongle's AP and the
          uplink must come up WHILE the user's client sits on the WiCAN AP
          (field-hit 2026-08-31: wifi_manager's AP-client pause blocked
-         the very first association — fixed with a first-connect
+         the very first association, fixed with a first-connect
          exemption + a bounded pause)
   view   what the user sees: GET /api/espnetlink over the WiCAN AP shows
          paired + uplink; the stored dongle key is read back and pushed
@@ -54,8 +54,8 @@ E_WHITELIST = ("Invalid MMIE", "select() timeout",
                "Connection failed, sock < 0",
                "tcp_read error")   # the cut severs the link mid-read
                # (2026-09-05: the first-boot "Corrupted dir pair" /
-               # "FAULT boot_errors" lines are fixed in the WiCAN firmware
-               # — blank partitions are formatted before the mount — and
+               # "FAULT boot_errors" lines are fixed in the WiCAN firmware,
+               # blank partitions are formatted before the mount, and
                # are no longer whitelisted here. NOTE the dongle firmware
                # still logs them on ITS first boot after an erase; port
                # the same guard there before running this bench fresh.)
@@ -170,7 +170,7 @@ class Console:
                 not any(w in l for w in E_WHITELIST)]
 
 
-# esptool v5 spelling (default-reset / erase-flash) — the IDF v6 venv has
+# esptool v5 spelling (default-reset / erase-flash): the IDF v6 venv has
 # it; a system python with an old esptool does not. Prefer the venv.
 ESPTOOL_PY = next((p for p in (
     os.environ.get("ESPTOOL_PYTHON", ""),
@@ -295,7 +295,7 @@ def main():
                   "ok" in r.stdout, ap_ssid)
 
         # a real phone is back on the AP within seconds of the beacons
-        # returning — hammer the re-join so the test is deterministic
+        # returning: hammer the re-join so the test is deterministic
         def phone_rejoin(deadline_s):
             end = time.time() + deadline_s
             while time.time() < end:
@@ -320,7 +320,7 @@ def main():
         t_pair = 0.0     # USB on from boot: pairing may already be done
         if not usb_on and not a.no_client and ap_ssid:
             note("user: enabling the USB host on the USB page "
-                 "(settings PUT + submit) — the WiCAN reboots")
+                 "(settings PUT + submit): the WiCAN reboots")
             r = ssh_run(
                 f"sudo -n nmcli con up {USER_CON} >/dev/null 2>&1; sleep 2; "
                 f"doc=$({CURL} http://{WICAN_AP_IP}/api/settings/"

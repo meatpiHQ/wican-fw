@@ -2,14 +2,14 @@
 """AutoPID matrix bench: standard + custom + vehicle-specific PIDs and
 passive filters, alone and combined, against the bench ECU simulator.
 
-Runs from the PC (or the Pi) over plain HTTP — no PCAN needed. The ECU
+Runs from the PC (or the Pi) over plain HTTP: no PCAN needed. The ECU
 simulator (WiCAN ECU Simulator box, 500k/11-bit) answers:
   0100 -> 41 00 18 3F 80 03      010C -> RPM 800      0105 -> 90 degC
   010D -> 0 km/h                 0162 -> 7F 01 31 (unsupported)
   physical 7E0/7E8 AND 7E1/7E9 (a second ECU) for mode 01
   UDS 22 F190 (VIN "1WCAN0FW0P0000001", multi-frame) + 22 F187 on 7E0
   broadcast (settings ecu_sim.broadcast_enabled): id 0x0C0, SEVEN data
-  bytes 0C 80 00 00 00 00 00 (raw RPM 800) — the filter legs' frame
+  bytes 0C 80 00 00 00 00 00 (raw RPM 800), the filter legs' frame
   source. Nothing on the bench bus ACKs it while the chip monitors, so it
   is retransmitted at line rate (see discover_broadcast).
 
@@ -20,7 +20,7 @@ Legs:
      0105, unsupported 0162 isolated), period-0 group
   3  vehicle-specific: multi-frame UDS DIDs via ATSH7E0/rxheader 7E8,
      second-ECU PID via ATSH7E1/7E9 (init + rxheader per PID)
-  4  combination: all three groups live at different periods — every
+  4  combination: all three groups live at different periods, every
      value right at once (no cross-attribution), update rates, runtime
      group toggle stops/resumes one group, HTTP stays responsive
   5  filters: passive window on 0x0C0 decodes the broadcast while
@@ -37,7 +37,7 @@ Legs:
   (what a car's other ECUs do) instead of being retransmitted at line rate.
   Without it leg 5 measures the filter window on a saturated bus.
 Expected final line: AUTOPID MATRIX PASS (a WARN line marks the open
-filter-on-a-flooded-bus finding — see the autopid README).
+filter-on-a-flooded-bus finding, see the autopid README).
 """
 import json
 import os
@@ -316,7 +316,7 @@ def discover_broadcast(secs=2.5):
     try:
         import websocket  # websocket-client
     except ImportError:
-        print("note: websocket-client missing — filter leg assumes 0x0C0")
+        print("note: websocket-client missing, filter leg assumes 0x0C0")
         return None
     import re
     from collections import Counter
@@ -538,7 +538,7 @@ def main():
             print(f"note: --ack-pcan {ACK_PCAN} not available ({e}); leg 5 runs without an ACK source")
     metric("leg5_ack_source", ACK_PCAN if ack_bus else "none")
     # the simulator's broadcast set is not fixed (seen 0x0C0 with the
-    # raw RPM, later 0x1A0/0x100 with zero payloads) — calibrate the
+    # raw RPM, later 0x1A0/0x100 with zero payloads): calibrate the
     # filter on whatever dominant frame is on the bus right now
     bc = discover_broadcast()
     flt = filters()
@@ -564,9 +564,9 @@ def main():
     time.sleep(8)
     cnt = update_counts([stdn, "mx_flt_rpm"] if stdn else ["mx_flt_rpm"], 15)
     # OPEN FINDING 2026-09-06 (firmware): on a flooded bus (the simulator
-    # broadcasts one id at 2-3 kHz) filter windows fail repeatedly — the
+    # broadcasts one id at 2-3 kHz) filter windows fail repeatedly, the
     # post-window stop cannot find the chip's prompt in the flood and
-    # retries up to 2 s — and each failure holds the chip, cutting std
+    # retries up to 2 s, and each failure holds the chip, cutting std
     # polling to <0.6/s from ~1.4/s. Reported as WARN until fixed.
     warn("leg5 polling continues alongside filter windows (15 s steady state)",
          (stdn is None or cnt[stdn] >= 12) and cnt["mx_flt_rpm"] >= 3, cnt)

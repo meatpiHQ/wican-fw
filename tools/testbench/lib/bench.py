@@ -58,7 +58,7 @@ class Bench:
     def ap_resume(self, con: str) -> None:
         self.check(f"sudo nmcli connection up {con}", timeout=45)
 
-    #: persistent Pi infrastructure — NEVER auto-deleted (the wican-bench
+    #: persistent Pi infrastructure, NEVER auto-deleted (the wican-bench
     #: hotspot is the standing DUT uplink; deleting it stranded the bench
     #: twice on 2026-07-05/06). wican-bench-w0 = the internal-radio (wint0) failover twin
     #: (2026-07-17 rig: the wican-bench-watchdog swaps between them).
@@ -75,7 +75,7 @@ class Bench:
     def park_persistent(self) -> None:
         """Take the persistent hotspots off the radios for the suite:
         autoconnect off + down (else one re-grabs a radio whenever a test
-        AP drops — and the bench watchdog stands down on autoconnect=no).
+        AP drops, and the bench watchdog stands down on autoconnect=no).
         Remembers which were ACTIVE so unpark restores that exact state
         (only one of the wican-bench twins is normally up)."""
         _, out = self.sh("nmcli -t -f NAME connection show --active")
@@ -98,7 +98,7 @@ class Bench:
         """IP the DUT got from the bench AP's DHCP (most recent lease).
 
         NM's shared-mode dnsmasq writes the lease the moment the client
-        joins — unlike the kernel neighbour table, which stays EMPTY for
+        joins, unlike the kernel neighbour table, which stays EMPTY for
         an idle client that never sends traffic toward the Pi (this cost
         a full HIL run 2026-07-06). Neighbour table kept as fallback;
         wait_dut_ip() pings to confirm liveness either way."""
@@ -149,7 +149,7 @@ class Bench:
 
     def wait_ssid_channel(self, ssid: str, ifname: str = "wint0",
                           timeout_s: int = 90) -> int:
-        """ssid_channel() with retries — RF scans regularly come back thin."""
+        """ssid_channel() with retries: RF scans regularly come back thin."""
         deadline = time.time() + timeout_s
         while time.time() < deadline:
             ch = self.ssid_channel(ssid, ifname)

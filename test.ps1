@@ -90,7 +90,7 @@ function Get-ComponentRoots {
 }
 
 # Absolute dir of components/<relPath> across the component roots
-# (later roots override — same precedence as the build's overlays).
+# (later roots override, same precedence as the build's overlays).
 function Get-CompDir { param([string]$RelPath)
     $hit = $null
     foreach ($root in Get-ComponentRoots) {
@@ -209,8 +209,8 @@ function Invoke-Stage { param([string]$Name, [scriptblock]$Body)
 # Quick physical-bench check BEFORE any run (~10 s). The bench has moving
 # parts that tests silently depend on:
 #   - the DUT's USB connector is EITHER cabled to this PC (CH342 device role,
-#     COM7/COM6 — needed for usb_obd/port-B legs) OR hosting a device (the
-#     USB-Ethernet adapter / a dongle — needed for the usbeth leg). Never both.
+#     COM7/COM6, needed for usb_obd/port-B legs) OR hosting a device (the
+#     USB-Ethernet adapter / a dongle, needed for the usbeth leg). Never both.
 #   - console/flash always works via the UART0 external adapter (COM10).
 #   - live/perf need the composed main ON the DUT + the Pi fixtures.
 # The selected kind FAILS FAST on hard requirements; optional legs consult
@@ -362,7 +362,7 @@ function Resolve-DutIp {
 }
 
 # Legs that drive the DUT over the USB-NCM mgmt link call this first and
-# SKIP (yellow) when the link is down — same fixture-absent pattern as
+# SKIP (yellow) when the link is down, same fixture-absent pattern as
 # usbeth/espnetlink. Returns $true when the stage should bail.
 function Skip-IfNoUsbNcm {
     if ($script:bench -and -not $script:bench.UsbNcm) {
@@ -439,7 +439,7 @@ function Use-IdfEnv {
     # (the stale-bin trap, CHECKLIST 2026-07-05)
     $env:ESP_ROM_ELF_DIR = 'C:\Espressif\tools\esp-rom-elfs\20241011\'
     # ccache MUST be on PATH: build dirs configured from a ccache-enabled
-    # shell bake `ccache gcc` into build.ninja — without it every compile
+    # shell bake `ccache gcc` into build.ninja, without it every compile
     # dies with "CreateProcess failed" (the 2026-07-05 `all` build failures)
     $env:PATH = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts;' +
                 'C:\Espressif\tools\ninja\1.12.1;C:\Espressif\tools\cmake\4.0.3\bin;' +
@@ -638,7 +638,7 @@ function Invoke-LiveChecks {
         $script:note = 'DBC REAL PASS'
     }
     # stack + memory audit: every task's stack_hw (PSRAM stacks corrupt
-    # silently on overflow — 2026-07-22 lesson), the ephemeral job tasks
+    # silently on overflow: 2026-07-22 lesson), the ephemeral job tasks
     # via their exit log line, and internal/PSRAM heap floors.
     Invoke-Stage 'live stack_audit (task watermarks + heap floors)' {
         $out = Invoke-Bench "cd ~/wican && python3 -u tools/testbench/system/stack_audit_test.py $DutIp"

@@ -69,7 +69,7 @@ def main():
 
     # headers on so the monitor lines include the CAN ID (default is ATH0);
     # note arbitrary injected data trips the ELM formatter's "<DATA ERROR"
-    # tag (first byte is not a valid ISO-TP PCI) — that is expected output
+    # tag (first byte is not a valid ISO-TP PCI): that is expected output
     s.write(b"ATH1\r")
     time.sleep(0.5)
 

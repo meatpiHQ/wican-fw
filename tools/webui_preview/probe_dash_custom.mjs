@@ -2,7 +2,7 @@
    mode, the per-tile dialog (widget, range, warnings, decimals, width,
    hide), the dial / bar / number / chart widgets, drag reordering, the
    layout file round trip through the fs API and Reset layout. Runs
-   against preview.html (mock API) under jsdom with a stub uPlot — the
+   against preview.html (mock API) under jsdom with a stub uPlot: the
    real library and its install flow are covered by the device flow. */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";

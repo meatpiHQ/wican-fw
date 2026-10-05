@@ -1,34 +1,34 @@
-"""WiCAN Pro v6 SYSTEM bench — the composed main firmware, end to end.
+"""WiCAN Pro v6 SYSTEM bench: the composed main firmware, end to end.
 Runs ON rpi001 (it plays the phone for AP onboarding, then the LAN).
 
 Flow (the real product journey):
-  1. ONBOARD  — join the DUT's factory AP (WiCAN_<12-hex id> / @meatpi#),
+  1. ONBOARD:   join the DUT's factory AP (WiCAN_<12-hex id> / @meatpi#),
                 talk to http://192.168.0.10: /api/status (bits + MEMORY),
                 /api/settings lists every component, /api/status/tasks.
-  2. CONFIGURE— PUT wifi (STA to the bench AP) + bridges (obd<->obd0) over
+  2. CONFIGURE: PUT wifi (STA to the bench AP) + bridges (obd<->obd0) over
                 the API, POST submit -> {"reboot":true} (the real
                 submit-then-reboot path on the real firmware).
-  3. STA      — swing the bench radios back to hotspot WICAN_TEST_AP; the DUT
+  3. STA:       swing the bench radios back to hotspot WICAN_TEST_AP; the DUT
                 reboots, applies, joins; find its lease.
-  4. FUNCTION — /api/status again (sta_connected bit), restart history shows
+  4. FUNCTION: /api/status again (sta_connected bit), restart history shows
                 the planned config_apply reboot, OBD chip over TCP:35000
                 through the configured bridge (ATI + live-ECU 0100).
-  5. PERF     — ATI RTT percentiles over TCP; 30 s of 0100 polling as load;
+  5. PERF:      ATI RTT percentiles over TCP; 30 s of 0100 polling as load;
                 memory snapshots before/after: internal largest_block must
                 not collapse (fragmentation stability, Architecture 12b).
-  6. HEALTH   — the silent-failure net (2026-07-19): zero log errors,
+  6. HEALTH:    the silent-failure net (2026-07-19): zero log errors,
                 registry headroom, flash-op budgets (boot + idle-quiet),
                 task stack headroom, and ZERO latched fault codes
-                (/api/faults — the device-DTC store).
+                (/api/faults: the device-DTC store).
 
-  7. WS/STA   — ws_obd ELM answer over the CONFIGURED network (step 1
+  7. WS/STA:    ws_obd ELM answer over the CONFIGURED network (step 1
                 proved it on the factory AP only).
-  8. DEGRADED — (skip: --no-degraded) a socket server on port 80 collides
+  8. DEGRADED: (skip: --no-degraded) a socket server on port 80 collides
                 with httpd at start (invisible to settings validation):
                 boot must COMPLETE, the API must answer, log_errors +
                 the boot_errors fault must latch, the healthy bridges
                 must still serve; then restore + clear -> clean reboot.
-  9. OTA      — (--ota <bin>) full OTA cycle: upload -> ota_apply restart
+  9. OTA:       (--ota <bin>) full OTA cycle: upload -> ota_apply restart
                 intent in history -> next-target partition flipped ->
                 clean health on the new image.
 
@@ -52,7 +52,7 @@ import benchlib                          # noqa: E402
 from benchlib import (AP_IP, BENCH_SSID, RigFault, bench_psk, find_dut,
                       obd_tcp as obd_transact, sh)
 
-BENCH_PSK = benchlib.BENCH_PSK_FALLBACK  # fallback only — the STANDING
+BENCH_PSK = benchlib.BENCH_PSK_FALLBACK  # fallback only: the STANDING
                          # wican-bench profile's real PSK is read at runtime
                          # via bench_psk() (2026-07-19: recreating the
                          # hotspot with this constant silently CHANGED the
@@ -60,7 +60,7 @@ BENCH_PSK = benchlib.BENCH_PSK_FALLBACK  # fallback only — the STANDING
 
 
 def http(method, host, path, body=None, timeout=None, tries=None):
-    """Shim onto benchlib.api — ONE timeout policy, rig-classified.
+    """Shim onto benchlib.api: ONE timeout policy, rig-classified.
     (timeout/tries args accepted for call-site compatibility; the policy
     constants live in benchlib/TESTING.md, not here.)"""
     return benchlib.api(host, path, method=method, body=body)
@@ -70,7 +70,7 @@ def main():
     try:
         return run()
     except RigFault as e:
-        # NOT a firmware failure — the rig broke and the ladder could not
+        # NOT a firmware failure: the rig broke and the ladder could not
         # recover it. Distinct verdict so the report never blames the DUT.
         print(f"SYSTEM BENCH RIG FAULT: {e}")
         return 2
@@ -99,7 +99,7 @@ def run():
         print(f"PROGRESS {n - 1}/{PHASES}", flush=True)
         print(f"== phase {n}/{PHASES}: {title} ==", flush=True)
 
-    phase(1, "ONBOARD — join the factory AP")
+    phase(1, "ONBOARD: join the factory AP")
     # ---- 1. ONBOARD: join the factory AP ---------------------------------
     dut_ap = f"WiCAN_{args.id}"
 
@@ -114,12 +114,12 @@ def run():
     # Join on the INTERNAL radio (reliable brcmfmac). The USB sticks
     # intermittently wedge both as APs and as scanners (re-bitten twice
     # 2026-07-26: 4-retry scans found a beaconing AP another radio saw at
-    # signal 94). The internal radio normally hosts the bench hotspot —
+    # signal 94). The internal radio normally hosts the bench hotspot,
     # during ONBOARD nothing needs it (the DUT is the only bench client
     # and it's about to reboot into STA); step 3 restores it.
     # PARK with autoconnect=no (the HIL park_persistent convention): a
     # plain `down` leaves NM free to re-up the profile mid-onboard AND
-    # the beacon watchdog armed — it fought this bench 2026-07-26
+    # the beacon watchdog armed, it fought this bench 2026-07-26
     # (declared the SSID off-air during ONBOARD, failed over, left the
     # primary down). autoconnect=no = the watchdog's stand-down signal.
     for con in ("wican-bench-w0", "wican-bench"):
@@ -143,7 +143,7 @@ def run():
     check("onboard_join_ap", rc == 0, out[-80:])
 
     # PIN the routes (2026-07-19): the factory AP subnet 192.168.0.0/24
-    # COLLIDES with LANs the Pi may already sit on — an unpinned second
+    # COLLIDES with LANs the Pi may already sit on, an unpinned second
     # /24 blackholes the Pi's own uplink (incl. the ssh running this).
     # never-default + high metric + a /32 to the DUT keeps only DUT
     # traffic on this radio.
@@ -193,7 +193,7 @@ def run():
           f"{len(body.splitlines())} tasks")
 
     # out-of-the-box OBD over WebSocket (shipped defaults since 2026-07-05:
-    # ws_obd channel + obd<->ws_obd bridge both enabled) — must answer on
+    # ws_obd channel + obd<->ws_obd bridge both enabled), must answer on
     # the factory AP with zero configuration
     try:
         import websocket
@@ -228,14 +228,14 @@ def run():
     wifi.update({"mode": "apsta", "sta_ssid": BENCH_SSID,
                  "sta_password": bench_psk()})
     st, body = http("PUT", AP_IP, "/api/settings/wifi_manager", wifi)
-    # changed:false is VALID — a device already carrying this exact
+    # changed:false is VALID, a device already carrying this exact
     # config answers idempotently and skips the flash write (the §11
     # change-guard discipline); the sta_join step downstream is the
     # real assertion that the config is in effect
     check("configure_wifi", st == 200, body)
 
     # the SHIPPED defaults (2026-07-19) already carry the full trio on the
-    # obd fan-out — ws_obd (web UI terminal), TCP:35000 and USB. Assert
+    # obd fan-out: ws_obd (web UI terminal), TCP:35000 and USB. Assert
     # they're present and REPAIR if a previous config replaced them (this
     # script's own pre-trio PUT used to downgrade to one bridge).
     DEFAULT_BRIDGES = {"bridges": [
@@ -266,14 +266,14 @@ def run():
     # ---- 3. bring the bench hotspot back; DUT reboots into STA ------------
     sh("sudo nmcli connection down wican-dut")
     sh("sudo nmcli connection delete wican-dut")
-    # unpark (autoconnect back on — see the ONBOARD park note)
+    # unpark (autoconnect back on, see the ONBOARD park note)
     for con in ("wican-bench-w0", "wican-bench"):
         sh(f"sudo nmcli connection modify {con} "
            f"connection.autoconnect yes 2>/dev/null")
-    # REUSE the standing hotspot profiles (never recreate — that would
+    # REUSE the standing hotspot profiles (never recreate: that would
     # overwrite the bench PSK, see BENCH_PSK note). PREFER the internal (wint0) radio
     # (wican-bench-w0): the USB sticks intermittently WEDGES as an
-    # AP — nmcli reports "activated" while nothing beacons (2026-07-17
+    # AP: nmcli reports "activated" while nothing beacons (2026-07-17
     # rig note; re-bitten 2026-07-26, stranded the DUT mid-bench).
     rc, out = sh("sudo nmcli connection up wican-bench-w0", 60)
 
@@ -287,7 +287,7 @@ def run():
 
     check("bench_ap_up", rc == 0, out[-60:])
 
-    # the bench hotspot has a failover twin (2026-07-17 rig) — the DUT
+    # the bench hotspot has a failover twin (2026-07-17 rig): the DUT
     # may associate with either radio, so search both; classify=True:
     # an empty window consults bench-health/bench-recover before failing
     dut_ip = find_dut(180, classify=True)
@@ -315,7 +315,7 @@ def run():
               f"seq={newest['seq']}")
     else:
         # idempotent run: no config reboot happened, so the newest record
-        # belongs to whatever rebooted the DUT last — assert it was PLANNED
+        # belongs to whatever rebooted the DUT last, assert it was PLANNED
         # or a plain power-on (fresh flash / bench PSU cycle; first live
         # OTA run 2026-07-26 hit exactly this). A panic/watchdog newest
         # still fails here.
@@ -358,7 +358,7 @@ def run():
         except socket.timeout:
             continue
         except OSError:
-            # a real client reconnects on a dropped stream — so does the
+            # a real client reconnects on a dropped stream, so does the
             # bench (transient RF resets must not kill the perf leg)
             try:
                 s.close()
@@ -437,7 +437,7 @@ def run():
     phase(7, "WS over STA (production remote path)")
     # ---- 7. WS over STA (the production remote path) ------------------------
     # step 1 proved ws_obd on the factory AP; this is the same channel on
-    # the CONFIGURED network — route registration + network-trust gate.
+    # the CONFIGURED network: route registration + network-trust gate.
     try:
         import websocket
         w = websocket.WebSocket()
@@ -459,8 +459,8 @@ def run():
     phase(8, "DEGRADED / GUARDED CONFIG legs")
     # ---- 8. DEGRADED / GUARDED CONFIG (rev 2.3/2.6) --------------------------
     # 8a. the validation net: a tcp:80 socket server would split SYNs with
-    #     httpd nondeterministically (live find 2026-07-26 — lwip
-    #     SO_REUSEADDR lets both LISTEN) — the PUT must be REJECTED.
+    #     httpd nondeterministically (live find 2026-07-26, lwip
+    #     SO_REUSEADDR lets both LISTEN): the PUT must be REJECTED.
     # 8b. never-brick: a bridge to a configured-but-DISABLED server is
     #     schema-valid and jack-valid; the boot must complete CLEAN with
     #     the bridge dormant (subscribe parks, no error storm).
@@ -546,11 +546,11 @@ def run():
                   f"free_ep={free_ep} "
                   f"bridges={len(bm_before.get('bridges', []))})")
 
-    phase(9, "OTA leg" + ("" if args.ota else " (skipped — no --ota)"))
+    phase(9, "OTA leg" + ("" if args.ota else " (skipped: no --ota)"))
     # ---- 9. OTA (optional: --ota <bin>) -------------------------------------
     if args.ota:
         # the RUNNING partition lives in /api/status (ota/status.partition
-        # is only populated DURING an upload — first live OTA run
+        # is only populated DURING an upload, first live OTA run
         # 2026-07-26 found the leg asserting on the wrong field)
         st, body = http("GET", dut_ip, "/api/status")
         part_before = json.loads(body).get("partition", "")

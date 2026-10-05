@@ -3,12 +3,12 @@
  * @brief Composition-root CLI commands. Three kinds live here, not in a
  *        component:
  *         - `system`: a COMPOSITE (dev_status memory/tasks + battery
- *           voltage + restart_tracker reboot + chip/app info) — only
+ *           voltage + restart_tracker reboot + chip/app info), only
  *           main knows all of them; legacy argtable interface preserved
  *           (-v/-r/-i/-m, plus -t tasks as the v6 addition);
  *         - `debug`: log_manager's knob, but log_manager sits BELOW
  *           cmdline_manager (registering there would be a dependency
- *           cycle — same reason /api/logs lives in api_http);
+ *           cycle, same reason /api/logs lives in api_http);
  *         - pending stubs for legacy commands whose v6 backer doesn't
  *           exist yet (only the composition root knows what's missing).
  */
@@ -125,7 +125,7 @@ static int system_memory(void)
 static int system_tasks(void)
 {
     /* two snapshots 1 s apart: CPU% = runtime delta over the window
-       (× core count in the denominator — total_us is per-core time).
+       (× core count in the denominator, total_us is per-core time).
        PSRAM statics; serialized by the console (one command at a time) */
     static dev_status_task_t t0[CLI_TASKS_MAX] EXT_RAM_BSS_ATTR;
     static dev_status_task_t t1[CLI_TASKS_MAX] EXT_RAM_BSS_ATTR;
@@ -298,7 +298,7 @@ static int cmd_debug(int argc, char **argv)
         { "debug", ESP_LOG_DEBUG }, { "verbose", ESP_LOG_VERBOSE },
     };
 
-    /* legacy interface: debug -e/--enable <0|1> — everything DEBUG/WARN */
+    /* legacy interface: debug -e/--enable <0|1>: everything DEBUG/WARN */
     if (argc == 3 && (strcmp(argv[1], "-e") == 0 ||
                       strcmp(argv[1], "--enable") == 0))
     {
@@ -450,7 +450,7 @@ static int cmd_factoryreset(int argc, char **argv)
 
 /* ---- blast (BLE TX throughput test source) --------------------------------------- */
 
-/** Pump N bytes into the BLE data pipe (FFF1 notifies) — the bench's
+/** Pump N bytes into the BLE data pipe (FFF1 notifies): the bench's
  *  TX-throughput source when WiFi is down (the TCP path needs WiFi;
  *  with interface_manager active, a connected BLE client suspends
  *  WiFi, which is exactly the clean-radio measurement condition). */

@@ -54,7 +54,7 @@ CONFIG_ESP_WIFI_TX_BA_WIN=32
 CONFIG_ESP_WIFI_RX_BA_WIN=16
 CONFIG_ESP_WIFI_GMAC_SUPPORT=n
 CONFIG_FATFS_USE_DYN_BUFFERS=n
-# unlink-while-open corrupts FATFS (orphaned cluster chains) — with the
+# unlink-while-open corrupts FATFS (orphaned cluster chains), with the
 # data_logger holding its active files open, a /api/fs delete of the
 # CURRENT log must fail (FR_LOCKED), not corrupt the card (2026-07-09)
 CONFIG_FATFS_FS_LOCK=8
@@ -115,15 +115,15 @@ CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL=y
 CONFIG_BT_NIMBLE_MAX_CCCDS=16
 
 # sys_evt stack: the v6.0.2 default (2304) overflowed live in the WiFi HIL
-# app's got-IP handler path (2026-07-06) — pin the classic 4608. Main's
+# app's got-IP handler path (2026-07-06), pin the classic 4608. Main's
 # margin at 2304 was untested luck; +2.3 K internal buys the safety.
 CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=4608
 
 # littlefs on SD-card support (data_logger backend option, 2026-07-07):
-# compile-time only — nothing mounts SD-littlefs unless configured.
+# compile-time only, nothing mounts SD-littlefs unless configured.
 CONFIG_LITTLEFS_SDMMC_SUPPORT=y
 
-# CherryUSB host (vendored meatpiHQ fork, components/cherryusb) — the
+# CherryUSB host (vendored meatpiHQ fork, components/cherryusb): the
 # USB track (usb_eth_host/usb_host_manager). Net-class buffers are the
 # heap-backed shared pool (allocated only while an adapter is attached).
 CONFIG_CHERRYUSB=y
@@ -137,12 +137,12 @@ CONFIG_CHERRYUSB_HOST_ASIX=y
 # CONFIG_CHERRYUSB_HOST_RTL8152 is not set
 
 # microlink/Tailscale Noise protocol (ts2021) uses mbedtls ChaChaPoly +
-# ChaCha20 for the control-plane crypto — off by default in mbedtls 4.
+# ChaCha20 for the control-plane crypto: off by default in mbedtls 4.
 CONFIG_MBEDTLS_CHACHA20_C=y
 CONFIG_MBEDTLS_CHACHAPOLY_C=y
 
 # TWAI ISR in IRAM (2026-07-10): with a flash-resident ISR, EVERY
-# internal-flash operation (NVS commit, littlefs write — cache-off
+# internal-flash operation (NVS commit, littlefs write, cache-off
 # window) masks the CAN interrupt and the ~64-byte hardware RX FIFO
 # silently overruns => wire frames vanish with all software counters
 # clean (the datalog leg1 first-3-frames heisen-loss). can_core also
@@ -159,7 +159,7 @@ CONFIG_TWAI_ISR_CACHE_SAFE=y
 # lands in flash and a lost frame during a flash write is a cache panic.
 CONFIG_TWAI_IO_FUNC_IN_IRAM=y
 
-# Flash-op counters (2026-07-19): the wear/abuse tripwire — dev_status
+# Flash-op counters (2026-07-19): the wear/abuse tripwire, dev_status
 # exposes them, the boot report prints them, the bench asserts budgets
 CONFIG_SPI_FLASH_ENABLE_COUNTERS=y
 

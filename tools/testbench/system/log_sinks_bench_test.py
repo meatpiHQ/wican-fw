@@ -2,7 +2,7 @@
 """External log sinks end-to-end bench (log_sinks component). Runs ON
 rpi001 (it binds the UDP collector + TCP/WS clients on the hotspot).
 
-Legs (gates FIRST — the device ships with no log byte leaving the box):
+Legs (gates FIRST: the device ships with no log byte leaving the box):
   0. defaults: all four sinks enumerate DISABLED in /api/logs/status,
      the tail port is closed, counters are zero; websocket_manager v2
      migration proof: the ws_log channel exists in stored settings.

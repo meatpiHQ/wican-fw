@@ -9,7 +9,7 @@ lives in cherryusb's `usb_hc_dwc2.c`; the WG/TS 10+ min soaks passed,
 this bench is the TARGETED stress.
 
 Race levers (all remote, no unplugging):
-- The usb_acm_cli RX task polls bulk-IN with a 200 ms timeout — every
+- The usb_acm_cli RX task polls bulk-IN with a 200 ms timeout: every
   quiet expiry is a kill_urb. Flooding ACM commands with tiny
   `timeout_ms` makes response bytes land asynchronously around those
   kill instants (IN-channel kill-vs-completion).
@@ -23,7 +23,7 @@ role), `usb_host_manager` + `usb_acm_cli` enabled. The dongle's NCM
 gateway answers on the point-to-point subnet (DUT side e.g.
 192.168.7.2 -> blast target .1).
 
-Stages per round (default 2 rounds — the repeat-it rule):
+Stages per round (default 2 rounds, the repeat-it rule):
   A acm_kill_flood   60 s mixed-timeout ACM command flood, idle bus
   B blast_plus_acm   45 s NCM UDP blast + the same ACM flood on top
   C teardown_churn   12x { 2 s blast -> `iperf -a` mid-flight -> ACM
@@ -141,7 +141,7 @@ class Rig:
         return usb, seq
 
     def verify(self, tag, usb0, seq0):
-        """The post-stage invariants — any drift = the hammer drew blood."""
+        """The post-stage invariants: any drift = the hammer drew blood."""
         # twin-roam tolerant: re-discover before judging
         if self.dut.get("/api/usb", timeout_s=4) is None:
             self.dut.discover()

@@ -2,7 +2,7 @@
  * @file main_sleep.c
  * @brief Composition-root glue: the ordered shutdown sequence
  *        sleep_manager runs right before powering down (the
- *        prepare-callback pattern — sleep_manager itself depends on
+ *        prepare-callback pattern, sleep_manager itself depends on
  *        none of these components). Order mirrors legacy
  *        sleep_mode.c: data producers first, tunnels/advertisements,
  *        then the radios, storage last.

@@ -1,9 +1,9 @@
 /**
  * @file main_boot.c
  * @brief Boot scaffolding for the composition root: the init/start step
- *        helpers (degrade, never halt — §4.3), the boot RAM map every
+ *        helpers (degrade, never halt, §4.3), the boot RAM map every
  *        step feeds, and the boot HEALTH report (2026-07-19): error/
- *        warning counts, flash-op counters, registry occupancy — printed
+ *        warning counts, flash-op counters, registry occupancy, printed
  *        for the bench AND latched as fault codes when out of budget.
  */
 #include "esp_intr_alloc.h"
@@ -34,7 +34,7 @@ static const char *TAG = "main";
  * after the boot line as `WICAN RAMMAP <step>=<bytes>` (positive =
  * consumed). One boot = the whole consumption map. Since 2026-07-19 each
  * step also records its DURATION; steps >= 50 ms print as
- * `WICAN BOOTTIME <step>=<ms>` — the boot-latency map (Ali: "it takes
+ * `WICAN BOOTTIME <step>=<ms>`: the boot-latency map (Ali: "it takes
  * long to boot?"). */
 typedef struct
 {
@@ -119,14 +119,14 @@ bool main_boot_start(const char *name, esp_err_t (*start_fn)(void))
 }
 
 /* ---- boot health report (meatpi 2026-07-19: detect the silent-failure
- * classes — every-boot flash rewrites, registry overflow, ESP_LOGE'd
+ * classes, every-boot flash rewrites, registry overflow, ESP_LOGE'd
  * degradations nobody read. Printed lines are bench-parsed; breaches
  * LATCH a fault code (the automotive-DTC model: manual clear only). */
 
 /* Steady-state boot flash budget. A clean boot after the 2026-07-19
  * settings fix measures ~10 erases (littlefs metadata); the pre-fix bug
  * (37 files rewritten every boot) measured 37+. First boot after a
- * defaults change legitimately fills+persists — the budget stays above
+ * defaults change legitimately fills+persists: the budget stays above
  * that but far below the rewrite-everything pathology. */
 #define BOOT_ERASE_BUDGET 64
 
@@ -218,7 +218,7 @@ void main_boot_health_report(void)
 }
 
 /** Flash-churn tripwire for the 60 s watch loop: latches ONE fault per
- *  boot when flash erases grow in many consecutive windows — the
+ *  boot when flash erases grow in many consecutive windows, the
  *  "component rewrites flash on a timer" class, caught in the field. */
 void main_boot_flash_watch(void)
 {
@@ -238,7 +238,7 @@ void main_boot_flash_watch(void)
 
     if (s_rising_windows >= 10 && !s_raised)
     {
-        s_raised = true; /* data_logger-class streaming is legit — the
+        s_raised = true; /* data_logger-class streaming is legit: the
                             fault flags the pattern; the human judges */
         char detail[48];
 
@@ -249,7 +249,7 @@ void main_boot_flash_watch(void)
 }
 
 /** Init/register one step. NEVER panics: a deterministic init failure
- *  under ESP_ERROR_CHECK would be a permanent boot loop — the one thing
+ *  under ESP_ERROR_CHECK would be a permanent boot loop, the one thing
  *  a field device must not do. A failed init leaves that component
  *  unconfigured (its _start() then refuses per §4.3 step 5) and the rest
  *  of the device keeps working: serial console, and usually the AP + OTA

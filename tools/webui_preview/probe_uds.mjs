@@ -1,5 +1,5 @@
 /* Probe: the UDS Tool page (2026-09-16): path badge + Exclusive bus switch
- * from GET /api/uds, and the TERMINAL view — every request (›) and reply
+ * from GET /api/uds, and the TERMINAL view, every request (›) and reply
  * (‹) as lines with the decode inline (VIN as text, NRC name), the raw JSON
  * toggle, Clear, persistence in localStorage, a sent line clicking back into
  * the form, the exclusive round-trip (POST /api/uds -> "AutoPID paused"

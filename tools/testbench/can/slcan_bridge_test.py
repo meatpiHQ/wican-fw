@@ -6,7 +6,7 @@ Reconfigures the DUT so bridge `br_slcan` = can <-> slcan0 (tcp:3333) with the
   * TX: send a Lawicel `t...` line over TCP -> PCAN must see the CAN frame.
   * RX: PCAN injects a frame -> a Lawicel `t...` line must arrive over TCP.
 
-Run on the machine with PCAN (Windows, IDF venv python — has python-can):
+Run on the machine with PCAN (Windows, IDF venv python, has python-can):
   python slcan_bridge_test.py [dut_ip] [pcan_channel]
 Defaults: dut 192.168.82.1, pcan PCAN_USBBUS2.  Needs python-can.
 """
@@ -79,7 +79,7 @@ def main():
     bus = can.Bus(interface="pcan", channel=PCAN, bitrate=500000)
     s = socket.create_connection((DUT, PORT), timeout=5)
     s.settimeout(3)
-    # python-can slcan clients open with S6/O; harmless — the codec absorbs them
+    # python-can slcan clients open with S6/O; harmless: the codec absorbs them
     s.sendall(b"S6\rO\r")
     time.sleep(0.3)
     # drain any greeting

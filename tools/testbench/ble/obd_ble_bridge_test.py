@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""OBD <-> BLE live bridge — the PRODUCTION path (a phone app talking
+"""OBD <-> BLE live bridge: the PRODUCTION path (a phone app talking
 ELM327 over BLE), never live-tested before 2026-07-26. Runs ON rpi001
 (UB500 dongle + bleak + the D-Bus passkey agent from ble_bench.py).
 
 Flow:
   1. over WiFi: enable ble_manager + add the br_ble_obd bridge
-     (obd <-> ble, raw) next to the shipped trio — the obd jack is
+     (obd <-> ble, raw) next to the shipped trio, the obd jack is
      multi_consumer, so TCP/WS/USB stay live; submit-reboot.
   2. bluetoothctl-remove any stale WiC_ bond (the BlueZ stale-LTK trap),
      scan, connect, pair (static passkey agent).
@@ -114,7 +114,7 @@ async def ble_leg(passkey):
     out["found"] = True
     print(f"  found {device.name} @ {device.address}")
 
-    # connect with retries — BlueZ throws transient br-connection-canceled
+    # connect with retries: BlueZ throws transient br-connection-canceled
     # on the first attempt after a fresh advertise (bitten 2026-07-26)
     client = None
     for attempt in range(3):
@@ -194,7 +194,7 @@ def main():
     bridges = [b for b in bm.get("bridges", [])
                if b.get("name") != "br_ble_obd"]
     # the standing bench config carries FIVE bridges (shipped trio +
-    # two rig bridges, 2026-07-20) — the honest bound is a free
+    # two rig bridges, 2026-07-20): the honest bound is a free
     # slot in the 6-cap table for br_ble_obd
     check("bridge_slot_free", len(bridges) < 6, f"{len(bridges)} bridges")
     bridges.append({"name": "br_ble_obd", "a": "obd", "b": "ble",

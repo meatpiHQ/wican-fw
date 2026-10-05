@@ -5,7 +5,7 @@ bridge configured: a WS channel <-raw-> `obd0` (WebSocket channel to the
 TCP server). The Pi holds both ends, so every scenario exercises the real
 production path: httpd WS frames -> chunks -> bridge pump -> lwIP TCP (and
 back). One pump crossing per direction (the socket_manager echo-bridge
-numbers crossed the pump TWICE — compare accordingly; the `latency`
+numbers crossed the pump TWICE: compare accordingly; the `latency`
 scenario here loops WS->TCP->WS so it also crosses twice + radio twice).
 
     python3 ws_bench.py --host 10.42.0.62 --scenario \
@@ -137,7 +137,7 @@ def bidir(host, secs, frame):
                 s.sendall(payload)
                 sent["tcp"] += frame
             except (socket.timeout, TimeoutError):
-                continue  # backpressure — keep offering
+                continue  # backpressure, keep offering
 
     threads.append(threading.Thread(target=tcp_tx))
 
@@ -152,7 +152,7 @@ def bidir(host, secs, frame):
             sent["ws"] += frame
         except Exception:
             time.sleep(0.005)  # backpressure (drain thread's 1 s timeout
-                               # is shared with send) — retry, don't die
+                               # is shared with send), retry, don't die
 
     dt = time.time() - t0
     time.sleep(1.5)
@@ -170,7 +170,7 @@ def bidir(host, secs, frame):
 
 def latency(host, secs, frame):
     """WS sends a small frame; the Pi's TCP end echoes it straight back;
-    WS waits for the return. Crosses the pump twice + the radio twice —
+    WS waits for the return. Crosses the pump twice + the radio twice:
     directly comparable to socket_manager's echo-bridge RTT rows."""
     w, s = _ws(host), _tcp(host)
     s.settimeout(2)
@@ -214,7 +214,7 @@ def latency(host, secs, frame):
 
 def fanout(host, secs, frame):
     """TCP blasts; BOTH WS clients (max_clients=2) must receive the full
-    stream — fan-out TX cost is O(clients) on the DUT."""
+    stream: fan-out TX cost is O(clients) on the DUT."""
     w1, w2, s = _ws(host), _ws(host), _tcp(host)
     payload = (bytes(range(256)) * ((frame // 256) + 1))[:frame]
     rx1, rx2, done = [0], [0], [False]

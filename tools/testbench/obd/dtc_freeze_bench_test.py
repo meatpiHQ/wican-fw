@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Freeze-frame (OBD mode 02) end-to-end bench — TASK_dtc §14.
+"""Freeze-frame (OBD mode 02) end-to-end bench: TASK_dtc §14.
 
 Topology: the ECU-sim box (REST at 192.168.8.1 from the PC over its
-NCM link) is the vehicle — its mode 02 serves frame 0 while a DTC is
+NCM link) is the vehicle, its mode 02 serves frame 0 while a DTC is
 stored (PID 02 = DTCFRZF, other PIDs = frozen snapshot of the live
 mode-01 value). DUT driven over HTTP via rpi001.
 
@@ -151,7 +151,7 @@ def main():
     ap_before.pop("degraded", None)
     ap_before.pop("pending_reboot", None)
 
-    # ---- configure: OBD protocol, freeze ON (the default — set
+    # ---- configure: OBD protocol, freeze ON (the default, set
     # explicitly so the leg is self-describing) ----
     rpm_before = sim_rpm()
     sim_set_dtcs(["P0301"], mil=True)
@@ -193,7 +193,7 @@ def main():
     print("PROGRESS 1/4", flush=True)
 
     # ---- leg 2: no stored codes -> no freeze in the fresh report ----
-    print("leg 2/4: DTCs cleared on the sim — rescan must drop the "
+    print("leg 2/4: DTCs cleared on the sim, rescan must drop the "
           "freeze…", flush=True)
     sim_api("/api/ecu/dtcs", "DELETE")
     r = scan_retry(ip)

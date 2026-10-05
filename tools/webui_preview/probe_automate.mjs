@@ -97,7 +97,7 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
     stdSpans().includes("Intake MAP") && stdSpans().filter((t) => t === "010C1").length === 1);
   check("std names/commands are read-only text",
     ![...d().querySelectorAll("input")].some((i) => i.value === "Intake MAP" || i.value === "010C1"));
-  /* dedup regression: re-open Last Scan Results and re-add — no dup rows */
+  /* dedup regression: re-open Last Scan Results and re-add, no dup rows */
   const lastBtn = [...d().querySelectorAll("button")].find((b) => b.textContent === "Last Scan Results");
   if (lastBtn) {
     lastBtn.click(); await sleep(300);
@@ -248,7 +248,7 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
     check("RX Hdr column present on custom tab", !!d().querySelector('input[placeholder="7E8"]'));
   }
   if (errs.length) { console.log('errors so far:'); errs.forEach(e=>console.log('  '+e)); }
-  /* rules page — the veh flow staged settings, so the unsaved-changes
+  /* rules page: the veh flow staged settings, so the unsaved-changes
      guard modal appears on navigation: choose Discard (authentic UX) */
   w.location.hash = "#/events";
   w.dispatchEvent(new w.Event("hashchange"));

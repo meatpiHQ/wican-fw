@@ -3,17 +3,17 @@
 the Pi's UB500 dongle over ssh + the DUT over the USB link).
 
 Verifies the 2026-07-08 BLE hardening on real hardware:
-  * gate    — a WRONG passkey cannot pair, so no characteristic is
+  * gate:     a WRONG passkey cannot pair, so no characteristic is
               readable (item 4: chars only readable by an authenticated peer)
-  * pair    — the CORRECT passkey pairs (MITM) and the gated Device-Info
+  * pair:     the CORRECT passkey pairs (MITM) and the gated Device-Info
               read succeeds
-  * persist — after a DUT REBOOT the bonded central reconnects and reads
+  * persist: after a DUT REBOOT the bonded central reconnects and reads
               WITHOUT re-pairing / re-entering the passkey (items 1 + 3:
               NVS bond persistence)
 
 BLE + the full firmware composition sits on the internal-RAM cliff
 (~2 KB free), so this test needs a BLE-focused profile: **WiFi off, BLE
-on**. Pass --setup to switch the DUT into it (saves nothing — restore with
+on**. Pass --setup to switch the DUT into it (saves nothing: restore with
 --restore), or set it yourself first. The USB link (192.168.82.1) stays up
 with WiFi off, so the DUT is controllable throughout.
 

@@ -3,7 +3,7 @@
 #
 # PORTABLE BY DESIGN: instruments (bench equipment) live as one folder
 # each under tools/testbench/instruments/. Machine-specific values (COM
-# ports, IPs, your device id) are NOT edited here — put them in
+# ports, IPs, your device id) are NOT edited here: put them in
 # benchboard.local.toml (gitignored; copy benchboard.local.example.toml).
 # ${python} = the interpreter running BenchBoard; ${<ins>.<key>} = an
 # instrument's (locally-overridden) config value.
@@ -70,7 +70,7 @@ name = "Target test app -> restore main fw"
 group = "system"
 instruments = ["dut", "pi", "serial"]
 timeout_s = 1500
-doc = "Flash ONE component's on-target test app (test.ps1 target), capture its verdict over serial, then ALWAYS reflash the main firmware and wait for the DUT to come back online — even when the test app fails mid-run. Valid components: settings_manager, filesystem, http_server_manager, wifi_manager, log_manager, dev_status_manager, restart_tracker, obd_chip, api_http, socket_manager, bridge_manager, ble_manager."
+doc = "Flash ONE component's on-target test app (test.ps1 target), capture its verdict over serial, then ALWAYS reflash the main firmware and wait for the DUT to come back online, even when the test app fails mid-run. Valid components: settings_manager, filesystem, http_server_manager, wifi_manager, log_manager, dev_status_manager, restart_tracker, obd_chip, api_http, socket_manager, bridge_manager, ble_manager."
 
   [[flow.param]]
   name = "comp"

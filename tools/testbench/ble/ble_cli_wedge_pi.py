@@ -1,17 +1,17 @@
-"""BLE CLI wedge probe — runs ON rpi001 (BlueZ + bleak), MAIN firmware.
+"""BLE CLI wedge probe: runs ON rpi001 (BlueZ + bleak), MAIN firmware.
 
 Verifies the 2026-07-10 fix: BLE CLI lines are queued to the
 cmdline_manager dispatcher instead of executing INLINE in the NimBLE
-host task (where a long command wedged the stack — GATT "Unlikely
+host task (where a long command wedged the stack: GATT "Unlikely
 Error" / stalled ATT).
 
-  1. quick    — `help` returns output ending in the `wican> ` prompt
-  2. wedge    — queue 4x `system -t` (~1 s each: the dispatcher stays
+  1. quick:     `help` returns output ending in the `wican> ` prompt
+  2. wedge:     queue 4x `system -t` (~1 s each: the dispatcher stays
                 busy ~4 s) and DURING that window do Device-Info GATT
                 reads: with the fix they return at normal BLE RTT;
                 inline exec serializes them behind the commands
-                (median >= ~1 s = FAIL) — and all 4 prompts still arrive
-  3. flood    — 8 back-to-back lines (queue depth 4): expect prompts
+                (median >= ~1 s = FAIL), and all 4 prompts still arrive
+  3. flood:     8 back-to-back lines (queue depth 4): expect prompts
                 and/or `busy` feedback, NO disconnect, CLI usable after
 
 Usage: sudo python3 ble_cli_wedge_pi.py --passkey 421337 [--name WiC_]
@@ -19,7 +19,7 @@ Ends with: BLE CLI WEDGE PASS
 
 Connect by DISCOVERED DEVICE, never by a bare address: the DUT
 advertises RPAs; when a bond exists BlueZ reports the identity address,
-and removing the bond (the wrong-LTK hygiene step) deletes the IRK —
+and removing the bond (the wrong-LTK hygiene step) deletes the IRK:
 a subsequent connect-by-identity then fails "device not found".
 """
 import argparse
@@ -159,14 +159,14 @@ async def main():
         check("wedge: all 4 command responses arrived", ok,
               f"prompts={out.count(PROMPT)}")
 
-        # 3) flood past the queue depth — feedback, no wedge
+        # 3) flood past the queue depth: feedback, no wedge
         out = bytearray()
         for _ in range(8):
             await client.write_gatt_char(UUID_CLI_IN, b"help\n",
                                          response=False)
 
-        # every line answers with a prompt — the busy fallback ends in
-        # one too — so 8 writes must yield 8 prompts if nothing wedged
+        # every line answers with a prompt (the busy fallback ends in
+        # one too) so 8 writes must yield 8 prompts if nothing wedged
         await drain_until(cli_q, out, 8, 25)
         prompts = out.count(PROMPT)
         busies = out.count(b"busy")

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Flash-port presence probe — ENUMERATION ONLY, never opens a port.
+"""Flash-port presence probe: ENUMERATION ONLY, never opens a port.
 
 Opening COM7 resets the DUT (and any open can steal the port from a
 flash in progress), so this probe only checks that the configured port

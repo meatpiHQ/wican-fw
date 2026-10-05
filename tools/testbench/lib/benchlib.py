@@ -1,17 +1,17 @@
-"""benchlib — ONE bench library, ONE timeout policy (bench plan phase 3).
+"""benchlib: ONE bench library, ONE timeout policy (bench plan phase 3).
 
 Every timeout/retry constant the bench uses lives HERE (documented in
 TESTING.md); scripts must not invent their own. The core contract (the
 classification rule): when a step exhausts its budget, benchlib asks the
-rig itself (`bench-health` on rpi001) BEFORE failing —
+rig itself (`bench-health` on rpi001) BEFORE failing,
 
   RIG FAULT -> run `bench-recover`, retry the operation once; a second
-               rig fault raises RigFault — the run is reported as
+               rig fault raises RigFault: the run is reported as
                RIG FAULT <detail>, never blamed on firmware.
   RIG OK    -> the failure is real: the original DUT-side error surfaces.
 
 Works both ON rpi001 (system_bench et al.) and on the dev PC (ssh'd Pi
-commands via the `rpi001` alias — which is the ethernet control plane).
+commands via the `rpi001` alias, which is the ethernet control plane).
 """
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ except ImportError:         # a lone copy of this file: no simulator there
 SSH_CONNECT = 10          # s; + 1 retry (Windows OpenSSH cold-handshake flake)
 SSH_RETRIES = 1
 HTTP_TRY = 8              # s; one API call on a healthy link
-HTTP_RETRY_BUDGET = 30    # s; rides a route flap — longer means rig fault
+HTTP_RETRY_BUDGET = 30    # s; rides a route flap: longer means rig fault
 HTTP_RETRY_GAP = 3        # s between transport retries
 DUT_REBOOT_WINDOW = 180   # s; healthy ~20-40 s, degraded rig 2-3 min
 OTA_UPLOAD = 300          # s; 3.4 MB at worst-case RF
@@ -54,12 +54,12 @@ BENCH_PSK_FALLBACK = os.environ.get("WICAN_BENCH_PSK", "")
 
 # radio roles (udev-pinned on rpi001 since 2026-07-26); legacy fallbacks
 # let this library run against a Pi that predates the rename
-ROLE_HOTSPOT = ("wtest0", "wlan1")   # wican-bench (USB stick — primary since 2026-09-06)
-ROLE_TWIN = ("wint0", "wlan0")       # wican-bench-w0 (internal radio — failover only; goes deaf in AP mode)
+ROLE_HOTSPOT = ("wtest0", "wlan1")   # wican-bench (USB stick: primary since 2026-09-06)
+ROLE_TWIN = ("wint0", "wlan0")       # wican-bench-w0 (internal radio: failover only; goes deaf in AP mode)
 
 
 class RigFault(Exception):
-    """The RIG (Pi/radios/services) is at fault — not the firmware."""
+    """The RIG (Pi/radios/services) is at fault, not the firmware."""
 
 
 def on_pi() -> bool:
@@ -103,7 +103,7 @@ def pi(cmd: str, timeout: int = 60) -> tuple[int, str]:
 
 def bench_psk() -> str:
     """The standing wican-bench profile's REAL PSK (never recreate a
-    hotspot with the fallback constant — 2026-07-19 lesson)."""
+    hotspot with the fallback constant, 2026-07-19 lesson)."""
     rc, out = pi("sudo nmcli -s -g 802-11-wireless-security.psk "
                  "connection show wican-bench")
     return out.strip() if rc == 0 and out.strip() else BENCH_PSK_FALLBACK
@@ -153,7 +153,7 @@ def _classified(op, what: str):
         try:
             return op()
         except Exception:
-            # retry failed too — re-probe decides who is to blame now
+            # retry failed too: re-probe decides who is to blame now
             ok2, verdict2 = rig_verdict()
             if ok2:
                 raise   # rig healed but the DUT still fails: DUT's fault
@@ -169,7 +169,7 @@ def api(host: str, path: str, method: str = "GET", body=None,
         classify: bool = True):
     """One API call with the standard retry policy. Transport errors
     retry inside budget_s; HTTP status errors surface IMMEDIATELY (they
-    are answers — the leg-8a lesson). Returns (status, text)."""
+    are answers: the leg-8a lesson). Returns (status, text)."""
     def attempt_loop():
         deadline = time.time() + budget_s
         while True:
@@ -255,7 +255,7 @@ def find_dut(window: int = DUT_REBOOT_WINDOW, classify: bool = False):
 
 def submit_and_wait(ip: str, window: int = DUT_REBOOT_WINDOW):
     """POST /api/settings/submit and ride through the apply reboot.
-    Returns (rebooted, new_ip) — new_ip == ip when nothing was staged."""
+    Returns (rebooted, new_ip): new_ip == ip when nothing was staged."""
     st, body = api(ip, "/api/settings/submit", method="POST")
     rebooted = json.loads(body).get("reboot", False)
 

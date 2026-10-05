@@ -1,6 +1,6 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
-# wg_public_soak.sh — WireGuard soak test of the WiCAN DUT against a PUBLIC
+# wg_public_soak.sh: WireGuard soak test of the WiCAN DUT against a PUBLIC
 # endpoint (the "betty" VPS), over the real LTE/CGNAT path.
 #
 # KEY HYGIENE (the whole point):
@@ -23,13 +23,13 @@
 #
 # split = AllowedIPs 10.9.0.0/24 (management via STA stays alive, full
 #         observability). full = 0.0.0.0/0 (betty NATs egress; DUT HTTP
-#         management drops — observe via `status` on betty + the serial log).
+#         management drops: observe via `status` on betty + the serial log).
 # ---------------------------------------------------------------------------
 set -u
 
 SRV=betty                       # ssh alias for the VPS
 EP_DNS="${WG_BENCH_DNS:-}"      # optional: server DNS name (env var, NOT
-                                # committed — private server, public repo).
+                                # committed, private server, public repo).
                                 # When set and matching the server IP, the
                                 # DUT gets the NAME as its endpoint so the
                                 # firmware's DNS-resolution path runs too.
@@ -104,7 +104,7 @@ up|run)
     echo "DUT pubkey:    $(mask "$DUTPUB")"
     server_peer "$DUTPUB"
 
-    # DUT settings (do NOT send private_key — keygen already set it in NVS)
+    # DUT settings (do NOT send private_key: keygen already set it in NVS)
     VCFG=$(dut "-s http://${DUT_IP}/api/settings/vpn_manager" | SRVPUB="$SRVPUB" EP="$EP" ALLOWED="$ALLOWED" MASK="$MASK" PORT="$WG_PORT" NET="$NET" DEFROUTE="$DEFROUTE" python3 -c '
 import json,sys,os
 d=json.load(sys.stdin)
@@ -157,7 +157,7 @@ print(json.dumps(d))')
 
 status)
     echo "=== betty wg ${IF} ==="; $SRVSSH "wg show ${IF} 2>/dev/null || echo 'DOWN'"
-    echo "=== DUT vpn ==="; dut "-s http://${DUT_IP}/api/vpn" || echo "(DUT HTTP unreachable — expected under full tunnel)"
+    echo "=== DUT vpn ==="; dut "-s http://${DUT_IP}/api/vpn" || echo "(DUT HTTP unreachable: expected under full tunnel)"
     ;;
 
 down)
@@ -185,7 +185,7 @@ print(json.dumps(d))' 2>/dev/null)
         $PI "curl -s -o /dev/null -w 'DUT vpn disable PUT -> %{http_code}\n' -m 8 -X PUT http://${DUT_IP}/api/settings/vpn_manager -H 'Content-Type: application/json' -d '$VCFG'"
         dut "-X POST http://${DUT_IP}/api/settings/submit" >/dev/null 2>&1 && echo "DUT submitted (VPN off)"
     else
-        echo "DUT unreachable — disable it manually when it is back (vpn off in settings)"
+        echo "DUT unreachable: disable it manually when it is back (vpn off in settings)"
     fi
     ;;
 

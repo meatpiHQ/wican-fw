@@ -2,12 +2,12 @@
 """Bench-test the slcan translator over the WebSocket transport.
 
 Reconfigures the DUT so bridge `br_slcan_ws` = can <-> ws_can (/ws/can) with
-the `slcan` translator (br_echo is removed for the run — ws_can is
+the `slcan` translator (br_echo is removed for the run, ws_can is
 single-consumer), reboots, then:
   * TX: send a Lawicel `t...` line as a WS binary frame -> PCAN sees the frame.
   * RX: PCAN injects a frame -> a Lawicel `t...` line arrives as a WS frame.
 
-Run on the machine with PCAN (Windows, IDF venv python — has python-can):
+Run on the machine with PCAN (Windows, IDF venv python, has python-can):
   python slcan_ws_test.py [dut_ip] [pcan_channel]
 Defaults: dut 192.168.82.1, pcan PCAN_USBBUS2. WS client = wsmin.py (no deps).
 Restore the canonical bridge set afterwards (br_echo ws_can<->obd0).
@@ -81,7 +81,7 @@ def main():
     bus = can.Bus(interface="pcan", channel=PCAN, bitrate=500000)
     ws = WS(DUT, 80, WS_PATH)
     ws.settimeout(3)
-    # python-can slcan clients open with S6/O; harmless — the codec absorbs them
+    # python-can slcan clients open with S6/O; harmless: the codec absorbs them
     ws.send(b"S6\rO\r")
     time.sleep(0.3)
     for _ in ws.pump():

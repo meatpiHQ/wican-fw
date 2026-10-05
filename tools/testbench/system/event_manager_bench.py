@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""event_manager comprehensive integration bench — runs ON rpi001 (paho to
+"""event_manager comprehensive integration bench: runs ON rpi001 (paho to
 the local broker + the DUT's HTTP API). Complements the pure host suite
 (rule match/when/cooldown/templates) and the worker-pool bench
 (em_worker_bench.py). Proves the wired paths on real hardware:
 
-  1. discovery   — /api/events/{sources,actions,values} expose the
+  1. discovery:    /api/events/{sources,actions,values} expose the
                    registered registries (timer/mqtt/... , log.note/
                    mqtt.publish/http.post/... , time./... ).
-  2. validation  — a rule with an unknown action/event is REJECTED at PUT.
-  3. timer->act  — a settings timer fires a rule whose mqtt.publish action
+  2. validation:   a rule with an unknown action/event is REJECTED at PUT.
+  3. timer->act:   a settings timer fires a rule whose mqtt.publish action
                    lands at the broker at cadence, with the ${..} template
                    RENDERED (not literal).
-  4. cooldown    — a cooldown_ms rule is throttled + `suppressed` climbs.
+  4. cooldown:     a cooldown_ms rule is throttled + `suppressed` climbs.
 
 Preconditions are SELF-HEALED (rig-standardization rule: a leg verifies
 its own rig, 2026-07-26 after a silent mqtt_connected:false FAIL):
-  [RIG] mosquitto must be active on this Pi — started if not.
-  [DUT] mqtt must be connected to the bench broker — if not, mqtt_manager
+  [RIG] mosquitto must be active on this Pi, started if not.
+  [DUT] mqtt must be connected to the bench broker: if not, mqtt_manager
         is pointed at <dut_subnet>.1 for the run and RESTORED afterwards
         (GET->PUT round-trip is safe: api_http unredacts _password fields
         on PUT). Ends with EVENT MGR PASS.
@@ -76,7 +76,7 @@ def rig_broker_up():
                                "mosquitto"]).returncode == 0
     if active():
         return True
-    print("[RIG] mosquitto inactive — starting it")
+    print("[RIG] mosquitto inactive: starting it")
     subprocess.run(["sudo", "systemctl", "start", "mosquitto"], check=False)
     for _ in range(10):
         if active():
@@ -87,7 +87,7 @@ def rig_broker_up():
 
 def dut_mqtt_connected():
     """mqtt_connected is a dev-status BIT (status["bits"], like
-    autopid_enabled) — NOT a top-level status field. Reading the top
+    autopid_enabled), NOT a top-level status field. Reading the top
     level polls a key that never exists (false-FAILed 2× 2026-07-26)."""
     try:
         st = api("/api/status")[1]
@@ -98,7 +98,7 @@ def dut_mqtt_connected():
 
 
 def wait_mqtt(secs):
-    """Poll mqtt_connected — reconnect after a settings reboot takes a
+    """Poll mqtt_connected: reconnect after a settings reboot takes a
     while (WiFi rejoin + broker connect landed ~40 s post-submit on the
     2026-07-26 run; a 30 s poll false-FAILed a functionally green leg)."""
     deadline = time.time() + secs
@@ -116,7 +116,7 @@ def ensure_dut_mqtt():
     if dut_mqtt_connected():
         return None
     bench_broker = DUT.rsplit(".", 1)[0] + ".1"
-    print(f"[SETUP] DUT mqtt not connected — pointing it at "
+    print(f"[SETUP] DUT mqtt not connected: pointing it at "
           f"mqtt://{bench_broker} for this run")
     cur = api("/api/settings/mqtt_manager")[1]
     for k in ("degraded", "pending_reboot"):
@@ -132,7 +132,7 @@ def ensure_dut_mqtt():
     wait_online()
     if not wait_mqtt(90):
         print("[SETUP] WARNING: DUT still not connected to the bench "
-              "broker — the timer->mqtt legs will fail "
+              "broker, the timer->mqtt legs will fail "
               "(RIG/DUT network issue?)")
     return saved
 
@@ -192,7 +192,7 @@ def main():
         check("discovery: values non-empty (pull-value providers)",
               len(json.dumps(vals)) > 20, "")
 
-        # 2. validation — unknown action must be rejected at PUT
+        # 2. validation: unknown action must be rejected at PUT
         bad = dict(saved)
         bad.pop("degraded", None); bad.pop("pending_reboot", None)
         bad["rules"] = [{"name": "bad", "on": "timer.tick", "do": "does.not.exist",

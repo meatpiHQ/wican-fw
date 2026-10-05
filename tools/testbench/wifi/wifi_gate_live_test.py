@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Network-trust lockdown — EXHAUSTIVE attack-surface sweep (wifi_manager
+"""Network-trust lockdown: EXHAUSTIVE attack-surface sweep (wifi_manager
 v3 `*_trusted` flags + http_server_manager request gate; meatpi
 2026-07-08: shared networks must not expose configuration, and the test
-must cover the WHOLE surface — one un-gated route is the entire hole).
+must cover the WHOLE surface, one un-gated route is the entire hole).
 
 Enumerates every HTTP route + WebSocket channel from the firmware SOURCE
 (so the list can never drift from what's registered), marks the DUT's
-current STA network untrusted (managed over the USB-NCM link — the path
+current STA network untrusted (managed over the USB-NCM link: the path
 the gate must NEVER close), then asserts, over the STA address:
   * EVERY /api route -> 403, across GET/POST/PUT/DELETE (the gate wraps
     per-registered-handler; a method that reaches its handler is a leak)
@@ -116,7 +116,7 @@ def set_trusted(value):
 
 def sweep_http_codes(host, paths, methods):
     """Probe every (method, path) over the Pi via a remote read-loop fed
-    on stdin (keeps the ssh command line short — 300+ probes overflow
+    on stdin (keeps the ssh command line short, 300+ probes overflow
     Windows CreateProcess otherwise). Emits 'CODE METHOD PATH' per line."""
     probes = [f"{m} {p}" for p in paths for m in methods]
     # tr -d '\r': Windows text-mode stdin adds CR, which would land in $p
@@ -164,7 +164,7 @@ def main():
         # 1) every API route x every method: the gate must return 403 for
         #    the route's REGISTERED methods; httpd itself returns 405 for
         #    an unregistered method (rejected before any handler). Both
-        #    are "closed" — a LEAK is any response a handler produced
+        #    are "closed": a LEAK is any response a handler produced
         #    (2xx, or a handler-level 4xx/5xx). Safe set = {403, 405}.
         SAFE = {"403", "405"}
         methods = ["GET", "POST", "PUT", "DELETE"]
@@ -200,7 +200,7 @@ def main():
         check("untrusted: STA surface exposes ZERO handler responses",
               leak_codes == [], "saw: " + ",".join(leak_codes))
 
-        # 5) USB admin path intact + outbound alive (LOCAL — the Pi
+        # 5) USB admin path intact + outbound alive (LOCAL: the Pi
         #    can't reach the PC-local USB-NCM address)
         s = api("/api/status")
         check("untrusted: USB admin 200 + STA connected",
@@ -208,7 +208,7 @@ def main():
         check("untrusted: outbound MQTT connected over untrusted STA",
               s["bits"]["mqtt_connected"] is True)
         check("untrusted: USB config route reachable (gate never closes "
-              "USB) — settings GET works",
+              "USB), settings GET works",
               isinstance(api("/api/settings/wifi_manager"), dict))
     finally:
         set_trusted(True)

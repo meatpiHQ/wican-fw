@@ -7,7 +7,7 @@ slept. Protocol verified 2026-07-20 against P4305 FW V1.8.0 on COM2016:
 
 SAFETY: every voltage path is clamped to HARD_MAX_V (15.0 V) and open()
 programs the same ceiling into the instrument (VOLT:LIM) so not even a
-front-panel fat-finger can exceed it. Never raise HARD_MAX_V — the DUT's
+front-panel fat-finger can exceed it. Never raise HARD_MAX_V: the DUT's
 automotive input is specced for 12 V systems.
 """
 from __future__ import annotations
@@ -47,7 +47,7 @@ class OwonPsu:
     # ---- protocol ---------------------------------------------------------
 
     def send(self, cmd: str, settle_s: float = 0.15) -> None:
-        """Set command — the P4305 sends no reply."""
+        """Set command: the P4305 sends no reply."""
         self.ser.write((cmd + "\n").encode())
         time.sleep(settle_s)
 

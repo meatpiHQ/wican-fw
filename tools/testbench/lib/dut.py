@@ -2,7 +2,7 @@
 
 Thin pyserial wrapper: hard-reset via RTS (same auto-reset circuit esptool
 uses), expect() over an accumulating buffer, and line commands for the HIL
-app's protocol (SET / RESTART / STATUS / SCAN — see
+app's protocol (SET / RESTART / STATUS / SCAN, see
 components/wifi_manager/test_apps_hil/main/hil_main.c).
 """
 from __future__ import annotations

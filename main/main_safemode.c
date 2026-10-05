@@ -1,6 +1,6 @@
 /**
  * @file main_safemode.c
- * @brief SAFE MODE — the v6 port of legacy safemode.c (see the header
+ * @brief SAFE MODE: the v6 port of legacy safemode.c (see the header
  *        for semantics). Composition-root code by design: it runs
  *        INSTEAD of the composition, uses no component settings, and
  *        touches only what recovery needs (WiFi AP + httpd + OTA +
@@ -48,7 +48,7 @@ static const char *TAG = "safemode";
 
 bool main_safemode_check(void)
 {
-    /* polled input, pull-up, active low — no interrupts (meatpi) */
+    /* polled input, pull-up, active low: no interrupts (meatpi) */
     gpio_reset_pin(SM_BUTTON_GPIO);
     gpio_set_direction(SM_BUTTON_GPIO, GPIO_MODE_INPUT);
     gpio_set_pull_mode(SM_BUTTON_GPIO, GPIO_PULLUP_ONLY);
@@ -65,7 +65,7 @@ bool main_safemode_check(void)
     }
 
     /* held at power-on: legacy feedback = sky blue while deciding */
-    ESP_LOGI(TAG, "button held at boot — hold %d s for safe mode",
+    ESP_LOGI(TAG, "button held at boot: hold %d s for safe mode",
              SM_HOLD_MS / 1000);
     i2c_bus_init();
     led_manager_boot_color(135, 206, 235);
@@ -88,7 +88,7 @@ bool main_safemode_check(void)
         }
     }
 
-    ESP_LOGI(TAG, "released after %d ms — normal boot", held_ms);
+    ESP_LOGI(TAG, "released after %d ms: normal boot", held_ms);
     return false;
 }
 
@@ -185,7 +185,7 @@ static void ota_on_finished(void *user_ctx)
 static esp_err_t root_handler(httpd_req_t *req)
 {
     /* the LEGACY safemode.html verbatim (main/web/safemode.html,
-       EMBED_FILES — Ali prefers the original look; its endpoints match
+       EMBED_FILES: Ali prefers the original look; its endpoints match
        these routes exactly) */
     extern const uint8_t safemode_html_start[] asm("_binary_safemode_html_start");
     extern const uint8_t safemode_html_end[] asm("_binary_safemode_html_end");
@@ -270,7 +270,7 @@ static esp_err_t factory_reset_handler(httpd_req_t *req)
 {
     ESP_LOGI(TAG, "factory reset requested");
 
-    /* raw partition erase — deliberately NOT settings_manager (safe mode
+    /* raw partition erase: deliberately NOT settings_manager (safe mode
        must recover from a settings layer too corrupt to load) */
     const esp_partition_t *settings = esp_partition_find_first(
         ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "settings");
@@ -344,7 +344,7 @@ static void safemode_run(void)
 
     if (esp_wifi_init(&init_cfg) != ESP_OK)
     {
-        ESP_LOGE(TAG, "wifi init failed — recovery unavailable");
+        ESP_LOGE(TAG, "wifi init failed: recovery unavailable");
         goto park;
     }
 
@@ -383,7 +383,7 @@ static void safemode_run(void)
 
     if (esp_wifi_start() != ESP_OK)
     {
-        ESP_LOGE(TAG, "wifi start failed — recovery unavailable");
+        ESP_LOGE(TAG, "wifi start failed: recovery unavailable");
         goto park;
     }
 
@@ -420,11 +420,11 @@ static void safemode_run(void)
     }
     else
     {
-        ESP_LOGE(TAG, "httpd start failed — recovery unavailable");
+        ESP_LOGE(TAG, "httpd start failed: recovery unavailable");
     }
 
 park:
-    /* idle timeout: reboot after 10 min with NO AP client — a client
+    /* idle timeout: reboot after 10 min with NO AP client, a client
        being attached (someone recovering) holds safe mode open */
     {
         int idle_ms = 0;
@@ -446,7 +446,7 @@ park:
 
             if (idle_ms >= SM_IDLE_TIMEOUT_MS)
             {
-                ESP_LOGW(TAG, "safe mode idle timeout — rebooting");
+                ESP_LOGW(TAG, "safe mode idle timeout: rebooting");
                 restart_tracker_restart(
                     RESTART_TRACKER_PLANNED_REASON_SAFE_MODE,
                     RESTART_TRACKER_SOURCE_SAFE_MODE, 0);
@@ -455,7 +455,7 @@ park:
     }
 }
 
-/* Called by app_main when main_safemode_check() returned true — split so
+/* Called by app_main when main_safemode_check() returned true: split so
  * the check stays cheap and this file owns the whole story. */
 void main_safemode_enter(void)
 {

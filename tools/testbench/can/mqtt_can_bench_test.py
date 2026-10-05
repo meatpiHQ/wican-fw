@@ -5,7 +5,7 @@ Topology: PCAN on the bus (the "car"), mosquitto on rpi001 (the
 broker), DUT on the bench hotspot. Runs on the PC (IDF venv python:
 python-can; Pi legs over ssh).
 
-Legs (gates FIRST — nothing may move before explicit consent):
+Legs (gates FIRST: nothing may move before explicit consent):
   0. mqtt_can enabled, BOTH gates false, bridge up: PCAN storm →
      broker sees ZERO rx messages; tx publish → ZERO bus frames;
      both refusals COUNTED (mqtt_can CLI).
@@ -154,7 +154,7 @@ def main():
     for c in (mc_before, bm_before, mq_before):
         c.pop("degraded", None)
         c.pop("pending_reboot", None)
-        c.pop("broker_password", None)  # GET redacts it — never PUT back
+        c.pop("broker_password", None)  # GET redacts it, never PUT back
 
     # explicit prefix: deterministic topics without needing device_id;
     # "~" expansion (the legacy wican/<id> default) is the same code path
@@ -226,7 +226,7 @@ def main():
     check("leg0 nothing reached the bus side", s1.get("tx", 0) == 0,
           s1.get("tx"))
 
-    # ---- leg 1: allow_rx — conservation at rate ----
+    # ---- leg 1: allow_rx, conservation at rate ----
     mc.update({"allow_rx": True})
     api(ip, "/api/settings/mqtt_can", "PUT", mc)
     print("opening the rx gate; rebooting…")
@@ -303,7 +303,7 @@ def main():
               and seen[2016][1][2] == 47, seen)
 
     # rx still flows, now on the custom pub topic. The broker-side
-    # STRICT conservation was leg1's job — here the device stats carry
+    # STRICT conservation was leg1's job: here the device stats carry
     # the exact count (an ssh-started mosquitto_sub can attach late and
     # miss early batches), the broker check is liveness-on-this-topic.
     s_rx0 = mc_stats(ip)

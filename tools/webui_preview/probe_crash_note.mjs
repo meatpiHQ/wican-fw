@@ -81,7 +81,7 @@ const PANIC = { reason: "panic", planned: false, planned_reason: "none", source:
     && parsed.crash.backtrace.length === 7 && parsed.crash.pc === "0x42209640", parsed && Object.keys(parsed));
   const labels = modal ? [...modal.querySelectorAll(".acts button")].map((b) => b.textContent) : [];
   check("the modal offers Copy details and Close", labels.join("|") === "Copy details|Close", labels);
-  check("no long dash in the row or the modal", !/—/.test(rowVal("Last crash") + text.replace(pre ? pre.textContent : "", "")));
+  check("no long dash in the row or the modal", !/\u2014/.test(rowVal("Last crash") + text.replace(pre ? pre.textContent : "", "")));
   if (modal) modal.querySelectorAll(".acts button")[1].click();
   await sleep(100);
   check("Close closes it", !d().querySelector("#modal-root .modal"));
@@ -129,7 +129,7 @@ const PANIC = { reason: "panic", planned: false, planned_reason: "none", source:
     && !!m3 && m3.querySelector("p.help").textContent.includes("After 3 crashes in a row the device parked itself"));
   const l3 = m3 ? [...m3.querySelectorAll(".acts button")].map((b) => b.textContent) : [];
   check("the modal offers Copy report, Download, Clear and Close", l3.join("|") === "Copy report|Download|Clear|Close", l3);
-  check("no long dash in the report row or its modal", !/—/.test(rowVal("Last crash") + (m3 ? m3.textContent : "")));
+  check("no long dash in the report row or its modal", !/\u2014/.test(rowVal("Last crash") + (m3 ? m3.textContent : "")));
 
   /* Clear asks first, then removes the report from the device and from the page */
   if (m3) m3.querySelectorAll(".acts button")[2].click();

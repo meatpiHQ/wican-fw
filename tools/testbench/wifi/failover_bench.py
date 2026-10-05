@@ -53,7 +53,7 @@ DUT_CANDIDATES = ["10.42.0.62", "10.42.1.62"]  # one per hotspot radio
 
 def dut_ip():
     """The DUT's STA address moves between the Pi's two hotspot subnets
-    depending on which radio the profile came up on — find it."""
+    depending on which radio the profile came up on, find it."""
     global DUT
     for ip in [DUT] + DUT_CANDIDATES:
         out = ssh_out(PI, f"curl -s -m 4 -o /dev/null -w '%{{http_code}}' "
@@ -150,7 +150,7 @@ def main():
         check("baseline routes via STA",
               ip is not None and ip.startswith("10.42."), f"local={ip}")
 
-        # B: drive-away — hotspot down, watchdog parked
+        # B: drive-away, hotspot down, watchdog parked
         watchdog_park(True)
         hotspot(False)
         t0 = time.time()
@@ -163,7 +163,7 @@ def main():
         check("failover to LTE (binds 192.168.7.2)", ip == "192.168.7.2",
               f"local={ip} after {int(time.time() - t0)}s")
 
-        # C: home again — hotspot back, STA route returns
+        # C: home again, hotspot back, STA route returns
         hotspot(True)
         watchdog_park(False)
         sta = False

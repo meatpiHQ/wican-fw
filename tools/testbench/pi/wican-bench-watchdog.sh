@@ -1,8 +1,8 @@
 #!/bin/bash
 # wican-bench beacon watchdog v2 (role names, 2026-07-26; v1 2026-07-17).
-# nmcli "activated" lies — verify the SSID is genuinely ON AIR by scanning
+# nmcli "activated" lies: verify the SSID is genuinely ON AIR by scanning
 # from a second radio; bounce the hotspot if not, and fail over between
-# the USB stick (wican-bench/wtest0, PRIMARY since 2026-09-06 — the
+# the USB stick (wican-bench/wtest0, PRIMARY since 2026-09-06: the
 # internal brcmfmac radio goes deaf in AP mode) and the internal twin
 # (wican-bench-w0/wint0) if the bounce does not heal it. Respects HIL
 # parking: autoconnect=no on the primary = deliberately down. Escalates
@@ -11,7 +11,7 @@ BENCH_TAG=wican-bench-watchdog
 . /usr/local/lib/bench-lib.sh
 
 PRIMARY="$HOTSPOT_PRIMARY"    # wican-bench (wtest0, USB stick)
-FAILOVER="$HOTSPOT_TWIN"      # wican-bench-w0 (wint0, internal — failover only)
+FAILOVER="$HOTSPOT_TWIN"      # wican-bench-w0 (wint0, internal: failover only)
 
 # parked on purpose? (HIL park_persistent sets autoconnect no)
 if [ "$(nmcli -g connection.autoconnect connection show "$PRIMARY" 2>/dev/null)" = "no" ]; then
@@ -19,7 +19,7 @@ if [ "$(nmcli -g connection.autoconnect connection show "$PRIMARY" 2>/dev/null)"
 fi
 
 # a bench is ONBOARDING (wican-dut = a factory-AP client on a bench
-# radio): the hotspots are legitimately elsewhere — stand down. The
+# radio): the hotspots are legitimately elsewhere, stand down. The
 # watchdog fought system_bench 2026-07-26 (bounced + failed over
 # mid-onboard and left the primary down).
 if con_active wican-dut; then
@@ -52,7 +52,7 @@ hs_if=$(con_device "$active_con")
 scanner=$(pick_scanner "$hs_if") || exit 0   # nothing to scan with
 
 # TWO scan attempts before acting: the only free scanner is often the
-# 5 GHz-associated uplink stick, which under-reports 2.4 GHz beacons —
+# 5 GHz-associated uplink stick, which under-reports 2.4 GHz beacons,
 # a single missed scan caused a false phantom + needless failover
 # (2026-07-26)
 if ssid_on_air "$scanner" "$SSID" || ssid_on_air "$scanner" "$SSID"; then
@@ -73,7 +73,7 @@ nmcli connection down "$active_con" >/dev/null 2>&1
 sleep 2
 nmcli connection up "$other" >/dev/null 2>&1
 sleep 6
-# scanner may now be the new hotspot iface — re-pick
+# scanner may now be the new hotspot iface: re-pick
 hs_if=$(con_device "$other")
 if scanner=$(pick_scanner "$hs_if") && ssid_on_air "$scanner" "$SSID"; then
     blog "healed by failover to $other"

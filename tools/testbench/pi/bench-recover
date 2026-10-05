@@ -1,5 +1,5 @@
 #!/bin/bash
-# bench-recover — run the recovery ladder bottom-up (plan §4.3).
+# bench-recover: run the recovery ladder bottom-up (plan §4.3).
 #   probe -> targeted level 0 per failed component -> re-probe
 #         -> still faulty: level 1 Pi reboot (with marker) -> (post-boot
 #            re-probe happens naturally via bench-startup + next caller)
@@ -63,7 +63,7 @@ if [ "$NO_REBOOT" = 1 ]; then
 fi
 
 # reboot-loop guard: if we already rebooted for recovery <10 min ago and
-# the rig is STILL faulty, a second reboot won't help — needs hands.
+# the rig is STILL faulty, a second reboot won't help, needs hands.
 if [ -f "$MARKER" ]; then
     age=$(( $(date +%s) - $(stat -c %Y "$MARKER") ))
     if [ "$age" -lt 600 ]; then

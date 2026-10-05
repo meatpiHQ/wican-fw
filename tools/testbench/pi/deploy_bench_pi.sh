@@ -1,5 +1,5 @@
 #!/bin/bash
-# deploy_bench_pi.sh — install/refresh the rpi001 bench toolkit.
+# deploy_bench_pi.sh: install/refresh the rpi001 bench toolkit.
 # Run ON the Pi from this directory (synced via the usual tar/scp):
 #   ssh rpi001 "cd ~/wican/tools/testbench/pi && bash deploy_bench_pi.sh"
 # Idempotent. Prints REBOOT REQUIRED when the udev role names are not
@@ -26,7 +26,7 @@ sudo nmcli connection modify wican-bench-w0 connection.interface-name wint0
 sudo nmcli connection modify "Nachos_8042_5G 1" connection.autoconnect no 2>/dev/null || true
 
 # The twin and uplink profiles are MAC-PINNED, so they survive interface
-# renames but NOT a stick swap — a replaced radio leaves them bound to a
+# renames but NOT a stick swap: a replaced radio leaves them bound to a
 # MAC that no longer exists and they silently never activate (2026-07-31,
 # the MT7612U swap). Re-pin them from bench_role_mac(), the single source
 # of truth, on every deploy.

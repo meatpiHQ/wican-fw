@@ -3,25 +3,25 @@
 
 Legs (each = stage the `espnetlink.mode` setting over HTTP, submit, WiCAN
 reboots, then assert the OBSERVED state over the serial console + the
-dongle's health endpoint — HTTP statuses are advisory only: fresh-AP
+dongle's health endpoint, HTTP statuses are advisory only: fresh-AP
 associations lose response status lines routinely, and in the USB modes
-the WiCAN's STA idles into power-save, making HTTP to it lossy — every
+the WiCAN's STA idles into power-save, making HTTP to it lossy: every
 HTTP step is therefore verified by reading state back):
 
   0  preflight        paired, mode=wifi_modem steady (uplink=espnetlink)
   1  wifi -> usb_ncm  the AP-path usb_data restore un-cuts the boot-cut
-                      dongle (boot_cut clears, NO dongle reboot — class
+                      dongle (boot_cut clears, NO dongle reboot: class
                       ncm + ncm_share already right), driver cdc_ncm,
                       uplink espnetlink_usb @192.168.7.1, GPS polls flow
   2  ncm -> usb_rndis exactly the class flip: ONE dongle reboot, re-enum
                       as RNDIS, driver rndis, uplink back @192.168.7.1
   3  rndis -> wifi    key re-read + cut (usb_data=0, boot_cut re-armed),
-                      uplink espnetlink (AP), dongle NOT rebooted — a
+                      uplink espnetlink (AP), dongle NOT rebooted: a
                       live GPS fix survives
   3b reset class      dongle class back to ncm (its own reboot) so leg 4
                       exercises the COMBINED restore+class single-submit
   4  wifi -> usb_rndis direct: AP restore + class flip in one ensure
-                      pass — still only ONE dongle reboot, driver rndis
+                      pass, still only ONE dongle reboot, driver rndis
   5  restore          back to wifi_modem, dongle class ncm; entry state
 
 Cross-cutting: every WiCAN reboot must be planned (restart_tracker
@@ -30,7 +30,7 @@ a baseline taken right before each switch), console E lines == 0 (the
 esp_wifi `Invalid MMIE` PMF-noise line is whitelisted; offending lines
 are recorded and printed), and the WiCAN's STA address is read live from
 the console (the dongle's DHCP hands out a new lease after every WiCAN
-reboot — never assume one).
+reboot: never assume one).
 
 A leg whose ENTRY mode is wrong (a previous leg failed to switch) is
 skipped as a cascade instead of producing misleading assertions.
@@ -304,7 +304,7 @@ def leg_entry_ok(con, leg, want_mode):
     cur = espnl_status(con).get("mode")
     if cur == want_mode:
         return True
-    note(f"{leg}: SKIPPED as a cascade — entry mode is {cur!r}, "
+    note(f"{leg}: SKIPPED as a cascade, entry mode is {cur!r}, "
          f"needed {want_mode!r}")
     fails.append(f"{leg}: skipped (cascade)")
     return False
@@ -335,7 +335,7 @@ def main():
         if fails:
             return finish()
         if st.get("mode") != "wifi_modem":
-            note("entry mode is not wifi_modem — normalizing first")
+            note("entry mode is not wifi_modem: normalizing first")
             check("preflight: normalize to wifi_modem",
                   set_mode(con, "wifi_modem"))
         dt = wait_for(con, "wifi_modem steady", wifi_steady(con), 120)
@@ -444,7 +444,7 @@ def main():
                     check("leg3: GPS fix survived the cut",
                           espnl_status(con).get("dongle_fix") is True)
                 else:
-                    note("leg3: no fix at leg start — fix-survival "
+                    note("leg3: no fix at leg start, fix-survival "
                          "not assessed")
                 reboot_check(con, "leg3", b0, u0)
 

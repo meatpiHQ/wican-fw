@@ -10,7 +10,7 @@ burst to `<prefix>/bench/out`; `<prefix>/bench/echo` is bounced to
 
 throughput: count/time messages at the broker between first and last,
 compare with the device's result message (ok vs dropped_full = offered
-vs sustainable). sustained: paced run — expect zero drops. rtt: echo
+vs sustainable). sustained: paced run, expect zero drops. rtt: echo
 round trip percentiles.
 """
 import argparse

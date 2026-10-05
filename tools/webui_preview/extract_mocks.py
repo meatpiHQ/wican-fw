@@ -3,7 +3,7 @@
 every component's SETTINGS_* field table straight out of the C sources.
 
 Output: mock_settings.json  { "<component>": {"values": {...}, "schema":
-{"properties": {...}}} } — the same shapes GET /api/settings/<n> and
+{"properties": {...}}} }, the same shapes GET /api/settings/<n> and
 /<n>/schema serve, so the UI renders identically off-device.
 
 Field-table macros parsed (settings_manager.h):

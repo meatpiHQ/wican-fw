@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """ha_webhooks follow-up legs (run ON rpi001; DUT over the hotspot):
 
-  403 leg   — a mock HA answering HTTP 403: after HW_REJECT_LIMIT (3)
+  403 leg:    a mock HA answering HTTP 403: after HW_REJECT_LIMIT (3)
               consecutive rejected cycles the poster must PAUSE (post
               count plateaus, last_error says identity rejected), and a
               re-registration must clear the pause (attempts resume).
-  vpnip leg — a normal 200 receiver: with a live WG tunnel up, every
+  vpnip leg: a normal 200 receiver: with a live WG tunnel up, every
               status section must carry vpn_ip == the expected tunnel
               address (HA's away-from-home control endpoint).
 
@@ -112,7 +112,7 @@ def main():
             time.sleep(7)
             check("pushes arriving", len(bodies) >= 2, f"n={len(bodies)}")
             # diff mode: vpn_ip appears in the FULL (first) push and then
-            # only on change — assert the full push, and that no later
+            # only on change, assert the full push, and that no later
             # diff ever contradicts it.
             vpn_ips = [b.get("status", {}).get("vpn_ip") for b in bodies]
             present = [v for v in vpn_ips if v is not None]

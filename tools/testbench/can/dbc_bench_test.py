@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """End-to-end bench for DBC → autopid filters (TASK_dbc.md).
 
-Legs (mux-aware since 2026-07-22 — simple mux SUPPORTED, extended not):
+Legs (mux-aware since 2026-07-22: simple mux SUPPORTED, extended not):
   1. upload the fixture DBC (counts + format), garbage/bad-name rejects
   2. list + signal search: supported expressions incl. the m1 signal
      (mux_expr + mux_val emitted), extended-mux listed w/ reason
@@ -13,7 +13,7 @@ Legs (mux-aware since 2026-07-22 — simple mux SUPPORTED, extended not):
      carries a 119 decoy that MUST NOT leak through the gate)
   5. cleanup: delete DBC, restore the original config.json verbatim
 
-Assumes the canonical bench state (autopid settings enabled=true — the
+Assumes the canonical bench state (autopid settings enabled=true: the
 filter runner needs the poller). No reboot: config applies LIVE.
 
   python dbc_bench_test.py [dut_ip] [pcan_channel]
@@ -93,7 +93,7 @@ def main():
     pre = f123_params(cfg_before)
     if pre is not None:
         print(f"note: pre-existing 0x123 filter with {pre} params "
-              "(earlier bench debris) — delta assertions")
+              "(earlier bench debris), delta assertions")
     api("/api/autopid/dbc?name=benchdbc", "DELETE")
 
     # ---- leg 1: upload + rejects ----
@@ -161,7 +161,7 @@ def main():
           json.dumps(muxp)[:120])
 
     # ---- leg 4: live capture (both mux pages on the wire) ----
-    # page 0: switch=0, BenchMux byte = 119 (the DECOY — must not leak);
+    # page 0: switch=0, BenchMux byte = 119 (the DECOY, must not leak);
     # page 1: switch=1, BenchMux byte = 42 (the real value)
     bc = subprocess.Popen(
         [PY, "-u",

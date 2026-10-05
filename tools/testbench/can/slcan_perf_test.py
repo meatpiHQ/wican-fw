@@ -79,7 +79,7 @@ def main():
     ap.add_argument("--ws-path", default="/ws/can")
     ap.add_argument("--rx-fps", type=int, default=4600,
                     help="RX flood pacing (just above the 500k/8B bus ceiling "
-                         "~4200 — PCAN Write() has no backpressure; unpaced "
+                         "~4200: PCAN Write() has no backpressure; unpaced "
                          "floods leave thousands queued in the PEAK driver "
                          "and wedge the adapter)")
     a = ap.parse_args()
@@ -134,7 +134,7 @@ def main():
     # ---------------- TX: transport -> slcan -> CAN ----------------
     # The RX flood drives the PEAK adapter error-passive (it can't ACK a
     # saturated bus) and a non-ACKing peer then walks the DUT's TWAI to
-    # error-passive too — a same-session TX run reads ~0. Re-init the PCAN,
+    # error-passive too: a same-session TX run reads ~0. Re-init the PCAN,
     # then kick the bus with one DUT frame so both nodes re-integrate.
     bus.shutdown()
     time.sleep(0.5)

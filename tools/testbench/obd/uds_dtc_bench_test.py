@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""UDS DTC (0x19/0x14) end-to-end bench — TASK_dtc §12.
+"""UDS DTC (0x19/0x14) end-to-end bench: TASK_dtc §12.
 
 Topology: the ECU-sim box (REST at 192.168.8.1 from the PC over its
-NCM link) is the vehicle — it speaks UDS 0x19/0x14 on the shared
+NCM link) is the vehicle: it speaks UDS 0x19/0x14 on the shared
 500k bus. DUT driven over HTTP via rpi001.
 
 Legs:
   1. forced `uds`: REST-set DTCs → scan → report protocol=="uds",
      stored exact (sim FTB=0 → no suffix; suffix rules host-proven)
-  2. UDS clear (group FFFFFF; the sim ignores groupOfDTC — selective
+  2. UDS clear (group FFFFFF; the sim ignores groupOfDTC: selective
      per-code 0x14 encode is host-proven, sim-selective is on the sim
      TODO) → cleared, rescan empty
   3. `auto`: sim answers OBD mode 03 too → auto stays on OBD

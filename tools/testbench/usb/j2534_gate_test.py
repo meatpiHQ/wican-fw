@@ -41,7 +41,7 @@ def main():
     try:
         c = b.Client(dut, port)
     except OSError as e:
-        print(f"GATE TEST FAIL: cannot connect {dut}:{port} ({e}) — "
+        print(f"GATE TEST FAIL: cannot connect {dut}:{port} ({e}), "
               f"interface refused or server disabled?")
         sys.exit(1)
     check("connection accepted (interface allowed)", True, f"{dut}:{port}")
@@ -55,7 +55,7 @@ def main():
     check("CONNECT ISO15765", st == NOERROR, f"channel {ch}")
 
     # non-reflash service passes the gate (10 02 = DiagnosticSessionControl).
-    # No ECU needed — we only assert the WRITE ACK, not the response.
+    # No ECU needed: we only assert the WRITE ACK, not the response.
     st, _ = c.write_uds(ch, bytes([0x10, 0x02]), collect_ms=200)
     check("10 02 (session) NOT gated", st == NOERROR, f"status 0x{st:02X}")
 

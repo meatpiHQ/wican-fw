@@ -3,7 +3,7 @@
 
 Motivated by 2026-07-22: the autopid DTC job task's 6144-BYTE stack had
 been silently overflowing (the response assembler's line table alone is
-a ~5.6 KB frame) — on a PSRAM stack that corrupts neighbouring .bss
+a ~5.6 KB frame), on a PSRAM stack that corrupts neighbouring .bss
 instead of panicking. This tool makes the hazard visible at build time:
 
   1. reads every .su file the build emits (-fstack-usage is permanently
@@ -15,7 +15,7 @@ instead of panicking. This tool makes the hazard visible at build time:
   3. reports big frames, the task table, and CANDIDATE OVERFLOWS: any
      function whose frame exceeds --flag-pct (default 40%) of a task
      stack in the same component. A frame that big means at most ONE
-     level of calls fits on top — human triage required, because .su
+     level of calls fits on top: human triage required, because .su
      has no call graph.
 
 Usage (after a normal idf.py build):
@@ -52,7 +52,7 @@ SKIP_DIRS = {"host_test", "test_apps", "build", "managed_components",
 
 
 def parse_su_files(build_dir):
-    """{function: (frame_bytes, su_path)} — biggest frame wins on dups."""
+    """{function: (frame_bytes, su_path)}, biggest frame wins on dups."""
     frames = {}
     for root, dirs, files in os.walk(build_dir):
         for f in files:
@@ -125,8 +125,8 @@ def resolve_size(expr, text, all_texts):
     n = safe_arith(expr)
     if n is not None:
         return n, ""
-    # sizeof(arr) or sizeof(arr) / sizeof(arr[0]) / sizeof(StackType_t)
-    # — StackType_t is 1 byte on xtensa, so both reduce to the array size
+    # sizeof(arr) or sizeof(arr) / sizeof(arr[0]) / sizeof(StackType_t),
+    # StackType_t is 1 byte on xtensa, so both reduce to the array size
     m = re.fullmatch(
         r"sizeof\s*\(\s*(\w+)\s*\)"
         r"(?:\s*/\s*sizeof\s*\([^)]*\))?", expr)
@@ -209,7 +209,7 @@ def main():
     frames = parse_su_files(a.build)
     if not frames:
         print("no .su files under", a.build,
-              "— build first (root CMakeLists sets -fstack-usage)")
+              "(build first: root CMakeLists sets -fstack-usage)")
         sys.exit(2)
     tasks = find_tasks()
 
@@ -243,12 +243,12 @@ def main():
                 found += 1
                 print(f"  {fn} frame {n} B = "
                       f"{n * 100 // t['size']}% of task "
-                      f"'{t['name']}' ({t['size']} B) — "
+                      f"'{t['name']}' ({t['size']} B): "
                       f"{t['file']}:{t['line']}")
     if not found:
         print("  none")
     else:
-        print(f"\n{found} candidate(s) — triage by hand: .su has no "
+        print(f"\n{found} candidate(s): triage by hand: .su has no "
               "call graph; a flagged frame only matters if that "
               "function runs on that task.")
     sys.exit(1 if (a.strict and found) else 0)

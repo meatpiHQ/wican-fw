@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """WiCAN Pro out-of-the-box scenario (device alone): erase the flash,
-flash the build, cold-boot, and do what a new user does — join the
+flash the build, cold-boot, and do what a new user does, join the
 WiCAN's AP with a phone, open the web UI, configure the home WiFi through
 the settings API exactly as the UI does, submit, and expect the device to
 come up on the home network while the phone is still on its AP.
@@ -24,7 +24,7 @@ come up on the home network while the phone is still on its AP.
   health  restart_tracker: planned reboots only; console E lines == 0
 
 A dongle on the USB connector is fine (it pairs in the background now
-that the USB host defaults on) — the bench notes it and ignores it.
+that the USB host defaults on): the bench notes it and ignores it.
 
   python wican_fresh_bench.py --wican COM12 --psu COM17 [--build <dir>]
          [--no-erase]
@@ -57,7 +57,7 @@ E_WHITELIST = ("Invalid MMIE", "select() timeout",
                "Failed to open a new connection",
                "Connection failed, sock < 0",
                # (2026-09-05: "Corrupted dir pair" / "FAULT boot_errors" on
-               # the first boot after an erase are NO LONGER whitelisted —
+               # the first boot after an erase are NO LONGER whitelisted,
                # filesystem + settings_manager format a blank partition
                # quietly now; seeing them again is a regression)
                # espnetlink's HTTP client racing the dongle's cut/reboot
@@ -189,7 +189,7 @@ class Console:
                 not any(w in l for w in E_WHITELIST)]
 
 
-# esptool v5 spelling (default-reset / erase-flash) — the IDF v6 venv has
+# esptool v5 spelling (default-reset / erase-flash): the IDF v6 venv has
 # it; a system python with an old esptool does not. Prefer the venv.
 ESPTOOL_PY = next((p for p in (
     os.environ.get("ESPTOOL_PYTHON", ""),
@@ -351,7 +351,7 @@ def main():
         # sta_networks=2 when a dongle paired in the background (its slot)
         # the submit reboots at once: the line may print while the ssh
         # command is still returning (slack), and a burst can garble one
-        # line — either boot marker is proof
+        # line, either boot marker is proof
         rb = con.wait_for(r"config applied: mode=3 sta_networks=[12]|"
                           r"wifi_manager: started \(mode=3, [12] STA", 90,
                           since=max(0.0, t_sub - 6))

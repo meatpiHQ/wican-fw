@@ -72,7 +72,7 @@ static void ble_cli_sink(const char *data, size_t len, void *arg)
 
 static void on_ble_cli_line(const char *line)
 {
-    /* NimBLE host task context — enqueue only. Inline exec here wedged
+    /* NimBLE host task context: enqueue only. Inline exec here wedged
      * the BLE stack on long commands (GATT "Unlikely Error"); the
      * dispatcher task runs the line and streams output via the sink.
      * On a full queue the async API answers "busy" itself. */
@@ -89,7 +89,7 @@ void main_glue_wire_ble_cli(void)
  *  link) become first-class autopid parameters, so a fix reaches HA
  *  (autopid_data), the data_logger, the dashboard and event rules with no
  *  per-consumer GPS code. Only a live fix is published; the last known
- *  position persists in autopid's cache. Poll-task context — non-blocking. */
+ *  position persists in autopid's cache. Poll-task context: non-blocking. */
 static void gps_to_autopid(const usb_acm_gps_t *g)
 {
     if (g == NULL || !g->valid)
@@ -111,7 +111,7 @@ void main_glue_wire_gps(void)
     usb_acm_cli_set_gps_sink(gps_to_autopid);
     espnetlink_link_set_gps_sink(gps_to_autopid);
     /* /api/gps (usb_acm_cli's route) serves the HTTP-polled fix when the
-       console has none — the WiFi-modem topology has no console at all */
+       console has none: the WiFi-modem topology has no console at all */
     usb_acm_cli_set_gps_fallback(espnetlink_link_gps_get);
 }
 
@@ -127,7 +127,7 @@ void main_glue_wire_autopid_logger(void)
  * Long-press while running -> "let me configure the device": BLE off,
  * AP forced up whatever the mode, LED alternating yellow/blue (the
  * legacy pattern), and a 10 min timeout that reboots back into the
- * configured mode — held open while an AP client is attached (someone
+ * configured mode: held open while an AP client is attached (someone
  * is mid-configuration). Policy lives HERE: button_manager only reports
  * the press; wifi/ble/led stay ignorant of each other. */
 
@@ -136,7 +136,7 @@ void main_glue_wire_autopid_logger(void)
 static TaskHandle_t s_cfgmode_task;
 static StaticTask_t s_cfgmode_tcb;         /* internal: FreeRTOS object */
 static StackType_t s_cfgmode_stack[3072] EXT_RAM_BSS_ATTR; /* LED/count
-    only — the radio calls happened before the task spawns */
+    only: the radio calls happened before the task spawns */
 
 static void config_mode_task(void *arg)
 {
@@ -164,7 +164,7 @@ static void config_mode_task(void *arg)
 
         if (wifi_manager_get_ap_station_count() > 0)
         {
-            idle_ms = 0; /* someone is configuring — hold the mode open */
+            idle_ms = 0; /* someone is configuring: hold the mode open */
         }
         else
         {
@@ -172,7 +172,7 @@ static void config_mode_task(void *arg)
         }
     }
 
-    ESP_LOGW(TAG, "config mode timeout — rebooting to configured state");
+    ESP_LOGW(TAG, "config mode timeout: rebooting to configured state");
     led_manager_clear(LED_MANAGER_PRIO_ALERT);
     restart_tracker_restart(RESTART_TRACKER_PLANNED_REASON_CONFIG_RECOVERY,
                             RESTART_TRACKER_SOURCE_BUTTON, 0);

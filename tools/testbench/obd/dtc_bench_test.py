@@ -3,7 +3,7 @@
 
 Topology: DUT over USB-NCM (192.168.82.1), MIC3624 on the OBD bus with
 the PCAN. The python ECU (pcan_obd_ecu.py, spawned here) answers at
-0x7E9 — the DUT targets it with dtc_rxheader "7E9" so the hardware
+0x7E9: the DUT targets it with dtc_rxheader "7E9" so the hardware
 bench ECU box at 0x7E8 never collides.
 
 Legs:
@@ -86,7 +86,7 @@ def submit_and_wait():
     try:
         api("/api/settings/submit", "POST")
     except Exception:
-        pass  # the reboot can cut the submit response — that's success
+        pass  # the reboot can cut the submit response, that's success
     time.sleep(3)
     if not wait_up():
         print("FATAL: DUT did not come back after submit")
@@ -122,7 +122,7 @@ def spawn_ecu(stored, pending="", permanent="", secs=300, extra=None):
 
 
 def stop_ecu(p):
-    # NEVER force-kill mid-transaction (wedges the PEAK driver) — the
+    # NEVER force-kill mid-transaction (wedges the PEAK driver), the
     # sim exits on its own timer; terminate + wait is the gentle path.
     p.terminate()
     try:
@@ -142,7 +142,7 @@ def main():
 
     # enforce the leg-0 precondition: dtc at factory defaults
     if ap_before.get("dtc_enabled") or ap_before.get("dtc_allow_clear"):
-        print("dtc not at defaults — resetting first…")
+        print("dtc not at defaults, resetting first…")
         clean = dict(ap_before)
         clean.update({"dtc_enabled": False, "dtc_allow_clear": False,
                       "dtc_init": "", "dtc_rxheader": ""})
@@ -161,7 +161,7 @@ def main():
                   {"confirm": True, "mode": "always"})
     check("leg0 clear refused 403 while disabled", code == 403, code)
 
-    # ---- leg 1: configure (polling OFF — DTC-without-polling proof) ----
+    # ---- leg 1: configure (polling OFF, DTC-without-polling proof) ----
     ap_cfg = dict(ap_before)
     ap_cfg.update({
         "enabled": False,
@@ -170,7 +170,7 @@ def main():
         "dtc_pending": True,
         "dtc_permanent": True,
         # atsp6/ATM1 on purpose: the EEPROM guard must rewrite them to
-        # ATTP6/ATM0 before the chip — leg 2's real scan results prove
+        # ATTP6/ATM0 before the chip, leg 2's real scan results prove
         # the sanitized init still lands the protocol/header state
         "dtc_init": "ATS1;ATH0;ATST96;atsp6;ATM1;ATSH7DF",
         "dtc_rxheader": "7E9",
@@ -194,14 +194,14 @@ def main():
     try:
         # ---- leg 2: scan #1 ----
         # obd_chip boot provisioning holds the chip ~15 s after reboot
-        # (log: "autopid: started" at t=16 s) — retry until it's ready
+        # (log: "autopid: started" at t=16 s), retry until it's ready
         code, g = 202, None
         for attempt in range(5):
             code, g = scan_and_wait()
             r = (g or {}).get("report", {})
             if code == 202 and r.get("valid"):
                 break
-            print(f"  (scan attempt {attempt + 1}: chip not ready yet — "
+            print(f"  (scan attempt {attempt + 1}: chip not ready yet, "
                   f"{r.get('error', 'no report')})")
             time.sleep(5)
         r = (g or {}).get("report", {})
@@ -272,7 +272,7 @@ def main():
         stop_ecu(ecu)
 
     # ---- leg 6b: test-a-PID one-shot with an AT cmd (EEPROM guard on
-    # the cmd path: firmware sends ATM0, chip answers OK either way —
+    # the cmd path: firmware sends ATM0, chip answers OK either way,
     # the leg proves the sanitized-copy path runs end to end) ----
     code, r = api("/api/autopid/test", "POST", {"cmd": "ATM1"})
     check("leg6b test-a-PID AT cmd ok",
@@ -282,7 +282,7 @@ def main():
     # ---- leg 6c: multi-ECU functional scan (v2 merge, 2026-07-22) ----
     # rxheader CLEARED -> receive-all: two python responders (7E9 + 7EA)
     # answer every 7DF request. The hardware ECU-sim box at 7E8 may
-    # answer too, so list assertions are SUPERSETS — but the P0420
+    # answer too, so list assertions are SUPERSETS, but the P0420
     # overlap between the two python responders pins the dedup exactly.
     ap_multi = dict(ap_cfg)
     ap_multi["dtc_rxheader"] = ""
@@ -300,7 +300,7 @@ def main():
             r = (g or {}).get("report", {})
             if code == 202 and r.get("valid"):
                 break
-            print(f"  (scan attempt {attempt + 1}: chip not ready yet — "
+            print(f"  (scan attempt {attempt + 1}: chip not ready yet, "
                   f"{r.get('error', 'no report')})")
             time.sleep(5)
         r = (g or {}).get("report", {})

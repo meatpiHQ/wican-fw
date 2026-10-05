@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Decode a WiCAN data_logger `.wdl` binary log.
 
-Format ("WDL1" magic, little-endian, self-contained — the param
+Format ("WDL1" magic, little-endian, self-contained: the param
 dictionary is inline; a resumed file may carry several dictionary
 blocks, each def applies to the records after it):
 
@@ -12,14 +12,14 @@ blocks, each def applies to the records after it):
 
 Output formats:
   csv     params: ts_ms,param,value  /  frames: ts_ms,id,ext,rtr,dlc,data
-  candump (frames only) "(ts.sec) can0 ID#HEXDATA" — SavvyCAN/canutils
+  candump (frames only) "(ts.sec) can0 ID#HEXDATA", SavvyCAN/canutils
   trc     (frames only) PEAK PCAN-View v1.1 text trace
   text    human-readable mixed dump (default)
 
   python wdl_dump.py file.wdl [--to csv|candump|trc|text] [--strict]
 
 --strict exits 1 on a torn/unknown tail instead of stopping quietly
-(a torn tail frame is legal — power loss mid-write).
+(a torn tail frame is legal: power loss mid-write).
 """
 import argparse
 import struct
@@ -70,7 +70,7 @@ def decode(path, strict=False):
         except struct.error as e:
             if strict:
                 raise SystemExit(f"{path}: {e} at offset {off - 1}")
-            return  # torn tail — normal after power loss
+            return  # torn tail, normal after power loss
 
 
 def main():

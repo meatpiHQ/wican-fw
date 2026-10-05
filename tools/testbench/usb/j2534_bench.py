@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """J2534 PassThru server Phase-1 bench (run ON rpi001, or anywhere with
-IP reach to the DUT). Drives the wire protocol over TCP — the same
+IP reach to the DUT). Drives the wire protocol over TCP: the same
 protocol the USB-CDC transport will carry in Phase 3.
 
 Exercises the session/channel handshake: HELLO → OPEN → CONNECT(CAN),

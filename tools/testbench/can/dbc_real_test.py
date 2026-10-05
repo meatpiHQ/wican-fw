@@ -6,7 +6,7 @@ keyed by message id + name) against an independent reference parser
 built from the DBC spec. Catches parser drift that synthetic fixtures
 can't (comment-line noise, orphan pseudo-messages, real formatting).
 
-Pure HTTP — runs from the Pi or the PC, stdlib only:
+Pure HTTP: runs from the Pi or the PC, stdlib only:
   python3 dbc_real_test.py [dut_ip]
 Cleans its uploads off the DUT afterwards. Prints DBC REAL PASS/FAIL.
 """
@@ -27,7 +27,7 @@ FIXTURES = [
     ("j1939", "j1939_database.dbc"),   # extended 29-bit ids
 ]
 
-# device caps (autopid_private.h) — the reference applies the same
+# device caps (autopid_private.h): the reference applies the same
 MSGS_CAP, SIGS_CAP = 400, 3000
 NAME_LEN, UNIT_LEN = 32, 15
 
@@ -111,7 +111,7 @@ def fetch_all(db):
 
 def main():
     for i, (name, fname) in enumerate(FIXTURES, 1):
-        print("fixture {}/{}: {} — upload + full signal diff…".format(
+        print("fixture {}/{}: {}, upload + full signal diff…".format(
             i, len(FIXTURES), fname), flush=True)
         path = os.path.join(HERE, "..", "fixtures", "dbc", fname)
 
@@ -174,7 +174,7 @@ def main():
         print("PROGRESS {}/{}".format(i, len(FIXTURES) + 1), flush=True)
 
     # extended-id spot check: J1939 EEC1 is BO_ 2364540158 = 0x8CF004FE
-    # (bit 31 = extended flag, source address 0xFE) — the device must
+    # (bit 31 = extended flag, source address 0xFE), the device must
     # surface it under the MASKED 29-bit id
     want_id = 2364540158 & 0x1FFFFFFF
     code, r = api("/api/autopid/dbc/signals?db=j1939&q=EngineSpeed"

@@ -24,7 +24,7 @@ else()
         endif()
     endforeach()
     if(NOT MEATPI_COMPONENTS_PATH)
-        # Not cloned yet — fetch it INTO this checkout (self-contained;
+        # Not cloned yet: fetch it INTO this checkout (self-contained;
         # components/meatpi/ is gitignored) so the search finds it on
         # every future configure.
         set(_meatpi_dest "${CMAKE_CURRENT_LIST_DIR}/components/meatpi")
@@ -32,7 +32,7 @@ else()
         if(DEFINED ENV{MEATPI_COMPONENTS_GIT_URL})
             set(_meatpi_url "$ENV{MEATPI_COMPONENTS_GIT_URL}")
         endif()
-        message(STATUS "meatpi-components not found — cloning "
+        message(STATUS "meatpi-components not found: cloning "
                        "${_meatpi_url} into ${_meatpi_dest}")
         execute_process(
             COMMAND ${CMAKE_COMMAND} -E env GIT_TERMINAL_PROMPT=0
@@ -42,7 +42,7 @@ else()
             set(MEATPI_COMPONENTS_PATH "${_meatpi_dest}/components")
         else()
             message(FATAL_ERROR
-                "meatpi-components could not be cloned automatically — "
+                "meatpi-components could not be cloned automatically: "
                 "clone github.com/meatpiHQ/meatpi-components to "
                 "components/meatpi in this checkout (or next to it), or "
                 "set MEATPI_COMPONENTS_PATH to its components/ directory")
@@ -55,7 +55,7 @@ list(APPEND EXTRA_COMPONENT_DIRS "${MEATPI_COMPONENTS_PATH}")
 # Sibling component packs: any meatpi-components-<suffix> repo cloned
 # next to the resolved base repo is picked up as an overlay
 # automatically (appended AFTER the base, so a pack component with the
-# same name overrides the base one — e.g. its ext_manager). Purely
+# same name overrides the base one, e.g. its ext_manager). Purely
 # optional: a stock checkout has none and this is a no-op.
 get_filename_component(_meatpi_repos_dir
                        "${MEATPI_COMPONENTS_PATH}/../.." ABSOLUTE)
@@ -68,7 +68,7 @@ endforeach()
 
 # Optional component overlays: extra component dirs appended after the
 # bundled set (semicolon-separated). A later dir overrides an earlier
-# component with the same name — useful for local experiments or
+# component with the same name: useful for local experiments or
 # alternative component implementations. Captured at configure time;
 # after changing it run `idf.py reconfigure` (or delete build/).
 if(DEFINED ENV{MEATPI_COMPONENT_OVERLAYS})
@@ -130,7 +130,7 @@ message(STATUS "WiCAN binary: ${WICAN_PRJ_BIN}.bin (hw '${WICAN_HW_CFG}', git ${
 project("${WICAN_PRJ_BIN}")
 
 # Per-function stack-frame sizes (.su files next to every .obj) for the
-# stack audit (tools/stack_audit.py — TESTING.md "stack audit"). Build-time
+# stack audit (tools/stack_audit.py: TESTING.md "stack audit"). Build-time
 # artifact only; zero runtime cost. Motivated by the 2026-07-22 silent
 # PSRAM-stack overflow (autopid DTC job task).
 idf_build_set_property(COMPILE_OPTIONS "-fstack-usage" APPEND)

@@ -1,6 +1,6 @@
 # Everything under tools/testbench/ is deployed to and EXECUTED ON the
 # bench Pi (Linux). This repo is worked on from Windows with
-# core.autocrlf=true, which checks these out as CRLF — and a shell script
+# core.autocrlf=true, which checks these out as CRLF, and a shell script
 # with CRLF fails on the Pi in a maximally confusing way: `set -e` becomes
 # `set: -: invalid option`, `cd .` becomes `cd $'.\r'`, and an install(1)
 # target picks up a trailing CR so files land under a CR-named path

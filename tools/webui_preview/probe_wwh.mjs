@@ -62,7 +62,7 @@ const heads = (p) => p.$$("#view table thead th").map((th) => th.textContent.tri
     check("wwh: who asks for the lamp", /The lamp is requested by 18DAF100, 18DAF13D\./.test(t), t.slice(0, 0));
     check("wwh: the clear is worded for the emissions group", /This clears ALL emission codes of every ECU/.test(t) && /group FFFF33/.test(t));
     check("wwh: no word of mode 04", !/[Mm]ode 04/.test(t));
-    check("wwh: no long dash in the page", !/—/.test(t.replace(/Last scan:.*$/, "")));
+    check("wwh: no long dash in the page", !/\u2014/.test(t.replace(/Last scan:.*$/, "")));
 
     /* the clear: the firmware's confirm, then what is left */
     const clear = p.btn(/^Clear$/);

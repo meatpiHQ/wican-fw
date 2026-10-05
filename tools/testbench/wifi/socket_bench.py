@@ -1,7 +1,7 @@
 """socket_manager benchmark load generator (BENCHMARKS.md scenarios).
 
 Runs from the PC or rpi001 against a DUT running a socket_manager
-composition. Plain sockets — no DUT-side cooperation needed beyond an
+composition. Plain sockets: no DUT-side cooperation needed beyond an
 echoing/absorbing bridge on the target port.
 
     python tools/testbench/socket_bench.py --host 10.42.0.123 --port 35000 \
@@ -98,7 +98,7 @@ def udp_loss(host, port, secs):
         time.sleep(0.002)
 
     print(f"udp offered {sent} datagrams "
-          f"({sent * CHUNK / secs / 1024:.1f} KB/s) — read delivered count "
+          f"({sent * CHUNK / secs / 1024:.1f} KB/s): read delivered count "
           f"from DUT stats (bytes_in/{CHUNK})")
 
 

@@ -1,16 +1,16 @@
 /**
  * @file main.c
- * @brief WiCAN Pro firmware — the composition root (Architecture §11).
+ * @brief WiCAN Pro firmware: the composition root (Architecture §11).
  *
  * main owns nothing but the ORDER: init the owners bottom-up, let every
  * component register (settings/log descriptors, HTTP routes, bridge
- * jacks — see components/bridge_endpoints), run the ONE settings apply
+ * jacks, see components/bridge_endpoints), run the ONE settings apply
  * pass, then start everything. A component that fails to start leaves the
  * device degraded, never bricked (§4.3): boot always completes.
  *
  * Not composed yet (their components don't exist): internal CAN
  * (TWAI), autopid, sleep_manager. The BLE/WiFi coexistence policy hook
- * watches the dev-status bits here when needed — v1 runs both radios
+ * watches the dev-status bits here when needed: v1 runs both radios
  * (coex firmware arbitrates airtime).
  */
 #include <stdio.h>
@@ -92,7 +92,7 @@ static const char *TAG = "main";
 
 void app_main(void)
 {
-    /* THE VERY FIRST act: button held at power-on = SAFE MODE — a bare
+    /* THE VERY FIRST act: button held at power-on = SAFE MODE, a bare
        recovery environment that never loads settings (a corrupt config
        must not be able to crash it). Released = one GPIO read of cost. */
     if (main_safemode_check())
@@ -116,7 +116,7 @@ void app_main(void)
 
     if (err != ESP_OK)
     {
-        /* settings live on their OWN LittleFS partition, not NVS — a dead
+        /* settings live on their OWN LittleFS partition, not NVS: a dead
            NVS mainly costs WiFi PHY-cal cache. Degrade, don't loop. */
         ESP_LOGE(TAG, "nvs_flash_init failed: %s (continuing degraded)",
                  esp_err_to_name(err));
@@ -156,7 +156,7 @@ void app_main(void)
               filesystem_register_settings);
 
     /* §9.2 exception: settings_manager can't register with log_manager
-       (cycle) — the composition root does it */
+       (cycle), the composition root does it */
     static const log_descriptor_t SETTINGS_LOG =
         { "settings_manager", ESP_LOG_INFO };
 
@@ -176,7 +176,7 @@ void app_main(void)
     main_boot_init("ble_manager_init", ble_manager_init);
     main_boot_init("socket_manager_init", socket_manager_init);
     main_boot_init("websocket_manager_init", websocket_manager_init);
-    /* the external log sinks (tcp/udp/ws/file) — registers its settings;
+    /* the external log sinks (tcp/udp/ws/file): registers its settings;
        its sinks join log_manager at start (below) */
     main_boot_init("log_sinks_init", log_sinks_init);
     main_boot_init("bridge_manager_init", bridge_manager_init);
@@ -184,7 +184,7 @@ void app_main(void)
     /* the J1939 listener reads the native bus: descriptors only here */
     main_boot_init("j1939_init", j1939_init);
     /* optional add-on packs register their settings/jacks/providers
-       here (no-op in stock builds — see ext_manager.h) */
+       here (no-op in stock builds, see ext_manager.h) */
     main_boot_init("ext_manager_init", ext_manager_init);
     /* the public build's native ISO-TP provider (esp_isotp over
        can_manager): registers ONLY when no pack did (single-writer
@@ -259,14 +259,14 @@ void app_main(void)
     main_boot_init("uds_manager_register_http", uds_manager_register_http);
     main_boot_init("script_engine_register_http", script_engine_register_http);
     /* CLI commands: each component registers its own INSIDE its settings
-       apply, gated by its `cli` setting (meatpi 2026-07-05 — ownership
+       apply, gated by its `cli` setting (meatpi 2026-07-05, ownership
        lives in the component, not here); main_cli adds only the
        composites + pending stubs */
     main_boot_init("main_cli_register", main_cli_register);
     /* the adapter layer: fixed jacks now; the settings-named socket/WS
        jacks at its start (after the settings apply pass below) */
     main_boot_init("bridge_endpoints_init", bridge_endpoints_init);
-    /* CAN framing codecs (bridge_manager translators) — register before
+    /* CAN framing codecs (bridge_manager translators): register before
        bridge_manager_start builds the configured bridges. */
     main_boot_init("translator_slcan_init", translator_slcan_init);
     main_boot_init("translator_realdash_init", translator_realdash_init);
@@ -293,14 +293,14 @@ void app_main(void)
     bool batt_ok = main_boot_start("battery_monitor",
                                    battery_monitor_start);
     bool wifi_ok = main_boot_start("wifi_manager", wifi_manager_start);
-    /* esp-mdns tracks interface events itself — safe pre-network */
+    /* esp-mdns tracks interface events itself: safe pre-network */
     bool mdns_ok = main_boot_start("mdns_manager", mdns_manager_start);
     /* certs before mqtt: cert_set consumers borrow at start */
     bool cert_ok = main_boot_start("cert_manager", cert_manager_start);
     /* network-gated internally; starts its own waiter task */
     bool mqtt_ok = main_boot_start("mqtt_manager", mqtt_manager_start);
     /* network-gated internally like mqtt; no ordering coupling (meatpi
-       2026-07-07 — consumers behind the tunnel just retry) */
+       2026-07-07: consumers behind the tunnel just retry) */
     main_boot_start("vpn_manager", vpn_manager_start);
     /* passive diagnostic; sessions start from the `iperf` CLI command */
     main_boot_start("iperf_manager", iperf_manager_start);
@@ -330,7 +330,7 @@ void app_main(void)
     main_boot_start("uds_manager", uds_manager_start);
     main_boot_start("script_engine", script_engine_start);
     bool apid_ok = main_boot_start("autopid", autopid_start);
-    /* HA telemetry poster — reads autopid's snapshot + cached config */
+    /* HA telemetry poster: reads autopid's snapshot + cached config */
     main_boot_start("ha_webhooks", ha_webhooks_start);
     /* data destinations poster - autopid snapshot -> MQTT / HTTP(S) / ABRP
        (network- and broker-gated inside; mqtt_manager started above) */
@@ -357,7 +357,7 @@ void app_main(void)
        start AFTER both radios exist (the callback actuates them) */
     main_glue_wire_button();
     main_boot_start("button_manager", button_manager_start);
-    /* glue first (the ordered shutdown callback), then arm — LAST
+    /* glue first (the ordered shutdown callback), then arm, LAST
        among the features: everything it powers down exists by now */
     main_sleep_wire();
     main_boot_start("sleep_manager", sleep_manager_start);
@@ -368,11 +368,11 @@ void app_main(void)
     bool ws_ok = main_boot_start("websocket_manager",
                                  websocket_manager_start);
     /* jacks from the applied settings (socket/WS names) + the USB
-       port-B UART — MUST precede bridge_manager_start (registration
+       port-B UART: MUST precede bridge_manager_start (registration
        is pre-start only) */
     bool usb_ok = main_boot_start("bridge_endpoints",
                                   bridge_endpoints_start);
-    /* mqtt0 jack + canmqtt codec (no-op when mqtt_can disabled) —
+    /* mqtt0 jack + canmqtt codec (no-op when mqtt_can disabled),
        same pre-bridge_manager_start registration contract */
     main_boot_start("mqtt_can", mqtt_can_start);
     /* external log sinks AFTER websocket_manager (ws_log channel) and

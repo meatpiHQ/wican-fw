@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """can-jack fan-out (multi_consumer, 2026-07-26): slcan + MQTT
-SIMULTANEOUSLY on the one `can` jack — the mqtt_can v2 backlog item.
+SIMULTANEOUSLY on the one `can` jack, the mqtt_can v2 backlog item.
 Before this, the jack was single-consumer and the two features were
 mutually exclusive.
 
 Topology: PCAN on the bus (the generator), mosquitto on rpi001, DUT on
 the bench hotspot. Runs on the PC (IDF venv python: python-can; Pi legs
-over ssh) — the mqtt_can_bench_test.py pattern.
+over ssh): the mqtt_can_bench_test.py pattern.
 
-Leg: configure BOTH bridges on the can jack —
+Leg: configure BOTH bridges on the can jack,
        br_slcan:    can <-> slcan0 (tcp:3333, slcan codec)
        br_mqtt_can: can <-> mqtt0  (canmqtt codec, allow_rx)
      storm N frames -> BOTH consumers must see (>=95% each, same storm):
@@ -138,10 +138,10 @@ def main():
             s["enabled"] = True
     api(ip, "/api/settings/socket_manager", "PUT", sock)
 
-    # BOTH bridges on the can jack — the fan-out under test. Park ANY
+    # BOTH bridges on the can jack: the fan-out under test. Park ANY
     # standing bridge that uses one of our endpoints, not just can-jack
     # ones: a standing bridge holding slcan0 collided with
-    # br_slcan and the validator rejected the whole PUT — unnoticed,
+    # br_slcan and the validator rejected the whole PUT, unnoticed,
     # because the result wasn't checked (first live run 2026-07-26).
     ours = {"can", "slcan0", "mqtt0"}
     bm = json.loads(json.dumps(befores["bridge_manager"]))
@@ -170,14 +170,14 @@ def main():
     print("PROGRESS 1/5", flush=True)
 
     # wait for the DUT's broker session (reconnect backoff can exceed a
-    # flat sleep after the apply reboot — 2026-07-26 first-run lesson)
+    # flat sleep after the apply reboot: 2026-07-26 first-run lesson)
     print("waiting for the DUT's MQTT broker session…", flush=True)
     for _ in range(15):
         if api(ip, "/api/status").get("bits", {}).get("mqtt_connected"):
             break
         time.sleep(3)
     else:
-        print("  (mqtt_connected bit never rose — storming anyway)")
+        print("  (mqtt_connected bit never rose: storming anyway)")
     time.sleep(2)
     print("PROGRESS 2/5", flush=True)
 
@@ -200,7 +200,7 @@ def main():
 
     def collect_slcan():
         # the PC has no route to the DUT's hotspot subnet since the bench
-        # ethernet link went gateway-less (2026-07-26) — tunnel the TCP
+        # ethernet link went gateway-less (2026-07-26), tunnel the TCP
         # leg through the control plane when the direct connect fails
         tunnel = None
         try:
@@ -238,11 +238,11 @@ def main():
     t2 = threading.Thread(target=collect_slcan)
     t1.start()
     t2.start()
-    # gate the storm on the slcan client being CONNECTED — slcan only
+    # gate the storm on the slcan client being CONNECTED: slcan only
     # delivers to attached clients, and the ssh tunnel adds seconds of
     # connect latency (71/600 tail-catch on the fixed-sleep version)
     if not slcan_ready.wait(timeout=25):
-        print("  (slcan client never connected — storming anyway)")
+        print("  (slcan client never connected: storming anyway)")
     time.sleep(1.5)
     print(f"both consumers listening; storming {N} frames @ 100 Hz "
           f"(~{N // 100} s)…", flush=True)

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# WiCAN host unit tests — builds and runs components/*/host_test on the
+# WiCAN host unit tests: builds and runs components/*/host_test on the
 # IDF `linux` target and prints a compact PASS/FAIL summary (with per-suite
 # test counts). An optional argument limits the run to one component:
 #   run_host_tests.sh wifi_manager
@@ -12,7 +12,7 @@ set -u
 cd "$(dirname "$0")/../.."
 ONLY="${1:-*}"
 
-# linux target needs only the IDF python env + system gcc/cmake/ninja —
+# linux target needs only the IDF python env + system gcc/cmake/ninja:
 # skip export.sh (it refuses without the cross toolchains installed).
 export IDF_PATH="${IDF_PATH:-$HOME/esp-idf}"
 export IDF_PYTHON_CHECK_CONSTRAINTS=no
@@ -42,8 +42,8 @@ for ht in components/$ONLY/host_test; do
         [ -n "$elf" ] || { echo NO_ELF; exit 2; }
         # The FreeRTOS POSIX port never exits after UNITY_END, so we
         # kill the process OURSELVES the moment Unity's summary line
-        # appears (a fixed `timeout 30` burned 30 s on EVERY suite —
-        # ~22 min of pure waiting across the 44 suites — and still
+        # appears (a fixed `timeout 30` burned 30 s on EVERY suite
+        # (~22 min of pure waiting across the 44 suites) and still
         # false-failed autopid on slow CI runners, 2026-07-27). Budget
         # only guards against a truly hung binary.
         budget=120

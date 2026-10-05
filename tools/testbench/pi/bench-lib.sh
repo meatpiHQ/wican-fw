@@ -9,8 +9,8 @@ export PATH="/usr/local/bin:/usr/sbin:/sbin:$PATH"
 
 BENCH_STATE_DIR=/var/lib/bench
 SSID="WICAN_TEST_AP"
-HOTSPOT_PRIMARY="wican-bench"      # USB stick (wtest0) — the internal brcmfmac radio goes deaf in AP mode (2026-09-06)
-HOTSPOT_TWIN="wican-bench-w0"      # internal radio (wint0) — failover only, keep parked (autoconnect no)
+HOTSPOT_PRIMARY="wican-bench"      # USB stick (wtest0), the internal brcmfmac radio goes deaf in AP mode (2026-09-06)
+HOTSPOT_TWIN="wican-bench-w0"      # internal radio (wint0), failover only, keep parked (autoconnect no)
 UPLINK_CON="Nachos_8042_5G 2"      # non-load-bearing convenience uplink
 ETH_CON="eth-bench"
 ETH_ADDR="192.168.90.2"
@@ -69,7 +69,7 @@ con_device() {
 }
 
 # a radio to truth-test-scan with: never one in AP mode, prefer a fully
-# idle radio, but the uplink stick is a legal LAST choice — a station-mode
+# idle radio, but the uplink stick is a legal LAST choice, a station-mode
 # scan is allowed while associated, and since the control plane moved to
 # ethernet (2026-07-26) the uplink is non-load-bearing by design.
 # $1 = interface to EXCLUDE (the one under test). May echo nothing.
@@ -90,7 +90,7 @@ pick_scanner() {
 }
 
 # TRUTH TEST: is $2 (ssid) genuinely on air, seen from $1 (scanner iface)?
-# nmcli "activated" lies (phantom-AP mode, twice on 2026-07-26) — only a
+# nmcli "activated" lies (phantom-AP mode, twice on 2026-07-26): only a
 # scan from a DIFFERENT radio proves beacons.
 ssid_on_air() {
     local scanner="$1" ssid="$2"
@@ -101,8 +101,8 @@ ssid_on_air() {
 }
 
 # TRUTH TEST, per-radio: is the AP hosted on the iface with MAC $2
-# genuinely beaconing? (The twins share one SSID, so only the BSSID —
-# which equals the hosting iface's MAC — identifies WHICH radio is on
+# genuinely beaconing? (The twins share one SSID, so only the BSSID
+# (which equals the hosting iface's MAC) identifies WHICH radio is on
 # air.) Seen from scanner $1.
 bssid_on_air() {
     local scanner="$1" mac="$2"

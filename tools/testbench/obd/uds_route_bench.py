@@ -19,7 +19,7 @@ do not check, for an ECU with another VIN DID size).
 
 Found 2026-09-16: over the MIC (backend obd_chip) with autopid polling the
 route flipped between ok, ESP_ERR_INVALID_RESPONSE and a 14 s timeout (1 of
-3), and 5/5 ok at ~525 ms with autopid paused — the transport did not hold
+3), and 5/5 ok at ~525 ms with autopid paused: the transport did not hold
 the chip across its 8-command transaction. Phase 1 of
 can_manager/TASK_isotp_public.md fixes that; this is its regression.
 

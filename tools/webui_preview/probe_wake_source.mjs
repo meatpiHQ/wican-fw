@@ -1,4 +1,4 @@
-/* Probe (2026-09-07, meatpi): the Status page names this boot's cause — "Last wake-up":
+/* Probe (2026-09-07, meatpi): the Status page names this boot's cause, "Last wake-up":
    battery-voltage recovery vs the periodic check-in vs a plain power-on, a requested
    restart or a crash. The mock's last restart record is __mockState.lastRestart. */
 import { readFileSync } from "node:fs";

@@ -1,6 +1,6 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
-# ts_public_soak.sh — Tailscale (headscale) test of the WiCAN DUT against a
+# ts_public_soak.sh: Tailscale (headscale) test of the WiCAN DUT against a
 # PUBLIC control server on the "betty" VPS, over the DUT's real uplink
 # (LTE/CGNAT via espnetlink, or STA). Public twin of ts_bench_target.py
 # (the rpi001 local headscale rig).
@@ -35,7 +35,7 @@ set -u
 
 SRV=betty                        # ssh alias for the VPS
 EP_DNS="${WG_BENCH_DNS:-}"       # optional: server DNS name (env var, NOT
-                                 # committed — private server, public repo).
+                                 # committed, private server, public repo).
                                  # When set and matching the server IP, the
                                  # control URL uses the NAME so the
                                  # firmware's DNS path runs too.
@@ -111,7 +111,7 @@ up|run)
     # BUG_TS_PHANTOM_PEERS.md: a stale node db can mask NVS-cached phantoms)
     # separate ssh for the kills: the bracket trick protects against the
     # pattern itself, but the START block below carries the plain
-    # 'headscale serve' string in its nohup line — same-shell pkill would
+    # 'headscale serve' string in its nohup line: same-shell pkill would
     # self-match through THAT and kill the block (burned twice here)
     $SRVSSH "pkill -f '$BASE/[h]eadscale serve' 2>/dev/null || true
         pkill -f '[t]ailscaled.*tsb.sock' 2>/dev/null || true; sleep 1"
@@ -168,7 +168,7 @@ EOF
     PUB_OK=$(curl -s -m 10 -o /dev/null -w '%{http_code}' "http://${EP}:${HSPORT}/health")
     check "control publicly reachable" "$([ "$PUB_OK" = "200" ] && echo 1 || echo 0)" "health=$PUB_OK"
     if [ "$HS_OK" != "200" ]; then
-        echo "headscale failed to start — aborting before touching the DUT"
+        echo "headscale failed to start: aborting before touching the DUT"
         $SRVSSH "tail -5 /var/log/hs_bench.log 2>/dev/null"
         exit 1
     fi
@@ -180,7 +180,7 @@ EOF
     KLEN=$($SRVSSH "wc -c < $KEYFILE")
     check "preauth key created" "$([ "${KLEN:-0}" -gt 20 ] && echo 1 || echo 0)"
     if [ "${KLEN:-0}" -le 20 ]; then
-        echo "no preauth key — aborting before touching the DUT"
+        echo "no preauth key: aborting before touching the DUT"
         exit 1
     fi
     TSKEY=$($SRVSSH "cat $KEYFILE")
@@ -265,7 +265,7 @@ down)
         printf '%s' "$VCFG" | dut_put_vpn | sed 's/^/DUT vpn disable PUT -> /'; echo
         dut "-X POST http://${DUT_IP}/api/settings/submit" >/dev/null 2>&1 && echo "DUT submitted (VPN off, key blanked)"
     else
-        echo "DUT unreachable — blank ts_auth_key manually when it is back"
+        echo "DUT unreachable: blank ts_auth_key manually when it is back"
     fi
     $SRVSSH "$BASE/ts/tailscale --socket=/run/tsb.sock down 2>/dev/null
         pkill -f '[t]ailscaled.*tsb.sock' 2>/dev/null || true

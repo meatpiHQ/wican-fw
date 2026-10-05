@@ -16,7 +16,7 @@
  * ~17 KB of internal at boot: nodes >32 B already went to PSRAM under
  * SPIRAM_MALLOC_ALWAYSINTERNAL=32, but every short key/value string
  * stayed internal). cJSON is only ever touched from task context, so ALL
- * of it belongs in PSRAM — the sqlite SQLITE_CONFIG_MALLOC precedent.
+ * of it belongs in PSRAM: the sqlite SQLITE_CONFIG_MALLOC precedent.
  * Fallback to the default policy if PSRAM is exhausted/absent. */
 static void *cjson_psram_malloc(size_t n)
 {

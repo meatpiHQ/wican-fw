@@ -107,7 +107,7 @@ def main():
     ts_dir = ts_dirs[-1] if ts_dirs else None
 
     # 1. headscale up (local-only bind per its /etc config) from FRESH
-    # state — BUG_TS_PHANTOM_PEERS.md: stale server state let NVS-cached
+    # state, BUG_TS_PHANTOM_PEERS.md: stale server state let NVS-cached
     # phantom peers hide; with a wiped db a DUT carrying phantoms fails
     # the peer legs before the fix and passes after (the first full map
     # prunes them).

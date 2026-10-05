@@ -3,11 +3,11 @@
 
 Answers functional 0x7DF + physical (resp - 8), replies on **0x7E9** by
 default (the "second ECU" slot) so it never collides with the hardware
-bench ECU box at 0x7E8 — the DUT targets it with `dtc_rxheader: "7E9"`.
+bench ECU box at 0x7E8, the DUT targets it with `dtc_rxheader: "7E9"`.
 Full ISO-TP (SF + FF/CF with FC), scaffolding from pcan_uds_ecu.py.
 
 --resp2 adds a SECOND independent responder (own id + own DTC lists) for
-the multi-ECU functional-scan leg — both answer every 0x7DF request.
+the multi-ECU functional-scan leg: both answer every 0x7DF request.
 Keep each responder's stored list <= 2 codes in that mode so responses
 stay single-frame (two ECUs streaming FF/CF would fight over the FC).
 

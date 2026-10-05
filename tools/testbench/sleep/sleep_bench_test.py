@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sleep-mode bench — PSU-in-the-loop HIL for sleep_manager.
+"""Sleep-mode bench: PSU-in-the-loop HIL for sleep_manager.
 
 Topology (2026-07-20 rig): the OWON P4305 (RS232, `owon_psu.py`, hard
 15.0 V ceiling in driver AND instrument) plays the car battery on the
@@ -7,8 +7,8 @@ DUT's 12 V input; the DUT is observed over HTTP through rpi001 (the DUT
 is a STA on the bench hotspot) and by PSU current readback. The serial
 console is deliberately NOT used: opening the CH342 console port resets
 the DUT (DTR/RTS auto-reset), and the port itself dies during light
-sleep — current + HTTP are the ground truth. Runs on the dev host; the
-Pi is reached with plain ssh (never join the DUT AP from the dev PC —
+sleep, current + HTTP are the ground truth. Runs on the dev host; the
+Pi is reached with plain ssh (never join the DUT AP from the dev PC,
 see TESTING.md "Reaching the DUT's AP").
 
 Model under test (sleep_manager defaults: sleep < 13.10 V, wake >=
@@ -18,18 +18,18 @@ recovery to wake_v cancels it; expiry tears components down and starts
 reason power_wake (`/api/restart/history`).
 
 Legs:
-  0. PSU     — IDN, ceiling programmed, current limit sane
-  1. BOOT    — power-cycle at 14.0 V: STA rejoin, /api/sleep enabled +
+  0. PSU:      IDN, ceiling programmed, current limit sane
+  1. BOOT:     power-cycle at 14.0 V: STA rejoin, /api/sleep enabled +
                state normal, DUT voltage reading tracks the PSU
                (offset reported), awake current
-  2. LADDER  — 12.5 V -> state "low_voltage"; 14.0 V -> "normal"
+  2. LADDER:   12.5 V -> state "low_voltage"; 14.0 V -> "normal"
                (hysteresis countdown cancel: no sleep, no reboot)
-  3. VOLTAGE — sleep_delay_min -> 1 via the settings API
+  3. VOLTAGE: sleep_delay_min -> 1 via the settings API
                (submit-reboot), then 12.5 V: HTTP dies AND current
                collapses inside delay+90 s (sleep current sampled +
                reported, < 40 mA asserted); 14.0 V: back awake within
                60 s, newest restart record = power_wake, state normal
-  4. RESTORE — sleep_delay_min back to 5 (submit-reboot), PSU left at
+  4. RESTORE: sleep_delay_min back to 5 (submit-reboot), PSU left at
                --end-volts output ON (>= 13.2 keeps the DUT awake)
 
 Usage (dev host):
@@ -144,7 +144,7 @@ class PiHttp:
 
     def wait_state(self, want, timeout_s=20):
         """Poll /api/sleep for a policy state (1 Hz tick + WiFi jitter).
-        Re-discovers on repeated failures — the DUT can roam between
+        Re-discovers on repeated failures: the DUT can roam between
         the same-SSID hotspot twins at ANY time, not just reboots."""
         deadline = time.time() + timeout_s
         state = "?"
@@ -188,7 +188,7 @@ class PiHttp:
         r = self.put_json("/api/settings/sleep_manager", cur)
         assert r is not None and "error" not in r, f"PUT failed: {r}"
         if not r.get("changed"):
-            return self.get("/api/sleep")  # already configured — no reboot
+            return self.get("/api/sleep")  # already configured: no reboot
         r = self.post("/api/settings/submit")
         assert r and r.get("reboot"), f"submit failed: {r}"
         time.sleep(8)  # let it actually go down before polling up
@@ -284,7 +284,7 @@ def main():
         return 1
 
     # the voltage field stays 0.00 until the state task's first policy
-    # tick — that lands ~19 s after boot (15 s arm grace + 1 Hz loop)
+    # tick: that lands ~19 s after boot (15 s arm grace + 1 Hz loop)
     volts = 0.0
     deadline = time.time() + 40
     while time.time() < deadline:
@@ -298,7 +298,7 @@ def main():
           f"DUT reads {volts:.2f} V at {V_AWAKE:.1f} V "
           f"(offset {offset:+.2f} V)")
     # awake baseline: NOTE anything else on the PSU feed (the ECU sim
-    # draws ~40 mA on this rig) rides on every reading — the sleep
+    # draws ~40 mA on this rig) rides on every reading, the sleep
     # assertion below is therefore a DELTA against this baseline; the
     # absolute floor is reported and only asserted when the feed is
     # clean (baseline low enough that no sim can be present)
@@ -326,7 +326,7 @@ def main():
     check("voltage_countdown", state == "low_voltage", state)
 
     # ground truth for "asleep" is the supply current dropping well
-    # below the awake baseline (delta — survives shared-feed loads)
+    # below the awake baseline (delta: survives shared-feed loads)
     sleep_gate = awake_a - 0.030
     entry = psu.wait_current(lambda a: a < sleep_gate,
                              timeout_s=60 + 90)
@@ -344,11 +344,11 @@ def main():
         check("voltage_sleep_current", avg < sleep_gate,
               f"avg {mA(avg)}, min {mA(min(s))}, max {mA(max(s))} "
               f"(awake {mA(awake_a)}, delta {mA(awake_a - avg)})")
-        if awake_a < 0.070:  # clean feed: DUT alone — assert the floor
+        if awake_a < 0.070:  # clean feed: DUT alone, assert the floor
             check("voltage_sleep_floor", avg < SLEEP_A_MAX, mA(avg))
         elif avg >= SLEEP_A_MAX:
-            print(f"NOTE: absolute sleep floor {mA(avg)} not asserted "
-                  f"— shared PSU feed (ECU sim?) adds standing draw")
+            print(f"NOTE: absolute sleep floor {mA(avg)} not asserted, "
+                  f"shared PSU feed (ECU sim?) adds standing draw")
         gone = dut.get("/api/sleep", timeout_s=4)
         check("voltage_sleep_offline", gone is None,
               "HTTP dead while asleep" if gone is None

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""data_logger end-to-end bench (PC orchestrator) — the full matrix for
+"""data_logger end-to-end bench (PC orchestrator): the full matrix for
 the two-stream logger (TASK_data_logger.md addendum):
 
   leg 1  format=sqlite  can=binary  monitor_all + autopid-sink rows
@@ -11,7 +11,7 @@ the two-stream logger (TASK_data_logger.md addendum):
          + frametest drain-rate benchmark
 
 Every leg downloads the files via /api/fs and validates CONTENT
-(python sqlite3 / csv parse / tools/wdl_dump.py decode — byte-exact
+(python sqlite3 / csv parse / tools/wdl_dump.py decode: byte-exact
 for the .wdl CAN frames we sent). CAN legs self-skip without a PCAN.
 
 Topology: DUT over the USB mgmt link (192.168.82.1: HTTP + /ws/cli);
@@ -65,7 +65,7 @@ def metric(name, value):
 
 
 def api(path, method="GET", body=None, retries=4, timeout=20):
-    # settings submits reboot the DUT — retry transport errors, return
+    # settings submits reboot the DUT: retry transport errors, return
     # real HTTP responses as-is (the em_worker/ha_webhook hardening)
     data = None
     if body is not None:
@@ -91,7 +91,7 @@ def api(path, method="GET", body=None, retries=4, timeout=20):
 
 def download(path):
     # the rings are FIFO: once they report (near-)empty twice, every
-    # record queued BEFORE now has been committed — gating off earlier
+    # record queued BEFORE now has been committed, gating off earlier
     # would strand the tail in the ring (it survives for resume, but
     # the downloaded file would miss it)
     end = time.time() + 25
@@ -102,8 +102,8 @@ def download(path):
                             st["can"]["queued"] <= 1) else 0
         time.sleep(0.7)
     time.sleep(1.5)  # let the flush batch commit
-    # FS_LOCK: the ACTIVE file is write-locked (open of any kind fails)
-    # — park the writer (closes + flushes both files), fetch a
+    # FS_LOCK: the ACTIVE file is write-locked (open of any kind fails),
+    # park the writer (closes + flushes both files), fetch a
     # CONSISTENT snapshot, resume
     api("/api/logger/gate", "POST", {"enabled": False})
     time.sleep(1.5)
@@ -179,7 +179,7 @@ def log_files():
 
 def clean_logs():
     # the writer HOLDS its active files open and FS_LOCK makes deleting
-    # an open file fail (by design) — park the writer first (closes
+    # an open file fail (by design), park the writer first (closes
     # both files), delete, resume
     api("/api/logger/gate", "POST", {"enabled": False})
     time.sleep(1)
@@ -241,7 +241,7 @@ def pcan_bus():
         import can
         return can.Bus(interface="pcan", channel=PCAN, bitrate=500000)
     except Exception as e:
-        print(f"note: PCAN unavailable ({e}) — CAN legs skipped")
+        print(f"note: PCAN unavailable ({e}), CAN legs skipped")
         return None
 
 
@@ -468,7 +468,7 @@ def assert_sent_frames_present(name, fmt, blob, sent, id_span):
     ids = {sid for sid, _ in sent}
     ours = [g for g in got if g[0] in ids]
     # byte-exact, in-order comparison of OUR frames (other bus chatter
-    # — autopid polls, the hardware ECU — may interleave legally)
+    # (autopid polls, the hardware ECU) may interleave legally)
     ok = ours == sent
     check(name, ok,
           f"{len(ours)}/{len(sent)} matched (file has {len(got)} total)")
@@ -554,7 +554,7 @@ def main():
 
         # autopid -> params: the REAL polling loop (bench ECU box
         # answers the standard PIDs) feeds the value sink with
-        # autopid_log=all — assert its rows landed next to test.value.
+        # autopid_log=all, assert its rows landed next to test.value.
         # Conditional: only when live autopid values actually exist
         # (the ECU box could be unpowered on another bench).
         _, apdata = api("/api/autopid/data")
@@ -570,7 +570,7 @@ def main():
             check("leg1 autopid sink rows landed (autopid_log=all)",
                   len(apn) >= 1, str(apn))
         else:
-            print("note: no live autopid values (ECU box off?) — "
+            print("note: no live autopid values (ECU box off?): "
                   "sink-row check skipped")
 
         if bus is not None:
@@ -579,7 +579,7 @@ def main():
             # sent-indexes [0..2] of the train, every DUT counter
             # incl. the new rx_missed/dispatch_drops reads 0, IRAM TWAI
             # ISR didn't change it, and one warmup frame shrank the
-            # loss from 3 to 2 — a fixed ~3-frame first-TX-after-idle
+            # loss from 3 to 2: a fixed ~3-frame first-TX-after-idle
             # window; everything after is loss-free at any rate, see
             # the 2500-frame 500 fps leg. Mechanism unpinned, CHECKLIST
             # item). Absorb it with 3 throwaway frames outside the
@@ -605,7 +605,7 @@ def main():
 
             # CAN-rate benchmark (binary engine): paced 500 fps must be
             # loss-free; 1000/2000 fps paced report; then a FULL-SPEED
-            # blast (gap 0 — python-can pushes as fast as the 500 kbit/s
+            # blast (gap 0: python-can pushes as fast as the 500 kbit/s
             # bus accepts; ~3.4k fps wire ceiling for 8-byte 11-bit
             # frames) = "as many frames as possible".
             for rate, count, must_hold in ((500, 2500, True),
@@ -781,7 +781,7 @@ def main():
                       f"rows={len(test_rows)}")
 
             if bus is None:
-                print(f"note: no PCAN — {fmt} leg skipped")
+                print(f"note: no PCAN, {fmt} leg skipped")
                 continue
 
             pre = logger_stats()["can"]["frames_written"]
@@ -799,7 +799,7 @@ def main():
             if fmt == "mf4":
                 x = asammdf_crosscheck(blob, 100)
                 if x is None:
-                    print("note: asammdf not installed — "
+                    print("note: asammdf not installed, "
                           "spec-offset parser only")
                 else:
                     check("leg7 mf4 asammdf cross-check", x is True,

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Sync components + tools to rpi001 (~/wican), overlaying the split
 # meatpi-components repo (TESTBENCH.md §4 recipe; test.ps1 host does the
-# same automatically — this is the standalone/BenchBoard entry point).
+# same automatically: this is the standalone/BenchBoard entry point).
 set -e
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 COMPS="$REPO/../../wican-fw-dev/meatpi-components"

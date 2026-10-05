@@ -6,7 +6,7 @@ USB-Ethernet adapter plugged, cabled to the Pi's eth0 (the `eth-bench`
 NetworkManager shared profile serves DHCP 10.42.1.x) -- or, since
 2026-08-26, to a USB-Ethernet adapter on the Pi (`eth1`, shared profile
 `eth-bench-usb`, 10.42.2.x). If the connector
-is wired to a PC instead (CH342 device role), this bench cannot run —
+is wired to a PC instead (CH342 device role), this bench cannot run:
 test.ps1's bench preflight detects that and SKIPs the leg.
 
 Flow: verify /api/usb reports the adapter up -> HTTP over the usb-eth

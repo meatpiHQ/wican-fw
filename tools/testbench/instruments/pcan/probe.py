@@ -9,7 +9,7 @@ ap.add_argument("--channel", default="PCAN_USBBUS2")
 ap.add_argument("--bitrate", type=int, default=500000)
 args = ap.parse_args()
 
-import can  # noqa: E402 — needs python-can (IDF venv has it)
+import can  # noqa: E402, needs python-can (IDF venv has it)
 
 others = [c for c in ("PCAN_USBBUS1", "PCAN_USBBUS2") if c != args.channel]
 last = None

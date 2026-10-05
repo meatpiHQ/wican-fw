@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Sleep robustness matrix runner — see SLEEP_MATRIX.md for the map.
+"""Sleep robustness matrix runner, see SLEEP_MATRIX.md for the map.
 
 Per scenario: configure the subsystem, hold its live condition, drop to
 12.5 V (sleep_delay_min=1), prove entry by supply-current delta, soak
 asleep watching for spurious wakes, restore 14.0 V, prove the wake, then
 run forensics: zero unexpected resets, exactly one new restart record
 (power_wake/sleep_mode), /api/faults empty. A failed scenario recovers
-the DUT (COM7 reset pulse — that port's open resets it anyway) and the
+the DUT (COM7 reset pulse: that port's open resets it anyway) and the
 suite moves on. `wifi_ghost` runs LAST (its restore goes through the
 DUT's own AP via the Pi).
 
@@ -358,7 +358,7 @@ def sleep_cycle(rig, key, soak_s=90, entry_extra_s=90, offline_ok=False,
         f"wrong wake record: {json.dumps(newest)[:100]}"
     assert newest.get("seq") == seq0 + 1, \
         f"extra reboots during scenario (seq {seq0} -> " \
-        f"{newest.get('seq')}) — crash/recovery in between?"
+        f"{newest.get('seq')}): crash/recovery in between?"
     assert hist.get("unexpected_resets") == unexpected0, \
         f"unexpected resets grew: {unexpected0} -> " \
         f"{hist.get('unexpected_resets')}"
@@ -484,7 +484,7 @@ def s_ble_client(rig):
            stdin=script)
     time.sleep(25)  # scan + connect window
     try:
-        # a connected central may suspend WiFi (interface_manager) —
+        # a connected central may suspend WiFi (interface_manager),
         # verify by current only
         sleep_cycle(rig, "ble_client", offline_ok=True)
     finally:
@@ -553,13 +553,13 @@ def _soak_sh(rig, script, up_args=""):
 
 def s_wg_betty_soak(rig):
     """WireGuard against the PUBLIC betty endpoint (real internet path)
-    + the 10-min asleep soak — the closest reproduction of the
+    + the 10-min asleep soak: the closest reproduction of the
     historical delayed-panic conditions."""
     rc, out = _soak_sh(rig, "wg_public_soak.sh", "up split")
     if rc != 0:
         raise SkipScenario(f"betty WG up failed: {out[-200:]}")
     try:
-        # `up` submits and returns while the DUT reboots — wait for it,
+        # `up` submits and returns while the DUT reboots, wait for it,
         # then for the handshake
         time.sleep(8)
         assert rig.dut.wait_up(120), "DUT lost after WG submit-reboot"
@@ -572,7 +572,7 @@ def s_wg_betty_soak(rig):
         assert st.get("state") == "connected", f"WG not connected: {st}"
         sleep_cycle(rig, "wg_betty_soak", soak_s=600)
     finally:
-        # --wipe also disables/blanks the DUT's vpn config — without it
+        # --wipe also disables/blanks the DUT's vpn config, without it
         # the DUT keeps dialing the (now dead) betty endpoint forever
         _soak_sh(rig, "wg_public_soak.sh", "down --wipe")
 
@@ -664,7 +664,7 @@ def s_periodic_critical(rig):
     Control leg at 12.5 V: periodic_wakeup (5 min, the schema's minimum
     since 2026-09-06) MUST fire while sleeping (awake current burst).
     Critical leg at 11.75 V (DUT reads ~11.68 < SM_CRITICAL_V): periodic
-    wake MUST stay suppressed for an interval and a half — only voltage
+    wake MUST stay suppressed for an interval and a half, only voltage
     recovery may touch a critical battery."""
     rig.put_settings("sleep_manager",
                      {"enabled": True, "periodic_wakeup": True,
@@ -823,7 +823,7 @@ def s_forced_sleep(rig):
 
 def s_bootloop_guard(rig):
     """The LAST-LINE battery defense: >=3 unexpected resets below
-    12.10 V must park the device asleep — with sleep DISABLED in
+    12.10 V must park the device asleep, with sleep DISABLED in
     settings (the guard is setting-independent, legacy parity).
     Panics are injected via `restart_tracker --panic` over the console."""
     rig.put_settings("sleep_manager", {"enabled": False})
@@ -879,7 +879,7 @@ def _bootloop_guard_body(rig):
         tries += 1
         panic()
         time.sleep(10)
-        if tries + c0 < 3:  # guard not due yet — device comes back
+        if tries + c0 < 3:  # guard not due yet, device comes back
             assert rig.dut.wait_up(120), \
                 f"DUT lost after panic #{tries}"
     # the boot that reaches count>=3 must trip the guard (~20 s after

@@ -3,7 +3,7 @@
 
 Physical setup: the espnetlink cellular dongle plugged into the WiCAN
 USB connector (host mode), its LTE modem provisioned with a SIM. It is a
-COMPOSITE device — RNDIS (the LTE data path, handled by usb_eth_host)
+COMPOSITE device: RNDIS (the LTE data path, handled by usb_eth_host)
 plus a CDC-ACM management console (usb_acm_cli). This bench exercises
 both.
 

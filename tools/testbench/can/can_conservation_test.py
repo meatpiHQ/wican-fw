@@ -2,12 +2,12 @@
 """CAN counter-conservation bench (MEATPI_COMPONENT_STANDARD §7,
 performance-truth rules): put EXACTLY N frames on the wire with the
 PCAN at three load tiers and assert the DUT's `/api/can` counters
-account for every single one — `rx == N`, `rx_missed == 0`,
+account for every single one, `rx == N`, `rx_missed == 0`,
 `dispatch_drops == 0`. "No crash + plausible traffic" is not a pass;
 this bench exists because a 30x rx_count error survived every
 functional test (the 2026-07-21 TWAI drain-loop bug).
 
-Run on the PC (IDF venv python — needs python-can + the PCAN on the
+Run on the PC (IDF venv python, needs python-can + the PCAN on the
 DUT's bus):  python tools/testbench/can_conservation_test.py
 Expected final line: CAN CONSERVATION PASS
 """

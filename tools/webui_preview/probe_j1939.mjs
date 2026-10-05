@@ -64,7 +64,7 @@ const heads = (p) => p.$$("#view table thead th").map((th) => th.textContent.tri
     check("dtc: the lamp sentence names the source", /The lamp is requested by SA 0\./.test(t));
     check("dtc: no clear on a listener", /WiCAN only listens on this vehicle/.test(t) && !p.btn(/^Clear$/), t.slice(0, 0));
     check("dtc: no word of mode 04", !/[Mm]ode 04/.test(t));
-    check("dtc: no long dash in the page", !/—/.test(t.replace(/Last scan:.*$/, "")));
+    check("dtc: no long dash in the page", !/\u2014/.test(t.replace(/Last scan:.*$/, "")));
     check("dtc: no script error", p.errs.length === 0, p.errs.slice(0, 2));
   }
 
@@ -79,7 +79,7 @@ const heads = (p) => p.$$("#view table thead th").map((th) => th.textContent.tri
     check("active dtc: the sentence says DM2 is asked at every scan", /previously active ones are asked for \(DM2\) at every scan/.test(t) && !/asks nothing/.test(t));
     check("active dtc: the clear is offered as DM11 and DM3", /DM11 clears the active codes of every controller/.test(t) && /DM3 the previously active ones/.test(t) && !!p.btn(/^Clear$/), t.slice(0, 0));
     check("active dtc: no word of listening only", !/WiCAN only listens on this vehicle/.test(t));
-    check("active dtc: no long dash in the page", !/—/.test(t.replace(/Last scan:.*$/, "")));
+    check("active dtc: no long dash in the page", !/\u2014/.test(t.replace(/Last scan:.*$/, "")));
     check("active dtc: no script error", p.errs.length === 0, p.errs.slice(0, 2));
   }
 

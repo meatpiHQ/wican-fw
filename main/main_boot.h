@@ -1,7 +1,7 @@
 /** @file main_boot.h
  *  @brief Composition-root boot scaffolding: the degrade-never-halt
  *         init/start step helpers and the boot RAM map they feed
- *         (`WICAN RAMMAP <step>=<bytes>` — one boot prints the whole
+ *         (`WICAN RAMMAP <step>=<bytes>`, one boot prints the whole
  *         internal-RAM consumption map; the system bench parses it). */
 #pragma once
 
@@ -23,6 +23,6 @@ void main_boot_ram_map_print(void);
  *  errors, flash budget, registry headroom). Call once, after start. */
 void main_boot_health_report(void);
 
-/** Flash-churn tripwire — call from the 60 s watch loop; latches one
+/** Flash-churn tripwire: call from the 60 s watch loop; latches one
  *  `flash_churn` fault per boot when erases rise 10 windows straight. */
 void main_boot_flash_watch(void);

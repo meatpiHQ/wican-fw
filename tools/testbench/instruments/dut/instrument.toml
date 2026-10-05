@@ -1,6 +1,6 @@
 label = "DUT"
 desc = "WiCAN Pro (ESP32-S3) on the bench hotspot, 12 V from the PSU"
-doc = "Console COM7 (2 Mbaud, opening it resets the DUT — no COM probe). Canonical lease ${dut.ip}; the probe falls back to the newest dnsmasq lease."
+doc = "Console COM7 (2 Mbaud, opening it resets the DUT: no COM probe). Canonical lease ${dut.ip}; the probe falls back to the newest dnsmasq lease."
 
 [config]
 ip = "10.42.0.62"

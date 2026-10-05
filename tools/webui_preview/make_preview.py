@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Build preview.html = the real web/index.html with the mock API shim
-injected (--min: minified first, exactly as the firmware embeds it) — clickable in any browser with NO device (and publishable as
+injected (--min: minified first, exactly as the firmware embeds it), clickable in any browser with NO device (and publishable as
 a claude.ai artifact). Run extract_mocks.py first (or let this call it).
 """
 import json
@@ -12,7 +12,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # components live in the meatpi-components repo since 2026-07 (same
 # search order as the root CMakeLists); the old in-repo path is the
 # fallback for exotic checkouts
-# MEATPI_COMPONENTS_PATH wins (the firmware build uses it too) — the
+# MEATPI_COMPONENTS_PATH wins (the firmware build uses it too): the
 # sibling-clone guess below can point at an OLDER checkout and silently
 # preview stale UI (bit us 2026-09-06)
 _ENV = os.environ.get("MEATPI_COMPONENTS_PATH")
@@ -56,7 +56,7 @@ def main():
               "b.style.cssText='position:fixed;bottom:10px;right:10px;z-index:9999;"
               "background:#c1810b;color:#fff;font:600 11px system-ui;"
               "padding:4px 10px;border-radius:6px;opacity:.92';"
-              "b.textContent='PREVIEW — mock data, no device';"
+              "b.textContent='PREVIEW: mock data, no device';"
               "document.body.append(b);});</script>\n")
 
     anchor = '<meta charset="utf-8">'

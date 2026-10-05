@@ -1,10 +1,10 @@
 #!/bin/bash
-# bench-radio-reset — recovery ladder level 0 for one radio (plan §4).
+# bench-radio-reset: recovery ladder level 0 for one radio (plan §4).
 #   bench-radio-reset <wint0|wtest0|wtest1> [--usb]
 # Level 0a: bounce the NM profile(s) on that radio (the fix that healed
 # both phantom-AP incidents). Level 0b (--usb, or automatically when the
 # bounce alone did not restore the interface): usbreset the stick so it
-# re-enumerates without a Pi reboot. wint0 is not USB — --usb is a no-op.
+# re-enumerates without a Pi reboot. wint0 is not USB: --usb is a no-op.
 BENCH_TAG=bench-radio-reset
 . /usr/local/lib/bench-lib.sh
 
@@ -57,7 +57,7 @@ if [ -n "$ifc" ] && busdev=$(usb_busdev "$ifc"); then
     blog "$role/$ifc: usbreset $busdev"
     sudo usbreset "$busdev"
 else
-    # interface gone — reset by product name (both sticks are 0bda:c812;
+    # interface gone: reset by product name (both sticks are 0bda:c812;
     # only reachable path when we can't tell them apart is: reset the one
     # whose netdev vanished, i.e. any 0bda:c812 with no net child.
     reset_done=0

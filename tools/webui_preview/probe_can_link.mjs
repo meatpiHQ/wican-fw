@@ -36,7 +36,7 @@ function boot(hash, preset) {
 const tileText = (w) => {
   const t = [...w.document.querySelectorAll("#view *")].find((e) => e.children.length === 0 && e.textContent.trim() === "CAN Bus");
   let n = t;
-  for (let i = 0; i < 4 && n && !/K|Auto|—/.test(n.textContent.replace("CAN Bus", "")); i++) n = n.parentElement;
+  for (let i = 0; i < 4 && n && !/K|Auto|-/.test(n.textContent.replace("CAN Bus", "")); i++) n = n.parentElement;
   return n ? n.textContent.replace(/\s+/g, " ").trim() : "";
 };
 
@@ -56,7 +56,7 @@ const tileText = (w) => {
     const t = tileText(w);
     check("Status tile: " + name, rate.test(t) && cap.test(t), t);
     check("  no page errors (" + name + ")", errs.length === 0, errs);
-    check("  no long dash in the caption (" + name + ")", !/—/.test(t.replace("CAN Bus", "")), t);
+    check("  no long dash in the caption (" + name + ")", !/\u2014/.test(t.replace("CAN Bus", "")), t);
     w.close();
   }
 
@@ -72,7 +72,7 @@ const tileText = (w) => {
     check("Automate: the banner links to the settings", !!banner && !!banner.querySelector('a[href="#/automate/settings"]'));
     const chip = [...view.querySelectorAll(".chip")].find((c) => /Paused: nothing is sent to this bus/.test(c.textContent));
     check("Automate: the state chip says paused", !!chip);
-    check("Automate: no long dash in the new text", !!banner && !/—/.test(banner.textContent));
+    check("Automate: no long dash in the new text", !!banner && !/\u2014/.test(banner.textContent));
     check("Automate: no page errors", errs.length === 0, errs);
     w.close();
   }
@@ -96,7 +96,7 @@ const tileText = (w) => {
     check("Automate: it prints the firmware's sentence", !!banner && banner.textContent.includes("The init of row Soc sets protocol 6 (500 kbit/s)") && banner.textContent.includes("250 kbit/s"));
     check("Automate: it links to the parameters", !!banner && !!banner.querySelector('a[href="#/automate/parameters"]'));
     check("Automate: polling is not shown as paused", ![...view.querySelectorAll(".chip")].some((c) => /Paused: nothing is sent/.test(c.textContent)));
-    check("Automate: no long dash in the refused text", !!banner && !/—/.test(banner.textContent));
+    check("Automate: no long dash in the refused text", !!banner && !/\u2014/.test(banner.textContent));
     check("Automate: no page errors (refused)", errs.length === 0, errs);
     w.close();
   }

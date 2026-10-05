@@ -1,7 +1,7 @@
 /**
  * @file main_bench.c
  * @brief Composition glue: the MQTT bench surface (BENCHMARKS.md rows are
- *        measured through this). Driven from the bench host over MQTT —
+ *        measured through this). Driven from the bench host over MQTT,
  *        which also exercises the handler registry end to end:
  *
  *  - `<prefix>/bench/cmd`  {"n":1000,"size":512[,"gap_ms":5]}
@@ -57,7 +57,7 @@ static StaticTask_t s_tcb;         /* internal: FreeRTOS object */
 static uint8_t s_payload[BENCH_MAX_SIZE] EXT_RAM_BSS_ATTR;
 
 /* The bench task's 8 KB INTERNAL stack (download() ends in flash
-   writes, TLS handshakes run on it — §2 corollary) is allocated on the
+   writes, TLS handshakes run on it, §2 corollary) is allocated on the
    FIRST bench command: a dev surface must not tax production boots. */
 #define BENCH_STACK_BYTES 8192
 
@@ -134,7 +134,7 @@ static void on_cmd(const char *topic, const uint8_t *data, size_t len,
 }
 
 /** http_client_manager exercise (GET or download), result to
- *  bench/result. Runs in the bench task — a normal-task consumer, the
+ *  bench/result. Runs in the bench task: a normal-task consumer, the
  *  component's intended calling context. */
 static void run_http_cmd(const bench_cmd_t *cmd)
 {

@@ -1,4 +1,4 @@
-# uds_bindings.be — every UDS binding of the script engine against one ECU
+# uds_bindings.be: every UDS binding of the script engine against one ECU
 # (the bench ECU simulator on 7E0/7E8 by default; run_be.py --tx/--rx
 # retarget the header below). Prints PASS/FAIL lines and a final
 # "SCRIPT UDS PASS|FAIL". Sim answers used: 10 02 -> 50 02 .., 3E 00 -> 7E 00,

@@ -18,7 +18,7 @@ import urllib.request
 DUT = sys.argv[1] if len(sys.argv) > 1 else "10.42.0.62"
 SRV_TUN = "10.66.0.1"
 DUT_TUN = "10.66.0.2"
-TUN_NET = "10.66.0.0"   # AllowedIPs NETWORK address — regression gate for
+TUN_NET = "10.66.0.0"   # AllowedIPs NETWORK address: regression gate for
                         # BUG_WG_NETIF_ADDR (netif must still come up as
                         # DUT_TUN, not this)
 PORT = 51821

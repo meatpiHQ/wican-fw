@@ -9,7 +9,7 @@ apps that idle for an external driver pass their ready line instead
     python serial_capture.py COM7 115200 60 out.log ["TEST DONE"]
 
 The verdict line reports E/W log-line counts (2026-07-19 health pass).
-Not fatal by default — negative-path tests provoke errors on purpose —
+Not fatal by default (negative-path tests provoke errors on purpose)
 but visible in every log and report; grep `errors=` to audit a run.
 """
 import re

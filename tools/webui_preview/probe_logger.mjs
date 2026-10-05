@@ -2,7 +2,7 @@
    chips from the real card state, per-stream settings cards with
    progressive disclosure, the guided CAN filter, retention totals, the
    log-files list and the Files deep link. Runs against preview.html
-   (mock API) under jsdom — no device needed. */
+   (mock API) under jsdom: no device needed. */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";

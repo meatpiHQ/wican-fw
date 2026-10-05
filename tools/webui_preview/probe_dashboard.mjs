@@ -1,7 +1,7 @@
 /* Interaction probe for the reworked Dashboard (2026-09-06): state chip,
    group switches + poll stats, sparkline tiles with the parameter's own
    range / PID / age, stale fading, external values and the empty states.
-   Runs against preview.html (mock API) under jsdom — no device needed. */
+   Runs against preview.html (mock API) under jsdom: no device needed. */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";

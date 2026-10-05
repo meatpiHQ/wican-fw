@@ -76,7 +76,7 @@ async function load(report) {
     && st.style.display === "block", [st.textContent, p.calls]);
   check("the copy helper leaves no textarea behind", p.d.querySelectorAll("textarea").length === 0);
   check("the warning line names what the page offers", p.d.querySelector(".warning-text").textContent.includes("crash report, firmware update and factory reset"));
-  check("no long dash on the page", !/—/.test(p.d.body.textContent));
+  check("no long dash on the page", !/\u2014/.test(p.d.body.textContent));
 
   /* the two things the page always did */
   p.w.confirmFactoryReset();

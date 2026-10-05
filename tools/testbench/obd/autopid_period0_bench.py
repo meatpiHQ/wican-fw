@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""autopid event-pipeline cost at period_ms=0 (max poll rate) — the
+"""autopid event-pipeline cost at period_ms=0 (max poll rate): the
 deferred Phase-1b measure (TASK_autopid.md). Runs ON rpi001 against the
 bench ECU sim feeding the DUT's stored autopid parameters.
 
@@ -144,7 +144,7 @@ def main():
 
     # flags live in the settings component (reboot-to-apply); the PID/
     # group tables live in /api/autopid/config (file-backed, PUT reloads
-    # LIVE — first live run 2026-07-26: the original draft walked the
+    # LIVE, first live run 2026-07-26: the original draft walked the
     # settings object, which holds only flags)
     flags_before = api(ip, "/api/settings/autopid")
     for k in ("degraded", "pending_reboot"):
@@ -156,12 +156,12 @@ def main():
 
     if not periods:
         print("FATAL: no period_ms in the stored autopid tables "
-              "(/api/autopid/config) — configure parameters first (the "
+              "(/api/autopid/config), configure parameters first (the "
               "bench DUT usually has the sim profile loaded)")
         return 1
 
     # NOTE: the sampling window sees a ~4 Hz observer floor (we poll
-    # /api/autopid every 250 ms) — rates are lower bounds per param.
+    # /api/autopid every 250 ms), rates are lower bounds per param.
 
     # ---- baseline at the stored periods ----
     enabled_flip = not flags_before.get("enabled", False)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""UDS reprogramming (ECU-flash) simulator on PCAN — for exercising the
+"""UDS reprogramming (ECU-flash) simulator on PCAN: for exercising the
 J2534 PassThru device against realistic reflash flows AND their failure
 modes.
 

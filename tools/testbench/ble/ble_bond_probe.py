@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""BLE bond/security probe — runs ON rpi001 (BlueZ + bleak + UB500).
+"""BLE bond/security probe: runs ON rpi001 (BlueZ + bleak + UB500).
 
 One probe per invocation; the PC-side orchestrator (ble_bonding_test.py)
 sequences them with a DUT reboot in between. Modes:
 
   wrongkey   connect and read Device Info while the agent supplies a WRONG
-             passkey — MUST be rejected (authenticated pairing fails =>
+             passkey: MUST be rejected (authenticated pairing fails =>
              every char is gated behind MITM; on un-gated firmware the DI
              read would succeed regardless of the passkey)
-  pair       pair with the static passkey, then read Device Info — proves
+  pair       pair with the static passkey, then read Device Info, proves
              pairing works with the NVS store and a paired read succeeds
   reconnect  connect and read an ENC+AUTHEN char WITHOUT calling pair()
-             and WITHOUT the passkey agent firing — proves the DUT kept
+             and WITHOUT the passkey agent firing, proves the DUT kept
              its bond across a reboot (no re-pair / no re-passkey)
 
 Prints one machine-readable RESULT: line. Needs python3-dbus + bleak.
@@ -108,13 +108,13 @@ async def main():
                 try:
                     val = await c.read_gatt_char(UUID_SERIAL)
                     print(f"  read returned {len(val)} bytes: {bytes(val)!r}")
-                    print("RESULT: wrongkey_read=LEAKED")  # bad — not gated
+                    print("RESULT: wrongkey_read=LEAKED")  # bad, not gated
                     return 1
                 except Exception as e:
                     print(f"RESULT: wrongkey_read=blocked ({type(e).__name__})")
                     return 0
         except Exception as e:
-            # rejected at the encrypted-read step by dropping the link —
+            # rejected at the encrypted-read step by dropping the link,
             # still "not readable without the right passkey"
             print(f"RESULT: wrongkey_read=blocked ({type(e).__name__})")
             return 0

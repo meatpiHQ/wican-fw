@@ -26,7 +26,7 @@ USB = sys.argv[1] if len(sys.argv) > 1 else "192.168.82.1"
 BENCH = sys.argv[2] if len(sys.argv) > 2 else "rpi001"
 PI_AP = sys.argv[3] if len(sys.argv) > 3 else "10.42.0.1"
 PORT = 8199
-DEAD_PORT = 8231  # nothing listens here — the failover primary
+DEAD_PORT = 8231  # nothing listens here: the failover primary
 SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10"]
 
 fails = []
@@ -64,7 +64,7 @@ def api(path, method="GET", body=None, retries=4):
 
 def pi(cmd, timeout=30):
     # Windows OpenSSH has no ControlMaster; each call is a cold handshake and
-    # one occasionally spikes past the timeout — retry once before giving up.
+    # one occasionally spikes past the timeout: retry once before giving up.
     last = ""
     for _ in range(2):
         try:
@@ -99,7 +99,7 @@ def port_open(ip, port, timeout=3):
 
 # The receiver captures each webhook POST in-memory and hands the whole
 # list back on GET /__dump. The PC pulls it over PLAIN HTTP (the server
-# binds 0.0.0.0, reachable at the bench IP) — NOT ssh — so a flaky ssh
+# binds 0.0.0.0, reachable at the bench IP) (NOT ssh) so a flaky ssh
 # link can't turn "delivered" into "0 posts" (burned 2026-07-09).
 RECEIVER = r'''
 import http.server, json, sys
@@ -127,7 +127,7 @@ _recv_proc = None
 
 def start_receiver(port, outfile):
     """Run the receiver in the FOREGROUND of a backgrounded ssh the PC
-    holds open — the only reliable way to keep a remote process alive for
+    holds open, the only reliable way to keep a remote process alive for
     the test (setsid/nohup/disown all die with the one-shot ssh channel)."""
     global _recv_proc
     stop_receiver()
@@ -137,7 +137,7 @@ def start_receiver(port, outfile):
          f"python3 -u /tmp/ha_recv.py {port}"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     # probe the port from the PC (server binds 0.0.0.0) instead of an
-    # ss-over-ssh poll — one cold ssh per iteration was the flake source.
+    # ss-over-ssh poll: one cold ssh per iteration was the flake source.
     ip = bench_ip()
     for _ in range(10):
         if port_open(ip, port):
@@ -160,7 +160,7 @@ def stop_receiver():
 
 def received(outfile=None):
     # pull the captured posts over plain HTTP from the PC (no ssh in the
-    # verification hot path — ssh flakiness must not read as "0 posts")
+    # verification hot path, ssh flakiness must not read as "0 posts")
     try:
         with urllib.request.urlopen(f"http://{bench_ip()}:{PORT}/__dump",
                                     timeout=5) as r:
@@ -187,12 +187,12 @@ def main():
 
     # [RIG] fast precondition: this leg drives the DUT over USB-NCM.
     # Without the NCM device role up, the first api() call dies in a raw
-    # 48 s urllib traceback — classify and fail in 2 s instead.
+    # 48 s urllib traceback: classify and fail in 2 s instead.
     try:
         socket.create_connection((USB, 80), timeout=2).close()
     except OSError:
         check(f"[RIG] USB-NCM {USB} reachable", False,
-              "DUT usb role must be device/ncm — usb_host_manager "
+              "DUT usb role must be device/ncm, usb_host_manager "
               "{enabled:true, role:'device', device_class:'ncm'} + submit; "
               "or skip this leg")
         sys.exit(1)

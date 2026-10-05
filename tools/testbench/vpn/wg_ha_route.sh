@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# wg_ha_route.sh — the HA-over-VPN bench route (2026-09-09).
+# wg_ha_route.sh: the HA-over-VPN bench route (2026-09-09).
 #
 # The "car on the road talks to Home Assistant through its VPN" scenario:
 #   * betty (public VPS) runs a WireGuard server 10.9.0.1/24 on udp/51820
 #     and forwards between its peers;
-#   * rpi001 (the bench HA, `~/ha`) is peer 10.9.0.3 — HA's internal_url is
+#   * rpi001 (the bench HA, `~/ha`) is peer 10.9.0.3: HA's internal_url is
 #     then http://10.9.0.3:8123 and the integration registers THAT webhook
 #     URL on the device;
 #   * the DUT is peer 10.9.0.2 through the firmware's own vpn_manager
 #     (split mode: AllowedIPs 10.9.0.0/24, no default route), so it reaches
-#     the bench HA at 10.9.0.3 from ANY uplink — the bench hotspot or the
-#     ESPNetLink LTE path — and HA reaches the DUT at 10.9.0.2 (the
+#     the bench HA at 10.9.0.3 from ANY uplink (the bench hotspot or the
+#     ESPNetLink LTE path) and HA reaches the DUT at 10.9.0.2 (the
 #     integration's `vpn_ip` backup endpoint).
 #
 # Keys (same rules as wg_public_soak.sh): the server keypair is generated ON
@@ -23,7 +23,7 @@
 #   wg_ha_route.sh status          # server-side wg show, rpi001 tunnel, DUT /api/vpn
 #   wg_ha_route.sh down [--wipe]   # tear down (idempotent); --wipe blanks the DUT config
 #
-# Env: DUT_IP (default 10.42.1.194 — the DUT on the wtest0 hotspot).
+# Env: DUT_IP (default 10.42.1.194, the DUT on the wtest0 hotspot).
 set -u
 SRV=betty
 PI_HOST=rpi001

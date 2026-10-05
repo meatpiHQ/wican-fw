@@ -72,7 +72,7 @@ ok2 = results["VTVERS"] != b""
 ok3 = b"41 00" in results["0100"] or b"4100" in results["0100"].replace(b" ", b"")
 print(f"single-client: ATI={'OK' if ok1 else 'FAIL'} VTVERS={'OK' if ok2 else 'FAIL'} 0100={'OK' if ok3 else 'FAIL'}")
 
-# --- test 2: fan-out — second client connects, one sends, both receive ---
+# --- test 2: fan-out, second client connects, one sends, both receive ---
 ws2 = websocket.WebSocket()
 ws2.connect(URL, timeout=5)
 time.sleep(0.3)

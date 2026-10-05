@@ -1,6 +1,6 @@
 # DBC test fixtures
 
-Real-world DBC files for `tools/testbench/dbc_real_test.py` — the
+Real-world DBC files for `tools/testbench/dbc_real_test.py`: the
 device's parser (`autopid_dbc_codec.c`) is cross-checked field-by-field
 against an independent reference parser over these.
 

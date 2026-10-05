@@ -553,7 +553,7 @@
     }
     if (method === "POST" && path === "/api/scripts/stop") { state.stops++; return J({ ok: true }); }
     if (method === "GET" && path === "/api/logger/export") {
-      /* the params stream: 120 points, 30 s apart, for the requested name — NDJSON or CSV rows */
+      /* the params stream: 120 points, 30 s apart, for the requested name, NDJSON or CSV rows */
       const fmt = S.data_logger && S.data_logger.values.format;
       if (fmt !== "jsonl" && fmt !== "csv") return T("params stream is not jsonl or csv", 400);
       const name = q.get("name") || "RPM", nowMs = Date.now(), base = state.dash[name] != null ? state.dash[name] : 50;
@@ -613,7 +613,7 @@
     }
     if (method === "POST" && path === "/api/usb/acm/cmd") {
       // canned dongle-console replies captured from a live ESPNetLink
-      // (v1.22, BG95-M5) — echo + payload + esp> prompt, as on the wire
+      // (v1.22, BG95-M5): echo + payload + esp> prompt, as on the wire
       const cmd = (body && body.cmd) || "";
       const wrap = (b) => J({ ok: true, response: cmd + "\r\n\r\r\n" + b + "\r\r\nOK\r\r\nesp> ", connected: true });
       if (cmd.startsWith("lte -j")) return wrap(JSON.stringify({
@@ -664,7 +664,7 @@
     return J({ error: "mock: " + method + " " + path + " not implemented" }, 404);
   }
 
-  /* XMLHttpRequest over the same mock — pages that want upload progress use XHR */
+  /* XMLHttpRequest over the same mock: pages that want upload progress use XHR */
   window.XMLHttpRequest = class {
     constructor() { this.upload = {}; this.status = 0; this.responseText = ""; }
     open(m, u) { this._m = m; this._u = u; }

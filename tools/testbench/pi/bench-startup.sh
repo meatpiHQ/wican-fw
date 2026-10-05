@@ -1,5 +1,5 @@
 #!/bin/bash
-# bench-startup — assert the canonical bench state at boot (plan §4.2).
+# bench-startup: assert the canonical bench state at boot (plan §4.2).
 # A Pi reboot converges to a KNOWN state instead of whatever NM remembers.
 # Logs "BENCH READY" (journal: journalctl -t bench-startup) when done.
 BENCH_TAG=bench-startup
@@ -29,11 +29,11 @@ done
 systemctl is-active --quiet mosquitto || sudo systemctl start mosquitto
 sudo systemctl enable --now wican-bench-watchdog.timer >/dev/null 2>&1
 
-# nothing load-bearing lives in /tmp by policy (tmpfs — re-scp per run);
+# nothing load-bearing lives in /tmp by policy (tmpfs: re-scp per run);
 # state that must survive reboots belongs in $BENCH_STATE_DIR.
 
 # compat shims: pre-rename scripts read dnsmasq-wlan{0,1}.leases; point
-# the old names at the role-named files (dangling until a client joins —
+# the old names at the role-named files (dangling until a client joins,
 # same failure mode as a missing file, which is what those scripts expect)
 sudo ln -sfn dnsmasq-wint0.leases  /var/lib/NetworkManager/dnsmasq-wlan0.leases
 sudo ln -sfn dnsmasq-wtest0.leases /var/lib/NetworkManager/dnsmasq-wlan1.leases

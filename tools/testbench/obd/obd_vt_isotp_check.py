@@ -1,7 +1,7 @@
 """OBD bench check: 4 KB ISO-TP transmit via VTFullyRequestCk (task 11.3),
 verified with a REAL ISO-TP stack (python-can + can-isotp), per the task
 spec: the PC side is a standards-compliant ISO 15765-2 receiver, not a
-hand-rolled parser — it owns flow control (BS/STmin), sequence-number
+hand-rolled parser, it owns flow control (BS/STmin), sequence-number
 checking and reassembly, and reports any protocol violation by the chip.
 
 Command syntax (bench-verified 2026-07-03 on MIC3624 V2.3.22):
@@ -63,7 +63,7 @@ def snapshot():
 
 def on_isotp_error(error):
     # any deviation the stack sees (bad sequence number, overflow, timeout)
-    # is a finding about the chip's ISO-TP implementation — record them all
+    # is a finding about the chip's ISO-TP implementation, record them all
     isotp_errors.append(f"{error.__class__.__name__}: {error}")
 
 

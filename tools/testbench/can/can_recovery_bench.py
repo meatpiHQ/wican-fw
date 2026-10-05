@@ -9,21 +9,21 @@ automatic recovery added 2026-07-10 (can_core_recovery policy):
          blasts while the DUT transmits ID 0x000 (auto-retransmit) ->
          every TX attempt takes a bit error -> TEC +8 -> 256 = BUS-OFF
          in <100 ms.
-  leg 3  recovery: /api/can shows recoveries incremented + running —
+  leg 3  recovery: /api/can shows recoveries incremented + running,
          no reboot (round 1 restart is immediate; round 2, inside the
          60 s stability window, exercises the 1 s backoff).
   leg 4  traffic after recovery: byte-exact both directions at 500k.
-  leg 5  repeat legs 2-4 once (episode #2) — counters must reach 2.
+  leg 5  repeat legs 2-4 once (episode #2): counters must reach 2.
 
 The injection geometry is delicate (probed 2026-07-10, all on the wire):
   - matched-baud or silent peer: no-ACK pins TEC at 128 (error-passive
-    ACK exemption) — never bus-off. The PEAK-wedge post-mortem case.
+    ACK exemption): never bus-off. The PEAK-wedge post-mortem case.
   - fast/saturating storm (125k/250k back-to-back): the inter-frame gap
     is < 11 recessive bits at 500k, the DUT can never START a frame ->
     TEC freezes (~115).
-  - without auto_reset the PEAK itself bus-offs first (~0.8 s) — the
+  - without auto_reset the PEAK itself bus-offs first (~0.8 s): the
     DUT's error flags stomp it 100x more often than vice versa.
-  - 50k storm: 2 ms frames with 60 us gaps = 30 bit-times at 500k —
+  - 50k storm: 2 ms frames with 60 us gaps = 30 bit-times at 500k,
     room to start a frame, never room to finish it. TX id MUST be 0x000:
     an all-dominant arbitration field can't lose arbitration, so the
     error-passive DUT (which restarts 8 suspend-bits later, putting the
@@ -155,7 +155,7 @@ class Blaster:
                 self.bus.send(msg, timeout=0.02)
                 self.sent += 1
             except Exception:
-                # error-passive / TX queue full while the bus is chaos —
+                # error-passive / TX queue full while the bus is chaos,
                 # expected, keep hammering
                 time.sleep(0.002)
 
@@ -240,7 +240,7 @@ def force_bus_off(round_no, off_before):
     """Blast at 50k while the DUT transmits id 0x000 (see module doc).
 
     Occasionally the PEAK enters a reset-thrash mode (auto_reset flushes
-    its queue faster than it saturates the wire — seen right after the
+    its queue faster than it saturates the wire, seen right after the
     datalog FULL BLAST leg): the mostly-quiet wire turns the DUT's
     attempts into ACK errors, which PIN TEC at 128 instead of climbing
     to 256. A FRESH storm bus clears that mode, so retry once."""
@@ -253,10 +253,10 @@ def force_bus_off(round_no, off_before):
         blaster = Blaster(storm).start()
         try:
             # SUSTAINED induction TX (2026-07-22): fail_retry_cnt is
-            # FINITE now (512 — the ELM-style give-up that killed the
+            # FINITE now (512, the ELM-style give-up that killed the
             # error-passive-forever pathology), so a one-shot queued
             # frame stops erroring after ~130 ms and TEC plateaus below
-            # 256. Keep submitting through the window — each frame is
+            # 256. Keep submitting through the window: each frame is
             # another retry burst, exactly what sustained app traffic
             # (autopid polling) does on a faulted bus.
             end = time.time() + 15
@@ -281,7 +281,7 @@ def force_bus_off(round_no, off_before):
         if st is not None and st["bus_off"] > off_before:
             break
         print(f"  round {round_no} attempt {attempt}: no bus-off "
-              f"(blast sent {blaster.sent}) — fresh storm bus")
+              f"(blast sent {blaster.sent}), fresh storm bus")
         time.sleep(1)
 
     ok = st is not None and st["bus_off"] > off_before

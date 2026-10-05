@@ -42,7 +42,7 @@ const btn = (re, root = card()) => [...root.querySelectorAll("button")].find((b)
   check("link chips (network / MQTT)", /Network up/.test(txt) && /MQTT connected/.test(txt));
   check("master switch row", /Master switch/.test(txt));
   check("legacy timer-rule import banner (mock still has dest1 rule)", /timer rules/.test(txt) && !!btn(/Import and remove/));
-  check("no long dash in the card", !txt.includes("—"));
+  check("no long dash in the card", !txt.includes("\u2014"));
 
   /* expand the HTTPS row: auth, cert set dropdown with the mock set, first-push switch */
   const carets = [...c.querySelectorAll("button")].filter((b) => b.textContent.trim() === "▸");

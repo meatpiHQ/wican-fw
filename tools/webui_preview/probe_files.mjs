@@ -1,4 +1,4 @@
-/* Probe (2026-09-07, meatpi): the File Manager — storage landing, navigation with the
+/* Probe (2026-09-07, meatpi): the File Manager, storage landing, navigation with the
    URL following the folder, filter/sort, in-use marking of the logger's active file,
    New folder, upload (XHR progress) via drop, text preview, single + bulk delete, the
    SD-not-mounted state, and the sidebar rename. Runs over the mock API. */

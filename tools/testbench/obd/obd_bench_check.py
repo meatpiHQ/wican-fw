@@ -1,4 +1,4 @@
-"""OBD bench verification (PC side) — components/obd_chip bench (BENCH.md).
+"""OBD bench verification (PC side): components/obd_chip bench (BENCH.md).
 
 Run AFTER flashing the bench-probe app (it bridges UART2 <-> chip):
 

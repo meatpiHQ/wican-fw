@@ -15,7 +15,7 @@ import bench_ports  # noqa: E402
 
 args.port = bench_ports.resolve(args.port, "psu", "COM2016")
 
-import serial  # noqa: E402 — pyserial (IDF venv has it)
+import serial  # noqa: E402, pyserial (IDF venv has it)
 
 try:
     s = serial.Serial(args.port, args.baud, timeout=2)

@@ -1,4 +1,4 @@
-# reflash.be — script-driven ECU reflash from an SD firmware file.
+# reflash.be: script-driven ECU reflash from an SD firmware file.
 #
 # Reads /sd/fw/ecu.bin and flashes it to the ECU at TX/RX (7E0/7E8) using the
 # ISO 14229 programming sequence the WiCAN ECU simulator implements:

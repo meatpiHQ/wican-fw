@@ -1,15 +1,15 @@
-"""BLE performance benchmark for ble_manager — runs ON rpi001.
+"""BLE performance benchmark for ble_manager: runs ON rpi001.
 
 Three measured scenarios against the ble_manager test app (results go into
 components/ble_manager/BENCHMARKS.md):
 
-  1. TX (notify) throughput  — CLI "blast <N>": the DUT pushes N bytes
+  1. TX (notify) throughput:   CLI "blast <N>": the DUT pushes N bytes
      through ble_manager_send -> FFF1; we time first->last byte and verify
      the byte count (the pattern is 0..127 cycling in 128-byte chunks).
-  2. Echo (bidirectional)    — write-without-response flat out for --secs,
+  2. Echo (bidirectional):     write-without-response flat out for --secs,
      draining the echoed FFF1 notifications: every byte crosses the bridge
      pump twice.
-  3. RTT                     — 100 write->notify round trips, p50/p95/p99.
+  3. RTT:                      100 write->notify round trips, p50/p95/p99.
 
 Usage: python3 ble_perf.py [--passkey 123456] [--secs 20] [--blast 262144]
 Prints one RESULT line per scenario. Expected final line: BLE PERF DONE

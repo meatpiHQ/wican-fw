@@ -7,7 +7,7 @@ name when the corruption was found; this is the second, thorough pass on a PC.
 Two strategies, best first:
   1. the sqlite3 command-line shell's `.recover` (needs sqlite3 >= 3.29 on PATH)
   2. a plain Python walk: params, then records/frames in rowid order, stopping at
-     the first read error — everything before it is kept.
+     the first read error, everything before it is kept.
 The output is a normal logger .db (params + records + frames) that the Logger
 page, wdl_dump-style tooling and any SQLite client can open. A file the firmware
 salvaged on the device lacks the ts index (no temp files there for the sort);

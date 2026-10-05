@@ -2,11 +2,11 @@
 """USB-NCM byte-conservation bench (standard §7 performance-truth).
 
 Runs over the DUT's CDC-NCM device-role link (PC 192.168.82.2 <->
-DUT 192.168.82.1 — the connector role is SOFTWARE-switched via
+DUT 192.168.82.1: the connector role is SOFTWARE-switched via
 usb_host_manager settings, see TESTING.md). The PC sends EXACTLY N UDP
 datagrams of known size to the DUT's fw iperf server (started over
 ws_cli THROUGH the same NCM link); the server's `iperf -r` total must
-account for every byte. USB bulk is a reliable transport — the bound
+account for every byte. USB bulk is a reliable transport: the bound
 is tight (0.5%).
 
 Run on the PC (needs the DUT in role=device/class=ncm):

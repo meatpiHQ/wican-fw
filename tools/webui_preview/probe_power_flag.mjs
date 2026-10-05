@@ -1,5 +1,5 @@
 /* Probe (2026-09-07, meatpi): "Wake on motion" is sleep-related in users' eyes, so the
-   Power Saving page must flag it while it is on — and say what it really does (bump
+   Power Saving page must flag it while it is on, and say what it really does (bump
    events, no wake from sleep). The Motion card shows each detector's knobs only while
    that detector is on, and the threshold help no longer claims a knock wakes the device.
    Runs over the mock API (the mock device has WoM on). */

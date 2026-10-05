@@ -1,9 +1,9 @@
 #!/bin/bash
-# wg-bench — start/stop the LOCAL WireGuard test server on rpi001.
+# wg-bench: start/stop the LOCAL WireGuard test server on rpi001.
 #
 # LOCAL-ONLY test rig (never expose a public endpoint for bench work):
 # serves 10.66.0.1/24 on udp/51821 at the Pi's hotspot address
-# (10.42.0.1), point-to-point to the WiCAN (peer 10.66.0.2/32) — no NAT,
+# (10.42.0.1), point-to-point to the WiCAN (peer 10.66.0.2/32), no NAT,
 # no ip_forward. Config: /etc/wireguard/wg-bench.conf.
 #
 #   wg-bench start                 bring the server up (idempotent)

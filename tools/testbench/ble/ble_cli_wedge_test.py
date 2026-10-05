@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""BLE CLI wedge bench (PC orchestrator) — MAIN firmware.
+"""BLE CLI wedge bench (PC orchestrator): MAIN firmware.
 
-Enables BLE (WiFi stays ON — post-cliff this is the supported combo),
+Enables BLE (WiFi stays ON: post-cliff this is the supported combo),
 runs ble_cli_wedge_pi.py on the bench Pi (UB500 + bleak) against the
 real cmdline_manager CLI characteristics, restores BLE off. See the Pi
 script for the legs (quick / wedge / flood).

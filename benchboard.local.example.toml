@@ -1,4 +1,4 @@
-# BenchBoard per-machine overrides — COPY THIS FILE to
+# BenchBoard per-machine overrides: COPY THIS FILE to
 # benchboard.local.toml (gitignored) and edit for YOUR bench. Everything
 # here is optional; without the file the tracked defaults apply.
 # Full format: tools/testbench/instruments/README.md.
