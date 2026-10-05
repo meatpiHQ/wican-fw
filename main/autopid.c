@@ -925,7 +925,9 @@ void autopid_request_data(void)
 
 char *autopid_data_read(void)
 {
-    static char *json_str = NULL;
+    // Not static: the caller owns and frees the returned string, and this
+    // runs from both the webhook task and the /autopid_data HTTP handler.
+    char *json_str = NULL;
     
     if (!autopid_values || !autopid_values_mutex) {
         ESP_LOGE(TAG, "Invalid autopid_values or mutex");
