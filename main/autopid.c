@@ -1690,7 +1690,7 @@ static void autopid_task(void *pvParameters)
                                         ESP_LOGI(TAG, "Processing custom/specific PID");
                                         if(param->expression && 
                                         evaluate_expression((uint8_t*)param->expression, 
-                                                            elm327_response.data, 0, &result))
+                                                            elm327_response.data, elm327_response.length, 0, &result))
                                         {
                                             if (param->min != FLT_MAX && result < param->min) {
                                                 ESP_LOGW(TAG, "Parameter %s value %.2f below min %.2f - ignoring", 
