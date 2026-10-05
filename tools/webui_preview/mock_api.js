@@ -52,6 +52,8 @@
     /* the CAN link and autopid's bus guard (2026-10-03): null = a healthy 500k bus, nothing parked */
     canLink: (window.__mockPreset || {}).can || null,
     busGuard: (window.__mockPreset || {}).busGuard || null,
+    /* rows not sent because their own init sets a protocol this bus cannot take (2026-10-05): {reason, ms} */
+    busRefused: (window.__mockPreset || {}).busRefused || null,
     /* trouble codes (2026-10-03): null = DTC off, no scan yet; "obd" = an
        OBD-II car with codes; "wwh" = an ISO 27145 vehicle, two ECUs */
     dtc: (window.__mockPreset || {}).dtc || null,
@@ -271,7 +273,10 @@
       /* the bus guard (2026-10-03): state.busGuard = a parked poller's reason */
       bus_guard: state.busGuard
         ? { bus: "live", bus_kbps: 250, verdict: "park", parked: true, reason: state.busGuard }
-        : { bus: "silent", bus_kbps: 0, verdict: "allow", parked: false, reason: "vehicle bus silent" },
+        : state.busRefused
+          ? { bus: "live", bus_kbps: 250, verdict: "allow", parked: false, reason: "vehicle bus live at 250 kbit/s",
+              refused: 12, refused_reason: state.busRefused.reason, refused_ms: state.busRefused.ms }
+          : { bus: "silent", bus_kbps: 0, verdict: "allow", parked: false, reason: "vehicle bus silent", refused: 0 },
     }); },
     /* the registry as the firmware serves it (2026-09-17): keys per event, params_schema + undoable per action, value prefixes */
     "/api/events/sources": () => J([
@@ -325,10 +330,27 @@
       { name: "wifi", state: "B", core: 0, prio: 23, stack_hw: 1210, runtime_us: 1893201 },
     ] }),
     "/api/certs": () => J({ sets: [{ name: "homeca", ca: true, cert: false, key: false }] }),
-    "/api/restart/history": () => J({ boot_count: 42, unexpected_resets: 1, records: [
-      { seq: 42, ...state.lastRestart, flags: 0, boot_time: now() - 8040, time_valid: true, request_time: now() - 8041, request_uptime_ms: 120033 },
-      { seq: 41, reason: "poweron", planned: false, planned_reason: "none", source: "unknown", flags: 0, boot_time: now() - 90000, time_valid: true, request_time: 0, request_uptime_ms: 0 },
+    /* a probe puts a crash note on this boot's record through
+       __mockState.lastRestart.crash, and a crash report into flash through
+       __mockState.crashReport = {stored_time, time_valid, firmware, streak,
+       parked, crash} (restart_tracker/HTTP_API.md) */
+    "/api/restart/history": () => J({ boot_count: 42, unexpected_resets: 1, elf_sha: "76a961dd5f08aabb",
+      brake: { verdict: "normal", streak: 0, limit: 3, parks: 0, settled: true, settle_s: 600, report_budget: 4 },
+      ...(state.crashReport ? { report: state.crashReport } : {}), records: [
+      { seq: 42, mode: "normal", settled: true, ...state.lastRestart, flags: 0, boot_time: now() - 8040, time_valid: true, request_time: now() - 8041, request_uptime_ms: 120033 },
+      { seq: 41, reason: "poweron", planned: false, planned_reason: "none", source: "unknown", mode: "normal", settled: true, flags: 0, boot_time: now() - 90000, time_valid: true, request_time: 0, request_uptime_ms: 0 },
     ] }),
+    /* the stored report as the firmware's text (restart_tracker_report_core.c) */
+    "/api/restart/report": () => {
+      const r = state.crashReport;
+      if (!r) return J({ error: "no crash report is stored" }, 404);
+      const c = r.crash || {};
+      return T("WiCAN crash report\nDevice:    68ee8f5a653d\nFirmware:  " + (r.firmware || "not the one that stored this report")
+        + "\nImage:     " + (c.elf_sha || "not recorded")
+        + "\nStored:    " + (r.time_valid ? new Date(r.stored_time * 1000).toISOString().replace("T", " ").slice(0, 19) + " UTC" : "the clock was not set")
+        + (r.streak >= 2 || r.parked ? "\nLoop:      " + r.streak + " crashes in a row" + (r.parked ? "; the device parked itself" : "") : "")
+        + "\nCrash:     " + (c.summary || "") + ((c.backtrace || []).length ? "\nBacktrace: " + c.backtrace.join(" ") : "") + "\n");
+    },
     "/api/events/log": () => J({
       stats: { published: 812, fired: 640, action_errors: 1 },
       events: [
@@ -502,6 +524,10 @@
         else txt = new TextDecoder().decode(opts.body);
       } catch (e) { txt = ""; }
       state.files[q.get("path")] = txt; return J({ ok: true, path: q.get("path"), size: txt.length });
+    }
+    if (method === "DELETE" && path === "/api/restart/report") {
+      state.crashReport = null; state.crashReportClears = (state.crashReportClears || 0) + 1;
+      return J({ cleared: true });
     }
     if (method === "DELETE" && path === "/api/fs/file") {
       const p = q.get("path") || "";

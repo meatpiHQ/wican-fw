@@ -15,16 +15,23 @@ as an argument and the chip follows its protocol (ATTP).
 
 As a module: sim_get/sim_set/sim_status, dut_can(). The simulator's REST is
 reachable from the PC only (USB-NCM 192.168.8.1); its settings PUT replaces
-the whole object, hence GET, modify, PUT. A submit reboots it (~20 s).
+the whole object, hence GET, modify, PUT. A submit reboots it (~20 s). On a
+LAN that uses the same subnet (a router at 192.168.8.1) the requests are
+bound to the simulator's own link: sim_net.py.
 """
 import argparse
 import json
+import os
 import sys
 import time
 import urllib.error
 import urllib.request
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import sim_net  # noqa: E402
+
 SIM_URL = "http://192.168.8.1"
+sim_net.install(SIM_URL)
 SIM_DEFAULT = {"bitrate": "500", "id_format": "11bit", "enabled": True}
 SIM_REBOOT_WINDOW = 60
 
@@ -120,6 +127,7 @@ def main():
     for p in (st, sm):
         p.add_argument("--sim", default=SIM_URL)
     a = ap.parse_args()
+    sim_net.install(a.sim)
 
     if a.what == "status":
         print("simulator settings:", json.dumps(sim_get("ecu_sim", a.sim)))

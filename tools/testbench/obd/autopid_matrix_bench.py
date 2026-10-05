@@ -40,11 +40,17 @@ Expected final line: AUTOPID MATRIX PASS (a WARN line marks the open
 filter-on-a-flooded-bus finding — see the autopid README).
 """
 import json
+import os
 import statistics
 import sys
 import time
 import urllib.error
 import urllib.request
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib"))
+import sim_net  # noqa: E402  (the simulator's own link on any LAN)
+
+sim_net.install()
 
 DUT = "localhost:8081"
 SIM = "192.168.8.1"

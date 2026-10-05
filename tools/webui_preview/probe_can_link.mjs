@@ -85,6 +85,30 @@ const tileText = (w) => {
     w.close();
   }
 
+  /* ---- rows not sent because their own init sets another bit rate (2026-10-05) ---- */
+  {
+    const reason = "the init of row Soc sets protocol 6 (500 kbit/s) and the vehicle bus runs at 250 kbit/s: not sent";
+    const { w, errs } = boot("#/dashboard", { busRefused: { reason, ms: 1200 } });
+    await sleep(1500);
+    const view = w.document.querySelector("#view");
+    const banner = [...view.querySelectorAll(".banner")].find((b) => /Some rows are not sent/.test(b.textContent) && b.parentElement.style.display !== "none");
+    check("Automate: a banner says some rows are not sent", !!banner, banner && banner.textContent.slice(0, 80));
+    check("Automate: it prints the firmware's sentence", !!banner && banner.textContent.includes("The init of row Soc sets protocol 6 (500 kbit/s)") && banner.textContent.includes("250 kbit/s"));
+    check("Automate: it links to the parameters", !!banner && !!banner.querySelector('a[href="#/automate/parameters"]'));
+    check("Automate: polling is not shown as paused", ![...view.querySelectorAll(".chip")].some((c) => /Paused: nothing is sent/.test(c.textContent)));
+    check("Automate: no long dash in the refused text", !!banner && !/—/.test(banner.textContent));
+    check("Automate: no page errors (refused)", errs.length === 0, errs);
+    w.close();
+  }
+  {
+    const { w, errs } = boot("#/dashboard", { busRefused: { reason: "the init of row Soc sets protocol 6 (500 kbit/s) and the vehicle bus runs at 250 kbit/s: not sent", ms: 300000 } });
+    await sleep(1500);
+    const banner = [...w.document.querySelectorAll("#view .banner")].find((b) => /Some rows are not sent/.test(b.textContent) && b.parentElement.style.display !== "none");
+    check("Automate: no banner for a refusal long ago", !banner);
+    check("Automate: no page errors (old refusal)", errs.length === 0, errs);
+    w.close();
+  }
+
   /* ---- CAN Monitor: Automatic in the bit rate select, the reason nothing is sent ---- */
   {
     const { w, errs } = boot("#/monitor", { can: { state: "mismatch", listen_only: true, verified: false, baud_detected: 0 } });

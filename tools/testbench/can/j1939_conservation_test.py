@@ -395,16 +395,7 @@ def main():
             run.check("probe_file_removed", code != 200, f"HTTP {code}")
             code, f1 = dut.api("/api/faults")
             run.check("no_new_fault", f1 == faults0, json.dumps(f1)[:300])
-            st1 = dut.get("/api/status")
-            run.check("no_unexpected_reset",
-                      st1.get("unexpected_resets")
-                      == st0.get("unexpected_resets")
-                      and st1.get("boot_count") - st0.get("boot_count")
-                      == dut.restarts,
-                      f"unexpected_resets {st0.get('unexpected_resets')} -> "
-                      f"{st1.get('unexpected_resets')}, boot_count +"
-                      f"{st1.get('boot_count') - st0.get('boot_count')} for "
-                      f"{dut.restarts} restarts")
+            dut.reset_check(run, st0)
             dut.passing_checks(run)
         except Bench as e:
             run.check("restore", False, str(e))

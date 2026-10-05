@@ -19,9 +19,19 @@ import json
 import os
 import socket
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
+
+# the ECU simulator's USB link shares its subnet with common LAN routers:
+# requests to it leave through its own link (no I/O at import: sim_net.py)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    import sim_net  # noqa: E402
+    sim_net.install()
+except ImportError:         # a lone copy of this file: no simulator there
+    pass
 
 # ---------------------------------------------------------------------------
 # THE timeout table (single source of truth; mirror: TESTING.md)

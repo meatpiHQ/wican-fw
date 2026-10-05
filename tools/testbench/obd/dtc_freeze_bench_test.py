@@ -20,10 +20,16 @@ Legs:
 Expected final line: DTC FREEZE BENCH PASS
 """
 import json
+import os
 import subprocess
 import sys
 import time
 import urllib.request
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib"))
+import sim_net  # noqa: E402  (the simulator's own link on any LAN)
+
+sim_net.install()
 
 SIM = "http://192.168.8.1"
 

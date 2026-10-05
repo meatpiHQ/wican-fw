@@ -120,10 +120,36 @@ class Console:
                 with self.lock:
                     self.lines.append((time.time() - self.t0, txt))
 
+    def park_note(self):
+        """The crash park (2026-10-05): after three crashes in a row the
+        firmware prints `WICAN PARK ...` once, goes to sleep and answers
+        nothing, so a bench only sees a DUT that is gone. When this capture
+        holds such a line and no boot after it: the lines that say so and
+        why, and what to do; '' otherwise."""
+        snap = [l for _, l in self.snapshot()]
+        at = max((i for i, l in enumerate(snap) if "WICAN PARK" in l),
+                 default=-1)
+        if at < 0 or any("restart_tracker: boot" in l for l in snap[at + 1:]):
+            return ""
+        why = [l.strip()[:200] for l in snap[:at]
+               if "previous run crashed" in l][-3:]
+        return ("THE DUT PARKED ITSELF and is still parked: three runs in a "
+                "row crashed before any had been up ten minutes, so the "
+                "firmware sleeps instead of starting again (LED breathing "
+                "red, about 47 mA, no network).\n  " + snap[at].strip()
+                + "".join("\n  " + l for l in why)
+                + "\n  bring it back: python tools/testbench/lib/owon_psu.py "
+                "cycle; then GET /api/restart/report is the crash that "
+                "parked it (TESTING.md, \"When the DUT disappears in the "
+                "middle of a test\")")
+
     def close(self):
         self._run = False
         self.th.join(1)
         self.s.close()
+        note = self.park_note()
+        if note:
+            print(note, flush=True)   # whichever bench held the console
 
     def snapshot(self):
         with self.lock:

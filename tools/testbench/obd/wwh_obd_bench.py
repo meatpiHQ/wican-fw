@@ -65,6 +65,7 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "lib"))
 import bench_bus  # noqa: E402
+from pcbench import unplanned_boots  # noqa: E402
 
 ACTOR = os.path.join(HERE, "..", "actors", "pcan_wwh_ecu.py")
 PY = sys.executable
@@ -981,7 +982,9 @@ def main():
                   f"unexpected_resets {st0.get('unexpected_resets')} -> "
                   f"{st1.get('unexpected_resets')}, boot_count +"
                   f"{st1.get('boot_count') - st0.get('boot_count')} for "
-                  f"{restarts[0]} restarts")
+                  f"{restarts[0]} restarts"
+                  + unplanned_boots(api("/api/restart/history", timeout=15)[1],
+                                    st0.get("boot_count", 0)))
             sweep()
             new_e = sorted(seen_e)
             check("no_own_E_lines", not new_e, " | ".join(new_e)[:400])

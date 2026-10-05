@@ -27,9 +27,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))          # sleep_bench_test
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 import bench_ports  # noqa: E402  (COM ports by role, tools/testbench/detect_ports.py)
+import sim_net  # noqa: E402  (the simulator's own link on any LAN)
 
 from owon_psu import OwonPsu            # noqa: E402
 from sleep_bench_test import PiHttp, mA  # noqa: E402
+
+sim_net.install()
 
 V_AWAKE = 14.0
 V_SLEEPY = 12.5
@@ -67,7 +70,23 @@ class Rig:
             print(f"(no console capture: {e})")
         self.con_mark = 0.0
         self.expected_panics = 0  # bootloop_guard injects its own
+        self.awake_ref_a = None   # awake at V_AWAKE after a power cycle
         self._bench_ap_active = None
+
+    def take_awake_ref(self):
+        """What the device draws awake right after a POWER CYCLE, at V_AWAKE:
+        the reference every wake of the suite is held against. A wake is a
+        reboot, and what a sleep entry latched off (a pad hold outlives a
+        reset) is only back after power was really gone."""
+        self.psu.set_voltage(V_AWAKE)
+        self.psu.output(False)
+        time.sleep(4)
+        self.psu.output(True)
+        assert self.dut.wait_up(180), "DUT lost after the reference power cycle"
+        time.sleep(15)  # WiFi, the OBD chip and the USB port are up
+        self.awake_ref_a = statistics.mean(self.psu.sample_current(8))
+        print(f"reference: awake {mA(self.awake_ref_a)} at {V_AWAKE} V "
+              f"after a power cycle")
 
     def bench_ap(self, cmd, timeout=60):
         """A console command to the bench_ap P4 instrument (via the Pi's
@@ -106,11 +125,35 @@ class Rig:
         if not self.con:
             return None
         lines = [(t, x) for t, x in self.con.snapshot() if t >= self.con_mark]
-        panics = [x for _, x in lines if "Guru Meditation" in x or "assert failed" in x or "abort()" in x]
+        # the whole capture of the scenario, not only the lines picked below:
+        # the 2026-10-05 bootloop_guard failure could not be read from 14
+        # "telling" lines
+        out = Path(__file__).resolve().parents[3] / "test-reports" / "logs" / \
+            f"sleep_matrix_console_{key}_{time.strftime('%Y%m%d_%H%M%S')}.log"
+        try:
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text("".join(f"{t:9.3f} {x}\n" for t, x in lines),
+                           encoding="utf-8", errors="replace")
+            print(f"  console ({key}): all {len(lines)} lines in {out}")
+        except OSError as e:
+            print(f"  console ({key}): could not save the capture: {e}")
+        # not the restart tracker's own lines: since 2026-10-05 the boot after
+        # a crash quotes it (`previous run crashed: abort: abort() was called
+        # ...`), which counted every injected panic twice
+        panics = [x for _, x in lines
+                  if ("Guru Meditation" in x or "assert failed" in x or "abort()" in x)
+                  and "restart_tracker:" not in x]
         if self.expected_panics and len(panics) <= self.expected_panics:
             print(f"  console ({key}): {len(panics)} injected panic(s), as the scenario intended")
             panics = []
-        keep = [x for _, x in lines if re.search(r"Guru|Backtrace|panic|assert|abort\(\)|sleep_manager|vpn_manager|tailscale|boot #|critical battery", x)]
+        # the crash park (2026-10-05): a DUT that parked looks asleep on the
+        # supply (47 mA) and never wakes on voltage; its console says so once
+        parked = [x for _, x in lines if "WICAN PARK" in x]
+        if parked:
+            print(f"  console ({key}): THE DUT PARKED ITSELF ({parked[-1].strip()}): "
+                  "three crashes in a row before any run settled. TESTING.md, "
+                  "\"When the DUT disappears in the middle of a test\"")
+        keep = [x for _, x in lines if re.search(r"Guru|Backtrace|panic|assert|abort\(\)|sleep_manager|vpn_manager|tailscale|boot #|critical battery|crash-loop brake|WICAN PARK| park: ", x)]
         if keep:
             print(f"  console ({key}): {len(lines)} lines since the scenario started; the telling ones:")
             for x in keep[-14:]:
@@ -169,6 +212,15 @@ class Rig:
             except Exception as e:  # noqa: BLE001
                 print(f"  (recover: console not reopened: {e})")
         if self.dut.wait_up(90) is None:
+            # The console reset above can leave the chip in the ROM's download
+            # mode (2026-10-05, twice in a row: silent, 73 mA, esptool syncs
+            # with `--before no-reset`). A power cycle boots the app whatever
+            # the adapter's lines did; only then is the AP worth a suspicion.
+            print("  (recover: DUT still away; power cycle)")
+            self.psu.output(False)
+            time.sleep(4)
+            self.psu.output(True)
+        if self.dut.wait_up(120) is None:
             # the DUT cannot rejoin: cycle the bench AP, i.e. the bench_ap P4
             # (a console command). Nothing here touches the Pi's own radios.
             if self.bench_ap_active():
@@ -189,6 +241,47 @@ class Rig:
 
 # ---- the sleep/soak/wake core (shared by every scenario) -----------------
 
+def starts_whole(rig, awake_a, volts, online=True):
+    """Before a scenario sleeps the device: it must draw what it drew after
+    the suite's power cycle (rig.awake_ref_a), or an earlier wake left
+    something off and this scenario would compare against a device that is
+    already short of a load. `online` False: the scenario runs the device in
+    another state on purpose (WiFi suspended, off the bench net)."""
+    ref = rig.awake_ref_a
+    if not ref or not online:
+        return
+    want = ref * V_AWAKE / volts
+    assert awake_a >= 0.8 * want, \
+        f"starts at only {mA(awake_a)} at {volts} V: after a power cycle " \
+        f"the device drew {mA(ref)} at {V_AWAKE} V (about {mA(want)} " \
+        f"here); a load is off, left so by an earlier wake"
+
+
+def back_to_awake(rig, awake_a, volts_before, online=True):
+    """After a wake the device must draw again what it drew before it slept
+    (`awake_a` at `volts_before`; the PSU is at V_AWAKE now) and what it
+    drew after the suite's power cycle. Until 2026-10-05 a wake was only
+    judged as "more than asleep", and a load that stays OFF after a wake
+    passed every scenario: the USB rail, 76 mA, latched low by the sleep
+    entry's pad hold and never released (awake 89 mA after a wake against
+    165 mA after a power cycle; `bootloop_guard` only tripped over it because
+    its threshold was a sample from the teardown ramp). Constant power is
+    close enough for the voltage; 20 % covers what legitimately differs after
+    a reboot (a client that is gone, traffic)."""
+    time.sleep(10)  # this boot's WiFi and USB are up
+    after_a = statistics.mean(rig.psu.sample_current(8))
+    want = awake_a * volts_before / V_AWAKE
+    if rig.awake_ref_a and online:
+        want = max(want, rig.awake_ref_a)
+    assert after_a >= 0.8 * want, \
+        f"awake again at only {mA(after_a)}: before the sleep it drew " \
+        f"{mA(awake_a)} at {volts_before} V, after a power cycle " \
+        f"{mA(rig.awake_ref_a or 0)} at {V_AWAKE} V; something stays off " \
+        f"after a wake"
+    print(f"  back at {mA(after_a)} (before the sleep: {mA(awake_a)} at "
+          f"{volts_before} V)")
+
+
 def sleep_cycle(rig, key, soak_s=90, entry_extra_s=90, offline_ok=False,
                 wake_http=True, seq_base=None, before_wake=None):
     """Drop -> entry -> soak -> wake -> forensics. Raises on failure.
@@ -207,6 +300,7 @@ def sleep_cycle(rig, key, soak_s=90, entry_extra_s=90, offline_ok=False,
     unexpected0 = hist.get("unexpected_resets", -1)
 
     awake_a = statistics.mean(psu.sample_current(4))
+    starts_whole(rig, awake_a, V_AWAKE, online=not offline_ok)
     gate = awake_a - 0.030
     print(f"  awake {mA(awake_a)}; dropping to {V_SLEEPY} V")
     psu.set_voltage(V_SLEEPY)
@@ -252,6 +346,7 @@ def sleep_cycle(rig, key, soak_s=90, entry_extra_s=90, offline_ok=False,
     st = dut.wait_up(120)
     assert st, "DUT unreachable after wake"
     assert st.get("state") in ("normal", "wake_pending"), st
+    back_to_awake(rig, awake_a, V_AWAKE, online=not offline_ok)
 
     # forensics
     hist = dut.get("/api/restart/history") or {}
@@ -699,10 +794,13 @@ def s_forced_sleep(rig):
     full entry sequence + ~30 s of naps + wake-by-test-timer reboot.
     (Until 2026-10-02 this went over ws_cli, which ships parked: the
     "CLI refused" of the 2026-10-01 runs was its 404.)"""
+    # before the command: the three seconds after it are the teardown, and a
+    # mean over them is no awake current (it read 88 mA on 2026-10-05)
+    awake_a = statistics.mean(rig.psu.sample_current(3))
+    starts_whole(rig, awake_a, V_AWAKE)
     hit = rig.cli("sleep test 30", r"entering test sleep|TEST sleep", 8)
     assert hit, "the CLI did not acknowledge `sleep test 30`"
 
-    awake_a = statistics.mean(rig.psu.sample_current(3))
     entry = rig.psu.wait_current(lambda a: a < awake_a - 0.030,
                                  timeout_s=60)
     assert entry is not None, "forced entry never slept"
@@ -716,6 +814,7 @@ def s_forced_sleep(rig):
     assert 20 <= took <= 70, f"wake after {took:.0f} s (expected ~30)"
     st = rig.dut.wait_up(120)
     assert st, "DUT unreachable after timed wake"
+    back_to_awake(rig, awake_a, V_AWAKE)
     hist = rig.dut.get("/api/restart/history") or {}
     newest = (hist.get("records") or [{}])[0]
     assert newest.get("planned_reason") == "power_wake", newest
@@ -760,11 +859,19 @@ def _bootloop_guard_body(rig):
 
     def panic():
         rig.expected_panics += 1  # forensics must not count these
+        # Since 2026-10-05 three QUICK crashes in a row park the device (the
+        # crash-loop brake, system/crash_park_bench.py), and a parked device
+        # does not wake on voltage. This scenario is about the BATTERY guard,
+        # which counts unexpected resets whatever their pace: each run is
+        # marked healthy first, so the brake stays out of it.
+        said = rig.cli("restart_tracker --settle", r"Run marked settled", 4)
+        assert said, "the CLI did not take `restart_tracker --settle`"
         rig.cli("restart_tracker --panic", r"Guru Meditation|panic", 4)
 
     c0 = count()
     assert c0 >= 0, "restart history unreachable"
     awake_a = statistics.mean(rig.psu.sample_current(4))
+    starts_whole(rig, awake_a, 12.05)
     print(f"  unexpected_resets={c0}, awake {mA(awake_a)}; "
           f"injecting panics at 12.05 V")
     tries = 0
@@ -780,7 +887,14 @@ def _bootloop_guard_body(rig):
     entry = rig.psu.wait_current(lambda a: a < awake_a - 0.030,
                                  timeout_s=120)
     assert entry is not None, "guard never slept the device"
-    print(f"  guard slept the device ({mA(entry)}); soaking 60 s")
+    # `entry` is a point on the teardown's ramp (about 1.5 s from 175 to
+    # 47 mA; 96, 70 and 73 mA in three runs of 2026-10-05). The reference
+    # for the wake is the settled sleep current, as in sleep_cycle(): with
+    # the ramp's sample the scenario passed or failed by where it landed.
+    time.sleep(3)
+    sleep_a = statistics.mean(rig.psu.sample_current(5))
+    print(f"  guard slept the device ({mA(sleep_a)}, first reading under "
+          f"the gate {mA(entry)}); soaking 60 s")
     t0 = time.time()
     while time.time() - t0 < 60:
         assert rig.psu.meas_current() < awake_a - 0.020, \
@@ -791,11 +905,12 @@ def _bootloop_guard_body(rig):
 
     print("  waking at 14.0 V")
     rig.psu.set_voltage(V_AWAKE)
-    awake = rig.psu.wait_current(lambda a: a >= entry + 0.030,
+    awake = rig.psu.wait_current(lambda a: a >= sleep_a + 0.030,
                                  timeout_s=60)
     assert awake is not None, "no wake on voltage recovery"
     st = rig.dut.wait_up(120)
     assert st, "DUT unreachable after guard wake"
+    back_to_awake(rig, awake_a, 12.05)
     hist = rig.dut.get("/api/restart/history") or {}
     newest = (hist.get("records") or [{}])[0]
     assert newest.get("planned_reason") == "power_wake", newest
@@ -1000,6 +1115,7 @@ def main():
     print("setting sleep_delay_min=1 for the suite ...")
     rig.put_settings("sleep_manager", {"enabled": True,
                                        "sleep_delay_min": 1})
+    rig.take_awake_ref()
 
     for key, fn in SCENARIOS:
         if only and key not in only:

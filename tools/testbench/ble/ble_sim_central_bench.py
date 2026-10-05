@@ -27,11 +27,17 @@ Usage: python tools/testbench/ble/ble_sim_central_bench.py [--sim 192.168.8.1]
 """
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib"))
+import sim_net  # noqa: E402  (the simulator's own link on any LAN)
+
+sim_net.install()
 
 results = []
 warns = []

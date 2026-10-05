@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'wwh', 'eutruck', 'j1939', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'wwh', 'eutruck', 'j1939', 'crashnote', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [string]$Port = 'COM10',  # UART0 external USB-serial = console/flash
@@ -36,7 +36,9 @@ param(
                               # then known sibling locations (see below)
     [switch]$Flash,
     [switch]$NoReport,
-    [switch]$SkipBenchCheck   # bypass the physical-bench preflight
+    [switch]$SkipBenchCheck,  # bypass the physical-bench preflight
+    [switch]$NoConsole        # PC bench stages: do not open the DUT's console
+                              # port beside the run (Start-ConsoleTail)
 )
 
 # 'Continue', not 'Stop': PS 5.1 turns redirected native stderr into
@@ -114,6 +116,69 @@ function Save-StageLog { param([string]$Name, $Text)
     if (-not (Test-Path $script:logDir)) { New-Item -ItemType Directory -Force $script:logDir | Out-Null }
     $safe = $Name -replace '[^\w.-]', '_'
     ($Text | Out-String) | Set-Content -Encoding utf8 (Join-Path $script:logDir "$safe.log")
+}
+
+# The DUT's console beside a PC bench stage. A reset nobody asked for says why
+# on the console only (the panic handler does not write into the log ring),
+# and a bench that runs over HTTP has nobody watching it: the EU truck bench's
+# first run (2026-10-03) lost the device to such a reset, and the reason with
+# it. DTR/RTS stay off, so the open does not reset the DUT. No console port,
+# or a port somebody else holds: no capture, the stage runs all the same.
+# -NoConsole leaves the port alone.
+function Start-ConsoleTail { param([string]$Name)
+    try {
+        if ($NoConsole -or -not ($script:Port -match '^COM\d+$')) { return $null }
+        if (-not (Test-Path $script:logDir)) { New-Item -ItemType Directory -Force $script:logDir | Out-Null }
+        $safe = $Name -replace '[^\w.-]', '_'
+        $log = Join-Path $script:logDir "console_$safe.log"
+        $stop = "$log.stop"
+        if (Test-Path $stop) { Remove-Item $stop -Force -Confirm:$false }
+        $p = Start-Process -FilePath 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe' -PassThru -WindowStyle Hidden `
+            -ArgumentList @('-u', "`"$repo\tools\testbench\lib\console_tail.py`"", $script:Port, "`"$log`"", '--stop-file', "`"$stop`"") `
+            -RedirectStandardOutput "$log.keys"
+        return [pscustomobject]@{ Proc = $p; Log = $log; Stop = $stop; Keys = "$log.keys" }
+    } catch {
+        Write-Host "console: no capture ($($_.Exception.Message))" -ForegroundColor Yellow
+        return $null
+    }
+}
+
+function Stop-ConsoleTail { param($Tail)
+    if ($null -eq $Tail) { return }
+    try {
+        New-Item -ItemType File -Path $Tail.Stop -Force | Out-Null
+        if (-not $Tail.Proc.WaitForExit(6000)) { Stop-Process -Id $Tail.Proc.Id -Force -Confirm:$false }
+        Remove-Item $Tail.Stop -Force -Confirm:$false -ErrorAction SilentlyContinue
+        $keys = @(Get-Content $Tail.Keys -ErrorAction SilentlyContinue)
+        $crash = @($keys | Where-Object { $_ -match 'Guru Meditation|wdt timeout|Task watchdog|Backtrace:|abort\(\) was called|assert failed|stack overflow|CORRUPT HEAP' })
+        if ($crash.Count -gt 0) {
+            Write-Host "console: the DUT crashed during this stage (the whole console: $($Tail.Log)):" -ForegroundColor Red
+            $crash | Select-Object -First 16 | ForEach-Object { Write-Host "  $_" }
+        }
+        # The crash park (2026-10-05): three runs in a row that crash within ten
+        # minutes of their start, and the firmware sleeps instead of starting a
+        # fourth time. A bench over HTTP only sees a DUT that stopped answering,
+        # and the DUT prints its one line and is silent from then on: say it here.
+        $parkAt = -1
+        for ($i = 0; $i -lt $keys.Count; $i++) { if ($keys[$i] -match 'WICAN PARK') { $parkAt = $i } }
+        if ($parkAt -ge 0) {
+            $back = @($keys | Select-Object -Skip ($parkAt + 1) | Where-Object { $_ -match 'restart_tracker: boot' }).Count -gt 0
+            if ($back) {
+                Write-Host "console: the DUT PARKED ITSELF during this stage (three crashes in a row) and started again later:" -ForegroundColor Red
+            } else {
+                Write-Host "console: THE DUT PARKED ITSELF during this stage and is still parked: three runs in a row crashed before any had been up ten minutes, so the firmware sleeps instead of starting again (LED breathing red, about 47 mA, no network)." -ForegroundColor Red
+            }
+            Write-Host "  $($keys[$parkAt])"
+            $keys | Where-Object { $_ -match 'previous run crashed' } | Select-Object -Last 3 | ForEach-Object { Write-Host "  $_" }
+            if (-not $back) {
+                Write-Host "  bring it back:  python tools\testbench\lib\owon_psu.py cycle   (or hold its button until the LED turns sky blue: one try, and the history keeps every note)" -ForegroundColor Red
+            }
+            Write-Host "  then the cause: GET /api/restart/report (the crash that parked it, kept in flash), python tools\crash_decode.py --url http://<device>; TESTING.md, 'When the DUT disappears in the middle of a test'" -ForegroundColor Red
+        }
+        Remove-Item $Tail.Keys -Force -Confirm:$false -ErrorAction SilentlyContinue
+    } catch {
+        Write-Host "console: capture not closed cleanly ($($_.Exception.Message))" -ForegroundColor Yellow
+    }
 }
 
 function Add-Metric { param([string]$Label, [string]$Line)
@@ -487,8 +552,39 @@ function Invoke-HostSuites { param([string]$Only)
     $script:note = $totalNote
 }
 
+# Test apps inherit the MAIN firmware's sdkconfig.defaults and partition
+# table through ..\..\.. of their directory (standard 7). Since the
+# components live in their own repository that is the components repo's
+# root, where neither file exists and CMake stops. Stage copies for the
+# build and take them away again (2026-10-05: no target app had been built
+# since the split).
+function Add-TargetAppDefaults { param([string]$AppDir)
+    $root = (Resolve-Path "$AppDir\..\..\..").Path
+    $staged = @()
+    foreach ($f in 'sdkconfig.defaults', 'wican_pro_partitions_table.csv') {
+        if (-not (Test-Path "$root\$f")) {
+            Copy-Item "$repo\$f" "$root\$f"
+            $staged += "$root\$f"
+        }
+    }
+    return , $staged
+}
+
 function Invoke-TargetApp { param([string]$Comp)
-    Invoke-BuildFlash (Get-CompDir "$Comp\test_apps")
+    $appDir = Get-CompDir "$Comp\test_apps"
+    $staged = Add-TargetAppDefaults $appDir
+    try { Invoke-BuildFlash $appDir }
+    finally { foreach ($f in $staged) { Remove-Item $f -ErrorAction SilentlyContinue } }
+    if ($Comp -eq 'restart_tracker') {
+        # the app crashes on purpose, step by step: its own checker judges
+        # every crash note against IDF's panic text of the same crash
+        $out = & python "$repo\tools\testbench\system\rt_target_check.py" $Port "$env:TEMP\wican_$Comp.log" 2>&1 | ForEach-Object { Write-Host $_; "$_" }
+        Save-StageLog 'target_restart_tracker' $out
+        $verdict = $out | Select-String -Pattern '^RT TARGET PASS' | Select-Object -Last 1
+        if (-not $verdict) { throw "restart_tracker target run FAILED (console: $env:TEMP\wican_$Comp.log)" }
+        $script:note = $verdict.Line
+        return
+    }
     if ($Comp -eq 'ble_manager') {
         # app idles after BLE READY; the pass verdict comes from the Pi's
         # BLE controller driving it (tools/testbench/ble/ble_bench.py)
@@ -746,9 +842,10 @@ function Show-Inventory {
     Write-Host '  blecanraw  - binary CAN records over BLE (can <-raw-> ble bridge): live bus, answered requests, 29-bit'
     Write-Host '  blephy     - BLE 5 settings: 1M vs 2M PHY throughput/RTT, legacy + extended advertising sets'
     Write-Host '  blethru    - BLE throughput with the ECU simulator as the central (notify/write/read/tunnel vs the esp-idf reference)'
-    Write-Host '  autobaud   - CAN listen-before-talk, auto bit rate and the autopid bus guard: PCAN keeps the bus alive and counts error frames (~8 min)'
+    Write-Host '  autobaud   - CAN listen-before-talk, auto bit rate and the autopid bus guard: PCAN keeps the bus alive and counts error frames (~9 min)'
     Write-Host '  wwh        - OBD over UDS (ISO 27145 / SAE J1979-2): a PCAN vehicle is detected, polled, its codes read and cleared; the car switch both ways (~10 min)'
-    Write-Host '  eutruck    - end to end on an EU truck: the PCAN adapter plays WWH-OBD ECUs and a J1939 network at once; from an OBD-II car through the wizard path (detection, the one restart, values of both sets at the API and the broker, one DTC report with 19 42 and DM1 codes, the legislated clear) and back to the car (~6 min)'
+    Write-Host '  crashnote  - the crash note, the stored crash report and the crash-loop brake, two stages: (1) the DUT is crashed on purpose over its console (abort, an invalid store twice, the interrupt watchdog); the next boot must say where: its note against the console panic text, the decoded function names, one small NVS write for a crash that is news and none for the same crash again, the report word for word after a PSU power cycle (CRASH NOTE PASS); (2) three quick crashes in a row park the device: console line, HTTP silent, supply current against sleep mode, the timed exit, the next crash parks at once, a power cycle is a fresh start (CRASH PARK PASS)'
+    Write-Host '  eutruck    - end to end on an EU truck: the PCAN adapter plays WWH-OBD ECUs and a J1939 network at once; from an OBD-II car through the wizard path to the truck, the car made current on the truck bus, and back; then the tables own protocol commands on the truck bus (~6 min)'
     Write-Host '  j1939      - the J1939 listener on native CAN: a PCAN truck is read value for value (BAM, DM1, 250k and 500k), the DUT never transmits; then exactly-N conservation up to line rate; then AutoPID on the truck (detection, PGN rows, broker, an ELM app beside them, DM1 in the DTC report); then active mode (address claim and contention, requests incl. RTS/CTS as destination, NACKs, a bus flood, ? rows, DM2 and the clear, a diagnostics hold, listen mode) (~30 min)'
     Write-Host '  all    - host + every target app + hil'
     Write-Host ''
@@ -978,6 +1075,7 @@ try {
             Invoke-Stage 'CAN auto-baud + bus guard' {
                 $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                $con = Start-ConsoleTail 'can_autobaud'
                 try {
                     Start-Sleep -Seconds 3
                     if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
@@ -986,27 +1084,85 @@ try {
                     if (-not ($out | Select-String -Quiet 'CAN AUTOBAUD PASS')) { throw 'no CAN AUTOBAUD PASS (PCAN wired? simulator on 192.168.8.1?)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
+                }
+            }
+        }
+        'crashnote' {
+            # The crash note, the stored crash report and the crash-loop
+            # brake on the production firmware (TASK_crash_note.md,
+            # TASK_crash_loop_brake.md; ~10 min in two stages, each ending
+            # with a PSU power cycle that leaves the DUT as found).
+            # Stage 1 (~4 min, 4 crashes on purpose, 1 planned restart): the
+            # bench types `restart_tracker --panic`, `--panic=fault` (twice)
+            # and `--panic=wdt` on the DUT's console and judges what the next
+            # boot says about each: the note against the console's own panic
+            # text, the decoded function names, the log line, the ONE small
+            # NVS write that stores a crash that is news and the zero writes
+            # of the same crash again, the report word for word after a power
+            # cycle. Stage 2 (~6 min, 4 crashes, a forced sleep): three quick
+            # crashes in a row park the device (console line, HTTP silent,
+            # supply current against the firmware's own sleep mode), the park
+            # ends by the bench's timer, the next quick crash parks at once,
+            # a power cycle is a fresh start. Both hold the console
+            # themselves (they type there), so no console tail beside them.
+            $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+            foreach ($stage in @(
+                    @{ Name = 'crash note'; Script = 'crash_note_bench.py'; Log = 'crash_note'; Verdict = 'CRASH NOTE PASS' },
+                    @{ Name = 'crash park'; Script = 'crash_park_bench.py'; Log = 'crash_park'; Verdict = 'CRASH PARK PASS' })) {
+                Invoke-Stage $stage.Name {
+                    $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                    try {
+                        Start-Sleep -Seconds 3
+                        if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                        $out = & $py -u "$repo\tools\testbench\system\$($stage.Script)" 'localhost:18081' 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                        Save-StageLog $stage.Log $out
+                        if (-not ($out | Select-String -Quiet "^$($stage.Verdict)")) { throw "no $($stage.Verdict)" }
+                    } finally {
+                        if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    }
                 }
             }
         }
         'eutruck' {
             # End to end on an EU truck (TASK_j1939_wwh.md phase 7, ~6 min,
-            # 3 DUT restarts): the PCAN adapter plays WWH-OBD ECUs AND a J1939
-            # network in one process (actors/pcan_wwh_ecu.py --truck), the
-            # DUT walks the wizard's path from an OBD-II car to the truck and
-            # back; the ECU simulator is the ACK source and the car.
+            # 10 DUT restarts): the PCAN adapter plays WWH-OBD ECUs AND a
+            # J1939 network in one process (actors/pcan_wwh_ecu.py --truck),
+            # the DUT walks the wizard's path from an OBD-II car to the truck,
+            # the stored car is made current on the truck's bus (the bus guard
+            # looks again), and back; the ECU simulator is the ACK source and
+            # the car. Second stage (leg x5): the tables' own protocol
+            # commands and resets on the truck's bus, judged at the truck.
             Invoke-Stage 'EU truck end to end' {
                 $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
-                $logdir = Join-Path $repo 'test-reports\logs'
+                $actorLogs = Join-Path $repo 'test-reports\logs'
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                $con = Start-ConsoleTail 'eu_truck_e2e'
                 try {
                     Start-Sleep -Seconds 3
                     if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
-                    $out = & $py -u "$repo\tools\testbench\obd\eu_truck_e2e_bench.py" 'localhost:18081' '--logdir' $logdir 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    $out = & $py -u "$repo\tools\testbench\obd\eu_truck_e2e_bench.py" 'localhost:18081' '--logdir' $actorLogs 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'eu_truck_e2e' $out
                     if (-not ($out | Select-String -Quiet '^EU TRUCK E2E PASS')) { throw 'no EU TRUCK E2E PASS (PCAN wired? simulator on 192.168.8.1?)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
+                }
+            }
+            Invoke-Stage 'EU truck: the tables own protocols' {
+                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $actorLogs = Join-Path $repo 'test-reports\logs'
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                $con = Start-ConsoleTail 'eu_truck_tables'
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\obd\eu_truck_e2e_bench.py" 'localhost:18081' '--only' 'x5' '--logdir' $actorLogs 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'eu_truck_tables' $out
+                    if (-not ($out | Select-String -Quiet '^EU TRUCK E2E PARTIAL PASS')) { throw 'no EU TRUCK E2E PARTIAL PASS for leg x5' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
                 }
             }
         }
@@ -1019,16 +1175,18 @@ try {
             # leg. The actor's logs land beside the stage log.
             Invoke-Stage 'WWH-OBD (ISO 27145 / J1979-2)' {
                 $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
-                $logdir = Join-Path $repo 'test-reports\logs'
+                $actorLogs = Join-Path $repo 'test-reports\logs'
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                $con = Start-ConsoleTail 'wwh_obd'
                 try {
                     Start-Sleep -Seconds 3
                     if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
-                    $out = & $py -u "$repo\tools\testbench\obd\wwh_obd_bench.py" 'localhost:18081' '--logdir' $logdir 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    $out = & $py -u "$repo\tools\testbench\obd\wwh_obd_bench.py" 'localhost:18081' '--logdir' $actorLogs 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'wwh_obd' $out
                     if (-not ($out | Select-String -Quiet 'WWH OBD PASS')) { throw 'no WWH OBD PASS (PCAN wired? simulator on 192.168.8.1?)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
                 }
             }
         }
@@ -1041,22 +1199,29 @@ try {
             # counter conservation at 250k and 500k up to line rate (~9 min,
             # 3 restarts), then AutoPID on the truck (~10 min, 7 restarts;
             # the obd0 ELM bridge is tunnelled too for its app leg).
+            # ($actorLogs, not $logdir: this block runs in the script's scope
+            # and PowerShell names are case-insensitive; `$logdir = ...` here
+            # replaced $script:logDir, and this kind's stage logs landed
+            # outside the run's folder until 2026-10-04.)
             $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
-            $logdir = Join-Path $repo 'test-reports\logs'
+            $actorLogs = Join-Path $repo 'test-reports\logs'
             Invoke-Stage 'J1939 listener' {
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                $con = Start-ConsoleTail 'j1939_listener'
                 try {
                     Start-Sleep -Seconds 3
                     if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
-                    $out = & $py -u "$repo\tools\testbench\can\j1939_bench.py" 'localhost:18081' '--logdir' $logdir 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    $out = & $py -u "$repo\tools\testbench\can\j1939_bench.py" 'localhost:18081' '--logdir' $actorLogs 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'j1939_listener' $out
                     if (-not ($out | Select-String -Quiet '^J1939 PASS')) { throw 'no J1939 PASS (PCAN wired? simulator on 192.168.8.1?)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
                 }
             }
             Invoke-Stage 'J1939 conservation' {
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                $con = Start-ConsoleTail 'j1939_conservation'
                 try {
                     Start-Sleep -Seconds 3
                     if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
@@ -1065,18 +1230,21 @@ try {
                     if (-not ($out | Select-String -Quiet '^J1939 CONSERVATION PASS')) { throw 'no J1939 CONSERVATION PASS' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
                 }
             }
             Invoke-Stage 'AutoPID J1939' {
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", '-L', "18082:${DutIp}:35000", $BenchHost)
+                $con = Start-ConsoleTail 'autopid_j1939'
                 try {
                     Start-Sleep -Seconds 3
                     if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (ports 18081/18082 busy?)" }
-                    $out = & $py -u "$repo\tools\testbench\obd\autopid_j1939_bench.py" 'localhost:18081' '--elm' 'localhost:18082' '--logdir' $logdir 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    $out = & $py -u "$repo\tools\testbench\obd\autopid_j1939_bench.py" 'localhost:18081' '--elm' 'localhost:18082' '--logdir' $actorLogs 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'autopid_j1939' $out
                     if (-not ($out | Select-String -Quiet '^AUTOPID J1939 PASS')) { throw 'no AUTOPID J1939 PASS' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
                 }
             }
             # phase 6: the node talks (address claim, requests, DM2 / the
@@ -1084,14 +1252,16 @@ try {
             # J2534 TCP port, a bare tester connection = the diagnostics hold
             Invoke-Stage 'J1939 active' {
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", '-L', "18083:${DutIp}:6809", $BenchHost)
+                $con = Start-ConsoleTail 'j1939_active'
                 try {
                     Start-Sleep -Seconds 3
                     if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (ports 18081/18083 busy?)" }
-                    $out = & $py -u "$repo\tools\testbench\can\j1939_active_bench.py" 'localhost:18081' '--diag' 'localhost:18083' '--logdir' $logdir 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    $out = & $py -u "$repo\tools\testbench\can\j1939_active_bench.py" 'localhost:18081' '--diag' 'localhost:18083' '--logdir' $actorLogs 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'j1939_active' $out
                     if (-not ($out | Select-String -Quiet '^J1939 ACTIVE PASS')) { throw 'no J1939 ACTIVE PASS' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
                 }
             }
         }

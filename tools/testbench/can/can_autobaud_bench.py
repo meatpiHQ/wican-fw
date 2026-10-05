@@ -41,6 +41,13 @@ Legs (bus / DUT setting):
    n12 auto + silent, traffic at 800k (no candidate reads it): every
                                 candidate is tried, round after round, the
                                 node never claims a bitrate
+   n13 the same bouncing node, its status asked for from four threads at
+                                once (GET /api/can) for a minute: no reset.
+                                Until 2026-10-05 a status read on a node the
+                                link policy was deleting loaded through a
+                                NULL register pointer: about one panic in
+                                150 s of this (and the "unexplained" reset
+                                of the EU truck bench's first run)
   OBD chip (autopid's bus guard), can_manager off
    c0  500k live / protocol Automatic: polls answered, the vehicle store
                                 holds protocol 6
@@ -62,7 +69,7 @@ Run on the PC (IDF venv python: python-can + the PCAN on the DUT's bus, the
 simulator's REST at 192.168.8.1, the DUT's HTTP through the tunnel):
   python can_autobaud_bench.py [dut host[:port]] [--sim http://192.168.8.1]
         [--pcan PCAN_USBBUS2] [--fps 200] [--window 8] [--only n1,c3,...]
-Takes about 8 minutes (18 DUT restarts, 2 simulator restarts).
+Takes about 9 minutes (18 DUT restarts, 2 simulator restarts).
 
 The simulator cannot leave the bus (its CAN controller survives a software
 restart and keeps acknowledging at its last bitrate, "enabled": false or
@@ -84,6 +91,7 @@ import can
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "..", "lib"))
 import bench_bus  # noqa: E402
+from pcbench import unplanned_boots  # noqa: E402
 
 DUT = "localhost:8081"
 SIM = bench_bus.SIM_URL
@@ -109,10 +117,10 @@ while i < len(args):
 BASE = "http://" + DUT
 
 ALL_LEGS = ["c0", "n1", "n2", "n3", "n4", "n5", "n6", "n7", "n8", "n9", "n10",
-            "n11", "n12", "c1", "c2", "c3", "c4"]
+            "n11", "n12", "n13", "c1", "c2", "c3", "c4"]
 LEG_BUS = {"c0": 500, "n1": 500, "n2": 500, "n3": 500, "n4": 500, "n5": 500,
            "n6": 250, "n7": 250, "n8": 250, "n9": 250, "n10": 250,
-           "n11": 250, "n12": 250, "c1": 250, "c2": 250, "c3": 250,
+           "n11": 250, "n12": 250, "n13": 250, "c1": 250, "c2": 250, "c3": 250,
            "c4": 250}
 # n11: the adapter's bitrates in the order the node does NOT try them, the
 # bus's own last (the simulator, at 250k, acknowledges there again)
@@ -712,6 +720,55 @@ def leg_n12(wire):
     wire.open(250)      # the bus as the next leg expects it
 
 
+STATUS_READERS = 4
+STATUS_READ_S = 60
+
+
+def leg_n13(wire):
+    print("--- n13: the bouncing node of n12, GET /api/can from "
+          f"{STATUS_READERS} threads for {STATUS_READ_S} s", flush=True)
+    apply({"autopid": {"enabled": False},
+           "can_manager": {"enabled": True, "baud": "auto", "silent": True}})
+    wire.open(800)
+    a = can_state()
+    st0 = get("/api/status")
+    wire.traffic(40)
+    answers = [0] * STATUS_READERS
+    silent = [0] * STATUS_READERS
+    end = time.time() + STATUS_READ_S
+
+    def reader(n):
+        while time.time() < end:
+            code, r = api("/api/can", timeout=4)
+            if code == 200 and isinstance(r, dict):
+                answers[n] += 1
+            else:
+                silent[n] += 1
+                time.sleep(0.05)
+
+    threads = [threading.Thread(target=reader, args=(n,), daemon=True)
+               for n in range(STATUS_READERS)]
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join(STATUS_READ_S + 30)
+    wire.traffic(0)
+    time.sleep(0.2)
+    wire.close()
+    b = can_state()             # (rides out the reboot of a device that fell)
+    st1 = get("/api/status")
+    dsw = b.get("link_switches", 0) - a.get("link_switches", 0)
+    same_boot = st1.get("boot_count") == st0.get("boot_count")
+    metric("n13_status_reads", sum(answers))
+    metric("n13_link_switches", dsw if same_boot else -1)
+    check("n13_status_reads_against_a_bouncing_node",
+          same_boot and sum(answers) >= 300 and dsw >= 40,
+          f"{sum(answers)} answers ({sum(answers) / STATUS_READ_S:.0f}/s), "
+          f"{sum(silent)} unanswered, link_switches +{dsw}, boot_count "
+          f"{st0.get('boot_count')} -> {st1.get('boot_count')}")
+    wire.open(250)      # the bus as the next leg expects it
+
+
 # ---- chip legs (autopid's bus guard) -----------------------------------------------------
 
 CAN_OFF = {"enabled": False}
@@ -967,7 +1024,7 @@ def main():
             if leg == "n5":
                 to_bus(wire, 500, True)
             else:
-                live = leg not in ("n9", "n10", "n11", "n12", "c3", "c4")
+                live = leg not in ("n9", "n10", "n11", "n12", "n13", "c3", "c4")
                 moved = wire.bus is None or wire.kbit != LEG_BUS[leg]
                 if moved:
                     # nothing of the DUT may sit on the bus at the old
@@ -1007,6 +1064,8 @@ def main():
                 wire.open(250)
             elif leg == "n12":
                 leg_n12(wire)
+            elif leg == "n13":
+                leg_n13(wire)
             elif leg == "c1":
                 leg_c1(wire)
             elif leg == "c2":
@@ -1066,7 +1125,9 @@ def main():
                   f"unexpected_resets {st0.get('unexpected_resets')} -> "
                   f"{st1.get('unexpected_resets')}, boot_count +"
                   f"{st1.get('boot_count') - st0.get('boot_count')} for "
-                  f"{restarts[0]} submits")
+                  f"{restarts[0]} submits"
+                  + unplanned_boots(api("/api/restart/history", timeout=15)[1],
+                                    st0.get("boot_count", 0)))
             seen_e |= set(own_e_lines())
             new_e = sorted(seen_e - e_lines0)
             check("no_own_E_lines", not new_e, " | ".join(new_e)[:400])

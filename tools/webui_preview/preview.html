@@ -2012,6 +2012,8 @@
     /* the CAN link and autopid's bus guard (2026-10-03): null = a healthy 500k bus, nothing parked */
     canLink: (window.__mockPreset || {}).can || null,
     busGuard: (window.__mockPreset || {}).busGuard || null,
+    /* rows not sent because their own init sets a protocol this bus cannot take (2026-10-05): {reason, ms} */
+    busRefused: (window.__mockPreset || {}).busRefused || null,
     /* trouble codes (2026-10-03): null = DTC off, no scan yet; "obd" = an
        OBD-II car with codes; "wwh" = an ISO 27145 vehicle, two ECUs */
     dtc: (window.__mockPreset || {}).dtc || null,
@@ -2231,7 +2233,10 @@
       /* the bus guard (2026-10-03): state.busGuard = a parked poller's reason */
       bus_guard: state.busGuard
         ? { bus: "live", bus_kbps: 250, verdict: "park", parked: true, reason: state.busGuard }
-        : { bus: "silent", bus_kbps: 0, verdict: "allow", parked: false, reason: "vehicle bus silent" },
+        : state.busRefused
+          ? { bus: "live", bus_kbps: 250, verdict: "allow", parked: false, reason: "vehicle bus live at 250 kbit/s",
+              refused: 12, refused_reason: state.busRefused.reason, refused_ms: state.busRefused.ms }
+          : { bus: "silent", bus_kbps: 0, verdict: "allow", parked: false, reason: "vehicle bus silent", refused: 0 },
     }); },
     /* the registry as the firmware serves it (2026-09-17): keys per event, params_schema + undoable per action, value prefixes */
     "/api/events/sources": () => J([
@@ -2285,10 +2290,27 @@
       { name: "wifi", state: "B", core: 0, prio: 23, stack_hw: 1210, runtime_us: 1893201 },
     ] }),
     "/api/certs": () => J({ sets: [{ name: "homeca", ca: true, cert: false, key: false }] }),
-    "/api/restart/history": () => J({ boot_count: 42, unexpected_resets: 1, records: [
-      { seq: 42, ...state.lastRestart, flags: 0, boot_time: now() - 8040, time_valid: true, request_time: now() - 8041, request_uptime_ms: 120033 },
-      { seq: 41, reason: "poweron", planned: false, planned_reason: "none", source: "unknown", flags: 0, boot_time: now() - 90000, time_valid: true, request_time: 0, request_uptime_ms: 0 },
+    /* a probe puts a crash note on this boot's record through
+       __mockState.lastRestart.crash, and a crash report into flash through
+       __mockState.crashReport = {stored_time, time_valid, firmware, streak,
+       parked, crash} (restart_tracker/HTTP_API.md) */
+    "/api/restart/history": () => J({ boot_count: 42, unexpected_resets: 1, elf_sha: "76a961dd5f08aabb",
+      brake: { verdict: "normal", streak: 0, limit: 3, parks: 0, settled: true, settle_s: 600, report_budget: 4 },
+      ...(state.crashReport ? { report: state.crashReport } : {}), records: [
+      { seq: 42, mode: "normal", settled: true, ...state.lastRestart, flags: 0, boot_time: now() - 8040, time_valid: true, request_time: now() - 8041, request_uptime_ms: 120033 },
+      { seq: 41, reason: "poweron", planned: false, planned_reason: "none", source: "unknown", mode: "normal", settled: true, flags: 0, boot_time: now() - 90000, time_valid: true, request_time: 0, request_uptime_ms: 0 },
     ] }),
+    /* the stored report as the firmware's text (restart_tracker_report_core.c) */
+    "/api/restart/report": () => {
+      const r = state.crashReport;
+      if (!r) return J({ error: "no crash report is stored" }, 404);
+      const c = r.crash || {};
+      return T("WiCAN crash report\nDevice:    68ee8f5a653d\nFirmware:  " + (r.firmware || "not the one that stored this report")
+        + "\nImage:     " + (c.elf_sha || "not recorded")
+        + "\nStored:    " + (r.time_valid ? new Date(r.stored_time * 1000).toISOString().replace("T", " ").slice(0, 19) + " UTC" : "the clock was not set")
+        + (r.streak >= 2 || r.parked ? "\nLoop:      " + r.streak + " crashes in a row" + (r.parked ? "; the device parked itself" : "") : "")
+        + "\nCrash:     " + (c.summary || "") + ((c.backtrace || []).length ? "\nBacktrace: " + c.backtrace.join(" ") : "") + "\n");
+    },
     "/api/events/log": () => J({
       stats: { published: 812, fired: 640, action_errors: 1 },
       events: [
@@ -2462,6 +2484,10 @@
         else txt = new TextDecoder().decode(opts.body);
       } catch (e) { txt = ""; }
       state.files[q.get("path")] = txt; return J({ ok: true, path: q.get("path"), size: txt.length });
+    }
+    if (method === "DELETE" && path === "/api/restart/report") {
+      state.crashReport = null; state.crashReportClears = (state.crashReportClears || 0) + 1;
+      return J({ cleared: true });
     }
     if (method === "DELETE" && path === "/api/fs/file") {
       const p = q.get("path") || "";
@@ -4275,9 +4301,10 @@ const PAGES={};
    periodic_wake = the check-in timer); anything else is the chip's own reset cause. */
 const WAKE_PLANNED={power_wake:"Battery voltage recovered, woke from sleep",periodic_wake:"Periodic check-in, woke from sleep",
   user_request:"Restart requested",config_apply:"Settings applied",config_recovery:"Settings recovery",ota_apply:"Firmware update",
-  factory_reset:"Factory reset",safe_mode:"Safe mode",internal_recovery:"Internal recovery restart"};
+  factory_reset:"Factory reset",safe_mode:"Safe mode",internal_recovery:"Internal recovery restart",
+  park_retry:"Start after a crash park"};
 const WAKE_SOURCE={web_ui:"web UI",cmdline:"command line",console:"console",mqtt:"MQTT",ota:"OTA",safe_mode:"safe mode",
-  sleep_mode:"power saving",button:"button",pairing:"pairing"};
+  sleep_mode:"power saving",button:"button",pairing:"pairing",park:"timer"};
 const WAKE_RESET={poweron:"Power-on",external:"External reset",software:"Software restart",panic:"Crash (panic)",deepsleep:"Woke from deep sleep",
   brownout:"Brown-out (supply dipped)",interrupt_wdt:"Interrupt watchdog",task_wdt:"Task watchdog",wdt:"Watchdog",sdio:"SDIO reset"};
 function wakeSource(r){
@@ -4286,6 +4313,58 @@ function wakeSource(r){
     const s=WAKE_SOURCE[r.source];return s&&!/_wake$/.test(r.planned_reason||"")?t+" · "+s:t;}
   const t=WAKE_RESET[r.reason]||("Reset ("+(r.reason||"unknown")+")");
   return /^(poweron|external|deepsleep)$/.test(r.reason||"")?t:t+", unexpected";
+}
+/* Where the device last crashed (restart_tracker's crash note, 2026-10-05). A record of
+   the restart history carries `crash` when its boot followed a crash that went through
+   the firmware's panic handler: kind, task, the addresses of the call chain. One row on
+   the Status page says it in words; the details open on request, because the addresses
+   only mean something next to the firmware's build files (tools/crash_decode.py). */
+function crashWords(c){
+  if(!c.complete)return "Crash at "+c.pc+", details not recorded";
+  const where=c.task?" in task "+c.task:"";
+  if(c.kind==="abort")return (c.text||"Abort")+where;
+  if(c.kind==="int_wdt")return "Interrupt watchdog"+where;
+  if(c.kind==="task_wdt")return "Task watchdog"+where;
+  return (c.reason||"Exception")+where;
+}
+/* the page is served over plain HTTP: no navigator.clipboard there */
+function copyText(text,okMsg){
+  const ta=h("textarea",{style:"position:fixed;left:-9999px;top:0"});ta.value=text;document.body.append(ta);ta.select();
+  let ok=false;try{ok=document.execCommand("copy");}catch{}ta.remove();
+  toast(ok?okMsg:"Could not copy. Open it again and select the text",ok?"ok":"err");
+}
+/* The crash report the firmware keeps in flash (2026-10-05): the newest distinct crash,
+   still there after the device was unplugged, as the text a user sends on. Safe mode and
+   the console show the same lines (GET /api/restart/report; `report` in the history). */
+const sameCrash=(a,b)=>!!(a&&b&&a.pc===b.pc&&a.kind===b.kind&&a.elf_sha===b.elf_sha);
+const crashReportWhen=r=>r.time_valid?new Date(r.stored_time*1000).toLocaleDateString():"date not known";
+async function crashReportModal(hist,onClear){
+  let text=null;try{text=await api("/api/restart/report");}catch{}
+  if(typeof text!=="string"||!text){toast("The crash report could not be read","err");return;}
+  const rep=(hist&&hist.report)||{};
+  const save=()=>{const a=h("a",{href:URL.createObjectURL(new Blob([text],{type:"text/plain"})),download:"wican_crash_report.txt"});
+    document.body.append(a);a.click();a.remove();};
+  const clear=async()=>{
+    if(!await confirmModal("Remove the stored crash report from the device?","Clear crash report"))return;
+    try{await api("/api/restart/report",{method:"DELETE"});toast("Crash report cleared","ok");onClear&&onClear();}
+    catch(e){toast("Could not clear the report: "+e.message,"err");}};
+  modal({title:"Crash report",body:h("div",{},
+      h("p",{class:"help"},"The device keeps this report in its flash memory, so it is still here after a power cut. Send it with a bug report."+
+        (rep.parked?" After "+rep.streak+" crashes in a row the device parked itself (LED breathing red) to protect the battery.":"")),
+      h("pre",{class:"mono",style:"font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow:auto;margin:6px 0 0"},text)),
+    actions:[{label:"Copy report",kind:"pri",fn:()=>copyText(text,"Crash report copied")},{label:"Download",fn:save},{label:"Clear",fn:clear},{label:"Close"}]});
+}
+function crashDetails(rec,hist,version){
+  const c=rec.crash;
+  const text=JSON.stringify({firmware:version||"",running_elf_sha:(hist&&hist.elf_sha)||"",boot:rec.seq,reset:rec.reason,crash:c},null,1);
+  const copy=()=>copyText(text,"Crash details copied");
+  modal({title:"Last crash",body:h("div",{},
+      h("p",{},c.summary||crashWords(c)),
+      h("p",{class:"help"},c.complete?(c.same_image?"This firmware is the one running now.":"This was another firmware than the one running now."):
+        "The firmware could not finish its note, so the call chain is missing."),
+      h("p",{class:"help"},"Send these details with a bug report. The addresses are turned into function names with the build files of that firmware."),
+      h("pre",{class:"mono",style:"font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow:auto;margin:6px 0 0"},text)),
+    actions:[{label:"Copy details",kind:"pri",fn:copy},{label:"Close"}]});
 }
 PAGES.status=async(view)=>{
   const p=page(view,null,"Status","Live overview of the device and CAN interface.");
@@ -4297,6 +4376,10 @@ PAGES.status=async(view)=>{
   const hist=await tryGet("/api/restart/history");
   const recs=(hist&&hist.records)||[];
   const wake=wakeSource(recs.find(r=>hist&&r.seq===hist.boot_count)||recs[0]);
+  const crashed=recs.find(r=>r.crash); /* newest first: the last crash on record */
+  /* the report kept in flash: usually this very crash; after a power cut, when the notes
+     in RAM are gone, the only thing left. Read at every refresh: Clear empties it. */
+  const reportLink=()=>h("a",{href:"#",onclick:e=>{e.preventDefault();crashReportModal(hist,()=>{hist.report=null;refresh();});}},"Report");
   async function refresh(){
     const st=conn.status||await tryGet("/api/status");if(!st)return;
     const b=st.bits||{};
@@ -4337,6 +4420,12 @@ PAGES.status=async(view)=>{
         ["Boot count",st.boot_count??"—"],
         ["Last wake-up",wake],
         ["Unexpected resets",st.unexpected_resets??"—"],
+        ["Last crash",crashed?h("span",{},crashWords(crashed.crash)+" · boot "+crashed.seq+" ",
+          h("a",{href:"#",onclick:e=>{e.preventDefault();crashDetails(crashed,hist,st.version);}},"Details"),
+          hist.report&&sameCrash(hist.report.crash,crashed.crash)?[" · ",reportLink()]:null)
+          :(hist&&hist.report?h("span",{},crashWords(hist.report.crash)+" · "+crashReportWhen(hist.report)+" ",reportLink()):null)],
+        crashed&&hist.report&&!sameCrash(hist.report.crash,crashed.crash)?["Stored crash report",
+          h("span",{},crashWords(hist.report.crash)+" · "+crashReportWhen(hist.report)+" ",reportLink())]:null,
         ["OBD chip",b.awake===false?"Asleep":"Ready"],
         ["Motion (IMU)",imu?(imu.activity+(imu.temp!=null?" · "+imu.temp+" °C":"")):"—"],
         ["SD card",b.sdcard_mounted?"Mounted":"Not mounted"],
@@ -6106,10 +6195,14 @@ PAGES.dashboard=async(view)=>{
     if(!a){stateEl.replaceChildren(chip("Unavailable","crit"));stripEl.style.display="none";showEmpty("Automate is not answering.");return;}
     const st=a.stats||{},bits=(conn.status&&conn.status.bits)||{};
     const off=bits.autopid_enabled===false;
-    const parked=!off&&!!st.paused_bus,why=(a.bus_guard&&a.bus_guard.reason)||"the vehicle bus runs at another bit rate than the OBD protocol in use";
+    const guard=a.bus_guard||{},cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
+    const parked=!off&&!!st.paused_bus,why=guard.reason||"the vehicle bus runs at another bit rate than the OBD protocol in use";
+    /* rows whose own init sets a protocol this bus cannot take are not sent: say so while it happens */
+    const refusing=!off&&!parked&&guard.refused>0&&guard.refused_ms<60000&&!!guard.refused_reason;
     stateEl.replaceChildren(off?chip("Automate off",""):st.paused_voltage?chip("Paused: battery below the threshold","warn"):parked?chip("Paused: nothing is sent to this bus","warn"):st.running?chip("Polling","ok"):chip("Not polling",""));
-    busEl.style.display=parked?"":"none";
-    if(parked)busEl.replaceChildren(banner("warn","alert",h("b",{},"Polling is paused to protect the vehicle bus. "),why.charAt(0).toUpperCase()+why.slice(1)+". ",h("a",{href:"#/automate/settings"},"Open Automate settings")));
+    busEl.style.display=(parked||refusing)?"":"none";
+    if(parked)busEl.replaceChildren(banner("warn","alert",h("b",{},"Polling is paused to protect the vehicle bus. "),cap(why)+". ",h("a",{href:"#/automate/settings"},"Open Automate settings")));
+    else if(refusing)busEl.replaceChildren(banner("warn","alert",h("b",{},"Some rows are not sent to protect the vehicle bus. "),cap(guard.refused_reason)+". ",h("a",{href:"#/automate/parameters"},"Open Automate parameters")));
     if(off){stripEl.style.display="none";showEmpty(h("span",{},"Automate is off: turn polling on under ",h("a",{href:"#/automate/settings"},"Automate → Settings"),"."));return;}
     if(!(a.params||[]).length){stripEl.style.display="none";showEmpty(h("span",{},"Nothing to show yet: add parameters under ",h("a",{href:"#/automate/parameters"},"Automate → Parameters"),"."));return;}
     stripEl.style.display="";paintGroups(a);paintStats(st);
@@ -6669,7 +6762,9 @@ PAGES.system=async(view,sub)=>{
     const hist=await tryGet("/api/restart/history");
     modal({title:"Restart history",body:hist&&hist.records?dataTable([
       {label:"#",key:"seq"},{label:"Reason",key:"reason"},
-      {label:"Type",get:r=>r.planned?chip(r.planned_reason||"planned","info"):chip("unexpected","warn")},
+      /* how that boot ran (2026-10-05): parked asleep by the crash-loop brake, or safe mode */
+      {label:"Type",get:r=>h("span",{},r.planned?chip(r.planned_reason||"planned","info"):chip("unexpected","warn"),
+        /^park/.test(r.mode||"")?[" ",chip("parked","warn")]:r.mode==="safe"?[" ",chip("safe mode","info")]:null)},
       {label:"Source",mono:true,key:"source"}],hist.records.slice(0,12)):h("p",{},"—"),
       actions:[{label:"Close"}]});}},"Restart History");
   paneMaint.append(card("Maintenance","refresh",
@@ -7045,7 +7140,7 @@ PAGES.events=async(view,sub)=>{
       {id:"disable",do:"autopid.group",label:"Disable a PID group",fields:[{key:"group",label:"Group",kind:"group"}],fixed:{enabled:false}},
       {id:"mqtt",do:"mqtt.publish",label:"Publish to MQTT",fields:[{key:"topic",label:"Topic",kind:"text",def:"~/events"},{key:"payload",label:"Payload",kind:"textarea",def:"${data}"}]},
       {id:"http",do:"http.post",label:"POST to a URL",fields:[{key:"url",label:"URL",kind:"text",def:"http://host/path"},{key:"body",label:"Body",kind:"textarea",def:"${data}"}]},
-      {id:"led",do:"led.indicate",label:"LED alert",fields:[{key:"rgb",label:"Colour",kind:"color"},{key:"mode",label:"Mode",kind:"enum",opts:[["solid","solid"],["blink_slow","blink slowly"],["blink_fast","blink fast"]]}]},
+      {id:"led",do:"led.indicate",label:"LED alert",fields:[{key:"rgb",label:"Colour",kind:"color"},{key:"mode",label:"Mode",kind:"enum",opts:[["solid","solid"],["blink_slow","blink slowly"],["blink_fast","blink fast"],["breathe","breathe"]]}]},
       {id:"led_clear",do:"led.clear",label:"Clear the LED alert"},
       {id:"note",do:"log.note",label:"Note in the log",fields:[{key:"message",label:"Message",kind:"text",def:"${source}.${name}"}]},
       {id:"obd",do:"obd.request",label:"Send an OBD command",fields:[{key:"cmd",label:"Command",kind:"text",def:"010C"}]},

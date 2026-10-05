@@ -401,12 +401,26 @@ def run_pcan(a):
 
     class BusErrors(can.Listener):
         """A bus error as PCAN reports it has a non-zero id (the kind);
-        id 0 is only its error counter moving."""
+        id 0 is only its error counter moving. The first error after a
+        quiet second is an event with the wall clock on it (`BUS {...}`):
+        a bench that wants to know WHEN somebody transmitted at the wrong
+        bit rate reads these."""
+
+        last = 0.0
 
         def on_message_received(self, msg):
             if msg.is_error_frame and msg.arbitration_id != 0:
+                now = time.time()
                 with lock:
                     stats["bus_errors"] += 1
+                    first = now - self.last > 1.0
+                    self.last = now
+                    if first:
+                        print("BUS " + json.dumps(
+                            {"t": round(now, 3), "event": "errors_begin",
+                             "kind": msg.arbitration_id,
+                             "data": bytes(msg.data).hex(),
+                             "total": stats["bus_errors"]}), flush=True)
 
     notifier.add_listener(BusErrors())
 
@@ -500,13 +514,27 @@ def run_pcan(a):
         import j1939_ref as J
         tlock = threading.Lock()
 
+        tx_state = {"failing": False}
+
         def truck_tx(cid, data):
             try:
                 bus.send(can.Message(arbitration_id=cid, is_extended_id=True,
                                      data=data), timeout=0.05)
-            except can.CanError:
+                if tx_state["failing"]:
+                    tx_state["failing"] = False
+                    print("BUS " + json.dumps(
+                        {"t": round(time.time(), 3), "event": "tx_ok_again"}),
+                        flush=True)
+            except can.CanError as e:
                 with lock:
                     stats["truck_tx_errors"] = stats.get("truck_tx_errors", 0) + 1
+                if not tx_state["failing"]:
+                    # the adapter refuses frames: bus-off, or its queue full
+                    # behind a frame nobody acknowledges
+                    tx_state["failing"] = True
+                    print("BUS " + json.dumps(
+                        {"t": round(time.time(), 3), "event": "tx_failing",
+                         "why": str(e)[:80]}), flush=True)
 
         def truck_log(ev):
             print("TRUCK " + json.dumps(ev), flush=True)

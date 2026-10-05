@@ -111,3 +111,50 @@ class OwonPsu:
                 return amps
             time.sleep(interval_s)
         return None
+
+
+def main() -> int:
+    """By hand: what the supply reads, and a power cycle of the DUT.
+
+        python owon_psu.py            setpoint, output, measured V and mA
+        python owon_psu.py cycle      output off 4 s, on again, then the same
+
+    The current tells a DUT that went quiet apart without touching it
+    (TESTING.md, "When the DUT disappears in the middle of a test"): about
+    47 mA at 13.5 V = parked or asleep, 73 mA = the ROM's download mode,
+    160 mA = awake. Opens the PSU's port only.
+    """
+    import argparse
+
+    import bench_ports
+
+    ap = argparse.ArgumentParser(description="The bench PSU by hand")
+    ap.add_argument("what", nargs="?", default="status",
+                    choices=("status", "cycle"))
+    ap.add_argument("--port", default="auto")
+    a = ap.parse_args()
+    with OwonPsu(bench_ports.resolve(a.port, "psu", "COM2016")) as psu:
+        try:
+            psu.meas_current()  # a cold OWON's first answer is not one
+        except (AssertionError, ValueError):
+            pass
+        if a.what == "cycle":
+            psu.output(False)
+            print("output off", flush=True)
+            time.sleep(4)
+            psu.output(True)
+            print("output on", flush=True)
+            time.sleep(2)
+        amps = sorted(psu.sample_current(2, 0.25))
+        print(f"setpoint {psu.voltage_setpoint():.2f} V, output "
+              f"{'on' if psu.output_on() else 'OFF'}, measured "
+              f"{psu.meas_voltage():.2f} V, {amps[len(amps) // 2] * 1000:.0f} mA "
+              f"(median of {len(amps)}; {amps[0] * 1000:.0f} to "
+              f"{amps[-1] * 1000:.0f})")
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(main())

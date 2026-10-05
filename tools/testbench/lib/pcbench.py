@@ -32,9 +32,46 @@ import urllib.request
 STACK_FAIL_B = 512              # the stack audit's floors
 INT_MIN_FREE_B = 20 * 1024
 
+# A DUT that stops answering: since 2026-10-05 the first suspect is the crash
+# park (three runs in a row that crash within ten minutes of their start, and
+# the firmware sleeps instead of starting a fourth time). A bench over HTTP
+# cannot see it; the supply current and the console can.
+GONE_HINT = (" [no answer: if the supply reads about 47 mA (`python "
+             "tools/testbench/lib/owon_psu.py`) and the LED breathes red, the "
+             "DUT PARKED itself after three crashes in a row: the console log "
+             "has `WICAN PARK`, a PSU power cycle brings it back, and `GET "
+             "/api/restart/report` then says what crashed. TESTING.md, \"When "
+             "the DUT disappears in the middle of a test\"]")
+
 
 class Bench(Exception):
     """The rig did not do what a step needs: the run cannot go on."""
+
+
+def unplanned_boots(history, since_boot):
+    """From a `/api/restart/history` reply: the boots after boot number
+    `since_boot` that nobody asked for, as text for a failed reset check
+    ('' when the tracker's 8 records hold none)."""
+    recs = history.get("records", []) if isinstance(history, dict) else []
+    out = [reset_text(r) for r in recs
+           if not r.get("planned") and isinstance(r.get("seq"), int)
+           and r["seq"] > since_boot]
+    return ("; " + "; ".join(sorted(out))) if out else ""
+
+
+def reset_text(rec):
+    """One record of the restart history for a failed reset check: the reset
+    reason and, since 2026-10-05, the crash note the boot filed (where it
+    crashed: kind, PC, task, backtrace), with the backtrace as function
+    names when the ELF of that very image is in build/ (lib/crash_note.py)."""
+    try:
+        import crash_note
+        text = crash_note.one_line(rec)
+        if isinstance(rec.get("crash"), dict):
+            text += crash_note.decoded_line(rec["crash"])
+        return text
+    except Exception:  # noqa: BLE001  (a report must not die on its footnote)
+        return f"boot {rec.get('seq')}: reset reason '{rec.get('reason')}'"
 
 
 class Run:
@@ -82,6 +119,9 @@ class Dut:
         self.seen_e = set()
         self.stack_min = {}               # task -> least headroom seen, bytes
         self.heap_min = None              # internal heap: least min_free seen
+        self.unexpected = None            # unexpected_resets at the last look
+        self.old_resets = set()           # unplanned boots older than the run
+        self.reset_notes = []             # the tracker's word on this run's
 
     # ---- plain HTTP -----------------------------------------------------------
 
@@ -115,7 +155,8 @@ class Dut:
                 return r
             last = (code, r)
             time.sleep(1.5)
-        raise Bench(f"GET {path}: {last}")
+        raise Bench(f"GET {path}: {last}"
+                    + (GONE_HINT if last and last[0] == 0 else ""))
 
     # ---- settings and restarts --------------------------------------------------
 
@@ -161,7 +202,8 @@ class Dut:
                 self.restarts += 1
                 return time.time()
             time.sleep(0.5)
-        raise Bench("the DUT did not come back within 150 s of a restart")
+        raise Bench("the DUT did not come back within 150 s of a restart"
+                    + GONE_HINT)
 
     # ---- what the device only says in passing ------------------------------------
 
@@ -174,8 +216,12 @@ class Dut:
         return [re.sub(r"\x1b\[[0-9;]*m", "", ln) for ln in t.splitlines()]
 
     def as_found(self):
-        """Remember the log ring as it is: older lines are not this run's."""
+        """Remember the log ring as it is: older lines are not this run's.
+        The same for resets nobody asked for."""
         self.ring0.update(self.ring_lines())
+        code, st = self.api("/api/status")
+        if code == 200 and isinstance(st, dict):
+            self.note_resets(st)
 
     def sweep(self):
         """Keep the E lines of the own tags, the stack headroom of the named
@@ -199,6 +245,45 @@ class Dut:
             if isinstance(low, int) and \
                     (self.heap_min is None or low < self.heap_min):
                 self.heap_min = low
+            self.note_resets(st)
+
+    def note_resets(self, st):
+        """A reset nobody asked for: keep what the restart tracker says about
+        it NOW (its history holds 8 boots; a bench restarts more often than
+        that, and the reason is gone by the closing check otherwise; the EU
+        truck bench's first run, 2026-10-03). `st` = a /api/status reply."""
+        n = st.get("unexpected_resets")
+        if not isinstance(n, int) or n == self.unexpected:
+            return
+        code, h = self.api("/api/restart/history", timeout=15)
+        recs = h.get("records", []) if code == 200 and isinstance(h, dict) \
+            else []
+        first = self.unexpected is None
+        self.unexpected = n
+        for r in recs:
+            seq = r.get("seq")
+            if r.get("planned") or seq in self.old_resets:
+                continue
+            self.old_resets.add(seq)
+            if not first:               # the first look is the run's baseline
+                self.reset_notes.append(reset_text(r))
+
+    def reset_check(self, run, st0):
+        """The closing check: no boot but the ones the bench asked for since
+        `st0` (the /api/status of the start). A failure says what the restart
+        tracker recorded."""
+        st1 = self.get("/api/status")
+        self.note_resets(st1)
+        boots = st1.get("boot_count") - st0.get("boot_count")
+        detail = (f"unexpected_resets {st0.get('unexpected_resets')} -> "
+                  f"{st1.get('unexpected_resets')}, boot_count +{boots} for "
+                  f"{self.restarts} restarts")
+        if self.reset_notes:
+            detail += "; " + "; ".join(self.reset_notes)
+        return run.check("no_unexpected_reset",
+                         st1.get("unexpected_resets")
+                         == st0.get("unexpected_resets")
+                         and boots == self.restarts, detail)
 
     def passing_checks(self, run):
         """The closing checks on what sweep() collected."""
@@ -236,25 +321,40 @@ class Actor:
         self.stop_file = None
 
     def start(self, tag, actor_args, secs=900):
-        """Start it (a running one is stopped first) and wait for READY."""
+        """Start it (a running one is stopped first) and wait for READY. An
+        actor that dies at once is started again, twice: the PEAK driver now
+        and then refuses the first open after a pause of the adapter
+        (`PcanCanInitializationError: ... irregularities were registered`)
+        and takes the next one."""
         self.stop()
         self.log = os.path.join(self.logdir, f"{self.prefix}_{tag}.log")
         self.stop_file = os.path.join(self.logdir, f"{self.prefix}_{tag}.stop")
         if os.path.exists(self.stop_file):
             os.remove(self.stop_file)
-        out = open(self.log, "w")
-        self.p = subprocess.Popen(
-            [sys.executable, "-u", self.script, str(secs),
-             "--stop-file", self.stop_file] + list(actor_args),
-            stdout=out, stderr=subprocess.STDOUT)
-        end = time.time() + 15
-        while time.time() < end:
-            if self.p.poll() is not None:
-                raise Bench(f"the actor died at start: see {self.log}")
-            if self.ready in self.text():
-                return
-            time.sleep(0.2)
-        raise Bench(f"the actor did not come up: see {self.log}")
+        for attempt in range(3):
+            out = open(self.log, "w")
+            self.p = subprocess.Popen(
+                [sys.executable, "-u", self.script, str(secs),
+                 "--stop-file", self.stop_file] + list(actor_args),
+                stdout=out, stderr=subprocess.STDOUT)
+            end = time.time() + 15
+            died = False
+            while time.time() < end:
+                if self.p.poll() is not None:
+                    died = True
+                    break
+                if self.ready in self.text():
+                    return
+                time.sleep(0.2)
+            out.close()
+            if not died:
+                raise Bench(f"the actor did not come up: see {self.log}")
+            last = self.text().strip().splitlines()[-1:] or ["(no output)"]
+            print(f"actor died at start (attempt {attempt + 1}): {last[0][:160]}",
+                  flush=True)
+            self.p = None
+            time.sleep(2)
+        raise Bench(f"the actor died at start: see {self.log}")
 
     def stop(self):
         """Ask for a clean stop. Returns the closing statistics, {} without."""
