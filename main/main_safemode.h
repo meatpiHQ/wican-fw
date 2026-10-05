@@ -4,14 +4,19 @@
  *         boots a BARE-MINIMUM recovery environment instead of the
  *         composition: default AP (WiCAN_<mac> / @meatpi# on
  *         192.168.0.10 — ALWAYS the defaults, whatever the stored
- *         settings say) + a 3-route web server (recovery page, firmware
- *         upload, factory reset). Settings are NEVER loaded — a corrupt
- *         config cannot crash safe mode. Reboots after 10 min with no
- *         AP client. LED: sky-blue while deciding, solid yellow in safe
+ *         settings say) + a small web server (recovery page, firmware
+ *         upload, factory reset, and since 2026-10-05 the stored crash
+ *         report as text and as a download). Settings are NEVER loaded — a
+ *         corrupt config cannot crash safe mode. Reboots after 10 min with
+ *         no AP client. LED: sky-blue while deciding, solid yellow in safe
  *         mode (legacy pattern). */
 #pragma once
 
 #include <stdbool.h>
+
+/** The button: polled, active low, pull-up (main_safemode_check() sets the
+ *  pad up at every boot). The crash park polls it too (main_park.c). */
+#define MAIN_SAFEMODE_BUTTON_GPIO 8
 
 /** Call FIRST in app_main, before any component init. Polls the button
  *  (no interrupts): released (the normal case) returns false in

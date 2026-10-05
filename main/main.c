@@ -80,6 +80,7 @@
 #include "main_cli.h"
 #include "main_glue.h"
 #include "main_heap.h"
+#include "main_park.h"
 #include "main_safemode.h"
 #include "bridge_endpoints.h"
 #include "mqtt_can.h"
@@ -125,6 +126,12 @@ void app_main(void)
        (log_manager_init failure falls back to the raw IDF console) */
     main_boot_init("log_manager_init", log_manager_init);
     main_boot_init("restart_tracker_init", restart_tracker_init);
+
+    /* the crash-loop brake: after three runs in a row that crashed before
+       they settled, the boot ends here, asleep, before anything else can
+       crash again (main_park.c). One call of cost otherwise. */
+    main_park_check();
+
     main_boot_init("dev_status_manager_init", dev_status_manager_init);
 
     /* ---- HAL + core owners ------------------------------------------------ */
@@ -415,6 +422,10 @@ void app_main(void)
         vTaskDelay(pdMS_TO_TICKS(60000));
 
         main_boot_flash_watch();
+
+        /* a run that stayed up RESTART_TRACKER_SETTLE_S is healthy: this
+           ends a crash streak (no flash; a no-op once it is marked) */
+        (void)restart_tracker_settle(false);
 
         if (dev_status_manager_memory(&mem) == ESP_OK)
         {

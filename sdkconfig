@@ -3622,6 +3622,13 @@ CONFIG_ML_DEVICE_NAME=""
 # end of MicroLink V2 Configuration
 
 #
+# WiCAN restart_tracker
+#
+# default:
+CONFIG_WICAN_RESTART_TRACKER_PARK_RETRY_MIN=0
+# end of WiCAN restart_tracker
+
+#
 # WiCAN sleep_manager
 #
 # default:

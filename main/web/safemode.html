@@ -150,6 +150,23 @@
             width: 0%;
             transition: width 0.2s linear;
         }
+        .crash-report {
+            text-align: left;
+            font-family: Consolas, Menlo, monospace;
+            font-size: 0.8rem;
+            line-height: 1.4;
+            background-color: var(--gray-100);
+            border: 1px solid var(--gray-300);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        a.btn {
+            display: inline-block;
+            text-decoration: none;
+        }
         .progress-text {
             position: absolute;
             top: 50%;
@@ -167,8 +184,18 @@
     <div class="container">
         <div class="warning-header">
             <h1 class="warning-title">WiCAN Safe Mode</h1>
-            <p class="warning-text">Device is in safe mode. Only firmware update and factory reset are available.</p>
+            <p class="warning-text">Device is in safe mode. Only the crash report, firmware update and factory reset are available.</p>
         </div>
+
+        <div class="section-title">Crash Report</div>
+        <p id="crash-status">Looking for a crash report...</p>
+        <div id="crash-box" style="display:none">
+            <pre class="crash-report" id="crash-text"></pre>
+            <button type="button" class="btn btn-secondary" onclick="copyCrashReport()">Copy Report</button>
+            <a class="btn btn-secondary" href="/crash_report.txt" download="wican_crash_report.txt">Download Report</a>
+        </div>
+
+        <div class="divider"></div>
 
         <div class="section-title">Factory Reset</div>
         <p>Reset all settings to factory defaults. This action cannot be undone.</p>
@@ -307,6 +334,55 @@
                 showStatus('Factory reset failed. Please try again.', 'error');
             });
         }
+
+        function loadCrashReport() {
+            const status = document.getElementById('crash-status');
+            fetch('/crash_report')
+            .then(response => {
+                if (response.status === 404) {
+                    status.textContent = 'No crash report is stored on this device.';
+                    return null;
+                }
+                if (!response.ok) {
+                    throw new Error('Report failed');
+                }
+                return response.text();
+            })
+            .then(text => {
+                if (text === null) {
+                    return;
+                }
+                status.textContent = 'The firmware stored this report when it crashed. Copy or download it and send it with your support request. It stays on the device until you clear it or a different crash replaces it.';
+                document.getElementById('crash-text').textContent = text;
+                document.getElementById('crash-box').style.display = 'block';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                status.textContent = 'The crash report could not be read. Reload the page to try again.';
+            });
+        }
+
+        function copyCrashReport() {
+            const text = document.getElementById('crash-text').textContent;
+            // this page is served over plain http: the clipboard API is not there
+            const area = document.createElement('textarea');
+            area.value = text;
+            area.setAttribute('readonly', '');
+            area.style.position = 'fixed';
+            area.style.top = '-1000px';
+            document.body.appendChild(area);
+            area.select();
+            let copied = false;
+            try {
+                copied = document.execCommand('copy');
+            } catch (error) {
+                copied = false;
+            }
+            document.body.removeChild(area);
+            showStatus(copied ? 'Crash report copied.' : 'Copy failed. Select the report text and copy it by hand.', copied ? 'success' : 'error');
+        }
+
+        loadCrashReport();
 
         function showStatus(message, type) {
             const statusMessage = document.getElementById('status-message');

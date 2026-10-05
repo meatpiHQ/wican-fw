@@ -5,12 +5,21 @@
  *        INSTEAD of the composition, uses no component settings, and
  *        touches only what recovery needs (WiFi AP + httpd + OTA +
  *        factory erase). Button is POLLED, never an interrupt.
+ *
+ *        2026-10-05: safe mode is also where a user gets the crash report
+ *        of a device that no longer starts (the crash park breathes red,
+ *        the user holds the button while plugging it in): the report the
+ *        restart tracker keeps in NVS is on the page, as text to copy and
+ *        as a file to download, and on the console. NVS is the one store
+ *        safe mode opens anyway; no filesystem is mounted for it.
  */
 #include "main_safemode.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "driver/gpio.h"
+#include "esp_attr.h"
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_mac.h"
@@ -31,7 +40,7 @@
 
 static const char *TAG = "safemode";
 
-#define SM_BUTTON_GPIO     8
+#define SM_BUTTON_GPIO     MAIN_SAFEMODE_BUTTON_GPIO
 #define SM_HOLD_MS         5000   /* legacy: 5 s to latch safe mode      */
 #define SM_IDLE_TIMEOUT_MS 600000 /* reboot after 10 min with no client */
 
@@ -171,7 +180,7 @@ static void ota_on_finished(void *user_ctx)
     }
 }
 
-/* ---- the 3 routes ------------------------------------------------------------ */
+/* ---- the routes ---------------------------------------------------------------- */
 
 static esp_err_t root_handler(httpd_req_t *req)
 {
@@ -222,6 +231,41 @@ static esp_err_t upload_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+/** The crash report NVS holds, as the text a user sends on. Registered
+ *  twice: `/crash_report` for the page, `/crash_report.txt` (user_ctx set)
+ *  as a download. */
+static esp_err_t crash_report_handler(httpd_req_t *req)
+{
+    /* PSRAM: one httpd worker, one request at a time */
+    static restart_tracker_report_t report EXT_RAM_BSS_ATTR;
+    static char text[RESTART_TRACKER_REPORT_TEXT_MAX] EXT_RAM_BSS_ATTR;
+
+    httpd_resp_set_type(req, "text/plain; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+
+    if (restart_tracker_get_report(&report) != ESP_OK)
+    {
+        httpd_resp_set_status(req, "404 Not Found");
+        return httpd_resp_sendstr(req,
+                                  "No crash report is stored on this device.\n");
+    }
+
+    int len = restart_tracker_report_text(&report, text, sizeof(text));
+
+    if (len >= (int)sizeof(text))
+    {
+        len = (int)sizeof(text) - 1;
+    }
+
+    if (req->user_ctx != NULL)
+    {
+        httpd_resp_set_hdr(req, "Content-Disposition",
+                           "attachment; filename=\"wican_crash_report.txt\"");
+    }
+
+    return httpd_resp_send(req, text, (len > 0) ? len : 0);
+}
+
 static esp_err_t factory_reset_handler(httpd_req_t *req)
 {
     ESP_LOGI(TAG, "factory reset requested");
@@ -238,6 +282,14 @@ static esp_err_t factory_reset_handler(httpd_req_t *req)
 
     nvs_flash_erase();
 
+    /* the crash report is no setting: it goes back in, so that a user who
+       resets first and asks for help second still has it (the console's
+       `factoryreset` never touched NVS either) */
+    if (nvs_flash_init() == ESP_OK)
+    {
+        (void)restart_tracker_restore_report();
+    }
+
     httpd_resp_sendstr(req, "OK");
     vTaskDelay(pdMS_TO_TICKS(2000));
     restart_tracker_restart(RESTART_TRACKER_PLANNED_REASON_FACTORY_RESET,
@@ -247,12 +299,30 @@ static esp_err_t factory_reset_handler(httpd_req_t *req)
 
 /* ---- safe mode proper -------------------------------------------------------- */
 
+/** The stored crash report on the console, for a user with a cable. */
+static void print_crash_report(void)
+{
+    static restart_tracker_report_t report EXT_RAM_BSS_ATTR;
+    static char text[RESTART_TRACKER_REPORT_TEXT_MAX] EXT_RAM_BSS_ATTR;
+
+    if (restart_tracker_get_report(&report) != ESP_OK)
+    {
+        ESP_LOGI(TAG, "no crash report is stored");
+        return;
+    }
+
+    restart_tracker_report_text(&report, text, sizeof(text));
+    printf("---- stored crash report ----\n%s-----------------------------\n",
+           text);
+}
+
 static void safemode_run(void)
 {
     ESP_LOGI(TAG, "entering SAFE MODE");
     led_manager_boot_color(255, 255, 0); /* legacy: solid yellow */
-    restart_tracker_init();
 
+    /* NVS first (2026-10-05): the tracker reads the stored crash report
+       from it, and stores the note of the run that just ended */
     esp_err_t err = nvs_flash_init();
 
     if (err == ESP_ERR_NVS_NO_FREE_PAGES ||
@@ -261,6 +331,10 @@ static void safemode_run(void)
         nvs_flash_erase();
         nvs_flash_init();
     }
+
+    restart_tracker_init();
+    (void)restart_tracker_set_boot_mode(RESTART_TRACKER_BOOT_SAFE);
+    print_crash_report();
 
     esp_netif_init();
     esp_event_loop_create_default();
@@ -317,7 +391,7 @@ static void safemode_run(void)
     httpd_config_t hcfg = HTTPD_DEFAULT_CONFIG();
 
     hcfg.stack_size = 12 * 1024;
-    hcfg.max_uri_handlers = 4;
+    hcfg.max_uri_handlers = 6; /* 5 routes below */
 
     if (httpd_start(&server, &hcfg) == ESP_OK)
     {
@@ -329,10 +403,18 @@ static void safemode_run(void)
         const httpd_uri_t RESET =
             { .uri = "/factory_reset", .method = HTTP_POST,
               .handler = factory_reset_handler };
+        const httpd_uri_t REPORT =
+            { .uri = "/crash_report", .method = HTTP_GET,
+              .handler = crash_report_handler };
+        const httpd_uri_t REPORT_FILE =
+            { .uri = "/crash_report.txt", .method = HTTP_GET,
+              .handler = crash_report_handler, .user_ctx = (void *)1 };
 
         httpd_register_uri_handler(server, &ROOT);
         httpd_register_uri_handler(server, &UPLOAD);
         httpd_register_uri_handler(server, &RESET);
+        httpd_register_uri_handler(server, &REPORT);
+        httpd_register_uri_handler(server, &REPORT_FILE);
         ESP_LOGI(TAG, "safe mode up: AP '%s' @ 192.168.0.10",
                  (char *)ap_cfg.ap.ssid);
     }

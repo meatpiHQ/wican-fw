@@ -5,6 +5,7 @@ idf_component_register(
          "main_cli.c"
          "main_glue.c"
          "main_heap.c"
+         "main_park.c"
          "main_safemode.c"
          "main_sleep.c"
     INCLUDE_DIRS "."
