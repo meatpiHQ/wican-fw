@@ -1,0 +1,28 @@
+{
+  "car_model": "Toyota: bZ4X 2022-2025",
+  "init": "ATSP6;ATST96;",
+  "pids": [
+    {
+      "pid": "221F5B1",
+      "pid_init": "ATSH7D2;ATCRA7DA;",
+      "parameters": {
+        "SOC": "B4/2.55"
+      }
+    },
+    {
+      "pid": "221F9A2",
+      "pid_init": "ATSH7D2;ATCRA7DA;",
+      "parameters": {
+        "HV_V": "((B7*256)+B9)*0.015625",
+        "HV_A": "[S10:S11]*0.1"
+      }
+    },
+    {
+      "pid": "22181A2",
+      "pid_init": "ATSH747;ATCRA74F;",
+      "parameters": {
+        "HV_C_V_001": "[B5:B6]/13107"
+      }
+    }
+  ]
+}
