@@ -992,11 +992,15 @@ def s_destinations(rig):
 
 def s_critical_floor(rig):
     """Sleep DISABLED in settings, 11.75 V: the critical floor (under 11.90 V
-    for 120 s, 2026-10-01) must put the device to sleep anyway, keep it
-    asleep, and 14 V must wake it (power_wake). Restores sleep enabled."""
+    for 5 min since 2026-10-06, 2 min before; the device states it as
+    `critical_s` on /api/sleep) must put the device to sleep anyway, not
+    before its delay ran out, keep it asleep, and 14 V must wake it
+    (power_wake). Restores sleep enabled."""
     rig.put_settings("sleep_manager", {"enabled": False})
     try:
-        assert rig.dut.wait_up(120), "DUT not up with sleep disabled"
+        st0 = rig.dut.wait_up(120)
+        assert st0, "DUT not up with sleep disabled"
+        floor_s = int(st0.get("critical_s", 120))    # no field = the 2 min firmware
         time.sleep(20)                               # past the 15 s boot grace
         awake_a = statistics.mean(rig.psu.sample_current(4))
         hist0 = rig.dut.get("/api/restart/history") or {}
@@ -1004,15 +1008,20 @@ def s_critical_floor(rig):
         rig.psu.set_voltage(11.75)
         t0 = time.time()
         entry = None
-        while time.time() - t0 < 120 + 90:
+        early = None
+        while time.time() - t0 < floor_s + 90:
             a = rig.psu.meas_current()
-            if time.time() - t0 >= 100 and a < awake_a - 0.030 and rig.dut.get("/api/sleep", timeout_s=3) is None:
+            el = time.time() - t0
+            if 30 <= el < floor_s - 20 and a < awake_a - 0.030 and early is None and rig.dut.get("/api/sleep", timeout_s=3) is None:
+                early = el                           # asleep before the floor's delay: the old 2 min rule?
+            if el >= floor_s - 20 and a < awake_a - 0.030 and rig.dut.get("/api/sleep", timeout_s=3) is None:
                 entry = a
                 break
             time.sleep(2)
         took = time.time() - t0
+        assert early is None, f"asleep {early:.0f} s after the drop, before the floor's {floor_s} s"
         assert entry is not None, f"floor never slept the device ({took:.0f} s, awake {mA(awake_a)})"
-        assert took <= 200, f"floor took {took:.0f} s (expected ~120)"
+        assert took <= floor_s + 80, f"floor took {took:.0f} s (expected ~{floor_s})"
         print(f"  asleep after {took:.0f} s with sleep DISABLED ({mA(entry)})")
         sleep_a = statistics.mean(rig.psu.sample_current(5))
         time.sleep(40)

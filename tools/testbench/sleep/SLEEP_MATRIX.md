@@ -44,7 +44,7 @@
 | 19 | `j2534_on` | J2534 server listening on TCP 6809 at entry | 90 s | runner (2026-10-01) |
 | 20 | `ble_idle_on` | BLE platform on, advertising, no central (the connected case is #6) | 90 s | runner (2026-10-01) |
 | 21 | `destinations` | data_destinations publishing the configured rows (MQTT to the Pi) at entry | 90 s | runner (2026-10-01, SKIP without a configured row) |
-| 22 | `critical_floor` | sleep DISABLED in settings, 11.75 V: the critical floor (under 11.90 V for 120 s) must sleep the device anyway, keep it asleep, and 14 V must wake it (`power_wake`) | ~3 min | runner (2026-10-01, Ali's floor) |
+| 22 | `critical_floor` | sleep DISABLED in settings, 11.75 V: the critical floor (under 11.90 V for 300 s since 2026-10-06, Ali; 120 s before; the scenario reads the device's `critical_s`) must sleep the device anyway, NOT before that delay ran out, keep it asleep, and 14 V must wake it (`power_wake`) | ~7 min | runner (2026-10-01, Ali's floor; 2026-10-06 re-timed for 5 min: `--only critical_floor` PASS 09:40, asleep after 315 s with sleep disabled, clean `power_wake`) |
 
 Chip-stays-asleep coverage: every scenario's forensics fail on an
 `internal_recovery` record (= the OBD chip refused to stay asleep and

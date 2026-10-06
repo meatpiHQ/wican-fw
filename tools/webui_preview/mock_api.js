@@ -35,6 +35,19 @@
   });
 
   const now = () => Math.floor(Date.now() / 1000);
+
+  /* what GET /api/sleep (and a hold) answer: the countdown counted down from the first read */
+  const sleepStatus = () => {
+    const sm = (S.sleep_manager && S.sleep_manager.values) || {};
+    const sp = state.sleepPending;
+    if (sp && !sp.t0) sp.t0 = Date.now();
+    const left = sp ? Math.max(0, Math.ceil(sp.in_s - (Date.now() - sp.t0) / 1000)) : 0;
+    const hold = sp && state.holdUntil > Date.now() ? Math.ceil((state.holdUntil - Date.now()) / 1000) : 0;
+    return { enabled: sm.enabled !== false, state: sp && sm.enabled !== false ? "low_voltage" : "normal", voltage: state.batteryV,
+      sleep_v: (sm.sleep_mv || 13100) / 1000, wake_v: (sm.wake_mv || 13200) / 1000, naps: 0,
+      pending: sp ? sp.cause : "none", sleep_in_s: left, critical_v: 11.9, critical_s: 300,
+      hold_s: hold, holds_left: 3 - state.holds, holds_max: 3 };
+  };
   const state = {
     scan: { status: "idle", found: 0 },
     /* Quick Setup (2026-10-01): a probe presets window.__mockPreset before
@@ -49,6 +62,29 @@
     vehicles: (window.__mockPreset || {}).vehicles || { current: "", vehicles: [] },
     /* the battery the wizard's Battery and sleep step watches: a probe moves it (14.3 = charging, 12.8 = resting) */
     batteryV: typeof (window.__mockPreset || {}).batteryV === "number" ? window.__mockPreset.batteryV : 12.52,
+    /* the sleep countdown (2026-10-06): null = nothing counts, whatever batteryV says (the mock's
+       ladder does not run by itself); a probe sets {cause: "delay" | "critical", in_s: N} and the
+       mock counts it down from the first read, then stops answering like a device that went to
+       sleep (state.asleep; set it back to false to "wake" it) */
+    sleepPending: (window.__mockPreset || {}).sleepPending || null,
+    asleep: false,
+    /* the Quick Setup reconnect screen (2026-10-06): `offline` = this page's
+       own origin is out of reach (the phone left the access point);
+       `linkAnswers` = WiCAN answers at the mDNS link (the phone has arrived
+       on the home WiFi and WiCAN joined it) */
+    offline: false,
+    linkAnswers: false,
+    /* the connection test (2026-10-06, POST/GET /api/wifi/try): tryResult =
+       connected | password | not_found | refused | no_ip | timeout, the
+       answer after tryDelayMs; tryMode "ap" refuses the POST (no station
+       interface); trial = the running/last trial, tryPosts counts starts */
+    tryResult: (window.__mockPreset || {}).tryResult || "connected",
+    tryDelayMs: typeof (window.__mockPreset || {}).tryDelayMs === "number" ? window.__mockPreset.tryDelayMs : 1500,
+    tryMode: (window.__mockPreset || {}).tryMode || "apsta",
+    trial: null,
+    tryPosts: 0,
+    holds: 0,                 /* POST /api/sleep/hold presses this boot (three allowed) */
+    holdUntil: 0,
     /* the CAN link and autopid's bus guard (2026-10-03): null = a healthy 500k bus, nothing parked */
     canLink: (window.__mockPreset || {}).can || null,
     busGuard: (window.__mockPreset || {}).busGuard || null,
@@ -207,7 +243,7 @@
 
   const FIXED = {
     "/api/status": () => J({
-      bits: { awake: true, sleep: false, sta_connected: state.staConnected !== false, mqtt_connected: state.mqttConnected !== false, ble_connected: false, sdcard_mounted: state.sdMounted !== false, ble_enabled: false, sta_enabled: true, ap_enabled: true, autopid_enabled: true, home_mode: false, drive_mode: false, smartconnect: false, sta_ap_overlap: false, time_synced: true, vpn_enabled: true, wake_voltage_ok: true, eth_connected: false, autopid_idle: false, motion: false, sta_suspended: false, ap_suspended: false, ble_suspended: false },
+      bits: { awake: true, sleep: false, sta_connected: state.staConnected !== false, mqtt_connected: state.mqttConnected !== false, ble_connected: false, sdcard_mounted: state.sdMounted !== false, ble_enabled: false, sta_enabled: true, ap_enabled: true, autopid_enabled: true, home_mode: false, drive_mode: false, smartconnect: false, sta_ap_overlap: false, time_synced: true, vpn_enabled: true, wake_voltage_ok: !state.sleepPending, eth_connected: false, autopid_idle: false, motion: false, sta_suspended: false, ap_suspended: false, ble_suspended: false },
       network_connected: true, uptime: "02:14:09", version: "v6.0.0-preview", partition: "ota_0",
       boot_count: 42, unexpected_resets: 1, device_id: "14c19f44e349",
       memory: { internal: { total: 274580, free: 71103, min_free: 63587, largest_block: 45056 }, psram: { total: 8272000, free: 7734508, min_free: 7524288 } }, /* no largest_block for PSRAM in the polled status (2026-10-03) */
@@ -220,6 +256,25 @@
     "/api/faults": () => J({ faults: S.__faults || (S.__faults = [
       { code: "registry_headroom", detail: "bridge_tr at 3/4", count: 1,
         first_time: 1784400000, last_time: 1784400000 }]) }),
+    "/api/wifi/try": (path, method, body) => {
+      if (method === "POST") {
+        const b = body || {};   /* handle() parsed it already */
+        if (!b.ssid || b.ssid.length > 32 || (b.password && (b.password.length < 8 || b.password.length > 63))) return J({ error: "need ssid (1..32) and password (8..63)" }, 400);
+        if (state.tryMode === "ap") return J({ error: "the station is off: the test needs Access point + Station" }, 409);
+        if (state.trial && state.trial.state === "running" && Date.now() < state.trial.t0 + state.tryDelayMs) return J({ error: "a test is already running" }, 409);
+        state.tryPosts++;
+        state.trial = { state: "running", ssid: b.ssid, password: b.password || "", t0: Date.now(), result: state.tryResult };
+        return J({ state: "running", ssid: b.ssid, result: "none", reason: 0, took_ms: 0, age_s: 0 }, 202);
+      }
+      const t = state.trial;
+      if (!t) return J({ state: "idle", ssid: "", result: "none", reason: 0, took_ms: 0, age_s: 0 });
+      if (Date.now() < t.t0 + state.tryDelayMs) return J({ state: "running", ssid: t.ssid, result: "none", reason: 0, took_ms: 0, age_s: 0 });
+      const reasons = { password: 204, not_found: 201, refused: 203, no_ip: 0, timeout: 0, connected: 0 };
+      const o = { state: "done", ssid: t.ssid, result: t.result, reason: reasons[t.result] || 0, took_ms: t.result === "connected" ? 4200 : t.result === "timeout" ? 20000 : 6100, age_s: Math.floor((Date.now() - t.t0 - state.tryDelayMs) / 1000) };
+      if (t.result === "connected") { o.ip = "10.42.0.62"; o.rssi = -58; o.channel = 6; }
+      if (t.result === "no_ip") { o.channel = 6; o.took_ms = 10000; }
+      return J(o);
+    },
     "/api/wifi/status": () => J({ enabled: true, sta_connected: state.staConnected !== false, ip: state.staConnected !== false ? "10.42.0.62" : "", ap_started: true, ap_default_password: state.apDefaultPassword === true, clients: 0, ap_ip: "192.168.80.1", dns: ["10.42.0.1", "1.1.1.1"],
       sta_attempt: { ssid: "HomeWiFi", reason: 204, fail_count: 3, deprioritised: true } }),
     "/api/destinations": () => J({ enabled: S.data_destinations.values.enabled !== false, running: true, network: true, mqtt: true,
@@ -392,7 +447,22 @@
                             frames_rx: 0, frames_tx: 0, allow_reflash: false, allow_lan: false, exclusive: !!state.j2534Exclusive,
                             autopid_paused: false, phase: "2 (CAN + ISO15765 channels)" }),
     "/api/uds": () => J(state.uds),
-    "/api/sleep": () => { const sm = (S.sleep_manager && S.sleep_manager.values) || {}; return J({ enabled: sm.enabled !== false, state: "normal", voltage: state.batteryV, sleep_v: (sm.sleep_mv || 13100) / 1000, wake_v: (sm.wake_mv || 13200) / 1000, naps: 0 }); },
+    "/api/sleep": () => J(sleepStatus()),
+    /* the keep-awake button (2026-10-06): both deadlines out to now + minutes where that is
+       later, three times per boot; 409 when nothing counts or the three are used */
+    "/api/sleep/hold": (full, method, body) => {
+      const minutes = body && typeof body.minutes === "number" ? body.minutes : 10;
+      if (minutes < 1 || minutes > 30) return J({ error: "minutes must be 1..30" }, 400);
+      const sp = state.sleepPending;
+      if (!sp) return J({ error: "nothing is counting" }, 409);
+      if (state.holds >= 3) return J({ error: "hold limit reached" }, 409);
+      if (!sp.t0) sp.t0 = Date.now();
+      const now = Date.now();
+      const left = Math.max(0, sp.in_s - (now - sp.t0) / 1000);
+      sp.t0 = now; sp.in_s = Math.max(left, minutes * 60);
+      state.holds += 1; state.holdUntil = now + minutes * 60000;
+      return J(sleepStatus());
+    },
     /* fixtures per folder + whatever probes uploaded (state.files) or created (state.dirs) */
     "/api/fs/list": (full) => {
       const p = ((new URLSearchParams((full || "").split("?")[1] || "")).get("path") || "/data").replace(/(.)\/$/, "$1");
@@ -660,7 +730,7 @@
     }
 
     if (path.endsWith("/vehicle_profiles.json")) return J({"cars": [{"car_model": "AAA: Generic", "init": "ATSP6;", "pids": [{"pid": "010C1", "parameters": [{"name": "EngineRPM", "expression": "[B3:B4]*0.25", "unit": "RPM", "class": "frequency"}]}, {"pid": "010D1", "parameters": [{"name": "VehicleSpeed", "expression": "B3", "unit": "km/h", "class": "speed"}]}, {"pid": "01051", "parameters": [{"name": "Coolant", "expression": "B3-40", "unit": "°C", "class": "temperature"}]}, {"pid": "012F1", "parameters": [{"name": "FuelLevel", "expression": "B3/2.55", "unit": "%", "class": "none"}]}, {"pid": "010F1", "parameters": [{"name": "IntakeAirTemp", "expression": "B3-40", "unit": "°C", "class": "temperature"}]}, {"pid": "01111", "parameters": [{"name": "Throttle", "expression": "B3/2.55", "unit": "%", "class": "none"}]}, {"pid": "01101", "parameters": [{"name": "MAF", "expression": "[B3:B4]*0.01", "unit": "g/s", "class": "none"}]}, {"pid": "010A1", "parameters": [{"name": "FuelPressure", "expression": "B3*3", "unit": "kPa", "class": "pressure"}]}, {"pid": "01061", "parameters": [{"name": "ShortTermFuelTrim", "expression": "(B3/1.28)-100", "unit": "%", "class": "none"}]}, {"pid": "01A61", "parameters": [{"name": "Odometer", "expression": "[B3:B6]", "unit": "km", "class": "distance"}]}]}, {"car_model": "Hyundai: Ioniq2017", "init": "ATSP6;ATSH7E4;ATST96;", "pids": [{"pid": "21057", "parameters": [{"name": "SOC_DISPLAY", "expression": "B39/2", "unit": "%", "class": "battery"}, {"name": "SOH", "expression": "[B33:B34]/10", "unit": "%", "class": ""}]}, {"pid": "2101", "parameters": [{"name": "SOC_BMS", "expression": "B09/2", "unit": "%", "class": "battery"}, {"name": "Charger_Connected", "expression": "B14:5", "unit": "", "class": ""}, {"name": "Charging", "expression": "B14:7", "unit": "", "class": ""}, {"name": "HV_Charger_Connected", "expression": "B14:6", "unit": "", "class": ""}]}]}, {"car_model": "Kia/Hyundai: Niro/Soul/Kona", "init": "ATST96;", "pids": [{"pid_init": "ATSH7E4;", "pid": "2201019", "parameters": [{"name": "SOC_BMS", "expression": "B10/2", "unit": "%", "class": "battery"}, {"name": "Max_REGEN", "expression": "[B11:B12]/100", "unit": "kW", "class": "power"}, {"name": "Max_Power", "expression": "[B13:B14]/100", "unit": "kW", "class": "power"}, {"name": "Batt_Current", "expression": "(65536-([B17:B18]))/10", "unit": "A", "class": "current"}, {"name": "HV_Volts", "expression": "[B19:B20]/10", "unit": "V", "class": "voltage"}, {"name": "HV_Power", "expression": "([B19:B20]/10)*((65536-([B17:B18]))/10)", "unit": "W", "class": "power"}, {"name": "Batt_MaxT", "expression": "B21", "unit": "°C", "class": "temperature"}, {"name": "Batt_MinT", "expression": "B22", "unit": "°C", "class": "temperature"}, {"name": "Batt_Temp_1", "expression": "B23", "unit": "°C", "class": "temperature"}, {"name": "Batt_Temp_2", "expression": "B25", "unit": "°C", "class": "temperature"}, {"name": "Batt_Temp_3", "expression": "B26", "unit": "°C", "class": "temperature"}, {"name": "Batt_Temp_4", "expression": "B27", "unit": "°C", "class": "temperature"}, {"name": "Batt_InletT", "expression": "B30", "unit": "°C", "class": "temperature"}, {"name": "Max_Cell_V", "expression": "B31/50", "unit": "V", "class": "voltage"}, {"name": "Max_Cell_V_No", "expression": "B33", "unit": "none", "class": "none"}, {"name": "Min_Cell_V", "expression": "B34/50", "unit": "V", "class": "voltage"}, {"name": "Min_Cell_V_No", "expression": "B35", "unit": "none", "class": "none"}, {"name": "Aux_Batt_Volts", "expression": "B38*0.1", "unit": "V", "class": "voltage"}]}, {"pid_init": "ATSH7E4;", "pid": "2201057", "parameters": [{"name": "SOH", "expression": "[B34:B35]/10", "unit": "%", "class": "battery"}, {"name": "SOC_D", "expression": "B41/2", "unit": "%", "class": "battery"}, {"name": "Min_Cell_Det_No", "expression": "B39", "unit": "none", "class": "none"}, {"name": "Max_Cell_Det_No", "expression": "B36", "unit": "none", "class": "none"}, {"name": "Min_Cell_Det", "expression": "[B37:B38]/10", "unit": "%", "class": "battery"}]}, {"pid_init": "ATSH7E2;", "pid": "21014", "parameters": [{"name": "GearSelector_Raw", "expression": "B10", "unit": "none", "class": "none"}, {"name": "Speed_Vehicle", "expression": "[B19:B20]/100", "unit": "%", "class": "battery"}, {"name": "Car_Ready", "expression": "B26:3", "unit": "none", "class": "none"}, {"name": "Car_ParkBreak", "expression": "B26:5", "unit": "none", "class": "none"}]}]}]});
-    if (FIXED[path]) return FIXED[path](full || path);
+    if (FIXED[path]) return FIXED[path](full || path, method, body);   /* a few mutate on method + body */
     return J({ error: "mock: " + method + " " + path + " not implemented" }, 404);
   }
 
@@ -683,7 +753,20 @@
   window.__mockState = state;   /* probes read counters (gate calls) and set the active log file */
   window.__mockSettings = S;    /* probes read what a page staged / PUT (values per component) */
   window.fetch = (url, opts) => {
+    /* a countdown that ran out: the device is asleep and answers nothing */
+    const sp = state.sleepPending;
+    if (sp && sp.t0 && Date.now() >= sp.t0 + sp.in_s * 1000) state.asleep = true;
+    if (state.asleep) return Promise.reject(new TypeError("mock: the device is asleep"));
     const u = String(url);
+    /* another origin (the mDNS link wican_<id>.local, or the address the
+       connection test returned) is another device-side door: the reconnect
+       screen probes them with no-CORS fetches */
+    if (/^http:\/\/(wican_[0-9a-f]+\.local|\d+\.\d+\.\d+\.\d+)(:\d+)?(\/|$)/i.test(u) && new URL(u).host !== location.host) {
+      state.linkProbes = (state.linkProbes || 0) + 1;
+      return state.linkAnswers ? Promise.resolve({ ok: false, status: 0, type: "opaque", headers: { get: () => null }, json: async () => { throw new TypeError("opaque"); }, text: async () => "" })
+        : Promise.reject(new TypeError("mock: " + u + " is out of reach"));
+    }
+    if (state.offline) return Promise.reject(new TypeError("mock: the page's origin is out of reach"));
     const path = u.startsWith("http") ? new URL(u).pathname + (new URL(u).search || "") : u;
     const clean = path.split("?")[0];
     return Promise.resolve(handle(clean, opts, path));

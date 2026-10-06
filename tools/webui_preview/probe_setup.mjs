@@ -91,12 +91,16 @@ function boot(url, preset) {
     check("duplicate names collapse to one row (strongest)", p.$$('.qs-net[data-ssid="HomeWiFi"]').length === 1);
     check("security comes from auth_mode (Neighbor is WPA2/3, CafeFree open)", /WPA2\/3/.test(p.$('.qs-net[data-ssid="Neighbor"]').textContent) && /Open/.test(p.$('.qs-net[data-ssid="CafeFree"]').textContent));
     p.$('.qs-net[data-ssid="CafeFree"]').click(); await sleep(50);
-    check("an open network blocks Continue with a warning", p.btn(/^Continue$/).disabled && /has no password/.test(p.text()));
+    check("an open network blocks Continue with a warning", p.btn(/Test and continue|^Continue$/).disabled && /has no password/.test(p.text()));
     p.$('.qs-net[data-ssid="Neighbor"]').click(); await sleep(50);
-    check("a protected network needs a password first", p.btn(/^Continue$/).disabled);
+    check("a protected network needs a password first", p.btn(/Test and continue/).disabled);
     p.setText(p.$("#qs-wifi-pw"), "letmein-please");
-    check("password enables Continue", !p.btn(/^Continue$/).disabled);
-    p.btn(/^Continue$/).click(); await sleep(300);
+    check("password enables Test and continue (2026-10-06: the connection test runs before Review)", !p.btn(/Test and continue/).disabled);
+    p.btn(/Test and continue/).click(); await sleep(400);
+    check("the test starts: POST /api/wifi/try, the Trying card, the button says Testing", p.M().tryPosts === 1 && /Trying Neighbor/.test(p.text()) && /nothing is saved/.test(p.text()) && /Testing/.test((p.$(".qs-foot button.pri") || {}).textContent || ""), [p.M().tryPosts, (p.$(".qs-foot button.pri") || {}).textContent]);
+    await sleep(2800);
+    check("the network accepted the password: straight on to Review with the verdict", /Review, then restart/.test(p.h2()) && /Tested: password accepted, 10\.42\.0\.62/.test(p.text()), p.h2());
+    check("Review promises the tested address for the next screen", /http:\/\/10\.42\.0\.62\/#\/setup\/checks/.test(p.text()));
     check("review screen summarises everything", /Review, then restart/.test(p.h2()) && /Neighbor/.test(p.text()) && /mqtt:\/\/10\.0\.0\.5:1883/.test(p.text()) && /New password/.test(p.text()), p.h2());
     const puts0 = p.M().puts || 0;
     p.btn(/Save and restart/).click(); await sleep(900);
@@ -162,7 +166,7 @@ function boot(url, preset) {
     check("rail has twelve steps", p.$$(".qs-step").length === 12, p.$$(".qs-step").length);
     check("the live reading shows ONE decimal", /^12\.5V$/.test((p.$("#qs-pwr-big") || {}).textContent || ""), (p.$("#qs-pwr-big") || {}).textContent);
     check("waiting for the engine, Continue locked", /Waiting for the engine/.test(p.text()) && p.$("#qs-pwr-continue") && p.$("#qs-pwr-continue").disabled);
-    check("the keep-defaults exit quotes the device pair with one decimal", /Keep the current values \(13\.1 \/ 13\.2 V\)/.test(p.text()));
+    check("the skip is a real button quoting the device pair with one decimal (Ali, 2026-10-06)", !!p.$("#qs-pwr-keep") && /Skip, keep the defaults \(13\.1 \/ 13\.2 V\)/.test(p.$("#qs-pwr-keep").textContent) && !p.$("#qs-pwr-keep").classList.contains("gh") && !p.$("#qs-pwr-keep").disabled, (p.$("#qs-pwr-keep") || {}).textContent);
     p.M().batteryV = 14.31; await sleep(7600);
     check("charging captured by itself from six stable readings, one decimal", /14\.3 V charging/.test(p.text()) && !/14\.31/.test(p.text()), (p.text().match(/1\d\.\d+ V charging/) || [])[0]);
     check("the engine-off row is now the active one", /Waiting for the engine to stop/.test(p.text()));
@@ -192,7 +196,16 @@ function boot(url, preset) {
     check("trouble codes on reveals the interval", !!p.$("#qs-dtcmin") && p.$("#qs-dtcmin").value === "60");
     p.setText(p.$("#qs-dtcmin"), "120");
     p.setText(p.$("#qs-minevent"), "2");
+    /* the device's own file carries a parameter name twice (a car answering both oxygen-sensor
+       PID sets under the old table, 2026-10-06): Finish must not send it as it is */
+    p.M().autopidCfg.pids.push(
+      { name: "OxySensor1_Volt", type: "std", cmd: "0114", group: "default", parameters: [{ name: "OxySensor1_Volt", expression: "B2*0.005" }, { name: "OxySensor1_STFT", expression: "B3" }] },
+      { name: "OxySensor1_FAER", type: "std", cmd: "0124", group: "default", parameters: [{ name: "OxySensor1_FAER", expression: "[B2:B3]" }, { name: "OxySensor1_Volt", expression: "[B4:B5]" }] });
     p.btn(/Finish and restart/).click(); await sleep(1000);
+    {
+      const names = p.M().autopidCfg.pids.flatMap((x) => (x.parameters || []).map((q) => q.name));
+      check("finish: no parameter name twice in the config PUT (the later one got _2)", new Set(names).size === names.length && names.includes("OxySensor1_Volt") && names.includes("OxySensor1_Volt_2"), names.filter((n) => /OxySensor1/.test(n)));
+    }
     const puts = p.M().vehiclePuts || [];
     check("finish: PUT the car's entry with the name, the profile and its init", puts.length === 1 && puts[0].key === "1WCAN0FW0P0000001" && puts[0].body.name === "Bench car" && typeof puts[0].body.profile === "string" && puts[0].body.profile.length > 0 && "specific_init" in puts[0].body, puts[0] && puts[0].body);
     check("finish: the store cleared pending_profile and holds the profile", !(p.M().vehicles.vehicles[0] || {}).pending_profile && !!(p.M().vehicles.vehicles[0] || {}).profile);
@@ -233,6 +246,10 @@ function boot(url, preset) {
     p.btn(/^Continue$/).click(); await sleep(300);
     check("WiFi-only skips the details screen", /Secure the access point/.test(p.h2()), p.h2());
     check("a device with its own AP password may keep it (Continue enabled with blank fields)", !p.btn(/^Continue$/).disabled && /already has your own password/.test(p.text()));
+    p.btn(/^Continue$/).click(); await sleep(700);
+    check("re-run WiFi step: the stored network with a blank password needs no test (Continue)", /Join your home WiFi/.test(p.h2()) && !!p.btn(/^Continue$/) && !p.btn(/Test and continue/), [p.h2(), (p.$(".qs-foot button.pri") || {}).textContent]);
+    p.setText(p.$("#qs-wifi-pw"), "another-password");
+    check("a typed password brings the test back", !!p.btn(/Test and continue/), (p.$(".qs-foot button.pri") || {}).textContent);
     p.btn(/^Exit setup$/) ? null : null;
     p.nav("#/system"); await sleep(700);
     check("System > Maintenance has Run Quick Setup again", !!p.btn(/Run Quick Setup again/));
