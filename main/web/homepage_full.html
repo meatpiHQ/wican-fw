@@ -1794,6 +1794,16 @@
                     </td>
                 </tr>
                 <tr>
+                    <td>Persist PIDs to SD&nbsp;card:</td>
+                    <td>
+                        <select name="pid_persist" id="pid_persist" onchange="submit_enable();">
+                            <option value="enable">Enable</option>
+                            <option value="disable">Disable</option>
+                        </select>
+                        <span id="pid_persist_hint" style="font-size:12px;color:#666;display:none;">requires SD card</span>
+                    </td>
+                </tr>
+                <tr>
                     <td>Battery Alert:</td>
                     <td>
                         <select name="batt_alert" id="batt_alert" onchange="submit_enable();">
