@@ -49,7 +49,9 @@ const tunB = spawn("ssh", ["-N", "-L", `127.0.0.1:${PB}:${DUT}:80`, "rpi001"], {
 const up = async (base) => { for (let i = 0; i < 40; i++) { try { const r = await fetch(base + "/api/info"); if (r.ok) return await r.json(); } catch (e) { } await new Promise((r) => setTimeout(r, 500)); } throw new Error("tunnel never answered: " + base); };
 const info = await up(baseA); await up(baseB);
 say("both tunnels answer: device", info.device_id, info.fw_version, "| origin", baseA);
-const mdns = `http://wican_${info.device_id}.local`;
+/* the link is the device's address on the home network (no mDNS name since
+   2026-10-07); this PC cannot reach the Pi's network, so B carries it */
+const mdns = `http://${DUT}`;
 
 const b = await chromium.launch({ channel: "chrome" });
 const ctx = await b.newContext({ viewport: { width: 1280, height: 900 } });
@@ -122,12 +124,18 @@ check("no link probe in the first 8 s", hitsAt8 === 0, hitsAt8);
 check("the card said WiCAN answers on <ssid>", foundAt >= 0, foundAt);
 check("no jump on a timer: the page is still on the reconnect screen 5 s later", stillHere.startsWith(baseA + "/#/setup/reconnect") && /Now switch networks/.test(await h2()), stillHere);
 check("the way on is a button to the link, in the card", !!goBtn && /Continue on/.test(goBtn.text) && goBtn.href === mdns + "/#/setup/checks", goBtn);
-await page.click(".qs-check a.btn.pri");
+/* the popup (2026-10-07, Ali): the moment WiCAN is found, a success popup with ONE button,
+   the user's press; nothing navigated by itself in the five seconds above */
+const pop = await page.evaluate(() => { const m = document.querySelector("#modal-root.on .modal"); if (!m) return null;
+  const btns = [...m.querySelectorAll(".acts button")].map((b) => b.textContent.trim()); return { text: m.textContent.replace(/\s+/g, " ").trim().slice(0, 160), btns }; });
+check("the success popup is up: 'successfully connected', the address, one Continue button", !!pop && /successfully connected to/.test(pop.text) && pop.text.includes(DUT) && pop.btns.length === 1 && /^Continue on/.test(pop.btns[0]), pop);
+await page.screenshot({ path: `${out}/3b_popup.png` });
+await page.click("#modal-root .acts button.pri");
 await page.waitForTimeout(4000);
 const finalUrl = page.url(), finalH2 = await h2();
 say("after the press: url", finalUrl, "| h2:", JSON.stringify(finalH2));
 await page.screenshot({ path: `${out}/4_checks_at_local.png` });
-check("the press opens Quick Setup at the .local link", finalUrl.startsWith(mdns + "/#/setup/checks"), finalUrl);
+check("the popup's press opens Quick Setup at the address link", finalUrl.startsWith(mdns + "/#/setup/checks"), finalUrl);
 check("the checks screen is up there", /Connected through/.test(finalH2), finalH2);
 check("the pill never said Device offline while waiting", !log.some((l) => /Device offline/.test(l)));
 await b.close();

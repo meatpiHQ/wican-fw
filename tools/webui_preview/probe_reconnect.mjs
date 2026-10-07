@@ -53,7 +53,7 @@ function boot(url, preset) {
     await sleep(1800);
     check("reconnect screen opens from its URL", /Now switch networks/.test(($("h2", p) || {}).textContent || ""), ($("h2", p) || {}).textContent);
     const link = (p.$(".qs-link .url") || {}).textContent || "";
-    check("the link is the mDNS address with the resume hash", /^http:\/\/wican_[0-9a-f]+\.local\/#\/setup\/checks$/i.test(link), link);
+    check("the link is the device's address on the home network with the resume hash (no mDNS name since 2026-10-07)", link === "http://10.42.0.62/#/setup/checks", link);
     check("the link is selectable in one go (user-select: all)", /user-select:\s*all/.test((p.$("#qs-css") || {}).textContent || ""));
     check("own origin online: the card reports the join, not Restarting", /WiCAN joined/.test(p.card()) && /10\.42\.0\.62/.test(p.card()), p.card());
     check("no probe of the link while the own origin answers", !(p.M().linkProbes), p.M().linkProbes || 0);
@@ -88,19 +88,26 @@ function boot(url, preset) {
     const probes = p.M().linkProbes || 0;
     p.M().linkAnswers = true;
     await sleep(3500);
-    check("the link answers: the card says found and where Quick Setup continues", /WiCAN answers on/.test(p.card()) && /continues at wican_[0-9a-f]+\.local/i.test(p.card()), p.card());
+    check("the link answers: the card says found and where Quick Setup continues", /WiCAN answers on/.test(p.card()) && /continues at 10\.42\.0\.62/.test(p.card()), p.card());
     check("probes kept running until then", (p.M().linkProbes || 0) > probes, [probes, p.M().linkProbes]);
     const go = p.$(".qs-check a.btn.pri");
     check("the way on is a button to the link, in the card", !!go && /Continue on HomeWiFi/.test(go.textContent) && go.getAttribute("href") === link, go && [go.textContent, go.getAttribute("href")]);
+    /* the popup (2026-10-07, Ali): a success popup at that moment, one button, the user's press */
+    const pop = p.$("#modal-root.on .modal");
+    const popBtns = pop ? [...pop.querySelectorAll(".acts button")] : [];
+    check("the success popup is up: 'successfully connected', the address, the link, ONE Continue button with the open-in-new mark", !!pop && /WiCAN successfully connected to HomeWiFi/.test(pop.textContent) && /10\.42\.0\.62/.test(pop.textContent) && popBtns.length === 1 && /^Continue on HomeWiFi/.test(popBtns[0].textContent.trim()) && !!popBtns[0].querySelector("svg"), pop && [pop.textContent.slice(0, 120), popBtns.map((b) => b.textContent)]);
     await sleep(4500);
     check("no jump on a timer: the page stays here", p.navs.length === 0, p.navs);
+    if (popBtns[0]) { popBtns[0].click(); await sleep(200); }
+    check("the popup's press opens the link (jsdom reports the navigation) and closes the popup", p.navs.length >= 1 && !p.$("#modal-root.on"), [p.navs[0], !!p.$("#modal-root.on")]);
+    const navsAfterPop = p.navs.length;
     check("found stays found (no repaint, no flicker)", /WiCAN answers on/.test(p.card()) && !!p.$(".qs-check a.btn.pri"), p.card());
     const pr = p.M().linkProbes;
     await sleep(3500);
     check("no more probes once found", p.M().linkProbes === pr, [pr, p.M().linkProbes]);
     go.click();
     await sleep(300);
-    check("the button opens the link (jsdom reports the navigation)", p.navs.length >= 1, p.navs[0]);
+    check("the card's button opens the link too (jsdom reports the navigation)", p.navs.length > navsAfterPop, p.navs.slice(-1)[0]);
     check("no page errors", p.errs.length === 0, p.errs.slice(0, 3));
     p.w.close();
   }
@@ -108,9 +115,10 @@ function boot(url, preset) {
   /* ---------------- a PC that stays on the access point ---------------- */
   {
     const p = boot("http://wican.local/#/setup/reconnect", { apDefaultPassword: true });
-    p.M().linkAnswers = true;   /* the name resolves over the AP too */
+    p.M().linkAnswers = true;   /* the address answers over the AP too */
     await sleep(15500);
     check("own origin online and the link answering: no probe, no found card, the join card", /WiCAN joined/.test(p.card()) && p.navs.length === 0 && !(p.M().linkProbes), [p.card().slice(0, 40), p.navs.length, p.M().linkProbes || 0]);
+    check("the success popup also comes on this path, after the restart's time, with its one button and no navigation", !!p.$("#modal-root.on .modal") && /successfully connected to HomeWiFi/.test(p.$("#modal-root.on .modal").textContent) && p.$$("#modal-root.on .acts button").length === 1 && p.navs.length === 0, (p.$("#modal-root.on .modal") || {}).textContent);
     check("no page errors", p.errs.length === 0, p.errs.slice(0, 3));
     p.w.close();
   }

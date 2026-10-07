@@ -133,7 +133,7 @@ const heads = (p) => p.$$("#view table thead th").map((th) => th.textContent.tri
       check("setup: Continue is enabled without a profile choice", !!cont && !cont.disabled);
       if (cont) {
         cont.click(); await sleep(1200);
-        const keep = p.btn(/Keep the defaults|Keep/);
+        const keep = p.btn(/Skip, keep the defaults|Keep the defaults|Continue with the current values/);   /* the skip is a real button since 2026-10-06 */
         if (keep) { keep.click(); await sleep(1200); }
         const fin = p.btn(/Finish and restart/);
         check("setup: the Reading the car step offers Finish", !!fin);
@@ -160,7 +160,7 @@ const heads = (p) => p.$$("#view table thead th").map((th) => th.textContent.tri
     const det = p.btn(/Detect my vehicle/);
     if (det) { det.click(); await sleep(5900); }
     const t = p.text();
-    check("setup2: the VIN the truck broadcast", /1WCANJ1939TRUCK01/.test(t) && /Broadcast by the vehicle/.test(t));
+    check("setup2: the VIN the truck broadcast", /1WCANJ1939TRUCK01/.test(t) && /broadcast by the vehicle/i.test(t));   /* muted text beside the VIN since 2026-10-07, no pill */
     check("setup2: no restart notice", !/One more restart for the J1939 listener/.test(t));
     check("setup2: no script error", p.errs.length === 0, p.errs.slice(0, 2));
   }

@@ -93,7 +93,7 @@ const runTest = async (p, result, wait = 2600) => { p.M().tryResult = result; p.
 
     /* Continue anyway: Review carries the warning, Back returns to a fresh test */
     p.$("#view .qs-check button").click(); await sleep(400);
-    check("Continue anyway: Review with the warning chip", /Review, then restart/.test(p.h2()) && /Test failed, continuing anyway/.test(p.text()), p.h2());
+    check("Continue anyway: Review with the warning circle and its line", /Review, then restart/.test(p.h2()) && /Test failed/.test(p.text()) && /continuing anyway/.test(p.text()) && p.$$(".qs-rv .ci.warn").length === 1, p.h2());
     check("no tested address promised in that case", !/10\.42\.0\.62/.test(p.text()));
     p.btn(/^Back$/).click(); await sleep(700);
     check("Back to the WiFi step: the test is asked again", /Join your home WiFi/.test(p.h2()) && p.pri() === "Test and continue", [p.h2(), p.pri()]);
@@ -107,7 +107,7 @@ const runTest = async (p, result, wait = 2600) => { p.M().tryResult = result; p.
     await sleep(1200);
     check("after the blink the page re-routed and the rebuilt step carries the test on (Trying card again)", /Trying Neighbor/.test(p.card()) && p.pri() === "Testing", [p.card().slice(0, 40), p.pri()]);
     await sleep(3200);
-    check("the blink is ridden out: connected, straight to Review with the verdict and address", /Review, then restart/.test(p.h2()) && /Tested: password accepted, 10\.42\.0\.62/.test(p.text()), [p.h2(), p.card().slice(0, 60)]);
+    check("the blink is ridden out: connected, straight to Review with the verdict and address", /Review, then restart/.test(p.h2()) && /Password accepted/.test(p.text()) && /10\.42\.0\.62/.test(p.text()), [p.h2(), p.card().slice(0, 60)]);
     check("six POSTs: the blink did not start a second test", p.M().tryPosts === 6, p.M().tryPosts);
 
     /* the pass is remembered for these credentials, a new password is not */
@@ -122,10 +122,10 @@ const runTest = async (p, result, wait = 2600) => { p.M().tryResult = result; p.
 
     /* Reconnect: the tested address is the second way in and the preferred door */
     p.w.location.hash = "#/setup/reconnect"; p.w.dispatchEvent(new p.w.Event("hashchange")); await sleep(1500);
-    check("Reconnect shows the tested address as a second link", /Now switch networks/.test(p.h2()) && /or http:\/\/10\.42\.0\.62\/#\/setup\/checks/.test(p.text()) && /usually the same after the restart/.test(p.text()), p.h2());
+    check("Reconnect: the tested address IS the link (no mDNS name since 2026-10-07), one card, no Step chips", /Now switch networks/.test(p.h2()) && (p.$(".qs-link .url") || {}).textContent === "http://10.42.0.62/#/setup/checks" && !p.$(".qs-link .alt") && !/\.local/.test(p.text()) && !/Step 1/.test(p.text()), (p.$(".qs-link .url") || {}).textContent);
     p.M().offline = true;
     await sleep(13500);
-    check("after 12 s offline: the name and the address are probed (two probes per tick)", (p.M().linkProbes || 0) >= 2, p.M().linkProbes);
+    check("after 12 s offline: the address is probed (one probe per tick; the name went with mDNS on 2026-10-07)", (p.M().linkProbes || 0) >= 1, p.M().linkProbes);
     p.M().linkAnswers = true;
     await sleep(3500);
     const go = p.$("#view .qs-check a.btn.pri");
@@ -140,7 +140,7 @@ const runTest = async (p, result, wait = 2600) => { p.M().tryResult = result; p.
     await sleep(1500);
     await toWifi(p);
     p.btn(/Test and continue/).click(); await sleep(900);
-    check("AP only: the test is skipped with its note on Review", /Review, then restart/.test(p.h2()) && /Not tested: WiCAN is access point only until the restart/.test(p.text()), p.h2());
+    check("AP only: the test is skipped with its note on Review (an empty circle)", /Review, then restart/.test(p.h2()) && /Not tested/.test(p.text()) && /access point only until the restart/.test(p.text()) && p.$$(".qs-rv .ci.pend").length === 2, p.h2());
     check("no POST counted (the 409 came before any trial)", !(p.M().tryPosts), p.M().tryPosts || 0);
     check("no page errors", p.errs.length === 0, p.errs.slice(0, 3));
     p.w.close();

@@ -64,7 +64,13 @@ function boot(url, preset) {
     cont.click(); await sleep(250);
     check("use case screen", /How will you use WiCAN/.test(p.h2()), p.h2());
     check("Home Assistant preselected", p.$('.qs-tile[data-use="ha"]').classList.contains("sel"));
+    /* WiFi only is a tile (Ali, 2026-10-07): chosen, the use-case screen leaves the rail and the
+       steps renumber */
+    check("a third tile: Just connect WiCAN to my WiFi", !!p.$('.qs-tile[data-use="wifi"]') && /Just connect WiCAN to my WiFi/.test(p.$('.qs-tile[data-use="wifi"]').textContent) && !p.$("#qs-use-wifi"));
+    p.$('.qs-tile[data-use="wifi"]').click(); await sleep(250);
+    check("WiFi only chosen: no Home Assistant step on the rail, Access point is step 3", !p.$('.qs-step[data-step="details"]') && /^3/.test(p.$('.qs-step[data-step="ap"] .n').textContent) && p.$$(".qs-step").length === 11, [p.$$(".qs-step").length, (p.$('.qs-step[data-step="ap"] .n') || {}).textContent]);
     p.$('.qs-tile[data-use="mqtt"]').click(); await sleep(250);
+    check("MQTT chosen again: the step is back, twelve on the rail", !!p.$('.qs-step[data-step="details"]') && p.$$(".qs-step").length === 12);
     check("MQTT tile selects and the rail label follows", p.$('.qs-tile[data-use="mqtt"]').classList.contains("sel") && /MQTT broker/.test(p.$('.qs-step[data-step="details"]').textContent));
     p.btn(/^Continue$/).click(); await sleep(400);
     check("MQTT details screen", /Your MQTT broker/.test(p.h2()), p.h2());
@@ -96,30 +102,41 @@ function boot(url, preset) {
     check("a protected network needs a password first", p.btn(/Test and continue/).disabled);
     p.setText(p.$("#qs-wifi-pw"), "letmein-please");
     check("password enables Test and continue (2026-10-06: the connection test runs before Review)", !p.btn(/Test and continue/).disabled);
+    /* after it joins (Ali, 2026-10-07): Station only is the default on a fresh device; Access
+       point + Station reveals the auto-off box, ticked by default */
+    check("after it joins: Station only is the default, no auto-off box yet", /After it joins/.test(p.text()) && p.$("#qs-mode-sta") && p.$("#qs-mode-sta").checked && !p.$("#qs-mode-apsta").checked && !p.$("#qs-ap-auto") && /hold its button for 5 seconds/.test(p.text()));
+    p.$("#qs-mode-apsta").click(); p.fire(p.$("#qs-mode-apsta"), "change"); await sleep(100);
+    check("Access point + Station reveals the auto-off box, ticked by default", p.$("#qs-mode-apsta").checked && !!p.$("#qs-ap-auto") && p.$("#qs-ap-auto").checked && /Turn the access point off while WiCAN is on Neighbor/.test(p.text()));
+    p.$("#qs-mode-sta").click(); p.fire(p.$("#qs-mode-sta"), "change"); await sleep(100);
+    check("back to Station only: the box is gone", p.$("#qs-mode-sta").checked && !p.$("#qs-ap-auto"));
+    const auto0 = p.S().wifi_manager.values.ap_auto_disable;
     p.btn(/Test and continue/).click(); await sleep(400);
     check("the test starts: POST /api/wifi/try, the Trying card, the button says Testing", p.M().tryPosts === 1 && /Trying Neighbor/.test(p.text()) && /nothing is saved/.test(p.text()) && /Testing/.test((p.$(".qs-foot button.pri") || {}).textContent || ""), [p.M().tryPosts, (p.$(".qs-foot button.pri") || {}).textContent]);
     await sleep(2800);
-    check("the network accepted the password: straight on to Review with the verdict", /Review, then restart/.test(p.h2()) && /Tested: password accepted, 10\.42\.0\.62/.test(p.text()), p.h2());
-    check("Review promises the tested address for the next screen", /http:\/\/10\.42\.0\.62\/#\/setup\/checks/.test(p.text()));
+    check("the network accepted the password: straight on to Review with the verdict", /Review, then restart/.test(p.h2()) && /Password accepted/.test(p.text()) && /10\.42\.0\.62/.test(p.text()), p.h2());
+    /* Review is a checklist (Ali's sketch, 2026-10-07): a circle per row, the title in its
+       column, the value and details beside it; three settled, the vehicle data pending; no pills */
+    check("review: a checklist of four rows, three done circles and one pending, no pills", p.$$(".qs-rv li").length === 4 && p.$$(".qs-rv .ci").length === 4 && p.$$(".qs-rv .ci.pend").length === 1 && p.$$(".qs-rv .ci.warn").length === 0 && p.$$(".qs-rv .chip").length === 0, { rows: p.$$(".qs-rv li").length, pend: p.$$(".qs-rv .ci.pend").length });
+    check("Review: step 3 is the address itself, Station only on the rows (the access point off after the restart, the button named)", /open http:\/\/10\.42\.0\.62\/#\/setup\/checks/.test(p.text()) && /Station only/.test(p.text()) && /Off after the restart/.test(p.text()) && /hold the button 5 s/.test(p.text()) && /drops off WiCAN_[0-9a-f]+ for good/.test(p.text()) && !/\.local/.test(p.text()), (p.text().match(/Connect your phone[^.]*/) || [])[0]);
     check("review screen summarises everything", /Review, then restart/.test(p.h2()) && /Neighbor/.test(p.text()) && /mqtt:\/\/10\.0\.0\.5:1883/.test(p.text()) && /New password/.test(p.text()), p.h2());
     const puts0 = p.M().puts || 0;
     p.btn(/Save and restart/).click(); await sleep(900);
     const wf = p.S().wifi_manager.values, mq = p.S().mqtt_manager.values, dd = p.S().data_destinations.values;
-    check("one submit: wifi_manager PUT carries apsta + station + trusted + new AP password", wf.mode === "apsta" && wf.sta_ssid === "Neighbor" && wf.sta_password === "letmein-please" && wf.sta_trusted === true && wf.ap_password === "garage-door-2026", { mode: wf.mode, ssid: wf.sta_ssid, trusted: wf.sta_trusted });
+    check("one submit: wifi_manager PUT carries mode sta (the default) + station + trusted + new AP password, ap_auto_disable untouched", wf.mode === "sta" && wf.ap_auto_disable === auto0 && wf.sta_ssid === "Neighbor" && wf.sta_password === "letmein-please" && wf.sta_trusted === true && wf.ap_password === "garage-door-2026", { mode: wf.mode, auto: [wf.ap_auto_disable, auto0], ssid: wf.sta_ssid, trusted: wf.sta_trusted });
     check("mqtt_manager PUT enables the broker", mq.enabled === true && mq.url === "mqtt://10.0.0.5:1883" && mq.username === "wican" && mq.broker_password === "secret12", { enabled: mq.enabled, url: mq.url });
     const row = (dd.destinations || []).find((x) => x.type === "mqtt" && x.url === "~/autopid");
     check("data_destinations PUT has the ~/autopid mqtt row at the chosen period", dd.enabled === true && row && row.enabled === true && row.period_s === 7, row && { period: row.period_s, enabled: row.enabled });
     check("three PUTs went out", (p.M().puts || 0) - puts0 === 3, (p.M().puts || 0) - puts0);
-    check("reconnect screen with the mDNS link carrying the resume hash", /Now switch networks/.test(p.h2()) && /wican_[0-9a-f]+\.local\/#\/setup\/checks/i.test(p.text()), p.h2());
-    check("reconnect screen names the access point fallback", /192\.168\.80\.1\/#\/setup\/checks|192\.168\.0\.10\/#\/setup\/checks/.test(p.text()));
+    check("reconnect screen with the address link carrying the resume hash and the use case (mqtt), no mDNS name", /Now switch networks/.test(p.h2()) && (p.$(".qs-link .url") || {}).textContent === "http://10.42.0.62/#/setup/checks/mqtt" && !/\.local/.test(p.text()), (p.$(".qs-link .url") || {}).textContent);
+    check("reconnect screen, Station only: the fallback names the router's device list and the button, with the access point address", /router's device list/.test(p.text()) && /hold WiCAN's button for 5 seconds/.test(p.text()) && /192\.168\.80\.1\/#\/setup\/checks|192\.168\.0\.10\/#\/setup\/checks/.test(p.text()));
 
     /* the phone comes back on the home network: deep link into the checks */
     p.M().apDefaultPassword = false;
     await p.w.ping();
-    p.nav("#/setup/checks"); await sleep(700);
-    check("deep link lands on the checks screen", /Connected through/.test(p.h2()), p.h2());
+    p.nav("#/setup/checks/mqtt"); await sleep(700);
+    check("deep link (with the use case segment) lands on the checks screen", /Connected through/.test(p.h2()), p.h2());
     const cards = p.$$(".qs-check");
-    check("WiFi, access point and MQTT cards are shown", cards.length === 3 && /joined/.test(cards[0].textContent) && /Access point secured/.test(cards[1].textContent) && /MQTT broker connected/.test(cards[2].textContent), cards.map((c) => c.querySelector("b").textContent));
+    check("WiFi, access point (off: Station only) and MQTT cards are shown, no mDNS name", cards.length === 3 && /joined/.test(cards[0].textContent) && /router's device list shows it as wican_/.test(cards[0].textContent) && /Access point off: Station only/.test(cards[1].textContent) && /hold its button for 5 seconds/i.test(cards[1].textContent) && /MQTT broker connected/.test(cards[2].textContent) && !/\.local/.test(p.text()), cards.map((c) => c.querySelector("b").textContent));
     check("rail: the six steps before the restart show as done", p.$$(".qs-step.done").length === 7, p.$$(".qs-step.done").length);
     /* a FRESH device: polling off, the firmware's 1 s default group (the mock ships autopid on) */
     p.S().autopid.values.enabled = false;
@@ -135,7 +152,17 @@ function boot(url, preset) {
     await sleep(1500);
     check("then the VIN phase, protocol done", /Reading the VIN/.test(p.text()) && /Done/.test(p.text()));
     await sleep(2600);
-    check("result: new vehicle, VIN, detected protocol, PID count", /New vehicle/.test(p.text()) && /1WCAN0FW0P0000001/.test(p.text()) && /CAN 11-bit 500 kbit\/s/.test(p.text()) && /8 supported/.test(p.text()), p.text().slice(0, 200));
+    check("result: new vehicle, VIN, detected protocol, PID count, no pills (2026-10-07)", /New vehicle/.test(p.text()) && /1WCAN0FW0P0000001/.test(p.text()) && /CAN 11-bit 500 kbit\/s/.test(p.text()) && /8 answered/.test(p.text()) && /none chosen yet/.test(p.text()) && p.$$(".qs-kv .chip").length === 0, p.text().slice(0, 200));
+    /* 2. Standard PIDs: the scan found what the car answers, the user chooses what WiCAN reads
+       (Ali, 2026-10-07): nothing chosen for a new car, the page's picker (the Automate one) */
+    check("section 2 is the standard PID choice, the profile section 3, nothing chosen yet", /2\. Standard PIDs/.test(p.text()) && /3\. Vehicle profile/.test(p.text()) && /None chosen yet/.test(p.text()) && !!p.btn(/Choose PIDs/), p.text().match(/\d\. [A-Z][a-z]+ [a-zP]+/g));
+    p.btn(/Choose PIDs/).click(); await sleep(300);
+    const pickBoxes = () => [...p.$$('#modal-root input[type="checkbox"]')];
+    check("the picker lists the 8 PIDs the scan found, none ticked, Add selected", /Standard PIDs this car answers/.test(p.modalText()) && pickBoxes().length === 8 && pickBoxes().every((b) => !b.checked) && !!p.modalBtn(/Add selected/) && /0 ticked/.test(p.modalText()), { boxes: pickBoxes().length });
+    for (const b of pickBoxes()) { const row = b.closest("label"); if (/010C1|010D1|01051|012F1/.test(row.textContent)) { b.click(); p.fire(b, "change"); } }
+    check("four ticked, the count follows", /4 ticked/.test(p.modalText()));
+    p.modalBtn(/Add selected/).click(); await sleep(300);
+    check("the choice shows on the step: 4 of 8, named, with Change; the card says 4 chosen", /4 of 8 chosen: /.test(p.text()) && /Fuel Level/.test(p.text()) && !!p.btn(/^Change$/) && /4 chosen/.test(p.text()), p.text().match(/4 of 8 chosen[^.]*/) && p.text().match(/4 of 8 chosen[^.]*/)[0]);
     check("the store lists the car as current, profile pending", /Vehicles this WiCAN knows/.test(p.text()) && /Profile pending|Current/.test(p.text()));
     check("a name field is offered", !!p.$("#qs-veh-name"));
     check("profile radios offer another profile and none", !!p.$("#qs-prof-other") && !!p.$("#qs-prof-none"));
@@ -189,6 +216,7 @@ function boot(url, preset) {
     check("defaults: every 5 s, pause with Power Saving, trouble codes off", p.$("#qs-rate-5").checked && p.$("#qs-pause-sleep").checked && !p.$("#qs-dtc").checked);
     check("the sleep voltage from the device is quoted", /13\.1 V|\d+\.\d V/.test(p.text()));
     check("vehicle-specific switch enabled because a profile was chosen", p.$("#qs-specific") && !p.$("#qs-specific").disabled && p.$("#qs-specific").checked);
+    check("the Standard PIDs switch reads the choice; no Custom PIDs switch (Ali, 2026-10-07)", p.$("#qs-std") && p.$("#qs-std").checked && !p.$("#qs-std").disabled && /The 4 of the 8 the scan found that you chose/.test(p.text()) && !p.$("#qs-custom") && !/Custom PIDs/.test(p.text()), p.text().match(/The \d of the \d[^.]*/) && p.text().match(/The \d of the \d[^.]*/)[0]);
     p.$("#qs-pause-never").click(); p.fire(p.$("#qs-pause-never"), "change"); await sleep(150);
     check("Never pause shows the battery warning", /keeps the car's modules awake/.test(p.text()));
     p.$("#qs-rate-10").click(); p.fire(p.$("#qs-rate-10"), "change"); await sleep(150);
@@ -197,10 +225,15 @@ function boot(url, preset) {
     p.setText(p.$("#qs-dtcmin"), "120");
     p.setText(p.$("#qs-minevent"), "2");
     /* the device's own file carries a parameter name twice (a car answering both oxygen-sensor
-       PID sets under the old table, 2026-10-06): Finish must not send it as it is */
+       PID sets under the old table, 2026-10-06): Finish must not send it as it is. Custom rows
+       since 2026-10-07: a standard row that was not chosen leaves the config at Finish */
     p.M().autopidCfg.pids.push(
-      { name: "OxySensor1_Volt", type: "std", cmd: "0114", group: "default", parameters: [{ name: "OxySensor1_Volt", expression: "B2*0.005" }, { name: "OxySensor1_STFT", expression: "B3" }] },
-      { name: "OxySensor1_FAER", type: "std", cmd: "0124", group: "default", parameters: [{ name: "OxySensor1_FAER", expression: "[B2:B3]" }, { name: "OxySensor1_Volt", expression: "[B4:B5]" }] });
+      { name: "OxySensor1_Volt", type: "custom", cmd: "0114", group: "default", parameters: [{ name: "OxySensor1_Volt", expression: "B2*0.005" }, { name: "OxySensor1_STFT", expression: "B3" }] },
+      { name: "OxySensor1_FAER", type: "custom", cmd: "0124", group: "default", parameters: [{ name: "OxySensor1_FAER", expression: "[B2:B3]" }, { name: "OxySensor1_Volt", expression: "[B4:B5]" }] });
+    /* a standard row the device stored that was NOT chosen (the firmware stores every row the
+       scan found): Finish drops it */
+    p.M().autopidCfg.pids.push({ name: "Throttle", type: "std", cmd: "01111", group: "default", parameters: [{ name: "Throttle", expression: "B3*100/255", unit: "%" }] });
+    const custom0 = p.S().autopid.values.custom_enabled;
     p.btn(/Finish and restart/).click(); await sleep(1000);
     {
       const names = p.M().autopidCfg.pids.flatMap((x) => (x.parameters || []).map((q) => q.name));
@@ -212,14 +245,23 @@ function boot(url, preset) {
     check("finish: the config PUT carries the profile's vehicle-specific rows", p.M().autopidCfg.pids.filter((x) => x.type === "specific").length > pids0, p.M().autopidCfg.pids.filter((x) => x.type === "specific").length);
     const ap = p.S().autopid.values;
     check("finish: autopid PUT enables polling, protocol follows the store, profile named", ap.enabled === true && ap.std_enabled === true && ap.std_protocol === "0" && ap.specific_enabled === true && ap.vehicle.length > 0, { enabled: ap.enabled, proto: ap.std_protocol, vehicle: ap.vehicle });
-    check("finish: the reading rules landed in the autopid PUT", ap.pause_below_mv === 0 && ap.pause_follow_sleep === false && ap.pause_mode === "requests_only" && ap.dtc_enabled === true && ap.dtc_scan_period_min === 120 && ap.min_event_interval_ms === 2000 && ap.custom_enabled === true, { pause_below_mv: ap.pause_below_mv, follow: ap.pause_follow_sleep, mode: ap.pause_mode, dtc: ap.dtc_enabled, dtc_min: ap.dtc_scan_period_min, ev: ap.min_event_interval_ms });
+    check("finish: the reading rules landed in the autopid PUT; custom_enabled left as the device had it", ap.pause_below_mv === 0 && ap.pause_follow_sleep === false && ap.pause_mode === "requests_only" && ap.dtc_enabled === true && ap.dtc_scan_period_min === 120 && ap.min_event_interval_ms === 2000 && ap.custom_enabled === custom0, { pause_below_mv: ap.pause_below_mv, follow: ap.pause_follow_sleep, mode: ap.pause_mode, dtc: ap.dtc_enabled, dtc_min: ap.dtc_scan_period_min, ev: ap.min_event_interval_ms, custom: [ap.custom_enabled, custom0] });
     const smv = p.S().sleep_manager.values;
     check("finish: the measured pair is staged for Power Saving, switched on", smv.enabled === true && smv.sleep_mv === 13100 && smv.wake_mv === 13300, { enabled: smv.enabled, sleep_mv: smv.sleep_mv, wake_mv: smv.wake_mv });
     const cfgNow = p.M().autopidCfg;
     const byName = (n) => cfgNow.pids.find((x) => x.name === n) || {};
     check("finish: the default group runs at the chosen rate; rows on the old default inherit it, a row with its own rate keeps it", cfgNow.groups[0].period_ms === 10000 && !byName("RPM").period_ms && !byName("Speed").period_ms && byName("Coolant").period_ms === 5000 && cfgNow.pids.filter((x) => x.type === "std" && x.name !== "Coolant").every((x) => !x.period_ms), { period: cfgNow.groups[0].period_ms, own: cfgNow.pids.filter((x) => x.period_ms).map((x) => x.name + ":" + x.period_ms) });
+    {
+      /* the chosen four are all asked for; a chosen request the picked profile already carries
+         (this one asks for 012F itself) is not added as a second row: one row per request, the
+         guard the no-store path always had; no standard row that was not chosen stays */
+      const cmds = cfgNow.pids.map((x) => String(x.cmd).toUpperCase());
+      const std = cfgNow.pids.filter((x) => x.type === "std").map((x) => x.cmd);
+      check("finish: every chosen request is asked for, the device's three standard rows kept, Throttle (stored, not chosen) dropped", ["010C1", "010D1", "01051", "012F1"].every((c) => cmds.includes(c)) && std.every((c) => ["010C1", "010D1", "01051", "012F1"].includes(c)) && std.length === 3 && !byName("Throttle").cmd, { std, other: cfgNow.pids.filter((x) => x.type !== "std").map((x) => x.cmd) });
+    }
+    check("finish: the custom rows (the dedupe fixture, the device's own) stayed", cfgNow.pids.filter((x) => x.type === "custom" && /^OxySensor1_(Volt|FAER)$/.test(x.name)).length === 2 && cfgNow.pids.some((x) => x.type === "custom" && x.name === "OilTemp"), cfgNow.pids.filter((x) => x.type === "custom").map((x) => x.name));
     check("done screen", /WiCAN is set up/.test(p.h2()), p.h2());
-    check("done screen shows the VIN and the mDNS address", /1WCAN0FW0P0000001/.test(p.text()) && /wican_[0-9a-f]+\.local/i.test(p.text()));
+    check("done screen shows the VIN, the address and the router's name for WiCAN (no mDNS name)", /1WCAN0FW0P0000001/.test(p.text()) && /http:\/\/10\.42\.0\.62/.test(p.text()) && /shown as wican_[0-9a-f]+ in your router's device list/i.test(p.text()) && !/\.local/.test(p.text()));
     check("done screen summarises the reading rules", /every 10 s, never pauses, trouble codes every 120 min/.test(p.text()), p.text().match(/every [^.]*min/) && p.text().match(/every [^.]*min/)[0]);
     check("done screen lists the measured pair", /sleeps after 5 min below 13\.1 V, wakes above 13\.3 V/.test(p.text()) && /Measured on your car/.test(p.text()) && !/Power saving is off/.test(p.text()), (p.text().match(/sleeps after[^M]*/) || [])[0]);
     check("no JS errors on the fresh-device run", p.errs.length === 0, p.errs.slice(0, 3));
@@ -239,15 +281,16 @@ function boot(url, preset) {
     p.$$(".qs-agree input[type=checkbox]").forEach((c) => p.tick(c));
     p.btn(/^Continue$/).click(); await sleep(300);
     check("re-run: use case screen", /How will you use WiCAN/.test(p.h2()), p.h2());
-    const wifiOnly = p.$("#qs-use-wifi");
-    check("WiFi-only choice is offered", !!wifiOnly);
-    if (wifiOnly) { wifiOnly.checked = true; p.fire(wifiOnly, "change"); }
+    const wifiOnly = p.$('.qs-tile[data-use="wifi"]');
+    check("WiFi-only choice is offered as a tile", !!wifiOnly);
+    if (wifiOnly) wifiOnly.click();
     await sleep(300);
     p.btn(/^Continue$/).click(); await sleep(300);
-    check("WiFi-only skips the details screen", /Secure the access point/.test(p.h2()), p.h2());
+    check("WiFi-only skips the details screen, which is not on the rail", /Secure the access point/.test(p.h2()) && !p.$('.qs-step[data-step="details"]'), p.h2());
     check("a device with its own AP password may keep it (Continue enabled with blank fields)", !p.btn(/^Continue$/).disabled && /already has your own password/.test(p.text()));
     p.btn(/^Continue$/).click(); await sleep(700);
     check("re-run WiFi step: the stored network with a blank password needs no test (Continue)", /Join your home WiFi/.test(p.h2()) && !!p.btn(/^Continue$/) && !p.btn(/Test and continue/), [p.h2(), (p.$(".qs-foot button.pri") || {}).textContent]);
+    check("re-run on a device running Access point + Station with a network: that stays the default, the auto-off box ticked", p.$("#qs-mode-apsta") && p.$("#qs-mode-apsta").checked && !!p.$("#qs-ap-auto") && p.$("#qs-ap-auto").checked, [(p.$("#qs-mode-apsta") || {}).checked, (p.$("#qs-ap-auto") || {}).checked]);
     p.setText(p.$("#qs-wifi-pw"), "another-password");
     check("a typed password brings the test back", !!p.btn(/Test and continue/), (p.$(".qs-foot button.pri") || {}).textContent);
     p.btn(/^Exit setup$/) ? null : null;
@@ -263,6 +306,10 @@ function boot(url, preset) {
     p.w.sessionStorage.removeItem("wican-setup-skip");
     p.nav(""); await sleep(600);
     check("without the skip flag the default route opens the wizard again", /Quick Setup/.test((p.$("#view h1") || {}).textContent || ""));
+    /* the resume link of a WiFi-only run carries the choice (the page state is lost at the new
+       origin): the checks screen must not wait for Home Assistant */
+    p.nav("#/setup/checks/wifi"); await sleep(700);
+    check("a WiFi-only resume link: the checks screen with no Home Assistant card", /Connected through/.test(p.h2()) && p.$$(".qs-check").length >= 2 && !p.$$(".qs-check").some((c) => /Home Assistant/.test(c.textContent)), p.$$(".qs-check").map((c) => (c.querySelector("b") || {}).textContent));
     check("no JS errors on the configured-device run", p.errs.length === 0, p.errs.slice(0, 3));
   }
 
