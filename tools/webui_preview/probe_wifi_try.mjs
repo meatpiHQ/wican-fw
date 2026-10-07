@@ -74,12 +74,14 @@ const backToWifi = async (p) => { p.btn(/^Back$/).click(); await sleep(500); if 
     await sleep(1500);
     await toWifi(p);
     check("WiFi step, Neighbor picked, the button says Test and continue", /Join your home WiFi/.test(p.h2()) && p.pri() === "Test and continue", [p.h2(), p.pri()]);
+    check("from the home WiFi side: no mobile-data tick, the button is live", !p.$("#qs-mdata") && !p.$("#view .qs-foot button.pri").disabled);
 
     await runTest(p, "password");
     check("wrong password: the card says so with the reason", /Neighbor did not accept the password/.test(p.card()) && /reason 204/.test(p.card()) && /typo/.test(p.card()), p.card());
     check("the password field is marked and the button says Test again", p.$("#qs-wifi-pw").classList.contains("qs-bad") && p.pri() === "Test again", p.pri());
     check("Continue anyway is offered in the card", !!p.$("#view .qs-check button") && /Continue anyway/.test(p.$("#view .qs-check button").textContent));
     check("one POST so far", p.M().tryPosts === 1, p.M().tryPosts);
+    check("the POST carried Neighbor's channel from the scan row (2026-10-08)", p.M().trial.channel === 11, p.M().trial.channel);
 
     await runTest(p, "not_found");
     check("not found: the card names range, 5 GHz and hidden names", /Neighbor was not found/.test(p.card()) && /reason 201/.test(p.card()) && /5 GHz/.test(p.card()) && /hidden name/.test(p.card()), p.card());
@@ -94,6 +96,15 @@ const backToWifi = async (p) => { p.btn(/^Back$/).click(); await sleep(500); if 
     await runTest(p, "refused");
     check("refused: the card gives the reason and the router causes", /Neighbor refused the connection/.test(p.card()) && /reason 203/.test(p.card()) && /MAC filter/.test(p.card()), p.card());
     check("five POSTs, one per press", p.M().tryPosts === 5, p.M().tryPosts);
+
+    /* a name typed by hand has no channel: the device scans them all */
+    p.setText(p.$("#qs-man-ssid"), "HiddenHome");
+    check("a hand-typed name is the selection", /Password for HiddenHome/.test(p.text()) && p.pri() === "Test and continue", p.pri());
+    await runTest(p, "not_found");
+    check("its POST carries channel 0 (all channels)", p.M().tryPosts === 6 && p.M().trial.channel === 0 && p.M().trial.ssid === "HiddenHome", [p.M().tryPosts, p.M().trial.channel]);
+    p.$('.qs-net[data-ssid="Neighbor"]').click(); await sleep(60);
+    await runTest(p, "refused");
+    check("Neighbor again, with its channel", p.M().tryPosts === 7 && p.M().trial.channel === 11, [p.M().tryPosts, p.M().trial.channel]);
 
     /* Continue anyway: Review carries the warning, Back returns to a fresh test */
     p.$("#view .qs-check button").click(); await sleep(400);
@@ -114,7 +125,7 @@ const backToWifi = async (p) => { p.btn(/^Back$/).click(); await sleep(500); if 
     await sleep(3200);
     await pastUsb(p);
     check("the blink is ridden out: connected, straight to Review with the verdict and address", /Review, then restart/.test(p.h2()) && /Password accepted/.test(p.text()) && /10\.42\.0\.62/.test(p.text()), [p.h2(), p.card().slice(0, 60)]);
-    check("six POSTs: the blink did not start a second test", p.M().tryPosts === 6, p.M().tryPosts);
+    check("eight POSTs: the blink did not start a second test", p.M().tryPosts === 8, p.M().tryPosts);
 
     /* the pass is remembered for these credentials, a new password is not */
     await backToWifi(p);
@@ -125,7 +136,7 @@ const backToWifi = async (p) => { p.btn(/^Back$/).click(); await sleep(500); if 
     check("the tested password back: Continue again", p.pri() === "Continue", p.pri());
     p.btn(/^Continue$/).click(); await sleep(400);
     await pastUsb(p);
-    check("Review again without a new POST", /Review, then restart/.test(p.h2()) && p.M().tryPosts === 6, p.M().tryPosts);
+    check("Review again without a new POST", /Review, then restart/.test(p.h2()) && p.M().tryPosts === 8, p.M().tryPosts);
 
     /* Reconnect: the tested address is the second way in and the preferred door */
     p.w.location.hash = "#/setup/reconnect"; p.w.dispatchEvent(new p.w.Event("hashchange")); await sleep(1500);
@@ -137,6 +148,26 @@ const backToWifi = async (p) => { p.btn(/^Back$/).click(); await sleep(500); if 
     await sleep(3500);
     const go = p.$("#view .qs-check a.btn.pri");
     check("found: the Continue button goes to the tested address, not the .local name", !!go && go.getAttribute("href") === "http://10.42.0.62/#/setup/checks" && /continues at 10\.42\.0\.62/.test(p.card()), go && go.getAttribute("href"));
+    check("no page errors", p.errs.length === 0, p.errs.slice(0, 3));
+    p.w.close();
+  }
+
+  /* ---------------- over the access point: the mobile-data request (Ali, 2026-10-08) ---------------- */
+  {
+    const p = boot("http://192.168.0.10/", { apDefaultPassword: true, staConnected: false, tryResult: "connected", usb: "none" });
+    await sleep(1500);
+    check("AP: the first screen asks for mobile data off, with the where and the why", /Keep your WiCAN private/.test(p.h2()) && /turn off mobile data until WiCAN is on your WiFi/.test(p.text()) && /Settings > Mobile data/.test(p.text()) && /A computer has nothing to turn off/.test(p.text()), p.h2());
+    await toWifi(p);
+    check("AP: the WiFi step carries the tick, Test and continue waits for it", /Join your home WiFi/.test(p.h2()) && !!p.$("#qs-mdata") && !p.$("#qs-mdata").checked && p.pri() === "Test and continue" && p.$("#view .qs-foot button.pri").disabled, [p.h2(), p.pri()]);
+    check("the tick names the network and the access point", /moves WiCAN's radio to Neighbor's channel/.test(p.text()) && /drops off WiCAN_/.test(p.text()) && /Nothing to do on a computer/.test(p.text()));
+    const t = p.$("#qs-mdata"); t.checked = true; p.fire(t, "change");
+    check("ticked: the button is live", !p.$("#view .qs-foot button.pri").disabled);
+    p.btn(/Test and continue/).click(); await sleep(600);
+    check("the Trying card says the phone may drop off the access point and rejoin; the tick is gone meanwhile", /Trying Neighbor/.test(p.card()) && /Your phone may drop off WiCAN_/.test(p.card()) && /rejoins by itself/.test(p.card()) && !p.$("#qs-mdata"), p.card().slice(0, 80));
+    await sleep(2200);
+    check("connected: on to the USB step", /What is on the USB connector/.test(p.h2()), p.h2());
+    await backToWifi(p);
+    check("Back after a pass: Continue, and no tick to ask again", p.pri() === "Continue" && !p.$("#qs-mdata"), p.pri());
     check("no page errors", p.errs.length === 0, p.errs.slice(0, 3));
     p.w.close();
   }
@@ -162,7 +193,7 @@ const backToWifi = async (p) => { p.btn(/^Back$/).click(); await sleep(500); if 
     p.btn(/Test and continue/).click(); await sleep(300);
     p.M().offline = true;
     await sleep(31500);
-    check("30 s without the device: the card says so and offers Test again", /Lost contact with WiCAN during the test/.test(p.card()) && /WiCAN_/.test(p.card()) && p.pri() === "Test again", [p.card().slice(0, 60), p.pri()]);
+    check("30 s without the device: the card says so (join the access point again, mobile data off) and offers Test again", /Lost contact with WiCAN during the test/.test(p.card()) && /WiCAN_/.test(p.card()) && /join it again \(mobile data off\)/.test(p.card()) && p.pri() === "Test again", [p.card().slice(0, 60), p.pri()]);
     p.M().offline = false;
     check("no page errors", p.errs.length === 0, p.errs.slice(0, 3));
     p.w.close();

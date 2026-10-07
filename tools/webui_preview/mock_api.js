@@ -330,7 +330,8 @@
         if (state.tryMode === "ap") return J({ error: "the station is off: the test needs Access point + Station" }, 409);
         if (state.trial && state.trial.state === "running" && Date.now() < state.trial.t0 + state.tryDelayMs) return J({ error: "a test is already running" }, 409);
         state.tryPosts++;
-        state.trial = { state: "running", ssid: b.ssid, password: b.password || "", t0: Date.now(), result: state.tryResult };
+        /* `channel` (2026-10-08): the scan row's, 0 for a name typed by hand; the probe reads it back */
+        state.trial = { state: "running", ssid: b.ssid, password: b.password || "", channel: b.channel || 0, t0: Date.now(), result: state.tryResult };
         return J({ state: "running", ssid: b.ssid, result: "none", reason: 0, took_ms: 0, age_s: 0 }, 202);
       }
       const t = state.trial;
