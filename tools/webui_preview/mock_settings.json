@@ -630,7 +630,10 @@
    "cut_retries": 2,
    "ssid": "",
    "device_id": "",
-   "host": ""
+   "host": "",
+   "apn": "",
+   "apn_user": "",
+   "apn_password": ""
   },
   "schema": {
    "properties": {
@@ -673,6 +676,15 @@
      "type": "string"
     },
     "host": {
+     "type": "string"
+    },
+    "apn": {
+     "type": "string"
+    },
+    "apn_user": {
+     "type": "string"
+    },
+    "apn_password": {
      "type": "string"
     }
    }

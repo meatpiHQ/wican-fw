@@ -101,4 +101,9 @@ const check = (n, ok, extra) => { console.log((ok ? "PASS " : "FAIL ") + n + (ex
   w.__mockState.espnlUnsupported = false;
 
   check("no jsdom errors", errs.length === 0, errs.slice(0, 2).join(" ;; "));
+  /* the USB page keeps two intervals running: close the window and leave, or node
+     never exits (2026-10-07, the probe chain stalled here) */
+  console.log(process.exitCode ? "ESPNETLINK PROBE FAIL" : "ESPNETLINK PROBE PASS");
+  dom.window.close();
+  process.exit(process.exitCode || 0);
 })();

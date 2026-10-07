@@ -24,6 +24,10 @@
   ov("data_logger", { enabled: false });
   ov("vpn_manager", { enabled: true, type: "wireguard", address: "10.66.0.2", endpoint: "vpn.example.com", port: 51820 });
   ov("usb_host_manager", { enabled: true, role: "host" });
+  /* the "gps" USB scene is a receiver already read by the console (usbScene below) */
+  if ((window.__mockPreset || {}).usb === "gps") ov("usb_acm_cli", { enabled: true });
+  /* the carrier settings the wizard relays to the dongle (Quick Setup's USB step) */
+  ov("espnetlink", { apn: "", apn_user: "", apn_password: "" });
   ov("event_manager", {
     enabled: true,
     timers: [{ name: "dest1", period_s: 5 }],
@@ -48,6 +52,65 @@
       pending: sp ? sp.cause : "none", sleep_in_s: left, critical_v: 11.9, critical_s: 300,
       hold_s: hold, holds_left: 3 - state.holds, holds_max: 3 };
   };
+  /* what /api/usb, /api/espnetlink, /api/usb/acm and /api/gps answer for the USB
+     scene state.usb names (Quick Setup's USB step, 2026-10-07): "none",
+     "espnetlink_fresh" (on the cable, pairing on hold behind the factory AP
+     password), "espnetlink" (paired, WiCAN on the dongle's WiFi: LTE and GPS live),
+     "espnetlink_home" (paired, WiCAN on the home WiFi: the dongle standing by),
+     "eth" (an ASIX adapter with an address), "eth_nolink" (the adapter, no cable),
+     "gps" (a u-blox receiver read by the console, with a fix), "gps_nofix" (the
+     receiver identified, the console off: read after the restart), "unknown" (a
+     memory stick). `device` on /api/usb is the enumerated device whatever its class
+     (the shape the GPS part needs from the firmware) */
+  const usbScene = () => {
+    const k = state.usb;
+    if (!k) return null;
+    const usb0 = { enabled: true, device_present: false, host_active: true, eth_connected: false, driver: "", ip: "", attaches: 0, vid: "0000", pid: "0000", vbus: true };
+    const nl0 = { enabled: true, mode: "wifi_modem", auto_pair: true, paired: false, ssid: "", device_id: "", uplink: "wifi", on_link: false, host: "",
+      pair_blocked_factory_pw: false, last_error: "", dongle_fw: "", dongle_api: 0, dongle_api_min: 7, health_unsupported: false,
+      usb: { attached: false, pair_state: "idle", cuts: 0, vbus_cycles: 0, errors: 0 }, gps: { valid: false }, dongle: { valid: false }, polls: 0, failures: 0, link_ups: 0 };
+    const nlv = (S.espnetlink && S.espnetlink.values) || {};
+    /* dongle api 8 + the carrier relay (2026-10-07): `apn` is the WiCAN's setting,
+       `carrier_synced` whether the pairing pass found the dongle holding it */
+    const fw = { dongle_fw: "v1.22-41-gf2f6aa2", dongle_api: 8, dongle_api_min: 7, device_id: "206ef1894a5d", apn: nlv.apn || "", carrier_synced: true, carrier_note: "" };
+    /* the dongle's health as WiCAN relays it (`sim`, `stage`, `ip` and `age_s` are
+       dongle api 8; read over the cable during pairing too, so a fresh device sees
+       them before its restart) */
+    const health = { valid: true, lte_connected: true, attached: true, rssi_dbm: -67, operator: "ALDI Mobile", network_type: "eMTC", ip: "10.86.12.44", sim: "ready", stage: "connected", gps_fix: false, usb_data: true, age_s: 2 };
+    const paired = { ...nl0, ...fw, paired: true, ssid: "ESPNetLink_894A5D", usb: { attached: false, pair_state: "done", cuts: 1, vbus_cycles: 0, errors: 0 } };
+    const fix = { valid: true, latitude: -37.905350, longitude: 145.145047, accuracy: 4, altitude: 88.8, speed: 0.3, heading: 270.5, satellites: 9, age_ms: 800 };
+    const nofix = { valid: false };
+    const ublox = { vid: "1546", pid: "01a7", class: "cdc", product: "u-blox 7 - GPS/GNSS Receiver" };
+    /* /api/usb/acm since 2026-10-07: `reading` (the console enabled and its RX task on the
+       device) and `mode` ("nmea" once a receiver's sentences arrived, else "console") */
+    const off = { connected: false, reading: false, mode: "console", nmea_sentences: 0 };
+    switch (k) {
+      case "none": return { usb: usb0, nl: nl0, acm: off, gps: nofix };
+      case "espnetlink_fresh":
+      case "espnetlink_nosim": {
+        const hold = state.apDefaultPassword === true;
+        const d = k === "espnetlink_nosim" ? { ...health, lte_connected: false, attached: false, rssi_dbm: 0, operator: "", network_type: "", ip: "", sim: "missing", stage: "not_started" } : health;
+        return { usb: { ...usb0, device_present: true, eth_connected: true, driver: "cdc_ncm", ip: "192.168.7.2", attaches: 1, vid: "303a", pid: "4007", device: { vid: "303a", pid: "4007", class: "cdc_ncm", product: "ESPNetLink" } },
+          nl: { ...nl0, ...fw, pair_blocked_factory_pw: hold, last_error: hold ? "the access point still has the factory password: set a new one (8 to 63 characters)" : "",
+            usb: { attached: true, pair_state: hold ? "hold" : "read_key", cuts: 0, vbus_cycles: 0, errors: 0 }, dongle: d },
+          acm: off, gps: nofix };
+      }
+      case "espnetlink": return { usb: { ...usb0, device_present: true, eth_connected: true, driver: "rndis", ip: "192.168.7.2", attaches: 1, vid: "303a", pid: "4007", device: { vid: "303a", pid: "4007", class: "rndis", product: "ESPNetLink" } },
+        nl: { ...paired, mode: "usb_rndis", uplink: "espnetlink_usb", on_link: true, host: "192.168.7.1", gps: { valid: true, age_ms: 800, satellites: 9 },
+          usb: { attached: true, pair_state: "ncm_up", cuts: 0, vbus_cycles: 0, errors: 0 },
+          dongle: { ...health, rssi_dbm: -59, gps_fix: true }, polls: 42, link_ups: 1 },
+        acm: off, gps: fix };
+      case "espnetlink_home": return { usb: { ...usb0, device_present: true, attaches: 1 }, nl: paired, acm: off, gps: nofix };
+      case "eth": return { usb: { ...usb0, device_present: true, eth_connected: true, driver: "asix", ip: "10.42.2.37", attaches: 1, vid: "0b95", pid: "772b", device: { vid: "0b95", pid: "772b", class: "vendor", product: "AX88772B" } },
+        nl: nl0, acm: off, gps: nofix };
+      case "eth_nolink": return { usb: { ...usb0, device_present: true, driver: "asix", attaches: 1, device: { vid: "0b95", pid: "772b", class: "vendor", product: "AX88772B" } }, nl: nl0, acm: off, gps: nofix };
+      case "gps": return { usb: { ...usb0, device_present: true, attaches: 1, device: ublox }, nl: nl0, acm: { connected: true, reading: true, mode: "nmea", nmea_sentences: 412 }, gps: fix };
+      /* the receiver bound but nobody reads it: the console is off in settings */
+      case "gps_nofix": return { usb: { ...usb0, device_present: true, attaches: 1, device: ublox }, nl: nl0, acm: { connected: true, reading: false, mode: "console", nmea_sentences: 0 }, gps: nofix };
+      case "unknown": return { usb: { ...usb0, device_present: true, attaches: 1, device: { vid: "0781", pid: "5581", class: "mass_storage", product: "SanDisk Ultra" } }, nl: nl0, acm: off, gps: nofix };
+    }
+    return null;
+  };
   const state = {
     scan: { status: "idle", found: 0 },
     /* Quick Setup (2026-10-01): a probe presets window.__mockPreset before
@@ -68,6 +131,10 @@
        sleep (state.asleep; set it back to false to "wake" it) */
     sleepPending: (window.__mockPreset || {}).sleepPending || null,
     asleep: false,
+    /* the USB connector as Quick Setup's USB step sees it (2026-10-07): a preset or
+       __mockState.usb names the scene, usbScene() below spells it out; null = the
+       routes' own answers (the USB page probe's) */
+    usb: (window.__mockPreset || {}).usb || null,
     /* the Quick Setup reconnect screen (2026-10-06): `offline` = this page's
        own origin is out of reach (the phone left the access point);
        `linkAnswers` = WiCAN answers at the mDNS link (the phone has arrived
@@ -284,12 +351,12 @@
         last_ok_time: i === 0 ? new Date().toISOString() : "", full_sent: i === 1 })) }),
     "/api/webhook": () => J({ url: state.webhookUrl !== undefined ? state.webhookUrl : S.ha_webhooks.values.url, enabled: true, interval: 15, manual_override: false, data_mode: "changed", gzip: false, status: "ok", last_post: new Date().toISOString(), retries: 0, success_count: 512, fail_count: 3, last_error: "", last_error_time: "" }),
     "/api/vpn": () => J({ state: "connected", type: "wireguard", endpoint: "vpn.example.com:51820", ts_ip: "", ts_peers: 0, connects: 1, failures: 0, uptime_s: 8040 }),
-    "/api/usb": () => J({ enabled: true, device_present: true, host_active: true, eth_connected: true, driver: "cdc_ncm", ip: "192.168.7.2", attaches: 1 }),
+    "/api/usb": () => J(usbScene() ? usbScene().usb : { enabled: true, device_present: true, host_active: true, eth_connected: true, driver: "cdc_ncm", ip: "192.168.7.2", attaches: 1 }),
     /* espnetlink_link: paired steady state by default; state.espnlBlocked
        flips to the fresh-device hold (factory AP password, 2026-09-07);
        state.espnlUnsupported to the stale-dongle-firmware case (bench
        2026-09-08: a July build, api 6, 404 on the WiFi-modem routes) */
-    "/api/espnetlink": () => J(state.espnlUnsupported
+    "/api/espnetlink": () => J(usbScene() ? usbScene().nl : state.espnlUnsupported
       ? { enabled: true, mode: "usb_rndis", auto_pair: true, paired: false, ssid: "", device_id: "206ef1894a5d", uplink: "espnetlink_usb", on_link: true, host: "192.168.7.1",
           pair_blocked_factory_pw: false, last_error: "the dongle firmware cannot select the USB class (no usb_dev_ethernet settings): it stays on CDC-NCM. Update the dongle firmware",
           dongle_fw: "v1.22-41-gf0e8804-dirty", dongle_api: 6, dongle_api_min: 7, health_unsupported: true,
@@ -304,8 +371,8 @@
           dongle_fw: "v1.22-41-gf2f6aa2", dongle_api: 7, dongle_api_min: 7, health_unsupported: false,
           usb: { attached: false, pair_state: "idle", cuts: 0, vbus_cycles: 0, errors: 0 }, gps: { valid: true, age_ms: 1200, satellites: 7 },
           dongle: { valid: true, lte_connected: true, rssi_dbm: -59, operator: "ALDI Mobile", network_type: "eMTC", gps_fix: true, usb_data: false }, polls: 42, failures: 0, link_ups: 1 }),
-    "/api/usb/acm": () => J({ connected: true }),
-    "/api/gps": () => J({ valid: true, latitude: -37.905350, longitude: 145.145047, accuracy: 6, altitude: 88.8, speed: 1.0, heading: 270.5, satellites: 7, age_ms: 1200 }),
+    "/api/usb/acm": () => J(usbScene() ? usbScene().acm : { connected: true }),
+    "/api/gps": () => J(usbScene() ? usbScene().gps : { valid: true, latitude: -37.905350, longitude: 145.145047, accuracy: 6, altitude: 88.8, speed: 1.0, heading: 270.5, satellites: 7, age_ms: 1200 }),
     "/api/battery": () => J({ voltage: state.batteryV }),
     /* the native CAN bus (state.canEnabled=false: a fresh device, bus off) */
     /* 2026-10-03: the node listens before it talks; state.canLink (a probe's

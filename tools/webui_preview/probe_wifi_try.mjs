@@ -62,11 +62,15 @@ async function toWifi(p) {
   p.setText(p.$("#qs-wifi-pw"), "letmein-please");
 }
 const runTest = async (p, result, wait = 2600) => { p.M().tryResult = result; p.btn(/Test and continue|Test again/).click(); await sleep(wait); };
+/* since 2026-10-07 the WiFi step hands over to the USB step (nothing on the connector in this
+   probe: a plain Continue) before Review */
+const pastUsb = async (p) => { if (/What is on the USB connector/.test(p.h2())) { p.btn(/^Continue$/).click(); await sleep(400); } };
+const backToWifi = async (p) => { p.btn(/^Back$/).click(); await sleep(500); if (/What is on the USB connector/.test(p.h2())) { p.btn(/^Back$/).click(); await sleep(700); } };
 
 (async () => {
   /* ---------------- the verdicts ---------------- */
   {
-    const p = boot("http://wican.local/", { apDefaultPassword: true, tryResult: "password" });
+    const p = boot("http://wican.local/", { apDefaultPassword: true, tryResult: "password", usb: "none" });
     await sleep(1500);
     await toWifi(p);
     check("WiFi step, Neighbor picked, the button says Test and continue", /Join your home WiFi/.test(p.h2()) && p.pri() === "Test and continue", [p.h2(), p.pri()]);
@@ -93,9 +97,10 @@ const runTest = async (p, result, wait = 2600) => { p.M().tryResult = result; p.
 
     /* Continue anyway: Review carries the warning, Back returns to a fresh test */
     p.$("#view .qs-check button").click(); await sleep(400);
+    await pastUsb(p);
     check("Continue anyway: Review with the warning circle and its line", /Review, then restart/.test(p.h2()) && /Test failed/.test(p.text()) && /continuing anyway/.test(p.text()) && p.$$(".qs-rv .ci.warn").length === 1, p.h2());
     check("no tested address promised in that case", !/10\.42\.0\.62/.test(p.text()));
-    p.btn(/^Back$/).click(); await sleep(700);
+    await backToWifi(p);
     check("Back to the WiFi step: the test is asked again", /Join your home WiFi/.test(p.h2()) && p.pri() === "Test and continue", [p.h2(), p.pri()]);
 
     /* the blink: the AP pauses for two seconds in the middle of a longer test */
@@ -107,17 +112,19 @@ const runTest = async (p, result, wait = 2600) => { p.M().tryResult = result; p.
     await sleep(1200);
     check("after the blink the page re-routed and the rebuilt step carries the test on (Trying card again)", /Trying Neighbor/.test(p.card()) && p.pri() === "Testing", [p.card().slice(0, 40), p.pri()]);
     await sleep(3200);
+    await pastUsb(p);
     check("the blink is ridden out: connected, straight to Review with the verdict and address", /Review, then restart/.test(p.h2()) && /Password accepted/.test(p.text()) && /10\.42\.0\.62/.test(p.text()), [p.h2(), p.card().slice(0, 60)]);
     check("six POSTs: the blink did not start a second test", p.M().tryPosts === 6, p.M().tryPosts);
 
     /* the pass is remembered for these credentials, a new password is not */
-    p.btn(/^Back$/).click(); await sleep(700);
+    await backToWifi(p);
     check("Back: the same credentials need no new test (Continue)", p.pri() === "Continue", p.pri());
     p.setText(p.$("#qs-wifi-pw"), "letmein-pleas");
     check("an edited password asks for the test again", p.pri() === "Test and continue", p.pri());
     p.setText(p.$("#qs-wifi-pw"), "letmein-please");
     check("the tested password back: Continue again", p.pri() === "Continue", p.pri());
     p.btn(/^Continue$/).click(); await sleep(400);
+    await pastUsb(p);
     check("Review again without a new POST", /Review, then restart/.test(p.h2()) && p.M().tryPosts === 6, p.M().tryPosts);
 
     /* Reconnect: the tested address is the second way in and the preferred door */
@@ -136,10 +143,11 @@ const runTest = async (p, result, wait = 2600) => { p.M().tryResult = result; p.
 
   /* ---------------- a device in access point only mode ---------------- */
   {
-    const p = boot("http://wican.local/", { apDefaultPassword: true, tryMode: "ap" });
+    const p = boot("http://wican.local/", { apDefaultPassword: true, tryMode: "ap", usb: "none" });
     await sleep(1500);
     await toWifi(p);
     p.btn(/Test and continue/).click(); await sleep(900);
+    await pastUsb(p);
     check("AP only: the test is skipped with its note on Review (an empty circle)", /Review, then restart/.test(p.h2()) && /Not tested/.test(p.text()) && /access point only until the restart/.test(p.text()) && p.$$(".qs-rv .ci.pend").length === 2, p.h2());
     check("no POST counted (the 409 came before any trial)", !(p.M().tryPosts), p.M().tryPosts || 0);
     check("no page errors", p.errs.length === 0, p.errs.slice(0, 3));
@@ -148,7 +156,7 @@ const runTest = async (p, result, wait = 2600) => { p.M().tryResult = result; p.
 
   /* ---------------- lost contact for the whole test ---------------- */
   {
-    const p = boot("http://wican.local/", { apDefaultPassword: true, tryResult: "connected", tryDelayMs: 1500 });
+    const p = boot("http://wican.local/", { apDefaultPassword: true, tryResult: "connected", tryDelayMs: 1500, usb: "none" });
     await sleep(1500);
     await toWifi(p);
     p.btn(/Test and continue/).click(); await sleep(300);

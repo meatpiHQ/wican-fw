@@ -50,11 +50,12 @@ function boot(url, preset) {
 (async () => {
   /* ---------------- fresh device ---------------- */
   {
-    const p = boot("http://wican.local/", { apDefaultPassword: true });
+    /* an ESPNetLink on the connector of the fresh device (2026-10-07: the USB step) */
+    const p = boot("http://wican.local/", { apDefaultPassword: true, usb: "espnetlink_fresh" });
     await sleep(1500);
     check("fresh device: the default route opens the wizard", p.w.location.hash === "#/setup" || p.w.location.hash.startsWith("#/setup/") || /Quick Setup/.test((p.$("#view h1") || {}).textContent || ""), p.w.location.hash);
     check("focused layout: #app carries setup-focus", p.$("#app").classList.contains("setup-focus"));
-    check("rail lists twelve steps", p.$$(".qs-step").length === 12, p.$$(".qs-step").length);
+    check("rail lists thirteen steps (USB devices since 2026-10-07)", p.$$(".qs-step").length === 13 && /USB devices/.test(p.$('.qs-step[data-step="usb"]').textContent), p.$$(".qs-step").length);
     check("safety screen first", /Keep your WiCAN private/.test(p.h2()), p.h2());
     let cont = p.btn(/^Continue$/);
     check("Continue disabled until the three rules are ticked", cont && cont.disabled);
@@ -68,9 +69,9 @@ function boot(url, preset) {
        steps renumber */
     check("a third tile: Just connect WiCAN to my WiFi", !!p.$('.qs-tile[data-use="wifi"]') && /Just connect WiCAN to my WiFi/.test(p.$('.qs-tile[data-use="wifi"]').textContent) && !p.$("#qs-use-wifi"));
     p.$('.qs-tile[data-use="wifi"]').click(); await sleep(250);
-    check("WiFi only chosen: no Home Assistant step on the rail, Access point is step 3", !p.$('.qs-step[data-step="details"]') && /^3/.test(p.$('.qs-step[data-step="ap"] .n').textContent) && p.$$(".qs-step").length === 11, [p.$$(".qs-step").length, (p.$('.qs-step[data-step="ap"] .n') || {}).textContent]);
+    check("WiFi only chosen: no Home Assistant step on the rail, Access point is step 3", !p.$('.qs-step[data-step="details"]') && /^3/.test(p.$('.qs-step[data-step="ap"] .n').textContent) && p.$$(".qs-step").length === 12, [p.$$(".qs-step").length, (p.$('.qs-step[data-step="ap"] .n') || {}).textContent]);
     p.$('.qs-tile[data-use="mqtt"]').click(); await sleep(250);
-    check("MQTT chosen again: the step is back, twelve on the rail", !!p.$('.qs-step[data-step="details"]') && p.$$(".qs-step").length === 12);
+    check("MQTT chosen again: the step is back, thirteen on the rail", !!p.$('.qs-step[data-step="details"]') && p.$$(".qs-step").length === 13);
     check("MQTT tile selects and the rail label follows", p.$('.qs-tile[data-use="mqtt"]').classList.contains("sel") && /MQTT broker/.test(p.$('.qs-step[data-step="details"]').textContent));
     p.btn(/^Continue$/).click(); await sleep(400);
     check("MQTT details screen", /Your MQTT broker/.test(p.h2()), p.h2());
@@ -113,10 +114,23 @@ function boot(url, preset) {
     p.btn(/Test and continue/).click(); await sleep(400);
     check("the test starts: POST /api/wifi/try, the Trying card, the button says Testing", p.M().tryPosts === 1 && /Trying Neighbor/.test(p.text()) && /nothing is saved/.test(p.text()) && /Testing/.test((p.$(".qs-foot button.pri") || {}).textContent || ""), [p.M().tryPosts, (p.$(".qs-foot button.pri") || {}).textContent]);
     await sleep(2800);
-    check("the network accepted the password: straight on to Review with the verdict", /Review, then restart/.test(p.h2()) && /Password accepted/.test(p.text()) && /10\.42\.0\.62/.test(p.text()), p.h2());
+    /* the USB step (Ali, 2026-10-07: "quick setup for usb devices such as espnetlink, usb to
+       ethernet and gps"): the connector read live, the dongle found with its basics read over
+       the cable, USB Ethernet recommended, the carrier settings optional */
+    check("the network accepted the password: on to the USB step", /What is on the USB connector/.test(p.h2()), p.h2());
+    check("USB step: three tiles, the ESPNetLink lit with Found, the others dim", p.$$(".qs-tile").length === 3 && p.$('.qs-tile[data-usb="espnetlink"]').classList.contains("sel") && /Found/.test(p.$('.qs-tile[data-usb="espnetlink"]').textContent) && p.$('.qs-tile[data-usb="eth"]').classList.contains("later") && p.$('.qs-tile[data-usb="gps"]').classList.contains("later"));
+    check("USB step: a fresh device says the dongle pairs after the restart and restarts once more", /ESPNetLink found, pairs after the restart/.test(p.text()) && /restarts once more/.test(p.text()) && /firmware v1\.22-41/.test(p.text()));
+    check("USB step: the basics read over the cable: SIM found, the carrier and type, the signal with a word, internet with the address, GPS no fix", /SIM/.test(p.text()) && /Found/.test(p.text()) && /ALDI Mobile \(eMTC\)/.test(p.text()) && /-67 dBm, fair/.test(p.text()) && /10\.86\.12\.44/.test(p.text()) && /No fix yet/.test(p.text()), (p.text().match(/SIM[\s\S]{0,160}/) || [])[0]);
+    check("USB step: USB Ethernet is recommended and ticked, the GPS note names WiFi modem as the way out", p.$("#qs-nl-usb") && p.$("#qs-nl-usb").checked && !p.$("#qs-nl-wifi").checked && /USB Ethernet \(recommended\)/.test(p.text()) && /never gets a fix this way/.test(p.text()) && /switch to WiFi modem/.test(p.text()));
+    check("USB step: the carrier settings are a collapsed details with APN, username, password", !!p.$("#qs-apn") && !!p.$("#qs-apn-user") && !!p.$("#qs-apn-pw") && !p.$("#qs-apn").closest("details").open);
+    p.setText(p.$("#qs-apn"), "telstra.internet");
+    p.btn(/^Continue$/).click(); await sleep(400);
+    check("Review with the verdict after the USB step", /Review, then restart/.test(p.h2()) && /Password accepted/.test(p.text()) && /10\.42\.0\.62/.test(p.text()), p.h2());
     /* Review is a checklist (Ali's sketch, 2026-10-07): a circle per row, the title in its
-       column, the value and details beside it; three settled, the vehicle data pending; no pills */
-    check("review: a checklist of four rows, three done circles and one pending, no pills", p.$$(".qs-rv li").length === 4 && p.$$(".qs-rv .ci").length === 4 && p.$$(".qs-rv .ci.pend").length === 1 && p.$$(".qs-rv .ci.warn").length === 0 && p.$$(".qs-rv .chip").length === 0, { rows: p.$$(".qs-rv li").length, pend: p.$$(".qs-rv .ci.pend").length });
+       column, the value and details beside it; three settled, the USB connector and the vehicle
+       data pending; no pills */
+    check("review: a checklist of five rows, three done circles and two pending, no pills", p.$$(".qs-rv li").length === 5 && p.$$(".qs-rv .ci").length === 5 && p.$$(".qs-rv .ci.pend").length === 2 && p.$$(".qs-rv .ci.warn").length === 0 && p.$$(".qs-rv .chip").length === 0, { rows: p.$$(".qs-rv li").length, pend: p.$$(".qs-rv .ci.pend").length });
+    check("review: the USB connector row names the dongle, USB Ethernet, the APN and what the restart does", /USB connector/.test(p.text()) && /ESPNetLink/.test(p.text()) && /USB Ethernet/.test(p.text()) && /APN telstra\.internet/.test(p.text()) && /Pairs after the restart/.test(p.text()) && /Carrier settings sent to the dongle/.test(p.text()), (p.text().match(/USB connector[\s\S]{0,200}/) || [])[0]);
     check("Review: step 3 is the address itself, Station only on the rows (the access point off after the restart, the button named)", /open http:\/\/10\.42\.0\.62\/#\/setup\/checks/.test(p.text()) && /Station only/.test(p.text()) && /Off after the restart/.test(p.text()) && /hold the button 5 s/.test(p.text()) && /drops off WiCAN_[0-9a-f]+ for good/.test(p.text()) && !/\.local/.test(p.text()), (p.text().match(/Connect your phone[^.]*/) || [])[0]);
     check("review screen summarises everything", /Review, then restart/.test(p.h2()) && /Neighbor/.test(p.text()) && /mqtt:\/\/10\.0\.0\.5:1883/.test(p.text()) && /New password/.test(p.text()), p.h2());
     const puts0 = p.M().puts || 0;
@@ -126,18 +140,22 @@ function boot(url, preset) {
     check("mqtt_manager PUT enables the broker", mq.enabled === true && mq.url === "mqtt://10.0.0.5:1883" && mq.username === "wican" && mq.broker_password === "secret12", { enabled: mq.enabled, url: mq.url });
     const row = (dd.destinations || []).find((x) => x.type === "mqtt" && x.url === "~/autopid");
     check("data_destinations PUT has the ~/autopid mqtt row at the chosen period", dd.enabled === true && row && row.enabled === true && row.period_s === 7, row && { period: row.period_s, enabled: row.enabled });
-    check("three PUTs went out", (p.M().puts || 0) - puts0 === 3, (p.M().puts || 0) - puts0);
+    const nl = p.S().espnetlink.values;
+    check("espnetlink PUT carries the recommended mode (usb_rndis) and the APN, the rest untouched", nl.mode === "usb_rndis" && nl.enabled === true && nl.apn === "telstra.internet" && nl.apn_user === "" && nl.auto_pair === true, { mode: nl.mode, apn: nl.apn });
+    check("four PUTs went out (the USB step's espnetlink one included)", (p.M().puts || 0) - puts0 === 4, (p.M().puts || 0) - puts0);
     check("reconnect screen with the address link carrying the resume hash and the use case (mqtt), no mDNS name", /Now switch networks/.test(p.h2()) && (p.$(".qs-link .url") || {}).textContent === "http://10.42.0.62/#/setup/checks/mqtt" && !/\.local/.test(p.text()), (p.$(".qs-link .url") || {}).textContent);
     check("reconnect screen, Station only: the fallback names the router's device list and the button, with the access point address", /router's device list/.test(p.text()) && /hold WiCAN's button for 5 seconds/.test(p.text()) && /192\.168\.80\.1\/#\/setup\/checks|192\.168\.0\.10\/#\/setup\/checks/.test(p.text()));
 
     /* the phone comes back on the home network: deep link into the checks */
     p.M().apDefaultPassword = false;
+    p.M().usb = "espnetlink";   /* after the restart the dongle paired and is in use over the cable */
     await p.w.ping();
     p.nav("#/setup/checks/mqtt"); await sleep(700);
     check("deep link (with the use case segment) lands on the checks screen", /Connected through/.test(p.h2()), p.h2());
     const cards = p.$$(".qs-check");
-    check("WiFi, access point (off: Station only) and MQTT cards are shown, no mDNS name", cards.length === 3 && /joined/.test(cards[0].textContent) && /router's device list shows it as wican_/.test(cards[0].textContent) && /Access point off: Station only/.test(cards[1].textContent) && /hold its button for 5 seconds/i.test(cards[1].textContent) && /MQTT broker connected/.test(cards[2].textContent) && !/\.local/.test(p.text()), cards.map((c) => c.querySelector("b").textContent));
-    check("rail: the six steps before the restart show as done", p.$$(".qs-step.done").length === 7, p.$$(".qs-step.done").length);
+    check("WiFi, access point (off: Station only), ESPNetLink and MQTT cards are shown, no mDNS name", cards.length === 4 && /joined/.test(cards[0].textContent) && /router's device list shows it as wican_/.test(cards[0].textContent) && /Access point off: Station only/.test(cards[1].textContent) && /hold its button for 5 seconds/i.test(cards[1].textContent) && /ESPNetLink paired/.test(cards[2].textContent) && /MQTT broker connected/.test(cards[3].textContent) && !/\.local/.test(p.text()), cards.map((c) => c.querySelector("b").textContent));
+    check("checks: the dongle card reads the device (no step state at the new address): in use over the cable, the rows in the same box", !!p.$(".qs-nlcard") && /In use/.test(p.$(".qs-nlcard").textContent) && /over the cable/.test(p.$(".qs-nlcard").textContent) && /-59 dBm, good/.test(p.$(".qs-nlcard").textContent) && /9 satellites/.test(p.$(".qs-nlcard").textContent), (p.$(".qs-nlcard") || {}).textContent);
+    check("rail: the seven steps before the restart show as done", p.$$(".qs-step.done").length === 8, p.$$(".qs-step.done").length);
     /* a FRESH device: polling off, the firmware's 1 s default group (the mock ships autopid on) */
     p.S().autopid.values.enabled = false;
     p.btn(/Set up my vehicle/).click(); await sleep(600);
@@ -190,7 +208,7 @@ function boot(url, preset) {
     p.btn(/^Continue$/).click(); await sleep(1600);
     /* ---- the Battery and sleep step (2026-10-01): the probe plays the car through the mock battery ---- */
     check("battery step after the vehicle", /When should WiCAN sleep/.test(p.h2()), p.h2());
-    check("rail has twelve steps", p.$$(".qs-step").length === 12, p.$$(".qs-step").length);
+    check("rail has thirteen steps", p.$$(".qs-step").length === 13, p.$$(".qs-step").length);
     check("the live reading shows ONE decimal", /^12\.5V$/.test((p.$("#qs-pwr-big") || {}).textContent || ""), (p.$("#qs-pwr-big") || {}).textContent);
     check("waiting for the engine, Continue locked", /Waiting for the engine/.test(p.text()) && p.$("#qs-pwr-continue") && p.$("#qs-pwr-continue").disabled);
     check("the skip is a real button quoting the device pair with one decimal (Ali, 2026-10-06)", !!p.$("#qs-pwr-keep") && /Skip, keep the defaults \(13\.1 \/ 13\.2 V\)/.test(p.$("#qs-pwr-keep").textContent) && !p.$("#qs-pwr-keep").classList.contains("gh") && !p.$("#qs-pwr-keep").disabled, (p.$("#qs-pwr-keep") || {}).textContent);
@@ -262,6 +280,7 @@ function boot(url, preset) {
     check("finish: the custom rows (the dedupe fixture, the device's own) stayed", cfgNow.pids.filter((x) => x.type === "custom" && /^OxySensor1_(Volt|FAER)$/.test(x.name)).length === 2 && cfgNow.pids.some((x) => x.type === "custom" && x.name === "OilTemp"), cfgNow.pids.filter((x) => x.type === "custom").map((x) => x.name));
     check("done screen", /WiCAN is set up/.test(p.h2()), p.h2());
     check("done screen shows the VIN, the address and the router's name for WiCAN (no mDNS name)", /1WCAN0FW0P0000001/.test(p.text()) && /http:\/\/10\.42\.0\.62/.test(p.text()) && /shown as wican_[0-9a-f]+ in your router's device list/i.test(p.text()) && !/\.local/.test(p.text()));
+    check("done screen: one USB connector row with the dongle's state", p.$$(".qs-kv dt").some((t) => /USB connector/.test(t.textContent)) && /ESPNetLink paired/.test(p.text()) && /In use/.test(p.text()));
     check("done screen summarises the reading rules", /every 10 s, never pauses, trouble codes every 120 min/.test(p.text()), p.text().match(/every [^.]*min/) && p.text().match(/every [^.]*min/)[0]);
     check("done screen lists the measured pair", /sleeps after 5 min below 13\.1 V, wakes above 13\.3 V/.test(p.text()) && /Measured on your car/.test(p.text()) && !/Power saving is off/.test(p.text()), (p.text().match(/sleeps after[^M]*/) || [])[0]);
     check("no JS errors on the fresh-device run", p.errs.length === 0, p.errs.slice(0, 3));
@@ -311,6 +330,66 @@ function boot(url, preset) {
     p.nav("#/setup/checks/wifi"); await sleep(700);
     check("a WiFi-only resume link: the checks screen with no Home Assistant card", /Connected through/.test(p.h2()) && p.$$(".qs-check").length >= 2 && !p.$$(".qs-check").some((c) => /Home Assistant/.test(c.textContent)), p.$$(".qs-check").map((c) => (c.querySelector("b") || {}).textContent));
     check("no JS errors on the configured-device run", p.errs.length === 0, p.errs.slice(0, 3));
+  }
+
+  /* ---------------- the USB step, scene by scene (2026-10-07) ---------------- */
+  /* each scene is what the four routes answer (mock_api.js usbScene); the step is entered by its
+     hash on a configured device, as a re-run would */
+  const usbScene = async (usb, hash = "#/setup/usb", preset = {}) => {
+    const p = boot("http://wican.local/", { apDefaultPassword: false, usb, ...preset });
+    await sleep(1300);
+    p.nav(hash); await sleep(700);
+    return p;
+  };
+  {
+    const p = await usbScene("none");
+    check("nothing plugged in: all three tiles dim, the card says so, Continue is free, no question asked", p.$$(".qs-tile.later").length === 3 && !p.$(".qs-tile.sel") && /Nothing on the USB connector/.test(p.text()) && !p.btn(/^Continue$/).disabled && !p.$("#qs-nl-usb") && !p.$("#qs-eth-wifi"), p.h2());
+    check("no JS errors (none)", p.errs.length === 0, p.errs.slice(0, 2));
+  }
+  {
+    const p = await usbScene("eth");
+    check("USB Ethernet adapter with an address: the tile lit, driver and address on the card, WiFi first ticked", p.$('.qs-tile[data-usb="eth"]').classList.contains("sel") && /USB Ethernet connected/.test(p.text()) && /ASIX adapter has the address 10\.42\.2\.37/.test(p.text()) && p.$("#qs-eth-wifi").checked && !p.$("#qs-eth-first").checked && /Settings > USB/.test(p.text()), (p.text().match(/USB Ethernet connected[\s\S]{0,120}/) || [])[0]);
+    p.$("#qs-eth-first").click(); p.fire(p.$("#qs-eth-first"), "change"); await sleep(100);
+    p.btn(/^Continue$/).click(); await sleep(400);
+    check("Review names the adapter, cable first and its address", /USB connector/.test(p.text()) && /USB Ethernet adapter/.test(p.text()) && /cable first/.test(p.text()) && /Address 10\.42\.2\.37/.test(p.text()), (p.text().match(/USB connector[\s\S]{0,160}/) || [])[0]);
+  }
+  {
+    const p = await usbScene("eth_nolink");
+    check("the adapter without a network cable: no link yet, the cable asked for", /USB Ethernet adapter found, no link yet/.test(p.text()) && /Plug the network cable in/.test(p.text()) && /No link/.test(p.text()));
+  }
+  {
+    const p = await usbScene("gps_nofix", "#/setup/usb", { apDefaultPassword: true });
+    check("a GPS receiver on a fresh device: identified, read after the restart, no question", p.$('.qs-tile[data-usb="gps"]').classList.contains("sel") && /USB GPS receiver found/.test(p.text()) && /u-blox 7/.test(p.text()) && /reads it after the restart/.test(p.text()) && /Read after the restart/.test(p.text()) && !p.$("#qs-nl-usb") && !p.$("#qs-eth-wifi"));
+  }
+  {
+    const p = await usbScene("gps");
+    check("the receiver with a fix: satellites and the parameter names", /GPS fix/.test(p.text()) && /9 satellites/.test(p.text()) && /gps_latitude/.test(p.text()) && /Fix/.test(p.text()));
+    p.nav("#/setup/done"); await sleep(900);
+    check("Done with the receiver: the USB connector row says GPS fix", p.$$(".qs-kv dt").some((t) => /USB connector/.test(t.textContent)) && /GPS fix/.test(p.text()));
+  }
+  {
+    const p = await usbScene("unknown");
+    check("something else: named, what WiCAN supports listed, no tile lit, Continue free", !p.$(".qs-tile.sel") && /does not support/.test(p.text()) && /SanDisk Ultra/.test(p.text()) && /ASIX, Realtek RTL8152, CDC/.test(p.text()) && !p.btn(/^Continue$/).disabled);
+  }
+  {
+    const p = await usbScene("espnetlink_nosim", "#/setup/usb", { apDefaultPassword: true });
+    check("no SIM in the dongle: the card warns, the SIM row says what to do, the rows that need one are left out, Continue free", /ESPNetLink found, no SIM in it/.test(p.text()) && /Not found/.test(p.text()) && /Insert a SIM, then plug the dongle in again/.test(p.text()) && !/Network/.test(p.$(".qs-nlrows").textContent) && !/Signal/.test(p.$(".qs-nlrows").textContent) && /No SIM/.test(p.text()) && !p.btn(/^Continue$/).disabled, (p.$(".qs-nlrows") || {}).textContent);
+    check("no SIM: the mode choice is still asked, USB Ethernet ticked on a fresh pairing", p.$("#qs-nl-usb") && p.$("#qs-nl-usb").checked);
+  }
+  {
+    const p = await usbScene("espnetlink");
+    check("a dongle paired over the cable and in use: the rows read live, USB Ethernet stays ticked (paired keeps its mode)", /ESPNetLink paired/.test(p.text()) && /In use/.test(p.text()) && /over the cable/.test(p.text()) && /-59 dBm, good/.test(p.text()) && /10\.86\.12\.44/.test(p.text()) && /9 satellites/.test(p.text()) && p.$("#qs-nl-usb").checked);
+    p.btn(/^Continue$/).click(); await sleep(400);
+    check("Review for a paired dongle with nothing to change: a done row", p.$$(".qs-rv li").some((li) => /USB connector/.test(li.textContent) && /Paired/.test(li.textContent) && !li.querySelector(".ci.pend")));
+  }
+  {
+    const p = await usbScene("espnetlink_home");
+    check("a dongle paired as WiFi modem, WiCAN on the home WiFi: standing by, WiFi modem stays ticked", /ESPNetLink paired/.test(p.text()) && /Standing by/.test(p.text()) && /stands by/.test(p.text()) && p.$("#qs-nl-wifi").checked && !p.$("#qs-nl-usb").checked);
+  }
+  {
+    const p = await usbScene("eth", "#/setup/checks");
+    check("Checks with the adapter: the card from the device", p.$$(".qs-check").some((c) => /USB Ethernet connected/.test(c.textContent) && /10\.42\.2\.37/.test(c.textContent)));
+    check("no JS errors (scenes)", p.errs.length === 0, p.errs.slice(0, 2));
   }
 
   console.log(fails ? ("\n" + fails + " check(s) FAILED") : "\nALL PASS");
