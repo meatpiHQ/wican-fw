@@ -74,9 +74,10 @@ const backToWifi = async (p) => { p.btn(/^Back$/).click(); await sleep(500); if 
     await sleep(1500);
     await toWifi(p);
     check("WiFi step, Neighbor picked, the button says Test and continue", /Join your home WiFi/.test(p.h2()) && p.pri() === "Test and continue", [p.h2(), p.pri()]);
-    check("from the home WiFi side: no mobile-data tick, the button is live", !p.$("#qs-mdata") && !p.$("#view .qs-foot button.pri").disabled);
+    check("from the home WiFi side: no tick, the button is live", !p.$("#qs-mdata") && !p.$("#view .qs-foot button.pri").disabled);
 
     await runTest(p, "password");
+    check("from the home WiFi side the press tests at once, no popup", !p.$("#modal-root").classList.contains("on"));
     check("wrong password: the card says so with the reason", /Neighbor did not accept the password/.test(p.card()) && /reason 204/.test(p.card()) && /typo/.test(p.card()), p.card());
     check("the password field is marked and the button says Test again", p.$("#qs-wifi-pw").classList.contains("qs-bad") && p.pri() === "Test again", p.pri());
     check("Continue anyway is offered in the card", !!p.$("#view .qs-check button") && /Continue anyway/.test(p.$("#view .qs-check button").textContent));
@@ -152,22 +153,27 @@ const backToWifi = async (p) => { p.btn(/^Back$/).click(); await sleep(500); if 
     p.w.close();
   }
 
-  /* ---------------- over the access point: the mobile-data request (Ali, 2026-10-08) ---------------- */
+  /* ---------------- over the access point: the mobile-data popup (Ali, 2026-10-08) ---------------- */
   {
     const p = boot("http://192.168.0.10/", { apDefaultPassword: true, staConnected: false, tryResult: "connected", usb: "none" });
     await sleep(1500);
     check("AP: the first screen asks for mobile data off, with the where and the why", /Keep your WiCAN private/.test(p.h2()) && /turn off mobile data until WiCAN is on your WiFi/.test(p.text()) && /Settings > Mobile data/.test(p.text()) && /A computer has nothing to turn off/.test(p.text()), p.h2());
     await toWifi(p);
-    check("AP: the WiFi step carries the tick, Test and continue waits for it", /Join your home WiFi/.test(p.h2()) && !!p.$("#qs-mdata") && !p.$("#qs-mdata").checked && p.pri() === "Test and continue" && p.$("#view .qs-foot button.pri").disabled, [p.h2(), p.pri()]);
-    check("the tick names the network and the access point", /moves WiCAN's radio to Neighbor's channel/.test(p.text()) && /drops off WiCAN_/.test(p.text()) && /Nothing to do on a computer/.test(p.text()));
-    const t = p.$("#qs-mdata"); t.checked = true; p.fire(t, "change");
-    check("ticked: the button is live", !p.$("#view .qs-foot button.pri").disabled);
-    p.btn(/Test and continue/).click(); await sleep(600);
-    check("the Trying card says the phone may drop off the access point and rejoin; the tick is gone meanwhile", /Trying Neighbor/.test(p.card()) && /Your phone may drop off WiCAN_/.test(p.card()) && /rejoins by itself/.test(p.card()) && !p.$("#qs-mdata"), p.card().slice(0, 80));
+    const modalOn = () => p.$("#modal-root").classList.contains("on");
+    const modalText = () => (p.$("#modal-root .modal") || {}).textContent || "";
+    check("AP: the WiFi step has no tick, Test and continue is live", /Join your home WiFi/.test(p.h2()) && !p.$("#qs-mdata") && p.pri() === "Test and continue" && !p.$("#view .qs-foot button.pri").disabled, [p.h2(), p.pri()]);
+    p.btn(/Test and continue/).click(); await sleep(300);
+    check("the press opens the popup instead of testing: make sure mobile data is off, the names, where the switch is, one Continue", modalOn() && /Make sure mobile data is off on this phone/.test(modalText()) && /Neighbor's channel/.test(modalText()) && /drops off WiCAN_/.test(modalText()) && /Settings > Mobile data/.test(modalText()) && p.$$("#modal-root .acts button").length === 1 && /^Continue$/.test(p.$("#modal-root .acts button").textContent.trim()), modalText().slice(0, 80));
+    check("no POST before Continue", !(p.M().tryPosts), p.M().tryPosts || 0);
+    p.$("#modal-root .acts button.pri").click(); await sleep(600);
+    check("Continue closes the popup and starts the test: the Trying card says the phone may drop off the access point and rejoin", !modalOn() && /Trying Neighbor/.test(p.card()) && /Your phone may drop off WiCAN_/.test(p.card()) && /rejoins by itself/.test(p.card()) && p.M().tryPosts === 1, [p.card().slice(0, 80), p.M().tryPosts]);
     await sleep(2200);
     check("connected: on to the USB step", /What is on the USB connector/.test(p.h2()), p.h2());
     await backToWifi(p);
-    check("Back after a pass: Continue, and no tick to ask again", p.pri() === "Continue" && !p.$("#qs-mdata"), p.pri());
+    check("Back after a pass: Continue, no popup", p.pri() === "Continue" && !modalOn(), p.pri());
+    p.setText(p.$("#qs-wifi-pw"), "letmein-pleas");
+    p.btn(/Test and continue/).click(); await sleep(600);
+    check("a re-test in the same visit is not asked again: the test starts at once", !modalOn() && /Trying Neighbor/.test(p.card()) && p.M().tryPosts === 2, [p.M().tryPosts, p.card().slice(0, 30)]);
     check("no page errors", p.errs.length === 0, p.errs.slice(0, 3));
     p.w.close();
   }
