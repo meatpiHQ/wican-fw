@@ -42,7 +42,7 @@
   Specific routes always win over the catch-all (§9.3). The catch-all
   also serves two on-demand asset folders registered by `web_ui_v2`
   (2026-09-06): `/cache/*` → `/data/cache` and `/sdcache/*` →
-  `/sd/cache` (MIME by extension, ETag/304, `Cache-Control: max-age=3600`).
+  `/sd/cache` (MIME by extension, ETag/304; embedded assets `Cache-Control: no-cache` with an ETag of size plus the build's ELF hash prefix since 2026-10-08, so a new firmware's page shows at once; fetched files `max-age=3600`).
   The UI fills them through `/api/fs/upload` (today the dashboard's
   uPlot chart library under `cache/www/`) and nothing there is needed
   for the firmware to work; a missing file is a plain 404.
