@@ -90,4 +90,4 @@ components/meatpi/
 __pycache__/
 *.py[cod]
 .pytest_cache/
-
+internal/
