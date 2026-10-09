@@ -195,6 +195,22 @@ def broker_autopid(device_id):
 
 # ---- legs ------------------------------------------------------------------------
 
+def tick_std_rows(label):
+    """The user's tick (2026-10-09, Ali: "it should not start polling unless
+    the user enables the standard PIDs and enables the PIDs they want"): the
+    rows a detection stores are OFF; the bench ticks every standard row, as
+    the wizard's picker or Automate > Parameters would. Returns how many."""
+    code, cfg = dut.api("/api/autopid/config")
+    rows = cfg.get("pids", []) if isinstance(cfg, dict) else []
+    off = [p for p in rows if p.get("type") == "std" and p.get("enabled") is False]
+    for p in off:
+        p.pop("enabled", None)
+    if off:
+        code, r = dut.api("/api/autopid/config", "PUT", cfg)
+        run.check(f"{label}_rows_ticked_on", code == 200, f"{len(off)} rows on, HTTP {code}")
+    return len(off)
+
+
 def leg_e1():
     """The wizard's Detect on a device that knows a car, the native bus off."""
     # first contact may have started a detection of its own already (the
@@ -232,6 +248,13 @@ def leg_e1():
     ecus = e.get("ecus", "")
     run.check("e1_chip_responders_are_the_print",
               "18DAF100:" in ecus.upper() and "18DAF13D:" in ecus.upper(), ecus)
+    # the truck's rows are stored OFF (2026-10-09); the user's tick for the legs after
+    code, cfg = dut.api("/api/autopid/config")
+    stored = [p for p in (cfg.get("pids", []) if isinstance(cfg, dict) else []) if p.get("type") == "std"]
+    run.check("e1_rows_stored_off_until_ticked",
+              bool(stored) and all(p.get("enabled") is False for p in stored),
+              f"{sum(1 for p in stored if p.get('enabled') is False)} of {len(stored)} off")
+    tick_std_rows("e1")
 
 
 def leg_x1():
@@ -738,7 +761,9 @@ def leg_x5(found_car, found_cfg):
 
 def leg_e2():
     """The wizard's one restart: the native bus listen-only at the measured
-    bitrate + the J1939 listener. Both row sets live."""
+    bitrate + the J1939 listener. Both row sets live (ticked: a detection
+    stores them off, 2026-10-09)."""
+    tick_std_rows("e2")
     dut.restart({"can_manager": {"enabled": True, "baud": "250", "silent": True},
                  "j1939": {"enabled": True},
                  "autopid": {"dtc_enabled": True, "dtc_allow_clear": True, "dtc_pending": True,

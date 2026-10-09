@@ -494,6 +494,17 @@ def leg_w1(actor):
     rpm = rows.get("22F40C", {}).get("parameters", [{}])[0]
     check("w1_expressions_shifted", rpm.get("expression") == "[B3:B4]*0.25",
           str(rpm.get("expression")))
+    # the rows a detection stores are OFF until the user ticks them (2026-10-09,
+    # Ali): the user's tick, as the wizard's picker or Automate would
+    cfg = get("/api/autopid/config")
+    stored = [p for p in (cfg.get("pids") or []) if p.get("type") == "std"]
+    check("w1_rows_stored_off_until_ticked",
+          bool(stored) and all(p.get("enabled") is False for p in stored),
+          f"{sum(1 for p in stored if p.get('enabled') is False)} of {len(stored)} off")
+    for p in stored:
+        p.pop("enabled", None)
+    code, r = api("/api/autopid/config", "PUT", cfg)
+    check("w1_rows_ticked_on", code == 200, f"HTTP {code} {json.dumps(r)[:80]}")
     v, up = wait_value("EngineRPM", 30)
     check("w1_values_flow", close(v, TRUCK_VALUES["EngineRPM"]), str(v))
     if up is not None:

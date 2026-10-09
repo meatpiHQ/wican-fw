@@ -131,7 +131,9 @@ def espnl_status(con):
     if m:
         st.update(attached=m.group(1) == "1", pair_state=m.group(2),
                   cuts=int(m.group(3)))
-    m = re.search(r"gps: valid=(\d).*?fix=(\d) usb_data=(\d) \| "
+    # the dongle block grew `sim= stage= ip=` after usb_data with api 8
+    # (2026-10-07): anything may sit between usb_data and the poll counters
+    m = re.search(r"gps: valid=(\d).*?fix=(\d) usb_data=(\d).*?\| "
                   r"polls=(\d+) fail=(\d+)", txt)
     if m:
         st.update(gps_valid=m.group(1) == "1",

@@ -274,6 +274,22 @@ class ElmApp:
 
 # ---- legs ------------------------------------------------------------------------
 
+def tick_std_rows(label):
+    """The user's tick (2026-10-09, Ali: "it should not start polling unless
+    the user enables the standard PIDs and enables the PIDs they want"): the
+    rows a detection stores are OFF; the bench ticks every standard row, as
+    the wizard's picker or Automate > Parameters would. Returns how many."""
+    code, cfg = dut.api("/api/autopid/config")
+    rows = cfg.get("pids", []) if isinstance(cfg, dict) else []
+    off = [p for p in rows if p.get("type") == "std" and p.get("enabled") is False]
+    for p in off:
+        p.pop("enabled", None)
+    if off:
+        code, r = dut.api("/api/autopid/config", "PUT", cfg)
+        run.check(f"{label}_rows_ticked_on", code == 200, f"{len(off)} rows on, HTTP {code}")
+    return len(off)
+
+
 def leg_a1():
     """Detection with the native bus off: the sample path. The truck has
     been on since before the DUT's boot (a device powered by the ignition
@@ -328,12 +344,16 @@ def leg_a1():
     run.check("a1_tables_hold_the_pgn_rows", len(pgn_rows) == len(rows)
               and all(p.get("type") == "std" for p in pgn_rows),
               f"{len(pgn_rows)} of {len(rows)}")
+    run.check("a1_rows_stored_off_until_ticked",
+              bool(pgn_rows) and all(p.get("enabled") is False for p in pgn_rows),
+              f"{sum(1 for p in pgn_rows if p.get('enabled') is False)} of {len(pgn_rows)} off")
+    tick_std_rows("a1")
     truck.stop()
 
 
 def leg_a2():
-    """The listener on: first contact by itself, every row live, the chip
-    untouched."""
+    """The listener on: first contact by itself, the rows ticked (a detection
+    stores them off), every row live, the chip untouched."""
     start_truck("a2")
     t_restart = dut.restart({"can_manager": {"enabled": True, "baud": "250",
                                              "silent": True},
@@ -359,6 +379,15 @@ def leg_a2():
     if "a1" in legs_run:
         run.check("a2_no_detection_job_for_a_known_truck", st.get("status") != "running"
                   and st.get("ts") == scan_ts0, json.dumps(st))
+    # a2 alone: the first contact's detection stored the truck's rows OFF; the
+    # user's tick (a1 ticked them already when it ran: nothing to do then)
+    end = time.time() + 30
+    while time.time() < end:
+        code, st = dut.api("/api/autopid/std_scan")
+        if not (code == 200 and isinstance(st, dict) and st.get("status") == "running"):
+            break
+        time.sleep(0.5)
+    tick_std_rows("a2")
     names = table_names()
     run.metric("a2_rows_in_the_tables", len(names))
     doc = wait_for("every row with the truck's value", 30,

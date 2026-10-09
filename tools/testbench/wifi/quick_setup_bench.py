@@ -471,9 +471,15 @@ def main():
             groups = cfg.get("groups") or [{"name": "default", "enabled_default": True, "period_ms": 1000}]
             old_period = groups[0].get("period_ms") or 1000
             groups[0]["period_ms"] = 5000
+            stored = [p for p in (cfg.get("pids") or []) if p.get("type") == "std"]
+            check("vehicle: the job stored the rows OFF (the user ticks the ones to read, 2026-10-09)",
+                  bool(stored) and all(p.get("enabled") is False for p in stored),
+                  f"{sum(1 for p in stored if p.get('enabled') is False)} of {len(stored)} off")
             for pid in cfg.get("pids") or []:
                 if pid.get("period_ms") in (old_period, 1000):
                     pid["period_ms"] = 0
+                if pid.get("type") == "std":
+                    pid.pop("enabled", None)      # the wizard's tick: every row chosen here
             cfg["groups"] = groups
             cfg.setdefault("filters", [])
             home_api(ip, "PUT", "/api/autopid/config", cfg)
