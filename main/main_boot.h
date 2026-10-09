@@ -15,6 +15,15 @@ bool main_boot_init(const char *name, esp_err_t (*fn)(void));
 /** Start one component; a failure degrades, never halts boot (§4.3). */
 bool main_boot_start(const char *name, esp_err_t (*start_fn)(void));
 
+/** The partition table in flash becomes this build's when a unit updated
+ *  by OTA still carries another firmware's layout (partition_migrate,
+ *  2026-10-10): rewrites it once and restarts; never twice in a row. Call
+ *  after restart_tracker_init() and before any data partition mounts. */
+void main_boot_layout(void);
+
+/** True when this boot follows a partition table migration restart. */
+bool main_boot_layout_followed_migration(void);
+
 /** Print the recorded per-step internal-heap deltas (>256 B only). */
 void main_boot_ram_map_print(void);
 

@@ -187,3 +187,7 @@ CONFIG_BT_CTRL_BLE_MAX_ACT=4
 # per-handler run counts/time for `system --events`: names the handler that wedges the
 # default event loop instead of inferring it from "Failed to post ... ESP_ERR_TIMEOUT"
 CONFIG_ESP_EVENT_LOOP_PROFILING=y
+# partition_migrate (2026-10-10): the partition table at 0x8000 is rewritten
+# once on a unit updated by OTA from the factory firmware; the IDF flash
+# driver aborts writes below the end of the table unless this is set
+CONFIG_SPI_FLASH_DANGEROUS_WRITE_ALLOWED=y

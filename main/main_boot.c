@@ -13,6 +13,8 @@
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #include "ble_manager.h"
 #include "bridge_manager.h"
@@ -23,6 +25,8 @@
 #include "http_server_manager.h"
 #include "j1939.h"
 #include "log_manager.h"
+#include "partition_migrate.h"
+#include "restart_tracker.h"
 #include "settings_manager.h"
 
 #include "main_boot.h"
@@ -268,4 +272,54 @@ bool main_boot_init(const char *name, esp_err_t (*fn)(void))
 
     ram_map_record(name, before, t0);
     return err == ESP_OK;
+}
+
+/* ---- the partition table (2026-10-10) ---------------------------------------
+ * An OTA writes an app slot only, so a unit updated from the factory
+ * firmware (v4.5x) still carries the factory table: nvs, otadata, phy_init,
+ * ota_0 and ota_1 as ours, then ONE 6 MB `storage` where this build has
+ * `settings` + `storage`. Nothing could persist (41 x persist failed, the
+ * boot_errors fault, a factory reset that fails: the field report). The
+ * component rewrites the table with this build's when only data partitions
+ * differ; the device restarts into the new layout and the data partitions'
+ * owners format what they find (the 2026-10-06 superblock probes). One try
+ * per restart chain: a boot that follows a migration restart and still sees
+ * another layout logs the error and carries on degraded instead of looping. */
+static bool s_followed_migration;
+
+bool main_boot_layout_followed_migration(void)
+{
+    return s_followed_migration;
+}
+
+void main_boot_layout(void)
+{
+    restart_tracker_record_t rec = { 0 };
+    bool after_migration =
+        restart_tracker_get_latest_record(&rec) == ESP_OK &&
+        rec.was_planned != 0 &&
+        rec.planned_reason == RESTART_TRACKER_PLANNED_REASON_PARTITION_MIGRATE;
+
+    s_followed_migration = after_migration;
+    partition_migrate_result_t result = PARTITION_MIGRATE_OURS;
+    uint32_t ms = 0;
+    uint32_t before = internal_free_now();
+    int64_t t0 = esp_timer_get_time();
+
+    partition_migrate_run(!after_migration, &result, &ms);
+    ram_map_record("partition_migrate_run", before, t0);
+
+    if (result == PARTITION_MIGRATE_REWRITTEN)
+    {
+        /* the lines above must reach the console before the reset */
+        vTaskDelay(pdMS_TO_TICKS(200));
+        restart_tracker_restart(RESTART_TRACKER_PLANNED_REASON_PARTITION_MIGRATE,
+                                RESTART_TRACKER_SOURCE_BOOT, 0);
+    }
+
+    if (result == PARTITION_MIGRATE_NEEDED && after_migration)
+    {
+        ESP_LOGE(TAG, "the partition table is still another layout after a "
+                 "migration restart: not trying again (continuing degraded)");
+    }
 }

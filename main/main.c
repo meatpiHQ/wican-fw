@@ -67,6 +67,7 @@
 #include "obd_chip.h"
 #include "obd_gate.h"
 #include "ota_manager.h"
+#include "partition_migrate.h"
 #include "restart_tracker.h"
 #include "rtc_manager.h"
 #include "settings_manager.h"
@@ -132,7 +133,27 @@ void app_main(void)
        crash again (main_park.c). One call of cost otherwise. */
     main_park_check();
 
+    /* the partition table in flash must be this build's before anything
+       mounts a data partition: a unit updated by OTA from the factory
+       firmware (v4.5x) still carries the factory table, which has no
+       `settings` partition (the 2026-10-10 field report). A migratable
+       table is rewritten once and the device restarts (main_boot.c). */
+    main_boot_init("partition_migrate_init", partition_migrate_init);
+    main_boot_layout();
+
     main_boot_init("dev_status_manager_init", dev_status_manager_init);
+
+    if (main_boot_layout_followed_migration())
+    {
+        /* the boots that could not persist (the settings partition was
+           missing under the other firmware's table) latched boot_errors:
+           void now, and a user who just updated must not see "1 fault" */
+        if (dev_status_manager_fault_clear("boot_errors") == ESP_OK)
+        {
+            ESP_LOGW(TAG, "boot_errors fault cleared: latched while the "
+                     "partition table was another firmware's");
+        }
+    }
 
     /* ---- HAL + core owners ------------------------------------------------ */
     main_boot_init("external_storage_init", external_storage_init);
