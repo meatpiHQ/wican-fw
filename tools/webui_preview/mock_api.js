@@ -343,7 +343,7 @@
       if (t.result === "no_ip") { o.channel = 6; o.took_ms = 10000; }
       return J(o);
     },
-    "/api/wifi/status": () => J({ enabled: true, sta_connected: state.staConnected !== false, ip: state.staConnected !== false ? "10.42.0.62" : "", ap_started: true, ap_default_password: state.apDefaultPassword === true, clients: 0, ap_ip: "192.168.80.1", dns: ["10.42.0.1", "1.1.1.1"],
+    "/api/wifi/status": () => J({ enabled: true, sta_connected: state.staConnected !== false, ip: state.staConnected !== false ? "10.42.0.62" : "", ap_started: true, ap_default_password: state.apDefaultPassword === true, clients: 0, ap_ip: "192.168.0.10", dns: ["10.42.0.1", "1.1.1.1"],
       sta_attempt: { ssid: "HomeWiFi", reason: 204, fail_count: 3, deprioritised: true } }),
     "/api/destinations": () => J({ enabled: S.data_destinations.values.enabled !== false, running: true, network: true, mqtt: true,
       destinations: (S.data_destinations.values.destinations || []).map((d, i) => ({ name: d.name, type: d.type, enabled: d.enabled !== false, url: d.url, period_s: d.period_s, auth: d.auth,
@@ -626,6 +626,16 @@
                 dialect: car.dialect, j1939: !!car.j1939, ecus: car.ecus, profile: "", specific_init: "",
                 std_supported: scanRows().length, pending_profile: true, first_seen: now(), last_seen: now(), scan_ts: now() };
           state.vehicles.vehicles.push(e);
+          /* the firmware's new-car path (autopid_vehicle_switch.c): the car's tables are
+             the rows the scan found, type std in the default group, every one stored OFF
+             (2026-10-09, Ali: nothing is read until the user enables the standard PIDs and
+             ticks the ones they want). The firmware's tables hold these rows only (an
+             earlier car's rows go to its own file); the mock keeps the custom and specific
+             rows so the other probes' fixtures survive a detection. */
+          const rows = scanRows().map((r) => ({ name: r.name, cmd: r.cmd, group: "default", type: "std",
+            ...(r.init ? { init: r.init } : {}), enabled: false,
+            parameters: (r.parameters || []).map((p) => ({ ...p })) }));
+          state.autopidCfg.pids = state.autopidCfg.pids.filter((p) => p.type !== "std").concat(rows);
         } else { e.last_seen = now(); e.scan_ts = now(); e.std_supported = scanRows().length; }
         state.vehicles.current = key;
       }, 2500);

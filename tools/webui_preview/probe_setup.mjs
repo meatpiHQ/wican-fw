@@ -268,14 +268,18 @@ function boot(url, preset) {
     check("finish: the measured pair is staged for Power Saving, switched on", smv.enabled === true && smv.sleep_mv === 13100 && smv.wake_mv === 13300, { enabled: smv.enabled, sleep_mv: smv.sleep_mv, wake_mv: smv.wake_mv });
     const cfgNow = p.M().autopidCfg;
     const byName = (n) => cfgNow.pids.find((x) => x.name === n) || {};
-    check("finish: the default group runs at the chosen rate; rows on the old default inherit it, a row with its own rate keeps it", cfgNow.groups[0].period_ms === 10000 && !byName("RPM").period_ms && !byName("Speed").period_ms && byName("Coolant").period_ms === 5000 && cfgNow.pids.filter((x) => x.type === "std" && x.name !== "Coolant").every((x) => !x.period_ms), { period: cfgNow.groups[0].period_ms, own: cfgNow.pids.filter((x) => x.period_ms).map((x) => x.name + ":" + x.period_ms) });
+    /* since 2026-10-09 the mock stores a new car's rows at the detection like the firmware
+       (the device's RPM / Speed / Coolant rows of before are the scan's rows now): the
+       standard rows inherit the group's rate, the custom row with its own rate keeps it */
+    check("finish: the default group runs at the chosen rate; the standard rows inherit it, a row with its own rate keeps it", cfgNow.groups[0].period_ms === 10000 && byName("OilTemp").period_ms === 2000 && cfgNow.pids.filter((x) => x.type === "std").every((x) => !x.period_ms), { period: cfgNow.groups[0].period_ms, own: cfgNow.pids.filter((x) => x.period_ms).map((x) => x.name + ":" + x.period_ms) });
     {
-      /* the chosen four are all asked for; a chosen request the picked profile already carries
-         (this one asks for 012F itself) is not added as a second row: one row per request, the
-         guard the no-store path always had; no standard row that was not chosen stays */
+      /* the chosen four are all asked for and no standard row that was not chosen stays
+         (the device stored eight at the detection, the probe's Throttle makes a ninth);
+         the picked profile asks for 012F itself: that row stays beside the chosen standard
+         one, as on the device (the wizard never drops a row the user ticked) */
       const cmds = cfgNow.pids.map((x) => String(x.cmd).toUpperCase());
-      const std = cfgNow.pids.filter((x) => x.type === "std").map((x) => x.cmd);
-      check("finish: every chosen request is asked for, the device's three standard rows kept, Throttle (stored, not chosen) dropped", ["010C1", "010D1", "01051", "012F1"].every((c) => cmds.includes(c)) && std.every((c) => ["010C1", "010D1", "01051", "012F1"].includes(c)) && std.length === 3 && !byName("Throttle").cmd, { std, other: cfgNow.pids.filter((x) => x.type !== "std").map((x) => x.cmd) });
+      const std = cfgNow.pids.filter((x) => x.type === "std").map((x) => x.cmd).sort();
+      check("finish: every chosen request is asked for, exactly the four chosen standard rows stay, Throttle (stored, not chosen) dropped", ["010C1", "010D1", "01051", "012F1"].every((c) => cmds.includes(c)) && std.join(",") === "01051,010C1,010D1,012F1" && !byName("Throttle").cmd && cfgNow.pids.filter((x) => x.type === "std").every((x) => x.enabled !== false), { std, other: cfgNow.pids.filter((x) => x.type !== "std").map((x) => x.cmd) });
     }
     check("finish: the custom rows (the dedupe fixture, the device's own) stayed", cfgNow.pids.filter((x) => x.type === "custom" && /^OxySensor1_(Volt|FAER)$/.test(x.name)).length === 2 && cfgNow.pids.some((x) => x.type === "custom" && x.name === "OilTemp"), cfgNow.pids.filter((x) => x.type === "custom").map((x) => x.name));
     check("done screen", /WiCAN is set up/.test(p.h2()), p.h2());
