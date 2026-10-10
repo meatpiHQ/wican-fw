@@ -1,0 +1,73 @@
+{
+  "car_model": "Peugeot: 206 (K-line KWP fast)",
+  "init": "ATSP5;ATST96;",
+  "pids": [
+    {
+      "pid": "010C1",
+      "parameters": {
+        "ENGINE_RPM": "[B3:B4]*0.25"
+      }
+    },
+    {
+      "pid": "010D1",
+      "parameters": {
+        "SPEED": "B3"
+      }
+    },
+    {
+      "pid": "01051",
+      "parameters": {
+        "COOLANT_TMP": "B3-40"
+      }
+    },
+    {
+      "pid": "010B1",
+      "parameters": {
+        "INTAKE_MAP": "B3"
+      }
+    },
+    {
+      "pid": "010F1",
+      "parameters": {
+        "INTAKE_AIR_TMP": "B3-40"
+      }
+    },
+    {
+      "pid": "01111",
+      "parameters": {
+        "THROTTLE": "B3/2.55"
+      }
+    },
+    {
+      "pid": "01041",
+      "parameters": {
+        "ENGINE_LOAD": "B3/2.55"
+      }
+    },
+    {
+      "pid": "01061",
+      "parameters": {
+        "STFT": "(B3/1.28)-100"
+      }
+    },
+    {
+      "pid": "01071",
+      "parameters": {
+        "LTFT": "(B3/1.28)-100"
+      }
+    },
+    {
+      "pid": "010E1",
+      "parameters": {
+        "TIMING_ADV": "(B3/2)-64"
+      }
+    },
+    {
+      "pid": "01011",
+      "parameters": {
+        "MIL_ON": "B3>>7",
+        "DTC_COUNT": "B3&127"
+      }
+    }
+  ]
+}
