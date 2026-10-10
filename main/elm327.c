@@ -377,6 +377,18 @@ static char* elm327_set_receive_address(const char* command_str)
 	return (char*)ok_str;
 }
 
+static char* elm327_set_receive_address_auto(const char* command_str)
+{
+	// The STN1110 "ATAR" command restores the default receive address so
+	// responses are received from any ECU again. CarScanner sends it after
+	// PIDs that were monitored on a specific ECU header (the ACM field of
+	// the PID definition). Without it CarScanner treats the PID flow as
+	// failed and never stores the parsed value.
+	(void)command_str;
+	elm327_config.rx_address_is_set = 0;
+	return (char*)ok_str;
+}
+
 uint32_t elm327_get_rx_address(void)
 {
     if (elm327_config.rx_address_is_set)
@@ -1018,6 +1030,7 @@ const xelm327_cmd_t elm327_commands[] = {
 											{"fcsm", elm327_set_fc_mode}, // determine if the fc_data and/or fc_header is uses
 											{"dpn", elm327_describe_protocol_num},//describe protocol by number
 											{"cra", elm327_set_receive_address},
+											{"ar", elm327_set_receive_address_auto},
 											{"cp", elm327_set_priority_bits},// set five most significant bits of 29bit header
 											{"dp", elm327_describe_protocol},//describe current protocol
 											{"sh", elm327_set_header},// set header to xyz, xx yy zz, or ww xx yy zz
