@@ -1238,6 +1238,15 @@ void parse_elm327_response(char *buffer, response_t *response) {
         data_start = strchr(frame, ' ');
         if (data_start != NULL) {
             int header_length = data_start - frame;
+            // Validate the header length before touching header_str: an
+            // over-long header would overflow the 9-byte buffer in the
+            // strncpy below, before the switch ever got a chance to reject
+            // it.
+            if (header_length != 2 && header_length != 3 && header_length != 8) {
+                ESP_LOGW(TAG, "Unexpected header length: %d, skipping frame", header_length);
+                frame = strtok(NULL, "\r\n");
+                continue;
+            }
             char header_str[9] = {0};
             strncpy(header_str, frame, header_length);
             uint32_t current_header = strtoul(header_str, NULL, 16);
@@ -1298,27 +1307,34 @@ void parse_elm327_response(char *buffer, response_t *response) {
                 lowest_header = current_header;
                 lowest_header_length = current_length;
                 
-                // Allocate space and copy data for lowest header frame
-                if (lowest_header_data == NULL) {
-                    lowest_header_data = (uint8_t*)malloc(current_length);
+                // Allocate space and copy data for lowest header frame.
+                // realloc(NULL, n) is malloc(n), so the single call covers
+                // both cases, and the temp pointer avoids leaking the
+                // previous buffer when realloc fails.
+                uint8_t *lowest_header_new = (uint8_t*)realloc(lowest_header_data, current_length);
+                if (lowest_header_new == NULL) {
+                    ESP_LOGE(TAG, "Failed to allocate buffer for lowest header data");
+                    free(lowest_header_data);
+                    lowest_header_data = NULL;
+                    lowest_header_length = 0;
                 } else {
-                    lowest_header_data = (uint8_t*)realloc(lowest_header_data, current_length);
-                }
-                
-                // Parse and store the data bytes for this frame
-                int idx = 0;
-                while (*current_data_start != '\0') {
-                    if (*current_data_start == ' ') {
-                        current_data_start++;
-                        continue;
-                    }
-                    if (strlen(current_data_start) < 2) break;
+                    lowest_header_data = lowest_header_new;
                     
-                    char byte_str[3] = {current_data_start[0], current_data_start[1], 0};
-                    lowest_header_data[idx++] = (unsigned char)strtol(byte_str, NULL, 16);
-                    current_data_start += 2;
+                    // Parse and store the data bytes for this frame
+                    int idx = 0;
+                    while (*current_data_start != '\0') {
+                        if (*current_data_start == ' ') {
+                            current_data_start++;
+                            continue;
+                        }
+                        if (strlen(current_data_start) < 2) break;
+                        
+                        char byte_str[3] = {current_data_start[0], current_data_start[1], 0};
+                        lowest_header_data[idx++] = (unsigned char)strtol(byte_str, NULL, 16);
+                        current_data_start += 2;
+                    }
+                    ESP_LOGD(TAG, "Stored %d bytes from lowest header frame", idx);
                 }
-                ESP_LOGD(TAG, "Stored %d bytes from lowest header frame", idx);
             }
 
             // Parse data bytes into main response buffer
@@ -1330,6 +1346,10 @@ void parse_elm327_response(char *buffer, response_t *response) {
                 }
                 if (strlen(data_start) < 2) {
                     ESP_LOGW(TAG, "Incomplete byte at end of frame: %s", data_start);
+                    break;
+                }
+                if (k >= BUFFER_SIZE) {
+                    ESP_LOGW(TAG, "Response exceeds BUFFER_SIZE (%d), truncating", BUFFER_SIZE);
                     break;
                 }
                 
@@ -1359,9 +1379,13 @@ void parse_elm327_response(char *buffer, response_t *response) {
     } else {
         response->priority_data = lowest_header_data;
         response->priority_data_len = lowest_header_length;
-        ESP_LOGI(TAG, "Priority data set - length: %u, starting with byte: 0x%02X", 
-                response->priority_data_len, 
-                response->priority_data[0]);
+        if (lowest_header_data != NULL) {
+            ESP_LOGI(TAG, "Priority data set - length: %u, starting with byte: 0x%02X", 
+                    response->priority_data_len, 
+                    response->priority_data[0]);
+        } else {
+            ESP_LOGW(TAG, "Frames > 2 with differing headers but no usable data (all frames rejected?)");
+        }
     }
     
     ESP_LOGI(TAG, "Parsing complete. Headers - Lowest: 0x%lX, Highest: 0x%lX, Total frames: %d, Total bytes: %lu, Priority data length: %u",
