@@ -2281,6 +2281,7 @@ static void autopid_webhook_task(void *pvParameters)
     char *prev_autopid_snapshot = NULL;
     char *prev_config_snapshot = NULL;
     char *prev_status_snapshot = NULL;
+    bool param_meta_posted = false;
 
     vTaskDelay(pdMS_TO_TICKS(5000));
 
@@ -2352,6 +2353,7 @@ static void autopid_webhook_task(void *pvParameters)
                 {
                     last_post_time = now;
 
+                    bool param_meta_pending = false;
                     char *raw_json = autopid_data_read();
                     if (raw_json)
                     {
@@ -2446,6 +2448,43 @@ static void autopid_webhook_task(void *pvParameters)
                                     }
                                 }
 
+                                // Per-parameter unit/class metadata. Consumers such as
+                                // ha-wican look for config[<PARAM>]["unit"], but the
+                                // config object otherwise carries only device-level
+                                // settings, so they silently fall back to their own
+                                // bundled copy of params.json and a profile that
+                                // publishes a different unit is overridden.
+                                //
+                                // Sent once per boot rather than on every post: it is a
+                                // few KB, it does not change while the device is up, and
+                                // json_object_diff_simple() only diffs scalars, so a diff
+                                // payload would never carry it at all.
+                                if (!param_meta_posted && cfg_payload)
+                                {
+                                    char *param_json = autopid_get_config();
+                                    if (param_json)
+                                    {
+                                        cJSON *params_obj = cJSON_Parse(param_json);
+                                        if (params_obj)
+                                        {
+                                            cJSON *it = NULL;
+                                            cJSON_ArrayForEach(it, params_obj)
+                                            {
+                                                if (!it->string)
+                                                    continue;
+                                                cJSON *copy = cJSON_Duplicate(it, true);
+                                                if (!copy)
+                                                    continue;
+                                                cJSON_DeleteItemFromObjectCaseSensitive(cfg_payload, it->string);
+                                                cJSON_AddItemToObject(cfg_payload, it->string, copy);
+                                            }
+                                            cJSON_Delete(params_obj);
+                                            param_meta_pending = true;
+                                        }
+                                        free(param_json);
+                                    }
+                                }
+
                                 if (cfg_payload && cJSON_GetArraySize(cfg_payload) > 0)
                                     cJSON_AddItemToObject(root_obj, "config", cfg_payload);
                                 else if (cfg_payload)
@@ -2487,6 +2526,8 @@ static void autopid_webhook_task(void *pvParameters)
                                     ha_webhook_config_t upd = webhook_cfg;
                                     if (ok)
                                     {
+                                        if (param_meta_pending)
+                                            param_meta_posted = true;
                                         upd.success_count++;
                                         upd.retries = 0;
                                         strlcpy(upd.status, "ok", sizeof(upd.status));
