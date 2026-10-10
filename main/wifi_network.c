@@ -34,6 +34,7 @@
  #include "config_server.h"
  #include "ble.h"
  #include "dev_status.h"
+ #include "lwip/ip4_addr.h"
  
  #define WIFI_CONNECTED_BIT 			BIT0
  #define WIFI_FAIL_BIT     			BIT1
@@ -357,6 +358,52 @@
          }
          ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
          ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config_sta) );
+
+         // Optional static STA IP. Only applied when all three fields are
+         // set and parse cleanly -- any missing/invalid field leaves DHCP
+         // running, so a bad config can never leave the interface addressless.
+         char *sta_static_ip = config_server_get_sta_static_ip();
+         char *sta_gateway = config_server_get_sta_gateway();
+         char *sta_netmask = config_server_get_sta_netmask();
+         if(strlen(sta_static_ip) > 0 && strlen(sta_gateway) > 0 && strlen(sta_netmask) > 0)
+         {
+             esp_netif_ip_info_t sta_ip_info;
+             memset(&sta_ip_info, 0, sizeof(sta_ip_info));
+             if(ip4addr_aton(sta_static_ip, (ip4_addr_t*)&sta_ip_info.ip) &&
+                ip4addr_aton(sta_gateway, (ip4_addr_t*)&sta_ip_info.gw) &&
+                ip4addr_aton(sta_netmask, (ip4_addr_t*)&sta_ip_info.netmask))
+             {
+                 esp_netif_dhcpc_stop(sta_netif);
+                 esp_netif_set_ip_info(sta_netif, &sta_ip_info);
+
+                 // Stopping the DHCP client also drops the DNS servers it was
+                 // handed, so hostname-based MQTT/webhook targets would stop
+                 // resolving unless we set one here. sta_dns is optional --
+                 // fall back to the gateway, which resolves on virtually
+                 // every home router.
+                 char *sta_dns = config_server_get_sta_dns();
+                 ip4_addr_t dns_addr;
+                 int have_dns = (strlen(sta_dns) > 0) && ip4addr_aton(sta_dns, &dns_addr);
+                 if(!have_dns)
+                 {
+                     dns_addr = *(ip4_addr_t*)&sta_ip_info.gw;
+                 }
+                 esp_netif_dns_info_t sta_dns_info;
+                 memset(&sta_dns_info, 0, sizeof(sta_dns_info));
+                 sta_dns_info.ip.type = ESP_IPADDR_TYPE_V4;
+                 sta_dns_info.ip.u_addr.ip4.addr = dns_addr.addr;
+                 esp_netif_set_dns_info(sta_netif, ESP_NETIF_DNS_MAIN, &sta_dns_info);
+
+                 ESP_LOGI(WIFI_TAG, "Static STA IP: %s gw: %s mask: %s dns: %s",
+                         sta_static_ip, sta_gateway, sta_netmask,
+                         have_dns ? sta_dns : sta_gateway);
+             }
+             else
+             {
+                 ESP_LOGE(WIFI_TAG, "Invalid static STA IP config, falling back to DHCP");
+             }
+         }
+
          if(xwifi_handle == NULL)
          {
              xTaskCreate(wifi_conn_task, "wifi_conn_task", 4096, (void*)AF_INET, 5, &xwifi_handle);
