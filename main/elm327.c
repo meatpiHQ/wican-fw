@@ -834,7 +834,10 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 	{
 		elm327_can_log(&txframe, ELM327_CAN_TX);
 	}
-	while( xQueueReceive(*can_rx_queue, ( void * ) &rx_frame, pdMS_TO_TICKS(1)) == pdPASS );
+	// Drain with a zero timeout: the final iteration otherwise always
+	// blocks a full tick (CONFIG_FREERTOS_HZ=1000), adding >= 1 ms of dead
+	// time to every OBD command.
+	while( xQueueReceive(*can_rx_queue, ( void * ) &rx_frame, 0) == pdPASS );
 	can_flush_rx();
 	can_send(&txframe, 1);
 	xEventGroupSetBits(elm327_event_group, ELM327_READY_TO_RECEIVE_CAN);
