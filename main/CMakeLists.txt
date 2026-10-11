@@ -23,7 +23,7 @@ idf_component_register(
              log_manager log_sinks mdns_manager
              mqtt_can mqtt_manager obd_chip obd_gate ota_manager partition_migrate
              restart_tracker rtc_manager settings_manager socket_manager
-             sleep_manager usb_host_manager vpn_manager
+             sleep_manager usb_host_manager vpn_manager ip4_routes
              websocket_manager wifi_manager esp_driver_uart esp_netif
              web_ui_v2
              translator_slcan translator_realdash translator_gvret

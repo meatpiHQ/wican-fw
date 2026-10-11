@@ -39,7 +39,8 @@ const row = (k) => $('#view .frow[data-key="' + k + '"]');
   const cards = $$("#view .section").map((c) => (c.querySelector(".legend, h3") || {}).textContent.trim());
   check("WiFi tab order: mode selector, then Access Point, then Station", /^WiFi mode/.test(cards[0] || "") && /Access Point/.test(cards[1] || "") && /Station/.test(cards[2] || ""), cards.slice(0, 3));
   check("four mode tiles, the mock's apsta marked, none called recommended", $$("#view .wm-mode").length === 4 && tile("apsta").classList.contains("on") && !/recommended/i.test($("#view .wm-modes").textContent));
-  check("no WiFi mode row inside the Access Point card", !row("mode"));
+  /* the J1939 card on the CAN pane carries a `mode` row of its own (2026-10-03): look inside the AP card only */
+  check("no WiFi mode row inside the Access Point card", !$$('#view .frow[data-key="mode"]').some((r) => /Access Point/.test(((r.closest(".section") || {}).querySelector("h3") || {}).textContent || "")));
   const auth = row("ap_auth") && row("ap_auth").querySelector("select");
   check("AP security offers no open option and names automatic as WPA2", !!auth && ![...auth.options].some((o) => o.value === "open") && [...auth.options].some((o) => /Automatic \(WPA2\)/.test(o.textContent)), auth && [...auth.options].map((o) => o.value));
   const apCard = cardByTitle("WiFi Access Point"), staCard = cardByTitle("WiFi Network");

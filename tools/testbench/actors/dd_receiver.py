@@ -20,7 +20,8 @@ memory and served back to the orchestrator over the plain port:
                 exactly like the real API
 
 Records: {"i","t","port","path","method","query","headers":{...},
-          "body","peer_cn"}; MQTT: {"i","t","topic","payload","retain"}.
+          "body","peer_cn","peer" (the source address: the VPN routes bench
+          tells a tunnel from a station by it)}; MQTT: {"i","t","topic","payload","retain"}.
 
   python3 dd_receiver.py [--tls-dir ~/wican-tls] [--mqtt localhost]
                          [--topic 'wican/#']
@@ -47,7 +48,8 @@ def record(port, handler, body, peer_cn=""):
         rec = {"i": len(RECORDS), "t": time.time(), "port": port, "path": url.path,
                "method": handler.command, "query": dict(urllib.parse.parse_qsl(url.query)),
                "headers": {k.lower(): v for k, v in handler.headers.items()},
-               "body": body, "peer_cn": peer_cn}
+               "body": body, "peer_cn": peer_cn,
+               "peer": handler.client_address[0] if getattr(handler, "client_address", None) else ""}
         RECORDS.append(rec)
     return rec
 

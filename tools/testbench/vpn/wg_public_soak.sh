@@ -112,8 +112,9 @@ for k in ("degraded","pending_reboot"): d.pop(k,None)
 d.update({"enabled":True,"type":"wireguard",
           "endpoint":os.environ["EP"],"port":int(os.environ["PORT"]),
           "peer_public_key":os.environ["SRVPUB"],
-          "address":os.environ["NET"]+".2","allowed_ip":os.environ["ALLOWED"],
-          "allowed_ip_mask":os.environ["MASK"],"keepalive_s":25,
+          "address":os.environ["NET"]+".2",
+          "routes":("" if os.environ["ALLOWED"]=="0.0.0.0" else os.environ["ALLOWED"]+"/"+str(sum(bin(int(o)).count("1") for o in os.environ["MASK"].split(".")))),
+          "keepalive_s":25,
           "default_route":os.environ["DEFROUTE"]=="true"})
 print(json.dumps(d))')
     code=$($PI "curl -s -o /dev/null -w '%{http_code}' -m 8 -X PUT http://${DUT_IP}/api/settings/vpn_manager -H 'Content-Type: application/json' -d '$VCFG'")

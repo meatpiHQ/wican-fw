@@ -511,8 +511,7 @@ def s_wg_soak(rig):
                      {"enabled": True, "type": "wireguard",
                       "peer_public_key": srv_pub, "private_key": "",
                       "address": "10.66.0.2",
-                      "allowed_ip": "10.66.0.0",
-                      "allowed_ip_mask": "255.255.255.0",
+                      "routes": "10.66.0.0/24",
                       "endpoint": rig.dut_gw(), "port": 51821,
                       "keepalive_s": 5, "default_route": False})
     state = None

@@ -23,6 +23,7 @@
 #include "dev_status_manager.h"
 #include "event_manager.h"
 #include "http_server_manager.h"
+#include "ip4_routes.h"
 #include "j1939.h"
 #include "log_manager.h"
 #include "partition_migrate.h"
@@ -215,6 +216,8 @@ void main_boot_health_report(void)
     cap_check("j1939_msgs", used, cap);
     j1939_tp_capacity(&used, &cap);
     cap_check("j1939_tp", used, cap);
+    ip4_routes_capacity(&used, &cap);
+    cap_check("ip4_routes", used, cap);
 
     printf("WICAN FAULTS active=%d\n",
            dev_status_manager_faults(NULL, 0));

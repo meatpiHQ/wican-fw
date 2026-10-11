@@ -35,6 +35,7 @@
 #include "j2534_server.h"
 #include "iperf_manager.h"
 #include "vpn_manager.h"
+#include "ip4_routes.h"
 #include "main_sleep.h"
 #include "battery_monitor.h"
 #include "ble_http.h"
@@ -223,6 +224,7 @@ void app_main(void)
     main_boot_init("mdns_manager_init", mdns_manager_init);
     main_boot_init("mqtt_manager_init", mqtt_manager_init);
     main_boot_init("mqtt_can_init", mqtt_can_init);
+    main_boot_init("ip4_routes_init", ip4_routes_init); /* the VPN's route table */
     main_boot_init("vpn_manager_init", vpn_manager_init);
     main_boot_init("iperf_manager_init", iperf_manager_init);
     main_boot_init("sleep_manager_init", sleep_manager_init);

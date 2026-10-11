@@ -389,12 +389,12 @@ the user picks (the `autopid_log` setting is the log-everything twin).
 
 | Route | Method | Behavior |
 |---|---|---|
-| `/api/vpn` | GET | `{"state":"disabled\|waiting\|connecting\|connected","type":"wireguard\|tailscale","endpoint":"host:port","ts_ip":"100.64.x.y","ts_peers":N,"connects":N,"failures":N,"uptime_s":N}`: `ts_*` fields are only meaningful for type=tailscale |
+| `/api/vpn` | GET | `{"state":"disabled\|waiting\|paused\|connecting\|connected","type":"wireguard\|tailscale","endpoint":"host:port","network":"HomeWiFi","paused":false,"routes":["10.66.0.0/24"],"ts_ip":"100.64.x.y","ts_peers":N,"connects":N,"failures":N,"uptime_s":N}`: `ts_*` fields are only meaningful for type=tailscale. `paused` / state `paused` (2026-10-11, issue #976): the station is on a network marked `Pause VPN` (wifi_manager `sta_vpn_pause` / `fallbackN_vpn_pause`), the tunnel is down on purpose and comes back as soon as the station leaves it; `network` = the station's network ("" without a station session); `routes` (2026-10-11, issue #975, wireguard type only) = the networks routed into the tunnel as `a.b.c.d/n` strings, from the `routes` setting |
 | `/api/vpn/keygen` | POST | generate a Curve25519 pair ON the device; private key goes straight into pending settings (never over HTTP); responds `{"public_key":"…","pending_reboot":true}` (wireguard type) |
 
 Config = `/api/settings/vpn_manager`. `type` selects the stack:
 `wireguard` (fields `private_key`*, `peer_public_key`, `preshared_key`*,
-`address`, `allowed_ip`+mask, `endpoint`, `port`, `keepalive_s`,
+`address`, `routes` (v2, 2026-10-11, issue #975: a comma list of up to 8 networks in CIDR form routed into the tunnel, the tunnel's own network included; replaces `allowed_ip`+mask, a stored v1 pair migrates to one route), `endpoint`, `port`, `keepalive_s`,
 `default_route`, `dns`) or `tailscale` (fields `ts_auth_key`*,
 `ts_device_name`, `ts_control_url`: empty control_url = official
 Tailscale, `host[:port]` = Headscale/Ionscale). Secret fields

@@ -10,6 +10,8 @@
   /* ---- realistic value overrides on top of the extracted defaults ---- */
   const ov = (c, v) => { if (S[c]) Object.assign(S[c].values, v); };
   ov("wifi_manager", { mode: "apsta", sta_ssid: "HomeWiFi", sta_password: "********", ap_ssid: "WiCAN_E349" });
+  /* a probe's own station values, e.g. { sta_vpn_pause: true } (2026-10-11) */
+  if ((window.__mockPreset || {}).wifi) ov("wifi_manager", window.__mockPreset.wifi);
   ov("ble_manager", { enabled: false });
   ov("mqtt_manager", { enabled: true, broker: "mqtt://10.42.0.1:1883", topic_prefix: "wican" });
   ov("ha_webhooks", { enabled: true, url: "http://homeassistant.local:8123/api/webhook/8f4a21be", interval_s: 15 });
@@ -22,7 +24,7 @@
   if ((window.__mockPreset || {}).j1939Active === true) ov("j1939", { enabled: true, mode: "active" });
   else if ((window.__mockPreset || {}).j1939Listening === true) ov("j1939", { enabled: true });
   ov("data_logger", { enabled: false });
-  ov("vpn_manager", { enabled: true, type: "wireguard", address: "10.66.0.2", endpoint: "vpn.example.com", port: 51820 });
+  ov("vpn_manager", { enabled: true, type: "wireguard", address: "10.66.0.2", routes: "10.66.0.0/24", endpoint: "vpn.example.com", port: 51820 });
   ov("usb_host_manager", { enabled: true, role: "host" });
   /* the "gps" USB scene is a receiver already read by the console (usbScene below) */
   if ((window.__mockPreset || {}).usb === "gps") ov("usb_acm_cli", { enabled: true });
@@ -351,7 +353,8 @@
         backoff_s: i === 1 ? 10 : 0, next_in_s: 4, last_status: i === 1 ? 503 : (i === 0 ? 0 : 0), last_error: i === 1 ? "http=503" : "", last_error_time: i === 1 ? new Date().toISOString() : "",
         last_ok_time: i === 0 ? new Date().toISOString() : "", full_sent: i === 1 })) }),
     "/api/webhook": () => J({ url: state.webhookUrl !== undefined ? state.webhookUrl : S.ha_webhooks.values.url, enabled: true, interval: 15, manual_override: false, data_mode: "changed", gzip: false, status: "ok", last_post: new Date().toISOString(), retries: 0, success_count: 512, fail_count: 3, last_error: "", last_error_time: "" }),
-    "/api/vpn": () => J({ state: "connected", type: "wireguard", endpoint: "vpn.example.com:51820", ts_ip: "", ts_peers: 0, connects: 1, failures: 0, uptime_s: 8040 }),
+    /* `network` + `paused` since 2026-10-11 (issue #976); a probe presets the state through __mockPreset.vpn */
+    "/api/vpn": () => J({ state: "connected", type: "wireguard", endpoint: "vpn.example.com:51820", network: "HomeWiFi", paused: false, routes: ["10.66.0.0/24"], ts_ip: "", ts_peers: 0, connects: 1, failures: 0, uptime_s: 8040, ...((window.__mockPreset || {}).vpn || {}) }),
     "/api/usb": () => J(usbScene() ? usbScene().usb : { enabled: true, device_present: true, host_active: true, eth_connected: true, driver: "cdc_ncm", ip: "192.168.7.2", attaches: 1 }),
     /* espnetlink_link: paired steady state by default; state.espnlBlocked
        flips to the fresh-device hold (factory AP password, 2026-09-07);
@@ -413,7 +416,7 @@
       { event: "battery.threshold", description: "Voltage crossed a watch threshold", keys: [{ key: "edge", type: "string" }, { key: "volts", type: "number" }] },
       { event: "status.bit", description: "A device status bit changed", keys: [{ key: "bit", type: "string" }, { key: "set", type: "boolean" }] },
       { event: "mqtt.rx", description: "an MQTT message arrived", keys: [{ key: "topic", type: "string" }, { key: "payload", type: "string" }] },
-      { event: "vpn.state", description: "VPN connection state changed", keys: [{ key: "state", type: "string" }] },
+      { event: "vpn.state", description: "VPN tunnel state changed; paused while the station is on a network marked Pause VPN", keys: [{ key: "connected", type: "string" }, { key: "paused", type: "string" }, { key: "network", type: "string" }] },
     ]),
     "/api/events/actions": () => J([
       { name: "log.note", params_schema: { type: "object", properties: { message: { type: "string" } } }, undoable: false },

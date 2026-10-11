@@ -48,34 +48,38 @@ def ceval(expr):
 
 
 def parse_rows(src):
-    """(props, values) for the SETTINGS_* rows found in `src`."""
+    """(props, values) for the SETTINGS_* rows found in `src`, in SOURCE order:
+    the device generates its schema in field-table order and the schema-driven
+    forms render in that order (2026-10-11: the booleans used to be collected
+    first, which put a new switch above the SSID field in the preview while
+    the device shows it under the password). First definition of a key wins."""
     props, values = {}, {}
-    for m in RX_BOOL.finditer(src):
-        props[m.group(1)] = {"type": "boolean"}
-        values[m.group(1)] = m.group(2) == "true"
-    for m in RX_ENUM.finditer(src):
-        props[m.group(1)] = {"type": "string", "enum": m.group(2).split(",")}
-        values[m.group(1)] = m.group(3)
-    for m in RX_INT.finditer(src):
+    found = []
+    for kind, rx in (("bool", RX_BOOL), ("enum", RX_ENUM), ("int", RX_INT),
+                     ("str", RX_STR), ("array", RX_ARRAY)):
+        for m in rx.finditer(src):
+            found.append((m.start(), kind, m))
+    for _, kind, m in sorted(found, key=lambda t: t[0]):
         k = m.group(1)
         if k in props:
             continue
-        props[k] = {"type": "integer", "minimum": ceval(m.group(2)),
-                    "maximum": ceval(m.group(3))}
-        values[k] = ceval(m.group(4))
-    for m in RX_STR.finditer(src):
-        k = m.group(1)
-        if k in props:
-            continue
-        props[k] = {"type": "string"}
-        # secrets come back redacted from the real API (api_util_redact): mirror it
-        values[k] = "" if re.search(SECRET_RX, k) else m.group(3)
-    for m in RX_ARRAY.finditer(src):
-        k = m.group(1)
-        if k in props:
-            continue
-        props[k] = {"type": "array", "items": {}}
-        values[k] = []
+        if kind == "bool":
+            props[k] = {"type": "boolean"}
+            values[k] = m.group(2) == "true"
+        elif kind == "enum":
+            props[k] = {"type": "string", "enum": m.group(2).split(",")}
+            values[k] = m.group(3)
+        elif kind == "int":
+            props[k] = {"type": "integer", "minimum": ceval(m.group(2)),
+                        "maximum": ceval(m.group(3))}
+            values[k] = ceval(m.group(4))
+        elif kind == "str":
+            props[k] = {"type": "string"}
+            # secrets come back redacted from the real API (api_util_redact): mirror it
+            values[k] = "" if re.search(SECRET_RX, k) else m.group(3)
+        else:
+            props[k] = {"type": "array", "items": {}}
+            values[k] = []
     return props, values
 
 

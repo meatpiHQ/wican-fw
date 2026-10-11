@@ -89,8 +89,7 @@ def main():
         "peer_public_key": srv_pub,
         "preshared_key": "",
         "address": DUT_TUN,
-        "allowed_ip": TUN_NET,
-        "allowed_ip_mask": "255.255.255.0",
+        "routes": TUN_NET + "/24",   # v2 (issue #975): was allowed_ip + mask
         "endpoint": "10.42.0.1",
         "port": PORT,
         "keepalive_s": 5,

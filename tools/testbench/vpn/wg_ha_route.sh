@@ -107,8 +107,8 @@ for k in ("degraded","pending_reboot"): d.pop(k,None)
 d.update({"enabled":True,"type":"wireguard",
           "endpoint":os.environ["EP"],"port":int(os.environ["PORT"]),
           "peer_public_key":os.environ["SRVPUB"],
-          "address":os.environ["NET"]+".2","allowed_ip":os.environ["NET"]+".0",
-          "allowed_ip_mask":"255.255.255.0","keepalive_s":25,"default_route":False})
+          "address":os.environ["NET"]+".2","routes":os.environ["NET"]+".0/24",
+          "keepalive_s":25,"default_route":False})
 print(json.dumps(d))')
     code=$($PI "curl -s -o /dev/null -w '%{http_code}' -m 8 -X PUT http://${DUT_IP}/api/settings/vpn_manager -H 'Content-Type: application/json' -d '$VCFG'")
     echo "DUT vpn PUT -> $code"
@@ -144,7 +144,7 @@ d=json.load(sys.stdin)
 for k in ("degraded","pending_reboot"): d.pop(k,None)
 d["enabled"]=False
 if os.environ["WIPE"]=="--wipe":
-    d.update({"endpoint":"","peer_public_key":"","address":"","allowed_ip":"0.0.0.0","allowed_ip_mask":"0.0.0.0"})
+    d.update({"endpoint":"","peer_public_key":"","address":"","routes":""})
 print(json.dumps(d))' 2>/dev/null) || continue
         [ -n "$VCFG" ] || continue
         code=$($PI "curl -s -o /dev/null -w '%{http_code}' -m 8 -X PUT http://${host}/api/settings/vpn_manager -H 'Content-Type: application/json' -d '$VCFG'")

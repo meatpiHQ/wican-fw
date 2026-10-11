@@ -9,29 +9,29 @@
    "std_enabled": true,
    "custom_enabled": true,
    "specific_enabled": true,
-   "pause_follow_sleep": true,
-   "cli": true,
-   "dtc_enabled": false,
-   "dtc_allow_clear": false,
-   "dtc_pending": true,
-   "dtc_permanent": false,
-   "dtc_freeze": true,
-   "dtc_uds_ext": false,
-   "std_protocol": "0",
-   "pause_mode": "requests_only",
-   "dtc_protocol": "obd",
-   "pause_below_mv": 0,
-   "min_event_interval_ms": 1000,
-   "dtc_scan_period_min": 0,
-   "dtc_uds_mask": 8,
    "std_init": "",
    "custom_init": "",
    "specific_init": "",
+   "std_protocol": "0",
    "vehicle": "",
+   "pause_below_mv": 0,
+   "pause_follow_sleep": true,
+   "pause_mode": "requests_only",
+   "min_event_interval_ms": 1000,
+   "cli": true,
+   "dtc_enabled": false,
+   "dtc_allow_clear": false,
+   "dtc_scan_period_min": 0,
+   "dtc_pending": true,
+   "dtc_permanent": false,
+   "dtc_freeze": true,
    "dtc_init": "",
    "dtc_rxheader": "",
+   "dtc_protocol": "obd",
    "dtc_uds_txid": "7E0",
-   "dtc_uds_rxid": "7E8"
+   "dtc_uds_rxid": "7E8",
+   "dtc_uds_ext": false,
+   "dtc_uds_mask": 8
   },
   "schema": {
    "properties": {
@@ -47,29 +47,14 @@
     "specific_enabled": {
      "type": "boolean"
     },
-    "pause_follow_sleep": {
-     "type": "boolean"
+    "std_init": {
+     "type": "string"
     },
-    "cli": {
-     "type": "boolean"
+    "custom_init": {
+     "type": "string"
     },
-    "dtc_enabled": {
-     "type": "boolean"
-    },
-    "dtc_allow_clear": {
-     "type": "boolean"
-    },
-    "dtc_pending": {
-     "type": "boolean"
-    },
-    "dtc_permanent": {
-     "type": "boolean"
-    },
-    "dtc_freeze": {
-     "type": "boolean"
-    },
-    "dtc_uds_ext": {
-     "type": "boolean"
+    "specific_init": {
+     "type": "string"
     },
     "std_protocol": {
      "type": "string",
@@ -81,12 +66,57 @@
       "9"
      ]
     },
+    "vehicle": {
+     "type": "string"
+    },
+    "pause_below_mv": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 14500
+    },
+    "pause_follow_sleep": {
+     "type": "boolean"
+    },
     "pause_mode": {
      "type": "string",
      "enum": [
       "all",
       "requests_only"
      ]
+    },
+    "min_event_interval_ms": {
+     "type": "integer",
+     "minimum": 10,
+     "maximum": 600000
+    },
+    "cli": {
+     "type": "boolean"
+    },
+    "dtc_enabled": {
+     "type": "boolean"
+    },
+    "dtc_allow_clear": {
+     "type": "boolean"
+    },
+    "dtc_scan_period_min": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 10080
+    },
+    "dtc_pending": {
+     "type": "boolean"
+    },
+    "dtc_permanent": {
+     "type": "boolean"
+    },
+    "dtc_freeze": {
+     "type": "boolean"
+    },
+    "dtc_init": {
+     "type": "string"
+    },
+    "dtc_rxheader": {
+     "type": "string"
     },
     "dtc_protocol": {
      "type": "string",
@@ -96,49 +126,19 @@
       "auto"
      ]
     },
-    "pause_below_mv": {
-     "type": "integer",
-     "minimum": 0,
-     "maximum": 14500
-    },
-    "min_event_interval_ms": {
-     "type": "integer",
-     "minimum": 10,
-     "maximum": 600000
-    },
-    "dtc_scan_period_min": {
-     "type": "integer",
-     "minimum": 0,
-     "maximum": 10080
-    },
-    "dtc_uds_mask": {
-     "type": "integer",
-     "minimum": 0,
-     "maximum": 255
-    },
-    "std_init": {
-     "type": "string"
-    },
-    "custom_init": {
-     "type": "string"
-    },
-    "specific_init": {
-     "type": "string"
-    },
-    "vehicle": {
-     "type": "string"
-    },
-    "dtc_init": {
-     "type": "string"
-    },
-    "dtc_rxheader": {
-     "type": "string"
-    },
     "dtc_uds_txid": {
      "type": "string"
     },
     "dtc_uds_rxid": {
      "type": "string"
+    },
+    "dtc_uds_ext": {
+     "type": "boolean"
+    },
+    "dtc_uds_mask": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 255
     }
    }
   }
@@ -146,21 +146,21 @@
  "battery_monitor": {
   "values": {
    "enabled": true,
-   "cli": true,
-   "poll_s": 3
+   "poll_s": 3,
+   "cli": true
   },
   "schema": {
    "properties": {
     "enabled": {
      "type": "boolean"
     },
-    "cli": {
-     "type": "boolean"
-    },
     "poll_s": {
      "type": "integer",
      "minimum": 1,
      "maximum": 60
+    },
+    "cli": {
+     "type": "boolean"
     }
    }
   }
@@ -168,32 +168,22 @@
  "ble_central_bench": {
   "values": {
    "enabled": false,
-   "dle": true,
-   "cli": true,
-   "phy": "1m",
+   "target": "WiC_",
    "passkey": 123456,
    "mtu": 517,
    "conn_itvl_units": 6,
    "ce_len_units": 24,
-   "target": "WiC_"
+   "dle": true,
+   "phy": "1m",
+   "cli": true
   },
   "schema": {
    "properties": {
     "enabled": {
      "type": "boolean"
     },
-    "dle": {
-     "type": "boolean"
-    },
-    "cli": {
-     "type": "boolean"
-    },
-    "phy": {
-     "type": "string",
-     "enum": [
-      "1m",
-      "2m"
-     ]
+    "target": {
+     "type": "string"
     },
     "passkey": {
      "type": "integer",
@@ -215,8 +205,18 @@
      "minimum": 0,
      "maximum": 65535
     },
-    "target": {
-     "type": "string"
+    "dle": {
+     "type": "boolean"
+    },
+    "phy": {
+     "type": "string",
+     "enum": [
+      "1m",
+      "2m"
+     ]
+    },
+    "cli": {
+     "type": "boolean"
     }
    }
   }
@@ -240,19 +240,29 @@
  "ble_manager": {
   "values": {
    "enabled": false,
+   "passkey": 123456,
+   "tx_power_dbm": 9,
    "pairing_at_boot": true,
    "bonding": true,
    "sc_only": true,
    "conn_profile": "ios",
    "phy": "1m",
-   "advertising": "legacy",
-   "passkey": 123456,
-   "tx_power_dbm": 9
+   "advertising": "legacy"
   },
   "schema": {
    "properties": {
     "enabled": {
      "type": "boolean"
+    },
+    "passkey": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 999999
+    },
+    "tx_power_dbm": {
+     "type": "integer",
+     "minimum": -12,
+     "maximum": 9
     },
     "pairing_at_boot": {
      "type": "boolean"
@@ -286,16 +296,6 @@
       "extended",
       "both"
      ]
-    },
-    "passkey": {
-     "type": "integer",
-     "minimum": 0,
-     "maximum": 999999
-    },
-    "tx_power_dbm": {
-     "type": "integer",
-     "minimum": -12,
-     "maximum": 9
     }
    }
   }
@@ -312,9 +312,6 @@
      "items": {
       "type": "object",
       "properties": {
-       "enabled": {
-        "type": "boolean"
-       },
        "name": {
         "type": "string"
        },
@@ -326,6 +323,9 @@
        },
        "translator": {
         "type": "string"
+       },
+       "enabled": {
+        "type": "boolean"
        }
       },
       "required": [
@@ -335,11 +335,11 @@
       ]
      },
      "item_defaults": {
-      "enabled": false,
       "name": "",
       "a": "",
       "b": "",
-      "translator": "raw"
+      "translator": "raw",
+      "enabled": false
      }
     }
    }
@@ -366,19 +366,13 @@
  "can_manager": {
   "values": {
    "enabled": false,
+   "baud": "500",
    "silent": false,
-   "cli": true,
-   "baud": "500"
+   "cli": true
   },
   "schema": {
    "properties": {
     "enabled": {
-     "type": "boolean"
-    },
-    "silent": {
-     "type": "boolean"
-    },
-    "cli": {
      "type": "boolean"
     },
     "baud": {
@@ -394,6 +388,12 @@
       "500",
       "1000"
      ]
+    },
+    "silent": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
     }
    }
   }
@@ -417,15 +417,12 @@
  "data_destinations": {
   "values": {
    "enabled": true,
-   "cli": true,
-   "destinations": []
+   "destinations": [],
+   "cli": true
   },
   "schema": {
    "properties": {
     "enabled": {
-     "type": "boolean"
-    },
-    "cli": {
      "type": "boolean"
     },
     "destinations": {
@@ -434,25 +431,19 @@
      "items": {
       "type": "object",
       "properties": {
+       "name": {
+        "type": "string"
+       },
        "enabled": {
         "type": "boolean"
        },
-       "retain": {
-        "type": "boolean"
-       },
-       "full_first": {
-        "type": "boolean"
+       "url": {
+        "type": "string"
        },
        "period_s": {
         "type": "integer",
         "minimum": 1,
         "maximum": 86400
-       },
-       "name": {
-        "type": "string"
-       },
-       "url": {
-        "type": "string"
        },
        "auth_token": {
         "type": "string"
@@ -477,6 +468,12 @@
        },
        "car_model": {
         "type": "string"
+       },
+       "retain": {
+        "type": "boolean"
+       },
+       "full_first": {
+        "type": "boolean"
        }
       },
       "required": [
@@ -485,12 +482,10 @@
       ]
      },
      "item_defaults": {
-      "enabled": true,
-      "retain": true,
-      "full_first": true,
-      "period_s": 5,
       "name": "",
+      "enabled": true,
       "url": "",
+      "period_s": 5,
       "auth_token": "",
       "auth_name": "",
       "basic_username": "",
@@ -498,8 +493,13 @@
       "api_key": "",
       "query": "",
       "cert_set": "",
-      "car_model": ""
+      "car_model": "",
+      "retain": true,
+      "full_first": true
      }
+    },
+    "cli": {
+     "type": "boolean"
     }
    }
   }
@@ -507,34 +507,25 @@
  "data_logger": {
   "values": {
    "enabled": false,
-   "can_log": false,
-   "can_ext": false,
-   "cli": true,
    "format": "sqlite",
-   "autopid_log": "off",
-   "can_format": "binary",
    "max_file_mb": 4,
    "max_files": 100,
    "batch_rows": 256,
    "flush_ms": 5000,
+   "autopid_log": "off",
+   "can_log": false,
+   "can_format": "binary",
+   "can_filter": "",
+   "can_mask": "7FF",
+   "can_ext": false,
    "can_max_file_mb": 8,
    "can_max_files": 50,
    "ring_len": 2048,
-   "can_filter": "",
-   "can_mask": "7FF"
+   "cli": true
   },
   "schema": {
    "properties": {
     "enabled": {
-     "type": "boolean"
-    },
-    "can_log": {
-     "type": "boolean"
-    },
-    "can_ext": {
-     "type": "boolean"
-    },
-    "cli": {
      "type": "boolean"
     },
     "format": {
@@ -543,27 +534,6 @@
       "sqlite",
       "csv",
       "binary",
-      "jsonl"
-     ]
-    },
-    "autopid_log": {
-     "type": "string",
-     "enum": [
-      "off",
-      "changed",
-      "all"
-     ]
-    },
-    "can_format": {
-     "type": "string",
-     "enum": [
-      "binary",
-      "csv",
-      "sqlite",
-      "mf4",
-      "blf",
-      "candump",
-      "asc",
       "jsonl"
      ]
     },
@@ -587,6 +557,39 @@
      "minimum": 100,
      "maximum": 60000
     },
+    "autopid_log": {
+     "type": "string",
+     "enum": [
+      "off",
+      "changed",
+      "all"
+     ]
+    },
+    "can_log": {
+     "type": "boolean"
+    },
+    "can_format": {
+     "type": "string",
+     "enum": [
+      "binary",
+      "csv",
+      "sqlite",
+      "mf4",
+      "blf",
+      "candump",
+      "asc",
+      "jsonl"
+     ]
+    },
+    "can_filter": {
+     "type": "string"
+    },
+    "can_mask": {
+     "type": "string"
+    },
+    "can_ext": {
+     "type": "boolean"
+    },
     "can_max_file_mb": {
      "type": "integer",
      "minimum": 1,
@@ -602,11 +605,8 @@
      "minimum": 512,
      "maximum": 0
     },
-    "can_filter": {
-     "type": "string"
-    },
-    "can_mask": {
-     "type": "string"
+    "cli": {
+     "type": "boolean"
     }
    }
   }
@@ -626,28 +626,22 @@
  "espnetlink": {
   "values": {
    "enabled": true,
-   "auto_pair": true,
-   "cli": true,
    "mode": "wifi_modem",
-   "gps_poll_s": 2,
-   "health_poll_s": 10,
-   "cut_retries": 2,
+   "auto_pair": true,
    "ssid": "",
    "device_id": "",
    "host": "",
+   "gps_poll_s": 2,
+   "health_poll_s": 10,
+   "cut_retries": 2,
    "apn": "",
    "apn_user": "",
-   "apn_password": ""
+   "apn_password": "",
+   "cli": true
   },
   "schema": {
    "properties": {
     "enabled": {
-     "type": "boolean"
-    },
-    "auto_pair": {
-     "type": "boolean"
-    },
-    "cli": {
      "type": "boolean"
     },
     "mode": {
@@ -657,6 +651,18 @@
       "usb_ncm",
       "usb_rndis"
      ]
+    },
+    "auto_pair": {
+     "type": "boolean"
+    },
+    "ssid": {
+     "type": "string"
+    },
+    "device_id": {
+     "type": "string"
+    },
+    "host": {
+     "type": "string"
     },
     "gps_poll_s": {
      "type": "integer",
@@ -673,15 +679,6 @@
      "minimum": 1,
      "maximum": 5
     },
-    "ssid": {
-     "type": "string"
-    },
-    "device_id": {
-     "type": "string"
-    },
-    "host": {
-     "type": "string"
-    },
     "apn": {
      "type": "string"
     },
@@ -690,6 +687,9 @@
     },
     "apn_password": {
      "type": "string"
+    },
+    "cli": {
+     "type": "boolean"
     }
    }
   }
@@ -711,13 +711,13 @@
      "items": {
       "type": "object",
       "properties": {
+       "name": {
+        "type": "string"
+       },
        "period_s": {
         "type": "integer",
         "minimum": 1,
         "maximum": 604800
-       },
-       "name": {
-        "type": "string"
        }
       },
       "required": [
@@ -726,8 +726,8 @@
       ]
      },
      "item_defaults": {
-      "period_s": 60,
-      "name": ""
+      "name": "",
+      "period_s": 60
      }
     },
     "rules": {
@@ -764,28 +764,30 @@
  "ha_webhooks": {
   "values": {
    "enabled": false,
-   "gzip": false,
-   "manual_override": false,
-   "cli": true,
-   "data_mode": "changed",
-   "interval_s": 60,
    "url": "",
    "url2": "",
-   "cert_set": ""
+   "interval_s": 60,
+   "data_mode": "changed",
+   "gzip": false,
+   "manual_override": false,
+   "cert_set": "",
+   "cli": true
   },
   "schema": {
    "properties": {
     "enabled": {
      "type": "boolean"
     },
-    "gzip": {
-     "type": "boolean"
+    "url": {
+     "type": "string"
     },
-    "manual_override": {
-     "type": "boolean"
+    "url2": {
+     "type": "string"
     },
-    "cli": {
-     "type": "boolean"
+    "interval_s": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 3600
     },
     "data_mode": {
      "type": "string",
@@ -794,19 +796,17 @@
       "full"
      ]
     },
-    "interval_s": {
-     "type": "integer",
-     "minimum": 1,
-     "maximum": 3600
+    "gzip": {
+     "type": "boolean"
     },
-    "url": {
-     "type": "string"
-    },
-    "url2": {
-     "type": "string"
+    "manual_override": {
+     "type": "boolean"
     },
     "cert_set": {
      "type": "string"
+    },
+    "cli": {
+     "type": "boolean"
     }
    }
   }
@@ -832,10 +832,10 @@
    "enabled": true,
    "smd": true,
    "wom": false,
-   "cli": true,
    "smd_sensitivity": 0,
    "wom_threshold": 32,
-   "stationary_s": 3
+   "stationary_s": 3,
+   "cli": true
   },
   "schema": {
    "properties": {
@@ -846,9 +846,6 @@
      "type": "boolean"
     },
     "wom": {
-     "type": "boolean"
-    },
-    "cli": {
      "type": "boolean"
     },
     "smd_sensitivity": {
@@ -865,6 +862,9 @@
      "type": "integer",
      "minimum": 1,
      "maximum": 3600
+    },
+    "cli": {
+     "type": "boolean"
     }
    }
   }
@@ -904,16 +904,13 @@
  "j1939": {
   "values": {
    "enabled": false,
-   "cli": true,
    "mode": "listen",
-   "address": 249
+   "address": 249,
+   "cli": true
   },
   "schema": {
    "properties": {
     "enabled": {
-     "type": "boolean"
-    },
-    "cli": {
      "type": "boolean"
     },
     "mode": {
@@ -927,6 +924,9 @@
      "type": "integer",
      "minimum": 128,
      "maximum": 253
+    },
+    "cli": {
+     "type": "boolean"
     }
    }
   }
@@ -934,16 +934,21 @@
  "j2534_server": {
   "values": {
    "enabled": false,
+   "port": 6809,
    "allow_reflash": false,
    "allow_lan": false,
    "exclusive": true,
-   "cli": true,
-   "port": 6809
+   "cli": true
   },
   "schema": {
    "properties": {
     "enabled": {
      "type": "boolean"
+    },
+    "port": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 65535
     },
     "allow_reflash": {
      "type": "boolean"
@@ -956,11 +961,6 @@
     },
     "cli": {
      "type": "boolean"
-    },
-    "port": {
-     "type": "integer",
-     "minimum": 1,
-     "maximum": 65535
     }
    }
   }
@@ -968,18 +968,15 @@
  "led_manager": {
   "values": {
    "enabled": true,
-   "cli": true,
    "idle_mode": "solid",
    "idle_r": 0,
    "idle_g": 204,
-   "idle_b": 255
+   "idle_b": 255,
+   "cli": true
   },
   "schema": {
    "properties": {
     "enabled": {
-     "type": "boolean"
-    },
-    "cli": {
      "type": "boolean"
     },
     "idle_mode": {
@@ -1004,24 +1001,21 @@
      "type": "integer",
      "minimum": 0,
      "maximum": 255
+    },
+    "cli": {
+     "type": "boolean"
     }
    }
   }
  },
  "log_manager": {
   "values": {
+   "level": "info",
    "console_enabled": true,
-   "ring_enabled": true,
-   "level": "info"
+   "ring_enabled": true
   },
   "schema": {
    "properties": {
-    "console_enabled": {
-     "type": "boolean"
-    },
-    "ring_enabled": {
-     "type": "boolean"
-    },
     "level": {
      "type": "string",
      "enum": [
@@ -1032,6 +1026,12 @@
       "debug",
       "verbose"
      ]
+    },
+    "console_enabled": {
+     "type": "boolean"
+    },
+    "ring_enabled": {
+     "type": "boolean"
     }
    }
   }
@@ -1039,32 +1039,20 @@
  "log_sinks": {
   "values": {
    "tcp_enabled": false,
+   "tcp_port": 5515,
    "udp_enabled": false,
+   "udp_host": "",
+   "udp_port": 5514,
    "ws_enabled": false,
    "file_enabled": false,
-   "cli": true,
-   "tcp_port": 5515,
-   "udp_port": 5514,
    "file_max_kb": 512,
    "file_keep": 4,
    "file_flush_s": 60,
-   "udp_host": ""
+   "cli": true
   },
   "schema": {
    "properties": {
     "tcp_enabled": {
-     "type": "boolean"
-    },
-    "udp_enabled": {
-     "type": "boolean"
-    },
-    "ws_enabled": {
-     "type": "boolean"
-    },
-    "file_enabled": {
-     "type": "boolean"
-    },
-    "cli": {
      "type": "boolean"
     },
     "tcp_port": {
@@ -1072,10 +1060,22 @@
      "minimum": 1,
      "maximum": 65535
     },
+    "udp_enabled": {
+     "type": "boolean"
+    },
+    "udp_host": {
+     "type": "string"
+    },
     "udp_port": {
      "type": "integer",
      "minimum": 1,
      "maximum": 65535
+    },
+    "ws_enabled": {
+     "type": "boolean"
+    },
+    "file_enabled": {
+     "type": "boolean"
     },
     "file_max_kb": {
      "type": "integer",
@@ -1092,8 +1092,8 @@
      "minimum": 5,
      "maximum": 3600
     },
-    "udp_host": {
-     "type": "string"
+    "cli": {
+     "type": "boolean"
     }
    }
   }
@@ -1113,32 +1113,20 @@
  "mqtt_manager": {
   "values": {
    "enabled": false,
-   "connect_on": "wifi",
-   "keepalive_s": 30,
    "url": "",
    "username": "",
    "broker_password": "",
    "client_id": "",
    "topic_prefix": "",
    "ca_file": "",
-   "cert_set": ""
+   "cert_set": "",
+   "keepalive_s": 30,
+   "connect_on": "wifi"
   },
   "schema": {
    "properties": {
     "enabled": {
      "type": "boolean"
-    },
-    "connect_on": {
-     "type": "string",
-     "enum": [
-      "wifi",
-      "any"
-     ]
-    },
-    "keepalive_s": {
-     "type": "integer",
-     "minimum": 5,
-     "maximum": 600
     },
     "url": {
      "type": "string"
@@ -1160,6 +1148,18 @@
     },
     "cert_set": {
      "type": "string"
+    },
+    "keepalive_s": {
+     "type": "integer",
+     "minimum": 5,
+     "maximum": 600
+    },
+    "connect_on": {
+     "type": "string",
+     "enum": [
+      "wifi",
+      "any"
+     ]
     }
    }
   }
@@ -1234,10 +1234,10 @@
   "values": {
    "enabled": true,
    "sntp": true,
-   "cli": true,
-   "sync_interval_h": 24,
    "ntp_server": "pool.ntp.org",
-   "ntp_server2": ""
+   "ntp_server2": "",
+   "sync_interval_h": 24,
+   "cli": true
   },
   "schema": {
    "properties": {
@@ -1247,19 +1247,19 @@
     "sntp": {
      "type": "boolean"
     },
-    "cli": {
-     "type": "boolean"
+    "ntp_server": {
+     "type": "string"
+    },
+    "ntp_server2": {
+     "type": "string"
     },
     "sync_interval_h": {
      "type": "integer",
      "minimum": 1,
      "maximum": 168
     },
-    "ntp_server": {
-     "type": "string"
-    },
-    "ntp_server2": {
-     "type": "string"
+    "cli": {
+     "type": "boolean"
     }
    }
   }
@@ -1267,15 +1267,20 @@
  "script_engine": {
   "values": {
    "enabled": false,
+   "max_runtime_ms": 10000,
    "allow_reflash": false,
    "exclusive": true,
-   "cli": true,
-   "max_runtime_ms": 10000
+   "cli": true
   },
   "schema": {
    "properties": {
     "enabled": {
      "type": "boolean"
+    },
+    "max_runtime_ms": {
+     "type": "integer",
+     "minimum": 100,
+     "maximum": 120000
     },
     "allow_reflash": {
      "type": "boolean"
@@ -1285,11 +1290,6 @@
     },
     "cli": {
      "type": "boolean"
-    },
-    "max_runtime_ms": {
-     "type": "integer",
-     "minimum": 100,
-     "maximum": 120000
     }
    }
   }
@@ -1297,23 +1297,17 @@
  "sleep_manager": {
   "values": {
    "enabled": true,
-   "periodic_wakeup": false,
-   "cli": true,
    "sleep_mv": 13100,
    "wake_mv": 13200,
    "wake_delay_ms": 500,
    "sleep_delay_min": 5,
-   "wakeup_interval_min": 30
+   "periodic_wakeup": false,
+   "wakeup_interval_min": 30,
+   "cli": true
   },
   "schema": {
    "properties": {
     "enabled": {
-     "type": "boolean"
-    },
-    "periodic_wakeup": {
-     "type": "boolean"
-    },
-    "cli": {
      "type": "boolean"
     },
     "sleep_mv": {
@@ -1336,10 +1330,16 @@
      "minimum": 1,
      "maximum": 30
     },
+    "periodic_wakeup": {
+     "type": "boolean"
+    },
     "wakeup_interval_min": {
      "type": "integer",
      "minimum": 5,
      "maximum": 1440
+    },
+    "cli": {
+     "type": "boolean"
     }
    }
   }
@@ -1356,8 +1356,8 @@
      "items": {
       "type": "object",
       "properties": {
-       "enabled": {
-        "type": "boolean"
+       "name": {
+        "type": "string"
        },
        "port": {
         "type": "integer",
@@ -1374,8 +1374,8 @@
         "minimum": 0,
         "maximum": 600
        },
-       "name": {
-        "type": "string"
+       "enabled": {
+        "type": "boolean"
        }
       },
       "required": [
@@ -1385,11 +1385,11 @@
       ]
      },
      "item_defaults": {
-      "enabled": false,
+      "name": "",
       "port": 3333,
       "max_clients": 2,
       "keepalive_s": 30,
-      "name": ""
+      "enabled": false
      }
     }
    }
@@ -1397,21 +1397,15 @@
  },
  "uds_manager": {
   "values": {
-   "exclusive": true,
-   "cli": true,
    "backend": "auto",
    "p2_ms": 250,
    "p2star_ms": 5000,
-   "tester_present_ms": 2000
+   "tester_present_ms": 2000,
+   "exclusive": true,
+   "cli": true
   },
   "schema": {
    "properties": {
-    "exclusive": {
-     "type": "boolean"
-    },
-    "cli": {
-     "type": "boolean"
-    },
     "backend": {
      "type": "string",
      "enum": [
@@ -1434,6 +1428,12 @@
      "type": "integer",
      "minimum": 500,
      "maximum": 10000
+    },
+    "exclusive": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
     }
    }
   }
@@ -1457,24 +1457,18 @@
  "usb_host_manager": {
   "values": {
    "enabled": true,
-   "prefer_usb_route": false,
-   "cli": true,
    "role": "host",
    "device_class": "ncm",
    "ip_mode": "dhcp",
    "static_ip": "",
    "static_netmask": "255.255.255.0",
-   "static_gw": ""
+   "static_gw": "",
+   "prefer_usb_route": false,
+   "cli": true
   },
   "schema": {
    "properties": {
     "enabled": {
-     "type": "boolean"
-    },
-    "prefer_usb_route": {
-     "type": "boolean"
-    },
-    "cli": {
      "type": "boolean"
     },
     "role": {
@@ -1507,6 +1501,12 @@
     },
     "static_gw": {
      "type": "string"
+    },
+    "prefer_usb_route": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
     }
    }
   }
@@ -1514,11 +1514,7 @@
  "vpn_manager": {
   "values": {
    "enabled": false,
-   "default_route": false,
-   "cli": true,
    "type": "wireguard",
-   "port": 51820,
-   "keepalive_s": 25,
    "ts_auth_key": "",
    "ts_device_name": "",
    "ts_control_url": "",
@@ -1526,20 +1522,17 @@
    "peer_public_key": "",
    "preshared_key": "",
    "address": "",
-   "allowed_ip": "0.0.0.0",
-   "allowed_ip_mask": "0.0.0.0",
+   "routes": "",
    "endpoint": "",
-   "dns": ""
+   "port": 51820,
+   "keepalive_s": 25,
+   "default_route": false,
+   "dns": "",
+   "cli": true
   },
   "schema": {
    "properties": {
     "enabled": {
-     "type": "boolean"
-    },
-    "default_route": {
-     "type": "boolean"
-    },
-    "cli": {
      "type": "boolean"
     },
     "type": {
@@ -1548,16 +1541,6 @@
       "wireguard",
       "tailscale"
      ]
-    },
-    "port": {
-     "type": "integer",
-     "minimum": 1,
-     "maximum": 65535
-    },
-    "keepalive_s": {
-     "type": "integer",
-     "minimum": 0,
-     "maximum": 3600
     },
     "ts_auth_key": {
      "type": "string"
@@ -1580,17 +1563,30 @@
     "address": {
      "type": "string"
     },
-    "allowed_ip": {
-     "type": "string"
-    },
-    "allowed_ip_mask": {
+    "routes": {
      "type": "string"
     },
     "endpoint": {
      "type": "string"
     },
+    "port": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 65535
+    },
+    "keepalive_s": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 3600
+    },
+    "default_route": {
+     "type": "boolean"
+    },
     "dns": {
      "type": "string"
+    },
+    "cli": {
+     "type": "boolean"
     }
    }
   }
@@ -1607,8 +1603,16 @@
      "items": {
       "type": "object",
       "properties": {
-       "enabled": {
-        "type": "boolean"
+       "name": {
+        "type": "string"
+       },
+       "path": {
+        "type": "string"
+       },
+       "max_clients": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 4
        },
        "mode": {
         "type": "string",
@@ -1617,16 +1621,8 @@
          "text"
         ]
        },
-       "max_clients": {
-        "type": "integer",
-        "minimum": 1,
-        "maximum": 4
-       },
-       "name": {
-        "type": "string"
-       },
-       "path": {
-        "type": "string"
+       "enabled": {
+        "type": "boolean"
        }
       },
       "required": [
@@ -1635,11 +1631,11 @@
       ]
      },
      "item_defaults": {
-      "enabled": false,
-      "mode": "binary",
-      "max_clients": 2,
       "name": "",
-      "path": "/ws/"
+      "path": "/ws/",
+      "max_clients": 2,
+      "mode": "binary",
+      "enabled": false
      }
     }
    }
@@ -1647,102 +1643,78 @@
  },
  "wifi_manager": {
   "values": {
-   "sta_trusted": true,
-   "sta_auto_reconnect": true,
-   "fallback1_trusted": true,
-   "fallback2_trusted": true,
-   "fallback3_trusted": true,
-   "fallback4_trusted": true,
-   "fallback5_trusted": true,
-   "ap_auto_disable": false,
-   "ap_hidden": false,
-   "cli": true,
    "mode": "apsta",
-   "sta_ip_mode": "dhcp",
-   "fallback1_ip_mode": "dhcp",
-   "fallback2_ip_mode": "dhcp",
-   "fallback3_ip_mode": "dhcp",
-   "fallback4_ip_mode": "dhcp",
-   "fallback5_ip_mode": "dhcp",
-   "ap_bandwidth": "ht20",
-   "ap_auth": "auto",
-   "power_save": "none",
-   "wifi_ram_profile": "lean",
-   "sta_max_retry": -1,
-   "ap_channel": 6,
-   "ap_max_connections": 4,
-   "sta_roam_interval_s": 300,
-   "wifi_static_rx": 10,
-   "wifi_static_tx": 8,
-   "wifi_cache_tx": 32,
    "sta_ssid": "",
    "sta_password": "",
+   "sta_trusted": true,
+   "sta_vpn_pause": false,
    "hostname": "",
+   "sta_auto_reconnect": true,
+   "sta_max_retry": -1,
+   "sta_ip_mode": "dhcp",
    "sta_static_ip": "",
    "sta_static_netmask": "255.255.255.0",
    "sta_static_gw": "",
    "sta_dns": "",
+   "fallback1_ip_mode": "dhcp",
    "fallback1_static_ip": "",
    "fallback1_static_netmask": "255.255.255.0",
    "fallback1_static_gw": "",
+   "fallback2_ip_mode": "dhcp",
    "fallback2_static_ip": "",
    "fallback2_static_netmask": "255.255.255.0",
    "fallback2_static_gw": "",
+   "fallback3_ip_mode": "dhcp",
    "fallback3_static_ip": "",
    "fallback3_static_netmask": "255.255.255.0",
    "fallback3_static_gw": "",
+   "fallback4_ip_mode": "dhcp",
    "fallback4_static_ip": "",
    "fallback4_static_netmask": "255.255.255.0",
    "fallback4_static_gw": "",
+   "fallback5_ip_mode": "dhcp",
    "fallback5_static_ip": "",
    "fallback5_static_netmask": "255.255.255.0",
    "fallback5_static_gw": "",
    "fallback1_ssid": "",
    "fallback1_password": "",
+   "fallback1_trusted": true,
+   "fallback1_vpn_pause": false,
    "fallback2_ssid": "",
    "fallback2_password": "",
+   "fallback2_trusted": true,
+   "fallback2_vpn_pause": false,
    "fallback3_ssid": "",
    "fallback3_password": "",
+   "fallback3_trusted": true,
+   "fallback3_vpn_pause": false,
    "fallback4_ssid": "",
    "fallback4_password": "",
+   "fallback4_trusted": true,
+   "fallback4_vpn_pause": false,
    "fallback5_ssid": "",
    "fallback5_password": "",
+   "fallback5_trusted": true,
+   "fallback5_vpn_pause": false,
    "ap_ssid": "",
    "ap_password": "",
-   "ap_ip": "192.168.0.10"
+   "ap_channel": 6,
+   "ap_max_connections": 4,
+   "ap_auto_disable": false,
+   "ap_ip": "192.168.0.10",
+   "ap_hidden": false,
+   "ap_bandwidth": "ht20",
+   "ap_auth": "auto",
+   "power_save": "none",
+   "sta_roam_interval_s": 300,
+   "wifi_ram_profile": "lean",
+   "wifi_static_rx": 10,
+   "wifi_static_tx": 8,
+   "wifi_cache_tx": 32,
+   "cli": true
   },
   "schema": {
    "properties": {
-    "sta_trusted": {
-     "type": "boolean"
-    },
-    "sta_auto_reconnect": {
-     "type": "boolean"
-    },
-    "fallback1_trusted": {
-     "type": "boolean"
-    },
-    "fallback2_trusted": {
-     "type": "boolean"
-    },
-    "fallback3_trusted": {
-     "type": "boolean"
-    },
-    "fallback4_trusted": {
-     "type": "boolean"
-    },
-    "fallback5_trusted": {
-     "type": "boolean"
-    },
-    "ap_auto_disable": {
-     "type": "boolean"
-    },
-    "ap_hidden": {
-     "type": "boolean"
-    },
-    "cli": {
-     "type": "boolean"
-    },
     "mode": {
      "type": "string",
      "enum": [
@@ -1752,12 +1724,47 @@
       "apsta"
      ]
     },
+    "sta_ssid": {
+     "type": "string"
+    },
+    "sta_password": {
+     "type": "string"
+    },
+    "sta_trusted": {
+     "type": "boolean"
+    },
+    "sta_vpn_pause": {
+     "type": "boolean"
+    },
+    "hostname": {
+     "type": "string"
+    },
+    "sta_auto_reconnect": {
+     "type": "boolean"
+    },
+    "sta_max_retry": {
+     "type": "integer",
+     "minimum": -1,
+     "maximum": 1000
+    },
     "sta_ip_mode": {
      "type": "string",
      "enum": [
       "dhcp",
       "static"
      ]
+    },
+    "sta_static_ip": {
+     "type": "string"
+    },
+    "sta_static_netmask": {
+     "type": "string"
+    },
+    "sta_static_gw": {
+     "type": "string"
+    },
+    "sta_dns": {
+     "type": "string"
     },
     "fallback1_ip_mode": {
      "type": "string",
@@ -1766,12 +1773,30 @@
       "static"
      ]
     },
+    "fallback1_static_ip": {
+     "type": "string"
+    },
+    "fallback1_static_netmask": {
+     "type": "string"
+    },
+    "fallback1_static_gw": {
+     "type": "string"
+    },
     "fallback2_ip_mode": {
      "type": "string",
      "enum": [
       "dhcp",
       "static"
      ]
+    },
+    "fallback2_static_ip": {
+     "type": "string"
+    },
+    "fallback2_static_netmask": {
+     "type": "string"
+    },
+    "fallback2_static_gw": {
+     "type": "string"
     },
     "fallback3_ip_mode": {
      "type": "string",
@@ -1780,6 +1805,15 @@
       "static"
      ]
     },
+    "fallback3_static_ip": {
+     "type": "string"
+    },
+    "fallback3_static_netmask": {
+     "type": "string"
+    },
+    "fallback3_static_gw": {
+     "type": "string"
+    },
     "fallback4_ip_mode": {
      "type": "string",
      "enum": [
@@ -1787,12 +1821,115 @@
       "static"
      ]
     },
+    "fallback4_static_ip": {
+     "type": "string"
+    },
+    "fallback4_static_netmask": {
+     "type": "string"
+    },
+    "fallback4_static_gw": {
+     "type": "string"
+    },
     "fallback5_ip_mode": {
      "type": "string",
      "enum": [
       "dhcp",
       "static"
      ]
+    },
+    "fallback5_static_ip": {
+     "type": "string"
+    },
+    "fallback5_static_netmask": {
+     "type": "string"
+    },
+    "fallback5_static_gw": {
+     "type": "string"
+    },
+    "fallback1_ssid": {
+     "type": "string"
+    },
+    "fallback1_password": {
+     "type": "string"
+    },
+    "fallback1_trusted": {
+     "type": "boolean"
+    },
+    "fallback1_vpn_pause": {
+     "type": "boolean"
+    },
+    "fallback2_ssid": {
+     "type": "string"
+    },
+    "fallback2_password": {
+     "type": "string"
+    },
+    "fallback2_trusted": {
+     "type": "boolean"
+    },
+    "fallback2_vpn_pause": {
+     "type": "boolean"
+    },
+    "fallback3_ssid": {
+     "type": "string"
+    },
+    "fallback3_password": {
+     "type": "string"
+    },
+    "fallback3_trusted": {
+     "type": "boolean"
+    },
+    "fallback3_vpn_pause": {
+     "type": "boolean"
+    },
+    "fallback4_ssid": {
+     "type": "string"
+    },
+    "fallback4_password": {
+     "type": "string"
+    },
+    "fallback4_trusted": {
+     "type": "boolean"
+    },
+    "fallback4_vpn_pause": {
+     "type": "boolean"
+    },
+    "fallback5_ssid": {
+     "type": "string"
+    },
+    "fallback5_password": {
+     "type": "string"
+    },
+    "fallback5_trusted": {
+     "type": "boolean"
+    },
+    "fallback5_vpn_pause": {
+     "type": "boolean"
+    },
+    "ap_ssid": {
+     "type": "string"
+    },
+    "ap_password": {
+     "type": "string"
+    },
+    "ap_channel": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 13
+    },
+    "ap_max_connections": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 10
+    },
+    "ap_auto_disable": {
+     "type": "boolean"
+    },
+    "ap_ip": {
+     "type": "string"
+    },
+    "ap_hidden": {
+     "type": "boolean"
     },
     "ap_bandwidth": {
      "type": "string",
@@ -1818,6 +1955,11 @@
       "max"
      ]
     },
+    "sta_roam_interval_s": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 86400
+    },
     "wifi_ram_profile": {
      "type": "string",
      "enum": [
@@ -1825,26 +1967,6 @@
       "lean",
       "custom"
      ]
-    },
-    "sta_max_retry": {
-     "type": "integer",
-     "minimum": -1,
-     "maximum": 1000
-    },
-    "ap_channel": {
-     "type": "integer",
-     "minimum": 1,
-     "maximum": 13
-    },
-    "ap_max_connections": {
-     "type": "integer",
-     "minimum": 1,
-     "maximum": 10
-    },
-    "sta_roam_interval_s": {
-     "type": "integer",
-     "minimum": 0,
-     "maximum": 86400
     },
     "wifi_static_rx": {
      "type": "integer",
@@ -1861,110 +1983,8 @@
      "minimum": 0,
      "maximum": 128
     },
-    "sta_ssid": {
-     "type": "string"
-    },
-    "sta_password": {
-     "type": "string"
-    },
-    "hostname": {
-     "type": "string"
-    },
-    "sta_static_ip": {
-     "type": "string"
-    },
-    "sta_static_netmask": {
-     "type": "string"
-    },
-    "sta_static_gw": {
-     "type": "string"
-    },
-    "sta_dns": {
-     "type": "string"
-    },
-    "fallback1_static_ip": {
-     "type": "string"
-    },
-    "fallback1_static_netmask": {
-     "type": "string"
-    },
-    "fallback1_static_gw": {
-     "type": "string"
-    },
-    "fallback2_static_ip": {
-     "type": "string"
-    },
-    "fallback2_static_netmask": {
-     "type": "string"
-    },
-    "fallback2_static_gw": {
-     "type": "string"
-    },
-    "fallback3_static_ip": {
-     "type": "string"
-    },
-    "fallback3_static_netmask": {
-     "type": "string"
-    },
-    "fallback3_static_gw": {
-     "type": "string"
-    },
-    "fallback4_static_ip": {
-     "type": "string"
-    },
-    "fallback4_static_netmask": {
-     "type": "string"
-    },
-    "fallback4_static_gw": {
-     "type": "string"
-    },
-    "fallback5_static_ip": {
-     "type": "string"
-    },
-    "fallback5_static_netmask": {
-     "type": "string"
-    },
-    "fallback5_static_gw": {
-     "type": "string"
-    },
-    "fallback1_ssid": {
-     "type": "string"
-    },
-    "fallback1_password": {
-     "type": "string"
-    },
-    "fallback2_ssid": {
-     "type": "string"
-    },
-    "fallback2_password": {
-     "type": "string"
-    },
-    "fallback3_ssid": {
-     "type": "string"
-    },
-    "fallback3_password": {
-     "type": "string"
-    },
-    "fallback4_ssid": {
-     "type": "string"
-    },
-    "fallback4_password": {
-     "type": "string"
-    },
-    "fallback5_ssid": {
-     "type": "string"
-    },
-    "fallback5_password": {
-     "type": "string"
-    },
-    "ap_ssid": {
-     "type": "string"
-    },
-    "ap_password": {
-     "type": "string"
-    },
-    "ap_ip": {
-     "type": "string"
+    "cli": {
+     "type": "boolean"
     }
    }
   }
@@ -1982,6 +2002,8 @@
   /* ---- realistic value overrides on top of the extracted defaults ---- */
   const ov = (c, v) => { if (S[c]) Object.assign(S[c].values, v); };
   ov("wifi_manager", { mode: "apsta", sta_ssid: "HomeWiFi", sta_password: "********", ap_ssid: "WiCAN_E349" });
+  /* a probe's own station values, e.g. { sta_vpn_pause: true } (2026-10-11) */
+  if ((window.__mockPreset || {}).wifi) ov("wifi_manager", window.__mockPreset.wifi);
   ov("ble_manager", { enabled: false });
   ov("mqtt_manager", { enabled: true, broker: "mqtt://10.42.0.1:1883", topic_prefix: "wican" });
   ov("ha_webhooks", { enabled: true, url: "http://homeassistant.local:8123/api/webhook/8f4a21be", interval_s: 15 });
@@ -1994,7 +2016,7 @@
   if ((window.__mockPreset || {}).j1939Active === true) ov("j1939", { enabled: true, mode: "active" });
   else if ((window.__mockPreset || {}).j1939Listening === true) ov("j1939", { enabled: true });
   ov("data_logger", { enabled: false });
-  ov("vpn_manager", { enabled: true, type: "wireguard", address: "10.66.0.2", endpoint: "vpn.example.com", port: 51820 });
+  ov("vpn_manager", { enabled: true, type: "wireguard", address: "10.66.0.2", routes: "10.66.0.0/24", endpoint: "vpn.example.com", port: 51820 });
   ov("usb_host_manager", { enabled: true, role: "host" });
   /* the "gps" USB scene is a receiver already read by the console (usbScene below) */
   if ((window.__mockPreset || {}).usb === "gps") ov("usb_acm_cli", { enabled: true });
@@ -2323,7 +2345,8 @@
         backoff_s: i === 1 ? 10 : 0, next_in_s: 4, last_status: i === 1 ? 503 : (i === 0 ? 0 : 0), last_error: i === 1 ? "http=503" : "", last_error_time: i === 1 ? new Date().toISOString() : "",
         last_ok_time: i === 0 ? new Date().toISOString() : "", full_sent: i === 1 })) }),
     "/api/webhook": () => J({ url: state.webhookUrl !== undefined ? state.webhookUrl : S.ha_webhooks.values.url, enabled: true, interval: 15, manual_override: false, data_mode: "changed", gzip: false, status: "ok", last_post: new Date().toISOString(), retries: 0, success_count: 512, fail_count: 3, last_error: "", last_error_time: "" }),
-    "/api/vpn": () => J({ state: "connected", type: "wireguard", endpoint: "vpn.example.com:51820", ts_ip: "", ts_peers: 0, connects: 1, failures: 0, uptime_s: 8040 }),
+    /* `network` + `paused` since 2026-10-11 (issue #976); a probe presets the state through __mockPreset.vpn */
+    "/api/vpn": () => J({ state: "connected", type: "wireguard", endpoint: "vpn.example.com:51820", network: "HomeWiFi", paused: false, routes: ["10.66.0.0/24"], ts_ip: "", ts_peers: 0, connects: 1, failures: 0, uptime_s: 8040, ...((window.__mockPreset || {}).vpn || {}) }),
     "/api/usb": () => J(usbScene() ? usbScene().usb : { enabled: true, device_present: true, host_active: true, eth_connected: true, driver: "cdc_ncm", ip: "192.168.7.2", attaches: 1 }),
     /* espnetlink_link: paired steady state by default; state.espnlBlocked
        flips to the fresh-device hold (factory AP password, 2026-09-07);
@@ -2385,7 +2408,7 @@
       { event: "battery.threshold", description: "Voltage crossed a watch threshold", keys: [{ key: "edge", type: "string" }, { key: "volts", type: "number" }] },
       { event: "status.bit", description: "A device status bit changed", keys: [{ key: "bit", type: "string" }, { key: "set", type: "boolean" }] },
       { event: "mqtt.rx", description: "an MQTT message arrived", keys: [{ key: "topic", type: "string" }, { key: "payload", type: "string" }] },
-      { event: "vpn.state", description: "VPN connection state changed", keys: [{ key: "state", type: "string" }] },
+      { event: "vpn.state", description: "VPN tunnel state changed; paused while the station is on a network marked Pause VPN", keys: [{ key: "connected", type: "string" }, { key: "paused", type: "string" }, { key: "network", type: "string" }] },
     ]),
     "/api/events/actions": () => J([
       { name: "log.note", params_schema: { type: "object", properties: { message: { type: "string" } } }, undoable: false },
@@ -4006,6 +4029,7 @@ const LABELS={
   ap_ip:"AP IP address",ap_channel:"AP channel",ap_bandwidth:"AP bandwidth",ap_hidden:"Hide AP network",
   ap_max_connections:"Max AP clients",ap_auto_disable:"Turn the access point off while the station is connected",power_save:"WiFi power save",
   wifi_ram_profile:"WiFi RAM profile",wifi_static_rx:"Static RX buffers",wifi_static_tx:"Static TX buffers",wifi_cache_tx:"TX cache buffers",
+  sta_vpn_pause:"Pause VPN",
   sta_ssid:"Network name (SSID)",sta_password:"Password",sta_trusted:"Trusted network",hostname:"Hostname",
   sta_auto_reconnect:"Auto-reconnect",sta_max_retry:"Max connect retries",sta_ip_mode:"IP assignment",
   sta_static_ip:"Static IP address",sta_static_netmask:"Subnet mask",sta_static_gw:"Gateway",sta_dns:"DNS server",
@@ -4054,7 +4078,7 @@ const LABELS={
   /* vpn_manager */
   "vpn_manager.type":"VPN type",ts_auth_key:"Tailscale auth key",ts_device_name:"Tailscale device name",ts_control_url:"Control server URL",
   private_key:"Private key",peer_public_key:"Peer public key",preshared_key:"Pre-shared key",address:"Tunnel address",
-  allowed_ip:"Allowed IPs",allowed_ip_mask:"Allowed IPs mask",endpoint:"Endpoint host","vpn_manager.port":"Endpoint port",
+  routes:"Routes through the tunnel",endpoint:"Endpoint host","vpn_manager.port":"Endpoint port",
   default_route:"Route all traffic through the VPN",dns:"DNS server",
   /* j2534_server / script_engine / uds_manager */
   "j2534_server.port":"TCP port",allow_reflash:"Allow ECU flashing",allow_lan:"Expose on LAN",
@@ -4089,6 +4113,7 @@ const HELP={
   ap_password:"8 to 63 characters. Blank keeps the current password, unless it is still the factory one (@meatpi#), which must be replaced before WiFi settings can be saved.",
   ap_auto_disable:"Recommended with Access point + Station: the access point stops once the station has an IP and comes back if the station loses its network, so the WiCAN stays reachable one way or the other.",
   sta_ssid:"The WiFi network the WiCAN should join: use Scan to pick one.",
+  sta_vpn_pause:"On: the VPN stays down while WiCAN is on this network and comes back as soon as it leaves. For your home WiFi, where the VPN has nothing to add.",
   sta_password:"Leave blank to keep the stored password.",
   sta_trusted:"On an untrusted network the web UI and API are blocked over the station link; MQTT and the USB link stay up.",
   hostname:()=>"Leave blank for wican_"+((conn.info&&conn.info.device_id)||"<device id>")+".",
@@ -4118,6 +4143,7 @@ const HELP={
   role:"Host: an adapter or dongle plugs into the WiCAN. Device: the WiCAN appears as a network adapter on a PC.",
   prefer_usb_route:"Use the USB-Ethernet uplink even when WiFi is connected.",
   "vpn_manager.type":"WireGuard: point-to-point tunnel to your own server. Tailscale: zero-config mesh (needs an auth key).",
+  routes:"Destination networks that go through the tunnel, comma separated in CIDR form, e.g. 10.66.0.0/24, 192.168.1.0/24. Include the tunnel's own network. Everything else uses the normal connection; Route all traffic (under Show advanced) sends everything through the tunnel instead.",
   default_route:"Send all internet traffic through the tunnel, not only the allowed IPs.",
   allow_reflash:"Lets a connected tool write ECU firmware. Keep off unless you are flashing.",
   allow_lan:"Reachable from any network the WiCAN is on, not only its own AP / USB link.",
@@ -4183,7 +4209,7 @@ const PLACEHOLDER={
   ts_control_url:"https://controlplane.tailscale.com","espnetlink.ssid":"ESPNetLink_XXXXXX","espnetlink.host":"192.168.80.1",
   "espnetlink.device_id":"set by pairing",static_ip:"192.168.1.50",static_netmask:"255.255.255.0",static_gw:"192.168.1.1",
   sta_static_ip:"192.168.1.50",sta_static_netmask:"255.255.255.0",sta_static_gw:"192.168.1.1",sta_dns:"optional, e.g. 1.1.1.1",dns:"e.g. 1.1.1.1",
-  client_id:"optional",topic_prefix:"optional",can_filter:"7E8",can_mask:"7FF",address:"10.0.0.2",allowed_ip:"0.0.0.0",allowed_ip_mask:"0.0.0.0",
+  client_id:"optional",topic_prefix:"optional",can_filter:"7E8",can_mask:"7FF",address:"10.0.0.2",routes:"10.66.0.0/24, 192.168.1.0/24",
   udp_host:"192.168.1.10",vehicle:"No profile loaded",std_init:"ATSP6;",custom_init:"optional AT chain",specific_init:"optional AT chain",
   dtc_init:"optional AT chain",dtc_rxheader:"7E8",dtc_uds_txid:"7E0",dtc_uds_rxid:"7E8",pub_topic:"~/can/rx",sub_topic:"~/can/tx",
   ca_file:"optional",auth_password:"8+ characters",
@@ -4390,13 +4416,11 @@ function importWgConf(text,vals){
     }
   }
   if(allowed.length){
+    /* every IPv4 AllowedIPs entry becomes a route through the tunnel
+       (issue #975); 0.0.0.0/0 is the route-everything flag instead */
     const full=allowed.includes("0.0.0.0/0");
     vals.default_route=full;
-    const cidr=allowed.find(a=>a!=="0.0.0.0/0");
-    if(cidr){const[ip,bits]=cidr.split("/");vals.allowed_ip=ip;
-      if(bits!==undefined){const b=Number(bits);
-        const m=b===0?0:((0xFFFFFFFF<<(32-b))>>>0);
-        vals.allowed_ip_mask=[m>>>24,(m>>>16)&255,(m>>>8)&255,m&255].join(".");}}
+    vals.routes=allowed.filter(a=>a!=="0.0.0.0/0").join(", ");
   }
   if(!n)throw new Error("no WireGuard fields found in the file");
   return n;
@@ -4635,7 +4659,7 @@ const PAGES={};
 const WAKE_PLANNED={power_wake:"Battery voltage recovered, woke from sleep",periodic_wake:"Periodic check-in, woke from sleep",
   user_request:"Restart requested",config_apply:"Settings applied",config_recovery:"Settings recovery",ota_apply:"Firmware update",
   factory_reset:"Factory reset",safe_mode:"Safe mode",internal_recovery:"Internal recovery restart",
-  park_retry:"Start after a crash park"};
+  park_retry:"Start after a crash park",partition_migrate:"Partition layout updated after a firmware update"};
 const WAKE_SOURCE={web_ui:"web UI",cmdline:"command line",console:"console",mqtt:"MQTT",ota:"OTA",safe_mode:"safe mode",
   sleep_mode:"power saving",button:"button",pairing:"pairing",park:"timer"};
 const WAKE_RESET={poweron:"Power-on",external:"External reset",software:"Software restart",panic:"Crash (panic)",deepsleep:"Woke from deep sleep",
@@ -4748,7 +4772,7 @@ PAGES.status=async(view)=>{
         ["Bluetooth ID",st.bluetooth_id||(st.device_id||(conn.info&&conn.info.device_id)?("WiC_"+(st.device_id||conn.info.device_id)):"-")],
         ["WiFi MAC",st.wifi_mac||(conn.info&&conn.info.mac)||"-"],
         ["MQTT",b.mqtt_connected?"Connected":"Off"],
-        ["VPN",vpn?(vpn.state||"disabled"):"-"]])),
+        ["VPN",vpn?vpnWord(vpn):"-"]])),
       card("System","cpu",kv([
         ["Firmware",st.version||"-"],
         ["Partition",st.partition||"-"],
@@ -4939,7 +4963,7 @@ function fallbackNetworks(vals,stage){
         h("div",{class:"rowflex",style:"justify-content:space-between;margin-bottom:6px"},
           h("b",{style:"font-size:12px"},"Backup network"),
           h("button",{class:"btn sm gh danger",type:"button",onclick:()=>{
-            vals[k("ssid")]="";vals[k("password")]="";vals[k("trusted")]=true;
+            vals[k("ssid")]="";vals[k("password")]="";vals[k("trusted")]=true;vals[k("vpn_pause")]=false;
             vals[k("ip_mode")]="dhcp";vals[k("static_ip")]="";vals[k("static_gw")]="";
             open.delete(i);stage();rebuild();}},ic("trash"))),
         h("div",{class:"rowflex",style:"gap:8px;flex-wrap:wrap"},
@@ -4950,7 +4974,12 @@ function fallbackNetworks(vals,stage){
             onchange:e=>{vals[k("password")]=e.target.value;stage();}}),
           h("label",{class:"rowflex",style:"gap:6px;font-size:12px;color:var(--text-2)"},
             h("input",{type:"checkbox",checked:vals[k("trusted")]!==false,
-              onchange:e=>{vals[k("trusted")]=e.target.checked;stage();}}),"trusted")),
+              onchange:e=>{vals[k("trusted")]=e.target.checked;stage();}}),"trusted"),
+          /* Pause VPN per network (issue #976, 2026-10-11): the VPN stays
+             down while the station is on this network */
+          h("label",{class:"rowflex",style:"gap:6px;font-size:12px;color:var(--text-2)",title:"The VPN stays down while WiCAN is on this network and comes back as soon as it leaves"},
+            h("input",{type:"checkbox",checked:vals[k("vpn_pause")]===true,
+              onchange:e=>{vals[k("vpn_pause")]=e.target.checked;stage();}}),"pause VPN")),
         ipRow);
     }));
     add.style.display=act.length>=5?"none":"";
@@ -6706,16 +6735,23 @@ PAGES.advanced=async(view)=>{
 };
 
 /* ---- VPN ---- */
+/* the VPN state as words (the Status page's row, the VPN page's badge);
+   paused = the station is on a network marked Pause VPN (issue #976) */
+function vpnWord(v){const s=v&&v.state;
+  return s==="connected"?"Connected":s==="paused"?("Paused on "+(v.network||"this network")):s==="waiting"?"Waiting for network":s==="connecting"?"Connecting":"Disabled";}
 PAGES.vpn=async(view)=>{
   const badge=chip("…","");
   const p=page(view,null,"VPN","WireGuard / Tailscale tunnel for secure remote access.",[badge]);
   const wrap=h("div",{style:"display:flex;flex-direction:column;gap:16px"});p.append(wrap);
   const dbgRows=h("div",{});
   async function status(){const v=await tryGet("/api/vpn");if(!v)return;
-    badge.className="chip "+(v.state==="connected"?"ok":v.state==="disabled"?"":"warn");
-    badge.replaceChildren(h("span",{class:"d"}),v.state==="connected"?"Connected":(v.state||"disabled"));
+    const paused=v.state==="paused";
+    badge.className="chip "+(v.state==="connected"?"ok":paused?"info":v.state==="disabled"?"":"warn");
+    badge.replaceChildren(h("span",{class:"d"}),(v.state==="connected"||paused)?vpnWord(v):(v.state||"disabled"));
     dbgRows.replaceChildren(kv([
       ["Type",v.type||"-"],["State",v.state||"-"],["Endpoint",(v.endpoint&&!/^:\d*$/.test(v.endpoint))?v.endpoint:"-"],
+      ["Network",v.network||"-"],
+      ["Routes",Array.isArray(v.routes)&&v.routes.length?v.routes.join(", "):"-"],
       ["Tailscale IP",v.ts_ip||"-"],["Peers",v.ts_peers],["Connects",v.connects],
       ["Failures",v.failures],["Uptime",fmt.dur(v.uptime_s)]]));}
   await status();
@@ -6723,7 +6759,7 @@ PAGES.vpn=async(view)=>{
     const vals=await api("/api/settings/vpn_manager");
     const schema=await api("/api/settings/vpn_manager/schema");
     delete vals.degraded;delete vals.pending_reboot;
-    const WG=["private_key","peer_public_key","preshared_key","address","allowed_ip","allowed_ip_mask","endpoint","port","keepalive_s","default_route","dns"];
+    const WG=["private_key","peer_public_key","preshared_key","address","routes","endpoint","port","keepalive_s","default_route","dns"];
     const TS=["ts_auth_key","ts_device_name","ts_control_url"];
     const keyOut=h("div",{class:"help mono",style:"display:none;word-break:break-all;margin-top:6px"});
     const keyRow=h("div",{class:"frow"},h("label",{},"Key Pair"),h("div",{class:"ctl"},
@@ -6746,12 +6782,23 @@ PAGES.vpn=async(view)=>{
           catch(err){toast("Import failed: "+err.message,"err");}
           e.target.value="";}})),
       h("div",{class:"help"},"Standard wg-quick file: [Interface]/[Peer] keys map onto the fields below. Tailscale needs no file: just the auth key.")));
+    /* where the VPN pauses (issue #976): the flags live with the networks
+       under Settings > WiFi (Pause VPN); this page only reports them */
+    const wifi=await tryGet("/api/settings/wifi_manager")||{};
+    const marked=[];
+    if(wifi.sta_vpn_pause&&String(wifi.sta_ssid||""))marked.push(String(wifi.sta_ssid));
+    for(const i of[1,2,3,4,5]){const s=String(wifi["fallback"+i+"_ssid"]||"");if(s&&wifi["fallback"+i+"_vpn_pause"])marked.push(s);}
+    const pauseNote=note("",[marked.length
+      ?"Pauses on "+marked.join(", ")+": the tunnel stays down while WiCAN is on "+(marked.length===1?"that network":"one of those networks")+" and comes back as soon as it leaves. Mark the networks with Pause VPN under "
+      :"Pauses on no network yet. Mark your home WiFi with Pause VPN under ",
+      h("a",{href:"#/settings/wifi"},"Settings > WiFi > Station"),"."]);
+    pauseNote.dataset.key="vpn_pause_note";
     const syncKey=()=>{const wg=vals.enabled&&vals.type!=="tailscale";
-      keyRow.style.display=wg?"":"none";impRow.style.display=wg?"":"none";};
+      keyRow.style.display=wg?"":"none";impRow.style.display=wg?"":"none";pauseNote.style.display=vals.enabled?"":"none";};
     /* ONE mode dropdown: Disabled / WireGuard / Tailscale, only the
        selected backend's fields show (meatpi 2026-07-11) */
     const rows=await settingsForm("vpn_manager",[...WG,...TS,"cli"],{values:vals,schema,onDirty:syncKey,
-      advanced:["preshared_key","allowed_ip","allowed_ip_mask","keepalive_s","default_route","dns","ts_control_url"],
+      advanced:["preshared_key","keepalive_s","default_route","dns","ts_control_url"],
       visible:st=>!st.enabled?[]:(st.type==="tailscale"?[...TS,"cli"]:[...WG,"cli"])});
     const mode=()=>vals.enabled?(vals.type==="tailscale"?"tailscale":"wireguard"):"disabled";
     const modeSel=h("select",{onchange:e=>{const v=e.target.value;
@@ -6763,7 +6810,7 @@ PAGES.vpn=async(view)=>{
       h("div",{class:"help"},"WireGuard: point-to-point tunnel to your own server. Tailscale: zero-config mesh (needs an auth key)."));
     syncKey();
     wrap.append(
-      card("VPN Settings","shield",modeRow,impRow,...rows,keyRow),
+      card("VPN Settings","shield",modeRow,impRow,...rows,keyRow,pauseNote),
       card("VPN Debug","bug",
         h("div",{class:"rowflex",style:"gap:10px;margin-bottom:6px;flex-wrap:wrap"},
           h("button",{class:"btn sm",onclick:status},ic("refresh"),"Refresh")),
