@@ -173,6 +173,13 @@ picker (REVIEW §6.1):
 The write surface (upload/delete/mkdir) was un-deferred by meatpi
 2026-07-04 and is LIVE: AP-mode trust model until the auth story; the
 settings partition is unreachable by construction, traversal refused.
+Since 2026-10-11 (config_backup, issue #979) every route answers 404
+`not found` for `/data/certs`, `/data/backups` and `/sd/backups` and
+anything under them, and a parent listing skips those folders
+(`filesystem_api_hidden`): the certificate sets and the device's own backup
+copies hold key material, which never comes back through the API. An
+upload or a delete through this surface also tells config_backup to refresh
+the copies.
 
 ## 6b. Firmware update: `ota_manager` via `api_http`
 
@@ -628,6 +635,24 @@ Config = `/api/settings/j2534_server` (`enabled` default false, `port` default 6
 
 Config = `/api/settings/ble_manager` (see `ble_manager/BLE_API.md` 7). The tunnel's own request counters are on the `blehttp` console command.
 
+## 6e16. Configuration backup: `config_backup` registers its own routes (2026-10-11, issue #979)
+
+The backup that carries everything: a file for the computer with every part that may leave the device, the copies the device keeps for itself (certificates included, sealed with a key it made once) on the internal flash and the SD card, and a restore that shows what a backup holds before anything changes. Key material never comes back through the API. Full reference: `config_backup/HTTP_API.md`; the UI is the three cards on System > Maintenance (`web_ui_v2/web/backup.js`).
+
+| Route | Method | Behavior |
+|---|---|---|
+| `/api/backup/status` | GET | the parts with counts and bytes (`settings`, `vehicles`, `databases`, `scripts`, `dashboard`, `certs`), the key (`created`, `downloaded`), the copies (`internal`, `sd`: present, refreshed, bytes, parts, the card's device id and free space), `excluded[]`, `auto_copy`, `staged` |
+| `/api/backup?include=a,b&redact=1&encrypt=1` | GET | the file, chunked, `Content-Disposition` `wican-<id>-<date>[-encrypted].json`; `include` defaults to the five file parts (`certs` refused: it never leaves the device); `redact=1` blanks the secret keys (`"redacted":true`); `encrypt=1` = AES-256-GCM with the device key, 409 `download the key first` until the key file was downloaded once |
+| `/api/backup/key` | GET | the key file (`text/plain`, 64 hex, attachment); marks the key downloaded |
+| `/api/backup/copies/refresh` | POST | refresh both copies now: `{"written":["internal","sd"]}` |
+| `/api/backup/copies/<internal\|sd>` | GET | stage that copy for a restore: the manifest (facts, `warnings`, per-part counts, `errors`, `locked` for another device's copy until its key is given) |
+| `/api/backup/inspect?name=` | POST | the uploaded file as the raw body (2 MB, PSRAM, never on flash): unsealed when the key is known, every part dry-run; the manifest |
+| `/api/backup/unlock` | POST | `{"key":"<the key file's text>"}` for another device's staged backup, held in RAM for that restore |
+| `/api/backup/restore` | POST | `{"include":[...],"keep_identity":true,"keep_vpn_keys":false}`: applies the ticked parts, each as a whole, then restarts (`{"restored":[...],"reboot":true}`); 409 locked / refused / nothing staged |
+| `/api/backup/staged` | DELETE | drop the staged backup |
+
+Config = `/api/settings/config_backup` (`auto_copy` default true, `cli`). Today's `GET /api/settings/backup` (section 2) stays and its document (`wican_backup: 1`) restores through `inspect` as the settings part. The file browser (section 6) refuses `/data/certs`, `/data/backups` and `/sd/backups` since the same day.
+
 ## 7. WiFi: `wifi_manager` registers its own routes
 
 | Route | Method | Behavior |
@@ -699,4 +724,5 @@ Config strictly via `/api/settings/wifi_manager`: no bespoke config routes.
 | `/api/autopid/dbc*` | `autopid` (feature layer, §6e4c) | http_server_manager (private) |
 | `/api/destinations`, `/api/destinations/test` | `data_destinations` (feature layer, §6e14): MQTT / HTTP(S) / ABRP cyclic pushes of the autopid snapshot; the table is the `data_destinations` settings component | http_server_manager (private) |
 | `/api/webhook` | `ha_webhooks` (feature layer): HA integration discovery push (GET/POST/DELETE); outbound telemetry `{status,autopid_data,config,gps}` poster (`gps` = the contract §5.4 block for HA's Location tracker, 2026-09-09). See `ha_webhooks/HTTP_API.md` | http_server_manager (private) |
+| `/api/backup*` | `config_backup` (service layer, §6e16): the backup that carries everything, the copies on the device, the sealed restore. See `config_backup/HTTP_API.md` | settings_manager, filesystem, dev_status_manager, http_server_manager (private) |
 | future: `/api/can/*`, `/api/obd/*`, … | their feature components | http_server_manager (private) |

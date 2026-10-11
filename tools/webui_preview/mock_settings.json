@@ -410,6 +410,22 @@
    }
   }
  },
+ "config_backup": {
+  "values": {
+   "auto_copy": true,
+   "cli": true
+  },
+  "schema": {
+   "properties": {
+    "auto_copy": {
+     "type": "boolean"
+    },
+    "cli": {
+     "type": "boolean"
+    }
+   }
+  }
+ },
  "data_destinations": {
   "values": {
    "enabled": true,

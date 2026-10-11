@@ -16,7 +16,7 @@ idf_component_register(
              can_manager j1939 can_isotp_esp ext_manager uds_manager script_engine
              usb_acm_cli espnetlink_link j2534_server
              data_logger event_manager
-             cert_manager cmdline_manager dev_status_manager
+             cert_manager cmdline_manager config_backup dev_status_manager
              external_storage filesystem http_client_manager
              http_server_manager i2c_bus
              imu_manager interface_manager iperf_manager led_manager

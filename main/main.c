@@ -45,6 +45,7 @@
 #include "bridge_manager.h"
 #include "can_manager.h"
 #include "cmdline_manager.h"
+#include "config_backup.h"
 #include "ext_manager.h"
 #include "can_isotp_esp.h"
 #include "uds_manager.h"
@@ -246,6 +247,9 @@ void app_main(void)
     main_boot_init("data_destinations_init", data_destinations_init); /* MQTT /
         HTTP(S) / ABRP cyclic pushes of the autopid snapshot */
     main_boot_init("data_logger_init", data_logger_init);
+    /* the backup that carries everything: its settings descriptor here, the
+       key and the copies worker at start (issue #979) */
+    main_boot_init("config_backup_init", config_backup_init);
     main_boot_init("ota_manager_init", ota_manager_init); /* before api_http */
     main_boot_init("api_http_init", api_http_init);
     /* network-trust lockdown: untrusted STA networks get 403 on every
@@ -281,6 +285,7 @@ void app_main(void)
     main_boot_init("j1939_register_http", j1939_register_http);
     main_boot_init("uds_manager_register_http", uds_manager_register_http);
     main_boot_init("script_engine_register_http", script_engine_register_http);
+    main_boot_init("config_backup_register_http", config_backup_register_http);
     /* CLI commands: each component registers its own INSIDE its settings
        apply, gated by its `cli` setting (meatpi 2026-07-05, ownership
        lives in the component, not here); main_cli adds only the
@@ -362,6 +367,10 @@ void app_main(void)
     main_boot_start("data_logger", data_logger_start);
     /* glue: autopid samples -> the logger's params stream */
     main_glue_wire_autopid_logger();
+    /* the backup key (NVS) and the copies worker; AFTER the filesystem, the
+       card and every component whose files it mirrors (its first sweep
+       runs 20 s later) */
+    main_boot_start("config_backup", config_backup_start);
     /* the wired uplink; network-gated consumers pick it up via the
        ETH_CONNECTED bit exactly like the STA */
     main_boot_start("usb_host_manager", usb_host_manager_start);

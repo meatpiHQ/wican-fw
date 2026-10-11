@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'backup', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [string]$Port = 'COM10',  # UART0 external USB-serial = console/flash
@@ -845,6 +845,7 @@ function Show-Inventory {
     Write-Host '  autobaud   - CAN listen-before-talk, auto bit rate and the autopid bus guard: PCAN keeps the bus alive and counts error frames (~9 min)'
     Write-Host '  vpnpause   - the VPN pauses on networks marked Pause VPN (issue #976): the bench AP marked / unmarked, away on the dongle AP, home again; wg-bench on the Pi, the console for the away leg (~12 min)'
     Write-Host '  vpnroutes  - the split tunnel (issue #975): a request to a routed network leaves through wg-bench on the Pi, one to any other address through the station, judged at the receiver by the source address (~6 min)'
+    Write-Host '  backup     - the configuration backup that carries everything (issue #979): the file plain / redacted / encrypted after the key, the fs deny list, the round trips from a file and from the copy on the flash, the refusals, the sweep (8 planned restarts, ~7 min)'
     Write-Host '  wwh        - OBD over UDS (ISO 27145 / SAE J1979-2): a PCAN vehicle is detected, polled, its codes read and cleared; the car switch both ways (~10 min)'
     Write-Host '  crashnote  - the crash note, the stored crash report and the crash-loop brake, two stages: (1) the DUT is crashed on purpose over its console (abort, an invalid store twice, the interrupt watchdog); the next boot must say where: its note against the console panic text, the decoded function names, one small NVS write for a crash that is news and none for the same crash again, the report word for word after a PSU power cycle (CRASH NOTE PASS); (2) three quick crashes in a row park the device: console line, HTTP silent, supply current against sleep mode, the timed exit, the next crash parks at once, a power cycle is a fresh start (CRASH PARK PASS)'
     Write-Host '  eutruck    - end to end on an EU truck: the PCAN adapter plays WWH-OBD ECUs and a J1939 network at once; from an OBD-II car through the wizard path to the truck, the car made current on the truck bus, and back; then the tables own protocol commands on the truck bus (~6 min)'
@@ -1087,6 +1088,27 @@ try {
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                     Stop-ConsoleTail $con
+                }
+            }
+        }
+        'backup' {
+            # The configuration backup that carries everything (issue #979,
+            # 2026-10-11): the file (plain, redacted, encrypted once the key
+            # file was downloaded), the fs deny list, the round trips from a
+            # file and from the copy on the flash (and the card when one is
+            # in), the refusals, the sweep's refresh after an upload and its
+            # idle quiet. Eight planned restarts; no console, no PCAN.
+            Invoke-Stage 'Configuration backup' {
+                $py = 'C:\Espressif	ools\python6.0.2env\Scripts\python.exe'
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $out = & $py -u "$repo	ools	estbench\system\config_backup_bench.py" --dut 'localhost:18081' --pi $BenchHost 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'config_backup' $out
+                    if (-not ($out | Select-String -Quiet 'CONFIG BACKUP PASS')) { throw 'no CONFIG BACKUP PASS (the DUT on the bench AP? a card in for the SD leg?)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                 }
             }
         }
