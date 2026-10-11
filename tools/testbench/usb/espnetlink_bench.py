@@ -10,7 +10,7 @@ both.
 Enable on the DUT first (reboot-to-apply):
   /api/settings/usb_host_manager  {enabled:true}   (+ prefer_usb_route to
                                                      use LTE as the uplink)
-  /api/settings/usb_acm_cli       {enabled:true}
+  /api/settings/usb_acm_cli       {console:true}   (v2 since 2026-10-11; `enabled` before)
 
 Flow: RNDIS enumerated + IP -> ACM console up -> `ver`/`lte -s`/`lte -i`
 show a provisioned+attached modem. Optional --prove-lte isolates the

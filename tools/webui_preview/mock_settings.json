@@ -1452,12 +1452,16 @@
  },
  "usb_acm_cli": {
   "values": {
-   "enabled": false,
+   "gps": true,
+   "console": false,
    "cli": true
   },
   "schema": {
    "properties": {
-    "enabled": {
+    "gps": {
+     "type": "boolean"
+    },
+    "console": {
      "type": "boolean"
     },
     "cli": {

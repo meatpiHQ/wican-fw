@@ -51,7 +51,7 @@ const check = (n, ok, extra) => { console.log((ok ? "PASS " : "FAIL ") + n + (ex
 
   // GPS panel rendered from /api/gps (firmware cache; also HA's autopid gps_*)
   check("GPS fix rendered", /Fix/.test(txt));
-  check("GPS location rendered", /-37\.905350/.test(txt));
+  check("GPS location rendered", /-25\.344400/.test(txt));
   check("GPS satellites rendered", /\b7\b/.test(txt));
   check("GPS heading rendered", /27[01]°/.test(txt));
 

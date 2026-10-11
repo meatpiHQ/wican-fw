@@ -19,7 +19,8 @@ Race levers (all remote, no unplugging):
   OUT URBs are in flight (the TS-teardown-window geometry).
 
 Physical setup: espnetlink dongle on the WiCAN USB connector (host
-role), `usb_host_manager` + `usb_acm_cli` enabled. The dongle's NCM
+role), `usb_host_manager` enabled + `usb_acm_cli.console` on (the ESPNetLink
+console switch; `enabled` before 2026-10-11). The dongle's NCM
 gateway answers on the point-to-point subnet (DUT side e.g.
 192.168.7.2 -> blast target .1).
 

@@ -1456,12 +1456,16 @@
  },
  "usb_acm_cli": {
   "values": {
-   "enabled": false,
+   "gps": true,
+   "console": false,
    "cli": true
   },
   "schema": {
    "properties": {
-    "enabled": {
+    "gps": {
+     "type": "boolean"
+    },
+    "console": {
      "type": "boolean"
     },
     "cli": {
@@ -2034,8 +2038,9 @@
   ov("data_logger", { enabled: false });
   ov("vpn_manager", { enabled: true, type: "wireguard", address: "10.66.0.2", routes: "10.66.0.0/24", endpoint: "vpn.example.com", port: 51820 });
   ov("usb_host_manager", { enabled: true, role: "host" });
-  /* the "gps" USB scene is a receiver already read by the console (usbScene below) */
-  if ((window.__mockPreset || {}).usb === "gps") ov("usb_acm_cli", { enabled: true });
+  /* the "gps_off" USB scene is a receiver ignored because the USB GPS receiver switch
+     is off (usb_acm_cli v2, issue #978: `gps` default true, `console` default false) */
+  if ((window.__mockPreset || {}).usb === "gps_off") ov("usb_acm_cli", { gps: false });
   /* the carrier settings the wizard relays to the dongle (Quick Setup's USB step) */
   ov("espnetlink", { apn: "", apn_user: "", apn_password: "" });
   ov("event_manager", {
@@ -2088,12 +2093,13 @@
        them before its restart) */
     const health = { valid: true, lte_connected: true, attached: true, rssi_dbm: -67, operator: "ALDI Mobile", network_type: "eMTC", ip: "10.86.12.44", sim: "ready", stage: "connected", gps_fix: false, usb_data: true, age_s: 2 };
     const paired = { ...nl0, ...fw, paired: true, ssid: "ESPNetLink_894A5D", usb: { attached: false, pair_state: "done", cuts: 1, vbus_cycles: 0, errors: 0 } };
-    const fix = { valid: true, latitude: -37.905350, longitude: 145.145047, accuracy: 4, altitude: 88.8, speed: 0.3, heading: 270.5, satellites: 9, age_ms: 800 };
+    const fix = { valid: true, latitude: -25.344400, longitude: 131.036900, accuracy: 4, altitude: 88.8, speed: 0.3, heading: 270.5, satellites: 9, age_ms: 800 };
     const nofix = { valid: false };
     const ublox = { vid: "1546", pid: "01a7", class: "cdc", product: "u-blox 7 - GPS/GNSS Receiver" };
     /* /api/usb/acm since 2026-10-07: `reading` (the console enabled and its RX task on the
        device) and `mode` ("nmea" once a receiver's sentences arrived, else "console") */
-    const off = { connected: false, reading: false, mode: "console", nmea_sentences: 0 };
+    /* `gps` and `console` since 2026-10-11 (usb_acm_cli v2): the two switches as applied */
+    const off = { connected: false, reading: false, mode: "console", nmea_sentences: 0, gps: true, console: false };
     switch (k) {
       case "none": return { usb: usb0, nl: nl0, acm: off, gps: nofix };
       case "espnetlink_fresh":
@@ -2114,9 +2120,11 @@
       case "eth": return { usb: { ...usb0, device_present: true, eth_connected: true, driver: "asix", ip: "10.42.2.37", attaches: 1, vid: "0b95", pid: "772b", device: { vid: "0b95", pid: "772b", class: "vendor", product: "AX88772B" } },
         nl: nl0, acm: off, gps: nofix };
       case "eth_nolink": return { usb: { ...usb0, device_present: true, driver: "asix", attaches: 1, device: { vid: "0b95", pid: "772b", class: "vendor", product: "AX88772B" } }, nl: nl0, acm: off, gps: nofix };
-      case "gps": return { usb: { ...usb0, device_present: true, attaches: 1, device: ublox }, nl: nl0, acm: { connected: true, reading: true, mode: "nmea", nmea_sentences: 412 }, gps: fix };
-      /* the receiver bound but nobody reads it: the console is off in settings */
-      case "gps_nofix": return { usb: { ...usb0, device_present: true, attaches: 1, device: ublox }, nl: nl0, acm: { connected: true, reading: false, mode: "console", nmea_sentences: 0 }, gps: nofix };
+      case "gps": return { usb: { ...usb0, device_present: true, attaches: 1, device: ublox }, nl: nl0, acm: { connected: true, reading: true, mode: "nmea", nmea_sentences: 412, gps: true, console: false }, gps: fix };
+      /* the receiver read by default (issue #978), no fix yet */
+      case "gps_nofix": return { usb: { ...usb0, device_present: true, attaches: 1, device: ublox }, nl: nl0, acm: { connected: true, reading: true, mode: "nmea", nmea_sentences: 23, gps: true, console: false }, gps: nofix };
+      /* the receiver bound but ignored: the USB GPS receiver switch is off */
+      case "gps_off": return { usb: { ...usb0, device_present: true, attaches: 1, device: ublox }, nl: nl0, acm: { connected: true, reading: false, mode: "console", nmea_sentences: 0, gps: false, console: false }, gps: nofix };
       case "unknown": return { usb: { ...usb0, device_present: true, attaches: 1, device: { vid: "0781", pid: "5581", class: "mass_storage", product: "SanDisk Ultra" } }, nl: nl0, acm: off, gps: nofix };
     }
     return null;
@@ -2432,8 +2440,8 @@
           dongle_fw: "v1.22-41-gf2f6aa2", dongle_api: 7, dongle_api_min: 7, health_unsupported: false,
           usb: { attached: false, pair_state: "idle", cuts: 0, vbus_cycles: 0, errors: 0 }, gps: { valid: true, age_ms: 1200, satellites: 7 },
           dongle: { valid: true, lte_connected: true, rssi_dbm: -59, operator: "ALDI Mobile", network_type: "eMTC", gps_fix: true, usb_data: false }, polls: 42, failures: 0, link_ups: 1 }),
-    "/api/usb/acm": () => J(usbScene() ? usbScene().acm : { connected: true }),
-    "/api/gps": () => J(usbScene() ? usbScene().gps : { valid: true, latitude: -37.905350, longitude: 145.145047, accuracy: 6, altitude: 88.8, speed: 1.0, heading: 270.5, satellites: 7, age_ms: 1200 }),
+    "/api/usb/acm": () => J(usbScene() ? usbScene().acm : { connected: true, reading: true, mode: "console", nmea_sentences: 0, gps: true, console: true }),
+    "/api/gps": () => J(usbScene() ? usbScene().gps : { valid: true, latitude: -25.344400, longitude: 131.036900, accuracy: 6, altitude: 88.8, speed: 1.0, heading: 270.5, satellites: 7, age_ms: 1200 }),
     "/api/battery": () => J({ voltage: state.batteryV }),
     /* the native CAN bus (state.canEnabled=false: a fresh device, bus off) */
     /* 2026-10-03: the node listens before it talks; state.canLink (a probe's
@@ -2837,11 +2845,11 @@
         cops: "+COPS: 0,0,ALDI Mobile,8", psm_enabled: false, edrx_cycle_s: null,
       }));
       if (cmd.startsWith("gps")) return wrap(JSON.stringify({
-        valid: true, lat: -37.905350, lon: 145.145047, satellites: 7, sats_in_view: 11,
+        valid: true, lat: -25.344400, lon: 131.036900, satellites: 7, sats_in_view: 11,
         fix_quality: 1, fix_type: 3, altitude_m: 88.8, hdop: 1.2, pdop: 1.9, vdop: 1.4,
         speed_knots: 0.02, speed_kmph: 0.04, course_deg: 0, age_ms: 480,
         agnss_enabled: true, time_injected: true, position_injected: true,
-        cached_lat: -37.905350, cached_lon: 145.145047, cached_alt: 88.8,
+        cached_lat: -25.344400, cached_lon: 131.036900, cached_alt: 88.8,
       }));
       if (cmd.startsWith("ver")) return wrap("ESPNetLink USB CLI (CDC-ACM)\r\nFW v1.22-31 (preview)\r\nESP-IDF v6.0.2\r\nOK");
       return wrap("OK");
@@ -4193,12 +4201,15 @@ const LABELS={
   idle_mode:"Idle LED",idle_r:"Idle red",idle_g:"Idle green",idle_b:"Idle blue",
   sntp:"Sync time from the internet (SNTP)",ntp_server:"NTP server",ntp_server2:"Backup NTP server",sync_interval_h:"Sync interval (h)",
   poll_s:"Poll interval (s)",hold_s:"Hold to reset (s)",auth_enabled:"Require a password",auth_password:"Web password",
-  uart:"UART console","usb_acm_cli.enabled":"Dongle console",
+  uart:"UART console","usb_acm_cli.gps":"USB GPS receiver","usb_acm_cli.console":"ESPNetLink console over USB",
   /* config_backup (issue #979, 2026-10-11) */
   "config_backup.auto_copy":"Keep the copies up to date",
 };
 const HELP={
   cli:"Register this component's commands on the serial console.",
+  /* usb_acm_cli v2 (issue #978, 2026-10-11): a receiver is read by default; the console switch is the dongle's */
+  "usb_acm_cli.gps":"Reads a GPS receiver plugged into the USB connector (NMEA, a u-blox for one): position, speed, heading and altitude join the vehicle data, Home Assistant and the dashboard. On by default: a receiver is read the moment it is plugged in. Off: a receiver on the connector is ignored.",
+  "usb_acm_cli.console":"Lets WiCAN talk to the dongle's own console over the cable: the Dongle console tab, the acm console command, the acm bridge endpoint and a GPS poll of the dongle every 5 s in USB Ethernet mode. A USB GPS receiver does not need this.",
   "config_backup.auto_copy":"After every change (a settings submit, a vehicle or parameter edit, a script, the dashboard, a certificate) the copies on the device are refreshed, part by part: a few seconds after a change the device sees, within two minutes otherwise. Nothing is written when nothing changed. Off: Refresh the copies now is the only way.",
   "script_engine.enabled":"Lets scripts run: from the Scripts page, from rules (script.run) and the console. Restart to apply.",
   "script_engine.max_runtime_ms":"A run is stopped when it takes longer than this. Sleeps count.",
@@ -4854,7 +4865,7 @@ PAGES.status=async(view)=>{
       :b.autopid_enabled?null:banner("info","sparkles",h("b",{},"Vehicle data is off. "),
       "Quick Setup walks you through WiFi, Home Assistant or MQTT, and your vehicle. ",h("a",{href:"#/setup"},"Open Quick Setup")));
     conn.vehicleName=curV?(curV.name||curV.vin||""):"";
-    const[w,batt,can,vpn,rtc,imu]=await Promise.all(["/api/wifi/status","/api/battery","/api/can","/api/vpn","/api/rtc","/api/imu"].map(tryGet));
+    const[w,batt,can,vpn,rtc,imu,gps,acm]=await Promise.all(["/api/wifi/status","/api/battery","/api/can","/api/vpn","/api/rtc","/api/imu","/api/gps","/api/usb/acm"].map(tryGet));
     const v=batt&&batt.voltage;
     const mode=b.sta_connected?(w&&w.ap_started?"AP+STA":"STA"):(w&&w.ap_started?"AP":"-");
     cardsEl.replaceChildren(
@@ -4889,6 +4900,7 @@ PAGES.status=async(view)=>{
           h("span",{},crashWords(hist.report.crash)+" · "+crashReportWhen(hist.report)+" ",reportLink())]:null,
         ["OBD chip",b.awake===false?"Asleep":"Ready"],
         ["Motion (IMU)",imu?(imu.activity+(imu.temp!=null?" · "+imu.temp+" °C":"")):"-"],
+        gpsRow(gps,acm),
         ["SD card",b.sdcard_mounted?"Mounted":"Not mounted"],
         ["Internal RAM free",st.memory?fmt.bytes(st.memory.internal.free):"-"],
         ["Die temperature",st.temp_c!=null?st.temp_c.toFixed(1)+" °C":"-"]])));
@@ -6835,6 +6847,14 @@ PAGES.advanced=async(view)=>{
   return null;
 };
 
+/* the Status page's GPS row (issue #978, 2026-10-11): only while a fix exists or a USB
+   receiver is being read; null = no row (kv() drops it). The source is named. */
+function gpsRow(g,acm){
+  if(g&&g.valid)return ["GPS",g.satellites+" satellites · ±"+(g.accuracy||0)+" m · "+(acm&&acm.mode==="nmea"?"USB receiver":"ESPNetLink")];
+  if(acm&&acm.mode==="nmea"&&acm.gps!==false)return ["GPS","Receiver found, no fix yet"];
+  return null;
+}
+
 /* ---- VPN ---- */
 /* the VPN state as words (the Status page's row, the VPN page's badge);
    paused = the station is on a network marked Pause VPN (issue #976) */
@@ -6927,7 +6947,7 @@ PAGES.usb=async(view,sub)=>{
   const wrap=h("div",{class:"pane"});p.append(wrap);
   const paneStatus=h("div",{class:"pane"}),paneSettings=h("div",{class:"pane"}),paneConsole=h("div",{class:"pane"});
   const stEl=h("div",{});
-  const consEl=h("div",{});const consOff=h("div",{class:"empty"},"No dongle console bound: the console needs USB data on (USB-Ethernet mode, or before the cut) and the console enabled below.");
+  const consEl=h("div",{});const consOff=h("div",{class:"empty"},"No ESPNetLink console: the dongle's console needs USB data on (USB Ethernet mode, or before the cut) and the switch below. A USB GPS receiver does not use this tab: its card is on the Status tab, its switch under Settings.");
   const nlEl=h("div",{});const nlOff=h("div",{class:"empty"},"Live LTE / GPS status appears once the dongle is reachable (over its WiFi AP or the USB link).");
   const DRV={asix:"ASIX",rtl8152:"RTL8152",cdc_ecm:"CDC-ECM",cdc_ncm:"CDC-NCM",rndis:"RNDIS","ncm-dev":"CDC-NCM (device)"};
   const UPL={none:["No uplink",""],wifi:["Wi-Fi (other network)","ok"],espnetlink:["ESPNetLink (WiFi modem)","ok"],espnetlink_usb:["ESPNetLink (USB Ethernet)","ok"]};
@@ -6936,10 +6956,17 @@ PAGES.usb=async(view,sub)=>{
     hold:["Pairing on hold (see the note below)","warn"],unsupported:["Dongle firmware unsupported: update the dongle","warn"]};
   let acmOn=false,nl=null,haveNl=false,lastUsb=null;
   async function status(){
-    const[u,acm,e]=await Promise.all([tryGet("/api/usb"),tryGet("/api/usb/acm"),tryGet("/api/espnetlink")]);
+    const[u,acm,e,g]=await Promise.all([tryGet("/api/usb"),tryGet("/api/usb/acm"),tryGet("/api/espnetlink"),tryGet("/api/gps")]);
     if(!u)return;
     nl=e;haveNl=!!e;lastUsb=u;
     const onNl=!!(e&&e.on_link);
+    /* a plain GPS receiver on the connector (issue #978, 2026-10-11): known by its ids
+       or by what it says; it has a card of its own, the LTE & GPS card is the dongle's */
+    const dev=u.device||{};
+    const isRx=!!(u.device&&(String(dev.vid||"").toLowerCase()==="1546"||/gnss|gps/i.test(dev.product||"")))||!!(acm&&acm.mode==="nmea");
+    const serial=!acm?"-":!acm.connected?"not bound":(isRx&&acm.gps===false)?"GNSS receiver, ignored (USB GPS receiver is off)"
+      :acm.mode==="nmea"?"GNSS receiver, NMEA ("+(acm.nmea_sentences||0)+" sentences)":acm.reading===false?"bound, not read (both switches off)"
+      :"ESPNetLink console"+(acm.console===false?" (off: see the Dongle console tab)":"");
     badge.className="chip "+(onNl||u.eth_connected?"ok":u.device_present?"warn":"");
     badge.replaceChildren(h("span",{class:"d"}),
       onNl?(e.uplink==="espnetlink"?"Dongle via WiFi":"Dongle via USB"):u.eth_connected?"Uplink up":u.host_active?(u.device_present?"Device attached":"Host idle"):"Device mode");
@@ -6954,12 +6981,17 @@ PAGES.usb=async(view,sub)=>{
       ["Enumerations",u.attaches],
       /* 2026-10-07: what the enumerated device is, and what the console turned out to be */
       ...(u.device?[["Attached device",(u.device.product||"")+" ("+u.device.vid+":"+u.device.pid+", "+u.device.class+")"]]:[]),
-      ["Dongle console",acm?(acm.mode==="nmea"?"GNSS receiver, NMEA ("+(acm.nmea_sentences||0)+" sentences)":acm.connected?(acm.reading===false?"bound, not read (console disabled)":"connected"):"not bound"):"-"]]));
-    const on=!!(acm&&acm.connected);
-    acmOn=on;
+      ["USB serial",serial]]));
+    const on=!!(acm&&acm.connected&&!isRx);
+    acmOn=on&&!(acm&&acm.console===false);
     consEl.style.display=on?"":"none";consOff.style.display=on?"none":"";
     const showNl=onNl||on;
     nlEl.style.display=showNl?"":"none";nlOff.style.display=showNl?"none":"";
+    /* the LTE & GPS card is the dongle's: with a plain receiver on the connector and
+       the dongle out of reach the whole card goes, the receiver's card takes its place */
+    nlStatusCard.style.display=(isRx&&!onNl)?"none":"";
+    gpsCard.style.display=isRx?"":"none";
+    if(isRx)renderRx(u,acm||{},g);
     renderNl();
   }
 
@@ -7113,6 +7145,26 @@ PAGES.usb=async(view,sub)=>{
   paneStatus.append(cardTools("USB Connector","route",
     [h("button",{class:"btn sm gh",title:"Refresh",onclick:()=>status()},ic("refresh"))],stEl,
     note("","The USB connector is shared: external serial console, OR ESP host mode (ESPNetLink dongle / USB-Ethernet adapter), OR device mode (network over the cable to a PC). Role changes apply after Submit + restart.")));
+  /* the GPS receiver card (issue #978): the device, what is read, the fix, where it goes;
+     shown while a receiver is on the connector, whatever the switch says */
+  const gpsKvRx=h("div",{}),gpsNoteRx=h("div",{});
+  const gpsCard=cardTools("GPS receiver","navigation",[h("button",{class:"btn sm gh",title:"Refresh",onclick:()=>status()},ic("refresh"))],gpsKvRx,gpsNoteRx);
+  gpsCard.id="usb-gps-card";gpsCard.style.display="none";
+  function renderRx(u,acm,g){
+    const dev=u.device||{};const name=(dev.product||"USB serial device")+(dev.vid?" ("+dev.vid+":"+dev.pid+")":"");
+    const on=acm.gps!==false;
+    const rows=[["Receiver",name]];
+    if(!on)rows.push(["Reading",chip("Off","")]);
+    else{rows.push(["Reading",acm.mode==="nmea"?"NMEA, "+(acm.nmea_sentences||0)+" sentences since it was plugged in":"waiting for the first sentence"]);
+      rows.push(["Fix",g&&g.valid?chip("Fix","ok"):chip("No fix yet","warn")]);}
+    if(g&&g.valid)rows.push(["Satellites",String(g.satellites??"-")],["Location",g.latitude.toFixed(6)+", "+g.longitude.toFixed(6)],["Speed",(g.speed*3.6).toFixed(1)+" km/h"],
+      ["Heading",(g.heading??0).toFixed(0)+"°"],["Altitude",(g.altitude??0).toFixed(0)+" m"],["Accuracy",g.accuracy?"±"+g.accuracy+" m":"-"],["Age",(g.age_ms/1000).toFixed(1)+" s"]);
+    gpsKvRx.replaceChildren(kv(rows));
+    gpsNoteRx.replaceChildren(!on?note("",["The receiver is ignored: USB GPS receiver is switched off under ",h("a",{href:"#/usb/settings"},"USB > Settings"),". Turn it on there; it applies with Submit Changes and a restart."])
+      :!(g&&g.valid)?note("","Waiting for a fix. The receiver needs a view of the sky: a cold start takes up to a minute outdoors, longer behind glass. The position, speed, heading and altitude join the vehicle data the moment it has one.")
+      :note("",["Published with the vehicle data as ",h("code",{},"gps_latitude"),", ",h("code",{},"gps_longitude"),", ",h("code",{},"gps_altitude"),", ",h("code",{},"gps_speed"),", ",h("code",{},"gps_heading")," and ",h("code",{},"gps_satellites"),": Home Assistant (its device tracker too), the MQTT and HTTP destinations, the dashboard and the logger get it with nothing to set up."]));
+  }
+  paneStatus.append(gpsCard);
   paneStatus.append(cardTools("ESPNetLink","signal",
     [h("button",{class:"btn sm",onclick:repair,title:"VBUS cycle: the dongle re-enumerates and its AP key is read again"},ic("refresh"),"Re-pair")],
     nlKv,
@@ -7137,9 +7189,21 @@ PAGES.usb=async(view,sub)=>{
     }});
     paneSettings.append(card("USB Settings","settings",...rows));
   }catch(e){paneSettings.append(banner("crit","alert",e.message));}
+  /* usb_acm_cli's two switches on two tabs, ONE shared values object so one Submit
+     carries both (issue #978, 2026-10-11): the GPS receiver switch (on by default)
+     with the other USB settings, the dongle's console switch on its own tab */
+  let acmVals=null,acmSchema=null;
+  try{
+    acmVals=await api("/api/settings/usb_acm_cli");acmSchema=await api("/api/settings/usb_acm_cli/schema");
+    delete acmVals.degraded;delete acmVals.pending_reboot;
+    if(acmSchema&&acmSchema.properties&&acmSchema.properties.gps){
+      const gpsRows=await settingsForm("usb_acm_cli",["gps"],{values:acmVals,schema:acmSchema,visible:false});
+      const c=card("USB GPS receiver","navigation",...gpsRows);c.id="usb-gps-settings-card";
+      paneSettings.append(c);}
+  }catch{/* usb_acm_cli absent in this build */}
   let nlTimer=null;
   try{
-    const acmRows=await settingsForm("usb_acm_cli");
+    const acmRows=acmVals?await settingsForm("usb_acm_cli",acmSchema&&acmSchema.properties&&acmSchema.properties.console?["console","cli"]:null,{values:acmVals,schema:acmSchema,visible:false}):await settingsForm("usb_acm_cli");
     const out=h("div",{class:"console",style:"height:170px"});
     const inp=h("input",{class:"mono",placeholder:"console command, e.g. lte -s",
       onkeydown:e=>{if(e.key==="Enter")send(inp.value);}});
@@ -8171,7 +8235,7 @@ PAGES.allsettings=async(view)=>{
   return null;
 };
 /* ============================================================ BOOT */
-const NICE={wifi_manager:"Wi-Fi",ble_manager:"Bluetooth",mqtt_manager:"MQTT",autopid:"AutoPID",vpn_manager:"VPN",data_logger:"Logger",sleep_manager:"Power saving",event_manager:"Automation rules",can_manager:"CAN bus",j2534_server:"J2534",usb_host_manager:"USB",led_manager:"LED",socket_manager:"Socket servers",bridge_manager:"Bridges",websocket_manager:"WebSocket channels",script_engine:"Scripts",obd_chip:"OBD chip",battery_monitor:"Battery",imu_manager:"Motion (IMU)",rtc_manager:"Clock",mdns_manager:"mDNS",cert_manager:"Certificates",usb_acm_cli:"Dongle console (USB serial)",espnetlink:"ESPNetLink",uds_manager:"UDS",interface_manager:"Radio arbitration",dev_status_manager:"Status flags",external_storage:"SD card",filesystem:"Filesystem",restart_tracker:"Restart tracking",log_manager:"Logging",cmdline_manager:"Console",ha_webhooks:"Home Assistant",data_destinations:"Data destinations",mqtt_can:"CAN over MQTT",http_server_manager:"Web server",obd_gate:"OBD gate",iperf_manager:"iPerf (throughput test)",log_sinks:"Log sinks",button_manager:"Button"};
+const NICE={wifi_manager:"Wi-Fi",ble_manager:"Bluetooth",mqtt_manager:"MQTT",autopid:"AutoPID",vpn_manager:"VPN",data_logger:"Logger",sleep_manager:"Power saving",event_manager:"Automation rules",can_manager:"CAN bus",j2534_server:"J2534",usb_host_manager:"USB",led_manager:"LED",socket_manager:"Socket servers",bridge_manager:"Bridges",websocket_manager:"WebSocket channels",script_engine:"Scripts",obd_chip:"OBD chip",battery_monitor:"Battery",imu_manager:"Motion (IMU)",rtc_manager:"Clock",mdns_manager:"mDNS",cert_manager:"Certificates",usb_acm_cli:"USB serial (GPS receiver, ESPNetLink console)",espnetlink:"ESPNetLink",uds_manager:"UDS",interface_manager:"Radio arbitration",dev_status_manager:"Status flags",external_storage:"SD card",filesystem:"Filesystem",restart_tracker:"Restart tracking",log_manager:"Logging",cmdline_manager:"Console",ha_webhooks:"Home Assistant",data_destinations:"Data destinations",mqtt_can:"CAN over MQTT",http_server_manager:"Web server",obd_gate:"OBD gate",iperf_manager:"iPerf (throughput test)",log_sinks:"Log sinks",button_manager:"Button"};
 const HIDE=new Set(["main_bench"]);
 function niceName(n){return NICE[n]||n.replace(/_manager$/,"").replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase());}
 async function boot(){
@@ -10192,11 +10256,10 @@ function usbSummary(L){
   if(kind==="gps"){
     const name=((u.device||{}).product)||"The receiver";
     if(g&&g.valid)return {state:"ok",icon:"navigation",title:"GPS fix",text:[name+": "+g.satellites+" satellites"+(g.accuracy?", about "+g.accuracy+" m":"")+". Position, speed, heading and altitude ride along with the vehicle data as ",h("code",{},"gps_latitude"),", ",h("code",{},"gps_longitude"),", ",h("code",{},"gps_speed")," and friends."],chip:["Fix","ok"]};
-    /* `reading` (2026-10-07): a bound receiver nobody reads (the console
-       off in settings) is read after the restart; older firmware has only
-       `connected` */
-    if(acm&&(acm.reading||(acm.reading===undefined&&acm.connected)))return {state:"run",icon:"navigation",title:"GPS receiver found, waiting for a fix",text:[name+" is being read"+(acm.nmea_sentences?" ("+acm.nmea_sentences+" sentences so far)":"")+". It needs a view of the sky; a cold start takes up to a minute."],chip:["No fix yet","warn"]};
-    return {state:"pend",icon:"navigation",title:"USB GPS receiver found",text:[name+" is on the connector. WiCAN reads it after the restart; position, speed, heading and altitude then ride along with the vehicle data."],chip:["Read after the restart",""]};
+    /* a receiver is read by default (issue #978, 2026-10-11); the one way it is not is
+       the USB GPS receiver switch under USB > Settings, which the wizard does not offer */
+    if(acm&&acm.gps===false)return {state:"warn",icon:"navigation",title:"USB GPS receiver found, switched off",text:[name+" is on the connector, but USB GPS receiver is off under USB > Settings, so WiCAN ignores it. Turn it on there after setup if you want its position."],chip:["Switched off","warn"]};
+    return {state:"run",icon:"navigation",title:"GPS receiver found, waiting for a fix",text:[name+" is being read"+(acm&&acm.nmea_sentences?" ("+acm.nmea_sentences+" sentences so far)":"")+". It needs a view of the sky; a cold start takes up to a minute."],chip:["No fix yet","warn"]};
   }
   if(kind==="unknown"){const dev=u.device||{};
     return {state:"warn",icon:"plug",title:"A USB device WiCAN does not support",text:["Something is on the connector"+(dev.product?": "+dev.product:dev.vid?" ("+dev.vid+":"+dev.pid+")":"")+". WiCAN works with the ESPNetLink, USB Ethernet adapters (ASIX, Realtek RTL8152, CDC) and NMEA GPS receivers."],chip:["Not supported","warn"]};}
@@ -10223,14 +10286,14 @@ function usbReview(item,line){
   if(k==="eth"){const u=L.u||{};
     return [item(u.eth_connected?"ok":"pend","USB connector","USB Ethernet adapter",line(USB_DRV[u.driver]||u.driver||"",W.usb.ethFirst?"cable first":"WiFi first"),u.ip?line("Address "+u.ip):line("No link yet","plug the network cable in"))];}
   if(k==="gps"){const g=L.g,dev=(L.u&&L.u.device)||{};
-    return [item(g&&g.valid?"ok":"pend","USB connector","USB GPS receiver",dev.product?line(dev.product):null,g&&g.valid?line(g.satellites+" satellites","published with the vehicle data"):line("Read after the restart","needs a view of the sky"))];}
+    const off=!!(L.acm&&L.acm.gps===false);
+    return [item(g&&g.valid?"ok":off?"warn":"pend","USB connector","USB GPS receiver",dev.product?line(dev.product):null,g&&g.valid?line(g.satellites+" satellites","published with the vehicle data"):off?line("Switched off","USB > Settings"):line("Waiting for a fix","needs a view of the sky"))];}
   return [];
 }
 
 SCREENS.usb=async()=>{
   if(D.usbhost===undefined){const s=await tryGet("/api/settings/usb_host_manager");D.usbhost=s?strip(s):null;}
   if(D.espnl===undefined){const s=await tryGet("/api/settings/espnetlink");D.espnl=s?strip(s):null;}   /* null: not in this build */
-  if(D.acm===undefined){const s=await tryGet("/api/settings/usb_acm_cli");D.acm=s?strip(s):null;}
   /* USB Ethernet is the recommendation (Ali, 2026-10-07); a dongle already
      paired keeps the mode it was paired with (the status says paired and the
      mode the device runs; seeded at the first reading, in refresh) */
@@ -10367,7 +10430,7 @@ async function applyAll(saveBtn,errEl){
         store.stage("espnetlink",nv);staged.push("espnetlink");D.espnl=nv;}}
     if(uk==="eth"&&D.usbhost&&!W.usb.hostFix){const uv=strip(D.usbhost);
       if(!!uv.prefer_usb_route!==!!W.usb.ethFirst){uv.prefer_usb_route=!!W.usb.ethFirst;store.stage("usb_host_manager",uv);staged.push("usb_host_manager");D.usbhost=uv;}}
-    if(uk==="gps"&&D.acm&&!D.acm.enabled){const av=strip(D.acm);av.enabled=true;store.stage("usb_acm_cli",av);staged.push("usb_acm_cli");D.acm=av;}
+    /* a GPS receiver needs nothing staged: it is read by default (issue #978) */
     W.applied=true;W.cur="reconnect";
     try{history.replaceState(null,"","#/setup/reconnect");}catch(_){}
     paint();

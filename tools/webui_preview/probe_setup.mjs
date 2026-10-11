@@ -363,7 +363,13 @@ function boot(url, preset) {
   }
   {
     const p = await usbScene("gps_nofix", "#/setup/usb", { apDefaultPassword: true });
-    check("a GPS receiver on a fresh device: identified, read after the restart, no question", p.$('.qs-tile[data-usb="gps"]').classList.contains("sel") && /USB GPS receiver found/.test(p.text()) && /u-blox 7/.test(p.text()) && /reads it after the restart/.test(p.text()) && /Read after the restart/.test(p.text()) && !p.$("#qs-nl-usb") && !p.$("#qs-eth-wifi"));
+    check("a GPS receiver on a fresh device: identified and read at once, waiting for a fix, no question (issue #978)", p.$('.qs-tile[data-usb="gps"]').classList.contains("sel") && /GPS receiver found, waiting for a fix/.test(p.text()) && /u-blox 7/.test(p.text()) && /23 sentences so far/.test(p.text()) && /No fix yet/.test(p.text()) && !/after the restart/.test(p.text()) && !p.$("#qs-nl-usb") && !p.$("#qs-eth-wifi"));
+    p.btn(/^Continue$/).click(); await sleep(400);
+    check("Review: the receiver row says waiting for a fix, nothing to apply", /USB GPS receiver/.test(p.text()) && /Waiting for a fix/.test(p.text()) && !/Read after the restart/.test(p.text()), (p.text().match(/USB connector[\s\S]{0,120}/) || [])[0]);
+  }
+  {
+    const p = await usbScene("gps_off");
+    check("the receiver with the USB GPS receiver switch off: ignored, the place of the switch named", /USB GPS receiver found, switched off/.test(p.text()) && /USB > Settings/.test(p.text()) && /Switched off/.test(p.text()));
   }
   {
     const p = await usbScene("gps");

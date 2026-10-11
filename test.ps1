@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'backup', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'usbgps', 'backup', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [string]$Port = 'COM10',  # UART0 external USB-serial = console/flash
@@ -845,6 +845,7 @@ function Show-Inventory {
     Write-Host '  autobaud   - CAN listen-before-talk, auto bit rate and the autopid bus guard: PCAN keeps the bus alive and counts error frames (~9 min)'
     Write-Host '  vpnpause   - the VPN pauses on networks marked Pause VPN (issue #976): the bench AP marked / unmarked, away on the dongle AP, home again; wg-bench on the Pi, the console for the away leg (~12 min)'
     Write-Host '  vpnroutes  - the split tunnel (issue #975): a request to a routed network leaves through wg-bench on the Pi, one to any other address through the station, judged at the receiver by the source address (~6 min)'
+    Write-Host '  usbgps     - a USB GPS receiver is read by default (issue #978): the console switch off, the receiver read as NMEA from boot, the fix when the sky allows, gps_ in autopid and the HA push, the USB GPS receiver switch off = ignored, back on; then the USB page card, the switches and the Status row in Chrome (3 to 4 planned restarts, ~6 min)'
     Write-Host '  backup     - the configuration backup that carries everything (issue #979): the file plain / redacted / encrypted after the key, the fs deny list, the round trips from a file and from the copy on the flash, the refusals, the sweep (8 planned restarts, ~7 min)'
     Write-Host '  wwh        - OBD over UDS (ISO 27145 / SAE J1979-2): a PCAN vehicle is detected, polled, its codes read and cleared; the car switch both ways (~10 min)'
     Write-Host '  crashnote  - the crash note, the stored crash report and the crash-loop brake, two stages: (1) the DUT is crashed on purpose over its console (abort, an invalid store twice, the interrupt watchdog); the next boot must say where: its note against the console panic text, the decoded function names, one small NVS write for a crash that is news and none for the same crash again, the report word for word after a PSU power cycle (CRASH NOTE PASS); (2) three quick crashes in a row park the device: console line, HTTP silent, supply current against sleep mode, the timed exit, the next crash parks at once, a power cycle is a fresh start (CRASH PARK PASS)'
@@ -1154,6 +1155,31 @@ try {
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                     Stop-ConsoleTail $con
+                }
+            }
+        }
+        'usbgps' {
+            # A USB GPS receiver is read by default (issue #978, 2026-10-11):
+            # the console switch off (a fresh install), the receiver on the
+            # connector read as NMEA from boot, the fix when the sky allows,
+            # the gps_ parameters and the HA push's gps block, the USB GPS
+            # receiver switch off = ignored, back on; then the USB page's
+            # card, the two switches and the Status row in Chrome through
+            # the same tunnel.
+            Invoke-Stage 'USB GPS receiver' {
+                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\usb\usb_gps_bench.py" '--dut' 'localhost:18081' '--pi' $BenchHost 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'usb_gps' $out
+                    if (-not ($out | Select-String -Quiet 'USB GPS PASS')) { throw 'no USB GPS PASS (the u-blox on the connector? the DUT on the bench AP?)' }
+                    $ui = & node "$repo\tools\testbench\usb\usb_gps_ui_check.mjs" 'http://127.0.0.1:18081' 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'usb_gps_ui' $ui
+                    if (-not ($ui | Select-String -Quiet 'USB GPS UI PASS')) { throw 'no USB GPS UI PASS' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                 }
             }
         }

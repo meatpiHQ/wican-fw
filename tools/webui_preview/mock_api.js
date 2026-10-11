@@ -26,8 +26,9 @@
   ov("data_logger", { enabled: false });
   ov("vpn_manager", { enabled: true, type: "wireguard", address: "10.66.0.2", routes: "10.66.0.0/24", endpoint: "vpn.example.com", port: 51820 });
   ov("usb_host_manager", { enabled: true, role: "host" });
-  /* the "gps" USB scene is a receiver already read by the console (usbScene below) */
-  if ((window.__mockPreset || {}).usb === "gps") ov("usb_acm_cli", { enabled: true });
+  /* the "gps_off" USB scene is a receiver ignored because the USB GPS receiver switch
+     is off (usb_acm_cli v2, issue #978: `gps` default true, `console` default false) */
+  if ((window.__mockPreset || {}).usb === "gps_off") ov("usb_acm_cli", { gps: false });
   /* the carrier settings the wizard relays to the dongle (Quick Setup's USB step) */
   ov("espnetlink", { apn: "", apn_user: "", apn_password: "" });
   ov("event_manager", {
@@ -80,12 +81,13 @@
        them before its restart) */
     const health = { valid: true, lte_connected: true, attached: true, rssi_dbm: -67, operator: "ALDI Mobile", network_type: "eMTC", ip: "10.86.12.44", sim: "ready", stage: "connected", gps_fix: false, usb_data: true, age_s: 2 };
     const paired = { ...nl0, ...fw, paired: true, ssid: "ESPNetLink_894A5D", usb: { attached: false, pair_state: "done", cuts: 1, vbus_cycles: 0, errors: 0 } };
-    const fix = { valid: true, latitude: -37.905350, longitude: 145.145047, accuracy: 4, altitude: 88.8, speed: 0.3, heading: 270.5, satellites: 9, age_ms: 800 };
+    const fix = { valid: true, latitude: -25.344400, longitude: 131.036900, accuracy: 4, altitude: 88.8, speed: 0.3, heading: 270.5, satellites: 9, age_ms: 800 };
     const nofix = { valid: false };
     const ublox = { vid: "1546", pid: "01a7", class: "cdc", product: "u-blox 7 - GPS/GNSS Receiver" };
     /* /api/usb/acm since 2026-10-07: `reading` (the console enabled and its RX task on the
        device) and `mode` ("nmea" once a receiver's sentences arrived, else "console") */
-    const off = { connected: false, reading: false, mode: "console", nmea_sentences: 0 };
+    /* `gps` and `console` since 2026-10-11 (usb_acm_cli v2): the two switches as applied */
+    const off = { connected: false, reading: false, mode: "console", nmea_sentences: 0, gps: true, console: false };
     switch (k) {
       case "none": return { usb: usb0, nl: nl0, acm: off, gps: nofix };
       case "espnetlink_fresh":
@@ -106,9 +108,11 @@
       case "eth": return { usb: { ...usb0, device_present: true, eth_connected: true, driver: "asix", ip: "10.42.2.37", attaches: 1, vid: "0b95", pid: "772b", device: { vid: "0b95", pid: "772b", class: "vendor", product: "AX88772B" } },
         nl: nl0, acm: off, gps: nofix };
       case "eth_nolink": return { usb: { ...usb0, device_present: true, driver: "asix", attaches: 1, device: { vid: "0b95", pid: "772b", class: "vendor", product: "AX88772B" } }, nl: nl0, acm: off, gps: nofix };
-      case "gps": return { usb: { ...usb0, device_present: true, attaches: 1, device: ublox }, nl: nl0, acm: { connected: true, reading: true, mode: "nmea", nmea_sentences: 412 }, gps: fix };
-      /* the receiver bound but nobody reads it: the console is off in settings */
-      case "gps_nofix": return { usb: { ...usb0, device_present: true, attaches: 1, device: ublox }, nl: nl0, acm: { connected: true, reading: false, mode: "console", nmea_sentences: 0 }, gps: nofix };
+      case "gps": return { usb: { ...usb0, device_present: true, attaches: 1, device: ublox }, nl: nl0, acm: { connected: true, reading: true, mode: "nmea", nmea_sentences: 412, gps: true, console: false }, gps: fix };
+      /* the receiver read by default (issue #978), no fix yet */
+      case "gps_nofix": return { usb: { ...usb0, device_present: true, attaches: 1, device: ublox }, nl: nl0, acm: { connected: true, reading: true, mode: "nmea", nmea_sentences: 23, gps: true, console: false }, gps: nofix };
+      /* the receiver bound but ignored: the USB GPS receiver switch is off */
+      case "gps_off": return { usb: { ...usb0, device_present: true, attaches: 1, device: ublox }, nl: nl0, acm: { connected: true, reading: false, mode: "console", nmea_sentences: 0, gps: false, console: false }, gps: nofix };
       case "unknown": return { usb: { ...usb0, device_present: true, attaches: 1, device: { vid: "0781", pid: "5581", class: "mass_storage", product: "SanDisk Ultra" } }, nl: nl0, acm: off, gps: nofix };
     }
     return null;
@@ -424,8 +428,8 @@
           dongle_fw: "v1.22-41-gf2f6aa2", dongle_api: 7, dongle_api_min: 7, health_unsupported: false,
           usb: { attached: false, pair_state: "idle", cuts: 0, vbus_cycles: 0, errors: 0 }, gps: { valid: true, age_ms: 1200, satellites: 7 },
           dongle: { valid: true, lte_connected: true, rssi_dbm: -59, operator: "ALDI Mobile", network_type: "eMTC", gps_fix: true, usb_data: false }, polls: 42, failures: 0, link_ups: 1 }),
-    "/api/usb/acm": () => J(usbScene() ? usbScene().acm : { connected: true }),
-    "/api/gps": () => J(usbScene() ? usbScene().gps : { valid: true, latitude: -37.905350, longitude: 145.145047, accuracy: 6, altitude: 88.8, speed: 1.0, heading: 270.5, satellites: 7, age_ms: 1200 }),
+    "/api/usb/acm": () => J(usbScene() ? usbScene().acm : { connected: true, reading: true, mode: "console", nmea_sentences: 0, gps: true, console: true }),
+    "/api/gps": () => J(usbScene() ? usbScene().gps : { valid: true, latitude: -25.344400, longitude: 131.036900, accuracy: 6, altitude: 88.8, speed: 1.0, heading: 270.5, satellites: 7, age_ms: 1200 }),
     "/api/battery": () => J({ voltage: state.batteryV }),
     /* the native CAN bus (state.canEnabled=false: a fresh device, bus off) */
     /* 2026-10-03: the node listens before it talks; state.canLink (a probe's
@@ -829,11 +833,11 @@
         cops: "+COPS: 0,0,ALDI Mobile,8", psm_enabled: false, edrx_cycle_s: null,
       }));
       if (cmd.startsWith("gps")) return wrap(JSON.stringify({
-        valid: true, lat: -37.905350, lon: 145.145047, satellites: 7, sats_in_view: 11,
+        valid: true, lat: -25.344400, lon: 131.036900, satellites: 7, sats_in_view: 11,
         fix_quality: 1, fix_type: 3, altitude_m: 88.8, hdop: 1.2, pdop: 1.9, vdop: 1.4,
         speed_knots: 0.02, speed_kmph: 0.04, course_deg: 0, age_ms: 480,
         agnss_enabled: true, time_injected: true, position_injected: true,
-        cached_lat: -37.905350, cached_lon: 145.145047, cached_alt: 88.8,
+        cached_lat: -25.344400, cached_lon: 131.036900, cached_alt: 88.8,
       }));
       if (cmd.startsWith("ver")) return wrap("ESPNetLink USB CLI (CDC-ACM)\r\nFW v1.22-31 (preview)\r\nESP-IDF v6.0.2\r\nOK");
       return wrap("OK");
