@@ -237,6 +237,9 @@ def main():
                   "status" in p and "config" in p, ",".join(p.keys()))
             dev = (p.get("status") or {}).get("device_id")
             check("status.device_id present (HA identity)", bool(dev), dev)
+            sta = (p.get("status") or {}).get("sta_ip")
+            check("status.sta_ip present (the station address, issue #977)",
+                  bool(sta), str(sta))
             check("config section non-empty",
                   len(p.get("config") or {}) > 0,
                   f"{len(p.get('config') or {})} keys")

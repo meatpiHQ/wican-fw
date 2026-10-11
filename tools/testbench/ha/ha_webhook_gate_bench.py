@@ -287,6 +287,8 @@ def main():
         check("status bit autopid_enabled clear", bits.get("autopid_enabled") is False,
               str(bits.get("autopid_enabled")))
         check("STA connected", bits.get("sta_connected") is True)
+        code, wifi = api("/api/wifi/status")
+        sta_ip = wifi.get("ip") if code == 200 and isinstance(wifi, dict) else None
 
         # 2) register
         n0 = len(received(dump))
@@ -314,6 +316,9 @@ def main():
                   st.get("device_id") == device_id, str(st.get("device_id")))
             check("first push carries fw_version + hw_version",
                   bool(st.get("fw_version")) and bool(st.get("hw_version")))
+            check("first push carries status.sta_ip == the station address (issue #977)",
+                  bool(sta_ip) and st.get("sta_ip") == sta_ip,
+                  f"{st.get('sta_ip')!r} vs {sta_ip!r}")
             check("no autopid_data while autopid is off",
                   not p.get("autopid_data"), ",".join(p.keys()))
             check("schema present", p.get("schema") == 1, str(p.get("schema")))
