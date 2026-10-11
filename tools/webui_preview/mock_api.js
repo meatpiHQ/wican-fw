@@ -496,7 +496,8 @@
       can: { enabled: false, file: "", file_rows: 0, files: 0, queued: 0, frames_written: 0, frames_dropped: 0, rotations: 0 },
       salvaged: state.loggerSalvaged || 0, corrupt: state.loggerCorrupt || 0, dir: "/sd/logs" }),
     "/api/fs/info": (full) => (/path=\/data/.test(full || "") ? J({ total: 6029312, used: 1060864 })
-      : !state.sdMounted ? J({ error: "invalid path" }, 400) : J({ total: 3038806016, used: 327680 })),
+      /* the bench's 16 GB card as the firmware reports it since 2026-10-11 (issue #982: 3038806016 before, the 32-bit wrap) */
+      : !state.sdMounted ? J({ error: "invalid path" }, 400) : J({ total: 15923707904, used: 327680 })),
     "/api/rtc": () => J({ time: new Date().toISOString(), valid: true, rtc: null, sntp: { enabled: true, server: "pool.ntp.org", last_sync: null } }),
     "/api/logs/status": () => J({ dropped: 0, sinks: { ring: true, uart: true } }),
     "/api/logs/ring": () => T("I (1234) main: WiCAN v6 preview mock\nI (1240) wifi_manager: STA got IP 10.42.0.62\nI (2001) autopid: started (3 pids / default group)\nW (9004) event_manager: rule low_batt disabled\n"),
