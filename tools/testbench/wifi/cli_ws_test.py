@@ -55,6 +55,12 @@ def main():
         ("restart_tracker -l", "reset="),
         ("help", "restart_tracker"),
         ("bogus", "Unknown command"),
+        # the dispatcher's verdict for a handler that returns non-zero (led -c
+        # without values prints its own Error line, then this). The third
+        # verdict, `Internal error: ...` for a console failure that kept the
+        # command from running (issue #980), cannot be provoked on a healthy
+        # device: cmdline_manager's host test covers it.
+        ("led -c", "command failed (1)"),
     ]
     for cmd, needle in checks:
         out = run_cmd(ws, cmd)
