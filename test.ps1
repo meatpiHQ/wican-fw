@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'usbgps', 'backup', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'usbgps', 'backup', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [string]$Port = 'COM10',  # UART0 external USB-serial = console/flash
@@ -761,7 +761,7 @@ function Invoke-EspnetlinkBench {
         $script:note = 'espnetlink not present (no RNDIS + ACM console)'
         return
     }
-    $out = Invoke-Bench "cd ~/wican && python3 -u tools/testbench/usb/espnetlink_bench.py"
+    $out = Invoke-Bench "cd ~/wican && python3 -u tools/testbench/usb/espnetlink_bench.py $DutIp"
     Save-StageLog 'espnetlink_bench' $out
     if (-not ($out | Select-String -Quiet 'ESPNETLINK TARGET PASS')) { throw 'no ESPNETLINK TARGET PASS' }
     $script:note = 'ESPNETLINK TARGET PASS (RNDIS data + ACM modem status)'
@@ -845,6 +845,7 @@ function Show-Inventory {
     Write-Host '  autobaud   - CAN listen-before-talk, auto bit rate and the autopid bus guard: PCAN keeps the bus alive and counts error frames (~9 min)'
     Write-Host '  vpnpause   - the VPN pauses on networks marked Pause VPN (issue #976): the bench AP marked / unmarked, away on the dongle AP, home again; wg-bench on the Pi, the console for the away leg (~12 min)'
     Write-Host '  vpnroutes  - the split tunnel (issue #975): a request to a routed network leaves through wg-bench on the Pi, one to any other address through the station, judged at the receiver by the source address (~6 min)'
+    Write-Host '  garage     - the garage story with the ESPNetLink (2026-10-12): home WiFi on the P4, away on the dongle LTE with the VPN to betty, home again, flaps, a dongle reboot away, sleep/wake both ways; the data path judged at a receiver on betty by the source address of every POST; the default legs in usb_rndis with VPN variant A (~35 min; wifi_modem, variant B, g9 and g11 by hand)'
     Write-Host '  usbgps     - a USB GPS receiver is read by default (issue #978): the console switch off, the receiver read as NMEA from boot, the fix when the sky allows, gps_ in autopid and the HA push, the USB GPS receiver switch off = ignored, back on; then the USB page card, the switches and the Status row in Chrome (3 to 4 planned restarts, ~6 min)'
     Write-Host '  backup     - the configuration backup that carries everything (issue #979): the file plain / redacted / encrypted after the key, the fs deny list, the round trips from a file and from the copy on the flash, the refusals, the sweep (8 planned restarts, ~7 min)'
     Write-Host '  wwh        - OBD over UDS (ISO 27145 / SAE J1979-2): a PCAN vehicle is detected, polled, its codes read and cleared; the car switch both ways (~10 min)'
@@ -1156,6 +1157,23 @@ try {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                     Stop-ConsoleTail $con
                 }
+            }
+        }
+        'garage' {
+            # The garage story with the ESPNetLink (2026-10-12): the home
+            # WiFi is the P4 bench AP, away is the dongle's LTE with the VPN
+            # to betty, then home again; the data path is judged at a
+            # receiver on betty by the source address of every POST. The
+            # bench opens its own tunnel to the DUT and probes the console
+            # itself (optional: only g10 needs it), so the stage holds
+            # neither. The default legs in usb_rndis with VPN variant A; the
+            # other runs are by hand (--mode wifi_modem, --vpn B, --only g9
+            # or g11).
+            Invoke-Stage 'ESPNetLink garage story' {
+                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $out = & $py -u "$repo\tools\testbench\wifi\espnetlink_garage_bench.py" '--dut-ip' $DutIp '--pi' $BenchHost 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                Save-StageLog 'espnetlink_garage' $out
+                if (-not ($out | Select-String -Quiet 'ESPNL GARAGE (PARTIAL )?PASS')) { throw 'no ESPNL GARAGE PASS (the P4 daemon up? betty reachable? the dongle on the connector? the DUT on the bench AP?)' }
             }
         }
         'usbgps' {

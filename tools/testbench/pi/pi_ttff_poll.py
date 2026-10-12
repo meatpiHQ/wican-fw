@@ -91,7 +91,8 @@ def main():
                "satellites": g.get("satellites"), "sats_in_view": g.get("sats_in_view"),
                "hdop": g.get("hdop"), "fix_quality": g.get("fix_quality"),
                "lte_stage": lte.get("stage"), "lte_rssi": lte.get("rssi_dbm"),
-               "usb_data": h.get("usb_data"), "boot_cut": h.get("boot_cut"),
+               "usb_data": h.get("usb_data"),
+               "usb_ethernet": h.get("usb_ethernet"),   # dongle api 9 (2026-10-12)
                "clients": h.get("ap", {}).get("clients")}
         samples.write(json.dumps(rec) + "\n")
         samples.flush()

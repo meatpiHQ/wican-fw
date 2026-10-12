@@ -10,9 +10,11 @@ the first fix (cap --max). Independent of the WiCAN's own GPS polls.
 
 By default the bench AP (the P4 instrument) is taken down for the series
 (`--bench-ap off`) so the WiCAN parks on the dongle's AP and polls it
-every 2 s: the configuration of the 2026-08-24/25 baseline (wifi_modem,
-boot-cut steady state, zero USB contact after the first pairing). It is
-restored at the end; the WiCAN roams home within sta_roam_interval_s.
+every 2 s: the configuration of the 2026-08-24/25 baseline (wifi_modem).
+Since 2026-10-12 nothing about a cut persists on the dongle: every cold
+cycle has 10 to 20 s of USB after power-on (identify, key, cut) before
+the bus goes quiet, where the baseline had none. It is restored at the
+end; the WiCAN roams home within sta_roam_interval_s.
 
 Per cycle: tfix (s after PSU on), tfix_uptime (the dongle's uptime at that
 poll, immune to the PC/Pi clock offset), sats_max, siv_max, fixpct over

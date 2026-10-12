@@ -932,6 +932,7 @@ def s_usb_dongle(rig):
     nl = rig.dut.get("/api/espnetlink") or {}
     print(f"  host active ({usb.get('vid')}:{usb.get('pid')}, driver {usb.get('driver')!r}), "
           f"espnetlink paired={nl.get('paired')} uplink={nl.get('uplink')}")
+    mode0 = nl.get("mode")
     sleep_cycle(rig, "usb_dongle")
     t0 = time.time()
     while time.time() - t0 < 60:
@@ -941,6 +942,38 @@ def s_usb_dongle(rig):
         time.sleep(3)
     assert usb.get("host_active"), f"USB host did not come back after the wake: {usb}"
     print("  USB host back after the wake")
+    # 2026-10-12: the wake re-boots the dongle too (same rail) and nothing
+    # about a cut persists on it, so the WiCAN must pair it again by
+    # itself: usb_rndis/usb_ncm = the wire up (ncm_up), wifi_modem = the
+    # key re-read + cut (done) and the AP uplink when no home WiFi wins
+    want = "ncm_up" if mode0 in ("usb_rndis", "usb_ncm") else "done"
+    t0 = time.time()
+    nl = {}
+    while time.time() - t0 < 180:
+        nl = rig.dut.get("/api/espnetlink") or {}
+        if (nl.get("usb") or {}).get("pair_state") == want:
+            break
+        time.sleep(5)
+    assert (nl.get("usb") or {}).get("pair_state") == want, \
+        f"dongle not paired again after the wake ({mode0}): {nl.get('usb')}"
+    print(f"  dongle paired again after the wake ({mode0}: {want}) "
+          f"in {time.time() - t0:.0f} s, uplink={nl.get('uplink')}")
+    if mode0 in ("usb_rndis", "usb_ncm"):
+        # the dongle rebooted with the rail, so this is a cold fix with the
+        # USB link live (the known GNSS desense): reported, not asserted
+        # (2026-10-12: no fix in 180 s on the bench window, the wake itself
+        # clean)
+        t0 = time.time()
+        while time.time() - t0 < 180:
+            nl = rig.dut.get("/api/espnetlink") or {}
+            if (nl.get("gps") or {}).get("valid"):
+                break
+            time.sleep(5)
+        if (nl.get("gps") or {}).get("valid"):
+            print(f"  GPS valid over the wire {time.time() - t0:.0f} s after the wake")
+        else:
+            print("  note: no GPS fix over the wire within 180 s of the wake "
+                  "(a cold fix with the USB link live; the wake is judged above)")
 
 
 def s_j2534_on(rig):

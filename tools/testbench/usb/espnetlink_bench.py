@@ -16,6 +16,9 @@ Flow: RNDIS enumerated + IP -> ACM console up -> `ver`/`lte -s`/`lte -i`
 show a provisioned+attached modem. Optional --prove-lte isolates the
 Pi's WiFi internet and confirms a fresh SNTP sync goes over the modem.
 
+Usage: espnetlink_bench.py [<dut ip>] [--prove-lte]. The DUT defaults to 10.42.0.62
+(the old hotspot address); test.ps1 passes its resolved address since 2026-10-12.
+
 Expected final line: ESPNETLINK TARGET PASS
 """
 import json
@@ -24,7 +27,7 @@ import sys
 import time
 import urllib.request
 
-DUT = "10.42.0.62"
+DUT = next((a for a in sys.argv[1:] if not a.startswith("--")), "10.42.0.62")
 PROVE_LTE = "--prove-lte" in sys.argv
 
 fails = []

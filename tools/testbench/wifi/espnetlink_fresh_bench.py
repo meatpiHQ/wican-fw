@@ -4,28 +4,41 @@ ESPNetLink, plugs them together, and configures the WiCAN over its own
 WiFi AP (phone/laptop joined to `WiCAN_<id>`, password @meatpi#) while
 the zero-touch pairing runs. Nothing is pre-configured on either device.
 
+Two paths since 2026-10-12 (the WiCAN's default `espnetlink.mode` is
+`usb_rndis`; the dongle ships `usb_mode=auto`, class rndis, LTE shared
+over USB, and nothing about a cut ever persists on it):
+
+  --mode usb_rndis (default)
   erase  both devices' flash (esptool erase-flash) and flash both builds
   boot   PSU cold cycle, both consoles captured from power-on
   user   the Pi joins the fresh WiCAN AP as soon as it appears and STAYS
-         there (--no-client skips this: the bare from-scratch path)
-  pair   identify -> credentials -> store (wifi mode ap -> apsta) -> cut
-         -> ONE WiCAN reboot
-  join   after that reboot the STA must join the dongle's AP and the
-         uplink must come up WHILE the user's client sits on the WiCAN AP
-         (field-hit 2026-08-31: wifi_manager's AP-client pause blocked
-         the very first association, fixed with a first-connect
-         exemption + a bounded pause)
-  view   what the user sees: GET /api/espnetlink over the WiCAN AP shows
-         paired + uplink; the stored dongle key is read back and pushed
-         into the Pi's `espnl-client` profile (the fresh dongle
-         provisioned a new AP password on first boot)
+         there (--no-client skips this)
+  pair   identify (api >= 9) -> "dongle USB uplink already configured":
+         no credentials, no cut, NO restart of either device, the dongle
+         reboots exactly once (its own AP password provisioning)
+  link   uplink = espnetlink (USB), pair_state ncm_up, GPS polls flow over
+         the wire; the view over the WiCAN AP says so; `espnetlink repair`
+         (a VBUS cycle) brings the wire back by itself
 
-Every WiCAN reboot must be planned (restart_tracker), console E lines
-== 0 (same whitelist as the mode bench).
+  --mode wifi_modem
+  the usb_rndis path first (that is what a fresh pair does), then the
+  user picks WiFi modem on the USB page (one planned restart), the
+  pairing HOLDS behind the factory AP password, the user changes it (one
+  restart), identify -> credentials -> store -> cut -> ONE more restart,
+  the STA joins the dongle's AP WHILE the user's client sits on the WiCAN
+  AP (field-hit 2026-08-31), the stored key is read back into the Pi's
+  `espnl-client` profile, and the AP-client hazard (repair with the phone
+  parked) must re-join within 150 s
 
-  python espnetlink_fresh_bench.py --wican COM12 --dongle COM16 --psu COM17
-         [--wican-build <dir>] [--dongle-build <dir>] [--no-erase]
-         [--no-client]
+Every WiCAN restart must be planned (restart_tracker), console E lines
+== 0 on both consoles (same whitelist as the mode bench; the dongle's
+first boot after an erase still logs littlefs "Corrupted dir pair" twice,
+whitelisted on the dongle console only until its filesystem gets the
+WiCAN's blank-partition probe).
+
+  python espnetlink_fresh_bench.py --wican COM254 --dongle COM252 --psu COM50
+         [--mode usb_rndis|wifi_modem] [--wican-build <dir>]
+         [--dongle-build <dir>] [--no-erase] [--no-client]
 
 Verdict: ESPNL FRESH PASS / ESPNL FRESH FAIL: <names>.
 """
@@ -53,12 +66,10 @@ E_WHITELIST = ("Invalid MMIE", "select() timeout",
                "Failed to open a new connection",
                "Connection failed, sock < 0",
                "tcp_read error")   # the cut severs the link mid-read
-               # (2026-09-05: the first-boot "Corrupted dir pair" /
-               # "FAULT boot_errors" lines are fixed in the WiCAN firmware,
-               # blank partitions are formatted before the mount, and
-               # are no longer whitelisted here. NOTE the dongle firmware
-               # still logs them on ITS first boot after an erase; port
-               # the same guard there before running this bench fresh.)
+# the dongle firmware still logs littlefs' "Corrupted dir pair" twice on
+# its first boot after an erase (the WiCAN got the blank-partition probe
+# on 2026-09-05, the dongle has not): whitelisted on the dongle console
+DONGLE_E_WHITELIST = E_WHITELIST + ("Corrupted dir pair",)
 
 fails = []
 
@@ -90,8 +101,9 @@ class Console:
     prints is kept (with a wall-clock stamp) and commands are answered by
     watching the same stream."""
 
-    def __init__(self, port, baud, name):
+    def __init__(self, port, baud, name, whitelist=E_WHITELIST):
         self.name = name
+        self.whitelist = whitelist
         self.s = serial.Serial()
         self.s.port, self.s.baudrate, self.s.timeout = port, baud, 0.2
         self.s.dtr = False    # pre-set BEFORE open (CH344 EN pulse)
@@ -140,6 +152,11 @@ class Console:
                 return ts, l
         return None
 
+    def count(self, pattern, since=0.0):
+        rx = re.compile(pattern)
+        return sum(1 for ts, l in self.snapshot()
+                   if ts >= since and rx.search(l))
+
     def wait_for(self, pattern, timeout, since=0.0):
         end = time.time() + timeout
         while time.time() < end:
@@ -164,10 +181,17 @@ class Console:
             time.sleep(0.2)
         return None
 
+    def cmd_text(self, line, wait=2.5):
+        """Send a console command; return everything printed within wait."""
+        mark = len(self.snapshot())
+        self.write(line)
+        time.sleep(wait)
+        return "\n".join(l for _, l in self.snapshot()[mark:])
+
     def e_lines(self):
         return [l for _, l in self.snapshot()
                 if l.startswith("E (") and
-                not any(w in l for w in E_WHITELIST)]
+                not any(w in l for w in self.whitelist)]
 
 
 # esptool v5 spelling (default-reset / erase-flash): the IDF v6 venv has
@@ -209,13 +233,28 @@ def psu_cycle(port, off_s=8):
 
 
 def espnl_status(con):
-    l = con.cmd("espnetlink", r"ESPNETLINK: enabled=")
-    if not l:
-        return {}
-    m = re.search(r"mode=(\w+) auto_pair=\d paired=(\d) ssid='([^']*)'"
-                  r".* uplink=(\S+) host=(\S+)", l)
-    return dict(mode=m.group(1), paired=m.group(2) == "1", ssid=m.group(3),
-                uplink=m.group(4), host=m.group(5)) if m else {}
+    """The `espnetlink` console command, parsed (the usb line carries
+    `console_only=` between attached and pair_state since 2026-10-12)."""
+    txt = con.cmd_text("espnetlink")
+    st = {}
+    m = re.search(r"ESPNETLINK: enabled=(\d) mode=(\w+) auto_pair=\d "
+                  r"paired=(\d) ssid='([^']*)'.* uplink=(\S+) host=(\S+)",
+                  txt)
+    if m:
+        st.update(enabled=m.group(1) == "1", mode=m.group(2),
+                  paired=m.group(3) == "1", ssid=m.group(4),
+                  uplink=m.group(5), host=m.group(6))
+    m = re.search(r"usb: attached=(\d)(?: console_only=(\d))? "
+                  r"pair_state=(\w+) cuts=(\d+)", txt)
+    if m:
+        st.update(attached=m.group(1) == "1",
+                  console_only=m.group(2) == "1",
+                  pair_state=m.group(3), cuts=int(m.group(4)))
+    m = re.search(r"gps: valid=(\d).*?\| polls=(\d+) fail=(\d+)", txt)
+    if m:
+        st.update(gps_valid=m.group(1) == "1", polls=int(m.group(2)),
+                  poll_fails=int(m.group(3)))
+    return st
 
 
 def restart_stats(con):
@@ -229,6 +268,8 @@ def main():
     ap.add_argument("--wican", required=True)
     ap.add_argument("--dongle", required=True)
     ap.add_argument("--psu", required=True)
+    ap.add_argument("--mode", choices=("usb_rndis", "wifi_modem"),
+                    default="usb_rndis")
     ap.add_argument("--wican-build", default=os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "..", "..",
         "build"))
@@ -253,7 +294,7 @@ def main():
 
     # ---- cold boot, both consoles from power-on -----------------------------
     wc = Console(a.wican, 2000000, "wican")
-    dc = Console(a.dongle, 115200, "dongle")
+    dc = Console(a.dongle, 115200, "dongle", DONGLE_E_WHITELIST)
     t0, on = psu_cycle(a.psu)
     check("boot: PSU cold cycle", on)
     ssh_run(f"sudo -n nmcli con delete {USER_CON} >/dev/null 2>&1; true")
@@ -266,7 +307,14 @@ def main():
         check("boot: fresh WiCAN AP SSID observed", bool(ap_ssid), ap_ssid)
         fresh_mode = re.search(r"config applied: mode=(\d+)",
                                hit[1]).group(1) if hit else "?"
-        note(f"fresh wifi_manager mode={fresh_mode} (2 = ap)")
+        note(f"fresh wifi_manager mode={fresh_mode} (3 = apsta)")
+
+        # the WiCAN's fresh dongle mode (2026-10-12: usb_rndis)
+        started = wc.wait_for(r"espnetlink: started \((\w+),", 60)
+        check("default: espnetlink mode usb_rndis out of the box",
+              started is not None and
+              re.search(r"started \((\w+),", started[1]).group(1)
+              == "usb_rndis", started[1][-70:] if started else "not seen")
 
         # dongle first boot: per-device AP password provisioning
         prov = dc.wait_for(r"per-device AP password provisioned", 40)
@@ -277,6 +325,15 @@ def main():
             check("dongle: first-boot AP password provisioning + reboot",
                   prov is not None,
                   f"{prov[0]:.0f} s" if prov else "not seen")
+        mode_line = dc.wait_for(r"wifi_modem: usb_mode=(\w+) ", 60)
+        check("dongle: ships usb_mode=auto (USB on at every boot)",
+              mode_line is not None and
+              re.search(r"usb_mode=(\w+) ", mode_line[1]).group(1) == "auto",
+              mode_line[1][-60:] if mode_line else "not seen")
+        composite = dc.wait_for(r"Starting CherryUSB (\S+)", 60)
+        check("dongle: ships RNDIS + the CDC console",
+              composite is not None and "RNDIS+CDC" in composite[1],
+              composite[1][-70:] if composite else "not seen")
 
         # ---- the user joins the WiCAN AP --------------------------------
         if not a.no_client and ap_ssid:
@@ -307,9 +364,24 @@ def main():
                 time.sleep(1)
             return False
 
+        def user_put_submit(component, edit, what):
+            """The user's settings change over the WiCAN AP: GET, edit,
+            PUT, submit (one planned restart)."""
+            r = ssh_run(
+                f"sudo -n nmcli con up {USER_CON} >/dev/null 2>&1; sleep 2; "
+                f"doc=$({CURL} http://{WICAN_AP_IP}/api/settings/{component}); "
+                f"body=$(echo \"$doc\" | python3 -c \"import json,sys;"
+                f"d=json.load(sys.stdin);{edit};print(json.dumps(d))\"); "
+                f"{CURL} -X PUT -H 'Content-Type: application/json' "
+                f"-d \"$body\" http://{WICAN_AP_IP}/api/settings/{component}; "
+                f"echo; {CURL} -X POST -d '{{}}' -H 'Content-Type: "
+                f"application/json' http://{WICAN_AP_IP}/api/settings/submit; "
+                f"echo")
+            note(f"user: {what}: " + " ".join(r.stdout.split())[-90:])
+
         # ---- USB host must be on out of the box (or the user turns it on)
         usb_line = ""
-        for _ in range(4):   # the query can land in the pairing-reboot window
+        for _ in range(4):   # the query can land in a restart window
             usb_line = wc.cmd("usb", r"usb host: (enabled|disabled)") or ""
             if usb_line:
                 break
@@ -317,129 +389,54 @@ def main():
         usb_on = "usb host: enabled" in usb_line
         check("default: USB host enabled out of the box (zero-touch)",
               usb_on, usb_line.strip()[:50])
-        t_pair = 0.0     # USB on from boot: pairing may already be done
+        t_pair = 0.0
         if not usb_on and not a.no_client and ap_ssid:
-            note("user: enabling the USB host on the USB page "
-                 "(settings PUT + submit): the WiCAN reboots")
-            r = ssh_run(
-                f"sudo -n nmcli con up {USER_CON} >/dev/null 2>&1; sleep 2; "
-                f"doc=$({CURL} http://{WICAN_AP_IP}/api/settings/"
-                f"usb_host_manager); body=$(echo \"$doc\" | python3 -c "
-                f"\"import json,sys;d=json.load(sys.stdin);"
-                f"d['enabled']=True;print(json.dumps(d))\"); "
-                f"{CURL} -X PUT -H 'Content-Type: application/json' "
-                f"-d \"$body\" http://{WICAN_AP_IP}/api/settings/"
-                f"usb_host_manager; echo; "
-                f"{CURL} -X POST -d '{{}}' -H 'Content-Type: application/json' "
-                f"http://{WICAN_AP_IP}/api/settings/submit; echo")
-            note("user: " + " ".join(r.stdout.split())[-120:])
+            user_put_submit("usb_host_manager", "d['enabled']=True",
+                            "enabling the USB host (one restart)")
             rb0 = wc.wait_for(r"config applied: mode=", 90, since=t_pair)
-            check("user: WiCAN rebooted with the USB host enabled",
+            check("user: WiCAN restarted with the USB host enabled",
                   rb0 is not None)
             t_pair = rb0[0] if rb0 else time.time() - wc.t0
-            note("user: phone re-joining the WiCAN AP after the reboot: "
+            note("user: phone re-joining the WiCAN AP after the restart: "
                  + ("on" if phone_rejoin(40) else "NOT back"))
 
-        # ---- the hold: pairing waits for a non-factory AP password ------
-        # (2026-09-07 field-hit: the key store is refused while the AP has
-        # the factory password; the firmware now HOLDS pairing and warns
-        # instead of churning into "Not an ESPNetLink / gave up")
-        hold = wc.wait_for(r"pairing is ON HOLD|on hold \(factory AP "
-                           r"password\)", 45, since=t_pair)
-        check("hold: zero-touch held while the AP has the factory password",
-              hold is not None, hold[1][-70:] if hold else "not seen")
-        st_h = espnl_status(wc)
-        # 2026-09-08: the hold is decided after identify + key read, so
-        # the machine parks in "hold" (never a VBUS cycle) - "idle" is the
-        # older attach-edge hold
-        check("hold: no pairing churn (machine idle or parked in hold)",
-              st_h.get("pair_state") in (None, "idle", "hold") and
-              not st_h.get("paired"), str(st_h)[:90])
-
-        # the user sets a new AP password over the AP (as the banner asks)
-        r = ssh_run(
-            f"sudo -n nmcli con up {USER_CON} >/dev/null 2>&1; sleep 2; "
-            f"doc=$({CURL} http://{WICAN_AP_IP}/api/settings/wifi_manager); "
-            f"body=$(echo \"$doc\" | python3 -c \"import json,sys;"
-            f"d=json.load(sys.stdin);d['ap_password']='{NEW_AP_PSK}';"
-            f"print(json.dumps(d))\"); "
-            f"{CURL} -X PUT -H 'Content-Type: application/json' "
-            f"-d \"$body\" http://{WICAN_AP_IP}/api/settings/wifi_manager; "
-            f"echo; {CURL} -X POST -d '{{}}' -H 'Content-Type: "
-            f"application/json' http://{WICAN_AP_IP}/api/settings/submit; "
-            f"echo")
-        note("user: set a new AP password + submit: "
-             + " ".join(r.stdout.split())[-90:])
-        rbpw = wc.wait_for(r"config applied: mode=", 90,
-                           since=time.time() - wc.t0 - 1)
-        check("user: WiCAN rebooted with the new AP password",
-              rbpw is not None)
-        t_pair = rbpw[0] if rbpw else time.time() - wc.t0
-        ssh_run(f"sudo -n nmcli con modify {USER_CON} "
-                f"802-11-wireless-security.psk '{NEW_AP_PSK}'")
-        note("user: phone re-joining with the new password: "
-             + ("on" if phone_rejoin(40) else "NOT back"))
-
-        # ---- zero-touch pairing (runs by itself after that restart) -----
+        # ---- the usb_rndis zero-touch (what every fresh pair does) -----
         ident = wc.wait_for(r"espnetlink: identified ESPNetLink", 120,
                             since=t_pair)
-        check("pair: dongle identified over USB", ident is not None,
+        check("rndis: dongle identified over USB", ident is not None,
               f"{ident[0]:.0f} s" if ident else "not seen")
-        # the dongle build under test must be current: a July test build
-        # (api 6, no WiFi-modem routes) passed identify and then 404'd
-        # everything (field + bench 2026-09-08)
         m_api = re.search(r"api (\d+)\)", ident[1]) if ident else None
-        check("pair: dongle firmware is current (api >= 7)",
-              m_api is not None and int(m_api.group(1)) >= 7,
+        check("rndis: dongle firmware is current (api >= 9: rndis + sharing "
+              "shipped)", m_api is not None and int(m_api.group(1)) >= 9,
               ident[1][-70:] if ident else "not seen")
-        creds = wc.wait_for(r"espnetlink: credentials ok|stored; reboot "
-                            r"after the cut|paired with", 90, since=t_pair)
-        check("pair: credentials read + stored", creds is not None,
-              creds[1][:70] if creds else "not seen")
-        modechg = wc.find(r"wifi mode ap -> apsta", since=t_pair)
-        check("pair: wifi mode ap -> apsta staged (STA needed)",
-              modechg is not None)
-        # the request line can be lost in the console burst around the cut;
-        # the drop itself ("usb gone ... cut #1") is the same proof
-        cut = wc.wait_for(r"usb_data off requested|usb gone: cable is power "
-                          r"only", 60, since=creds[0] if creds else t_pair)
-        check("pair: USB data cut requested", cut is not None)
-        rb = wc.wait_for(r"rebooting to apply", 60, since=t_pair)
-        check("pair: ONE WiCAN reboot to apply the new key/mode",
-              rb is not None, f"{rb[0]:.0f} s" if rb else "not seen")
-        t_reboot = rb[0] if rb else time.time() - wc.t0
-
-        # ---- after the reboot: STA joins the dongle AP ------------------
-        started = wc.wait_for(r"wifi_manager: started \(mode=(\d+)", 60,
-                              since=t_reboot)
-        check("join: wifi_manager restarted with STA (mode 1 or 3)",
-              started is not None and
-              re.search(r"mode=(\d+)", started[1]).group(1) in ("1", "3"),
-              started[1][-40:] if started else "not seen")
-        if not a.no_client:
-            back = phone_rejoin(30)
-            t_back = time.time() - wc.t0
-            sta_first = wc.find(r"STA got IP|wifi_manager: connecting|"
-                                r"connecting to", since=t_reboot)
-            note(f"user: phone back on the AP at +{t_back - t_reboot:.0f} s "
-                 f"after the reboot ({'on' if back else 'NOT back'}); "
-                 f"STA first attempt seen: "
-                 f"{'yes' if sta_first else 'not yet'}")
-            hop = wc.find(r"AP has \d+ clients but", since=t_reboot)
-            if hop:
-                note("wifi_manager: " + hop[1][-90:])
-        up = wc.wait_for(r"uplink: none -> espnetlink \(AP\)", 150,
-                         since=t_reboot)
-        check("join: STA joined the dongle AP, uplink=espnetlink "
-              + ("WITH a client on the WiCAN AP" if not a.no_client
-                 else "(no AP client)"),
-              up is not None, f"+{up[0] - t_reboot:.0f} s after reboot"
-              if up else "not within 150 s")
+        ready = wc.wait_for(r"dongle USB uplink already configured", 60,
+                            since=t_pair)
+        check("rndis: nothing to change on the dongle (class rndis, "
+              "ncm_share on): no dongle restart", ready is not None,
+              f"{ready[0]:.0f} s" if ready else "not seen")
+        check("rndis: no key read, no cut, no WiCAN restart",
+              wc.find(r"credentials ok|usb_data off requested|rebooting to "
+                      r"apply|pairing is ON HOLD", since=t_pair) is None)
+        up = wc.wait_for(r"uplink: none -> espnetlink \(USB\)", 90,
+                         since=t_pair)
+        check("rndis: uplink = espnetlink (USB) at 192.168.7.1",
+              up is not None, f"{up[0]:.0f} s" if up else "not seen")
         st = espnl_status(wc)
-        check("join: espnetlink status paired + uplink", st.get("paired")
-              and st.get("uplink") == "espnetlink", str(st))
+        check("rndis: espnetlink status ncm_up over the wire",
+              st.get("pair_state") == "ncm_up" and
+              st.get("uplink") == "espnetlink_usb" and
+              st.get("host") == "192.168.7.1", str(st)[:120])
+        p1 = st.get("polls", 0)
+        time.sleep(8)
+        p2 = espnl_status(wc).get("polls", 0)
+        check("rndis: GPS/health polls flowing over the wire", p2 > p1,
+              f"{p1} -> {p2}")
+        boots = dc.count(r"restart_tracker: boot #")
+        check("rndis: the dongle booted exactly twice (its provisioning "
+              "restart and nothing else)",
+              boots == (2 if not a.no_erase else 1), f"boots={boots}")
 
-        # ---- the user's view over the WiCAN AP --------------------------
+        # the view over the WiCAN AP
         if not a.no_client:
             d = {}
             for _ in range(4):
@@ -450,65 +447,26 @@ def main():
                     break
                 except json.JSONDecodeError:
                     time.sleep(3)
-            check("view: GET /api/espnetlink over the WiCAN AP shows "
-                  "paired + uplink", d.get("paired") is True and
-                  d.get("uplink") == "espnetlink",
-                  f"paired={d.get('paired')} uplink={d.get('uplink')}")
-            # the stored dongle key -> the Pi's dongle profile (the fresh
-            # dongle provisioned a new AP password)
-            # secrets are masked on /api/settings/<comp>; the backup
-            # document is the complete one (what the UI's Backup button gets)
-            wm = {}
-            for _ in range(4):
-                r = ssh_run(f"sudo -n nmcli con up {USER_CON} >/dev/null 2>&1; "
-                            f"{CURL} http://{WICAN_AP_IP}/api/settings/backup")
-                try:
-                    doc = json.loads(r.stdout)
-                    wm = doc.get("components", {}).get("wifi_manager", {})
-                    wm = wm.get("data", wm)
-                    break
-                except (json.JSONDecodeError, AttributeError):
-                    time.sleep(3)
-            key = ""
-            for i in range(1, 6):
-                if wm.get(f"fallback{i}_ssid", "") == st.get("ssid", "-"):
-                    key = wm.get(f"fallback{i}_password", "")
-            check("view: dongle key stored in a wifi_manager fallback slot",
-                  bool(key))
-            if key:
-                ssh_run(f"sudo -n nmcli con modify {DONGLE_CON} "
-                        f"802-11-wireless.ssid '{st['ssid']}' "
-                        f"wifi-sec.psk '{key}'")
-                note(f"Pi {DONGLE_CON} profile updated for the fresh dongle")
+            check("rndis view: GET /api/espnetlink over the WiCAN AP shows "
+                  "mode usb_rndis + uplink espnetlink_usb",
+                  d.get("mode") == "usb_rndis" and
+                  d.get("uplink") == "espnetlink_usb",
+                  f"mode={d.get('mode')} uplink={d.get('uplink')}")
 
-        # ---- the hazard, deterministically: phone parked on the AP, then a
-        #      dongle glitch -> the STA must RE-join while the phone stays.
-        #      (The first association after the pairing reboot usually wins
-        #      the race against a re-associating phone; a re-join with the
-        #      phone already parked is where the AP-client pause bites:
-        #      unfixed wifi_manager defers indefinitely, the 2026-08-31 fix
-        #      bounds it to 60 s.)
-        if not a.no_client:
-            phone_rejoin(20)
-            t_rep = time.time() - wc.t0
-            wc.write("espnetlink repair")
-            lost = wc.wait_for(r"uplink: espnetlink \(AP\) -> none", 90,
-                               since=t_rep)
-            note("repair: dongle VBUS-cycled; uplink lost: "
-                 + (f"+{lost[0] - t_rep:.0f} s" if lost else "not seen"))
-            back = wc.wait_for(r"uplink: none -> espnetlink \(AP\)", 150,
-                               since=(lost[0] if lost else t_rep) + 0.1)
-            on = ssh_run(f"nmcli -t dev status | grep -q '^{USER_IF}:wifi:"
-                         f"connected:{USER_CON}' && echo on").stdout
-            check("hazard: STA re-joined the dongle AP within 150 s with the "
-                  "phone parked on the WiCAN AP",
-                  back is not None,
-                  (f"+{back[0] - (lost[0] if lost else t_rep):.0f} s after "
-                   f"the drop" if back else "never") +
-                  f"; phone {'still on' if 'on' in on else 'NOT on'} the AP")
-            hop = wc.find(r"AP has \d+ clients but", since=t_rep)
-            if hop:
-                note("wifi_manager: " + hop[1][-90:])
+        # a VBUS cycle: the dongle re-enumerates and the wire returns by itself
+        t_rep = time.time() - wc.t0
+        wc.write("espnetlink repair")
+        lost = wc.wait_for(r"uplink: espnetlink \(USB\) -> none", 60,
+                           since=t_rep)
+        back = wc.wait_for(r"uplink: none -> espnetlink \(USB\)", 120,
+                           since=(lost[0] if lost else t_rep) + 0.1)
+        check("rndis: the wire returns by itself after a VBUS cycle",
+              lost is not None and back is not None,
+              f"+{back[0] - lost[0]:.0f} s" if lost and back else "not seen")
+
+        if a.mode == "wifi_modem":
+            run_wifi_modem_path(a, wc, dc, ap_ssid, phone_rejoin,
+                                user_put_submit)
 
         # ---- health -------------------------------------------------------
         b, u = restart_stats(wc)
@@ -520,8 +478,8 @@ def main():
         for l in e[:8]:
             note("E-line: " + l)
         de = dc.e_lines()
-        check("health: dongle console E lines == 0", len(de) == 0,
-              f"E={len(de)}")
+        check("health: dongle console E lines == 0 (first-boot littlefs "
+              "lines whitelisted)", len(de) == 0, f"E={len(de)}")
         for l in de[:8]:
             note("dongle E-line: " + l)
     finally:
@@ -537,6 +495,171 @@ def main():
         wc.close()
         dc.close()
     return finish()
+
+
+def run_wifi_modem_path(a, wc, dc, ap_ssid, phone_rejoin, user_put_submit):
+    """The user picks WiFi modem after the fresh USB pairing: the hold
+    behind the factory AP password, the password change, the key store
+    and cut, the STA on the dongle's AP with the phone parked, the key
+    read back, the AP-client hazard."""
+    if a.no_client or not ap_ssid:
+        note("wifi_modem path needs the user's client on the WiCAN AP: "
+             "skipped")
+        fails.append("wifi_modem: skipped (no client)")
+        return
+
+    # ---- the user picks WiFi modem (one planned restart) -----------------
+    t_sw = time.time() - wc.t0
+    user_put_submit("espnetlink", "d['mode']='wifi_modem'",
+                    "WiFi modem selected (one restart)")
+    rb = wc.wait_for(r"espnetlink: started \(wifi_modem,", 90, since=t_sw)
+    check("wifi: WiCAN restarted in wifi_modem mode", rb is not None)
+    t_pair = rb[0] if rb else time.time() - wc.t0
+    note("user: phone re-joining the WiCAN AP after the restart: "
+         + ("on" if phone_rejoin(40) else "NOT back"))
+
+    # ---- the hold: pairing waits for a non-factory AP password ----------
+    # (2026-09-07 field-hit: the key store is refused while the AP has
+    # the factory password; the firmware HOLDS pairing and warns instead
+    # of churning into "Not an ESPNetLink / gave up")
+    hold = wc.wait_for(r"pairing is ON HOLD|on hold \(factory AP "
+                       r"password\)", 60, since=t_pair)
+    check("hold: zero-touch held while the AP has the factory password",
+          hold is not None, hold[1][-70:] if hold else "not seen")
+    st_h = espnl_status(wc)
+    check("hold: no pairing churn (machine idle or parked in hold)",
+          st_h.get("pair_state") in (None, "idle", "hold") and
+          not st_h.get("paired"), str(st_h)[:90])
+
+    # the user sets a new AP password over the AP (as the banner asks)
+    user_put_submit("wifi_manager", f"d['ap_password']='{NEW_AP_PSK}'",
+                    "new AP password + submit")
+    rbpw = wc.wait_for(r"config applied: mode=", 90,
+                       since=time.time() - wc.t0 - 1)
+    check("user: WiCAN restarted with the new AP password", rbpw is not None)
+    t_pair = rbpw[0] if rbpw else time.time() - wc.t0
+    ssh_run(f"sudo -n nmcli con modify {USER_CON} "
+            f"802-11-wireless-security.psk '{NEW_AP_PSK}'")
+    note("user: phone re-joining with the new password: "
+         + ("on" if phone_rejoin(40) else "NOT back"))
+
+    # ---- zero-touch pairing (runs by itself after that restart) ---------
+    ident = wc.wait_for(r"espnetlink: identified ESPNetLink", 120,
+                        since=t_pair)
+    check("pair: dongle identified over USB", ident is not None,
+          f"{ident[0]:.0f} s" if ident else "not seen")
+    creds = wc.wait_for(r"espnetlink: credentials ok|stored; reboot "
+                        r"after the cut|paired with", 90, since=t_pair)
+    check("pair: credentials read + stored", creds is not None,
+          creds[1][:70] if creds else "not seen")
+    # the request line can be lost in the console burst around the cut;
+    # the drop itself ("usb gone ... cut #1") is the same proof
+    cut = wc.wait_for(r"usb_data off requested|usb gone: cable is power "
+                      r"only", 60, since=creds[0] if creds else t_pair)
+    check("pair: USB data cut requested", cut is not None)
+    dcut = dc.wait_for(r"USB data CUT at the mux by the host", 60,
+                       since=t_pair)
+    check("pair: the dongle reports the cut, until its next boot",
+          dcut is not None and "until the next boot" in dcut[1])
+    rb = wc.wait_for(r"rebooting to apply", 60, since=t_pair)
+    check("pair: ONE WiCAN restart to apply the new key",
+          rb is not None, f"{rb[0]:.0f} s" if rb else "not seen")
+    t_reboot = rb[0] if rb else time.time() - wc.t0
+
+    # ---- after the restart: STA joins the dongle AP ---------------------
+    started = wc.wait_for(r"wifi_manager: started \(mode=(\d+)", 60,
+                          since=t_reboot)
+    check("join: wifi_manager restarted with STA (mode 1 or 3)",
+          started is not None and
+          re.search(r"mode=(\d+)", started[1]).group(1) in ("1", "3"),
+          started[1][-40:] if started else "not seen")
+    back = phone_rejoin(30)
+    t_back = time.time() - wc.t0
+    note(f"user: phone back on the AP at +{t_back - t_reboot:.0f} s "
+         f"after the restart ({'on' if back else 'NOT back'})")
+    hop = wc.find(r"AP has \d+ clients but", since=t_reboot)
+    if hop:
+        note("wifi_manager: " + hop[1][-90:])
+    up = wc.wait_for(r"uplink: none -> espnetlink \(AP\)", 150,
+                     since=t_reboot)
+    check("join: STA joined the dongle AP, uplink=espnetlink WITH a client "
+          "on the WiCAN AP", up is not None,
+          f"+{up[0] - t_reboot:.0f} s after restart" if up
+          else "not within 150 s")
+    st = espnl_status(wc)
+    check("join: espnetlink status paired + uplink", st.get("paired")
+          and st.get("uplink") == "espnetlink", str(st)[:120])
+
+    # ---- the user's view over the WiCAN AP ------------------------------
+    d = {}
+    for _ in range(4):
+        r = ssh_run(f"sudo -n nmcli con up {USER_CON} >/dev/null 2>&1; "
+                    f"sleep 2; {CURL} http://{WICAN_AP_IP}/api/espnetlink")
+        try:
+            d = json.loads(r.stdout)
+            break
+        except json.JSONDecodeError:
+            time.sleep(3)
+    check("view: GET /api/espnetlink over the WiCAN AP shows paired + "
+          "uplink", d.get("paired") is True and
+          d.get("uplink") == "espnetlink",
+          f"paired={d.get('paired')} uplink={d.get('uplink')}")
+    # the stored dongle key -> the Pi's dongle profile (the fresh dongle
+    # provisioned a new AP password); secrets are masked on
+    # /api/settings/<comp>, the backup document is the complete one
+    wm = {}
+    for _ in range(4):
+        r = ssh_run(f"sudo -n nmcli con up {USER_CON} >/dev/null 2>&1; "
+                    f"{CURL} http://{WICAN_AP_IP}/api/settings/backup")
+        try:
+            doc = json.loads(r.stdout)
+            wm = doc.get("components", {}).get("wifi_manager", {})
+            wm = wm.get("data", wm)
+            break
+        except (json.JSONDecodeError, AttributeError):
+            time.sleep(3)
+    key = ""
+    for i in range(1, 6):
+        if wm.get(f"fallback{i}_ssid", "") == st.get("ssid", "-"):
+            key = wm.get(f"fallback{i}_password", "")
+    check("view: dongle key stored in a wifi_manager fallback slot",
+          bool(key))
+    if key:
+        ssh_run(f"sudo -n nmcli con modify {DONGLE_CON} "
+                f"802-11-wireless.ssid '{st['ssid']}' "
+                f"wifi-sec.psk '{key}'")
+        note(f"Pi {DONGLE_CON} profile updated for the fresh dongle")
+
+    # ---- the hazard, deterministically: phone parked on the AP, then a
+    #      dongle glitch -> the STA must RE-join while the phone stays.
+    #      (The 2026-08-31 fix bounds the AP-client pause to 60 s.) Since
+    #      2026-10-12 the rebooted dongle comes back with USB on, so the
+    #      WiCAN re-reads the key (unchanged) and cuts again on the way.
+    phone_rejoin(20)
+    t_rep = time.time() - wc.t0
+    wc.write("espnetlink repair")
+    lost = wc.wait_for(r"uplink: espnetlink \(AP\) -> none", 90,
+                       since=t_rep)
+    note("repair: dongle VBUS-cycled; uplink lost: "
+         + (f"+{lost[0] - t_rep:.0f} s" if lost else "not seen"))
+    recut = wc.wait_for(r"credentials ok: .* unchanged", 90, since=t_rep)
+    check("hazard: the rebooted dongle was re-read (key unchanged) and cut "
+          "again, no WiCAN restart",
+          recut is not None and
+          wc.find(r"rebooting to apply", since=t_rep) is None)
+    back = wc.wait_for(r"uplink: none -> espnetlink \(AP\)", 150,
+                       since=(lost[0] if lost else t_rep) + 0.1)
+    on = ssh_run(f"nmcli -t dev status | grep -q '^{USER_IF}:wifi:"
+                 f"connected:{USER_CON}' && echo on").stdout
+    check("hazard: STA re-joined the dongle AP within 150 s with the "
+          "phone parked on the WiCAN AP",
+          back is not None,
+          (f"+{back[0] - (lost[0] if lost else t_rep):.0f} s after "
+           f"the drop" if back else "never") +
+          f"; phone {'still on' if 'on' in on else 'NOT on'} the AP")
+    hop = wc.find(r"AP has \d+ clients but", since=t_rep)
+    if hop:
+        note("wifi_manager: " + hop[1][-90:])
 
 
 def finish():

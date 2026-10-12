@@ -71,7 +71,7 @@
     const usb0 = { enabled: true, device_present: false, host_active: true, eth_connected: false, driver: "", ip: "", attaches: 0, vid: "0000", pid: "0000", vbus: true };
     const nl0 = { enabled: true, mode: "wifi_modem", auto_pair: true, paired: false, ssid: "", device_id: "", uplink: "wifi", on_link: false, host: "",
       pair_blocked_factory_pw: false, last_error: "", dongle_fw: "", dongle_api: 0, dongle_api_min: 7, health_unsupported: false,
-      usb: { attached: false, pair_state: "idle", cuts: 0, vbus_cycles: 0, errors: 0 }, gps: { valid: false }, dongle: { valid: false }, polls: 0, failures: 0, link_ups: 0 };
+      usb: { attached: false, dongle_console: false, pair_state: "idle", cuts: 0, vbus_cycles: 0, errors: 0 }, gps: { valid: false }, dongle: { valid: false }, polls: 0, failures: 0, link_ups: 0 };
     const nlv = (S.espnetlink && S.espnetlink.values) || {};
     /* dongle api 8 + the carrier relay (2026-10-07): `apn` is the WiCAN's setting,
        `carrier_synced` whether the pairing pass found the dongle holding it */
@@ -105,6 +105,12 @@
           dongle: { ...health, rssi_dbm: -59, gps_fix: true }, polls: 42, link_ups: 1 },
         acm: off, gps: fix };
       case "espnetlink_home": return { usb: { ...usb0, device_present: true, attaches: 1 }, nl: paired, acm: off, gps: nofix };
+      /* dongle api 9 (2026-10-12): usb_mode=console, the CDC console alone on the
+         cable, no USB Ethernet: paired earlier, the WiCAN on its home WiFi, the
+         console bound and readable */
+      case "espnetlink_console": return { usb: { ...usb0, device_present: true, attaches: 1, device: { vid: "303a", pid: "4007", class: "cdc", product: "ESPNetLink" } },
+        nl: { ...paired, dongle_api: 9, usb: { attached: false, dongle_console: true, pair_state: "idle", cuts: 0, vbus_cycles: 0, errors: 0 } },
+        acm: { connected: true, reading: true, mode: "console", nmea_sentences: 0, gps: true, console: true }, gps: nofix };
       case "eth": return { usb: { ...usb0, device_present: true, eth_connected: true, driver: "asix", ip: "10.42.2.37", attaches: 1, vid: "0b95", pid: "772b", device: { vid: "0b95", pid: "772b", class: "vendor", product: "AX88772B" } },
         nl: nl0, acm: off, gps: nofix };
       case "eth_nolink": return { usb: { ...usb0, device_present: true, driver: "asix", attaches: 1, device: { vid: "0b95", pid: "772b", class: "vendor", product: "AX88772B" } }, nl: nl0, acm: off, gps: nofix };

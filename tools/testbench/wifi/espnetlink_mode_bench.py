@@ -8,21 +8,25 @@ associations lose response status lines routinely, and in the USB modes
 the WiCAN's STA idles into power-save, making HTTP to it lossy: every
 HTTP step is therefore verified by reading state back):
 
-  0  preflight        paired, mode=wifi_modem steady (uplink=espnetlink)
-  1  wifi -> usb_ncm  the AP-path usb_data restore un-cuts the boot-cut
-                      dongle (boot_cut clears, NO dongle reboot: class
-                      ncm + ncm_share already right), driver cdc_ncm,
-                      uplink espnetlink_usb @192.168.7.1, GPS polls flow
+  0  preflight        paired, mode=wifi_modem steady (uplink=espnetlink);
+                      the dongle's class is normalized to ncm for the
+                      matrix (its factory default is rndis since
+                      2026-10-12) and restored at the end
+  1  wifi -> usb_ncm  the AP-path usb_data restore un-cuts the dongle
+                      (a runtime cut, nothing persisted on the dongle
+                      since 2026-10-12; NO dongle reboot: class ncm +
+                      ncm_share already right), driver cdc_ncm, uplink
+                      espnetlink_usb @192.168.7.1, GPS polls flow
   2  ncm -> usb_rndis exactly the class flip: ONE dongle reboot, re-enum
                       as RNDIS, driver rndis, uplink back @192.168.7.1
-  3  rndis -> wifi    key re-read + cut (usb_data=0, boot_cut re-armed),
+  3  rndis -> wifi    key re-read + cut (the dongle reports usb_data=0),
                       uplink espnetlink (AP), dongle NOT rebooted: a
                       live GPS fix survives
   3b reset class      dongle class back to ncm (its own reboot) so leg 4
                       exercises the COMBINED restore+class single-submit
   4  wifi -> usb_rndis direct: AP restore + class flip in one ensure
                       pass, still only ONE dongle reboot, driver rndis
-  5  restore          back to wifi_modem, dongle class ncm; entry state
+  5  restore          back to wifi_modem, dongle class as found; entry state
 
 Cross-cutting: every WiCAN reboot must be planned (restart_tracker
 `unexpected resets` may not grow; boot counts are asserted PER LEG with
@@ -38,7 +42,7 @@ skipped as a cascade instead of producing misleading assertions.
 Prereqs: DUT console on COM1175 (capture stopped), rpi001 with the
 `espnl-client` profile (dongle AP) on wtest1, dongle paired.
 
-  python espnetlink_mode_bench.py [COM1175]
+  python espnetlink_mode_bench.py [COMx]   (the console by role when omitted)
 
 Verdict: ESPNL MODE PASS / ESPNL MODE FAIL: <names>.
 """
@@ -50,7 +54,21 @@ import time
 
 import serial
 
-COM = sys.argv[1] if len(sys.argv) > 1 else "COM1175"
+def _console_port():
+    """The WiCAN console by role (CH344 channel B), COM1175 only as the
+    last resort of the August rig (2026-10-12)."""
+    try:
+        import os
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                        "..", "lib"))
+        import bench_ports
+        return bench_ports.resolve("auto", ("wican_console", "ch342_console"),
+                                   "COM1175")
+    except Exception:  # noqa: BLE001
+        return "COM1175"
+
+
+COM = sys.argv[1] if len(sys.argv) > 1 else _console_port()
 BAUD = 2000000
 PI = "rpi001"
 SSH = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10"]
@@ -59,11 +77,22 @@ DONGLE_IF = "wtest1"
 DONGLE_IP = "192.168.80.1"
 CURL = f"curl -s -m 10 --retry 2 --retry-delay 2 --interface {DONGLE_IF}"
 
+
+def curl_for(ip):
+    """The WiCAN on the dongle's AP (192.168.80.x) is reached through the
+    Pi's wtest1; at a bench-AP address (10.42.x, the usb_rndis default of
+    2026-10-12 keeps it home) through the Pi's usb0 route, so no interface
+    binding there."""
+    return CURL if ip.startswith("192.168.80.") else "curl -s -m 10 --retry 2 --retry-delay 2"
+
 # esp_wifi PMF driver noise + the IDF HTTP client's connect-failure
 # triplet: mode transitions reboot the dongle mid-poll by design, so ONE
 # failed connect (esp-tls select timeout -> transport_base -> HTTP_CLIENT)
 # is inherent; espnetlink_link handles it at W level and retries.
-E_WHITELIST = ("Invalid MMIE", "select() timeout",
+# esp-mqtt lines to the Pi broker while the station sits on the dongle AP or
+# the USB uplink (TESTING.md, 2026-10-09): whitelisted since 2026-10-12
+E_WHITELIST = ("mqtt_client", "transport_base", "esp-tls",
+               "Invalid MMIE", "select() timeout",
                "Failed to open a new connection",
                "Connection failed, sock < 0")
 
@@ -127,7 +156,9 @@ def espnl_status(con):
         st.update(enabled=m.group(1) == "1", mode=m.group(2),
                   paired=m.group(3) == "1", ssid=m.group(4),
                   uplink=m.group(5), host=m.group(6))
-    m = re.search(r"usb: attached=(\d) pair_state=(\w+) cuts=(\d+)", txt)
+    # `console_only=` sits between attached and pair_state since 2026-10-12
+    m = re.search(r"usb: attached=(\d)(?: console_only=\d)? pair_state=(\w+) "
+                  r"cuts=(\d+)", txt)
     if m:
         st.update(attached=m.group(1) == "1", pair_state=m.group(2),
                   cuts=int(m.group(3)))
@@ -237,25 +268,28 @@ def set_mode(con, mode, budget_s=180):
             continue
         attempt += 1
         note(f"set_mode {mode}: HTTP attempt {attempt} via {ip}")
+        c = curl_for(ip)
+        pre = (f"sudo -n nmcli con up {DONGLE_CON} >/dev/null 2>&1; sleep 3; "
+               f"ping -c 2 -W 1 -I {DONGLE_IF} {ip} >/dev/null 2>&1; "
+               if ip.startswith("192.168.80.") else "")
         script = (
-            f"sudo -n nmcli con up {DONGLE_CON} >/dev/null 2>&1; sleep 3; "
-            f"ping -c 2 -W 1 -I {DONGLE_IF} {ip} >/dev/null 2>&1; "
+            pre +
             f"staged=''; "
             f"for i in 1 2 3; do "
-            f"  doc=$({CURL} http://{ip}/api/settings/espnetlink); "
+            f"  doc=$({c} http://{ip}/api/settings/espnetlink); "
             f"  body=$(echo \"$doc\" | python3 -c \"import json,sys;"
             f"d=json.load(sys.stdin);d['mode']='{mode}';"
             f"print(json.dumps(d))\" 2>/dev/null) || continue; "
             f"  [ -n \"$body\" ] || continue; "
-            f"  {CURL} -X PUT -H 'Content-Type: application/json' "
+            f"  {c} -X PUT -H 'Content-Type: application/json' "
             f"-d \"$body\" http://{ip}/api/settings/espnetlink >/dev/null; "
-            f"  back=$({CURL} http://{ip}/api/settings/espnetlink | "
+            f"  back=$({c} http://{ip}/api/settings/espnetlink | "
             f"python3 -c \"import json,sys;"
             f"print(json.load(sys.stdin).get('mode',''))\" 2>/dev/null); "
             f"  if [ \"$back\" = '{mode}' ]; then staged=yes; break; fi; "
             f"  sleep 2; "
             f"done; "
-            f"[ -n \"$staged\" ] && {CURL} -X POST -d '{{}}' "
+            f"[ -n \"$staged\" ] && {c} -X POST -d '{{}}' "
             f"-H 'Content-Type: application/json' "
             f"http://{ip}/api/settings/submit >/dev/null; "
             f"echo staged=$staged")
@@ -348,10 +382,11 @@ def main():
         if fails:
             return finish()
         cls0 = dongle_get_class()
-        note(f"dongle: uptime {h['uptime_s']} s, boot_cut "
-             f"{h.get('boot_cut')}, class {cls0}")
+        note(f"dongle: uptime {h['uptime_s']} s, usb_data "
+             f"{h.get('usb_data')}, usb_ethernet {h.get('usb_ethernet')}, "
+             f"class {cls0} (api {h.get('api_level', '?')})")
         if cls0 != "ncm":
-            check("preflight: dongle class reset to ncm",
+            check("preflight: dongle class normalized to ncm for the matrix",
                   dongle_set_class("ncm"))
 
         # ---- 1: wifi -> usb_ncm ------------------------------------------
@@ -373,9 +408,12 @@ def main():
                 check("leg1: dongle data lines restored over the AP",
                       dt >= 0, "health mirror refreshes on the 10 s poll")
                 h = dongle_health()
-                check("leg1: boot-cut hint cleared by the restore",
-                      h is not None and h.get("boot_cut") is False,
-                      str(h.get("boot_cut") if h else None))
+                check("leg1: the dongle reports its data lines on "
+                      "(usb_data true, no hint to clear since 2026-10-12)",
+                      h is not None and h.get("usb_data") is True and
+                      "boot_cut" not in h,
+                      str({k: h.get(k) for k in ("usb_data", "boot_cut")}
+                          if h else None))
                 survived = (h is not None and up_before > 0 and
                             h["uptime_s"] >= up_before +
                             (time.time() - t_leg) - 30)
@@ -434,8 +472,10 @@ def main():
                 check("leg3: cut executed, back on the AP uplink", dt >= 0,
                       f"{dt:.0f} s")
                 h = dongle_health()
-                check("leg3: boot-cut hint re-armed by the cut",
-                      h is not None and h.get("boot_cut") is True)
+                check("leg3: the dongle reports the runtime cut "
+                      "(usb_data false; nothing persisted)",
+                      h is not None and h.get("usb_data") is False and
+                      "boot_cut" not in h)
                 check("leg3: dongle NOT rebooted by the round trip",
                       h is not None and up_before > 0 and
                       h["uptime_s"] >= up_before +
@@ -481,7 +521,8 @@ def main():
               set_mode(con, "wifi_modem"))
         dt = wait_for(con, "wifi steady (final)", wifi_steady(con), 150)
         check("leg5: final wifi_modem steady", dt >= 0)
-        check("leg5: dongle class restored to ncm", dongle_set_class("ncm"))
+        check(f"leg5: dongle class restored to {cls0} (as found)",
+              dongle_set_class(cls0 or "rndis"))
         b, u = restart_stats(con)
         check("no unexpected WiCAN resets across the bench", u == 0,
               f"unexpected={u}")

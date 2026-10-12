@@ -98,6 +98,20 @@ const check = (n, ok, extra) => { console.log((ok ? "PASS " : "FAIL ") + n + (ex
   check("no hold note in the unsupported case", !/pairing is on hold/i.test(st));
   const lgTxt = lg.textContent;
   check("LTE panel explains the missing health API", /no health API/.test(lgTxt), lgTxt.slice(0, 160));
+
+  /* ---- dongle in usb_mode=console (dongle api 9, 2026-10-12): the CDC
+     console alone on the cable, no USB Ethernet, nothing to pair over USB;
+     the WiCAN keeps the dongle's WiFi with its stored key ---- */
+  w.__mockState.espnlUnsupported = false;
+  w.__mockState.usb = "espnetlink_console";
+  await sleep(5600);
+  st = stat.textContent;
+  check("console-mode note names the cause and the way out",
+    /console mode/.test(st) && /only the console/.test(st) && /wifi_modem -u auto/.test(st), st.slice(0, 240));
+  check("console mode: pairing row says no USB link, not an error",
+    /No USB link/.test(st) && !/gave up/.test(st) && !/unsupported/i.test(st));
+  check("console mode: still paired over WiFi", /ESPNetLink_894A5D/.test(st));
+  w.__mockState.usb = null;
   w.__mockState.espnlUnsupported = false;
 
   check("no jsdom errors", errs.length === 0, errs.slice(0, 2).join(" ;; "));
