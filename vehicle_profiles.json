@@ -2449,7 +2449,7 @@
             },
             {
               "name": "DM_R_RPM",
-              "expression": "((S36)*256)+B37",
+              "expression": "((S66)*256)+B67",
               "unit": "rpm",
               "class": "none",
               "min": "-10100",
@@ -2464,7 +2464,7 @@
             },
             {
               "name": "CAPACITOR",
-              "expression": "((B63<<8)+B35)",
+              "expression": "((B63<<8)+B65)",
               "unit": "V",
               "class": "battery",
               "min": "0",
@@ -2472,7 +2472,7 @@
             },
             {
               "name": "RESISTANCE",
-              "expression": "([B41:B42])",
+              "expression": "([B70:B71])",
               "unit": "kOhm",
               "class": "none",
               "min": "0",
@@ -2642,7 +2642,7 @@
           "parameters": [
             {
               "name": "ODOMETER_MI",
-              "expression": "[B17:B18]",
+              "expression": "(B15*65536+B17*256+B18)",
               "class": "distance",
               "unit": "mi",
               "min": "0"
@@ -2968,7 +2968,7 @@
             },
             {
               "name": "DM_R_RPM",
-              "expression": "((S36)*256)+B37",
+              "expression": "((S66)*256)+B67",
               "unit": "rpm",
               "class": "none",
               "min": "-10100",
@@ -2983,7 +2983,7 @@
             },
             {
               "name": "CAPACITOR",
-              "expression": "((B63<<8)+B35)",
+              "expression": "((B63<<8)+B65)",
               "unit": "V",
               "class": "battery",
               "min": "0",
@@ -2991,7 +2991,7 @@
             },
             {
               "name": "RESISTANCE",
-              "expression": "([B41:B42])",
+              "expression": "([B70:B71])",
               "unit": "kOhm",
               "class": "none",
               "min": "0",
@@ -3161,7 +3161,7 @@
           "parameters": [
             {
               "name": "ODOMETER_MI",
-              "expression": "[B17:B18]",
+              "expression": "(B15*65536+B17*256+B18)",
               "class": "distance",
               "unit": "mi",
               "min": "0"
@@ -4963,7 +4963,7 @@
             },
             {
               "name": "DM_R_RPM",
-              "expression": "((S36)*256)+B37",
+              "expression": "((S66)*256)+B67",
               "unit": "rpm",
               "class": "none",
               "min": "-10100",
@@ -4978,7 +4978,7 @@
             },
             {
               "name": "CAPACITOR",
-              "expression": "((B63<<8)+B35)",
+              "expression": "((B63<<8)+B65)",
               "unit": "V",
               "class": "battery",
               "min": "0",
@@ -4986,7 +4986,7 @@
             },
             {
               "name": "RESISTANCE",
-              "expression": "([B41:B42])",
+              "expression": "([B70:B71])",
               "unit": "kOhm",
               "class": "none",
               "min": "0",
@@ -5156,7 +5156,7 @@
           "parameters": [
             {
               "name": "ODOMETER_MI",
-              "expression": "[B17:B18]",
+              "expression": "(B15*65536+B17*256+B18)",
               "class": "distance",
               "unit": "mi",
               "min": "0"
@@ -7127,7 +7127,7 @@
             },
             {
               "name": "DM_R_RPM",
-              "expression": "((S36)*256)+B37",
+              "expression": "((S66)*256)+B67",
               "unit": "rpm",
               "class": "none",
               "min": "-10100",
@@ -7142,7 +7142,7 @@
             },
             {
               "name": "CAPACITOR",
-              "expression": "((B63<<8)+B35)",
+              "expression": "((B63<<8)+B65)",
               "unit": "V",
               "class": "battery",
               "min": "0",
@@ -7150,7 +7150,7 @@
             },
             {
               "name": "RESISTANCE",
-              "expression": "([B41:B42])",
+              "expression": "([B70:B71])",
               "unit": "kOhm",
               "class": "none",
               "min": "0",
@@ -7308,7 +7308,7 @@
           "parameters": [
             {
               "name": "ODOMETER_MI",
-              "expression": "[B17:B18]",
+              "expression": "(B15*65536+B17*256+B18)",
               "class": "distance",
               "unit": "mi",
               "min": "0"
@@ -7881,7 +7881,7 @@
             },
             {
               "name": "DM_R_RPM",
-              "expression": "((S36)*256)+B37",
+              "expression": "((S66)*256)+B67",
               "unit": "rpm",
               "class": "none",
               "min": "-10100",
@@ -7896,7 +7896,7 @@
             },
             {
               "name": "CAPACITOR",
-              "expression": "((B63<<8)+B35)",
+              "expression": "((B63<<8)+B65)",
               "unit": "V",
               "class": "battery",
               "min": "0",
@@ -7904,7 +7904,7 @@
             },
             {
               "name": "RESISTANCE",
-              "expression": "([B41:B42])",
+              "expression": "([B70:B71])",
               "unit": "kOhm",
               "class": "none",
               "min": "0",
@@ -8074,7 +8074,7 @@
           "parameters": [
             {
               "name": "ODOMETER_MI",
-              "expression": "[B17:B18]",
+              "expression": "(B15*65536+B17*256+B18)",
               "class": "distance",
               "unit": "mi",
               "min": "0"
@@ -8400,7 +8400,7 @@
             },
             {
               "name": "DM_R_RPM",
-              "expression": "((S36)*256)+B37",
+              "expression": "((S66)*256)+B67",
               "unit": "rpm",
               "class": "none",
               "min": "-10100",
@@ -8415,7 +8415,7 @@
             },
             {
               "name": "CAPACITOR",
-              "expression": "((B63<<8)+B35)",
+              "expression": "((B63<<8)+B65)",
               "unit": "V",
               "class": "battery",
               "min": "0",
@@ -8423,7 +8423,7 @@
             },
             {
               "name": "RESISTANCE",
-              "expression": "([B41:B42])",
+              "expression": "([B70:B71])",
               "unit": "kOhm",
               "class": "none",
               "min": "0",
@@ -8593,7 +8593,7 @@
           "parameters": [
             {
               "name": "ODOMETER_MI",
-              "expression": "[B17:B18]",
+              "expression": "(B15*65536+B17*256+B18)",
               "class": "distance",
               "unit": "mi",
               "min": "0"
