@@ -1103,12 +1103,12 @@ try {
             # in), the refusals, the sweep's refresh after an upload and its
             # idle quiet. Eight planned restarts; no console, no PCAN.
             Invoke-Stage 'Configuration backup' {
-                $py = 'C:\Espressif	ools\python6.0.2env\Scripts\python.exe'
+                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
                 try {
                     Start-Sleep -Seconds 3
                     if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
-                    $out = & $py -u "$repo	ools	estbench\system\config_backup_bench.py" --dut 'localhost:18081' --pi $BenchHost 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    $out = & $py -u "$repo\tools\testbench\system\config_backup_bench.py" --dut 'localhost:18081' --pi $BenchHost 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'config_backup' $out
                     if (-not ($out | Select-String -Quiet 'CONFIG BACKUP PASS')) { throw 'no CONFIG BACKUP PASS (the DUT on the bench AP? a card in for the SD leg?)' }
                 } finally {
