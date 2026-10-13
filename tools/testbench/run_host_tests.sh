@@ -28,6 +28,9 @@ rc=0
 total=0
 for ht in components/$ONLY/host_test; do
     [ -d "$ht" ] || { echo "no host_test matches '$ONLY'"; exit 1; }
+    # a host_test without a project is a leftover of an older sync (the tar never
+    # deletes; ble_j2534 and usb_cdc_device lost theirs): not a suite, not a failure
+    [ -f "$ht/CMakeLists.txt" ] || { echo "skip $ht: no CMakeLists.txt"; continue; }
     comp=$(basename "$(dirname "$ht")")
     echo "=== $comp ==="
 

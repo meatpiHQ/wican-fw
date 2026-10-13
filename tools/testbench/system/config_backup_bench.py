@@ -110,6 +110,29 @@ def part_equal(name, a, b):
     return a == b
 
 
+def part_diff(name, a, b):
+    """What differs, for the check's detail: the settings part names the
+    component and its keys (a FAIL without that cost a re-run on
+    2026-10-13), the file parts the entries."""
+    if name == "settings":
+        da = {k: v.get("data") or {} for k, v in (a or {}).items()}
+        db = {k: v.get("data") or {} for k, v in (b or {}).items()}
+        out = []
+        for comp in sorted(set(da) | set(db)):
+            x, y = da.get(comp), db.get(comp)
+            if x is None or y is None:
+                out.append(f"{comp}: {'missing' if x is None else 'extra'} after the restore")
+                continue
+            keys = sorted(k for k in set(x) | set(y) if x.get(k) != y.get(k))
+            for k in keys:
+                out.append(f"{comp}.{k}: {json.dumps(y.get(k))[:60]} -> {json.dumps(x.get(k))[:60]}")
+        return "; ".join(out)[:600]
+    if isinstance(a, dict) and isinstance(b, dict):
+        keys = sorted(k for k in set(a) | set(b) if a.get(k) != b.get(k))
+        return "differs in " + ", ".join(keys)[:400]
+    return "differs"
+
+
 def wait_boot(dut, b0, limit=150):
     t0 = time.time()
     time.sleep(3)
@@ -192,9 +215,11 @@ def main():
     def compare(tag, ref):
         doc, _ = plain_doc()
         for name in FILE_PARTS:
-            run.check(f"{tag}_{name}_equal",
-                      part_equal(name, doc.get("parts", {}).get(name),
-                                 ref.get("parts", {}).get(name)))
+            a = doc.get("parts", {}).get(name)
+            b = ref.get("parts", {}).get(name)
+            ok = part_equal(name, a, b)
+            run.check(f"{tag}_{name}_equal", ok,
+                      "" if ok else part_diff(name, a, b))
         run.check(f"{tag}_mutation_undone",
                   dut.settings(MUTATED[0]).get(MUTATED[1]) != MUTATED_VALUE)
 
