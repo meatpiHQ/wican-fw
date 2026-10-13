@@ -2881,5 +2881,212 @@
       "unit": "%",
       "class": "none"
     }
+  },
+  "TOTAL_CELL_VOLTAGE": {
+    "description": "Total battery cell voltage",
+    "settings": {
+      "unit": "V",
+      "class": "voltage",
+      "min": "0",
+      "max": "500"
+    }
+  },
+  "CHARGE_VOLTAGE_LIMIT": {
+    "description": "Battery charge voltage limit",
+    "settings": {
+      "unit": "V",
+      "class": "voltage",
+      "min": "0",
+      "max": "500"
+    }
+  },
+  "BATTERY_MAX_VOLTAGE": {
+    "description": "Battery maximum voltage",
+    "settings": {
+      "unit": "V",
+      "class": "voltage",
+      "min": "0",
+      "max": "500"
+    }
+  },
+  "BATTERY_MIN_VOLTAGE": {
+    "description": "Battery minimum voltage",
+    "settings": {
+      "unit": "V",
+      "class": "voltage",
+      "min": "0",
+      "max": "500"
+    }
+  },
+  "CELL_SOC_MAX": {
+    "description": "Maximum cell state of charge",
+    "settings": {
+      "unit": "%",
+      "class": "battery",
+      "min": "0",
+      "max": "100"
+    }
+  },
+  "CELL_SOC_MIN": {
+    "description": "Minimum cell state of charge",
+    "settings": {
+      "unit": "%",
+      "class": "battery",
+      "min": "0",
+      "max": "100"
+    }
+  },
+  "RESISTIVE_SOH": {
+    "description": "Battery resistive state of health",
+    "settings": {
+      "unit": "%",
+      "class": "battery",
+      "min": "0",
+      "max": "100"
+    }
+  },
+  "CHARGE_CYCLES": {
+    "description": "Battery charge cycles",
+    "settings": {
+      "unit": "",
+      "class": "none",
+      "min": "0",
+      "max": "5000"
+    }
+  },
+  "CHARGE_TIME_20": {
+    "description": "Charging time to 20%",
+    "settings": {
+      "unit": "min",
+      "class": "none",
+      "min": "0",
+      "max": "1440"
+    }
+  },
+  "CHARGE_TIME_50": {
+    "description": "Charging time to 50%",
+    "settings": {
+      "unit": "min",
+      "class": "none",
+      "min": "0",
+      "max": "1440"
+    }
+  },
+  "CHARGE_TIME_80": {
+    "description": "Charging time to 80%",
+    "settings": {
+      "unit": "min",
+      "class": "none",
+      "min": "0",
+      "max": "1440"
+    }
+  },
+  "CHARGE_TIME_100": {
+    "description": "Charging time to 100%",
+    "settings": {
+      "unit": "min",
+      "class": "none",
+      "min": "0",
+      "max": "1440"
+    }
+  },
+  "HV_CAPACITY_WH": {
+    "description": "Traction battery total energy capacity",
+    "settings": {
+      "unit": "Wh",
+      "class": "energy",
+      "min": "0",
+      "max": "60000"
+    }
+  },
+  "BATTERY_CURRENT_LIMIT_30S": {
+    "description": "Battery current limit for 30 seconds",
+    "settings": {
+      "unit": "A",
+      "class": "current",
+      "min": "-500",
+      "max": "500"
+    }
+  },
+  "BATTERY_OUTPUT_POWER": {
+    "description": "Battery output power",
+    "settings": {
+      "unit": "kW",
+      "class": "power",
+      "min": "-200",
+      "max": "200"
+    }
+  },
+  "CELL_VOLTAGE_DELTA": {
+    "description": "Maximum/minimum cell voltage difference",
+    "settings": {
+      "unit": "V",
+      "class": "voltage",
+      "min": "0",
+      "max": "1"
+    }
+  },
+  "CELL_MODULE_VOLTAGE_DELTA": {
+    "description": "Difference between summed cell voltage and battery module voltage",
+    "settings": {
+      "unit": "V",
+      "class": "voltage",
+      "min": "-5",
+      "max": "5"
+    }
+  },
+  "ACTUAL_ENERGY": {
+    "description": "Actual battery energy",
+    "settings": {
+      "unit": "Wh",
+      "class": "energy",
+      "min": "0",
+      "max": "60000"
+    }
+  },
+  "TOTAL_CAPACITY_DECREASE": {
+    "description": "Total battery capacity decrease",
+    "settings": {
+      "unit": "%",
+      "class": "battery",
+      "min": "0",
+      "max": "100"
+    }
+  },
+  "POWER_LOSS": {
+    "description": "Battery power loss",
+    "settings": {
+      "unit": "%",
+      "class": "battery",
+      "min": "0",
+      "max": "100"
+    }
+  },
+  "BATTERY_OVERVOLTAGE_TIME": {
+    "description": "Time during battery overvoltage",
+    "settings": {
+      "unit": "h",
+      "class": "none",
+      "min": "0",
+      "max": "100000"
+    }
+  },
+  "HV_T_MIN_NO": {
+    "description": "Battery module with minimum temperature",
+    "settings": {
+      "unit": "",
+      "class": "none",
+      "min": "1",
+      "max": "100"
+    }
+  },
+  "HV_T_MAX_NO": {
+    "description": "Battery module with maximum temperature",
+    "settings": {
+      "unit": "",
+      "class": "none",
+      "min": "1",
+      "max": "100"
+    }
   }
 }
