@@ -1,0 +1,29 @@
+{
+  "car_model": "Nissan: Leaf ZE0/AZE0 (2011-2017)",
+  "init": "ATSP6;ATST96;ATFCSH79B;ATFCSD300000;ATFCSM1;",
+  "pids": [
+    {
+      "pid": "21016",
+      "pid_init": "ATSH79B;ATFCSH79B;ATCRA7BB;",
+      "parameters": {
+        "SOC": "[B37:B39]/10000",
+        "HV_V": "[B25:B26]/100",
+        "HV_A": "(0-[S11:S14])/1024",
+        "LV_V": "[B27:B28]/1000",
+        "BATT_CAPACITY": "[B42:B44]/10000",
+        "SOH": "[B42:B44]/6600",
+        "RESISTANCE": "[B29:B30]"
+      }
+    },
+    {
+      "pid": "21043",
+      "pid_init": "ATSH79B;ATFCSH79B;ATCRA7BB;",
+      "parameters": {
+        "HV_T_1": "S6",
+        "HV_T_2": "S10",
+        "HV_T_3": "S13",
+        "HV_T_4": "S17"
+      }
+    }
+  ]
+}
