@@ -61,6 +61,20 @@ const btn = (re, root = card()) => [...root.querySelectorAll("button")].find((b)
   const t3 = card().textContent;
   check("abrp options: user token, API key, placement, car model", /ABRP user token/.test(t3) && /ABRP API key/.test(t3) && /API key placement/.test(t3) && /Car model/.test(t3));
   check("abrp car_model prefilled from the mock", [...card().querySelectorAll("input")].some((i) => i.value === "hyundai:ioniq5:22:77"));
+  /* the ABRP fields line (2026-10-13): what the vehicle provides, what route
+     planning misses and the parameter name that would fill it; the key hint
+     says the key is the user's own */
+  await sleep(250);
+  const t3b = card().textContent;
+  check("abrp options: the ABRP fields line names the missing planning fields and the parameter to name",
+    /ABRP receives now: elevation, heading, lat, lon, speed/.test(t3b) && /Missing for route planning/.test(t3b) && /soc \(name a parameter SOC\)/.test(t3b) && /power \(name a parameter HV_W\)/.test(t3b));
+  check("abrp key hint: your own Iternio key, 2 requests per second", /Your own key from Iternio/.test(t3b) && /2 requests per second/.test(t3b));
+  /* the 5 s floor on an ABRP row's period (the first two rows keep the minimum of 1) */
+  const periodInputs = [...card().querySelectorAll("input[type=number]")];
+  const abrpPeriod = periodInputs[2];
+  check("abrp row's period input has the 5 s floor, the mqtt row keeps 1", !!abrpPeriod && abrpPeriod.min === "5" && periodInputs[0].min === "1");
+  abrpPeriod.value = "2"; abrpPeriod.dispatchEvent(new w.Event("change")); await sleep(50);
+  check("a period under 5 s typed on an ABRP row is raised to 5", abrpPeriod.value === "5");
 
   /* add a destination: a new mqtt row appears expanded, staged for Apply */
   btn(/Add Destination/).click(); await sleep(150);

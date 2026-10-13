@@ -29,6 +29,9 @@ Legs (each prints PASS/FAIL checks):
   E  POST /api/destinations/test: ok for hs, not ok for hsx, 404 unknown
   F  ABRP logical error: the mock answers {"status":"error"} on HTTP 200
      -> the row fails (last_error abrp: ...), recovers when cleared
+  F2 ABRP rate limited (2026-10-13): the mock answers HTTP 429 -> the row
+     goes to the backoff cap (60 s) at once, not after three tries, and
+     recovers after it; the ABRP rows run at the 5 s floor (staged at 3 s)
   G  server down: receiver killed -> fail counts grow, backoff engages
      (>= 3 consecutive, backoff_s >= 10, attempts spaced out); receiver
      back -> success resumes within 60 s, backoff cleared
@@ -437,6 +440,13 @@ def leg_d(device_id, observe):
         if abh:
             check("D: abrph api_key as Authorization: APIKEY header", abh[0]["abrp"]["auth_header"] == "APIKEY key-2"
                   and "api_key" not in abh[0]["query"], abh[0]["abrp"]["auth_header"])
+    check("D: ABRP rows run at the 5 s floor (staged at 3 s, applied as 5)",
+          all(st[n].get("period_s") == 5 for n in ("abrp", "abrph", "abrplive") if n in st)
+          and st.get("h", {}).get("period_s") == 3,
+          json.dumps({n: st[n].get("period_s") for n in ("abrp", "abrph", "abrplive", "h") if n in st}))
+    pace = (st.get("__top") or {}).get("abrp_pacer") or {}
+    check("D: the ABRP pacer made due rows wait for the 2.5 s gap (waits > 0, two ABRP rows due together)",
+          pace.get("waits", 0) > 0 and pace.get("gap_ms") == 2500, json.dumps(pace))
     check("D: abrp rows count success, no fail", st.get("abrp", {}).get("success", 0) >= exp_min and st.get("abrp", {}).get("fail", 0) == 0
           and st.get("abrph", {}).get("fail", 0) == 0, json.dumps({k: (st.get(k, {}).get("success"), st.get(k, {}).get("fail")) for k in ("abrp", "abrph")}))
     # mqtt
@@ -491,6 +501,34 @@ def leg_f():
     st2 = dest_status()
     check("F: abrp recovers after the mock is cleared", st2["abrp"]["success"] > st1["abrp"]["success"] and st2["abrp"]["consecutive_failures"] == 0,
           json.dumps({k: st2["abrp"].get(k) for k in ("success", "consecutive_failures", "backoff_s")}))
+
+
+def leg_f2():
+    print("== F2 ABRP rate limited (HTTP 429 -> the backoff cap at once)")
+    control(abrp_429=True)
+    st0 = dest_status()
+    time.sleep(12)   # one or two laps of the 5 s row
+    st1 = dest_status()
+    a0, a1 = st0["abrp"], st1["abrp"]
+    check("F2: the first 429 takes the row to the backoff cap (60 s) with consecutive failures 3",
+          a1["fail"] > a0["fail"] and a1["last_status"] == 429 and a1["backoff_s"] == 60 and a1["consecutive_failures"] >= 3,
+          json.dumps({k: a1.get(k) for k in ("fail", "last_status", "backoff_s", "consecutive_failures", "last_error")}))
+    check("F2: the row then waits (at most 2 refusals booked in 12 s)", a1["fail"] - a0["fail"] <= 2, str(a1["fail"] - a0["fail"]))
+    check("F2: the 429 body's reason is kept", a1.get("last_error", "").startswith("abrp: error"), a1.get("last_error"))
+    control(abrp_429=False)
+    note("F2: waiting for the capped row to try again (up to 70 s)")
+    st2 = None
+    t0 = time.time()
+    while time.time() - t0 < 70:
+        time.sleep(5)
+        st2 = dest_status()
+        if st2 and st2["abrp"]["success"] > a1["success"]:
+            break
+    a2 = (st2 or {}).get("abrp", {})
+    check("F2: abrp recovers after the cap (success grew, consecutive 0, backoff cleared)",
+          a2.get("success", 0) > a1["success"] and a2.get("consecutive_failures") == 0 and a2.get("backoff_s") == 0,
+          json.dumps({k: a2.get(k) for k in ("success", "consecutive_failures", "backoff_s")}) + f" after {time.time() - t0:.0f} s")
+    metrics.append(("abrp_429_recovery_s", round(time.time() - t0)))
 
 
 def leg_g():
@@ -620,7 +658,7 @@ def leg_i(device_id):
 
 def leg_j(orig_dd, orig_mq):
     print("== J restore")
-    control(abrp_reject=False)
+    control(abrp_reject=False, abrp_429=False)
     code, _ = api("/api/settings/data_destinations", "PUT", clean_doc(orig_dd))
     check("J: data_destinations restored", code == 200, str(code))
     code, _ = api("/api/settings/mqtt_manager", "PUT", clean_doc(orig_mq))
@@ -680,6 +718,7 @@ def main():
         leg_d(device_id, A.observe)
         leg_e()
         leg_f()
+        leg_f2()
         leg_g()
         if not A.skip_broker:
             leg_h(device_id)

@@ -422,6 +422,16 @@ instruments = ["dut", "usbdev"]
 timeout_s = 1800
 doc = "ACM kill floods + NCM OUT blasts vs the 2026-07-17 crash class."
 
+[[test]]
+id = "abrp-live"
+name = "ABRP against the real Iternio API (~5 min)"
+group = "system"
+file = "tools/testbench/system/abrp_live_bench.py"
+cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1 abrp"
+instruments = ["dut", "pi"]
+timeout_s = 900
+doc = "data_destinations ABRP rows vs api.iternio.com: key as query / header, a wrong key, Test, get_telemetry witness; credentials in internal/abrp_credentials.json (PARTIAL without a user token)."
+
 # ---------------------------------------------------------------- suites
 [[suite]]
 id = "quick-live"

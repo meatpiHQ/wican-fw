@@ -384,6 +384,7 @@ void app_main(void)
        dashboard / rules like any polled value; and the HTTP cache backs
        /api/gps when there is no console */
     main_glue_wire_gps();
+    main_glue_wire_usb_status();
     main_boot_start("j2534_server", j2534_server_start);
     /* glue: button long-press -> config mode (AP up, BLE off);
        start AFTER both radios exist (the callback actuates them) */

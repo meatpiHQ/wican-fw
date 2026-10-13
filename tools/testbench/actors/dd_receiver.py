@@ -6,7 +6,7 @@ memory and served back to the orchestrator over the plain port:
 
   :8199  HTTP   any POST is recorded; GET /__dump?since=N returns the
                 records (JSON list) from index N; GET /__mqtt the MQTT
-                records; POST /__control {"abrp_reject": bool} flips the
+                records; POST /__control {"abrp_reject": bool, "abrp_429": bool} flips the
                 mock ABRP into its "status":"error" mode
   :8443  HTTPS  bench server certificate (~/wican-tls/server.crt, CN
                 10.42.0.1 - the firmware skips the CN check for raw-IP
@@ -38,7 +38,7 @@ import urllib.parse
 
 RECORDS = []
 MQTT = []
-CTRL = {"abrp_reject": False}
+CTRL = {"abrp_reject": False, "abrp_429": False}
 LOCK = threading.Lock()
 
 
@@ -155,6 +155,9 @@ class Abrp(Plain):
                        "auth_header": auth}
         if url.path != "/1/tlm/send":
             return send_json(self, {"status": "error", "errors": ["unknown endpoint"]}, 404)
+        if CTRL.get("abrp_429"):
+            # Iternio's rate limit, as the bench plays it: HTTP 429 with an error body
+            return send_json(self, {"status": "error", "errors": ["rate limited"]}, 429)
         if CTRL.get("abrp_reject"):
             return send_json(self, {"status": "error", "errors": ["bench reject"]})
         if missing:

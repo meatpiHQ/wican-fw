@@ -19,6 +19,10 @@ void main_glue_wire_ble_cli(void);
  *  (gps_*); the HTTP cache backs /api/gps without a console. */
 void main_glue_wire_gps(void);
 
+/** The USB connector summary provider for GET /api/status (2026-10-13):
+ *  after the USB components started. */
+void main_glue_wire_usb_status(void);
+
 /** Autopid samples feed data_logger's params stream. */
 void main_glue_wire_autopid_logger(void);
 

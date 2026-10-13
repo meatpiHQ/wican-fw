@@ -104,6 +104,20 @@
           usb: { attached: true, pair_state: "ncm_up", cuts: 0, vbus_cycles: 0, errors: 0 },
           dongle: { ...health, rssi_dbm: -59, gps_fix: true }, polls: 42, link_ups: 1 },
         acm: off, gps: fix };
+      /* 2026-10-13: the usb_rndis default on a fresh WiCAN (no hold, the dongle on
+         the wire at once), the same with no fix, a PIN-locked SIM, the GPS nudge */
+      case "espnetlink_fresh_usb":
+      case "espnetlink_usb_nofix":
+      case "espnetlink_pin":
+      case "espnetlink_nudge": {
+        const usbUp = { ...usb0, device_present: true, eth_connected: true, driver: "rndis", ip: "192.168.7.2", attaches: 1, vid: "303a", pid: "4007", device: { vid: "303a", pid: "4007", class: "rndis", product: "ESPNetLink" } };
+        const base = { ...nl0, ...fw, dongle_api: 9, mode: "usb_rndis", paired: false, uplink: "espnetlink_usb", on_link: true, host: "192.168.7.1",
+          usb: { attached: true, pair_state: "ncm_up", cuts: 0, vbus_cycles: 0, errors: 0 }, polls: 12, link_ups: 1 };
+        const d = k === "espnetlink_pin" ? { ...health, lte_connected: false, attached: false, rssi_dbm: 0, operator: "", network_type: "", ip: "", sim: "pin", stage: "sim_pin" }
+          : { ...health, operator: "Telstra", network_type: "LTE" };
+        const hint = { no_fix_s: k === "espnetlink_nudge" ? 760 : 0 };
+        return { usb: usbUp, nl: { ...base, dongle: d, gps_hint: hint }, acm: off, gps: nofix };
+      }
       case "espnetlink_home": return { usb: { ...usb0, device_present: true, attaches: 1 }, nl: paired, acm: off, gps: nofix };
       /* dongle api 9 (2026-10-12): usb_mode=console, the CDC console alone on the
          cable, no USB Ethernet: paired earlier, the WiCAN on its home WiFi, the
@@ -371,6 +385,7 @@
 
   const FIXED = {
     "/api/status": () => J({
+      usb: (window.__mockPreset || {}).usbStatus || undefined,
       bits: { awake: true, sleep: false, sta_connected: state.staConnected !== false, mqtt_connected: state.mqttConnected !== false, ble_connected: false, sdcard_mounted: state.sdMounted !== false, ble_enabled: false, sta_enabled: true, ap_enabled: true, autopid_enabled: true, home_mode: false, drive_mode: false, smartconnect: false, sta_ap_overlap: false, time_synced: true, vpn_enabled: true, wake_voltage_ok: !state.sleepPending, eth_connected: false, autopid_idle: false, motion: false, sta_suspended: false, ap_suspended: false, ble_suspended: false },
       network_connected: true, uptime: "02:14:09", version: "v6.0.0-preview", partition: "ota_0",
       boot_count: 42, unexpected_resets: 1, device_id: "14c19f44e349",
@@ -406,7 +421,13 @@
     },
     "/api/wifi/status": () => J({ enabled: true, sta_connected: state.staConnected !== false, ip: state.staConnected !== false ? "10.42.0.62" : "", ap_started: true, ap_default_password: state.apDefaultPassword === true, clients: 0, ap_ip: "192.168.0.10", dns: ["10.42.0.1", "1.1.1.1"],
       sta_attempt: { ssid: "HomeWiFi", reason: 204, fail_count: 3, deprioritised: true } }),
-    "/api/destinations": () => J({ enabled: S.data_destinations.values.enabled !== false, running: true, network: true, mqtt: true,
+    /* the ABRP coverage of the live snapshot (2026-10-13): which Iternio fields the
+       parameter names provide, which planning fields are missing and the name that
+       would fill each; the rate guard's constants */
+    "/api/destinations/abrp": () => J({ present: ["elevation", "heading", "lat", "lon", "speed", "utc"],
+      missing: [{ field: "soc", parameter: "SOC" }, { field: "power", parameter: "HV_W" }, { field: "is_charging", parameter: "CHARGING" },
+        { field: "is_dcfc", parameter: "CHARGING_DC" }, { field: "is_parked", parameter: "PARK_BRAKE" }], period_floor_s: 5, request_gap_ms: 2500 }),
+    "/api/destinations": () => J({ enabled: S.data_destinations.values.enabled !== false, running: true, network: true, mqtt: true, abrp_pacer: { gap_ms: 2500, waits: 12, waited_ms: 7400, last_request_age_s: 3 },
       destinations: (S.data_destinations.values.destinations || []).map((d, i) => ({ name: d.name, type: d.type, enabled: d.enabled !== false, url: d.url, period_s: d.period_s, auth: d.auth,
         has_token: i === 1, has_api_key: false, cert_set: d.cert_set, success: i === 0 ? 412 : 0, fail: i === 1 ? 3 : 0, skipped_offline: 0, consecutive_failures: i === 1 ? 3 : 0,
         backoff_s: i === 1 ? 10 : 0, next_in_s: 4, last_status: i === 1 ? 503 : (i === 0 ? 0 : 0), last_error: i === 1 ? "http=503" : "", last_error_time: i === 1 ? new Date().toISOString() : "",

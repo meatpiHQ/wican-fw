@@ -638,7 +638,7 @@
  "espnetlink": {
   "values": {
    "enabled": true,
-   "mode": "wifi_modem",
+   "mode": "usb_rndis",
    "auto_pair": true,
    "ssid": "",
    "device_id": "",
@@ -649,6 +649,7 @@
    "apn": "",
    "apn_user": "",
    "apn_password": "",
+   "sim_pin": "",
    "cli": true
   },
   "schema": {
@@ -698,6 +699,9 @@
      "type": "string"
     },
     "apn_password": {
+     "type": "string"
+    },
+    "sim_pin": {
      "type": "string"
     },
     "cli": {

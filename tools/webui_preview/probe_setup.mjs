@@ -153,7 +153,7 @@ function boot(url, preset) {
     p.nav("#/setup/checks/mqtt"); await sleep(700);
     check("deep link (with the use case segment) lands on the checks screen", /Connected through/.test(p.h2()), p.h2());
     const cards = p.$$(".qs-check");
-    check("WiFi, access point (off: Station only), ESPNetLink and MQTT cards are shown, no mDNS name", cards.length === 4 && /joined/.test(cards[0].textContent) && /router's device list shows it as wican_/.test(cards[0].textContent) && /Access point off: Station only/.test(cards[1].textContent) && /hold its button for 5 seconds/i.test(cards[1].textContent) && /ESPNetLink paired/.test(cards[2].textContent) && /MQTT broker connected/.test(cards[3].textContent) && !/\.local/.test(p.text()), cards.map((c) => c.querySelector("b").textContent));
+    check("WiFi, access point (off: Station only), ESPNetLink and MQTT cards are shown, no mDNS name", cards.length === 4 && /joined/.test(cards[0].textContent) && /router's device list shows it as wican_/.test(cards[0].textContent) && /Access point off: Station only/.test(cards[1].textContent) && /hold its button for 5 seconds/i.test(cards[1].textContent) && /ESPNetLink (paired|connected)/.test(cards[2].textContent) && /MQTT broker connected/.test(cards[3].textContent) && !/\.local/.test(p.text()), cards.map((c) => c.querySelector("b").textContent));
     check("checks: the dongle card reads the device (no step state at the new address): in use over the cable, the rows in the same box", !!p.$(".qs-nlcard") && /In use/.test(p.$(".qs-nlcard").textContent) && /over the cable/.test(p.$(".qs-nlcard").textContent) && /-59 dBm, good/.test(p.$(".qs-nlcard").textContent) && /9 satellites/.test(p.$(".qs-nlcard").textContent), (p.$(".qs-nlcard") || {}).textContent);
     check("rail: the seven steps before the restart show as done", p.$$(".qs-step.done").length === 8, p.$$(".qs-step.done").length);
     /* a FRESH device: polling off, the firmware's 1 s default group (the mock ships autopid on) */
@@ -284,7 +284,7 @@ function boot(url, preset) {
     check("finish: the custom rows (the dedupe fixture, the device's own) stayed", cfgNow.pids.filter((x) => x.type === "custom" && /^OxySensor1_(Volt|FAER)$/.test(x.name)).length === 2 && cfgNow.pids.some((x) => x.type === "custom" && x.name === "OilTemp"), cfgNow.pids.filter((x) => x.type === "custom").map((x) => x.name));
     check("done screen", /WiCAN is set up/.test(p.h2()), p.h2());
     check("done screen shows the VIN, the address and the router's name for WiCAN (no mDNS name)", /1WCAN0FW0P0000001/.test(p.text()) && /http:\/\/10\.42\.0\.62/.test(p.text()) && /shown as wican_[0-9a-f]+ in your router's device list/i.test(p.text()) && !/\.local/.test(p.text()));
-    check("done screen: one USB connector row with the dongle's state", p.$$(".qs-kv dt").some((t) => /USB connector/.test(t.textContent)) && /ESPNetLink paired/.test(p.text()) && /In use/.test(p.text()));
+    check("done screen: one USB connector row with the dongle's state", p.$$(".qs-kv dt").some((t) => /USB connector/.test(t.textContent)) && /ESPNetLink (paired|connected)/.test(p.text()) && /In use/.test(p.text()));
     check("done screen summarises the reading rules", /every 10 s, never pauses, trouble codes every 120 min/.test(p.text()), p.text().match(/every [^.]*min/) && p.text().match(/every [^.]*min/)[0]);
     check("done screen lists the measured pair", /sleeps after 5 min below 13\.1 V, wakes above 13\.3 V/.test(p.text()) && /Measured on your car/.test(p.text()) && !/Power saving is off/.test(p.text()), (p.text().match(/sleeps after[^M]*/) || [])[0]);
     check("no JS errors on the fresh-device run", p.errs.length === 0, p.errs.slice(0, 3));
@@ -388,9 +388,9 @@ function boot(url, preset) {
   }
   {
     const p = await usbScene("espnetlink");
-    check("a dongle paired over the cable and in use: the rows read live, USB Ethernet stays ticked (paired keeps its mode)", /ESPNetLink paired/.test(p.text()) && /In use/.test(p.text()) && /over the cable/.test(p.text()) && /-59 dBm, good/.test(p.text()) && /10\.86\.12\.44/.test(p.text()) && /9 satellites/.test(p.text()) && p.$("#qs-nl-usb").checked);
+    check("a dongle paired over the cable and in use: the rows read live, USB Ethernet stays ticked (paired keeps its mode)", /ESPNetLink (paired|connected)/.test(p.text()) && /In use/.test(p.text()) && /over the cable/.test(p.text()) && /-59 dBm, good/.test(p.text()) && /10\.86\.12\.44/.test(p.text()) && /9 satellites/.test(p.text()) && p.$("#qs-nl-usb").checked);
     p.btn(/^Continue$/).click(); await sleep(400);
-    check("Review for a paired dongle with nothing to change: a done row", p.$$(".qs-rv li").some((li) => /USB connector/.test(li.textContent) && /Paired/.test(li.textContent) && !li.querySelector(".ci.pend")));
+    check("Review for a paired dongle with nothing to change: a done row", p.$$(".qs-rv li").some((li) => /USB connector/.test(li.textContent) && /Paired|Connected over the cable/.test(li.textContent) && !li.querySelector(".ci.pend")));
   }
   {
     const p = await usbScene("espnetlink_home");

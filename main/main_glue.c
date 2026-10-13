@@ -25,6 +25,8 @@
 #include "usb_acm_cli.h"
 #include "espnetlink_link.h"
 #include "wifi_manager.h"
+#include "dev_status_manager.h"
+#include "usb_host_manager.h"
 
 #include "main_glue.h"
 
@@ -113,6 +115,77 @@ void main_glue_wire_gps(void)
     /* /api/gps (usb_acm_cli's route) serves the HTTP-polled fix when the
        console has none: the WiFi-modem topology has no console at all */
     usb_acm_cli_set_gps_fallback(espnetlink_link_gps_get);
+}
+
+/** The USB connector summary for GET /api/status (2026-10-13): the web UI's
+ *  header pill and ESPNetLink bar read it on the poll they make anyway.
+ *  The kind follows the wizard's own rule (setup.js usbKind): the dongle
+ *  whenever espnetlink_link has it in hand (on the wire or as a console),
+ *  else an Ethernet driver with a device, else a receiver by its NMEA
+ *  stream or the u-blox vendor id, else whatever enumerated. Composition
+ *  glue: dev_status_manager must not know the USB components. */
+static bool usb_summary(dev_status_usb_t *out)
+{
+    usb_host_manager_status_t u;
+    espnetlink_link_status_t nl;
+    usb_acm_gps_t g;
+
+    if (usb_host_manager_status(&u) != ESP_OK)
+    {
+        return false;
+    }
+
+    bool have_nl = espnetlink_link_status(&nl) == ESP_OK;
+    bool is_nl = have_nl && (nl.usb_attached || nl.dongle_console ||
+                             (u.dev_present && u.dev_vid == 0x303a &&
+                              u.dev_pid == 0x4007));
+
+    if (is_nl)
+    {
+        out->kind = DEV_STATUS_USB_ESPNETLINK;
+        snprintf(out->device_id, sizeof(out->device_id), "%s", nl.device_id);
+        snprintf(out->sim, sizeof(out->sim), "%s", nl.dongle_sim);
+        out->lte = nl.health_valid && nl.lte_connected;
+        snprintf(out->operator_name, sizeof(out->operator_name), "%s",
+                 nl.operator_name);
+        out->fix = nl.gps_valid || (nl.health_valid && nl.dongle_gps_fix);
+        out->satellites = espnetlink_link_gps_get(&g) == ESP_OK
+                              ? g.satellites : 0;
+        out->no_fix_s = nl.no_fix_s;
+        out->no_fix_hint = nl.no_fix_hint;
+        return true;
+    }
+    if (u.eth_connected || (u.device_present && u.driver[0] != '\0'))
+    {
+        out->kind = DEV_STATUS_USB_ETH;
+        out->link = u.eth_connected && u.ip[0] != '\0';
+        snprintf(out->ip, sizeof(out->ip), "%s", u.ip);
+        snprintf(out->product, sizeof(out->product), "%s", u.dev_product);
+        return true;
+    }
+    if (u.dev_present)
+    {
+        bool nmea = usb_acm_cli_connected() &&
+                    strcmp(usb_acm_cli_mode(), "nmea") == 0;
+
+        snprintf(out->product, sizeof(out->product), "%s", u.dev_product);
+        if (nmea || u.dev_vid == 0x1546)
+        {
+            out->kind = DEV_STATUS_USB_GPS;
+            out->fix = usb_acm_cli_gps_get(&g) == ESP_OK;
+            out->satellites = out->fix ? g.satellites : 0;
+            return true;
+        }
+        out->kind = DEV_STATUS_USB_OTHER;
+        return true;
+    }
+    out->kind = DEV_STATUS_USB_NONE;
+    return true;
+}
+
+void main_glue_wire_usb_status(void)
+{
+    dev_status_manager_set_usb_provider(usb_summary);
 }
 
 /** Composition glue: autopid samples -> the logger's params stream
