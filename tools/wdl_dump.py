@@ -9,6 +9,11 @@ blocks, each def applies to the records after it):
   0x02 param: i64 ts_ms, u16 id, f64 value
   0x03 frame: i64 ts_ms, u32 id_word, u8 dlc, data[dlc]
               id_word bit31 = extended id, bit30 = RTR
+  0x04 clock: i64 ts_ms, i64 delta_ms, u8 source (2026-10-13: the
+              device's clock was set here, by delta_ms; the records
+              before it were stamped on the old clock. The firmware
+              writes it only as the LAST record of a file: an older
+              reader stops at it as at a torn tail, nothing lost)
 
 Output formats:
   csv     params: ts_ms,param,value  /  frames: ts_ms,id,ext,rtr,dlc,data
@@ -19,16 +24,20 @@ Output formats:
   python wdl_dump.py file.wdl [--to csv|candump|trc|text] [--strict]
 
 --strict exits 1 on a torn/unknown tail instead of stopping quietly
-(a torn tail frame is legal: power loss mid-write).
+(a torn tail frame is legal: power loss mid-write). The clock record
+prints in text mode and is skipped by the row formats; `tools/log_clock.py`
+uses it (with the device's clock journal) to re-base the rows before it.
 """
 import argparse
 import struct
 import sys
 
+CLOCK_SOURCES = {0: "none", 1: "rtc", 2: "sntp", 3: "manual"}
+
 
 def decode(path, strict=False):
     """Yield ('param', ts_ms, name, value) / ('frame', ts_ms, id, ext,
-    rtr, data_bytes) tuples."""
+    rtr, data_bytes) / ('clock', ts_ms, delta_ms, source) tuples."""
     with open(path, "rb") as f:
         blob = f.read()
 
@@ -65,6 +74,10 @@ def decode(path, strict=False):
                 yield ("frame", ts, idw & 0x1FFFFFFF,
                        bool(idw & 0x80000000), bool(idw & 0x40000000),
                        data)
+            elif rtype == 0x04:
+                ts, delta, src = struct.unpack_from("<qqB", blob, off)
+                off += 17
+                yield ("clock", ts, delta, CLOCK_SOURCES.get(src, f"?{src}"))
             else:
                 raise struct.error(f"unknown record type 0x{rtype:02X}")
         except struct.error as e:
@@ -81,7 +94,7 @@ def main():
     ap.add_argument("--strict", action="store_true")
     a = ap.parse_args()
 
-    n_params = n_frames = 0
+    n_params = n_frames = n_clock = 0
     trc_base = None
 
     for rec in decode(a.file, a.strict):
@@ -98,6 +111,12 @@ def main():
                 print(f"{ts},{name},{value:.6g}")
             elif a.to == "text":
                 print(f"{ts} {name} = {value:.6g}")
+        elif rec[0] == "clock":
+            _, ts, delta, src = rec
+            n_clock += 1
+            if a.to == "text":
+                print(f"{ts} clock step {delta:+d} ms ({src}): the records "
+                      f"above were stamped on the old clock")
         else:
             _, ts, fid, ext, rtr, data = rec
             n_frames += 1
@@ -120,7 +139,8 @@ def main():
                       f"{data.hex().upper()}")
 
     if a.to == "text":
-        print(f"-- {n_params} params, {n_frames} frames")
+        print(f"-- {n_params} params, {n_frames} frames"
+              + (f", {n_clock} clock step(s)" if n_clock else ""))
 
 
 if __name__ == "__main__":

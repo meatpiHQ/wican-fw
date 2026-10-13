@@ -432,6 +432,16 @@ instruments = ["dut", "pi"]
 timeout_s = 900
 doc = "data_destinations ABRP rows vs api.iternio.com: key as query / header, a wrong key, Test, get_telemetry witness; credentials in internal/abrp_credentials.json (PARTIAL without a user token)."
 
+[[test]]
+id = "log-clock"
+name = "Log timestamps vs the clock's history (~8 min)"
+group = "system"
+file = "tools/testbench/system/log_clock_bench.py"
+cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1 logclock"
+instruments = ["dut", "pi", "psu"]
+timeout_s = 1200
+doc = "issue #984: the SNTP actor on the Pi steps the DUT's clock while the logger writes; the clock journal, the in-band markers, the re-based rows, the mf4 relative times, the unsynced boot after a PSU power cycle, the re-base tool. Prints LOG CLOCK PASS."
+
 # ---------------------------------------------------------------- suites
 [[suite]]
 id = "quick-live"

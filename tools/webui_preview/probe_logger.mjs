@@ -42,7 +42,8 @@ const setSel = (el, v) => { el.value = v; fire(el, "change"); };
     JSON.stringify(titles) === JSON.stringify(["Status", "Logger settings", "Vehicle parameters", "CAN frames", "Log files"]));
   const status = cardByTitle("Status");
   const chips = [...status.querySelectorAll(".lg-chips .chip")].map((c) => c.textContent.trim());
-  check("status chips: Off + SD card with GB capacity", chips[0] === "Off" && /^SD card · 320\.0 KB of 2\.83 GB used$/.test(chips[1] || ""), chips);
+  /* the mock's card reads 14.83 GB since the 64-bit capacity fix (issue #982, 2026-10-11) */
+  check("status chips: Off + SD card with GB capacity", chips[0] === "Off" && /^SD card · 320\.0 KB of 14\.83 GB used$/.test(chips[1] || ""), chips);
   check("status says logging is off, no dash-filled table", /Logging is off/.test(status.textContent) && !status.querySelector(".kv"));
   check("no Pause button while the logger is off", !/Pause/.test(status.textContent) && /Open folder/.test(status.textContent));
   check("stream cards hidden while the logger is off", !shown(cardByTitle("Vehicle parameters")) && !shown(cardByTitle("CAN frames")));
@@ -54,7 +55,8 @@ const setSel = (el, v) => { el.value = v; fire(el, "change"); };
   const dbRow = [...files.querySelectorAll("tbody tr")].find((tr) => tr.querySelector(".mono").textContent === "dl_1784563543.db");
   const cells = [...dbRow.querySelectorAll("td")].map((e) => e.textContent.trim());
   check("file row: stream + format + date + size", cells[1] === "Parameters" && cells[2] === "SQLite" && /\d{4}/.test(cells[3]) && cells[4] === "28.0 KB", cells);
-  check("download link per file, none marked in use", files.querySelectorAll('a[download]').length === 8 && !/in use/.test(files.textContent));
+  /* the card's header carries the Clock journal download too (2026-10-13): count the rows' links */
+  check("download link per file, none marked in use", files.querySelectorAll('tbody a[download]').length === 8 && !/in use/.test(files.textContent));
 
   /* enable: the stream cards appear, nothing selected yet */
   row("enabled").querySelector("label.switch input").click(); await sleep(50);

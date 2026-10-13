@@ -2214,6 +2214,7 @@
     lastRestart: { reason: "software", planned: true, planned_reason: "config_apply", source: "config_server" },
     dirs: new Set(),            /* folders created through /api/fs/mkdir */
     loggerRunning: false,       /* true -> /api/logger reports the active file (write-locked) */
+    clockUnset: !!(window.__mockPreset || {}).clockUnset,   /* a boot without a clock: /api/rtc valid false */
     sdMounted: true,            /* false -> /api/status says no card, /sd listings fail */
     autopidCfg: (window.__mockPreset || {}).autopidCfg || {
       version: 1,
@@ -2443,7 +2444,7 @@
     "/api/destinations/abrp": () => J({ present: ["elevation", "heading", "lat", "lon", "speed", "utc"],
       missing: [{ field: "soc", parameter: "SOC" }, { field: "power", parameter: "HV_W" }, { field: "is_charging", parameter: "CHARGING" },
         { field: "is_dcfc", parameter: "CHARGING_DC" }, { field: "is_parked", parameter: "PARK_BRAKE" }], period_floor_s: 5, request_gap_ms: 2500 }),
-    "/api/destinations": () => J({ enabled: S.data_destinations.values.enabled !== false, running: true, network: true, mqtt: true, abrp_pacer: { gap_ms: 2500, deferred: 12, waited_ms: 700, last_request_age_s: 3 },
+    "/api/destinations": () => J({ enabled: S.data_destinations.values.enabled !== false, running: true, network: true, mqtt: true, abrp_pacer: { gap_ms: 2500, waits: 12, waited_ms: 7400, last_request_age_s: 3 },
       destinations: (S.data_destinations.values.destinations || []).map((d, i) => ({ name: d.name, type: d.type, enabled: d.enabled !== false, url: d.url, period_s: d.period_s, auth: d.auth,
         has_token: i === 1, has_api_key: false, cert_set: d.cert_set, success: i === 0 ? 412 : 0, fail: i === 1 ? 3 : 0, skipped_offline: 0, consecutive_failures: i === 1 ? 3 : 0,
         backoff_s: i === 1 ? 10 : 0, next_in_s: 4, last_status: i === 1 ? 503 : (i === 0 ? 0 : 0), last_error: i === 1 ? "http=503" : "", last_error_time: i === 1 ? new Date().toISOString() : "",
@@ -2537,11 +2538,19 @@
     "/api/logger": () => J({ enabled: !!state.loggerRunning, running: !!state.loggerRunning, paused: false, storage_ok: false, file: state.loggerFile, file_rows: 0, files: 0, queued: 0,
       written: 0, dropped: 0, errors: 0, rotations: 0,
       can: { enabled: false, file: "", file_rows: 0, files: 0, queued: 0, frames_written: 0, frames_dropped: 0, rotations: 0 },
-      salvaged: state.loggerSalvaged || 0, corrupt: state.loggerCorrupt || 0, dir: "/sd/logs" }),
+      salvaged: state.loggerSalvaged || 0, corrupt: state.loggerCorrupt || 0,
+      clock: state.clockUnset ? { valid: false, source: "none", steps_this_boot: 0, rotations_by_clock: 0, journal_bytes: 0, journal: "/sd/logs/clock.jsonl" }
+        : { valid: true, source: "sntp", steps_this_boot: 2, rotations_by_clock: 2, journal_bytes: 612, journal: "/sd/logs/clock.jsonl" },
+      dir: "/sd/logs" }),
     "/api/fs/info": (full) => (/path=\/data/.test(full || "") ? J({ total: 6029312, used: 1060864 })
       /* the bench's 16 GB card as the firmware reports it since 2026-10-11 (issue #982: 3038806016 before, the 32-bit wrap) */
       : !state.sdMounted ? J({ error: "invalid path" }, 400) : J({ total: 15923707904, used: 327680 })),
-    "/api/rtc": () => J({ time: new Date().toISOString(), valid: true, rtc: null, sntp: { enabled: true, server: "pool.ntp.org", last_sync: null } }),
+    /* the clock's history (2026-10-13): `clock` = who set it and the newest step; __mockPreset.clockUnset = a boot without a clock */
+    "/api/rtc": () => state.clockUnset
+      ? J({ time: "1970-01-01T00:02:11Z", valid: false, rtc: null, sntp: { enabled: true, server: "pool.ntp.org", last_sync: null },
+            clock: { source: "none", generation: 0, steps_this_boot: 0, last_step: null } })
+      : J({ time: new Date().toISOString(), valid: true, rtc: null, sntp: { enabled: true, server: "pool.ntp.org", last_sync: null },
+            clock: { source: "sntp", generation: 2, steps_this_boot: 2, last_step: { delta_ms: 7200000, source: "sntp", at: "2026-10-13T09:14:02Z" } } }),
     "/api/logs/status": () => J({ dropped: 0, sinks: { ring: true, uart: true } }),
     "/api/logs/ring": () => T("I (1234) main: WiCAN v6 preview mock\nI (1240) wifi_manager: STA got IP 10.42.0.62\nI (2001) autopid: started (3 pids / default group)\nW (9004) event_manager: rule low_batt disabled\n"),
     "/api/status/tasks": () => J({ cores: 2, total_us: 23785179, tasks: [
@@ -2805,7 +2814,8 @@
       const fmt = S.data_logger && S.data_logger.values.format;
       if (fmt !== "jsonl" && fmt !== "csv") return T("params stream is not jsonl or csv", 400);
       const name = q.get("name") || "RPM", nowMs = Date.now(), base = state.dash[name] != null ? state.dash[name] : 50;
-      let out = fmt === "csv" ? "ts_ms,param,value\n" : "";
+      /* the file the rows come from (2026-10-13): the dashboard re-bases per file with the clock journal */
+      let out = (fmt === "csv" ? "ts_ms,param,value\n" : "") + JSON.stringify({ _file: "dl_" + String(state.logEpoch).padStart(10, "0") + (fmt === "csv" ? ".csv" : ".jsonl") }) + "\n";
       for (let i = 120; i >= 1; i--) {
         const ts = nowMs - i * 30000, value = base + Math.sin(i / 7) * (name === "RPM" ? 300 : 5);
         out += fmt === "csv" ? ts + ",autopid." + name + "," + value.toFixed(6) + "\n" : JSON.stringify({ ts, param: "autopid." + name, value }) + "\n";
@@ -2815,6 +2825,17 @@
     if (method === "POST" && path === "/api/logger/gate") { state.gateCalls++; return J({ ok: true }); }
     if (method === "GET" && path === "/api/fs/download") {
       const p = q.get("path");
+      /* the clock journal (2026-10-13): the legacy JSON-lines file and the ASC file were open when the clock
+         became valid (an unsynced boot), the SQLite file saw a +2 h step */
+      if (p === "/sd/logs/clock.jsonl") return T([
+        '{"ev":"boot","boot":3,"ts":131000,"up_ms":131000,"valid":false,"source":"none"}',
+        '{"ev":"valid","boot":3,"ts_before":140000,"ts_after":1784329700000,"delta_ms":1784329560000,"source":"sntp","files":["dl_1784329639.jsonl","can_1783689511.asc"]}',
+        '{"ev":"rotate","boot":3,"ts":1784329700000,"stream":"params","from":"dl_1784329639.jsonl","to":"dl_1784329700.jsonl","why":"clock"}',
+        '{"ev":"boot","boot":4,"ts":1784563540000,"up_ms":9000,"valid":true,"source":"rtc"}',
+        '{"ev":"step","boot":4,"ts_before":1784563600000,"ts_after":1784570800000,"delta_ms":7200000,"source":"sntp","files":["dl_1784563543.db","can_1784563543.wdl"]}',
+        '{"ev":"rotate","boot":4,"ts":1784570800000,"stream":"params","from":"dl_1784563543.db","to":"dl_1784570800.db","why":"clock"}',
+        '{"ev":"step","boot":4,"ts_before":1784574400000,"ts_after":1784570800000,"delta_ms":-3600000,"source":"manual","files":["dl_1784570800.db"]}',
+        ""].join("\n"));
       /* a binary log fixture the probe injects (window.__WDL_FIXTURE__: Uint8Array) */
       if (/\.wdl$/.test(p || "") && window.__WDL_FIXTURE__) {
         const buf = window.__WDL_FIXTURE__.buffer.slice(window.__WDL_FIXTURE__.byteOffset, window.__WDL_FIXTURE__.byteOffset + window.__WDL_FIXTURE__.byteLength);
@@ -4975,7 +4996,7 @@ PAGES.status=async(view)=>{
       card("System","cpu",kv([
         ["Firmware",st.version||"-"],
         ["Partition",st.partition||"-"],
-        ["Clock",rtc?(rtc.valid?rtc.time:"not set, waiting for an internet time sync"):"-"],
+        ["Clock",rtc?clockWords(rtc):"-"],
         ["Boot count",st.boot_count??"-"],
         ["Last wake-up",wake],
         ["Unexpected resets",st.unexpected_resets??"-"],
@@ -6108,6 +6129,56 @@ const LOG_FMT_HELP={
     asc:"Vector ASC text. CANalyzer / CANoe. Starts a fresh file every boot.",
     jsonl:"One JSON object per line: jq, pandas, anything."}};
 const LOG_EXT_NAME={db:"SQLite",csv:"CSV",wdl:"Binary",jsonl:"JSON lines",mf4:"MDF4",blf:"BLF",log:"candump",asc:"ASC"};
+/* The clock's history (2026-10-13, issue #984). /api/rtc.clock says who set
+   the system clock and how far it last moved; /api/logger.clock what the
+   logger did about it; /sd/logs/clock.jsonl (the clock journal) lists every
+   set with the files that were open. Words for all three, and the per-file
+   re-base the dashboard's history applies to rows written before a step. */
+const CLOCK_SRC={none:"nobody",rtc:"the RTC chip",sntp:"SNTP",manual:"a manual set"};
+function clockDelta(ms){const a=Math.abs(ms),s=ms<0?"-":"+";
+  if(a<1000)return s+a+" ms";if(a<120000)return s+Math.round(a/1000)+" s";if(a<7200000)return s+Math.round(a/60000)+" min";
+  if(a<172800000)return s+(a/3600000).toFixed(1).replace(/\.0$/,"")+" h";if(a<63072000000)return s+Math.round(a/86400000)+" days";return s+Math.round(a/31557600000)+" years";}
+function clockWords(rtc){
+  if(!rtc)return "-";
+  if(!rtc.valid)return "not set, waiting for an internet time sync (log rows carry the uptime since boot)";
+  const c=rtc.clock;if(!c)return rtc.time;
+  let s=rtc.time+" · set by "+(CLOCK_SRC[c.source]||c.source);
+  const ls=c.last_step;
+  if(ls&&c.steps_this_boot>1&&Math.abs(ls.delta_ms)>=1000)s+=", last moved "+clockDelta(ls.delta_ms)+" by "+(CLOCK_SRC[ls.source]||ls.source);
+  return s;
+}
+function loggerClockWords(c,rtc){
+  if(!c)return "";
+  if(!c.valid)return "Clock: not set. Rows carry the uptime since boot until an internet time sync or a manual set; the clock journal and the file list say so.";
+  const ls=rtc&&rtc.clock&&rtc.clock.last_step;
+  let s="Clock: set by "+(CLOCK_SRC[c.source]||c.source);
+  if(ls&&ls.at)s+=" at "+ls.at.replace("T"," ").replace("Z"," UTC");
+  if(ls&&c.steps_this_boot>1&&Math.abs(ls.delta_ms)>=60000)s+=", a step of "+clockDelta(ls.delta_ms)+" this boot";
+  else if(c.steps_this_boot>1)s+=", "+(c.steps_this_boot-1)+" small step"+(c.steps_this_boot>2?"s":"")+" this boot";
+  if(c.rotations_by_clock)s+=" ("+c.rotations_by_clock+" file"+(c.rotations_by_clock>1?"s":"")+" rotated by the clock)";
+  return s+".";
+}
+async function loadClockJournal(){
+  try{const r=await fetch(API+"/api/fs/download?path="+encodeURIComponent("/sd/logs/clock.jsonl").replace(/%2F/gi,"/"),{cache:"no-store"});return r.ok?journalFromText(await r.text()):new Map();}
+  catch(e){return new Map();}
+}
+/* file name -> the steps that happened while it was open: {before, after, delta, origin, unsynced} */
+function journalFromText(txt){
+  const m=new Map();let origin=null;
+  for(const line of String(txt||"").split("\n")){if(!line.trim())continue;let e;try{e=JSON.parse(line);}catch(x){continue;}
+    if(e.ev==="boot"){origin=(Number(e.ts)||0)-(Number(e.up_ms)||0);continue;}
+    if(e.ev!=="valid"&&e.ev!=="step")continue;
+    for(const f of(e.files||[])){let a=m.get(f);if(!a){a=[];m.set(f,a);}a.push({before:Number(e.ts_before),after:Number(e.ts_after),delta:Number(e.delta_ms)||0,origin,unsynced:e.ev==="valid"});}
+    if(origin!=null)origin+=Number(e.delta_ms)||0;   /* the boot's origin follows the clock through its later steps */}
+  return m;
+}
+/* a row's stamp as the corrected clock would have written it: every step
+   that happened while its file was open and after the row (a row from an
+   earlier boot in a resumed file keeps its stamp) */
+function journalShift(j,file,ts){
+  const a=j&&file?j.get(file):null;if(!a||!Number.isFinite(ts))return ts;
+  let t=ts;for(const s of a){if(t<=s.before&&(s.origin==null||t>=s.origin-5000))t+=s.delta;}return t;
+}
 PAGES.logger=async(view)=>{
   const p=page(view,null,"Logger","Record vehicle parameters and raw CAN frames to the SD card.");
   const statusEl=h("div",{}),formEl=h("div",{}),filesEl=h("div",{});p.append(statusEl,formEl,filesEl);
@@ -6229,7 +6300,7 @@ PAGES.logger=async(view)=>{
   const streamBlock=(t,i,rows)=>h("div",{class:"lg-stream"},h("h4",{},ic(i),t),kv(rows));
   const drop=n=>n?chip(fmt.num(n),"crit"):"0";
   async function status(){
-    const l=await tryGet("/api/logger");if(!l)return;
+    const[l,rtcNow]=await Promise.all([tryGet("/api/logger"),tryGet("/api/rtc")]);if(!l)return;
     const can=l.can||{};const sd=isMounted();
     const state=!l.enabled?chip("Off",""):l.paused?chip("Paused","warn"):(l.running&&l.storage_ok)?chip("Recording","ok"):sd?chip("Waiting for storage","warn"):chip("No SD card","crit");
     const storage=sd?chip(sdInfo&&sdInfo.total?"SD card · "+fmt.bytes(sdInfo.used)+" of "+fmt.bytes(sdInfo.total)+" used":"SD card mounted","ok"):chip("No SD card","crit");
@@ -6248,7 +6319,7 @@ PAGES.logger=async(view)=>{
       " and set aside as *.corrupt in /sd/logs. Logging went on in a fresh file and what could still be read was salvaged. For a deeper recovery download the .corrupt file and run tools/db_recover.py on a PC, then delete it in the ",
       h("a",{href:"#/files/sd/logs"},"File Manager"),"."));
     if(!l.enabled)body.push(h("div",{class:"empty",style:"padding:12px 0 2px"},"Logging is off: turn it on below and choose what to record."));
-    else body.push(h("div",{class:"cols2"},
+    else body.push(h("div",{class:"help lg-clock",style:"margin:8px 0 2px"},loggerClockWords(l.clock,rtcNow)),h("div",{class:"cols2"},
       streamBlock("Vehicle parameters","gauge",[["Mode",modeName()],["File",l.file||"-"],["Rows written",fmt.num(l.written)],["Dropped",drop(l.dropped)],["Files on card",fmt.num(l.files)],["Rotations",fmt.num(l.rotations)]]),
       streamBlock("CAN frames","activity",can.enabled?[["Bus",canBusOn()===false?chip("CAN bus off","warn"):canBusOn()?chip("On","ok"):"-"],["File",can.file||"-"],["Frames written",fmt.num(can.frames_written)],["Dropped",drop(can.frames_dropped)],["Files on card",fmt.num(can.files)],["Rotations",fmt.num(can.rotations)]]
         :[["Recording",chip("Off","")]])));
@@ -6261,11 +6332,23 @@ PAGES.logger=async(view)=>{
 
   /* ---- the newest files; the active ones are write-locked until paused ---- */
   const filesWrap=h("div",{});
+  /* the "Started" cell: the name's epoch, unless the clock journal says the
+     clock was not set while the file was open (its rows carry the uptime
+     since boot up to the moment the clock was set) or moved by a minute or more */
+  const startedCell=(e,j)=>{
+    const steps=j.get(e.name)||[];const un=steps.find(s=>s.unsynced);
+    const when=e.epoch>1e9?new Date(e.epoch*1000).toLocaleString():null;
+    if(un)return h("span",{class:"help",title:"The clock was not set when this file was started: its rows carry the uptime since boot until the clock was set"+(Number.isFinite(un.after)?" at "+new Date(un.after).toLocaleString():"")+". tools/log_clock.py re-bases them with the clock journal."},
+      "clock not set"+(Number.isFinite(un.after)?" until "+new Date(un.after).toLocaleTimeString():""));
+    const big=steps.find(s=>Math.abs(s.delta)>=60000);
+    if(big)return h("span",{title:"The clock moved by "+clockDelta(big.delta)+" while this file was open: the rows before the step are on the old clock (the file ends with a marker where it has room; the clock journal has the rest)"},(when||"clock not set")+" · clock moved "+clockDelta(big.delta));
+    return when||"clock not set";
+  };
   async function loadFiles(){
     if(!isMounted()){filesWrap.replaceChildren(h("div",{class:"empty"},"No SD card: insert one to record logs."));return;}
-    const r=await tryGet("/api/fs/list?path="+enc(LOG_DIR));
+    const[r,journal]=await Promise.all([tryGet("/api/fs/list?path="+enc(LOG_DIR)),loadClockJournal()]);
     if(!r){filesWrap.replaceChildren(h("div",{class:"empty"},"No log folder yet: it is created when the logger first runs."));return;}
-    const ents=(r.entries||[]).filter(e=>!e.dir).map(e=>{const m=e.name.match(/^(dl|can)_(\d+)\.(\w+)$/);
+    const ents=(r.entries||[]).filter(e=>!e.dir&&e.name!=="clock.jsonl").map(e=>{const m=e.name.match(/^(dl|can)_(\d+)\.(\w+)$/);
       return{name:e.name,size:e.size,stream:m?(m[1]==="dl"?"Parameters":"CAN frames"):"-",epoch:m?Number(m[2]):0,ext:m?m[3]:(e.name.split(".").pop()||"")};})
       .sort((a,b)=>b.epoch-a.epoch||b.name.localeCompare(a.name));
     const MAXN=8,show=ents.slice(0,MAXN);
@@ -6273,14 +6356,16 @@ PAGES.logger=async(view)=>{
       {label:"File",get:e=>h("span",{class:"rowflex",style:"gap:8px"},h("span",{class:"mono"},e.name),active.has(e.name)?chip("recording","ok"):null)},
       {label:"Stream",get:e=>e.stream},
       {label:"Format",get:e=>LOG_EXT_NAME[e.ext]||e.ext.toUpperCase()},
-      {label:"Started",get:e=>e.epoch>1e9?new Date(e.epoch*1000).toLocaleString():"-"},
+      {label:"Started",get:e=>startedCell(e,journal)},
       {label:"Size",align:"right",get:e=>fmt.bytes(e.size)},
       {label:"",get:e=>active.has(e.name)?h("span",{class:"help",title:"The file being written is locked: pause logging to download it"},"in use"):
         h("a",{class:"btn sm gh",title:"Download",href:API+"/api/fs/download?path="+enc(LOG_DIR+"/"+e.name),download:e.name},ic("download"))}],
       show,{empty:"No log files yet."});
     filesWrap.replaceChildren(tbl,ents.length>MAXN?h("div",{class:"help",style:"margin-top:8px"},"Newest "+MAXN+" of "+ents.length+" files: open the folder for the rest."):null);
   }
-  filesEl.append(cardTools("Log files","folder",[h("button",{class:"btn sm gh",type:"button",title:"Refresh the list",onclick:()=>loadFiles()},ic("refresh")),folderBtn()],filesWrap));
+  filesEl.append(cardTools("Log files","folder",[h("button",{class:"btn sm gh",type:"button",title:"Refresh the list",onclick:()=>loadFiles()},ic("refresh")),
+    h("a",{class:"btn sm gh",title:"The clock journal: every time the clock was set or stepped, with the files that were open (tools/log_clock.py re-bases a file with it)",href:API+"/api/fs/download?path="+enc(LOG_DIR+"/clock.jsonl"),download:"clock.jsonl"},ic("download"),"Clock journal"),
+    folderBtn()],filesWrap));
 
   await sdRefresh();
   await status();
@@ -6399,7 +6484,7 @@ let histInfo=null,histInfoAt=0,sqlReady=null;
 const matchName=(full,name)=>full===name||full.endsWith("."+name);
 async function loggerHistoryInfo(){
   if(histInfo&&Date.now()-histInfoAt<30000)return histInfo;
-  const[st,rtc,ls,lg]=await Promise.all([tryGet("/api/settings/data_logger"),tryGet("/api/rtc"),tryGet("/api/fs/list?path=/sd/logs"),tryGet("/api/logger")]);
+  const[st,rtc,ls,lg,journal]=await Promise.all([tryGet("/api/settings/data_logger"),tryGet("/api/rtc"),tryGet("/api/fs/list?path=/sd/logs"),tryGet("/api/logger"),loadClockJournal()]);
   const fmt=st&&st.format,ext=DASH_FMT_EXT[fmt];
   let reason=null;
   if(!st)reason="the logger settings are unavailable";
@@ -6410,13 +6495,13 @@ async function loggerHistoryInfo(){
   const re=ext?new RegExp("^dl_(\\d+)"+ext.replace(".","\\.")+"$"):null;
   const files=((ls&&ls.entries)||[]).map(e=>{const m=re&&e.name.match(re);return m?{epoch:Number(m[1]),name:e.name,size:e.size}:null;}).filter(Boolean).sort((a,b)=>a.epoch-b.epoch);
   if(!reason&&!files.length)reason="no "+DASH_FMT_NAME[fmt]+" log files on the card yet";
-  histInfo={ok:!reason,reason,fmt,ext,offsetMs:Number.isFinite(dev)?Date.now()-dev:0,files,clockOk:!!(rtc&&rtc.valid),active:(lg&&lg.file)||"",paused:!!(lg&&lg.paused)};histInfoAt=Date.now();
+  histInfo={ok:!reason,reason,fmt,ext,offsetMs:Number.isFinite(dev)?Date.now()-dev:0,files,clockOk:!!(rtc&&rtc.valid),active:(lg&&lg.file)||"",paused:!!(lg&&lg.paused),journal};histInfoAt=Date.now();
   return histInfo;
 }
 /* the newest file that starts before the window, plus everything newer */
 function filesForWindow(files,startDev){let from=0;files.forEach((f,i)=>{if(f.epoch<=startDev)from=i;});return files.slice(from);}
 async function histFromExport(name,info,sel,startWall){
-  let cursor=sel[0].epoch+":0",pts=[],reqs=0,more=true;
+  let cursor=sel[0].epoch+":0",pts=[],reqs=0,more=true,curFile=sel[0].name;
   while(more&&reqs++<80){
     let txt;
     try{const r=await fetch(API+"/api/logger/export?stream=params&name="+encodeURIComponent(name)+"&since="+cursor+"&limit=2000",{cache:"no-store"});if(!r.ok)break;txt=await r.text();}
@@ -6425,11 +6510,12 @@ async function histFromExport(name,info,sel,startWall){
     for(const line of txt.split("\n")){if(!line)continue;
       if(line[0]==="{"){let o;try{o=JSON.parse(line);}catch(e){continue;}
         if(o._cursor!==undefined){cursor=o._cursor;more=!!o.more;continue;}
+        if(o._file!==undefined){curFile=o._file;continue;}   /* the rows that follow come from this file (its clock steps apply) */
         if(typeof o.value!=="number"||typeof o.ts!=="number")continue;
-        const w=(o.ts+info.offsetMs)/1000;if(w>=startWall)pts.push({t:null,w,v:o.value});continue;}
+        const w=(journalShift(info.journal,curFile,o.ts)+info.offsetMs)/1000;if(w>=startWall)pts.push({t:null,w,v:o.value});continue;}
       const c=line.split(",");if(c.length<3)continue;                 /* csv: ts_ms,source.name,value */
       const ts=Number(c[0]),v=Number(c[2]);if(!Number.isFinite(ts)||!Number.isFinite(v)||!matchName(c[1],name))continue;
-      const w=(ts+info.offsetMs)/1000;if(w>=startWall)pts.push({t:null,w,v});}
+      const w=(journalShift(info.journal,curFile,ts)+info.offsetMs)/1000;if(w>=startWall)pts.push({t:null,w,v});}
     if(cursor===prevCursor)break;   /* no progress: never spin */
   }
   return pts;
@@ -6465,6 +6551,7 @@ function decodeWdl(buf){
     else if(t===2){if(off+18>u8.length)break;const ts=Number(dv.getBigInt64(off,true)),id=dv.getUint16(off+8,true),v=dv.getFloat64(off+10,true);off+=18;
       const nm=names.get(id)||("?"+id);let arr=out.get(nm);if(!arr){arr=[];out.set(nm,arr);}arr.push({ts,v});}
     else if(t===3){if(off+13>u8.length)break;off+=13+u8[off+12];}
+    else if(t===4){off+=17;}   /* a clock-step marker (the last record of a file) */
     else break;
   }
   return out;
@@ -6498,7 +6585,7 @@ async function histFromFiles(name,info,sel,startWall){
       try{ent=await job;}catch(e){continue;}
     }
     n++;
-    for(const[k,arr]of ent.byName){if(!matchName(k,name))continue;for(const p of arr){const w=(p.ts+info.offsetMs)/1000;if(w>=startWall)pts.push({t:null,w,v:p.v});}}
+    for(const[k,arr]of ent.byName){if(!matchName(k,name))continue;for(const p of arr){const w=(journalShift(info.journal,f.name,p.ts)+info.offsetMs)/1000;if(w>=startWall)pts.push({t:null,w,v:p.v});}}
   }
   pts.sort((a,b)=>a.w-b.w);
   return{ok:true,points:pts,files:n};

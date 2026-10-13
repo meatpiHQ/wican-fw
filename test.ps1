@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'espnleasy', 'usbgps', 'abrp', 'backup', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'espnleasy', 'usbgps', 'abrp', 'backup', 'logclock', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [string]$Port = 'COM10',  # UART0 external USB-serial = console/flash
@@ -1211,6 +1211,30 @@ try {
                     Save-StageLog 'abrp_live' $out
                     if (-not ($out | Select-String -Quiet 'ABRP LIVE (PARTIAL )?PASS')) { throw 'no ABRP LIVE PASS (internal/abrp_credentials.json present? the DUT on the bench AP? the Pi reaches the LAN router?)' }
                     if ($out | Select-String -Quiet 'ABRP LIVE PARTIAL PASS') { Write-Host 'bench: PARTIAL, no user token in internal/abrp_credentials.json: the refusal path only' -ForegroundColor Yellow }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                }
+            }
+        }
+        'logclock' {
+            # Log timestamps that survive the clock's history (issue #984,
+            # 2026-10-13): an SNTP actor on the Pi (UDP 123, a transient
+            # systemd unit) steps the DUT's clock forwards and backwards
+            # while the logger writes; the journal, the markers, the
+            # re-based rows, the relative formats, the unsynced boot after
+            # a PSU power cycle (`rtc --forget`), the re-base tool. Two
+            # planned restarts for the settings plus one for the format
+            # change, one power cycle. Needs the OWON PSU on this PC.
+            Invoke-Stage 'Log clock' {
+                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\system\log_clock_bench.py" '--dut' 'localhost:18081' '--pi' $BenchHost 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'log_clock' $out
+                    if (-not ($out | Select-String -Quiet 'LOG CLOCK (PARTIAL )?PASS')) { throw 'no LOG CLOCK PASS (the DUT on the bench AP? the Pi can bind UDP 123? the OWON on this PC?)' }
+                    if ($out | Select-String -Quiet 'LOG CLOCK PARTIAL PASS') { Write-Host 'bench: PARTIAL (a leg skipped)' -ForegroundColor Yellow }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                 }

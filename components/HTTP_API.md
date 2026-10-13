@@ -209,13 +209,20 @@ presentation concern of the client).
 
 | Route | Method | Behavior |
 |---|---|---|
-| `/api/rtc` | GET | `{"time":"…Z","valid":true,"rtc":"…Z","sntp":{"enabled":true,"server":"pool.ntp.org","last_sync":"…Z"}}`: `time` = system clock, `valid` = trusted this boot (RTC restore / SNTP / manual), `rtc` = the chip's own reading (`null` when implausible: fresh board / drained caps), `last_sync` = last successful SNTP (`null` = none this boot) |
+| `/api/rtc` | GET | `{"time":"…Z","valid":true,"rtc":"…Z","sntp":{"enabled":true,"server":"pool.ntp.org","last_sync":"…Z"},"clock":{"source":"sntp","generation":2,"steps_this_boot":2,"last_step":{"delta_ms":-2500,"source":"sntp","at":"…Z"}}}`: `time` = system clock, `valid` = trusted this boot (RTC restore / SNTP / manual), `rtc` = the chip's own reading (`null` when implausible: fresh board / drained caps), `last_sync` = last successful SNTP (`null` = none this boot); `clock` (2026-10-13, issue #984) = the clock's history this boot: `source` who set it last (`none` / `rtc` / `sntp` / `manual`), `generation` bumps at every set, `steps_this_boot` counts them (the boot restore is the first), `last_step` the newest set (`delta_ms` = how far the clock moved, `at` = the clock right after; `null` before the first) |
 | `/api/rtc` | POST | `{"epoch":1751600000}` (UTC seconds, 2020..2099) → sets the system clock AND the RTC, marks TIME_SYNCED; responds with the GET payload. The manual path for AP-mode/no-NTP: the browser knows the time. 400 outside range |
 | `/api/rtc/sync` | POST | on-demand SNTP sync (primary then fallback server; blocking, ≤~32 s worst case: UI shows a spinner). 400 when offline, 500 when no server answered, else the fresh GET payload |
 
 SNTP behavior (config via `/api/settings/rtc_manager`): syncs on every
 internet (re)connect + every `sync_interval_h`; `ntp_server` +
 optional `ntp_server2` fallback are user-configurable.
+
+Every set of the system clock is a measured **step** (the change of
+wall minus monotonic time, exact whoever wrote the clock): `data_logger`
+re-bases the rows it queued before a step and keeps the clock journal
+`/sd/logs/clock.jsonl` (its README "Time", 6e6 below). The console's
+`rtc --forget` writes 2000-01-01 into the chip so the next power-on boot
+starts without a clock (the bench's drained-caps unit on demand).
 
 ## 6e. IMU: `imu_manager` registers its own route
 
@@ -363,9 +370,9 @@ The rule editor's vocabulary comes entirely from discovery (API-first
 
 | Route | Method | Behavior |
 |---|---|---|
-| `/api/logger` | GET | `{"enabled","running","paused","storage_ok","file":"dl_<epoch>.db","file_rows","files","queued","written","dropped","errors","rotations","can":{"enabled","file":"can_<epoch>.wdl","file_rows","files","queued","frames_written","frames_dropped","rotations"},"salvaged":N,"corrupt":N,"dir":"/sd/logs"}`, `salvaged` = records carried over the last warm reset from PSRAM, `corrupt` = `*.corrupt` files set aside on the card (data_logger/ROBUSTNESS.md, 2026-09-07), top level = the params stream, `can{}` = the CAN-frames stream (2026-07-09 two-stream addendum) |
+| `/api/logger` | GET | `{"enabled","running","paused","storage_ok","file":"dl_<epoch>.db","file_rows","files","queued","written","dropped","errors","rotations","can":{"enabled","file":"can_<epoch>.wdl","file_rows","files","queued","frames_written","frames_dropped","rotations"},"salvaged":N,"corrupt":N,"clock":{"valid":true,"source":"sntp","steps_this_boot":2,"rotations_by_clock":2,"journal_bytes":612,"journal":"/sd/logs/clock.jsonl"},"dir":"/sd/logs"}`, `salvaged` = records carried over the last warm reset from PSRAM, `corrupt` = `*.corrupt` files set aside on the card (data_logger/ROBUSTNESS.md, 2026-09-07), top level = the params stream, `can{}` = the CAN-frames stream (2026-07-09 two-stream addendum), `clock{}` (2026-10-13, issue #984) = whether the system clock is set and by whom, how many times it was set this boot, how many files the logger rotated because it moved, and the clock journal's size and path (data_logger/README.md "Time") |
 | `/api/logger/gate` | POST | runtime (non-persisted) logging gate for BOTH streams: the HTTP twin of the `logger.enable`/`logger.disable` event actions (API-first §1b): `{"enabled":bool}` → `{"ok":true}`; observable as `paused` in the GET. A reboot restores the configured state. Added 2026-07-07 |
-| `/api/logger/export` | GET | incremental pull of the PARAMS stream, `format=jsonl` or `csv` (400 otherwise; csv rows stream as-is, the header row is skipped by the name filter, the trailing meta line stays JSON, 2026-09-06): `?stream=params&since=<epoch>:<off>&limit=N[&name=<param>]` (2026-09-06: `name` keeps only that parameter's records, full `source.name` or the part after the last `.`; the cursor still walks every line, at most 512 KB read and 64 KB emitted per request: the dashboard's chart history uses it) streams raw jsonl lines from the rotated files starting at the cursor, briefly gating the logger if it must read the ACTIVE file; final chunk is `{"_cursor":"epoch:off","more":bool}`: feed `_cursor` back as `since` to tail. Poll-based exporter for integrations that can't mount the SD |
+| `/api/logger/export` | GET | incremental pull of the PARAMS stream, `format=jsonl` or `csv` (400 otherwise; csv rows stream as-is, the header row is skipped by the name filter, the trailing meta line stays JSON, 2026-09-06): `?stream=params&since=<epoch>:<off>&limit=N[&name=<param>]` (2026-09-06: `name` keeps only that parameter's records, full `source.name` or the part after the last `.`; the cursor still walks every line, at most 512 KB read and 64 KB emitted per request: the dashboard's chart history uses it) streams raw jsonl lines from the rotated files starting at the cursor, briefly gating the logger if it must read the ACTIVE file; final chunk is `{"_cursor":"epoch:off","more":bool}`: feed `_cursor` back as `since` to tail. Since 2026-10-13 a `{"_file":"dl_<epoch>.jsonl"}` line precedes each file's rows (a consumer with the clock journal re-bases rows per file: the dashboard's history does) and the in-band clock-step markers (`"event":"clock_step"` lines, `logger.clock_step` csv rows) are never emitted. Poll-based exporter for integrations that can't mount the SD |
 
 Config = `/api/settings/data_logger` (v2): per-stream engine choice
 (`format` = params: sqlite|csv|binary|jsonl; `can_format` = CAN:
@@ -380,7 +387,11 @@ all frames; needs can_manager enabled), per-stream rotation/retention
 `ring_len`. The log FILES are ordinary `/sd/logs` entries
 (`dl_<epoch>.*` params, `can_<epoch>.*` frames): browse / download /
 delete through the §6 filesystem routes; no duplicate file surface
-here. The ACTIVE file of each stream is write-locked
+here. `/sd/logs/clock.jsonl` is the clock journal (2026-10-13: one
+JSON line per clock event, `boot` / `valid` / `step` / `rotate`, with
+the files that were open; `tools/log_clock.py` re-bases a file with it;
+the formats with room carry an in-band marker too, see
+data_logger/README.md "Time"). The ACTIVE file of each stream is write-locked
 (`CONFIG_FATFS_FS_LOCK`): `/api/fs` download/delete of it FAILS
 instead of corrupting the card: pause via `/api/logger/gate` (closes
 + flushes) or wait for rotation. `.wdl` files decode offline with

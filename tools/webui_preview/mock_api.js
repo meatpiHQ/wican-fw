@@ -198,6 +198,7 @@
     lastRestart: { reason: "software", planned: true, planned_reason: "config_apply", source: "config_server" },
     dirs: new Set(),            /* folders created through /api/fs/mkdir */
     loggerRunning: false,       /* true -> /api/logger reports the active file (write-locked) */
+    clockUnset: !!(window.__mockPreset || {}).clockUnset,   /* a boot without a clock: /api/rtc valid false */
     sdMounted: true,            /* false -> /api/status says no card, /sd listings fail */
     autopidCfg: (window.__mockPreset || {}).autopidCfg || {
       version: 1,
@@ -521,11 +522,19 @@
     "/api/logger": () => J({ enabled: !!state.loggerRunning, running: !!state.loggerRunning, paused: false, storage_ok: false, file: state.loggerFile, file_rows: 0, files: 0, queued: 0,
       written: 0, dropped: 0, errors: 0, rotations: 0,
       can: { enabled: false, file: "", file_rows: 0, files: 0, queued: 0, frames_written: 0, frames_dropped: 0, rotations: 0 },
-      salvaged: state.loggerSalvaged || 0, corrupt: state.loggerCorrupt || 0, dir: "/sd/logs" }),
+      salvaged: state.loggerSalvaged || 0, corrupt: state.loggerCorrupt || 0,
+      clock: state.clockUnset ? { valid: false, source: "none", steps_this_boot: 0, rotations_by_clock: 0, journal_bytes: 0, journal: "/sd/logs/clock.jsonl" }
+        : { valid: true, source: "sntp", steps_this_boot: 2, rotations_by_clock: 2, journal_bytes: 612, journal: "/sd/logs/clock.jsonl" },
+      dir: "/sd/logs" }),
     "/api/fs/info": (full) => (/path=\/data/.test(full || "") ? J({ total: 6029312, used: 1060864 })
       /* the bench's 16 GB card as the firmware reports it since 2026-10-11 (issue #982: 3038806016 before, the 32-bit wrap) */
       : !state.sdMounted ? J({ error: "invalid path" }, 400) : J({ total: 15923707904, used: 327680 })),
-    "/api/rtc": () => J({ time: new Date().toISOString(), valid: true, rtc: null, sntp: { enabled: true, server: "pool.ntp.org", last_sync: null } }),
+    /* the clock's history (2026-10-13): `clock` = who set it and the newest step; __mockPreset.clockUnset = a boot without a clock */
+    "/api/rtc": () => state.clockUnset
+      ? J({ time: "1970-01-01T00:02:11Z", valid: false, rtc: null, sntp: { enabled: true, server: "pool.ntp.org", last_sync: null },
+            clock: { source: "none", generation: 0, steps_this_boot: 0, last_step: null } })
+      : J({ time: new Date().toISOString(), valid: true, rtc: null, sntp: { enabled: true, server: "pool.ntp.org", last_sync: null },
+            clock: { source: "sntp", generation: 2, steps_this_boot: 2, last_step: { delta_ms: 7200000, source: "sntp", at: "2026-10-13T09:14:02Z" } } }),
     "/api/logs/status": () => J({ dropped: 0, sinks: { ring: true, uart: true } }),
     "/api/logs/ring": () => T("I (1234) main: WiCAN v6 preview mock\nI (1240) wifi_manager: STA got IP 10.42.0.62\nI (2001) autopid: started (3 pids / default group)\nW (9004) event_manager: rule low_batt disabled\n"),
     "/api/status/tasks": () => J({ cores: 2, total_us: 23785179, tasks: [
@@ -789,7 +798,8 @@
       const fmt = S.data_logger && S.data_logger.values.format;
       if (fmt !== "jsonl" && fmt !== "csv") return T("params stream is not jsonl or csv", 400);
       const name = q.get("name") || "RPM", nowMs = Date.now(), base = state.dash[name] != null ? state.dash[name] : 50;
-      let out = fmt === "csv" ? "ts_ms,param,value\n" : "";
+      /* the file the rows come from (2026-10-13): the dashboard re-bases per file with the clock journal */
+      let out = (fmt === "csv" ? "ts_ms,param,value\n" : "") + JSON.stringify({ _file: "dl_" + String(state.logEpoch).padStart(10, "0") + (fmt === "csv" ? ".csv" : ".jsonl") }) + "\n";
       for (let i = 120; i >= 1; i--) {
         const ts = nowMs - i * 30000, value = base + Math.sin(i / 7) * (name === "RPM" ? 300 : 5);
         out += fmt === "csv" ? ts + ",autopid." + name + "," + value.toFixed(6) + "\n" : JSON.stringify({ ts, param: "autopid." + name, value }) + "\n";
@@ -799,6 +809,17 @@
     if (method === "POST" && path === "/api/logger/gate") { state.gateCalls++; return J({ ok: true }); }
     if (method === "GET" && path === "/api/fs/download") {
       const p = q.get("path");
+      /* the clock journal (2026-10-13): the legacy JSON-lines file and the ASC file were open when the clock
+         became valid (an unsynced boot), the SQLite file saw a +2 h step */
+      if (p === "/sd/logs/clock.jsonl") return T([
+        '{"ev":"boot","boot":3,"ts":131000,"up_ms":131000,"valid":false,"source":"none"}',
+        '{"ev":"valid","boot":3,"ts_before":140000,"ts_after":1784329700000,"delta_ms":1784329560000,"source":"sntp","files":["dl_1784329639.jsonl","can_1783689511.asc"]}',
+        '{"ev":"rotate","boot":3,"ts":1784329700000,"stream":"params","from":"dl_1784329639.jsonl","to":"dl_1784329700.jsonl","why":"clock"}',
+        '{"ev":"boot","boot":4,"ts":1784563540000,"up_ms":9000,"valid":true,"source":"rtc"}',
+        '{"ev":"step","boot":4,"ts_before":1784563600000,"ts_after":1784570800000,"delta_ms":7200000,"source":"sntp","files":["dl_1784563543.db","can_1784563543.wdl"]}',
+        '{"ev":"rotate","boot":4,"ts":1784570800000,"stream":"params","from":"dl_1784563543.db","to":"dl_1784570800.db","why":"clock"}',
+        '{"ev":"step","boot":4,"ts_before":1784574400000,"ts_after":1784570800000,"delta_ms":-3600000,"source":"manual","files":["dl_1784570800.db"]}',
+        ""].join("\n"));
       /* a binary log fixture the probe injects (window.__WDL_FIXTURE__: Uint8Array) */
       if (/\.wdl$/.test(p || "") && window.__WDL_FIXTURE__) {
         const buf = window.__WDL_FIXTURE__.buffer.slice(window.__WDL_FIXTURE__.byteOffset, window.__WDL_FIXTURE__.byteOffset + window.__WDL_FIXTURE__.byteLength);
