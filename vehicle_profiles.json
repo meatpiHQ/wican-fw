@@ -10807,6 +10807,98 @@
       ]
     },
     {
+      "car_model": "Nissan: Leaf ZE0/AZE0 (2011-2017)",
+      "init": "ATSP6;ATST96;ATFCSH79B;ATFCSD300000;ATFCSM1;",
+      "pids": [
+        {
+          "pid": "21016",
+          "pid_init": "ATSH79B;ATFCSH79B;ATCRA7BB;",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "[B37:B39]/10000",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            },
+            {
+              "name": "HV_V",
+              "expression": "[B25:B26]/100",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "480"
+            },
+            {
+              "name": "HV_A",
+              "expression": "(0-[S11:S14])/1024",
+              "unit": "A",
+              "class": "current"
+            },
+            {
+              "name": "LV_V",
+              "expression": "[B27:B28]/1000",
+              "unit": "V",
+              "class": "battery"
+            },
+            {
+              "name": "BATT_CAPACITY",
+              "expression": "[B42:B44]/10000",
+              "unit": "Ah",
+              "class": "battery"
+            },
+            {
+              "name": "SOH",
+              "expression": "[B42:B44]/6600",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "105"
+            },
+            {
+              "name": "RESISTANCE",
+              "expression": "[B29:B30]",
+              "unit": "kOhm",
+              "class": "none",
+              "min": "0",
+              "max": "1000"
+            }
+          ]
+        },
+        {
+          "pid": "21043",
+          "pid_init": "ATSH79B;ATFCSH79B;ATCRA7BB;",
+          "parameters": [
+            {
+              "name": "HV_T_1",
+              "expression": "S6",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_2",
+              "expression": "S10",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_3",
+              "expression": "S13",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_4",
+              "expression": "S17",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Opel: Ampere-E",
       "init": "ATSP6;ATST96;ATSH7E0;ATSH7E1;ATSH7E4;",
       "pids": [
