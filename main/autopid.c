@@ -2277,6 +2277,7 @@ static void autopid_webhook_task(void *pvParameters)
     (void)pvParameters;
 
     uint64_t last_post_time = 0;
+    bool first_post_done = false;
     uint64_t last_wifi_status_time = 0;
     char *prev_autopid_snapshot = NULL;
     char *prev_config_snapshot = NULL;
@@ -2348,8 +2349,12 @@ static void autopid_webhook_task(void *pvParameters)
                 uint64_t now = (uint64_t)(esp_timer_get_time() / 1000000ULL);
                 uint32_t interval_sec = (webhook_cfg.interval > 0) ? (uint32_t)webhook_cfg.interval : 60;
 
-                if ((now - last_post_time) >= interval_sec)
+                // Post as soon as STA connects after boot instead of waiting a full
+                // interval of uptime: on a device powered with the ignition, the
+                // first report races the vehicle out of Wi-Fi range.
+                if (!first_post_done || (now - last_post_time) >= interval_sec)
                 {
+                    first_post_done = true;
                     last_post_time = now;
 
                     char *raw_json = autopid_data_read();
