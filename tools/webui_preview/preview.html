@@ -4189,14 +4189,15 @@ function chip(txt,kind){return h("span",{class:"chip "+(kind||"")},h("span",{cla
    listening | mismatch until the link has its verdict, then running |
    bus_off | recovering; listen_only is what the node may do right now,
    whatever the setting asks for. */
-function canRateText(c){return c.baud_auto&&!c.verified?"Auto":c.baud_kbps+"K";}
+function canRateText(c){return c.baud_auto&&!c.verified&&!c.adopted?"Auto":c.baud_kbps+"K";}
 function canStateText(c){
   if(!c.running)return c.enabled?"stopped":"disabled";
   if(c.state==="bus_off"||c.state==="recovering")return"BUS-OFF · auto-recovering";
   if(c.state==="detecting")return"Listening for the bit rate";
   if(c.state==="listening")return"Listening · no traffic yet";
   if(c.state==="mismatch")return(c.baud_auto?"No bit rate reads this bus":"Bus runs at another bit rate")+" · listen-only";
-  return(c.listen_only?"Listen-only":"Normal")+" · active";
+  /* adopted: a J2534 or slcan tool stated the rate on a silent bus (2026-10-17) */
+  return(c.listen_only?"Listen-only":"Normal")+(c.adopted&&!c.verified?" · bit rate from the tester":" · active");
 }
 function onoff(b,yes="On",no="Off"){return chip(b?yes:no,b?"ok":"");}
 function tile(k,v,unit,opt={}){return h("div",{class:"tile "+(opt.kind||"")},
@@ -4377,7 +4378,7 @@ const HELP={
   allow_reflash:"Lets a connected tool write ECU firmware. Keep off unless you are flashing.",
   allow_lan:"Reachable from any network the WiCAN is on, not only its own AP / USB link.",
   silent:"Receive only: the WiCAN never acknowledges frames on the bus.",
-  "can_manager.baud":"The WiCAN always listens first and only talks once it has read frames at this bit rate. Automatic takes the bit rate from the traffic; on a bus that stays silent until asked, choose the bit rate yourself.",
+  "can_manager.baud":"The WiCAN always listens first and only talks once it has read frames at this bit rate. Automatic takes the bit rate from the traffic; on a bus that stays silent until asked, choose the bit rate yourself, or let the tool state it: a J2534 tester's connect and an slcan client's S command set the rate while nothing has been read.",
   "j1939.enabled":"Reads the SAE J1939 network of trucks, buses and machines on the CAN interface above (it must be on): the parameter groups the controllers broadcast, their trouble codes (DM1), the VIN.",
   "j1939.mode":"Listen: never a frame on the bus, the vehicle cannot tell WiCAN is there. Active: WiCAN joins the network as a diagnostic tool with an address of its own, so it can ask for groups that are only sent on request, read previously active codes (DM2) and clear codes (DM11, DM3). Active needs the CAN interface in normal mode (listen-only off).",
   "j1939.address":"The address WiCAN claims first in active mode: 249 and 250 are the off-board diagnostic tool addresses of SAE J1939. Another node with a stronger claim on it moves WiCAN to the next free address by itself.",
@@ -9237,11 +9238,13 @@ document.head.append(h("style",{},CSS));
 
 /* /api/can: the node listens before it talks (state detecting | listening |
    mismatch until its verdict; listen_only = what it may do right now) */
-const canRate=c=>c.baud_auto&&!c.verified?"auto":(c.baud_kbps>=1000?(c.baud_kbps/1000)+"M":c.baud_kbps+"k");
-const canNote=c=>c.state==="detecting"?" · detecting":c.state==="mismatch"?" · other bit rate":c.state==="listening"?" · listening":c.listen_only||c.silent?" · listen-only":"";
+const canRate=c=>c.baud_auto&&!c.verified&&!c.adopted?"auto":(c.baud_kbps>=1000?(c.baud_kbps/1000)+"M":c.baud_kbps+"k");
+const canNote=c=>c.state==="detecting"?" · detecting":c.state==="mismatch"?" · other bit rate":c.state==="listening"?" · listening":c.adopted&&!c.verified?" · from the tester":c.listen_only||c.silent?" · listen-only":"";
+/* detecting on a bus that only answers when asked never ends (2026-10-17):
+   a J2534 or slcan tool states the rate by itself, the monitor's user sets it */
 const canWhyNoTx=c=>c.silent?"The bus is in listen-only mode: nothing is sent"
   :c.state==="mismatch"?"The bus runs at another bit rate than the one set here: nothing is sent"
-  :c.state==="detecting"?"No bit rate detected yet: nothing is sent until the bus shows traffic"
+  :c.state==="detecting"?"No bit rate detected yet: a bus that only answers when asked cannot be found by listening. Set the bit rate under CAN INTERFACE to send from here (a J2534 or slcan tool states it by itself)"
   :"The CAN node is still listening before it talks: nothing is sent yet";
 const BAUDS=[["auto","Automatic"],["33","33 kbit/s"],["83","83 kbit/s"],["95","95 kbit/s"],["100","100 kbit/s"],["125","125 kbit/s"],["250","250 kbit/s"],["500","500 kbit/s"],["1000","1 Mbit/s"]];
 const PREF_KEY="wican.canmon.v1";
