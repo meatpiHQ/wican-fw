@@ -69,9 +69,9 @@
     },
     {
       "pid": "221E3D",
-      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATCRA17FE007B;",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;ATCRA17FE007B;",
       "parameters": {
-        "HV_A": "([B4:B7]-150000)/100"
+        "HV_A": "([B5:B7]*256+B9-150000)/100"
       }
     },
     {
