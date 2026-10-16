@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'espnleasy', 'usbgps', 'abrp', 'backup', 'logclock', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'slcan', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'espnleasy', 'usbgps', 'abrp', 'backup', 'logclock', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [string]$Port = 'COM10',  # UART0 external USB-serial = console/flash
@@ -843,6 +843,7 @@ function Show-Inventory {
     Write-Host '  blephy     - BLE 5 settings: 1M vs 2M PHY throughput/RTT, legacy + extended advertising sets'
     Write-Host '  blethru    - BLE throughput with the ECU simulator as the central (notify/write/read/tunnel vs the esp-idf reference)'
     Write-Host '  autobaud   - CAN listen-before-talk, auto bit rate and the autopid bus guard: PCAN keeps the bus alive and counts error frames (~9 min)'
+    Write-Host '  slcan      - slcan over TCP 3333 (2026-10-16): first the trap (the server on with no connection row: client connected, nothing arrives, the W line and bridge:null say why), then the bridged path: python-can on the PC and on rpi001, slcand + SocketCAN, the /ws/can monitor beside the TCP client, exactly-N with PCAN as the generator, TX both ways, restore (2 to 3 planned restarts, ~3 min)'
     Write-Host '  vpnpause   - the VPN pauses on networks marked Pause VPN (issue #976): the bench AP marked / unmarked, away on the dongle AP, home again; wg-bench on the Pi, the console for the away leg (~12 min)'
     Write-Host '  vpnroutes  - the split tunnel (issue #975): a request to a routed network leaves through wg-bench on the Pi, one to any other address through the station, judged at the receiver by the source address (~6 min)'
     Write-Host '  espnleasy  - the ESPNetLink easy-setup surfaces on the DUT (2026-10-13): the usb summary on /api/status against /api/espnetlink, the sim_pin key (a no-op PUT, no restart), the UI doors in the served page, the GPS hint counting away from home (ap off on the P4 for 100 s, home again) (~6 min; needs the P4 daemon)'
@@ -1089,6 +1090,33 @@ try {
                     $out = & $py -u "$repo\tools\testbench\can\can_autobaud_bench.py" 'localhost:18081' 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'can_autobaud' $out
                     if (-not ($out | Select-String -Quiet 'CAN AUTOBAUD PASS')) { throw 'no CAN AUTOBAUD PASS (PCAN wired? simulator on 192.168.8.1?)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
+                }
+            }
+        }
+        'slcan' {
+            # slcan over TCP end to end (2026-10-16, a Discord report: "SLCAN
+            # works on the CAN monitor, not over python-can; the log says
+            # client connected, nothing arrives"). First the trap: the slcan0
+            # server on with no connection row (the client connects, the bus
+            # is read, nothing arrives; the W line and /api/sockets bridge:null
+            # say why). Then the bridged path: python-can on the PC through
+            # the tunnel and on rpi001 straight at the DUT, slcand + SocketCAN,
+            # the /ws/can monitor beside the TCP client, exactly-N with PCAN
+            # as the generator, TX both ways, restore. The slcan port rides a
+            # second forward of the same tunnel.
+            Invoke-Stage 'slcan over TCP' {
+                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", '-L', "18333:${DutIp}:3333", $BenchHost)
+                $con = Start-ConsoleTail 'slcan'
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (ports 18081/18333 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\can\slcan_bridge_test.py" --dut 'localhost:18081' --slcan 'localhost:18333' --dut-ip $DutIp --pi $BenchHost 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'slcan' $out
+                    if (-not ($out | Select-String -Quiet '^SLCAN BRIDGE PASS')) { throw 'no SLCAN BRIDGE PASS (PCAN wired? the DUT on the bench AP?)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                     Stop-ConsoleTail $con

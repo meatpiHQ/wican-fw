@@ -2486,7 +2486,11 @@
       err: { stuff: 0, form: 0, bit: 0, ack: 0, other: 0 }, probe: { result: "none", baud_kbps: 0, frames: 0, age_ms: 0 },
       subscribers: [{ idx: 0, name: "bridge", drops: 0 }, { idx: 1, name: "logger", drops: 0 }], subscribers_max: 16, ...(state.canLink || {}) }),
     "/api/bridges": () => J({ bridges: ((S.bridge_manager && S.bridge_manager.values.bridges) || []).map((b) => ({ ...b, up: b.enabled !== false, stats: { a2b_chunks: 0, b2a_chunks: 0, a2b_bytes: 0, b2a_bytes: 0, send_errors: 0, codec_errors: 0 } })) }),
-    "/api/ws": () => J({ channels: ((S.websocket_manager && S.websocket_manager.values.channels) || []).map((c) => ({ ...c, up: c.enabled !== false, stats: { clients: 0, frames_in: 0, frames_out: 0, bytes_in: 0, bytes_out: 0, rx_drops: 0, tx_drops: 0, refused: 0 } })) }),
+    /* 2026-10-16: `bridge` = the enabled bridge on the server / channel, null when nothing uses it */
+    "/api/sockets": () => { const br = (S.bridge_manager && S.bridge_manager.values.bridges) || []; const on = (n) => { const b = br.find((x) => x.enabled !== false && (x.a === n || x.b === n)); return b ? b.name : null; };
+      return J({ servers: ((S.socket_manager && S.socket_manager.values.servers) || []).map((s) => ({ ...s, up: true, bridge: on(s.name), stats: { clients: 0, bytes_in: 0, bytes_out: 0, rx_drops: 0, tx_drops: 0, reconnects: 1, refused: 0 } })) }); },
+    "/api/ws": () => { const br = (S.bridge_manager && S.bridge_manager.values.bridges) || []; const on = (n) => { const b = br.find((x) => x.enabled !== false && (x.a === n || x.b === n)); return b ? b.name : null; };
+      return J({ channels: ((S.websocket_manager && S.websocket_manager.values.channels) || []).map((c) => ({ ...c, up: c.enabled !== false, bridge: on(c.name), stats: { clients: 0, frames_in: 0, frames_out: 0, bytes_in: 0, bytes_out: 0, rx_drops: 0, tx_drops: 0, refused: 0 } })) }); },
     "/api/autopid": () => { state.polls += state.groupOn ? 4 : 0; const nowUs = Date.now() * 1000; return J({
       groups: [{ name: "default", enabled: state.groupOn, period_ms: 1000 }],
       params: Object.entries(state.dash).map(([name, value]) => ({
@@ -5035,11 +5039,26 @@ const BR_IFACES=[["obd","OBD chip"],["can","CAN bus"],["cli","Console (CLI)"]];
    the firmware's single-consumer rule (bridge_manager_config.c). */
 const BR_MULTI=new Set(["obd","can"]);
 const BR_MAX=6; /* BRIDGE_MANAGER_MAX_BRIDGES */
+/* A server switched on with no connection row accepts clients and sends
+   them nothing (the slcan-over-TCP field report, 2026-10-16: slcan0 on
+   under Socket servers, no can <-slcan-> slcan0 row, "client connected"
+   and no data). The card flags such servers and offers the row; the
+   Socket servers card under All Settings sends its shortcut here as a
+   one-shot pre-filled row (BR_PREFILL). */
+let BR_PREFILL=null;
+const brProtoForPort=port=>Number(port)===3333?"slcan":Number(port)===23?"gvret":"raw";
+const brRowForServer=s=>({iface:"can",conn:s.proto==="udp"?"udp":"tcp",port:Number(s.port),translator:brProtoForPort(s.port),enabled:true});
+function brOpenForServer(s){BR_PREFILL=brRowForServer(s);location.hash="#/settings/connections";}
+const brOrphans=(servers,bridges)=>servers.filter(s=>s.enabled&&!bridges.some(b=>b.enabled!==false&&(b.a===s.name||b.b===s.name)));
+const brWhere=s=>s.name+" ("+String(s.proto||"tcp").toUpperCase()+" "+s.port+")";
 const BR_CONNS=[["tcp","TCP server"],["udp","UDP server"],["ws","WebSocket"],["ble","Bluetooth (BLE)"],["usb","USB serial"]];
 const BR_PROTOS=["raw","slcan","gvret","realdash"];
 async function bridgesCard(){
   const[bm,sm,wm]=await Promise.all(["bridge_manager","socket_manager","websocket_manager"].map(c=>api("/api/settings/"+c)));
   [bm,sm,wm].forEach(o=>{delete o.degraded;delete o.pending_reboot;});
+  /* edits staged but not yet submitted stay visible across a re-render
+     (the shortcut from the Socket servers card relies on it, 2026-10-16) */
+  [["bridge_manager",bm],["socket_manager",sm],["websocket_manager",wm]].forEach(([c,o])=>{const p=store.pending.get(c);if(p)Object.assign(o,p);});
   const servers=sm.servers||[],channels=wm.channels||[];
   const IF=new Set(BR_IFACES.map(x=>x[0]));
   const rows=[],passthru=[];
@@ -5056,6 +5075,7 @@ async function bridgesCard(){
     else{passthru.push(b);continue;}
     rows.push(r);
   }
+  if(BR_PREFILL){rows.push(BR_PREFILL);BR_PREFILL=null;}
   const listEl=h("div",{style:"display:flex;flex-direction:column;gap:8px"});
   const warnEl=h("div",{style:"display:flex;flex-direction:column;gap:6px"});
   const canInfo=await tryGet("/api/can");
@@ -5109,7 +5129,10 @@ async function bridgesCard(){
     const c=compile();
     warnEl.replaceChildren(
       ...c.errs.map(e=>banner("warn","alert",e)),
-      c.canUsed&&canInfo&&canInfo.enabled===false?banner("info","activity","A connection uses the CAN bus but the CAN interface is disabled: enable it in the CAN Interface card above."):null);
+      c.canUsed&&canInfo&&canInfo.enabled===false?banner("info","activity","A connection uses the CAN bus but the CAN interface is disabled: enable it in the CAN Interface card above."):null,
+      ...brOrphans(c.srv,c.bridges).map(s=>banner("warn","alert",h("b",{},brWhere(s)+" is switched on but no connection uses it. "),"A client can connect to it and gets nothing. ",
+        h("button",{class:"btn sm","data-orphan":s.name,type:"button",style:"margin-left:6px",onclick:()=>{if(rows.length+passthru.length>=BR_MAX)return toast("Max "+BR_MAX+" connections","err");rows.push(brRowForServer(s));refresh();}},
+          ic("plus"),"Add a CAN bus connection on "+String(s.proto||"tcp").toUpperCase()+" "+s.port+" ("+brProtoForPort(s.port)+")"))));
     if(c.errs.length)return;
     if(JSON.stringify(c.bridges)!==JSON.stringify(bm.bridges||[]))store.stage("bridge_manager",{bridges:c.bridges});
     if(JSON.stringify(c.srv)!==JSON.stringify(servers))store.stage("socket_manager",{servers:c.srv});
@@ -8412,6 +8435,24 @@ PAGES.sysmon=async(view)=>{
   await refresh();const t=setInterval(()=>{if(conn.state==="online")refresh();},2000);return()=>clearInterval(t);
 };
 
+/* Socket servers (All Settings): the connection each server carries; a
+   server switched on with nothing bridged accepts clients and sends them
+   nothing (2026-10-16), so it gets a warning and a shortcut that opens the
+   Connections card with the CAN bus row ready. Repainted on every edit of
+   the form (settingsForm's onDirty). */
+async function socketServersFoot(vals){
+  const el=h("div",{style:"margin-top:10px;display:flex;flex-direction:column;gap:6px"});
+  const bm=await tryGet("/api/settings/bridge_manager");
+  el.paint=()=>{const bridges=((store.pending.get("bridge_manager")||bm||{}).bridges)||[];
+    el.replaceChildren(...(vals.servers||[]).map(s=>{
+      const br=bridges.find(b=>b.enabled!==false&&(b.a===s.name||b.b===s.name));
+      if(br)return h("div",{class:"help","data-server":s.name},brWhere(s)+": carries connection "+br.name+".");
+      if(!s.enabled)return h("div",{class:"help","data-server":s.name},brWhere(s)+": switched off.");
+      return banner("warn","alert",h("b",{},brWhere(s)+" is switched on but no connection uses it. "),"A client can connect to it and gets nothing. ",
+        h("button",{class:"btn sm","data-orphan":s.name,type:"button",style:"margin-left:6px",onclick:()=>brOpenForServer(s)},ic("plus"),"Add a CAN bus connection on "+String(s.proto||"tcp").toUpperCase()+" "+s.port));
+    }));};
+  el.paint();return el;
+}
 /* ---- All Settings ---- */
 PAGES.allsettings=async(view)=>{
   const p=page(view,null,"All Settings","Every component: forms generated from the device schema");
@@ -8421,7 +8462,11 @@ PAGES.allsettings=async(view)=>{
   const acc=h("div",{style:"display:flex;flex-direction:column;gap:10px"});p.append(acc);
   for(const c of comps){
     const body=h("div",{style:"display:none;padding:2px 22px 14px"});let loaded=false;
-    const head=h("button",{class:"legend",style:"width:100%;border:none;background:transparent;cursor:pointer;text-align:left;padding:14px 22px",onclick:async()=>{const open=body.style.display!=="none";body.style.display=open?"none":"block";head.querySelector(".chev").textContent=open?"▾":"▴";if(!open&&!loaded){loaded=true;body.replaceChildren(loading());try{const rows=await settingsForm(c.name);body.replaceChildren(...(rows.length?rows:[h("div",{class:"empty"},"no configurable fields")]));}catch(e){body.replaceChildren(banner("crit","alert",e.message));}}}},
+    const head=h("button",{class:"legend",style:"width:100%;border:none;background:transparent;cursor:pointer;text-align:left;padding:14px 22px",onclick:async()=>{const open=body.style.display!=="none";body.style.display=open?"none":"block";head.querySelector(".chev").textContent=open?"▾":"▴";if(!open&&!loaded){loaded=true;body.replaceChildren(loading());try{
+        let foot=null;const opts={};
+        if(c.name==="socket_manager"){opts.values=await api("/api/settings/socket_manager");foot=await socketServersFoot(opts.values);opts.onDirty=()=>foot.paint();}
+        const rows=await settingsForm(c.name,null,opts);body.replaceChildren(...(rows.length?rows:[h("div",{class:"empty"},"no configurable fields")]));
+        if(foot)body.append(foot);}catch(e){body.replaceChildren(banner("crit","alert",e.message));}}}},
       h("h3",{},niceName(c.name)),c.degraded?chip("check settings","crit"):null,c.pending_reboot?chip("restart pending","warn"):null,
       h("span",{class:"grow"}),h("code",{style:"color:var(--text-3);font-size:11px"},c.name),h("span",{class:"chev",style:"color:var(--text-3)"},"▾"));
     acc.append(h("div",{class:"section"},head,body));

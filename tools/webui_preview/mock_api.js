@@ -470,7 +470,11 @@
       err: { stuff: 0, form: 0, bit: 0, ack: 0, other: 0 }, probe: { result: "none", baud_kbps: 0, frames: 0, age_ms: 0 },
       subscribers: [{ idx: 0, name: "bridge", drops: 0 }, { idx: 1, name: "logger", drops: 0 }], subscribers_max: 16, ...(state.canLink || {}) }),
     "/api/bridges": () => J({ bridges: ((S.bridge_manager && S.bridge_manager.values.bridges) || []).map((b) => ({ ...b, up: b.enabled !== false, stats: { a2b_chunks: 0, b2a_chunks: 0, a2b_bytes: 0, b2a_bytes: 0, send_errors: 0, codec_errors: 0 } })) }),
-    "/api/ws": () => J({ channels: ((S.websocket_manager && S.websocket_manager.values.channels) || []).map((c) => ({ ...c, up: c.enabled !== false, stats: { clients: 0, frames_in: 0, frames_out: 0, bytes_in: 0, bytes_out: 0, rx_drops: 0, tx_drops: 0, refused: 0 } })) }),
+    /* 2026-10-16: `bridge` = the enabled bridge on the server / channel, null when nothing uses it */
+    "/api/sockets": () => { const br = (S.bridge_manager && S.bridge_manager.values.bridges) || []; const on = (n) => { const b = br.find((x) => x.enabled !== false && (x.a === n || x.b === n)); return b ? b.name : null; };
+      return J({ servers: ((S.socket_manager && S.socket_manager.values.servers) || []).map((s) => ({ ...s, up: true, bridge: on(s.name), stats: { clients: 0, bytes_in: 0, bytes_out: 0, rx_drops: 0, tx_drops: 0, reconnects: 1, refused: 0 } })) }); },
+    "/api/ws": () => { const br = (S.bridge_manager && S.bridge_manager.values.bridges) || []; const on = (n) => { const b = br.find((x) => x.enabled !== false && (x.a === n || x.b === n)); return b ? b.name : null; };
+      return J({ channels: ((S.websocket_manager && S.websocket_manager.values.channels) || []).map((c) => ({ ...c, up: c.enabled !== false, bridge: on(c.name), stats: { clients: 0, frames_in: 0, frames_out: 0, bytes_in: 0, bytes_out: 0, rx_drops: 0, tx_drops: 0, refused: 0 } })) }); },
     "/api/autopid": () => { state.polls += state.groupOn ? 4 : 0; const nowUs = Date.now() * 1000; return J({
       groups: [{ name: "default", enabled: state.groupOn, period_ms: 1000 }],
       params: Object.entries(state.dash).map(([name, value]) => ({
