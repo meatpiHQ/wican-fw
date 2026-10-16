@@ -39,8 +39,12 @@ The current `HV_T_MIN`/`HV_T_MAX` observations were close to the independent out
 
 During AC charging, the WiCAN readings were `HV_V = 378 V` and `HV_A = 25.04–25.12 A`, corresponding to about `9.47–9.50 kW` at the battery. At the same time, Peblar reported `10.322 kW` from the charger. At a lower charging rate, Peblar reported `1.303 kW` while WiCAN reported `376 V` and `2.68 A` (about `1.01 kW` at the battery). These are useful plausibility checks, not exact matches: Peblar measures AC input while `HV_V × HV_A` estimates battery-side power, and conversion losses and vehicle loads separate the readings.
 
-The CO₂ and humidity PID initialisation sets request header `746` and response filter `7B0`. After adding the missing `ATSH746` request-header command, the WiCAN CO₂ test returned `25400 ppm`. This value is not validated: a direct ELM request returned no data, and the evDash reference labels the PID as interior CO₂ in ppm but leaves its parser unfinished. Compare against an independent cabin CO₂ meter before relying on the value.
+The CO₂ PID is omitted from the regular profile because its reading has not been validated. The experimental profile `id3_experimental.json` retains PID `2242DB1` (`CO2`, `B5*100`): the WiCAN returned `25400 ppm`, but a direct ELM request returned no data, and the evDash reference labels the PID as interior CO₂ in ppm while leaving its parser unfinished. Treat this value as unverified; compare it against an independent cabin CO₂ meter before relying on it. The CO₂ and humidity PIDs use request header `746` and response filter `7B0`.
 
 The WiCAN humidity test returned `196%`. Since relative humidity cannot exceed 100%, the `HUMIDITY` byte currently has no validated percentage scaling. Compare it with an independent cabin hygrometer before using it.
+
+`OUTSIDE_TEMP` (`222609`, `B4/2-50`) is included in the regular profile. Its WiCAN PID test returned `16.5 °C`, matching an independent thermometer reading of `16.5 °C`.
+
+`CABIN_TEMP` (`222613`, `[B4:B5]/5-40`) is also included in the regular profile based on the evDash parser. WiCAN's PID test returned `20.6 °C` while the climate control setpoint was `20 °C` and had been running for a while. This is plausible, though the setpoint is not a direct cabin temperature measurement.
 
 The WiCAN battery temperature test returned `BATT_TEMP = 12.5 °C`; the same check returned `HV_T_MIN = 12.38 °C` and `HV_T_MAX = 13.13 °C`. An independent thermometer read 12.4 °C outside, close to the battery reading. This supports the reading's plausibility while the car is near ambient temperature; battery temperature can differ after driving or charging.
