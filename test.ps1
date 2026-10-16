@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'slcan', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'espnleasy', 'usbgps', 'abrp', 'backup', 'logclock', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'slcan', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'espnleasy', 'usbgps', 'usbdetach', 'abrp', 'backup', 'logclock', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [string]$Port = 'COM10',  # UART0 external USB-serial = console/flash
@@ -849,6 +849,7 @@ function Show-Inventory {
     Write-Host '  espnleasy  - the ESPNetLink easy-setup surfaces on the DUT (2026-10-13): the usb summary on /api/status against /api/espnetlink, the sim_pin key (a no-op PUT, no restart), the UI doors in the served page, the GPS hint counting away from home (ap off on the P4 for 100 s, home again) (~6 min; needs the P4 daemon)'
     Write-Host '  garage     - the garage story with the ESPNetLink (2026-10-12): home WiFi on the P4, away on the dongle LTE with the VPN to betty, home again, flaps, a dongle reboot away, sleep/wake both ways; the data path judged at a receiver on betty by the source address of every POST; the default legs in usb_rndis with VPN variant A (~35 min; wifi_modem, variant B, g9 and g11 by hand)'
     Write-Host '  usbgps     - a USB GPS receiver is read by default (issue #978): the console switch off, the receiver read as NMEA from boot, the fix when the sky allows, gps_ in autopid and the HA push, the USB GPS receiver switch off = ignored, back on; then the USB page card, the switches and the Status row in Chrome (3 to 4 planned restarts, ~6 min)'
+    Write-Host '  usbdetach  - a warm restart in the USB device role drops off the bus first (2026-10-17): the DUT cabled to this PC as a USB NCM device (one planned restart when it was host), warm restarts with the link up: gone from the PC within 5 s of each request (2.2 to 2.4 s measured), back, the link answers, software resets only; the internal heap before and after; the DUT stays in the device role (restore: python tools\testbench\usb\usb_detach_bench.py --only d4 --restore-host, a PSU power cycle inside) (~6 min)'
     Write-Host '  abrp       - the ABRP rows against the real Iternio API (2026-10-13): the key checked from the PC, host routes on the Pi for the run, the key as a query parameter / as the Authorization header / a wrong key, the counters over the window, the Test button, get_telemetry as the witness with a user token in internal/abrp_credentials.json (PARTIAL without one: the 401 refusals only), restore (2 planned restarts, ~5 min)'
     Write-Host '  backup     - the configuration backup that carries everything (issue #979): the file plain / redacted / encrypted after the key, the fs deny list, the round trips from a file and from the copy on the flash, the refusals, the sweep (8 planned restarts, ~7 min)'
     Write-Host '  wwh        - OBD over UDS (ISO 27145 / SAE J1979-2): a PCAN vehicle is detected, polled, its codes read and cleared; the car switch both ways (~10 min)'
@@ -1289,6 +1290,33 @@ try {
                     Save-StageLog 'usb_gps_ui' $ui
                     if (-not ($ui | Select-String -Quiet 'USB GPS UI PASS')) { throw 'no USB GPS UI PASS' }
                 } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                }
+            }
+        }
+        'usbdetach' {
+            # A warm restart in the USB device role drops off the bus first
+            # (2026-10-17, from the ESPNetLink bench of 2026-10-16): the DUT's
+            # USB-C cabled to this PC, role device / class ncm (one planned
+            # restart when it was host), the PC's view of the device through
+            # PnP, the warm restarts with the link up: the path to the DUT gone
+            # within 5 s of each request, back, the link answers, software resets
+            # only; the internal heap before and after. Leaves the DUT in the
+            # device role: the connector mux returns to the CH342 at power-on
+            # only (TESTING.md), so the restore is the bench's --restore-host
+            # by hand (role host + a PSU power cycle).
+            Invoke-Stage 'USB restart detach' {
+                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                $con = Start-ConsoleTail 'usbdetach'
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\usb\usb_detach_bench.py" '--dut' 'localhost:18081' 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'usb_detach' $out
+                    if (-not ($out | Select-String -Quiet 'USB DETACH PASS')) { throw 'no USB DETACH PASS (the DUT cabled to this PC? the DUT on the bench AP?)' }
+                } finally {
+                    Stop-ConsoleTail $con
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                 }
             }

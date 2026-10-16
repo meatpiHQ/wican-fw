@@ -32,6 +32,9 @@ mkdir -p "$OUT/inc"
 : > "$OUT/inc/sdkconfig.h"
 cat > "$OUT/main_shim.c" <<'EOF'
 void app_main(void);
+/* Unity's fixture hooks: a suite that defines its own wins (strong) */
+__attribute__((weak)) void setUp(void) {}
+__attribute__((weak)) void tearDown(void) {}
 int main(void)
 {
     app_main();
@@ -46,8 +49,14 @@ case "${1:-}" in
     config_backup)
         SRCS="$COMP/config_backup/host_test/main/test_main.c $COMP/config_backup/config_backup_core.c $COMP/config_backup/config_backup_codec.c $CJSON/cJSON.c"
         INC="-I$COMP/config_backup -I$COMP/config_backup/include -I$CJSON" ;;
+    restart_tracker)
+        # the four pure files of the tracker (2026-10-17: the usb/jtag
+        # classification was proven here while the Pi was offline)
+        RT="$COMP/restart_tracker"
+        SRCS="$RT/host_test/main/test_main.c $RT/host_test/main/test_core.c $RT/host_test/main/test_crash_core.c $RT/host_test/main/test_brake_core.c $RT/host_test/main/test_report_core.c $RT/restart_tracker_core.c $RT/restart_tracker_crash_core.c $RT/restart_tracker_brake_core.c $RT/restart_tracker_report_core.c"
+        INC="-I$RT -I$RT/include" ;;
     *)
-        echo "usage: $0 <vpn_manager|config_backup>"; exit 2 ;;
+        echo "usage: $0 <vpn_manager|config_backup|restart_tracker>"; exit 2 ;;
 esac
 
 gcc -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -O1 -g \
