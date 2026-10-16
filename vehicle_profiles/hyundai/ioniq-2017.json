@@ -4,7 +4,7 @@
   "pids": [
     {
       "pid": "2101",
-      "pid_init": "ATSH7E4;ATFCSH7E4;",
+      "pid_init": "ATSH7E4;ATFCSH7E4;ATCRA;",
       "parameters": {
         "SOC_BMS": "B9/2",
         "P_CHG_MAX": "[B10:B11]/100",
@@ -40,7 +40,7 @@
     },
     {
       "pid": "21057",
-      "pid_init": "ATSH7E4;ATFCSH7E4;",
+      "pid_init": "ATSH7E4;ATFCSH7E4;ATCRA;",
       "parameters": {
         "SOC_D": "B39/2",
         "SOH": "[B33:B34]/10",
@@ -60,7 +60,7 @@
     },
     {
       "pid": "2101",
-      "pid_init": "ATSH7E2;ATFCSH7E2;",
+      "pid_init": "ATSH7E2;ATFCSH7E2;ATCRA;",
       "parameters": {
         "GEAR_P": "B10:0",
         "GEAR_R": "B10:1",
@@ -72,16 +72,30 @@
     },
     {
       "pid": "2180",
-      "pid_init": "ATSH7E6;ATFCSH7E6;",
+      "pid_init": "ATSH7E6;ATFCSH7E6;ATCRA;",
       "parameters": {
         "T_OUTSIDE": "(B18-80)/2"
       }
     },
     {
       "pid": "22B002",
-      "pid_init": "ATSH7C6;ATFCSH7C6;",
+      "pid_init": "ATSH7C6;ATFCSH7C6;ATCRA7CE;",
       "parameters": {
         "ODOMETER": "[B12:B14]"
+      }
+    },
+    {
+      "pid": "22C00B",
+      "pid_init": "ATSH7A0;ATFCSH7A0;ATCRA7A8;",
+      "parameters": {
+        "TYRE_P_FL": "B10*0.2",
+        "TYRE_P_FR": "B14*0.2",
+        "TYRE_P_RR": "B19*0.2",
+        "TYRE_P_RL": "B23*0.2",
+        "TYRE_T_FL": "B11-55",
+        "TYRE_T_FR": "B15-55",
+        "TYRE_T_RR": "B20-55",
+        "TYRE_T_RL": "B25-55"
       }
     }
   ]
