@@ -40,20 +40,6 @@
       }
     },
     {
-      "pid": "2242DB1",
-      "pid_init": "ATSP6;ATSH746;ATFCSH746;ATFCSM1;ATCRA7B0;",
-      "parameters": {
-        "CO2": "B5*100"
-      }
-    },
-    {
-      "pid": "2227C42",
-      "pid_init": "ATSP6;ATSH746;ATFCSH746;ATFCSM1;ATCRA7B0;",
-      "parameters": {
-        "HUMIDITY": "B4"
-      }
-    },
-    {
       "pid": "222A0B1",
       "pid_init": "ATSP7;ATSHDB33F1;ATSHFC007B;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSM1;",
       "parameters": {
@@ -100,6 +86,20 @@
       "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATCRA17FE007B;",
       "parameters": {
         "HV_C_V_MIN": "[B4:B5]/4096"
+      }
+    },
+    {
+      "pid": "222609",
+      "pid_init": "ATSP6;ATSH746;ATFCSH746;ATFCSM1;ATCRA7B0;",
+      "parameters": {
+        "OUTSIDE_TEMP": "B4/2-50"
+      }
+    },
+    {
+      "pid": "222613",
+      "pid_init": "ATSP6;ATSH746;ATFCSH746;ATFCSM1;ATCRA7B0;",
+      "parameters": {
+        "CABIN_TEMP": "[B4:B5]/5-40"
       }
     }
   ]
