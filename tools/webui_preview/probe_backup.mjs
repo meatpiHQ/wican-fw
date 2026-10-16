@@ -5,8 +5,11 @@
    the copies on the device (internal flash and SD card rows with Restore, the
    refresh, the auto_copy setting row, the key row), the restore preview in its
    states (a plain file of this device, a locked file of another device and its
-   unlock, a redacted file, a newer file refused, the copy on the flash). Two
-   boots: a device with a card, one without and with the copies off.
+   unlock, a redacted file, a newer file refused, the copy on the flash). Three
+   boots: a device with a card, one without and with the copies off, and
+   (2026-10-16) one whose copy holds the settings from before a factory reset
+   (issue #987: the row, the refresh that asks first) and whose databases part
+   leaves a file out (issue #989: the note under the row and in the preview).
    Prints `BACKUP PROBE PASS`. */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -185,6 +188,38 @@ function boot(hash, preset) {
     check("its preview is locked until the key file is given", !!m && /Restore the copy on the SD card/.test(m.querySelector("h3").textContent) && !!p.$(".bk-unlock", m) && p.$(".bk-go", m).disabled);
     p.closeModal();
     check("no page errors (boot 2)", p.errs.length === 0, p.errs.slice(0, 2));
+    p.close();
+  }
+
+  /* ---- boot 3: a copy held since a factory reset (issue #987), files the backup leaves out (issue #989) ---- */
+  {
+    const p = boot("#/system/maintenance", { backup: { keyDownloaded: true, sd: true, copies: true, held: true,
+      leftOut: [{ name: "big.dbc", why: "over 512 KB" }, { name: "", why: "and 2 more" }] } });
+    await sleep(2200);
+    const bk = p.$("#bk-backup-card"), cp = p.$("#bk-copies-card");
+    const dbRow = p.rowOf(bk, "databases");
+    check("a part says what the backup leaves out, by name and reason", !!dbRow && /Not in the backup: big\.dbc \(over 512 KB\), and 2 more\./.test(dbRow.textContent), dbRow && dbRow.textContent);
+    check("the other parts carry no such note", !/Not in the backup/.test(p.rowOf(bk, "scripts").textContent));
+    let places = p.$$(".bk-place", cp);
+    check("the held copy says so, with the date and both ways out", places[0].classList.contains("bk-held") && /Holding the settings from before the factory reset of /.test(places[0].textContent) && /Restore to undo the reset/.test(places[0].textContent) && /refresh the copies to let them follow/.test(places[0].textContent) && !!places[0].querySelector(".bk-held-chip"), places[0].textContent);
+    check("the held copy still offers Restore", !!places[0].querySelector(".bk-restore-copy"));
+    /* a refresh asks before letting the undo go */
+    p.click(p.$(".bk-refresh", cp)); await sleep(400);
+    let m = p.modal();
+    check("Refresh on a held copy asks first", !!m && /Let the copies follow the device again\?/.test(m.querySelector("h3").textContent) && /the undo is gone/.test(m.textContent) && p.w.__mockState.backupRefreshes === 0);
+    p.click(p.$$(".acts .btn", m).find((b) => b.textContent === "Cancel")); await sleep(300);
+    check("Cancel keeps the hold", p.w.__mockState.backupRefreshes === 0 && !p.modal() && p.$$(".bk-place", cp)[0].classList.contains("bk-held"));
+    p.click(p.$(".bk-refresh", cp)); await sleep(400);
+    m = p.modal();
+    p.click(p.$$(".acts .btn", m).find((b) => b.textContent === "Continue")); await sleep(1200);
+    places = p.$$(".bk-place", cp);
+    check("Continue refreshes and the copy follows the device again", p.w.__mockState.backupRefreshes === 1 && !places[0].classList.contains("bk-held") && /Survives a factory reset/.test(places[0].textContent), places[0].textContent);
+    /* the restore preview names what the backup left out */
+    p.click(places[0].querySelector(".bk-restore-copy")); await sleep(600);
+    m = p.modal();
+    check("the preview names what the backup left out", !!m && /This backup left out: big\.dbc \(over 512 KB\), and 2 more\./.test(p.rowOf(m, "databases").textContent), m && p.rowOf(m, "databases").textContent);
+    p.closeModal();
+    check("no page errors (boot 3)", p.errs.length === 0, p.errs.slice(0, 2));
     p.close();
   }
 

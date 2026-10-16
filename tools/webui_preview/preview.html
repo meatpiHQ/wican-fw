@@ -2240,6 +2240,8 @@
       keyDownloaded: false, keyDownloadedAt: "", keyCreated: "2026-10-11T09:14:00Z",
       sd: true, sdDeviceId: null, copies: true, copiesRefreshed: "2026-10-11T09:14:00Z",
       inspectAs: "plain_this",   /* what an uploaded file reads as: plain_this | enc_other | redacted | newer | v1 */
+      held: false, heldSince: "2026-10-15T08:00:00Z",   /* the copies hold the settings from before a factory reset (issue #987) */
+      leftOut: null,   /* [{name, why}] the databases part leaves out (issue #989): the status, the file, the preview */
     }, (window.__mockPreset || {}).backup || {}),
     backupStaged: null, backupRestores: [], backupRefreshes: 0, backupUnlocks: 0,
   };
@@ -2365,14 +2367,15 @@
   const bkParts = () => ({
     settings: { groups: Object.keys(S).length, bytes: 7100 },
     vehicles: { cars: 2, pids: (state.autopidCfg.pids || []).length, filters: (state.autopidCfg.filters || []).length, bytes: 9400 },
-    databases: { dtc_db: 1, dbc: 1, bytes: 184000 },
+    databases: Object.assign({ dtc_db: 1, dbc: 1, bytes: 184000 }, state.backup.leftOut ? { left_out: state.backup.leftOut } : {}),
     scripts: { count: Object.keys(state.files).filter((p) => p.startsWith("/data/scripts/")).length, bytes: 2900 },
     dashboard: { present: true, bytes: 900 },   /* the mock device has a layout saved */
     certs: { sets: 1, bytes: 2100 },
   });
   const bkCopy = (present, id) => present
-    ? { present: true, refreshed: state.backup.copiesRefreshed, bytes: 206400, parts: 6, fw_version: BK_FW, device_id: id }
-    : { present: false, refreshed: "", bytes: 0, parts: 0, fw_version: "" };
+    ? { present: true, refreshed: state.backup.copiesRefreshed, bytes: 206400, parts: 6, fw_version: BK_FW, device_id: id,
+        held: !!state.backup.held, held_since: state.backup.held ? state.backup.heldSince : "" }
+    : { present: false, refreshed: "", bytes: 0, parts: 0, fw_version: "", held: false, held_since: "" };
   const bkStatus = () => {
     const b = state.backup;
     const sd = b.sd ? Object.assign({ card: true, free_bytes: 31240000000 }, bkCopy(b.copies || !!b.sdDeviceId, b.sdDeviceId || BK_DEV)) : { card: false, present: false };
@@ -2389,7 +2392,8 @@
   const bkManifest = (kind, source, name) => {
     const p = bkParts();
     const fileParts = { settings: p.settings, vehicles: p.vehicles, databases: p.databases, scripts: p.scripts, dashboard: p.dashboard };
-    const base = { source, name, created: "2026-10-11T09:14:00Z", device_id: BK_DEV, fw_version: BK_FW, version: 2, encrypted: false, redacted: false, locked: false, refused: false, other_device: false, warnings: [], parts: fileParts, errors: {} };
+    const base = Object.assign({ source, name, created: "2026-10-11T09:14:00Z", device_id: BK_DEV, fw_version: BK_FW, version: 2, encrypted: false, redacted: false, locked: false, refused: false, other_device: false, warnings: [], parts: fileParts, errors: {} },
+      state.backup.leftOut ? { left_out: { databases: state.backup.leftOut } } : {});
     if (kind === "enc_other") return Object.assign(base, { name: name || "wican-" + BK_OTHER + "-2026-10-04-encrypted.json", created: "2026-10-04T18:02:00Z", device_id: BK_OTHER, encrypted: true, locked: true, other_device: true, warnings: ["key_missing"], parts: {} });
     if (kind === "enc_other_open") return Object.assign(base, { name: name || "wican-" + BK_OTHER + "-2026-10-04-encrypted.json", created: "2026-10-04T18:02:00Z", device_id: BK_OTHER, encrypted: true, other_device: true, warnings: ["other_device"] });
     if (kind === "redacted") return Object.assign(base, { redacted: true, warnings: ["redacted"] });
@@ -2922,7 +2926,7 @@
     if (path === "/api/backup/status") return J(bkStatus());
     if (path === "/api/backup/key") { state.backup.keyDownloaded = true; state.backup.keyDownloadedAt = new Date().toISOString(); return T("# WiCAN backup key (mock)\n" + "00".repeat(32) + "\n"); }
     if (path === "/api/backup") return T(JSON.stringify({ wican_backup: 2, device_id: BK_DEV, fw_version: BK_FW, created: "", redacted: /redact=1/.test(full || ""), parts: {} }));
-    if (method === "POST" && path === "/api/backup/copies/refresh") { state.backupRefreshes++; state.backup.copiesRefreshed = new Date().toISOString(); return J({ ok: true, written: state.backup.sd ? ["internal", "sd"] : ["internal"] }); }
+    if (method === "POST" && path === "/api/backup/copies/refresh") { state.backupRefreshes++; state.backup.copiesRefreshed = new Date().toISOString(); state.backup.held = false; return J({ ok: true, written: state.backup.sd ? ["internal", "sd"] : ["internal"] }); }
     const bm = path.match(/^\/api\/backup\/copies\/(internal|sd)$/);
     if (bm && method === "GET") {
       if (bm[1] === "sd" && !state.backup.sd) return J({ error: "no SD card" }, 409);
@@ -2945,6 +2949,7 @@
       if (!state.backupStaged) return J({ error: "nothing staged" }, 409);
       if (state.backupStaged.locked || state.backupStaged.refused) return J({ error: "the backup cannot be restored" }, 409);
       state.backupRestores.push(body); const restored = (body && body.include) || Object.keys(state.backupStaged.parts);
+      if (restored.includes("settings")) state.backup.held = false;   /* the user chose: a held copy follows again */
       state.backupStaged = null; return J({ restored, reboot: true });
     }
     if (method === "DELETE" && path === "/api/backup/staged") { state.backupStaged = null; return J({ ok: true }); }
@@ -11626,6 +11631,9 @@ const when=iso=>{if(!iso)return"unknown date";const d=new Date(iso);return isNaN
 const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");};
 const heading=(t,first)=>h("div",{class:"bk-h",style:"font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.04em;"+(first?"margin-top:6px":"margin-top:18px;padding-top:14px;border-top:1px solid var(--border)")},t);
 const hasData=(p,d)=>!!d&&(p.id==="dashboard"?d.present:true);
+/* what a part leaves out (issue #989): [{name, why}], the last one a bare
+   "and N more"; a note under the row instead of a silent gap */
+const leftOut=(l,lead)=>Array.isArray(l)&&l.length?lead+": "+l.map(x=>x.name?x.name+" ("+x.why+")":x.why).join(", ")+".":null;
 
 /* one row of a parts list: tick | words | count and size (or why it is out) */
 function partRow(p,data,picked,onPick,state){
@@ -11671,7 +11679,7 @@ function backupCard(st,repaintAll){
   const foot=h("div",{class:"help",style:"margin-top:8px"});
   function paint(){
     list.replaceChildren(...PARTS.map(p=>partRow(p,st.parts[p.id],picked,(id,on)=>{if(on)picked.add(id);else picked.delete(id);paint();},
-      {blocked:p.localOnly?"Never leave the device: kept in the copies on the device, below":null})));
+      {blocked:p.localOnly?"Never leave the device: kept in the copies on the device, below":null,note:leftOut((st.parts[p.id]||{}).left_out,"Not in the backup")})));
     const usable=PARTS.filter(p=>!p.localOnly&&hasData(p,st.parts[p.id]));
     const n=usable.filter(p=>picked.has(p.id)).length;
     master.checked=n===usable.length&&n>0;master.indeterminate=n>0&&n<usable.length;
@@ -11703,10 +11711,15 @@ function backupCard(st,repaintAll){
 
 /* ---- card 2: the copies the device keeps for itself ---- */
 function copiesCard(st,repaintAll,autoRows){
-  const c=st.copies||{internal:{},sd:{}};
+  /* read through st: a repaint swaps st.copies for a fresh object */
+  const cur=()=>st.copies||{internal:{},sd:{}};
   const key=keyBits(st,repaintAll);
   const rows=h("div",{class:"bk-copies"});
   const refreshBtn=h("button",{class:"btn sm bk-refresh",onclick:async()=>{
+    const c=cur();
+    /* a copy held since a factory reset (issue #987) is the undo: a refresh
+       lets it go, so it asks first */
+    if(((c.internal||{}).held||(c.sd||{}).held)&&!await confirmModal("A copy holds the settings from before the factory reset. Refreshing replaces them with the settings this WiCAN has now, and the undo is gone. To undo the reset instead, use Restore on that copy.","Let the copies follow the device again?"))return;
     refreshBtn.disabled=true;
     try{const r=await api("/api/backup/copies/refresh",{method:"POST"});toast("Copies refreshed: "+(r.written||[]).join(", "),"ok");await repaintAll(true);}
     catch(e){toast(e.message,"err");}
@@ -11716,12 +11729,17 @@ function copiesCard(st,repaintAll,autoRows){
     h("div",{class:"ctl"},h("div",{class:"rowflex",style:"gap:10px;flex-wrap:wrap"},key.btn,key.state)),
     h("div",{class:"help"},"Made once on this device from its hardware random source and kept outside the settings, so a factory reset keeps it. Keep the key file apart from the backups. It is the same key that seals an encrypted download."));
   function placeRow(title,sub,data,where){
-    const words=h("div",{},h("b",{style:"font-size:13.5px"},title),h("div",{class:"help"},sub));
+    /* held (issue #987): the settings part is the one from before the factory
+       reset until the user restores it or lets the copy go */
+    const held=!!(data&&data.present&&data.held);
+    const words=h("div",{},h("b",{style:"font-size:13.5px"},title),h("div",{class:"help"},held?"Holding the settings from before the factory reset"+(data.held_since?" of "+day(data.held_since):"")+". Restore to undo the reset, or refresh the copies to let them follow the device again.":sub));
     let right;
     if(!data||!data.present){
       right=h("div",{class:"help",style:"text-align:right;max-width:200px"},data&&data.card===false?"No SD card in the slot":"No copy yet");
     }else{
-      right=h("div",{class:"rowflex",style:"gap:10px;flex-wrap:wrap;justify-content:flex-end"},
+      const heldChip=held?chip("held","warn"):null;
+      if(heldChip)heldChip.classList.add("bk-held-chip");
+      right=h("div",{class:"rowflex",style:"gap:10px;flex-wrap:wrap;justify-content:flex-end"},heldChip,
         h("div",{class:"help mono",style:"text-align:right;white-space:nowrap"},when(data.refreshed),h("br"),data.parts+" parts · "+kb(data.bytes)),
         h("button",{class:"btn sm bk-restore-copy","data-where":where,onclick:async e=>{
           e.target.closest("button").disabled=true;
@@ -11729,10 +11747,11 @@ function copiesCard(st,repaintAll,autoRows){
           catch(err){toast(err.message,"err");}
           e.target.closest("button").disabled=false;}},ic("upload"),"Restore"));
     }
-    return h("div",{class:"bk-place","data-where":where,style:"display:grid;grid-template-columns:22px 1fr auto;gap:2px 12px;align-items:center;padding:9px 4px;border-top:1px solid var(--border)"},
+    return h("div",{class:"bk-place"+(held?" bk-held":""),"data-where":where,style:"display:grid;grid-template-columns:22px 1fr auto;gap:2px 12px;align-items:center;padding:9px 4px;border-top:1px solid var(--border)"},
       h("span",{class:"cico",style:"color:var(--text-3)"},ic(where==="sd"?"harddrive":"cpu")),words,right);
   }
   function paint(){
+    const c=cur();
     const sd=c.sd||{};
     const other=sd.device_id&&sd.device_id!==st.device_id;
     rows.replaceChildren(
@@ -11792,7 +11811,7 @@ function restorePreview(m,repaintAll){
       go.disabled=true;go.title="Unlock it first";return;
     }
     list.replaceChildren(...PARTS.map(p=>partRow(p,(m.parts||{})[p.id],picked,(id,on)=>{if(on)picked.add(id);else picked.delete(id);paint();},
-      {absentWhy:p.localOnly&&m.source==="file"?"Never in a file: restore them from a copy on the device":"Not in this backup"})));
+      {absentWhy:p.localOnly&&m.source==="file"?"Never in a file: restore them from a copy on the device":"Not in this backup",note:leftOut((m.left_out||{})[p.id],"This backup left out")})));
     errs.replaceChildren(...Object.entries(m.errors||{}).map(([k,v])=>banner("crit","alert",h("b",{},(PARTS.find(p=>p.id===k)||{title:k}).title+": "),v)));
     go.disabled=!!m.refused||picked.size===0;go.title=m.refused?"This backup cannot be restored":picked.size===0?"Tick at least one part":"";
   }

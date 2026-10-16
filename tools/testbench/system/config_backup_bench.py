@@ -36,11 +36,29 @@ Legs:
   b6  the sweep: auto_copy on (a restart), a script uploaded through /api/fs:
       the copy's refresh time moves within 20 s; 150 s idle: no flash write,
       the time stays
+  b7  (issue #986, 2026-10-16) encrypted AND redacted: the wrapper says
+      redacted, the inspect reads it after the unseal (no part refused, the
+      VPN key check included), the settings part restored (a restart) with
+      every secret as stored: before the fix the blanks were restored
+  b8  (issue #989, 2026-10-16) what the backup leaves out is said, not
+      dropped: a file whose name starts with a dot (refused silently before)
+      is counted, carried and restored (a restart); a 600 KB file is listed
+      under left_out in the status and the file (which still downloads, 200)
+      and the copies keep refreshing around it. Needs a valid clock on the
+      DUT (the refresh is judged by its time stamp): without NTP through the
+      Pi set it (POST /api/rtc {"epoch"}) before the leg
+  b9  (issue #987, 2026-10-16, OPT-IN: --factory --reset-dut host:port) the
+      copy after a factory reset: refreshed, the reset (a restart onto the
+      device's own AP, reached at --reset-dut), the copy reads held, the
+      settings restored from it (a restart back onto the bench AP) equal the
+      as-found ones, the hold released. The rig must reach the DUT's own AP
+      (TESTING.md: the Pi's wint0 joined to WiCAN_<id> with a forward).
   close: no unexpected reset, no E line of the component tags, the worker's
       stack headroom, the heap floor
 
   python tools/testbench/system/config_backup_bench.py [--dut localhost:18081]
       [--dut-ip 10.42.0.194] [--pi rpi001] [--only b1,b2] [--logdir DIR]
+      [--factory --reset-dut 192.168.80.1:80]
 
 Prints `CONFIG BACKUP PASS` (or `CONFIG BACKUP PARTIAL PASS (legs: ...)`).
 """
@@ -52,6 +70,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -59,7 +78,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
 import pcbench  # noqa: E402
 
 OWN_TAGS = ("config_backup", "api_http", "filesystem")
-LEGS = ["b0", "b1", "b2", "b3", "b4", "b5", "b6"]
+LEGS = ["b0", "b1", "b2", "b3", "b4", "b5", "b6", "b7", "b8"]
+OPT_IN_LEGS = ["b9"]   # need a rig lever: run with --factory
 FILE_PARTS = ["settings", "vehicles", "databases", "scripts", "dashboard"]
 SECRET_SUFFIXES = ("_password", "private_key", "preshared_key", "auth_key",
                    "_token", "api_key")
@@ -153,10 +173,18 @@ def main():
     ap.add_argument("--pi", default="rpi001")
     ap.add_argument("--only", default="", help="comma list of legs")
     ap.add_argument("--logdir", default="")
+    ap.add_argument("--factory", action="store_true",
+                    help="run b9: a factory reset and the undo from the held copy")
+    ap.add_argument("--reset-dut", default="", help="host:port where the DUT "
+                    "answers after the factory reset (its own AP), for b9")
     a = ap.parse_args()
 
     only = [x.strip() for x in a.only.split(",") if x.strip()]
-    legs = [l for l in LEGS if not only or l in only or l == "b0"]
+    legs = [l for l in LEGS + (OPT_IN_LEGS if a.factory else [])
+            if not only or l in only or l == "b0"]
+    if "b9" in legs and not a.reset_dut:
+        print("b9 needs --reset-dut host:port (the DUT on its own AP after the reset)")
+        sys.exit(2)
     logdir = a.logdir or os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "..", "..",
         "test-reports", "logs", time.strftime("config_backup_%Y%m%d_%H%M"))
@@ -414,6 +442,143 @@ def main():
             run.check("b6_idle_sweep_writes_nothing", t3 == t2 and (w2 is None or w1 is None or w2 == w1),
                       f"refreshed {t2} -> {t3}, flash writes {w1} -> {w2}")
             run.metric("idle_flash_writes", (w2 - w1) if isinstance(w1, int) and isinstance(w2, int) else -1)
+
+        # ---- b7: encrypted AND redacted (issue #986) ------------------------------------------
+        if "b7" in legs:
+            code, etext = raw(base, "/api/backup?redact=1&encrypt=1")
+            enc = json.loads(etext) if code == 200 else {}
+            save("b7_encrypted_redacted.json", etext)
+            run.check("b7_wrapper_says_redacted", code == 200 and enc.get("encrypted") is True
+                      and enc.get("redacted") is True,
+                      f"{code} {str({k: enc.get(k) for k in ('encrypted', 'redacted')})}")
+            dut.restart({MUTATED[0]: {MUTATED[1]: MUTATED_VALUE}})
+            code, t = raw(base, "/api/backup/inspect?name=b7_encrypted_redacted.json", "POST", etext.encode())
+            man = json.loads(t) if code == 200 else {}
+            save("b7_inspect.json", t)
+            # before the fix the wrapper carried no `redacted` and the inner header was never
+            # re-read after the unseal: the settings part was refused on the VPN key check
+            # (VPN enabled) or restored with blank passwords (VPN off)
+            run.check("b7_inspect_reads_redacted_after_the_unseal", code == 200 and man.get("redacted") is True
+                      and "redacted" in man.get("warnings", []) and not man.get("locked"), f"{code} {str(man)[:200]}")
+            run.check("b7_no_part_refused", not man.get("refused") and man.get("errors") == {}
+                      and sorted(man.get("parts", {})) == sorted(FILE_PARTS),
+                      str({k: man.get(k) for k in ("refused", "errors")}))
+            stage_and_restore("b7", man, ["settings"])
+            doc7, _ = plain_doc()
+            run.check("b7_secrets_kept_after_the_redacted_restore",
+                      part_equal("settings", doc7["parts"]["settings"], ref["parts"]["settings"]),
+                      part_diff("settings", doc7["parts"]["settings"], ref["parts"]["settings"]))
+            run.check("b7_mutation_undone", dut.settings(MUTATED[0]).get(MUTATED[1]) != MUTATED_VALUE)
+
+        # ---- b8: what the backup leaves out is said, not dropped (issue #989) -----------------
+        if "b8" in legs:
+            q = urllib.parse.quote
+            # a leading dot: the old name rule refused it with nothing said. (A space
+            # cannot be made through HTTP: the fs routes keep the query text verbatim,
+            # so an uploaded "a b.txt" lands as "a%20b.txt"; found 2026-10-16.)
+            dot_path = "/data/scripts/.bench_dot_test.txt"       # .txt: the script engine ignores it
+            big_path = "/data/autopid/dbc/bench_big.bin"         # .bin: the DBC loader ignores it
+            if not dut.settings("config_backup").get("auto_copy"):
+                dut.restart({"config_backup": {"auto_copy": True}})
+                time.sleep(25)
+            s8 = status()
+            scripts_before = s8["parts"]["scripts"]["count"]
+            t_ref = s8["copies"]["internal"].get("refreshed")
+            code, t = raw(base, "/api/fs/upload?path=" + q(dot_path), "POST",
+                          b"a name with a leading dot\n", "application/octet-stream")
+            run.check("b8_dot_name_uploaded", code == 200, f"{code} {t[:80]}")
+            big = bytes(range(256)) * (600 * 1024 // 256)   # 600 KB: over the 512 KB file limit
+            code, t = raw(base, "/api/fs/upload?path=" + q(big_path), "POST", big,
+                          "application/octet-stream", timeout=240)
+            run.check("b8_big_file_uploaded", code == 200, f"{code} {t[:80]}")
+            s8 = status()
+            save("b8_status.json", json.dumps(s8, indent=1))
+            run.check("b8_status_counts_the_dot_name", s8["parts"]["scripts"]["count"] == scripts_before + 1,
+                      f"{scripts_before} -> {s8['parts']['scripts']['count']}")
+            lo = s8["parts"]["databases"].get("left_out") or []
+            run.check("b8_status_lists_the_big_file",
+                      any(e.get("name") == "bench_big.bin" and "512 KB" in e.get("why", "") for e in lo), str(lo))
+            code, text = raw(base, "/api/backup", timeout=120)
+            doc8 = json.loads(text) if code == 200 else {}
+            save("b8_plain.json", text if code == 200 else "")
+            run.check("b8_download_still_200_with_a_big_file", code == 200, f"{code} {text[:80]}")
+            names = [e.get("name") for e in doc8.get("parts", {}).get("scripts", [])]
+            run.check("b8_file_carries_the_dot_name", ".bench_dot_test.txt" in names, str(names))
+            lo = (doc8.get("left_out") or {}).get("databases", [])
+            run.check("b8_file_lists_the_big_file", any(e.get("name") == "bench_big.bin" for e in lo),
+                      str(doc8.get("left_out")))
+            dbc_names = [e.get("name") for e in doc8.get("parts", {}).get("databases", {}).get("dbc", [])]
+            run.check("b8_big_file_not_in_the_part", "bench_big.bin" not in dbc_names, str(dbc_names))
+            # the copies keep refreshing around it (before: that part stalled with "could not be built")
+            moved = None
+            for i in range(30):
+                time.sleep(1)
+                t1 = status()["copies"]["internal"].get("refreshed")
+                if t1 and t1 != t_ref:
+                    moved = t1
+                    break
+            run.check("b8_copies_refresh_despite_the_big_file", moved is not None, f"{t_ref} -> {moved}")
+            # the round trip of the dot name: deleted, inspected, restored, back
+            raw(base, "/api/fs/file?path=" + q(dot_path), "DELETE")
+            code, t = raw(base, "/api/backup/inspect?name=b8.json", "POST", text.encode())
+            man = json.loads(t) if code == 200 else {}
+            run.check("b8_inspect_names_the_left_out_file", code == 200 and not man.get("refused")
+                      and any(e.get("name") == "bench_big.bin"
+                              for e in (man.get("left_out") or {}).get("databases", [])), f"{code} {str(man)[:200]}")
+            stage_and_restore("b8", man, ["scripts"])
+            code, t = raw(base, "/api/fs/info?path=" + q(dot_path))
+            run.check("b8_dot_name_restored", code == 200, f"{code} {t[:80]}")
+            raw(base, "/api/fs/file?path=" + q(dot_path), "DELETE")
+            raw(base, "/api/fs/file?path=" + q(big_path), "DELETE")
+            time.sleep(8)   # the sweep after the deletes
+
+        # ---- b9: the copy after a factory reset (issue #987), opt-in ---------------------------
+        if "b9" in legs:
+            code, r = dut.api("/api/backup/copies/refresh", "POST", {}, timeout=60)
+            run.check("b9_copy_fresh_before_the_reset", code == 200 and "internal" in (r.get("written") or []),
+                      f"{code} {r}")
+            run.check("b9_not_held_before", status()["copies"]["internal"].get("held") is False)
+            code, r = dut.api("/api/settings/factory_reset", "POST", {"confirm": "factory-reset"})
+            run.check("b9_factory_reset_accepted", code == 200, f"{code} {r}")
+            dut.restarts += 1
+            # the DUT comes back with the defaults on its own AP; the hold is decided 20 s in
+            dut2 = pcbench.Dut(a.reset_dut, own_tags=OWN_TAGS, tasks=("cb_copies",))
+            deadline = time.time() + 180
+            up = False
+            while time.time() < deadline:
+                try:
+                    if dut2.get("/api/info").get("device_id") == info.get("device_id"):
+                        up = True
+                        break
+                except Exception:
+                    pass
+                time.sleep(3)
+            run.check("b9_dut_back_after_the_reset", up)
+            if not up:
+                raise pcbench.Bench(f"the DUT did not answer at {a.reset_dut} after the factory reset")
+            time.sleep(30)
+            s9 = dut2.get("/api/backup/status")
+            save("b9_status_after_reset.json", json.dumps(s9, indent=1))
+            run.check("b9_copy_held_after_the_reset", s9["copies"]["internal"].get("held") is True,
+                      str(s9["copies"]["internal"]))
+            run.check("b9_settings_are_defaults", dut2.settings("wifi_manager").get("sta_ssid", "") == "")
+            code, man = dut2.api("/api/backup/copies/internal", timeout=60)
+            run.check("b9_held_copy_staged_with_its_settings", code == 200 and isinstance(man, dict)
+                      and "settings" in man.get("parts", {}) and not man.get("refused"), f"{code} {str(man)[:200]}")
+            b1 = dut2.boot_count()
+            code, r = dut2.api("/api/backup/restore", "POST",
+                               {"include": ["settings"], "keep_identity": True, "keep_vpn_keys": False}, timeout=120)
+            run.check("b9_restore_from_the_held_copy_accepted", code == 200 and isinstance(r, dict)
+                      and r.get("reboot") is True, f"{code} {str(r)[:200]}")
+            # the restored settings bring the station network back: the bench AP, the tunnel
+            wait_boot(dut, b1)
+            time.sleep(4)
+            doc9, _ = plain_doc()
+            run.check("b9_settings_back_as_before_the_reset",
+                      part_equal("settings", doc9["parts"]["settings"], ref["parts"]["settings"]),
+                      part_diff("settings", doc9["parts"]["settings"], ref["parts"]["settings"]))
+            time.sleep(25)
+            run.check("b9_hold_released_after_the_restore", status()["copies"]["internal"].get("held") is False)
 
         # ---- close ----------------------------------------------------------------------------
         if found.get("auto_copy") is not None and \

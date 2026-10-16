@@ -17,7 +17,10 @@ Steps / checks:
      options: --pi HOST | --serve PORT --local-ip IP | --receiver URL)
   3. POST /api/webhook {url, enabled, interval 5, manual_override false}
   4. the first push: status.sta_ip present, a dotted quad, == the station
-     address of /api/wifi/status
+     address of /api/wifi/status; and (2026-10-16, issue #985) status.vpn_status
+     one of vpn_manager's five words and equal to GET /api/vpn `state`, with
+     vpn_ip present only while connected (run it once per VPN state that
+     matters: disabled, connected through the Pi's wg-bench, paused)
   5. a later push: in `changed` mode an unchanged address is NOT repeated
      (status carries only the identity overlay), in `full` mode every push
      carries it
@@ -40,6 +43,9 @@ import time
 import ha_webhook_gate_bench as gate
 
 check = gate.check
+
+# vpn_manager_state_str(): the words GET /api/vpn and the push share (issue #985)
+VPN_WORDS = ("disabled", "waiting", "paused", "connecting", "connected")
 
 
 def dotted_quad(s):
@@ -147,6 +153,21 @@ def main():
                   repr(st.get("sta_ip")))
             check("status.sta_ip == the station address of /api/wifi/status",
                   st.get("sta_ip") == sta_ip, f"{st.get('sta_ip')!r} vs {sta_ip!r}")
+            # issue #985 (2026-10-16): the VPN word is vpn_manager's own. The
+            # push used to index a four-entry table with the five-state enum:
+            # `connected` read past the table, `paused` pushed "connecting".
+            code_v, vpn = gate.api("/api/vpn")
+            vs = st.get("vpn_status")
+            check("first push carries status.vpn_status", "vpn_status" in st,
+                  "keys: " + ",".join(sorted(st.keys())))
+            check("status.vpn_status is one of vpn_manager's five words",
+                  vs in VPN_WORDS, repr(vs))
+            check("status.vpn_status == GET /api/vpn state",
+                  code_v == 200 and isinstance(vpn, dict) and vs == vpn.get("state"),
+                  f"{vs!r} vs {vpn.get('state') if isinstance(vpn, dict) else vpn!r}")
+            check("status.vpn_ip rides the push only while connected",
+                  ("vpn_ip" in st) == (vs == "connected"),
+                  f"vpn_ip {'present' if 'vpn_ip' in st else 'absent'}, state {vs!r}")
         if len(got) >= 2:
             st2 = got[1].get("status") or {}
             if data_mode == "changed":

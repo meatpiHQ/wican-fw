@@ -224,6 +224,8 @@
       keyDownloaded: false, keyDownloadedAt: "", keyCreated: "2026-10-11T09:14:00Z",
       sd: true, sdDeviceId: null, copies: true, copiesRefreshed: "2026-10-11T09:14:00Z",
       inspectAs: "plain_this",   /* what an uploaded file reads as: plain_this | enc_other | redacted | newer | v1 */
+      held: false, heldSince: "2026-10-15T08:00:00Z",   /* the copies hold the settings from before a factory reset (issue #987) */
+      leftOut: null,   /* [{name, why}] the databases part leaves out (issue #989): the status, the file, the preview */
     }, (window.__mockPreset || {}).backup || {}),
     backupStaged: null, backupRestores: [], backupRefreshes: 0, backupUnlocks: 0,
   };
@@ -349,14 +351,15 @@
   const bkParts = () => ({
     settings: { groups: Object.keys(S).length, bytes: 7100 },
     vehicles: { cars: 2, pids: (state.autopidCfg.pids || []).length, filters: (state.autopidCfg.filters || []).length, bytes: 9400 },
-    databases: { dtc_db: 1, dbc: 1, bytes: 184000 },
+    databases: Object.assign({ dtc_db: 1, dbc: 1, bytes: 184000 }, state.backup.leftOut ? { left_out: state.backup.leftOut } : {}),
     scripts: { count: Object.keys(state.files).filter((p) => p.startsWith("/data/scripts/")).length, bytes: 2900 },
     dashboard: { present: true, bytes: 900 },   /* the mock device has a layout saved */
     certs: { sets: 1, bytes: 2100 },
   });
   const bkCopy = (present, id) => present
-    ? { present: true, refreshed: state.backup.copiesRefreshed, bytes: 206400, parts: 6, fw_version: BK_FW, device_id: id }
-    : { present: false, refreshed: "", bytes: 0, parts: 0, fw_version: "" };
+    ? { present: true, refreshed: state.backup.copiesRefreshed, bytes: 206400, parts: 6, fw_version: BK_FW, device_id: id,
+        held: !!state.backup.held, held_since: state.backup.held ? state.backup.heldSince : "" }
+    : { present: false, refreshed: "", bytes: 0, parts: 0, fw_version: "", held: false, held_since: "" };
   const bkStatus = () => {
     const b = state.backup;
     const sd = b.sd ? Object.assign({ card: true, free_bytes: 31240000000 }, bkCopy(b.copies || !!b.sdDeviceId, b.sdDeviceId || BK_DEV)) : { card: false, present: false };
@@ -373,7 +376,8 @@
   const bkManifest = (kind, source, name) => {
     const p = bkParts();
     const fileParts = { settings: p.settings, vehicles: p.vehicles, databases: p.databases, scripts: p.scripts, dashboard: p.dashboard };
-    const base = { source, name, created: "2026-10-11T09:14:00Z", device_id: BK_DEV, fw_version: BK_FW, version: 2, encrypted: false, redacted: false, locked: false, refused: false, other_device: false, warnings: [], parts: fileParts, errors: {} };
+    const base = Object.assign({ source, name, created: "2026-10-11T09:14:00Z", device_id: BK_DEV, fw_version: BK_FW, version: 2, encrypted: false, redacted: false, locked: false, refused: false, other_device: false, warnings: [], parts: fileParts, errors: {} },
+      state.backup.leftOut ? { left_out: { databases: state.backup.leftOut } } : {});
     if (kind === "enc_other") return Object.assign(base, { name: name || "wican-" + BK_OTHER + "-2026-10-04-encrypted.json", created: "2026-10-04T18:02:00Z", device_id: BK_OTHER, encrypted: true, locked: true, other_device: true, warnings: ["key_missing"], parts: {} });
     if (kind === "enc_other_open") return Object.assign(base, { name: name || "wican-" + BK_OTHER + "-2026-10-04-encrypted.json", created: "2026-10-04T18:02:00Z", device_id: BK_OTHER, encrypted: true, other_device: true, warnings: ["other_device"] });
     if (kind === "redacted") return Object.assign(base, { redacted: true, warnings: ["redacted"] });
@@ -906,7 +910,7 @@
     if (path === "/api/backup/status") return J(bkStatus());
     if (path === "/api/backup/key") { state.backup.keyDownloaded = true; state.backup.keyDownloadedAt = new Date().toISOString(); return T("# WiCAN backup key (mock)\n" + "00".repeat(32) + "\n"); }
     if (path === "/api/backup") return T(JSON.stringify({ wican_backup: 2, device_id: BK_DEV, fw_version: BK_FW, created: "", redacted: /redact=1/.test(full || ""), parts: {} }));
-    if (method === "POST" && path === "/api/backup/copies/refresh") { state.backupRefreshes++; state.backup.copiesRefreshed = new Date().toISOString(); return J({ ok: true, written: state.backup.sd ? ["internal", "sd"] : ["internal"] }); }
+    if (method === "POST" && path === "/api/backup/copies/refresh") { state.backupRefreshes++; state.backup.copiesRefreshed = new Date().toISOString(); state.backup.held = false; return J({ ok: true, written: state.backup.sd ? ["internal", "sd"] : ["internal"] }); }
     const bm = path.match(/^\/api\/backup\/copies\/(internal|sd)$/);
     if (bm && method === "GET") {
       if (bm[1] === "sd" && !state.backup.sd) return J({ error: "no SD card" }, 409);
@@ -929,6 +933,7 @@
       if (!state.backupStaged) return J({ error: "nothing staged" }, 409);
       if (state.backupStaged.locked || state.backupStaged.refused) return J({ error: "the backup cannot be restored" }, 409);
       state.backupRestores.push(body); const restored = (body && body.include) || Object.keys(state.backupStaged.parts);
+      if (restored.includes("settings")) state.backup.held = false;   /* the user chose: a held copy follows again */
       state.backupStaged = null; return J({ restored, reboot: true });
     }
     if (method === "DELETE" && path === "/api/backup/staged") { state.backupStaged = null; return J({ ok: true }); }
