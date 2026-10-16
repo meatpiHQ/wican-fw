@@ -1,28 +1,101 @@
 {
   "car_model": "Hyundai: Ioniq2017",
-  "init": "ATSP6;ATSH7E4;ATST96;",
+  "init": "ATSP6;ATST96;",
   "pids": [
     {
+      "pid": "2101",
+      "pid_init": "ATSH7E4;ATFCSH7E4;ATCRA;",
+      "parameters": {
+        "SOC_BMS": "B9/2",
+        "P_CHG_MAX": "[B10:B11]/100",
+        "P_DIS_MAX": "[B12:B13]/100",
+        "MAIN_RELAY": "B14:0",
+        "CHARGER_CONNECTED": "B14:5",
+        "CHARGING_DC": "B14:6",
+        "CHARGING": "B14:7",
+        "HV_A": "(S15*256+B17)/10",
+        "HV_V": "[B18:B19]/10",
+        "HV_KW": "((S15*256+B17)/10)*([B18:B19]/10)/1000",
+        "T_BAT_MAX": "S20",
+        "T_BAT_MIN": "S21",
+        "T_MOD1": "S22",
+        "T_MOD2": "S23",
+        "T_MOD3": "S25",
+        "T_MOD4": "S26",
+        "T_BAT_INLET": "S27",
+        "CELL_V_MAX": "B30/50",
+        "CELL_V_MAX_NO": "B31",
+        "CELL_V_MIN": "B33/50",
+        "CELL_V_MIN_NO": "B34",
+        "BAT_FAN": "B35",
+        "LV_V": "B37/10",
+        "AH_CHARGED": "(B38*16777216+B39*65536+B41*256+B42)/10",
+        "AH_DISCHARGED": "[B43:B46]/10",
+        "KWH_CHARGED": "(B47*16777216+B49*65536+B50*256+B51)/10",
+        "KWH_DISCHARGED": "[B52:B55]/10",
+        "OP_HOURS": "[B57:B60]/3600",
+        "BMS_IGNITION": "B61:2",
+        "MOTOR_RPM": "[S65:S66]"
+      }
+    },
+    {
       "pid": "21057",
+      "pid_init": "ATSH7E4;ATFCSH7E4;ATCRA;",
       "parameters": {
         "SOC_D": "B39/2",
-        "SOH": "[B33:B34]/10"
+        "SOH": "[B33:B34]/10",
+        "SOH_MIN": "[B36:B37]/10",
+        "SOH_MIN_CELL_NO": "B38",
+        "CELL_V_DEV": "B27/50",
+        "T_HEATER1": "S30",
+        "T_HEATER2": "S31",
+        "T_MOD5": "S14",
+        "T_MOD6": "S15",
+        "T_MOD7": "S17",
+        "T_MOD8": "S18",
+        "T_MOD9": "S19",
+        "T_MOD10": "S20",
+        "T_MOD11": "S21"
       }
     },
     {
       "pid": "2101",
+      "pid_init": "ATSH7E2;ATFCSH7E2;ATCRA;",
       "parameters": {
-        "SOC": "B09/2",
-        "CHARGER_CONNECTED": "B14:5",
-        "CHARGING": "B14:7",
-        "CHARGING_DC": "B14:6"
+        "GEAR_P": "B10:0",
+        "GEAR_R": "B10:1",
+        "GEAR_N": "B10:2",
+        "GEAR_D": "B10:3",
+        "BRAKE_LAMP": "B11:0",
+        "SPEED": "(B20*256+B19)/100*1.60934"
       }
     },
     {
-      "pid": "22B0025",
-      "pid_init": "ATSH7C6;ATFCSH7C6;",
+      "pid": "2180",
+      "pid_init": "ATSH7E6;ATFCSH7E6;ATCRA;",
       "parameters": {
-        "ODOMETER": "[B17:B18]"
+        "T_OUTSIDE": "(B18-80)/2"
+      }
+    },
+    {
+      "pid": "22B002",
+      "pid_init": "ATSH7C6;ATFCSH7C6;ATCRA7CE;",
+      "parameters": {
+        "ODOMETER": "[B12:B14]"
+      }
+    },
+    {
+      "pid": "22C00B",
+      "pid_init": "ATSH7A0;ATFCSH7A0;ATCRA7A8;",
+      "parameters": {
+        "TYRE_P_FL": "B10*0.2",
+        "TYRE_P_FR": "B14*0.2",
+        "TYRE_P_RR": "B19*0.2",
+        "TYRE_P_RL": "B23*0.2",
+        "TYRE_T_FL": "B11-55",
+        "TYRE_T_FR": "B15-55",
+        "TYRE_T_RR": "B20-55",
+        "TYRE_T_RL": "B25-55"
       }
     }
   ]
