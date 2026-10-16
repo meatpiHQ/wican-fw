@@ -1,0 +1,106 @@
+{
+  "car_model": "VW: ID.3",
+  "init": "ATST96;ATFCSD300000;ATFCSM1;",
+  "pids": [
+    {
+      "pid": "22028C1",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATCRA17FE007B;",
+      "parameters": {
+        "SOC_D": "B4*0.4425-6.1947",
+        "SOC": "B4/2.5"
+      }
+    },
+    {
+      "pid": "227448",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATCRA17FE007B;",
+      "parameters": {
+        "CHARGING": "B4:2",
+        "DRIVE_MODE": "B4"
+      }
+    },
+    {
+      "pid": "222AB62",
+      "pid_init": "ATSP6;ATCP18;ATSH710;ATFCSH710;ATCRA77A;",
+      "parameters": {
+        "RANGE": "(B5*256)+B6"
+      }
+    },
+    {
+      "pid": "22295A",
+      "pid_init": "ATSP7;ATCP17;ATSHFC0076;ATFCSH17FC0076;ATCRA17FE0076;",
+      "parameters": {
+        "ODOMETER": "[B4:B6]"
+      }
+    },
+    {
+      "pid": "222AB2",
+      "pid_init": "ATSP6;ATCP18;ATSH710;ATFCSH710;ATCRA77A;",
+      "parameters": {
+        "HV_CAPACITY_KWH": "[B4:B5]*50/1000"
+      }
+    },
+    {
+      "pid": "222A0B1",
+      "pid_init": "ATSP7;ATSHDB33F1;ATSHFC007B;ATCP17;ATCRA17FE007B;ATFCSH17FC007B;ATFCSM1;",
+      "parameters": {
+        "BATT_TEMP": "B4/2-40"
+      }
+    },
+    {
+      "pid": "221E3B",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATCRA17FE007B;",
+      "parameters": {
+        "HV_V": "[B4:B5]/4"
+      }
+    },
+    {
+      "pid": "221E3D",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;ATCRA17FE007B;",
+      "parameters": {
+        "HV_A": "([B5:B7]*256+B9-150000)/100"
+      }
+    },
+    {
+      "pid": "221E0E",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATCRA17FE007B;",
+      "parameters": {
+        "HV_T_MAX": "[B4:B5]/64"
+      }
+    },
+    {
+      "pid": "221E0F",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATCRA17FE007B;",
+      "parameters": {
+        "HV_T_MIN": "[B4:B5]/64"
+      }
+    },
+    {
+      "pid": "221E33",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATCRA17FE007B;",
+      "parameters": {
+        "HV_C_V_MAX": "[B4:B5]/4096"
+      }
+    },
+    {
+      "pid": "221E34",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATCRA17FE007B;",
+      "parameters": {
+        "HV_C_V_MIN": "[B4:B5]/4096"
+      }
+    },
+    {
+      "pid": "222609",
+      "pid_init": "ATSP6;ATSH746;ATFCSH746;ATFCSM1;ATCRA7B0;",
+      "parameters": {
+        "OUTSIDE_TEMP": "B4/2-50"
+      }
+    },
+    {
+      "pid": "222613",
+      "pid_init": "ATSP6;ATSH746;ATFCSH746;ATFCSM1;ATCRA7B0;",
+      "parameters": {
+        "CABIN_TEMP": "[B4:B5]/5-40"
+      }
+    }
+  ]
+}
