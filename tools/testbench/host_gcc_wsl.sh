@@ -55,11 +55,39 @@ case "${1:-}" in
         RT="$COMP/restart_tracker"
         SRCS="$RT/host_test/main/test_main.c $RT/host_test/main/test_core.c $RT/host_test/main/test_crash_core.c $RT/host_test/main/test_brake_core.c $RT/host_test/main/test_report_core.c $RT/restart_tracker_core.c $RT/restart_tracker_crash_core.c $RT/restart_tracker_brake_core.c $RT/restart_tracker_report_core.c"
         INC="-I$RT -I$RT/include" ;;
+    fw_update)
+        # the pure core of the manifest updater (2026-10-18): the version
+        # grammar, the manifest parse and selection, the job record and the
+        # boot decision; cJSON from the repo's managed_components
+        FU="$COMP/fw_update"
+        SRCS="$FU/host_test/main/test_main.c $FU/host_test/main/test_image.c $FU/fw_update_core.c $FU/fw_update_version.c $FU/fw_update_record.c $CJSON/cJSON.c"
+        INC="-I$FU -I$FU/include -I$CJSON" ;;
+    partition_migrate)
+        # the pure core with the table MD5 (2026-10-18)
+        PM="$COMP/partition_migrate"
+        SRCS="$PM/host_test/main/test_main.c $PM/host_test/main/test_core.c $PM/partition_migrate_core.c $PM/partition_migrate_md5.c"
+        INC="-I$PM -I$PM/include" ;;
+    ota_manager)
+        # the pure session with the image head check and the digest (2026-10-18)
+        OM="$COMP/ota_manager"
+        SRCS="$OM/host_test/main/test_main.c $OM/host_test/main/test_session.c $OM/ota_session.c"
+        INC="-I$OM -I$OM/include" ;;
+    espnetlink_link)
+        # the pure core of the dongle link (the parsers, the pairing machine,
+        # the mode and AP-mode rules, the settings migration) + the shared
+        # GPS parser (2026-10-19: the AP mode rule was proven here)
+        EL="$COMP/espnetlink_link"
+        SRCS="$EL/host_test/main/test_main.c $EL/host_test/main/test_sm.c $EL/espnetlink_link_core.c $EL/espnetlink_link_migrate.c $COMP/usb_acm_cli/usb_acm_gps.c $CJSON/cJSON.c"
+        INC="-I$EL -I$EL/include -I$COMP/usb_acm_cli/include -I$CJSON" ;;
+    http_client_manager)
+        HC="$COMP/http_client_manager"
+        SRCS="$HC/host_test/main/test_main.c $HC/http_client_manager_auth.c"
+        INC="-I$HC -I$HC/include" ;;
     *)
-        echo "usage: $0 <vpn_manager|config_backup|restart_tracker>"; exit 2 ;;
+        echo "usage: $0 <vpn_manager|config_backup|restart_tracker|fw_update|partition_migrate|ota_manager|http_client_manager|espnetlink_link>"; exit 2 ;;
 esac
 
-gcc -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -O1 -g \
+gcc -std=gnu11 -DUNITY_INCLUDE_DOUBLE -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -O1 -g \
     -fsanitize=address,undefined -fno-sanitize-recover=undefined \
     $INC -I"$IDF/components/unity/unity/src" -I"$IDF/components/esp_common/include" -I"$OUT/inc" \
     $SRCS "$IDF/components/unity/unity/src/unity.c" "$OUT/main_shim.c" -o "$OUT/$1.bin" -lm || exit 3

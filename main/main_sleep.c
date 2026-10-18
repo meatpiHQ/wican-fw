@@ -27,11 +27,13 @@
 #include "j2534_server.h"
 #include "vpn_manager.h"
 #include "wifi_manager.h"
+#include "fw_update.h"
 
 #include "main_sleep.h"
 
 static void on_prepare_sleep(void)
 {
+    (void)fw_update_stop(); /* a download in flight is dropped first */
     (void)autopid_stop();
     (void)j1939_stop(); /* gives its bus subscription back first */
     (void)uds_manager_stop();

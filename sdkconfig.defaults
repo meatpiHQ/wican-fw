@@ -191,3 +191,14 @@ CONFIG_ESP_EVENT_LOOP_PROFILING=y
 # once on a unit updated by OTA from the factory firmware; the IDF flash
 # driver aborts writes below the end of the table unless this is set
 CONFIG_SPI_FLASH_DANGEROUS_WRITE_ALLOWED=y
+
+# fw_update (2026-10-18, internal/TASK_fw_update.md): the stock bootloader
+# with the rollback option. A new image boots PENDING_VERIFY and the
+# bootloader falls back to the previous slot at the next reset unless the
+# app confirms it (fw_update's verify milestone, before every planned
+# restart, before a new OTA session). Reaches units flashed over USB from
+# now on; field units keep their bootloader and rely on the app-level
+# rollback (the crash-loop brake's verdict). PROJECT_VER 2 marks such a
+# bootloader (esp_ota_get_bootloader_description, GET /api/fw_update).
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+CONFIG_BOOTLOADER_PROJECT_VER=2

@@ -22,6 +22,7 @@ idf_component_register(
              imu_manager interface_manager iperf_manager led_manager
              log_manager log_sinks mdns_manager
              mqtt_can mqtt_manager obd_chip obd_gate ota_manager partition_migrate
+             fw_update
              restart_tracker rtc_manager settings_manager socket_manager
              sleep_manager usb_host_manager vpn_manager ip4_routes
              websocket_manager wifi_manager esp_driver_uart esp_netif

@@ -13,9 +13,14 @@ over USB, and nothing about a cut ever persists on it):
   boot   PSU cold cycle, both consoles captured from power-on
   user   the Pi joins the fresh WiCAN AP as soon as it appears and STAYS
          there (--no-client skips this)
-  pair   identify (api >= 9) -> "dongle USB uplink already configured":
-         no credentials, no cut, NO restart of either device, the dongle
-         reboots exactly once (its own AP password provisioning)
+  pair   identify (api >= 9) -> the ensure-share pass: since 2026-10-15
+         the dongle ships USB sharing OFF (a PC on the cable keeps its
+         own internet), so the WiCAN turns it on = ONE planned dongle
+         restart, then "dongle USB uplink already configured" on the
+         re-enumerated wire; no credentials, no cut, no WiCAN restart;
+         the dongle boots three times after an erase (its own AP password
+         provisioning, the sharing restart) and never unexpectedly. A
+         dongle that already shares skips the restart (boots twice).
   link   uplink = espnetlink (USB), pair_state ncm_up, GPS polls flow over
          the wire; the view over the WiCAN AP says so; `espnetlink repair`
          (a VBUS cycle) brings the wire back by itself
@@ -409,11 +414,34 @@ def main():
         check("rndis: dongle firmware is current (api >= 9: rndis + sharing "
               "shipped)", m_api is not None and int(m_api.group(1)) >= 9,
               ident[1][-70:] if ident else "not seen")
+        # 2026-10-18: the dongle ships `lte_upstream_pppos.ncm_share` OFF
+        # again (2026-10-15: a PC on the cable keeps its own internet), so
+        # the first contact of a fresh pair is the WiCAN's ensure-share pass
+        # turning sharing on: ONE planned dongle restart, then the
+        # re-identify over the re-enumerated wire finds nothing to change.
+        # A dongle that already shares (--no-erase on a paired pair, or a
+        # 2026-10-12 build) skips that restart.
+        recfg = wc.wait_for(r"dongle USB uplink reconfigured \(class rndis, "
+                            r"ncm_share on\)", 30, since=t_pair)
         ready = wc.wait_for(r"dongle USB uplink already configured", 60,
-                            since=t_pair)
-        check("rndis: nothing to change on the dongle (class rndis, "
-              "ncm_share on): no dongle restart", ready is not None,
-              f"{ready[0]:.0f} s" if ready else "not seen")
+                            since=(recfg[0] if recfg else t_pair))
+        if recfg:
+            check("rndis: the ensure-share pass turned the dongle's USB "
+                  "sharing on (class rndis, ncm_share on): one planned "
+                  "dongle restart, then nothing to change",
+                  ready is not None,
+                  f"reconfigured {recfg[0]:.0f} s, already configured "
+                  + (f"{ready[0]:.0f} s" if ready else "not seen"))
+            check("rndis: the sharing restart was planned on the dongle "
+                  "(reset=software planned=config_apply)",
+                  dc.find(r"restart_tracker: boot #\d+ .*reset=software "
+                          r"planned=config_apply", since=recfg[0]) is not None)
+        else:
+            check("rndis: nothing to change on the dongle (class rndis, "
+                  "ncm_share already on): no dongle restart",
+                  ready is not None,
+                  f"{ready[0]:.0f} s" if ready else "not seen")
+        share_restarts = 1 if recfg else 0
         check("rndis: no key read, no cut, no WiCAN restart",
               wc.find(r"credentials ok|usb_data off requested|rebooting to "
                       r"apply|pairing is ON HOLD", since=t_pair) is None)
@@ -432,9 +460,11 @@ def main():
         check("rndis: GPS/health polls flowing over the wire", p2 > p1,
               f"{p1} -> {p2}")
         boots = dc.count(r"restart_tracker: boot #")
-        check("rndis: the dongle booted exactly twice (its provisioning "
-              "restart and nothing else)",
-              boots == (2 if not a.no_erase else 1), f"boots={boots}")
+        want = (2 if not a.no_erase else 1) + share_restarts
+        check(f"rndis: the dongle booted exactly {want} times (its "
+              "provisioning restart"
+              + (", the sharing restart" if share_restarts else "")
+              + " and nothing else)", boots == want, f"boots={boots}")
 
         # the view over the WiCAN AP
         if not a.no_client:
@@ -485,13 +515,20 @@ def main():
     finally:
         ssh_run(f"sudo -n nmcli con down {USER_CON} >/dev/null 2>&1; "
                 f"sudo -n nmcli con delete {USER_CON} >/dev/null 2>&1; true")
+        # under test-reports/logs (gitignored): a dongle console can carry
+        # a cached GPS position, which never goes into a tracked file
+        logdir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "..", "..", "..", "test-reports", "logs",
+                              "espnetlink_fresh_" + a.mode + "_"
+                              + time.strftime("%Y%m%d_%H%M"))
+        os.makedirs(logdir, exist_ok=True)
         for con, fn in ((wc, "fresh_wican_console.log"),
                         (dc, "fresh_dongle_console.log")):
-            with open(fn, "w", encoding="utf-8") as f:
+            with open(os.path.join(logdir, fn), "w", encoding="utf-8") as f:
                 for ts, l in con.snapshot():
                     f.write(f"{ts:8.2f} {l}\n")
-        note("raw console logs: fresh_wican_console.log, "
-             "fresh_dongle_console.log")
+        note("raw console logs: " + os.path.relpath(logdir)
+             + " (fresh_wican_console.log, fresh_dongle_console.log)")
         wc.close()
         dc.close()
     return finish()
@@ -531,11 +568,16 @@ def run_wifi_modem_path(a, wc, dc, ap_ssid, phone_rejoin, user_put_submit):
           st_h.get("pair_state") in (None, "idle", "hold") and
           not st_h.get("paired"), str(st_h)[:90])
 
-    # the user sets a new AP password over the AP (as the banner asks)
+    # the user sets a new AP password over the AP (as the banner asks).
+    # The anchor is taken BEFORE the submit: when the submit's answer is
+    # lost over the fresh association, curl's timeout and retries return
+    # the helper 10 to 34 s later, after the restart, and an anchor taken
+    # then lands on the NEXT boot (the pairing restart) and hides the whole
+    # pairing sequence (2026-10-18 run 1 of this path).
+    t_pw = time.time() - wc.t0
     user_put_submit("wifi_manager", f"d['ap_password']='{NEW_AP_PSK}'",
                     "new AP password + submit")
-    rbpw = wc.wait_for(r"config applied: mode=", 90,
-                       since=time.time() - wc.t0 - 1)
+    rbpw = wc.wait_for(r"config applied: mode=", 90, since=t_pw)
     check("user: WiCAN restarted with the new AP password", rbpw is not None)
     t_pair = rbpw[0] if rbpw else time.time() - wc.t0
     ssh_run(f"sudo -n nmcli con modify {USER_CON} "

@@ -777,6 +777,41 @@
    }
   }
  },
+ "fw_update": {
+  "values": {
+   "enabled": true,
+   "channel": "stable",
+   "check_interval_h": 24,
+   "cert_set": "",
+   "cli": true
+  },
+  "schema": {
+   "properties": {
+    "enabled": {
+     "type": "boolean"
+    },
+    "channel": {
+     "type": "string",
+     "enum": [
+      "stable",
+      "beta",
+      "alfa"
+     ]
+    },
+    "check_interval_h": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 168
+    },
+    "cert_set": {
+     "type": "string"
+    },
+    "cli": {
+     "type": "boolean"
+    }
+   }
+  }
+ },
  "ha_webhooks": {
   "values": {
    "enabled": false,

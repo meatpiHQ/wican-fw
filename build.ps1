@@ -31,11 +31,28 @@ if ($env:MSYSTEM) {
 # ---- ESP-IDF v6.0.2 environment -------------------------------------------
 $env:IDF_PATH                     = 'C:\esp\v6.0.2\esp-idf'
 $env:IDF_TOOLS_PATH               = 'C:\Espressif'
-$env:IDF_PYTHON_ENV_PATH          = 'C:\Espressif\tools\python\v6.0.2\venv'
+# The IDF venv, or its stand-in: on 2026-10-19 the venv's base interpreter
+# (C:\Espressif\tools\python\python.exe) vanished, so its launcher prints
+# "No Python at ..." and runs nothing. A second environment with IDF's own
+# requirements (idf_tools.py install-python-env, the Store python 3.10) was
+# made beside it and is used while the launcher is dead.
+$idfVenv = 'C:\Espressif\tools\python\v6.0.2\venv'
+$venvRuns = $false
+try { $null = & "$idfVenv\Scripts\python.exe" -c 'pass' 2>$null; $venvRuns = ($LASTEXITCODE -eq 0) } catch { $venvRuns = $false }
+if (-not $venvRuns) {
+    $alt = 'C:\Espressif\tools\python_env\idf6.0_py3.10_env'
+    if (Test-Path "$alt\Scripts\python.exe") {
+        Write-Host "build: the IDF v6.0.2 venv does not run (its base interpreter is missing); using $alt" -ForegroundColor Yellow
+        $idfVenv = $alt
+    } else {
+        Write-Error "build: no IDF python environment runs ($idfVenv is dead and $alt is absent)"
+    }
+}
+$env:IDF_PYTHON_ENV_PATH          = $idfVenv
 $env:IDF_PYTHON_CHECK_CONSTRAINTS = 'no'
 $env:ESP_IDF_VERSION              = '6.0.2'
 $env:ESP_ROM_ELF_DIR              = 'C:\Espressif\tools\esp-rom-elfs\20241011\'
-$env:PATH = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts;' +
+$env:PATH = "$idfVenv\Scripts;" +
             'C:\Espressif\tools\ninja\1.12.1;C:\Espressif\tools\cmake\4.0.3\bin;' +
             'C:\Espressif\tools\xtensa-esp-elf\esp-15.2.0_20251204\xtensa-esp-elf\bin;' +
             'C:\Espressif\tools\ccache\4.12.1\ccache-4.12.1-windows-x86_64;' +

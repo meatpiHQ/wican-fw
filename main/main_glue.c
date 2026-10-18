@@ -12,6 +12,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include <stdio.h>
+#include <string.h>
+
 #include "autopid.h"
 #include "ble_manager.h"
 #include "button_manager.h"
@@ -19,6 +22,8 @@
 #include "data_logger.h"
 #include "external_storage.h"
 #include "filesystem.h"
+#include "fw_update.h"
+#include "ha_webhooks.h"
 #include "led_manager.h"
 #include "ota_manager.h"
 #include "restart_tracker.h"
@@ -275,4 +280,151 @@ static void on_button_longpress(void)
 void main_glue_wire_button(void)
 {
     button_manager_set_longpress_cb(on_button_longpress);
+}
+
+/* ---- firmware updates (2026-10-18, internal/TASK_fw_update.md) ----------------
+ * Policy lives HERE: fw_update knows neither the dongle nor the radios, and
+ * ota_manager knows no product. */
+
+/* the project names a WiCAN PRO image may carry: the constant name of the
+   new builds, the versioned names of the v6 alfas and the v4.5x factory
+   firmware (the bench-proven downgrade stays open), and the legacy tree's */
+static const char *const WICAN_IMAGE_PREFIXES[] =
+{
+    "wican-fw_obd_pro",
+    "wican-pro",
+};
+
+/** The uplink a download would take, and whether it is the dongle's LTE:
+ *  the station on a network of its own carries the default route (the
+ *  wire does not take it over, prefer_usb_route false); on the dongle's
+ *  own access point or the USB link alone the bytes are mobile data. */
+static const char *fwu_uplink(bool *is_cellular)
+{
+    espnetlink_link_status_t nl;
+    bool have_nl = espnetlink_link_status(&nl) == ESP_OK;
+
+    *is_cellular = false;
+
+    if (have_nl && nl.uplink == ESPNETLINK_UPLINK_ESPNETLINK_AP)
+    {
+        *is_cellular = true;
+        return "espnetlink";
+    }
+
+    if (dev_status_manager_is_set(DEV_STATUS_BIT_STA_CONNECTED))
+    {
+        return "wifi";
+    }
+
+    if (have_nl && nl.uplink == ESPNETLINK_UPLINK_ESPNETLINK_USB)
+    {
+        *is_cellular = true;
+        return "espnetlink_usb";
+    }
+
+    if (dev_status_manager_is_set(DEV_STATUS_BIT_ETH_CONNECTED))
+    {
+        return "eth";
+    }
+
+    return "none";
+}
+
+/** The HA push's `fw_update_available` / `fw_latest_version` (poster task,
+ *  a PSRAM stack: the snapshot is a static). */
+static bool fwu_ha_provider(bool *available, char *latest, size_t cap)
+{
+    static fw_update_status_t st EXT_RAM_BSS_ATTR;
+
+    if (fw_update_status(&st) != ESP_OK)
+    {
+        return false;
+    }
+
+    *available = st.enabled && st.available && st.installable;
+    snprintf(latest, cap, "%s", (st.enabled && st.have_latest) ? st.latest_version
+                                                              : "");
+    return true;
+}
+
+/* ---- the dongle relay (2026-10-19): espnetlink_link's calls in the shape
+ * fw_update asked for (fw_update_dongle_ops_t) */
+
+static void endpoint_copy(const espnetlink_endpoint_t *in,
+                          fw_update_dongle_endpoint_t *out)
+{
+    memset(out, 0, sizeof(*out));
+    out->present = in->present;
+    out->reachable = in->reachable;
+    out->steady = in->steady;
+    out->usb_attached = in->usb_attached;
+    strlcpy(out->host, in->host, sizeof(out->host));
+    strlcpy(out->via, in->via, sizeof(out->via));
+    strlcpy(out->device_id, in->device_id, sizeof(out->device_id));
+    strlcpy(out->fw_version, in->fw_version, sizeof(out->fw_version));
+    out->api_level = in->api_level;
+}
+
+static esp_err_t fwd_endpoint(fw_update_dongle_endpoint_t *out)
+{
+    espnetlink_endpoint_t ep;
+    esp_err_t err = espnetlink_link_endpoint(&ep);
+
+    if (err != ESP_OK)
+    {
+        memset(out, 0, sizeof(*out));
+        return err;
+    }
+
+    endpoint_copy(&ep, out);
+    return ESP_OK;
+}
+
+static esp_err_t fwd_hold(bool hold)
+{
+    return espnetlink_link_hold(hold);
+}
+
+static void fwd_expect_reboot(void)
+{
+    espnetlink_link_expect_dongle_reboot();
+}
+
+static esp_err_t fwd_identify(int timeout_ms, fw_update_dongle_endpoint_t *out)
+{
+    espnetlink_endpoint_t ep;
+    esp_err_t err = espnetlink_link_identify_now(timeout_ms, &ep);
+
+    if (out != NULL)
+    {
+        if (err == ESP_OK)
+        {
+            endpoint_copy(&ep, out);
+        }
+        else
+        {
+            memset(out, 0, sizeof(*out));
+        }
+    }
+
+    return err;
+}
+
+static const fw_update_dongle_ops_t FWD_OPS =
+{
+    .endpoint = fwd_endpoint,
+    .hold = fwd_hold,
+    .expect_reboot = fwd_expect_reboot,
+    .identify = fwd_identify,
+};
+
+void main_glue_wire_fw_update(void)
+{
+    (void)fw_update_set_dongle_ops(&FWD_OPS);
+    (void)ota_manager_set_product(
+        "WiCAN PRO", WICAN_IMAGE_PREFIXES,
+        sizeof(WICAN_IMAGE_PREFIXES) / sizeof(WICAN_IMAGE_PREFIXES[0]));
+    (void)fw_update_set_uplink_provider(fwu_uplink);
+    (void)ha_webhooks_set_fw_provider(fwu_ha_provider);
 }

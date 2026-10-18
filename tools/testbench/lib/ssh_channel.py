@@ -81,9 +81,18 @@ class SshChannel:
             try:
                 for raw in self.proc.stdout:
                     ln = raw.decode("utf-8", "replace").rstrip("\r\n")
-                    if ln.startswith(tag):
+                    # the sentinel is echoed right after the command, so a
+                    # command whose output ends WITHOUT a newline (`curl -s
+                    # https://api.ipify.org`, `curl -w '%{http_code}'`)
+                    # leaves it on the same line as its last output: find
+                    # the tag anywhere and keep the text before it
+                    # (2026-10-18: the hammer's betty setup failed on this)
+                    i = ln.find(tag)
+                    if i >= 0:
+                        if i > 0:
+                            lines.append(ln[:i])
                         try:
-                            rc[0] = int(ln[len(tag):].strip() or "255")
+                            rc[0] = int(ln[i + len(tag):].strip() or "255")
                         except ValueError:
                             rc[0] = 255
                         done.set()

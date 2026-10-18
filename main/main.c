@@ -69,6 +69,7 @@
 #include "obd_chip.h"
 #include "obd_gate.h"
 #include "ota_manager.h"
+#include "fw_update.h"
 #include "partition_migrate.h"
 #include "restart_tracker.h"
 #include "rtc_manager.h"
@@ -130,6 +131,12 @@ void app_main(void)
     main_boot_init("log_manager_init", log_manager_init);
     main_boot_init("restart_tracker_init", restart_tracker_init);
 
+    /* a firmware update awaiting its verify milestone: a run the brake
+       would park rolls back to the previous slot instead (never returns
+       then); the bootloader's own fallback and a failed boot are recorded
+       (fw_update_boot.c). BEFORE the park, AFTER the tracker. */
+    main_boot_init("fw_update_boot_check", fw_update_boot_check);
+
     /* the crash-loop brake: after three runs in a row that crashed before
        they settled, the boot ends here, asleep, before anything else can
        crash again (main_park.c). One call of cost otherwise. */
@@ -144,6 +151,8 @@ void app_main(void)
     main_boot_layout();
 
     main_boot_init("dev_status_manager_init", dev_status_manager_init);
+    /* the build id beside the release number (root CMakeLists.txt) */
+    dev_status_manager_set_app_build(WICAN_FW_BUILD);
 
     if (main_boot_layout_followed_migration())
     {
@@ -251,6 +260,9 @@ void app_main(void)
        key and the copies worker at start (issue #979) */
     main_boot_init("config_backup_init", config_backup_init);
     main_boot_init("ota_manager_init", ota_manager_init); /* before api_http */
+    /* the manifest updater: its settings descriptor and the job record;
+       the task at start (2026-10-18) */
+    main_boot_init("fw_update_init", fw_update_init);
     main_boot_init("api_http_init", api_http_init);
     /* network-trust lockdown: untrusted STA networks get 403 on every
        inbound admin surface (API/UI/WS); own-AP + USB stay open */
@@ -286,6 +298,7 @@ void app_main(void)
     main_boot_init("uds_manager_register_http", uds_manager_register_http);
     main_boot_init("script_engine_register_http", script_engine_register_http);
     main_boot_init("config_backup_register_http", config_backup_register_http);
+    main_boot_init("fw_update_register_http", fw_update_register_http);
     /* CLI commands: each component registers its own INSIDE its settings
        apply, gated by its `cli` setting (meatpi 2026-07-05, ownership
        lives in the component, not here); main_cli adds only the
@@ -305,6 +318,9 @@ void app_main(void)
     main_boot_init("web_ui_v2_register", web_ui_v2_register);
     /* glue: OTA session state drives the CRITICAL LED indication */
     main_glue_wire_ota_led();
+    /* glue: the product's image names (ota_manager refuses the rest), the
+       uplink word for the cellular policy and the HA push's update keys */
+    main_glue_wire_fw_update();
     /* glue: BLE console lines run through cmdline_manager */
     main_glue_wire_ble_cli();
 
@@ -415,6 +431,9 @@ void app_main(void)
     /* the CLI must be up before bridges pull its endpoint queue */
     bool cli_ok = main_boot_start("cmdline_manager", cmdline_manager_start);
     bool ota_ok = main_boot_start("ota_manager", ota_manager_start);
+    /* the manifest updater's task: after ota_manager (its pipe) and the
+       network owners (it waits for the network bit itself) */
+    bool fwu_ok = main_boot_start("fw_update", fw_update_start);
     bool http_ok = main_boot_start("http_server_manager",
                                    http_server_manager_start);
 
@@ -423,11 +442,11 @@ void app_main(void)
     /* ---- boot report (the system bench parses these lines) ---------------- */
     printf("WICAN BOOT id=%s fs=%d sd=%d led=%d rtc=%d imu=%d batt=%d "
            "wifi=%d mdns=%d cert=%d mqtt=%d obd=%d ble=%d sock=%d ws=%d "
-           "bridge=%d cli=%d usb=%d ota=%d http=%d apid=%d evt=%d\n",
+           "bridge=%d cli=%d usb=%d ota=%d http=%d apid=%d evt=%d fwu=%d\n",
            dev_status_manager_device_id(), fs_ok, sd_ok, led_ok, rtc_ok,
            imu_ok, batt_ok, wifi_ok, mdns_ok, cert_ok, mqtt_ok, obd_ok,
            ble_ok, sock_ok, ws_ok, br_ok, cli_ok, usb_ok, ota_ok, http_ok,
-           apid_ok, evt_ok);
+           apid_ok, evt_ok, fwu_ok);
 
     dev_status_memory_t mem;
 

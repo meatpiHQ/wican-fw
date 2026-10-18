@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'slcan', 'j2534auto', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'espnleasy', 'usbgps', 'usbdetach', 'abrp', 'backup', 'logclock', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'slcan', 'j2534auto', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'espnleasy', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [string]$Port = 'COM10',  # UART0 external USB-serial = console/flash
@@ -112,6 +112,31 @@ $script:anyFail = $false
 $script:runName = (Get-Date -Format 'yyyy-MM-dd_HHmm') + "_$What" + $(if ($Component) { "_$Component" } else { '' })
 $script:logDir = Join-Path $repo "test-reports\logs\$($script:runName)"
 
+# The bench's python: the IDF v6.0.2 venv (esptool v5 spelling, the bench
+# modules). 2026-10-19: its base interpreter vanished from
+# C:\Espressif\tools\python (the venv launcher prints "No Python at ..." and
+# exits without running anything), so the first interpreter that runs is
+# used: the v5.5.3 venv (3.10; requests, pyserial and websocket present;
+# esptool 4.x, so the flash stages want the v6 venv back), then python on
+# PATH. The bench scripts themselves need the standard library only.
+function Resolve-BenchPython {
+    $cands = @('C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe',
+               'C:\Espressif\tools\python_env\idf6.0_py3.10_env\Scripts\python.exe',  # the stand-in made 2026-10-19 (esptool 5)
+               'C:\Espressif\tools\python\v5.5.3\venv\Scripts\python.exe',
+               'python')
+    foreach ($c in $cands) {
+        try {
+            $v = & $c -c 'import sys; print(sys.version.split()[0])' 2>$null
+            if ($LASTEXITCODE -eq 0 -and $v) {
+                if ($c -notlike '*v6.0.2*') { Write-Host "bench: python = $c ($v); the IDF v6.0.2 venv does not run (its base interpreter is missing)" -ForegroundColor Yellow }
+                return $c
+            }
+        } catch {}
+    }
+    throw 'no python interpreter runs on this PC'
+}
+$script:BenchPy = Resolve-BenchPython
+
 function Save-StageLog { param([string]$Name, $Text)
     if (-not (Test-Path $script:logDir)) { New-Item -ItemType Directory -Force $script:logDir | Out-Null }
     $safe = $Name -replace '[^\w.-]', '_'
@@ -133,7 +158,7 @@ function Start-ConsoleTail { param([string]$Name)
         $log = Join-Path $script:logDir "console_$safe.log"
         $stop = "$log.stop"
         if (Test-Path $stop) { Remove-Item $stop -Force -Confirm:$false }
-        $p = Start-Process -FilePath 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe' -PassThru -WindowStyle Hidden `
+        $p = Start-Process -FilePath $script:BenchPy -PassThru -WindowStyle Hidden `
             -ArgumentList @('-u', "`"$repo\tools\testbench\lib\console_tail.py`"", $script:Port, "`"$log`"", '--stop-file', "`"$stop`"") `
             -RedirectStandardOutput "$log.keys"
         return [pscustomobject]@{ Proc = $p; Log = $log; Stop = $stop; Keys = "$log.keys" }
@@ -657,7 +682,7 @@ function Invoke-LiveChecks {
     # event_manager worker pool: a slow http.post must not stall the dispatcher
     Invoke-Stage 'live em_worker (non-blocking action pool)' {
         if (Skip-IfNoUsbNcm) { return }
-        $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+        $py = $script:BenchPy
         $out = & $py -u "$repo\tools\testbench\system\em_worker_bench.py" 192.168.82.1 $BenchHost | ForEach-Object { Write-Host $_; $_ }
         Save-StageLog 'live_em_worker' $out
         if (-not ($out | Select-String -Quiet 'EM WORKER PASS')) { throw 'no EM WORKER PASS' }
@@ -668,7 +693,7 @@ function Invoke-LiveChecks {
     # stats. Runs on the PC (USB mgmt + ssh receiver on the Pi AP).
     Invoke-Stage 'live ha_webhook (Home Assistant telemetry)' {
         if (Skip-IfNoUsbNcm) { return }
-        $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+        $py = $script:BenchPy
         $out = & $py -u "$repo\tools\testbench\ha\ha_webhook_bench.py" 192.168.82.1 $BenchHost | ForEach-Object { Write-Host $_; $_ }
         Save-StageLog 'live_ha_webhook' $out
         if (-not ($out | Select-String -Quiet 'HA WEBHOOK PASS')) { throw 'no HA WEBHOOK PASS (autopid enabled? Pi AP 10.42.0.1 reachable from DUT STA?)' }
@@ -679,7 +704,7 @@ function Invoke-LiveChecks {
     # mgmt + ws_cli + PCAN); CAN legs self-skip without a PCAN.
     Invoke-Stage 'live datalog (data_logger streams + formats)' {
         if (Skip-IfNoUsbNcm) { return }
-        $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+        $py = $script:BenchPy
         $out = & $py -u "$repo\tools\testbench\system\data_logger_bench.py" 192.168.82.1 | ForEach-Object { Write-Host $_; $_ }
         Save-StageLog 'live_datalog' $out
         if (-not ($out | Select-String -Quiet 'DATALOG PASS')) { throw 'no DATALOG PASS (SD card in? PCAN plugged? ws_cli enabled?)' }
@@ -693,7 +718,7 @@ function Invoke-LiveChecks {
     # (can_core_recovery). Self-skips without a PCAN.
     Invoke-Stage 'live canrec (bus-off auto-recovery)' {
         if (Skip-IfNoUsbNcm) { return }
-        $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+        $py = $script:BenchPy
         $out = & $py -u "$repo\tools\testbench\can\can_recovery_bench.py" 192.168.82.1 | ForEach-Object { Write-Host $_; $_ }
         Save-StageLog 'live_canrec' $out
         if ($out | Select-String -Quiet 'SKIP: python-can') { $script:note = 'SKIP (no python-can)'; return }
@@ -720,7 +745,7 @@ function Invoke-LiveChecks {
     # concurrently, restores BLE off. Reboots the DUT twice.
     Invoke-Stage 'live blecli (BLE CLI wedge regression)' {
         if (Skip-IfNoUsbNcm) { return }
-        $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+        $py = $script:BenchPy
         $out = & $py -u "$repo\tools\testbench\ble\ble_cli_wedge_test.py" --usb 192.168.82.1 --bench $BenchHost | ForEach-Object { Write-Host $_; $_ }
         Save-StageLog 'live_blecli' $out
         if (-not ($out | Select-String -Quiet 'BLE CLI WEDGE PASS')) { throw 'no BLE CLI WEDGE PASS (UB500 on the Pi? BLE toggle failed?)' }
@@ -730,7 +755,7 @@ function Invoke-LiveChecks {
     # mgmt link + ssh probes from the Pi)
     Invoke-Stage 'live wifi_gate (network-trust lockdown)' {
         if (Skip-IfNoUsbNcm) { return }
-        $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+        $py = $script:BenchPy
         $out = & $py -u "$repo\tools\testbench\wifi\wifi_gate_live_test.py" 192.168.82.1 $DutIp $BenchHost | ForEach-Object { Write-Host $_; $_ }
         Save-StageLog 'live_wifi_gate' $out
         if (-not ($out | Select-String -Quiet 'WIFI GATE PASS')) { throw 'no WIFI GATE PASS (USB link up? sta_trusted schema present?)' }
@@ -853,6 +878,8 @@ function Show-Inventory {
     Write-Host '  usbdetach  - a warm restart in the USB device role drops off the bus first (2026-10-17): the DUT cabled to this PC as a USB NCM device (one planned restart when it was host), warm restarts with the link up: gone from the PC within 5 s of each request (2.2 to 2.4 s measured), back, the link answers, software resets only; the internal heap before and after; the DUT stays in the device role (restore: python tools\testbench\usb\usb_detach_bench.py --only d4 --restore-host, a PSU power cycle inside) (~6 min)'
     Write-Host '  abrp       - the ABRP rows against the real Iternio API (2026-10-13): the key checked from the PC, host routes on the Pi for the run, the key as a query parameter / as the Authorization header / a wrong key, the counters over the window, the Test button, get_telemetry as the witness with a user token in internal/abrp_credentials.json (PARTIAL without one: the 401 refusals only), restore (2 planned restarts, ~5 min)'
     Write-Host '  backup     - the configuration backup that carries everything (issue #979): the file plain / redacted / encrypted after the key, the fs deny list, the round trips from a file and from the copy on the flash, the refusals, the sweep (8 planned restarts, ~7 min)'
+    Write-Host '  fwupdate   - firmware updates pulled from a manifest (2026-10-18): rpi001 serves a release list and patched copies of the current build over HTTPS with the bench CA; up to date + the ETag, an update offered and its notes, the install through the pipe and the verify milestone, a wrong sha256, a foreign image (list and upload), the layout verdicts (wipe with the backup step, serial, unknown), channel visibility, stepping and yanked releases, the rollback after three crashes typed over /ws/cli, the legacy push back, mutual exclusion with an upload (6 to 8 planned restarts, 3 crashes on purpose, ~20 min; the DUT must run this build)'
+    Write-Host '  espnlota   - the ESPNetLink dongle updated through the WiCAN PRO (2026-10-19): rpi001 serves the dongle release list and patched copies of the dongle build; the row and its notes, the install over USB (download to PSRAM, the checks, the push, the dongle restart, the new version read back), the explicit downgrade, a wrong sha256 and the WiCAN image listed for the dongle (nothing pushed), no_memory, the restore; --unplug cuts the USB link mid-push over /ws/cli (1 planned WiCAN restart for the settings, the dongle restarts 3 to 5 times, ~12 min; the dongle on the connector in usb_rndis mode, the DUT on this build)'
     Write-Host '  wwh        - OBD over UDS (ISO 27145 / SAE J1979-2): a PCAN vehicle is detected, polled, its codes read and cleared; the car switch both ways (~10 min)'
     Write-Host '  crashnote  - the crash note, the stored crash report and the crash-loop brake, two stages: (1) the DUT is crashed on purpose over its console (abort, an invalid store twice, the interrupt watchdog); the next boot must say where: its note against the console panic text, the decoded function names, one small NVS write for a crash that is news and none for the same crash again, the report word for word after a PSU power cycle (CRASH NOTE PASS); (2) three quick crashes in a row park the device: console line, HTTP silent, supply current against sleep mode, the timed exit, the next crash parks at once, a power cycle is a fresh start (CRASH PARK PASS)'
     Write-Host '  eutruck    - end to end on an EU truck: the PCAN adapter plays WWH-OBD ECUs and a J1939 network at once; from an OBD-II car through the wizard path to the truck, the car made current on the truck bus, and back; then the tables own protocol commands on the truck bus (~6 min)'
@@ -926,7 +953,7 @@ try {
             # persist scenarios on the Pi's UB500, then restores apsta+BLE-off.
             # Reboots the DUT ~3x; leaves it back on WiFi. Runs on the PC.
             Invoke-Stage 'live blesec (BLE bonding + security)' {
-                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $py = $script:BenchPy
                 $out = & $py -u "$repo\tools\testbench\ble\ble_security_test.py" --usb 192.168.82.1 --bench $BenchHost --passkey 421337 --setup 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 Save-StageLog 'live_blesec' $out
                 # always restore the bench even if the test threw
@@ -941,7 +968,7 @@ try {
             # Pi (UB500 + bleak) via the ble_pi_run.py wrapper; 2 planned
             # reboots (configure + restore); the restore stage always runs.
             Invoke-Stage 'live blehttp (HTTP API over BLE incl. storage)' {
-                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $py = $script:BenchPy
                 $out = & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_http_pi.py --dut $DutIp --stage configure 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 $out += & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_http_pi.py --stage ble 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 $out += & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_http_pi.py --stage restore 2>&1 | ForEach-Object { Write-Host $_; $_ }
@@ -957,7 +984,7 @@ try {
             # ISO15765 + the reflash gate, a second tester refused, link drop
             # releases the server. Runs ON the Pi; 2 planned reboots.
             Invoke-Stage 'live blej2534 (J2534 PassThru over BLE)' {
-                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $py = $script:BenchPy
                 $out = & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_j2534_pi.py --dut $DutIp --stage configure 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 $out += & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_j2534_pi.py --stage ble 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 $out += & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_j2534_pi.py --stage restore 2>&1 | ForEach-Object { Write-Host $_; $_ }
@@ -972,7 +999,7 @@ try {
             # (live bus records, 20 answered requests, a 29-bit write). Runs
             # ON the Pi; 2 planned reboots.
             Invoke-Stage 'live blecanraw (binary CAN records over BLE)' {
-                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $py = $script:BenchPy
                 $out = & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_can_raw_pi.py --dut $DutIp --stage configure 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 $out += & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_can_raw_pi.py --stage ble 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 $out += & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_can_raw_pi.py --stage restore 2>&1 | ForEach-Object { Write-Host $_; $_ }
@@ -991,7 +1018,7 @@ try {
             # reboots; the PC pairs once (the script provides the passkey
             # through a WinRT custom pairing ceremony).
             Invoke-Stage 'live blephy (BLE 5 PHY + advertising sets)' {
-                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $py = $script:BenchPy
                 $pypc = 'C:\Espressif\tools\python\v5.5.3\venv\Scripts\python.exe'   # has bleak (WinRT)
                 $out = & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_phy_bench_pi.py --dut $DutIp --stage configure 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 $out += & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_phy_bench_pi.py --stage adv 2>&1 | ForEach-Object { Write-Host $_; $_ }
@@ -1015,7 +1042,7 @@ try {
             # link tuning, notify/write/read + tunnel legs on 1M then 2M.
             # The DUT is read over WiFi before/after each link. ~10 min.
             Invoke-Stage 'live blethru (simulator central: BLE throughput)' {
-                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $py = $script:BenchPy
                 $out = & $py -u "$repo\tools\testbench\ble\ble_sim_central_bench.py" --dut $DutIp 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 Save-StageLog 'live_blethru' $out
                 foreach ($m in ($out | Select-String '^METRIC (\S+)=(\S+) (\S+)')) { Add-Metric $m.Matches[0].Groups[1].Value ([double]$m.Matches[0].Groups[2].Value) $m.Matches[0].Groups[3].Value }
@@ -1026,7 +1053,7 @@ try {
         'sleep'  {
             # Sleep-mode HIL (OWON P4305 on COM2016 + Pi; ~10 min).
             Invoke-Stage 'sleep bench' {
-                $out = & 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe' -u "$repo\tools\testbench\sleep\sleep_bench_test.py" 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                $out = & $script:BenchPy -u "$repo\tools\testbench\sleep\sleep_bench_test.py" 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 Save-StageLog 'sleep_bench' $out
                 if (-not ($out | Select-String -Quiet 'SLEEP BENCH PASS')) { throw 'no SLEEP BENCH PASS (PSU on COM2016? sleep enabled?)' }
             }
@@ -1034,7 +1061,7 @@ try {
         'sleepmatrix' {
             # Full sleep robustness matrix (~90 min; SLEEP_MATRIX.md).
             Invoke-Stage 'sleep matrix' {
-                $out = & 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe' -u "$repo\tools\testbench\sleep\sleep_matrix_test.py" 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                $out = & $script:BenchPy -u "$repo\tools\testbench\sleep\sleep_matrix_test.py" 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 Save-StageLog 'sleep_matrix' $out
                 if (-not ($out | Select-String -Quiet 'SLEEP MATRIX PASS')) { throw 'no SLEEP MATRIX PASS' }
             }
@@ -1044,7 +1071,7 @@ try {
             # dongle on the USB host port + usb_host_manager/usb_acm_cli
             # enabled).
             Invoke-Stage 'DWC2 hammer' {
-                $out = & 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe' -u "$repo\tools\testbench\usb\dwc2_hammer_test.py" 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                $out = & $script:BenchPy -u "$repo\tools\testbench\usb\dwc2_hammer_test.py" 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 Save-StageLog 'dwc2_hammer' $out
                 if (-not ($out | Select-String -Quiet 'DWC2 HAMMER PASS')) { throw 'no DWC2 HAMMER PASS (dongle plugged? host mode enabled?)' }
             }
@@ -1052,7 +1079,7 @@ try {
         'conserve' {
             # Counter-conservation benches (standard §7 performance-truth).
             Invoke-Stage 'CAN conservation' {
-                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $py = $script:BenchPy
                 $out = & $py -u "$repo\tools\testbench\can\can_conservation_test.py" 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 Save-StageLog 'can_conservation' $out
                 if (-not ($out | Select-String -Quiet 'CAN CONSERVATION PASS')) { throw 'no CAN CONSERVATION PASS (PCAN wired?)' }
@@ -1065,12 +1092,12 @@ try {
                     Write-Host 'SKIP: DUT not in NCM device role' -ForegroundColor Yellow
                     return
                 }
-                $out = & 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe' -u "$repo\tools\testbench\usb\usb_ncm_conservation_test.py" 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                $out = & $script:BenchPy -u "$repo\tools\testbench\usb\usb_ncm_conservation_test.py" 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 Save-StageLog 'usb_ncm_conservation' $out
                 if (-not ($out | Select-String -Quiet 'USB NCM CONSERVATION PASS')) { throw 'no USB NCM CONSERVATION PASS' }
             }
             Invoke-Stage 'WiFi conservation' {
-                $out = & 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe' -u "$repo\tools\testbench\wifi\wifi_conservation_test.py" 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                $out = & $script:BenchPy -u "$repo\tools\testbench\wifi\wifi_conservation_test.py" 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 Save-StageLog 'wifi_conservation' $out
                 if (-not ($out | Select-String -Quiet 'WIFI CONSERVATION PASS')) { throw 'no WIFI CONSERVATION PASS (iperf on the Pi?)' }
             }
@@ -1083,7 +1110,7 @@ try {
             # polls the DUT's HTTP several times a second, so it gets a
             # tunnel of its own through the Pi instead of ssh + curl.
             Invoke-Stage 'CAN auto-baud + bus guard' {
-                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $py = $script:BenchPy
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
                 $con = Start-ConsoleTail 'can_autobaud'
                 try {
@@ -1110,7 +1137,7 @@ try {
             # as the generator, TX both ways, restore. The slcan port rides a
             # second forward of the same tunnel.
             Invoke-Stage 'slcan over TCP' {
-                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $py = $script:BenchPy
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", '-L', "18333:${DutIp}:3333", $BenchHost)
                 $con = Start-ConsoleTail 'slcan'
                 try {
@@ -1137,7 +1164,7 @@ try {
             # port; PCAN is the witness and, for the proof by frames, the
             # generator.
             Invoke-Stage 'J2534 and slcan state the bit rate' {
-                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $py = $script:BenchPy
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", '-L', "18534:${DutIp}:6809", '-L', "18333:${DutIp}:3333", $BenchHost)
                 $con = Start-ConsoleTail 'j2534_auto'
                 try {
@@ -1160,7 +1187,7 @@ try {
             # in), the refusals, the sweep's refresh after an upload and its
             # idle quiet. Eight planned restarts; no console, no PCAN.
             Invoke-Stage 'Configuration backup' {
-                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $py = $script:BenchPy
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
                 try {
                     Start-Sleep -Seconds 3
@@ -1173,13 +1200,59 @@ try {
                 }
             }
         }
+        'fwupdate' {
+            # Firmware updates pulled from a manifest (2026-10-18,
+            # internal/TASK_fw_update.md 9.2): rpi001 serves the release list
+            # and patched copies of the current build (fw_server.py), the
+            # bench walks the legs over HTTP through the tunnel and types the
+            # three crashes of the rollback leg over /ws/cli on the same port.
+            # No console, no PCAN; the DUT must run THIS build (the bench
+            # refuses otherwise: flash it first).
+            Invoke-Stage 'Firmware update from a manifest' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\system\fw_update_bench.py" --dut 'localhost:18081' --pi $BenchHost 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'fw_update' $out
+                    foreach ($m in ($out | Select-String -Pattern '^METRIC ' )) { Add-Metric 'fw_update' $m.Line }
+                    if (-not ($out | Select-String -Quiet '^FW UPDATE( PARTIAL)? PASS')) { throw 'no FW UPDATE PASS (the DUT on this build and on the bench AP? the Pi serving 8446 with the bench CA? the cli <-> ws_cli bridge for the rollback leg?)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                }
+            }
+        }
+        'espnlota' {
+            # The ESPNetLink dongle updated through the WiCAN PRO (2026-10-19,
+            # internal/TASK_fw_update.md 9.3): rpi001 serves the dongle's
+            # release list and patched copies of the dongle build; the bench
+            # drives the relay over HTTP through the tunnel with the dongle on
+            # the connector in usb_rndis mode. No console, no PCAN; the opt-in
+            # unplug leg types `usb vbus` over /ws/cli. The DUT must run THIS
+            # build (flash it first).
+            Invoke-Stage 'ESPNetLink update through the WiCAN PRO' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\wifi\espnetlink_ota_bench.py" --dut 'localhost:18081' --pi $BenchHost 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'espnetlink_ota' $out
+                    foreach ($m in ($out | Select-String -Pattern '^METRIC ' )) { Add-Metric 'espnetlink_ota' $m.Line }
+                    if (-not ($out | Select-String -Quiet '^ESPNL OTA( PARTIAL)? PASS')) { throw 'no ESPNL OTA PASS (the dongle on the connector in usb_rndis mode? the DUT on this build? the Pi serving 8446 with the bench CA? a dongle build in the dongle repo?)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                }
+            }
+        }
         'vpnpause' {
             # Pause the VPN on marked networks (issue #976, 2026-10-11): the
             # bench AP marked = paused, unmarked = connected over wg-bench on
             # the Pi, the hotspot down = paused on the dongle's AP (judged on
             # the console the stage holds), the hotspot up = connected again.
             Invoke-Stage 'VPN pause on marked networks' {
-                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $py = $script:BenchPy
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
                 $con = Start-ConsoleTail 'vpn_pause'
                 try {
@@ -1203,7 +1276,7 @@ try {
             # tunnel address, one to the hotspot address from the station's,
             # and with default_route both from the tunnel.
             Invoke-Stage 'VPN split-tunnel routes' {
-                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $py = $script:BenchPy
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
                 $con = Start-ConsoleTail 'vpn_routes'
                 try {
@@ -1229,7 +1302,7 @@ try {
             # other runs are by hand (--mode wifi_modem, --vpn B, --only g9
             # or g11).
             Invoke-Stage 'ESPNetLink garage story' {
-                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $py = $script:BenchPy
                 $out = & $py -u "$repo\tools\testbench\wifi\espnetlink_garage_bench.py" '--dut-ip' $DutIp '--pi' $BenchHost 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 Save-StageLog 'espnetlink_garage' $out
                 if (-not ($out | Select-String -Quiet 'ESPNL GARAGE (PARTIAL )?PASS')) { throw 'no ESPNL GARAGE PASS (the P4 daemon up? betty reachable? the dongle on the connector? the DUT on the bench AP?)' }
@@ -1241,7 +1314,7 @@ try {
             # the away leg (e3), so the stage holds neither; --no-away by
             # hand when the daemon is down.
             Invoke-Stage 'ESPNetLink easy setup' {
-                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $py = $script:BenchPy
                 $out = & $py -u "$repo\tools\testbench\usb\espnetlink_easy_bench.py" '--dut-ip' $DutIp '--pi' $BenchHost 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 Save-StageLog 'espnetlink_easy' $out
                 if (-not ($out | Select-String -Quiet 'ESPNL EASY BENCH (PARTIAL )?PASS')) { throw 'no ESPNL EASY BENCH PASS (the P4 daemon up? the dongle on the connector? the DUT on the bench AP?)' }
@@ -1259,7 +1332,7 @@ try {
             # says PARTIAL PASS), the originals restored. Nothing secret is
             # printed; the credentials file is gitignored.
             Invoke-Stage 'ABRP live' {
-                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $py = $script:BenchPy
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
                 try {
                     Start-Sleep -Seconds 3
@@ -1283,7 +1356,7 @@ try {
             # planned restarts for the settings plus one for the format
             # change, one power cycle. Needs the OWON PSU on this PC.
             Invoke-Stage 'Log clock' {
-                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $py = $script:BenchPy
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
                 try {
                     Start-Sleep -Seconds 3
@@ -1306,7 +1379,7 @@ try {
             # card, the two switches and the Status row in Chrome through
             # the same tunnel.
             Invoke-Stage 'USB GPS receiver' {
-                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $py = $script:BenchPy
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
                 try {
                     Start-Sleep -Seconds 3
@@ -1334,7 +1407,7 @@ try {
             # only (TESTING.md), so the restore is the bench's --restore-host
             # by hand (role host + a PSU power cycle).
             Invoke-Stage 'USB restart detach' {
-                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $py = $script:BenchPy
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
                 $con = Start-ConsoleTail 'usbdetach'
                 try {
@@ -1367,7 +1440,7 @@ try {
             # ends by the bench's timer, the next quick crash parks at once,
             # a power cycle is a fresh start. Both hold the console
             # themselves (they type there), so no console tail beside them.
-            $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+            $py = $script:BenchPy
             foreach ($stage in @(
                     @{ Name = 'crash note'; Script = 'crash_note_bench.py'; Log = 'crash_note'; Verdict = 'CRASH NOTE PASS' },
                     @{ Name = 'crash park'; Script = 'crash_park_bench.py'; Log = 'crash_park'; Verdict = 'CRASH PARK PASS' })) {
@@ -1395,7 +1468,7 @@ try {
             # the car. Second stage (leg x5): the tables' own protocol
             # commands and resets on the truck's bus, judged at the truck.
             Invoke-Stage 'EU truck end to end' {
-                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $py = $script:BenchPy
                 $actorLogs = Join-Path $repo 'test-reports\logs'
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
                 $con = Start-ConsoleTail 'eu_truck_e2e'
@@ -1411,7 +1484,7 @@ try {
                 }
             }
             Invoke-Stage 'EU truck: the tables own protocols' {
-                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $py = $script:BenchPy
                 $actorLogs = Join-Path $repo 'test-reports\logs'
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
                 $con = Start-ConsoleTail 'eu_truck_tables'
@@ -1435,7 +1508,7 @@ try {
             # 192.168.8.1) is the ACK source and the OBD-II car of the last
             # leg. The actor's logs land beside the stage log.
             Invoke-Stage 'WWH-OBD (ISO 27145 / J1979-2)' {
-                $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+                $py = $script:BenchPy
                 $actorLogs = Join-Path $repo 'test-reports\logs'
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
                 $con = Start-ConsoleTail 'wwh_obd'
@@ -1464,7 +1537,7 @@ try {
             # and PowerShell names are case-insensitive; `$logdir = ...` here
             # replaced $script:logDir, and this kind's stage logs landed
             # outside the run's folder until 2026-10-04.)
-            $py = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts\python.exe'
+            $py = $script:BenchPy
             $actorLogs = Join-Path $repo 'test-reports\logs'
             Invoke-Stage 'J1939 listener' {
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)

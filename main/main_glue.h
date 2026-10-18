@@ -30,3 +30,9 @@ void main_glue_wire_autopid_logger(void);
  *  yellow/blue LED alternation, 10 min timeout-reboot held open while
  *  an AP client is attached). */
 void main_glue_wire_button(void);
+
+/** Firmware updates (2026-10-18): the product's image names for
+ *  ota_manager's refusal, the uplink word (and whether it costs mobile
+ *  data) for fw_update's cellular policy, and the HA push's update keys.
+ *  After ota_manager_init / fw_update_init / ha_webhooks_init. */
+void main_glue_wire_fw_update(void);

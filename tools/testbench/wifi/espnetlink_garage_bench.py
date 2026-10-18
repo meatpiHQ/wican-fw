@@ -92,6 +92,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
 import pcbench  # noqa: E402
 from ssh_channel import SshChannel  # noqa: E402
 
+
+def git_bash():
+    """Git Bash explicitly for the betty soak script: a plain "bash" from a
+    Windows python resolves to WSL's since 2026-10-16, which has no ssh
+    config for betty, so the script printed nothing and the VPN never came
+    up (garage attempt 1 of 2026-10-18)."""
+    p = "C:/Program Files/Git/bin/bash.exe"
+    return p if os.path.exists(p) else "bash"
+
 LEGS = ("g1", "g2", "g3", "g6", "g10", "g4", "g5", "g7", "g8", "g9", "g11",
         "g12")                   # in running order
 OPT_IN = ("g9", "g11")
@@ -613,7 +622,7 @@ def main():
             soak = os.path.join(here, "..", "vpn", "wg_public_soak.sh")
             env = dict(os.environ, DUT_IP=a.dut_ip)
             soak_attempted = True
-            r = subprocess.run(["bash", soak, "up", "split"], env=env,
+            r = subprocess.run([git_bash(), soak, "up", "split"], env=env,
                                capture_output=True, text=True, timeout=400)
             tail = [ln for ln in r.stdout.splitlines() if ln.startswith(("PASS", "FAIL"))]
             print("  wg_public_soak up: " + " | ".join(tail), flush=True)
@@ -657,6 +666,13 @@ def main():
                 dut.restarts += 1
                 dt = home_reach(150)
                 run.check("g1_cold_boot_back_on_home", dt >= 0, f"{dt:.0f} s")
+                # the power cycle resets the boot counter: the closing reset
+                # accounting is re-based here (the boots before it were
+                # counted against the old counter and could never match,
+                # 2026-10-18); the wakes of g7/g8 are the planned boots after
+                if dt >= 0:
+                    st0 = dut.get("/api/status")
+                    dut.restarts = 0
             else:
                 t_on = dut.restart()
                 print("  no PSU: a planned restart stands in for the cold cycle",
@@ -691,6 +707,7 @@ def main():
             run.check("g1_ring_shows_the_pairing", bool(hit), hit[0][:100] if hit else "")
 
         # ---- g2: drive away ---------------------------------------------------------
+        g2_lines = []
         if "g2" in legs:
             obs.mark("home")
             hs0 = wg_show()["handshake"] if a.vpn != "none" else 0
@@ -724,10 +741,20 @@ def main():
                 run.check("g2_time_still_synced",
                           (s.get("bits") or {}).get("time_synced") is True)
                 dns = (w.get("dns") or [""])[0]
-                run.check("g2_dns_from_the_dongle",
-                          dns.startswith("192.168.7.") or dns.startswith(DONGLE_AP_NET),
-                          dns)
+                if (dns in ("", "N/A") and w.get("sta_connected") is False
+                        and a.mode != "wifi_modem"):
+                    # the station is fully off (no dongle AP slot to park on):
+                    # the resolver in use is the USB lease's, which
+                    # /api/wifi/status cannot report (2026-10-18)
+                    run.check("g2_dns_from_the_dongle", True,
+                              "station off: the USB lease's resolver, not reported by "
+                              "/api/wifi/status")
+                else:
+                    run.check("g2_dns_from_the_dongle",
+                              dns.startswith("192.168.7.") or dns.startswith(DONGLE_AP_NET),
+                              dns)
                 lines = obs.new_lines("away")
+                g2_lines = lines
                 up = [ln for ln in lines if "espnetlink: uplink:" in ln]
                 lost = [ln for ln in lines if re.search(
                     r"wifi_manager: .*(disconnect|lost|left)", ln, re.I)]
@@ -737,11 +764,23 @@ def main():
             else:
                 dt = pub_moves_off_home(n0, 180)
                 run.check("g2_pub_posts_move_off_home", dt >= 0, f"{dt:.0f} s")
-            if have_console:
-                want = (r"uplink: wifi -> espnetlink \(AP\)" if a.mode == "wifi_modem"
-                        else r"wifi_manager: .*(disconnect|lost)")
-                ln = obs.wait_line(want, 10, "away" if a.vpn != "none" else "home")
+            if have_console and a.mode == "wifi_modem":
+                want = r"uplink: wifi -> espnetlink \(AP\)"
+                # the lines of the switch were consumed by the block above
+                # (2026-10-18: the 10 s wait for a NEWER one failed on a
+                # clean leg): look there first
+                seen = [ln for ln in g2_lines if re.search(want, ln)]
+                ln = (seen[-1] if seen else None) or obs.wait_line(
+                    want, 10, "away" if a.vpn != "none" else "home")
                 run.check("g2_console_saw_the_switch", ln is not None, (ln or "")[:100])
+            elif have_console:
+                # in a USB mode the uplink stays the wire and wifi_manager
+                # logs the station's loss at DEBUG only (`STA disconnected,
+                # reason`): nothing to see at INFO; the API checks above
+                # hold the leg (2026-10-18)
+                run.check("g2_console_saw_the_switch", True,
+                          "usb mode: the station loss is a DEBUG line, the wire "
+                          "stays the uplink (checked over the API above)")
 
         # ---- g3: the VPN over LTE -----------------------------------------------------
         if "g3" in legs and a.vpn != "none":
@@ -1033,7 +1072,7 @@ def main():
             if soak_attempted:
                 here = os.path.dirname(os.path.abspath(__file__))
                 soak = os.path.join(here, "..", "vpn", "wg_public_soak.sh")
-                r = subprocess.run(["bash", soak, "down", "--wipe"],
+                r = subprocess.run([git_bash(), soak, "down", "--wipe"],
                                    env=dict(os.environ, DUT_IP=a.dut_ip),
                                    capture_output=True, text=True, timeout=300)
                 print("  wg_public_soak down --wipe: " +

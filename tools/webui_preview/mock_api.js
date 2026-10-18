@@ -75,7 +75,7 @@
     const nlv = (S.espnetlink && S.espnetlink.values) || {};
     /* dongle api 8 + the carrier relay (2026-10-07): `apn` is the WiCAN's setting,
        `carrier_synced` whether the pairing pass found the dongle holding it */
-    const fw = { dongle_fw: "v1.22-41-gf2f6aa2", dongle_api: 8, dongle_api_min: 7, device_id: "206ef1894a5d", apn: nlv.apn || "", carrier_synced: true, carrier_note: "" };
+    const fw = { dongle_fw: "v1.22-41-gf2f6aa2", dongle_api: 8, dongle_api_min: 7, device_id: "206ef1894a5d", apn: nlv.apn || "", carrier_synced: true, carrier_note: "", prefs: { agnss: "on", wifi_ap: "not_managed" } };
     /* the dongle's health as WiCAN relays it (`sim`, `stage`, `ip` and `age_s` are
        dongle api 8; read over the cable during pairing too, so a fresh device sees
        them before its restart) */
@@ -388,7 +388,83 @@
     return base;
   };
 
+  /* ---- firmware updates from the manifest (2026-10-18): /api/fw_update ----
+     __mockPreset.fw picks the scene; an install animates a job (checking,
+     downloading, verifying, rebooting) over about four seconds */
+  const FW_INSTALLED = "6.1.0-alfa.1";
+  const fwScene = () => (window.__mockPreset || {}).fw || "available";
+  const fwRelease = (version, date, summary, extra) => Object.assign({ version, date, summary, notes: true, size: 3791216 }, extra || {});
+  state.fwJob = null; state.fwLast = null; state.fwChecks = 0; state.fwInstalls = []; state.fwAborts = 0;
+  /* the probe reads what the page posted */
+  window.__mockFw = () => ({ job: state.fwJob, checks: state.fwChecks, installs: state.fwInstalls, aborts: state.fwAborts });
+  /* targets.dongle (2026-10-19): the relay's view of the ESPNetLink per scene */
+  const DONGLE_FW = "v1.22-61-gcc81591";
+  const fwDongle = (sc) => {
+    if (sc === "dongle_absent") return { present: false, verdict: "not_present" };
+    const d = { present: true, verdict: "up_to_date", reachable: sc !== "dongle_unreachable", transport: sc === "dongle_wifi" ? "wifi" : "usb",
+      installed: { fw_version: DONGLE_FW, device_id: "206ef1894aa5", api_level: 9, release_known: false, dev_build: true },
+      last_check: { ok: true, error: "" }, latest: null, available: false, installable: false, reason: "up_to_date", target_version: "",
+      cellular_needed: sc === "cellular", last_result: state.fwDongleLast };
+    if (sc === "dongle_unreachable") d.verdict = "unreachable";
+    else if (sc === "dongle_usb_flash") { d.verdict = "needs_usb_flash"; d.installed.api_level = 6; d.latest = { version: "1.23.0-alfa.1", date: "2026-10-24", summary: "Updatable through a connected WiCAN PRO.", notes: true, size: 1912400 }; }
+    else if (sc === "dongle_available" || sc === "dongle_wifi" || sc === "dongle_job" || sc === "cellular" || sc === "dongle_failed") {
+      d.verdict = "update_available"; d.available = true; d.installable = true; d.reason = ""; d.target_version = "1.23.0-alfa.1";
+      d.latest = { version: "1.23.0-alfa.1", date: "2026-10-24", summary: "First build with the version file; updatable through a connected WiCAN PRO.", notes: true, size: 1912400 };
+      if (sc === "dongle_failed" && !state.fwDongleLast) d.last_result = state.fwDongleLast = { id: 8, from: DONGLE_FW, to: "1.23.0-alfa.1", state: "failed", error: "timeout_reboot", detail: "the dongle did not come back on the USB link", time: 1784400200, push_s: 24 };
+    }
+    return d;
+  };
+  state.fwDongleLast = null;
+  const fwStatus = () => {
+    const sc = fwScene();
+    const base = { enabled: true, channel: sc === "step" ? "beta" : "alfa",
+      cellular: { policy: "wifi_only", uplink: sc === "cellular" ? "espnetlink" : "wifi", is_cellular: sc === "cellular" },
+      last_check: sc === "no_manifest" ? null : { time: 1784400000, ok: true, error: "", etag_hit: false, age_s: 7200 + state.fwChecks * 0, next_in_s: 79200, count: 3 + state.fwChecks },
+      targets: { self: { installed: FW_INSTALLED, build: "v6.1.0p-alfa.1-3-gabc1234-dirty", release_known: sc !== "no_manifest", dev_build: false, installed_yanked: sc === "yanked",
+        latest: null, available: false, installable: false, reason: "up_to_date", target: null,
+        layout: { flashed_md5: "35c16cb5677477a27c662bd912582329", build_md5: "35c16cb5677477a27c662bd912582329" } },
+        dongle: fwDongle(sc) },
+      job: state.fwJob, last_result: state.fwLast,
+      rollback: { pending_verify: false, running: "ota_0", previous: "ota_1", ota_state: "valid", bootloader_rollback: true, bootloader_version: 2 } };
+    const self = base.targets.self;
+    const offer = (ver, verdict, extra) => { self.latest = fwRelease(ver, "2026-10-24", "The device checks for and installs its own updates."); self.available = true; self.installable = verdict !== "serial" && verdict !== "unknown";
+      self.reason = self.installable ? "" : (verdict === "serial" ? "layout_serial" : "layout_unknown"); self.target = Object.assign({ version: ver, step: false, verdict, wipes: [], layout_md5: "35c16cb5677477a27c662bd912582329" }, extra || {}); };
+    if (sc === "up_to_date") { self.latest = fwRelease(FW_INSTALLED, "2026-10-20", "Sixth alfa of the v6 firmware."); }
+    else if (sc === "available" || sc === "job" || sc === "cellular") offer("6.1.0-alfa.2", "none");
+    else if (sc === "step") offer("6.1.0-beta.1", "none", { step: true });
+    else if (sc === "wipe") offer("6.2.0-alfa.1", "wipe", { wipes: ["settings", "storage"], layout_md5: "0123456789abcdef0123456789abcdef" });
+    else if (sc === "serial") offer("7.0.0-alfa.1", "serial");
+    else if (sc === "rolled_back") { offer("6.1.0-alfa.2", "none"); if (!state.fwLast) state.fwLast = { id: 6, target: "self", from: FW_INSTALLED, to: "6.1.0-alfa.2", state: "rolled_back", by: "app", error: "", time: 1784400100 }; }
+    else if (sc === "yanked") { self.yank_reason = "boot loop on units with a card inserted"; offer("6.1.0-alfa.0", "none"); }
+    else if (sc === "no_manifest") { self.reason = "no_manifest"; }
+    base.job = state.fwJob;          /* the scene may have set them above */
+    base.last_result = state.fwLast;
+    return base;
+  };
+  const fwStartDongleJob = (version) => {
+    const total = 1912400;
+    state.fwJob = { id: 8, active: true, target: "dongle", version, state: "checking", received: 0, total, pct: 0, attempt: 1, error: "", detail: "", elapsed_s: 0, transport: fwScene() === "dongle_wifi" ? "wifi" : "usb", backup: { sd: false } };
+    /* paced for the card's 2 s poll: downloading at the 2 s poll, pushing at
+       the 4 s poll, verified at the 8 s poll */
+    const steps = [[500, () => { state.fwJob.state = "downloading"; state.fwJob.received = Math.floor(total * 0.5); state.fwJob.pct = 50; }],
+      [2500, () => { state.fwJob.state = "pushing"; state.fwJob.received = Math.floor(total * 0.3); state.fwJob.pct = 30; }],
+      [5500, () => { state.fwJob.state = "rebooting"; state.fwJob.received = total; state.fwJob.pct = 100; }],
+      [6500, () => { state.fwJob.state = "pending_verify"; }],
+      [7500, () => { state.fwJob.state = "verified"; state.fwJob.active = false; state.fwDongleLast = { id: 8, from: DONGLE_FW, to: version, state: "verified", error: "", detail: "", time: 1784400300, push_s: 21 }; }]];
+    steps.forEach(([ms, fn]) => setTimeout(() => { if (state.fwJob && (state.fwJob.active || ms === 7500)) fn(); }, ms));
+  };
+  const fwStartJob = (version) => {
+    const total = 3791216;
+    state.fwJob = { id: 7, active: true, target: "self", version, state: "checking", received: 0, total, pct: 0, attempt: 1, error: "", detail: "", elapsed_s: 0, backup: { sd: fwScene() === "wipe" } };
+    const steps = [[600, () => { state.fwJob.state = "downloading"; }], [1400, () => { state.fwJob.received = Math.floor(total * 0.4); state.fwJob.pct = 40; }],
+      [2200, () => { state.fwJob.received = total; state.fwJob.pct = 100; state.fwJob.state = "verifying"; }], [3000, () => { state.fwJob.state = "rebooting"; }]];
+    steps.forEach(([ms, fn]) => setTimeout(() => { if (state.fwJob && state.fwJob.active) fn(); }, ms));
+  };
+  const FW_NOTES = "# WiCAN PRO 6.1.0-alfa.2\n\n## Before you update\nUnits on this layout update in place.\n\n## New features\n- The device checks for and installs its own updates.\n- **Release notes** open here, fetched through the device.\n\n## Bug fixes\n- A `sha256` check before anything is activated (#973).\n\nMore at [meatpi-devices](https://github.com/meatpiHQ/meatpi-devices).\n";
+
   const FIXED = {
+    "/api/fw_update": () => J(fwStatus()),
+    "/api/fw_update/notes": () => T(FW_NOTES),
     "/api/status": () => J({
       usb: (window.__mockPreset || {}).usbStatus || undefined,
       bits: { awake: true, sleep: false, sta_connected: state.staConnected !== false, mqtt_connected: state.mqttConnected !== false, ble_connected: false, sdcard_mounted: state.sdMounted !== false, ble_enabled: false, sta_enabled: true, ap_enabled: true, autopid_enabled: true, home_mode: false, drive_mode: false, smartconnect: false, sta_ap_overlap: false, time_synced: true, vpn_enabled: true, wake_voltage_ok: !state.sleepPending, eth_connected: false, autopid_idle: false, motion: false, sta_suspended: false, ap_suspended: false, ble_suspended: false },
@@ -675,6 +751,45 @@
   async function handle(path, opts, full) {
     const method = ((opts && opts.method) || "GET").toUpperCase();
     const body = opts && typeof opts.body === "string" ? (() => { try { return JSON.parse(opts.body); } catch { return null; } })() : null;
+
+    /* firmware updates (2026-10-18): the three POSTs of /api/fw_update */
+    if (method === "POST" && path === "/api/fw_update/check") {
+      if (state.fwJob && state.fwJob.active && state.fwJob.version) return J({ error: "another update job is running", code: "busy" }, 409);
+      state.fwChecks++;
+      return J({ job_id: 10 + state.fwChecks, state: "checking" }, 202);
+    }
+    if (method === "POST" && path === "/api/fw_update/install") {
+      const st = fwStatus(), self = st.targets.self, b = body || {};
+      state.fwInstalls.push(b);
+      if (state.fwJob && state.fwJob.active) return J({ error: "another update job is running", code: "busy" }, 409);
+      if (b.target === "dongle") {
+        const d = st.targets.dongle;
+        if (!d.present) return J({ error: "no ESPNetLink dongle is reachable", code: "no_dongle" }, 409);
+        if (d.verdict === "needs_usb_flash") return J({ error: "this dongle firmware cannot be updated from here", code: "needs_usb_flash" }, 409);
+        if (st.cellular.is_cellular) return J({ error: "the device is online through the mobile connection: firmware downloads need a WiFi network", code: "cellular_blocked" }, 409);
+        if (!d.available) return J({ error: "the dongle runs the newest release on this channel", code: "up_to_date" }, 409);
+        const dv = b.version || d.target_version;
+        if (dv !== d.target_version) return J({ error: "no such release in the manifest", code: "unknown_version" }, 404);
+        fwStartDongleJob(dv);
+        return J({ job_id: 8, state: "checking", target: "dongle", version: dv, from: DONGLE_FW }, 202);
+      }
+      if (!self.target) return J({ error: "the running firmware is the newest on this channel", code: "up_to_date" }, 409);
+      const ver = b.version || self.target.version;
+      if (ver === FW_INSTALLED) return J({ already: true, installed: FW_INSTALLED });
+      if (ver !== self.target.version) return J({ error: "no such release in the manifest", code: "unknown_version" }, 404);
+      if (self.target.verdict === "serial") return J({ error: "the release needs a USB flash", code: "layout_serial" }, 409);
+      if (self.target.verdict === "wipe" && !b.confirm_wipe) return J({ error: "the new partition layout erases data: confirm the wipe", code: "needs_confirm_wipe", wipes: self.target.wipes }, 409);
+      if (st.cellular.is_cellular) return J({ error: "the device is online through the mobile connection: firmware downloads need a WiFi network", code: "cellular_blocked" }, 409);
+      fwStartJob(ver);
+      return J({ job_id: 7, state: "checking", target: "self", version: ver, from: FW_INSTALLED }, 202);
+    }
+    if (method === "POST" && path === "/api/fw_update/abort") {
+      if (!state.fwJob || !state.fwJob.active) return J({ error: "no update job is running", code: "no_job" }, 409);
+      if (["rebooting", "pushing", "pending_verify"].includes(state.fwJob.state)) return J({ error: "too late to abort", code: "too_late" }, 409);
+      state.fwAborts++;
+      state.fwJob.active = false; state.fwJob.state = "aborted"; state.fwJob.error = "aborted";
+      return J({ aborted: true, job_id: state.fwJob.id });
+    }
 
     /* mutations */
     if (method === "POST" && path === "/api/uds") {

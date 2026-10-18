@@ -84,15 +84,17 @@ endif()
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
-# ---- binary name: wican-fw_<hw prefix>_<git describe, dots stripped> ------
-# Same scheme as the legacy tree (github.com/meatpiHQ/wican-fw wican-pro
-# branch): e.g. build/wican-fw_obd_pro_v600p_alfa-01-24-g0641c25.bin. The
-# hardware prefix follows CONFIG_WICAN_HW_VERSION in sdkconfig (falls back to
-# sdkconfig.defaults, then to the Pro). The app's own version string
-# (esp_app_desc) is IDF's git describe of the same commit, dots kept.
-# Every commit/dirty state yields a new file name, so old images pile up in
-# build/; build/flash_args and build/project_description.json (app_bin)
-# always name the current one - tools/fw_bin.py resolves it for scripts.
+# ---- project name and version (2026-10-18, internal/TASK_fw_update.md) -----
+# The project name is CONSTANT per hardware line: wican-fw_<hw prefix>
+# (`wican-fw_obd_pro`), so the app descriptor's project_name identifies the
+# product (ota_manager refuses foreign images on it) and the image is
+# build/wican-fw_obd_pro.bin whatever the commit. The app's version string
+# (esp_app_desc) is the release number in version.txt (`6.1.0-alfa.1`: IDF
+# reads the file because CONFIG_APP_PROJECT_VER_FROM_CONFIG is off); the
+# git describe of the build goes into the WICAN_FW_BUILD define, which main
+# hands to dev_status_manager (`fw_build` on /api/info and the About page).
+# build/flash_args and build/project_description.json (app_bin) always name
+# the current image - tools/fw_bin.py resolves it for scripts.
 execute_process(
     COMMAND git describe --tags --always --dirty
     WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
@@ -125,9 +127,16 @@ else()
     set(WICAN_HW_PREF "obd")
 endif()
 
-set(WICAN_PRJ_BIN "wican-fw_${WICAN_HW_PREF}_${WICAN_GIT_TAG}")
-message(STATUS "WiCAN binary: ${WICAN_PRJ_BIN}.bin (hw '${WICAN_HW_CFG}', git ${WICAN_GIT_DESC})")
+set(WICAN_PRJ_BIN "wican-fw_${WICAN_HW_PREF}")
+file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/version.txt" WICAN_VERSION_TXT)
+message(STATUS "WiCAN binary: ${WICAN_PRJ_BIN}.bin (hw '${WICAN_HW_CFG}', version ${WICAN_VERSION_TXT}, build ${WICAN_GIT_DESC})")
 project("${WICAN_PRJ_BIN}")
+
+# the build id for main (dev_status_manager_set_app_build): main's objects
+# alone depend on it, so a new commit does not recompile every component
+idf_component_get_property(_wican_main_lib main COMPONENT_LIB)
+target_compile_definitions(${_wican_main_lib} PRIVATE
+                           WICAN_FW_BUILD="${WICAN_GIT_DESC}")
 
 # Per-function stack-frame sizes (.su files next to every .obj) for the
 # stack audit (tools/stack_audit.py: TESTING.md "stack audit"). Build-time
