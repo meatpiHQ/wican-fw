@@ -2,6 +2,8 @@
 
 This directory contains the WiCAN vehicle profile for the Volkswagen ID.3.
 
+The separate [experimental profile](https://github.com/rernko/wican-id3-experimental) includes unverified and firmware-dependent entries. See its repository for status, use notes, and source attribution.
+
 ## Charging state
 
 PID `227448` exposes two related values:
