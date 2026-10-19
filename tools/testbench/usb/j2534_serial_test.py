@@ -67,8 +67,11 @@ class SerialClient:
                 return status, result, rch
             # ignore async RX_MSG before our ACK
 
-    def write_uds(self, channel, uds, collect_ms=1000):
-        m = struct.pack("<IIIIII", PROT_ISO15765, 0, 0, 0, 0, len(uds)) + uds
+    def write_uds(self, channel, uds, collect_ms=1000, tx_id=0x7E0):
+        # SAE J2534-1 layout (2026-10-19): the 4-byte id first, pad flag 0x40;
+        # answers come back with their id, indications (rx_status 0x01/0x02) skipped
+        d = struct.pack(">I", tx_id) + uds
+        m = struct.pack("<IIIIII", PROT_ISO15765, 0, 0x40, 0, 0, len(d)) + d
         payload = struct.pack("<I", 1) + m
         st, _, _ = self.call(WRITE_MSGS, channel, payload)
         rxs = []
@@ -77,8 +80,11 @@ class SerialClient:
             while True:
                 rt, _, body = self._read_frame()
                 if rt == RX_MSG and len(body) >= 24:
+                    rx_status = struct.unpack_from("<I", body, 4)[0]
                     dsz = struct.unpack_from("<I", body, 20)[0]
-                    rxs.append(body[24:24 + dsz])
+                    if rx_status & 0x03:
+                        continue
+                    rxs.append(body[28:24 + dsz])
         except (TimeoutError, AssertionError):
             pass
         self.s.timeout = 2

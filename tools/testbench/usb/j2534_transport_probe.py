@@ -11,7 +11,9 @@ What the J2534 server can actually do on THIS build, proven on the bus:
             server has to open an ISO-TP session. Public builds have no
             `can_isotp()` provider: ERR_FAILED here and
             `E j2534_server: ISO15765 not available in this build`; with the
-            add-on pack it binds and 10 02 answers 50 02.
+            add-on pack it binds and 10 02 answers 50 02. Since 2026-10-19
+            the ISO15765 data is the SAE J2534-1 layout ([4-byte id][payload]
+            both ways, the pad flag per message): write_uds() does that.
 
 usage (ON rpi001, next to j2534_bench.py):
   python3 j2534_transport_probe.py <dut_ip>
@@ -81,13 +83,13 @@ st, ch2, _ = c.call(b.CONNECT, payload=struct.pack("<III", b.PROT_ISO15765, 0, 5
 print("CONNECT ISO15765 (no ids) ->", hex(st), "channel", ch2)
 mask = b.MSG.pack(b.PROT_ISO15765, 0, 0, 0, 0, 4) + struct.pack(">I", 0xFFFFFFFF)
 patt = b.MSG.pack(b.PROT_ISO15765, 0, 0, 0, 0, 4) + struct.pack(">I", 0x7E8)
-flow = b.MSG.pack(b.PROT_ISO15765, 0, 0, 0, 0, 4) + struct.pack(">I", 0x7E0)
+flow = b.MSG.pack(b.PROT_ISO15765, 0, b.TX_PAD, 0, 0, 4) + struct.pack(">I", 0x7E0)
 st, fid, _ = c.call(START_FILTER, ch2, struct.pack("<I", 3) + mask + patt + flow)
 print("START_FILTER 0x%02X FLOW_CONTROL (pattern 7E8, fc 7E0) -> %s filter id %s" % (START_FILTER, hex(st), fid))
 st, rx = c.write_uds(ch2, bytes([0x10, 0x02]))
 print("WRITE ISO15765 10 02 ->", hex(st), "rx:", [m.hex(" ").upper() for m in rx][:3])
 c.call(b.DISCONNECT, channel=ch2)
 c.call(b.CLOSE)
-iso_ok = st == 0 and any(m[:2] == b"P" for m in rx)
+iso_ok = st == 0 and any(m[:2] == b"\x50\x02" for m in rx)
 print("J2534 TRANSPORT: raw CAN %s, ISO15765 bind %s" % ("PASS" if raw_ok else "FAIL", "PASS" if iso_ok else "FAIL"))
 sys.exit(0 if raw_ok else 1)

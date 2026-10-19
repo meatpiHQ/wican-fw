@@ -60,7 +60,7 @@ MSG = struct.Struct("<IIIIII")   # protocol, rx_status, tx_flags, ts, extra, siz
 PROT_CAN, PROT_ISO15765 = 5, 6
 NOERROR, ERR_NOT_SUPPORTED, ERR_DEVICE_IN_USE = 0x00, 0x01, 0x1A
 PASS_FILTER, BLOCK_FILTER = 1, 2
-VIN = bytes.fromhex("31574341 4E304657 30503030 30303031".replace(" ", ""))
+VIN = b"1WCAN0FW0P0000001"   # the ECU simulator's VIN (17 B; the hex typed on 2026-09-22 was one 0 short)
 
 results = []
 warns = []
@@ -96,8 +96,10 @@ def can_msg(can_id, data, ext=False):
     return MSG.pack(PROT_CAN, 0, 0x100 if ext else 0, 0, 0, len(d)) + d
 
 
-def iso_msg(data):
-    return MSG.pack(PROT_ISO15765, 0, 0, 0, 0, len(data)) + bytes(data)
+def iso_msg(data, tx_id=0x7E0):
+    # SAE J2534-1 layout (2026-10-19): the 4-byte CAN id first, ISO15765_FRAME_PAD set
+    d = struct.pack(">I", tx_id) + bytes(data)
+    return MSG.pack(PROT_ISO15765, 0, 0x40, 0, 0, len(d)) + d
 
 
 def id_msg(can_id):
@@ -307,19 +309,21 @@ async def ble_leg(saved, passkey, nm_profile):
     t.rx.clear()
     st, _, _ = await t.write(ich, iso_msg([0x22, 0xF1, 0x87]))   # ECU name DID
     await t.collect_rx(2.0)
-    nm = [d for c, d in t.rx if c == ich and d[:3] == b"\x62\xF1\x87"]
+    nm = [d[4:] for c, d in t.rx if c == ich and d[4:7] == b"\x62\xF1\x87"]
     check("L4_uds_did_via_isotp", st == NOERROR and nm and nm[0][3:] == b"WCAN-ECU-SIM",
           f"status {st} {nm[0].hex() if nm else [d.hex() for c, d in t.rx][:2]}")
     t.rx.clear()
     await t.write(ich, iso_msg([0x22, 0xF1, 0x90]))
-    await t.collect_rx(1.5)
-    vin = [d for c, d in t.rx if c == ich and d[:3] == b"\x62\xF1\x90"]
-    warn("L4_uds_vin_22F190", bool(vin) and vin[0][3:20] == VIN,
-         f"{[d.hex() for c, d in t.rx][:2]} (the sim answered NRC 31 on 2026-09-21)")
+    await t.collect_rx(3.0)
+    # a WARN until 2026-10-19: the expected VIN was typed one byte short, the answer always came
+    vin = [d[4:] for c, d in t.rx if c == ich and d[4:7] == b"\x62\xF1\x90"]
+    check("L4_uds_vin_22F190", bool(vin) and vin[0][3:] == VIN,
+          f"{vin[0][3:] if vin else [d.hex() for c, d in t.rx]} (the 20-byte multi-frame answer "
+          f"behind the TxDone and START_OF_MESSAGE indications)")
     t.rx.clear()
     st, _, _ = await t.write(ich, iso_msg([0x10, 0x02]))
     await t.collect_rx(1.5)
-    check("L4_uds_10_02", st == NOERROR and any(d[:2] == b"\x50\x02" for c, d in t.rx if c == ich),
+    check("L4_uds_10_02", st == NOERROR and any(d[4:6] == b"\x50\x02" for c, d in t.rx if c == ich),
           f"{[d.hex() for c, d in t.rx][:2]}")
     st, _, _ = await t.write(ich, iso_msg([0x34, 0x00, 0x44, 0x00, 0x00, 0x00, 0x04, 0x00]))
     check("L4_reflash_gate_not_supported", st == ERR_NOT_SUPPORTED, f"status {st}")
@@ -352,12 +356,12 @@ async def ble_leg(saved, passkey, nm_profile):
         # time to the FIRST RX_MSG (not the collect deadline: the first
         # run of this metric reported ~1.16 s = RTT + a 1 s collect window)
         end = time.monotonic() + 1.0
-        while time.monotonic() < end and not any(d[:3] == b"\x62\xF1\x87" for c, d in t.rx):
+        while time.monotonic() < end and not any(d[4:7] == b"\x62\xF1\x87" for c, d in t.rx):
             try:
                 await t._read_frame(max(0.05, end - time.monotonic()))
             except asyncio.TimeoutError:
                 break
-        if any(d[:3] == b"\x62\xF1\x87" for c, d in t.rx):
+        if any(d[4:7] == b"\x62\xF1\x87" for c, d in t.rx):
             lat.append((time.perf_counter() - t0) * 1000)
     if lat:
         metric("uds_request_to_rx_p50", statistics.median(lat), "ms")

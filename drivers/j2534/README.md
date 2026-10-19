@@ -1,15 +1,33 @@
 # WiCAN J2534 PassThru driver (Windows)
 
-`wican_j2534_setup_1.1.0.exe` installs the WiCAN SAE J2534-1 (04.04) PassThru
+`wican_j2534_setup_1.3.0.exe` installs the WiCAN SAE J2534-1 (04.04) PassThru
 driver: a 32-bit `wican_j2534.dll` that lets Windows diagnostic and reflash
-tools drive a vehicle's CAN bus through a WiCAN PRO, over USB or WiFi.
+tools drive a vehicle's bus through a WiCAN PRO, over USB or WiFi.
 
 | | |
 |---|---|
-| Version | 1.1.0 (the DLL reports itself as `WiCAN J2534 1.1`) |
-| SHA-256 | `908c2bff5a050ce12c3f30aba7d74499064ff145ab29d093a3bfebdc9c635ad4` |
-| Requires | WiCAN PRO on firmware v6, Windows 10 or 11 |
-| Protocols | CAN and ISO15765 (ISO-TP). Other J2534 protocols return `ERR_NOT_SUPPORTED`. |
+| Version | 1.3.0 (the DLL reports itself as `WiCAN J2534 1.3`; 2026-10-19: accepts the J1850 VPW protocol, see below; 1.2: event-driven ACK wait, a debug log via `WICAN_J2534_LOG` or the registry `LogFile`, GET_CONFIG answers, requests serialized across threads) |
+| SHA-256 | `67d5e7fe98ab7a80943fd59354b4494da42135659a061abd380c9c6b4eb720ea` |
+| Requires | WiCAN PRO on firmware v6 (a build of 2026-10-20 or later for ISO15765 and J1850 VPW: see below), Windows 10 or 11 |
+| Protocols | CAN, ISO15765 (ISO-TP) on the CAN controller, and J1850 VPW (GM Class 2) on the device's OBD chip. J1850 PWM, ISO9141 and ISO14230 return `ERR_NOT_SUPPORTED`. |
+
+ISO15765 messages are passed to and from the device exactly as SAE J2534-1
+lays them out: the 4-byte CAN id first, then the UDS payload, the pad flag
+in each message's TxFlags. Firmware before 2026-10-20 expected the bare
+payload, so every standard tool (udsoncan, the OEM suites) timed out on
+its first request; update the firmware (the message layout is the
+device's business, every driver version passes messages through
+verbatim). Driver 1.2 adds the faster ACK wait and the debug log on top.
+
+J1850 VPW (protocol id 1, GM Class 2) runs on the WiCAN's OBD chip, not the
+CAN controller. A J1850 message is its 3-byte header (priority, target,
+source) followed by the payload, placed whole in `PASSTHRU_MSG.Data` with
+no CAN-id prefix; the DLL passes it through verbatim like every message.
+WiCAN segments large transfers itself, so SPS/DPS-style programming works
+with "Allow ECU flashing" on. Limits: request/response only (no unsolicited
+bus capture), and GM 4x programming speed (service `$A1`) is not
+implemented, so programming runs at 10.4 kbit/s. Driver 1.3 only adds the
+protocol id to the accept list.
 
 The installer is not code-signed, so Windows SmartScreen may ask you to
 confirm before it runs. The same file is attached to each firmware release.
@@ -44,6 +62,9 @@ safety gates also default to off:
 
 Status: `GET /api/j2534` (its `transport` field says which link the
 attached tool came in on). Details in `components/HTTP_API.md`.
+
+J1850 VPW also needs the WiCAN's OBD chip ready; CONNECT returns
+`ERR_FAILED` if it is not.
 
 ## The wire protocol and the other transports
 

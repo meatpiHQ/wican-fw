@@ -36,6 +36,8 @@ NOERROR, ERR_NOT_SUPPORTED, ERR_DEVICE_NOT_CONNECTED = 0x00, 0x01, 0x08
 ERR_INVALID_MSG = 0x0A
 ERR_INVALID_BAUDRATE = 0x18
 MSG = struct.Struct("<IIIIII")  # protocol, rx_status, tx_flags, ts, extra, size
+TX_PAD, TX_29BIT = 0x40, 0x100                    # tx_flags
+RX_TX_MSG_TYPE, RX_START_OF_MESSAGE, RX_TX_INDICATION = 0x01, 0x02, 0x08  # rx_status
 
 fails = []
 
@@ -80,9 +82,14 @@ class Client:
                   if len(body) >= 8 else None)
         return status, result, rch
 
-    def write_uds(self, channel, uds_bytes, collect_ms=1200):
-        """WRITE_MSGS one ISO15765 message, then collect RX_MSG payloads."""
-        msg = MSG.pack(PROT_ISO15765, 0, 0, 0, 0, len(uds_bytes)) + uds_bytes
+    def write_uds(self, channel, uds_bytes, collect_ms=1200, tx_id=0x7E0, pad=True):
+        """WRITE_MSGS one ISO15765 message in the SAE J2534-1 layout (the
+        4-byte CAN id, then the UDS bytes; ISO15765_FRAME_PAD in tx_flags,
+        2026-10-19), then collect the ECU's answers: the RX_MSG payloads
+        without their 4-byte id prefix. The TxDone and START_OF_MESSAGE
+        indications (rx_status TX_MSG_TYPE / START_OF_MESSAGE) are skipped."""
+        data = struct.pack(">I", tx_id) + uds_bytes
+        msg = MSG.pack(PROT_ISO15765, 0, TX_PAD if pad else 0, 0, 0, len(data)) + data
         payload = struct.pack("<I", 1) + msg
         st, _, _ = self.call(WRITE_MSGS, channel, payload)
         rxs = []
@@ -91,8 +98,11 @@ class Client:
             while True:
                 rt, rseq, rch, body = self._read_frame()
                 if rt == RX_MSG:
-                    size = MSG.unpack_from(body, 0)[5]
-                    rxs.append(body[MSG.size:MSG.size + size])
+                    fields = MSG.unpack_from(body, 0)
+                    rx_status, size = fields[1], fields[5]
+                    if rx_status & (RX_TX_MSG_TYPE | RX_START_OF_MESSAGE):
+                        continue
+                    rxs.append(body[MSG.size + 4:MSG.size + size])
         except (socket.timeout, TimeoutError):
             pass
         finally:
@@ -122,12 +132,21 @@ def main():
     check("CONNECT CAN", st == NOERROR and ch1 == 1, f"channel {ch1}")
 
     st, ch2, _ = c.call(CONNECT,
-                        payload=struct.pack("<III", PROT_ISO15765, 0x40, 500000))
+                        payload=struct.pack("<III", PROT_ISO15765, 0, 500000))
     check("CONNECT ISO15765", st == NOERROR and ch2 == 2, f"channel {ch2}")
 
-    st, _, _ = c.call(CONNECT,
-                     payload=struct.pack("<III", PROT_J1850VPW, 0, 0))
-    check("CONNECT unsupported → ERR_NOT_SUPPORTED", st == ERR_NOT_SUPPORTED)
+    # J1850 VPW (2026-10-19) is chip-backed: NOERROR when the OBD chip is up,
+    # ERR_FAILED when it is not, never ERR_NOT_SUPPORTED. A legacy protocol
+    # that is not built yet (J1850 PWM = 2) stays refused.
+    st, vch, _ = c.call(CONNECT,
+                        payload=struct.pack("<III", PROT_J1850VPW, 0, 0))
+    check("CONNECT J1850VPW recognized (chip-backed)",
+          st in (NOERROR, ERR_FAILED), hex(st))
+    if st == NOERROR:
+        c.call(DISCONNECT, channel=vch)
+    st, _, _ = c.call(CONNECT, payload=struct.pack("<III", 2, 0, 0))
+    check("CONNECT J1850PWM (not built) → ERR_NOT_SUPPORTED",
+          st == ERR_NOT_SUPPORTED, hex(st))
 
     # the bus has its bitrate (the device's CAN setting, or what it read off
     # the wire): a tester that asks for another one is told so, not served at
@@ -183,23 +202,23 @@ def reflash():
     def last(rxs):
         return rxs[-1].hex(" ").upper() if rxs else "(none)"
 
-    st, rx = c.write_uds(ch, bytes([0x10, 0x02]))
+    st, rx = c.write_uds(ch, bytes([0x10, 0x02]), tx_id=tx)
     check("session 10 02 -> 50 02", rx and rx[-1][:2] == b"\x50\x02", last(rx))
 
-    st, rx = c.write_uds(ch, bytes([0x27, 0x01]))
+    st, rx = c.write_uds(ch, bytes([0x27, 0x01]), tx_id=tx)
     seed = rx[-1][2:] if rx and rx[-1][:2] == b"\x67\x01" else b""
     check("seed 27 01 -> 67 01 + seed", len(seed) == 4, last(rx))
 
     key = bytes(b ^ 0xFF for b in seed)  # ReflashEcu toy KDF: seed XOR 0xFF
-    st, rx = c.write_uds(ch, bytes([0x27, 0x02]) + key)
+    st, rx = c.write_uds(ch, bytes([0x27, 0x02]) + key, tx_id=tx)
     check("key 27 02 -> 67 02 (unlocked)",
           rx and rx[-1][:2] == b"\x67\x02", last(rx))
 
-    st, rx = c.write_uds(ch, bytes([0x34, 0x00, 0x44, 0, 0, 0x04, 0x00]))
+    st, rx = c.write_uds(ch, bytes([0x34, 0x00, 0x44, 0, 0, 0x04, 0x00]), tx_id=tx)
     check("requestDownload 34 -> 74", rx and rx[-1][0] == 0x74, last(rx))
 
     # erase routine: ECU floods 0x78 (if erase_pending) then 71 01 FF 00 00
-    st, rx = c.write_uds(ch, bytes([0x31, 0x01, 0xFF, 0x00]), collect_ms=2000)
+    st, rx = c.write_uds(ch, bytes([0x31, 0x01, 0xFF, 0x00]), collect_ms=2000, tx_id=tx)
     pend = sum(1 for m in rx if m[:1] == b"\x7F" and len(m) >= 3
                and m[2] == 0x78)
     final = rx[-1] if rx else b""

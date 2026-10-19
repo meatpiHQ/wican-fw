@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'slcan', 'j2534auto', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'espnleasy', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'espnleasy', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [string]$Port = 'COM10',  # UART0 external USB-serial = console/flash
@@ -870,6 +870,7 @@ function Show-Inventory {
     Write-Host '  autobaud   - CAN listen-before-talk, auto bit rate and the autopid bus guard: PCAN keeps the bus alive and counts error frames (~9 min)'
     Write-Host '  slcan      - slcan over TCP 3333 (2026-10-16): first the trap (the server on with no connection row: client connected, nothing arrives, the W line and bridge:null say why), then the bridged path: python-can on the PC and on rpi001, slcand + SocketCAN, the /ws/can monitor beside the TCP client, exactly-N with PCAN as the generator, TX both ways, restore (2 to 3 planned restarts, ~3 min)'
     Write-Host '  j2534auto  - a tester states the bit rate on a silent bus (2026-10-17): with Automatic and a bus that only answers when asked, a J2534 CONNECT at a rate the node does not know is refused and said so (tx_refused, the W lines), a CONNECT at 500k is taken (adopted, writes and the ISO15765 reply flow, frames then prove it), after a restart an slcan client''s S6 does the same through the bridge, restore (3 planned restarts, ~4 min)'
+    Write-Host '  j2534std   - a standard J2534 tool through the PassThru server (2026-10-19): udsoncan''s byte stream through the DLL replayed byte-exact (the 4-byte id first, the pad flag per message, TxDone and START_OF_MESSAGE indications, a multi-frame VIN, two ECUs on one channel, functional 7DF through a PASS filter, the reflash gate behind the id), then the installed wican_j2534.dll driven by udsoncan under the 32-bit Python; restore (2 planned restarts, ~1 min)'
     Write-Host '  vpnpause   - the VPN pauses on networks marked Pause VPN (issue #976): the bench AP marked / unmarked, away on the dongle AP, home again; wg-bench on the Pi, the console for the away leg (~12 min)'
     Write-Host '  vpnroutes  - the split tunnel (issue #975): a request to a routed network leaves through wg-bench on the Pi, one to any other address through the station, judged at the receiver by the source address (~6 min)'
     Write-Host '  espnleasy  - the ESPNetLink easy-setup surfaces on the DUT (2026-10-13): the usb summary on /api/status against /api/espnetlink, the sim_pin key (a no-op PUT, no restart), the UI doors in the served page, the GPS hint counting away from home (ap off on the P4 for 100 s, home again) (~6 min; needs the P4 daemon)'
@@ -1173,6 +1174,31 @@ try {
                     $out = & $py -u "$repo\tools\testbench\usb\j2534_auto_baud_bench.py" --dut 'localhost:18081' --j2534 'localhost:18534' --slcan 'localhost:18333' 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'j2534_auto' $out
                     if (-not ($out | Select-String -Quiet '^J2534 AUTO BAUD PASS')) { throw 'no J2534 AUTO BAUD PASS (PCAN wired? the simulator answering 7DF? the DUT on the bench AP?)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
+                }
+            }
+        }
+        'j2534std' {
+            # A standard J2534 tool through the PassThru server (2026-10-19,
+            # the second field report: udsoncan timed out on every request
+            # because the device took an ISO15765 message's data as the bare
+            # payload while SAE J2534-1 puts the CAN id first). The tool's
+            # bytes replayed byte-exact over the wire protocol, then the
+            # installed DLL driven by udsoncan itself under the 32-bit
+            # Python. The tunnel carries the web API and the J2534 port;
+            # PCAN is the witness on the bus.
+            Invoke-Stage 'A standard J2534 tool through the server' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", '-L', "18534:${DutIp}:6809", $BenchHost)
+                $con = Start-ConsoleTail 'j2534_std'
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (ports 18081/18534 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\usb\j2534_std_tool_bench.py" --dut 'localhost:18081' --j2534 'localhost:18534' 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'j2534_std' $out
+                    if (-not ($out | Select-String -Quiet '^J2534 STD TOOL PASS')) { throw 'no J2534 STD TOOL PASS (PCAN wired? the simulator answering 7E0? the DUT on the bench AP?)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                     Stop-ConsoleTail $con

@@ -373,7 +373,7 @@ def legs(dut, pcan, jh, jp, sh, sp):
     check("A7 CONNECT(ISO15765) accepted", st == 0, hex(st))
     mask = b.MSG.pack(b.PROT_ISO15765, 0, 0, 0, 0, 4) + struct.pack(">I", 0xFFFFFFFF)
     patt = b.MSG.pack(b.PROT_ISO15765, 0, 0, 0, 0, 4) + struct.pack(">I", 0x7E8)
-    flow = b.MSG.pack(b.PROT_ISO15765, 0, 0, 0, 0, 4) + struct.pack(">I", 0x7E0)
+    flow = b.MSG.pack(b.PROT_ISO15765, 0, b.TX_PAD, 0, 0, 4) + struct.pack(">I", 0x7E0)
     st, fid, _ = cl.call(START_FILTER, ch2, struct.pack("<I", 3) + mask + patt + flow)
     check("A8 FLOW_CONTROL filter bound (7E0/7E8)", st == 0, hex(st))
     st, rx = cl.write_uds(ch2, bytes([0x10, 0x02]))
