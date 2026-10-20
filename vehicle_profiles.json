@@ -668,6 +668,293 @@
       ]
     },
     {
+      "car_model": "Dacia: Spring (2025-) LFP",
+      "init": "ATSP7;ATCP18;ATST96;ATSHDADBF1;ATCRA18DAF1DB;ATFCSH18DADBF1;ATFCSD300000;ATFCSM1;",
+      "pids": [
+        {
+          "pid": "2290011",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "[B4:B5]/100",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "2290021",
+          "parameters": [
+            {
+              "name": "SOC_D",
+              "expression": "[B4:B5]/100",
+              "unit": "%",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "2290031",
+          "parameters": [
+            {
+              "name": "SOH",
+              "expression": "[B4:B5]/100",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "105"
+            }
+          ]
+        },
+        {
+          "pid": "2290061",
+          "parameters": [
+            {
+              "name": "HV_V",
+              "expression": "[B4:B7]/1024",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "480"
+            }
+          ]
+        },
+        {
+          "pid": "2292841",
+          "parameters": [
+            {
+              "name": "HV_A",
+              "expression": "0-([S4:S7]/1000)",
+              "unit": "A",
+              "class": "current"
+            }
+          ]
+        },
+        {
+          "pid": "2291C81",
+          "parameters": [
+            {
+              "name": "HV_CAPACITY_R",
+              "expression": "[B4:B6]/1000",
+              "unit": "kWh",
+              "class": "energy"
+            }
+          ]
+        },
+        {
+          "pid": "2290121",
+          "parameters": [
+            {
+              "name": "BATT_TEMP",
+              "expression": "([B4:B5]/16)-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "80"
+            }
+          ]
+        },
+        {
+          "pid": "2290111",
+          "parameters": [
+            {
+              "name": "LV_V",
+              "expression": "[B4:B5]/1000",
+              "unit": "V",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "2292451",
+          "parameters": [
+            {
+              "name": "KWH_DISCHARGED",
+              "expression": "[B4:B7]/1000",
+              "unit": "kWh",
+              "class": "energy",
+              "min": "0",
+              "max": "1000000"
+            }
+          ]
+        },
+        {
+          "pid": "2292431",
+          "parameters": [
+            {
+              "name": "KWH_CHARGED",
+              "expression": "[B4:B7]/1000",
+              "unit": "kWh",
+              "class": "energy",
+              "min": "0",
+              "max": "1000000"
+            }
+          ]
+        },
+        {
+          "pid": "2291311",
+          "parameters": [
+            {
+              "name": "HV_T_1",
+              "expression": "([B4:B5]/16)-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2291321",
+          "parameters": [
+            {
+              "name": "HV_T_2",
+              "expression": "([B4:B5]/16)-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2291331",
+          "parameters": [
+            {
+              "name": "HV_T_3",
+              "expression": "([B4:B5]/16)-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2291341",
+          "parameters": [
+            {
+              "name": "HV_T_4",
+              "expression": "([B4:B5]/16)-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2291351",
+          "parameters": [
+            {
+              "name": "HV_T_5",
+              "expression": "([B4:B5]/16)-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2291361",
+          "parameters": [
+            {
+              "name": "HV_T_6",
+              "expression": "([B4:B5]/16)-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "80"
+            }
+          ]
+        },
+        {
+          "pid": "2291371",
+          "parameters": [
+            {
+              "name": "HV_T_7",
+              "expression": "([B4:B5]/16)-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "80"
+            }
+          ]
+        },
+        {
+          "pid": "2291381",
+          "parameters": [
+            {
+              "name": "HV_T_8",
+              "expression": "([B4:B5]/16)-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "80"
+            }
+          ]
+        },
+        {
+          "pid": "2291391",
+          "parameters": [
+            {
+              "name": "HV_T_9",
+              "expression": "([B4:B5]/16)-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "80"
+            }
+          ]
+        },
+        {
+          "pid": "22913A1",
+          "parameters": [
+            {
+              "name": "HV_T_10",
+              "expression": "([B4:B5]/16)-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "80"
+            }
+          ]
+        },
+        {
+          "pid": "22913B1",
+          "parameters": [
+            {
+              "name": "HV_T_11",
+              "expression": "([B4:B5]/16)-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "80"
+            }
+          ]
+        },
+        {
+          "pid": "22913C1",
+          "parameters": [
+            {
+              "name": "HV_T_12",
+              "expression": "([B4:B5]/16)-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "80"
+            }
+          ]
+        },
+        {
+          "pid": "2220061",
+          "pid_init": "ATSHDADAF1;ATCRA18DAF1DA;ATFCSH18DADAF1;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B4:B6]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Dacia: Spring/CITY K-ZE",
       "init": "ATSP6;ATST64;ATFCSD300000;ATFCSM1;",
       "pids": [
