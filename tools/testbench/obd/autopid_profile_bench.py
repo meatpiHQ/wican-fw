@@ -14,8 +14,14 @@ tripped the firmware's duplicate-name rule next, so the importer now renames
 repeats. This bench mirrors `web_ui_v2/web/index.html` importProfile():
   1. B<n>/S<n> byte indexes shift DOWN by one (published profiles index the
      frame with its PCI byte; the v6 payload starts at the service echo),
+     which autopid_profile_e2e_bench.py measured right for single-frame
+     replies and wrong for multi-frame ones (2026-10-21, the fix pending:
+     internal/TASK_profile_frame_ref.md),
   2. a U+FFFD degree sign becomes "°",
-  3. a parameter name already in the table gets a _2/_3 suffix.
+  3. a parameter name already in the table gets a _2/_3 suffix,
+  4. passive CAN `filters` (2026-10-21) replace the filters tagged profile,
+     the frame id is read like JS Number(), the expressions stay as
+     published (a filter indexes the frame data, B0 = first data byte).
 
 Legs (in this order - the wide leg needs the chip in its found state):
   wide      one custom PID `wide0100` (cmd 0100, the ECU simulator answers
@@ -74,10 +80,24 @@ def fix_unit(u):
     return u.replace("�", "°") if isinstance(u, str) else u
 
 
+def frame_id_number(v):
+    """JS Number(): "0x284" -> 644, 644 -> 644, anything else -> 0."""
+    try:
+        return int(str(v), 0) if isinstance(v, str) else int(v)
+    except (TypeError, ValueError):
+        return 0
+
+
 def convert(found_cfg, car):
-    """The table the UI PUTs when this car is picked; returns (cfg, renamed)."""
+    """The table the UI PUTs when this car is picked; returns (cfg, renamed).
+    Since 2026-10-21 the published file may carry passive CAN `filters`
+    (the Leaf ZE1 profile): they replace the filters tagged `profile`,
+    hand-made ones stay, the frame id is read like JS Number() and the
+    expressions are NOT shifted (a filter indexes the frame data, B0 =
+    first data byte, in both the published and the v6 frame of reference)."""
     cfg = json.loads(json.dumps(found_cfg))
     cfg["pids"] = [p for p in cfg.get("pids", []) if p.get("type") != "specific"]
+    cfg["filters"] = [f for f in cfg.get("filters", []) if not f.get("profile")]
     taken = set(pr.get("name") for p in cfg["pids"] for pr in p.get("parameters", []))
     renamed = []
 
@@ -100,6 +120,16 @@ def convert(found_cfg, car):
             "name": (prm[0]["name"] if len(prm) == 1 and prm[0].get("name") else pp["pid"]),
             "cmd": pp["pid"], "init": pp.get("pid_init", ""), "group": "default",
             "period_ms": 0, "type": "specific", "parameters": prm})
+    for pf in car.get("filters", []) or []:
+        fid = frame_id_number(pf.get("frame_id"))
+        if not fid:
+            continue
+        prm = [dict(x, name=uniq(x.get("name")), unit=fix_unit(x.get("unit")))
+               for x in pf.get("parameters", [])]
+        cfg["filters"].append({
+            "frame_id": fid, "monitor_ms": pf.get("monitor_ms") or 1000,
+            "period_ms": pf.get("period_ms") or 0, "group": "default",
+            "profile": True, "parameters": prm})
     return cfg, renamed
 
 

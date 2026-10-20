@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'espnleasy', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'espnleasy', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [string]$Port = 'COM10',  # UART0 external USB-serial = console/flash
@@ -868,6 +868,7 @@ function Show-Inventory {
     Write-Host '  blephy     - BLE 5 settings: 1M vs 2M PHY throughput/RTT, legacy + extended advertising sets'
     Write-Host '  blethru    - BLE throughput with the ECU simulator as the central (notify/write/read/tunnel vs the esp-idf reference)'
     Write-Host '  autobaud   - CAN listen-before-talk, auto bit rate and the autopid bus guard: PCAN keeps the bus alive and counts error frames (~9 min)'
+    Write-Host '  profilee2e - a published vehicle profile end to end (2026-10-21): the Leaf ZE1 profile imported the way the web UI imports it (index shift, renames, passive filters) and polled against an ECU played FROM THE PROFILE on the PCAN (every reply and every filter frame with bytes the bench chose); the values the device publishes must be what the profile''s expressions mean, every request answered, the filters decoded, the rows re-read, restore (2 planned restarts, ~5 min; by hand --profiles <checkout>\vehicle_profiles.json tests a profile before it is pushed)'
     Write-Host '  slcan      - slcan over TCP 3333 (2026-10-16): first the trap (the server on with no connection row: client connected, nothing arrives, the W line and bridge:null say why), then the bridged path: python-can on the PC and on rpi001, slcand + SocketCAN, the /ws/can monitor beside the TCP client, exactly-N with PCAN as the generator, TX both ways, restore (2 to 3 planned restarts, ~3 min)'
     Write-Host '  j2534auto  - a tester states the bit rate on a silent bus (2026-10-17): with Automatic and a bus that only answers when asked, a J2534 CONNECT at a rate the node does not know is refused and said so (tx_refused, the W lines), a CONNECT at 500k is taken (adopted, writes and the ISO15765 reply flow, frames then prove it), after a restart an slcan client''s S6 does the same through the bridge, restore (3 planned restarts, ~4 min)'
     Write-Host '  j2534std   - a standard J2534 tool through the PassThru server (2026-10-19): udsoncan''s byte stream through the DLL replayed byte-exact (the 4-byte id first, the pad flag per message, TxDone and START_OF_MESSAGE indications, a multi-frame VIN, two ECUs on one channel, functional 7DF through a PASS filter, the reflash gate behind the id), then the installed wican_j2534.dll driven by udsoncan under the 32-bit Python; restore (2 planned restarts, ~1 min)'
@@ -1120,6 +1121,32 @@ try {
                     $out = & $py -u "$repo\tools\testbench\can\can_autobaud_bench.py" 'localhost:18081' 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'can_autobaud' $out
                     if (-not ($out | Select-String -Quiet 'CAN AUTOBAUD PASS')) { throw 'no CAN AUTOBAUD PASS (PCAN wired? simulator on 192.168.8.1?)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
+                }
+            }
+        }
+        'profilee2e' {
+            # A published vehicle profile end to end (2026-10-21): the Leaf ZE1
+            # profile is imported the way the web UI imports it and polled
+            # against an ECU played FROM THE PROFILE on the PCAN (every reply
+            # and every passive-filter frame carry bytes the bench chose); the
+            # values the device publishes must be what the profile's
+            # expressions mean in the legacy frame of reference the published
+            # file uses. The ECU simulator stays on the bus: it ACKs the
+            # actor's frames and answers the standard rows found on the DUT.
+            # By hand with an unpushed profile: --profiles <checkout>\vehicle_profiles.json
+            Invoke-Stage 'vehicle profile end to end' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                $con = Start-ConsoleTail 'autopid_profile_e2e'
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\obd\autopid_profile_e2e_bench.py" '--dut' 'localhost:18081' 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'autopid_profile_e2e' $out
+                    if (-not ($out | Select-String -Quiet '^AUTOPID PROFILE E2E PASS')) { throw 'no AUTOPID PROFILE E2E PASS (PCAN wired? the simulator on the bus? the profile published on main?)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                     Stop-ConsoleTail $con
