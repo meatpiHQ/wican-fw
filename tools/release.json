@@ -1,0 +1,26 @@
+{
+  "slug": "wican_pro",
+  "model": "WiCAN PRO",
+  "project_name": "wican-fw_obd_pro",
+  "source_repo": "meatpiHQ/wican-fw",
+  "devices_repo": "meatpiHQ/meatpi-devices",
+  "hw_letter": "p",
+  "source_tag": "v{version_tagged}",
+  "asset_name": "wican-fw_obd_pro_v{version}.bin",
+  "zip_name": "wican-fw_obd_pro_v{version}.zip",
+  "chip": "esp32s3",
+  "stable_mirror": {
+    "repo": "meatpiHQ/wican-fw",
+    "tag": "v{version_tagged}",
+    "name": "WiCAN PRO {version}",
+    "footer": "release-notes/LEGACY_FOOTER.md"
+  },
+  "layout_name": "v6 (settings and storage LittleFS)",
+  "layout_source": "wican_pro_partitions_table.csv (branch dev-v6)",
+  "partition_words": {
+    "storage": "stored files, logs and the saved configuration",
+    "settings": "settings",
+    "coredump": "crash dumps"
+  },
+  "keep_in_manifest": 24
+}
