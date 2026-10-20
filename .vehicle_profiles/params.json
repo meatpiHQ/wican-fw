@@ -140,6 +140,15 @@
       "class": "temperature"
     }
   },
+  "DCDC_OUT_V": {
+    "description": "DC-DC converter regulated output voltage",
+    "settings": {
+      "unit": "V",
+      "class": "voltage",
+      "min": "0",
+      "max": "1000"
+    }
+  },
   "DIST_SINCE_FULL_CHARGE": {
     "description": "Distance Traveled Since Last Full Charge",
     "settings": {
@@ -290,6 +299,24 @@
       "class": "power"
     }
   },
+  "HV_A_CHG_MAX": {
+    "description": "HV battery maximum dynamic charge current limit",
+    "settings": {
+      "unit": "A",
+      "class": "current",
+      "min": "0",
+      "max": "2000"
+    }
+  },
+  "HV_A_DIS_MAX": {
+    "description": "HV battery maximum dynamic discharge current limit",
+    "settings": {
+      "unit": "A",
+      "class": "current",
+      "min": "0",
+      "max": "2000"
+    }
+  },
   "HV_CAPACITY": {
     "description": "Capacity of HV battery",
     "settings": {
@@ -346,6 +373,24 @@
     "settings": {
       "unit": "none",
       "class": "none"
+    }
+  },
+  "HV_C_SOC_MAX": {
+    "description": "HV battery highest cell state of charge",
+    "settings": {
+      "unit": "%",
+      "class": "none",
+      "min": "0",
+      "max": "100"
+    }
+  },
+  "HV_C_SOC_MIN": {
+    "description": "HV battery lowest cell state of charge",
+    "settings": {
+      "unit": "%",
+      "class": "none",
+      "min": "0",
+      "max": "100"
     }
   },
   "HV_C_V_001": {
@@ -2113,6 +2158,24 @@
       "max": "80"
     }
   },
+  "HV_ISO_BAT_N": {
+    "description": "Insulation resistance, negative pole, HV battery",
+    "settings": {
+      "unit": "kΩ",
+      "class": "none",
+      "min": "0",
+      "max": "100000"
+    }
+  },
+  "HV_ISO_N": {
+    "description": "Insulation resistance, negative pole, HV system",
+    "settings": {
+      "unit": "kΩ",
+      "class": "none",
+      "min": "0",
+      "max": "100000"
+    }
+  },
   "HV_KWH_R": {
     "description": "Battery Remaining Energy",
     "settings": {
@@ -2530,6 +2593,14 @@
       "class": "current"
     }
   },
+  "LV_R_INT": {
+    "description": "12V battery internal resistance",
+    "settings": {
+      "unit": "mΩ",
+      "class": "none",
+      "min": "0"
+    }
+  },
   "LV_SOC": {
     "description": "12v Battery State of Charge",
     "settings": {
@@ -2544,6 +2615,15 @@
     "settings": {
       "unit": "V",
       "class": "battery"
+    }
+  },
+  "LV_V_REST": {
+    "description": "12V battery resting (open-circuit) voltage",
+    "settings": {
+      "unit": "V",
+      "class": "voltage",
+      "min": "0",
+      "max": "20"
     }
   },
   "MAF": {
