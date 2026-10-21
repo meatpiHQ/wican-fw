@@ -332,7 +332,8 @@ static const char *fwu_uplink(bool *is_cellular)
 }
 
 /** The HA push's `fw_update_available` / `fw_latest_version` (poster task,
- *  a PSRAM stack: the snapshot is a static). */
+ *  a PSRAM stack: the snapshot is a static, and fw_update_status() reads
+ *  no flash by contract since the beta.1 field crash of 2026-10-21). */
 static bool fwu_ha_provider(bool *available, char *latest, size_t cap)
 {
     static fw_update_status_t st EXT_RAM_BSS_ATTR;
