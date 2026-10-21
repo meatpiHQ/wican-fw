@@ -39,6 +39,7 @@ typedef struct {
     uint32_t length;
     uint8_t* priority_data;
     uint8_t  priority_data_len;
+    uint8_t  line_count;   // Number of response lines (CAN frames) parsed; feeds the ELM327 response-count hint.
 } response_t;
 
 typedef enum
@@ -111,6 +112,7 @@ typedef struct {
     uint32_t consec_failures;   // Internal: consecutive failure counter
     uint32_t backoff_ms;        // Internal: current backoff delay extension (ms)
     bool settings_sent;         // Internal: for HTTP/HTTPS, whether initial {config,status,autopid_data} was sent successfully
+    uint32_t last_published_version; // Internal: data_version at last publish (event-driven mode)
 } group_destination_t;
 
 typedef struct 
@@ -202,6 +204,7 @@ typedef struct
     bool ha_discovery_en;
     uint32_t cycle;     //To be removed when std pid gets its own period
     time_t last_successful_pid_time;  // Timestamp in seconds since epoch of last successful PID response
+    uint32_t data_version;  // Incremented on every parameter value update; used by event-driven destinations
     SemaphoreHandle_t mutex;
 } autopid_config_t;
 
