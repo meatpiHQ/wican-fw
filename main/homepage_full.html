@@ -1275,9 +1275,23 @@
             document.getElementById("submit_button").disabled = true;
         });
 		let latest_car_models = null;
+		// model stored on the device; kept selectable even if it is not in the official list
+		let stored_car_model = "";
+		function ensureCarModelOption(model) {
+			const sel = document.getElementById("car_model");
+			if (!sel || !model) return;
+			if (!Array.from(sel.options).some(o => o.value === model)) {
+				const option = document.createElement("option");
+				option.value = model;
+				option.text = model + " (stored on device)";
+				sel.appendChild(option);
+			}
+			sel.value = model;
+		}
         function loadCarModels(data) {
             const carModelSelect = document.getElementById("car_model");
             if (data && Array.isArray(data.supported)) {
+				const previous = carModelSelect.value || stored_car_model;
 				carModelSelect.innerHTML = "";
                 data.supported.forEach(model => {
                     const option = document.createElement("option");
@@ -1285,6 +1299,7 @@
                     option.text = model;
                     carModelSelect.appendChild(option);
                 });
+				if (previous && previous !== "Not Selected") ensureCarModelOption(previous);
             } else {
                 console.error("Invalid data format or missing 'supported' property.");
             }
@@ -1923,7 +1938,12 @@ function loadAutoTable(jsonData) {
             setElementValue("autopid_polling", data.autopid_polling, 'enable');
             setElementValue("group_cycle", data.cycle, '5000');
             setElementValue("destination", data.destination, '');
-            setElementValue("car_model", data.car_model, '');
+            stored_car_model = data.car_model || "";
+            if (stored_car_model) {
+                ensureCarModelOption(stored_car_model);
+            } else {
+                setElementValue("car_model", data.car_model, '');
+            }
             setElementValue("standard_pids", data.standard_pids, 'disable');
             setElementValue("ecu_protocol", data.ecu_protocol, '6');
             setElementValue("group_dest_type", data.group_dest_type, 'Default');
@@ -2067,15 +2087,19 @@ function loadAutoTable(jsonData) {
                 });
             }
             
-            fetch('/store_car_data', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ cars: [carData] })
-            }).then(response => response.text())
-            .then(data => console.log('Success:', data))
-            .catch(error => console.error('Error:', error));
+            // Only write the vehicle profile when the UI actually holds its PIDs; otherwise
+            // "Submit Changes" on any tab wiped a profile that was uploaded/stored directly.
+            if (carData.pids.length > 0) {
+                fetch('/store_car_data', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ cars: [carData] })
+                }).then(response => response.text())
+                .then(data => console.log('Success:', data))
+                .catch(error => console.error('Error:', error));
+            }
 
 
 
