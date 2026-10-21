@@ -56,15 +56,20 @@ def api(path, method="GET", body=None, ok_codes=(200,)):
     req = urllib.request.Request(BASE + path, data=data, method=method,
                                  headers={"Content-Type":
                                           "application/json"})
+    def parse(t):
+        # a text route (the log ring) can start with a brace: the ring
+        # rolls mid-line, so its first line is any tail (seen 2026-10-21)
+        if t.strip().startswith(("{", "[")):
+            try:
+                return json.loads(t)
+            except ValueError:
+                pass
+        return t
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
-            t = r.read().decode()
-            return r.status, (json.loads(t)
-                              if t.strip().startswith(("{", "[")) else t)
+            return r.status, parse(r.read().decode())
     except urllib.error.HTTPError as e:
-        t = e.read().decode()
-        return e.code, (json.loads(t)
-                        if t.strip().startswith(("{", "[")) else t)
+        return e.code, parse(e.read().decode())
 
 
 def submit_and_wait(secs=75):

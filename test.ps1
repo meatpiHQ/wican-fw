@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'espnleasy', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'stackaudit', 'dwc2', 'logsinks', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'espnleasy', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [string]$Port = 'COM10',  # UART0 external USB-serial = console/flash
@@ -881,6 +881,7 @@ function Show-Inventory {
     Write-Host '  abrp       - the ABRP rows against the real Iternio API (2026-10-13): the key checked from the PC, host routes on the Pi for the run, the key as a query parameter / as the Authorization header / a wrong key, the counters over the window, the Test button, get_telemetry as the witness with a user token in internal/abrp_credentials.json (PARTIAL without one: the 401 refusals only), restore (2 planned restarts, ~5 min)'
     Write-Host '  backup     - the configuration backup that carries everything (issue #979): the file plain / redacted / encrypted after the key, the fs deny list, the round trips from a file and from the copy on the flash, the refusals, the sweep (8 planned restarts, ~7 min)'
     Write-Host '  fwupdate   - firmware updates pulled from a manifest (2026-10-18): rpi001 serves a release list and patched copies of the current build over HTTPS with the bench CA; up to date + the ETag, an update offered and its notes, the install through the pipe and the verify milestone, a wrong sha256, a foreign image (list and upload), the layout verdicts (wipe with the backup step, serial, unknown), channel visibility, stepping and yanked releases, the rollback after three crashes typed over /ws/cli, the legacy push back, mutual exclusion with an upload (6 to 8 planned restarts, 3 crashes on purpose, ~20 min; the DUT must run this build)'
+    Write-Host '  release    - THE RELEASE TEST (2026-10-21, internal/TASK_release_test.md): the fast pre-release gate on the exact release image. Flashes the build''s flash set over the console port, then 13 budgeted steps: boot health, UI and API, a settings round trip, OBD (autopid values, ELM over ws_obd), CAN frames, MQTT, the HA webhook sta_ip bench (the PSRAM-stack canary), the updater''s check, an OTA upload of the same image, the writers, BLE, the closing stack/heap/faults/E-line audit and the restore; writes test-reports\release\<image sha256>.json, which release.py reads before it publishes (3 planned restarts, cap 15 min, ~9 min; the simulator on the bus)'
     Write-Host '  espnlota   - the ESPNetLink dongle updated through the WiCAN PRO (2026-10-19): rpi001 serves the dongle release list and patched copies of the dongle build; the row and its notes, the install over USB (download to PSRAM, the checks, the push, the dongle restart, the new version read back), the explicit downgrade, a wrong sha256 and the WiCAN image listed for the dongle (nothing pushed), no_memory, the restore; --unplug cuts the USB link mid-push over /ws/cli (1 planned WiCAN restart for the settings, the dongle restarts 3 to 5 times, ~12 min; the dongle on the connector in usb_rndis mode, the DUT on this build)'
     Write-Host '  wwh        - OBD over UDS (ISO 27145 / SAE J1979-2): a PCAN vehicle is detected, polled, its codes read and cleared; the car switch both ways (~10 min)'
     Write-Host '  crashnote  - the crash note, the stored crash report and the crash-loop brake, two stages: (1) the DUT is crashed on purpose over its console (abort, an invalid store twice, the interrupt watchdog); the next boot must say where: its note against the console panic text, the decoded function names, one small NVS write for a crash that is news and none for the same crash again, the report word for word after a PSU power cycle (CRASH NOTE PASS); (2) three quick crashes in a row park the device: console line, HTTP silent, supply current against sleep mode, the timed exit, the next crash parks at once, a power cycle is a fresh start (CRASH PARK PASS)'
@@ -1271,6 +1272,31 @@ try {
                     Save-StageLog 'fw_update' $out
                     foreach ($m in ($out | Select-String -Pattern '^METRIC ' )) { Add-Metric 'fw_update' $m.Line }
                     if (-not ($out | Select-String -Quiet '^FW UPDATE( PARTIAL)? PASS')) { throw 'no FW UPDATE PASS (the DUT on this build and on the bench AP? the Pi serving 8446 with the bench CA? the cli <-> ws_cli bridge for the rollback leg?)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                }
+            }
+        }
+        'release' {
+            # The Release Test (2026-10-21, internal/TASK_release_test.md): the
+            # fast pre-release gate on the exact release image. The bench
+            # flashes the build's flash set over the console port itself and
+            # tails the console after the flash (so no Start-ConsoleTail here),
+            # walks its steps over HTTP through the tunnel and the Pi, and
+            # writes test-reports/release/<image sha256>.json, the record
+            # release.py check / publish read before an image goes out.
+            Invoke-Stage 'Release test (the fast pre-release gate)' {
+                $py = $script:BenchPy
+                Sync-BenchTools
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\release\release_test.py" --dut 'localhost:18081' --dut-ip $DutIp --pi $BenchHost --console $script:Port 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'release_test' $out
+                    foreach ($m in ($out | Select-String -Pattern '^METRIC ' )) { Add-Metric 'release' $m.Line }
+                    if (-not ($out | Select-String -Quiet '^RELEASE TEST PASS')) { throw 'no RELEASE TEST PASS (the DUT on the bench AP, the console port free, the Pi with its broker, the simulator answering on the bus?)' }
+                    $script:note = ($out | Select-String '^record: ' | Select-Object -Last 1).Line
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                 }

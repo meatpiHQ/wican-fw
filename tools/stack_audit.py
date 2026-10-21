@@ -28,6 +28,7 @@ watermark check on real hardware (uxTaskGetStackHighWaterMark / the
 `system -t` CLI) to prove actual headroom.
 """
 import argparse
+import json
 import os
 import re
 import sys
@@ -183,12 +184,29 @@ def find_tasks():
                 continue
             name = parts[1].strip().strip('"')
             size, ident = resolve_size(parts[2], text, all_texts)
+            call = m.group(0)
             psram = None
+            # a static task names its stack buffer in argument 6: the
+            # placement comes from that declaration even when the size is
+            # a macro (2026-10-21: ha_webhook and fw_update read "?" before)
+            if "Static" in call and len(parts) >= 6:
+                buf = parts[5].strip().lstrip("&").strip()
+                if re.fullmatch(r"\w+", buf):
+                    ident = buf
             if ident:
-                mm = re.search(r"StackType_t\s+" + re.escape(ident) +
+                mm = re.search(r"\bStackType_t\s+" + re.escape(ident) +
                                r"\s*\[[^\]]*\][^;]*;", text)
                 if mm:
-                    psram = "EXT_RAM" in mm.group(0)
+                    # the whole statement: an attribute may sit before the
+                    # type or on its own line
+                    start = max(text.rfind(";", 0, mm.start()),
+                                text.rfind("{", 0, mm.start()),
+                                text.rfind("}", 0, mm.start())) + 1
+                    psram = "EXT_RAM" in text[start:mm.end()]
+            elif "WithCaps" in call:
+                psram = "SPIRAM" in args
+            elif "Static" not in call:
+                psram = False   # xTaskCreate*: the FreeRTOS heap, internal
             line = text[:m.start()].count("\n") + 1
             tasks.append({
                 "name": name, "size": size, "psram": psram,
@@ -204,7 +222,14 @@ def main():
     ap.add_argument("--min-frame", type=int, default=1024)
     ap.add_argument("--flag-pct", type=int, default=40)
     ap.add_argument("--strict", action="store_true")
+    ap.add_argument("--tasks-json", action="store_true",
+                    help="print the task table as JSON and exit (the "
+                         "release test's coverage matrix reads it)")
     a = ap.parse_args()
+
+    if a.tasks_json:
+        print(json.dumps(find_tasks(), indent=1))
+        return
 
     frames = parse_su_files(a.build)
     if not frames:

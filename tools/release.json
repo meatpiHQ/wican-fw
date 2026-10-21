@@ -22,5 +22,11 @@
     "settings": "settings",
     "coredump": "crash dumps"
   },
-  "keep_in_manifest": 24
+  "keep_in_manifest": 24,
+  "release_test": {
+    "required": true,
+    "max_age_h": 24,
+    "allow_skips": true,
+    "record_dir": "test-reports/release"
+  }
 }

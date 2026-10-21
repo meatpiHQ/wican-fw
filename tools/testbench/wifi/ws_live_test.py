@@ -60,6 +60,13 @@ def rx_all(ws, deadline):
 # --- test 1: single client, OBD commands over WS ---
 ws1 = websocket.WebSocket()
 ws1.connect(URL, timeout=5)
+# With autopid enabled the chip answers the FIRST external command with
+# STOPPED: the firmware yields the chip to the app by aborting the poller's
+# command, and the abort's answer lands on that first command (release test,
+# 2026-10-21). Apps retry; this test sends one CR and drains it first.
+ws1.send_binary(b"\r")
+warm = rx_all(ws1, time.time() + 1.5)
+print(f"warm-up -> {warm!r}")
 results = {}
 for cmd in ("ATI\r", "VTVERS\r", "0100\r"):
     ws1.send_binary(cmd.encode())
