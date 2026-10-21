@@ -1595,6 +1595,13 @@ static void autopid_task(void *pvParameters)
                 continue;
             }
 
+            // One request serves every parameter of this PID: sent when the
+            // first parameter with an expired timer is reached, and its
+            // response is evaluated for each expired parameter after it.
+            bool pid_requested = false;
+            bool pid_cmd_ok = false;
+            bool pid_response_ok = false;
+
             // Loop through parameters
             for(uint32_t p = 0; p < curr_pid->parameters_count; p++) 
             {
@@ -1651,27 +1658,37 @@ static void autopid_task(void *pvParameters)
 
                     if(curr_pid->cmd != NULL && strlen(curr_pid->cmd) > 0) 
                     {
-                        twai_message_t tx_msg;
-
-                        if(curr_pid->pid_type == PID_CUSTOM || curr_pid->pid_type == PID_SPECIFIC) 
+                        if(!pid_requested)
                         {
-                            if(curr_pid->init != NULL && strlen(curr_pid->init) > 0)
+                            twai_message_t tx_msg;
+
+                            pid_requested = true;
+
+                            if(curr_pid->pid_type == PID_CUSTOM || curr_pid->pid_type == PID_SPECIFIC) 
                             {
-                                send_commands(curr_pid->init, 2);
+                                if(curr_pid->init != NULL && strlen(curr_pid->init) > 0)
+                                {
+                                    send_commands(curr_pid->init, 2);
+                                }
+                            }
+
+                            ESP_LOGI(TAG, "Executing command: %s", curr_pid->cmd);
+                            DEBUG_LOGI(TAG, "Executing command: %s", curr_pid->cmd);
+                            pid_cmd_ok = elm327_process_cmd((uint8_t*)curr_pid->cmd, 
+                                                strlen(curr_pid->cmd), 
+                                                &tx_msg, 
+                                                &autopidQueue) == ESP_OK;
+                            if(pid_cmd_ok)
+                            {
+                                ESP_LOGI(TAG, "Command processed successfully");
+                                DEBUG_LOGI(TAG, "Command processed successfully");
+                                pid_response_ok = xQueueReceive(autopidQueue, &elm327_response, pdMS_TO_TICKS(1000)) == pdPASS;
                             }
                         }
 
-                        ESP_LOGI(TAG, "Executing command: %s", curr_pid->cmd);
-                        DEBUG_LOGI(TAG, "Executing command: %s", curr_pid->cmd);
-                        if(elm327_process_cmd((uint8_t*)curr_pid->cmd, 
-                                            strlen(curr_pid->cmd), 
-                                            &tx_msg, 
-                                            &autopidQueue) == ESP_OK)
+                        if(pid_cmd_ok)
                         {
-                            ESP_LOGI(TAG, "Command processed successfully");
-                            DEBUG_LOGI(TAG, "Command processed successfully");
-                            
-                            if(xQueueReceive(autopidQueue, &elm327_response, pdMS_TO_TICKS(1000)) == pdPASS)
+                            if(pid_response_ok)
                             {
                                 ESP_LOGI(TAG, "Response received, length: %lu", elm327_response.length);
                                 DEBUG_LOGI(TAG, "Response received, length: %lu", elm327_response.length);
