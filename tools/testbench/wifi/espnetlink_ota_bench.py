@@ -301,11 +301,16 @@ def main():
         N0); for a tolerant/dev describe (v1.22-...-g...) a fixed pair above
         its tolerant 1.22.0. The dongle may already run a prior run's N1, so
         bumping off the installed keeps climbing (2026-10-19)."""
-        m = re.match(r"^(\d+)\.(\d+)\.(\d+)-alfa\.(\d+)$", cur or "")
-        if m:
+        m = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:-alfa\.(\d+))?$", cur or "")
+        if m and m.group(4):
             base = "%s.%s.%s-alfa." % (m.group(1), m.group(2), m.group(3))
             n = int(m.group(4))
             return base + str(n + 1), base + str(n + 2)
+        if m:
+            # a release number (1.23.0, the dongle as shipped since 2026-10-22):
+            # the next patch's alfa series sits above it and below that patch
+            base = "%s.%s.%d-alfa." % (m.group(1), m.group(2), int(m.group(3)) + 1)
+            return base + "1", base + "2"
         return "1.22.1-alfa.1", "1.22.1-alfa.2"
 
     VER_N0, VER_N1 = "1.22.1-alfa.1", "1.22.1-alfa.2"
