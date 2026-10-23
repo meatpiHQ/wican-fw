@@ -1,0 +1,20 @@
+{
+  "car_model": "Mazda: EZ-6/6e",
+  "init": "ATSP6;ATAT1;ATST96;ATSH7A1;ATFCSH7A1;ATFCSD300000;ATFCSM1;",
+  "pids": [
+    {
+      "pid": "22F1AF",
+      "pid_init": "ATSH7E2;",
+      "parameters": {
+        "SOC": "[B4:B5]/10"
+      }
+    },
+    {
+      "pid": "22F1AE",
+      "pid_init": "ATSH7E2;",
+      "parameters": {
+        "ODOMETER": "[B4:B7]/10"
+      }
+    }
+  ]
+}

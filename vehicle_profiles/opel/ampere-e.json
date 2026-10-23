@@ -4,14 +4,14 @@
   "pids": [
     {
       "pid": "2283341",
-      "pid_init": "ATSH7E4",
+      "pid_init": "ATSH7E4;",
       "parameters": {
         "SOC": "(B4*100)/255"
       }
     },
     {
       "pid": "2241A31",
-      "pid_init": "ATSH7E4",
+      "pid_init": "ATSH7E4;",
       "parameters": {
         "HV_CAPACITY": "[B4:B5]/10"
       }

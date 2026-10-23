@@ -4,7 +4,7 @@
   "pids": [
     {
       "pid": "22E0021",
-      "pid_init": "ATSH7E3",
+      "pid_init": "ATSH7E3;",
       "parameters": {
         "SOC": "B4"
       }

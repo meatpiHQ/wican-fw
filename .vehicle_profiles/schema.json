@@ -407,6 +407,45 @@
           }
         }
       }
+    },
+    "filters": {
+      "description": "Passive CAN filters (WiCAN PRO): broadcast frames decoded without a request. Expressions index the frame data, B0 is the first data byte",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["frame_id", "parameters"],
+        "additionalProperties": false,
+        "properties": {
+          "frame_id": {
+            "description": "CAN id of the frame to capture, hex string (0x284, 0x18DAF1DB) or number",
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^0[xX][0-9A-Fa-f]{1,8}$"
+              },
+              {
+                "type": "integer",
+                "minimum": 1
+              }
+            ]
+          },
+          "monitor_ms": {
+            "description": "How long the monitor window waits for the frame, 50..60000 ms (default 1000)",
+            "type": "integer",
+            "minimum": 50,
+            "maximum": 60000
+          },
+          "period_ms": {
+            "description": "Capture period in ms, 0 or absent inherits the group period",
+            "type": "integer",
+            "minimum": 0
+          },
+          "parameters": {
+            "description": "Object of Parameter and Expressions decoded from the captured frame, same names as for a PID",
+            "$ref": "#/properties/pids/items/properties/parameters"
+          }
+        }
+      }
     }
   },
   "title": "WiCan Vehicle Profile",

@@ -22,6 +22,7 @@ jobs:
       - run: |
           cd .vehicle_profiles
           npm ci
+          npm run validate
           npm run build
           npx prettier ../vehicle_profiles --write
           npx prettier . --write
