@@ -1179,8 +1179,8 @@
             {
               "name": "KWH_CHARGED",
               "expression": "([B49:B50]*65536 + [B51:B52])/10",
-              "unit": "kwh",
-              "class": "battery",
+              "unit": "kWh",
+              "class": "energy",
               "min": "0",
               "max": "1000000"
             }
@@ -1283,7 +1283,7 @@
               "name": "HV_CAPACITY_R",
               "expression": "[B4:B5]/100",
               "unit": "kWh",
-              "class": "none"
+              "class": "energy"
             }
           ]
         },
@@ -1358,7 +1358,7 @@
               "name": "HV_CAPACITY_KWH",
               "expression": "[B6:B7]/10",
               "unit": "kWh",
-              "class": "none"
+              "class": "energy"
             }
           ]
         },
@@ -1613,8 +1613,8 @@
             {
               "name": "KWH_CHARGED",
               "expression": "([B49:B50]*65536+[B51:B52])/10",
-              "unit": "kwh",
-              "class": "battery",
+              "unit": "kWh",
+              "class": "energy",
               "min": "0",
               "max": "1000000"
             }
@@ -1987,7 +1987,7 @@
               "name": "HV_KWH_R",
               "expression": "((B37 << 8) + B38) *2",
               "unit": "Wh",
-              "class": "battery",
+              "class": "energy",
               "min": "0",
               "max": "77000"
             },
@@ -2108,8 +2108,8 @@
             {
               "name": "KWH_CHARGED",
               "expression": "((B49<<24)+(B50<<16)+(B51<<8)+B52)/10",
-              "unit": "kwh",
-              "class": "battery",
+              "unit": "kWh",
+              "class": "energy",
               "min": "0",
               "max": "1000000"
             },
@@ -2117,7 +2117,7 @@
               "name": "KWH_DISCHARGED",
               "expression": "((B53<<24)+(B54<<16)+(B55<<8)+B57)/10",
               "unit": "kWh",
-              "class": "none",
+              "class": "energy",
               "min": "0",
               "max": "1000000"
             },
@@ -2506,7 +2506,7 @@
               "name": "HV_KWH_R",
               "expression": "((B37 << 8) + B38) *2",
               "unit": "Wh",
-              "class": "battery",
+              "class": "energy",
               "min": "0",
               "max": "77000"
             },
@@ -2627,8 +2627,8 @@
             {
               "name": "KWH_CHARGED",
               "expression": "((B49<<24)+(B50<<16)+(B51<<8)+B52)/10",
-              "unit": "kwh",
-              "class": "battery",
+              "unit": "kWh",
+              "class": "energy",
               "min": "0",
               "max": "1000000"
             },
@@ -2636,7 +2636,7 @@
               "name": "KWH_DISCHARGED",
               "expression": "((B53<<24)+(B54<<16)+(B55<<8)+B57)/10",
               "unit": "kWh",
-              "class": "none",
+              "class": "energy",
               "min": "0",
               "max": "1000000"
             },
@@ -4501,7 +4501,7 @@
               "name": "HV_KWH_R",
               "expression": "((B37 << 8) + B38) *2",
               "unit": "Wh",
-              "class": "battery",
+              "class": "energy",
               "min": "0",
               "max": "77000"
             },
@@ -4622,8 +4622,8 @@
             {
               "name": "KWH_CHARGED",
               "expression": "((B49<<24)+(B50<<16)+(B51<<8)+B52)/10",
-              "unit": "kwh",
-              "class": "battery",
+              "unit": "kWh",
+              "class": "energy",
               "min": "0",
               "max": "1000000"
             },
@@ -4631,7 +4631,7 @@
               "name": "KWH_DISCHARGED",
               "expression": "((B53<<24)+(B54<<16)+(B55<<8)+B57)/10",
               "unit": "kWh",
-              "class": "none",
+              "class": "energy",
               "min": "0",
               "max": "1000000"
             },
@@ -6464,8 +6464,8 @@
             {
               "name": "KWH_CHARGED",
               "expression": "([B49:B50]*65536 + [B51:B52])/10",
-              "unit": "kwh",
-              "class": "battery",
+              "unit": "kWh",
+              "class": "energy",
               "min": "0",
               "max": "1000000"
             }
@@ -6512,308 +6512,80 @@
     },
     {
       "car_model": "Hyundai: Kona",
-      "init": "ATSP6;ATSH7E4;ATST96;",
       "pids": [
         {
-          "pid": "220100",
-          "pid_init": "ATSH7B3;",
-          "parameters": [
-            {
-              "name": "SPEED",
-              "expression": "B38",
-              "unit": "km/h",
-              "class": "speed"
-            },
-            {
-              "name": "TMP_A",
-              "expression": "(B12/2)-40",
-              "unit": "°C",
-              "class": "none"
-            },
-            {
-              "name": "T_CAB",
-              "expression": "(B11/2)-40",
-              "unit": "°C",
-              "class": "temperature"
-            }
-          ]
-        },
-        {
-          "pid": "220105",
+          "pid": "2201019",
           "pid_init": "ATSH7E4;",
           "parameters": [
             {
-              "name": "AIRBAG",
-              "expression": "B30",
-              "unit": "",
-              "class": "none",
-              "min": "50",
+              "name": "SOC",
+              "expression": "B10/2",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
               "max": "100"
             },
             {
-              "name": "HV_C_DIFF",
-              "expression": "B28/50",
+              "name": "HV_A",
+              "expression": "[S17:S18]/10",
+              "unit": "A",
+              "class": "current"
+            },
+            {
+              "name": "HV_V",
+              "expression": "[B19:B20]/10",
               "unit": "V",
-              "class": "battery",
-              "min": "0",
-              "max": "4"
+              "class": "voltage",
+              "min": "200",
+              "max": "480"
             },
             {
-              "name": "HV_H_1",
-              "expression": "(S31)",
-              "unit": "°C",
-              "class": "temperature",
-              "min": "0",
-              "max": "80"
-            },
-            {
-              "name": "HV_T_6",
-              "expression": "(S15)",
-              "unit": "°C",
-              "class": "temperature",
-              "min": "-40",
-              "max": "80"
-            },
-            {
-              "name": "HV_T_7",
-              "expression": "(S17)",
-              "unit": "°C",
-              "class": "temperature",
-              "min": "-40",
-              "max": "80"
-            },
-            {
-              "name": "HV_T_8",
-              "expression": "(S18)",
-              "unit": "°C",
-              "class": "temperature",
-              "min": "-40",
-              "max": "80"
-            },
-            {
-              "name": "HV_T_9",
-              "expression": "(S19)",
-              "unit": "°C",
-              "class": "temperature",
-              "min": "-40",
-              "max": "80"
-            },
-            {
-              "name": "HV_T_10",
-              "expression": "(S20)",
-              "unit": "°C",
-              "class": "temperature",
-              "min": "-40",
-              "max": "80"
-            },
-            {
-              "name": "HV_T_11",
-              "expression": "(S21)",
-              "unit": "°C",
-              "class": "temperature",
-              "min": "-40",
-              "max": "80"
-            },
-            {
-              "name": "HV_T_12",
-              "expression": "(S22)",
-              "unit": "°C",
-              "class": "temperature",
-              "min": "-40",
-              "max": "80"
-            },
-            {
-              "name": "HV_T_13",
-              "expression": "(S50)",
-              "unit": "°C",
-              "class": "temperature",
-              "min": "-40",
-              "max": "80"
-            },
-            {
-              "name": "HV_T_14",
-              "expression": "(S51)",
-              "unit": "°C",
-              "class": "temperature",
-              "min": "-40",
-              "max": "80"
-            },
-            {
-              "name": "HV_T_15",
-              "expression": "(S52)",
-              "unit": "°C",
-              "class": "temperature",
-              "min": "-40",
-              "max": "80"
-            },
-            {
-              "name": "HV_T_16",
-              "expression": "(S53)",
-              "unit": "°C",
-              "class": "temperature",
-              "min": "-40",
-              "max": "80"
-            },
-            {
-              "name": "HV_KWH_R",
-              "expression": "((B37 << 8) + B38) *2",
-              "unit": "Wh",
-              "class": "battery",
-              "min": "0",
-              "max": "77000"
-            },
-            {
-              "name": "SOH",
-              "expression": "[B34:B35]/10",
-              "unit": "%",
-              "class": "none",
-              "min": "0",
-              "max": "105"
-            },
-            {
-              "name": "SOC_D",
-              "expression": "B41/2",
-              "unit": "%",
-              "class": "battery"
-            },
-            {
-              "name": "HV_C_D_MIN_NO",
-              "expression": "B39",
-              "unit": "none",
-              "class": "none"
-            },
-            {
-              "name": "HV_C_D_MAX_NO",
-              "expression": "B36",
-              "unit": "none",
-              "class": "none"
-            }
-          ]
-        },
-        {
-          "pid": "220101",
-          "pid_init": "ATSH7E4;",
-          "parameters": [
-            {
-              "name": "LV_V",
-              "expression": "B38*0.1",
-              "unit": "V",
-              "class": "battery"
+              "name": "HV_W",
+              "expression": "([B19:B20]/10)*([S17:S18]/10)",
+              "unit": "W",
+              "class": "power"
             },
             {
               "name": "HV_T_MAX",
-              "expression": "(S21)",
+              "expression": "S21",
               "unit": "°C",
               "class": "temperature"
             },
             {
               "name": "HV_T_MIN",
-              "expression": "(S22)",
+              "expression": "S22",
               "unit": "°C",
               "class": "temperature"
             },
             {
               "name": "HV_T_1",
-              "expression": "(S23)",
+              "expression": "S23",
               "unit": "°C",
               "class": "temperature"
             },
             {
               "name": "HV_T_2",
-              "expression": "(S25)",
+              "expression": "S25",
               "unit": "°C",
               "class": "temperature"
             },
             {
               "name": "HV_T_3",
-              "expression": "(S26)",
+              "expression": "S26",
               "unit": "°C",
               "class": "temperature"
             },
             {
               "name": "HV_T_4",
-              "expression": "(S27)",
+              "expression": "S27",
               "unit": "°C",
               "class": "temperature"
             },
             {
-              "name": "HV_T_5",
-              "expression": "(S28)",
+              "name": "HV_T_I",
+              "expression": "S30",
               "unit": "°C",
               "class": "temperature"
-            },
-            {
-              "name": "IGNITION",
-              "expression": "B62:2",
-              "unit": "",
-              "type": "binary_sensor",
-              "class": "none",
-              "min": "0",
-              "max": "1"
-            },
-            {
-              "name": "HV_RELAY",
-              "expression": "B15:0",
-              "unit": "",
-              "type": "binary_sensor",
-              "class": "none",
-              "min": "0",
-              "max": "1"
-            },
-            {
-              "name": "HV_AH_CHARGED",
-              "expression": "((B39<<24)+(B41<<16)+(B42<<8)+B43)/10",
-              "unit": "Ah",
-              "class": "none",
-              "min": "0",
-              "max": "1000000"
-            },
-            {
-              "name": "HV_AH_DISCHARGED",
-              "expression": "((B44<<24)+(B45<<16)+(B46<<8)+B47)/10",
-              "unit": "Ah",
-              "class": "none",
-              "min": "0",
-              "max": "1000000"
-            },
-            {
-              "name": "KWH_DISCHARGED",
-              "expression": "((B53<<24)+(B54<<16)+(B55<<8)+B57)/10",
-              "unit": "kWh",
-              "class": "none",
-              "min": "0",
-              "max": "1000000"
-            },
-            {
-              "name": "DM_R_RPM",
-              "expression": "((S36)*256)+B37",
-              "unit": "rpm",
-              "class": "none",
-              "min": "-10100",
-              "max": "10100"
-            },
-            {
-              "name": "CHARGING",
-              "expression": "B15:7",
-              "unit": "",
-              "class": "battery_charging",
-              "type": "binary_sensor"
-            },
-            {
-              "name": "CAPACITOR",
-              "expression": "((B63<<8)+B35)",
-              "unit": "V",
-              "class": "battery",
-              "min": "0",
-              "max": "840"
-            },
-            {
-              "name": "RESISTANCE",
-              "expression": "([B41:B42])",
-              "unit": "kOhm",
-              "class": "none",
-              "min": "0",
-              "max": "1000"
             },
             {
               "name": "HV_C_V_MAX",
@@ -6840,8 +6612,119 @@
               "class": "none"
             },
             {
-              "name": "AC_PLUG",
-              "expression": "B15:5",
+              "name": "LV_V",
+              "expression": "B38*0.1",
+              "unit": "V",
+              "class": "battery"
+            },
+            {
+              "name": "KWH_CHARGED",
+              "expression": "([B49:B50]*65536 + [B51:B52])/10",
+              "unit": "kWh",
+              "class": "energy",
+              "min": "0",
+              "max": "1000000"
+            },
+            {
+              "name": "KWH_DISCHARGED",
+              "expression": "([B53:B54]*65536 + [B55:B56])/10",
+              "unit": "kWh",
+              "class": "energy",
+              "min": "0",
+              "max": "1000000"
+            },
+            {
+              "name": "HV_RELAY",
+              "expression": "B15:7",
+              "unit": "",
+              "type": "binary_sensor",
+              "class": "none",
+              "min": "0",
+              "max": "1"
+            }
+          ]
+        },
+        {
+          "pid": "2201057",
+          "pid_init": "ATSH7E4;",
+          "parameters": [
+            {
+              "name": "SOH",
+              "expression": "[B34:B35]/10",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "105"
+            },
+            {
+              "name": "SOC_D",
+              "expression": "B41/2",
+              "unit": "%",
+              "class": "battery"
+            },
+            {
+              "name": "HV_C_D_MAX_NO",
+              "expression": "B36",
+              "unit": "none",
+              "class": "none"
+            },
+            {
+              "name": "HV_C_D_MIN",
+              "expression": "[B37:B38]/10",
+              "unit": "%",
+              "class": "none"
+            },
+            {
+              "name": "HV_C_D_MIN_NO",
+              "expression": "B39",
+              "unit": "none",
+              "class": "none"
+            },
+            {
+              "name": "AIRBAG",
+              "expression": "B30",
+              "unit": "",
+              "class": "none",
+              "min": "50",
+              "max": "100"
+            },
+            {
+              "name": "REGEN_MAX",
+              "expression": "((B23<<8)+B25)/100",
+              "unit": "kW",
+              "class": "power"
+            },
+            {
+              "name": "POWER_MAX",
+              "expression": "[B26:B27]/100",
+              "unit": "kW",
+              "class": "power"
+            },
+            {
+              "name": "HV_C_DIFF",
+              "expression": "B28/50",
+              "unit": "V",
+              "class": "battery",
+              "min": "0",
+              "max": "4"
+            },
+            {
+              "name": "HV_H_1",
+              "expression": "(S31)",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "0",
+              "max": "80"
+            }
+          ]
+        },
+        {
+          "pid": "22BC03",
+          "pid_init": "ATSH770;",
+          "parameters": [
+            {
+              "name": "IGNITION",
+              "expression": "B11:5",
               "unit": "",
               "type": "binary_sensor",
               "class": "none",
@@ -6849,88 +6732,216 @@
               "max": "1"
             },
             {
-              "name": "OP_TIME",
-              "expression": "((B58<<24)+(B59<<16)+(B60<<8)+B61)/3600",
-              "unit": "hours",
-              "class": "none",
-              "min": "0",
-              "max": "1000000"
-            },
-            {
-              "name": "CHARGING_DC",
-              "expression": "B15:6",
+              "name": "DOOR_FL_OPEN",
+              "expression": "B10:5",
               "unit": "",
-              "class": "plug",
+              "class": "door",
               "type": "binary_sensor"
             },
             {
-              "name": "SOC",
-              "expression": "B10/2",
-              "unit": "%",
-              "class": "battery",
-              "min": "0",
-              "max": "100"
+              "name": "DOOR_FR_OPEN",
+              "expression": "B10:4",
+              "unit": "",
+              "class": "door",
+              "type": "binary_sensor"
             },
             {
-              "name": "CHARGING_R_A",
-              "expression": "([B13:B14])/10",
-              "unit": "A",
-              "class": "current",
-              "min": "0",
-              "max": "200"
+              "name": "DOOR_RL_OPEN",
+              "expression": "B10:0",
+              "unit": "",
+              "class": "door",
+              "type": "binary_sensor"
             },
             {
-              "name": "HV_V",
-              "expression": "[B19:B20]/10",
-              "unit": "V",
-              "class": "voltage",
-              "min": "200",
-              "max": "480"
+              "name": "DOOR_RR_OPEN",
+              "expression": "B10:2",
+              "unit": "",
+              "class": "door",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "TRUNK_OPEN",
+              "expression": "B10:7",
+              "unit": "none",
+              "class": "door",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "SEATBELT_FL",
+              "expression": "B11:1",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "SEATBELT_FR",
+              "expression": "B11:2",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "DOOR_LOCK_RL",
+              "expression": "1-B10:1",
+              "unit": "",
+              "class": "lock",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "DOOR_LOCK_RR",
+              "expression": "1-B10:3",
+              "unit": "",
+              "class": "lock",
+              "type": "binary_sensor"
             }
           ]
         },
         {
-          "pid": "22E011",
-          "pid_init": "ATSH7E5;",
+          "pid": "22BC04",
+          "pid_init": "ATSH770;",
           "parameters": [
             {
-              "name": "LV_SOC",
-              "expression": "B28",
-              "unit": "%",
-              "class": "battery",
-              "min": "0",
-              "max": "100"
+              "name": "DOOR_LOCK_FL",
+              "expression": "B10:3",
+              "unit": "",
+              "class": "lock",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "DOOR_LOCK_FR",
+              "expression": "B10:2",
+              "unit": "",
+              "class": "lock",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "HIGH_BEAM",
+              "expression": "B13:4",
+              "unit": "none",
+              "class": "light",
+              "type": "binary_sensor"
             }
           ]
         },
         {
-          "pid": "22C00B",
+          "pid": "22B002",
+          "pid_init": "ATSH7C6;ATFCSH7C6;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B12:B14]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "220100",
+          "pid_init": "ATSH7B3;",
+          "parameters": [
+            {
+              "name": "TMP_A",
+              "expression": "(B12/2)-40",
+              "unit": "°C",
+              "class": "none"
+            },
+            {
+              "name": "T_CAB",
+              "expression": "(B11/2)-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "22C101",
+          "pid_init": "ATSH7D1;",
+          "parameters": [
+            {
+              "name": "SPEED",
+              "expression": "B12",
+              "unit": "km/h",
+              "class": "speed"
+            }
+          ]
+        },
+        {
+          "pid": "21014",
+          "pid_init": "ATSH7E2;",
+          "parameters": [
+            {
+              "name": "READY",
+              "expression": "B26:3",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "GEAR",
+              "expression": "B10",
+              "unit": "none",
+              "class": "none"
+            },
+            {
+              "name": "PARK_BRAKE",
+              "expression": "B26:5",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "GEAR_PARK",
+              "expression": "B10:0",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "GEAR_REVERSE",
+              "expression": "B10:1",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "GEAR_NEUTRAL",
+              "expression": "B10:2",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "GEAR_DRIVE",
+              "expression": "B10:3",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            }
+          ]
+        },
+        {
+          "pid": "22B00E",
+          "pid_init": "ATSH7A0;",
+          "parameters": [
+            {
+              "name": "AC_PLUG",
+              "expression": "B10:4",
+              "unit": "",
+              "type": "binary_sensor",
+              "class": "none",
+              "min": "0",
+              "max": "1"
+            }
+          ]
+        },
+        {
+          "pid": "22C00B4",
           "pid_init": "ATSH7A0;",
           "parameters": [
             {
               "name": "TYRE_P_FL",
               "expression": "B10*0.2",
-              "class": "pressure",
-              "unit": "psi",
-              "min": "0"
-            },
-            {
-              "name": "TYRE_P_FR",
-              "expression": "B15*0.2",
-              "class": "pressure",
-              "unit": "psi",
-              "min": "0"
-            },
-            {
-              "name": "TYRE_P_RL",
-              "expression": "B21*0.2",
-              "class": "pressure",
-              "unit": "psi",
-              "min": "0"
-            },
-            {
-              "name": "TYRE_P_RR",
-              "expression": "B27*0.2",
               "class": "pressure",
               "unit": "psi",
               "min": "0"
@@ -6942,62 +6953,73 @@
               "unit": "°C"
             },
             {
+              "name": "TYRE_P_FR",
+              "expression": "B14*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
               "name": "TYRE_T_FR",
-              "expression": "B17-50",
+              "expression": "B15-50",
               "class": "temperature",
               "unit": "°C"
             },
             {
-              "name": "TYRE_T_RL",
-              "expression": "B22-50",
-              "class": "temperature",
-              "unit": "°C"
+              "name": "TYRE_P_RR",
+              "expression": "B19*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
             },
             {
               "name": "TYRE_T_RR",
-              "expression": "B28-50",
+              "expression": "B20-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_P_RL",
+              "expression": "B23*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_T_RL",
+              "expression": "B25-50",
               "class": "temperature",
               "unit": "°C"
             }
           ]
         },
         {
-          "pid": "22B002",
-          "pid_init": "ATSH7C6;",
+          "pid": "2101",
+          "pid_init": "ATSH7E5;",
           "parameters": [
             {
-              "name": "ODOMETER_MI",
-              "expression": "[B17:B18]",
-              "class": "distance",
-              "unit": "mi",
-              "min": "0"
+              "name": "AC_C_V",
+              "expression": "B55",
+              "unit": "V",
+              "class": "battery"
+            },
+            {
+              "name": "OBC_TEMP",
+              "expression": "B52/2-40",
+              "unit": "°C",
+              "class": "temperature"
             }
           ]
         },
         {
-          "pid": "22F010",
-          "pid_init": "ATSH730;",
+          "pid": "2103",
+          "pid_init": "ATSH7E5;",
           "parameters": [
             {
-              "name": "STEER_ANGLE",
-              "expression": "((S20)*256+B19)/10",
-              "unit": "deg",
-              "class": "none",
-              "min": "-720",
-              "max": "720"
-            }
-          ]
-        },
-        {
-          "pid": "22B0023",
-          "pid_init": "ATSH7C6;ATFCSH7C6;",
-          "parameters": [
-            {
-              "name": "ODOMETER",
-              "expression": "[B12:B14]",
-              "class": "distance",
-              "unit": "km",
-              "min": "0"
+              "name": "AC_C_C",
+              "expression": "[B9:B10]/100",
+              "unit": "A",
+              "class": "current"
             }
           ]
         }
@@ -7404,7 +7426,7 @@
               "name": "HV_KWH_R",
               "expression": "((B37 << 8) + B38) *2",
               "unit": "Wh",
-              "class": "battery",
+              "class": "energy",
               "min": "0",
               "max": "77000"
             },
@@ -7525,8 +7547,8 @@
             {
               "name": "KWH_CHARGED",
               "expression": "((B49<<24)+(B50<<16)+(B51<<8)+B52)/10",
-              "unit": "kwh",
-              "class": "battery",
+              "unit": "kWh",
+              "class": "energy",
               "min": "0",
               "max": "1000000"
             },
@@ -7534,7 +7556,7 @@
               "name": "KWH_DISCHARGED",
               "expression": "((B53<<24)+(B54<<16)+(B55<<8)+B57)/10",
               "unit": "kWh",
-              "class": "none",
+              "class": "energy",
               "min": "0",
               "max": "1000000"
             },
@@ -7923,7 +7945,7 @@
               "name": "HV_KWH_R",
               "expression": "((B37 << 8) + B38) *2",
               "unit": "Wh",
-              "class": "battery",
+              "class": "energy",
               "min": "0",
               "max": "77000"
             },
@@ -8044,8 +8066,8 @@
             {
               "name": "KWH_CHARGED",
               "expression": "((B49<<24)+(B50<<16)+(B51<<8)+B52)/10",
-              "unit": "kwh",
-              "class": "battery",
+              "unit": "kWh",
+              "class": "energy",
               "min": "0",
               "max": "1000000"
             },
@@ -8053,7 +8075,7 @@
               "name": "KWH_DISCHARGED",
               "expression": "((B53<<24)+(B54<<16)+(B55<<8)+B57)/10",
               "unit": "kWh",
-              "class": "none",
+              "class": "energy",
               "min": "0",
               "max": "1000000"
             },
@@ -9886,8 +9908,8 @@
             {
               "name": "KWH_CHARGED",
               "expression": "([B49:B50]*65536 + [B51:B52])/10",
-              "unit": "kwh",
-              "class": "battery",
+              "unit": "kWh",
+              "class": "energy",
               "min": "0",
               "max": "1000000"
             }
@@ -9946,6 +9968,522 @@
       ]
     },
     {
+      "car_model": "Kia: Niro EV (DE)",
+      "init": "ATST96;",
+      "pids": [
+        {
+          "pid": "2201019",
+          "pid_init": "ATSH7E4;",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "B10/2",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            },
+            {
+              "name": "HV_A",
+              "expression": "[S17:S18]/10",
+              "unit": "A",
+              "class": "current"
+            },
+            {
+              "name": "HV_V",
+              "expression": "[B19:B20]/10",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "480"
+            },
+            {
+              "name": "HV_W",
+              "expression": "([B19:B20]/10)*([S17:S18]/10)",
+              "unit": "W",
+              "class": "power"
+            },
+            {
+              "name": "HV_T_MAX",
+              "expression": "S21",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_MIN",
+              "expression": "S22",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_1",
+              "expression": "S23",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_2",
+              "expression": "S25",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_3",
+              "expression": "S26",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_4",
+              "expression": "S27",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_I",
+              "expression": "S30",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_C_V_MAX",
+              "expression": "B31/50",
+              "unit": "V",
+              "class": "voltage"
+            },
+            {
+              "name": "HV_C_V_MAX_NO",
+              "expression": "B33",
+              "unit": "none",
+              "class": "none"
+            },
+            {
+              "name": "HV_C_V_MIN",
+              "expression": "B34/50",
+              "unit": "V",
+              "class": "voltage"
+            },
+            {
+              "name": "HV_C_V_MIN_NO",
+              "expression": "B35",
+              "unit": "none",
+              "class": "none"
+            },
+            {
+              "name": "LV_V",
+              "expression": "B38*0.1",
+              "unit": "V",
+              "class": "battery"
+            },
+            {
+              "name": "KWH_CHARGED",
+              "expression": "([B49:B50]*65536 + [B51:B52])/10",
+              "unit": "kWh",
+              "class": "energy",
+              "min": "0",
+              "max": "1000000"
+            },
+            {
+              "name": "KWH_DISCHARGED",
+              "expression": "([B53:B54]*65536 + [B55:B56])/10",
+              "unit": "kWh",
+              "class": "energy",
+              "min": "0",
+              "max": "1000000"
+            },
+            {
+              "name": "HV_RELAY",
+              "expression": "B15:7",
+              "unit": "",
+              "type": "binary_sensor",
+              "class": "none",
+              "min": "0",
+              "max": "1"
+            }
+          ]
+        },
+        {
+          "pid": "2201057",
+          "pid_init": "ATSH7E4;",
+          "parameters": [
+            {
+              "name": "SOH",
+              "expression": "[B34:B35]/10",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "105"
+            },
+            {
+              "name": "SOC_D",
+              "expression": "B41/2",
+              "unit": "%",
+              "class": "battery"
+            },
+            {
+              "name": "HV_C_D_MAX_NO",
+              "expression": "B36",
+              "unit": "none",
+              "class": "none"
+            },
+            {
+              "name": "HV_C_D_MIN",
+              "expression": "[B37:B38]/10",
+              "unit": "%",
+              "class": "none"
+            },
+            {
+              "name": "HV_C_D_MIN_NO",
+              "expression": "B39",
+              "unit": "none",
+              "class": "none"
+            },
+            {
+              "name": "AIRBAG",
+              "expression": "B30",
+              "unit": "",
+              "class": "none",
+              "min": "50",
+              "max": "100"
+            },
+            {
+              "name": "REGEN_MAX",
+              "expression": "((B23<<8)+B25)/100",
+              "unit": "kW",
+              "class": "power"
+            },
+            {
+              "name": "POWER_MAX",
+              "expression": "[B26:B27]/100",
+              "unit": "kW",
+              "class": "power"
+            },
+            {
+              "name": "HV_C_DIFF",
+              "expression": "B28/50",
+              "unit": "V",
+              "class": "battery",
+              "min": "0",
+              "max": "4"
+            },
+            {
+              "name": "HV_H_1",
+              "expression": "(S31)",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "0",
+              "max": "80"
+            }
+          ]
+        },
+        {
+          "pid": "22BC03",
+          "pid_init": "ATSH770;",
+          "parameters": [
+            {
+              "name": "IGNITION",
+              "expression": "B11:5",
+              "unit": "",
+              "type": "binary_sensor",
+              "class": "none",
+              "min": "0",
+              "max": "1"
+            },
+            {
+              "name": "DOOR_FL_OPEN",
+              "expression": "B10:5",
+              "unit": "",
+              "class": "door",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "DOOR_FR_OPEN",
+              "expression": "B10:4",
+              "unit": "",
+              "class": "door",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "DOOR_RL_OPEN",
+              "expression": "B10:0",
+              "unit": "",
+              "class": "door",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "DOOR_RR_OPEN",
+              "expression": "B10:2",
+              "unit": "",
+              "class": "door",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "TRUNK_OPEN",
+              "expression": "B10:7",
+              "unit": "none",
+              "class": "door",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "SEATBELT_FL",
+              "expression": "B11:1",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "SEATBELT_FR",
+              "expression": "B11:2",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "DOOR_LOCK_RL",
+              "expression": "1-B10:1",
+              "unit": "",
+              "class": "lock",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "DOOR_LOCK_RR",
+              "expression": "1-B10:3",
+              "unit": "",
+              "class": "lock",
+              "type": "binary_sensor"
+            }
+          ]
+        },
+        {
+          "pid": "22BC04",
+          "pid_init": "ATSH770;",
+          "parameters": [
+            {
+              "name": "DOOR_LOCK_FL",
+              "expression": "B10:3",
+              "unit": "",
+              "class": "lock",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "DOOR_LOCK_FR",
+              "expression": "B10:2",
+              "unit": "",
+              "class": "lock",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "HIGH_BEAM",
+              "expression": "B13:4",
+              "unit": "none",
+              "class": "light",
+              "type": "binary_sensor"
+            }
+          ]
+        },
+        {
+          "pid": "22B002",
+          "pid_init": "ATSH7C6;ATFCSH7C6;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B12:B14]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "220100",
+          "pid_init": "ATSH7B3;",
+          "parameters": [
+            {
+              "name": "TMP_A",
+              "expression": "(B12/2)-40",
+              "unit": "°C",
+              "class": "none"
+            },
+            {
+              "name": "T_CAB",
+              "expression": "(B11/2)-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "22C101",
+          "pid_init": "ATSH7D1;",
+          "parameters": [
+            {
+              "name": "SPEED",
+              "expression": "B12",
+              "unit": "km/h",
+              "class": "speed"
+            }
+          ]
+        },
+        {
+          "pid": "21014",
+          "pid_init": "ATSH7E2;",
+          "parameters": [
+            {
+              "name": "READY",
+              "expression": "B26:3",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "GEAR",
+              "expression": "B10",
+              "unit": "none",
+              "class": "none"
+            },
+            {
+              "name": "PARK_BRAKE",
+              "expression": "B26:5",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "GEAR_PARK",
+              "expression": "B10:0",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "GEAR_REVERSE",
+              "expression": "B10:1",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "GEAR_NEUTRAL",
+              "expression": "B10:2",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "GEAR_DRIVE",
+              "expression": "B10:3",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            }
+          ]
+        },
+        {
+          "pid": "22B00E",
+          "pid_init": "ATSH7A0;",
+          "parameters": [
+            {
+              "name": "AC_PLUG",
+              "expression": "B10:4",
+              "unit": "",
+              "type": "binary_sensor",
+              "class": "none",
+              "min": "0",
+              "max": "1"
+            }
+          ]
+        },
+        {
+          "pid": "22C00B4",
+          "pid_init": "ATSH7A0;",
+          "parameters": [
+            {
+              "name": "TYRE_P_FL",
+              "expression": "B10*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_T_FL",
+              "expression": "B11-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_P_FR",
+              "expression": "B14*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_T_FR",
+              "expression": "B15-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_P_RR",
+              "expression": "B19*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_T_RR",
+              "expression": "B20-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_P_RL",
+              "expression": "B23*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_T_RL",
+              "expression": "B25-50",
+              "class": "temperature",
+              "unit": "°C"
+            }
+          ]
+        },
+        {
+          "pid": "2101",
+          "pid_init": "ATSH7E5;",
+          "parameters": [
+            {
+              "name": "AC_C_V",
+              "expression": "B55",
+              "unit": "V",
+              "class": "battery"
+            },
+            {
+              "name": "OBC_TEMP",
+              "expression": "B52/2-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2103",
+          "pid_init": "ATSH7E5;",
+          "parameters": [
+            {
+              "name": "AC_C_C",
+              "expression": "[B9:B10]/100",
+              "unit": "A",
+              "class": "current"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Kia: Niro PHEV",
       "init": "ATSP6;ATSH7E4;ATST96;",
       "pids": [
@@ -9991,12 +10529,11 @@
       ]
     },
     {
-      "car_model": "Kia: Niro/Soul",
-      "init": "ATST96;",
+      "car_model": "Kia: Soul",
       "pids": [
         {
-          "pid_init": "ATSH7E4;",
           "pid": "2201019",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "SOC",
@@ -10007,20 +10544,8 @@
               "max": "100"
             },
             {
-              "name": "REGEN_MAX",
-              "expression": "[B11:B12]/100",
-              "unit": "kW",
-              "class": "power"
-            },
-            {
-              "name": "POWER_MAX",
-              "expression": "[B13:B14]/100",
-              "unit": "kW",
-              "class": "power"
-            },
-            {
               "name": "HV_A",
-              "expression": "(65536-([B17:B18]))/10",
+              "expression": "[S17:S18]/10",
               "unit": "A",
               "class": "current"
             },
@@ -10034,49 +10559,49 @@
             },
             {
               "name": "HV_W",
-              "expression": "([B19:B20]/10)*((65536-([B17:B18]))/10)",
+              "expression": "([B19:B20]/10)*([S17:S18]/10)",
               "unit": "W",
               "class": "power"
             },
             {
               "name": "HV_T_MAX",
-              "expression": "B21",
+              "expression": "S21",
               "unit": "°C",
               "class": "temperature"
             },
             {
               "name": "HV_T_MIN",
-              "expression": "B22",
+              "expression": "S22",
               "unit": "°C",
               "class": "temperature"
             },
             {
               "name": "HV_T_1",
-              "expression": "B23",
+              "expression": "S23",
               "unit": "°C",
               "class": "temperature"
             },
             {
               "name": "HV_T_2",
-              "expression": "B25",
+              "expression": "S25",
               "unit": "°C",
               "class": "temperature"
             },
             {
               "name": "HV_T_3",
-              "expression": "B26",
+              "expression": "S26",
               "unit": "°C",
               "class": "temperature"
             },
             {
               "name": "HV_T_4",
-              "expression": "B27",
+              "expression": "S27",
               "unit": "°C",
               "class": "temperature"
             },
             {
               "name": "HV_T_I",
-              "expression": "B30",
+              "expression": "S30",
               "unit": "°C",
               "class": "temperature"
             },
@@ -10109,12 +10634,37 @@
               "expression": "B38*0.1",
               "unit": "V",
               "class": "battery"
+            },
+            {
+              "name": "KWH_CHARGED",
+              "expression": "([B49:B50]*65536 + [B51:B52])/10",
+              "unit": "kWh",
+              "class": "energy",
+              "min": "0",
+              "max": "1000000"
+            },
+            {
+              "name": "KWH_DISCHARGED",
+              "expression": "([B53:B54]*65536 + [B55:B56])/10",
+              "unit": "kWh",
+              "class": "energy",
+              "min": "0",
+              "max": "1000000"
+            },
+            {
+              "name": "HV_RELAY",
+              "expression": "B15:7",
+              "unit": "",
+              "type": "binary_sensor",
+              "class": "none",
+              "min": "0",
+              "max": "1"
             }
           ]
         },
         {
-          "pid_init": "ATSH7E4;",
           "pid": "2201057",
+          "pid_init": "ATSH7E4;",
           "parameters": [
             {
               "name": "SOH",
@@ -10131,12 +10681,6 @@
               "class": "battery"
             },
             {
-              "name": "HV_C_D_MIN_NO",
-              "expression": "B39",
-              "unit": "none",
-              "class": "none"
-            },
-            {
               "name": "HV_C_D_MAX_NO",
               "expression": "B36",
               "unit": "none",
@@ -10147,25 +10691,215 @@
               "expression": "[B37:B38]/10",
               "unit": "%",
               "class": "none"
+            },
+            {
+              "name": "HV_C_D_MIN_NO",
+              "expression": "B39",
+              "unit": "none",
+              "class": "none"
+            },
+            {
+              "name": "AIRBAG",
+              "expression": "B30",
+              "unit": "",
+              "class": "none",
+              "min": "50",
+              "max": "100"
+            },
+            {
+              "name": "REGEN_MAX",
+              "expression": "((B23<<8)+B25)/100",
+              "unit": "kW",
+              "class": "power"
+            },
+            {
+              "name": "POWER_MAX",
+              "expression": "[B26:B27]/100",
+              "unit": "kW",
+              "class": "power"
+            },
+            {
+              "name": "HV_C_DIFF",
+              "expression": "B28/50",
+              "unit": "V",
+              "class": "battery",
+              "min": "0",
+              "max": "4"
+            },
+            {
+              "name": "HV_H_1",
+              "expression": "(S31)",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "0",
+              "max": "80"
             }
           ]
         },
         {
-          "pid_init": "ATSH7E2;",
-          "pid": "21014",
+          "pid": "22BC03",
+          "pid_init": "ATSH770;",
           "parameters": [
             {
-              "name": "GEAR",
-              "expression": "B10",
+              "name": "IGNITION",
+              "expression": "B11:5",
+              "unit": "",
+              "type": "binary_sensor",
+              "class": "none",
+              "min": "0",
+              "max": "1"
+            },
+            {
+              "name": "DOOR_FL_OPEN",
+              "expression": "B10:5",
+              "unit": "",
+              "class": "door",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "DOOR_FR_OPEN",
+              "expression": "B10:4",
+              "unit": "",
+              "class": "door",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "DOOR_RL_OPEN",
+              "expression": "B10:0",
+              "unit": "",
+              "class": "door",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "DOOR_RR_OPEN",
+              "expression": "B10:2",
+              "unit": "",
+              "class": "door",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "TRUNK_OPEN",
+              "expression": "B10:7",
               "unit": "none",
+              "class": "door",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "SEATBELT_FL",
+              "expression": "B11:1",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "SEATBELT_FR",
+              "expression": "B11:2",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "DOOR_LOCK_RL",
+              "expression": "1-B10:1",
+              "unit": "",
+              "class": "lock",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "DOOR_LOCK_RR",
+              "expression": "1-B10:3",
+              "unit": "",
+              "class": "lock",
+              "type": "binary_sensor"
+            }
+          ]
+        },
+        {
+          "pid": "22BC04",
+          "pid_init": "ATSH770;",
+          "parameters": [
+            {
+              "name": "DOOR_LOCK_FL",
+              "expression": "B10:3",
+              "unit": "",
+              "class": "lock",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "DOOR_LOCK_FR",
+              "expression": "B10:2",
+              "unit": "",
+              "class": "lock",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "HIGH_BEAM",
+              "expression": "B13:4",
+              "unit": "none",
+              "class": "light",
+              "type": "binary_sensor"
+            }
+          ]
+        },
+        {
+          "pid": "22B002",
+          "pid_init": "ATSH7C6;ATFCSH7C6;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B12:B14]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "220100",
+          "pid_init": "ATSH7B3;",
+          "parameters": [
+            {
+              "name": "TMP_A",
+              "expression": "(B12/2)-40",
+              "unit": "°C",
               "class": "none"
             },
+            {
+              "name": "T_CAB",
+              "expression": "(B11/2)-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "22C101",
+          "pid_init": "ATSH7D1;",
+          "parameters": [
+            {
+              "name": "SPEED",
+              "expression": "B12",
+              "unit": "km/h",
+              "class": "speed"
+            }
+          ]
+        },
+        {
+          "pid": "21014",
+          "pid_init": "ATSH7E2;",
+          "parameters": [
             {
               "name": "READY",
               "expression": "B26:3",
               "unit": "none",
               "class": "none",
               "type": "binary_sensor"
+            },
+            {
+              "name": "GEAR",
+              "expression": "B10",
+              "unit": "none",
+              "class": "none"
             },
             {
               "name": "PARK_BRAKE",
@@ -10175,10 +10909,135 @@
               "type": "binary_sensor"
             },
             {
-              "name": "SPEED",
-              "expression": "[B19:B20]/100",
-              "unit": "km/h",
-              "class": "speed"
+              "name": "GEAR_PARK",
+              "expression": "B10:0",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "GEAR_REVERSE",
+              "expression": "B10:1",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "GEAR_NEUTRAL",
+              "expression": "B10:2",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            },
+            {
+              "name": "GEAR_DRIVE",
+              "expression": "B10:3",
+              "unit": "none",
+              "class": "none",
+              "type": "binary_sensor"
+            }
+          ]
+        },
+        {
+          "pid": "22B00E",
+          "pid_init": "ATSH7A0;",
+          "parameters": [
+            {
+              "name": "AC_PLUG",
+              "expression": "B10:4",
+              "unit": "",
+              "type": "binary_sensor",
+              "class": "none",
+              "min": "0",
+              "max": "1"
+            }
+          ]
+        },
+        {
+          "pid": "22C00B4",
+          "pid_init": "ATSH7A0;",
+          "parameters": [
+            {
+              "name": "TYRE_P_FL",
+              "expression": "B10*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_T_FL",
+              "expression": "B11-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_P_FR",
+              "expression": "B14*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_T_FR",
+              "expression": "B15-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_P_RR",
+              "expression": "B19*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_T_RR",
+              "expression": "B20-50",
+              "class": "temperature",
+              "unit": "°C"
+            },
+            {
+              "name": "TYRE_P_RL",
+              "expression": "B23*0.2",
+              "class": "pressure",
+              "unit": "psi",
+              "min": "0"
+            },
+            {
+              "name": "TYRE_T_RL",
+              "expression": "B25-50",
+              "class": "temperature",
+              "unit": "°C"
+            }
+          ]
+        },
+        {
+          "pid": "2101",
+          "pid_init": "ATSH7E5;",
+          "parameters": [
+            {
+              "name": "AC_C_V",
+              "expression": "B55",
+              "unit": "V",
+              "class": "battery"
+            },
+            {
+              "name": "OBC_TEMP",
+              "expression": "B52/2-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2103",
+          "pid_init": "ATSH7E5;",
+          "parameters": [
+            {
+              "name": "AC_C_C",
+              "expression": "[B9:B10]/100",
+              "unit": "A",
+              "class": "current"
             }
           ]
         }
@@ -10759,8 +11618,8 @@
             {
               "name": "KWH_CHARGED",
               "expression": "B5",
-              "unit": "kwh",
-              "class": "battery",
+              "unit": "kWh",
+              "class": "energy",
               "min": "0",
               "max": "1000000"
             }
@@ -10872,7 +11731,7 @@
               "name": "HV_AV",
               "expression": "[B4:B5] * 0.025",
               "unit": "kW",
-              "class": "battery"
+              "class": "power"
             }
           ]
         },
@@ -10929,7 +11788,7 @@
               "name": "HV_CAPACITY_R",
               "expression": "[B4:B6] * 0.001",
               "unit": "kWh",
-              "class": "none"
+              "class": "energy"
             }
           ]
         },
@@ -10939,8 +11798,8 @@
             {
               "name": "KWH_CHARGED",
               "expression": "[B5:B8] * 0.001",
-              "unit": "kwh",
-              "class": "battery",
+              "unit": "kWh",
+              "class": "energy",
               "min": "0",
               "max": "1000000"
             }
@@ -10953,7 +11812,7 @@
               "name": "AC_C_C",
               "expression": "[B4:B5] * 0.1",
               "unit": "A",
-              "class": "battery"
+              "class": "current"
             }
           ]
         },
@@ -11202,7 +12061,7 @@
               "name": "HV_AV",
               "expression": "[B4:B5]*0.005",
               "unit": "kW",
-              "class": "battery"
+              "class": "power"
             }
           ]
         },
@@ -11404,7 +12263,7 @@
               "name": "AC_C_C",
               "expression": "(([B4:B7] * 10) / 10000) - 2000",
               "unit": "A",
-              "class": "battery"
+              "class": "current"
             }
           ]
         }
@@ -11646,7 +12505,7 @@
               "name": "HV_CAPACITY_KWH",
               "expression": "[B4:B5]*50/1000",
               "unit": "kWh",
-              "class": "none"
+              "class": "energy"
             }
           ]
         }
