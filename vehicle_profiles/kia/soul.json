@@ -1,4 +1,4 @@
 {
   "car_model": "Kia: Soul",
-  "extends": "kia/niro.json"
+  "extends": "kia/niro-de.json"
 }
