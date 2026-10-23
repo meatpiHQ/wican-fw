@@ -319,6 +319,7 @@ def main():
     st0 = None
     server_up = False
     cert_uploaded = False
+    restored = False
     try:
         # ---- o0: preflight + setup -----------------------------------------------------------
         print("== o0 preflight + setup", flush=True)
@@ -346,6 +347,16 @@ def main():
         if not d.get("present") or not d.get("reachable"):
             raise pcbench.Bench("no dongle reachable over USB: plug the ESPNetLink into the DUT in usb_rndis mode")
         found["settings"] = dut.settings("fw_update")
+        if isinstance(found["settings"], dict) and (
+                str(found["settings"].get("base_url", "")).startswith(base_url) or
+                found["settings"].get("cert_set") == "fwbench"):
+            # a previous run aborted before its close (2026-10-23): what is "as found" is
+            # the bench's own server; restore the shipped values at the close instead
+            print("WARN: the DUT carries a previous run's bench settings (%s, cert set %r): "
+                  "the close restores the shipped values" % (found["settings"].get("base_url"),
+                                                             found["settings"].get("cert_set")), flush=True)
+            found["settings"] = dict(found["settings"], channel="stable", cert_set="",
+                                     base_url="https://raw.githubusercontent.com/meatpiHQ/meatpi-devices/main/")
         found["dongle_fw"] = inst.get("fw_version", "")
         VER_N0, VER_N1 = bump_versions(found["dongle_fw"])
         run.metric("bench_up_versions", "%s then %s (installed %s)" % (VER_N0, VER_N1, found["dongle_fw"]))
@@ -426,6 +437,12 @@ def main():
 
         # ---- o2: the install over USB ------------------------------------------------------------
         if "o2" in legs:
+            if "o1" not in legs:
+                # straight after o0's settings restart the relay's view of the dongle lags the
+                # engine's by a few seconds (2026-10-23: a 409 no_dongle with --only o2)
+                t0 = time.time()
+                while time.time() - t0 < 30 and not dongle().get("reachable"):
+                    time.sleep(2)
             print("== o2 install %s over USB" % VER_N1, flush=True)
             b0 = dut.boot_count()
             code, r = install({"target": "dongle", "version": VER_N1})
@@ -573,6 +590,7 @@ def main():
             dut.restart({"fw_update": {k: found["settings"][k] for k in SETTINGS_KEYS if k in found["settings"]}})
         if cert_uploaded:
             dut.api("/api/certs?set=fwbench", "DELETE")
+        restored = True
         wait_link(60)
         dut.reset_check(run, st0)
         dut.passing_checks(run)
@@ -582,6 +600,16 @@ def main():
         print("BENCH:", e, flush=True)
         exit_code = 2
     finally:
+        # an aborted run must not leave the bench's server settings on the DUT
+        # (2026-10-23: the next run took them as "as found" and restored them)
+        if not restored and found.get("settings"):
+            try:
+                print("== restoring the fw_update settings after the abort", flush=True)
+                dut.restart({"fw_update": {k: found["settings"][k] for k in SETTINGS_KEYS if k in found["settings"]}})
+                if cert_uploaded:
+                    dut.api("/api/certs?set=fwbench", "DELETE")
+            except Exception as e:
+                print("restore after the abort failed:", e, flush=True)
         try:
             if server_up:
                 pi_run("sudo -n systemctl stop fw_bench 2>/dev/null; true")
