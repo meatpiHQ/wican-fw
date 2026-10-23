@@ -10,7 +10,7 @@
     "description": "AC Charging Current",
     "settings": {
       "unit": "A",
-      "class": "battery"
+      "class": "current"
     }
   },
   "AC_C_V": {
@@ -69,6 +69,14 @@
       "max": "80"
     }
   },
+  "CABIN_TEMPERATURE": {
+    "description": "Cabin temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "max": "100"
+    }
+  },
   "CAPACITOR": {
     "description": "Inverter Capacitor Voltage",
     "settings": {
@@ -118,6 +126,13 @@
       "max": "200"
     }
   },
+  "CO2": {
+    "description": "CO2 Concentration",
+    "settings": {
+      "unit": "ppm",
+      "class": "carbon_dioxide"
+    }
+  },
   "COOLANT_TMP": {
     "description": "Coolant Temperature",
     "settings": {
@@ -151,6 +166,70 @@
       "max": "10100"
     }
   },
+  "DOOR_FL_OPEN": {
+    "description": "Front left (driver) door open",
+    "settings": {
+      "unit": "",
+      "class": "door",
+      "type": "binary_sensor"
+    }
+  },
+  "DOOR_FR_OPEN": {
+    "description": "Front right (passenger) door open",
+    "settings": {
+      "unit": "",
+      "class": "door",
+      "type": "binary_sensor"
+    }
+  },
+  "DOOR_LOCK_FL": {
+    "description": "Front left (driver) door locked",
+    "settings": {
+      "unit": "",
+      "class": "lock",
+      "type": "binary_sensor"
+    }
+  },
+  "DOOR_LOCK_FR": {
+    "description": "Front right (passenger) door locked",
+    "settings": {
+      "unit": "",
+      "class": "lock",
+      "type": "binary_sensor"
+    }
+  },
+  "DOOR_LOCK_RL": {
+    "description": "Rear left door locked",
+    "settings": {
+      "unit": "",
+      "class": "lock",
+      "type": "binary_sensor"
+    }
+  },
+  "DOOR_LOCK_RR": {
+    "description": "Rear right door locked",
+    "settings": {
+      "unit": "",
+      "class": "lock",
+      "type": "binary_sensor"
+    }
+  },
+  "DOOR_RL_OPEN": {
+    "description": "Rear left door open",
+    "settings": {
+      "unit": "",
+      "class": "door",
+      "type": "binary_sensor"
+    }
+  },
+  "DOOR_RR_OPEN": {
+    "description": "Rear right door open",
+    "settings": {
+      "unit": "",
+      "class": "door",
+      "type": "binary_sensor"
+    }
+  },
   "DRIVE_MODE": {
     "description": "Drive Mode",
     "settings": {
@@ -177,6 +256,14 @@
     "settings": {
       "unit": "RPM",
       "class": "frequency"
+    }
+  },
+  "FOG_FRONT": {
+    "description": "Front fog lights active",
+    "settings": {
+      "unit": "none",
+      "class": "light",
+      "type": "binary_sensor"
     }
   },
   "FUEL": {
@@ -236,6 +323,53 @@
       "class": "none"
     }
   },
+  "GEAR_DRIVE": {
+    "description": "Gear selector in Drive",
+    "settings": {
+      "unit": "none",
+      "class": "none",
+      "type": "binary_sensor"
+    }
+  },
+  "GEAR_NEUTRAL": {
+    "description": "Gear selector in Neutral",
+    "settings": {
+      "unit": "none",
+      "class": "none",
+      "type": "binary_sensor"
+    }
+  },
+  "GEAR_PARK": {
+    "description": "Gear selector in Park",
+    "settings": {
+      "unit": "none",
+      "class": "none",
+      "type": "binary_sensor"
+    }
+  },
+  "GEAR_REVERSE": {
+    "description": "Gear selector in Reverse",
+    "settings": {
+      "unit": "none",
+      "class": "none",
+      "type": "binary_sensor"
+    }
+  },
+  "HIGH_BEAM": {
+    "description": "High beam headlights active",
+    "settings": {
+      "unit": "none",
+      "class": "light",
+      "type": "binary_sensor"
+    }
+  },
+  "HUMIDITY": {
+    "description": "Humidity",
+    "settings": {
+      "unit": "%",
+      "class": "humidity"
+    }
+  },
   "HV_A": {
     "description": "High Voltage Battery current",
     "settings": {
@@ -265,7 +399,7 @@
     "description": "High Voltage Battery Power Available",
     "settings": {
       "unit": "kW",
-      "class": "battery"
+      "class": "power"
     }
   },
   "HV_CAPACITY": {
@@ -279,14 +413,14 @@
     "description": "HV Battery capacity in kWh",
     "settings": {
       "unit": "kWh",
-      "class": "none"
+      "class": "energy"
     }
   },
   "HV_CAPACITY_R": {
     "description": "HV Battery capacity Remaining",
     "settings": {
       "unit": "kWh",
-      "class": "none"
+      "class": "energy"
     }
   },
   "HV_C_DIFF": {
@@ -1739,6 +1873,15 @@
       "max": "10"
     }
   },
+  "HV_C_V_158": {
+    "description": "Cell Voltage 158",
+    "settings": {
+      "unit": "V",
+      "class": "battery",
+      "min": "0",
+      "max": "10"
+    }
+  },
   "HV_C_V_159": {
     "description": "Cell Voltage 159",
     "settings": {
@@ -2086,7 +2229,7 @@
     "description": "Battery Remaining Energy",
     "settings": {
       "unit": "Wh",
-      "class": "battery",
+      "class": "energy",
       "min": "0",
       "max": "77000"
     }
@@ -2171,6 +2314,33 @@
       "max": "80"
     }
   },
+  "HV_T_17": {
+    "description": "HV Battery Temp Sensor 17",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_18": {
+    "description": "HV Battery Temp Sensor 18",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_19": {
+    "description": "HV Battery Temp Sensor 19",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
   "HV_T_2": {
     "description": "HV Battery Temp Sensor 2",
     "settings": {
@@ -2178,11 +2348,155 @@
       "class": "temperature"
     }
   },
+  "HV_T_20": {
+    "description": "HV Battery Temp Sensor 20",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_21": {
+    "description": "HV Battery Temp Sensor 21",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_22": {
+    "description": "HV Battery Temp Sensor 22",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_23": {
+    "description": "HV Battery Temp Sensor 23",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_24": {
+    "description": "HV Battery Temp Sensor 24",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_25": {
+    "description": "HV Battery Temp Sensor 25",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_26": {
+    "description": "HV Battery Temp Sensor 26",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_27": {
+    "description": "HV Battery Temp Sensor 27",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_28": {
+    "description": "HV Battery Temp Sensor 28",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_29": {
+    "description": "HV Battery Temp Sensor 29",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
   "HV_T_3": {
     "description": "HV Battery Temp Sensor 3",
     "settings": {
       "unit": "°C",
       "class": "temperature"
+    }
+  },
+  "HV_T_30": {
+    "description": "HV Battery Temp Sensor 30",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_31": {
+    "description": "HV Battery Temp Sensor 31",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_32": {
+    "description": "HV Battery Temp Sensor 32",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_33": {
+    "description": "HV Battery Temp Sensor 33",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_34": {
+    "description": "HV Battery Temp Sensor 34",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "HV_T_35": {
+    "description": "HV Battery Temp Sensor 35",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
     }
   },
   "HV_T_4": {
@@ -2306,8 +2620,8 @@
   "KWH_CHARGED": {
     "description": "Total kWh Charged (Cumulative Energy Charged)",
     "settings": {
-      "unit": "kwh",
-      "class": "battery",
+      "unit": "kWh",
+      "class": "energy",
       "min": "0",
       "max": "1000000"
     }
@@ -2316,9 +2630,17 @@
     "description": "Total kWH Discharged( Cumulative Energy Discharged)",
     "settings": {
       "unit": "kWh",
-      "class": "none",
+      "class": "energy",
       "min": "0",
       "max": "1000000"
+    }
+  },
+  "LOW_BEAM": {
+    "description": "Low beam headlights active",
+    "settings": {
+      "unit": "none",
+      "class": "light",
+      "type": "binary_sensor"
     }
   },
   "LV_A": {
@@ -2349,6 +2671,13 @@
     "settings": {
       "unit": "g/s",
       "class": "none"
+    }
+  },
+  "OBC_TEMP": {
+    "description": "On-board charger temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature"
     }
   },
   "OCTANE_RATIO_L": {
@@ -2395,6 +2724,14 @@
       "class": "none",
       "min": "0",
       "max": "1000000"
+    }
+  },
+  "OUTSIDE_TEMPERATURE": {
+    "description": "Outside temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "max": "100"
     }
   },
   "PARK_BRAKE": {
@@ -2515,6 +2852,46 @@
       "max": "1000"
     }
   },
+  "SEATBELT_FL": {
+    "description": "Front left (driver) seatbelt buckled",
+    "settings": {
+      "unit": "none",
+      "class": "none",
+      "type": "binary_sensor"
+    }
+  },
+  "SEATBELT_FR": {
+    "description": "Front right (passenger) seatbelt buckled",
+    "settings": {
+      "unit": "none",
+      "class": "none",
+      "type": "binary_sensor"
+    }
+  },
+  "SEATBELT_RC": {
+    "description": "Rear centre seatbelt buckled",
+    "settings": {
+      "unit": "none",
+      "class": "none",
+      "type": "binary_sensor"
+    }
+  },
+  "SEATBELT_RL": {
+    "description": "Rear left seatbelt buckled",
+    "settings": {
+      "unit": "none",
+      "class": "none",
+      "type": "binary_sensor"
+    }
+  },
+  "SEATBELT_RR": {
+    "description": "Rear right seatbelt buckled",
+    "settings": {
+      "unit": "none",
+      "class": "none",
+      "type": "binary_sensor"
+    }
+  },
   "SOC": {
     "description": "State Of Charge",
     "settings": {
@@ -2596,6 +2973,14 @@
     "settings": {
       "unit": "°C",
       "class": "temperature"
+    }
+  },
+  "TRUNK_OPEN": {
+    "description": "Boot/trunk open",
+    "settings": {
+      "unit": "none",
+      "class": "door",
+      "type": "binary_sensor"
     }
   },
   "TYRE_P_FL": {

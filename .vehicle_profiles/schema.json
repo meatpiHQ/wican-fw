@@ -52,20 +52,31 @@
                 "ALT_DUTY",
                 "BATT_CAPACITY",
                 "BATT_TEMP",
+                "CABIN_TEMPERATURE",
                 "CAPACITOR",
                 "CHARGER_CONNECTED",
                 "CHARGER_DC_PWR",
                 "CHARGING",
                 "CHARGING_DC",
                 "CHARGING_R_A",
+                "CO2",
                 "COOLANT_TMP",
                 "DIST_SINCE_FULL_CHARGE",
                 "DM_F_RPM",
                 "DM_R_RPM",
+                "DOOR_FL_OPEN",
+                "DOOR_FR_OPEN",
+                "DOOR_LOCK_FL",
+                "DOOR_LOCK_FR",
+                "DOOR_LOCK_RL",
+                "DOOR_LOCK_RR",
+                "DOOR_RL_OPEN",
+                "DOOR_RR_OPEN",
                 "DRIVE_MODE",
                 "ENGINE_OIL_PRES",
                 "ENGINE_OIL_TEMP",
                 "ENGINE_RPM",
+                "FOG_FRONT",
                 "FUEL",
                 "FUEL_L",
                 "FUEL_PRESSURE",
@@ -74,6 +85,12 @@
                 "FUEL_RATE",
                 "FUEL_SYS_STAT",
                 "GEAR",
+                "GEAR_DRIVE",
+                "GEAR_NEUTRAL",
+                "GEAR_PARK",
+                "GEAR_REVERSE",
+                "HIGH_BEAM",
+                "HUMIDITY",
                 "HV_A",
                 "HV_AH_CHARGED",
                 "HV_AH_DISCHARGED",
@@ -243,6 +260,7 @@
                 "HV_C_V_155",
                 "HV_C_V_156",
                 "HV_C_V_157",
+                "HV_C_V_158",
                 "HV_C_V_159",
                 "HV_C_V_160",
                 "HV_C_V_161",
@@ -292,8 +310,27 @@
                 "HV_T_14",
                 "HV_T_15",
                 "HV_T_16",
+                "HV_T_17",
+                "HV_T_18",
+                "HV_T_19",
                 "HV_T_2",
+                "HV_T_20",
+                "HV_T_21",
+                "HV_T_22",
+                "HV_T_23",
+                "HV_T_24",
+                "HV_T_25",
+                "HV_T_26",
+                "HV_T_27",
+                "HV_T_28",
+                "HV_T_29",
                 "HV_T_3",
+                "HV_T_30",
+                "HV_T_31",
+                "HV_T_32",
+                "HV_T_33",
+                "HV_T_34",
+                "HV_T_35",
                 "HV_T_4",
                 "HV_T_5",
                 "HV_T_6",
@@ -311,16 +348,19 @@
                 "INTAKE_AIR_TMP",
                 "KWH_CHARGED",
                 "KWH_DISCHARGED",
+                "LOW_BEAM",
                 "LV_A",
                 "LV_SOC",
                 "LV_V",
                 "MAF",
+                "OBC_TEMP",
                 "OCTANE_RATIO_L",
                 "ODOMETER",
                 "ODOMETER_MI",
                 "OILCH_DIS",
                 "OIL_LIFE",
                 "OP_TIME",
+                "OUTSIDE_TEMPERATURE",
                 "PARK_BRAKE",
                 "PCM_Desired_Boost",
                 "PCM_Fuel_Rate",
@@ -335,6 +375,11 @@
                 "READY",
                 "REGEN_MAX",
                 "RESISTANCE",
+                "SEATBELT_FL",
+                "SEATBELT_FR",
+                "SEATBELT_RC",
+                "SEATBELT_RL",
+                "SEATBELT_RR",
                 "SOC",
                 "SOC_D",
                 "SOC_MAX",
@@ -346,6 +391,7 @@
                 "THROTTLE",
                 "TMP_A",
                 "TRAN_F_TEMP",
+                "TRUNK_OPEN",
                 "TYRE_P_FL",
                 "TYRE_P_FR",
                 "TYRE_P_RL",
@@ -358,6 +404,45 @@
                 "WASTEGATE"
               ]
             }
+          }
+        }
+      }
+    },
+    "filters": {
+      "description": "Passive CAN filters (WiCAN PRO): broadcast frames decoded without a request. Expressions index the frame data, B0 is the first data byte",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["frame_id", "parameters"],
+        "additionalProperties": false,
+        "properties": {
+          "frame_id": {
+            "description": "CAN id of the frame to capture, hex string (0x284, 0x18DAF1DB) or number",
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^0[xX][0-9A-Fa-f]{1,8}$"
+              },
+              {
+                "type": "integer",
+                "minimum": 1
+              }
+            ]
+          },
+          "monitor_ms": {
+            "description": "How long the monitor window waits for the frame, 50..60000 ms (default 1000)",
+            "type": "integer",
+            "minimum": 50,
+            "maximum": 60000
+          },
+          "period_ms": {
+            "description": "Capture period in ms, 0 or absent inherits the group period",
+            "type": "integer",
+            "minimum": 0
+          },
+          "parameters": {
+            "description": "Object of Parameter and Expressions decoded from the captured frame, same names as for a PID",
+            "$ref": "#/properties/pids/items/properties/parameters"
           }
         }
       }
