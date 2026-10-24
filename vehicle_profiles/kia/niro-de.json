@@ -1,5 +1,5 @@
 {
-  "car_model": "Kia: Niro EV (DE)",
+  "car_model": "Kia: Niro EV (2018-2022)",
   "init": "ATST96;",
   "pids": [
     {
@@ -55,8 +55,8 @@
         "TRUNK_OPEN": "B10:7",
         "SEATBELT_FL": "B11:1",
         "SEATBELT_FR": "B11:2",
-        "DOOR_LOCK_RL": "1-B10:1",
-        "DOOR_LOCK_RR": "1-B10:3"
+        "DOOR_LOCK_RL": "B10:1",
+        "DOOR_LOCK_RR": "B10:3"
       }
     },
     {
