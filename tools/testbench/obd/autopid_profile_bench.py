@@ -12,11 +12,13 @@ BMS DIDs decode 20-32 values, Xpeng's cell-voltage DID 192); once raised, a
 typo in three Hyundai/Kia profiles (cell 158 labelled HV_C_V_168 twice)
 tripped the firmware's duplicate-name rule next, so the importer now renames
 repeats. This bench mirrors `web_ui_v2/web/index.html` importProfile():
-  1. B<n>/S<n> byte indexes shift DOWN by one (published profiles index the
-     frame with its PCI byte; the v6 payload starts at the service echo),
-     which autopid_profile_e2e_bench.py measured right for single-frame
-     replies and wrong for multi-frame ones (2026-10-21, the fix pending:
-     internal/TASK_profile_frame_ref.md),
+  1. the expressions go in AS PUBLISHED (2026-10-24, issue #1014): the
+     firmware reads every reply as the chip prints it with headers on, the
+     ISO-TP framing bytes counted, which is the frame of reference the
+     published profiles use. Until 2026-10-24 every B<n>/S<n> index was
+     shifted down by one here, which autopid_profile_e2e_bench.py measured
+     right for single-frame replies and wrong for multi-frame ones
+     (2026-10-21; `shift_expr` below is kept for that bench's diagnostics),
   2. a U+FFFD degree sign becomes "°",
   3. a parameter name already in the table gets a _2/_3 suffix,
   4. passive CAN `filters` (2026-10-21) replace the filters tagged profile,
@@ -71,6 +73,9 @@ def http(base, method, path, body=None, timeout=25):
 
 # ---- the importer's conversion (keep in step with index.html importProfile) ----
 def shift_expr(x):
+    """The importer's conversion BEFORE 2026-10-24 (every index down by one):
+    no longer applied on import; the e2e bench evaluates it to name the
+    failure mode when a value is wrong."""
     return re.sub(r"([BS])(\d+)",
                   lambda m: m.group(1) + str(max(0, int(m.group(2)) - 1)),
                   str(x or ""))
@@ -114,7 +119,7 @@ def convert(found_cfg, car):
 
     for pp in car.get("pids", []):
         prm = [dict(x, name=uniq(x.get("name")), unit=fix_unit(x.get("unit")),
-                    expression=shift_expr(x.get("expression")))
+                    expression=str(x.get("expression") or ""))
                for x in pp.get("parameters", [])]
         cfg["pids"].append({
             "name": (prm[0]["name"] if len(prm) == 1 and prm[0].get("name") else pp["pid"]),

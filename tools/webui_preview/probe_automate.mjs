@@ -60,7 +60,7 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
   check("parameters collapsed by default", !d().querySelector('input[placeholder="(B2*256+B3)/4"]') &&
     [...d().querySelectorAll("button")].some((b) => b.textContent.trim().startsWith("▸")));
   await expandAll();
-  check("expression column present after expand", !!d().querySelector('input[placeholder="(B2*256+B3)/4"]'));
+  check("expression column present after expand", !!d().querySelector('input[placeholder="(B3*256+B4)/4"]'));
   check("unit column present after expand", !!d().querySelector('input[placeholder="rpm"]'));
   check("destinations cycle in seconds", d().body.textContent.includes("Every (s)"));
   check("destinations enable switch + type select", (() => {
@@ -169,7 +169,7 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
       [...d().querySelectorAll("label")].some((l) => l.textContent.includes("Choose File")));
     await expandAll();
     const exprs = [...d().querySelectorAll("input")].map((i) => i.value);
-    check("profile PIDs imported with B-index shift (B39->B38)", exprs.some((v) => v === "B38/2"));
+    check("profile PIDs imported as published (B39/2 stays, issue #1014)", exprs.some((v) => v === "B39/2") && !exprs.some((v) => v === "B38/2"));
     const vals = [...d().querySelectorAll("input")].map((i) => i.value);
     check("multi-parameter PID grouped: ONE 2101 row, 4 params under it",
       vals.filter((v) => v === "2101").length === 2 && /* cmd + pid-name inputs */

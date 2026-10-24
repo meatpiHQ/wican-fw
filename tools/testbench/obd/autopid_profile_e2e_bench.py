@@ -11,7 +11,10 @@ frame of reference: every byte after the CAN header, PCI bytes included
 (`parse_elm327_response()` in the legacy main/autopid.c; a single frame is
 `0L 41 05 xx`, a multi-frame reply `10 LL 61 01 .. 21 .. 22 ..`). That is
 what the bench evaluates them against ("what the profile means"); the
-device must publish the same numbers after the importer's conversion.
+device must publish the same numbers. Since 2026-10-24 (issue #1014) the
+firmware reads every reply the same way: headers on, the frames as the
+chip prints them, so the importer keeps the expressions as published and
+the 28-row replies come in arrival order.
 
 Legs:
   L0 preflight: the device answers and no app or diagnostic tool holds the
@@ -22,7 +25,7 @@ Legs:
      values computed, the actor `actors/pcan_profile_ecu.py` started on
      the PCAN.
   L2 the import: the table the UI would PUT (`autopid_profile_bench.convert`,
-     the importer mirror: index shift, renames, filters) is applied; the
+     the importer mirror: expressions as published, renames, filters) is applied; the
      settings get the profile's init as `specific_init`, its name as
      `vehicle`, and the poller enabled (submit-reboot when they changed).
   L3 the poll: /api/autopid watched for --watch seconds after the first
@@ -49,8 +52,17 @@ usage: autopid_profile_e2e_bench.py [--dut localhost:18081] [--pcan PCAN_USBBUS2
 Needs: the main firmware on the DUT on the bench AP, PCAN_USBBUS2 on the
 DUT bus, the ECU simulator on the bus (it ACKs the actor's frames and
 answers the standard rows), the PSU above the sleep voltage. 11-bit CAN
-profiles (ATSH/ATCRA/ATFCSH with 3 hex digits); ~4 min, two planned
-restarts.
+profiles (ATSH/ATCRA/ATFCSH with 3 hex digits; a profile that names no
+receive filter gets ISO 15765-4's reply id, request + 8: the Hyundai/Kia
+`ATSH7E4` rows answer on 7EC); ~4 min, two planned restarts.
+A profile whose ECU sits on 7E0..7E7 (Hyundai / Kia: 7E4) collides with
+the ECU simulator, which answers those physical requests with `7F 22 31`
+on the same reply id, and that single frame lands between the real reply's
+frames (2026-10-24, the Niro EV run: 0/20 until it was silenced). Before
+such a run: `curl.exe --interface 192.168.8.2 -X POST -H "Content-Type:
+application/json" -d '{"enabled":true,"response_type":"no_response",
+"trigger":"continuous"}' http://192.168.8.1/api/ecu/errors/22/<DID>` for
+every DID of the profile, DELETE the same paths afterwards.
 """
 import json
 import os
@@ -68,7 +80,8 @@ import autopid_profile_bench as apb  # noqa: E402  (the importer mirror)
 
 ACTOR = os.path.join(HERE, "..", "actors", "pcan_profile_ecu.py")
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
-PAYLOAD_CAP = 128          # AP_PAYLOAD_MAX in autopid_private.h
+PAYLOAD_CAP = 256          # AP_FRAMES_MAX in autopid_private.h: the frames the
+                           # expressions index (a raw index IS a frames index)
 DEFAULT_CAR = "Leaf ZE1 (2018-)"
 
 
@@ -315,6 +328,10 @@ def build_ecu(car, seed):
     skipped = []
     for pid in car.get("pids", []):
         ids = chain_ids(pid.get("pid_init", ""), dict(ids))
+        if ids["resp"] is None and ids["req"] is not None and ids["req"] <= 0x7FF:
+            # no receive filter named (the Hyundai / Kia profiles: `ATSH7E4`
+            # alone): ISO 15765-4's physical reply id, request + 8 (7EC)
+            ids["resp"] = ids["req"] + 8
         if ids["req"] is None or ids["resp"] is None:
             skipped.append("%s: no ATSH/ATCRA in its init chain (11-bit only)" % pid["pid"])
             continue
@@ -751,9 +768,10 @@ def main():
                 t = json.loads(body)
             except ValueError:
                 t = {}
+            # headers on since 2026-10-24: the frame `7E8 06 41 00 ..`
+            raw_bare = str(t.get("raw", "")).replace(" ", "")
             c.add("the chip is back on the baseline (0100 answered by the simulator)",
-                  st == 200 and t.get("ok") and
-                  str(t.get("raw", "")).replace(" ", "").startswith("4100"),
+                  st == 200 and t.get("ok") and "064100" in raw_bare,
                   "raw=%r" % str(t.get("raw", ""))[:40])
 
     failed = c.failed()
