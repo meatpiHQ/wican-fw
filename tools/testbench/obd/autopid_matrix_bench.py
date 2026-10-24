@@ -38,9 +38,19 @@ Legs:
   Without it leg 5 measures the filter window on a saturated bus.
 Expected final line: AUTOPID MATRIX PASS (a WARN line marks the open
 filter-on-a-flooded-bus finding, see the autopid README).
+
+Byte numbering (2026-10-24, issue #1014): expressions count the reply as
+the chip prints it with headers on, every frame's bytes after the CAN id,
+so a single frame `04 41 0C 0C 80` has the RPM at [B3:B4] and a multi-frame
+UDS reply `10 14 62 F1 90 31 57 43 / 21 41 4E ..` its first data byte at B5
+(B8, B16, .. are the consecutive-frame PCI bytes, so the VIN's 17th
+character is B23). The run switches the custom and specific type gates on
+when it finds them off (same reboot as `enabled`) and restores the
+settings as found.
 """
 import json
 import os
+import re
 import statistics
 import sys
 import time
@@ -236,21 +246,21 @@ def custom_pids():
     return [
         {"name": "MxCustomRpm", "type": "custom", "cmd": "010C1",
          "group": "mx_custom", "period_ms": 0,
-         "parameters": [{"name": "mx_custom_rpm", "expression": "[B2:B3]/4",
+         "parameters": [{"name": "mx_custom_rpm", "expression": "[B3:B4]/4",
                          "unit": "rpm"}]},
         {"name": "MxCustomTemp", "type": "custom", "cmd": "0105",
          "group": "mx_custom", "period_ms": 0,
-         "parameters": [{"name": "mx_custom_temp_c", "expression": "B2-40",
+         "parameters": [{"name": "mx_custom_temp_c", "expression": "B3-40",
                          "unit": "degC"},
-                        {"name": "mx_custom_temp_raw", "expression": "B2",
+                        {"name": "mx_custom_temp_raw", "expression": "B3",
                          "unit": ""}]},
         {"name": "MxCustomLoad", "type": "custom", "cmd": "0104",
          "group": "mx_custom", "period_ms": 0,
-         "parameters": [{"name": "mx_custom_load", "expression": "B2*100/255",
+         "parameters": [{"name": "mx_custom_load", "expression": "B3*100/255",
                          "unit": "%"}]},
         {"name": "MxCustomBad", "type": "custom", "cmd": "0162",
          "group": "mx_custom", "period_ms": 0,
-         "parameters": [{"name": "mx_custom_bad", "expression": "B2",
+         "parameters": [{"name": "mx_custom_bad", "expression": "B3",
                          "unit": ""}]},
     ]
 
@@ -260,17 +270,17 @@ def specific_pids():
         {"name": "MxSpecVin", "type": "specific", "cmd": "22F190",
          "init": "ATSH7E0", "rxheader": "7E8", "group": "mx_specific",
          "period_ms": 0,
-         "parameters": [{"name": "mx_spec_vin_c0", "expression": "B3", "unit": ""},
-                        {"name": "mx_spec_vin_c1", "expression": "B4", "unit": ""},
-                        {"name": "mx_spec_vin_c16", "expression": "B19", "unit": ""}]},
+         "parameters": [{"name": "mx_spec_vin_c0", "expression": "B5", "unit": ""},
+                        {"name": "mx_spec_vin_c1", "expression": "B6", "unit": ""},
+                        {"name": "mx_spec_vin_c16", "expression": "B23", "unit": ""}]},
         {"name": "MxSpecName", "type": "specific", "cmd": "22F187",
          "init": "ATSH7E0", "rxheader": "7E8", "group": "mx_specific",
          "period_ms": 0,
-         "parameters": [{"name": "mx_spec_name_c0", "expression": "B3", "unit": ""}]},
+         "parameters": [{"name": "mx_spec_name_c0", "expression": "B5", "unit": ""}]},
         {"name": "MxSpecEcu2Rpm", "type": "specific", "cmd": "010C",
          "init": "ATSH7E1", "rxheader": "7E9", "group": "mx_specific",
          "period_ms": 0,
-         "parameters": [{"name": "mx_spec_ecu2_rpm", "expression": "[B2:B3]/4",
+         "parameters": [{"name": "mx_spec_ecu2_rpm", "expression": "[B3:B4]/4",
                          "unit": "rpm"}]},
     ]
 
@@ -380,8 +390,9 @@ def main():
     _, info = api("/api/info")
     print("device:", info.get("device_id"), info.get("fw_version"))
     code, r = api("/api/autopid/test", "POST", {"cmd": "0100"})
+    raw0 = str(r.get("raw", "")) if isinstance(r, dict) else ""
     check("leg0 chip chain: 0100 answered by the simulator",
-          code == 200 and r.get("ok") and str(r.get("raw", "")).startswith("41 00"),
+          code == 200 and r.get("ok") and re.search(r"(^|\s)41 00 ", raw0) is not None,
           r.get("raw") if isinstance(r, dict) else r)
     _, ap_before = api("/api/settings/autopid")
     cfg_before = cfg_get()
@@ -391,10 +402,13 @@ def main():
     _, sim_before = api("/api/settings/ecu_sim", base="http://" + SIM)
     sim_bc_before = sim_before.get("broadcast_enabled") if isinstance(sim_before, dict) else None
     print("simulator broadcast at start:", sim_bc_before)
-    if not ap_before.get("enabled"):
-        v = dict(ap_before); v["enabled"] = True
+    gates = ("enabled", "custom_enabled", "specific_enabled")
+    if not all(ap_before.get(k) for k in gates):
+        v = dict(ap_before)
+        for k in gates:
+            v[k] = True
         put_settings("autopid", v)
-        check("leg0 autopid enabled for the run (reboot)", submit_and_wait())
+        check("leg0 autopid + custom + specific gates on for the run (reboot)", submit_and_wait())
     st = stats().get("stats", {})
     check("leg0 poller running", st.get("running") is True, st)
 
@@ -476,8 +490,9 @@ def main():
         check(f"leg3 specific {n} == {v}", near(got.get(n), v), got.get(n))
     code, r = api("/api/autopid/test", "POST",
                   {"cmd": "22F190", "init": "ATSH7E0", "rxheader": "7E8"})
+    vin_lines = [l for l in str(r.get("raw", "")).split("\r") if l.strip()] if isinstance(r, dict) else []
     check("leg3 VIN DID is multi-frame on the wire (3 ISO-TP lines)",
-          r.get("ok") and r.get("raw", "").count("\r") >= 3 and "62 F1 90" in r.get("payload", ""),
+          r.get("ok") and len(vin_lines) >= 3 and "62 F1 90" in r.get("payload", ""),
           r.get("raw", "")[:60].replace("\r", "|") if isinstance(r, dict) else r)
 
     # ---- leg 4: combination ----
