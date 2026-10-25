@@ -14,9 +14,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '20.x'
       - run: |
@@ -28,7 +28,7 @@ jobs:
           npx prettier . --write
           cd -
       - name: Commit
-        uses: EndBug/add-and-commit@v9
+        uses: EndBug/add-and-commit@v11
         with:
           author_name: Jay Oswald
           author_email: jay@oswald.net.au
@@ -37,7 +37,7 @@ jobs:
           push: true
       - name: Tell the manuals (meatpiHQ/meatpi-docs rebuilds its Supported vehicles page)
         if: success()
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@v4
         with:
           token: ${{ secrets.DOCS_DISPATCH_TOKEN }}
           repository: meatpiHQ/meatpi-docs
