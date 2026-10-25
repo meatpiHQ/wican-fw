@@ -172,7 +172,7 @@
           "parameters": [
             {
               "name": "HV_CAPACITY_KWH",
-              "expression": "[B4:B5]*50",
+              "expression": "[B4:B5]*50/1000",
               "unit": "kWh",
               "class": "energy"
             }
@@ -282,12 +282,12 @@
           ]
         },
         {
-          "pid": "221E3D",
+          "pid": "221E3D2",
           "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
           "parameters": [
             {
               "name": "HV_A",
-              "expression": "(150000-[B5:B9])/100",
+              "expression": "(150000-(([B5:B7]*256)+B9))/100",
               "unit": "A",
               "class": "current"
             }
