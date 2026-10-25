@@ -1,0 +1,41 @@
+{
+  "car_model": "Skoda: Elroq",
+  "init": "ATAT1;ATST96;",
+  "extends": "vw/ev_meb.json",
+  "pids": [
+    {
+      "pid": "remove",
+      "parameters": {
+        "SOC_D": ""
+      }
+    },
+    {
+      "pid": "22F45B1",
+      "pid_init": "ATSP7;ATCP18;ATSHDB33F1;ATCRA18DAF105;",
+      "parameters": {
+        "SOC": "B4*100/255"
+      }
+    },
+    {
+      "pid": "222AB62",
+      "pid_init": "ATSP6;ATSH710;ATFCSH710;ATFCSD300000;ATFCSM1;ATCRA77A;",
+      "parameters": {
+        "RANGE": "(B5*256)+B6"
+      }
+    },
+    {
+      "pid": "2274481",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+      "parameters": {
+        "CHARGING": "B4:2"
+      }
+    },
+    {
+      "pid": "221E3B1",
+      "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+      "parameters": {
+        "HV_V": "(((B4*256)+B5)/4)"
+      }
+    }
+  ]
+}
