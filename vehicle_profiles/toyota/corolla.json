@@ -1,0 +1,48 @@
+{
+  "car_model": "Toyota: Corolla 2014-2019",
+  "init": "ATSP6;ATST96;",
+  "pids": [
+    {
+      "pid": "21281",
+      "pid_init": "ATSH7E0;ATCRA7E8;",
+      "parameters": {
+        "ODOMETER": "[B3:B5]"
+      }
+    },
+    {
+      "pid": "21291",
+      "pid_init": "ATSH7C0;ATCRA7C8;",
+      "parameters": {
+        "FUEL_L": "B3/2"
+      }
+    },
+    {
+      "pid": "01051",
+      "pid_init": "ATSH7E0;ATCRA7E8;",
+      "parameters": {
+        "COOLANT_TMP": "B3-40"
+      }
+    },
+    {
+      "pid": "01421",
+      "pid_init": "ATSH7E0;ATCRA7E8;",
+      "parameters": {
+        "LV_V": "[B3:B4]/1000"
+      }
+    },
+    {
+      "pid": "01461",
+      "pid_init": "ATSH7E0;ATCRA7E8;",
+      "parameters": {
+        "OUTSIDE_TEMPERATURE": "B3-40"
+      }
+    },
+    {
+      "pid": "21516",
+      "pid_init": "ATSH7E0;ATCRA7E8;",
+      "parameters": {
+        "ENGINE_OIL_TEMP": "B14-40"
+      }
+    }
+  ]
+}
