@@ -35,3 +35,10 @@ jobs:
           message: Commit from GitHub Actions (Build Vehicle Profiles)
           pull: '--rebase --autostash'
           push: true
+      - name: Tell the manuals (meatpiHQ/meatpi-docs rebuilds its Supported vehicles page)
+        if: success()
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.DOCS_DISPATCH_TOKEN }}
+          repository: meatpiHQ/meatpi-docs
+          event-type: vehicle-profiles
