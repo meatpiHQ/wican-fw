@@ -14156,6 +14156,87 @@
       ]
     },
     {
+      "car_model": "Toyota: Corolla 2014-2019",
+      "init": "ATSP6;ATST96;",
+      "pids": [
+        {
+          "pid": "21281",
+          "pid_init": "ATSH7E0;ATCRA7E8;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B3:B5]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "21291",
+          "pid_init": "ATSH7C0;ATCRA7C8;",
+          "parameters": [
+            {
+              "name": "FUEL_L",
+              "expression": "B3/2",
+              "unit": "L",
+              "class": "none",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "01051",
+          "pid_init": "ATSH7E0;ATCRA7E8;",
+          "parameters": [
+            {
+              "name": "COOLANT_TMP",
+              "expression": "B3-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "01421",
+          "pid_init": "ATSH7E0;ATCRA7E8;",
+          "parameters": [
+            {
+              "name": "LV_V",
+              "expression": "[B3:B4]/1000",
+              "unit": "V",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "01461",
+          "pid_init": "ATSH7E0;ATCRA7E8;",
+          "parameters": [
+            {
+              "name": "OUTSIDE_TEMPERATURE",
+              "expression": "B3-40",
+              "unit": "°C",
+              "class": "temperature",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "21516",
+          "pid_init": "ATSH7E0;ATCRA7E8;",
+          "parameters": [
+            {
+              "name": "ENGINE_OIL_TEMP",
+              "expression": "B14-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Toyota: Hilux",
       "init": "ATST96;ATSP6;",
       "pids": [
