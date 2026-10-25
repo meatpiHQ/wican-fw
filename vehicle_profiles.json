@@ -14299,6 +14299,133 @@
       ]
     },
     {
+      "car_model": "Toyota: Sienna 2021-",
+      "init": "ATSP6;ATST96;",
+      "pids": [
+        {
+          "pid": "015B1",
+          "pid_init": "ATSH7E2;ATCRA7EA;",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "(B3*100)/255",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "01A61",
+          "pid_init": "ATSH7E2;ATCRA7EA;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B3:B6]/10",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "221F9A2",
+          "pid_init": "ATSH7D2;ATCRA7DA;",
+          "parameters": [
+            {
+              "name": "HV_V",
+              "expression": "B7*4",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "480"
+            },
+            {
+              "name": "HV_A",
+              "expression": "[S10:S11]*0.1",
+              "unit": "A",
+              "class": "current"
+            }
+          ]
+        },
+        {
+          "pid": "2218142",
+          "pid_init": "ATSH7D2;ATCRA7DA;",
+          "parameters": [
+            {
+              "name": "HV_T_1",
+              "expression": "[B5:B6]/256-50",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_2",
+              "expression": "((B7*256)+B9)/256-50",
+              "unit": "°C",
+              "class": "temperature"
+            },
+            {
+              "name": "HV_T_3",
+              "expression": "[B10:B11]/256-50",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2210021",
+          "pid_init": "ATSH7D2;ATCRA7DA;",
+          "parameters": [
+            {
+              "name": "LV_V",
+              "expression": "[B4:B5]*12.2/10000",
+              "unit": "V",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "21291",
+          "pid_init": "ATSH7C0;ATCRA7C8;",
+          "parameters": [
+            {
+              "name": "FUEL_L",
+              "expression": "B3/2",
+              "unit": "L",
+              "class": "none",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "01051",
+          "pid_init": "ATSH7E0;ATCRA7E8;",
+          "parameters": [
+            {
+              "name": "COOLANT_TMP",
+              "expression": "B3-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "01461",
+          "pid_init": "ATSH7E0;ATCRA7E8;",
+          "parameters": [
+            {
+              "name": "OUTSIDE_TEMPERATURE",
+              "expression": "B3-40",
+              "unit": "°C",
+              "class": "temperature",
+              "max": "100"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Volvo: XC40",
       "init": "ATST96;ATSP7;",
       "pids": [
