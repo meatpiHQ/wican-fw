@@ -279,6 +279,8 @@ void app_main(void)
               data_destinations_register_http);
     main_boot_init("event_manager_register_http", event_manager_register_http);
     main_boot_init("rtc_manager_register_http", rtc_manager_register_http);
+    main_boot_init("external_storage_register_http",
+              external_storage_register_http);
     main_boot_init("data_logger_register_http", data_logger_register_http);
     main_boot_init("imu_manager_register_http", imu_manager_register_http);
     main_boot_init("cert_manager_register_http", cert_manager_register_http);

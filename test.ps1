@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'espnleasy', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'espnleasy', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [string]$Port = 'COM10',  # UART0 external USB-serial = console/flash
@@ -37,8 +37,10 @@ param(
     [switch]$Flash,
     [switch]$NoReport,
     [switch]$SkipBenchCheck,  # bypass the physical-bench preflight
-    [switch]$NoConsole        # PC bench stages: do not open the DUT's console
+    [switch]$NoConsole,       # PC bench stages: do not open the DUT's console
                               # port beside the run (Start-ConsoleTail)
+    [switch]$SdFormat         # sdformat stage: really format the card WiCAN
+                              # cannot read (it erases the card)
 )
 
 # 'Continue', not 'Stop': PS 5.1 turns redirected native stderr into
@@ -877,6 +879,7 @@ function Show-Inventory {
     Write-Host '  espnleasy  - the ESPNetLink easy-setup surfaces on the DUT (2026-10-13): the usb summary on /api/status against /api/espnetlink, the sim_pin key (a no-op PUT, no restart), the UI doors in the served page, the GPS hint counting away from home (ap off on the P4 for 100 s, home again) (~6 min; needs the P4 daemon)'
     Write-Host '  garage     - the garage story with the ESPNetLink (2026-10-12): home WiFi on the P4, away on the dongle LTE with the VPN to betty, home again, flaps, a dongle reboot away, sleep/wake both ways; the data path judged at a receiver on betty by the source address of every POST; the default legs in usb_rndis with VPN variant A (~35 min; wifi_modem, variant B, g9 and g11 by hand)'
     Write-Host '  usbgps     - a USB GPS receiver is read by default (issue #978): the console switch off, the receiver read as NMEA from boot, the fix when the sky allows, gps_ in autopid and the HA push, the USB GPS receiver switch off = ignored, back on; then the USB page card, the switches and the Status row in Chrome (3 to 4 planned restarts, ~6 min)'
+    Write-Host '  sdformat   - the SD card format from the API (2026-10-25): the slot as found, an unreadable card named by what it holds with a quiet log (W line, no E line), the refusals (no phrase, a wrong phrase, a mounted card), the format behind the phrase and the mount after it with a file round trip, the boot after, then the real page in Chrome; the format legs need a card WiCAN cannot read in the slot and the switch -SdFormat (it erases the card), PARTIAL otherwise (0 to 1 planned restart, ~3 min)'
     Write-Host '  usbdetach  - a warm restart in the USB device role drops off the bus first (2026-10-17): the DUT cabled to this PC as a USB NCM device (one planned restart when it was host), warm restarts with the link up: gone from the PC within 5 s of each request (2.2 to 2.4 s measured), back, the link answers, software resets only; the internal heap before and after; the DUT stays in the device role (restore: python tools\testbench\usb\usb_detach_bench.py --only d4 --restore-host, a PSU power cycle inside) (~6 min)'
     Write-Host '  abrp       - the ABRP rows against the real Iternio API (2026-10-13): the key checked from the PC, host routes on the Pi for the run, the key as a query parameter / as the Authorization header / a wrong key, the counters over the window, the Test button, get_telemetry as the witness with a user token in internal/abrp_credentials.json (PARTIAL without one: the 401 refusals only), restore (2 planned restarts, ~5 min)'
     Write-Host '  backup     - the configuration backup that carries everything (issue #979): the file plain / redacted / encrypted after the key, the fs deny list, the round trips from a file and from the copy on the flash, the refusals, the sweep (8 planned restarts, ~7 min)'
@@ -1444,6 +1447,35 @@ try {
                     Save-StageLog 'log_clock' $out
                     if (-not ($out | Select-String -Quiet 'LOG CLOCK (PARTIAL )?PASS')) { throw 'no LOG CLOCK PASS (the DUT on the bench AP? the Pi can bind UDP 123? the OWON on this PC?)' }
                     if ($out | Select-String -Quiet 'LOG CLOCK PARTIAL PASS') { Write-Host 'bench: PARTIAL (a leg skipped)' -ForegroundColor Yellow }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                }
+            }
+        }
+        'sdformat' {
+            # The SD card format from the API (2026-10-25): the slot's state
+            # as found, an unreadable card reported by what it holds with no E
+            # line, the refusals, the format behind the typed phrase and the
+            # mount after it (a file round trip), the boot after, then the real
+            # page in Chrome through the same tunnel. The format legs run only
+            # with -SdFormat (the card is erased) and a card WiCAN cannot read
+            # in the slot; PARTIAL otherwise.
+            Invoke-Stage 'SD card format' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $benchArgs = @('--dut', 'localhost:18081')
+                    if ($SdFormat) { $benchArgs += '--format' }
+                    $out = & $py -u "$repo\tools\testbench\system\sdcard_format_bench.py" @benchArgs 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'sdcard_format' $out
+                    if (-not ($out | Select-String -Quiet 'SD FORMAT (PARTIAL )?PASS')) { throw 'no SD FORMAT PASS (the DUT on the bench AP? a card in the slot?)' }
+                    if ($out | Select-String -Quiet 'SD FORMAT PARTIAL PASS') { Write-Host 'bench: PARTIAL (the format legs need an unreadable card and -SdFormat)' -ForegroundColor Yellow }
+                    # the real page in Chrome through the same tunnel, against what the device says
+                    $ui = & node "$repo\tools\testbench\system\sdcard_ui_check.mjs" 'http://127.0.0.1:18081' 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'sdcard_ui' $ui
+                    if (-not ($ui | Select-String -Quiet 'SD CARD UI PASS')) { throw 'no SD CARD UI PASS' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                 }

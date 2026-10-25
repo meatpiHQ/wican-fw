@@ -41,9 +41,33 @@ static void on_sd_event(bool mounted)
     filesystem_sd_set_mounted(mounted);
 }
 
+/** The SD slot summary for GET /api/status (2026-10-25): the web UI's
+ *  notice bar and the pages that mention the card read it on the poll
+ *  they make anyway. Composition glue: dev_status_manager must not know
+ *  external_storage. False = no card in the slot (no `sd` object). */
+static bool sd_summary(dev_status_sd_t *out)
+{
+    external_storage_status_t st;
+
+    if (external_storage_status(&st) != ESP_OK ||
+        st.state == EXTERNAL_STORAGE_ABSENT)
+    {
+        return false;
+    }
+
+    snprintf(out->state, sizeof(out->state), "%s",
+             external_storage_state_str(st.state));
+    snprintf(out->reason, sizeof(out->reason), "%s", st.reason);
+    snprintf(out->name, sizeof(out->name), "%s", st.card_known ? st.name : "");
+    out->capacity_bytes = st.card_known ? st.capacity_bytes : 0;
+    out->serial = st.card_known ? st.serial : 0;
+    return true;
+}
+
 void main_glue_wire_sd(void)
 {
     external_storage_set_callback(on_sd_event);
+    dev_status_manager_set_sd_provider(sd_summary);
 }
 
 /** Composition glue: the OTA session drives the "do not power off" LED

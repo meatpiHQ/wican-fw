@@ -83,8 +83,14 @@ case "${1:-}" in
         HC="$COMP/http_client_manager"
         SRCS="$HC/host_test/main/test_main.c $HC/http_client_manager_auth.c"
         INC="-I$HC -I$HC/include" ;;
+    external_storage)
+        # the card-detect debouncer and the probe of what a card holds
+        # (2026-10-25: the SD card format feature, the rig offline)
+        ES="$COMP/external_storage"
+        SRCS="$ES/host_test/main/test_main.c $ES/es_detect.c $ES/es_probe.c"
+        INC="-I$ES -I$ES/include" ;;
     *)
-        echo "usage: $0 <vpn_manager|config_backup|restart_tracker|fw_update|partition_migrate|ota_manager|http_client_manager|espnetlink_link>"; exit 2 ;;
+        echo "usage: $0 <vpn_manager|config_backup|restart_tracker|fw_update|partition_migrate|ota_manager|http_client_manager|espnetlink_link|external_storage>"; exit 2 ;;
 esac
 
 gcc -std=gnu11 -DUNITY_INCLUDE_DOUBLE -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -O1 -g \

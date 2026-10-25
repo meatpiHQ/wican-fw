@@ -45,7 +45,8 @@ const drawn = (svg) => !!svg && svg.innerHTML.trim().length > 0;   /* an icon na
   const navLabels = $$("#menu .nav-btn .nl").map((e) => e.textContent.trim());
   check("the sidebar tab is called File Manager (no plain Files entry left)", navLabels.includes("File Manager") && !navLabels.includes("Files"), navLabels.filter((l) => /File/.test(l)));
   const mounts = $$("#view .fm-mount");
-  check("landing: one card per storage area with its usage", mounts.length === 2 && /Internal flash/.test(mounts[0].textContent) && /1\.01 MB of 5\.75 MB used/.test(mounts[0].textContent) && /SD card/.test(mounts[1].textContent) && /2\.83 GB/.test(mounts[1].textContent), mounts.map((m) => m.textContent.slice(0, 60)));
+  /* the mock's card reads 14.83 GB since 2026-10-11 (issue #982: 2.83 GB was the 32-bit wrap) */
+  check("landing: one card per storage area with its usage", mounts.length === 2 && /Internal flash/.test(mounts[0].textContent) && /1\.01 MB of 5\.75 MB used/.test(mounts[0].textContent) && /SD card/.test(mounts[1].textContent) && /14\.83 GB/.test(mounts[1].textContent), mounts.map((m) => m.textContent.slice(0, 60)));
   check("landing: only Refresh in the toolbar (Up / filter / sort / New folder / Upload / Delete selected hidden)",
     hid($("#view .fm-tools button[title='Up one level']")) && hid(btn("New folder")) && hid($("#view .fm-tools label.btn")) && hid($("#view input[type=search]")) && hid($("#view .fm-tools select")) && hid($("#view .fm-tools button[title='Delete every selected item']")) && !hid($("#view .fm-tools button[title='Refresh']")));
   check("landing: both storage icons really render (known icon names, sized tile)", drawn(mounts[0].querySelector(".mi svg")) && drawn(mounts[1].querySelector(".mi svg")) && /Open/.test(mounts[0].querySelector(".mo").textContent));
@@ -56,7 +57,7 @@ const drawn = (svg) => !!svg && svg.innerHTML.trim().length > 0;   /* an icon na
   check("known folders carry a one-line description", /logger output/.test(row("logs").textContent) && /firmware files/.test(row("fw").textContent));
   check("inside a folder the tools show, Delete selected stays hidden until something is selected", !hid(btn("New folder")) && !hid($("#view .fm-tools label.btn")) && !hid($("#view input[type=search]")) && hid($("#view .fm-tools button[title='Delete every selected item']")));
   check("file and folder rows draw a real icon", drawn(row("bench_ok.txt").querySelector(".fm-name svg")) && drawn(row("logs").querySelector(".fm-name svg")));
-  check("the usage line names the mount", /SD card · .* of 2\.83 GB used/.test($("#view .fm-use").textContent));
+  check("the usage line names the mount", /SD card · .* of 14\.83 GB used/.test($("#view .fm-use").textContent));
   row("logs").querySelector("a.fn").click(); await sleep(500);
   check("/sd/logs lists the eight fixture files with a Download link each", rows().length === 8 && $$("#view a[download]").length === 8 && w.location.hash === "#/files/sd/logs");
   check("Preview only on text files small enough (asc + the 41 KB jsonl)", $$("#view button").filter((b) => b.textContent.trim() === "Preview").length === 2);

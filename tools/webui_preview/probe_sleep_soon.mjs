@@ -37,7 +37,9 @@ const left = () => { const m = text().match(/Going to sleep in (\d+):(\d\d)\./);
 const until = async (fn, ms) => { const t = Date.now(); while (Date.now() - t < ms) { if (fn()) return true; await sleep(150); } return !!fn(); };
 
 await sleep(1500);
-check("the bar sits in the content area, above the page", !!bar() && bar().parentElement === $("main.content") && bar().nextElementSibling === $("#view"));
+/* the ESPNetLink bar (2026-10-13) and the SD card bar (2026-10-25) sit between the
+   sleep bar and the page: the page must still follow the bar in the content area */
+check("the bar sits in the content area, above the page", !!bar() && bar().parentElement === $("main.content") && !!(bar().compareDocumentPosition($("#view")) & 4) && $("#view").parentElement === $("main.content"));
 check("nothing counts on a healthy battery: no bar", !shown());
 
 /* the report: 11.6 V, a default device, the floor's 2 min under way */

@@ -2188,8 +2188,33 @@
     }
     return null;
   };
+  /* the SD slot (2026-10-25): __mockPreset.sd names the scene: "mounted" (the
+     default, the 16 GB bench card), "exfat" (the 64 GB factory card WiCAN cannot
+     read), "exfat_failfmt" (the same, the format fails), "blank", "unknown",
+     "failed" (a card that does not answer), "absent"; a format through
+     POST /api/sdcard/format takes __mockPreset.sdFormatMs (default 1500) and
+     then the card is mounted and empty. */
+  const SD_CARDS = {
+    big: { name: "SD64G", type: "SDHC/SDXC", capacity_bytes: 63864569856, sector_size: 512, speed_khz: 40000, serial: "6b2f91a4" },
+    bench: { name: "SC16G", type: "SDHC/SDXC", capacity_bytes: 15931539456, sector_size: 512, speed_khz: 40000, serial: "0d47c1e2" },
+  };
+  const SD_SCENES = {
+    mounted: { state: "mounted", reason: "", card: SD_CARDS.bench },
+    exfat: { state: "unreadable", reason: "exfat", card: SD_CARDS.big },
+    exfat_failfmt: { state: "unreadable", reason: "exfat", card: SD_CARDS.big, failfmt: true },
+    blank: { state: "unreadable", reason: "blank", card: SD_CARDS.bench },
+    unknown: { state: "unreadable", reason: "unknown", card: SD_CARDS.bench },
+    failed: { state: "failed", reason: "ESP_ERR_TIMEOUT", card: null },
+    absent: { state: "absent", reason: "", card: null },
+  };
+  const sdScene = SD_SCENES[(window.__mockPreset || {}).sd || "mounted"] || SD_SCENES.mounted;
   const state = {
     scan: { status: "idle", found: 0 },
+    sd: { state: sdScene.state, reason: sdScene.reason, card: sdScene.card ? { ...sdScene.card } : null, failfmt: !!sdScene.failfmt,
+          format: { state: "idle", error: "", took_ms: 0, age_s: 0, cluster_kb: sdScene.card && sdScene.card.capacity_bytes > 32 * 1024 * 1024 * 1024 ? 32 : 16, phrase: "format sdcard" },
+          fs: null, formatted: false },
+    sdPosts: [],
+    sdFormatMs: typeof (window.__mockPreset || {}).sdFormatMs === "number" ? window.__mockPreset.sdFormatMs : 1500,
     /* Quick Setup (2026-10-01): a probe presets window.__mockPreset before
        the page boots (fresh device = factory AP password); the vehicle
        identity file, the broker bit and HA's registration are toggles */
@@ -2250,7 +2275,7 @@
     dirs: new Set(),            /* folders created through /api/fs/mkdir */
     loggerRunning: false,       /* true -> /api/logger reports the active file (write-locked) */
     clockUnset: !!(window.__mockPreset || {}).clockUnset,   /* a boot without a clock: /api/rtc valid false */
-    sdMounted: true,            /* false -> /api/status says no card, /sd listings fail */
+    sdMounted: sdScene.state === "mounted",   /* false -> /api/status says no card, /sd listings fail */
     autopidCfg: (window.__mockPreset || {}).autopidCfg || {
       version: 1,
       groups: [{ name: "default", enabled_default: true, period_ms: 1000 }],
@@ -2273,7 +2298,7 @@
        __mockPreset.backup; staged = the backup under preview (file or copy) */
     backup: Object.assign({
       keyDownloaded: false, keyDownloadedAt: "", keyCreated: "2026-10-11T09:14:00Z",
-      sd: true, sdDeviceId: null, copies: true, copiesRefreshed: "2026-10-11T09:14:00Z",
+      sd: sdScene.state === "mounted", sdDeviceId: null, copies: true, copiesRefreshed: "2026-10-11T09:14:00Z",
       inspectAs: "plain_this",   /* what an uploaded file reads as: plain_this | enc_other | redacted | newer | v1 */
       held: false, heldSince: "2026-10-15T08:00:00Z",   /* the copies hold the settings from before a factory reset (issue #987) */
       leftOut: null,   /* [{name, why}] the databases part leaves out (issue #989): the status, the file, the preview */
@@ -2513,11 +2538,36 @@
   };
   const FW_NOTES = "# WiCAN PRO 6.1.0-alfa.2\n\n## Before you update\nUnits on this layout update in place.\n\n## New features\n- The device checks for and installs its own updates.\n- **Release notes** open here, fetched through the device.\n\n## Bug fixes\n- A `sha256` check before anything is activated (#973).\n\nMore at [meatpi-devices](https://github.com/meatpiHQ/meatpi-devices).\n";
 
+  /* the SD slot (2026-10-25): GET /api/sdcard, the `sd` summary on /api/status,
+     and the format that POST /api/sdcard/format starts (external_storage/HTTP_API.md) */
+  const sdDoc = () => {
+    const s = state.sd;
+    const o = { present: s.state !== "absent", mounted: s.state === "mounted", state: s.state, reason: s.reason, card: s.card ? { ...s.card } : null, format: { ...s.format } };
+    if (s.state === "mounted") o.fs = s.fs || { total: 15923707904, used: 327680 };
+    return o;
+  };
+  const sdSummary = () => (state.sd.state === "absent" ? undefined
+    : { state: state.sd.state, reason: state.sd.reason, name: state.sd.card ? state.sd.card.name : "", capacity_bytes: state.sd.card ? state.sd.card.capacity_bytes : 0, serial: state.sd.card ? state.sd.card.serial : "" });
+  const sdStartFormat = () => {
+    const s = state.sd, t0 = Date.now();
+    s.state = "formatting"; s.format = { ...s.format, state: "running", error: "", took_ms: 0, age_s: 0 };
+    setTimeout(() => {
+      if (s.failfmt) { s.state = "unreadable"; s.reason = "unknown"; s.format = { ...s.format, state: "failed", error: "write error at sector 2048 (ESP_ERR_INVALID_RESPONSE)", took_ms: Date.now() - t0 }; return; }
+      s.state = "mounted"; s.reason = ""; s.formatted = true;
+      s.fs = { total: Math.round(s.card.capacity_bytes * 0.9979), used: 65536 };
+      s.format = { ...s.format, state: "done", error: "", took_ms: Date.now() - t0 };
+      state.sdMounted = true; state.backup.sd = true;
+    }, state.sdFormatMs);
+  };
+  window.__mockSd = () => ({ sd: state.sd, posts: state.sdPosts });
+
   const FIXED = {
+    "/api/sdcard": () => J(sdDoc()),
     "/api/fw_update": () => J(fwStatus()),
     "/api/fw_update/notes": () => T(FW_NOTES),
     "/api/status": () => J({
       usb: (window.__mockPreset || {}).usbStatus || undefined,
+      sd: sdSummary(),
       bits: { awake: true, sleep: false, sta_connected: state.staConnected !== false, mqtt_connected: state.mqttConnected !== false, ble_connected: false, sdcard_mounted: state.sdMounted !== false, ble_enabled: false, sta_enabled: true, ap_enabled: true, autopid_enabled: true, home_mode: false, drive_mode: false, smartconnect: false, sta_ap_overlap: false, time_synced: true, vpn_enabled: true, wake_voltage_ok: !state.sleepPending, eth_connected: false, autopid_idle: false, motion: false, sta_suspended: false, ap_suspended: false, ble_suspended: false },
       network_connected: true, uptime: "02:14:09", version: "v6.0.0-preview", partition: "ota_0",
       boot_count: 42, unexpected_resets: 1, device_id: "14c19f44e349",
@@ -2662,8 +2712,9 @@
         : { valid: true, source: "sntp", steps_this_boot: 2, rotations_by_clock: 2, journal_bytes: 612, journal: "/sd/logs/clock.jsonl" },
       dir: "/sd/logs" }),
     "/api/fs/info": (full) => (/path=\/data/.test(full || "") ? J({ total: 6029312, used: 1060864 })
-      /* the bench's 16 GB card as the firmware reports it since 2026-10-11 (issue #982: 3038806016 before, the 32-bit wrap) */
-      : !state.sdMounted ? J({ error: "invalid path" }, 400) : J({ total: 15923707904, used: 327680 })),
+      /* the bench's 16 GB card as the firmware reports it since 2026-10-11 (issue #982: 3038806016 before, the 32-bit wrap);
+         a card just formatted (2026-10-25) reports its own size, nearly empty */
+      : !state.sdMounted ? J({ error: "backend unavailable" }, 503) : state.sd.fs ? J(state.sd.fs) : J({ total: 15923707904, used: 327680 })),
     /* the clock's history (2026-10-13): `clock` = who set it and the newest step; __mockPreset.clockUnset = a boot without a clock */
     "/api/rtc": () => state.clockUnset
       ? J({ time: "1970-01-01T00:02:11Z", valid: false, rtc: null, sntp: { enabled: true, server: "pool.ntp.org", last_sync: null },
@@ -2762,7 +2813,10 @@
     /* fixtures per folder + whatever probes uploaded (state.files) or created (state.dirs) */
     "/api/fs/list": (full) => {
       const p = ((new URLSearchParams((full || "").split("?")[1] || "")).get("path") || "/data").replace(/(.)\/$/, "$1");
-      if (!/^\/(data|sd)(\/|$)/.test(p) || (!state.sdMounted && /^\/sd/.test(p))) return J({ error: "invalid path" }, 400);
+      if (!/^\/(data|sd)(\/|$)/.test(p)) return J({ error: "invalid path" }, 400);
+      if (!state.sdMounted && /^\/sd/.test(p)) return J({ error: "backend unavailable" }, 503);
+      /* a card just formatted (2026-10-25) is empty */
+      if (state.sd.formatted && /^\/sd/.test(p)) return p === "/sd" ? J({ path: p, entries: [] }) : J({ error: "not found" }, 404);
       const fixed = p === "/sd/logs" ? [
           { name: "dl_" + String(state.logEpoch).padStart(10, "0") + ".jsonl", dir: false, size: 240000 },
           { name: "dl_" + String(state.logEpoch).padStart(10, "0") + ".csv", dir: false, size: 120000 },
@@ -2803,6 +2857,18 @@
     const method = ((opts && opts.method) || "GET").toUpperCase();
     const body = opts && typeof opts.body === "string" ? (() => { try { return JSON.parse(opts.body); } catch { return null; } })() : null;
 
+    /* the SD card format (2026-10-25): the phrase, then the slot's state decides */
+    if (method === "POST" && path === "/api/sdcard/format") {
+      const s = state.sd;
+      state.sdPosts.push(body || {});
+      if (!body || body.confirm !== "format sdcard") return J({ error: "confirm with {\"confirm\":\"format sdcard\"}" }, 400);
+      if (s.state === "absent") return J({ error: "no card in the slot" }, 409);
+      if (s.state === "mounted") return J({ error: "the card is mounted and in use: nothing to format" }, 409);
+      if (s.state === "failed") return J({ error: "the card does not answer: it cannot be formatted" }, 409);
+      if (s.state === "formatting") return J({ error: "a format is already running" }, 409);
+      sdStartFormat();
+      return J({ state: "formatting" }, 202);
+    }
     /* firmware updates (2026-10-18): the three POSTs of /api/fw_update */
     if (method === "POST" && path === "/api/fw_update/check") {
       if (state.fwJob && state.fwJob.active && state.fwJob.version) return J({ error: "another update job is running", code: "busy" }, 409);
@@ -3357,17 +3423,23 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--primary);outline-of
 #sleepbar a{white-space:nowrap;font-weight:700}
 #sleepbar.crit{background:var(--warning-tint);border-bottom-color:color-mix(in srgb,var(--warning) 35%,transparent)}
 #sleepbar.crit svg{color:var(--warning)}
-#nlbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;padding:9px 32px;font-size:13px;font-weight:550;
+#nlbar,#sdbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;padding:9px 32px;font-size:13px;font-weight:550;
   color:var(--text-2);background:var(--primary-tint);border-bottom:1px solid color-mix(in srgb,var(--primary) 25%,transparent)}
-#nlbar[hidden]{display:none}
-#nlbar svg{width:16px;height:16px;flex:none;color:var(--primary)}
-#nlbar b{color:var(--text);font-variant-numeric:tabular-nums}
-#nlbar .sb-hold{margin-left:auto;white-space:nowrap}
+#nlbar[hidden],#sdbar[hidden]{display:none}
+#nlbar svg,#sdbar svg{width:16px;height:16px;flex:none;color:var(--primary)}
+#nlbar b,#sdbar b{color:var(--text);font-variant-numeric:tabular-nums}
+#nlbar .sb-hold,#sdbar .sb-hold{margin-left:auto;white-space:nowrap}
 #nlbar .sb-hold[hidden]{display:none}
 #nlbar .sb-hold[hidden]~a{margin-left:auto}
-#nlbar a{white-space:nowrap;font-weight:700}
-#nlbar.crit{background:var(--warning-tint);border-bottom-color:color-mix(in srgb,var(--warning) 35%,transparent)}
-#nlbar.crit svg{color:var(--warning)}
+#nlbar a,#sdbar a{white-space:nowrap;font-weight:700}
+#nlbar.crit,#sdbar{background:var(--warning-tint);border-bottom-color:color-mix(in srgb,var(--warning) 35%,transparent)}
+#nlbar.crit svg,#sdbar svg{color:var(--warning)}
+/* the SD card bar (2026-10-25): a card that does not answer at all reads as a fault */
+#sdbar.dead{background:var(--danger-tint);border-bottom-color:color-mix(in srgb,var(--danger) 35%,transparent)}
+#sdbar.dead svg{color:var(--danger)}
+.sd-facts{display:grid;grid-template-columns:max-content 1fr;gap:5px 16px;align-items:start;padding:10px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;font-size:13px}
+.sd-facts .k{font-weight:600;color:var(--text-3);font-size:12px;padding-top:1px}
+.sd-phrase{font-family:var(--mono);font-weight:700;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:1px 7px}
 /* Logger page (meatpi 2026-09-06): state chips + per-stream figure blocks */
 .lg-chips{display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 10px}
 .lg-stream h4{margin:6px 0 2px;font-size:12.5px;font-weight:700;color:var(--text-2);display:flex;align-items:center;gap:7px}
@@ -3837,7 +3909,7 @@ input[type="range"]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px var
     </button>
   </header>
   <nav class="app-nav" id="menu"></nav>
-  <main class="content"><div id="sleepbar" role="status" hidden></div><div id="nlbar" role="status" hidden></div><div class="page" id="view"><div class="loading"><div class="spinner"></div></div></div></main>
+  <main class="content"><div id="sleepbar" role="status" hidden></div><div id="nlbar" role="status" hidden></div><div id="sdbar" role="status" hidden></div><div class="page" id="view"><div class="loading"><div class="spinner"></div></div></div></main>
 </div>
 <div id="offline"><span class="d"></span><span id="offtx"></span></div>
 <div id="toasts"></div>
@@ -4186,6 +4258,110 @@ function paintNlBar(){
   else el.replaceChildren(ic("signal"),h("span",{},h("b",{},"ESPNetLink connected."),h("span",{class:"sb-why"}," "+[s.sim==="ready"?"SIM found":s.sim==="pin"?"SIM locked by a PIN":s.sim==="pin_wrong"?"the SIM refused the PIN":s.sim==="missing"?"no SIM":"",s.lte?(s.operator||"LTE")+" connected":"LTE connecting",s.gps_fix?"GPS fix":"GPS no fix yet"].filter(Boolean).join(", ")+".")),
     h("button",{class:"btn sm pri sb-hold",onclick:()=>{location.hash="#/espnetlink";}},"Finish setup"),h("a",{href:"#",onclick:e=>{e.preventDefault();dismiss();}},"OK"));
 }
+/* The SD card bar (2026-10-25): a card in the slot WiCAN cannot read (exFAT,
+   the factory format of cards over 32 GB; NTFS; blank; damaged) or one that
+   does not answer, from the status poll's `sd` summary (external_storage's
+   probe runs BEFORE any mount, so the words name what the card holds).
+   "Not now" is per card and state, in this browser. The format dialog below
+   is shared with the Status row, the File Manager tile, the Logger chips and
+   the backup copies row (external_storage/HTTP_API.md). */
+const SD_SEEN="wican-sd-seen";
+const SD_PHRASE="format sdcard";
+const SD_FOUND={exfat:"exFAT, the factory format of cards over 32 GB. WiCAN reads FAT32 only.",ntfs:"NTFS. WiCAN reads FAT32 only.",
+  blank:"No filesystem: the card is blank.",gpt:"A GPT partition table. WiCAN reads FAT32 only.",
+  unknown:"A filesystem WiCAN does not know, or a damaged one.",fat_corrupt:"A FAT32 filesystem too damaged to mount."};
+function sdSummary(){const s=conn.status&&conn.status.sd;return s&&s.state?s:null;}
+const sdAttention=s=>!!s&&(s.state==="unreadable"||s.state==="failed");
+const sdCardLine=c=>c?[c.name,c.capacity_bytes?fmt.bytes(c.capacity_bytes):"",c.type].filter(Boolean).join(" · "):"SD card";
+function sdShort(s){return s.state==="failed"?"Inserted, not answering":s.reason==="exfat"?"Inserted, exFAT: not readable":s.reason==="blank"?"Inserted, blank":"Inserted, not readable";}
+function sdBarWords(s){const sz=s.capacity_bytes?fmt.bytes(s.capacity_bytes)+" ":"";
+  if(s.state==="failed")return{lead:"SD card inserted, but it does not answer.",why:"WiCAN could not talk to it ("+s.reason+"). Take it out and put it back in; if it still does not answer, try another card."};
+  if(s.reason==="blank")return{lead:"SD card inserted, but it has no filesystem.",why:"The "+sz+"card is blank. Format it as FAT32 to use it for logs and backups."};
+  if(s.reason==="exfat")return{lead:"SD card inserted, but WiCAN cannot read it.",why:"The "+sz+"card is formatted as exFAT, the factory format of cards over 32 GB; WiCAN reads FAT32 only. Format it as FAT32 to use it for logs and backups: everything on the card is erased."};
+  if(s.reason==="ntfs")return{lead:"SD card inserted, but WiCAN cannot read it.",why:"The "+sz+"card is formatted as NTFS; WiCAN reads FAT32 only. Format it as FAT32 to use it: everything on the card is erased."};
+  return{lead:"SD card inserted, but WiCAN cannot read it.",why:"What is on the "+sz+"card is not FAT32, or its filesystem is damaged. Format it as FAT32 to use it for logs and backups: everything on the card is erased."};}
+const sdFormatLink=txt=>h("a",{href:"#",class:"sd-fmt-link",onclick:e=>{e.preventDefault();sdFormatDialog();}},txt||"Format…");
+/* the Status row's value (the Logger's chips and the copies row follow the same words) */
+function sdRowValue(mountedWord){const s=sdSummary();if(!sdAttention(s))return mountedWord;
+  if(s.state==="failed")return h("span",{class:"rowflex",style:"gap:8px;flex-wrap:wrap;align-items:center"},chip(sdShort(s),"crit"),h("span",{class:"help"},s.reason));
+  return h("span",{class:"rowflex",style:"gap:8px;flex-wrap:wrap;align-items:center"},chip(sdShort(s),"warn"),sdFormatLink());}
+function paintSdBar(){
+  const el=$("#sdbar");if(!el)return;
+  const s=sdSummary();
+  let seen="";try{seen=localStorage.getItem(SD_SEEN)||"";}catch(_){}
+  const key=s?(s.serial||s.name||"x")+":"+s.state:"";
+  const on=conn.state==="online"&&sdAttention(s)&&seen!==key&&!location.hash.startsWith("#/setup");
+  el.hidden=!on;if(!on){el.dataset.kind="";return;}
+  const kind=s.state+":"+s.reason+":"+(s.serial||"");
+  if(el.dataset.kind===kind)return;
+  el.dataset.kind=kind;el.classList.toggle("dead",s.state==="failed");
+  const dismiss=()=>{try{localStorage.setItem(SD_SEEN,key);}catch(_){}el.dataset.kind="";el.hidden=true;};
+  const w=sdBarWords(s);
+  el.replaceChildren(ic(s.state==="failed"?"alert":"harddrive"),h("span",{},h("b",{},w.lead),h("span",{class:"sb-why"}," "+w.why)),
+    s.state==="failed"?h("a",{href:"#",class:"sb-hold",onclick:e=>{e.preventDefault();dismiss();}},"OK")
+    :[h("button",{class:"btn sm pri sb-hold",onclick:()=>sdFormatDialog()},"Format the card…"),h("a",{href:"#",onclick:e=>{e.preventDefault();dismiss();}},"Not now")]);
+}
+/* the format dialog: ask, type the words, progress, outcome. The device answers
+   202 at once and formats on its detect task; the page asks GET /api/sdcard once
+   a second. Only a card WiCAN cannot read is ever offered (the route refuses a
+   mounted card), and the words must match before Continue works. */
+async function sdFormatDialog(){
+  const info=await tryGet("/api/sdcard");
+  if(!info||!info.present){toast("No SD card in the slot","err");return;}
+  if(info.state==="mounted"){toast("The card is mounted and in use: nothing to format","err");return;}
+  if(info.state==="formatting"){sdFormatRun(info,true);return;}
+  if(info.state==="failed"){modal({title:"The SD card does not answer",body:h("p",{},"WiCAN could not talk to the card ("+info.reason+"), so it cannot be formatted either. Take it out and put it back in; if it still does not answer, try another card."),actions:[{label:"Close"}]});return;}
+  sdFormatAsk(info);
+}
+function sdFormatAsk(info){
+  const fact=(k,v)=>[h("span",{class:"k"},k),h("span",{},v)];
+  const body=h("div",{style:"display:flex;flex-direction:column;gap:12px"},
+    h("p",{style:"margin:0;font-size:13.5px;color:var(--text-2)"},"WiCAN cannot read this card as it is. Formatting writes a fresh FAT32 filesystem on it, the one WiCAN, phones and computers all read."),
+    h("div",{class:"sd-facts"},...fact("Card",sdCardLine(info.card)),...fact("Found",SD_FOUND[info.reason]||SD_FOUND.unknown),...fact("After","FAT32, one partition, "+(info.format&&info.format.cluster_kb||16)+" KB clusters, empty")),
+    banner("warn","alert",h("b",{},"Everything on the card is erased.")," If it holds files you still need, take the card out and copy them on a computer first."),
+    h("div",{class:"help"},"Takes a few seconds to about a minute, depending on the card. The logger and the backup copies start using the card as soon as it is done."));
+  modal({title:"Format the SD card?",body,actions:[{label:"Cancel"},{label:"Yes, format it",kind:"danger",fn:()=>sdFormatPhrase(info)}]});
+}
+function sdFormatPhrase(info){
+  const inp=h("input",{type:"text",class:"mono",id:"sd-phrase",placeholder:SD_PHRASE,autocomplete:"off",spellcheck:"false",style:"width:100%;max-width:320px"});
+  const body=h("div",{style:"display:flex;flex-direction:column;gap:10px"},
+    h("p",{style:"margin:0;font-size:13.5px;color:var(--text-2)"},"To be sure this is what you want, type ",h("span",{class:"sd-phrase"},SD_PHRASE)," and press Continue. The ",h("b",{},sdCardLine(info.card))," is erased and formatted as FAT32."),
+    h("div",{},inp),h("div",{class:"help"},"Capital letters do not matter. Continue stays off until the words match."));
+  modal({title:"Type the words to continue",body,actions:[{label:"Cancel"},{label:"Continue",kind:"danger",fn:()=>sdFormatRun(info,false)}]});
+  const btn=[...document.querySelectorAll("#modal-root .acts button")].find(b=>b.textContent==="Continue");
+  const sync=()=>{btn.disabled=inp.value.trim().toLowerCase().replace(/\s+/g," ")!==SD_PHRASE;};
+  sync();inp.oninput=sync;inp.onkeydown=e=>{if(e.key==="Enter"&&!btn.disabled)btn.click();};setTimeout(()=>inp.focus(),30);
+}
+async function sdFormatRun(info,resume){
+  if(!resume){try{await api("/api/sdcard/format",{method:"POST",body:{confirm:SD_PHRASE}});}catch(e){toast("Format refused: "+e.message,"err");return;}}
+  const t0=Date.now();const elapsed=h("span",{class:"mono"},"0 s");
+  const body=h("div",{style:"display:flex;flex-direction:column;gap:12px"},
+    h("div",{class:"rowflex",style:"gap:14px;align-items:center"},h("div",{class:"spinner",style:"flex:none"}),h("div",{},h("b",{},"Writing a FAT32 filesystem on the "+sdCardLine(info.card)+"."),h("div",{class:"help"},"Do not take the card out or power WiCAN off. Running for ",elapsed,"."))),
+    h("div",{class:"help"},"WiCAN answered at once and formats on its own; this page asks it once a second how it is going."));
+  const close=modal({title:"Formatting the SD card",body,actions:[]});
+  $("#modal-root").onclick=null; /* no backdrop close while it runs */
+  const tick=async()=>{elapsed.textContent=Math.round((Date.now()-t0)/1000)+" s";
+    const s=await tryGet("/api/sdcard");
+    if(!s){setTimeout(tick,1000);return;}
+    if(!s.present){close();toast("The SD card was taken out.","err");return;}
+    if(s.state==="formatting"){setTimeout(tick,1000);return;}
+    close();if(s.state==="mounted"&&s.format&&s.format.state==="done")sdFormatDone(s);else sdFormatFailed(s,info);};
+  setTimeout(tick,400);
+}
+function sdFormatDone(s){const fs=s.fs||{};const cap=fs.total||(s.card&&s.card.capacity_bytes)||0;
+  const body=h("div",{style:"display:flex;flex-direction:column;gap:12px"},
+    h("div",{class:"rowflex",style:"gap:8px;align-items:center;flex-wrap:wrap"},chip("Mounted at /sd","ok"),chip("FAT32","info"),chip(fmt.bytes(cap-(fs.used||0))+" free","info")),
+    h("p",{style:"margin:0;font-size:13.5px;color:var(--text-2)"},"The "+sdCardLine(s.card)+" is ready: formatted in "+((s.format.took_ms||0)/1000).toFixed(1)+" s. The logger, the backup copies and the File Manager use it from now on."),
+    h("div",{class:"help"},"A computer reads the card too: FAT32 on one partition, like a card formatted on Windows."));
+  modal({title:"SD card ready",body,actions:[{label:"Open File Manager",fn:()=>{location.hash="#/files/sd";}},{label:"Close",kind:"pri"}]});
+  ping(); /* the bar goes and the Status row reads Mounted without waiting for the next poll */
+}
+function sdFormatFailed(s,info){
+  const body=h("div",{style:"display:flex;flex-direction:column;gap:12px"},
+    banner("crit","alert",h("b",{},"The format did not finish.")," "+((s.format&&s.format.error)||"unknown error")+"."),
+    h("p",{style:"margin:0;font-size:13.5px;color:var(--text-2)"},"The card may be worn out, or write-protected by the small switch on a full-size adapter. Try again; if it fails twice, try the card on a computer, or another card."));
+  modal({title:"The format failed",body,actions:[{label:"Close"},{label:"Try again",kind:"danger",fn:()=>sdFormatRun(info,false)}]});
+}
 function sleepAckModal(){return new Promise(res=>{
   const cb=h("input",{type:"checkbox"});
   const body=h("div",{},
@@ -4293,7 +4469,7 @@ function expectReboot(reason="Rebooting"){conn.rebootUntil=Date.now()+95000;setC
 async function ping(){
   try{const st=await api("/api/status");conn.status=st;
     conn.wifi=await tryGet("/api/wifi/status");
-    paintApWarn();paintNlBar();
+    paintApWarn();paintNlBar();paintSdBar();
     setConn("online");
     /* under the sleep voltage, or a countdown on the bar: keep it honest */
     if((st&&st.bits&&st.bits.wake_voltage_ok===false)||sleepSoon.cause!=="none")refreshSleep();
@@ -4915,7 +5091,7 @@ async function route(){
       actions:[{label:"Stay",fn:()=>res(true)},{label:"Discard",kind:"danger",fn:()=>{store.pending.clear();store.dirty.clear();renderSubmit();res(false);}},{label:"Submit",kind:"pri",fn:()=>{store.apply();res(true);}}]}));
     if(stay){location.hash="#/"+curSection;return;}
   }
-  curSection=section;paintNlBar();
+  curSection=section;paintNlBar();paintSdBar();
   buildMenu(section,sub);
   if(cleanup){try{cleanup();}catch{}cleanup=null;}
   subNav=null;
@@ -4929,24 +5105,27 @@ function page(view,crumb,title,desc,tools){const p=h("div",{class:"page"});view.
 
 /* ============================================================ VEHICLE PROFILES (shared by Automate > Parameters and Quick Setup, 2026-10-01) */
 const PROFILES_URL="https://raw.githubusercontent.com/meatpiHQ/wican-fw/main/vehicle_profiles.json";
-/* Turns a published profile into vehicle-specific PID rows. Published
-   profiles index the frame WITH its PCI byte; the v6 payload starts at the
-   service echo, so every B<n>/S<n> index shifts DOWN BY ONE (autopid README
-   importer rule 1). The published file carries a latin-1 degree sign that
+/* Turns a published profile into vehicle-specific PID rows. The
+   expressions go in AS PUBLISHED (2026-10-24, issue #1014): the firmware
+   reads every reply as the chip prints it with headers on, every frame's
+   bytes after the CAN id with the ISO-TP framing bytes counted, which is
+   the frame of reference the legacy firmware had and the published
+   profiles use (autopid README importer rule 1). Until 2026-10-24 every
+   B<n>/S<n> index was shifted down by one here, right for a single-frame
+   reply only. The published file carries a latin-1 degree sign that
    decodes to U+FFFD: units are normalised (meatpi 2026-09-06). Profiles are
    community data and the firmware keys its value cache by parameter name,
    so a repeated name is refused whole ("duplicate parameter name"; the
    HV_C_V_168 typo, 2026-09-16): repeats are renamed (_2, _3, ...) against
    everything in keepPids and reported. Returns {pids, renamed}. */
 function profileToPids(car,keepPids){
-  const shiftExpr=x=>String(x||"").replace(/([BS])(\d+)/g,(m,l,n)=>l+Math.max(0,Number(n)-1));
   const fixUnit=u=>typeof u==="string"?u.replace(/�/g,"°"):u;
   const taken=new Set((keepPids||[]).flatMap(pd=>(pd.parameters||[]).map(pr=>pr.name)));
   const renamed=[],pids=[];
   const uniq=n=>{if(!n||!taken.has(n)){taken.add(n);return n;}
     let k=2;while(taken.has(n+"_"+k))k++;taken.add(n+"_"+k);renamed.push(n+" to "+n+"_"+k);return n+"_"+k;};
   for(const pp of((car&&car.pids)||[])){
-    const prm=(pp.parameters||[]).map(x=>({...x,name:uniq(String(x.name||"")),unit:fixUnit(x.unit),expression:shiftExpr(x.expression)}));
+    const prm=(pp.parameters||[]).map(x=>({...x,name:uniq(String(x.name||"")),unit:fixUnit(x.unit),expression:String(x.expression||"")}));
     pids.push({name:(prm.length===1&&prm[0].name)||pp.pid,cmd:pp.pid,init:pp.pid_init||"",group:"default",period_ms:0,type:"specific",parameters:prm});
   }
   return{pids,renamed};
@@ -5179,7 +5358,7 @@ PAGES.status=async(view)=>{
         ["OBD chip",b.awake===false?"Asleep":"Ready"],
         ["Motion (IMU)",imu?(imu.activity+(imu.temp!=null?" · "+imu.temp+" °C":"")):"-"],
         gpsRow(gps,acm),
-        ["SD card",b.sdcard_mounted?"Mounted":"Not mounted"],
+        ["SD card",sdRowValue(b.sdcard_mounted?"Mounted":"Not mounted")],
         ["Internal RAM free",st.memory?fmt.bytes(st.memory.internal.free):"-"],
         ["Die temperature",st.temp_c!=null?st.temp_c.toFixed(1)+" °C":"-"]])));
   }
@@ -5943,7 +6122,7 @@ PAGES.automate=async(view,sub)=>{
           h("div",{class:"help",style:"margin-bottom:4px"},"Sent (>) and received (<)"+(ms?" · the request answered in "+ms:"")),
           h("div",{class:"console",style:"height:auto;min-height:56px;max-height:240px;overflow:auto;padding:8px 10px;font-family:var(--mono);font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-all"},...lines),
           r.error?h("div",{class:"help",style:"color:var(--danger);margin-top:6px"},r.error):null,
-          r.payload?h("div",{class:"help",style:"margin-top:6px"},"Payload after the service echo: ",h("span",{class:"mono"},r.payload)):null,
+          r.payload?h("div",{class:"help",style:"margin-top:6px"},"Reply bytes as the expressions count them (B0 is the first byte after the CAN id): ",h("span",{class:"mono"},r.payload)):null,
           rows.length?h("div",{style:"margin-top:10px"},
             h("div",{class:"help",style:"margin-bottom:2px"},"Decoded"),
             ...rows.map(r0=>h("div",{class:"rowflex",style:"gap:8px;padding:4px 0;border-bottom:1px solid var(--border)"},
@@ -6043,14 +6222,14 @@ PAGES.automate=async(view,sub)=>{
                cycle time for every PID is 0" after loading a profile) */
             fld("Cycle (ms)",h("input",{class:"mono",type:"number",min:"0",value:pd.period_ms||"",placeholder:"group: "+groupRate(pd),title:"Empty = the group's rate, "+groupRate(pd)+". A value here overrides it for this PID only.",onchange:e=>{pd.period_ms=Number(e.target.value)||0;markDirty();}})),
             isPgn(pd)?fld("J1939",h("span",{class:"help",style:"display:block;padding-top:6px"},pgnLabel(pd)+". No init, no reply header: the listener keeps the newest message of every group, this row decodes it (B0 = the first data byte)."))
-              :fld("PID init (optional AT chain)",h("input",{class:"mono",value:pd.init||"",placeholder:"ATSP6;ATSH7E4;",title:"Sent before this PID's request whenever the poller switches to it",onchange:e=>{pd.init=e.target.value;markDirty();}})));
+              :fld("PID init (optional AT chain)",h("input",{class:"mono",value:pd.init||"",placeholder:"ATSP6;ATSH7E4;",title:"Sent before this PID's request whenever the poller switches to it. ATH0, ATS0 and ATE1 are ignored: the poller reads replies with headers and spaces on.",onchange:e=>{pd.init=e.target.value;markDirty();}})));
           const prmHead=h("div",{class:"prm prm-head"},h("span",{}),h("span",{},"Parameter"),h("span",{},"Expression"),h("span",{},"Unit"),h("span",{class:"r"},"Live"),h("span",{}));
           const prmRows=pd.parameters.map(pr=>{
             const pon=pr.enabled!==false;
             const prow=h("div",{class:"prm"+(pon?"":" off")});
             const psw=switchCtl(pon,v=>{pr.enabled=v;prow.classList.toggle("off",!v);markDirty();},{sm:true,noText:true,title:"Include this parameter"});
-            const expr=h("input",{class:"mono"+((pr.expression||"").trim()?"":" bad"),value:pr.expression||"",placeholder:"(B2*256+B3)/4",
-              title:"Decode expression over the reply bytes (B0..Bn); B14:5 selects a bit",
+            const expr=h("input",{class:"mono"+((pr.expression||"").trim()?"":" bad"),value:pr.expression||"",placeholder:"(B3*256+B4)/4",
+              title:"Decode expression over the reply bytes as the ELM327 prints them with headers on: B0 is the first byte after the CAN id (the ISO-TP length byte), so the RPM reply 04 41 0C 1A F8 reads [B3:B4]/4, and a long reply counts its 21, 22, ... framing bytes too, as the vehicle profiles do. B14:5 selects a bit.",
               oninput:e=>{e.target.classList.toggle("bad",!e.target.value.trim());},onchange:e=>{pr.expression=e.target.value;markDirty();}});
             prow.append(psw,
               h("input",{value:pr.name||"",placeholder:"ParameterName",onchange:e=>{pr.name=e.target.value;markDirty();refreshLive();}}),
@@ -6131,10 +6310,10 @@ PAGES.automate=async(view,sub)=>{
       const applyBtn=h("button",{class:"btn pri sm",onclick:saveCfg},"Apply Configuration");
       return h("div",{},groupHead("custom"),tbl,
         h("div",{class:"rowflex",style:"gap:8px;margin-top:12px;flex-wrap:wrap"},
-          h("button",{class:"btn sm",onclick:()=>{cfg.pids.push({name:"NewPID",cmd:"010C1",group:"default",period_ms:1000,type:"custom",parameters:[{name:"NewPID",expression:"B2",unit:""}]});paneEl.replaceChildren(custPane());}},ic("plus"),"Add PID"),
+          h("button",{class:"btn sm",onclick:()=>{cfg.pids.push({name:"NewPID",cmd:"010C1",group:"default",period_ms:1000,type:"custom",parameters:[{name:"NewPID",expression:"B3",unit:""}]});paneEl.replaceChildren(custPane());}},ic("plus"),"Add PID"),
           h("button",{class:"btn sm",title:"A J1939 parameter group read from the listener (trucks): PGN:<hex>[@<source>][?]",onclick:()=>{cfg.pids.push({name:"EngineSpeed",cmd:"PGN:F004",group:"default",period_ms:1000,type:"custom",parameters:[{name:"EngineSpeed",expression:"(B3+B4*256)*0.125",unit:"rpm"}]});paneEl.replaceChildren(custPane());}},ic("plus"),"Add PGN"),
           h("span",{class:"grow"}),applyBtn),
-        note("","Command is the raw OBD/UDS request (e.g. 010C1 or 22F1901); expand a PID (▸) to edit the parameters decoding its reply bytes (B0…Bn). A J1939 group is PGN:<hex>, with @<source> to pin one controller and ? for a group sent on request only: in J1939 active mode (Settings > CAN) WiCAN asks for it at the row's period, once a second at most; in listen mode the row shows what another node asked for. Groups are read from the J1939 listener, B0 is the first data byte and words are little-endian (B3+B4*256). Passive CAN filters: Raw Config."));
+        note("","Command is the raw OBD/UDS request (e.g. 010C1 or 22F1901); expand a PID (▸) to edit the parameters decoding its reply bytes (B0…Bn). The bytes are counted as the ELM327 prints a reply with headers on, B0 being the first byte after the CAN id (the ISO-TP length byte): the RPM reply 04 41 0C 1A F8 reads [B3:B4]/4, the same numbering as the vehicle profiles and the legacy firmware; a long reply counts its 21, 22, ... framing bytes too. ATH0, ATS0 and ATE1 in an init chain are ignored. A J1939 group is PGN:<hex>, with @<source> to pin one controller and ? for a group sent on request only: in J1939 active mode (Settings > CAN) WiCAN asks for it at the row's period, once a second at most; in listen mode the row shows what another node asked for. Groups are read from the J1939 listener, B0 is the first data byte and words are little-endian (B3+B4*256). Passive CAN filters: Raw Config."));
     }
     /* shared helpers since 2026-10-01: profileToPids / vehicleProfilePicker
        (top level) serve this page and Quick Setup */
@@ -6234,7 +6413,7 @@ PAGES.automate=async(view,sub)=>{
           h("a",{class:"btn sm gh",href:"https://github.com/meatpiHQ/wican-fw",target:"_blank"},"Profile repository")));
       return h("div",{},groupHead("specific"),tbl,banner,
         h("div",{class:"rowflex",style:"gap:8px;margin-top:12px;flex-wrap:wrap"},
-          h("button",{class:"btn sm",onclick:()=>{cfg.pids.push({name:"NewPID",cmd:"22F1901",group:"default",period_ms:0,type:"specific",init:"",parameters:[{name:"NewPID",expression:"B3",unit:""}]});markDirty();tbl.rebuild();}},ic("plus"),"Add PID"),
+          h("button",{class:"btn sm",onclick:()=>{cfg.pids.push({name:"NewPID",cmd:"22F1901",group:"default",period_ms:0,type:"specific",init:"",parameters:[{name:"NewPID",expression:"B4",unit:""}]});markDirty();tbl.rebuild();}},ic("plus"),"Add PID"),
           h("span",{class:"grow"}),
           h("button",{class:"btn pri sm",onclick:saveCfg},"Apply Configuration")),
         dropZone,
@@ -6491,8 +6670,11 @@ PAGES.logger=async(view)=>{
   async function status(){
     const[l,rtcNow]=await Promise.all([tryGet("/api/logger"),tryGet("/api/rtc")]);if(!l)return;
     const can=l.can||{};const sd=isMounted();
-    const state=!l.enabled?chip("Off",""):l.paused?chip("Paused","warn"):(l.running&&l.storage_ok)?chip("Recording","ok"):sd?chip("Waiting for storage","warn"):chip("No SD card","crit");
-    const storage=sd?chip(sdInfo&&sdInfo.total?"SD card · "+fmt.bytes(sdInfo.used)+" of "+fmt.bytes(sdInfo.total)+" used":"SD card mounted","ok"):chip("No SD card","crit");
+    /* a card in the slot WiCAN cannot read (2026-10-25): say so, offer the format */
+    const sds=sdSummary(),sdBad=!sd&&sdAttention(sds);
+    const state=!l.enabled?chip("Off",""):l.paused?chip("Paused","warn"):(l.running&&l.storage_ok)?chip("Recording","ok"):sd?chip("Waiting for storage","warn"):sdBad?chip("Not recording","warn"):chip("No SD card","crit");
+    const storage=sd?chip(sdInfo&&sdInfo.total?"SD card · "+fmt.bytes(sdInfo.used)+" of "+fmt.bytes(sdInfo.total)+" used":"SD card mounted","ok")
+      :sdBad?[chip(sds.state==="failed"?"SD card not answering":"SD card inserted, not readable","crit"),sds.state==="failed"?null:sdFormatLink("Format the card…")]:chip("No SD card","crit");
     const chips=h("div",{class:"lg-chips"},state,storage);
     if(l.errors)chips.append(chip(fmt.num(l.errors)+" write errors","crit"));
     if(l.salvaged)chips.append(chip(fmt.num(l.salvaged)+" records recovered after the last reset","info"));
@@ -6534,7 +6716,9 @@ PAGES.logger=async(view)=>{
     return when||"clock not set";
   };
   async function loadFiles(){
-    if(!isMounted()){filesWrap.replaceChildren(h("div",{class:"empty"},"No SD card: insert one to record logs."));return;}
+    if(!isMounted()){const sds=sdSummary();
+      filesWrap.replaceChildren(h("div",{class:"empty"},sdAttention(sds)?(sds.state==="failed"?"An SD card is in the slot, but it does not answer ("+sds.reason+"). Take it out and put it back in."
+        :["An SD card is in the slot, but WiCAN cannot read it. ",sdFormatLink("Format it")," to record logs."]):"No SD card: insert one to record logs."));return;}
     const[r,journal]=await Promise.all([tryGet("/api/fs/list?path="+enc(LOG_DIR)),loadClockJournal()]);
     if(!r){filesWrap.replaceChildren(h("div",{class:"empty"},"No log folder yet: it is created when the logger first runs."));return;}
     const ents=(r.entries||[]).filter(e=>!e.dir&&e.name!=="clock.jsonl").map(e=>{const m=e.name.match(/^(dl|can)_(\d+)\.(\w+)$/);
@@ -9125,14 +9309,24 @@ PAGES.__files=async(view)=>{
       const info=infos[i];
       const mounted=!(m.bit&&S.bits&&S.bits[m.bit]===false)&&!!(info&&info.total);
       const pct=mounted?info.used/info.total*100:0;
-      const card=h("div",{class:"fm-mount"+(mounted?"":" off"),role:"button",title:mounted?"Open "+m.path:m.name+" is not available",
-          onclick:()=>{if(mounted)go(m.path);else toast(m.name+" is not available","err");},
+      /* a card in the slot WiCAN cannot read (2026-10-25): the tile says what it
+         holds and offers the format (the page's dialog); a card that does not
+         answer is a fault, no button */
+      const sdx=m.path==="/sd"&&!mounted&&typeof sdSummary==="function"?sdSummary():null;
+      const sdBad=!!sdx&&(sdx.state==="unreadable"||sdx.state==="failed"),dead=sdBad&&sdx.state==="failed",fixable=sdBad&&!dead;
+      const card=h("div",{class:"fm-mount"+(mounted||fixable?"":" off"),role:"button",title:mounted?"Open "+m.path:fixable?"The card is not readable: format it to use it":m.name+" is not available",
+          onclick:()=>{if(mounted)go(m.path);else if(fixable)sdFormatDialog();else toast(m.name+" is not available","err");},
           onkeydown:e=>{if(e.key==="Enter"&&mounted)go(m.path);}},
         h("div",{class:"mi"},ic(m.icon)),
         h("div",{},
-          h("div",{class:"mt"},h("span",{class:"mn"},m.name),h("span",{class:"mp"},m.path),mounted?null:chip("not mounted","warn"),mounted?h("span",{class:"mo"},"Open ›"):null),
+          h("div",{class:"mt"},h("span",{class:"mn"},m.name),h("span",{class:"mp"},m.path),
+            mounted?null:sdBad?chip(dead?"not answering":"not readable",dead?"crit":"warn"):chip("not mounted","warn"),
+            mounted?h("span",{class:"mo"},"Open ›"):fixable?h("button",{class:"btn sm pri",type:"button",style:"margin-left:auto",onclick:e=>{e.stopPropagation();sdFormatDialog();}},"Format…"):null),
           h("div",{class:"md"},m.desc),
-          h("div",{class:"mu"},mounted?fmt.bytes(info.used)+" of "+fmt.bytes(info.total)+" used ("+pct.toFixed(0)+"%)":(m.path==="/sd"?"Insert an SD card, then refresh.":"Unavailable")),
+          h("div",{class:"mu"},mounted?fmt.bytes(info.used)+" of "+fmt.bytes(info.total)+" used ("+pct.toFixed(0)+"%)"
+            :dead?"The card does not answer ("+sdx.reason+"). Take it out and put it back in, or try another card."
+            :fixable?sdCardLine({name:sdx.name,capacity_bytes:sdx.capacity_bytes})+". "+(SD_FOUND[sdx.reason]||SD_FOUND.unknown)+" Format it as FAT32 to use it here: everything on it is erased."
+            :(m.path==="/sd"?"Insert an SD card, then refresh.":"Unavailable")),
           mounted?meter(info.used,info.total):null));
       card.tabIndex=0;return card;})),
       h("div",{class:"fm-hint"},"Pick a storage area. Folders you will meet: ",h("code",{},"/data/scripts")," (Scripts page), ",h("code",{},"/data/certs")," (System → Certificates), ",
@@ -11961,7 +12155,10 @@ function copiesCard(st,repaintAll,autoRows){
     const words=h("div",{},h("b",{style:"font-size:13.5px"},title),h("div",{class:"help"},held?"Holding the settings from before the factory reset"+(data.held_since?" of "+day(data.held_since):"")+". Restore to undo the reset, or refresh the copies to let them follow the device again.":sub));
     let right;
     if(!data||!data.present){
-      right=h("div",{class:"help",style:"text-align:right;max-width:200px"},data&&data.card===false?"No SD card in the slot":"No copy yet");
+      /* a card in the slot WiCAN cannot read (2026-10-25): the chip and the page's format dialog */
+      const bad=data&&data.card===false&&data.unreadable?data.unreadable:null;
+      right=bad?h("div",{class:"rowflex",style:"gap:10px;justify-content:flex-end;align-items:center"},chip(bad.state==="failed"?"not answering":"not readable",bad.state==="failed"?"crit":"warn"),bad.state==="failed"?null:sdFormatLink())
+        :h("div",{class:"help",style:"text-align:right;max-width:200px"},data&&data.card===false?"No SD card in the slot":"No copy yet");
     }else{
       const heldChip=held?chip("held","warn"):null;
       if(heldChip)heldChip.classList.add("bk-held-chip");
@@ -11978,11 +12175,16 @@ function copiesCard(st,repaintAll,autoRows){
   }
   function paint(){
     const c=cur();
-    const sd=c.sd||{};
+    const sd=Object.assign({},c.sd||{});
     const other=sd.device_id&&sd.device_id!==st.device_id;
+    /* the slot holds a card WiCAN cannot read (2026-10-25): the status poll's `sd` summary */
+    const sdx=!sd.card&&typeof sdSummary==="function"?sdSummary():null;
+    sd.unreadable=sdx&&(sdx.state==="unreadable"||sdx.state==="failed")?sdx:null;
     rows.replaceChildren(
       placeRow("Internal flash","Survives a factory reset: restore from it to undo one.",c.internal,"internal"),
-      placeRow("SD card",sd.card?(other?"This card came from another WiCAN ("+sd.device_id+"): restore from it to take its configuration over.":"Move the card to a replacement WiCAN and restore from it there."+(sd.free_bytes?" "+kb(sd.free_bytes)+" free.":"")):"Insert a card to keep a copy you can move to another WiCAN.",sd,"sd"));
+      placeRow("SD card",sd.card?(other?"This card came from another WiCAN ("+sd.device_id+"): restore from it to take its configuration over.":"Move the card to a replacement WiCAN and restore from it there."+(sd.free_bytes?" "+kb(sd.free_bytes)+" free.":""))
+        :sd.unreadable?(sd.unreadable.state==="failed"?"The card in the slot does not answer. Take it out and put it back in.":"The card in the slot is not readable yet. Format it to keep a copy here that can move to another WiCAN.")
+        :"Insert a card to keep a copy you can move to another WiCAN.",sd,"sd"));
     key.paint();
     keyNudge.style.display=key.downloaded()?"none":"";
   }

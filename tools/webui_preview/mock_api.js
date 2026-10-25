@@ -137,8 +137,33 @@
     }
     return null;
   };
+  /* the SD slot (2026-10-25): __mockPreset.sd names the scene: "mounted" (the
+     default, the 16 GB bench card), "exfat" (the 64 GB factory card WiCAN cannot
+     read), "exfat_failfmt" (the same, the format fails), "blank", "unknown",
+     "failed" (a card that does not answer), "absent"; a format through
+     POST /api/sdcard/format takes __mockPreset.sdFormatMs (default 1500) and
+     then the card is mounted and empty. */
+  const SD_CARDS = {
+    big: { name: "SD64G", type: "SDHC/SDXC", capacity_bytes: 63864569856, sector_size: 512, speed_khz: 40000, serial: "6b2f91a4" },
+    bench: { name: "SC16G", type: "SDHC/SDXC", capacity_bytes: 15931539456, sector_size: 512, speed_khz: 40000, serial: "0d47c1e2" },
+  };
+  const SD_SCENES = {
+    mounted: { state: "mounted", reason: "", card: SD_CARDS.bench },
+    exfat: { state: "unreadable", reason: "exfat", card: SD_CARDS.big },
+    exfat_failfmt: { state: "unreadable", reason: "exfat", card: SD_CARDS.big, failfmt: true },
+    blank: { state: "unreadable", reason: "blank", card: SD_CARDS.bench },
+    unknown: { state: "unreadable", reason: "unknown", card: SD_CARDS.bench },
+    failed: { state: "failed", reason: "ESP_ERR_TIMEOUT", card: null },
+    absent: { state: "absent", reason: "", card: null },
+  };
+  const sdScene = SD_SCENES[(window.__mockPreset || {}).sd || "mounted"] || SD_SCENES.mounted;
   const state = {
     scan: { status: "idle", found: 0 },
+    sd: { state: sdScene.state, reason: sdScene.reason, card: sdScene.card ? { ...sdScene.card } : null, failfmt: !!sdScene.failfmt,
+          format: { state: "idle", error: "", took_ms: 0, age_s: 0, cluster_kb: sdScene.card && sdScene.card.capacity_bytes > 32 * 1024 * 1024 * 1024 ? 32 : 16, phrase: "format sdcard" },
+          fs: null, formatted: false },
+    sdPosts: [],
+    sdFormatMs: typeof (window.__mockPreset || {}).sdFormatMs === "number" ? window.__mockPreset.sdFormatMs : 1500,
     /* Quick Setup (2026-10-01): a probe presets window.__mockPreset before
        the page boots (fresh device = factory AP password); the vehicle
        identity file, the broker bit and HA's registration are toggles */
@@ -199,7 +224,7 @@
     dirs: new Set(),            /* folders created through /api/fs/mkdir */
     loggerRunning: false,       /* true -> /api/logger reports the active file (write-locked) */
     clockUnset: !!(window.__mockPreset || {}).clockUnset,   /* a boot without a clock: /api/rtc valid false */
-    sdMounted: true,            /* false -> /api/status says no card, /sd listings fail */
+    sdMounted: sdScene.state === "mounted",   /* false -> /api/status says no card, /sd listings fail */
     autopidCfg: (window.__mockPreset || {}).autopidCfg || {
       version: 1,
       groups: [{ name: "default", enabled_default: true, period_ms: 1000 }],
@@ -222,7 +247,7 @@
        __mockPreset.backup; staged = the backup under preview (file or copy) */
     backup: Object.assign({
       keyDownloaded: false, keyDownloadedAt: "", keyCreated: "2026-10-11T09:14:00Z",
-      sd: true, sdDeviceId: null, copies: true, copiesRefreshed: "2026-10-11T09:14:00Z",
+      sd: sdScene.state === "mounted", sdDeviceId: null, copies: true, copiesRefreshed: "2026-10-11T09:14:00Z",
       inspectAs: "plain_this",   /* what an uploaded file reads as: plain_this | enc_other | redacted | newer | v1 */
       held: false, heldSince: "2026-10-15T08:00:00Z",   /* the copies hold the settings from before a factory reset (issue #987) */
       leftOut: null,   /* [{name, why}] the databases part leaves out (issue #989): the status, the file, the preview */
@@ -462,11 +487,36 @@
   };
   const FW_NOTES = "# WiCAN PRO 6.1.0-alfa.2\n\n## Before you update\nUnits on this layout update in place.\n\n## New features\n- The device checks for and installs its own updates.\n- **Release notes** open here, fetched through the device.\n\n## Bug fixes\n- A `sha256` check before anything is activated (#973).\n\nMore at [meatpi-devices](https://github.com/meatpiHQ/meatpi-devices).\n";
 
+  /* the SD slot (2026-10-25): GET /api/sdcard, the `sd` summary on /api/status,
+     and the format that POST /api/sdcard/format starts (external_storage/HTTP_API.md) */
+  const sdDoc = () => {
+    const s = state.sd;
+    const o = { present: s.state !== "absent", mounted: s.state === "mounted", state: s.state, reason: s.reason, card: s.card ? { ...s.card } : null, format: { ...s.format } };
+    if (s.state === "mounted") o.fs = s.fs || { total: 15923707904, used: 327680 };
+    return o;
+  };
+  const sdSummary = () => (state.sd.state === "absent" ? undefined
+    : { state: state.sd.state, reason: state.sd.reason, name: state.sd.card ? state.sd.card.name : "", capacity_bytes: state.sd.card ? state.sd.card.capacity_bytes : 0, serial: state.sd.card ? state.sd.card.serial : "" });
+  const sdStartFormat = () => {
+    const s = state.sd, t0 = Date.now();
+    s.state = "formatting"; s.format = { ...s.format, state: "running", error: "", took_ms: 0, age_s: 0 };
+    setTimeout(() => {
+      if (s.failfmt) { s.state = "unreadable"; s.reason = "unknown"; s.format = { ...s.format, state: "failed", error: "write error at sector 2048 (ESP_ERR_INVALID_RESPONSE)", took_ms: Date.now() - t0 }; return; }
+      s.state = "mounted"; s.reason = ""; s.formatted = true;
+      s.fs = { total: Math.round(s.card.capacity_bytes * 0.9979), used: 65536 };
+      s.format = { ...s.format, state: "done", error: "", took_ms: Date.now() - t0 };
+      state.sdMounted = true; state.backup.sd = true;
+    }, state.sdFormatMs);
+  };
+  window.__mockSd = () => ({ sd: state.sd, posts: state.sdPosts });
+
   const FIXED = {
+    "/api/sdcard": () => J(sdDoc()),
     "/api/fw_update": () => J(fwStatus()),
     "/api/fw_update/notes": () => T(FW_NOTES),
     "/api/status": () => J({
       usb: (window.__mockPreset || {}).usbStatus || undefined,
+      sd: sdSummary(),
       bits: { awake: true, sleep: false, sta_connected: state.staConnected !== false, mqtt_connected: state.mqttConnected !== false, ble_connected: false, sdcard_mounted: state.sdMounted !== false, ble_enabled: false, sta_enabled: true, ap_enabled: true, autopid_enabled: true, home_mode: false, drive_mode: false, smartconnect: false, sta_ap_overlap: false, time_synced: true, vpn_enabled: true, wake_voltage_ok: !state.sleepPending, eth_connected: false, autopid_idle: false, motion: false, sta_suspended: false, ap_suspended: false, ble_suspended: false },
       network_connected: true, uptime: "02:14:09", version: "v6.0.0-preview", partition: "ota_0",
       boot_count: 42, unexpected_resets: 1, device_id: "14c19f44e349",
@@ -611,8 +661,9 @@
         : { valid: true, source: "sntp", steps_this_boot: 2, rotations_by_clock: 2, journal_bytes: 612, journal: "/sd/logs/clock.jsonl" },
       dir: "/sd/logs" }),
     "/api/fs/info": (full) => (/path=\/data/.test(full || "") ? J({ total: 6029312, used: 1060864 })
-      /* the bench's 16 GB card as the firmware reports it since 2026-10-11 (issue #982: 3038806016 before, the 32-bit wrap) */
-      : !state.sdMounted ? J({ error: "invalid path" }, 400) : J({ total: 15923707904, used: 327680 })),
+      /* the bench's 16 GB card as the firmware reports it since 2026-10-11 (issue #982: 3038806016 before, the 32-bit wrap);
+         a card just formatted (2026-10-25) reports its own size, nearly empty */
+      : !state.sdMounted ? J({ error: "backend unavailable" }, 503) : state.sd.fs ? J(state.sd.fs) : J({ total: 15923707904, used: 327680 })),
     /* the clock's history (2026-10-13): `clock` = who set it and the newest step; __mockPreset.clockUnset = a boot without a clock */
     "/api/rtc": () => state.clockUnset
       ? J({ time: "1970-01-01T00:02:11Z", valid: false, rtc: null, sntp: { enabled: true, server: "pool.ntp.org", last_sync: null },
@@ -711,7 +762,10 @@
     /* fixtures per folder + whatever probes uploaded (state.files) or created (state.dirs) */
     "/api/fs/list": (full) => {
       const p = ((new URLSearchParams((full || "").split("?")[1] || "")).get("path") || "/data").replace(/(.)\/$/, "$1");
-      if (!/^\/(data|sd)(\/|$)/.test(p) || (!state.sdMounted && /^\/sd/.test(p))) return J({ error: "invalid path" }, 400);
+      if (!/^\/(data|sd)(\/|$)/.test(p)) return J({ error: "invalid path" }, 400);
+      if (!state.sdMounted && /^\/sd/.test(p)) return J({ error: "backend unavailable" }, 503);
+      /* a card just formatted (2026-10-25) is empty */
+      if (state.sd.formatted && /^\/sd/.test(p)) return p === "/sd" ? J({ path: p, entries: [] }) : J({ error: "not found" }, 404);
       const fixed = p === "/sd/logs" ? [
           { name: "dl_" + String(state.logEpoch).padStart(10, "0") + ".jsonl", dir: false, size: 240000 },
           { name: "dl_" + String(state.logEpoch).padStart(10, "0") + ".csv", dir: false, size: 120000 },
@@ -752,6 +806,18 @@
     const method = ((opts && opts.method) || "GET").toUpperCase();
     const body = opts && typeof opts.body === "string" ? (() => { try { return JSON.parse(opts.body); } catch { return null; } })() : null;
 
+    /* the SD card format (2026-10-25): the phrase, then the slot's state decides */
+    if (method === "POST" && path === "/api/sdcard/format") {
+      const s = state.sd;
+      state.sdPosts.push(body || {});
+      if (!body || body.confirm !== "format sdcard") return J({ error: "confirm with {\"confirm\":\"format sdcard\"}" }, 400);
+      if (s.state === "absent") return J({ error: "no card in the slot" }, 409);
+      if (s.state === "mounted") return J({ error: "the card is mounted and in use: nothing to format" }, 409);
+      if (s.state === "failed") return J({ error: "the card does not answer: it cannot be formatted" }, 409);
+      if (s.state === "formatting") return J({ error: "a format is already running" }, 409);
+      sdStartFormat();
+      return J({ state: "formatting" }, 202);
+    }
     /* firmware updates (2026-10-18): the three POSTs of /api/fw_update */
     if (method === "POST" && path === "/api/fw_update/check") {
       if (state.fwJob && state.fwJob.active && state.fwJob.version) return J({ error: "another update job is running", code: "busy" }, 409);
