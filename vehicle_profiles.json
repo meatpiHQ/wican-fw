@@ -12998,6 +12998,178 @@
       ]
     },
     {
+      "car_model": "Skoda: Elroq",
+      "init": "ATAT1;ATST96;",
+      "pids": [
+        {
+          "pid": "22295A",
+          "pid_init": "ATSP7;ATCP17;ATSHFC0076;ATCRA17FE0076;ATFCSH17FC0076;ATFCSD300000;ATFCSM1;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B4:B6]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "222AB2",
+          "pid_init": "ATSP6;ATSH710;ATFCSH710;ATFCSD300000;ATFCSM1;ATCRA77A;",
+          "parameters": [
+            {
+              "name": "HV_CAPACITY_KWH",
+              "expression": "[B4:B5]*50/1000",
+              "unit": "kWh",
+              "class": "energy"
+            }
+          ]
+        },
+        {
+          "pid": "2242DB",
+          "pid_init": "ATSP6;ATSH746;ATFCSH746;ATFCSD300000;ATFCSM1;ATCRA7B0;",
+          "parameters": [
+            {
+              "name": "CO2",
+              "expression": "B5*100",
+              "unit": "ppm",
+              "class": "carbon_dioxide"
+            }
+          ]
+        },
+        {
+          "pid": "2227C42",
+          "pid_init": "ATSP6;ATSH746;ATFCSH746;ATFCSD300000;ATFCSM1;ATCRA7B0;",
+          "parameters": [
+            {
+              "name": "HUMIDITY",
+              "expression": "B10*0.5",
+              "unit": "%",
+              "class": "humidity"
+            }
+          ]
+        },
+        {
+          "pid": "222A0B1",
+          "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+          "parameters": [
+            {
+              "name": "BATT_TEMP",
+              "expression": "((B4/2)-40)",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "80"
+            }
+          ]
+        },
+        {
+          "pid": "2226091",
+          "pid_init": "ATSP6;ATSH746;ATFCSH746;ATFCSD300000;ATFCSM1;ATCRA7B0;",
+          "parameters": [
+            {
+              "name": "OUTSIDE_TEMPERATURE",
+              "expression": "((B4*0.5)-50)",
+              "unit": "°C",
+              "class": "temperature",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "2226131",
+          "pid_init": "ATSP6;ATSH746;ATFCSH746;ATFCSD300000;ATFCSM1;ATCRA7B0;",
+          "parameters": [
+            {
+              "name": "CABIN_TEMPERATURE",
+              "expression": "(([B4:B5]/5)-40)",
+              "unit": "°C",
+              "class": "temperature",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "221E3B1E3D",
+          "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+          "parameters": [
+            {
+              "name": "HV_AV",
+              "expression": "(((150000-[B10:B13])/100)*([B5:B6]/4))/1000",
+              "unit": "kW",
+              "class": "power"
+            }
+          ]
+        },
+        {
+          "pid": "221E3D2",
+          "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+          "parameters": [
+            {
+              "name": "HV_A",
+              "expression": "(150000-(([B5:B7]*256)+B9))/100",
+              "unit": "A",
+              "class": "current"
+            }
+          ]
+        },
+        {
+          "pid": "22F45B1",
+          "pid_init": "ATSP7;ATCP18;ATSHDB33F1;ATCRA18DAF105;",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "B4*100/255",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "222AB62",
+          "pid_init": "ATSP6;ATSH710;ATFCSH710;ATFCSD300000;ATFCSM1;ATCRA77A;",
+          "parameters": [
+            {
+              "name": "RANGE",
+              "expression": "(B5*256)+B6",
+              "unit": "km",
+              "class": "distance"
+            }
+          ]
+        },
+        {
+          "pid": "2274481",
+          "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+          "parameters": [
+            {
+              "name": "CHARGING",
+              "expression": "B4:2",
+              "unit": "",
+              "class": "battery_charging",
+              "type": "binary_sensor"
+            }
+          ]
+        },
+        {
+          "pid": "221E3B1",
+          "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
+          "parameters": [
+            {
+              "name": "HV_V",
+              "expression": "(((B4*256)+B5)/4)",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "480"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Skoda: Karoq",
       "init": "ATSP6;",
       "pids": [
