@@ -1,0 +1,41 @@
+{
+  "car_model": "Ford: Escape",
+  "init": "ATSP6;ATST96;",
+  "pids": [
+    {
+      "pid": "360",
+      "parameters": [
+        {
+          "name": "Trunk State",
+          "expression": "[B19]",
+          "unit": "",
+          "class": "none"
+        },
+        {
+          "name": "Right Rear Door State",
+          "expression": "[B20]",
+          "unit": "",
+          "class": "none"
+        },
+        {
+          "name": "Left Rear Door State",
+          "expression": "[B21]",
+          "unit": "",
+          "class": "none"
+        },
+        {
+          "name": "Right Front Door State",
+          "expression": "[B22]",
+          "unit": "",
+          "class": "none"
+        },
+        {
+          "name": "Left Front Door State",
+          "expression": "[B23]",
+          "unit": "",
+          "class": "none"
+        }
+      ]
+    }
+  ]
+}
