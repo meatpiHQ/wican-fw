@@ -1049,6 +1049,9 @@ char* autopid_get_config(void)
     {
         ESP_LOGE(TAG, "Failed to create JSON object");
         DEBUG_LOGE(TAG, "Failed to create JSON object");
+        // The mutex is held from here on; returning without giving it back
+        // leaves every other autopid consumer blocked forever.
+        xSemaphoreGive(all_pids->mutex);
         return NULL;
     }
 
