@@ -845,12 +845,16 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 	uint8_t timeout_flag = 0;
 	uint8_t rsp_found = 0;
 	uint8_t number_of_rsp = 0;
+	uint16_t expected_payload = 0;
+	uint16_t received_payload = 0;
+	uint8_t message_complete = 0;
 	char tmp[10];
 	xwait_time = xtimeout;
 	memset(tmp, 0, sizeof(tmp));
 	ESP_LOGW(TAG, "req_expected_rsp: %u", req_expected_rsp);
 	while(timeout_flag == 0)
 	{
+		TickType_t wait_start = xTaskGetTickCount();
 		if( xQueueReceive(*can_rx_queue, ( void * ) &rx_frame, xwait_time) == pdPASS )
 		{
 			xwait_time = xtimeout;
@@ -924,6 +928,45 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 					rx_frame_data_length = rx_frame.data[0];
 				}
 
+				// Track the ISO-TP message assembly so a complete response can
+				// be handed to the client without waiting out ATST.
+				if (frame_type == 0x10)
+				{
+					// First frame: the total payload length is in the first
+					// two bytes and the first frame carries 6 payload bytes.
+					expected_payload = ((rx_frame.data[0] & 0x0F) << 8) | rx_frame.data[1];
+					received_payload = 6;
+					message_complete = 0;
+				}
+				else if (frame_type == 0x20)
+				{
+					// Consecutive frame. expected_payload == 0 means no first
+					// frame was seen, so a stray CF must not complete a message.
+					received_payload += 7;
+					if (expected_payload != 0 && received_payload >= expected_payload)
+					{
+						message_complete = 1;
+						expected_payload = 0;
+						received_payload = 0;
+					}
+				}
+				else if (frame_type != 0x30)
+				{
+					// A single frame is a complete message, unless it is a
+					// negative response with NRC 0x78 (response pending): the
+					// ECU will send the real response afterwards, so keep
+					// waiting for it and deliver both frames to the client.
+					if (rx_frame.data[0] >= 3 && rx_frame.data[1] == 0x7F &&
+					    rx_frame.data[3] == 0x78)
+					{
+						message_complete = 0;
+					}
+					else
+					{
+						message_complete = 1;
+					}
+				}
+
 				// Based on the "CAF0 AND CAF1" section of the ELM doc, if headers are shown
 				// the PCI byte(s) (usually just data[0]) should be printed.
 				if(elm327_config.show_header)
@@ -978,16 +1021,23 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 						break;
 					}
 				}
+				else if(message_complete && elm327_config.rx_address_is_set)
+				{
+					// Message complete: send the prompt now rather than idling
+					// out ATST. Requires ATCRA to pin a single responder -
+					// without a filter elm327_should_receive() accepts
+					// 0x7E8..0x7EF, and several ECUs may answer one functional
+					// request.
+					timeout_flag = 1;
+					break;
+				}
 			}
 			else
 			{
-				xwait_time -= (((esp_timer_get_time() - txtime)/1000)/portTICK_PERIOD_MS);
+				// Charge only the time spent waiting for this frame. pdPASS
+				// returns within the wait time, so xwait_time cannot underflow.
+				xwait_time -= (xTaskGetTickCount() - wait_start);
 				ESP_LOGI(TAG, "xwait_time: %lu" , xwait_time);
-				if(xwait_time > (elm327_config.req_timeout*4.096))
-				{
-					xwait_time = 0;
-					timeout_flag = 1;
-				}
 			}
 		}
 		else
