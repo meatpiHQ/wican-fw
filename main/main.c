@@ -405,6 +405,8 @@ void app_main(void)
        /api/gps when there is no console */
     main_glue_wire_gps();
     main_glue_wire_usb_status();
+    /* glue: the status poll says which car the live tables belong to */
+    main_glue_wire_vehicle_status();
     main_boot_start("j2534_server", j2534_server_start);
     /* glue: button long-press -> config mode (AP up, BLE off);
        start AFTER both radios exist (the callback actuates them) */

@@ -219,6 +219,33 @@ void main_glue_wire_usb_status(void)
     dev_status_manager_set_usb_provider(usb_summary);
 }
 
+/** The current vehicle summary for GET /api/status (2026-10-26): the web
+ *  UI's notice bar and the dashboard say when the live tables belong to a
+ *  car whose setup never finished (a device set up on one car and plugged
+ *  into another). Composition glue: dev_status_manager must not know
+ *  autopid. False = no current car (no `vehicle` object). */
+static bool vehicle_summary(dev_status_vehicle_t *out)
+{
+    autopid_vehicle_summary_t v;
+
+    if (!autopid_vehicle_summary(&v))
+    {
+        return false;
+    }
+
+    snprintf(out->name, sizeof(out->name), "%s", v.name);
+    snprintf(out->key, sizeof(out->key), "%s", v.key);
+    snprintf(out->vin, sizeof(out->vin), "%s", v.vin);
+    out->pending = v.pending;
+    out->cars = v.cars;
+    return true;
+}
+
+void main_glue_wire_vehicle_status(void)
+{
+    dev_status_manager_set_vehicle_provider(vehicle_summary);
+}
+
 /** Composition glue: autopid samples -> the logger's params stream
  *  (gated by data_logger's autopid_log setting; both components stay
  *  ignorant of each other). */

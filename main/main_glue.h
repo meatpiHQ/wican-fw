@@ -23,6 +23,11 @@ void main_glue_wire_gps(void);
  *  after the USB components started. */
 void main_glue_wire_usb_status(void);
 
+/** The current vehicle summary provider for GET /api/status (2026-10-26):
+ *  the web UI's notice bar and the dashboard say when the live tables
+ *  belong to a car whose setup never finished. After autopid_init. */
+void main_glue_wire_vehicle_status(void);
+
 /** Autopid samples feed data_logger's params stream. */
 void main_glue_wire_autopid_logger(void);
 

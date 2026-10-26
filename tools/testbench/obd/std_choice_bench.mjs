@@ -31,13 +31,20 @@
                those two read, live, no restart
      reload    detect (rows stored off), choose none, reload, Skip for now: the 16
                rows stay, all off
+     reboot    (Ali, 2026-10-26, on beta.4: "selected 2 standard PIDs, the rpm and
+               speed, finished, saw them on the dashboard; after a reboot or an
+               unplug/replug of the OBD port they were gone and I had to select them
+               again from the Automate tab") detect, tick 010C and 010D in the
+               picker, Finish and restart: the two rows on and read; then a restart
+               (his reboot), the first contact, and a second restart: the two rows
+               must still be there, on, and read
 
    At the end the saved config and the autopid settings go back (a restart when the
    settings moved). Needs the ECU simulator answering on the bus, the DUT on the Pi's
    hotspot, the Playwright devDependency of tools/webui_preview (`npm install` there
    once).
 
-   node tools/testbench/obd/std_choice_bench.mjs [out dir] [--dut 10.42.1.194] [--legs plain,redetect,skip,reload]
+   node tools/testbench/obd/std_choice_bench.mjs [out dir] [--dut 10.42.1.194] [--legs plain,redetect,skip,reload,reboot]
    Verdict: STD CHOICE PASS / STD CHOICE FAIL: <names>. */
 import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -134,9 +141,9 @@ const detect = async (label) => {
   await page.click("#qs-plugged"); await page.click("#qs-ignition");
   await page.click('button:has-text("Detect my vehicle")');
   const t0 = Date.now();
-  for (let i = 0; i < 90 && !/1\. Vehicle detected/.test(await text()) && !/did not answer/.test(await text()); i++) await sleep(1000);
+  for (let i = 0; i < 90 && !/\d\. Vehicle detected/.test(await text()) && !/did not answer/.test(await text()); i++) await sleep(1000);
   const tv = await text();
-  check(`${label}: the simulator was detected (${Math.round((Date.now() - t0) / 1000)} s)`, /1\. Vehicle detected/.test(tv), (tv.match(/\d+ answered[^N]*/) || [])[0]);
+  check(`${label}: the simulator was detected (${Math.round((Date.now() - t0) / 1000)} s)`, /\d\. Vehicle detected/.test(tv), (tv.match(/\d+ answered[^N]*/) || [])[0]);
   return tv;
 };
 const chooseNone = async (label) => {
@@ -203,7 +210,7 @@ if (LEGS.includes("redetect")) {
   await chooseNone(L);
   say(L, "reloading the page (a phone discarding the tab)");
   await page.reload(); await sleep(3500);
-  check(`${L}: after the reload the step is back at Detect`, /1\. Detect the vehicle/.test(await text()));
+  check(`${L}: after the reload the step is back at Detect`, /\d\. Detect the vehicle/.test(await text()));
   const tv = await detect(L + " again");
   const m = tv.match(/(\d+) of (\d+) chosen/);
   check(`${L}: the second detection ticks nothing (the car's setup never finished)`, /none chosen yet/.test(tv) && !m, m ? m[0] : "none chosen yet");
@@ -270,6 +277,95 @@ if (LEGS.includes("reload")) {
   await skipForNow(L);
   const cfg1 = stdRows(await getJ("/api/autopid/config"));
   check(`${L}: the rows the device stored stay, all off: nothing reads until the user ticks`, cfg1.length === stored.length && cfg1.every((r) => !r.on), brief(cfg1));
+}
+
+/* ---- reboot: the two rows chosen in the wizard must survive a reboot (Ali, 2026-10-26) ---- */
+if (LEGS.includes("reboot")) {
+  const L = "reboot";
+  const TWO = "010C,010D";
+  const onRows = (cfg) => stdRows(cfg).filter((r) => r.on).map((r) => r.cmd).sort().join(",");
+  const carFile = async () => {
+    const v = await getJ("/api/autopid/vehicles");
+    const cur = ((v && v.vehicles) || []).find((x) => x.current);
+    /* the fs routes take the query text verbatim (no percent-decoding): the path goes as is */
+    return cur ? getJ("/api/fs/download?path=/data/autopid/vehicles/" + cur.key + ".json") : null;
+  };
+  const readTwo = async (label) => {
+    await sleep(15000);
+    const live = await getJ("/api/autopid");
+    writeFileSync(`${out}/${label.replace(/[^a-z0-9]+/gi, "_")}_live.json`, JSON.stringify(live, null, 1));
+    const polled = polledNames(live).sort();
+    check(`${label}: engine speed and vehicle speed are read`, polled.join(",") === "EngineRPM,VehicleSpeed", { polled, polls_ok: ((live || {}).stats || {}).polls_ok });
+  };
+  await forgetCar(L);
+  await openVehicle(L);
+  await detect(L);
+  /* the picker: Clear, tick 010C and 010D, Add selected */
+  const openBtn = (await page.$('button:has-text("Choose PIDs")')) || (await page.$('button:has-text("Change")'));
+  await openBtn.click(); await sleep(500);
+  await page.click('#modal-root button:has-text("Clear")'); await sleep(100);
+  const ticked = await page.evaluate(() => {
+    const want = ["010C", "010D"], done = [];
+    for (const lab of document.querySelectorAll("#modal-root label")) {
+      const cmd = ((lab.querySelector(".mono") || {}).textContent || "").trim().replace(/\s+/g, "").toUpperCase();
+      if (want.includes(cmd)) { const cb = lab.querySelector('input[type="checkbox"]'); if (cb && !cb.checked) { cb.click(); done.push(cmd); } }
+    }
+    return done;
+  });
+  check(`${L}: two rows ticked in the picker (engine speed, vehicle speed)`, ticked.length === 2, ticked);
+  await page.click('#modal-root button:has-text("Add selected")'); await sleep(500);
+  check(`${L}: the step says 2 chosen`, /2 of \d+ chosen/.test(await text()), (await text()).match(/\d+ of \d+ chosen|none chosen yet/)?.[0]);
+  await shot(`${L}_two_chosen`);
+  const none = await page.$("#qs-prof-none"); if (none) { await none.click(); await sleep(300); }
+  const cont = await page.$(".qs-foot button.pri:not([disabled])");
+  check(`${L}: Continue enabled`, !!cont);
+  await cont.click(); await sleep(2500);
+  const keep = await page.$("#qs-pwr-keep"); if (keep) { await keep.click(); await sleep(1500); }
+  check(`${L}: the Reading the car step`, /How WiCAN reads the car/.test(await h2()), await h2());
+  const sw = await page.$("#qs-std");
+  check(`${L}: the Standard PIDs switch is on (a pick this session)`, sw && (await sw.isChecked()) && !(await sw.isDisabled()));
+  await shot(`${L}_reading`);
+  await page.click('button:has-text("Finish and restart")'); await sleep(4000);
+  check(`${L}: the done screen`, /WiCAN is set up/.test(await h2()), await h2());
+  await sleep(12000);
+  await waitBack(`${L}: after Finish`);
+  const cfg1 = await getJ("/api/autopid/config");
+  const set1 = unwrap(await getJ("/api/settings/autopid"));
+  writeFileSync(`${out}/${L}_config_after_finish.json`, JSON.stringify(cfg1, null, 1));
+  check(`${L}: after Finish the config carries exactly the two rows, on; the standard set on, polling on`, onRows(cfg1) === TWO && stdRows(cfg1).length === 2 && set1.std_enabled === true && set1.enabled === true, { rows: brief(stdRows(cfg1)), on: onRows(cfg1), std_enabled: set1.std_enabled, enabled: set1.enabled });
+  const file1 = await carFile();
+  writeFileSync(`${out}/${L}_carfile_after_finish.json`, JSON.stringify(file1, null, 1));
+  check(`${L}: the car's own table carries the same two rows`, !!file1 && onRows(file1) === TWO && stdRows(file1).length === 2, file1 ? brief(stdRows(file1)) : "no file");
+  const lines1 = await firstContact(`${L}_boot1`);
+  say(L, "first contact after Finish:\n   " + lines1.slice(-6).join("\n   "));
+  const cfg1b = await getJ("/api/autopid/config");
+  check(`${L}: the first contact after Finish keeps the two rows`, onRows(cfg1b) === TWO && stdRows(cfg1b).length === 2, brief(stdRows(cfg1b)));
+  await readTwo(`${L}: after Finish`);
+  /* his reboot (a restart, or the OBD plug pulled and put back) */
+  await restartAndWait(`${L}: after the reboot`);
+  const cfg2 = await getJ("/api/autopid/config");
+  writeFileSync(`${out}/${L}_config_after_reboot.json`, JSON.stringify(cfg2, null, 1));
+  check(`${L}: after the reboot the config still carries the two rows, on`, onRows(cfg2) === TWO && stdRows(cfg2).length === 2, { rows: brief(stdRows(cfg2)), on: onRows(cfg2) });
+  const lines2 = await firstContact(`${L}_boot2`);
+  say(L, "first contact after the reboot:\n   " + lines2.slice(-6).join("\n   "));
+  const cfg2b = await getJ("/api/autopid/config");
+  const file2 = await carFile();
+  writeFileSync(`${out}/${L}_config_after_reboot_contact.json`, JSON.stringify(cfg2b, null, 1));
+  writeFileSync(`${out}/${L}_carfile_after_reboot_contact.json`, JSON.stringify(file2, null, 1));
+  check(`${L}: the first contact after the reboot keeps the two rows (config)`, onRows(cfg2b) === TWO && stdRows(cfg2b).length === 2, { rows: brief(stdRows(cfg2b)), on: onRows(cfg2b) });
+  check(`${L}: the first contact after the reboot keeps the two rows (the car's file)`, !!file2 && onRows(file2) === TWO && stdRows(file2).length === 2, file2 ? brief(stdRows(file2)) : "no file");
+  await readTwo(`${L}: after the reboot`);
+  /* the Automate table, as he looked at it */
+  const rows = await openStandardTab();
+  check(`${L}: the Standard PIDs table shows the two rows, both on`, rows.length === 2 && rows.every((r) => r.on && !r.off), rows);
+  await shot(`${L}_table_after_reboot`);
+  /* and once more */
+  await restartAndWait(`${L}: after the second reboot`);
+  const lines3 = await firstContact(`${L}_boot3`);
+  say(L, "first contact after the second reboot:\n   " + lines3.slice(-6).join("\n   "));
+  const cfg3 = await getJ("/api/autopid/config");
+  check(`${L}: after the second reboot and its first contact the two rows are still there, on`, onRows(cfg3) === TWO && stdRows(cfg3).length === 2, { rows: brief(stdRows(cfg3)), on: onRows(cfg3) });
+  await readTwo(`${L}: after the second reboot`);
 }
 
 /* ---- restore ---- */
