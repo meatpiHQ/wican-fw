@@ -75,7 +75,17 @@ static int precedence(char operator) {
     return 0;
 }
 
-bool evaluate_expression(uint8_t *expression, uint8_t *data, double V, double *result) {
+// True if every byte in [start, end] lies inside a data_len-byte buffer.
+// An inverted range reads nothing, so it is in bounds.
+static bool byte_range_in_bounds(int start, int end, size_t data_len)
+{
+    if (start > end) {
+        return true;
+    }
+    return start >= 0 && (size_t)end < data_len;
+}
+
+bool evaluate_expression(uint8_t *expression, uint8_t *data, size_t data_len, double V, double *result) {
     Stack operandStack, operatorStack;
     initStack(&operandStack);
     initStack(&operatorStack);
@@ -109,6 +119,12 @@ bool evaluate_expression(uint8_t *expression, uint8_t *data, double V, double *r
                     freeStack(&operatorStack);
                     return false;
                 }
+                if (!byte_range_in_bounds(start_index, end_index, data_len)) {
+                    ESP_LOGW(TAG, "[B%d:B%d] is past the end of a %u-byte response", start_index, end_index, (unsigned)data_len);
+                    freeStack(&operandStack);
+                    freeStack(&operatorStack);
+                    return false;
+                }
                 for (int j = start_index; j <= end_index; j++) {
                     int shift_amount = (end_index - j) * 8;
                     sum_64 |= ((uint64_t)data[j] << shift_amount);
@@ -120,6 +136,12 @@ bool evaluate_expression(uint8_t *expression, uint8_t *data, double V, double *r
                     i += chars_read;
                     if (end_index - start_index > 7) {
                         ESP_LOGE(TAG, "Range too large for 64-bit storage.");
+                        freeStack(&operandStack);
+                        freeStack(&operatorStack);
+                        return false;
+                    }
+                    if (!byte_range_in_bounds(start_index, end_index, data_len)) {
+                        ESP_LOGW(TAG, "[S%d:S%d] is past the end of a %u-byte response", start_index, end_index, (unsigned)data_len);
                         freeStack(&operandStack);
                         freeStack(&operatorStack);
                         return false;
@@ -172,6 +194,12 @@ bool evaluate_expression(uint8_t *expression, uint8_t *data, double V, double *r
                 index = index * 10 + (expression[i] - '0');
                 i++;
             }
+            if ((size_t)index >= data_len) {
+                ESP_LOGW(TAG, "B%d is past the end of a %u-byte response", index, (unsigned)data_len);
+                freeStack(&operandStack);
+                freeStack(&operatorStack);
+                return false;
+            }
             uint8_t value = data[index];
             if (expression[i] == ':') {
                 i++;
@@ -186,6 +214,12 @@ bool evaluate_expression(uint8_t *expression, uint8_t *data, double V, double *r
             while (isdigit(expression[i])) {
                 index = index * 10 + (expression[i] - '0');
                 i++;
+            }
+            if ((size_t)index >= data_len) {
+                ESP_LOGW(TAG, "S%d is past the end of a %u-byte response", index, (unsigned)data_len);
+                freeStack(&operandStack);
+                freeStack(&operatorStack);
+                return false;
             }
             int8_t value = (int8_t)data[index];
             push(&operandStack, value);
