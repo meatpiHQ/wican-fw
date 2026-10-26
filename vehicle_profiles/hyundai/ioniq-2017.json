@@ -1,28 +1,80 @@
 {
   "car_model": "Hyundai: Ioniq2017",
-  "init": "ATSP6;ATSH7E4;ATST96;",
+  "init": "ATSP6;ATS0;ATAL;ATST96;",
   "pids": [
     {
-      "pid": "21057",
-      "parameters": {
-        "SOC_D": "B39/2",
-        "SOH": "[B33:B34]/10"
-      }
-    },
-    {
       "pid": "2101",
+      "pid_init": "ATSH7E4;ATFCSH7E4;",
       "parameters": {
         "SOC": "B09/2",
+        "HV_V": "[B18:B19]/10",
+        "HV_A": "((S15 << 8) | S17)/10",
+        "HV_W": "([B18:B19]/10) * (((S15 << 8) | S17)/10)",
+        "HV_C_V_MAX": "B30*0.02",
+        "HV_C_V_MAX_NO": "B31",
+        "HV_C_V_MIN": "B33*0.02",
+        "HV_C_V_MIN_NO": "B34",
+        "LV_V": "B37*0.1",
+        "HV_T_MAX": "S20",
+        "HV_T_MIN": "S21",
+        "HV_T_I": "S29",
+        "HV_T_1": "S22",
+        "HV_T_2": "S23",
+        "HV_T_3": "S25",
+        "HV_T_4": "S26",
+        "HV_T_5": "S27",
+        "KWH_CHARGED": "((B47<<24)|(B49<<16)|(B50<<8)|B51)/10",
         "CHARGER_CONNECTED": "B14:5",
         "CHARGING": "B14:7",
         "CHARGING_DC": "B14:6"
       }
     },
     {
-      "pid": "22B0025",
+      "pid": "2105",
+      "pid_init": "ATSH7E4;ATFCSH7E4;",
+      "parameters": {
+        "SOH": "[B33:B34]/10",
+        "SOC_D": "B39/2",
+        "HV_AV": "[B25:B26]/100",
+        "HV_C_D_MIN": "[B36:B37]/10",
+        "HV_C_D_MIN_NO": "B38",
+        "HV_C_D_MAX_NO": "B35"
+      }
+    },
+    {
+      "pid": "22B002",
       "pid_init": "ATSH7C6;ATFCSH7C6;",
       "parameters": {
-        "ODOMETER": "[B17:B18]"
+        "ODOMETER": "[B12:B14]"
+      }
+    },
+    {
+      "pid": "22C00B",
+      "pid_init": "ATSH7A0;ATFCSH7A0;",
+      "parameters": {
+        "TYRE_P_FL": "B10*0.2",
+        "TYRE_P_FR": "B14*0.2",
+        "TYRE_P_RL": "B19*0.2",
+        "TYRE_P_RR": "B23*0.2",
+        "TYRE_T_FL": "B11-50",
+        "TYRE_T_FR": "B15-50",
+        "TYRE_T_RL": "B20-50",
+        "TYRE_T_RR": "B25-50"
+      }
+    },
+    {
+      "pid": "220100",
+      "pid_init": "ATSH7B3;ATFCSH7B3;",
+      "parameters": {
+        "TMP_A": "(B12/2)-40",
+        "T_CAB": "(B11/2)-40"
+      }
+    },
+    {
+      "pid": "2101",
+      "pid_init": "ATSH7E2;ATFCSH7E2;",
+      "parameters": {
+        "SPEED": "((S20*256)+B19)/60"
       }
     }
   ]
