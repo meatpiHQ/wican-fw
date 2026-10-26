@@ -226,6 +226,26 @@ char *config_server_get_sta_pass(void)
 {
 	return device_config.sta_pass;
 }
+
+char *config_server_get_sta_static_ip(void)
+{
+	return device_config.sta_static_ip;
+}
+
+char *config_server_get_sta_gateway(void)
+{
+	return device_config.sta_gateway;
+}
+
+char *config_server_get_sta_netmask(void)
+{
+	return device_config.sta_netmask;
+}
+
+char *config_server_get_sta_dns(void)
+{
+	return device_config.sta_dns;
+}
 int8_t config_server_protocol(void)
 {
 	if(strcmp(device_config.protocol, "slcan") == 0)
@@ -847,6 +867,10 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 		cJSON_AddStringToObject(root, "sta_pass", device_config.sta_pass);
 		cJSON_AddStringToObject(root, "sta_security", device_config.sta_security);
 		cJSON_AddStringToObject(root, "sta_ip", ip_str);
+		cJSON_AddStringToObject(root, "sta_static_ip", device_config.sta_static_ip);
+		cJSON_AddStringToObject(root, "sta_gateway", device_config.sta_gateway);
+		cJSON_AddStringToObject(root, "sta_netmask", device_config.sta_netmask);
+		cJSON_AddStringToObject(root, "sta_dns", device_config.sta_dns);
 	}
 
 	cJSON_AddStringToObject(root, "sta_status", (wifi_network_is_connected() ? "Connected" : "Not Connected"));
@@ -2035,7 +2059,56 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	ESP_LOGE(TAG, "device_config.ap_auto_disable: %s", device_config.ap_auto_disable);
-	//*****	
+	//*****
+
+	//***** Optional static STA IP. Any of ip/gateway/netmask missing, empty,
+	// or oversized falls back to "" (DHCP) -- there is no partially-static
+	// state: wifi_network_init only applies it when all three are set.
+	// sta_dns is separately optional -- when static IP is active but DNS is
+	// missing/invalid, wifi_network_init falls back to the gateway.
+	key = cJSON_GetObjectItem(root,"sta_static_ip");
+	if(key == 0 || key->valuestring == NULL || strlen(key->valuestring) >= sizeof(device_config.sta_static_ip))
+	{
+		device_config.sta_static_ip[0] = 0;
+	}
+	else
+	{
+		strcpy(device_config.sta_static_ip, key->valuestring);
+	}
+
+	key = cJSON_GetObjectItem(root,"sta_gateway");
+	if(key == 0 || key->valuestring == NULL || strlen(key->valuestring) >= sizeof(device_config.sta_gateway))
+	{
+		device_config.sta_gateway[0] = 0;
+	}
+	else
+	{
+		strcpy(device_config.sta_gateway, key->valuestring);
+	}
+
+	key = cJSON_GetObjectItem(root,"sta_netmask");
+	if(key == 0 || key->valuestring == NULL || strlen(key->valuestring) >= sizeof(device_config.sta_netmask))
+	{
+		device_config.sta_netmask[0] = 0;
+	}
+	else
+	{
+		strcpy(device_config.sta_netmask, key->valuestring);
+	}
+
+	key = cJSON_GetObjectItem(root,"sta_dns");
+	if(key == 0 || key->valuestring == NULL || strlen(key->valuestring) >= sizeof(device_config.sta_dns))
+	{
+		device_config.sta_dns[0] = 0;
+	}
+	else
+	{
+		strcpy(device_config.sta_dns, key->valuestring);
+	}
+
+	ESP_LOGI(TAG, "device_config.sta_static_ip: %s, gateway: %s, netmask: %s, dns: %s",
+		device_config.sta_static_ip, device_config.sta_gateway, device_config.sta_netmask, device_config.sta_dns);
+	//*****
 
 	//*****
 	key = cJSON_GetObjectItem(root,"keep_alive");
