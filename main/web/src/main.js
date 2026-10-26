@@ -2910,6 +2910,15 @@ function checkStatus() {
             badge.title = vpnText;
         }
         document.getElementById("obd_chip_status").innerHTML = obj.obd_chip_status || "N/A";
+        // Persist-PIDs-to-SD requires a card: grey the toggle and show its hint only when none is mounted.
+        const pidPersistEl = document.getElementById("pid_persist");
+        if (pidPersistEl) {
+            pidPersistEl.disabled = !obj.sd_mounted;
+            // No card -> show "Disabled" regardless of the stored value, since the feature can't be active without a card.
+            if (!obj.sd_mounted) pidPersistEl.value = "disable";
+        }
+        const pidPersistHintEl = document.getElementById("pid_persist_hint");
+        if (pidPersistHintEl) pidPersistHintEl.style.display = obj.sd_mounted ? "none" : "inline";
         document.getElementById("uptime").innerHTML = obj.uptime || "N/A";
         const restartLastResetEl = document.getElementById("restart_last_reset_reason");
         if (restartLastResetEl) restartLastResetEl.innerHTML = formatRestartTrackerValue(obj.restart_last_reset_reason);
@@ -3485,6 +3494,7 @@ async function postConfig() {
     obj["sleep_status"] = document.getElementById("sleep_status").value;
     obj["sleep_disable_agree"] = document.getElementById("sleep_disable_agree").value;
     obj["periodic_wakeup"] = document.getElementById("periodic_wakeup").value;
+    obj["pid_persist"] = document.getElementById("pid_persist").value;
     obj["sleep_volt"] = document.getElementById("sleep_volt").value;
     obj["sleep_time"] = document.getElementById("sleep_time").value;
     obj["wakeup_interval"] = document.getElementById("wakeup_interval").value;
@@ -4054,6 +4064,11 @@ xhttp.onload = async function() {
             document.getElementById("periodic_wakeup").selectedIndex = "0";
         } else if(obj.periodic_wakeup == "disable") {
             document.getElementById("periodic_wakeup").selectedIndex = "1";
+        }
+        if(obj.pid_persist == "enable") {
+            document.getElementById("pid_persist").selectedIndex = "0";
+        } else if(obj.pid_persist == "disable") {
+            document.getElementById("pid_persist").selectedIndex = "1";
         }
 
         if ("mqtt_tx_en" in obj) {

@@ -230,7 +230,7 @@ const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"we
 										\"drive_ssid\":\"MeatPi\",\"drive_password\":\"TomatoSauce\",\"drive_security\":\"wpa3\",\"drive_protocol\":\"elm327\",\"drive_connection_type\":\"wifi\",\"drive_mode_timeout\":\"60\",\
 										\"can_datarate\":\"500K\",\
 										\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\
-								\"ble_status\":\"disable\",\"ble_power\":\"9\",\"sleep_status\":\"enable\",\"periodic_wakeup\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"sleep_time\":\"5\",\"wakeup_interval\":\"90\",\"batt_alert\":\"disable\",\
+								\"ble_status\":\"disable\",\"ble_power\":\"9\",\"sleep_status\":\"enable\",\"periodic_wakeup\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"sleep_time\":\"5\",\"wakeup_interval\":\"90\",\"pid_persist\":\"disable\",\"batt_alert\":\"disable\",\
 										\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\
 										\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\
 								\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"elm327_udp_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\
@@ -1801,6 +1801,7 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	cJSON_AddStringToObject(root, "wakeup_volt", device_config.wakeup_volt);
 	cJSON_AddStringToObject(root, "periodic_wakeup", device_config.periodic_wakeup);
 	cJSON_AddStringToObject(root, "wakeup_interval", device_config.wakeup_interval);
+	cJSON_AddStringToObject(root, "pid_persist", device_config.pid_persist);
 
 	cJSON_AddStringToObject(root, "batt_alert", device_config.batt_alert);
 	if(!remove_sensitive_info)
@@ -1847,6 +1848,7 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 
 	// Time sync status (used by VPN gating + DNS resolution stability)
 	cJSON_AddBoolToObject(root, "time_synced", dev_status_is_time_synced());
+	cJSON_AddBoolToObject(root, "sd_mounted", sdcard_is_mounted());
 
 	// STA DNS servers
 	{
@@ -3313,6 +3315,18 @@ static void config_server_load_cfg(char *cfg)
 	}
 
 	ESP_LOGI(TAG, "device_config.wakeup_interval: %s", device_config.wakeup_interval);
+
+	key = cJSON_GetObjectItem(root,"pid_persist");
+	if(key == 0)
+	{
+		strlcpy(device_config.pid_persist, "disable", sizeof(device_config.pid_persist));
+	}
+	else
+	{
+		strlcpy(device_config.pid_persist, key->valuestring, sizeof(device_config.pid_persist));
+	}
+
+	ESP_LOGI(TAG, "device_config.pid_persist: %s", device_config.pid_persist);
 	//*****	
 
 
@@ -3872,6 +3886,15 @@ int8_t config_server_get_wakeup_interval(uint32_t *wakeup_interval)
     
     *wakeup_interval = (uint32_t)wk_int;
     return 1;
+}
+
+int8_t config_server_get_pid_persist(void)
+{
+	if(strcmp(device_config.pid_persist, "enable") == 0)
+	{
+		return 1;
+	}
+	return 0;
 }
 
 int8_t config_server_get_battery_alert_config(void)

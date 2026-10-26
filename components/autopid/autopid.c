@@ -51,6 +51,9 @@
 #include "ha_webhooks.h"
 #include "autopid_config.h"
 #include "esp_heap_caps.h"
+#include "sdcard.h"
+#include "esp_timer.h"
+#include <sys/stat.h>
 
 // #define TAG __func__
 #define TAG "AUTO_PID"
@@ -608,6 +611,73 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
     return ESP_FAIL;
 }
 
+// Last-known PID persistence (Feature: survive a sleep/wake reboot or power
+// loss so cached values can still be reported while the ECU is asleep).
+// Stored on the SD card next to the OBD logger data. Opt-in via "pid_persist".
+#define PID_PERSIST_DIR              SD_CARD_MOUNT_POINT "/wican_data"
+#define PID_PERSIST_PATH             PID_PERSIST_DIR "/pid_last.json"
+#define PID_PERSIST_MIN_INTERVAL_US  (60LL * 1000000LL)   // throttle SD writes to <=1/min
+
+// Best-effort write of the latest published snapshot JSON to the SD card.
+// Called from autopid_data_update() while autopid_data.mutex is held, so it
+// takes no additional lock. Requires an SD card and the pid_persist setting.
+static void autopid_persist_snapshot(const char *json)
+{
+    static int64_t last_write_us = 0;
+
+    // Skip empty snapshots ("{}") — e.g. before the first successful ECU read —
+    // so we never overwrite previously-persisted last-known values with nothing.
+    if (json == NULL || json[0] == '\0' || strcmp(json, "{}") == 0)
+    {
+        return;
+    }
+    if (config_server_get_pid_persist() != 1 || !dev_status_is_bit_set(DEV_SDCARD_MOUNTED_BIT))
+    {
+        return;
+    }
+
+    int64_t now = esp_timer_get_time();
+    if (last_write_us != 0 && (now - last_write_us) < PID_PERSIST_MIN_INTERVAL_US)
+    {
+        return;
+    }
+    last_write_us = now;
+
+    mkdir(PID_PERSIST_DIR, 0755); // ignore errors (e.g. directory already exists)
+
+    // Write to a temp file then rename, so a power loss mid-write can't corrupt
+    // the live cache (a failed write just leaves the previous good file).
+    FILE *fp = fopen(PID_PERSIST_PATH ".tmp", "w");
+    if (fp == NULL)
+    {
+        ESP_LOGW(TAG, "pid_persist: cannot open %s", PID_PERSIST_PATH ".tmp");
+        return;
+    }
+    size_t len = strlen(json);
+    bool ok = (fwrite(json, 1, len, fp) == len);
+    if (fclose(fp) != 0)
+    {
+        ok = false;
+    }
+    if (ok)
+    {
+        // FATFS rename() fails if the destination already exists, so remove the
+        // previous file first (no-op if absent). The full temp was written above,
+        // so a crash during the write can't corrupt the live file.
+        remove(PID_PERSIST_PATH);
+        if (rename(PID_PERSIST_PATH ".tmp", PID_PERSIST_PATH) != 0)
+        {
+            ESP_LOGW(TAG, "pid_persist: rename to %s failed", PID_PERSIST_PATH);
+            remove(PID_PERSIST_PATH ".tmp");
+        }
+    }
+    else
+    {
+        ESP_LOGW(TAG, "pid_persist: write to %s failed", PID_PERSIST_PATH ".tmp");
+        remove(PID_PERSIST_PATH ".tmp");
+    }
+}
+
 static void autopid_data_update(autopid_config_t *pids)
 {
     if (!pids || !pids->mutex)
@@ -683,10 +753,105 @@ static void autopid_data_update(autopid_config_t *pids)
             }
             autopid_data.json_str = cJSON_PrintUnformatted(root);
             cJSON_Delete(root);
+
+            // Persist the latest snapshot so cached values survive a reboot.
+            autopid_persist_snapshot(autopid_data.json_str);
         }
 
         // release mutex
         xSemaphoreGive(autopid_data.mutex);
+    }
+}
+
+// Restore last-known values from the SD snapshot into the parameter structs, so
+// MQTT/webhook can report them immediately after boot even if the ECU is asleep.
+// Called once from autopid_init() before the worker tasks start (no locking
+// needed). Values are keyed by parameter name; a later successful ECU read
+// simply overwrites them.
+static void autopid_load_persisted_values(void)
+{
+    if (config_server_get_pid_persist() != 1 || !dev_status_is_bit_set(DEV_SDCARD_MOUNTED_BIT))
+    {
+        return;
+    }
+    if (autopid_config == NULL)
+    {
+        return;
+    }
+
+    FILE *fp = fopen(PID_PERSIST_PATH, "r");
+    if (fp == NULL)
+    {
+        return; // nothing persisted yet
+    }
+    fseek(fp, 0, SEEK_END);
+    long sz = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    if (sz <= 0 || sz > 65536)
+    {
+        fclose(fp);
+        return;
+    }
+    char *buf = malloc((size_t)sz + 1);
+    if (buf == NULL)
+    {
+        fclose(fp);
+        return;
+    }
+    size_t rd = fread(buf, 1, (size_t)sz, fp);
+    fclose(fp);
+    buf[rd] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    free(buf);
+    if (root == NULL)
+    {
+        return;
+    }
+
+    uint32_t restored = 0;
+    for (int pass = 0; pass < 2; pass++)
+    {
+        uint32_t group_count = (pass == 0) ? autopid_config->pid_count : autopid_config->can_filters_count;
+        for (uint32_t i = 0; i < group_count; i++)
+        {
+            parameter_t *params = (pass == 0) ? autopid_config->pids[i].parameters
+                                              : autopid_config->can_filters[i].parameters;
+            uint32_t pcount = (pass == 0) ? autopid_config->pids[i].parameters_count
+                                          : autopid_config->can_filters[i].parameters_count;
+            for (uint32_t j = 0; j < pcount; j++)
+            {
+                parameter_t *p = &params[j];
+                if (p->name == NULL)
+                {
+                    continue;
+                }
+                cJSON *it = cJSON_GetObjectItem(root, p->name);
+                if (cJSON_IsNumber(it))
+                {
+                    p->value = (float)it->valuedouble;
+                    p->failed = false;
+                    restored++;
+                }
+                else if (cJSON_IsString(it) && it->valuestring != NULL)
+                {
+                    // binary sensors are serialised as "on"/"off"
+                    p->value = (strcmp(it->valuestring, "on") == 0) ? 1.0f : 0.0f;
+                    p->failed = false;
+                    restored++;
+                }
+            }
+        }
+    }
+    cJSON_Delete(root);
+
+    ESP_LOGI(TAG, "pid_persist: restored %lu cached value(s) from SD", (unsigned long)restored);
+
+    // Rebuild the published snapshot so MQTT and the HTTP webhook can serve the
+    // restored values immediately, before the first (possibly failing) ECU poll.
+    if (restored > 0)
+    {
+        autopid_data_update(autopid_config);
     }
 }
 
@@ -4465,6 +4630,17 @@ void autopid_init(char *id, bool enable_logging, uint32_t logging_period)
         ESP_LOGE(TAG, "No PIDs found in car_data.json or auto_pid.json");
         return;
     }
+
+    // Seed parameters with the last-known values persisted on the SD card so
+    // MQTT/webhook can report them right away while the ECU is still asleep.
+    autopid_load_persisted_values();
+
+    // If persistence is disabled, remove any stale cache left on the card.
+    if (config_server_get_pid_persist() != 1 && sdcard_is_mounted())
+    {
+        remove(PID_PERSIST_PATH);
+    }
+
     // Build and cache config JSON once after loading autopid_config
     (void)autopid_get_config();
     // autopid_load_config(config_str);
