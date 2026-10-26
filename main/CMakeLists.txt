@@ -3,6 +3,7 @@ idf_component_register(
          "main_bench.c"
          "main_boot.c"
          "main_cli.c"
+         "main_factory.c"
          "main_glue.c"
          "main_heap.c"
          "main_park.c"

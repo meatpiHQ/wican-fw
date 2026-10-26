@@ -36,3 +36,8 @@ void main_glue_wire_button(void);
  *  data) for fw_update's cellular policy, and the HA push's update keys.
  *  After ota_manager_init / fw_update_init / ha_webhooks_init. */
 void main_glue_wire_fw_update(void);
+
+/** The factory reset the web route performs is the device's full wipe
+ *  (main_factory.c), not the settings partition alone (2026-10-26).
+ *  After api_http_init. */
+void main_glue_wire_factory_reset(void);

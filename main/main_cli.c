@@ -35,9 +35,9 @@
 #include "dev_status_manager.h"
 #include "log_manager.h"
 #include "restart_tracker.h"
-#include "settings_manager.h"
 
 #include "main_cli.h"
+#include "main_factory.h"
 
 /* ---- system (composite; legacy cmd_system.c interface) ------------------------ */
 
@@ -399,9 +399,10 @@ static int cmd_factoryreset(int argc, char **argv)
         }
 
         cmdline_printf("Starting factory reset...\n");
-        cmdline_printf("Deleting settings files...\n");
+        cmdline_printf("Wiping the settings, the stored data and NVS "
+                       "(the SD card is kept)...\n");
 
-        esp_err_t err = settings_manager_factory_reset();
+        esp_err_t err = main_factory_reset();
 
         s_freset_pending = false;
 
@@ -436,9 +437,13 @@ static int cmd_factoryreset(int argc, char **argv)
     cmdline_printf("=== FACTORY RESET WARNING ===\n");
     cmdline_printf("This will permanently delete ALL settings (WiFi, "
                    "BLE, MQTT, bridges, ...)\n");
-    cmdline_printf("and reboot to factory defaults (AP mode).\n");
-    cmdline_printf("Certificate sets and files on /data or the SD card "
-                   "are NOT deleted.\n");
+    cmdline_printf("and everything stored on the device: vehicles, "
+                   "databases, scripts,\n");
+    cmdline_printf("the dashboard, certificate sets and the backup copy "
+                   "on the flash,\n");
+    cmdline_printf("then reboot to factory defaults (AP mode).\n");
+    cmdline_printf("The SD card is NOT touched. The crash report and the "
+                   "backup key are kept.\n");
     cmdline_printf("\n");
     cmdline_printf("This action CANNOT be undone!\n");
     cmdline_printf("\n");
@@ -553,8 +558,8 @@ esp_err_t main_cli_register(void)
         { .command = "ping", .help = "Ping a host (pending)",
           .func = cmd_pending },
         { .command = "factoryreset",
-          .help = "Perform factory reset - deletes all settings and "
-                  "reboots",
+          .help = "Factory reset: wipes the settings, the stored data and "
+                  "NVS (not the SD card), reboots",
           .hint = "Options: -c/--confirm",
           .func = cmd_factoryreset },
     };

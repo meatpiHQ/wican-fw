@@ -198,7 +198,7 @@
         <div class="divider"></div>
 
         <div class="section-title">Factory Reset</div>
-        <p>Reset all settings to factory defaults. This action cannot be undone.</p>
+        <p>Return the device to its factory state: all settings and everything stored on it are erased (the SD card is kept). This action cannot be undone.</p>
         <button type="button" class="btn btn-secondary" onclick="confirmFactoryReset()">Factory Reset</button>
 
         <div class="divider"></div>
@@ -313,7 +313,7 @@
         }
 
         function confirmFactoryReset() {
-            if (confirm('Are you sure you want to perform a factory reset? This will erase all settings and cannot be undone.')) {
+            if (confirm('Factory reset: all settings and everything stored on the device will be erased (the SD card is kept). This cannot be undone. Continue?')) {
                 factoryReset();
             }
         }

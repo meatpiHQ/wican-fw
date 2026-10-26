@@ -7,7 +7,7 @@
    states (a plain file of this device, a locked file of another device and its
    unlock, a redacted file, a newer file refused, the copy on the flash). Three
    boots: a device with a card, one without and with the copies off, and
-   (2026-10-16) one whose copy holds the settings from before a factory reset
+   (2026-10-16) one whose copy holds everything from before a factory reset
    (issue #987: the row, the refresh that asks first) and whose databases part
    leaves a file out (issue #989: the note under the row and in the preview).
    Prints `BACKUP PROBE PASS`. */
@@ -201,7 +201,7 @@ function boot(hash, preset) {
     check("a part says what the backup leaves out, by name and reason", !!dbRow && /Not in the backup: big\.dbc \(over 512 KB\), and 2 more\./.test(dbRow.textContent), dbRow && dbRow.textContent);
     check("the other parts carry no such note", !/Not in the backup/.test(p.rowOf(bk, "scripts").textContent));
     let places = p.$$(".bk-place", cp);
-    check("the held copy says so, with the date and both ways out", places[0].classList.contains("bk-held") && /Holding the settings from before the factory reset of /.test(places[0].textContent) && /Restore to undo the reset/.test(places[0].textContent) && /refresh the copies to let them follow/.test(places[0].textContent) && !!places[0].querySelector(".bk-held-chip"), places[0].textContent);
+    check("the held copy says so, with the date and both ways out", places[0].classList.contains("bk-held") && /Holding everything from before the factory reset of /.test(places[0].textContent) && /Restore to undo the reset/.test(places[0].textContent) && /refresh the copies to let them follow/.test(places[0].textContent) && !!places[0].querySelector(".bk-held-chip"), places[0].textContent);
     check("the held copy still offers Restore", !!places[0].querySelector(".bk-restore-copy"));
     /* a refresh asks before letting the undo go */
     p.click(p.$(".bk-refresh", cp)); await sleep(400);
@@ -213,7 +213,7 @@ function boot(hash, preset) {
     m = p.modal();
     p.click(p.$$(".acts .btn", m).find((b) => b.textContent === "Continue")); await sleep(1200);
     places = p.$$(".bk-place", cp);
-    check("Continue refreshes and the copy follows the device again", p.w.__mockState.backupRefreshes === 1 && !places[0].classList.contains("bk-held") && /Survives a factory reset/.test(places[0].textContent), places[0].textContent);
+    check("Continue refreshes and the copy follows the device again", p.w.__mockState.backupRefreshes === 1 && !places[0].classList.contains("bk-held") && /A factory reset wipes it/.test(places[0].textContent), places[0].textContent);
     /* the restore preview names what the backup left out */
     p.click(places[0].querySelector(".bk-restore-copy")); await sleep(600);
     m = p.modal();

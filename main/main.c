@@ -325,6 +325,8 @@ void app_main(void)
     main_glue_wire_fw_update();
     /* glue: BLE console lines run through cmdline_manager */
     main_glue_wire_ble_cli();
+    /* glue: the web route's factory reset is the device's full wipe */
+    main_glue_wire_factory_reset();
 
     /* ---- the ONE settings apply pass, then start everything --------------- */
     main_boot_init("settings_manager_start", settings_manager_start);

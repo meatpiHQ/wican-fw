@@ -39,6 +39,11 @@ param(
     [switch]$SkipBenchCheck,  # bypass the physical-bench preflight
     [switch]$NoConsole,       # PC bench stages: do not open the DUT's console
                               # port beside the run (Start-ConsoleTail)
+    [switch]$Factory,         # backup stage: run b9 too, a REAL factory reset of
+                              # the DUT (the full wipe since 2026-10-26) and the
+                              # undo from its SD copy; the reset DUT is reached
+                              # on its own AP through the Pi (a second forward
+                              # and the bench's --join-ap)
     [switch]$SdFormat         # sdformat stage: really format the card WiCAN
                               # cannot read (it erases the card)
 )
@@ -1245,15 +1250,26 @@ try {
             # idle quiet. Eight planned restarts; no console, no PCAN.
             Invoke-Stage 'Configuration backup' {
                 $py = $script:BenchPy
+                $apTunnel = $null
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
                 try {
                     Start-Sleep -Seconds 3
                     if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
-                    $out = & $py -u "$repo\tools\testbench\system\config_backup_bench.py" --dut 'localhost:18081' --pi $BenchHost 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    $benchArgs = @('--dut', 'localhost:18081', '--pi', $BenchHost)
+                    if ($Factory) {
+                        # b9: the reset DUT answers on its own AP only (the bench DUT's USB link
+                        # to the Pi drops once the factory default hands the port to the
+                        # ESPNetLink dongle): a second forward to the AP address; the bench
+                        # starts the Pi's join right after the reset (--join-ap) and leaves it
+                        $apTunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', '18082:192.168.0.10:80', $BenchHost)
+                        $benchArgs += @('--factory', '--reset-dut', 'localhost:18082', '--join-ap')
+                    }
+                    $out = & $py -u "$repo\tools\testbench\system\config_backup_bench.py" @benchArgs 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'config_backup' $out
                     if (-not ($out | Select-String -Quiet 'CONFIG BACKUP PASS')) { throw 'no CONFIG BACKUP PASS (the DUT on the bench AP? a card in for the SD leg?)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    if ($apTunnel -and -not $apTunnel.HasExited) { Stop-Process -Id $apTunnel.Id -Force -Confirm:$false }
                 }
             }
         }

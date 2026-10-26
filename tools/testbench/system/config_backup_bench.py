@@ -48,11 +48,24 @@ Legs:
       DUT (the refresh is judged by its time stamp): without NTP through the
       Pi set it (POST /api/rtc {"epoch"}) before the leg
   b9  (issue #987, 2026-10-16, OPT-IN: --factory --reset-dut host:port) the
-      copy after a factory reset: refreshed, the reset (a restart onto the
-      device's own AP, reached at --reset-dut), the copy reads held, the
-      settings restored from it (a restart back onto the bench AP) equal the
-      as-found ones, the hold released. The rig must reach the DUT's own AP
-      (TESTING.md: the Pi's wint0 joined to WiCAN_<id> with a forward).
+      factory reset and its undo. Since 2026-10-26 the reset is the device's
+      full wipe (main_factory_reset: the settings partition, /data and NVS
+      erased, the crash report and the backup key written back, the SD card
+      kept), so the leg proves that: the copies refreshed, a marker file on
+      /data and one on /sd, the reset (a restart onto the defaults, reached
+      at --reset-dut: the device's own AP through the Pi; the bench DUT's
+      USB link to the Pi answers for the first half minute only, then the
+      factory default hands the USB port to the ESPNetLink dongle), the
+      /data marker gone and the /sd marker kept, the
+      vehicles list empty, the internal copy fresh and not held, the SD copy
+      held, the key's created stamp unchanged, the crash report still there,
+      no fault latched; then every part restored from the SD copy (a restart
+      back onto the bench network) equal to the as-found ones, the hold
+      released. Without a card the undo restores the settings from the
+      as-found document instead. The rig must reach the DUT after the reset
+      (TESTING.md: a Pi radio joined to WiCAN_<id> with a forward to
+      192.168.0.10: tools/testbench/pi/dut_ap_join.sh, started beside the
+      run; it waits for the AP to appear).
   close: no unexpected reset, no E line of the component tags, the worker's
       stack headroom, the heap floor
 
@@ -177,6 +190,12 @@ def main():
                     help="run b9: a factory reset and the undo from the held copy")
     ap.add_argument("--reset-dut", default="", help="host:port where the DUT "
                     "answers after the factory reset (its own AP), for b9")
+    ap.add_argument("--join-ap", action="store_true",
+                    help="b9: right after the reset, join the DUT's own AP from the Pi "
+                    "(tools/testbench/pi/dut_ap_join.sh on --pi, radio --join-ifname) so "
+                    "--reset-dut can be a forward to 192.168.0.10; left at the end")
+    ap.add_argument("--join-ifname", default="wtest1",
+                    help="the Pi radio dut_ap_join.sh uses (default wtest1)")
     a = ap.parse_args()
 
     only = [x.strip() for x in a.only.split(",") if x.strip()]
@@ -254,6 +273,20 @@ def main():
     found = {}
     ref = None
     exit_code = 1
+    ap_join = None   # the Pi's join of the DUT's AP (b9 --join-ap), undone in finally
+
+    def ap_leave():
+        nonlocal ap_join
+        if ap_join is None:
+            return
+        try:
+            ap_join.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            ap_join.kill()
+        subprocess.run(["ssh", "-o", "BatchMode=yes", a.pi,
+                        f"bash ~/wican/tools/testbench/pi/dut_ap_join.sh down {a.join_ifname}"],
+                       timeout=60, capture_output=True)
+        ap_join = None
     try:
         # ---- b0: as found ---------------------------------------------------------
         info = dut.get("/api/info")
@@ -532,16 +565,45 @@ def main():
             raw(base, "/api/fs/file?path=" + q(big_path), "DELETE")
             time.sleep(8)   # the sweep after the deletes
 
-        # ---- b9: the copy after a factory reset (issue #987), opt-in ---------------------------
+        # ---- b9: the factory reset (the full wipe since 2026-10-26) and its undo (#987) ------
         if "b9" in legs:
+            q9 = urllib.parse.quote
             code, r = dut.api("/api/backup/copies/refresh", "POST", {}, timeout=60)
             run.check("b9_copy_fresh_before_the_reset", code == 200 and "internal" in (r.get("written") or []),
                       f"{code} {r}")
-            run.check("b9_not_held_before", status()["copies"]["internal"].get("held") is False)
-            code, r = dut.api("/api/settings/factory_reset", "POST", {"confirm": "factory-reset"})
+            s_pre = status()
+            run.check("b9_not_held_before", s_pre["copies"]["internal"].get("held") is False)
+            card = bool(s_pre["copies"]["sd"].get("card")) and bool(s_pre["copies"]["sd"].get("present"))
+            key_created = (s_pre.get("key") or {}).get("created")
+            run.metric("b9_card_in", 1 if card else 0)
+            # markers: the one on /data must go with the reset, the one on /sd must stay
+            marker_data = "/data/bench_factory_marker.txt"
+            marker_sd = "/sd/bench_factory_marker.txt"
+            code, t = raw(base, "/api/fs/upload?path=" + q9(marker_data), "POST",
+                          b"gone after the factory reset\n", "application/octet-stream")
+            run.check("b9_marker_written_on_data", code == 200, f"{code} {t[:80]}")
+            if card:
+                code, t = raw(base, "/api/fs/upload?path=" + q9(marker_sd), "POST",
+                              b"kept across the factory reset\n", "application/octet-stream")
+                run.check("b9_marker_written_on_sd", code == 200, f"{code} {t[:80]}")
+            vehicles_pre = (dut.get("/api/autopid/vehicles") or {}).get("vehicles") or []
+            run.metric("b9_vehicles_before_the_reset", len(vehicles_pre))
+            code, _ = raw(base, "/api/restart/report")
+            report_pre = code == 200
+            time.sleep(8)   # the sweep the uploads trigger (the markers belong to no part)
+            code, r = dut.api("/api/settings/factory_reset", "POST", {"confirm": "factory-reset"}, timeout=60)
             run.check("b9_factory_reset_accepted", code == 200, f"{code} {r}")
             dut.restarts += 1
-            # the DUT comes back with the defaults on its own AP; the hold is decided 20 s in
+            if a.join_ap:
+                # the Pi joins WiCAN_<id> once it appears (the script waits up to 150 s), the
+                # factory AP password; --reset-dut is the forward to 192.168.0.10 through the Pi
+                ap_join = subprocess.Popen(
+                    ["ssh", "-o", "BatchMode=yes", a.pi,
+                     f"bash ~/wican/tools/testbench/pi/dut_ap_join.sh up WiCAN_{info.get('device_id')} "
+                     f"'@meatpi#' {a.join_ifname}"])
+            # the DUT comes back with the defaults on its own AP (the bench DUT's USB link to the
+            # Pi answers for the first half minute only: the default hands the port to the
+            # ESPNetLink dongle); the hold is decided 20 s in
             dut2 = pcbench.Dut(a.reset_dut, own_tags=OWN_TAGS, tasks=("cb_copies",))
             deadline = time.time() + 180
             up = False
@@ -559,26 +621,56 @@ def main():
             time.sleep(30)
             s9 = dut2.get("/api/backup/status")
             save("b9_status_after_reset.json", json.dumps(s9, indent=1))
-            run.check("b9_copy_held_after_the_reset", s9["copies"]["internal"].get("held") is True,
-                      str(s9["copies"]["internal"]))
             run.check("b9_settings_are_defaults", dut2.settings("wifi_manager").get("sta_ssid", "") == "")
-            code, man = dut2.api("/api/backup/copies/internal", timeout=60)
-            run.check("b9_held_copy_staged_with_its_settings", code == 200 and isinstance(man, dict)
-                      and "settings" in man.get("parts", {}) and not man.get("refused"), f"{code} {str(man)[:200]}")
+            code, t = raw(dut2.base, "/api/fs/download?path=" + q9(marker_data))
+            run.check("b9_data_marker_gone", code == 404, f"{code} {t[:80]}")
+            vehicles9 = (dut2.get("/api/autopid/vehicles") or {}).get("vehicles")
+            run.check("b9_vehicles_gone", vehicles9 == [], str(vehicles9)[:120])
+            run.check("b9_internal_copy_fresh_not_held", s9["copies"]["internal"].get("held") is False,
+                      str(s9["copies"]["internal"]))
+            if card:
+                code, t = raw(dut2.base, "/api/fs/download?path=" + q9(marker_sd))
+                run.check("b9_sd_marker_kept", code == 200 and "kept" in t, f"{code} {t[:80]}")
+                run.check("b9_sd_copy_held_after_the_reset", s9["copies"]["sd"].get("held") is True,
+                          str(s9["copies"]["sd"]))
+            key9 = (s9.get("key") or {}).get("created")
+            run.check("b9_backup_key_kept", key9 == key_created, f"{key_created} -> {key9}")
+            code, _ = raw(dut2.base, "/api/restart/report")
+            run.check("b9_crash_report_as_before", (code == 200) == report_pre, f"before {report_pre}, after {code}")
+            f9 = dut2.get("/api/faults")
+            run.check("b9_no_fault_latched", (f9 or {}).get("faults") == [], str(f9)[:160])
+            # the undo: every part from the SD copy (the flash copy is a fresh one now);
+            # without a card the as-found document's five parts
+            if card:
+                code, man = dut2.api("/api/backup/copies/sd", timeout=60)
+                run.check("b9_sd_copy_staged_with_its_settings", code == 200 and isinstance(man, dict)
+                          and "settings" in man.get("parts", {}) and not man.get("refused"), f"{code} {str(man)[:200]}")
+            else:
+                code, t = raw(dut2.base, "/api/backup/inspect?name=b0_as_found_plain.json", "POST",
+                              open(os.path.join(logdir, "b0_as_found_plain.json"), "rb").read())
+                man = json.loads(t) if code == 200 else {}
+                run.check("b9_as_found_document_staged", code == 200 and "settings" in man.get("parts", {})
+                          and not man.get("refused"), f"{code} {t[:200]}")
+            include = list(man.get("parts", {})) if isinstance(man, dict) and man.get("parts") else ["settings"]
             b1 = dut2.boot_count()
             code, r = dut2.api("/api/backup/restore", "POST",
-                               {"include": ["settings"], "keep_identity": True, "keep_vpn_keys": False}, timeout=120)
-            run.check("b9_restore_from_the_held_copy_accepted", code == 200 and isinstance(r, dict)
+                               {"include": include, "keep_identity": True, "keep_vpn_keys": False}, timeout=120)
+            run.check("b9_restore_accepted", code == 200 and isinstance(r, dict)
                       and r.get("reboot") is True, f"{code} {str(r)[:200]}")
-            # the restored settings bring the station network back: the bench AP, the tunnel
+            # the restored settings bring the station network back: the bench network, the tunnel
             wait_boot(dut, b1)
+            ap_leave()   # the DUT's AP is gone with the restore; the Pi's profile goes too
             time.sleep(4)
             doc9, _ = plain_doc()
-            run.check("b9_settings_back_as_before_the_reset",
-                      part_equal("settings", doc9["parts"]["settings"], ref["parts"]["settings"]),
-                      part_diff("settings", doc9["parts"]["settings"], ref["parts"]["settings"]))
+            for name in (FILE_PARTS if card else ["settings"]):
+                ok = part_equal(name, doc9["parts"].get(name), ref["parts"].get(name))
+                run.check(f"b9_{name}_back_as_before_the_reset", ok,
+                          "" if ok else part_diff(name, doc9["parts"].get(name), ref["parts"].get(name)))
             time.sleep(25)
-            run.check("b9_hold_released_after_the_restore", status()["copies"]["internal"].get("held") is False)
+            run.check("b9_hold_released_after_the_restore",
+                      status()["copies"]["sd" if card else "internal"].get("held") is False)
+            if card:
+                raw(base, "/api/fs/file?path=" + q9(marker_sd), "DELETE")
 
         # ---- close ----------------------------------------------------------------------------
         if found.get("auto_copy") is not None and \
@@ -593,6 +685,10 @@ def main():
         print("BENCH:", e, flush=True)
         exit_code = 2
     finally:
+        try:
+            ap_leave()
+        except (OSError, subprocess.SubprocessError):
+            pass
         if tunnel is not None:
             tunnel.terminate()
     sys.exit(exit_code)

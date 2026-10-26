@@ -14,6 +14,7 @@
  *        safe mode opens anyway; no filesystem is mounted for it.
  */
 #include "main_safemode.h"
+#include "main_factory.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -270,24 +271,23 @@ static esp_err_t factory_reset_handler(httpd_req_t *req)
 {
     ESP_LOGI(TAG, "factory reset requested");
 
-    /* raw partition erase: deliberately NOT settings_manager (safe mode
-       must recover from a settings layer too corrupt to load) */
-    const esp_partition_t *settings = esp_partition_find_first(
-        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "settings");
+    /* the device's factory reset in its bare form (main_factory.c,
+       2026-10-26): the settings partition erased raw, deliberately NOT
+       through settings_manager (safe mode must recover from a settings
+       layer too corrupt to load), the data partition erased, NVS erased
+       and made again with the crash report and the backup key written
+       back (the report is no setting: a user who resets first and asks
+       for help second still has it). Before 2026-10-26 safe mode erased
+       the settings partition and NVS alone. */
+    esp_err_t err = main_factory_reset_bare();
 
-    if (settings != NULL)
+    if (err != ESP_OK)
     {
-        esp_partition_erase_range(settings, 0, settings->size);
-    }
-
-    nvs_flash_erase();
-
-    /* the crash report is no setting: it goes back in, so that a user who
-       resets first and asks for help second still has it (the console's
-       `factoryreset` never touched NVS either) */
-    if (nvs_flash_init() == ESP_OK)
-    {
-        (void)restart_tracker_restore_report();
+        /* nothing is mounted here: the page says "try again", and a retry
+           is safe at any point of the sequence */
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        httpd_resp_sendstr(req, "factory reset incomplete");
+        return ESP_OK;
     }
 
     httpd_resp_sendstr(req, "OK");

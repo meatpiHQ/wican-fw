@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "api_http.h"
 #include "autopid.h"
 #include "ble_manager.h"
 #include "button_manager.h"
@@ -33,6 +34,7 @@
 #include "dev_status_manager.h"
 #include "usb_host_manager.h"
 
+#include "main_factory.h"
 #include "main_glue.h"
 
 /** Composition glue: SD mount events flip filesystem's /sd backend. */
@@ -452,4 +454,9 @@ void main_glue_wire_fw_update(void)
         sizeof(WICAN_IMAGE_PREFIXES) / sizeof(WICAN_IMAGE_PREFIXES[0]));
     (void)fw_update_set_uplink_provider(fwu_uplink);
     (void)ha_webhooks_set_fw_provider(fwu_ha_provider);
+}
+
+void main_glue_wire_factory_reset(void)
+{
+    (void)api_http_set_factory_reset(main_factory_reset);
 }
