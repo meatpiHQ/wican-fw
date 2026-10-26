@@ -2530,6 +2530,8 @@ function getElements() {
         protocol: document.getElementById("protocol"),
         portType: document.getElementById("port_type"),
         mqttElm327Log: document.getElementById("mqtt_elm327_log"),
+        mqttRxIndividualEn: document.getElementById("mqtt_rx_individual_en"),
+        mqttRxIndividualRetain: document.getElementById("mqtt_rx_individual_retain"),
         periodicWakeup: document.getElementById("periodic_wakeup"),
         wakeupEveryRow: document.getElementById("wakeup_every_row"),
         sta_ble_info: document.getElementById("sta_ble_info")
@@ -3538,6 +3540,8 @@ async function postConfig() {
     obj["log_period"] = document.getElementById("log_period").value;
     obj["imu_threshold"] = document.getElementById("imu_threshold").value;
     obj["elm327_udp_log"] = document.getElementById("elm327_udp_log").value;
+    obj["mqtt_rx_individual_en"] = document.getElementById("mqtt_rx_individual_en").value;
+	obj["mqtt_rx_individual_retain"] = document.getElementById("mqtt_rx_individual_retain").value;
 
     // Collect fallback networks (max 5)
     try {
@@ -4146,6 +4150,8 @@ xhttp.onload = async function() {
         document.getElementById("mqtt_rx_topic").value = obj.mqtt_rx_topic;
         document.getElementById("mqtt_status_topic").value = obj.mqtt_status_topic;
         document.getElementById("mqtt_elm327_log").value = obj.mqtt_elm327_log;
+        document.getElementById("mqtt_rx_individual_en").value = obj.mqtt_rx_individual_en;
+		document.getElementById("mqtt_rx_individual_retain").value = obj.mqtt_rx_individual_retain;
         document.getElementById("vpn_status").innerHTML = obj.vpn_status || "N/A";
         // Optional fields for MQTTS (UI only for now)
         if (obj.mqtt_security){
