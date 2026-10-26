@@ -2300,7 +2300,7 @@
       keyDownloaded: false, keyDownloadedAt: "", keyCreated: "2026-10-11T09:14:00Z",
       sd: sdScene.state === "mounted", sdDeviceId: null, copies: true, copiesRefreshed: "2026-10-11T09:14:00Z",
       inspectAs: "plain_this",   /* what an uploaded file reads as: plain_this | enc_other | redacted | newer | v1 */
-      held: false, heldSince: "2026-10-15T08:00:00Z",   /* the copies hold the settings from before a factory reset (issue #987) */
+      held: false, heldSince: "2026-10-15T08:00:00Z",   /* the copies hold everything from before a factory reset (issue #987) */
       leftOut: null,   /* [{name, why}] the databases part leaves out (issue #989): the status, the file, the preview */
     }, (window.__mockPreset || {}).backup || {}),
     backupStaged: null, backupRestores: [], backupRefreshes: 0, backupUnlocks: 0,
@@ -2353,6 +2353,10 @@
     /* a J1939-only truck: no chip protocol; the VIN comes from the listener (BAM), the
        sample path without it knows the controllers alone */
     ? { key: j1939Listening() ? J1939_VIN : "fp:9be17165", vin: j1939Listening() ? J1939_VIN : "", protocol: "", dialect: "j1939", fingerprint: "9be17165", ecus: "0:0,B:0", j1939: true }
+    /* a car that answers nothing standard (a Nissan Leaf, 2026-10-26): no VIN, no 0100; the
+       profile's own request confirms it, its responders are the ECU set it is keyed by */
+    : state.detect === "profileonly"
+    ? { key: "fp:3b91c204", vin: "", protocol: "6", dialect: "obd2", fingerprint: "3b91c204", ecus: "7BB:00000000", j1939: false }
     : { key: "1WCAN0FW0P0000001", protocol: "6", dialect: "obd2", fingerprint: "9a3f17c2", ecus: "7E8:183F8003", j1939: false });
 
   /* GET /api/autopid/dtc, the shape of 2026-10-03: `path`, and a report
@@ -2560,6 +2564,15 @@
     }, state.sdFormatMs);
   };
   window.__mockSd = () => ({ sd: state.sd, posts: state.sdPosts });
+  /* the current vehicle summary on the status poll (2026-10-26): the car the live
+     tables belong to and whether its setup finished; a probe presets the store
+     through __mockPreset.vehicles (a pending current car beside a set-up one
+     puts the new-car bar up) */
+  const vehicleSummary = () => {
+    const cur = state.vehicles.vehicles.find((v) => v.key === state.vehicles.current);
+    return cur ? { name: cur.name || ("Car " + String(cur.key).slice(-4)), key: cur.key, vin: cur.vin || "",
+      pending: cur.pending_profile === true, cars: state.vehicles.vehicles.length } : undefined;
+  };
 
   const FIXED = {
     "/api/sdcard": () => J(sdDoc()),
@@ -2568,6 +2581,7 @@
     "/api/status": () => J({
       usb: (window.__mockPreset || {}).usbStatus || undefined,
       sd: sdSummary(),
+      vehicle: vehicleSummary(),
       bits: { awake: true, sleep: false, sta_connected: state.staConnected !== false, mqtt_connected: state.mqttConnected !== false, ble_connected: false, sdcard_mounted: state.sdMounted !== false, ble_enabled: false, sta_enabled: true, ap_enabled: true, autopid_enabled: true, home_mode: false, drive_mode: false, smartconnect: false, sta_ap_overlap: false, time_synced: true, vpn_enabled: true, wake_voltage_ok: !state.sleepPending, eth_connected: false, autopid_idle: false, motion: false, sta_suspended: false, ap_suspended: false, ble_suspended: false },
       network_connected: true, uptime: "02:14:09", version: "v6.0.0-preview", partition: "ota_0",
       boot_count: 42, unexpected_resets: 1, device_id: "14c19f44e349",
@@ -2838,16 +2852,19 @@
     "/api/j1939": () => J(j1939Doc()),
     "/api/autopid/std_scan/result": () => (state.scan.status === "done"
       ? J({ version: 1, protocol: "0", protocol_detected: scanCar().protocol, dialect: scanCar().dialect, vin: scanCar().vin !== undefined ? scanCar().vin : scanCar().key,
-            fingerprint: scanCar().fingerprint, supported: scanRows(), found: scanRows().length, ts: now(),
+            fingerprint: scanCar().fingerprint, supported: state.detect === "profileonly" ? [] : scanRows(), found: state.detect === "profileonly" ? 0 : scanRows().length, ts: now(),
+            /* 2026-10-26: what confirmed the car, and the profile request that answered when nothing standard did */
+            confirmed_by: state.detect === "profileonly" ? "profile" : "obd",
+            probe_answered: state.detect === "profileonly" ? ((state.scanProbe || {}).answered || "2101") : null,
             ...(state.detect === "wwh" ? { uds_protocol_id: 1 } : {}),
             /* the network step (phase 5): on every detection since 2026-10-03 */
             j1939: !!scanCar().j1939, j1939_listening: j1939Listening(), bus_kbps: state.detect === "j1939" ? 250 : 500,
-            key: scanCar().key, known: !!(state.vehicles.vehicles.find((v) => v.key === scanCar().key) || {}).profile,
+            key: scanCar().key, known: !!state.scanKnown,
             name: (state.vehicles.vehicles.find((v) => v.key === scanCar().key) || {}).name || "" })
       : J({ error: "no scan stored" }, 404)),
     /* the vehicle store (autopid second pass, 2026-10-01) */
     "/api/autopid/vehicles": () => J({ current: state.vehicles.current, max: 8,
-      vehicles: state.vehicles.vehicles.map((v) => ({ ...v, current: v.key === state.vehicles.current })) }),
+      vehicles: state.vehicles.vehicles.map((v) => ({ faces: [], confirmed_by: "obd", ...v, current: v.key === state.vehicles.current })) }),
     "/api/autopid/std_table": () => J({ version: 1, supported: STD_ROWS, found: STD_ROWS.length }),
     "/api/autopid/config": () => J(state.autopidCfg),
     "/api/settings": () => J(settingsList()),
@@ -2944,20 +2961,41 @@
     }
     if (method === "POST" && (path === "/api/autopid/std_scan" || path === "/api/autopid/vehicles/detect")) {
       /* three phases like the firmware: protocol detect, VIN, support bitmaps;
-         at the end the store gets (or recognises) the simulator's car */
+         at the end the store gets (or recognises) the simulator's car.
+         2026-10-26: the body may name the car's profile ({profile, name,
+         protocol, init, cmds}); the preset `detect: "profileonly"` plays a
+         car that answers nothing standard (a Nissan Leaf): with the
+         profile's requests in the body the job confirms it by the profile
+         (phase "probe", no rows), without them it fails as before */
       if (state.scan.status === "running") return J({ error: "scan running" }, 409);
+      const probe = body && typeof body === "object" ? body : {};
+      const probeCmds = Array.isArray(probe.cmds) ? probe.cmds.length : 0;
+      const nothingStd = state.detect === "profileonly";
+      state.scanProbe = { profile: String(probe.profile || ""), name: String(probe.name || ""), cmds: probeCmds,
+        answered: probeCmds ? String(typeof probe.cmds[0] === "object" ? probe.cmds[0].cmd : probe.cmds[0]) : "" };
       state.scan = { status: "running", phase: "protocol", found: 0 };
-      setTimeout(() => { state.scan = { status: "running", phase: "vin", found: 0 }; }, 800);
-      setTimeout(() => { state.scan = { status: "running", phase: "pids", found: 0 }; }, 1600);
+      if (nothingStd && !probeCmds) {
+        setTimeout(() => { state.scan = { status: "failed", phase: "idle", found: 0, error: "no ECU response (ignition on?)", stored: !!state.scanStored }; }, 1600);
+        return J({ started: true }, 202);
+      }
+      setTimeout(() => { state.scan = { status: "running", phase: nothingStd ? "probe" : "vin", found: 0 }; }, 800);
+      setTimeout(() => { state.scan = { status: "running", phase: nothingStd ? "probe" : "pids", found: 0 }; }, 1600);
       setTimeout(() => { state.scan = { status: "running", phase: "network", found: 0 }; }, 2100);
       setTimeout(() => {
-        state.scan = { status: "done", phase: "idle", found: scanRows().length, ts: now(), stored: true };
+        const rows = nothingStd ? [] : scanRows();
+        state.scanStored = true;
+        state.scan = { status: "done", phase: "idle", found: rows.length, ts: now(), stored: true };
         const car = scanCar(), key = car.key;
         let e = state.vehicles.vehicles.find((v) => v.key === key);
+        state.scanKnown = !!e;   /* the firmware's `known`: the entry existed before this run */
         if (!e) {
           e = { key, vin: car.vin !== undefined ? car.vin : key, fingerprint: car.fingerprint, name: "", protocol: car.protocol, chip_protocol: car.protocol,
                 dialect: car.dialect, j1939: !!car.j1939, ecus: car.ecus, profile: "", specific_init: "",
-                std_supported: scanRows().length, pending_profile: true, first_seen: now(), last_seen: now(), scan_ts: now() };
+                std_supported: rows.length, pending_profile: true, first_seen: now(), last_seen: now(), scan_ts: now(),
+                faces: [], confirmed_by: nothingStd ? "profile" : "obd" };
+          /* the car named before the probe: stored under that name with the profile attached */
+          if (state.scanProbe.profile) { e.profile = state.scanProbe.profile; e.pending_profile = false; if (probe.init) e.specific_init = String(probe.init); }
+          if (state.scanProbe.name) e.name = state.scanProbe.name;
           state.vehicles.vehicles.push(e);
           /* the firmware's new-car path (autopid_vehicle_switch.c): the car's tables are
              the rows the scan found, type std in the default group, every one stored OFF
@@ -2965,20 +3003,34 @@
              ticks the ones they want). The firmware's tables hold these rows only (an
              earlier car's rows go to its own file); the mock keeps the custom and specific
              rows so the other probes' fixtures survive a detection. */
-          const rows = scanRows().map((r) => ({ name: r.name, cmd: r.cmd, group: "default", type: "std",
+          const stdRows = rows.map((r) => ({ name: r.name, cmd: r.cmd, group: "default", type: "std",
             ...(r.init ? { init: r.init } : {}), enabled: false,
             parameters: (r.parameters || []).map((p) => ({ ...p })) }));
-          state.autopidCfg.pids = state.autopidCfg.pids.filter((p) => p.type !== "std").concat(rows);
-        } else { e.last_seen = now(); e.scan_ts = now(); e.std_supported = scanRows().length; }
+          state.autopidCfg.pids = state.autopidCfg.pids.filter((p) => p.type !== "std").concat(stdRows);
+        } else { e.last_seen = now(); e.scan_ts = now(); e.std_supported = rows.length; if (e.confirmed_by === "profile" && !nothingStd) e.confirmed_by = "obd"; }
         state.vehicles.current = key;
       }, 2500);
       return J({ started: true }, 202);
     }
-    let vm = path.match(/^\/api\/autopid\/vehicles\/([^/]+)(\/activate)?$/);
+    let vm = path.match(/^\/api\/autopid\/vehicles\/([^/]+)(\/activate|\/merge)?$/);
     if (vm) {
       const key = decodeURIComponent(vm[1]);
       const e = state.vehicles.vehicles.find((v) => v.key === key);
       if (!e) return J({ error: "unknown vehicle" }, 404);
+      if (method === "POST" && vm[2] === "/merge") {
+        /* "Same car as..." (2026-10-26): the source's fingerprint and faces become faces of
+           the target, the source goes; a current source makes the target current */
+        const into = String((body && body.into) || "");
+        const t = state.vehicles.vehicles.find((v) => v.key === into);
+        if (!t) return J({ error: "no such vehicle" }, 404);
+        if (t === e) return J({ error: "into: another car than this one" }, 400);
+        t.faces = (t.faces || []).concat([e.fingerprint].concat(e.faces || [])).filter((f, i, a) => f && f !== t.fingerprint && a.indexOf(f) === i).slice(-4);
+        if (!t.vin && e.vin) t.vin = e.vin;
+        state.vehicles.vehicles = state.vehicles.vehicles.filter((v) => v !== e);
+        if (state.vehicles.current === key) state.vehicles.current = into;
+        state.vehicleMerges = (state.vehicleMerges || []).concat([{ from: key, into }]);
+        return J({ ok: true });
+      }
       if (method === "PUT" && !vm[2]) {
         if (body && typeof body.name === "string") e.name = body.name;
         if (body && typeof body.profile === "string") { e.profile = body.profile; e.pending_profile = false; e.specific_init = typeof body.specific_init === "string" ? body.specific_init : (body.profile ? e.specific_init : ""); }
@@ -3437,6 +3489,16 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--primary);outline-of
 /* the SD card bar (2026-10-25): a card that does not answer at all reads as a fault */
 #sdbar.dead{background:var(--danger-tint);border-bottom-color:color-mix(in srgb,var(--danger) 35%,transparent)}
 #sdbar.dead svg{color:var(--danger)}
+/* the new-car bar (2026-10-26): the live tables belong to a car whose setup never finished */
+#vehbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;padding:9px 32px;font-size:13px;font-weight:550;
+  color:var(--text-2);background:var(--warning-tint);border-bottom:1px solid color-mix(in srgb,var(--warning) 35%,transparent)}
+#vehbar[hidden]{display:none}
+#vehbar svg{width:16px;height:16px;flex:none;color:var(--warning)}
+#vehbar b{color:var(--text)}
+#vehbar .sb-hold{margin-left:auto;white-space:nowrap}
+#vehbar a{white-space:nowrap;font-weight:700}
+#dash-vehnote:empty{display:none}
+#dash-vehnote{margin-bottom:12px}
 .sd-facts{display:grid;grid-template-columns:max-content 1fr;gap:5px 16px;align-items:start;padding:10px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;font-size:13px}
 .sd-facts .k{font-weight:600;color:var(--text-3);font-size:12px;padding-top:1px}
 .sd-phrase{font-family:var(--mono);font-weight:700;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:1px 7px}
@@ -3909,7 +3971,7 @@ input[type="range"]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px var
     </button>
   </header>
   <nav class="app-nav" id="menu"></nav>
-  <main class="content"><div id="sleepbar" role="status" hidden></div><div id="nlbar" role="status" hidden></div><div id="sdbar" role="status" hidden></div><div class="page" id="view"><div class="loading"><div class="spinner"></div></div></div></main>
+  <main class="content"><div id="sleepbar" role="status" hidden></div><div id="nlbar" role="status" hidden></div><div id="sdbar" role="status" hidden></div><div id="vehbar" role="status" hidden></div><div class="page" id="view"><div class="loading"><div class="spinner"></div></div></div></main>
 </div>
 <div id="offline"><span class="d"></span><span id="offtx"></span></div>
 <div id="toasts"></div>
@@ -4272,6 +4334,35 @@ const SD_FOUND={exfat:"exFAT, the factory format of cards over 32 GB. WiCAN read
   unknown:"A filesystem WiCAN does not know, or a damaged one.",fat_corrupt:"A FAT32 filesystem too damaged to mount."};
 function sdSummary(){const s=conn.status&&conn.status.sd;return s&&s.state?s:null;}
 const sdAttention=s=>!!s&&(s.state==="unreadable"||s.state==="failed");
+/* the new-car bar (2026-10-26, Ali: a device set up on the simulator and taken to
+   the car met a new car; it became current with its rows stored off and the
+   dashboard went empty without a word): the status poll's `vehicle` summary.
+   Shown while the current car's setup never finished and the store holds
+   another car; per car key, Not now keeps it away in this browser. */
+const VEH_SEEN="wican-veh-seen";
+function vehSummary(){const v=conn.status&&conn.status.vehicle;return v&&v.key?v:null;}
+const vehAttention=v=>!!v&&v.pending===true&&(v.cars|0)>1;
+const vehWho=v=>(v.name||v.key)+(v.vin?"":" (no VIN)");
+function paintVehBar(){
+  const el=$("#vehbar"),v=vehSummary(),att=vehAttention(v);
+  const noteEl=$("#dash-vehnote");
+  if(noteEl){
+    if(!att){noteEl.replaceChildren();delete noteEl.dataset.key;}
+    else if(noteEl.dataset.key!==v.key){noteEl.dataset.key=v.key;
+      noteEl.replaceChildren(banner("warn","car",h("b",{},"Showing "+vehWho(v)+": not set up yet, nothing chosen for it."),
+        " The parameters you chose belong to another car. ",h("a",{href:"#/setup/vehicle"},"Set up this car, or fold it into yours")));}
+  }
+  if(!el)return;
+  let seen="";try{seen=localStorage.getItem(VEH_SEEN)||"";}catch(_){}
+  const on=conn.state==="online"&&att&&seen!==v.key&&!location.hash.startsWith("#/setup");
+  el.hidden=!on;if(!on){el.dataset.key="";return;}
+  if(el.dataset.key===v.key)return;
+  el.dataset.key=v.key;
+  const dismiss=()=>{try{localStorage.setItem(VEH_SEEN,v.key);}catch(_){}el.dataset.key="";el.hidden=true;};
+  el.replaceChildren(ic("car"),h("span",{},h("b",{},"WiCAN is reading a car it was not set up for."),
+      h("span",{class:"sb-why"}," "+vehWho(v)+" answered on the last contact and nothing is chosen for it yet, so the dashboard is empty: the parameters you chose belong to another car. If it is the same car, fold it in under Vehicles; if it is a new car, set it up.")),
+    h("a",{href:"#/setup/vehicle",class:"btn sm pri sb-hold"},"Set up this car"),h("a",{href:"#",onclick:e=>{e.preventDefault();dismiss();}},"Not now"));
+}
 const sdCardLine=c=>c?[c.name,c.capacity_bytes?fmt.bytes(c.capacity_bytes):"",c.type].filter(Boolean).join(" · "):"SD card";
 function sdShort(s){return s.state==="failed"?"Inserted, not answering":s.reason==="exfat"?"Inserted, exFAT: not readable":s.reason==="blank"?"Inserted, blank":"Inserted, not readable";}
 function sdBarWords(s){const sz=s.capacity_bytes?fmt.bytes(s.capacity_bytes)+" ":"";
@@ -4469,7 +4560,7 @@ function expectReboot(reason="Rebooting"){conn.rebootUntil=Date.now()+95000;setC
 async function ping(){
   try{const st=await api("/api/status");conn.status=st;
     conn.wifi=await tryGet("/api/wifi/status");
-    paintApWarn();paintNlBar();paintSdBar();
+    paintApWarn();paintNlBar();paintSdBar();paintVehBar();
     setConn("online");
     /* under the sleep voltage, or a countdown on the bar: keep it honest */
     if((st&&st.bits&&st.bits.wake_voltage_ok===false)||sleepSoon.cause!=="none")refreshSleep();
@@ -5091,7 +5182,7 @@ async function route(){
       actions:[{label:"Stay",fn:()=>res(true)},{label:"Discard",kind:"danger",fn:()=>{store.pending.clear();store.dirty.clear();renderSubmit();res(false);}},{label:"Submit",kind:"pri",fn:()=>{store.apply();res(true);}}]}));
     if(stay){location.hash="#/"+curSection;return;}
   }
-  curSection=section;paintNlBar();paintSdBar();
+  curSection=section;paintNlBar();paintSdBar();paintVehBar();
   buildMenu(section,sub);
   if(cleanup){try{cleanup();}catch{}cleanup=null;}
   subNav=null;
@@ -7024,11 +7115,13 @@ PAGES.dashboard=async(view)=>{
     h("button",{class:"btn sm pri",type:"button",onclick:()=>setEdit(false)},"Done"));
   const cardsEl=h("div",{class:"tiles"});
   const emptyEl=h("div",{class:"section",style:"display:none"},h("div",{class:"empty"}));
-  p.append(busEl,stripEl,editBar,cardsEl,emptyEl,
+  const vehEl=h("div",{id:"dash-vehnote"});   /* the new-car word, where the empty tiles are (paintVehBar) */
+  p.append(vehEl,busEl,stripEl,editBar,cardsEl,emptyEl,
     note("","Each gauge spans the parameter's min / max from Automate → Parameters unless you set a custom range; without either the bar follows the values seen this session. Group switches are temporary: the configured state returns after a restart. Customise keeps the layout on the WiCAN, so every phone and PC sees the same dashboard."));
   const hist=DASH_HIST,range=new Map(),tiles=new Map();
   let meta=new Map(),metaNames="",groups=[],groupsSig="",prev=null,rateTxt=null,editing=false,dragName=null,saveT=null;
   let layout=await dashLoadLayout();
+  paintVehBar();   /* the new-car word at once when the status poll already knows */
   const num=x=>{if(x===""||x==null)return null;const n=Number(x);return Number.isFinite(n)?n:null;};
   /* units as people read them: the SAE table says degC; imported profiles may carry U+FFFD for the degree sign */
   const unitTxt=u=>{u=String(u||"").replace(/\uFFFD/g,"°").replace(/^deg([CF])$/i,"°$1");return/^none$/i.test(u)?"":u;};
@@ -7872,7 +7965,7 @@ PAGES.system=async(view,sub)=>{
       histBtn,
       h("button",{class:"btn sm",title:"Start over with the first-run wizard: nothing is deleted by itself",onclick:()=>{location.hash="#/setup";}},ic("sparkles"),"Run Quick Setup again"),
       h("button",{class:"btn sm danger",onclick:async()=>{
-        const c=await promptModal('Type "factory-reset" to confirm: wipes ALL settings to defaults (files and SD kept)');
+        const c=await promptModal('Type "factory-reset" to confirm: erases all settings and everything stored on WiCAN (vehicles, databases, scripts, the dashboard, certificates, the backup copy on the flash). The SD card is kept.');
         if(c!=="factory-reset")return;
         try{await api("/api/settings/factory_reset",{method:"POST",body:{confirm:"factory-reset"}});expectReboot("Factory reset");}
         catch(e2){toast(e2.message,"err");}}},"Factory Reset")),histEl));
@@ -10238,7 +10331,7 @@ const W={cur:null,use:"ha",agree:[false,false,false],haInstalled:false,mdataOk:f
   applied:false,noVeh:false,
   car:null,noProfile:false,proto:"0",plugged:false,ignition:false,
   scan:"idle",scanStatus:null,scanResult:null,stdPick:null,stdDefault:[],
-  vehPhase:null,veh:null,vehName:"",profChoice:null,profCar:null,profList:undefined,
+  vehPhase:null,veh:null,vehName:"",profChoice:null,profCar:null,profList:undefined,carChoice:"detect",vehNameAuto:false,
   poll:{rate:5,rateCustom:3,minEvent:1,pause:"sleep",pauseV:12.5,pauseAll:false,std:true,specific:true,dtc:false,dtcMin:60},pollSeeded:false,
   /* step 10, battery and sleep: the live trace, the two readings, the chosen pair */
   pwr:{phase:"idle",trace:[],base:null,charging:null,resting:null,tC:0,tD:0,tR:0,sleep:13.1,wake:13.2,touched:false,narrow:false,measured:false,skipped:false,misses:0}};
@@ -11333,7 +11426,17 @@ SCREENS.vehicle=async()=>{
   const err=h("div",{});
   const body=h("div",{class:"qs-body"});
   const finish=btn("Continue",()=>go("power"),"pri");
-  const picker=vehicleProfilePicker({current:()=>W.profCar?W.profCar.car_model:(W.veh&&W.veh.profile)||"",onPick:car=>{W.profCar=car;W.profChoice="car";render();}});
+  /* the profile's make and model as the entry's name ("Toyota: Sienna 2021-"
+     -> "Toyota Sienna 2021"), the maker's trailing dash dropped */
+  const profileName=car=>{const sp=picker.splitName(car&&car.car_model);return(sp.make+" "+sp.model).replace(/\s*-\s*$/,"").replace(/\s+/g," ").trim().slice(0,maxName);};
+  const profileSays=car=>{const pm=profileProtocol(car);const n=(car.pids||[]).length;
+    const names=(car.pids||[]).flatMap(p=>(p.parameters||[]).map(x=>x.name)).filter(Boolean).slice(0,5).join(", ");
+    return(pm?protoName(pm)+" (the profile's init), ":"")+n+" request"+(n===1?"":"s")+(names?": "+names:"")+".";};
+  /* picked before the probe (section 1, 2026-10-26): the choice is the
+     profile, the name follows it until the user types one */
+  const picker=vehicleProfilePicker({current:()=>W.profCar?W.profCar.car_model:(W.veh&&W.veh.profile)||"",onPick:car=>{W.profCar=car;W.profChoice="car";
+    if(W.vehPhase==="idle"||W.vehPhase==="noanswer"){W.carChoice="profile";if(!W.vehName||W.vehNameAuto){W.vehName=profileName(car);W.vehNameAuto=true;}}
+    render();}});
   const entries=()=>(D.vehicles&&Array.isArray(D.vehicles.vehicles))?D.vehicles.vehicles:[];
   const protoName=p=>PROTO[String(p)]||(String(p)==="0"||!p?"Automatic":"protocol "+p);
   const norm=c=>String(c||"").replace(/\s+/g,"").toUpperCase();
@@ -11348,12 +11451,44 @@ SCREENS.vehicle=async()=>{
       lead:sup.length+" supported PIDs reported by the vehicle. Tick the ones WiCAN should read:"});
     if(picked){W.stdPick=picked.map(r=>norm(r.cmd));render();}
   }
+  /* "Same car as..." (2026-10-26): a car seen without its VIN folded into
+     the entry it belongs to; its ECU set stays with that entry as a face,
+     so the next contact that answers the same way lands on the right car */
+  async function sameCar(e){
+    const others=entries().filter(x=>x.key!==e.key);
+    if(!others.length)return;
+    let into=others[0].key;
+    const choices=h("div",{class:"qs-radios"},...others.map((x,i)=>h("label",{},h("input",{type:"radio",name:"qs-same",checked:i===0,onchange:()=>{into=x.key;}})," "+(x.name||defaultName(x)||x.key)+(x.vin?" · "+x.vin:" · no VIN")+(x.profile?" · "+x.profile:""))));
+    const ok=await new Promise(res=>modal({title:"Same car as...",
+      body:h("div",{},h("p",{class:"help",style:"margin:0 0 8px;font-size:12.5px"},"\""+(e.name||defaultName(e)||e.key)+"\" is folded into the car you pick: its ECU set is remembered as a face of that car, its own rows are dropped."),choices),
+      actions:[{label:"Cancel",fn:()=>res(false)},{label:"Fold it in",kind:"pri",fn:()=>res(true)}]}));
+    if(!ok)return;
+    try{await api("/api/autopid/vehicles/"+encodeURIComponent(e.key)+"/merge",{method:"POST",body:{into}});toast("Folded in","ok");D.vehicles=await tryGet("/api/autopid/vehicles");render();}
+    catch(ex){toast(ex.message,"err");}
+  }
   const render=()=>{
     const out=[];
     const v=W.veh;
     const phase=W.vehPhase;
     if(phase==="idle"||phase==="noanswer"){
-      out.push(sub("1. Detect the vehicle"));
+      /* 1. which car (2026-10-26, discussion #1018, Ali: the profile before
+         the probe): a published profile, or no profile and detection as
+         before; the action of the first choice at the right edge of its row */
+      out.push(sub("1. Which car is this?"));
+      out.push(h("p",{class:"qs-lead",style:"font-size:13px"},"WiCAN knows the published profiles (what each car answers beyond the standard PIDs). Say which car this is first: the detection then uses the profile's protocol and requests, and the car is stored under this name even when it answers no standard request."));
+      const car1=W.carChoice==="profile"?W.profCar:null;
+      const pickProfile=()=>{W.carChoice="profile";picker.open();};
+      out.push(h("div",{class:"qs-radios"},
+        h("div",{style:"display:flex;align-items:center;gap:10px;flex-wrap:wrap"},
+          h("label",{},h("input",{type:"radio",name:"qs-car",id:"qs-car-profile",checked:W.carChoice==="profile",onchange:()=>{if(W.profCar){W.carChoice="profile";render();}else pickProfile();}})," A published profile"),
+          h("div",{class:"qs-pick",style:"margin:0 0 0 auto;padding:0"},...(car1?[h("span",{class:"sel"},ic("car"),car1.car_model),btn("Change profile",pickProfile,"sm",{icon:"search"})]:[btn("Choose profile",pickProfile,"sm",{icon:"search"})]))),
+        h("div",{class:"help",style:"font-size:12.5px;margin:-4px 0 8px 26px"},car1?profileSays(car1):"The make and model from the published list: what the car answers beyond the standard PIDs."),
+        h("div",{},h("label",{},h("input",{type:"radio",name:"qs-car",id:"qs-car-detect",checked:W.carChoice!=="profile",onchange:()=>{W.carChoice="detect";render();}})," No profile for this car: detect it")),
+        h("div",{class:"help",style:"font-size:12.5px;margin:-4px 0 8px 26px"},"WiCAN learns the protocol, reads the VIN and finds the standard PIDs it answers. A profile can still be picked after the scan.")));
+      out.push(h("dl",{class:"qs-kv"},h("dt",{},"Name"),h("dd",{},
+        h("input",{id:"qs-veh-name",value:W.vehName,placeholder:"e.g. Family car",style:"max-width:260px",oninput:e=>{W.vehName=e.target.value;W.vehNameAuto=false;}}),
+        h("span",{class:"help",style:"font-size:12px"},car1&&W.vehNameAuto?"from the profile; change it if you like":"shown on the Status page and in Home Assistant"))));
+      out.push(sub("2. Detect the vehicle"));
       if(phase==="noanswer")out.push(banner("warn","alert",h("b",{},"The car did not answer. "),
         (W.scanStatus&&W.scanStatus.error?W.scanStatus.error+". ":"")+"Usually the ignition is off or the plug is not seated. Turn the ignition on (an EV in ready mode) and try again. You can also skip: WiCAN detects the car by itself the first time it answers, and the Status page tells you when it has."));
       const detBtn=btn(phase==="noanswer"?"Try again":"Detect my vehicle",startDetect,"pri",{icon:"refresh",disabled:!(W.plugged&&W.ignition)});
@@ -11361,36 +11496,40 @@ SCREENS.vehicle=async()=>{
       out.push(ack("plugged","qs-plugged","WiCAN is plugged into the OBD port","Under the dashboard, driver side on most cars."));
       out.push(ack("ignition","qs-ignition","Ignition is on","The engine can stay off. On an EV, \"ready\" mode."));
       out.push(h("div",{},detBtn));
-      out.push(note("","About 15 to 30 s. WiCAN learns the protocol, reads the VIN and finds the standard PIDs, then remembers all of it under this vehicle. Plug it into another car later and it tells the cars apart."));
+      out.push(note("",W.carChoice==="profile"&&W.profCar
+        ?"About 10 to 20 s. WiCAN pins the protocol the profile expects, reads the VIN and the standard PIDs, and sends the profile's first requests. A car that answers no standard request is still confirmed by those and stored under the name above."
+        :"About 15 to 30 s. WiCAN learns the protocol, reads the VIN and finds the standard PIDs, then remembers all of it under this vehicle. Plug it into another car later and it tells the cars apart."));
       if(!D.vehicles)out.push(note("","This firmware keeps one vehicle only (no vehicle store): the result is stored, but moving WiCAN between cars needs a new scan each time."));
     }else if(phase==="detecting"){
-      out.push(sub("1. Detecting the vehicle"));
+      out.push(sub("2. Detecting the vehicle"));
       const phases=[["protocol","Detecting the OBD protocol","WiCAN asks on each CAN protocol in turn, first the OBD-II way (0100), then the way of newer vans and trucks (ISO 27145: 22 F400). A few seconds."],["vin","Reading the VIN","Mode 09 PID 02, then UDS 22 F190 (22 F802 on an ISO 27145 vehicle). Without either, the car is identified by the set of ECUs that answered."],["pids","Finding the standard PIDs","The support bitmaps of every ECU that answers (0100, 0120 and up, or 22 F400 and up). Stored under this vehicle."],["network","Listening to the vehicle network","Is this a J1939 network (trucks, buses, agricultural machines)? WiCAN only listens here: the controllers that broadcast, the groups they send, the VIN when one is broadcast."]];
+      phases.push(["probe","Asking the profile's own requests","Nothing standard answered: the profile's first requests confirm the car and give the ECUs it is identified by."]);
       const ph=W.scanStatus&&W.scanStatus.phase;const idx=Math.max(0,phases.findIndex(p=>p[0]===ph));
       phases.forEach((p,i)=>out.push(check(i<idx?"ok":i===idx?"run":"","info",p[1],p[2],i<idx?chip("Done","ok"):i===idx?chip("Working",""):null)));
     }else{
       /* result */
-      out.push(sub("1. Vehicle detected"));
+      out.push(sub("2. Vehicle detected"));
       const known=!!(v.known&&v.profile);
       const j1939Only=v.dialect==="j1939";
       if(known)out.push(banner("ok","check",h("b",{},"Welcome back: "+(v.name||defaultName(v))+". "),"WiCAN set this car up before and already switched to its profile, PIDs and protocol. Nothing to do here unless you want to change something."));
       else if(j1939Only)out.push(banner("ok","check",h("b",{},"J1939 vehicle. "),"This vehicle speaks SAE J1939, the network of trucks, buses and agricultural machines. Its controllers broadcast their values; WiCAN listens and never asks. "+(v.std_supported||0)+" standard parameters were heard and stored under this vehicle."+(v.vin?"":" No VIN was broadcast: it is remembered by the set of controllers on its network.")));
-      else if(!v.vin)out.push(banner("info","info",h("b",{},"New vehicle. "),"This car gave no VIN, so WiCAN remembers it by the set of ECUs that answered (that works for one car; two identical models would look the same). Give it a name below."));
+      else if(v.confirmed_by==="profile")out.push(banner("ok","check",h("b",{},"New vehicle: "+(W.vehName||v.name||"the profile's car")+". "),"This car answers no standard request (no 0100, no VIN): WiCAN confirmed it with the profile's own request"+(v.probeAnswered?" ("+v.probeAnswered+")":"")+" and stored it under this name, identified by the ECUs that answered. There is no standard set to choose from."));
+      else if(!v.vin)out.push(banner("info","info",h("b",{},"New vehicle. "),"This car gave no VIN, so WiCAN remembers it by the set of ECUs that answered (that works for one car; two identical models would look the same). If it answers its VIN another day, a second entry appears: \"Same car as...\" in the list below folds the two into one. Give it a name below."));
       else out.push(banner("ok","check",h("b",{},v.known?"Vehicle recognised. ":"New vehicle. "),"WiCAN stored the protocol and VIN under this car and found "+(v.std_supported||0)+" standard PIDs it answers. Choose the ones to read below, and a profile for the vehicle-specific values."));
       if(v.j1939&&!v.j1939Listening)out.push(banner("warn","alert",h("b",{},"One more restart for the J1939 listener. "),"The J1939 network is read by WiCAN's own CAN controller, which is off on a new device. Finish turns it on in listen-only mode (it never transmits) together with the J1939 listener; the values arrive after that restart."));
       else if(v.j1939&&!j1939Only)out.push(banner("info","info",h("b",{},"A J1939 network as well. "),"This vehicle answers OBD requests and broadcasts J1939 groups. Both sets of parameters are stored under it."));
       const nameInp=h("input",{id:"qs-veh-name",value:W.vehName,placeholder:"e.g. Family car",style:"max-width:260px",oninput:e=>{W.vehName=e.target.value;}});
       const d2=t=>h("span",{class:"d2"},t);
       out.push(h("dl",{class:"qs-kv"},
-        h("dt",{},"VIN"),h("dd",{},v.vin?[h("code",{},v.vin),d2(j1939Only?"broadcast by the vehicle":"read from the car")]:[h("span",{},"not available"),d2((j1939Only?"identified by its controllers":"identified by its ECUs")+(v.fingerprint?" ("+v.fingerprint+")":""))]),
+        h("dt",{},"VIN"),h("dd",{},v.vin?[h("code",{},v.vin),d2(j1939Only?"broadcast by the vehicle":"read from the car")]:[h("span",{},v.confirmed_by==="profile"?"not available":"not answered"),j1939Only||v.confirmed_by==="profile"?null:chip("No VIN","warn"),d2((j1939Only?"identified by its controllers":v.confirmed_by==="profile"?"identified by the ECUs the profile's request answered from":"identified by its ECUs")+(v.fingerprint?" ("+v.fingerprint+")":""))]),
         h("dt",{},j1939Only?"Network":"OBD protocol"),h("dd",{},j1939Only?[h("span",{id:"qs-veh-dialect"},"SAE J1939"+(v.busKbps?", "+v.busKbps+" kbit/s":"")),d2("heard")]:[protoName(v.protocol),DIALECT[v.dialect]?h("span",{id:"qs-veh-dialect"},DIALECT[v.dialect]):null,d2(PROTO[String(v.protocol)]?"detected":"automatic"),v.j1939?d2("and a J1939 network"):null]),
         h("dt",{},j1939Only?"Standard parameters":"Standard PIDs"),h("dd",{},(v.std_supported||0)+(j1939Only?" heard":" answered"),d2(j1939Only?"stored under this vehicle":stdPick().length?stdPick().length+" chosen":"none chosen yet")),
         h("dt",{},"Name"),h("dd",{},nameInp,h("span",{class:"help",style:"font-size:12px"},"shown on the Status page and in Home Assistant"))));
       /* 2. the standard PIDs: the scan found what the car answers, the user
          chooses what WiCAN reads (nothing ticked for a new car, none is
          allowed: Ali, 2026-10-07); a J1939-only vehicle has no requests */
-      if(!j1939Only){
-        out.push(sub("2. Standard PIDs"));
+      if(!j1939Only&&v.confirmed_by!=="profile"){
+        out.push(sub("3. Standard PIDs"));
         const sup=stdRows(),pick=stdPick();
         const names=pick.map(c=>(sup.find(r=>norm(r.cmd)===c)||{}).name||c);
         out.push(h("p",{class:"qs-lead",style:"font-size:13px"},"The scan found "+sup.length+" standard PIDs this car answers: speed, RPM, coolant, fuel level and the like. Choose the ones WiCAN should read. Each one is a request every polling round, so fewer means faster updates for the ones you keep; the rest can be added any time under Automate > Parameters."));
@@ -11401,14 +11540,19 @@ SCREENS.vehicle=async()=>{
       /* 2. profile (a J1939-only vehicle has no OBD requests for a profile to add) */
       if(j1939Only&&!known){
         if(W.profChoice===null){W.profChoice="none";W.profCar=null;}
-        out.push(sub("2. Vehicle profile"));
+        out.push(sub("3. Vehicle profile"));
         out.push(note("","Profiles carry OBD requests, which a J1939 vehicle does not answer. The standard J1939 parameters are stored already; more groups can be added as PGN rows under Automate > Parameters."));
       }
       const chosen=W.profChoice==="car"?W.profCar:null;
       if(!(j1939Only&&!known)){
-      out.push(sub((j1939Only?"2":"3")+". Vehicle profile"));
+      out.push(sub(((j1939Only||v.confirmed_by==="profile")?"3":"4")+". Vehicle profile"));
       const testBtn=btn("Test profile",()=>testProfile(chosen||(known?{car_model:v.profile,fromStore:true}:null)),"sm",{icon:"refresh",disabled:!(chosen||known)});
-      if(known&&W.profChoice===null){
+      if(W.carChoice==="profile"&&chosen){
+        /* named before the probe (section 1): the profile is attached to the
+           entry already; change it, test it, or scan again */
+        out.push(h("div",{class:"qs-pick"},h("span",{class:"sel"},ic("car"),chosen.car_model),btn("Change profile",()=>picker.open(),"sm",{icon:"search"}),testBtn,btn("Scan again",startDetect,"sm",{icon:"refresh"})));
+        out.push(note("","The profile is saved under this car: WiCAN applies it again whenever this car answers, and never to another car. Test profile sends each of its requests once and shows the values before anything is saved."));
+      }else if(known&&W.profChoice===null){
         out.push(h("div",{class:"qs-pick"},h("span",{class:"sel"},ic("car"),v.profile),btn("Change profile",()=>picker.open(),"sm",{icon:"search"}),testBtn,btn("Scan again",startDetect,"sm",{icon:"refresh"})));
         out.push(note("","The profile and the PIDs you had for this car are back in place. Scan again only if the car behaves differently than before."));
       }else{
@@ -11438,9 +11582,11 @@ SCREENS.vehicle=async()=>{
       if(list.length){
         out.push(h("div",{class:"qs-nets"},...list.map(e=>h("div",{class:"qs-net",style:"grid-template-columns:1fr auto auto;cursor:default"},
           h("span",{},h("b",{},e.name||defaultName(e)||"Unnamed vehicle"),h("br"),h("span",{class:"help"},(e.vin||("no VIN, "+(e.dialect==="j1939"?"controller set ":"ECU set ")+(e.fingerprint||"")))+" · "+(e.dialect==="j1939"?"SAE J1939":protoName(e.protocol)+(DIALECT[e.dialect]?", "+DIALECT[e.dialect]:"")+(e.j1939?", J1939 network":""))+" · "+(e.profile||"no profile")+" · "+(e.std_supported||0)+(e.dialect==="j1939"?" std parameters":" std PIDs")+(e.last_seen?" · seen "+fmtAge(e.last_seen):""))),
-          e.current?chip("Current","pri"):e.pending_profile?chip("Profile pending","warn"):h("span",{}),
-          btn("Forget",async()=>{if(!await confirmModal("Forget "+(e.name||e.vin||"this vehicle")+" and its PIDs?","Forget vehicle"))return;
-            try{await api("/api/autopid/vehicles/"+encodeURIComponent(e.key),{method:"DELETE"});toast("Forgotten","ok");D.vehicles=await tryGet("/api/autopid/vehicles");render();}catch(ex){toast(ex.message,"err");}},"sm gh")))));
+          e.current?chip("Current","pri"):(!e.vin&&e.dialect!=="j1939")?chip("No VIN","warn"):e.pending_profile?chip("Profile pending","warn"):h("span",{}),
+          h("span",{style:"display:flex;gap:6px;align-items:center;justify-content:flex-end"},
+            (!e.vin&&e.dialect!=="j1939"&&list.length>1)?btn("Same car as...",()=>sameCar(e),"sm",{icon:"car"}):null,
+            btn("Forget",async()=>{if(!await confirmModal("Forget "+(e.name||e.vin||"this vehicle")+" and its PIDs?","Forget vehicle"))return;
+              try{await api("/api/autopid/vehicles/"+encodeURIComponent(e.key),{method:"DELETE"});toast("Forgotten","ok");D.vehicles=await tryGet("/api/autopid/vehicles");render();}catch(ex){toast(ex.message,"err");}},"sm gh"))))));
       }else out.push(h("div",{class:"empty"},"No vehicle stored yet. Detect one above."));
       out.push(note("","Up to "+(D.vehicles.max||8)+" vehicles. The current one is whichever answered last; its PIDs, protocol and profile are what WiCAN polls. Forget removes a car and its PIDs."));
     }
@@ -11455,11 +11601,19 @@ SCREENS.vehicle=async()=>{
       const st0=await tryGet("/api/autopid/std_scan");
       if(st0&&st0.status==="running")toast("A scan is already running","");
       else{
-        try{await api("/api/autopid/vehicles/detect",{method:"POST",body:{}});}
+        /* the car named before the probe (2026-10-26): the profile, the
+           name, the protocol its init pins and its first three requests
+           (each with its own init when it has one) go with the job, which
+           confirms a car that answers nothing standard with those */
+        const pc=W.carChoice==="profile"?W.profCar:null;
+        const detectBody=pc?{profile:String(pc.car_model||"").slice(0,maxName),name:String(W.vehName||"").slice(0,31),protocol:profileProtocol(pc)||"",init:String(pc.init||"").slice(0,95),
+          cmds:(pc.pids||[]).map(p=>({cmd:String(p.pid||"").replace(/\s+/g,""),init:String(p.pid_init||"").slice(0,95)})).filter(x=>/^[0-9A-Fa-f]{2,15}$/.test(x.cmd)).slice(0,3).map(x=>x.init?x:x.cmd)}:{};
+        try{await api("/api/autopid/vehicles/detect",{method:"POST",body:detectBody});}
         catch(e){if(/404|not found/i.test(e.message))await api("/api/autopid/std_scan",{method:"POST",body:{}});else throw e;}
       }
       const list0=entries();   /* the store before this scan: a new car is one it did not have */
-      W.vehPhase="detecting";W.veh=null;W.profChoice=null;W.profCar=null;W.stdPick=null;W.stdDefault=[];
+      W.vehPhase="detecting";W.veh=null;W.stdPick=null;W.stdDefault=[];
+      if(W.carChoice==="profile"&&W.profCar)W.profChoice="car";else{W.profChoice=null;W.profCar=null;}
       W.scanStatus=(await tryGet("/api/autopid/std_scan"))||{status:"running"};render();
       loadProfiles();
       let ticks=0;
@@ -11474,8 +11628,9 @@ SCREENS.vehicle=async()=>{
         const key=r.key||r.vin||(r.fingerprint?"fp:"+r.fingerprint:"");
         const e=list.find(x=>x.key===key)||list.find(x=>x.current)||{};
         W.veh={key:e.key||key,vin:r.vin||e.vin||"",fingerprint:r.fingerprint||e.fingerprint||"",protocol:r.protocol_detected||e.protocol||r.protocol||"",dialect:r.dialect||e.dialect||"obd2",
-          std_supported:(r.supported||[]).length||e.std_supported||0,known:!!(r.known||e.profile),name:r.name||e.name||"",profile:e.profile||"",specific_init:e.specific_init||"",pending_profile:e.pending_profile,
-          j1939:!!(r.j1939||e.j1939),j1939Listening:r.j1939_listening!==false,busKbps:r.bus_kbps||0};
+          std_supported:(r.supported||[]).length||e.std_supported||0,known:!!r.known||(!!e.profile&&W.carChoice!=="profile"),name:r.name||e.name||"",profile:e.profile||"",specific_init:e.specific_init||"",pending_profile:e.pending_profile,
+          j1939:!!(r.j1939||e.j1939),j1939Listening:r.j1939_listening!==false,busKbps:r.bus_kbps||0,
+          confirmed_by:r.confirmed_by||e.confirmed_by||"obd",probeAnswered:r.probe_answered||""};
         W.scanResult=r;W.vehName=W.veh.name||defaultName(W.veh);
         {const sup=(r.supported||[]).map(x=>norm(x.cmd));
          const cfgNow=await tryGet("/api/autopid/config");
@@ -11538,7 +11693,7 @@ SCREENS.vehicle=async()=>{
   if(W.vehPhase===undefined||W.vehPhase===null)W.vehPhase="idle";
   if(W.vehPhase==="result")await loadProfiles();
   render();
-  return screen("Your vehicle","WiCAN detects the car first: the OBD protocol, the VIN and the standard PIDs it supports. Then you pick a profile for the vehicle-specific values. Everything is stored under the car, so moving WiCAN between cars just works.",
+  return screen("Your vehicle","Say which car it is, then WiCAN detects it: the OBD protocol, the VIN and the standard PIDs it supports, with the profile's own requests for a car that answers nothing standard. Everything is stored under the car, so moving WiCAN between cars just works.",
     [body],
     [back("checks"),grow(),btn("Skip for now",()=>{W.noVeh=true;go("done");},"gh sm"),finish]);
 };
@@ -12139,7 +12294,7 @@ function copiesCard(st,repaintAll,autoRows){
     const c=cur();
     /* a copy held since a factory reset (issue #987) is the undo: a refresh
        lets it go, so it asks first */
-    if(((c.internal||{}).held||(c.sd||{}).held)&&!await confirmModal("A copy holds the settings from before the factory reset. Refreshing replaces them with the settings this WiCAN has now, and the undo is gone. To undo the reset instead, use Restore on that copy.","Let the copies follow the device again?"))return;
+    if(((c.internal||{}).held||(c.sd||{}).held)&&!await confirmModal("A copy holds everything from before the factory reset. Refreshing replaces it with what this WiCAN has now, and the undo is gone. To undo the reset instead, use Restore on that copy.","Let the copies follow the device again?"))return;
     refreshBtn.disabled=true;
     try{const r=await api("/api/backup/copies/refresh",{method:"POST"});toast("Copies refreshed: "+(r.written||[]).join(", "),"ok");await repaintAll(true);}
     catch(e){toast(e.message,"err");}
@@ -12152,7 +12307,7 @@ function copiesCard(st,repaintAll,autoRows){
     /* held (issue #987): the settings part is the one from before the factory
        reset until the user restores it or lets the copy go */
     const held=!!(data&&data.present&&data.held);
-    const words=h("div",{},h("b",{style:"font-size:13.5px"},title),h("div",{class:"help"},held?"Holding the settings from before the factory reset"+(data.held_since?" of "+day(data.held_since):"")+". Restore to undo the reset, or refresh the copies to let them follow the device again.":sub));
+    const words=h("div",{},h("b",{style:"font-size:13.5px"},title),h("div",{class:"help"},held?"Holding everything from before the factory reset"+(data.held_since?" of "+day(data.held_since):"")+". Restore to undo the reset, or refresh the copies to let them follow the device again.":sub));
     let right;
     if(!data||!data.present){
       /* a card in the slot WiCAN cannot read (2026-10-25): the chip and the page's format dialog */
@@ -12181,7 +12336,7 @@ function copiesCard(st,repaintAll,autoRows){
     const sdx=!sd.card&&typeof sdSummary==="function"?sdSummary():null;
     sd.unreadable=sdx&&(sdx.state==="unreadable"||sdx.state==="failed")?sdx:null;
     rows.replaceChildren(
-      placeRow("Internal flash","Survives a factory reset: restore from it to undo one.",c.internal,"internal"),
+      placeRow("Internal flash","Restore from it to undo a change. A factory reset wipes it; the copy on the SD card is the undo then.",c.internal,"internal"),
       placeRow("SD card",sd.card?(other?"This card came from another WiCAN ("+sd.device_id+"): restore from it to take its configuration over.":"Move the card to a replacement WiCAN and restore from it there."+(sd.free_bytes?" "+kb(sd.free_bytes)+" free.":""))
         :sd.unreadable?(sd.unreadable.state==="failed"?"The card in the slot does not answer. Take it out and put it back in.":"The card in the slot is not readable yet. Format it to keep a copy here that can move to another WiCAN.")
         :"Insert a card to keep a copy you can move to another WiCAN.",sd,"sd"));

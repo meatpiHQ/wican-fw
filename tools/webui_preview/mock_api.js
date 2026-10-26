@@ -249,7 +249,7 @@
       keyDownloaded: false, keyDownloadedAt: "", keyCreated: "2026-10-11T09:14:00Z",
       sd: sdScene.state === "mounted", sdDeviceId: null, copies: true, copiesRefreshed: "2026-10-11T09:14:00Z",
       inspectAs: "plain_this",   /* what an uploaded file reads as: plain_this | enc_other | redacted | newer | v1 */
-      held: false, heldSince: "2026-10-15T08:00:00Z",   /* the copies hold the settings from before a factory reset (issue #987) */
+      held: false, heldSince: "2026-10-15T08:00:00Z",   /* the copies hold everything from before a factory reset (issue #987) */
       leftOut: null,   /* [{name, why}] the databases part leaves out (issue #989): the status, the file, the preview */
     }, (window.__mockPreset || {}).backup || {}),
     backupStaged: null, backupRestores: [], backupRefreshes: 0, backupUnlocks: 0,
@@ -302,6 +302,10 @@
     /* a J1939-only truck: no chip protocol; the VIN comes from the listener (BAM), the
        sample path without it knows the controllers alone */
     ? { key: j1939Listening() ? J1939_VIN : "fp:9be17165", vin: j1939Listening() ? J1939_VIN : "", protocol: "", dialect: "j1939", fingerprint: "9be17165", ecus: "0:0,B:0", j1939: true }
+    /* a car that answers nothing standard (a Nissan Leaf, 2026-10-26): no VIN, no 0100; the
+       profile's own request confirms it, its responders are the ECU set it is keyed by */
+    : state.detect === "profileonly"
+    ? { key: "fp:3b91c204", vin: "", protocol: "6", dialect: "obd2", fingerprint: "3b91c204", ecus: "7BB:00000000", j1939: false }
     : { key: "1WCAN0FW0P0000001", protocol: "6", dialect: "obd2", fingerprint: "9a3f17c2", ecus: "7E8:183F8003", j1939: false });
 
   /* GET /api/autopid/dtc, the shape of 2026-10-03: `path`, and a report
@@ -509,6 +513,15 @@
     }, state.sdFormatMs);
   };
   window.__mockSd = () => ({ sd: state.sd, posts: state.sdPosts });
+  /* the current vehicle summary on the status poll (2026-10-26): the car the live
+     tables belong to and whether its setup finished; a probe presets the store
+     through __mockPreset.vehicles (a pending current car beside a set-up one
+     puts the new-car bar up) */
+  const vehicleSummary = () => {
+    const cur = state.vehicles.vehicles.find((v) => v.key === state.vehicles.current);
+    return cur ? { name: cur.name || ("Car " + String(cur.key).slice(-4)), key: cur.key, vin: cur.vin || "",
+      pending: cur.pending_profile === true, cars: state.vehicles.vehicles.length } : undefined;
+  };
 
   const FIXED = {
     "/api/sdcard": () => J(sdDoc()),
@@ -517,6 +530,7 @@
     "/api/status": () => J({
       usb: (window.__mockPreset || {}).usbStatus || undefined,
       sd: sdSummary(),
+      vehicle: vehicleSummary(),
       bits: { awake: true, sleep: false, sta_connected: state.staConnected !== false, mqtt_connected: state.mqttConnected !== false, ble_connected: false, sdcard_mounted: state.sdMounted !== false, ble_enabled: false, sta_enabled: true, ap_enabled: true, autopid_enabled: true, home_mode: false, drive_mode: false, smartconnect: false, sta_ap_overlap: false, time_synced: true, vpn_enabled: true, wake_voltage_ok: !state.sleepPending, eth_connected: false, autopid_idle: false, motion: false, sta_suspended: false, ap_suspended: false, ble_suspended: false },
       network_connected: true, uptime: "02:14:09", version: "v6.0.0-preview", partition: "ota_0",
       boot_count: 42, unexpected_resets: 1, device_id: "14c19f44e349",
@@ -787,16 +801,19 @@
     "/api/j1939": () => J(j1939Doc()),
     "/api/autopid/std_scan/result": () => (state.scan.status === "done"
       ? J({ version: 1, protocol: "0", protocol_detected: scanCar().protocol, dialect: scanCar().dialect, vin: scanCar().vin !== undefined ? scanCar().vin : scanCar().key,
-            fingerprint: scanCar().fingerprint, supported: scanRows(), found: scanRows().length, ts: now(),
+            fingerprint: scanCar().fingerprint, supported: state.detect === "profileonly" ? [] : scanRows(), found: state.detect === "profileonly" ? 0 : scanRows().length, ts: now(),
+            /* 2026-10-26: what confirmed the car, and the profile request that answered when nothing standard did */
+            confirmed_by: state.detect === "profileonly" ? "profile" : "obd",
+            probe_answered: state.detect === "profileonly" ? ((state.scanProbe || {}).answered || "2101") : null,
             ...(state.detect === "wwh" ? { uds_protocol_id: 1 } : {}),
             /* the network step (phase 5): on every detection since 2026-10-03 */
             j1939: !!scanCar().j1939, j1939_listening: j1939Listening(), bus_kbps: state.detect === "j1939" ? 250 : 500,
-            key: scanCar().key, known: !!(state.vehicles.vehicles.find((v) => v.key === scanCar().key) || {}).profile,
+            key: scanCar().key, known: !!state.scanKnown,
             name: (state.vehicles.vehicles.find((v) => v.key === scanCar().key) || {}).name || "" })
       : J({ error: "no scan stored" }, 404)),
     /* the vehicle store (autopid second pass, 2026-10-01) */
     "/api/autopid/vehicles": () => J({ current: state.vehicles.current, max: 8,
-      vehicles: state.vehicles.vehicles.map((v) => ({ ...v, current: v.key === state.vehicles.current })) }),
+      vehicles: state.vehicles.vehicles.map((v) => ({ faces: [], confirmed_by: "obd", ...v, current: v.key === state.vehicles.current })) }),
     "/api/autopid/std_table": () => J({ version: 1, supported: STD_ROWS, found: STD_ROWS.length }),
     "/api/autopid/config": () => J(state.autopidCfg),
     "/api/settings": () => J(settingsList()),
@@ -893,20 +910,41 @@
     }
     if (method === "POST" && (path === "/api/autopid/std_scan" || path === "/api/autopid/vehicles/detect")) {
       /* three phases like the firmware: protocol detect, VIN, support bitmaps;
-         at the end the store gets (or recognises) the simulator's car */
+         at the end the store gets (or recognises) the simulator's car.
+         2026-10-26: the body may name the car's profile ({profile, name,
+         protocol, init, cmds}); the preset `detect: "profileonly"` plays a
+         car that answers nothing standard (a Nissan Leaf): with the
+         profile's requests in the body the job confirms it by the profile
+         (phase "probe", no rows), without them it fails as before */
       if (state.scan.status === "running") return J({ error: "scan running" }, 409);
+      const probe = body && typeof body === "object" ? body : {};
+      const probeCmds = Array.isArray(probe.cmds) ? probe.cmds.length : 0;
+      const nothingStd = state.detect === "profileonly";
+      state.scanProbe = { profile: String(probe.profile || ""), name: String(probe.name || ""), cmds: probeCmds,
+        answered: probeCmds ? String(typeof probe.cmds[0] === "object" ? probe.cmds[0].cmd : probe.cmds[0]) : "" };
       state.scan = { status: "running", phase: "protocol", found: 0 };
-      setTimeout(() => { state.scan = { status: "running", phase: "vin", found: 0 }; }, 800);
-      setTimeout(() => { state.scan = { status: "running", phase: "pids", found: 0 }; }, 1600);
+      if (nothingStd && !probeCmds) {
+        setTimeout(() => { state.scan = { status: "failed", phase: "idle", found: 0, error: "no ECU response (ignition on?)", stored: !!state.scanStored }; }, 1600);
+        return J({ started: true }, 202);
+      }
+      setTimeout(() => { state.scan = { status: "running", phase: nothingStd ? "probe" : "vin", found: 0 }; }, 800);
+      setTimeout(() => { state.scan = { status: "running", phase: nothingStd ? "probe" : "pids", found: 0 }; }, 1600);
       setTimeout(() => { state.scan = { status: "running", phase: "network", found: 0 }; }, 2100);
       setTimeout(() => {
-        state.scan = { status: "done", phase: "idle", found: scanRows().length, ts: now(), stored: true };
+        const rows = nothingStd ? [] : scanRows();
+        state.scanStored = true;
+        state.scan = { status: "done", phase: "idle", found: rows.length, ts: now(), stored: true };
         const car = scanCar(), key = car.key;
         let e = state.vehicles.vehicles.find((v) => v.key === key);
+        state.scanKnown = !!e;   /* the firmware's `known`: the entry existed before this run */
         if (!e) {
           e = { key, vin: car.vin !== undefined ? car.vin : key, fingerprint: car.fingerprint, name: "", protocol: car.protocol, chip_protocol: car.protocol,
                 dialect: car.dialect, j1939: !!car.j1939, ecus: car.ecus, profile: "", specific_init: "",
-                std_supported: scanRows().length, pending_profile: true, first_seen: now(), last_seen: now(), scan_ts: now() };
+                std_supported: rows.length, pending_profile: true, first_seen: now(), last_seen: now(), scan_ts: now(),
+                faces: [], confirmed_by: nothingStd ? "profile" : "obd" };
+          /* the car named before the probe: stored under that name with the profile attached */
+          if (state.scanProbe.profile) { e.profile = state.scanProbe.profile; e.pending_profile = false; if (probe.init) e.specific_init = String(probe.init); }
+          if (state.scanProbe.name) e.name = state.scanProbe.name;
           state.vehicles.vehicles.push(e);
           /* the firmware's new-car path (autopid_vehicle_switch.c): the car's tables are
              the rows the scan found, type std in the default group, every one stored OFF
@@ -914,20 +952,34 @@
              ticks the ones they want). The firmware's tables hold these rows only (an
              earlier car's rows go to its own file); the mock keeps the custom and specific
              rows so the other probes' fixtures survive a detection. */
-          const rows = scanRows().map((r) => ({ name: r.name, cmd: r.cmd, group: "default", type: "std",
+          const stdRows = rows.map((r) => ({ name: r.name, cmd: r.cmd, group: "default", type: "std",
             ...(r.init ? { init: r.init } : {}), enabled: false,
             parameters: (r.parameters || []).map((p) => ({ ...p })) }));
-          state.autopidCfg.pids = state.autopidCfg.pids.filter((p) => p.type !== "std").concat(rows);
-        } else { e.last_seen = now(); e.scan_ts = now(); e.std_supported = scanRows().length; }
+          state.autopidCfg.pids = state.autopidCfg.pids.filter((p) => p.type !== "std").concat(stdRows);
+        } else { e.last_seen = now(); e.scan_ts = now(); e.std_supported = rows.length; if (e.confirmed_by === "profile" && !nothingStd) e.confirmed_by = "obd"; }
         state.vehicles.current = key;
       }, 2500);
       return J({ started: true }, 202);
     }
-    let vm = path.match(/^\/api\/autopid\/vehicles\/([^/]+)(\/activate)?$/);
+    let vm = path.match(/^\/api\/autopid\/vehicles\/([^/]+)(\/activate|\/merge)?$/);
     if (vm) {
       const key = decodeURIComponent(vm[1]);
       const e = state.vehicles.vehicles.find((v) => v.key === key);
       if (!e) return J({ error: "unknown vehicle" }, 404);
+      if (method === "POST" && vm[2] === "/merge") {
+        /* "Same car as..." (2026-10-26): the source's fingerprint and faces become faces of
+           the target, the source goes; a current source makes the target current */
+        const into = String((body && body.into) || "");
+        const t = state.vehicles.vehicles.find((v) => v.key === into);
+        if (!t) return J({ error: "no such vehicle" }, 404);
+        if (t === e) return J({ error: "into: another car than this one" }, 400);
+        t.faces = (t.faces || []).concat([e.fingerprint].concat(e.faces || [])).filter((f, i, a) => f && f !== t.fingerprint && a.indexOf(f) === i).slice(-4);
+        if (!t.vin && e.vin) t.vin = e.vin;
+        state.vehicles.vehicles = state.vehicles.vehicles.filter((v) => v !== e);
+        if (state.vehicles.current === key) state.vehicles.current = into;
+        state.vehicleMerges = (state.vehicleMerges || []).concat([{ from: key, into }]);
+        return J({ ok: true });
+      }
       if (method === "PUT" && !vm[2]) {
         if (body && typeof body.name === "string") e.name = body.name;
         if (body && typeof body.profile === "string") { e.profile = body.profile; e.pending_profile = false; e.specific_init = typeof body.specific_init === "string" ? body.specific_init : (body.profile ? e.specific_init : ""); }
