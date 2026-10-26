@@ -230,7 +230,7 @@ const char device_config_default[] = "{\"wifi_mode\":\"AP\",\"ap_ch\":\"6\",\"we
 										\"drive_ssid\":\"MeatPi\",\"drive_password\":\"TomatoSauce\",\"drive_security\":\"wpa3\",\"drive_protocol\":\"elm327\",\"drive_connection_type\":\"wifi\",\"drive_mode_timeout\":\"60\",\
 										\"can_datarate\":\"500K\",\
 										\"can_mode\":\"normal\",\"port_type\":\"tcp\",\"port\":\"35000\",\"ap_pass\":\"@meatpi#\",\"protocol\":\"elm327\",\"ble_pass\":\"123456\",\
-								\"ble_status\":\"disable\",\"ble_power\":\"9\",\"sleep_status\":\"enable\",\"periodic_wakeup\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"sleep_time\":\"5\",\"wakeup_interval\":\"90\",\"batt_alert\":\"disable\",\
+								\"ble_status\":\"disable\",\"ble_power\":\"9\",\"sleep_status\":\"enable\",\"periodic_wakeup\":\"disable\",\"sleep_volt\":\"13.1\",\"wakeup_volt\":\"13.5\",\"sleep_time\":\"5\",\"first_sleep_time\":\"30\",\"wakeup_interval\":\"90\",\"batt_alert\":\"disable\",\
 										\"batt_alert_ssid\":\"MeatPi\",\"batt_alert_pass\":\"TomatoSauce\",\"batt_alert_volt\":\"11.0\",\"batt_alert_protocol\":\"mqtt\",\
 										\"batt_alert_url\":\"mqtt://mqtt.eclipseprojects.io\",\"batt_alert_port\":\"1883\",\"batt_alert_topic\":\"CAR1/voltage\",\"batt_mqtt_user\":\"meatpi\",\
 								\"batt_mqtt_pass\":\"meatpi\",\"batt_alert_time\":\"1\",\"mqtt_en\":\"disable\",\"mqtt_elm327_log\":\"disable\",\"elm327_udp_log\":\"disable\",\"mqtt_url\":\"mqtt://127.0.0.1\",\"mqtt_port\":\"1883\",\
@@ -1798,6 +1798,7 @@ char *config_server_get_status_json(bool remove_sensitive_info)
 	cJSON_AddStringToObject(root, "sleep_disable_agree", device_config.sleep_disable_agree);
 	cJSON_AddStringToObject(root, "sleep_volt", device_config.sleep_volt);
 	cJSON_AddStringToObject(root, "sleep_time", device_config.sleep_time);
+	cJSON_AddStringToObject(root, "first_sleep_time", device_config.first_sleep_time);
 	cJSON_AddStringToObject(root, "wakeup_volt", device_config.wakeup_volt);
 	cJSON_AddStringToObject(root, "periodic_wakeup", device_config.periodic_wakeup);
 	cJSON_AddStringToObject(root, "wakeup_interval", device_config.wakeup_interval);
@@ -3046,6 +3047,29 @@ static void config_server_load_cfg(char *cfg)
 	//*****
 
 	//*****
+	key = cJSON_GetObjectItem(root,"first_sleep_time");
+	if(key == 0)
+	{
+		strlcpy(device_config.first_sleep_time, "30", sizeof(device_config.first_sleep_time));
+	}
+	else
+	{
+		long first_sleep_time = atoi(key->valuestring);
+
+		if(first_sleep_time < 1 || first_sleep_time > 60)
+		{
+			strlcpy(device_config.first_sleep_time, "30", sizeof(device_config.first_sleep_time));
+		}
+		else
+		{
+			strlcpy(device_config.first_sleep_time, key->valuestring, sizeof(device_config.first_sleep_time));
+		}
+	}
+
+	ESP_LOGI(TAG, "device_config.first_sleep_time: %s", device_config.first_sleep_time);
+	//*****
+
+	//*****
 	key = cJSON_GetObjectItem(root,"sta_security");
 	if(key == 0)
 	{
@@ -3841,6 +3865,27 @@ int8_t config_server_get_sleep_time(uint32_t *sleep_time)
     }
     
     *sleep_time = (uint32_t)slp_t;
+    return 1;
+}
+
+int8_t config_server_get_first_sleep_time(uint32_t *first_sleep_time)
+{
+    char *endptr;
+    long slp_t = strtol(device_config.first_sleep_time, &endptr, 10);
+
+    // Check for conversion errors
+    if (*endptr != '\0' || endptr == device_config.first_sleep_time)
+	{
+        return -1;
+    }
+
+    // Validate range
+    if (slp_t < 1 || slp_t > 60)
+	{
+        return -1;
+    }
+
+    *first_sleep_time = (uint32_t)slp_t;
     return 1;
 }
 
