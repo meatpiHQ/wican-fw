@@ -1826,7 +1826,19 @@ cJSON* parse_json_file(FILE* f) {
     long fsize = ftell(f);
     fseek(f, 0, SEEK_SET);
 
+    // A failed ftell returns -1: the negative value would be cast to a
+    // huge size_t by malloc, and buffer[fsize] = 0 below would then
+    // underflow into buffer[-1].
+    if (fsize <= 0) {
+        ESP_LOGE(TAG, "Failed to determine file size: %ld", fsize);
+        return NULL;
+    }
+
     char* buffer = malloc(fsize + 1);
+    if (buffer == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate %ld bytes for file", fsize + 1);
+        return NULL;
+    }
     fread(buffer, fsize, 1, f);
     buffer[fsize] = 0;
 
@@ -1916,13 +1928,13 @@ all_pids_t* load_all_pids(void){
             all_pids->grouping = (grouping_item && grouping_item->valuestring && strlen(grouping_item->valuestring) > 1) ? strdup(grouping_item->valuestring) : strdup("disable");
             all_pids->autopid_polling = (autopid_polling_item && autopid_polling_item->valuestring && strlen(autopid_polling_item->valuestring) > 1) ? strdup(autopid_polling_item->valuestring) : strdup("enable");
             all_pids->webhook_data_mode = (webhook_data_mode_item && webhook_data_mode_item->valuestring && strlen(webhook_data_mode_item->valuestring) > 0) ? strdup(webhook_data_mode_item->valuestring) : strdup("full");
-            all_pids->vehicle_model = car_model_item ? strdup(car_model_item->valuestring) : NULL;
-            all_pids->std_ecu_protocol = ecu_protocol_item ? strdup(ecu_protocol_item->valuestring) : NULL;
-            all_pids->ha_discovery_en = ha_discovery_item ? (strcmp(ha_discovery_item->valuestring, "enable") == 0) : false;
-            all_pids->cycle = cycle_item ? atoi(cycle_item->valuestring) : 10000;
-            all_pids->pid_std_en = standard_pids_item ? (strcmp(standard_pids_item->valuestring, "enable") == 0) : false;
-            all_pids->pid_specific_en = specific_pids_item ? (strcmp(specific_pids_item->valuestring, "enable") == 0) : false;
-            all_pids->group_destination = group_destination_item ? strdup(group_destination_item->valuestring) : NULL;
+            all_pids->vehicle_model = car_model_item && car_model_item->valuestring ? strdup(car_model_item->valuestring) : NULL;
+            all_pids->std_ecu_protocol = ecu_protocol_item && ecu_protocol_item->valuestring ? strdup(ecu_protocol_item->valuestring) : NULL;
+            all_pids->ha_discovery_en = ha_discovery_item && ha_discovery_item->valuestring ? (strcmp(ha_discovery_item->valuestring, "enable") == 0) : false;
+            all_pids->cycle = cycle_item && cycle_item->valuestring ? atoi(cycle_item->valuestring) : 10000;
+            all_pids->pid_std_en = standard_pids_item && standard_pids_item->valuestring ? (strcmp(standard_pids_item->valuestring, "enable") == 0) : false;
+            all_pids->pid_specific_en = specific_pids_item && specific_pids_item->valuestring ? (strcmp(specific_pids_item->valuestring, "enable") == 0) : false;
+            all_pids->group_destination = group_destination_item && group_destination_item->valuestring ? strdup(group_destination_item->valuestring) : NULL;
             all_pids->group_destination_type = group_dest_type_item && group_dest_type_item->valuestring ?
                             (strcmp(group_dest_type_item->valuestring, "MQTT_Topic") == 0 ? DEST_MQTT_TOPIC :
                             DEST_DEFAULT) : DEST_DEFAULT;
@@ -1953,8 +1965,8 @@ all_pids_t* load_all_pids(void){
                         all_pids->pid_custom_en = true;
                     }
                     
-                    curr_pid->cmd = pid_item ? (char*)malloc(strlen(pid_item->valuestring) + 2) : NULL;
-                    if (curr_pid->cmd && pid_item && strlen(pid_item->valuestring) > 1)
+                    curr_pid->cmd = pid_item && pid_item->valuestring ? (char*)malloc(strlen(pid_item->valuestring) + 2) : NULL;
+                    if (curr_pid->cmd && pid_item && pid_item->valuestring && strlen(pid_item->valuestring) > 1)
                     {
                         strcpy(curr_pid->cmd, pid_item->valuestring);
                         strcat(curr_pid->cmd, "\r");
@@ -1982,26 +1994,26 @@ all_pids_t* load_all_pids(void){
                         }
                     }
 
-                    curr_pid->period = period_item ? atoi(period_item->valuestring) : 10000;
-                    curr_pid->rxheader = rxheader_item ? strdup(rxheader_item->valuestring) : NULL;
+                    curr_pid->period = period_item && period_item->valuestring ? atoi(period_item->valuestring) : 10000;
+                    curr_pid->rxheader = rxheader_item && rxheader_item->valuestring ? strdup(rxheader_item->valuestring) : NULL;
                     curr_pid->pid_type = PID_CUSTOM;
 
                     curr_pid->parameters_count = 1;
                     curr_pid->parameters = (parameter_t*)calloc(1, sizeof(parameter_t));
                     if (curr_pid->parameters) {
-                        curr_pid->parameters->name = name_item ? strdup(name_item->valuestring) : NULL;
-                        curr_pid->parameters->expression = expr_item ? strdup(expr_item->valuestring) : NULL;
-                        curr_pid->parameters->period = period_item ? atoi(period_item->valuestring) : 0;
-                        curr_pid->parameters->destination = send_to_item ? strdup(send_to_item->valuestring) : NULL;
+                        curr_pid->parameters->name = name_item && name_item->valuestring ? strdup(name_item->valuestring) : NULL;
+                        curr_pid->parameters->expression = expr_item && expr_item->valuestring ? strdup(expr_item->valuestring) : NULL;
+                        curr_pid->parameters->period = period_item && period_item->valuestring ? atoi(period_item->valuestring) : 0;
+                        curr_pid->parameters->destination = send_to_item && send_to_item->valuestring ? strdup(send_to_item->valuestring) : NULL;
                         curr_pid->parameters->timer = 0;
                         curr_pid->parameters->value = FLT_MAX;
-                        curr_pid->parameters->min = (min_value_item && strlen(min_value_item->valuestring) > 0) ? atof(min_value_item->valuestring) : FLT_MAX;
-                        curr_pid->parameters->max = (max_value_item && strlen(max_value_item->valuestring) > 0) ? atof(max_value_item->valuestring) : FLT_MAX;
+                        curr_pid->parameters->min = (min_value_item && min_value_item->valuestring && strlen(min_value_item->valuestring) > 0) ? atof(min_value_item->valuestring) : FLT_MAX;
+                        curr_pid->parameters->max = (max_value_item && max_value_item->valuestring && strlen(max_value_item->valuestring) > 0) ? atof(max_value_item->valuestring) : FLT_MAX;
                         curr_pid->parameters->destination_type = type_item && type_item->valuestring ? 
                             (strcmp(type_item->valuestring, "MQTT_Topic") == 0 ? DEST_MQTT_TOPIC :
                             strcmp(type_item->valuestring, "MQTT_WallBox") == 0 ? DEST_MQTT_WALLBOX :
                             DEST_DEFAULT) : DEST_DEFAULT;
-                        curr_pid->parameters->sensor_type = sensor_type_item ? 
+                        curr_pid->parameters->sensor_type = sensor_type_item && sensor_type_item->valuestring ? 
                             (strcmp(sensor_type_item->valuestring, "binary") == 0 ? BINARY_SENSOR : SENSOR) : SENSOR;
                         curr_pid->parameters->unit = unit_item && unit_item->valuestring ? 
                             strdup(unit_item->valuestring) : strdup("none");
@@ -2036,19 +2048,19 @@ all_pids_t* load_all_pids(void){
                         cJSON* sensor_type_item = cJSON_GetObjectItem(pid, "sensor_type");
                         cJSON* rxheader_item = cJSON_GetObjectItem(pid, "ReceiveHeader");
 
-                        curr_pid->parameters->name = name_item ? strdup(name_item->valuestring) : NULL;
-                        curr_pid->parameters->period = period_item ? atoi(period_item->valuestring) : 10000;
-                        curr_pid->parameters->destination = send_to_item ? strdup(send_to_item->valuestring) : NULL;
+                        curr_pid->parameters->name = name_item && name_item->valuestring ? strdup(name_item->valuestring) : NULL;
+                        curr_pid->parameters->period = period_item && period_item->valuestring ? atoi(period_item->valuestring) : 10000;
+                        curr_pid->parameters->destination = send_to_item && send_to_item->valuestring ? strdup(send_to_item->valuestring) : NULL;
                         curr_pid->parameters->destination_type = type_item && type_item->valuestring ? 
                             (strcmp(type_item->valuestring, "MQTT_Topic") == 0 ? DEST_MQTT_TOPIC :
                             strcmp(type_item->valuestring, "MQTT_WallBox") == 0 ? DEST_MQTT_WALLBOX :
                             DEST_DEFAULT) : DEST_DEFAULT;
                         curr_pid->parameters->timer = 0;
                         curr_pid->parameters->value = FLT_MAX;
-                        curr_pid->parameters->sensor_type = sensor_type_item ? 
+                        curr_pid->parameters->sensor_type = sensor_type_item && sensor_type_item->valuestring ? 
                             (strcmp(sensor_type_item->valuestring, "binary") == 0 ? BINARY_SENSOR : SENSOR) : SENSOR;
                             
-                        curr_pid->rxheader = rxheader_item ? strdup(rxheader_item->valuestring) : NULL;
+                        curr_pid->rxheader = rxheader_item && rxheader_item->valuestring ? strdup(rxheader_item->valuestring) : NULL;
 
                         if (all_pids->std_ecu_protocol)
                         {
@@ -2080,6 +2092,9 @@ all_pids_t* load_all_pids(void){
                             snprintf(std_init_buf, sizeof(std_init_buf), "ATSP%s\rATSH%s\rATCRA\r",
                                                         all_pids->std_ecu_protocol, sh_value);                        
                         }
+                        // Rebuilt per PID; free the previous allocation so
+                        // the last one does not leak.
+                        free(all_pids->standard_init);
                         all_pids->standard_init = strdup(std_init_buf);
 
                         if(curr_pid->parameters->name != NULL && strlen(curr_pid->parameters->name) > 0)
@@ -2094,7 +2109,8 @@ all_pids_t* load_all_pids(void){
                                 for(int i = 0; i < pid_info->num_params; i++)
                                 {
                                     ESP_LOGI(TAG, "    [%d] Name: %s, Unit: %s", i, pid_info->params[i].name, pid_info->params[i].unit);
-                                    if(strcmp(pid_info->params[i].name, strchr(curr_pid->parameters->name, '-') + 1) == 0)
+                                    char *param_name_sep = strchr(curr_pid->parameters->name, '-');
+                                    if(param_name_sep != NULL && strcmp(pid_info->params[i].name, param_name_sep + 1) == 0)
                                     {
                                         curr_pid->parameters->class = strdup(pid_info->params[i].class);
                                         curr_pid->parameters->unit = strdup(pid_info->params[i].unit);
@@ -2216,10 +2232,10 @@ all_pids_t* load_all_pids(void){
                                 cJSON_ArrayForEach(param, params) 
                                 {
                                     cJSON* name_item = cJSON_GetObjectItem(param, "name");
-                                    curr_pid->parameters[param_index].name = name_item ? strdup(name_item->valuestring) : NULL;
+                                    curr_pid->parameters[param_index].name = name_item && name_item->valuestring ? strdup(name_item->valuestring) : NULL;
 
                                     cJSON* expr_item = cJSON_GetObjectItem(param, "expression");
-                                    curr_pid->parameters[param_index].expression = expr_item ? strdup(expr_item->valuestring) : NULL;
+                                    curr_pid->parameters[param_index].expression = expr_item && expr_item->valuestring ? strdup(expr_item->valuestring) : NULL;
 
                                     cJSON* unit_item = cJSON_GetObjectItem(param, "unit");
                                     curr_pid->parameters[param_index].unit = unit_item && unit_item->valuestring ? 
@@ -2230,20 +2246,20 @@ all_pids_t* load_all_pids(void){
                                         strdup(class_item->valuestring) : strdup("none");
 
                                     cJSON* sensor_type_item = cJSON_GetObjectItem(param, "sensor_type");
-                                    curr_pid->parameters[param_index].sensor_type = sensor_type_item ? 
+                                    curr_pid->parameters[param_index].sensor_type = sensor_type_item && sensor_type_item->valuestring ?
                                             (strcmp(sensor_type_item->valuestring, "binary") == 0 ? BINARY_SENSOR : SENSOR) : SENSOR;
 
                                     cJSON* min_item = cJSON_GetObjectItem(param, "min");
-                                    curr_pid->parameters[param_index].min = (min_item && strlen(min_item->valuestring) > 0) ?  atof(min_item->valuestring) : FLT_MAX;
+                                    curr_pid->parameters[param_index].min = (min_item && min_item->valuestring && strlen(min_item->valuestring) > 0) ?  atof(min_item->valuestring) : FLT_MAX;
 
                                     cJSON* max_item = cJSON_GetObjectItem(param, "max");
-                                    curr_pid->parameters[param_index].max = (max_item && strlen(max_item->valuestring) > 0) ?  atof(max_item->valuestring) : FLT_MAX;
+                                    curr_pid->parameters[param_index].max = (max_item && max_item->valuestring && strlen(max_item->valuestring) > 0) ?  atof(max_item->valuestring) : FLT_MAX;
 
                                     cJSON* period_item = cJSON_GetObjectItem(param, "period");
-                                    curr_pid->parameters[param_index].period = period_item ? atof(period_item->valuestring) : FLT_MAX;
+                                    curr_pid->parameters[param_index].period = period_item && period_item->valuestring ? atof(period_item->valuestring) : FLT_MAX;
 
                                     cJSON* send_to_item = cJSON_GetObjectItem(param, "send_to");
-                                    curr_pid->parameters[param_index].destination = send_to_item ? strdup(send_to_item->valuestring) : strdup("none");
+                                    curr_pid->parameters[param_index].destination = send_to_item && send_to_item->valuestring ? strdup(send_to_item->valuestring) : strdup("none");
 
                                     cJSON* destination_type_item = cJSON_GetObjectItem(param, "type");      //destination_type
                                     curr_pid->parameters[param_index].destination_type = 
