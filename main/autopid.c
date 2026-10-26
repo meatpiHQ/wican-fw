@@ -586,6 +586,20 @@ static void merge_response_frames(uint8_t* data, uint32_t length, uint8_t* merge
     }
 }
 
+// parse_elm327_response() mallocs a per-frame heap buffer for the
+// lowest-header frame and hands ownership to the consumer through the
+// queue as response.priority_data (only when frame_count > 2 and headers
+// differ). Every consumer - including drain loops that discard the rest
+// of the response - must free it exactly once per received response.
+static inline void autopid_free_response(response_t *r)
+{
+    if (r && r->priority_data)
+    {
+        free(r->priority_data);
+        r->priority_data = NULL;
+    }
+}
+
 esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint32_t available_pids_size) 
 {
     twai_message_t frame;
@@ -603,14 +617,18 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
                                                 "ATSP9\rATSH18DB33F1\rATCRA\r",
                                                 };
 
-    response = (response_t *)malloc(sizeof(response_t)); 
-    
+    response = (response_t *)malloc(sizeof(response_t));
+
     if (response == NULL)
     {
         ESP_LOGE(TAG, "Failed to allocate memory for response");
         DEBUG_LOGE(TAG, "Failed to allocate memory for response");
         return ESP_ERR_NO_MEM;
     }
+
+    // Zero it so a timed-out receive cannot leave an uninitialised
+    // priority_data pointer for autopid_free_response() to free.
+    memset(response, 0, sizeof(response_t));
 
     if(current_rxheader == 0)
     {
@@ -642,13 +660,19 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
 
         static const char *elm327_config = "ate0\rath1\ratl0\rats1\ratst96\r";
         elm327_process_cmd((uint8_t*)elm327_config, strlen(elm327_config), &frame, &autopidQueue);
-        while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS);
+        while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS)
+        {
+            autopid_free_response(response);
+        }
 
         const char* protocol_cmds = supported_protocols[protocol-6];
         ESP_LOGI(TAG, "Sending protocol commands: %s", protocol_cmds);
     DEBUG_LOGI(TAG, "Sending protocol commands: %s", protocol_cmds);
         elm327_process_cmd((uint8_t*)protocol_cmds, strlen(protocol_cmds), &frame, &autopidQueue);
-        while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS);
+        while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS)
+        {
+            autopid_free_response(response);
+        }
         ESP_LOGI(TAG, "Protocol %d set successfully", protocol);
     DEBUG_LOGI(TAG, "Protocol %d set successfully", protocol);
     }
@@ -662,6 +686,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
     }
     
     xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000));
+    autopid_free_response(response);
 
     const char *pid_support_cmds[] = {
         "0100\r",  // PIDs 0x01-0x20
@@ -684,6 +709,7 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
         }
 
     if (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS) {
+        autopid_free_response(response);
         ESP_LOGI(TAG, "Raw response length: %lu", response->length);
     DEBUG_LOGI(TAG, "Raw response length: %lu", response->length);
         ESP_LOG_BUFFER_HEX(TAG, response->data, response->length);
@@ -772,7 +798,10 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
             ESP_LOGI(TAG, "Restoring protocol settings");
             DEBUG_LOGI(TAG, "Restoring protocol settings");
             elm327_process_cmd((uint8_t*)restore_cmd, strlen(restore_cmd), &frame, &autopidQueue);
-            while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS);
+            while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS)
+            {
+                autopid_free_response(response);
+            }
 
             free(response);
             elm327_unlock();
@@ -789,7 +818,10 @@ esp_err_t autopid_find_standard_pid(uint8_t protocol, char *available_pids, uint
     ESP_LOGI(TAG, "Restoring protocol settings");
     DEBUG_LOGI(TAG, "Restoring protocol settings");
     elm327_process_cmd((uint8_t*)restore_cmd, strlen(restore_cmd), &frame, &autopidQueue);
-    while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS);
+    while (xQueueReceive(autopidQueue, response, pdMS_TO_TICKS(1000)) == pdPASS)
+    {
+        autopid_free_response(response);
+    }
     
     cJSON_Delete(root);
     free(response);
@@ -1407,6 +1439,16 @@ void autopid_parser(char *str, uint32_t len, QueueHandle_t *q)
             {
                 sprintf((char*)response.data, "error");
                 response.length = strlen((char*)response.data);
+                // The static response struct may still carry a priority_data
+                // buffer from a previous successful parse. The consumer frees
+                // priority_data after each response, so drop and clear the
+                // stale pointer here to avoid queuing (and later double-
+                // freeing) the same buffer alongside the error response.
+                if (response.priority_data != NULL)
+                {
+                    free(response.priority_data);
+                    response.priority_data = NULL;
+                }
                 ESP_LOGE(TAG, "Error response: %s", auto_pid_buf);
                 DEBUG_LOGE(TAG, "Error response: %s", auto_pid_buf);
                 if (xQueueSend(autopidQueue, &response, pdMS_TO_TICKS(1000)) != pdPASS)
@@ -1438,7 +1480,10 @@ static void send_commands(char *commands, uint32_t delay_ms)
             (strstr(str_send, "ate1") == NULL && strstr(str_send, "ATE1") == NULL && strstr(str_send, "at e1") == NULL && strstr(str_send, "AT E1") == NULL))
         {
             elm327_process_cmd((uint8_t *)str_send, cmd_len, &tx_msg, &autopidQueue);
-            while ((xQueueReceive(autopidQueue, &elm327_response, pdMS_TO_TICKS(10)) == pdPASS));
+            while ((xQueueReceive(autopidQueue, &elm327_response, pdMS_TO_TICKS(10)) == pdPASS))
+            {
+                autopid_free_response(&elm327_response);
+            }
         }
         
         cmd_start = cmd_end + 1; // Move to the start of the next command
@@ -1768,6 +1813,12 @@ static void autopid_task(void *pvParameters)
                                     param->failed = true;
                                     ESP_LOGE(TAG, "Failed to process command: %s", curr_pid->cmd);
                                 }
+
+                                // parse_elm327_response hands ownership of the
+                                // priority_data heap buffer to the consumer via
+                                // the queue; free it now that this response has
+                                // been fully processed.
+                                autopid_free_response(&elm327_response);
                             }
                             else
                             {
