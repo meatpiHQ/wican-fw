@@ -1,0 +1,28 @@
+{
+  "car_model": "Toyota: Prius Prime (Gen2 PHV)",
+  "comment": "Extends the Rav4 profile (shared TNGA hybrid platform). Confirmed on a WiCAN-OBD-C3 (fw 4.21). Differences from the Rav4: HV/EV SOC (015B) returns two ECU responses, so it is filtered to one with ATCRA; odometer (01A6) returns NO DATA on the Prius Prime, so it is removed; coolant (0105) is added. Standard fuel PID 012F also returns NO DATA on this car.",
+  "extends": "toyota/rav4.json",
+  "init": "ATSP6;",
+  "pids": [
+    {
+      "pid": "remove",
+      "parameters": {
+        "ODOMETER": "",
+        "SOC": ""
+      }
+    },
+    {
+      "pid": "015B1",
+      "pid_init": "ATCRA7EA;",
+      "parameters": {
+        "SOC": "(B3*20)/51"
+      }
+    },
+    {
+      "pid": "01051",
+      "parameters": {
+        "COOLANT_TMP": "B3-40"
+      }
+    }
+  ]
+}
