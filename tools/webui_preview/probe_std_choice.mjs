@@ -72,7 +72,7 @@ async function detect(p, name) {
   const det = p.btn(/Detect my vehicle/);
   check(`${name}: Detect enabled`, det && !det.disabled);
   det.click(); await sleep(4800);
-  check(`${name}: the car was detected`, /1\. Vehicle detected/.test(p.text()), (p.text().match(/1\. Vehicle [a-z]+/) || [])[0]);
+  check(`${name}: the car was detected`, /2\. Vehicle detected/.test(p.text()), (p.text().match(/2\. Vehicle [a-z]+/) || [])[0]);
 }
 async function chooseNone(p, name) {
   p.btn(/Choose PIDs|^Change$/).click(); await sleep(300);
@@ -120,7 +120,7 @@ async function finish(p, name) {
   /* ---- B: the page reloaded after the detection, the car detected again ---- */
   {
     const p = await openVehicle({ __name: "B", autopidCfg: clone(snapshot.autopidCfg), vehicles: clone(snapshot.vehicles) });
-    check("B: after the reload the step is back at Detect, the device still holds the 8 stored rows", /1\. Detect the vehicle/.test(p.text()) && stdRows(p.M().autopidCfg).length === 8);
+    check("B: after the reload the step is back at Detect, the device still holds the 8 stored rows", /2\. Detect the vehicle/.test(p.text()) && stdRows(p.M().autopidCfg).length === 8);
     await detect(p, "B");
     check("B: the second detection ticks nothing (the car's setup never finished), not 8 of 8", /none chosen yet/.test(p.text()) && !/8 of 8 chosen/.test(p.text()), (p.text().match(/\d+ of \d+ chosen|none chosen yet/) || [])[0]);
     check("B: the store still says pending", (p.M().vehicles.vehicles[0] || {}).pending_profile === true);

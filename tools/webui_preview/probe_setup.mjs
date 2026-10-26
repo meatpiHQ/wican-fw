@@ -173,7 +173,7 @@ function boot(url, preset) {
     check("result: new vehicle, VIN, detected protocol, PID count, no pills (2026-10-07)", /New vehicle/.test(p.text()) && /1WCAN0FW0P0000001/.test(p.text()) && /CAN 11-bit 500 kbit\/s/.test(p.text()) && /8 answered/.test(p.text()) && /none chosen yet/.test(p.text()) && p.$$(".qs-kv .chip").length === 0, p.text().slice(0, 200));
     /* 2. Standard PIDs: the scan found what the car answers, the user chooses what WiCAN reads
        (Ali, 2026-10-07): nothing chosen for a new car, the page's picker (the Automate one) */
-    check("section 2 is the standard PID choice, the profile section 3, nothing chosen yet", /2\. Standard PIDs/.test(p.text()) && /3\. Vehicle profile/.test(p.text()) && /None chosen yet/.test(p.text()) && !!p.btn(/Choose PIDs/), p.text().match(/\d\. [A-Z][a-z]+ [a-zP]+/g));
+    check("section 3 is the standard PID choice, the profile section 4 (section 1 is the car, 2026-10-26), nothing chosen yet", /3\. Standard PIDs/.test(p.text()) && /4\. Vehicle profile/.test(p.text()) && /None chosen yet/.test(p.text()) && !!p.btn(/Choose PIDs/), p.text().match(/\d\. [A-Z][a-z]+ [a-zP]+/g));
     p.btn(/Choose PIDs/).click(); await sleep(300);
     const pickBoxes = () => [...p.$$('#modal-root input[type="checkbox"]')];
     check("the picker lists the 8 PIDs the scan found, none ticked, Add selected", /Standard PIDs this car answers/.test(p.modalText()) && pickBoxes().length === 8 && pickBoxes().every((b) => !b.checked) && !!p.modalBtn(/Add selected/) && /0 ticked/.test(p.modalText()), { boxes: pickBoxes().length });

@@ -1,0 +1,1215 @@
+{
+ "_comment": "WiCAN ECU Simulator \u2014 Vehicle Profile Schema v1.0",
+ "_doc": {
+  "encoding": "decode: value = raw * decode_scale + decode_offset  |  encode: raw = round((value - decode_offset) / decode_scale)",
+  "raw": "unsigned integer, split big-endian into 'bytes' bytes, placed at data_byte_offset in the response payload",
+  "web_control elements": [
+   "slider",
+   "switch",
+   "dropdown",
+   "number_input",
+   "text_input"
+  ],
+  "multi_frame": "All responses use ISO-TP. Payloads > 7 bytes are automatically segmented into FF+CF frames. No special flag needed.",
+  "error_sim": {
+   "note": "Optional field on any PID entry. Absent or enabled=false means normal responses.",
+   "response_type values": [
+    "negative_response",
+    "no_response",
+    "response_pending"
+   ],
+   "trigger values": [
+    "single",
+    "continuous",
+    "intermittent"
+   ],
+   "nrc common codes": {
+    "0x10": "generalReject",
+    "0x11": "serviceNotSupported",
+    "0x22": "conditionsNotCorrect",
+    "0x31": "requestOutOfRange",
+    "0x33": "securityAccessDenied",
+    "0x78": "requestCorrectlyReceivedResponsePending"
+   }
+  }
+ },
+ "version": "1.0",
+ "_section_vehicle": "--- Vehicle metadata ---",
+ "vehicle": {
+  "id": "fp_dup_test",
+  "name": "Fp Dup Test",
+  "make": "Generic Motors",
+  "model": "Sedan GT",
+  "year": 2023,
+  "vin": "1WCAN0FW0P0000001"
+ },
+ "_section_can": "--- CAN bus configuration ---",
+ "can": {
+  "bitrate": 500000,
+  "id_format": "11bit",
+  "obd_request_id": "0x7DF",
+  "obd_response_id": "0x7E8"
+ },
+ "_section_diagnostics": "--- Diagnostic state (MIL lamp + DTC lists) ---",
+ "diagnostics": {
+  "mil_on": true,
+  "dtcs": {
+   "_comment": "Standard 5-char DTC codes: P/C/B/U + 4 hex digits",
+   "stored": [
+    "P0300",
+    "P0420"
+   ],
+   "pending": [
+    "P0171"
+   ],
+   "permanent": []
+  }
+ },
+ "_section_standard_pids": "--- Mode 01 / Mode 09 PIDs (well-known OBD2 service data) ---",
+ "standard_pids": [
+  {
+   "_comment": "Mode 01 PID 04 \u2014 Calculated Engine Load (0\u2013100 %)",
+   "mode": "01",
+   "pid": "04",
+   "name": "Engine Load",
+   "enabled": true,
+   "parameters": [
+    {
+     "name": "load",
+     "unit": "%",
+     "default": 25.0,
+     "min": 0.0,
+     "max": 100.0,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 0.3922,
+      "decode_offset": 0.0,
+      "bytes": 1,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "Engine Load",
+      "group": "Engine",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "%"
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "Mode 01 PID 05 \u2014 Engine Coolant Temperature (-40 to 215 \u00b0C)  raw = temp + 40",
+   "mode": "01",
+   "pid": "05",
+   "name": "Engine Coolant Temperature",
+   "enabled": true,
+   "parameters": [
+    {
+     "name": "temperature",
+     "unit": "\u00b0C",
+     "default": 90.0,
+     "min": -40.0,
+     "max": 215.0,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 1.0,
+      "decode_offset": -40.0,
+      "bytes": 1,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "Coolant Temperature",
+      "group": "Engine",
+      "min": -40,
+      "max": 215,
+      "step": 1,
+      "unit": "\u00b0C"
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "Mode 01 PID 0B \u2014 Intake Manifold Absolute Pressure (0\u2013255 kPa)",
+   "mode": "01",
+   "pid": "0B",
+   "name": "Intake Manifold Pressure",
+   "enabled": true,
+   "parameters": [
+    {
+     "name": "pressure",
+     "unit": "kPa",
+     "default": 101.0,
+     "min": 0.0,
+     "max": 255.0,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 1.0,
+      "decode_offset": 0.0,
+      "bytes": 1,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "Intake Manifold Pressure",
+      "group": "Engine",
+      "min": 0,
+      "max": 255,
+      "step": 1,
+      "unit": "kPa"
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "Mode 01 PID 0C \u2014 Engine Speed (0\u201316383.75 RPM)  raw_16bit = rpm * 4  A=high byte B=low byte",
+   "_comment_error_sim": "error_sim is OPTIONAL on every PID. This example shows a single-shot NRC \u2014 remove or set enabled=false to disable.",
+   "mode": "01",
+   "pid": "0C",
+   "name": "Engine RPM",
+   "enabled": true,
+   "error_sim": {
+    "_comment": "Example: fires ONE negative response, then automatically disables itself",
+    "enabled": false,
+    "response_type": "negative_response",
+    "nrc": "0x22",
+    "trigger": "single",
+    "intermittent_rate_pct": 0
+   },
+   "parameters": [
+    {
+     "name": "rpm",
+     "unit": "rpm",
+     "default": 800.0,
+     "min": 0.0,
+     "max": 8000.0,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 0.25,
+      "decode_offset": 0.0,
+      "bytes": 2,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "Engine RPM",
+      "group": "Engine",
+      "min": 0,
+      "max": 8000,
+      "step": 10,
+      "unit": "rpm"
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "Mode 01 PID 0D \u2014 Vehicle Speed (0\u2013255 km/h)  raw = speed",
+   "_comment_error_sim": "Example: intermittent 25% NRC to simulate flaky sensor",
+   "mode": "01",
+   "pid": "0D",
+   "name": "Vehicle Speed",
+   "enabled": true,
+   "error_sim": {
+    "_comment": "25% of requests return NRC 0x31 (requestOutOfRange), rest return normal data",
+    "enabled": false,
+    "response_type": "negative_response",
+    "nrc": "0x31",
+    "trigger": "intermittent",
+    "intermittent_rate_pct": 25
+   },
+   "parameters": [
+    {
+     "name": "speed",
+     "unit": "km/h",
+     "default": 0.0,
+     "min": 0.0,
+     "max": 255.0,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 1.0,
+      "decode_offset": 0.0,
+      "bytes": 1,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "Vehicle Speed",
+      "group": "Vehicle",
+      "min": 0,
+      "max": 255,
+      "step": 1,
+      "unit": "km/h"
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "Mode 01 PID 0E \u2014 Timing Advance (-64 to +63.5\u00b0)  raw = (advance + 64) * 2",
+   "mode": "01",
+   "pid": "0E",
+   "name": "Timing Advance",
+   "enabled": true,
+   "parameters": [
+    {
+     "name": "advance",
+     "unit": "\u00b0 BTDC",
+     "default": 10.0,
+     "min": -64.0,
+     "max": 63.5,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 0.5,
+      "decode_offset": -64.0,
+      "bytes": 1,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "Timing Advance",
+      "group": "Engine",
+      "min": -64,
+      "max": 63,
+      "step": 0.5,
+      "unit": "\u00b0"
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "Mode 01 PID 0F \u2014 Intake Air Temperature (-40 to 215 \u00b0C)  raw = temp + 40",
+   "mode": "01",
+   "pid": "0F",
+   "name": "Intake Air Temperature",
+   "enabled": true,
+   "parameters": [
+    {
+     "name": "temperature",
+     "unit": "\u00b0C",
+     "default": 25.0,
+     "min": -40.0,
+     "max": 215.0,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 1.0,
+      "decode_offset": -40.0,
+      "bytes": 1,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "Intake Air Temperature",
+      "group": "Engine",
+      "min": -40,
+      "max": 215,
+      "step": 1,
+      "unit": "\u00b0C"
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "Mode 01 PID 10 \u2014 MAF Air Flow Rate (0\u2013655.35 g/s)  raw_16bit = maf * 100  A=high B=low",
+   "mode": "01",
+   "pid": "10",
+   "name": "MAF Air Flow Rate",
+   "enabled": true,
+   "parameters": [
+    {
+     "name": "maf",
+     "unit": "g/s",
+     "default": 3.5,
+     "min": 0.0,
+     "max": 655.35,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 0.01,
+      "decode_offset": 0.0,
+      "bytes": 2,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "MAF Air Flow Rate",
+      "group": "Engine",
+      "min": 0,
+      "max": 200,
+      "step": 0.5,
+      "unit": "g/s"
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "Mode 01 PID 11 \u2014 Throttle Position (0\u2013100 %)  raw = throttle * 2.55",
+   "mode": "01",
+   "pid": "11",
+   "name": "Throttle Position",
+   "enabled": true,
+   "parameters": [
+    {
+     "name": "throttle",
+     "unit": "%",
+     "default": 0.0,
+     "min": 0.0,
+     "max": 100.0,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 0.3922,
+      "decode_offset": 0.0,
+      "bytes": 1,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "Throttle Position",
+      "group": "Engine",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "%"
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "Mode 01 PID 1F \u2014 Run Time Since Engine Start (0\u201365535 s)  A=high B=low",
+   "mode": "01",
+   "pid": "1F",
+   "name": "Engine Run Time",
+   "enabled": false,
+   "parameters": [
+    {
+     "name": "seconds",
+     "unit": "s",
+     "default": 0.0,
+     "min": 0.0,
+     "max": 65535.0,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 1.0,
+      "decode_offset": 0.0,
+      "bytes": 2,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "number_input",
+      "label": "Engine Run Time",
+      "group": "Vehicle",
+      "min": 0,
+      "max": 65535,
+      "precision": 0,
+      "unit": "s"
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "Mode 01 PID 2F \u2014 Fuel Tank Level Input (0\u2013100 %)  raw = level * 2.55",
+   "mode": "01",
+   "pid": "2F",
+   "name": "Fuel Tank Level",
+   "enabled": false,
+   "parameters": [
+    {
+     "name": "level",
+     "unit": "%",
+     "default": 75.0,
+     "min": 0.0,
+     "max": 100.0,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 0.3922,
+      "decode_offset": 0.0,
+      "bytes": 1,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "Fuel Tank Level",
+      "group": "Vehicle",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "%"
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "Mode 01 PID 33 \u2014 Absolute Barometric Pressure (0\u2013255 kPa)",
+   "mode": "01",
+   "pid": "33",
+   "name": "Barometric Pressure",
+   "enabled": false,
+   "parameters": [
+    {
+     "name": "pressure",
+     "unit": "kPa",
+     "default": 101.0,
+     "min": 0.0,
+     "max": 255.0,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 1.0,
+      "decode_offset": 0.0,
+      "bytes": 1,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "Barometric Pressure",
+      "group": "Vehicle",
+      "min": 60,
+      "max": 110,
+      "step": 1,
+      "unit": "kPa"
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "Mode 01 PID 42 \u2014 Control Module Voltage (0\u201365.535 V)  raw_16bit = voltage * 1000",
+   "mode": "01",
+   "pid": "42",
+   "name": "Control Module Voltage",
+   "enabled": false,
+   "parameters": [
+    {
+     "name": "voltage",
+     "unit": "V",
+     "default": 12.6,
+     "min": 0.0,
+     "max": 65.535,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 0.001,
+      "decode_offset": 0.0,
+      "bytes": 2,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "Module Voltage",
+      "group": "Vehicle",
+      "min": 6,
+      "max": 16,
+      "step": 0.1,
+      "unit": "V"
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "Mode 01 PID 46 \u2014 Ambient Air Temperature (-40 to 215 \u00b0C)  raw = temp + 40",
+   "mode": "01",
+   "pid": "46",
+   "name": "Ambient Air Temperature",
+   "enabled": false,
+   "parameters": [
+    {
+     "name": "temperature",
+     "unit": "\u00b0C",
+     "default": 22.0,
+     "min": -40.0,
+     "max": 215.0,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 1.0,
+      "decode_offset": -40.0,
+      "bytes": 1,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "Ambient Temperature",
+      "group": "Vehicle",
+      "min": -40,
+      "max": 60,
+      "step": 1,
+      "unit": "\u00b0C"
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "Mode 01 PID 5C \u2014 Engine Oil Temperature (-40 to 215 \u00b0C)  raw = temp + 40",
+   "mode": "01",
+   "pid": "5C",
+   "name": "Engine Oil Temperature",
+   "enabled": false,
+   "parameters": [
+    {
+     "name": "temperature",
+     "unit": "\u00b0C",
+     "default": 95.0,
+     "min": -40.0,
+     "max": 215.0,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 1.0,
+      "decode_offset": -40.0,
+      "bytes": 1,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "Oil Temperature",
+      "group": "Engine",
+      "min": -40,
+      "max": 215,
+      "step": 1,
+      "unit": "\u00b0C"
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "Mode 01 PID 5E \u2014 Engine Fuel Rate (0\u20133212.75 L/h)  raw_16bit = rate * 20",
+   "mode": "01",
+   "pid": "5E",
+   "name": "Engine Fuel Rate",
+   "enabled": false,
+   "parameters": [
+    {
+     "name": "fuel_rate",
+     "unit": "L/h",
+     "default": 4.5,
+     "min": 0.0,
+     "max": 3212.75,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 0.05,
+      "decode_offset": 0.0,
+      "bytes": 2,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "Fuel Rate",
+      "group": "Engine",
+      "min": 0,
+      "max": 50,
+      "step": 0.1,
+      "unit": "L/h"
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "Mode 09 PID 02 \u2014 Vehicle Identification Number (17 ASCII chars). Firmware prefixes message count byte automatically.",
+   "mode": "09",
+   "pid": "02",
+   "name": "VIN",
+   "enabled": true,
+   "parameters": [
+    {
+     "name": "vin",
+     "unit": "",
+     "default": "1WCAN0FW0P0000001",
+     "min": 0,
+     "max": 0,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "string",
+      "max_length": 17
+     },
+     "web_control": {
+      "element": "text_input",
+      "label": "VIN",
+      "group": "Vehicle Info",
+      "max_length": 17
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "Mode 09 PID 04 \u2014 Calibration ID (up to 16 ASCII chars per message)",
+   "mode": "09",
+   "pid": "04",
+   "name": "Calibration ID",
+   "enabled": true,
+   "parameters": [
+    {
+     "name": "cal_id",
+     "unit": "",
+     "default": "ECU_CAL_V1.0.0  ",
+     "min": 0,
+     "max": 0,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "string",
+      "max_length": 16
+     },
+     "web_control": {
+      "element": "text_input",
+      "label": "Calibration ID",
+      "group": "Vehicle Info",
+      "max_length": 16
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "Mode 09 PID 0A \u2014 ECU Name (up to 20 ASCII chars)",
+   "mode": "09",
+   "pid": "0A",
+   "name": "ECU Name",
+   "enabled": true,
+   "parameters": [
+    {
+     "name": "ecu_name",
+     "unit": "",
+     "default": "GENERIC_ECU_01      ",
+     "min": 0,
+     "max": 0,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "string",
+      "max_length": 20
+     },
+     "web_control": {
+      "element": "text_input",
+      "label": "ECU Name",
+      "group": "Vehicle Info",
+      "max_length": 20
+     }
+    }
+   ]
+  }
+ ],
+ "_section_vehicle_specific_pids": "--- Mode 22 (UDS ReadDataByIdentifier) \u2014 manufacturer-specific PIDs ---",
+ "vehicle_specific_pids": [
+  {
+   "_comment": "UDS 0x22 DID F405 \u2014 High Voltage Battery State of Charge.  CAN IDs simulate a BMS ECU at 0x7E4 \u2192 0x7EC.",
+   "_comment_error_sim": "Example: continuous 'no response' simulates a dead BMS ECU",
+   "mode": "22",
+   "pid": "F405",
+   "name": "HV Battery State of Charge",
+   "enabled": true,
+   "can_id": "0x7E4",
+   "response_id": "0x7EC",
+   "error_sim": {
+    "_comment": "Simulates dead ECU \u2014 scan tool will show NO DATA / timeout",
+    "enabled": false,
+    "response_type": "no_response",
+    "nrc": "0x00",
+    "trigger": "continuous",
+    "intermittent_rate_pct": 0
+   },
+   "parameters": [
+    {
+     "name": "soc",
+     "unit": "%",
+     "default": 80.0,
+     "min": 0.0,
+     "max": 100.0,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 0.3922,
+      "decode_offset": 0.0,
+      "bytes": 1,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "HV Battery SOC",
+      "group": "Battery",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "%"
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "UDS 0x22 DID F406 \u2014 HV Battery Voltage (0\u2013600 V in 0.1 V steps)  raw_16bit = voltage * 10",
+   "mode": "22",
+   "pid": "F406",
+   "name": "HV Battery Voltage",
+   "enabled": true,
+   "can_id": "0x7E4",
+   "response_id": "0x7EC",
+   "parameters": [
+    {
+     "name": "voltage",
+     "unit": "V",
+     "default": 380.0,
+     "min": 0.0,
+     "max": 600.0,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 0.1,
+      "decode_offset": 0.0,
+      "bytes": 2,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "HV Battery Voltage",
+      "group": "Battery",
+      "min": 200,
+      "max": 500,
+      "step": 1,
+      "unit": "V"
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "UDS 0x22 DID F407 \u2014 HV Battery Current (-500 to +500 A in 0.1 A steps, offset 500).  Positive = discharge.",
+   "mode": "22",
+   "pid": "F407",
+   "name": "HV Battery Current",
+   "enabled": true,
+   "can_id": "0x7E4",
+   "response_id": "0x7EC",
+   "parameters": [
+    {
+     "name": "current",
+     "unit": "A",
+     "default": 0.0,
+     "min": -500.0,
+     "max": 500.0,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 0.1,
+      "decode_offset": -500.0,
+      "bytes": 2,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "HV Battery Current",
+      "group": "Battery",
+      "min": -500,
+      "max": 500,
+      "step": 1,
+      "unit": "A"
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "UDS 0x22 DID F408 \u2014 HV Battery Temperature (-40 to 85 \u00b0C)  raw = temp + 40",
+   "mode": "22",
+   "pid": "F408",
+   "name": "HV Battery Temperature",
+   "enabled": true,
+   "can_id": "0x7E4",
+   "response_id": "0x7EC",
+   "parameters": [
+    {
+     "name": "temperature",
+     "unit": "\u00b0C",
+     "default": 28.0,
+     "min": -40.0,
+     "max": 85.0,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 1.0,
+      "decode_offset": -40.0,
+      "bytes": 1,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "Battery Temperature",
+      "group": "Battery",
+      "min": -40,
+      "max": 85,
+      "step": 1,
+      "unit": "\u00b0C"
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "UDS 0x22 DID 2B10 \u2014 Transmission Gear Position (discrete states).  Example: switch element with 'on_value'/'off_value' not applicable here; use dropdown.",
+   "mode": "22",
+   "pid": "2B10",
+   "name": "Transmission Gear Position",
+   "enabled": true,
+   "can_id": "0x7E1",
+   "response_id": "0x7E9",
+   "parameters": [
+    {
+     "name": "gear",
+     "unit": "",
+     "default": 0.0,
+     "min": 0.0,
+     "max": 7.0,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 1.0,
+      "decode_offset": 0.0,
+      "bytes": 1,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "dropdown",
+      "label": "Gear Position",
+      "group": "Transmission",
+      "options": [
+       {
+        "label": "Park (P)",
+        "value": 0
+       },
+       {
+        "label": "Reverse (R)",
+        "value": 1
+       },
+       {
+        "label": "Neutral (N)",
+        "value": 2
+       },
+       {
+        "label": "Drive (D)",
+        "value": 3
+       },
+       {
+        "label": "Sport (S)",
+        "value": 4
+       },
+       {
+        "label": "Manual 1",
+        "value": 5
+       },
+       {
+        "label": "Manual 2",
+        "value": 6
+       },
+       {
+        "label": "Manual 3",
+        "value": 7
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "UDS 0x22 DID 2B11 \u2014 Transmission Fluid Temperature (-40 to 215 \u00b0C)",
+   "mode": "22",
+   "pid": "2B11",
+   "name": "Transmission Fluid Temperature",
+   "enabled": true,
+   "can_id": "0x7E1",
+   "response_id": "0x7E9",
+   "parameters": [
+    {
+     "name": "temperature",
+     "unit": "\u00b0C",
+     "default": 80.0,
+     "min": -40.0,
+     "max": 215.0,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 1.0,
+      "decode_offset": -40.0,
+      "bytes": 1,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "Trans Fluid Temp",
+      "group": "Transmission",
+      "min": -40,
+      "max": 215,
+      "step": 1,
+      "unit": "\u00b0C"
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "UDS 0x22 DID D001 \u2014 Warning lamp flags packed into a single byte (bit-field).  Each bit maps to a separate boolean parameter with 'switch' control.  data_byte_offset is the same (0) for all; the firmware should mask the bit.",
+   "_note": "Multi-parameter single-byte example: 2 parameters sharing byte 0, differentiated by 'bit_mask'",
+   "mode": "22",
+   "pid": "D001",
+   "name": "Warning Lamp Flags",
+   "enabled": true,
+   "can_id": "0x7E0",
+   "response_id": "0x7E8",
+   "parameters": [
+    {
+     "name": "seatbelt_warning",
+     "unit": "",
+     "default": 0.0,
+     "min": 0.0,
+     "max": 1.0,
+     "data_byte_offset": 0,
+     "bit_mask": "0x01",
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 1.0,
+      "decode_offset": 0.0,
+      "bytes": 1,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "switch",
+      "label": "Seatbelt Warning",
+      "group": "Warnings",
+      "on_value": 1,
+      "off_value": 0
+     }
+    },
+    {
+     "name": "door_ajar_warning",
+     "unit": "",
+     "default": 0.0,
+     "min": 0.0,
+     "max": 1.0,
+     "data_byte_offset": 0,
+     "bit_mask": "0x02",
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 1.0,
+      "decode_offset": 0.0,
+      "bytes": 1,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "switch",
+      "label": "Door Ajar Warning",
+      "group": "Warnings",
+      "on_value": 1,
+      "off_value": 0
+     }
+    },
+    {
+     "name": "low_fuel_warning",
+     "unit": "",
+     "default": 0.0,
+     "min": 0.0,
+     "max": 1.0,
+     "data_byte_offset": 0,
+     "bit_mask": "0x04",
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 1.0,
+      "decode_offset": 0.0,
+      "bytes": 1,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "switch",
+      "label": "Low Fuel Warning",
+      "group": "Warnings",
+      "on_value": 1,
+      "off_value": 0
+     }
+    }
+   ]
+  },
+  {
+   "_comment": "UDS 0x22 DID D002 \u2014 TPMS pressures: 4 wheel pressures packed into 4 bytes (1 byte each, 0.2 kPa/bit offset 0).  One PID, four parameters, each at a different byte offset.",
+   "mode": "22",
+   "pid": "D002",
+   "name": "TPMS Tyre Pressures",
+   "enabled": true,
+   "can_id": "0x7E0",
+   "response_id": "0x7E8",
+   "parameters": [
+    {
+     "name": "front_left_kpa",
+     "unit": "kPa",
+     "default": 220.0,
+     "min": 0.0,
+     "max": 510.0,
+     "data_byte_offset": 0,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 2.0,
+      "decode_offset": 0.0,
+      "bytes": 1,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "FL Tyre Pressure",
+      "group": "TPMS",
+      "min": 0,
+      "max": 400,
+      "step": 2,
+      "unit": "kPa"
+     }
+    },
+    {
+     "name": "front_right_kpa",
+     "unit": "kPa",
+     "default": 220.0,
+     "min": 0.0,
+     "max": 510.0,
+     "data_byte_offset": 1,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 2.0,
+      "decode_offset": 0.0,
+      "bytes": 1,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "FR Tyre Pressure",
+      "group": "TPMS",
+      "min": 0,
+      "max": 400,
+      "step": 2,
+      "unit": "kPa"
+     }
+    },
+    {
+     "name": "rear_left_kpa",
+     "unit": "kPa",
+     "default": 210.0,
+     "min": 0.0,
+     "max": 510.0,
+     "data_byte_offset": 2,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 2.0,
+      "decode_offset": 0.0,
+      "bytes": 1,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "RL Tyre Pressure",
+      "group": "TPMS",
+      "min": 0,
+      "max": 400,
+      "step": 2,
+      "unit": "kPa"
+     }
+    },
+    {
+     "name": "rear_right_kpa",
+     "unit": "kPa",
+     "default": 210.0,
+     "min": 0.0,
+     "max": 510.0,
+     "data_byte_offset": 3,
+     "encoding": {
+      "type": "numeric",
+      "decode_scale": 2.0,
+      "decode_offset": 0.0,
+      "bytes": 1,
+      "byte_order": "big_endian"
+     },
+     "web_control": {
+      "element": "slider",
+      "label": "RR Tyre Pressure",
+      "group": "TPMS",
+      "min": 0,
+      "max": 400,
+      "step": 2,
+      "unit": "kPa"
+     }
+    }
+   ]
+  }
+ ],
+ "_section_ecus": "--- Extra UDS ECU addresses (each independent session/security) ---",
+ "ecus": [
+  {
+   "name": "abs",
+   "request_id": "0x7E2",
+   "response_id": "0x7EA"
+  },
+  {
+   "name": "body",
+   "request_id": "0x7E3",
+   "response_id": "0x7EB"
+  }
+ ],
+ "_section_dids": "--- UDS Data Identifiers (0x22 read / 0x2E write / 0x2A periodic) ---",
+ "data_identifiers": [
+  {
+   "id": "F190",
+   "string": true,
+   "writable": false,
+   "value": "1WCAN0FW0P0000001"
+  },
+  {
+   "id": "F18C",
+   "string": true,
+   "writable": false,
+   "value": "WCAN-SN-000123"
+  },
+  {
+   "id": "F195",
+   "string": true,
+   "writable": false,
+   "value": "SW-1.0.0"
+  },
+  {
+   "id": "F191",
+   "string": true,
+   "writable": false,
+   "value": "HW-PRO-1"
+  },
+  {
+   "id": "0100",
+   "string": false,
+   "writable": true,
+   "bytes": "12345678"
+  },
+  {
+   "id": "F250",
+   "string": false,
+   "writable": false,
+   "bytes": "0C80"
+  }
+ ],
+ "_section_broadcasts": "--- Unsolicited periodic frames (some ECUs stream data) ---",
+ "broadcasts": [
+  {
+   "name": "rpm_stream",
+   "id": "0x0C0",
+   "period_ms": 100,
+   "enabled": true,
+   "data": "0C800000000000"
+  },
+  {
+   "name": "speed_stream",
+   "id": "0x1A0",
+   "period_ms": 200,
+   "enabled": true,
+   "data": "0000000000000000"
+  },
+  {
+   "name": "status_29b",
+   "id": "0x18FEF100",
+   "ext": true,
+   "period_ms": 500,
+   "enabled": false,
+   "data": "FF00FF00FF00FF00"
+  }
+ ]
+}
