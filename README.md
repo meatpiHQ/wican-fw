@@ -1,161 +1,113 @@
-<img src="https://github.com/slimelec/ollie-hw/blob/master/images/mpi_logo.png" width=300>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/images/meatpi-logo-dark.svg">
+  <img src=".github/images/meatpi-logo.svg" alt="MeatPi Electronics" width="300">
+</picture>
 
-[www.meatpi.com](https://www.meatpi.com)
----
-### [Documentation](https://meatpihq.github.io/wican-fw/) | [Supported Vehicles](https://meatpihq.github.io/wican-fw/config/automate/supported_vehicles) | [Firmware updates](https://github.com/meatpiHQ/wican-fw/releases/) | [Discord server](https://discord.com/invite/2hpHVDmyfw) | [Reddit](https://www.reddit.com/r/wican/)
+# WiCAN firmware
 
-## **WiCAN PRO Recommended**
-We **highly recommend** ordering the **WiCAN PRO** version because:
-- It features an **advanced OBD chip**, improving compatibility with a wider range of vehicles.
-- You’ll receive **access to the latest features** and **firmware updates**.
-- It offers **better long-term support** compared to the standard WiCAN **because of memory limitations on the original WiCAN hardware**.
+Open-source firmware for the MeatPi WiCAN family: OBD-II and CAN adapters with WiFi, Bluetooth LE and USB that bring vehicle data to Home Assistant, MQTT and the diagnostic apps you already use.
 
-## Order on [**Mouser**](https://www.mouser.com/c/?m=MeatPi) or [**Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics)
+### [Documentation](https://docs.meatpi.com/) | [Supported vehicles](https://docs.meatpi.com/wican-pro/supported-vehicles/) | [Firmware releases](https://github.com/meatpiHQ/wican-fw/releases/) | [Discord](https://discord.com/invite/2hpHVDmyfw) | [Reddit](https://www.reddit.com/r/wican/)
 
----
-# WiCAN PRO
-
-![1](https://github.com/user-attachments/assets/ed94e7b2-3d8a-4b1c-a759-c1e7a28d4a67)
-
-<table>
-  <thead>
-    <tr>
-      <th align="left" style="background-color:#0c1322;color:#fff;padding:12px 16px;font-size:15px;">Feature</th>
-      <th align="center" style="background-color:#2563eb;color:#fff;padding:12px 16px;font-size:15px;">WiCAN Pro ⭐</th>
-      <th align="center" style="background-color:#0c1322;color:#fff;padding:12px 16px;font-size:15px;">WiCAN</th>
-      <th align="center" style="background-color:#0c1322;color:#fff;padding:12px 16px;font-size:15px;">OBDLink MX+</th>
-    </tr>
-  </thead>
-  <tbody>
-    <!-- USB & Hardware -->
-    <tr><td colspan="4"><strong>USB &amp; HARDWARE</strong></td></tr>
-    <tr><td>USB Host Interface</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-    <tr><td>Dual USB to Serial</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-    <tr><td>Button</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
-    <tr><td>SD Card Logging</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-    <!-- Connectivity & Software -->
-    <tr><td colspan="4"><strong>CONNECTIVITY &amp; SOFTWARE</strong></td></tr>
-    <tr><td>Interface</td><td align="center">WiFi / BLE / USB</td><td align="center">WiFi / BLE</td><td align="center">Bluetooth</td></tr>
-    <tr><td>WiCAN Firmware</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
-    <tr><td>Wireguard VPN</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-    <tr><td>HTTPS</td><td align="center">✅</td><td align="center">HTTP only</td><td align="center">—</td></tr>
-    <tr><td>MQTTS (Secure MQTT)</td><td align="center">✅</td><td align="center">MQTT only</td><td align="center">—</td></tr>
-    <tr><td>Home Assistant Nabu Casa</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-    <tr><td>Firmware Updates - Access Latest Features</td><td align="center">Full</td><td align="center">Limited</td><td align="center">—</td></tr>
-    <tr><td>Improved Web Interface</td><td align="center">✅</td><td align="center">❌</td><td align="center">—</td></tr>
-    <tr><td>Additional Reverse Engineering Tools</td><td align="center">✅</td><td align="center">❌</td><td align="center">—</td></tr>
-    <tr><td>RealDash CAN Protocol (PIN 6/14)</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
-    <tr><td>slcan / socketCAN (PIN 6/14)</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
-    <!-- Protocols -->
-    <tr><td colspan="4"><strong>PROTOCOLS</strong></td></tr>
-    <tr><td>Medium Speed CAN MS-CAN (PIN 3/11)</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
-    <tr><td>GM High-Speed J1962 (PIN 12/13)</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
-    <tr><td>Single Wire CAN GMLAN (PIN 1)</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
-    <tr><td>SAE J1850-PWM</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
-    <tr><td>SAE J1850-VPW</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
-    <tr><td>ISO 9141-2</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
-    <tr><td>ISO 14230-4 Slow/Fast</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
-    <!-- Instruction Sets -->
-    <tr><td colspan="4"><strong>INSTRUCTION SETS</strong></td></tr>
-    <tr><td>ELM327 Instructions</td><td align="center">v2.3</td><td align="center">Emulation v1.5</td><td align="center">v2.3</td></tr>
-    <tr><td>ELM329 Instructions</td><td align="center">v2.2</td><td align="center">❌</td><td align="center">v2.2</td></tr>
-    <tr><td>STN Instructions</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
-    <tr><td>VT Instructions</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-    <!-- Price -->
-    <tr><td><strong>Price</strong></td><td align="center"><strong>$89</strong></td><td align="center"><strong>$42</strong></td><td align="center"><strong>$139.95</strong></td></tr>
-  </tbody>
-</table>
-
-# WiCAN PRO 4G Module
-
-### ESPNetLink is an LTE and GPS module that provides IoT connectivity and real-time vehicle tracking for your WiCAN PRO adapter. To support this project, please subscribe for updates [**Crowd Supply!**](https://www.crowdsupply.com/meatpi-electronics/espnetlink)
-
-![image](https://github.com/user-attachments/assets/5314bd88-768f-4e8c-8eea-dd2ed4649283)
-
-# WiCAN
-
-![65465](https://github.com/meatpiHQ/wican-fw/assets/94690098/537b5062-cb8a-485f-9354-6c351d08aa49)
-
-## WiCAN-USB Pinout
-
-<p align="center">
-<img src="https://user-images.githubusercontent.com/94690098/218081136-fc3da520-1851-497e-90dc-ccc5d6543f1f.png" >
-</p>
-
-### *** To activate the 120R termination resistor, simply connect the TR pin to CANH. The other end of the termination resistor is connected to CANL internally.
-
-
-## WiCAN-OBD2 Pinout
-
-<p align="center">
-<img src="https://user-images.githubusercontent.com/94690098/182854687-911bae04-9bdd-4947-8363-e088e278b3b8.png" >
-</p>
-
----
-## [webCAN](http://webcan.meatpi.com/) Coming soon!
-
-- [Important Notes](#important-notes)
-- [API](#api)
-- [Build](#build)
-- [Description](#description)
-- [ELM327 OBD2 Protocol](#elm327-obd2-protocol)
-- [Firmware Update](https://meatpihq.github.io/wican-fw/config/firmware-update)
-  - [OTA](https://meatpihq.github.io/wican-fw/config/firmware-update)
-  - [USB Flash](https://meatpihq.github.io/wican-fw/config/firmware-update)
-
-# **Important Notes**:
-
-- The OBD2 adapter is not designed to powered of the USB connecter. The USB connector can power the adapter to flash custom firmware or hardreset the deivce and can also be used for debuging.
-- It is highly recommanded to turn OFF the BLE if not used. Otherwise it might affect the preformance.
-- When the BLE is connected, the device configuration access point will be disabled i.e you won't be able to configure the device unless you disconnect the BLE, by turning off the BLE on your phone or device.
-- If AP+Station mode is enabled, only use station IP to communicate with the device and AP must be used for configuration only.
-  
-# **API**
-[API Documentation](https://drive.google.com/drive/folders/1qJelUAHGrn_YbNIP0Jk_KmNENG-hKbtl?usp=sharing)
-
-[Programing examples](https://github.com/meatpiHQ/programming_examples/tree/master/CAN)
-
-# **Build**:
-
-1. Install ESP-IDF >= v5.1.
-2. Clone project.
-3. Open project and build.
-
-# **Description**:
-
-WiCAN is a powerful ESP32-C3-based CAN adapter for car hacking and general CAN-bus development. It is available in two form factors, OBD-II and standard USB-CAN. The original firmware can use Wi-Fi or BLE to interface directly with RealDash, which allows you to create your own custom dashboards with stunning graphics. It is available for Android, iOS, and Windows 10. WiCAN connects to your existing Wi-Fi network and any device on that network, where it allows you to configure Wi-Fi and CAN settings through a built-in web interface. Both versions have a power-saving mode that detects when the voltage drops under 13 V or some other preset value. When this power-saving mode is engaged, WiCAN is capable of entering sleep mode, which drops current consumption below 1 mA.
-
-WiCAN is a simple, ready-to-use solution for CAN-bus development and hacking. It accelerates development by providing vehicle-diagnostic APIs and libraries in various languages and for various operating systems. WiCAN works with a large array of pre-existing vehicle-diagnostic libraries, including RealDash, SavvyCAN, BUSmaster, python-can/SocketCA, and more. APIs are also available for LabView, C#, VB.Net, Delphi, and Python in case you’re writing your own software.
-
-# WiCAN-OBD
-![image](https://user-images.githubusercontent.com/94690098/231444160-08842087-55ad-4165-8291-b379da63aeeb.png)
-
-WiCAN-OBD will be of great interest to car enthusiasts and tinkers who want to modernize or customize the head-unit displays in their cars using RealDash. Check out some examples of the available graphic interfaces, which are supported by a robust collection of Manuals & Tutorials to get you started with RealDash.
-
-Another great feature of WiCAN-OBD is its MQTT battery alerts. It can monitor your battery voltage and send an alert if that voltage drops under a set threshold. This feature is especially important for users who own multiple cars they do not use regularly.
-
-# WiCAN-USB
-![image](https://user-images.githubusercontent.com/94690098/231443956-fbf2de46-ef19-4ba5-83b1-6058ab123f56.png)
-
-WiCAN-USB can be powered through USB or through a screw-terminal connector. The hardware and firmware is almost identical to WiCAN-OBD, but with an extended voltage range up to 36 V. Many of the projects we work on involve 12 V or 24 V trucks, and WiCAN-USB comes in handy when we need to monitor those trucks remotely, from the comfort of our desks, by configuring them to connect to Wi-Fi. And, thanks to its low cost, we don’t need to worry about breaking or losing it the WiCAN-USB device itself.
-
-WiCAN-USB can also be used as a USB-to-CAN adapter when Wi-Fi connectivity is not available or when a hardwired connection is needed.
-
-
-## [**Programming Examples**](https://github.com/meatpiHQ/programming_examples/tree/master/CAN)
-
-### **Features and Specifications**:
-
-- Supports CAN2.0A/B up to 1Mbits.
-- Works with Realdash, based on "realdash 66"
-- Supports SocketCAN and works with BUSMaster
-- Supports TCP and UDP
-- WiFi can be used in AP and station mode
-- WiFi and CAN configured using web interface.
-- Diode protection for the USB port
-
-![Modes](https://user-images.githubusercontent.com/94690098/222961571-bd137341-808a-4f0a-9528-789fe24d640e.png "Connection Mode")
+### Order on [**meatpi.com**](https://www.meatpi.com), [**Mouser**](https://www.mouser.com/c/?m=MeatPi) or [**Crowd Supply**](https://www.crowdsupply.com/meatpi-electronics)
 
 ---
 
-© 2024 meatPi Electronics | www.meatpi.com | PO Box 5005 Clayton, VIC 3168, Australia
+## WiCAN PRO
+
+![WiCAN PRO](https://github.com/user-attachments/assets/ed94e7b2-3d8a-4b1c-a759-c1e7a28d4a67)
+
+WiCAN PRO plugs into the OBD-II port and reads your car without an app: pick a vehicle profile, or add your own PIDs, and the values arrive in Home Assistant (auto-discovered over MQTT), on any MQTT broker, or at an HTTP, HTTPS or ABRP endpoint. Setup is a web page from any phone or laptop, firmware updates are over the air.
+
+- **Every OBD-II protocol**, thanks to a dedicated OBD chip: CAN, MS-CAN, single-wire CAN, J1850 PWM and VPW, ISO 9141-2, ISO 14230, plus J1939 and ISO 27145 (WWH-OBD) for trucks.
+- **Works with the apps you know**: ELM327 v2.3 over WiFi and Bluetooth LE for Car Scanner, RealDash and friends, CAN over TCP for SavvyCAN, slcan, and a J2534 PassThru driver for Windows diagnostic tools.
+- **A USB port for accessories**: the [ESPNetLink](#espnetlink) LTE and GPS dongle, a USB GPS receiver or an Ethernet adapter.
+- **Built for the long run**: WireGuard VPN, HTTPS and MQTTS, SD card logging, a CAN monitor, a UDS tool, scripts and automation rules, settings backup and restore.
+- **Kind to the battery**: sleep mode under 1 mA with a configurable voltage threshold, wake on voltage or motion, and a low-battery alert.
+
+We recommend WiCAN PRO over the original WiCAN: it reads more vehicles, and it is where new features land. The original WiCAN's memory limits what its firmware can grow into.
+
+[Read the WiCAN PRO manual](https://docs.meatpi.com/wican-pro/)
+
+## ESPNetLink
+
+![ESPNetLink](https://github.com/user-attachments/assets/5314bd88-768f-4e8c-8eea-dd2ed4649283)
+
+ESPNetLink is the LTE and GPS dongle for WiCAN PRO: internet over Cat M1 or NB-IoT wherever the car is, and a GPS position, with nothing to set up. On a computer it is a USB modem with its own web interface. Follow the project on [Crowd Supply](https://www.crowdsupply.com/meatpi-electronics/espnetlink) or [read the manual](https://docs.meatpi.com/espnetlink/).
+
+## WiCAN OBD and WiCAN USB
+
+![WiCAN OBD and WiCAN USB](https://github.com/meatpiHQ/wican-fw/assets/94690098/537b5062-cb8a-485f-9354-6c351d08aa49)
+
+The original ESP32-C3 WiCAN, in two shapes:
+
+- **WiCAN OBD** sits in the OBD-II port: an ELM327 adapter for Car Scanner and RealDash, a CAN interface for SavvyCAN and SocketCAN, and vehicle data for Home Assistant and MQTT, with a sleep mode and a battery alert.
+- **WiCAN USB** has screw terminals for any CAN bus from 7.5 V to 36 V and a USB serial port: SocketCAN, SavvyCAN, BUSMASTER and RealDash over WiFi, Bluetooth or the cable.
+
+Manuals: [WiCAN OBD](https://docs.meatpi.com/wican-obd/) | [WiCAN USB](https://docs.meatpi.com/wican-usb/)
+
+## WiCAN PRO compared
+
+| Feature | WiCAN PRO | WiCAN | OBDLink MX+ |
+|---|:---:|:---:|:---:|
+| **Hardware** | | | |
+| USB host port for accessories | ✅ | ❌ | ❌ |
+| Dual USB to serial | ✅ | ❌ | ❌ |
+| Button | ✅ | ❌ | ✅ |
+| SD card logging | ✅ | ❌ | ❌ |
+| **Connectivity and software** | | | |
+| Interface | WiFi / BLE / USB | WiFi / BLE | Bluetooth |
+| WiCAN firmware | ✅ | ✅ | ❌ |
+| WireGuard VPN | ✅ | ❌ | ❌ |
+| HTTPS | ✅ | HTTP only | - |
+| MQTTS (secure MQTT) | ✅ | MQTT only | - |
+| Home Assistant through Nabu Casa | ✅ | ❌ | ❌ |
+| Firmware updates with new features | Full | Limited | - |
+| Improved web interface | ✅ | ❌ | - |
+| Reverse engineering tools | ✅ | ❌ | - |
+| RealDash CAN protocol (pins 6/14) | ✅ | ✅ | ❌ |
+| slcan / SocketCAN (pins 6/14) | ✅ | ✅ | ❌ |
+| **Protocols** | | | |
+| Medium speed CAN, MS-CAN (pins 3/11) | ✅ | ❌ | ✅ |
+| GM high speed J1962 (pins 12/13) | ✅ | ❌ | ✅ |
+| Single wire CAN, GMLAN (pin 1) | ✅ | ❌ | ✅ |
+| SAE J1850 PWM | ✅ | ❌ | ✅ |
+| SAE J1850 VPW | ✅ | ❌ | ✅ |
+| ISO 9141-2 | ✅ | ❌ | ✅ |
+| ISO 14230-4 slow and fast init | ✅ | ❌ | ✅ |
+| **Instruction sets** | | | |
+| ELM327 | v2.3 | Emulation v1.5 | v2.3 |
+| ELM329 | v2.2 | ❌ | v2.2 |
+| STN | ✅ | ❌ | ✅ |
+| VT | ✅ | ❌ | ❌ |
+
+---
+
+## Firmware updates
+
+Every release is on the [Releases](https://github.com/meatpiHQ/wican-fw/releases/) page. Install it from the device's web interface, or over USB if the device no longer boots. The manual for your device has the steps: [WiCAN PRO](https://docs.meatpi.com/wican-pro/firmware/update/), [WiCAN OBD](https://docs.meatpi.com/wican-obd/firmware/update/), [WiCAN USB](https://docs.meatpi.com/wican-usb/firmware/update/).
+
+## Vehicle profiles
+
+A vehicle profile tells WiCAN which PIDs to read for a given car and how to decode them. The profiles live in [vehicle_profiles/](vehicle_profiles/) and are merged into [vehicle_profiles.json](vehicle_profiles.json), which the device downloads. The [Supported vehicles](https://docs.meatpi.com/wican-pro/supported-vehicles/) page is generated from them.
+
+To add or fix a car, open a pull request that changes the files under vehicle_profiles/. The format is described in [vehicle_profiles/README.md](vehicle_profiles/README.md), and a workflow validates the profile and attaches a test build of the merged file to the pull request.
+
+## For developers
+
+- HTTP API reference: [WiCAN PRO](https://docs.meatpi.com/wican-pro/reference/http-api/status/), [WiCAN OBD](https://docs.meatpi.com/wican-obd/reference/http-endpoints/), [WiCAN USB](https://docs.meatpi.com/wican-usb/reference/http-endpoints/)
+- [MQTT messages](https://docs.meatpi.com/wican-obd/reference/mqtt-messages/) and [ELM327 commands](https://docs.meatpi.com/wican-obd/reference/elm327-commands/)
+- [Programming examples](https://github.com/meatpiHQ/programming_examples/tree/master/CAN) in Python, C#, LabVIEW and more
+- Pinouts: [WiCAN PRO](https://docs.meatpi.com/wican-pro/hardware/pinout/), [WiCAN OBD](https://docs.meatpi.com/wican-obd/hardware/pinout/), [WiCAN USB](https://docs.meatpi.com/wican-usb/hardware/pinout/)
+
+## Support
+
+Questions and show-and-tell go to [Discord](https://discord.com/invite/2hpHVDmyfw) and [Reddit](https://www.reddit.com/r/wican/). Bugs and feature requests go to [GitHub issues](https://github.com/meatpiHQ/wican-fw/issues), with the firmware version and the device model.
+
+## License
+
+The firmware is released under the [GNU GPL v3](LICENSE).
+
+---
+
+© 2026 MeatPi Electronics | www.meatpi.com | PO Box 5005 Clayton, VIC 3168, Australia

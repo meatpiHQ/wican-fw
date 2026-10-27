@@ -1,0 +1,12 @@
+{
+  "car_model": "Geely: EX5 2026",
+  "init": "ATSP7;ATSHD01635;ATCP1D;ATCRA1EC6AE80;ATFCSH1DD01635;ATFCSD300000;ATFCSM1;",
+  "pids": [
+    {
+      "pid": "2248011",
+      "parameters": {
+        "SOC": "([B7:B8]/470)-(117/20)"
+      }
+    }
+  ]
+}
