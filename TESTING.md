@@ -5,7 +5,8 @@ inventory live in `components/TESTBENCH.md`. `.\test.ps1 list` prints every
 runnable suite/check.
 
 **Two ESP-IDF installs since 2026-10-27** (v6.1 beside v6.0.2): `build.ps1`
-and `test.ps1` take `-Idf 6.0.2|6.1` (default 6.0.2) and set the matching
+and `test.ps1` take `-Idf 6.0.2|6.1` (default 6.1 since 6.0.0-beta.5, the
+first release built with it; 6.0.2 stays installed) and set the matching
 IDF tree and Python environment themselves (v6.1's own export.ps1 does not
 find the installer's venv). Switching the IDF needs a fresh `build\`: delete
 it, since `-Clean` would run the other IDF's fullclean on a foreign cache.

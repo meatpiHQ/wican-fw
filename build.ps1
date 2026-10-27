@@ -5,10 +5,11 @@
 #   .\build.ps1 -Flash COM12       # build + flash at 460800
 #   .\build.ps1 -Clean             # idf.py fullclean first (after env/path
 #                                  # changes - the CMake cache pins paths)
-#   .\build.ps1 -Idf 6.1           # build with ESP-IDF v6.1 (C:\esp\v6.1) instead
-#                                  # of the default 6.0.2; switching the IDF needs
-#                                  # a fresh build\ (delete it: -Clean runs the
-#                                  # OTHER idf's fullclean on a foreign cache)
+#   .\build.ps1 -Idf 6.0.2         # build with ESP-IDF v6.0.2 (C:\esp\v6.0.2) instead
+#                                  # of the default 6.1 (the default since 6.0.0-beta.5,
+#                                  # 2026-10-27); switching the IDF needs a fresh
+#                                  # build\ (delete it: -Clean runs the OTHER idf's
+#                                  # fullclean on a foreign cache)
 #
 # Why this script exists (each of these has burned a session):
 #  - MEATPI_COMPONENTS_PATH must point at the live meatpi-components tree,
@@ -24,7 +25,7 @@
 param(
     [string]$Flash = "",
     [switch]$Clean,
-    [ValidateSet('6.0.2', '6.1')][string]$Idf = '6.0.2'   # the ESP-IDF to build with (6.1 installed beside 6.0.2 on 2026-10-27)
+    [ValidateSet('6.0.2', '6.1')][string]$Idf = '6.1'   # the ESP-IDF to build with (6.1 since 6.0.0-beta.5, 2026-10-27; 6.0.2 stays installed)
 )
 
 $ErrorActionPreference = "Stop"
