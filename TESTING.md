@@ -4,6 +4,25 @@ One entry point: **`.\test.ps1`** (PowerShell, repo root). Bench details and
 inventory live in `components/TESTBENCH.md`. `.\test.ps1 list` prints every
 runnable suite/check.
 
+**Two ESP-IDF installs since 2026-10-27** (v6.1 beside v6.0.2): `build.ps1`
+and `test.ps1` take `-Idf 6.0.2|6.1` (default 6.0.2) and set the matching
+IDF tree and Python environment themselves (v6.1's own export.ps1 does not
+find the installer's venv). Switching the IDF needs a fresh `build\`: delete
+it, since `-Clean` would run the other IDF's fullclean on a foreign cache.
+The first v6.1 build (2026-10-27) compiled clean (the 13 warnings are the
+vendored components' and predate it: same compiler, same flags), re-resolved
+`dependencies.lock` (idf 6.1.0, the managed components unchanged) and added
+the 6.1 symbols to `sdkconfig`; the image grew about 25 KB (25 % of the app
+partition free).
+Release Test PASS 59/59 on it; the one measurable change is internal RAM: the
+settled free after boot is 3.9 KB higher, the boot's floor 10 KB lower (39.7 KB),
+set inside the HTTP server's start. The boot map prints `WICAN RAMMIN <step>=<min>`
+since that day (the internal minimum at the end of every step that lowered it,
+then `end=`), beside `WICAN RAMMAP` (the retained delta per step) and
+`WICAN BOOTTIME`: a step that borrows RAM for a moment shows in RAMMIN only.
+The Release Test's `supply_current_awake_band` (90..300 mA) assumes the ESPNetLink
+on the DUT's USB port; with the PC cable there instead the PSU reads 88 to 91 mA.
+
 **Every run writes a dated summary report to `test-reports\`** (results
 table, performance numbers, DUT conditions, git revision): that folder is
 the pass/fail + performance history; see `test-reports/README.md` for how to

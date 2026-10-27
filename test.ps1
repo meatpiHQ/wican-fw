@@ -18,6 +18,7 @@ param(
     [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'espnleasy', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
+    [ValidateSet('6.0.2', '6.1')][string]$Idf = '6.0.2',  # the ESP-IDF the build stages use (6.1 beside 6.0.2 since 2026-10-27; build.ps1 -Idf has the same table)
     [string]$Port = 'COM10',  # UART0 external USB-serial = console/flash
                               # ('auto' = whatever the preflight detects);
                               # works in EVERY USB-connector mode. COM numbers
@@ -462,18 +463,31 @@ function Write-Report {
 
 # ---------------------------------------------------------------- idf env
 function Use-IdfEnv {
-    $env:IDF_PATH = 'C:\esp\v6.0.2\esp-idf'
+    # -Idf picks the install (2026-10-27: 6.1 beside 6.0.2; build.ps1 carries
+    # the same table): both share the tool versions below, only the IDF tree
+    # and its python environment differ. The 6.0.2 venv's base interpreter
+    # vanished on 2026-10-19, so its stand-in is taken when the venv is dead.
+    $idfEnvs = @{
+        '6.0.2' = @{ Path = 'C:\esp\v6.0.2\esp-idf'; Venv = 'C:\Espressif\tools\python\v6.0.2\venv'; Alt = 'C:\Espressif\tools\python_env\idf6.0_py3.10_env' }
+        '6.1'   = @{ Path = 'C:\esp\v6.1\esp-idf';   Venv = 'C:\Espressif\tools\python\v6.1\venv';   Alt = '' }
+    }
+    $e = $idfEnvs[$Idf]
+    $venv = $e.Venv
+    $runs = $false
+    try { $null = & "$venv\Scripts\python.exe" -c 'pass' 2>$null; $runs = ($LASTEXITCODE -eq 0) } catch { $runs = $false }
+    if (-not $runs -and $e.Alt -and (Test-Path "$($e.Alt)\Scripts\python.exe")) { $venv = $e.Alt }
+    $env:IDF_PATH = $e.Path
     $env:IDF_TOOLS_PATH = 'C:\Espressif'
-    $env:IDF_PYTHON_ENV_PATH = 'C:\Espressif\tools\python\v6.0.2\venv'
+    $env:IDF_PYTHON_ENV_PATH = $venv
     $env:IDF_PYTHON_CHECK_CONSTRAINTS = 'no'
-    $env:ESP_IDF_VERSION = '6.0.2'
+    $env:ESP_IDF_VERSION = $Idf
     # gdbinit generation needs this or ninja aborts BEFORE the app image
     # (the stale-bin trap, CHECKLIST 2026-07-05)
     $env:ESP_ROM_ELF_DIR = 'C:\Espressif\tools\esp-rom-elfs\20241011\'
     # ccache MUST be on PATH: build dirs configured from a ccache-enabled
     # shell bake `ccache gcc` into build.ninja, without it every compile
     # dies with "CreateProcess failed" (the 2026-07-05 `all` build failures)
-    $env:PATH = 'C:\Espressif\tools\python\v6.0.2\venv\Scripts;' +
+    $env:PATH = "$venv\Scripts;" +
                 'C:\Espressif\tools\ninja\1.12.1;C:\Espressif\tools\cmake\4.0.3\bin;' +
                 'C:\Espressif\tools\xtensa-esp-elf\esp-15.2.0_20251204\xtensa-esp-elf\bin;' +
                 'C:\Espressif\tools\ccache\4.12.1\ccache-4.12.1-windows-x86_64;' +

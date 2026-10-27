@@ -5,6 +5,10 @@
 #   .\build.ps1 -Flash COM12       # build + flash at 460800
 #   .\build.ps1 -Clean             # idf.py fullclean first (after env/path
 #                                  # changes - the CMake cache pins paths)
+#   .\build.ps1 -Idf 6.1           # build with ESP-IDF v6.1 (C:\esp\v6.1) instead
+#                                  # of the default 6.0.2; switching the IDF needs
+#                                  # a fresh build\ (delete it: -Clean runs the
+#                                  # OTHER idf's fullclean on a foreign cache)
 #
 # Why this script exists (each of these has burned a session):
 #  - MEATPI_COMPONENTS_PATH must point at the live meatpi-components tree,
@@ -19,7 +23,8 @@
 
 param(
     [string]$Flash = "",
-    [switch]$Clean
+    [switch]$Clean,
+    [ValidateSet('6.0.2', '6.1')][string]$Idf = '6.0.2'   # the ESP-IDF to build with (6.1 installed beside 6.0.2 on 2026-10-27)
 )
 
 $ErrorActionPreference = "Stop"
@@ -28,30 +33,42 @@ if ($env:MSYSTEM) {
     Write-Error "Run this from native PowerShell, not Git Bash/MSYS (MSYSTEM=$env:MSYSTEM): idf.py builds nothing there while still exiting 0."
 }
 
-# ---- ESP-IDF v6.0.2 environment -------------------------------------------
-$env:IDF_PATH                     = 'C:\esp\v6.0.2\esp-idf'
+# ---- ESP-IDF environment (-Idf 6.0.2 or 6.1) ---------------------------------
+# Both installs share the tool versions below (xtensa esp-15.2.0_20251204,
+# ninja 1.12.1, cmake 4.0.3, ccache 4.12.1, esp-rom-elfs 20241011); what
+# differs is the IDF tree and its Python environment. The v6.1 installer
+# put its venv under tools\python\v6.1 (python 3.11), which v6.1's own
+# export.ps1 does not find (it expects python_env\idf6.1_py3.10_env), so
+# this script sets the paths itself for both, as it always did for 6.0.2.
+$idfEnvs = @{
+    '6.0.2' = @{ Path = 'C:\esp\v6.0.2\esp-idf'; Venv = 'C:\Espressif\tools\python\v6.0.2\venv'; Alt = 'C:\Espressif\tools\python_env\idf6.0_py3.10_env' }
+    '6.1'   = @{ Path = 'C:\esp\v6.1\esp-idf';   Venv = 'C:\Espressif\tools\python\v6.1\venv';   Alt = '' }
+}
+$idfEnv = $idfEnvs[$Idf]
+$env:IDF_PATH                     = $idfEnv.Path
 $env:IDF_TOOLS_PATH               = 'C:\Espressif'
-# The IDF venv, or its stand-in: on 2026-10-19 the venv's base interpreter
-# (C:\Espressif\tools\python\python.exe) vanished, so its launcher prints
-# "No Python at ..." and runs nothing. A second environment with IDF's own
-# requirements (idf_tools.py install-python-env, the Store python 3.10) was
-# made beside it and is used while the launcher is dead.
-$idfVenv = 'C:\Espressif\tools\python\v6.0.2\venv'
+# The IDF venv, or its stand-in: on 2026-10-19 the 6.0.2 venv's base
+# interpreter (C:\Espressif\tools\python\python.exe) vanished, so its launcher
+# prints "No Python at ..." and runs nothing. A second environment with IDF's
+# own requirements (idf_tools.py install-python-env, the Store python 3.10)
+# was made beside it and is used while the launcher is dead.
+$idfVenv = $idfEnv.Venv
 $venvRuns = $false
 try { $null = & "$idfVenv\Scripts\python.exe" -c 'pass' 2>$null; $venvRuns = ($LASTEXITCODE -eq 0) } catch { $venvRuns = $false }
 if (-not $venvRuns) {
-    $alt = 'C:\Espressif\tools\python_env\idf6.0_py3.10_env'
-    if (Test-Path "$alt\Scripts\python.exe") {
-        Write-Host "build: the IDF v6.0.2 venv does not run (its base interpreter is missing); using $alt" -ForegroundColor Yellow
+    $alt = $idfEnv.Alt
+    if ($alt -and (Test-Path "$alt\Scripts\python.exe")) {
+        Write-Host "build: the IDF $Idf venv does not run (its base interpreter is missing); using $alt" -ForegroundColor Yellow
         $idfVenv = $alt
     } else {
-        Write-Error "build: no IDF python environment runs ($idfVenv is dead and $alt is absent)"
+        Write-Error "build: no IDF $Idf python environment runs ($idfVenv is dead$(if ($alt) { " and $alt is absent" }))"
     }
 }
 $env:IDF_PYTHON_ENV_PATH          = $idfVenv
 $env:IDF_PYTHON_CHECK_CONSTRAINTS = 'no'
-$env:ESP_IDF_VERSION              = '6.0.2'
+$env:ESP_IDF_VERSION              = $Idf
 $env:ESP_ROM_ELF_DIR              = 'C:\Espressif\tools\esp-rom-elfs\20241011\'
+"build: ESP-IDF $Idf at $env:IDF_PATH (python $idfVenv)"
 $env:PATH = "$idfVenv\Scripts;" +
             'C:\Espressif\tools\ninja\1.12.1;C:\Espressif\tools\cmake\4.0.3\bin;' +
             'C:\Espressif\tools\xtensa-esp-elf\esp-15.2.0_20251204\xtensa-esp-elf\bin;' +
