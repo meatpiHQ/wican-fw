@@ -109,11 +109,15 @@
       case "espnetlink_fresh_usb":
       case "espnetlink_usb_nofix":
       case "espnetlink_pin":
+      case "espnetlink_usb_nolte":
       case "espnetlink_nudge": {
         const usbUp = { ...usb0, device_present: true, eth_connected: true, driver: "rndis", ip: "192.168.7.2", attaches: 1, vid: "303a", pid: "4007", device: { vid: "303a", pid: "4007", class: "rndis", product: "ESPNetLink" } };
         const base = { ...nl0, ...fw, dongle_api: 9, mode: "usb_rndis", paired: false, uplink: "espnetlink_usb", on_link: true, host: "192.168.7.1",
           usb: { attached: true, pair_state: "ncm_up", cuts: 0, vbus_cycles: 0, errors: 0 }, polls: 12, link_ups: 1 };
         const d = k === "espnetlink_pin" ? { ...health, lte_connected: false, attached: false, rssi_dbm: 0, operator: "", network_type: "", ip: "", sim: "pin", stage: "sim_pin" }
+          /* 2026-10-28: a SIM the dongle cannot attach with on its default APN (the Simbase
+             case): registered nowhere, the radio sees the cell, no internet */
+          : k === "espnetlink_usb_nolte" ? { ...health, lte_connected: false, attached: false, rssi_dbm: -71, operator: "", network_type: "", ip: "", sim: "ready", stage: "connecting" }
           : { ...health, operator: "Telstra", network_type: "LTE" };
         const hint = { no_fix_s: k === "espnetlink_nudge" ? 760 : 0 };
         return { usb: usbUp, nl: { ...base, dongle: d, gps_hint: hint }, acm: off, gps: nofix };

@@ -122,7 +122,10 @@ function boot(url, preset) {
     check("USB step: a fresh device says the dongle pairs after the restart and restarts once more", /ESPNetLink found, pairs after the restart/.test(p.text()) && /restarts once more/.test(p.text()) && /firmware v1\.22-41/.test(p.text()));
     check("USB step: the basics read over the cable: SIM found, the carrier and type, the signal with a word, internet with the address, GPS no fix", /SIM/.test(p.text()) && /Found/.test(p.text()) && /ALDI Mobile \(eMTC\)/.test(p.text()) && /-67 dBm, fair/.test(p.text()) && /10\.86\.12\.44/.test(p.text()) && /No fix yet/.test(p.text()), (p.text().match(/SIM[\s\S]{0,160}/) || [])[0]);
     check("USB step: USB Ethernet is recommended and ticked, the GPS note names WiFi modem as the way out", p.$("#qs-nl-usb") && p.$("#qs-nl-usb").checked && !p.$("#qs-nl-wifi").checked && /USB Ethernet \(recommended\)/.test(p.text()) && /never gets a fix this way/.test(p.text()) && /switch to WiFi modem/.test(p.text()));
-    check("USB step: the carrier settings are a collapsed details with APN, username, password", !!p.$("#qs-apn") && !!p.$("#qs-apn-user") && !!p.$("#qs-apn-pw") && !p.$("#qs-apn").closest("details").open);
+    /* 2026-10-28: the APN is asked on its own (a Simbase SIM on the dongle's default APN never
+       attached while the field sat folded under "optional"): the provider note, the live verdict
+       from the dongle's health (online on the default here), username and password folded */
+    check("USB step: the APN is asked on its own with the provider note and the live verdict, username and password folded", !!p.$("#qs-apn") && !p.$("#qs-apn").closest("details") && /Your SIM's APN/.test(p.text()) && /SIM provider/.test(p.text()) && !!p.$("#qs-apn-verdict") && /Online/.test(p.$("#qs-apn-verdict").textContent) && /default APN/.test(p.$("#qs-apn-verdict").textContent) && !!p.$("#qs-apn-user") && !!p.$("#qs-apn-pw") && !!p.$("#qs-apn-user").closest("details") && !p.$("#qs-apn-user").closest("details").open, (p.$("#qs-apn-verdict") || {}).textContent);
     p.setText(p.$("#qs-apn"), "telstra.internet");
     p.btn(/^Continue$/).click(); await sleep(400);
     check("Review with the verdict after the USB step", /Review, then restart/.test(p.h2()) && /Password accepted/.test(p.text()) && /10\.42\.0\.62/.test(p.text()), p.h2());

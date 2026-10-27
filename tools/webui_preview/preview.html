@@ -2160,11 +2160,15 @@
       case "espnetlink_fresh_usb":
       case "espnetlink_usb_nofix":
       case "espnetlink_pin":
+      case "espnetlink_usb_nolte":
       case "espnetlink_nudge": {
         const usbUp = { ...usb0, device_present: true, eth_connected: true, driver: "rndis", ip: "192.168.7.2", attaches: 1, vid: "303a", pid: "4007", device: { vid: "303a", pid: "4007", class: "rndis", product: "ESPNetLink" } };
         const base = { ...nl0, ...fw, dongle_api: 9, mode: "usb_rndis", paired: false, uplink: "espnetlink_usb", on_link: true, host: "192.168.7.1",
           usb: { attached: true, pair_state: "ncm_up", cuts: 0, vbus_cycles: 0, errors: 0 }, polls: 12, link_ups: 1 };
         const d = k === "espnetlink_pin" ? { ...health, lte_connected: false, attached: false, rssi_dbm: 0, operator: "", network_type: "", ip: "", sim: "pin", stage: "sim_pin" }
+          /* 2026-10-28: a SIM the dongle cannot attach with on its default APN (the Simbase
+             case): registered nowhere, the radio sees the cell, no internet */
+          : k === "espnetlink_usb_nolte" ? { ...health, lte_connected: false, attached: false, rssi_dbm: -71, operator: "", network_type: "", ip: "", sim: "ready", stage: "connecting" }
           : { ...health, operator: "Telstra", network_type: "LTE" };
         const hint = { no_fix_s: k === "espnetlink_nudge" ? 760 : 0 };
         return { usb: usbUp, nl: { ...base, dongle: d, gps_hint: hint }, acm: off, gps: nofix };
@@ -4796,7 +4800,7 @@ const HELP={
   "espnetlink.mode":"USB Ethernet (RNDIS, the default) keeps the data lines on and uses the cable as the uplink; the dongle ships ready for it. WiFi modem cuts the dongle's USB data after each pairing (best GPS reception): WiCAN re-pairs at every dongle boot, nothing persists on the dongle.",
   auto_pair:"Read the dongle's AP key over USB automatically the first time it is plugged in.",
   cut_retries:"How many times to retry cutting the dongle's USB data lines before giving up.",
-  "espnetlink.apn":"Only if your carrier gave you one: most SIMs work without it. WiCAN sends it to the dongle the next time the dongle is on the cable; the dongle restarts once to apply it. Blank keeps the dongle's own.",
+  "espnetlink.apn":"Your SIM provider gives it (the SIM's packaging, your account or their APN settings page); the dongle needs it to get online, and its own default suits only some SIMs. WiCAN sends it to the dongle the next time the dongle is on the cable; the dongle restarts once to apply it. Blank keeps the dongle's own.",
   "espnetlink.sim_pin":"Only when the dongle reports the SIM as PIN locked. Sent to the dongle once per start while the SIM asks; a PIN the SIM refuses is never retried by itself (three wrong tries lock the SIM). Blank = none.",
   role:"Host: an adapter or dongle plugs into the WiCAN. Device: the WiCAN appears as a network adapter on a PC.",
   prefer_usb_route:"Use the USB-Ethernet uplink even when WiFi is connected.",
@@ -10958,7 +10962,7 @@ function nlRows(e){
   const sim=d.sim||(d.attached||d.lte_connected?"ready":"unknown");
   const rows=[];
   rows.push(["SIM",sim==="ready"?[chip("Found","ok")]:sim==="missing"?[chip("Not found","crit"),h("span",{class:"d2"},"Insert a SIM, then plug the dongle in again.")]
-    :sim==="pin"?[chip("PIN locked","warn"),h("span",{class:"d2"},"Enter the SIM's PIN under Carrier settings, below.")]
+    :sim==="pin"?[chip("PIN locked","warn"),h("span",{class:"d2"},"Enter the SIM's PIN under SIM PIN, below.")]
     :sim==="pin_wrong"?[chip("PIN rejected","crit"),h("span",{class:"d2"},"The SIM refused the PIN. Check it below; nothing is retried by itself, a third wrong try locks the SIM.")]:[h("span",{class:"d2"},"Not read yet")]]);
   if(sim!=="missing"){
     rows.push(["Network",d.operator?[h("span",{},d.operator+(d.network_type?" ("+d.network_type+")":""))]:[chip(d.attached?"Attached":"Searching","warn")]]);
@@ -10974,7 +10978,7 @@ function nlRows(e){
 const nlNetCard=L=>{const e=(L&&L.e)||{},d=e.dongle||{};
   const net=[d.operator||"",d.network_type||"",d.rssi_dbm?d.rssi_dbm+" dBm, "+sigWord(d.rssi_dbm):""].filter(Boolean).join(", ");
   return d.lte_connected?check("ok","signal","Internet via ESPNetLink: connected",[net+". Address ",h("code",{},d.ip||""),". "+(d.gps_fix?"GPS fix.":"GPS: no fix yet, it needs a view of the sky.")],chip("Connected","ok"))
-    :check("warn","signal","Internet via ESPNetLink: not connected yet",[d.sim==="missing"?"No SIM in the dongle.":d.sim==="pin"?"The SIM asks for its PIN: enter it below.":d.sim==="pin_wrong"?"The SIM refused the PIN: check it below.":"The dongle is still attaching to the network (usually under a minute)."],chip("Connecting","warn"));};
+    :check("warn","signal","Internet via ESPNetLink: not connected yet",[d.sim==="missing"?"No SIM in the dongle.":d.sim==="pin"?"The SIM asks for its PIN: enter it below.":d.sim==="pin_wrong"?"The SIM refused the PIN: check it below.":"The dongle is still attaching to the network (usually under a minute). If it stays this way, the APN from your SIM provider is the first thing to check: Settings > USB > ESPNetLink."],chip("Connecting","warn"));};
 /* one reading of the connector for the step's card, the Checks card and the
    Done row: state ok / warn / run / pend (settled after the restart) */
 function usbSummary(L){
@@ -11029,7 +11033,7 @@ function usbReview(item,line){
   if(k==="espnetlink"){const e=L.e||{},pst=(e.usb||{}).pair_state,paired=!!(e.paired||pst==="done"||pst==="ncm_up");
     const switching=nlUsbMode(e.mode)!==(W.usb.nlMode==="usb");
     const apn=W.usb.apn.trim(),apnNew=apn!==((D.espnl&&D.espnl.apn)||"")||!!W.usb.apnPw||W.usb.apnUser!==((D.espnl&&D.espnl.apn_user)||"")||!!W.usb.pin;
-    return [item(paired&&!switching&&!apnNew?"ok":"pend","USB connector","ESPNetLink",line(...[W.usb.nlMode==="usb"?"USB Ethernet":"WiFi modem",apn?"APN "+apn:""].filter(Boolean)),
+    return [item(paired&&!switching&&!apnNew?"ok":"pend","USB connector","ESPNetLink",line(...[W.usb.nlMode==="usb"?"USB Ethernet":"WiFi modem",apn?"APN "+apn:"the dongle's default APN"].filter(Boolean)),
       paired?(switching?line("Switches at the restart","the dongle reboots once to change its USB class"):pst==="ncm_up"?line("Connected over the cable","nothing to do at the restart"):line("Paired",e.ssid||""))
         :line("Pairs after the restart","WiCAN restarts once more by itself to store the dongle's key"),
       !paired&&switching?line("Then "+(W.usb.nlMode==="usb"?"USB Ethernet":"WiFi modem"),"the dongle reboots once to change its USB class"):null,
@@ -11060,6 +11064,29 @@ async function saveAlone(saveBtn){
   catch(e){store.unstage("espnetlink");saveBtn.disabled=false;toast("WiCAN did not accept the settings: "+(e.message||e),"err");}
 }
 
+/* the ESPNetLink screen's APN section (Ali, 2026-10-28: a Simbase SIM left on
+   the dongle's default APN never attached while the field sat folded under
+   "optional"): the SIM PIN row when the SIM asks for one, the APN asked on its
+   own with where the provider publishes it, a live verdict under the field from
+   the dongle's health (refreshed with the connector poll, the inputs untouched),
+   the username and password folded as rarely needed */
+const APN_HELP="Every SIM provider has an APN (access point name) the dongle needs to get online. You find it with the SIM: on its packaging, in your account or on the provider's support pages under APN settings. Type it exactly as written; WiCAN sends it to the dongle, which restarts once to apply it.";
+function apnVerdict(ed,e){
+  if(!ed.valid||ed.sim==="missing")return null;
+  if(ed.lte_connected)return [chip("Online","ok"),h("span",{},e.apn?" with APN "+e.apn+".":" on the dongle's own default APN: you can leave this blank.")];
+  if(ed.sim==="pin"||ed.sim==="pin_wrong")return [chip("Waiting for the PIN","warn")];
+  return [chip("Not online yet","warn"),h("span",{},(e.apn?" The dongle has APN "+e.apn+". ":" ")+"The APN is the usual reason: enter the one from your SIM provider.")];
+}
+function paintApnVerdict(ed,e){const el=document.getElementById("qs-apn-verdict");if(!el)return;const v=apnVerdict(ed,e);el.replaceChildren(...(v||[]));el.style.display=v?"":"none";}
+function apnSection(ed,e,pinLocked,inp){
+  return h("div",{class:"qs-apnsec"},
+    ...(pinLocked?[sub("SIM PIN"),row("SIM PIN",inp("qs-pin","pin",{type:"password",maxlength:"8",inputmode:"numeric",placeholder:D.espnl.sim_pin?"stored, type to replace":"4 to 8 digits",autocomplete:"off"}),"WiCAN sends it to the dongle once. A wrong PIN is never tried again by itself: three wrong tries lock the SIM (the PUK is on the SIM's card).")]:[]),
+    sub("Your SIM's APN"),h("p",{class:"help"},APN_HELP),
+    row("APN",inp("qs-apn","apn",{placeholder:"as your SIM provider writes it",autocapitalize:"none",autocorrect:"off",spellcheck:"false"}),h("span",{id:"qs-apn-verdict",class:"qs-verdict"},...(apnVerdict(ed,e)||[]))),
+    h("details",{class:"qs-details"},h("summary",{},"Username and password (only if your provider gave you them)"),
+      row("Username",inp("qs-apn-user","apnUser",{placeholder:"optional"})),
+      row("Password",inp("qs-apn-pw","apnPw",{type:"password",placeholder:D.espnl.apn_password?"unchanged, type to replace":"optional",autocomplete:"new-password"}))));
+}
 SCREENS.usb=async()=>{
   if(D.usbhost===undefined){const s=await tryGet("/api/settings/usb_host_manager");D.usbhost=s?strip(s):null;}
   if(D.espnl===undefined){const s=await tryGet("/api/settings/espnetlink");D.espnl=s?strip(s):null;}   /* null: not in this build */
@@ -11081,11 +11108,7 @@ SCREENS.usb=async()=>{
       choice.replaceChildren(...[nudgeCard()].filter(Boolean),sub("How WiCAN uses it"),h("div",{class:"qs-radios",style:"gap:8px"},
         radio("qs-nl","qs-nl-usb",W.usb.nlMode==="usb","USB Ethernet (recommended)","The dongle is a wired network adapter on the cable: always on, nothing to join, internet over LTE the moment the cable is in. If the GPS never gets a fix this way (the USB link can disturb its reception), switch to WiFi modem under Settings > USB.",()=>{W.usb.nlMode="usb";paintChoice(kind);}),
         radio("qs-nl","qs-nl-wifi",W.usb.nlMode==="wifi_modem","WiFi modem","The cable carries power only. WiCAN joins the dongle's own WiFi whenever your home WiFi is out of range. The GPS gets its best reception this way.",()=>{W.usb.nlMode="wifi_modem";paintChoice(kind);})),
-        h("details",{class:"qs-details",open:(W.usb.apn||pinLocked)?true:null},h("summary",{},pinLocked?"SIM PIN and carrier settings":"Carrier settings (optional)"),
-          pinLocked?row("SIM PIN",inp("qs-pin","pin",{type:"password",maxlength:"8",inputmode:"numeric",placeholder:D.espnl.sim_pin?"stored, type to replace":"4 to 8 digits",autocomplete:"off"}),"WiCAN sends it to the dongle once. A wrong PIN is never tried again by itself: three wrong tries lock the SIM (the PUK is on the SIM's card)."):null,
-          row("APN",inp("qs-apn","apn",{placeholder:"leave blank for the carrier default"}),"Only if your carrier gave you one: most SIMs work without it. WiCAN sends it to the dongle, which restarts once to apply it."),
-          row("Username",inp("qs-apn-user","apnUser",{placeholder:"optional"})),
-          row("Password",inp("qs-apn-pw","apnPw",{type:"password",placeholder:D.espnl.apn_password?"unchanged, type to replace":"optional",autocomplete:"new-password"}))));
+        apnSection(ed,live.e||{},pinLocked,inp));
       return;}
     if(kind==="eth"){
       choice.replaceChildren(sub("Internet over the cable"),h("div",{class:"qs-radios",style:"gap:8px"},
@@ -11110,6 +11133,7 @@ SCREENS.usb=async()=>{
     if(W.usb.nlMode===null){const e=L.e||{};W.usb.nlMode=(e.paired&&!nlUsbMode(e.mode))?"wifi_modem":"usb";}
     const prev=W.usb.kind;W.usb.live=L;W.usb.kind=L.kind;
     paintTiles(L.kind);paintCard(L);if(prev!==L.kind||!choice.childElementCount)paintChoice(L.kind);
+    if(L.kind==="espnetlink")paintApnVerdict(((L.e||{}).dongle)||{},L.e||{});
   };
   await refresh();every(3000,refresh);
   const nwNote=W.noWifi?note("",["WiCAN keeps its own access point on, ",h("code",{},apName()),": with no home network it is the way to reach WiCAN. Internet comes over the dongle wherever the car is."]):null;

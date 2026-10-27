@@ -141,7 +141,7 @@ async function toWifi(preset) {
   await b.page.waitForTimeout(1500);
   ok("PIN locked row", /PIN locked/.test(await body(b.page)));
   ok("PIN field offered", await has(b.page, "#qs-pin"));
-  ok("carrier settings open", await b.page.evaluate(() => { const d = document.querySelector("details.qs-details"); return !!d && d.open; }));
+  ok("PIN row and the APN asked on their own, the verdict waits for the PIN (2026-10-28)", await b.page.evaluate(() => { const pin = document.querySelector("#qs-pin"), apn = document.querySelector("#qs-apn"), v = document.querySelector("#qs-apn-verdict"); return !!pin && !pin.closest("details") && !!apn && !apn.closest("details") && /Your SIM's APN/.test(document.body.textContent) && !!v && /Waiting for the PIN/.test(v.textContent); }));
   ok("button says Send PIN and save", /Send PIN and save/.test(await text(b.page, ".qs-foot button.pri")));
   ok("header says SIM PIN", /SIM PIN/.test(await text(b.page, "#cp-usb")));
   await b.ctx.close();
