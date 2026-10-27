@@ -30,6 +30,20 @@ the pass/fail + performance history; see `test-reports/README.md` for how to
 compare runs. Raw per-stage logs go to `test-reports\logs\<run>\` (local
 only). Suppress with `-NoReport`.
 
+**One WICAN_TEST_AP on the air** (since 2026-10-02 the bench AP is the P4
+`bench_ap` on its NCM link, NetworkManager profile `wican-bench-usb`; the
+Pi's own hotspot profiles `wican-bench` and `wican-bench-w0` stay parked).
+Two radios with that SSID make the DUT roam between them and drop every TCP
+connection on each move: the 6.0.0-beta.5 release run (2026-10-27) paid two
+WiFi drops and six MQTT error lines because a Pi reboot had re-armed the
+twins through the Pi's pre-P4 boot service and the hotspot watchdog bounced
+the internal radio under the DUT. The Pi scripts in `tools/testbench/pi`
+park the twins while the P4 serves since that night (deploy with
+`deploy_bench_pi.sh` on the Pi), and the bench preflight prints which radio
+serves (`ap=P4 (wican-bench-usb)`) and refuses a run with a twin beside the
+P4, naming the parking command. A DUT log reading `STA got IP 10.42.0.x` or
+a bssid starting 2c:cf:67 means the twin is up.
+
 **Every test directory has a `README.md` stating exactly what it covers and
 what the expected passing output is** (Unity summary for host suites, ordered
 serial markers for target apps, pytest verdict for HIL):
@@ -42,7 +56,7 @@ serial markers for target apps, pytest verdict for HIL):
 
 | Command | What runs | Needs |
 |---|---|---|
-| `.\test.ps1 check` | **The quick bench check**: only the bench preflight below (~10 s), then `RESULT: PASS/FAIL`. Run it after re-plugging anything: it names the console port it found (`serial=COM254 (CH344 B)`), the DUT address it resolved, and the FTDI (PSU) / `MeatPi USB-CAN` (ECU sim) ports | PC + rpi001 |
+| `.\test.ps1 check` | **The quick bench check**: only the bench preflight below (~10 s), then `RESULT: PASS/FAIL`. Run it after re-plugging anything: it names the console port it found (`serial=COM254 (CH344 B)`), the DUT address it resolved, and the FTDI (PSU) / `MeatPi USB-CAN` (ECU sim) ports, and since 2026-10-27 which radio serves WICAN_TEST_AP (`ap=P4 (wican-bench-usb)`; a Pi hotspot twin beside the P4 fails the preflight with the parking command) | PC + rpi001 |
 | `.\test.ps1 host [component]` | Host **unit** suites (`components/*/host_test`, 526 tests across 44 components as of 2026-07-26; the summary prints a per-suite and TOTAL count) on the bench Pi's IDF linux target, syncs sources automatically. Optional component name runs just that suite. **Pi offline:** `bash tools/testbench/host_gcc_wsl.sh <vpn_manager\|config_backup>` from WSL compiles that PURE suite with the system gcc + Unity under ASan/UBSan (no IDF build; 2026-10-16, issues #985 to #989: `vpn_manager` 11, `config_backup` 24; add a case per IDF-free suite) | `ssh rpi001` reachable (the WSL form: gcc in WSL, the IDF tree on C:) |
 | `.\test.ps1 target <component>` | Builds + flashes that component's **self-contained on-target app** (`components/<comp>/test_apps`), captures serial, verifies `TEST DONE` with no crash signatures. `ble_manager` is special: waits for `BLE READY`, then drives the DUT from rpi001's BLE controller (`ble_bench.py`) and passes on `BLE BENCH PASS`. `restart_tracker` is special too (2026-10-05): its app crashes the DUT on purpose, one step per boot (15 steps, about a minute), and `tools/testbench/system/rt_target_check.py` judges every crash note against IDF's own panic text of the same crash (`RT TARGET PASS`, 85 checks since the evening of 2026-10-05: the same 13 crashes, all quick and all different, also prove the crash-loop brake and the stored crash report on the device's own RTC memory and NVS: the streak counts every one, the verdict turns to `park` at the third, the report is stored four times and not a fifth, and the app clears it at the end); run it at every IDF version bump. Since the components live in their own repository a test app's `..\..\..\sdkconfig.defaults` and partition table do not exist there: `test.ps1` stages copies from this repo for the build and removes them (no target app had been built since the split until 2026-10-05; the other apps still build every component of the tree, `restart_tracker`'s and `filesystem`'s use `MINIMAL_BUILD`). `filesystem`'s app carries the 32 GB card of issue #982 since 2026-10-11 (`INFO_SD`: a link-time wrap of `esp_vfs_fat_info` stands in for the card, 1,897,503 clusters of 16 KiB, one used; a failed check withholds `TEST DONE`, so the stage goes red): before the fix it printed `total=1023918080 ... ok=0` and `TEST FAILED checks=1` on the bench unit (`test-reports/2026-10-11_2005_target_filesystem.md`); with `filesystem_info()` in `uint64_t` the same day: `ok=1`, `TEST DONE`, 0 E lines, `RESULT: PASS` in 16.4 s (`2026-10-11_2028_target_filesystem.md`). The bench unit's own card is the field-faithful check: a 16 GB SanDisk SC16G that `/api/fs/info?path=/sd` reported as 3,038,806,016 B (2.83 GB on the File Manager) for three months and reads as 15,923,707,904 B (14.83 GB) since, equal to `/api/backup/status` `free_bytes` + used; `test-reports/logs/issue982_20261011/files_page_real.mjs` reads the page in Chrome through a tunnel and prints AGREES / DISAGREES against that sum. **Flash the main firmware back afterwards** (`.\build.ps1 -Flash COMx`) | DUT console port (the preflight picks it; + rpi001 for ble_manager) |
 | `.\test.ps1 hil` | **WiFi hardware-in-the-loop** pytest: real STA connect / reconnect / fallback / ban / AP-auto-disable against the Pi's AP (add `-Flash` to rebuild+flash the HIL app first) | DUT + `ssh rpi001` |

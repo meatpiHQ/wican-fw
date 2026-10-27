@@ -13,6 +13,15 @@ BENCH_TAG=wican-bench-watchdog
 PRIMARY="$HOTSPOT_PRIMARY"    # wican-bench (wtest0, USB stick)
 FAILOVER="$HOTSPOT_TWIN"      # wican-bench-w0 (wint0, internal: failover only)
 
+# the P4 serves (since 2026-10-02): the Pi radios are parked by design and
+# there is nothing here to keep on air. This watchdog must never bring a
+# twin up beside the P4: on 2026-10-27 it bounced the internal radio under
+# the DUT during a release run (two WiFi drops and the MQTT errors they
+# cost), after a Pi reboot had re-armed the twins.
+if p4_serves; then
+    exit 0
+fi
+
 # parked on purpose? (HIL park_persistent sets autoconnect no)
 if [ "$(nmcli -g connection.autoconnect connection show "$PRIMARY" 2>/dev/null)" = "no" ]; then
     exit 0

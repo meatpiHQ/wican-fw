@@ -28,12 +28,25 @@ for role in wint0 wtest0 wtest1; do
 done
 
 # --- DUT hotspot (the load-bearing radio surface) -------------------------
-# Canonical (2026-09-06): wican-bench active on wtest0 (USB stick). The
-# wint0 twin is failover only (the internal brcmfmac radio goes deaf in AP
-# mode), verified only when active. autoconnect=no on the primary =
-# deliberately parked (HIL park_persistent), then neither is required.
+# Canonical since 2026-10-02: the P4 (bench_ap) serves on its NCM link
+# ($P4_CON) and BOTH Pi hotspot twins stay parked; a twin active beside the
+# P4 is a fault (two WICAN_TEST_AP radios, the DUT roams: the 2026-10-27
+# release run). The P4's own beacon is bench_ap_cli's business ("ap").
+# Without the P4 (2026-09-06 world): wican-bench active on wtest0 (USB
+# stick), the wint0 twin failover only (the internal brcmfmac radio goes
+# deaf in AP mode), verified only when active. autoconnect=no on the
+# primary = deliberately parked (HIL park_persistent), then neither is
+# required.
 hs_checked=0
+if p4_serves; then
+    for con in "$HOTSPOT_PRIMARY" "$HOTSPOT_TWIN"; do
+        con_active "$con" &&
+            fault "$con" "active beside the P4 ($P4_CON): two WICAN_TEST_AP radios, the DUT roams; park it (autoconnect no, down)"
+    done
+    hs_checked=1
+fi
 for con in "$HOTSPOT_PRIMARY" "$HOTSPOT_TWIN"; do
+    p4_serves && break
     con_active "$con" || continue
     hs_checked=1
     hs_if=$(con_device "$con")
@@ -62,7 +75,9 @@ for con in "$HOTSPOT_PRIMARY" "$HOTSPOT_TWIN"; do
     fi
 done
 
-if ! con_active "$HOTSPOT_PRIMARY"; then
+if p4_serves; then
+    : # the P4 is the AP; the parked twins are the canonical state
+elif ! con_active "$HOTSPOT_PRIMARY"; then
     if [ "$(nmcli -g connection.autoconnect connection show "$HOTSPOT_PRIMARY" 2>/dev/null)" = "no" ]; then
         warn hotspot "parked (autoconnect=no) - deliberate, not a fault"
     elif [ "$hs_checked" = 1 ]; then

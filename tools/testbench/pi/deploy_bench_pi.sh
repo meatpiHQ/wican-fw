@@ -38,8 +38,12 @@ repin() {  # <connection> <role>
     sudo nmcli connection modify "$con" 802-11-wireless.mac-address "$mac"
     echo "   re-pinned '$con' -> $2 ($mac)"
 }
-repin "$HOTSPOT_TWIN" wtest0
-repin "$UPLINK_CON"   wtest1
+# the USB-stick hotspot is $HOTSPOT_PRIMARY since the 2026-09-06 swap of
+# the roles (until 2026-10-27 this line pinned the internal radio's
+# profile to the stick's MAC, so wican-bench-w0 could never activate on
+# wint0 by name); the internal twin stays bound by interface name
+repin "$HOTSPOT_PRIMARY" wtest0
+repin "$UPLINK_CON"      wtest1
 
 echo "== state dir"
 sudo mkdir -p /var/lib/bench

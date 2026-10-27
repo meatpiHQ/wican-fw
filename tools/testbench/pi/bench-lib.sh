@@ -11,6 +11,7 @@ BENCH_STATE_DIR=/var/lib/bench
 SSID="WICAN_TEST_AP"
 HOTSPOT_PRIMARY="wican-bench"      # USB stick (wtest0), the internal brcmfmac radio goes deaf in AP mode (2026-09-06)
 HOTSPOT_TWIN="wican-bench-w0"      # internal radio (wint0), failover only, keep parked (autoconnect no)
+P4_CON="wican-bench-usb"           # the bench_ap P4 on its CDC-NCM link (2026-10-02): THE bench AP while present
 UPLINK_CON="Nachos_8042_5G 2"      # non-load-bearing convenience uplink
 ETH_CON="eth-bench"
 ETH_ADDR="192.168.90.2"
@@ -60,6 +61,23 @@ bench_role() {
 # NM connection active?
 con_active() {
     nmcli -t -f NAME connection show --active 2>/dev/null | grep -qx "$1"
+}
+# the P4's CDC-NCM interface (bench_ap, plugged into the Pi's USB), if any
+p4_ncm_iface() {
+    local d drv
+    for d in /sys/class/net/*; do
+        drv=$(readlink -f "$d/device/driver" 2>/dev/null)
+        case "$drv" in *cdc_ncm*|*cdc_ether*) basename "$d"; return 0;; esac
+    done
+    return 1
+}
+# the P4 serves WICAN_TEST_AP (its NCM profile is active). Both Pi hotspot
+# twins must then stay parked: two radios with one SSID make the DUT roam
+# between them (2026-10-27: a Pi reboot re-armed the twins through
+# bench-startup, the DUT joined the internal radio and the watchdog's
+# bounce dropped it twice during a release run).
+p4_serves() {
+    con_active "$P4_CON"
 }
 
 # device an active connection sits on

@@ -11,20 +11,49 @@ sudo mkdir -p "$BENCH_STATE_DIR"
 # NetworkManager settled enough to talk to
 nm-online -s -q --timeout=30
 
-# canonical autoconnect flags (TESTBENCH.md): both hotspot twins yes
-# (the watchdog keeps at least one on air), uplink yes (non-load-bearing),
-# stale duplicate uplink profile parked.
-nmcli connection modify "$HOTSPOT_PRIMARY" connection.autoconnect yes 2>/dev/null
-nmcli connection modify "$HOTSPOT_TWIN"    connection.autoconnect yes 2>/dev/null
+# canonical autoconnect flags. Since 2026-10-02 the bench AP is the P4
+# (bench_ap) on its CDC-NCM link, profile $P4_CON: whenever its interface
+# is present it serves, and BOTH Pi hotspot twins stay parked (autoconnect
+# no, down), or the DUT meets two WICAN_TEST_AP radios and roams between
+# them. Until 2026-10-27 this script re-armed both twins at every Pi boot
+# and the watchdog bounced the internal radio under the DUT during a
+# release run (two WiFi drops, the MQTT errors they cost). Without the P4
+# (no NCM interface) the old hotspot world applies: the USB-stick primary
+# autoconnects, the internal twin stays parked (it goes deaf in AP mode,
+# 2026-09-06). Uplink yes (non-load-bearing), the stale duplicate uplink
+# profile parked.
 nmcli connection modify "Nachos_8042_5G 1" connection.autoconnect no  2>/dev/null
 nmcli connection modify "$ETH_CON"         connection.autoconnect yes 2>/dev/null
+nmcli connection modify "$HOTSPOT_TWIN"    connection.autoconnect no  2>/dev/null
 
-# the DUT hotspot must be up (autoconnect usually did it already)
-for i in $(seq 1 12); do
-    con_active "$HOTSPOT_PRIMARY" && break
-    [ "$i" = 4 ] && nmcli connection up "$HOTSPOT_PRIMARY" >/dev/null 2>&1
-    sleep 5
-done
+if ncm_if=$(p4_ncm_iface); then
+    for h in "$HOTSPOT_PRIMARY" "$HOTSPOT_TWIN"; do
+        nmcli connection modify "$h" connection.autoconnect no >/dev/null 2>&1
+        nmcli connection down "$h" >/dev/null 2>&1
+    done
+    nmcli connection modify "$P4_CON" connection.autoconnect yes 2>/dev/null
+    for i in $(seq 1 12); do
+        con_active "$P4_CON" && break
+        [ "$i" = 4 ] && nmcli connection up "$P4_CON" >/dev/null 2>&1
+        sleep 5
+    done
+    # the lease-file shim bench_ap_net.sh keeps: the bench scripts read the
+    # hotspot's file, which points at the NCM interface's while the P4 serves
+    shim=/var/lib/NetworkManager/dnsmasq-wtest0.leases
+    sudo touch "/var/lib/NetworkManager/dnsmasq-$ncm_if.leases"
+    if [ -f "$shim" ] && [ ! -L "$shim" ]; then sudo mv -f "$shim" "$shim.parked"; fi
+    sudo ln -sfn "dnsmasq-$ncm_if.leases" "$shim"
+    blog "the P4 serves ($P4_CON on $ncm_if); both Pi hotspots parked"
+else
+    # no P4: the DUT hotspot must be up (autoconnect usually did it already)
+    nmcli connection modify "$HOTSPOT_PRIMARY" connection.autoconnect yes 2>/dev/null
+    for i in $(seq 1 12); do
+        con_active "$HOTSPOT_PRIMARY" && break
+        [ "$i" = 4 ] && nmcli connection up "$HOTSPOT_PRIMARY" >/dev/null 2>&1
+        sleep 5
+    done
+    blog "no P4 NCM interface: the Pi hotspot $HOTSPOT_PRIMARY serves"
+fi
 
 systemctl is-active --quiet mosquitto || sudo systemctl start mosquitto
 sudo systemctl enable --now wican-bench-watchdog.timer >/dev/null 2>&1

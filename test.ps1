@@ -265,6 +265,8 @@ function Invoke-BenchCheck {
         UsbDevicePresent = $false
         Broker   = $false    # mosquitto :1883 on the Pi (perf mqtt legs)
         UsbNcm   = $false    # DUT mgmt link 192.168.82.1 (NCM device role)
+        P4Serves = $false    # wican-bench-usb active on the Pi = the P4 is the bench AP
+        TwinActive = @()     # Pi hotspot profiles ALSO on the air as WICAN_TEST_AP
     }
     $script:bench = $b
 
@@ -310,11 +312,22 @@ function Invoke-BenchCheck {
         $script:Port = $b.Serial
     }
 
-    # one ssh round-trip: Pi alive, DUT status, USB state, broker port
+    # one ssh round-trip: Pi alive, DUT status, USB state, broker port, the
+    # Pi's active NetworkManager profiles (which radio serves WICAN_TEST_AP)
     $probe = & ssh -o BatchMode=yes -o ConnectTimeout=8 $BenchHost `
-        "echo PI_OK; curl -s -m 5 http://$DutIp/api/status; echo; echo --USB--; curl -s -m 5 http://$DutIp/api/usb; echo; echo --ACM--; curl -s -m 5 http://$DutIp/api/usb/acm; echo; echo --BROKER--; (ss -tln 2>/dev/null || netstat -tln) | grep -c ':1883 '" 2>$null
+        "echo PI_OK; curl -s -m 5 http://$DutIp/api/status; echo; echo --USB--; curl -s -m 5 http://$DutIp/api/usb; echo; echo --ACM--; curl -s -m 5 http://$DutIp/api/usb/acm; echo; echo --BROKER--; (ss -tln 2>/dev/null || netstat -tln) | grep -c ':1883 '; echo --NMACTIVE--; nmcli -t -f NAME con show --active 2>/dev/null | tr '\n' ' '; echo" 2>$null
     $text = ($probe | Out-String)
     if ($text -match 'PI_OK') { $b.PiOk = $true }
+    # Two radios with the SSID WICAN_TEST_AP make the DUT roam: the Pi's own
+    # hotspot profiles (wican-bench on the USB stick, wican-bench-w0 on the
+    # internal radio) must stay parked while the P4 (wican-bench-usb) serves.
+    # The 2026-10-27 release run found the twin back after a Pi reboot and
+    # its watchdog bouncing it under the DUT (two WiFi drops = MQTT errors).
+    if ($text -match '--NMACTIVE--\s*([^\r\n]*)') {
+        $active = @($Matches[1] -split '\s+' | Where-Object { $_ })
+        if ($active -contains 'wican-bench-usb') { $b.P4Serves = $true }
+        $b.TwinActive = @($active | Where-Object { $_ -in @('wican-bench', 'wican-bench-w0') })
+    }
     if ($text -match '"uptime"') {
         $b.DutOnline = $true
         if ($text -match '"version":"([^"]+)"') { $b.DutVersion = $Matches[1] }
@@ -349,12 +362,18 @@ function Invoke-BenchCheck {
     $dutTxt = if ($b.DutOnline) { "$($b.DutVersion) @ $DutIp" } else { "OFFLINE @ $DutIp" }
     $ftdiTxt = if ($b.Ftdi) { $b.Ftdi -join '/' } else { 'none' }
     $ecuTxt = if ($b.EcuSim) { $b.EcuSim -join '/' } else { 'none' }
-    Write-Host "bench: serial=$serialTxt  pi=$($b.PiOk)  dut=$dutTxt  broker=$($b.Broker)  ncm=$($b.UsbNcm)" -ForegroundColor Cyan
+    $apTxt = if ($b.P4Serves) { 'P4 (wican-bench-usb)' } elseif ($b.PiOk) { 'Pi radio' } else { 'unknown' }
+    if ($b.TwinActive.Count -gt 0) { $apTxt += " + TWIN $($b.TwinActive -join '/')" }
+    Write-Host "bench: serial=$serialTxt  pi=$($b.PiOk)  dut=$dutTxt  broker=$($b.Broker)  ncm=$($b.UsbNcm)  ap=$apTxt" -ForegroundColor Cyan
     Write-Host "bench: $wiring; ftdi(psu)=$ftdiTxt  ecu_sim_cdc=$ecuTxt" -ForegroundColor Cyan
-    $script:conditions += "preflight: $wiring; serial=$serialTxt; dut=$(if ($b.DutOnline) { $b.DutVersion } else { 'offline' }) @ $DutIp; broker=$($b.Broker); ncm=$($b.UsbNcm); ftdi=$ftdiTxt; ecu_sim_cdc=$ecuTxt"
+    $script:conditions += "preflight: $wiring; serial=$serialTxt; dut=$(if ($b.DutOnline) { $b.DutVersion } else { 'offline' }) @ $DutIp; broker=$($b.Broker); ncm=$($b.UsbNcm); ap=$apTxt; ftdi=$ftdiTxt; ecu_sim_cdc=$ecuTxt"
 
     # hard requirements per kind
     if (-not $b.PiOk) { throw "bench: $BenchHost unreachable - every kind needs the Pi" }
+    if ($b.P4Serves -and $b.TwinActive.Count -gt 0) {
+        $h = $b.TwinActive[0]
+        throw "bench: a second WICAN_TEST_AP is on the air from the Pi ($($b.TwinActive -join ', ')) beside the P4: the DUT roams between them and drops its connections. Park it: ssh $BenchHost `"sudo -n nmcli con modify $h connection.autoconnect no; sudo -n nmcli con down $h`" (bench_ap_net.sh up does both), then rerun."
+    }
     if ($What -in @('target', 'hil', 'all') -and -not $b.Serial) {
         throw "bench: no console/flash COM port (tried $Port, COM10, CH344 channel B, CH342). Plug the UART0 adapter / the CH344 or cable the connector to the PC."
     }

@@ -23,6 +23,21 @@ blog "rig faulty - running ladder"
 # ---- level 0: targeted per failed component ------------------------------
 echo "$out" | grep "^RIG FAULT" | while read -r _ _ comp reason; do
     comp=${comp%:}
+    # with the P4 serving, a hotspot fault is a Pi twin on the air beside it
+    # (bench-health, 2026-10-27): the remedy is to park it, never to bring
+    # the primary up
+    if p4_serves; then
+        case "$comp" in
+            wican-bench-w0|wican-bench|hotspot)
+                for h in "$HOTSPOT_PRIMARY" "$HOTSPOT_TWIN"; do
+                    sudo nmcli connection modify "$h" connection.autoconnect no >/dev/null 2>&1
+                    sudo nmcli connection down "$h" >/dev/null 2>&1
+                done
+                blog "parked the Pi hotspots beside the P4"
+                continue
+                ;;
+        esac
+    fi
     case "$comp" in
         wican-bench-w0|hotspot)
             bench-radio-reset wint0
