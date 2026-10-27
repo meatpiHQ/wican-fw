@@ -46,6 +46,7 @@ typedef struct
     const char *name;
     int32_t     delta;
     uint32_t    ms;
+    uint32_t    min_free; /* the internal heap's minimum since boot, at the step's end */
 } ram_step_t;
 
 /* 96 overflowed without a word: a boot is 131 steps since 2026-10-03, so
@@ -70,6 +71,8 @@ static void ram_map_record(const char *name, uint32_t before,
             (int32_t)before - (int32_t)internal_free_now();
         s_ram_map[s_ram_map_n].ms =
             (uint32_t)((esp_timer_get_time() - t_start_us) / 1000);
+        s_ram_map[s_ram_map_n].min_free = (uint32_t)heap_caps_get_minimum_free_size(
+            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
         s_ram_map_n++;
     }
     else
@@ -96,6 +99,31 @@ void main_boot_ram_map_print(void)
             printf("WICAN BOOTTIME %s=%lu\n", s_ram_map[i].name,
                    (unsigned long)s_ram_map[i].ms);
         }
+    }
+
+    /* the boot's transient dips (2026-10-27): the delta map misses a step
+       that borrows internal RAM and returns it, yet that moment sets the
+       minimum the health audit reads as the floor (ESP-IDF 6.1 moved it
+       10 KB with no change in the deltas). A step whose end finds the
+       minimum more than 1 KB under the previous step's prints as
+       `WICAN RAMMIN <step>=<minimum>`; the last line is the boot's floor. */
+    uint32_t prev_min = 0;
+
+    for (size_t i = 0; i < s_ram_map_n; i++)
+    {
+        if (i > 0 && s_ram_map[i].min_free + 1024 < prev_min)
+        {
+            printf("WICAN RAMMIN %s=%lu\n", s_ram_map[i].name,
+                   (unsigned long)s_ram_map[i].min_free);
+        }
+
+        prev_min = s_ram_map[i].min_free;
+    }
+
+    if (s_ram_map_n > 0)
+    {
+        printf("WICAN RAMMIN end=%lu\n",
+               (unsigned long)s_ram_map[s_ram_map_n - 1].min_free);
     }
 
     if (s_ram_map_lost > 0)
