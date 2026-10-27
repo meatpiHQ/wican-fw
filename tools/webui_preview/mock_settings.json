@@ -986,7 +986,6 @@
   "values": {
    "enabled": false,
    "port": 6809,
-   "allow_reflash": false,
    "allow_lan": false,
    "exclusive": true,
    "cli": true
@@ -1000,9 +999,6 @@
      "type": "integer",
      "minimum": 1,
      "maximum": 65535
-    },
-    "allow_reflash": {
-     "type": "boolean"
     },
     "allow_lan": {
      "type": "boolean"
@@ -1514,6 +1510,7 @@
    "enabled": true,
    "role": "host",
    "device_class": "ncm",
+   "device_ip": "192.168.82.1",
    "ip_mode": "dhcp",
    "static_ip": "",
    "static_netmask": "255.255.255.0",
@@ -1540,6 +1537,9 @@
       "rndis",
       "cdc"
      ]
+    },
+    "device_ip": {
+     "type": "string"
     },
     "ip_mode": {
      "type": "string",

@@ -754,7 +754,7 @@
       ] });
     },
     "/api/j2534": () => J({ enabled: false, port: 6809, listening: false, client_connected: false, device_open: false, channels: 0,
-                            frames_rx: 0, frames_tx: 0, allow_reflash: false, allow_lan: false, exclusive: !!state.j2534Exclusive,
+                            frames_rx: 0, frames_tx: 0, tx_refused: 0, reflash_seen: 0, allow_lan: false, exclusive: !!state.j2534Exclusive,
                             autopid_paused: false, phase: "2 (CAN + ISO15765 channels)" }),
     "/api/uds": () => J(state.uds),
     "/api/sleep": () => J(sleepStatus()),

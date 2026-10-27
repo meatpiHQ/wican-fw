@@ -990,7 +990,6 @@
   "values": {
    "enabled": false,
    "port": 6809,
-   "allow_reflash": false,
    "allow_lan": false,
    "exclusive": true,
    "cli": true
@@ -1004,9 +1003,6 @@
      "type": "integer",
      "minimum": 1,
      "maximum": 65535
-    },
-    "allow_reflash": {
-     "type": "boolean"
     },
     "allow_lan": {
      "type": "boolean"
@@ -1518,6 +1514,7 @@
    "enabled": true,
    "role": "host",
    "device_class": "ncm",
+   "device_ip": "192.168.82.1",
    "ip_mode": "dhcp",
    "static_ip": "",
    "static_netmask": "255.255.255.0",
@@ -1544,6 +1541,9 @@
       "rndis",
       "cdc"
      ]
+    },
+    "device_ip": {
+     "type": "string"
     },
     "ip_mode": {
      "type": "string",
@@ -2805,7 +2805,7 @@
       ] });
     },
     "/api/j2534": () => J({ enabled: false, port: 6809, listening: false, client_connected: false, device_open: false, channels: 0,
-                            frames_rx: 0, frames_tx: 0, allow_reflash: false, allow_lan: false, exclusive: !!state.j2534Exclusive,
+                            frames_rx: 0, frames_tx: 0, tx_refused: 0, reflash_seen: 0, allow_lan: false, exclusive: !!state.j2534Exclusive,
                             autopid_paused: false, phase: "2 (CAN + ISO15765 channels)" }),
     "/api/uds": () => J(state.uds),
     "/api/sleep": () => J(sleepStatus()),
@@ -4716,7 +4716,7 @@ const LABELS={
   "espnetlink.host":"Dongle address",gps_poll_s:"GPS poll interval (s)",health_poll_s:"Health poll interval (s)",cut_retries:"USB cut retries",
   "espnetlink.apn":"APN","espnetlink.apn_user":"APN username","espnetlink.apn_password":"APN password","espnetlink.sim_pin":"SIM PIN",
   /* usb_host_manager */
-  role:"Connector role",device_class:"USB device class",ip_mode:"IP assignment",static_ip:"Static IP address",
+  role:"Connector role",device_class:"USB device class",device_ip:"USB link address",ip_mode:"IP assignment",static_ip:"Static IP address",
   static_netmask:"Subnet mask",static_gw:"Gateway",prefer_usb_route:"Prefer USB uplink over WiFi",
   /* vpn_manager */
   "vpn_manager.type":"VPN type",ts_auth_key:"Tailscale auth key",ts_device_name:"Tailscale device name",ts_control_url:"Control server URL",
@@ -4724,7 +4724,7 @@ const LABELS={
   routes:"Routes through the tunnel",endpoint:"Endpoint host","vpn_manager.port":"Endpoint port",
   default_route:"Route all traffic through the VPN",dns:"DNS server",
   /* j2534_server / script_engine / uds_manager */
-  "j2534_server.port":"TCP port",allow_reflash:"Allow ECU flashing",allow_lan:"Expose on LAN",
+  "j2534_server.port":"TCP port",allow_lan:"Expose on LAN",
   max_runtime_ms:"Max script runtime (ms)","script_engine.enabled":"Scripting","uds_manager.backend":"Transport",p2_ms:"P2 timeout (ms)",p2star_ms:"P2* timeout (ms)",
   tester_present_ms:"Tester-present interval (ms)","uds_manager.exclusive":"Exclusive bus at boot","j2534_server.exclusive":"Exclusive bus at boot","script_engine.exclusive":"Exclusive bus for scripts",
   /* log_manager / log_sinks */
@@ -4797,10 +4797,10 @@ const HELP={
   "espnetlink.sim_pin":"Only when the dongle reports the SIM as PIN locked. Sent to the dongle once per start while the SIM asks; a PIN the SIM refuses is never retried by itself (three wrong tries lock the SIM). Blank = none.",
   role:"Host: an adapter or dongle plugs into the WiCAN. Device: the WiCAN appears as a network adapter on a PC.",
   prefer_usb_route:"Use the USB-Ethernet uplink even when WiFi is connected.",
+  device_ip:"The WiCAN's address on the USB cable in device mode; the PC leases the next one. Change it only when the PC's own network already uses this subnet (the link would not route). Reboot to apply.",
   "vpn_manager.type":"WireGuard: point-to-point tunnel to your own server. Tailscale: zero-config mesh (needs an auth key).",
   routes:"Destination networks that go through the tunnel, comma separated in CIDR form, e.g. 10.66.0.0/24, 192.168.1.0/24. Include the tunnel's own network. Everything else uses the normal connection; Route all traffic (under Show advanced) sends everything through the tunnel instead.",
   default_route:"Send all internet traffic through the tunnel, not only the allowed IPs.",
-  allow_reflash:"Lets a connected tool write ECU firmware. Keep off unless you are flashing.",
   allow_lan:"Reachable from any network the WiCAN is on, not only its own AP / USB link.",
   silent:"Receive only: the WiCAN never acknowledges frames on the bus.",
   "can_manager.baud":"The WiCAN always listens first and only talks once it has read frames at this bit rate. Automatic takes the bit rate from the traffic; on a bus that stays silent until asked, choose the bit rate yourself, or let the tool state it: a J2534 tester's connect and an slcan client's S command set the rate while nothing has been read.",
@@ -4863,7 +4863,7 @@ const PLACEHOLDER={
   sta_ssid:"e.g. MyHomeWiFi","mqtt_manager.url":"mqtt://broker.local:1883","ha_webhooks.url":"http://homeassistant.local:8123/api/webhook/…",
   url2:"optional failover URL",ntp_server:"pool.ntp.org",ntp_server2:"optional",endpoint:"vpn.example.com",ts_device_name:"wican",
   ts_control_url:"https://controlplane.tailscale.com","espnetlink.ssid":"ESPNetLink_XXXXXX","espnetlink.host":"192.168.80.1",
-  "espnetlink.device_id":"set by pairing",static_ip:"192.168.1.50",static_netmask:"255.255.255.0",static_gw:"192.168.1.1",
+  "espnetlink.device_id":"set by pairing",device_ip:"192.168.82.1",static_ip:"192.168.1.50",static_netmask:"255.255.255.0",static_gw:"192.168.1.1",
   sta_static_ip:"192.168.1.50",sta_static_netmask:"255.255.255.0",sta_static_gw:"192.168.1.1",sta_dns:"optional, e.g. 1.1.1.1",dns:"e.g. 1.1.1.1",
   client_id:"optional",topic_prefix:"optional",can_filter:"7E8",can_mask:"7FF",address:"10.0.0.2",routes:"10.66.0.0/24, 192.168.1.0/24",
   udp_host:"192.168.1.10",vehicle:"No profile loaded",std_init:"ATSP6;",custom_init:"optional AT chain",specific_init:"optional AT chain",
@@ -7834,7 +7834,7 @@ PAGES.usb=async(view,sub)=>{
   try{
     const rows=await settingsForm("usb_host_manager",null,{visible:st=>{
       if(!st.enabled)return["enabled"];
-      if(st.role==="device")return["enabled","role","device_class","cli"];
+      if(st.role==="device")return st.device_class==="cdc"?["enabled","role","device_class","cli"]:["enabled","role","device_class","device_ip","cli"];
       const host=["enabled","role","prefer_usb_route","ip_mode","cli"];
       return st.ip_mode==="static"?[...host,"static_ip","static_netmask","static_gw"]:host;
     }});
@@ -8762,7 +8762,7 @@ PAGES.uds=async(view)=>{
 
 /* ---- J2534 ---- */
 PAGES.j2534=async(view)=>{
-  const p=page(view,null,"J2534 Pass-through","SAE J2534 device + safety gates");
+  const p=page(view,null,"J2534 Pass-through","SAE J2534 PassThru device for PC diagnostic and reflash tools");
   const statusEl=h("div",{});const formEl=h("div",{});p.append(statusEl,formEl);
   async function status(){const j=await tryGet("/api/j2534");if(!j)return;
     statusEl.replaceChildren(
@@ -8770,13 +8770,12 @@ PAGES.j2534=async(view)=>{
         h("div",{class:"rowflex",style:"gap:8px;margin-bottom:12px;flex-wrap:wrap"},
           onoff(j.enabled,"Enabled","Disabled"),j.listening?chip("listening :"+j.port,"info"):chip("not listening",""),
           j.client_connected?chip("client connected","ok"):chip("no client",""),
-          j.allow_reflash?chip("ECU flashing ALLOWED","warn"):chip("ECU flashing blocked","ok"),
           j.allow_lan?chip("LAN exposed","warn"):chip("AP/USB only","ok")),
         h("div",{class:"rowflex",style:"gap:12px;margin-bottom:12px;flex-wrap:wrap;align-items:center"},
           switchCtl(!!j.exclusive,v=>{api("/api/j2534",{method:"POST",body:{exclusive:v}}).then(()=>status()).catch(e=>toast(e.message,"err"));},{yes:"Exclusive bus: on",no:"Exclusive bus: off",title:"While a tool is connected, AutoPID polling and DTC scans stay off the bus"}),
           j.autopid_paused?chip("AutoPID paused","warn"):h("span",{class:"help"},j.exclusive?"AutoPID pauses while a tool is connected.":"AutoPID keeps polling alongside a connected tool. Turn on for a bus to yourself; the boot default is in the settings below.")),
-        kv([["Phase",j.phase],["Channels",j.channels],["Frames rx/tx",j.frames_rx+" / "+j.frames_tx]])),
-      banner("info","shield",h("b",{},"Safety default: "),"with ECU flashing blocked, a connected tool can read and diagnose but cannot write firmware; with LAN exposure off, the port is reachable only on WiCAN's own AP or USB link."));}
+        kv([["Phase",j.phase],["Channels",j.channels],["Frames rx/tx",j.frames_rx+" / "+j.frames_tx],["Reprogramming services seen",(j.reflash_seen||0)+" (UDS 0x34..0x37 requests, counted since boot)"]])),
+      banner("info","shield",h("b",{},"What enabling means: "),"a connected tool can send anything the bus allows, reads and reprogramming alike; the WiCAN forwards it like a cable and counts the reprogramming services above. With LAN exposure off, the port is reachable only on WiCAN's own AP or USB link."));}
   await status();
   try{const rows=await settingsForm("j2534_server");formEl.replaceChildren(sectionTools("J2534 settings",[],...rows));}catch(e){formEl.replaceChildren(banner("crit","alert",e.message));}
   const t=setInterval(()=>{if(conn.state==="online")status();},4000);return()=>clearInterval(t);

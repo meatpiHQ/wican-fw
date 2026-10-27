@@ -1,28 +1,31 @@
 #!/usr/bin/env python3
-"""Verify the J2534 server's two safety gates against a live DUT.
+"""The J2534 server forwards every write (no content gate since 2026-10-27).
 
   python j2534_gate_test.py <dut_ip> [port]
 
 Reuses the wire-protocol Client from j2534_bench. Assumes:
   * the DUT is reachable at <dut_ip> on an ALLOWED interface (AP or USB),
-  * j2534_server.enabled = true.
+  * j2534_server.enabled = true (its web API on port 80 at the same ip).
 
 Checks:
-  1. the connection is accepted (interface allowed),
-  2. a non-reflash write (10 02 DiagnosticSessionControl) is NOT gated,
-  3. reflash writes (34 RequestDownload, 36 TransferData) ARE rejected
-     with ERR_NOT_SUPPORTED when allow_reflash is false.
+  1. the connection is accepted (the interface gate, allow_lan),
+  2. 10 02 DiagnosticSessionControl is forwarded (ACK NOERROR),
+  3. the UDS memory-transfer services 34 RequestDownload, 36 TransferData
+     and 37 RequestTransferExit are forwarded too (ACK NOERROR; until
+     2026-10-27 a closed allow_reflash gate answered ERR_NOT_SUPPORTED),
+  4. /api/j2534 reflash_seen grew by exactly 3 (counted, never refused).
 
-Does NOT need a responding ECU: the reflash gate rejects the WRITE at the
-device before it reaches the bus, so we assert on the WRITE ACK status.
+Does NOT need a responding ECU: the ACK of a WRITE says whether the device
+forwarded it; the ECU's answer is not asserted.
 """
+import json
 import struct
 import sys
+import urllib.request
 
 import j2534_bench as b
 
 NOERROR = 0x00
-ERR_NOT_SUPPORTED = 0x01
 PROT_ISO15765 = 6
 
 fails = []
@@ -32,6 +35,14 @@ def check(name, ok, detail=""):
     print(("PASS" if ok else "FAIL") + f": {name}" + (f" ({detail})" if detail else ""))
     if not ok:
         fails.append(name)
+
+
+def reflash_seen(dut):
+    try:
+        with urllib.request.urlopen(f"http://{dut}/api/j2534", timeout=5) as r:
+            return json.load(r).get("reflash_seen")
+    except Exception:
+        return None
 
 
 def main():
@@ -54,24 +65,18 @@ def main():
                                            0x7E0, 0x7E8))
     check("CONNECT ISO15765", st == NOERROR, f"channel {ch}")
 
-    # non-reflash service passes the gate (10 02 = DiagnosticSessionControl).
-    # No ECU needed: we only assert the WRITE ACK, not the response.
+    seen0 = reflash_seen(dut)
     st, _ = c.write_uds(ch, bytes([0x10, 0x02]), collect_ms=200)
-    check("10 02 (session) NOT gated", st == NOERROR, f"status 0x{st:02X}")
+    check("10 02 (session) forwarded", st == NOERROR, f"status 0x{st:02X}")
 
-    # reflash services must be rejected while allow_reflash is false
-    st, _ = c.write_uds(ch, bytes([0x34, 0x00, 0x44, 0, 0, 0x04, 0x00]),
-                        collect_ms=200)
-    check("34 RequestDownload BLOCKED", st == ERR_NOT_SUPPORTED,
-          f"status 0x{st:02X}")
+    for name, pdu in (("34 RequestDownload", bytes([0x34, 0x00, 0x44, 0, 0, 0x04, 0x00])),
+                      ("36 TransferData", bytes([0x36, 0x01, 0xAA, 0xBB])),
+                      ("37 RequestTransferExit", bytes([0x37]))):
+        st, _ = c.write_uds(ch, pdu, collect_ms=200)
+        check(f"{name} forwarded (no content gate)", st == NOERROR, f"status 0x{st:02X}")
 
-    st, _ = c.write_uds(ch, bytes([0x36, 0x01, 0xAA, 0xBB]), collect_ms=200)
-    check("36 TransferData BLOCKED", st == ERR_NOT_SUPPORTED,
-          f"status 0x{st:02X}")
-
-    st, _ = c.write_uds(ch, bytes([0x37]), collect_ms=200)
-    check("37 RequestTransferExit BLOCKED", st == ERR_NOT_SUPPORTED,
-          f"status 0x{st:02X}")
+    seen1 = reflash_seen(dut)
+    check("reflash_seen counted the three", seen0 is not None and seen1 == seen0 + 3, f"{seen0} -> {seen1}")
 
     c.call(b.CLOSE)
 

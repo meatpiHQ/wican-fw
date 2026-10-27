@@ -21,7 +21,8 @@ carried as a byte stream on the `j2534` channel. Stages (state in
               L3 START_FILTER PASS 7E8 -> still answered; STOP + BLOCK 7E8 ->
                  silence; STOP; DISCONNECT
               L4 CONNECT ISO15765 7E0/7E8, 22 F1 90 -> 62 F1 90 + VIN,
-                 10 02 -> 50 02; reflash gate: 34 .. -> ERR_NOT_SUPPORTED
+                 10 02 -> 50 02; 34 .. forwarded (NOERROR; the reflash
+                 gate refused it until 2026-10-27)
               L5 a second tester over TCP (the Pi) while BLE holds the
                  session -> ACK ERR_DEVICE_IN_USE (0x1A)
               L6 RTT: 30 x HELLO p50/p95 (report only)
@@ -326,7 +327,7 @@ async def ble_leg(saved, passkey, nm_profile):
     check("L4_uds_10_02", st == NOERROR and any(d[4:6] == b"\x50\x02" for c, d in t.rx if c == ich),
           f"{[d.hex() for c, d in t.rx][:2]}")
     st, _, _ = await t.write(ich, iso_msg([0x34, 0x00, 0x44, 0x00, 0x00, 0x00, 0x04, 0x00]))
-    check("L4_reflash_gate_not_supported", st == ERR_NOT_SUPPORTED, f"status {st}")
+    check("L4_34_forwarded_no_gate", st == NOERROR, f"status {st} (the reflash gate refused it until 2026-10-27)")
 
     # L5: second tester over TCP while BLE holds the session
     try:

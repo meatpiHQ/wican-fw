@@ -1,13 +1,13 @@
 # WiCAN J2534 PassThru driver (Windows)
 
-`wican_j2534_setup_1.3.0.exe` installs the WiCAN SAE J2534-1 (04.04) PassThru
+`wican_j2534_setup_1.5.0.exe` installs the WiCAN SAE J2534-1 (04.04) PassThru
 driver: a 32-bit `wican_j2534.dll` that lets Windows diagnostic and reflash
 tools drive a vehicle's bus through a WiCAN PRO, over USB or WiFi.
 
 | | |
 |---|---|
-| Version | 1.3.0 (the DLL reports itself as `WiCAN J2534 1.3`; 2026-10-19: accepts the J1850 VPW protocol, see below; 1.2: event-driven ACK wait, a debug log via `WICAN_J2534_LOG` or the registry `LogFile`, GET_CONFIG answers, requests serialized across threads) |
-| SHA-256 | `67d5e7fe98ab7a80943fd59354b4494da42135659a061abd380c9c6b4eb720ea` |
+| Version | 1.5.0 (the DLL reports itself as `WiCAN J2534 1.5`; 2026-10-27: `PassThruGetLastError` explains every device refusal in words; 1.4, the same day: `PassThruReadMsgs` waits on an event instead of a `Sleep(1)` poll, and the driver log is on by default at `C:\Users\Public\Documents\WiCAN\wican_j2534.log` with every message in full both ways, see below; 1.3: accepts the J1850 VPW protocol; 1.2: event-driven ACK wait, GET_CONFIG answers, requests serialized across threads) |
+| SHA-256 | `61bdadbd9aad79be8a4779a8695592034203d57b6a39b393c04785ade435d3f4` |
 | Requires | WiCAN PRO on firmware v6 (a build of 2026-10-20 or later for ISO15765 and J1850 VPW: see below), Windows 10 or 11 |
 | Protocols | CAN, ISO15765 (ISO-TP) on the CAN controller, and J1850 VPW (GM Class 2) on the device's OBD chip. J1850 PWM, ISO9141 and ISO14230 return `ERR_NOT_SUPPORTED`. |
 
@@ -24,10 +24,26 @@ CAN controller. A J1850 message is its 3-byte header (priority, target,
 source) followed by the payload, placed whole in `PASSTHRU_MSG.Data` with
 no CAN-id prefix; the DLL passes it through verbatim like every message.
 WiCAN segments large transfers itself, so SPS/DPS-style programming works
-with "Allow ECU flashing" on. Limits: request/response only (no unsolicited
+as is. Limits: request/response only (no unsolicited
 bus capture), and GM 4x programming speed (service `$A1`) is not
 implemented, so programming runs at 10.4 kbit/s. Driver 1.3 only adds the
 protocol id to the accept list.
+
+Driver 1.4 (2026-10-27) changes two things a flashing tool feels. The read
+side no longer polls: `PassThruReadMsgs` wakes on the message itself, where
+the 1.2 and 1.3 poll slept one Windows timer period per wait (15.6 ms on a
+PC where no application raised the timer resolution), which a tool that
+acknowledges every block of a transfer paid at every block end. And the
+driver log is on by default: `C:\Users\Public\Documents\WiCAN\wican_j2534.log`
+(the Start Menu entry "WiCAN J2534 driver log" opens the folder) holds one
+line per call with every byte sent to the ECU and received from it, the
+device's timestamp on reads and every status, 16 MB then one rotation to
+`.1`; send it with a problem report. `WICAN_J2534_LOG` or the registry
+`LogFile` move it, the value `off` disables it. Driver 1.5 (the same day)
+makes `PassThruGetLastError` say why the WiCAN refused a call ("the WiCAN
+refused: ERR_INVALID_BAUDRATE (0x18): the CAN bus runs at another bit
+rate ..."); until then a device status left "no error" behind and a tool's
+dialog said nothing useful.
 
 The installer is not code-signed, so Windows SmartScreen may ask you to
 confirm before it runs. The same file is attached to each firmware release.
@@ -50,15 +66,19 @@ user manual (PDF) is installed next to the DLL.
 ## On the WiCAN
 
 Open the J2534 page of the web UI (or `PUT /api/settings/j2534_server`) and
-enable the server. It listens on TCP port 6809 and is off by default. Two
-safety gates also default to off:
+enable the server. It listens on TCP port 6809 and is off by default.
+Enabling it is the consent: the WiCAN then forwards whatever the tool
+sends, reads and reprogramming alike, like a cable (the J2534 page counts
+the reprogramming services it saw). One exposure gate defaults to off:
 
-- "Allow ECU flashing" (`allow_reflash`): until enabled, the UDS
-  memory-transfer services 0x34 to 0x37 are rejected, so a tool can diagnose
-  but not write ECU firmware.
 - "Expose on LAN" (`allow_lan`): until enabled, connections are accepted only
   on the WiCAN's own hotspot and the USB network link, because the transport
   is unauthenticated.
+
+Firmware before 2026-10-27 also had an "Allow ECU flashing" gate that
+refused UDS 0x34 to 0x37 and, on raw CAN, ordinary frames of tools with
+their own framing (`NotSupported (0x01)`, "no error"); on such firmware turn
+that switch on for flashing work, or update.
 
 Status: `GET /api/j2534` (its `transport` field says which link the
 attached tool came in on). Details in `components/HTTP_API.md`.
