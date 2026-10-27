@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'espnleasy', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [ValidateSet('6.0.2', '6.1')][string]$Idf = '6.1',  # the ESP-IDF the build stages use (6.1 since 6.0.0-beta.5, 2026-10-27; 6.0.2 stays installed; build.ps1 -Idf has the same table)
@@ -386,7 +386,7 @@ function Invoke-BenchCheck {
     if ($What -eq 'usbeth' -and -not $b.UsbEth) {
         throw "bench: USB-Ethernet adapter not detected on the DUT ($wiring). Plug it into the WiCAN USB connector + cable to Pi eth0."
     }
-    if ($What -eq 'espnetlink' -and -not $b.Espnetlink) {
+    if ($What -in @('espnetlink', 'espnlapn') -and -not $b.Espnetlink) {
         throw "bench: espnetlink not detected ($wiring). Plug the LTE dongle into the WiCAN USB connector + enable usb_host_manager & usb_acm_cli."
     }
 }
@@ -915,6 +915,7 @@ function Show-Inventory {
     Write-Host '  vpnpause   - the VPN pauses on networks marked Pause VPN (issue #976): the bench AP marked / unmarked, away on the dongle AP, home again; wg-bench on the Pi, the console for the away leg (~12 min)'
     Write-Host '  vpnroutes  - the split tunnel (issue #975): a request to a routed network leaves through wg-bench on the Pi, one to any other address through the station, judged at the receiver by the source address (~6 min)'
     Write-Host '  espnleasy  - the ESPNetLink easy-setup surfaces on the DUT (2026-10-13): the usb summary on /api/status against /api/espnetlink, the sim_pin key (a no-op PUT, no restart), the UI doors in the served page, the GPS hint counting away from home (ap off on the P4 for 100 s, home again) (~6 min; needs the P4 daemon)'
+    Write-Host '  espnlapn   - the carrier settings relay in the USB modes (2026-10-28): a bench APN set on the WiCAN reaches the dongle through the share pass (one planned dongle restart), a plain WiCAN restart writes nothing, the APN restored as found and the LTE back (~8 min, 3 to 4 planned WiCAN restarts, 2 dongle restarts; the dongle on the connector in a USB mode with its console on; its LTE is down while the bench APN is on it)'
     Write-Host '  garage     - the garage story with the ESPNetLink (2026-10-12): home WiFi on the P4, away on the dongle LTE with the VPN to betty, home again, flaps, a dongle reboot away, sleep/wake both ways; the data path judged at a receiver on betty by the source address of every POST; the default legs in usb_rndis with VPN variant A (~35 min; wifi_modem, variant B, g9 and g11 by hand)'
     Write-Host '  usbgps     - a USB GPS receiver is read by default (issue #978): the console switch off, the receiver read as NMEA from boot, the fix when the sky allows, gps_ in autopid and the HA push, the USB GPS receiver switch off = ignored, back on; then the USB page card, the switches and the Status row in Chrome (3 to 4 planned restarts, ~6 min)'
     Write-Host '  sdformat   - the SD card format from the API (2026-10-25): the slot as found, an unreadable card named by what it holds with a quiet log (W line, no E line), the refusals (no phrase, a wrong phrase, a mounted card), the format behind the phrase and the mount after it with a file round trip, the boot after, then the real page in Chrome; the format legs need a card WiCAN cannot read in the slot and the switch -SdFormat (it erases the card), PARTIAL otherwise (0 to 1 planned restart, ~3 min)'
@@ -1449,6 +1450,20 @@ try {
                 $out = & $py -u "$repo\tools\testbench\usb\espnetlink_easy_bench.py" '--dut-ip' $DutIp '--pi' $BenchHost 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 Save-StageLog 'espnetlink_easy' $out
                 if (-not ($out | Select-String -Quiet 'ESPNL EASY BENCH (PARTIAL )?PASS')) { throw 'no ESPNL EASY BENCH PASS (the P4 daemon up? the dongle on the connector? the DUT on the bench AP?)' }
+            }
+        }
+        'espnlapn' {
+            # The carrier settings relay in the USB modes (2026-10-28): the
+            # bench opens its own tunnel to the DUT through the Pi and reads
+            # the dongle's side through the WiCAN's ACM bridge; it restores
+            # the APN as found. The dongle's LTE is down while the bench APN
+            # is on it: not alongside an LTE bench.
+            Invoke-Stage 'ESPNetLink carrier relay' {
+                $py = $script:BenchPy
+                $out = & $py -u "$repo\tools\testbench\usb\espnetlink_apn_bench.py" '--dut-ip' $DutIp '--pi' $BenchHost 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                Save-StageLog 'espnetlink_apn' $out
+                foreach ($m in ($out | Select-String -Pattern '^METRIC ' )) { Add-Metric 'espnetlink_apn' $m.Line }
+                if (-not ($out | Select-String -Quiet 'ESPNL APN RELAY PASS')) { throw 'no ESPNL APN RELAY PASS (the dongle on the connector in a USB mode? usb_acm_cli console on? the DUT on the bench AP?)' }
             }
         }
         'abrp' {
