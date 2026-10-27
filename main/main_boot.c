@@ -218,6 +218,8 @@ void main_boot_health_report(void)
     cap_check("j1939_tp", used, cap);
     ip4_routes_capacity(&used, &cap);
     cap_check("ip4_routes", used, cap);
+    restart_tracker_hooks_capacity(&used, &cap);
+    cap_check("rt_hooks", used, cap);
 
     printf("WICAN FAULTS active=%d\n",
            dev_status_manager_faults(NULL, 0));
