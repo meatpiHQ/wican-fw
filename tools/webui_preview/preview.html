@@ -3237,7 +3237,10 @@
       return J({ ...S[c].values, degraded: false, pending_reboot: false });
     }
 
-    if (path.endsWith("/vehicle_profiles.json")) return J({"cars": [{"car_model": "AAA: Generic", "init": "ATSP6;", "pids": [{"pid": "010C1", "parameters": [{"name": "EngineRPM", "expression": "[B3:B4]*0.25", "unit": "RPM", "class": "frequency"}]}, {"pid": "010D1", "parameters": [{"name": "VehicleSpeed", "expression": "B3", "unit": "km/h", "class": "speed"}]}, {"pid": "01051", "parameters": [{"name": "Coolant", "expression": "B3-40", "unit": "°C", "class": "temperature"}]}, {"pid": "012F1", "parameters": [{"name": "FuelLevel", "expression": "B3/2.55", "unit": "%", "class": "none"}]}, {"pid": "010F1", "parameters": [{"name": "IntakeAirTemp", "expression": "B3-40", "unit": "°C", "class": "temperature"}]}, {"pid": "01111", "parameters": [{"name": "Throttle", "expression": "B3/2.55", "unit": "%", "class": "none"}]}, {"pid": "01101", "parameters": [{"name": "MAF", "expression": "[B3:B4]*0.01", "unit": "g/s", "class": "none"}]}, {"pid": "010A1", "parameters": [{"name": "FuelPressure", "expression": "B3*3", "unit": "kPa", "class": "pressure"}]}, {"pid": "01061", "parameters": [{"name": "ShortTermFuelTrim", "expression": "(B3/1.28)-100", "unit": "%", "class": "none"}]}, {"pid": "01A61", "parameters": [{"name": "Odometer", "expression": "[B3:B6]", "unit": "km", "class": "distance"}]}]}, {"car_model": "Hyundai: Ioniq2017", "init": "ATSP6;ATSH7E4;ATST96;", "pids": [{"pid": "21057", "parameters": [{"name": "SOC_DISPLAY", "expression": "B39/2", "unit": "%", "class": "battery"}, {"name": "SOH", "expression": "[B33:B34]/10", "unit": "%", "class": ""}]}, {"pid": "2101", "parameters": [{"name": "SOC_BMS", "expression": "B09/2", "unit": "%", "class": "battery"}, {"name": "Charger_Connected", "expression": "B14:5", "unit": "", "class": ""}, {"name": "Charging", "expression": "B14:7", "unit": "", "class": ""}, {"name": "HV_Charger_Connected", "expression": "B14:6", "unit": "", "class": ""}]}]}, {"car_model": "Kia/Hyundai: Niro/Soul/Kona", "init": "ATST96;", "pids": [{"pid_init": "ATSH7E4;", "pid": "2201019", "parameters": [{"name": "SOC_BMS", "expression": "B10/2", "unit": "%", "class": "battery"}, {"name": "Max_REGEN", "expression": "[B11:B12]/100", "unit": "kW", "class": "power"}, {"name": "Max_Power", "expression": "[B13:B14]/100", "unit": "kW", "class": "power"}, {"name": "Batt_Current", "expression": "(65536-([B17:B18]))/10", "unit": "A", "class": "current"}, {"name": "HV_Volts", "expression": "[B19:B20]/10", "unit": "V", "class": "voltage"}, {"name": "HV_Power", "expression": "([B19:B20]/10)*((65536-([B17:B18]))/10)", "unit": "W", "class": "power"}, {"name": "Batt_MaxT", "expression": "B21", "unit": "°C", "class": "temperature"}, {"name": "Batt_MinT", "expression": "B22", "unit": "°C", "class": "temperature"}, {"name": "Batt_Temp_1", "expression": "B23", "unit": "°C", "class": "temperature"}, {"name": "Batt_Temp_2", "expression": "B25", "unit": "°C", "class": "temperature"}, {"name": "Batt_Temp_3", "expression": "B26", "unit": "°C", "class": "temperature"}, {"name": "Batt_Temp_4", "expression": "B27", "unit": "°C", "class": "temperature"}, {"name": "Batt_InletT", "expression": "B30", "unit": "°C", "class": "temperature"}, {"name": "Max_Cell_V", "expression": "B31/50", "unit": "V", "class": "voltage"}, {"name": "Max_Cell_V_No", "expression": "B33", "unit": "none", "class": "none"}, {"name": "Min_Cell_V", "expression": "B34/50", "unit": "V", "class": "voltage"}, {"name": "Min_Cell_V_No", "expression": "B35", "unit": "none", "class": "none"}, {"name": "Aux_Batt_Volts", "expression": "B38*0.1", "unit": "V", "class": "voltage"}]}, {"pid_init": "ATSH7E4;", "pid": "2201057", "parameters": [{"name": "SOH", "expression": "[B34:B35]/10", "unit": "%", "class": "battery"}, {"name": "SOC_D", "expression": "B41/2", "unit": "%", "class": "battery"}, {"name": "Min_Cell_Det_No", "expression": "B39", "unit": "none", "class": "none"}, {"name": "Max_Cell_Det_No", "expression": "B36", "unit": "none", "class": "none"}, {"name": "Min_Cell_Det", "expression": "[B37:B38]/10", "unit": "%", "class": "battery"}]}, {"pid_init": "ATSH7E2;", "pid": "21014", "parameters": [{"name": "GearSelector_Raw", "expression": "B10", "unit": "none", "class": "none"}, {"name": "Speed_Vehicle", "expression": "[B19:B20]/100", "unit": "%", "class": "battery"}, {"name": "Car_Ready", "expression": "B26:3", "unit": "none", "class": "none"}, {"name": "Car_ParkBreak", "expression": "B26:5", "unit": "none", "class": "none"}]}]}]});
+    /* a probe presets window.__mockPreset.profiles = [cars...] to serve its own published list (2026-10-27, the passive-filters probe) */
+    if (path.endsWith("/vehicle_profiles.json") && Array.isArray((window.__mockPreset || {}).profiles)) return J({ cars: window.__mockPreset.profiles });
+    /* the Leaf ZE1 (2018-) heads the list (2026-10-27): the first published profile with passive CAN filters, two of its PIDs, its three filters as published */
+    if (path.endsWith("/vehicle_profiles.json")) return J({"cars": [{"car_model": "Nissan: Leaf ZE1 (2018-)", "init": "ATSP6;ATST96;ATFCSH79B;ATFCSD300000;ATFCSM1;", "pids": [{"pid": "21018", "parameters": [{"name": "SOC", "expression": "[B39:B41]/10000", "unit": "%", "class": "battery"}, {"name": "HV_V", "expression": "[B22:B23]/100", "unit": "V", "class": "voltage"}, {"name": "HV_A", "expression": "[S4:S7]/1024", "unit": "A", "class": "current"}, {"name": "LV_V", "expression": "B11*0.08", "unit": "V", "class": "voltage"}, {"name": "BATT_CAPACITY", "expression": "[B36:B38]/10000", "unit": "Ah", "class": "none"}]}, {"pid": "2161", "parameters": [{"name": "SOH", "expression": "[B6:B7]/100", "unit": "%", "class": "none"}]}], "filters": [{"frame_id": "0x284", "monitor_ms": 500, "parameters": [{"name": "SPEED", "expression": "[B4:B5]/98", "unit": "km/h", "class": "speed"}]}, {"frame_id": "0x1DA", "monitor_ms": 500, "parameters": [{"name": "DM_F_RPM", "expression": "[S4:S5]/2", "unit": "rpm", "class": "none", "min": "-10100", "max": "10100"}]}, {"frame_id": "0x5C5", "monitor_ms": 500, "parameters": [{"name": "ODOMETER", "expression": "[B1:B3]", "class": "distance", "unit": "km", "min": "0"}]}]}, {"car_model": "AAA: Generic", "init": "ATSP6;", "pids": [{"pid": "010C1", "parameters": [{"name": "EngineRPM", "expression": "[B3:B4]*0.25", "unit": "RPM", "class": "frequency"}]}, {"pid": "010D1", "parameters": [{"name": "VehicleSpeed", "expression": "B3", "unit": "km/h", "class": "speed"}]}, {"pid": "01051", "parameters": [{"name": "Coolant", "expression": "B3-40", "unit": "°C", "class": "temperature"}]}, {"pid": "012F1", "parameters": [{"name": "FuelLevel", "expression": "B3/2.55", "unit": "%", "class": "none"}]}, {"pid": "010F1", "parameters": [{"name": "IntakeAirTemp", "expression": "B3-40", "unit": "°C", "class": "temperature"}]}, {"pid": "01111", "parameters": [{"name": "Throttle", "expression": "B3/2.55", "unit": "%", "class": "none"}]}, {"pid": "01101", "parameters": [{"name": "MAF", "expression": "[B3:B4]*0.01", "unit": "g/s", "class": "none"}]}, {"pid": "010A1", "parameters": [{"name": "FuelPressure", "expression": "B3*3", "unit": "kPa", "class": "pressure"}]}, {"pid": "01061", "parameters": [{"name": "ShortTermFuelTrim", "expression": "(B3/1.28)-100", "unit": "%", "class": "none"}]}, {"pid": "01A61", "parameters": [{"name": "Odometer", "expression": "[B3:B6]", "unit": "km", "class": "distance"}]}]}, {"car_model": "Hyundai: Ioniq2017", "init": "ATSP6;ATSH7E4;ATST96;", "pids": [{"pid": "21057", "parameters": [{"name": "SOC_DISPLAY", "expression": "B39/2", "unit": "%", "class": "battery"}, {"name": "SOH", "expression": "[B33:B34]/10", "unit": "%", "class": ""}]}, {"pid": "2101", "parameters": [{"name": "SOC_BMS", "expression": "B09/2", "unit": "%", "class": "battery"}, {"name": "Charger_Connected", "expression": "B14:5", "unit": "", "class": ""}, {"name": "Charging", "expression": "B14:7", "unit": "", "class": ""}, {"name": "HV_Charger_Connected", "expression": "B14:6", "unit": "", "class": ""}]}]}, {"car_model": "Kia/Hyundai: Niro/Soul/Kona", "init": "ATST96;", "pids": [{"pid_init": "ATSH7E4;", "pid": "2201019", "parameters": [{"name": "SOC_BMS", "expression": "B10/2", "unit": "%", "class": "battery"}, {"name": "Max_REGEN", "expression": "[B11:B12]/100", "unit": "kW", "class": "power"}, {"name": "Max_Power", "expression": "[B13:B14]/100", "unit": "kW", "class": "power"}, {"name": "Batt_Current", "expression": "(65536-([B17:B18]))/10", "unit": "A", "class": "current"}, {"name": "HV_Volts", "expression": "[B19:B20]/10", "unit": "V", "class": "voltage"}, {"name": "HV_Power", "expression": "([B19:B20]/10)*((65536-([B17:B18]))/10)", "unit": "W", "class": "power"}, {"name": "Batt_MaxT", "expression": "B21", "unit": "°C", "class": "temperature"}, {"name": "Batt_MinT", "expression": "B22", "unit": "°C", "class": "temperature"}, {"name": "Batt_Temp_1", "expression": "B23", "unit": "°C", "class": "temperature"}, {"name": "Batt_Temp_2", "expression": "B25", "unit": "°C", "class": "temperature"}, {"name": "Batt_Temp_3", "expression": "B26", "unit": "°C", "class": "temperature"}, {"name": "Batt_Temp_4", "expression": "B27", "unit": "°C", "class": "temperature"}, {"name": "Batt_InletT", "expression": "B30", "unit": "°C", "class": "temperature"}, {"name": "Max_Cell_V", "expression": "B31/50", "unit": "V", "class": "voltage"}, {"name": "Max_Cell_V_No", "expression": "B33", "unit": "none", "class": "none"}, {"name": "Min_Cell_V", "expression": "B34/50", "unit": "V", "class": "voltage"}, {"name": "Min_Cell_V_No", "expression": "B35", "unit": "none", "class": "none"}, {"name": "Aux_Batt_Volts", "expression": "B38*0.1", "unit": "V", "class": "voltage"}]}, {"pid_init": "ATSH7E4;", "pid": "2201057", "parameters": [{"name": "SOH", "expression": "[B34:B35]/10", "unit": "%", "class": "battery"}, {"name": "SOC_D", "expression": "B41/2", "unit": "%", "class": "battery"}, {"name": "Min_Cell_Det_No", "expression": "B39", "unit": "none", "class": "none"}, {"name": "Max_Cell_Det_No", "expression": "B36", "unit": "none", "class": "none"}, {"name": "Min_Cell_Det", "expression": "[B37:B38]/10", "unit": "%", "class": "battery"}]}, {"pid_init": "ATSH7E2;", "pid": "21014", "parameters": [{"name": "GearSelector_Raw", "expression": "B10", "unit": "none", "class": "none"}, {"name": "Speed_Vehicle", "expression": "[B19:B20]/100", "unit": "%", "class": "battery"}, {"name": "Car_Ready", "expression": "B26:3", "unit": "none", "class": "none"}, {"name": "Car_ParkBreak", "expression": "B26:5", "unit": "none", "class": "none"}]}]}]});
     if (FIXED[path]) return FIXED[path](full || path, method, body);   /* a few mutate on method + body */
     return J({ error: "mock: " + method + " " + path + " not implemented" }, 404);
   }
@@ -5208,18 +5211,33 @@ const PROFILES_URL="https://raw.githubusercontent.com/meatpiHQ/wican-fw/main/veh
    community data and the firmware keys its value cache by parameter name,
    so a repeated name is refused whole ("duplicate parameter name"; the
    HV_C_V_168 typo, 2026-09-16): repeats are renamed (_2, _3, ...) against
-   everything in keepPids and reported. Returns {pids, renamed}. */
-function profileToPids(car,keepPids){
-  const fixUnit=u=>typeof u==="string"?u.replace(/�/g,"°"):u;
-  const taken=new Set((keepPids||[]).flatMap(pd=>(pd.parameters||[]).map(pr=>pr.name)));
-  const renamed=[],pids=[];
+   everything in keepPids and reported. A profile's passive CAN `filters`
+   (2026-10-21, the Leaf ZE1 is the first published profile with them)
+   become table filters: the frame id read like Number() ("0x284" is 644),
+   monitor_ms as published (default 1000), period_ms 0 (the group's), group
+   default, tagged profile:true so that the next import replaces them and
+   hand-made filters stay; their expressions are NOT shifted either (a
+   filter indexes the frame data, B0 = first data byte, in both frames of
+   reference). The repeat check covers keepFilters' parameters too. Ported
+   here 2026-10-27: the edit had sat in a stale clone since 2026-10-21, so
+   builds up to 6.0.0-beta.4 imported the PIDs alone. Returns
+   {pids, filters, renamed}. */
+function profileToPids(car,keepPids,keepFilters){
+  const fixUnit=u=>typeof u==="string"?u.replace(/\uFFFD/g,"°"):u;
+  const taken=new Set([...(keepPids||[]),...(keepFilters||[])].flatMap(pd=>(pd.parameters||(pd.name?[pd]:[])).map(pr=>pr.name)));
+  const renamed=[],pids=[],filters=[];
   const uniq=n=>{if(!n||!taken.has(n)){taken.add(n);return n;}
     let k=2;while(taken.has(n+"_"+k))k++;taken.add(n+"_"+k);renamed.push(n+" to "+n+"_"+k);return n+"_"+k;};
   for(const pp of((car&&car.pids)||[])){
     const prm=(pp.parameters||[]).map(x=>({...x,name:uniq(String(x.name||"")),unit:fixUnit(x.unit),expression:String(x.expression||"")}));
     pids.push({name:(prm.length===1&&prm[0].name)||pp.pid,cmd:pp.pid,init:pp.pid_init||"",group:"default",period_ms:0,type:"specific",parameters:prm});
   }
-  return{pids,renamed};
+  for(const pf of((car&&car.filters)||[])){
+    const fid=Number(pf.frame_id);if(!fid)continue;
+    const prm=(pf.parameters||[]).map(x=>({...x,name:uniq(String(x.name||"")),unit:fixUnit(x.unit),expression:String(x.expression||"")}));
+    filters.push({frame_id:fid,monitor_ms:pf.monitor_ms||1000,period_ms:pf.period_ms||0,group:"default",profile:true,parameters:prm});
+  }
+  return{pids,filters,renamed};
 }
 /* The make-then-model picker dialog over the published list (meatpi
    2026-09-17, "Option A"): makes left, the chosen make's models right, one
@@ -6409,11 +6427,15 @@ PAGES.automate=async(view,sub)=>{
     /* shared helpers since 2026-10-01: profileToPids / vehicleProfilePicker
        (top level) serve this page and Quick Setup */
     function importProfile(car){
-      /* replace the vehicle-specific PID set; std/custom stay */
+      /* replace the vehicle-specific PID set and the filters the last
+         profile brought (tagged profile); std/custom PIDs and hand-made
+         filters stay. Returns {pids, filters, renamed} as imported. */
       cfg.pids=cfg.pids.filter(pd=>pidType(pd)!=="specific");
-      const r=profileToPids(car,cfg.pids);
+      const keep=(cfg.filters||[]).filter(f=>!f.profile);
+      const r=profileToPids(car,cfg.pids,keep);
       cfg.pids.push(...r.pids);
-      return r.renamed;
+      if(cfg.filters||r.filters.length)cfg.filters=keep.concat(r.filters);
+      return r;
     }
     const renameNote=renamed=>{if(renamed.length)toast(renamed.length+" duplicate parameter name"+(renamed.length>1?"s":"")+" in this profile renamed: "+renamed.slice(0,3).join(", ")+(renamed.length>3?" and more":""),"");};
     /* Vehicle Specific (meatpi 2026-09-17): ONE "Vehicle profile" row (the
@@ -6436,11 +6458,11 @@ PAGES.automate=async(view,sub)=>{
       const banner=h("div",{class:"banner info",style:"margin-top:12px;display:none"});
       const paintBanner=state=>{ /* false = staged; "unsaved" = PIDs applied but the settings save was declined */
         if(!staged){banner.style.display="none";return;}
-        const n=(staged.car.pids||[]).length;const unsaved=state==="unsaved";
+        const n=(staged.car.pids||[]).length,nf=staged.nf||0;const unsaved=state==="unsaved";
         banner.className="banner "+(unsaved?"warn":"info");
         banner.replaceChildren(ic(unsaved?"alert":"info"),
           unsaved?h("span",{},h("b",{},staged.car.car_model),": PIDs applied, but the profile name and init commands above are not saved yet. Press Apply Configuration again and save, or Submit Changes.")
-                 :h("span",{},h("b",{},staged.car.car_model)," is staged, not applied: "+n+" PID"+(n===1?"":"s")+" replace the vehicle-specific table, and the profile name and init commands above are filled in. Standard and custom PIDs are kept. Apply Configuration sends it all; the name and init commands take effect after the restart it offers."),
+                 :h("span",{},h("b",{},staged.car.car_model)," is staged, not applied: "+n+" PID"+(n===1?" replaces":"s replace")+" the vehicle-specific table"+(nf?", "+nf+" passive CAN filter"+(nf===1?" (frames the car broadcasts) replaces":"s (frames the car broadcasts) replace")+" the last profile's filters":"")+", and the profile name and init commands above are filled in. Standard and custom PIDs and hand-made filters are kept. Apply Configuration sends it all; the name and init commands take effect after the restart it offers."),
           h("span",{class:"grow"}),
           unsaved?null:h("button",{class:"btn sm gh",type:"button",title:"Put back what the device has now",onclick:()=>discard()},"Discard"));
         banner.style.display="";};
@@ -6450,20 +6472,22 @@ PAGES.automate=async(view,sub)=>{
         av.vehicle=String(car.car_model||"").slice(0,maxName);av.specific_init=car.init||"";av.specific_enabled=true;
         stageAv();if(rows)rows.load();};
       const snapshot=()=>({pids:cfg.pids.filter(pd=>pidType(pd)==="specific").map(pd=>JSON.parse(JSON.stringify(pd))),
+        filters:(cfg.filters||[]).filter(f=>f.profile).map(f=>JSON.parse(JSON.stringify(f))),
         vehicle:av?av.vehicle:"",init:av?av.specific_init:"",en:av?av.specific_enabled:true,dirty:cfgDirty,pending:store.pending.has("autopid")});
       const stageProfile=car=>{
         if(!car)return;
         const snap=staged?staged.snap:snapshot(); /* a second pick still discards back to the first snapshot */
-        const renamed=importProfile(car);
+        const r=importProfile(car),np=r.pids.length,nf=r.filters.length;
         stageCar(car);
         markDirty();tbl.rebuild();
-        staged={car,snap};paintBanner(false);
-        toast(car.car_model+" staged: "+(car.pids||[]).length+" PIDs. Apply Configuration sends them","ok");
+        staged={car,snap,nf};paintBanner(false);
+        toast(car.car_model+" staged: "+np+" PID"+(np===1?"":"s")+(nf?" and "+nf+" CAN filter"+(nf===1?"":"s"):"")+". Apply Configuration sends them","ok");
         if(String(car.car_model||"").length>maxName)toast("Profile name shortened to "+maxName+" characters (device limit)","");
-        renameNote(renamed);};
+        renameNote(r.renamed);};
       const discard=()=>{
         if(!staged)return;const s=staged.snap;
         cfg.pids=cfg.pids.filter(pd=>pidType(pd)!=="specific").concat(s.pids);
+        if(cfg.filters||(s.filters||[]).length)cfg.filters=(cfg.filters||[]).filter(f=>!f.profile).concat(s.filters||[]);
         if(av){av.vehicle=s.vehicle;av.specific_init=s.init;av.specific_enabled=s.en;
           if(s.pending)stageAv();else store.unstage("autopid");
           if(rows)rows.load();}
@@ -11687,6 +11711,10 @@ SCREENS.vehicle=async()=>{
     }
     summary.className="chip "+(total&&ok===total?"ok":ok?"warn":"crit");
     summary.replaceChildren(h("span",{class:"d"}),ok+" of "+total+" parameters answered"+(stop?" (stopped)":""));
+    /* a profile's passive CAN filters read frames the car broadcasts: nothing to
+       request here; they come along at Finish like the PIDs (2026-10-27) */
+    const nf=(car.filters||[]).length;
+    if(nf&&tb.isConnected)tb.parentNode.parentNode.append(h("p",{class:"help",style:"margin:8px 0 0;font-size:12.5px"},"The profile also reads "+nf+" frame"+(nf===1?"":"s")+" the car broadcasts (passive CAN filter"+(nf===1?"":"s")+": "+(car.filters||[]).flatMap(f=>(f.parameters||[]).map(x=>x.name)).join(", ")+"). Nothing to request for those: they are set up with the profile."));
     void close;
   }
   if(W.vehPhase===undefined||W.vehPhase===null)W.vehPhase="idle";
@@ -11996,9 +12024,10 @@ async function finishVehicle(finishBtn,errEl,maxName){
       else if(none){bodyPut.profile="";bodyPut.specific_init="";}
       await api("/api/autopid/vehicles/"+encodeURIComponent(v.key),{method:"PUT",body:bodyPut});
     }
-    /* 2. the PID tables: the profile's rows replace the vehicle-specific ones; std + custom
-       stay; the default group takes the chosen rate and the rows that sat on the old
-       default inherit it */
+    /* 2. the PID tables: the profile's rows replace the vehicle-specific ones and its
+       passive CAN filters the last profile's (2026-10-27; hand-made filters stay); std +
+       custom stay; the default group takes the chosen rate and the rows that sat on the
+       old default inherit it */
     const cfg0=await tryGet("/api/autopid/config");
     const cfg=cfg0&&typeof cfg0==="object"?JSON.parse(JSON.stringify(cfg0)):{};
     cfg.pids=Array.isArray(cfg.pids)?cfg.pids:[];
@@ -12006,9 +12035,9 @@ async function finishVehicle(finishBtn,errEl,maxName){
     cfg.filters=Array.isArray(cfg.filters)?cfg.filters:[];
     const oldPeriod=cfg.groups[0].period_ms||1000;
     if(car||none){
-      const keep=cfg.pids.filter(pd=>pd.type!=="specific");
-      if(car){const r=profileToPids(car,keep);cfg.pids=keep.concat(r.pids);if(r.renamed.length)toast(r.renamed.length+" duplicate parameter name"+(r.renamed.length>1?"s":"")+" renamed","");}
-      else cfg.pids=keep;
+      const keep=cfg.pids.filter(pd=>pd.type!=="specific"),keepF=cfg.filters.filter(f=>!f.profile);
+      if(car){const r=profileToPids(car,keep,keepF);cfg.pids=keep.concat(r.pids);cfg.filters=keepF.concat(r.filters);if(r.renamed.length)toast(r.renamed.length+" duplicate parameter name"+(r.renamed.length>1?"s":"")+" renamed","");}
+      else{cfg.pids=keep;cfg.filters=keepF;}
     }
     /* the standard rows: the ones chosen on the vehicle step and no other
        (a new car starts with none: Ali, 2026-10-07). The firmware stored

@@ -135,12 +135,12 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
   const deviceName = (vehInput() || {}).value;
   if (chooseBtn) {
     chooseBtn.click();
-    await sleep(600);   /* the mock serves vehicle_profiles.json: 3 cars */
+    await sleep(600);   /* the mock serves vehicle_profiles.json: 4 cars (the Leaf ZE1 since 2026-10-27) */
     /* Option A (2026-09-17): makes left, models right, no PID/parameter counts */
     check("picker dialog opens with the makes of the fetched list (models wait for a make)",
-      /Choose a vehicle profile/.test(modalEl().textContent) && modalEl().querySelectorAll(".vp-make").length === 3 &&
+      /Choose a vehicle profile/.test(modalEl().textContent) && modalEl().querySelectorAll(".vp-make").length === 4 &&
       modalEl().querySelectorAll(".vp-row").length === 0 && /Pick a make/.test(modalEl().textContent) &&
-      /3 profiles, fetched/.test(modalEl().textContent) && !/parameters/.test(modalEl().textContent));
+      /4 profiles, fetched/.test(modalEl().textContent) && !/parameters/.test(modalEl().textContent));
     const okBtn = [...modalEl().querySelectorAll(".acts button")].find((b) => /Use this profile/.test(b.textContent));
     check("Use this profile disabled until a model is selected", !!okBtn && okBtn.disabled === true);
     modalEl().querySelectorAll(".vp-make")[1].click(); await sleep(50);
@@ -153,7 +153,7 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
     await sleep(50);
     check("search narrows makes + models and auto-selects a single match (1 of 3)",
       modalEl().querySelectorAll(".vp-make").length === 1 && modalEl().querySelectorAll(".vp-row").length === 1 &&
-      /Ioniq2017/.test(modalEl().querySelector(".vp-row").textContent) && /1 of 3 profiles match/.test(modalEl().textContent) &&
+      /Ioniq2017/.test(modalEl().querySelector(".vp-row").textContent) && /1 of 4 profiles match/.test(modalEl().textContent) &&
       !!modalEl().querySelector(".vp-row mark") && !!modalEl().querySelector(".vp-row.sel .tick") && okBtn.disabled === false);
     okBtn.click();
     await sleep(300);
@@ -171,9 +171,9 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
     const exprs = [...d().querySelectorAll("input")].map((i) => i.value);
     check("profile PIDs imported as published (B39/2 stays, issue #1014)", exprs.some((v) => v === "B39/2") && !exprs.some((v) => v === "B38/2"));
     const vals = [...d().querySelectorAll("input")].map((i) => i.value);
-    check("multi-parameter PID grouped: ONE 2101 row, 4 params under it",
+    check("multi-parameter PID grouped: ONE 2101 row, 4 params under it (SOC_BMS renamed SOC_BMS_2 since 2026-10-27: the mock has a hand-made filter of that name and the device refuses a repeat across PIDs and filters)",
       vals.filter((v) => v === "2101").length === 2 && /* cmd + pid-name inputs */
-      ["SOC_BMS","Charger_Connected","Charging","HV_Charger_Connected"].every((n) => vals.includes(n)));
+      ["SOC_BMS_2","Charger_Connected","Charging","HV_Charger_Connected"].every((n) => vals.includes(n)));
     /* Discard puts the device's state back */
     const discardBtn = bannerEl() && [...bannerEl().querySelectorAll("button")].find((b) => b.textContent === "Discard");
     check("Discard button on the banner", !!discardBtn);
