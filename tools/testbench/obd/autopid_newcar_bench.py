@@ -65,6 +65,20 @@ def main():
     def post(path, body=None):
         return fp.http(base, "POST", path, body, timeout=60)
 
+    def upload(path, obj):
+        # a file of the device put back as it was read (the fs upload route)
+        import urllib.request
+        data = json.dumps(obj).encode()
+        req = urllib.request.Request(base + "/api/fs/upload?path=" + path,
+                                     data=data, method="POST")
+        req.add_header("Content-Type", "application/octet-stream")
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return r.status
+        except Exception as e:
+            log("upload", path, str(e)[:100])
+            return 0
+
     def std_rows(cfg):
         return [(p["cmd"].upper(), p.get("enabled") is not False)
                 for p in (cfg or {}).get("pids", []) if p.get("type") == "std"]
@@ -122,6 +136,12 @@ def main():
     set0 = get("/api/settings/autopid")
     cars0 = cars()
     st0 = get("/api/status") or {}
+    # the store files byte for byte (2026-10-28): the fold-in keeps the other
+    # car's fingerprint as a face on the VIN car, and a later detection with
+    # the same fixture then recognises the car instead of forking (the
+    # fingerprint bench's L2 failed on a face this bench had left)
+    index0 = get("/api/fs/download?path=/data/autopid/vehicles.json")
+    vinfile0 = get("/api/fs/download?path=/data/autopid/vehicles/" + fp.SIM_VIN + ".json")
     sim_before = (fp.sim_profiles() or {}).get("active")
     log("as found: std rows", len(std_rows(cfg0)), "autopid",
         {k: (set0 or {}).get(k) for k in ("enabled", "std_enabled")}, "cars", cars0,
@@ -229,6 +249,11 @@ def main():
             post("/api/autopid/vehicles/" + fp.SIM_VIN + "/activate", {})
             time.sleep(3)
         put("/api/autopid/config", cfg0)
+        files_back = False
+        if index0 is not None and vinfile0 is not None:
+            files_back = (upload("/data/autopid/vehicles.json", index0) == 200 and
+                          upload("/data/autopid/vehicles/" + fp.SIM_VIN + ".json", vinfile0) == 200)
+            log("close: the store files put back:", files_back)
         want = {k: v for k, v in set0.items() if k not in ("degraded", "pending_reboot")}
         have = {k: v for k, v in (get("/api/settings/autopid") or {}).items() if k not in ("degraded", "pending_reboot")}
         if want != have:
@@ -236,6 +261,8 @@ def main():
             post("/api/settings/submit", {})
             time.sleep(8)
             wait_back("close")
+        elif files_back:
+            restart("close: the store reloaded from its files")
         st1 = get("/api/status") or {}
         c.add("close the simulator plays its own profile again, nothing silenced",
               fp.sim_profile_name() not in (None, "Fp Dup Test") and not (fp.sim_errors() or []),
@@ -244,6 +271,10 @@ def main():
               cars() == cars0 and std_rows(get("/api/autopid/config")) == std_rows(cfg0)
               and {k: v for k, v in (get("/api/settings/autopid") or {}).items() if k not in ("degraded", "pending_reboot")} == want,
               str(cars()))
+        def faces_of(store):
+            return [v.get("faces") or [] for v in (store or {}).get("vehicles", []) if v.get("key") == fp.SIM_VIN]
+        c.add("close the VIN car carries the faces it had (none left by the fold-in)",
+              faces_of(get("/api/autopid/vehicles")) == faces_of(index0), str(faces_of(get("/api/autopid/vehicles"))))
         c.add("close no unexpected reset", st1.get("unexpected_resets") == st0.get("unexpected_resets"),
               "%s -> %s" % (st0.get("unexpected_resets"), st1.get("unexpected_resets")))
     failed = c.failed()

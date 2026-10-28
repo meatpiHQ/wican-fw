@@ -10,16 +10,20 @@ PID to the table's bounds; v6 dropped every value outside min..max.
 
 The bench plays it on the ECU simulator (its fuel level set to 100 %, raw
 0xFF) with four rows:
-  FuelTankLevel   std    012F  B2*0.3921568692  0..100  the alfa-04 row as
+  FuelTankLevel   std    012F  B3*0.3921568692  0..100  the alfa-04 row as
                                                          stored: must read 100
-  CalcEngineLoad  std    0104  B2*0.3921568692  0..100  a control (25.1 %)
-  FuelCustomNoise custom 012F  B2*0.3921568692  0..100  the same float noise
+  CalcEngineLoad  std    0104  B3*0.3921568692  0..100  a control (25.1 %)
+  FuelCustomNoise custom 012F  B3*0.3921568692  0..100  the same float noise
                                                          on a custom row: 100
-  FuelWrongScale  custom 012F  B2*0.4           0..100  102: outside the
+  FuelWrongScale  custom 012F  B3*0.4           0..100  102: outside the
                                                          band, stays dropped
 Then the generator: `GET /api/autopid/std_table` must hand out the fuel
-row as `B2*100/255` (0xFF decodes to exactly 100, no float noise) and the
+row as `B3*100/255` (0xFF decodes to exactly 100, no float noise) and the
 test route must decode it so.
+(The expressions index the reply as the chip prints it with headers on,
+the frame of reference of 2026-10-24: `03 41 2F FF` reads B3 for the data
+byte. The alfa-04 report's row read B2 with headers off; the bench moved
+on 2026-10-28, it had last run on 2026-10-20.)
 
 Legs: L0 preflight (DUT, simulator, saves), L1 stage (the table, autopid
 on with a submit-reboot when it was off, the simulator at 100 %), L2 the
@@ -47,7 +51,7 @@ import sim_net  # noqa: E402
 
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 SIM = "http://192.168.8.1"
-NOISE = "B2*0.3921568692"       # the table's float scale as alfa-04 printed it
+NOISE = "B3*0.3921568692"       # the table's float scale as alfa-04 printed it (B3 since the 2026-10-24 frame of reference)
 
 
 def http(base, method, path, body=None, timeout=30):
@@ -95,7 +99,7 @@ def table():
             "pids": [row("FuelTankLevel", "std", "012F", NOISE),
                      row("CalcEngineLoad", "std", "0104", NOISE),
                      row("FuelCustomNoise", "custom", "012F", NOISE),
-                     row("FuelWrongScale", "custom", "012F", "B2*0.4")],
+                     row("FuelWrongScale", "custom", "012F", "B3*0.4")],
             "filters": []}
 
 
@@ -242,12 +246,12 @@ def main():
         prm = (fuel or {}).get("parameters", [{}])[0]
         with open(os.path.join(out, "std_table_012F.json"), "w") as f:
             json.dump(fuel, f)
-        c.add("the table hands out the fuel row as B2*100/255 with max 100",
-              prm.get("expression") == "B2*100/255" and prm.get("max") == 100,
+        c.add("the table hands out the fuel row as B3*100/255 with max 100",
+              prm.get("expression") == "B3*100/255" and prm.get("max") == 100,
               "expression %r max %r" % (prm.get("expression"), prm.get("max")))
         st, body = http(base, "POST", "/api/autopid/test",
                         {"cmd": "012F", "type": "std",
-                         "expressions": [prm.get("expression") or "B2*100/255",
+                         "expressions": [prm.get("expression") or "B3*100/255",
                                          NOISE]}, timeout=40)
         with open(os.path.join(out, "test_012F.json"), "w") as f:
             f.write(body)
@@ -258,7 +262,7 @@ def main():
         v = t.get("values") or []
         c.add("test-a-PID decodes the full tank as exactly 100 with the "
               "generated expression", st == 200 and t.get("ok") and
-              str(t.get("raw", "")).replace(" ", "") == "412FFF" and
+              str(t.get("raw", "")).replace(" ", "").endswith("412FFF") and  # the reply as printed: 7E8 03 41 2F FF
               len(v) >= 1 and v[0] == 100,
               "%s raw=%r values=%s" % (st, t.get("raw"), v))
     finally:

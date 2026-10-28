@@ -55,7 +55,7 @@ function boot(hash, preset) {
     await sleep(2200);
     const bk = p.$("#bk-backup-card"), cp = p.$("#bk-copies-card"), rs = p.$("#bk-restore-card"), maint = p.cardByTitle("Maintenance");
     check("the three cards render", !!bk && !!cp && !!rs);
-    check("they sit ahead of Maintenance", !!maint && !!bk && (bk.compareDocumentPosition(maint) & 4) !== 0);
+    check("they sit after the Maintenance card, which leads the page (2026-10-28)", !!maint && !!bk && (maint.compareDocumentPosition(bk) & 4) !== 0);
     check("the old Download Config and Upload Config buttons are gone", !p.$$("#view a, #view label").some((e) => /Download Config|Upload Config/.test(e.textContent)));
     check("Maintenance keeps Reboot, Restart History, Quick Setup, Factory Reset", !!maint && ["Reboot", "Restart History", "Run Quick Setup again", "Factory Reset"].every((t) => p.$$("button", maint).some((b) => b.textContent.includes(t))));
 

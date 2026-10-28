@@ -15,9 +15,11 @@ the OBD chip and CAN self-test cards of System > Maintenance:
                       with the programmable parameters, nothing timed out
   wire tools          POST /api/obd_chip/probe {kind:"probe"} -> 202, the
                       result on GET: ATI and VTVERS with a prompt at 2000000,
-                      no prompt at 115200 (the chip answers the garbled
-                      bytes with garbage of its own, read at the wrong
-                      speed; bench: 481 bytes); {kind:"scan"} names 2000000
+                      no prompt at 115200 (with its echo on the chip echoes
+                      the garbled bytes, read at the wrong speed, bench: 481
+                      bytes; with the echo off, as the bring-up and the
+                      self-test's restore leave it, nothing comes back);
+                      {kind:"scan"} names 2000000
   chip status         GET /api/obd_chip carries fw.chip (the cached VTVERS),
                       fw.builtin V2.3.24, fw.outdated false and bringup.wire
                       (empty on a chip that answered at once)
@@ -28,12 +30,24 @@ the OBD chip and CAN self-test cards of System > Maintenance:
                       leaves it alone (0 records: the v4.52p policy); the
                       forced packaged rewrite brings it back to V2.3.24 and
                       fw.outdated false; the file is deleted
+  after the test      (Ali, 2026-10-28: "make sure the CAN and OBD chip and
+                      AutoPID still work properly after the CAN self-test")
+                      AutoPID enabled when it is off (one planned restart,
+                      put back at the end), polling the simulator's car;
+                      its poll rate, the CAN node's state and counters and
+                      the chip's state taken before a self-test and again
+                      after it: polls go on at the same rate with no new
+                      failures, the values stay fresh and come from the
+                      simulator (not the test's 1726 rpm), the node keeps
+                      its bitrate with no bus or tx error, the chip is ready
+                      and unclaimed and answers WITHOUT echo (the restore's
+                      ATD had switched the echo back on until 2026-10-28)
   console             (optional, --ws) `can_selftest` on /ws/cli prints the
                       last result's verdict
 
 usage: can_selftest_bench.py [--dut localhost:18081] [--sim http://192.168.8.1]
                              [--sim-restore asis|on|off] [--skip-flip]
-                             [--fw22 <path to V2.3.22.txt>]
+                             [--fw22 <path to V2.3.22.txt>] [--skip-after]
   run on the PC with the DUT through test.ps1's ssh tunnel (the canselftest
   stage) and the simulator at its NCM address (the requests to it are bound
   to the PC's own address on that link by lib/sim_net.py: on this PC the LAN
@@ -64,6 +78,7 @@ sim_net.install(SIM)
 SIM_RESTORE = arg("--sim-restore", "asis")
 SKIP_FLIP = "--skip-flip" in ARGS
 FW22 = arg("--fw22", "")
+SKIP_AFTER = "--skip-after" in ARGS
 CHECKS = []
 
 
@@ -190,6 +205,71 @@ def wait_ready(limit):
     return oc if isinstance(oc, dict) else {}
 
 
+def wait_dut(limit):
+    """/api/info answers again (after a planned restart)"""
+    t0 = time.time()
+    time.sleep(5)
+    while time.time() - t0 < limit:
+        st, i = http(DUT, "/api/info", timeout=3)
+        if st == 200:
+            return True
+        time.sleep(2)
+    return False
+
+
+def selftest_wait(limit):
+    # the self-test result once the run started by a POST has ended
+    t0 = time.time()
+    r = None
+    while time.time() - t0 < limit:
+        time.sleep(0.5)
+        st, r = http(DUT, "/api/can/selftest")
+        if st == 200 and isinstance(r, dict) and r.get("done") and not r.get("running"):
+            return r
+    return r if isinstance(r, dict) else None
+
+
+def autopid_enable(on):
+    """PUT autopid.enabled and submit (a planned restart when it changes);
+    returns True when the DUT is back"""
+    st, s = http(DUT, "/api/settings/autopid")
+    if st != 200 or not isinstance(s, dict):
+        return False
+    if bool(s.get("enabled")) == on:
+        return True
+    v = {k: x for k, x in s.items() if k not in ("degraded", "pending_reboot")}
+    v["enabled"] = on
+    http(DUT, "/api/settings/autopid", "PUT", v)
+    st, r = http(DUT, "/api/settings/submit", "POST", {})
+    print("%s autopid.enabled -> %s, submit: %s %s (the DUT restarts)" % (now(), on, st, r))
+    return wait_dut(120)
+
+
+def autopid_snapshot():
+    st, ap = http(DUT, "/api/autopid")
+    ap = ap if st == 200 and isinstance(ap, dict) else {}
+    stt = ap.get("stats", {})
+    params = {p.get("name"): (p.get("value"), p.get("ts_us")) for p in ap.get("params", [])}
+    return {"running": stt.get("running"), "ok": stt.get("polls_ok", 0), "failed": stt.get("polls_failed", 0),
+            "now_us": stt.get("now_us", 0), "params": params}
+
+
+def probe_echo():
+    """the bare-wire probe at 2 Mbaud: True when the chip echoed ATI"""
+    http(DUT, "/api/obd_chip/probe", "POST", {"kind": "probe", "baud": 2000000, "seconds": 0})
+    pr = None
+    t0 = time.time()
+    while time.time() - t0 < 30:
+        time.sleep(0.5)
+        st, pr = http(DUT, "/api/obd_chip/probe")
+        if st == 200 and isinstance(pr, dict) and pr.get("done") and not pr.get("running"):
+            break
+    for l in (pr or {}).get("lines", []):
+        if l.get("cmd") == "ATI":
+            return str(l.get("text", "")).startswith("ATI"), l.get("text")
+    return None, None
+
+
 def sim_broadcast(value):
     st, s = http(SIM, "/api/settings/ecu_sim")
     if st != 200 or not isinstance(s, dict):
@@ -308,6 +388,66 @@ def main():
         check("V2.3.22.txt deleted from /data", st == 200, (st, r))
     else:
         print("(no --fw22 <V2.3.22.txt>: the warning on a chip left on V2.3.22 is not exercised)")
+
+    # ---- after the test: CAN, the chip and AutoPID carry on ----
+    if not SKIP_AFTER:
+        print("== after the test: CAN, the chip and AutoPID as before ==")
+        st, aps = http(DUT, "/api/settings/autopid")
+        ap_was_on = bool(isinstance(aps, dict) and aps.get("enabled"))
+        if not ap_was_on:
+            check("AutoPID enabled for the leg (planned restart)", autopid_enable(True))
+            t0 = time.time()
+            while time.time() - t0 < 60:
+                st, oc = http(DUT, "/api/obd_chip")
+                if st == 200 and isinstance(oc, dict) and oc.get("ready"):
+                    break
+                time.sleep(1)
+        # AutoPID contacts the simulator's car and polls
+        t0 = time.time()
+        snap = autopid_snapshot()
+        while time.time() - t0 < 90 and not (snap["running"] and snap["ok"] > 0):
+            time.sleep(2)
+            snap = autopid_snapshot()
+        check("AutoPID is polling the simulator's car", bool(snap["running"]) and snap["ok"] > 0, (snap["running"], snap["ok"], snap["failed"]))
+        a = autopid_snapshot()
+        time.sleep(10)
+        b = autopid_snapshot()
+        rate_before = (b["ok"] - a["ok"]) / 10.0
+        check("polls go on before the test (%.1f ok/s)" % rate_before, rate_before >= 0.5, (a["ok"], b["ok"], b["failed"] - a["failed"]))
+        st, can_a = http(DUT, "/api/can")
+        st, oc_a = http(DUT, "/api/obd_chip")
+        st, r = http(DUT, "/api/can/selftest", "POST", {})
+        check("POST /api/can/selftest -> 202 (with AutoPID polling)", st == 202, (st, r))
+        r = selftest_wait(30)
+        check("verdict PASS with AutoPID polling", bool(r) and r.get("pass"), r and r.get("verdict"))
+        c = autopid_snapshot()
+        time.sleep(15)
+        d = autopid_snapshot()
+        rate_after = (d["ok"] - c["ok"]) / 15.0
+        check("AutoPID resumed at its rate (%.1f ok/s after, %.1f before)" % (rate_after, rate_before), rate_after >= 0.5 * rate_before, (c["ok"], d["ok"]))
+        check("no new poll failures after the test (at most the one refused during it)", d["failed"] - b["failed"] <= 2, (b["failed"], c["failed"], d["failed"]))
+        fresh = [n for n, (v, ts) in d["params"].items() if ts and d["now_us"] - ts < 5_000_000]
+        rpm = d["params"].get("EngineRPM", (None, None))
+        check("the values are fresh after the test (%d of %d within 5 s)" % (len(fresh), len(d["params"])), len(fresh) >= max(1, len(d["params"]) // 2), fresh[:6])
+        check("EngineRPM comes from the simulator, not the test's 1726", rpm[0] is not None and abs(float(rpm[0]) - 1726) > 1, rpm)
+        st, can_b = http(DUT, "/api/can")
+        same = all(isinstance(can_a, dict) and isinstance(can_b, dict) and can_a.get(k) == can_b.get(k) for k in ("running", "baud_kbps", "listen_only", "silent", "state"))
+        check("the CAN node is as before (running, bitrate, listen-only, state)", same, ({k: (can_a or {}).get(k) for k in ("running", "baud_kbps", "listen_only", "state")}, {k: (can_b or {}).get(k) for k in ("running", "baud_kbps", "listen_only", "state")}))
+        check("no bus or tx error from the test", isinstance(can_b, dict) and can_b.get("bus_errors", 1) - (can_a or {}).get("bus_errors", 0) == 0 and can_b.get("tx_errors", 1) - (can_a or {}).get("tx_errors", 0) == 0, ((can_a or {}).get("bus_errors"), (can_b or {}).get("bus_errors"), (can_a or {}).get("tx_errors"), (can_b or {}).get("tx_errors")))
+        st, oc_b = http(DUT, "/api/obd_chip")
+        check("the chip is ready and unclaimed after the test", st == 200 and oc_b.get("ready") and oc_b.get("claim") == "none" and oc_b.get("baud") == (oc_a or {}).get("baud"), oc_b and (oc_b.get("ready"), oc_b.get("claim"), oc_b.get("baud")))
+        echoed, txt = probe_echo()
+        check("the chip answers without echo after the test (the restore keeps the bring-up's ATE0)", echoed is False, txt)
+        if not ap_was_on:
+            check("AutoPID put back off (planned restart)", autopid_enable(False))
+            t0 = time.time()
+            while time.time() - t0 < 60:
+                st, oc = http(DUT, "/api/obd_chip")
+                if st == 200 and isinstance(oc, dict) and oc.get("ready"):
+                    break
+                time.sleep(1)
+    else:
+        print("(--skip-after: the carry-on leg is not exercised)")
 
     # ---- restore the simulator ----
     target = {"asis": sim_bc, "on": True, "off": False}.get(SIM_RESTORE, sim_bc)

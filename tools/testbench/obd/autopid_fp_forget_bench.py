@@ -325,6 +325,11 @@ def main():
         cars_before = len(saved_store.get("vehicles", []))
         current_before = saved_store.get("current")
         stale = fp_entries(saved_store)
+        faces = (vin_car or {}).get("faces") or []
+        c.add("the VIN car carries no folded face (a fold-in keeps the other car's "
+              "fingerprint as a face and the detection then recognises it instead of "
+              "forking; the new-car bench's close puts the store back since 2026-10-28)",
+              not faces, ", ".join(faces))
         c.add("no fp: car in the store before the bench", not stale,
               ", ".join(v["key"] for v in stale))
         if c.failed():

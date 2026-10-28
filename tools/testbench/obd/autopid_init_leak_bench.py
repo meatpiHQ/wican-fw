@@ -55,16 +55,20 @@ ODO_INIT = "ATSH6F1;ATCEA60;ATCRA660;ATFCSH6F1;ATFCSD60300000;ATFCSM1"
 ODO_KM = 123456
 
 # the report's nine Mode 01 rows, on PIDs the bench simulator answers
+# expressions in the frame of reference of 2026-10-24 (the reply as the
+# chip prints it with headers on: `03 41 05 5A` reads B3 for the data byte;
+# the extended-addressed reply `F1 06 62 D1 07 01 E2 40` its odometer at
+# [B5:B7]); the bench had last run on 2026-10-20 with B2 and [B3:B5]
 STD_ROWS = [
-    ("EngineCoolantTemp", "0105", "B2-40", "degC"),
-    ("EngineRPM", "010C", "[B2:B3]*0.25", "rpm"),
-    ("VehicleSpeed", "010D", "B2", "km/h"),
-    ("IntakeAirTemperature", "010F", "B2-40", "degC"),
-    ("MAFAirFlowRate", "0110", "[B2:B3]*0.01", "grams/sec"),
-    ("ThrottlePosition", "0111", "B2*0.3921568692", "%"),
-    ("FuelTankLevel", "012F", "B2*0.3921568692", "%"),
-    ("CalcEngineLoad", "0104", "B2*0.3921568692", "%"),
-    ("ControlModuleVolt", "0142", "[B2:B3]*0.001", "V"),
+    ("EngineCoolantTemp", "0105", "B3-40", "degC"),
+    ("EngineRPM", "010C", "[B3:B4]*0.25", "rpm"),
+    ("VehicleSpeed", "010D", "B3", "km/h"),
+    ("IntakeAirTemperature", "010F", "B3-40", "degC"),
+    ("MAFAirFlowRate", "0110", "[B3:B4]*0.01", "grams/sec"),
+    ("ThrottlePosition", "0111", "B3*0.3921568692", "%"),
+    ("FuelTankLevel", "012F", "B3*0.3921568692", "%"),
+    ("CalcEngineLoad", "0104", "B3*0.3921568692", "%"),
+    ("ControlModuleVolt", "0142", "[B3:B4]*0.001", "V"),
 ]
 
 
@@ -99,7 +103,7 @@ def table(period_ms):
     pids.append({"name": "ODOMETER", "type": "custom", "cmd": "22D107",
                  "init": ODO_INIT, "group": "report",
                  "parameters": [{"name": "ODOMETER",
-                                 "expression": "[B3:B5]", "unit": "km"}]})
+                                 "expression": "[B5:B7]", "unit": "km"}]})
     return {"groups": [{"name": "report", "enabled": True,
                         "period_ms": period_ms}],
             "pids": pids, "filters": []}
@@ -314,7 +318,7 @@ def main():
         print("L3 the one-shot: test-a-PID custom, then standard")
         st, body = http(base, "POST", "/api/autopid/test",
                         {"cmd": "22D107", "type": "custom", "init": ODO_INIT,
-                         "expression": "[B3:B5]"}, timeout=40)
+                         "expression": "[B5:B7]"}, timeout=40)
         with open(os.path.join(out, "test_custom.json"), "w") as f:
             f.write(body)
         try:
@@ -327,7 +331,7 @@ def main():
         time.sleep(1.0)
         st, body = http(base, "POST", "/api/autopid/test",
                         {"cmd": "010C", "type": "std",
-                         "expression": "[B2:B3]*0.25"}, timeout=40)
+                         "expression": "[B3:B4]*0.25"}, timeout=40)
         with open(os.path.join(out, "test_std.json"), "w") as f:
             f.write(body)
         try:
@@ -342,7 +346,7 @@ def main():
               "looked for ATSH7DF, ATCRA, ATCEA, ATFCSM0")
         c.add("the standard row answers 41 0C (RPM 800) after the custom one",
               st == 200 and t2.get("ok") and
-              str(t2.get("raw", "")).replace(" ", "").startswith("410C") and
+              "410C" in str(t2.get("raw", "")).replace(" ", "") and
               t2.get("value") == 800,
               "%s raw=%r value=%s" % (st, t2.get("raw"), t2.get("value")))
     finally:

@@ -4,7 +4,7 @@
    /api/can/selftest. Three boots: a healthy chip (the cards, the state chips,
    the rewrite's confirm dialog and its POST, the configuration report as a
    copyable block, the wire tools' console lines, the self-test run to PASS
-   with its steps and the rpm), a chip that did not come up (the banner with
+   as the verdict chip and the copyable block), a chip that did not come up (the banner with
    the bring-up's wire verdicts, the report refused), a refused self-test, and
    a chip left on V2.3.22 (the outdated banner naming both versions, Ali
    2026-10-28). Prints `DIAG PROBE PASS`. */
@@ -50,6 +50,8 @@ function boot(hash, preset) {
     const chip = p.cardByTitle("OBD chip"), self = p.cardByTitle("CAN self-test"), maint = p.cardByTitle("Maintenance");
     check("the two cards render", !!chip && !!self);
     check("they sit after the Maintenance card", !!maint && !!chip && (maint.compareDocumentPosition(chip) & 4) !== 0);
+    const bk = p.$("#bk-cards");
+    check("the Maintenance card leads the page, the backup cards follow the diagnostics", !!bk && (maint.compareDocumentPosition(bk) & 4) !== 0 && (self.compareDocumentPosition(bk) & 4) !== 0);
     check("the chip card shows ready at 2 Mbaud and the chip's version", !!chip && /ready at 2 000 000 baud/.test(chip.textContent) && /MIC3624 V2\.3\.24/.test(chip.textContent));
     check("the packaged version and the last rewrite", !!chip && /device carries V2\.3\.24/.test(chip.textContent) && /last rewrite: ESP_OK/.test(chip.textContent));
     check("no down banner on a healthy chip", !!chip && !/did not come up/.test(chip.textContent));
@@ -81,11 +83,12 @@ function boot(hash, preset) {
     check("the last start's chip lines come from the log ring", /no obd_chip lines in the log ring|obd_chip:/.test(det.textContent));
 
     /* the self-test */
-    check("the tiles say the bus runs and the chip is ready", !!self && /running, 500 kbit\/s/.test(self.textContent) && /ready, MIC3624 V2\.3\.24/.test(self.textContent));
-    check("not run yet before the first run", /not run yet/.test(self.textContent));
+    check("not run yet before the first run", !!self && /not run yet/.test(self.textContent) && !self.querySelector("textarea"));
     p.click(p.btn(self, "Run the self-test")); await sleep(1500);
-    check("the run ends in PASS with the three steps", /PASS: both transceivers see each other/.test(self.textContent) && p.$$("li", self).length === 3 && /engine speed 1726 rpm, from the ESP32/.test(self.textContent));
-    check("the exchange and the failure table are folded away", p.$$("details", self).length === 1 && /010C  \(sent\)/.test(self.querySelector("details").textContent) && /Where to look/.test(self.querySelector("details").textContent));
+    check("the run ends in PASS as the verdict chip", /PASS: both transceivers see each other/.test(self.textContent) && p.$$("li", self).length === 0 && p.$$("details", self).length === 0);
+    const sta = self.querySelector("textarea");
+    check("the result is one copyable block in the console's text", !!sta && /^--- CAN self-test \(\d\d:\d\d:\d\d\) ---\n/.test(sta.value) && /\n\[ok\] The chip asked, the ESP32 heard \(6 ms\)\n     the chip sent 7DF 02 01 0C/.test(sta.value) && /\nexchange:\n/.test(sta.value) && /\n  chip   printed: 7EF 04 41 0C 1A F8\n/.test(sta.value) && /\ntook 1880 ms\n--- end ---$/.test(sta.value), sta && sta.value.slice(0, 160));
+    check("the block has a Select all button", !!p.btn(self, "Select all"));
     check("no jsdom errors", p.errs.length === 0, p.errs.slice(0, 2));
     p.close();
   }
@@ -99,8 +102,6 @@ function boot(hash, preset) {
     check("the banner carries the bring-up's wire verdicts", !!chip && /did not come up at this start/.test(chip.textContent) && /at 2 000 000 baud nothing; at 115 200 baud 2 byte\(s\) without a prompt \(FC 00\)/.test(chip.textContent), chip && chip.textContent.slice(0, 400));
     p.click(p.btn(chip, "Read the chip configuration")); await sleep(500);
     check("the report is refused while the chip is down", /Could not read the chip/.test(chip.textContent));
-    const self = p.cardByTitle("CAN self-test");
-    check("the self-test tile says the chip is not up", !!self && /not up: see the chip card/.test(self.textContent));
     check("no jsdom errors", p.errs.length === 0, p.errs.slice(0, 2));
     p.close();
   }
@@ -111,7 +112,7 @@ function boot(hash, preset) {
     await sleep(2600);
     const self = p.cardByTitle("CAN self-test");
     p.click(p.btn(self, "Run the self-test")); await sleep(1500);
-    check("a refusal is shown as not run with its reason", /not run: the CAN bus is off/.test(self.textContent) && p.$$("li", self).length === 0);
+    check("a refusal is shown as not run with its reason and no block", /not run: the CAN bus is off/.test(self.textContent) && !self.querySelector("textarea"));
     check("no jsdom errors", p.errs.length === 0, p.errs.slice(0, 2));
     p.close();
   }

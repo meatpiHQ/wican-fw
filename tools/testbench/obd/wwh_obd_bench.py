@@ -492,7 +492,9 @@ def leg_w1(actor):
     check("w1_rows_addressed_to_their_owner",
           len(rows) == TRUCK_ROWS and not wrong, json.dumps(wrong)[:200])
     rpm = rows.get("22F40C", {}).get("parameters", [{}])[0]
-    check("w1_expressions_shifted", rpm.get("expression") == "[B3:B4]*0.25",
+    # the reply as printed with headers on (2026-10-24): `05 62 F4 0C A B`
+    # reads [B4:B5]; the bench expected [B3:B4] until 2026-10-28
+    check("w1_expressions_shifted", rpm.get("expression") == "[B4:B5]*0.25",
           str(rpm.get("expression")))
     # the rows a detection stores are OFF until the user ticks them (2026-10-09,
     # Ali): the user's tick, as the wizard's picker or Automate would
@@ -509,6 +511,18 @@ def leg_w1(actor):
     check("w1_values_flow", close(v, TRUCK_VALUES["EngineRPM"]), str(v))
     if up is not None:
         metric("w1_new_vehicle_first_value_s", round(up, 1), "s after boot")
+
+
+def tick_rows(label):
+    """The rows a detection stores are OFF until the user ticks them
+    (2026-10-09, Ali); the legs after w1 did not tick and read None since
+    (the stage was red from 2026-10-20 on, noticed 2026-10-28)."""
+    cfg = get("/api/autopid/config")
+    for p in (cfg.get("pids") or []):
+        if p.get("type") == "std":
+            p.pop("enabled", None)
+    code, r = api("/api/autopid/config", "PUT", cfg)
+    check(f"{label}_rows_ticked_on", code == 200, f"HTTP {code} {json.dumps(r)[:80]}")
 
 
 def leg_w2(actor):
@@ -544,7 +558,7 @@ def leg_w3(actor):
     probe["pids"] = list(cfg.get("pids", [])) + [{
         "name": "wwh_probe", "type": "custom", "cmd": "22F810",
         "group": "default", "period_ms": 1000,
-        "parameters": [{"name": "WWH_PROTOCOL_ID", "expression": "B3",
+        "parameters": [{"name": "WWH_PROTOCOL_ID", "expression": "B4",
                         "unit": ""}]}]
     code, r = api("/api/autopid/config", "PUT", probe)
     if code != 200:
@@ -712,6 +726,7 @@ def leg_w7(actor):
           f"{len(rows)} rows, inits "
           f"{sorted({str(x.get('init')) for x in rows.values()})}, "
           f"uds_protocol_id {r.get('uds_protocol_id')}")
+    tick_rows("w7")
     v, up = wait_value("EngineRPM", 30)
     time.sleep(4)
     vals, _ = values()
@@ -755,6 +770,7 @@ def leg_w8(actor):
           and all(x.get("init") in ("ATSH18DA58F1", "ATSH18DA5DF1")
                   for x in rows.values()),
           json.dumps(sorted({str(x.get('init')) for x in rows.values()})))
+    tick_rows("w8")
     v, _ = wait_value("EngineRPM", 30)
     check("w8_engine_speed_is_58s", close(v, 763.25), str(v))
 
@@ -789,8 +805,11 @@ def leg_w8(actor):
 def leg_w9(actor):
     """A truck's bus: 250 kbit/s and talking when the device boots."""
     actor.stop()
-    # nothing of the DUT may sit on the bus at the old bitrate while it moves
-    restart({"autopid": {"enabled": False}})
+    # nothing of the DUT may sit on the bus at the old bitrate while it moves;
+    # the leg needs the node's bitrate on Automatic (the bench DUT carried a
+    # fixed 500 since some restore: "a bitrate that could not be read",
+    # 2026-10-28); the as-found value goes back in the restore
+    restart({"autopid": {"enabled": False}, "can_manager": {"baud": "auto"}})
     # The simulator is the ACK source and must not answer 0100. Its CAN
     # controller survives its restart: disabled, it keeps ACKing at the
     # bitrate it LAST ran at. So: run it at 250k once, then switch its ECU
@@ -815,6 +834,7 @@ def leg_w9(actor):
     check("w9_guard_named_the_bitrate",
           g.get("bus") == "live" and g.get("bus_kbps") == 250
           and g.get("parked") is False, json.dumps(g))
+    tick_rows("w9")
     v, up = wait_value("EngineRPM", 30)
     time.sleep(5)
     vals, _ = values()
@@ -905,7 +925,8 @@ def main():
 
     # ---- as found ----------------------------------------------------------------
     st0 = get("/api/status")
-    found = {"autopid": settings("autopid")}
+    found = {"autopid": settings("autopid"),
+             "can_manager": settings("can_manager")}  # w9 needs Automatic
     found_sim = bench_bus.sim_get("ecu_sim", SIM)
     for key in BENCH_VINS:      # left behind by an aborted run
         forget(key)
@@ -968,9 +989,10 @@ def main():
                 code, r = api("/api/autopid/config", "PUT", found_cfg)
                 if code != 200:
                     raise Bench(f"PUT config back: {code} {r}")
-            if settings("autopid") != found["autopid"]:
-                restart({"autopid": found["autopid"]})
-            now = {"autopid": settings("autopid")}
+            back = {n: found[n] for n in found if settings(n) != found[n]}
+            if back:
+                restart(back)
+            now = {n: settings(n) for n in found}
             check("restored_settings", now == found,
                   "" if now == found else json.dumps(now))
             sv = store_view(vehicles())

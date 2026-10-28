@@ -17,17 +17,28 @@ def api(path, method="GET", body=None, timeout=5):
 # OBD exclusivity: autopid polling co-masters the chip and its traffic
 # fans out to /ws/obd clients too, breaking this test's request/response
 # pairing. Pause every autopid group for the run (runtime-only toggle -
-# a reboot restores the configured state).
+# a reboot restores the configured state). The groups come from the
+# runtime list on /api/autopid: /api/autopid/config lists only the groups
+# written in the table, and the "default" group exists without one
+# (2026-10-28, the release test's r5: a table of standard rows with no
+# group entry left the poller running and every answer arrived one
+# command late). Then wait for the poller to go idle instead of a fixed
+# sleep: a poll in flight when the client connects shifts the pairing.
 paused_groups = []
 try:
-    for g in api("/api/autopid/config").get("groups", []):
+    groups = api("/api/autopid").get("groups") or         api("/api/autopid/config").get("groups", [])
+    for g in groups:
         if g.get("enabled"):
             api("/api/autopid/group", "POST",
                 {"name": g["name"], "enabled": False})
             paused_groups.append(g["name"])
     if paused_groups:
         print(f"autopid groups paused for the run: {paused_groups}")
-        time.sleep(1.5)  # let any in-flight poll finish
+        for _ in range(20):
+            time.sleep(0.25)
+            if not api("/api/autopid").get("stats", {}).get("running"):
+                break
+        time.sleep(0.5)  # the last answer's tail
 except Exception as e:
     print(f"(autopid pause skipped: {e})")
 
