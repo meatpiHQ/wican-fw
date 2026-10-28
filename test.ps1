@@ -73,6 +73,7 @@ if (-not $script:fwRepo) {
     throw 'wican-fw checkout not found - pass -FwRepo <path> or set WICAN_FW_PATH'
 }
 $fwRepo = $script:fwRepo
+$script:compRootShown = $false   # Get-ComponentRoots prints its pick once
 # benches locate fw-side tools (wdl_dump.py, stack_audit.py) through this
 $env:WICAN_FW_PATH = $fwRepo
 
@@ -81,13 +82,28 @@ $env:WICAN_FW_PATH = $fwRepo
 function Get-ComponentRoots {
     $roots = @()
     if ($env:MEATPI_COMPONENTS_PATH) {
+        if (-not (Test-Path "$env:MEATPI_COMPONENTS_PATH\bridge_manager")) {
+            throw "MEATPI_COMPONENTS_PATH is not a components tree: $env:MEATPI_COMPONENTS_PATH"
+        }
         $roots += (Split-Path $env:MEATPI_COMPONENTS_PATH -Parent)
     } else {
-        foreach ($cand in @("$fwRepo\components\meatpi",
+        # the root CMakeLists' order (2026-10-29): the dev layout's live tree
+        # (the one build.ps1 builds), a clone beside the checkout, the clone
+        # inside it LAST, so a stale in-tree copy never shadows the live tree
+        # (the 2026-10-29 02:21 host run synced the September clone to the Pi
+        # and ran its old suite). Nothing found = stop, never guess.
+        foreach ($cand in @("$fwRepo\..\..\components\meatpi-components",
                             "$fwRepo\..\meatpi-components",
-                            "$repo\..\meatpi-components")) {
-            if (Test-Path "$cand\components") { $roots += (Resolve-Path $cand).Path; break }
+                            "$fwRepo\components\meatpi")) {
+            if (Test-Path "$cand\components\bridge_manager") { $roots += (Resolve-Path $cand).Path; break }
         }
+        if (-not $roots) {
+            throw "no components tree found (looked for components\meatpi-components two levels up, meatpi-components beside the checkout, components\meatpi inside it): set MEATPI_COMPONENTS_PATH"
+        }
+    }
+    if (-not $script:compRootShown) {
+        Write-Host "components: $($roots[0])\components" -ForegroundColor DarkGray
+        $script:compRootShown = $true
     }
     # optional component-overlay roots (later roots override), the same
     # neutral hook the firmware build exposes

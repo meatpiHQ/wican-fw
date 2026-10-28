@@ -4,7 +4,12 @@ cmake_minimum_required(VERSION 3.16)
 # (github.com/meatpiHQ/meatpi-components). Clone it next to this
 # checkout, or point the MEATPI_COMPONENTS_PATH environment variable at
 # its components/ directory. The components/ dir in this repo holds
-# only non-component files (docs, legacy reference).
+# only non-component files (docs, legacy reference). Search order when
+# the variable is unset: the dev layout (components/meatpi-components two
+# levels up, the tree build.ps1 builds), a clone beside this checkout,
+# then the clone inside this checkout (components/meatpi, the auto-clone
+# below). The in-tree clone comes LAST so a stale copy of it never
+# shadows a live tree (it did until 2026-10-29).
 if(DEFINED ENV{MEATPI_COMPONENTS_PATH})
     file(TO_CMAKE_PATH "$ENV{MEATPI_COMPONENTS_PATH}" MEATPI_COMPONENTS_PATH)
     if(NOT EXISTS "${MEATPI_COMPONENTS_PATH}")
@@ -14,9 +19,9 @@ if(DEFINED ENV{MEATPI_COMPONENTS_PATH})
 else()
     set(MEATPI_COMPONENTS_PATH "")
     foreach(_cand
-            "${CMAKE_CURRENT_LIST_DIR}/components/meatpi/components"
+            "${CMAKE_CURRENT_LIST_DIR}/../../components/meatpi-components/components"
             "${CMAKE_CURRENT_LIST_DIR}/../meatpi-components/components"
-            "${CMAKE_CURRENT_LIST_DIR}/../../wican-fw-dev/meatpi-components/components")
+            "${CMAKE_CURRENT_LIST_DIR}/components/meatpi/components")
         get_filename_component(_cand "${_cand}" ABSOLUTE)
         if(EXISTS "${_cand}")
             set(MEATPI_COMPONENTS_PATH "${_cand}")

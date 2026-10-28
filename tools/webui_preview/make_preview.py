@@ -9,24 +9,24 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-# components live in the meatpi-components repo since 2026-07 (same
-# search order as the root CMakeLists); the old in-repo path is the
-# fallback for exotic checkouts
-# MEATPI_COMPONENTS_PATH wins (the firmware build uses it too): the
-# sibling-clone guess below can point at an OLDER checkout and silently
-# preview stale UI (bit us 2026-09-06)
+# components live in the meatpi-components repo since 2026-07, found in
+# the root CMakeLists' order (2026-10-29): MEATPI_COMPONENTS_PATH wins (the
+# firmware build uses it too), else the dev layout's live tree two levels
+# above the checkout, a clone beside it, the clone inside it last. A guess
+# at an OLDER checkout previews stale UI silently (bit us 2026-09-06 and
+# 2026-10-29), so nothing found stops the build instead of guessing.
 _ENV = os.environ.get("MEATPI_COMPONENTS_PATH")
-_CANDIDATES = ([os.path.join(_ENV, "web_ui_v2", "web", "index.html")] if _ENV else []) + [
-    os.path.join(HERE, "..", "..", "..", "..", "wican-fw-dev",
-                 "meatpi-components", "components", "web_ui_v2", "web",
-                 "index.html"),
-    os.path.join(HERE, "..", "..", "components", "meatpi", "components",
-                 "web_ui_v2", "web", "index.html"),
-    os.path.join(HERE, "..", "..", "components", "web_ui_v2", "web",
-                 "index.html"),
+_ROOTS = [_ENV] if _ENV else [
+    os.path.join(HERE, "..", "..", "..", "..", "components",
+                 "meatpi-components", "components"),
+    os.path.join(HERE, "..", "..", "..", "meatpi-components", "components"),
+    os.path.join(HERE, "..", "..", "components", "meatpi", "components"),
 ]
-INDEX = next((p for p in _CANDIDATES if os.path.exists(p)),
-             _CANDIDATES[0])
+_CANDIDATES = [os.path.join(r, "web_ui_v2", "web", "index.html") for r in _ROOTS]
+INDEX = next((p for p in _CANDIDATES if os.path.exists(p)), None)
+if INDEX is None:
+    sys.exit("make_preview: no components tree with web_ui_v2 found "
+             "(set MEATPI_COMPONENTS_PATH)")
 
 
 def main():

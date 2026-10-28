@@ -12,9 +12,11 @@
 #                                  # fullclean on a foreign cache)
 #
 # Why this script exists (each of these has burned a session):
-#  - MEATPI_COMPONENTS_PATH must point at the live meatpi-components tree,
-#    or CMake silently picks the STALE components/meatpi clone and the
-#    build fails on newer components (espnetlink_link etc.).
+#  - MEATPI_COMPONENTS_PATH must point at the live meatpi-components tree.
+#    Until 2026-10-29 CMake's own search took the STALE components/meatpi
+#    clone first (the build then failed on newer components, espnetlink_link
+#    etc.); the search now starts at the dev layout's live tree and that
+#    clone is gone, but this script still names the tree outright.
 #  - Git Bash / MSYS: idf.py prints "MSys/Mingw is no longer supported",
 #    builds NOTHING and still exits 0 - a flash then re-writes the OLD
 #    binary. This script refuses to run there.

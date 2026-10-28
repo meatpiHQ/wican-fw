@@ -17,9 +17,21 @@ import os
 import re
 import sys
 
-# MEATPI_COMPONENTS_PATH wins (same rule as the firmware build); the in-tree
-# components/ folder is only a fallback for exotic checkouts
-ROOT = os.environ.get("MEATPI_COMPONENTS_PATH") or os.path.join(os.path.dirname(__file__), "..", "..", "components")
+# MEATPI_COMPONENTS_PATH wins (same rule as the firmware build); without it
+# the root CMakeLists' order (2026-10-29): the dev layout's live tree, a
+# clone beside the checkout, the clone inside it last. Nothing found = stop:
+# a guess at an older tree extracts stale mocks silently.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_ENV_ROOT = os.environ.get("MEATPI_COMPONENTS_PATH")
+_ROOTS = [_ENV_ROOT] if _ENV_ROOT else [
+    os.path.join(_HERE, "..", "..", "..", "..", "components", "meatpi-components", "components"),
+    os.path.join(_HERE, "..", "..", "..", "meatpi-components", "components"),
+    os.path.join(_HERE, "..", "..", "components", "meatpi", "components"),
+]
+ROOT = next((os.path.normpath(r) for r in _ROOTS
+             if os.path.isdir(os.path.join(r, "bridge_manager"))), None)
+if ROOT is None:
+    sys.exit("extract_mocks: no components tree found (set MEATPI_COMPONENTS_PATH)")
 
 RX_DESC = re.compile(r'\.name\s*=\s*"([a-z0-9_]+)"')
 RX_BOOL = re.compile(r'SETTINGS_BOOL\s*\(\s*"([^"]+)"\s*,\s*(true|false)\s*\)')
