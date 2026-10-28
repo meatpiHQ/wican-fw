@@ -398,6 +398,18 @@
    }
   }
  },
+ "can_selftest": {
+  "values": {
+   "cli": true
+  },
+  "schema": {
+   "properties": {
+    "cli": {
+     "type": "boolean"
+    }
+   }
+  }
+ },
  "cmdline_manager": {
   "values": {
    "enabled": true,
@@ -1219,6 +1231,7 @@
   "values": {
    "auto_sleep": false,
    "auto_update": true,
+   "cli": true,
    "monitor_policy": "manual",
    "wake_voltage_mv": 13500,
    "sleep_voltage_mv": 13200,
@@ -1230,6 +1243,9 @@
      "type": "boolean"
     },
     "auto_update": {
+     "type": "boolean"
+    },
+    "cli": {
      "type": "boolean"
     },
     "monitor_policy": {
@@ -2664,6 +2680,33 @@
     "/api/can": () => J({ enabled: state.canEnabled !== false, running: state.canEnabled !== false, silent: false, baud_auto: false, baud_kbps: 500, baud_detected: 500, state: state.canEnabled === false ? "stopped" : "running", listen_only: state.canEnabled === false, verified: state.canEnabled !== false, tx: 1543, rx: 89231, tx_errors: 0, rx_errors: 0, arb_lost: 0, bus_errors: state.busErrors || 0, rx_missed: 0, dispatch_drops: 0, rx_bad: 0, rx_deaf: 0, tx_refused: 0, link_switches: 0, link_demotions: 0, bus_off: 0, recoveries: 0,
       err: { stuff: 0, form: 0, bit: 0, ack: 0, other: 0 }, probe: { result: "none", baud_kbps: 0, frames: 0, age_ms: 0 },
       subscribers: [{ idx: 0, name: "bridge", drops: 0 }, { idx: 1, name: "logger", drops: 0 }], subscribers_max: 16, ...(state.canLink || {}) }),
+    /* the OBD chip and the CAN self-test (issue #1023, 2026-10-28): the
+       System > Maintenance cards from web/diag.js. A probe sets
+       window.__mockPreset.diag = {down:true} for a chip that did not come up,
+       {updating:true} for a rewrite in progress; the wire tools and the
+       self-test answer from state.diagProbe / state.diagSelftest, set by
+       their POSTs */
+    "/api/obd_chip": () => { const d = (window.__mockPreset && window.__mockPreset.diag) || {}; const down = !!d.down;
+      return J({ ready: !down, claim: "none", client_idle_ms: 4294967295, baud: down ? 0 : 2000000,
+        eeprom_guard: { rewrites: 0, blocked: 0, protocol_saves: 0 },
+        uart: { rx_bytes: 18, rx_chunks: 1, rx_max_chunk: 18, rx_overflows: 0, rx_buffered: down ? 34 : 0, tx_bytes: 212 },
+        fw: { builtin: "V2.3.24", current: "V2.3.22, V2.3.24", chip: down ? "" : (d.chip22 ? "MIC3624 V2.3.22" : "MIC3624 V2.3.24"),
+          outdated: !down && !!d.chip22,
+          update: d.updating ? { running: true, lines: 1500, total: 3557, source: "builtin V2.3.24", done: false, last: "" }
+                             : { running: false, lines: 3557, total: 3557, source: "builtin V2.3.24", done: true, last: "ESP_OK" } },
+        bringup: { wire: down ? [{ baud: 2000000, bytes: 0, prompt: false, hex: "" }, { baud: 115200, bytes: 2, prompt: false, hex: "FC 00" }] : [] },
+        subscribers: [{ idx: 0, name: "bridge", dropped: 0, queued: 0, depth: 64 }] }); },
+    "/api/obd_chip/probe": () => J(state.diagProbe || { running: false, done: false, kind: "probe", baud: 0, seconds: 0, err: "", auto: { edges: 0, measured: 0, detected: 0 }, lines: [], raw: { baud: 0, total: 0, prompt: false, text: "", hex: "" } }),
+    "/api/obd_chip/report": () => { const d = (window.__mockPreset && window.__mockPreset.diag) || {}; if (d.down) return J({ error: "the chip is not up or an update runs" }, 409);
+      return J({ items: [
+        { cmd: "ATI", what: "chip", err: "", resp: "ELM327 v2.3" }, { cmd: "AT@1", what: "device description", err: "", resp: "OBDII to RS232 Interpreter" },
+        { cmd: "AT@2", what: "device identifier", err: "", resp: "?" }, { cmd: "VTVERS", what: "firmware", err: "", resp: "MIC3624 V2.3.24" },
+        { cmd: "ATRV", what: "voltage at the chip", err: "", resp: "13.4V" }, { cmd: "ATDPN", what: "protocol number", err: "", resp: "A6" },
+        { cmd: "ATDP", what: "protocol", err: "", resp: "AUTO, ISO 15765-4 (CAN 11/500)" }, { cmd: "ATCS", what: "CAN status counts", err: "", resp: "T:00 R:00 F:00" },
+        { cmd: "ATPPS", what: "programmable parameters (EEPROM)", err: "", resp: "00:FF F  01:FF F  02:FF F  03:32 F\n04:01 F  05:FF F  06:F1 F  07:09 F\n0C:68 F  0D:0D F  0E:7A N  0F:95 N\n10:0D F  11:00 F  12:FF F  13:32 F" },
+        { cmd: "STSLCS", what: "sleep and wake configuration", err: "", resp: "CTRL MODE: NATIVE\nPWR_CTRL: LOW (3.3V)\nUART_SLEEP: OFF, 1200 s\nUART_WAKE: ON, 0-30000 us\nEXT_INPUT: LOW\nEXT_SLEEP: OFF, LOW FOR 3000 ms\nEXT_WAKE: OFF, HIGH FOR 2000 ms\nVL_SLEEP: OFF, <13.20V FOR 150 s\nVL_WAKE: OFF, >13.50V FOR 1 s\nVCHG_WAKE: OFF, 0.20V IN 1000 ms" },
+        { cmd: "VTPPSWS", what: "power pin switch", err: "", resp: "10" } ] }); },
+    "/api/can/selftest": () => J(state.diagSelftest || { running: false, done: false, pass: false, verdict: "", refusal: "", bus: { baud_kbps: 0, live: false }, esp_heard: false, reply: "none", rpm: -1, took_ms: 0, steps: [], lines: [] }),
     "/api/bridges": () => J({ bridges: ((S.bridge_manager && S.bridge_manager.values.bridges) || []).map((b) => ({ ...b, up: b.enabled !== false, stats: { a2b_chunks: 0, b2a_chunks: 0, a2b_bytes: 0, b2a_bytes: 0, send_errors: 0, codec_errors: 0 } })) }),
     /* 2026-10-16: `bridge` = the enabled bridge on the server / channel, null when nothing uses it */
     "/api/sockets": () => { const br = (S.bridge_manager && S.bridge_manager.values.bridges) || []; const on = (n) => { const b = br.find((x) => x.enabled !== false && (x.a === n || x.b === n)); return b ? b.name : null; };
@@ -2927,6 +2970,35 @@
       state.fwAborts++;
       state.fwJob.active = false; state.fwJob.state = "aborted"; state.fwJob.error = "aborted";
       return J({ aborted: true, job_id: state.fwJob.id });
+    }
+
+    /* the OBD chip and the CAN self-test (issue #1023, 2026-10-28) */
+    if (method === "POST" && path === "/api/obd_chip/update") {
+      state.diagRewrites = (state.diagRewrites || 0) + 1;
+      return J({ started: true, source: "builtin", force: !!(body && body.force) }, 202);
+    }
+    if (method === "POST" && path === "/api/obd_chip/probe") {
+      const kind = (body && body.kind) || "probe", baud = (body && body.baud) || 0, seconds = (body && body.seconds) || 10;
+      const d = (window.__mockPreset && window.__mockPreset.diag) || {};
+      const lines = kind === "scan" ? [{ baud: 115200, cmd: "ATI", prompt: true, bytes: 8, text: "ATI.?..>", hex: "41 54 49 0D 3F 0D 0D 3E" }]
+        : kind === "probe" ? (d.down ? [{ baud: baud || 2000000, cmd: "ATI", prompt: false, bytes: 0, text: "", hex: "" }, { baud: baud || 2000000, cmd: "VTVERS", prompt: false, bytes: 2, text: "..", hex: "00 00" }]
+                                     : [{ baud: baud || 2000000, cmd: "ATI", prompt: true, bytes: 14, text: "ELM327 v2.3..>", hex: "45 4C 4D 33 32 37 20 76 32 2E 33 0D 0D 3E" }, { baud: baud || 2000000, cmd: "VTVERS", prompt: true, bytes: 18, text: "MIC3624 V2.3.24..>", hex: "4D 49 43 33 36 32 34 20 56 32 2E 33 2E 32 34 0D 0D 3E" }])
+        : [];
+      state.diagProbe = { running: false, done: true, kind, baud, seconds, err: "ESP_OK",
+        auto: kind === "auto" ? { edges: 72, measured: 115107, detected: 115200 } : kind === "scan" ? { edges: 0, measured: 0, detected: 115200 } : { edges: 0, measured: 0, detected: 0 },
+        lines, raw: (kind === "listen" || kind === "auto") ? { baud: kind === "auto" ? 115200 : (baud || 2000000), total: 0, prompt: false, text: "", hex: "" } : { baud: 0, total: 0, prompt: false, text: "", hex: "" } };
+      return J({ started: true, kind }, 202);
+    }
+    if (method === "POST" && path === "/api/can/selftest") {
+      const d = (window.__mockPreset && window.__mockPreset.diag) || {};
+      state.diagSelftest = d.selftestRefusal
+        ? { running: false, done: true, pass: false, verdict: d.selftestRefusal, refusal: d.selftestRefusal, bus: { baud_kbps: 0, live: false }, esp_heard: false, reply: "none", rpm: -1, took_ms: 3, steps: [], lines: [] }
+        : { running: false, done: true, pass: true, verdict: "PASS: both transceivers see each other", refusal: "", bus: { baud_kbps: 500, live: !!d.live }, esp_heard: true, reply: "ours", rpm: 1726, took_ms: 1880,
+            steps: [{ name: "The chip asked, the ESP32 heard", ok: true, ms: 6, detail: "the chip sent 7DF 02 01 0C at 500 kbit/s; the ESP32 received it and acknowledged it" },
+                    { name: "The ESP32 answered, the chip read it", ok: true, ms: 9, detail: "the ESP32 sent 7EF 04 41 0C 1A F8; the chip printed it: engine speed 1726 rpm, from the ESP32" },
+                    { name: "Bus health and clean-up", ok: true, ms: 120, detail: "0 bus error(s), 0 tx error(s); chip restored, AutoPID resumes" }],
+            lines: ["can    listened 412 ms at 500 kbit/s: silent", "chip   ATTP6     OK", "chip   ATH1      OK", "chip   ATSH 7DF  OK", "chip   ATCAF1    OK", "chip   010C  (sent)", "can    rx 7DF [02 01 0C] after 6 ms", "can    tx 7EF [04 41 0C 1A F8]: queued", "chip   printed: 7EF 04 41 0C 1A F8", "chip   ATPC      OK", "chip   ATD       OK"] };
+      return J({ started: true }, 202);
     }
 
     /* mutations */
@@ -8008,6 +8080,17 @@ PAGES.system=async(view,sub)=>{
     try{bk.append(...await PAGES.__backup.cards());}
     catch(e){bk.append(banner("crit","alert","Backup: "+e.message));}
   })();
+  /* the OBD chip and the CAN self-test cards (issue #1023, 2026-10-28): from
+     the on-demand chunk web/diag.js, after the Maintenance card and ahead of
+     the SD card and factory reset cards */
+  const dg=h("div",{id:"diag-cards",style:"display:flex;flex-direction:column;gap:16px"});
+  paneMaint.append(dg);
+  (async()=>{
+    if(!PAGES.__diag)await loadScript("/ui/diag.js");
+    if(!PAGES.__diag){dg.append(banner("crit","alert","The diagnostics cards could not be loaded (/ui/diag.js). Reload the page, or update the firmware."));return;}
+    try{dg.append(...await PAGES.__diag.cards());}
+    catch(e){dg.append(banner("crit","alert","Diagnostics: "+e.message));}
+  })();
   try{paneCerts.append(await certsCard());}
   catch(e){paneCerts.append(banner("crit","alert","Certificates: "+e.message));}
   /* firmware / OTA */
@@ -12754,6 +12837,173 @@ async function card(){
   return el;
 }
 PAGES.__fwupdate={card,mdLite};
+})();
+</script>
+<script>/* The OBD chip and the CAN self-test cards of System > Maintenance (issue
+   #1023, 2026-10-28; Ali's placement). An on-demand chunk (/ui/diag.js):
+   PAGES.system loads it into the Maintenance pane after the Maintenance
+   card. No setting lives here (the obd_chip knobs stay API/CLI only).
+
+   1. OBD chip: the chip's state from /api/obd_chip every 3 s, a banner with
+      the bring-up's wire verdicts when it is down, the chip firmware rewrite
+      (a confirm dialog, then POST /api/obd_chip/update {force}), the chip
+      configuration report (GET /api/obd_chip/report: one block to copy into
+      a bug report), and the wire tools folded away (POST /api/obd_chip/probe,
+      polled on GET; the chip's log lines of the last start from the ring).
+   2. CAN self-test: the preconditions, Run (POST /api/can/selftest, polled on
+      GET), the three steps with the verdict, the exchange and the failure
+      table folded away. */
+(()=>{
+const mono=(t)=>h("span",{class:"mono"},t);
+const fmtBaud=(b)=>b?String(b).replace(/\B(?=(\d{3})+(?!\d))/g," "):"-";
+const stamp=()=>{const d=new Date();return [d.getHours(),d.getMinutes(),d.getSeconds()].map(x=>String(x).padStart(2,"0")).join(":");};
+const copyBox=(text,rows)=>{
+  /* plain http has no clipboard API: a selectable box plus a Select button
+     that also tries the old copy command (UI audit rule) */
+  const ta=h("textarea",{class:"mono",readonly:true,rows:rows||10,style:"width:100%;box-sizing:border-box;font-size:12px;white-space:pre;background:var(--term-bg);color:var(--term-text);border:1px solid var(--border);border-radius:9px;padding:10px"},text);
+  const btn=h("button",{class:"btn sm gh",type:"button",onclick:()=>{ta.focus();ta.select();try{document.execCommand("copy");toast("Selected; copied where the browser allows it");}catch{toast("Selected: press Ctrl+C");}}},"Select all");
+  return {ta,btn};
+};
+const details=(title,...kids)=>h("details",{style:"border:1px solid var(--border);border-radius:9px;margin-top:10px"},
+  h("summary",{style:"cursor:pointer;padding:9px 12px;font-weight:600;color:var(--primary)"},title),
+  h("div",{style:"padding:4px 12px 12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:10px"},...kids));
+
+/* ---- 1. the OBD chip card ------------------------------------------------- */
+async function chipCard(){
+  const stateRow=h("div",{class:"rowflex",style:"gap:8px;flex-wrap:wrap;margin-bottom:10px"});
+  const downBanner=h("div",{});
+  const fwRow=h("div",{style:"margin:6px 0 10px"});
+  let st=null,timer=null;
+  const wireWords=(w)=>w.map(x=>"at "+fmtBaud(x.baud)+" baud "+(x.bytes?x.bytes+" byte(s) without a prompt ("+x.hex+(x.bytes>12?" ...":"")+")":"nothing")).join("; ");
+  async function refresh(){
+    const s=await tryGet("/api/obd_chip");if(!s)return;st=s;
+    const fw=s.fw||{},up=fw.update||{};
+    stateRow.replaceChildren(
+      s.ready?chip("ready at "+fmtBaud(s.baud)+" baud","ok"):chip("chip not up","warn"),
+      fw.chip?chip(fw.chip,fw.outdated?"warn":""):null,
+      chip("device carries "+(fw.builtin||"-"),""),
+      up.running?chip("rewrite running","info"):up.done?chip("last rewrite: "+(up.last||"-"),up.last==="ESP_OK"?"":"warn"):null);
+    const wire=(s.bringup&&s.bringup.wire)||[];
+    downBanner.replaceChildren(!s.ready?banner("warn","alert",h("span",{},h("b",{},"The chip did not come up at this start. ")," The bring-up saw: "+(wire.length?wireWords(wire):"nothing recorded")+". Open the wire tools below, then Rewrite the chip firmware.")):fw.outdated?banner("warn","alert",h("span",{},h("b",{},"The chip's firmware is older than the one this device carries. "),"The chip runs "+fw.chip+", the device has "+(fw.builtin||"a newer image")+". Rewrite the chip firmware below to bring it up to date: about 20 seconds, settings untouched.")):null);
+    if(up.running){
+      const pc=up.total?Math.round(up.lines/up.total*100):0;
+      fwRow.replaceChildren(h("div",{style:"display:flex;justify-content:space-between;font-size:12px;color:var(--text-2)"},h("span",{},"Rewrite running: "+fmt.num(up.lines)+" of "+fmt.num(up.total)+" records"),h("span",{},pc+"%")),
+        h("div",{style:"height:8px;background:var(--surface-3);border-radius:6px;overflow:hidden;margin-top:4px"},h("i",{style:"display:block;height:100%;width:"+pc+"%;background:var(--primary);border-radius:6px;transition:width .25s"})));
+    }else fwRow.replaceChildren();
+  }
+  await refresh();
+  timer=setInterval(()=>{if(!document.body.contains(stateRow)){clearInterval(timer);return;}refresh();},3000);
+  /* the rewrite: a confirm dialog (Ali, 2026-10-28), then the job */
+  const rewriteBtn=h("button",{class:"btn sm danger",type:"button",onclick:async()=>{
+    if(!await confirmModal("Rewrite the chip firmware with "+((st&&st.fw&&st.fw.builtin)||"the packaged image")+"? About 20 seconds; AutoPID and apps lose the chip meanwhile; settings are not touched. This is the recovery for a chip stuck in its download mode or answering nothing.","Rewrite"))return;
+    try{await api("/api/obd_chip/update",{method:"POST",body:{force:true}});toast("Rewrite started");refresh();}
+    catch(e){toast(e.message,"err");}}},"Rewrite the chip firmware");
+  /* the configuration report: one block to copy */
+  const repHolder=h("div",{});
+  const repBtn=h("button",{class:"btn sm",type:"button",onclick:async()=>{
+    repBtn.disabled=true;repHolder.replaceChildren(h("span",{class:"help"},"Reading the chip (about 2 s)…"));
+    try{const r=await api("/api/obd_chip/report");
+      const text=(r.items||[]).map(it=>it.err?(it.cmd+"  "+it.what+": "+it.err):(it.resp.includes("\n")?(it.cmd+"  "+it.what+":\n"+it.resp.split("\n").map(l=>"    "+l).join("\n")):(it.cmd+"  "+it.what+": "+it.resp))).join("\n");
+      const box=copyBox("--- OBD chip configuration ("+stamp()+") ---\n"+text+"\n--- end ---",14);
+      repHolder.replaceChildren(h("div",{class:"rowflex",style:"justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0 6px"},h("span",{class:"help"},"What the chip is and how it is set: paste this block into a bug report."),box.btn),box.ta);}
+    catch(e){repHolder.replaceChildren(banner("warn","alert","Could not read the chip: "+e.message));}
+    repBtn.disabled=false;}},"Read the chip configuration");
+  /* the wire tools (folded): POST a tool, poll its result */
+  const TOOL_KEY="wican-diag-wire",TOOL_MAX=200;
+  let lines=[];try{lines=JSON.parse(localStorage.getItem(TOOL_KEY)||"[]");}catch{}
+  const term=h("div",{class:"console",style:"height:220px"});
+  const renderTerm=()=>{term.replaceChildren();if(!lines.length)term.append(h("div",{class:"dim"},"Every byte the chip sent, as text and hex, lands here."));lines.forEach(l=>term.append(h("div",{class:l.kind||""},l.t)));term.scrollTop=term.scrollHeight;};
+  const say=(t,kind)=>{lines.push({t:stamp()+"  "+t,kind});if(lines.length>TOOL_MAX)lines=lines.slice(-TOOL_MAX);try{localStorage.setItem(TOOL_KEY,JSON.stringify(lines));}catch{}renderTerm();};
+  renderTerm();
+  const baudSel=h("select",{class:"mono"},...[2000000,115200,500000,38400,9600].map(b=>h("option",{value:b},String(b))));
+  const secs=h("input",{type:"number",value:"10",min:1,max:60,style:"width:70px"});
+  const cmdIn=h("input",{type:"text",value:"ATI",maxlength:15,class:"mono",style:"width:120px",title:"what the probe, scan and detect tools send; VTDLMIC3422 asks a chip whose application is gone for its bootloader"});
+  const busy=h("span",{class:"help"},"");
+  async function tool(kind){
+    const cmd=(cmdIn.value||"").trim();
+    const body={kind,baud:kind==="scan"?0:Number(baudSel.value),seconds:Number(secs.value)||10};
+    if(cmd&&cmd!=="ATI"&&kind!=="listen")body.cmd=cmd;
+    try{await api("/api/obd_chip/probe",{method:"POST",body});}catch(e){say("the tool was refused: "+e.message,"er");return;}
+    busy.textContent="running "+kind+"…";
+    let r=null;for(let i=0;i<120;i++){await new Promise(res=>setTimeout(res,600));r=await tryGet("/api/obd_chip/probe");if(r&&!r.running)break;}
+    busy.textContent="";if(!r){say("no result","er");return;}
+    (r.lines||[]).forEach(l=>say(kind+" "+fmtBaud(l.baud)+" "+l.cmd+(l.bytes?"  prompt="+(l.prompt?1:0)+"  "+l.bytes+" B  '"+l.text+"'  "+l.hex:"  silent"),l.prompt?"":"dim"));
+    {const ok=(r.lines||[]).find(l=>l.prompt);const junk=(r.lines||[]).filter(l=>!l.prompt&&l.bytes&&ok&&l.baud!==ok.baud);if(junk.length)say("the bytes at "+fmtBaud(junk[0].baud)+" baud are the chip's answer read at the wrong speed; the chip talks at "+fmtBaud(ok.baud),"dim");}
+    if(kind==="auto"){if(!r.auto||!r.auto.edges)say("detect: no edges, the chip sent nothing in "+body.seconds+" s after "+(r.cmd||"ATI")+" at "+fmtBaud(body.baud)+" baud","wn");else say("detect: "+r.auto.edges+" edges, bit time says "+r.auto.measured+" baud, nearest standard "+(r.auto.detected||"none within 8 %"),"");}
+    if(kind==="listen"||(kind==="auto"&&r.auto&&r.auto.detected)){const raw=r.raw||{};say("listen "+fmtBaud(raw.baud)+" baud: "+(raw.total?raw.total+" B  '"+raw.text+"'  "+raw.hex:"nothing received"),raw.total?"":"dim");}
+    if(kind==="scan")say("scan: "+(r.auto&&r.auto.detected?"prompt at "+fmtBaud(r.auto.detected)+" baud":"no prompt at any baud"),"");
+    if(r.err&&r.err!=="ESP_OK")say("tool ended: "+r.err,"wn");
+  }
+  const tbtn=(l,k,title)=>h("button",{class:"btn sm",type:"button",title,onclick:()=>tool(k)},l);
+  const bootLog=h("pre",{class:"console",style:"height:160px;margin:0;white-space:pre"});
+  (async()=>{const ring=await tryGet("/api/logs/ring");const ls=typeof ring==="string"?ring.split("\n").filter(l=>l.includes("obd_chip:")):[];bootLog.textContent=ls.length?ls.slice(-40).join("\n"):"no obd_chip lines in the log ring";})();
+  const tools=details("Wire tools, for a chip that will not come up",
+    h("p",{class:"help",style:"margin:4px 0 0"},"Each tool holds the chip for a few seconds; AutoPID and apps wait. Detect speed lets the UART hardware measure the bit time of whatever the chip sends and listens at that speed. Listen sends nothing and shows what arrives."),
+    h("div",{class:"rowflex",style:"gap:8px;flex-wrap:wrap;align-items:center"},h("label",{class:"help"},"Speed"),baudSel,h("label",{class:"help"},"Send"),cmdIn,h("label",{class:"help"},"Listen"),secs,h("span",{class:"help"},"s"),busy,h("span",{style:"flex:1 1 auto"}),
+      tbtn("Probe","probe","the Send word (and VTVERS after ATI) at the chosen speed"),tbtn("Scan all speeds","scan","the Send word at every standard speed, 9600 to 3 Mbaud"),tbtn("Detect speed","auto","the Send word goes out at the chosen speed, then the UART hardware measures the bit time of what the chip sends"),tbtn("Listen","listen","send nothing, show what arrives")),
+    term,
+    h("div",{class:"rowflex",style:"justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"},h("span",{class:"help"},"The chip's own log lines from the last start, what a bug report needs:"),h("button",{class:"btn sm gh",type:"button",onclick:()=>{lines=[];try{localStorage.removeItem(TOOL_KEY);}catch{}renderTerm();}},"Clear the tools' lines")),
+    bootLog);
+  return card("OBD chip","cpu",
+    h("div",{class:"rowflex",style:"justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"},stateRow,h("span",{class:"help"},"refreshed every 3 s")),
+    downBanner,
+    h("p",{class:"help",style:"margin:0 0 6px"},"The button below rewrites the chip with the packaged image whatever version it reports: the recovery for a chip stuck in its download mode or answering nothing. About 20 seconds; the chip is unavailable meanwhile. At every start the device on its own rewrites only a chip older than V2.3.22; a chip left on V2.3.22 is flagged above until it is rewritten."),
+    fwRow,
+    h("div",{class:"rowflex",style:"gap:8px;flex-wrap:wrap;align-items:center"},repBtn,h("span",{class:"help"},"the chip's identity, firmware, protocol, programmable parameters, sleep settings")),
+    repHolder,
+    tools,
+    h("div",{class:"rowflex",style:"justify-content:flex-end;margin-top:12px"},rewriteBtn));
+}
+
+/* ---- 2. the CAN self-test card ------------------------------------------- */
+async function selftestCard(){
+  const tiles=h("div",{style:"display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:8px 0"});
+  const verdictEl=h("span",{});
+  const steps=h("ol",{style:"list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px"});
+  const lines=h("pre",{class:"console",style:"height:200px;margin:0;white-space:pre"});
+  const foot=h("div",{class:"help"});
+  const tile=(ok,title,sub)=>h("div",{style:"background:var(--surface-2);border-radius:9px;padding:10px 12px;display:flex;gap:8px;align-items:flex-start"},
+    h("span",{style:"color:"+(ok?"var(--success)":"var(--warning)")+";font-weight:700"},ok?"✓":"!"),h("div",{},h("div",{style:"font-weight:600"},title),h("div",{class:"help"},sub)));
+  async function tilesRefresh(){
+    const can=await tryGet("/api/can"),oc=await tryGet("/api/obd_chip");
+    const canOk=!!(can&&can.running),chipOk=!!(oc&&oc.ready);
+    tiles.replaceChildren(
+      tile(canOk,"CAN bus",canOk?"running, "+(can.baud_kbps||can.baud_detected||"?")+" kbit/s"+(can.listen_only?", listen-only until proven":""):"off: enable it in CAN bus settings"),
+      tile(chipOk,"OBD chip",chipOk?"ready"+(oc.fw&&oc.fw.chip?", "+oc.fw.chip:""):"not up: see the chip card"),
+      tile(true,"Bus","silent or live, both run; on a vehicle the real ECUs answer too"));
+  }
+  function render(r){
+    if(!r||(!r.done&&!r.running)){verdictEl.replaceChildren(chip("not run yet",""));steps.replaceChildren();lines.textContent="";foot.textContent="";return;}
+    if(r.running){verdictEl.replaceChildren(chip("running…","info"));return;}
+    if(r.refusal){verdictEl.replaceChildren(chip("not run: "+r.refusal,"warn"));steps.replaceChildren();lines.textContent="";foot.textContent="";return;}
+    verdictEl.replaceChildren(chip(r.verdict||"-",r.pass?"ok":"warn"));
+    steps.replaceChildren(...(r.steps||[]).map(s=>h("li",{style:"display:grid;grid-template-columns:24px minmax(0,1fr) 70px;gap:10px;padding:8px 10px;background:var(--surface-2);border-radius:9px"},
+      h("span",{style:"font-weight:700;color:"+(s.ok?"var(--success)":"var(--danger)")},s.ok?"✓":"✗"),h("div",{},h("div",{style:"font-weight:600"},s.name),h("div",{class:"help"},s.detail)),mono(s.ms+" ms"))));
+    lines.textContent=(r.lines||[]).join("\n");
+    foot.textContent="Bus "+(r.bus?r.bus.baud_kbps+" kbit/s, "+(r.bus.live?"live (a vehicle talking)":"silent"):"-")+" · "+r.took_ms+" ms"+(r.rpm>=0?" · engine speed read by the chip: "+r.rpm+" rpm, from the ESP32":"");
+  }
+  await tilesRefresh();render(await tryGet("/api/can/selftest"));
+  const runBtn=h("button",{class:"btn pri sm",type:"button",onclick:async()=>{
+    runBtn.disabled=true;
+    try{await api("/api/can/selftest",{method:"POST"});}catch(e){toast(e.message,"err");runBtn.disabled=false;return;}
+    render({running:true});
+    let r=null;for(let i=0;i<30;i++){await new Promise(res=>setTimeout(res,500));r=await tryGet("/api/can/selftest");if(r&&!r.running)break;}
+    render(r);tilesRefresh();runBtn.disabled=false;}},"Run the self-test");
+  return card("CAN self-test","activity",
+    h("div",{class:"rowflex",style:"justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"},h("span",{class:"help"},"The ESP32's own CAN controller and the OBD chip sit on the same CAN_H and CAN_L wires."),verdictEl),
+    h("p",{class:"help",style:"margin:6px 0 0"},"The chip asks for engine speed the way every OBD app does (",mono("010C")," to 7DF) and the ESP32 answers it as an engine ECU from 7EF, an address no car uses. One exchange proves both transceivers, both directions, the chip's CAN side and the wiring, with or without a vehicle. On a vehicle the real ECUs answer too; the test looks only for its own reply. AutoPID pauses for the test."),
+    tiles,steps,foot,
+    details("The exchange, line by line, and how to read a failure",lines,
+      h("table",{class:"tbl",style:"font-size:13px"},h("thead",{},h("tr",{},h("th",{},"What failed"),h("th",{},"Where to look"))),h("tbody",{},
+        h("tr",{},h("td",{},"The chip asked, the ESP32 heard nothing"),h("td",{},"the chip's CAN side or its protocol, or the ESP32's transceiver; other ECUs answering tells them apart")),
+        h("tr",{},h("td",{},"The ESP32 answered, the chip printed NO DATA"),h("td",{},"the ESP32's transmit path or its standby pin")),
+        h("tr",{},h("td",{},"The chip printed CAN ERROR"),h("td",{},"nothing on the bus acknowledged it: the shared wires or the termination")),
+        h("tr",{},h("td",{},"Not run: the bus unreadable"),h("td",{},"the bus runs at a bitrate this node cannot read; set it in CAN bus settings"))))),
+    h("div",{class:"rowflex",style:"justify-content:flex-end;margin-top:12px"},runBtn));
+}
+
+async function cards(){return [await chipCard(),await selftestCard()];}
+PAGES.__diag={cards};
 })();
 </script>
 </body>

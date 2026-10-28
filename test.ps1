@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'canselftest', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [ValidateSet('6.0.2', '6.1')][string]$Idf = '6.1',  # the ESP-IDF the build stages use (6.1 since 6.0.0-beta.5, 2026-10-27; 6.0.2 stays installed; build.ps1 -Idf has the same table)
@@ -922,6 +922,7 @@ function Show-Inventory {
     Write-Host '  usbgps     - a USB GPS receiver is read by default (issue #978): the console switch off, the receiver read as NMEA from boot, the fix when the sky allows, gps_ in autopid and the HA push, the USB GPS receiver switch off = ignored, back on; then the USB page card, the switches and the Status row in Chrome (3 to 4 planned restarts, ~6 min)'
     Write-Host '  sdformat   - the SD card format from the API (2026-10-25): the slot as found, an unreadable card named by what it holds with a quiet log (W line, no E line), the refusals (no phrase, a wrong phrase, a mounted card), the format behind the phrase and the mount after it with a file round trip, the boot after, then the real page in Chrome; the format legs need a card WiCAN cannot read in the slot and the switch -SdFormat (it erases the card), PARTIAL otherwise (0 to 1 planned restart, ~3 min)'
     Write-Host '  obdfw      - the OBD chip firmware update (issue #1023, 2026-10-28): the packaged image and the current list on /api/obd_chip, the console command, a POST without force on a current chip = nothing to do, the forced reflash (3557 records, the fresh bring-up, the version), a stream cut by a restart recovered by the next boot (the chip answers at 115200 in download mode), and a sleep test typed mid-stream that waits for the update (2 planned restarts + 1 sleep/wake, ~6 min; -SkipSleep drops the sleep leg)'
+    Write-Host '  canselftest - the CAN self-test and the chip diagnostics (issue #1023, 2026-10-28): the OBD chip asks 010C and the ESP32 answers as ECU 7EF over the shared bus, PASS with the simulator broadcast as found and flipped, the chip configuration report, the wire tools on a healthy chip, the cached version on /api/obd_chip, and with obd_chip_manager/obd_fw/V2.3.22.txt in the components tree the chip written to V2.3.22 and back (fw.outdated, the warning a chip left on .22 gets) (0 DUT restarts, 1 to 2 simulator restarts, ~3 min)'
     Write-Host '  usbdetach  - a warm restart in the USB device role drops off the bus first (2026-10-17): the DUT cabled to this PC as a USB NCM device (one planned restart when it was host), warm restarts with the link up: gone from the PC within 5 s of each request (2.2 to 2.4 s measured), back, the link answers, software resets only; the internal heap before and after; the DUT stays in the device role (restore: python tools\testbench\usb\usb_detach_bench.py --only d4 --restore-host, a PSU power cycle inside) (~6 min)'
     Write-Host '  abrp       - the ABRP rows against the real Iternio API (2026-10-13): the key checked from the PC, host routes on the Pi for the run, the key as a query parameter / as the Authorization header / a wrong key, the counters over the window, the Test button, get_telemetry as the witness with a user token in internal/abrp_credentials.json (PARTIAL without one: the 401 refusals only), restore (2 planned restarts, ~5 min)'
     Write-Host '  backup     - the configuration backup that carries everything (issue #979): the file plain / redacted / encrypted after the key, the fs deny list, the round trips from a file and from the copy on the flash, the refusals, the sweep (8 planned restarts, ~7 min)'
@@ -1561,6 +1562,39 @@ try {
                 $out = Invoke-Bench "cd ~/wican && python3 -u tools/testbench/obd/obd_fw_bench.py $DutIp$benchArgs"
                 Save-StageLog 'obd_fw' $out
                 if (-not ($out | Select-String -Quiet 'OBD FW PASS')) { throw 'no OBD FW PASS (the DUT on the bench AP? the ws_cli bridge? auto_update on?)' }
+            }
+        }
+        'canselftest' {
+            # The CAN self-test and the chip diagnostics (issue #1023,
+            # 2026-10-28): the routes behind the two System > Maintenance
+            # cards against the real chip and the bench bus: the self-test
+            # with the simulator's broadcast as found and flipped (PASS both
+            # ways, the bus reported live or silent), the chip configuration
+            # report, the wire tools on a healthy chip, the cached version on
+            # /api/obd_chip. PC-side: the DUT through the tunnel, the
+            # simulator at its NCM address; the simulator is put back as found.
+            Invoke-Stage 'CAN self-test and chip diagnostics' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    # the .22 leg (the outdated warning, Ali 2026-10-28): the
+                    # V2.3.22 image still sits in the components tree beside
+                    # the packaged .24; without it the bench says so and skips
+                    $fw22 = $null
+                    foreach ($r in (Get-ComponentRoots)) {
+                        $cand = "$r\components\obd_chip_manager\obd_fw\V2.3.22.txt"
+                        if (Test-Path $cand) { $fw22 = $cand; break }
+                    }
+                    $benchArgs = @('--dut', 'localhost:18081')
+                    if ($fw22) { $benchArgs += @('--fw22', $fw22) } else { Write-Host 'bench: no obd_chip_manager/obd_fw/V2.3.22.txt in the components tree: the .22 leg is skipped' }
+                    $out = & $py -u "$repo\tools\testbench\can\can_selftest_bench.py" @benchArgs 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'can_selftest' $out
+                    if (-not ($out | Select-String -Quiet 'CAN SELFTEST PASS')) { throw 'no CAN SELFTEST PASS (the DUT on the bench AP? the simulator at 192.168.8.1? the chip up?)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                }
             }
         }
         'usbgps' {

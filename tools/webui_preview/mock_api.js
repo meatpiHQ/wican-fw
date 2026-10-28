@@ -613,6 +613,33 @@
     "/api/can": () => J({ enabled: state.canEnabled !== false, running: state.canEnabled !== false, silent: false, baud_auto: false, baud_kbps: 500, baud_detected: 500, state: state.canEnabled === false ? "stopped" : "running", listen_only: state.canEnabled === false, verified: state.canEnabled !== false, tx: 1543, rx: 89231, tx_errors: 0, rx_errors: 0, arb_lost: 0, bus_errors: state.busErrors || 0, rx_missed: 0, dispatch_drops: 0, rx_bad: 0, rx_deaf: 0, tx_refused: 0, link_switches: 0, link_demotions: 0, bus_off: 0, recoveries: 0,
       err: { stuff: 0, form: 0, bit: 0, ack: 0, other: 0 }, probe: { result: "none", baud_kbps: 0, frames: 0, age_ms: 0 },
       subscribers: [{ idx: 0, name: "bridge", drops: 0 }, { idx: 1, name: "logger", drops: 0 }], subscribers_max: 16, ...(state.canLink || {}) }),
+    /* the OBD chip and the CAN self-test (issue #1023, 2026-10-28): the
+       System > Maintenance cards from web/diag.js. A probe sets
+       window.__mockPreset.diag = {down:true} for a chip that did not come up,
+       {updating:true} for a rewrite in progress; the wire tools and the
+       self-test answer from state.diagProbe / state.diagSelftest, set by
+       their POSTs */
+    "/api/obd_chip": () => { const d = (window.__mockPreset && window.__mockPreset.diag) || {}; const down = !!d.down;
+      return J({ ready: !down, claim: "none", client_idle_ms: 4294967295, baud: down ? 0 : 2000000,
+        eeprom_guard: { rewrites: 0, blocked: 0, protocol_saves: 0 },
+        uart: { rx_bytes: 18, rx_chunks: 1, rx_max_chunk: 18, rx_overflows: 0, rx_buffered: down ? 34 : 0, tx_bytes: 212 },
+        fw: { builtin: "V2.3.24", current: "V2.3.22, V2.3.24", chip: down ? "" : (d.chip22 ? "MIC3624 V2.3.22" : "MIC3624 V2.3.24"),
+          outdated: !down && !!d.chip22,
+          update: d.updating ? { running: true, lines: 1500, total: 3557, source: "builtin V2.3.24", done: false, last: "" }
+                             : { running: false, lines: 3557, total: 3557, source: "builtin V2.3.24", done: true, last: "ESP_OK" } },
+        bringup: { wire: down ? [{ baud: 2000000, bytes: 0, prompt: false, hex: "" }, { baud: 115200, bytes: 2, prompt: false, hex: "FC 00" }] : [] },
+        subscribers: [{ idx: 0, name: "bridge", dropped: 0, queued: 0, depth: 64 }] }); },
+    "/api/obd_chip/probe": () => J(state.diagProbe || { running: false, done: false, kind: "probe", baud: 0, seconds: 0, err: "", auto: { edges: 0, measured: 0, detected: 0 }, lines: [], raw: { baud: 0, total: 0, prompt: false, text: "", hex: "" } }),
+    "/api/obd_chip/report": () => { const d = (window.__mockPreset && window.__mockPreset.diag) || {}; if (d.down) return J({ error: "the chip is not up or an update runs" }, 409);
+      return J({ items: [
+        { cmd: "ATI", what: "chip", err: "", resp: "ELM327 v2.3" }, { cmd: "AT@1", what: "device description", err: "", resp: "OBDII to RS232 Interpreter" },
+        { cmd: "AT@2", what: "device identifier", err: "", resp: "?" }, { cmd: "VTVERS", what: "firmware", err: "", resp: "MIC3624 V2.3.24" },
+        { cmd: "ATRV", what: "voltage at the chip", err: "", resp: "13.4V" }, { cmd: "ATDPN", what: "protocol number", err: "", resp: "A6" },
+        { cmd: "ATDP", what: "protocol", err: "", resp: "AUTO, ISO 15765-4 (CAN 11/500)" }, { cmd: "ATCS", what: "CAN status counts", err: "", resp: "T:00 R:00 F:00" },
+        { cmd: "ATPPS", what: "programmable parameters (EEPROM)", err: "", resp: "00:FF F  01:FF F  02:FF F  03:32 F\n04:01 F  05:FF F  06:F1 F  07:09 F\n0C:68 F  0D:0D F  0E:7A N  0F:95 N\n10:0D F  11:00 F  12:FF F  13:32 F" },
+        { cmd: "STSLCS", what: "sleep and wake configuration", err: "", resp: "CTRL MODE: NATIVE\nPWR_CTRL: LOW (3.3V)\nUART_SLEEP: OFF, 1200 s\nUART_WAKE: ON, 0-30000 us\nEXT_INPUT: LOW\nEXT_SLEEP: OFF, LOW FOR 3000 ms\nEXT_WAKE: OFF, HIGH FOR 2000 ms\nVL_SLEEP: OFF, <13.20V FOR 150 s\nVL_WAKE: OFF, >13.50V FOR 1 s\nVCHG_WAKE: OFF, 0.20V IN 1000 ms" },
+        { cmd: "VTPPSWS", what: "power pin switch", err: "", resp: "10" } ] }); },
+    "/api/can/selftest": () => J(state.diagSelftest || { running: false, done: false, pass: false, verdict: "", refusal: "", bus: { baud_kbps: 0, live: false }, esp_heard: false, reply: "none", rpm: -1, took_ms: 0, steps: [], lines: [] }),
     "/api/bridges": () => J({ bridges: ((S.bridge_manager && S.bridge_manager.values.bridges) || []).map((b) => ({ ...b, up: b.enabled !== false, stats: { a2b_chunks: 0, b2a_chunks: 0, a2b_bytes: 0, b2a_bytes: 0, send_errors: 0, codec_errors: 0 } })) }),
     /* 2026-10-16: `bridge` = the enabled bridge on the server / channel, null when nothing uses it */
     "/api/sockets": () => { const br = (S.bridge_manager && S.bridge_manager.values.bridges) || []; const on = (n) => { const b = br.find((x) => x.enabled !== false && (x.a === n || x.b === n)); return b ? b.name : null; };
@@ -876,6 +903,35 @@
       state.fwAborts++;
       state.fwJob.active = false; state.fwJob.state = "aborted"; state.fwJob.error = "aborted";
       return J({ aborted: true, job_id: state.fwJob.id });
+    }
+
+    /* the OBD chip and the CAN self-test (issue #1023, 2026-10-28) */
+    if (method === "POST" && path === "/api/obd_chip/update") {
+      state.diagRewrites = (state.diagRewrites || 0) + 1;
+      return J({ started: true, source: "builtin", force: !!(body && body.force) }, 202);
+    }
+    if (method === "POST" && path === "/api/obd_chip/probe") {
+      const kind = (body && body.kind) || "probe", baud = (body && body.baud) || 0, seconds = (body && body.seconds) || 10;
+      const d = (window.__mockPreset && window.__mockPreset.diag) || {};
+      const lines = kind === "scan" ? [{ baud: 115200, cmd: "ATI", prompt: true, bytes: 8, text: "ATI.?..>", hex: "41 54 49 0D 3F 0D 0D 3E" }]
+        : kind === "probe" ? (d.down ? [{ baud: baud || 2000000, cmd: "ATI", prompt: false, bytes: 0, text: "", hex: "" }, { baud: baud || 2000000, cmd: "VTVERS", prompt: false, bytes: 2, text: "..", hex: "00 00" }]
+                                     : [{ baud: baud || 2000000, cmd: "ATI", prompt: true, bytes: 14, text: "ELM327 v2.3..>", hex: "45 4C 4D 33 32 37 20 76 32 2E 33 0D 0D 3E" }, { baud: baud || 2000000, cmd: "VTVERS", prompt: true, bytes: 18, text: "MIC3624 V2.3.24..>", hex: "4D 49 43 33 36 32 34 20 56 32 2E 33 2E 32 34 0D 0D 3E" }])
+        : [];
+      state.diagProbe = { running: false, done: true, kind, baud, seconds, err: "ESP_OK",
+        auto: kind === "auto" ? { edges: 72, measured: 115107, detected: 115200 } : kind === "scan" ? { edges: 0, measured: 0, detected: 115200 } : { edges: 0, measured: 0, detected: 0 },
+        lines, raw: (kind === "listen" || kind === "auto") ? { baud: kind === "auto" ? 115200 : (baud || 2000000), total: 0, prompt: false, text: "", hex: "" } : { baud: 0, total: 0, prompt: false, text: "", hex: "" } };
+      return J({ started: true, kind }, 202);
+    }
+    if (method === "POST" && path === "/api/can/selftest") {
+      const d = (window.__mockPreset && window.__mockPreset.diag) || {};
+      state.diagSelftest = d.selftestRefusal
+        ? { running: false, done: true, pass: false, verdict: d.selftestRefusal, refusal: d.selftestRefusal, bus: { baud_kbps: 0, live: false }, esp_heard: false, reply: "none", rpm: -1, took_ms: 3, steps: [], lines: [] }
+        : { running: false, done: true, pass: true, verdict: "PASS: both transceivers see each other", refusal: "", bus: { baud_kbps: 500, live: !!d.live }, esp_heard: true, reply: "ours", rpm: 1726, took_ms: 1880,
+            steps: [{ name: "The chip asked, the ESP32 heard", ok: true, ms: 6, detail: "the chip sent 7DF 02 01 0C at 500 kbit/s; the ESP32 received it and acknowledged it" },
+                    { name: "The ESP32 answered, the chip read it", ok: true, ms: 9, detail: "the ESP32 sent 7EF 04 41 0C 1A F8; the chip printed it: engine speed 1726 rpm, from the ESP32" },
+                    { name: "Bus health and clean-up", ok: true, ms: 120, detail: "0 bus error(s), 0 tx error(s); chip restored, AutoPID resumes" }],
+            lines: ["can    listened 412 ms at 500 kbit/s: silent", "chip   ATTP6     OK", "chip   ATH1      OK", "chip   ATSH 7DF  OK", "chip   ATCAF1    OK", "chip   010C  (sent)", "can    rx 7DF [02 01 0C] after 6 ms", "can    tx 7EF [04 41 0C 1A F8]: queued", "chip   printed: 7EF 04 41 0C 1A F8", "chip   ATPC      OK", "chip   ATD       OK"] };
+      return J({ started: true }, 202);
     }
 
     /* mutations */

@@ -34,6 +34,7 @@
 #include "espnetlink_link.h"
 #include "j2534_server.h"
 #include "iperf_manager.h"
+#include "can_selftest.h"
 #include "vpn_manager.h"
 #include "ip4_routes.h"
 #include "main_sleep.h"
@@ -237,6 +238,8 @@ void app_main(void)
     main_boot_init("ip4_routes_init", ip4_routes_init); /* the VPN's route table */
     main_boot_init("vpn_manager_init", vpn_manager_init);
     main_boot_init("iperf_manager_init", iperf_manager_init);
+    /* the CAN self-test (issue #1023): above can_manager and obd_chip */
+    main_boot_init("can_selftest_init", can_selftest_init);
     main_boot_init("sleep_manager_init", sleep_manager_init);
     main_boot_init("usb_host_manager_init", usb_host_manager_init);
     main_boot_init("usb_acm_cli_init", usb_acm_cli_init);
@@ -274,6 +277,7 @@ void app_main(void)
     main_boot_init("led_manager_register_http", led_manager_register_http);
     main_boot_init("autopid_register_http", autopid_register_http);
     main_boot_init("obd_chip_register_http", obd_chip_register_http);
+    main_boot_init("can_selftest_register_http", can_selftest_register_http);
     main_boot_init("ha_webhooks_register_http", ha_webhooks_register_http);
     main_boot_init("data_destinations_register_http",
               data_destinations_register_http);
@@ -352,6 +356,8 @@ void app_main(void)
     main_boot_start("vpn_manager", vpn_manager_start);
     /* passive diagnostic; sessions start from the `iperf` CLI command */
     main_boot_start("iperf_manager", iperf_manager_start);
+    /* passive too: a run starts from the page, the route or `can_selftest run` */
+    main_boot_start("can_selftest", can_selftest_start);
     /* glue: imu/battery events -> <prefix>/events via the async path */
     /* glue: the MQTT bench surface (bench/cmd burst + bench/echo) */
     main_boot_start("main_bench", main_bench_start);

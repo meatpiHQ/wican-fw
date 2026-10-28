@@ -394,6 +394,18 @@
    }
   }
  },
+ "can_selftest": {
+  "values": {
+   "cli": true
+  },
+  "schema": {
+   "properties": {
+    "cli": {
+     "type": "boolean"
+    }
+   }
+  }
+ },
  "cmdline_manager": {
   "values": {
    "enabled": true,
@@ -1215,6 +1227,7 @@
   "values": {
    "auto_sleep": false,
    "auto_update": true,
+   "cli": true,
    "monitor_policy": "manual",
    "wake_voltage_mv": 13500,
    "sleep_voltage_mv": 13200,
@@ -1226,6 +1239,9 @@
      "type": "boolean"
     },
     "auto_update": {
+     "type": "boolean"
+    },
+    "cli": {
      "type": "boolean"
     },
     "monitor_policy": {
