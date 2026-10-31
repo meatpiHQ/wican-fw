@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'canselftest', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'tspublic', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'canselftest', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [ValidateSet('6.0.2', '6.1')][string]$Idf = '6.1',  # the ESP-IDF the build stages use (6.1 since 6.0.0-beta.5, 2026-10-27; 6.0.2 stays installed; build.ps1 -Idf has the same table)
@@ -938,6 +938,7 @@ function Show-Inventory {
     Write-Host '  j2534std   - a standard J2534 tool through the PassThru server (2026-10-19): udsoncan''s byte stream through the DLL replayed byte-exact (the 4-byte id first, the pad flag per message, TxDone and START_OF_MESSAGE indications, a multi-frame VIN, two ECUs on one channel, functional 7DF through a PASS filter, the reflash gate behind the id), then the installed wican_j2534.dll driven by udsoncan under the 32-bit Python; restore (2 planned restarts, ~1 min)'
     Write-Host '  vpnpause   - the VPN pauses on networks marked Pause VPN (issue #976): the bench AP marked / unmarked, away on the dongle AP, home again; wg-bench on the Pi, the console for the away leg (~12 min)'
     Write-Host '  vpnroutes  - the split tunnel (issue #975): a request to a routed network leaves through wg-bench on the Pi, one to any other address through the station, judged at the receiver by the source address (~6 min)'
+    Write-Host '  tspublic   - Tailscale against the public rig (issue #1024, 2026-10-31): headscale and a peer on betty, the public Tailscale DERP map; register, tunnel IP, direct path, ICMP + HTTP through the tunnel, the DERP relay up over TLS, the internal RAM flat over a 3 min soak; everything torn down and the keys wiped at the end (~8 min; needs betty and internet for the DUT)'
     Write-Host '  espnleasy  - the ESPNetLink easy-setup surfaces on the DUT (2026-10-13): the usb summary on /api/status against /api/espnetlink, the sim_pin key (a no-op PUT, no restart), the UI doors in the served page, the GPS hint counting away from home (ap off on the P4 for 100 s, home again) (~6 min; needs the P4 daemon)'
     Write-Host '  espnlapn   - the carrier settings relay in the USB modes (2026-10-28): a bench APN set on the WiCAN reaches the dongle through the share pass (one planned dongle restart), a plain WiCAN restart writes nothing, the APN restored as found and the LTE back (~8 min, 3 to 4 planned WiCAN restarts, 2 dongle restarts; the dongle on the connector in a USB mode with its console on; its LTE is down while the bench APN is on it)'
     Write-Host '  garage     - the garage story with the ESPNetLink (2026-10-12): home WiFi on the P4, away on the dongle LTE with the VPN to betty, home again, flaps, a dongle reboot away, sleep/wake both ways; the data path judged at a receiver on betty by the source address of every POST; the default legs in usb_rndis with VPN variant A (~35 min; wifi_modem, variant B, g9 and g11 by hand)'
@@ -1446,6 +1447,35 @@ try {
                     if (-not ($out | Select-String -Quiet 'VPN ROUTES PASS')) { throw 'no VPN ROUTES PASS (wg-bench on the Pi? dd_receiver started? the DUT on the bench AP?)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
+                }
+            }
+        }
+        'tspublic' {
+            # Tailscale against the canonical public rig (issue #1024,
+            # 2026-10-31): ts_public_soak.sh brings headscale and a real peer
+            # up on betty with the public Tailscale DERP map, joins the DUT
+            # over its real uplink, runs the legs (register, tunnel IP,
+            # direct path, ICMP + HTTP through the tunnel, the DERP relay up
+            # over TLS, internal RAM flat) and a 3 min soak, and tears it all
+            # down with the keys wiped. The DUT must reach the internet (the
+            # Pi's NAT or the dongle's LTE); the script talks to the DUT
+            # through the Pi, so no tunnel is needed here.
+            Invoke-Stage 'Tailscale on the public rig' {
+                $con = Start-ConsoleTail 'ts_public'
+                try {
+                    $env:DUT_IP = $DutIp
+                    # Git Bash, named by path: a bare `bash` on this PC is WSL's, which
+                    # cannot open a C:/ path; and forward slashes, a backslashed path
+                    # loses its separators in bash
+                    $gitBash = @("$env:ProgramFiles\Git\bin\bash.exe", "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+                    if (-not $gitBash) { throw 'Git Bash not found (Git for Windows; the IDF portable git on PATH has no bash)' }
+                    $sh = "$repo\tools\testbench\vpn\ts_public_soak.sh" -replace '\\', '/'
+                    $out = & $gitBash $sh 'run' '3' 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'ts_public' $out
+                    if (-not ($out | Select-String -Quiet 'TS PUBLIC PASS')) { throw 'no TS PUBLIC PASS (betty reachable? the DUT on the internet? the relay refused?)' }
+                } finally {
+                    Remove-Item Env:DUT_IP -ErrorAction SilentlyContinue
                     Stop-ConsoleTail $con
                 }
             }

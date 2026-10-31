@@ -485,7 +485,10 @@ CANONICAL VPN benches**, `wg_public_soak.sh` (self-verifying since
 2026-07-21: handshake + ICMP-through-tunnel after `up`; split mode
 keeps the AllowedIPs NETWORK address = the BUG_WG_NETIF_ADDR
 regression gate) and `ts_public_soak.sh` (fresh headscale state each
-run = the phantom-peers gate; full register/tunnel/peer legs). They
+run = the phantom-peers gate; full register/tunnel/peer legs; since
+2026-10-31 also the DERP relay up over TLS, `/api/vpn` `derp`, and the
+internal RAM flat over 60 s or over the soak: the two gates of issue
+#1024, `.\test.ps1 tspublic` runs it as `run 3`). They
 exercise the real internet path (NAT, public endpoint, keepalives;
 set `WG_BENCH_DNS=<name>` to run the firmware DNS-endpoint path too).
 The rpi001-local rigs above (`vpn_bench_target.py`,
@@ -515,6 +518,29 @@ sampler, not the tunnel (13 of 87 samples in the split run, 0 in the
 full run). The MQTT `tcp_read error` lines a second before every planned
 restart are the shutdown order (WiFi stops before the MQTT client), on
 every bench console since September.
+
+**2026-10-31, issue #1024 (Tailscale: the crash loop, the relay, the leak;
+`test-reports/2026-10-31_1145_tailscale_1024_repro.md`).** The public rig
+reproduced both field reports on the beta.6 dev build: `TS PUBLIC PASS` while
+every DERP relay handshake failed (`TLS handshake failed: X509 - Requested OID
+is unknown`, the relay's Ed25519 meta certificate on mbedTLS 4's TLS 1.3
+parser) and every failed attempt leaked 21 KB PSRAM + 230 B internal; with
+BLE on the device panicked at a task's first name lookup (the field backtrace
+line for line, `ha_webhook`), three times, and parked. The fix (microlink's
+X.509 wrap and session-ticket handling, the DERP cleanup and backoff, the
+`lwip_guard` component, vpn_manager's 30 KB internal-RAM floor with its
+`reason`) was proven on the same rig: **`.\test.ps1 tspublic` PASS** (302 s)
+on the final image, with the two new legs `DERP relay connected (derp:true)`
+and `internal RAM flat over the soak (31123 -> 31327 B)`; the floor held
+Tailscale with BLE on (`not started: 13 KB of internal RAM free, Tailscale
+needs 30 KB: turn Bluetooth off (about 40 KB), or use WireGuard`) and the
+device stayed reachable; host suites `lwip_guard` 5/5 and `vpn_manager` 12/12.
+Measured on the way: Tailscale takes about 20 KB of internal RAM (51.9 KB
+settled with the VPN off, 33.1 KB at the connect, 31.5 KB steady), BLE about
+40 KB; the two do not share this unit's budget. Rig lessons: the stage calls
+Git for Windows' bash by path (a bare `bash` is WSL's, and the IDF portable
+git on the runner's PATH has no bash); the stage needs betty and an internet
+path for the DUT (the Pi NATs the bench AP, or the dongle's LTE).
 
 ## BenchBoard: the interactive test dashboard (2026-07-26)
 

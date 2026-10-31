@@ -10,7 +10,9 @@
 #           peer node "betty-peer" (static build, own tun)
 #   DUT:    joins as "wican-pub" via vpn_manager type=tailscale
 #   legs:   register -> tailnet IP -> disco ping -> ICMP -> HTTP through
-#           the tunnel -> DUT peer-detail surface; then a soak loop.
+#           the tunnel -> DUT peer-detail surface -> the DERP relay up
+#           (/api/vpn derp, 2026-10-31) -> internal RAM flat over 60 s
+#           (`up`) or over the soak (`run`); then the soak loop.
 #
 # KEY HYGIENE (same rules as wg_public_soak.sh):
 #   * headscale's noise private key + node db live only on betty; `down`
@@ -56,6 +58,10 @@ check() { # name ok [detail]
 }
 dut() { $PI "curl -s -m 10 $*"; }
 tsq() { $SRVSSH "$BASE/ts/tailscale --socket=/run/tsb.sock $*"; }
+dut_int_free() { # the DUT's internal RAM free, bytes ("" when unreachable)
+    dut "-s -m 6 http://${DUT_IP}/api/status" 2>/dev/null | python3 -c \
+        "import json,sys; print(json.load(sys.stdin)['memory']['internal']['free'])" 2>/dev/null
+}
 
 dut_put_vpn() { # reads mutated-config JSON on stdin, PUTs it via curl stdin
     $PI "curl -s -o /dev/null -w '%{http_code}' -m 10 \
@@ -237,6 +243,28 @@ EOF
     check "DUT sees the peer" "$(echo "$V2" | grep -q '"ts_peers":0' && echo 0 || echo 1)" "$(echo "$V2" | head -c 240)"
     echo "path: $(tsq status 2>/dev/null | grep -i wican || echo '?')"
 
+    # --- the DERP relay (2026-10-31, issue 1024): the public Tailscale relays
+    # over TLS on :443 (the derpmap above). Every handshake failed on v6
+    # until the Ed25519 meta certificate was tolerated again; /api/vpn
+    # `derp` is the firmware's own word on it.
+    D=0; end=$((SECONDS+90))
+    while [ $SECONDS -lt $end ]; do
+        V3=$(dut "-s -m 6 http://${DUT_IP}/api/vpn" 2>/dev/null)
+        echo "$V3" | grep -q '"derp":true' && D=1 && break
+        sleep 5
+    done
+    check "DERP relay connected" "$D" "$(echo "$V3" | sed -n 's/.*\("derp":[a-z]*\).*/\1/p')"
+
+    # --- internal RAM flat (the leak gate of the same day): a refused relay
+    # cost 21 KB PSRAM + 230 B internal per attempt, several a minute
+    M0=$(dut_int_free)
+    echo "internal RAM free after the legs: ${M0} B"
+    if [ "$1" = "up" ]; then
+        sleep 60
+        M1=$(dut_int_free)
+        check "internal RAM flat over 60 s" "$([ -n "$M0" ] && [ -n "$M1" ] && [ $((M0 - M1)) -lt 4096 ] && echo 1 || echo 0)" "${M0} -> ${M1} B"
+    fi
+
     # --- soak
     if [ "$1" = "run" ]; then
         echo "=== soak ${MINS} min ==="
@@ -244,10 +272,12 @@ EOF
         while [ "$(date +%s)" -lt "$end" ]; do
             sleep 30
             S=$(dut "-s -m 6 http://${DUT_IP}/api/vpn" 2>/dev/null |
-                sed -n 's/.*"state":"\([a-z]*\)".*"ts_peers":\([0-9]*\).*/state=\1 peers=\2/p')
+                sed -n 's/.*"state":"\([a-z]*\)".*"ts_peers":\([0-9]*\),"derp":\([a-z]*\).*/state=\1 peers=\2 derp=\3/p')
             L=$(tsq status 2>/dev/null | grep -i wican | sed 's/  */ /g' | cut -c1-90)
-            echo "$(date +%H:%M:%S)  DUT ${S:-unreachable!}  |  ${L:-peer line missing}"
+            echo "$(date +%H:%M:%S)  DUT ${S:-unreachable!}  int free $(dut_int_free) B  |  ${L:-peer line missing}"
         done
+        M1=$(dut_int_free)
+        check "internal RAM flat over the soak" "$([ -n "$M0" ] && [ -n "$M1" ] && [ $((M0 - M1)) -lt 4096 ] && echo 1 || echo 0)" "${M0} -> ${M1} B"
     fi
     ;;
 

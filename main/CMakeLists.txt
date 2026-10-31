@@ -25,7 +25,7 @@ idf_component_register(
              mqtt_can mqtt_manager obd_chip obd_gate ota_manager partition_migrate
              fw_update
              restart_tracker rtc_manager settings_manager socket_manager
-             sleep_manager usb_host_manager vpn_manager ip4_routes
+             sleep_manager usb_host_manager vpn_manager ip4_routes lwip_guard
              websocket_manager wifi_manager esp_driver_uart esp_netif
              web_ui_v2
              translator_slcan translator_realdash translator_gvret
