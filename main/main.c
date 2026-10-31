@@ -493,6 +493,7 @@ void app_main(void)
         vTaskDelay(pdMS_TO_TICKS(60000));
 
         main_boot_flash_watch();
+        main_boot_flash_jobs_watch();
 
         /* a run that stayed up RESTART_TRACKER_SETTLE_S is healthy: this
            ends a crash streak (no flash; a no-op once it is marked) */

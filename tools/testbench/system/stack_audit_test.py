@@ -188,6 +188,16 @@ def main():
               f"stack_ext {row.get('stack_ext')} stack_hw {row.get('stack_hw')}"
               if row else "task not found")
 
+    # 2026-11-01: the VPN state task and the Tailscale WireGuard manager
+    # live on PSRAM stacks too (their NVS work runs on the flash worker);
+    # they exist only with the VPN enabled, so the check is conditional
+    # (the public Tailscale stage asserts them with the tunnel up)
+    for name in ("vpn_state", "ml_wg_mgr"):
+        row = next((x for x in tasks if x.get("name") == name), None)
+        if row is not None:
+            check(f"{name} stack in PSRAM", row.get("stack_ext") is True,
+                  f"stack_ext {row.get('stack_ext')} stack_hw {row.get('stack_hw')}")
+
     low = [(x["name"], x["stack_hw"]) for x in tasks
            if x.get("stack_hw", 1 << 30) < TASK_FAIL_B]
     warn = [(x["name"], x["stack_hw"]) for x in tasks

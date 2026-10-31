@@ -13,3 +13,12 @@ Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cel
 **Re-run the same day at 17:01 on the build whose `ota_manager` erases sector by sector (`OTA_WITH_SEQUENTIAL_WRITES`, found by the release test): `FW UPDATE PASS` 73 of 73, the pipe download 38.6 s (23 s on 2026-10-19: the erase time moved from the session's begin into the writes), heap floor 45,339 B.** The stage opens its own tunnel on 18081: a tunnel held by hand on that port makes it refuse in 3 s ("port 18081 busy?").
 
 **2026-10-31 (the HTTP server task on a PSRAM stack): `FW UPDATE PASS` on the second run** (505 s). The first run (`2026-10-31_2208_fwupdate.md`) failed two checks: `f6_backup_step_reported` read the job as `downloading` with `backup.sd` false because the job moved to `downloading` before running the backup step (the copies refresh takes half a second); `fw_update_job.c` publishes the step's result before the state moves since that night, and the second run read `backup {"sd": true}`. `f3_flash_writes_bounded` measured 108 writes after the first boot of the new image (the bound is 32, the record 11 to 12): not explained that night beyond an NVS page compaction on a device that had stored four runs of crash reports and a dozen update records that day; the second run measured 12. The legacy push on `/upload/ota.bin` and the upload route run the OTA session chunk by chunk on the flash worker from the server's PSRAM stack.
+
+**2026-11-01 00:13 (fw_update's record and confirm payloads on the flash worker instead of
+the one-shot `fwu_flash` task, `internal/TASK_httpd_psram_followups.md`): `FW UPDATE PASS`**
+(472 s): the manifest pull, the first boot of the new image writing 12 times (the bound is
+32), the verify at the milestone (`f3_verified_at_the_milestone`, the confirm payload
+through `flash_jobs_run` from the fw_update task's PSRAM stack), the layout verdicts, the
+rollback by the bootloader after one crash, the device back on image A; `fw_update` stack
+headroom 6728 B, internal min_free 48,704 before and 49,648 after the boot, the closing
+floor 41,856 B. Report `test-reports/2026-11-01_0013_fwupdate.md`.

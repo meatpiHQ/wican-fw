@@ -193,7 +193,16 @@ def find_tasks():
                 buf = parts[5].strip().lstrip("&").strip()
                 if re.fullmatch(r"\w+", buf):
                     ident = buf
-            if ident:
+            if "WithCaps" in call:
+                psram = "SPIRAM" in args
+            elif "Static" not in call:
+                # xTaskCreate / xTaskCreatePinnedToCore: the stack comes
+                # from the FreeRTOS heap, internal RAM, whatever the size
+                # expression was (2026-11-01: the flash_jobs worker read
+                # "?" because its size is a macro and the buffer lookup
+                # below never applies to a dynamic task)
+                psram = False
+            elif ident:
                 mm = re.search(r"\bStackType_t\s+" + re.escape(ident) +
                                r"\s*\[[^\]]*\][^;]*;", text)
                 if mm:
@@ -203,10 +212,12 @@ def find_tasks():
                                 text.rfind("{", 0, mm.start()),
                                 text.rfind("}", 0, mm.start())) + 1
                     psram = "EXT_RAM" in text[start:mm.end()]
-            elif "WithCaps" in call:
-                psram = "SPIRAM" in args
-            elif "Static" not in call:
-                psram = False   # xTaskCreate*: the FreeRTOS heap, internal
+                elif re.search(r"\bStackType_t\s*\*\s*" + re.escape(ident)
+                               + r"\b", text):
+                    # a pointer: the buffer comes from a heap; PSRAM when
+                    # the file takes it with MALLOC_CAP_SPIRAM (microlink's
+                    # tasks, the vpn_state task since 2026-11-01)
+                    psram = "MALLOC_CAP_SPIRAM" in text
             line = text[:m.start()].count("\n") + 1
             tasks.append({
                 "name": name, "size": size, "psram": psram,

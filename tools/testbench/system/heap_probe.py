@@ -37,6 +37,10 @@ def mem_row(dut):
     st = dut.get("/api/status")
     m = st.get("memory", {}).get("internal", {})
     tasks = dut.get("/api/status/tasks").get("tasks", [])
+    # the flash worker (2026-11-01): a reading taken while a worker is alive
+    # carries its stack (free is lower by that much for the 5 s after the
+    # last marshalled job); the counters say so per row
+    fj = st.get("health", {}).get("flash_jobs", {})
     return {
         "uptime": st.get("uptime"),
         "total": m.get("total"),
@@ -44,9 +48,19 @@ def mem_row(dut):
         "min_free": m.get("min_free"),
         "largest": m.get("largest_block"),
         "log_errors": st.get("health", {}).get("log_errors"),
+        "flash_jobs": fj,
         "tasks": sorted(t.get("name", "?") for t in tasks),
         "stack_hw": {t.get("name"): t.get("stack_hw") for t in tasks},
     }
+
+
+def fj_text(fj):
+    """The worker's counters for a row's line: '' on a firmware without them."""
+    if not fj:
+        return ""
+    return (f"  worker {'alive' if fj.get('worker_alive') else 'gone'}"
+            f" (marshalled {fj.get('marshalled')}, spawns {fj.get('spawns')},"
+            f" refusals {fj.get('refusals')}, stack_hw_min {fj.get('stack_hw_min')})")
 
 
 def main():
@@ -101,6 +115,7 @@ def main():
             print(f"{name:12s} uptime {r['uptime']}  total {r['total']}  "
                   f"free {r['free']}  min_free {r['min_free']}  "
                   f"largest {r['largest']}  log_errors {r['log_errors']}"
+                  + fj_text(r.get("flash_jobs"))
                   + (f"  tasks gone: {' '.join(gone)}" if gone else "")
                   + (f"  tasks new: {' '.join(new)}" if new else ""),
                   flush=True)

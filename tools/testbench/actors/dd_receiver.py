@@ -218,13 +218,20 @@ def main():
     ap.add_argument("--tls-dir", default=os.path.expanduser("~/wican-tls"))
     ap.add_argument("--mqtt", default="localhost")
     ap.add_argument("--topic", default="wican/#")
+    ap.add_argument("--no-tls", action="store_true",
+                    help="the plain listener only (a host without the bench "
+                         "CA: the Tailscale subnet router leg on betty)")
     a = ap.parse_args()
     serve(Plain, 8199)
-    serve(Tls, 8443, a.tls_dir)
-    serve(Mtls, 8444, a.tls_dir, require_client=True)
-    serve(Abrp, 8445, a.tls_dir)
-    threading.Thread(target=mqtt_sub, args=(a.mqtt, a.topic), daemon=True).start()
-    print("dd_receiver up: 8199 http, 8443 https, 8444 mtls, 8445 abrp; mqtt", a.mqtt, a.topic, flush=True)
+    if not a.no_tls:
+        serve(Tls, 8443, a.tls_dir)
+        serve(Mtls, 8444, a.tls_dir, require_client=True)
+        serve(Abrp, 8445, a.tls_dir)
+    if a.mqtt != "none":
+        threading.Thread(target=mqtt_sub, args=(a.mqtt, a.topic), daemon=True).start()
+    print("dd_receiver up: 8199 http"
+          + ("" if a.no_tls else ", 8443 https, 8444 mtls, 8445 abrp")
+          + "; mqtt", a.mqtt, a.topic, flush=True)
     while True:
         time.sleep(3600)
 

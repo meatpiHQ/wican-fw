@@ -7,3 +7,8 @@ Needs: main fw on DUT (tunnel or Pi-side address) + ECU simulator on the bus for
 Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
 
 **AutoPID vehicle-profile import** (→ `AUTOPID PROFILE PASS`, ~2 min, no vehicle): PUTs EVERY published profile (`vehicle_profiles.json` on GitHub main, or `--profiles FILE`) through the web UI's import conversion (byte-index shift, degree sign, duplicate-name rename) and expects `200 {"ok":true}` for each; then polls one custom PID on `0100` carrying 24 parameters (the ECU simulator answers it) and expects all 24 decoded in `GET /api/autopid` with no new E line; restores the config it found and reads it back equal. Born 2026-09-16 from "Profile rejected: 220105: more than 16 parameters" on picking Hyundai Ioniq5/6: `AP_PARAMS_PER` 16 rejected 11 of 80 profiles (Hyundai/Kia BMS DIDs decode 20-32 values, Xpeng 192), then a typo in three Hyundai/Kia profiles (cell 158 labelled `HV_C_V_168` twice) tripped the duplicate-name rule; cap now 256 with the poller's copy in PSRAM, the importer renames repeats and says so. Bench 2026-09-16 through the ssh tunnel: PASS
+
+**2026-11-01 00:12 (the vehicle writer `apid_veh` on a PSRAM stack, `--skip-wide`):
+`AUTOPID PROFILE PASS`**, 87/87 profiles accepted (the widest 192 parameters, 4 renames),
+every import a write of the vehicle store through the writer task, the filesystem
+marshalling its flash part to the worker; no abort, the DUT as found afterwards.

@@ -11,8 +11,11 @@
 #   DUT:    joins as "wican-pub" via vpn_manager type=tailscale
 #   legs:   register -> tailnet IP -> disco ping -> ICMP -> HTTP through
 #           the tunnel -> DUT peer-detail surface -> the DERP relay up
-#           (/api/vpn derp, 2026-10-31) -> internal RAM flat over 60 s
-#           (`up`) or over the soak (`run`); then the soak loop.
+#           (/api/vpn derp, 2026-10-31) -> a subnet route the betty peer
+#           advertises learned from the map and a request through it
+#           (2026-11-01) -> the Tailscale task stacks on PSRAM -> internal
+#           RAM flat over 60 s (`up`) or over the soak (`run`); then the
+#           soak loop.
 #
 # KEY HYGIENE (same rules as wg_public_soak.sh):
 #   * headscale's noise private key + node db live only on betty; `down`
@@ -58,6 +61,31 @@ check() { # name ok [detail]
 }
 dut() { $PI "curl -s -m 10 $*"; }
 tsq() { $SRVSSH "$BASE/ts/tailscale --socket=/run/tsb.sock $*"; }
+# the subnet router leg (2026-11-01): a network betty advertises (an alias on
+# its loopback) that the DUT must learn from the map and reach through the
+# tunnel; the receiver on betty records the request's source address
+SUBNET=10.99.0.0/24
+SUBNET_IP=10.99.0.1
+RECV_PORT=8199
+RECEIVER_SRC="$(dirname "$0")/../actors/dd_receiver.py"
+recv_count() { # records the receiver holds ("" when it is down)
+    $SRVSSH "curl -s -m 5 'http://127.0.0.1:${RECV_PORT}/__dump?since=0'" 2>/dev/null | python3 -c \
+        "import json,sys; print(len(json.load(sys.stdin)))" 2>/dev/null
+}
+dut_dd_config() { # $1 = python mutation of the data_destinations document, PUT back
+    dut "-s http://${DUT_IP}/api/settings/data_destinations" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+for k in ('degraded','pending_reboot'): d.pop(k,None)
+${1}
+print(json.dumps(d))" | $PI "curl -s -o /dev/null -w '%{http_code}' -m 10 \
+        -X PUT http://${DUT_IP}/api/settings/data_destinations \
+        -H 'Content-Type: application/json' -d @-"
+}
+DD_ROW_DROP="d['destinations']=[r for r in d.get('destinations',[]) if r.get('name')!='tsroute']"
+DD_ROW_ADD="${DD_ROW_DROP}
+d['enabled']=True
+d['destinations'].append({'name':'tsroute','type':'http','enabled':True,'url':'http://${SUBNET_IP}:${RECV_PORT}/route','period_s':86400,'auth':'none','auth_token':'','auth_name':'','basic_username':'','basic_password':'','api_key':'','query':'','cert_set':'','car_model':'','retain':True,'full_first':True})"
 dut_int_free() { # the DUT's internal RAM free, bytes ("" when unreachable)
     dut "-s -m 6 http://${DUT_IP}/api/status" 2>/dev/null | python3 -c \
         "import json,sys; print(json.load(sys.stdin)['memory']['internal']['free'])" 2>/dev/null
@@ -199,6 +227,9 @@ EOF
            'ts_control_url':os.environ['EP']+':'+os.environ['HSPORT']})" \
         | dut_put_vpn)
     check "DUT vpn PUT" "$([ "$CODE" = "200" ] && echo 1 || echo 0)" "http $CODE"
+    # the destination row the subnet leg tests with (one submit for both)
+    CODE=$(dut_dd_config "$DD_ROW_ADD")
+    check "DUT destination row PUT" "$([ "$CODE" = "200" ] && echo 1 || echo 0)" "http $CODE"
     dut "-X POST http://${DUT_IP}/api/settings/submit" >/dev/null
     echo "DUT submitted (rebooting)"
 
@@ -255,6 +286,58 @@ EOF
     done
     check "DERP relay connected" "$D" "$(echo "$V3" | sed -n 's/.*\("derp":[a-z]*\).*/\1/p')"
 
+    # --- a subnet router (2026-11-01; the Discord question "should pushing
+    # routes via tailscale work?"): betty advertises SUBNET, an alias on its
+    # loopback, headscale approves it, and the DUT must learn it from the
+    # map (/api/vpn routes) and reach an address in it through the tunnel:
+    # the receiver on betty records the request's source, the DUT's tailnet
+    # address. Before 2026-11-01 the firmware ignored a peer's AllowedIPs
+    # beyond its own address, so the request left over the station and
+    # died (the reporter's "WiCAN says it can't connect to the MQTT server").
+    scp -q -o BatchMode=yes "$RECEIVER_SRC" "$SRV:$BASE/dd_receiver.py"
+    # the pkill in its own ssh call: the start block below carries the plain
+    # 'dd_receiver.py' in its nohup line, and a same-shell pkill self-matches
+    # through it and kills the block (the headscale trap above, met again
+    # here on 2026-10-31)
+    $SRVSSH "pkill -f '[d]d_receiver.py' 2>/dev/null; sleep 1; true"
+    $SRVSSH "ip addr add ${SUBNET_IP}/24 dev lo 2>/dev/null || true
+        nohup python3 $BASE/dd_receiver.py --no-tls --mqtt none > /var/log/ddr_bench.log 2>&1 < /dev/null &
+        $BASE/ts/tailscale --socket=/run/tsb.sock set --advertise-routes=${SUBNET} 2>&1 | tail -2
+        sleep 3
+        $BASE/headscale routes list -o json 2>/dev/null | python3 -c \"
+import json,sys
+for r in json.load(sys.stdin) or []:
+    if r.get('prefix')=='${SUBNET}': print(r.get('id'))\" | while read id; do
+            $BASE/headscale routes enable -r \$id >/dev/null 2>&1 && echo \"route \$id (${SUBNET}) enabled on headscale\"
+        done"
+    RL=$($SRVSSH "$BASE/headscale routes list 2>/dev/null | grep -F '${SUBNET}' | head -1")
+    check "subnet route advertised and enabled on headscale" "$(echo "$RL" | grep -qi 'true.*true' && echo 1 || echo 0)" "$RL"
+    N0=$(recv_count)
+    check "receiver up on betty" "$([ -n "$N0" ] && echo 1 || echo 0)" "records=${N0:-?}"
+    R=0; end=$((SECONDS+120))
+    while [ $SECONDS -lt $end ]; do
+        V4=$(dut "-s -m 6 http://${DUT_IP}/api/vpn" 2>/dev/null)
+        echo "$V4" | grep -q "\"routes\":\[[^]]*\"${SUBNET}\"" && R=1 && break
+        sleep 5
+    done
+    check "subnet route learned from the map" "$R" "$(echo "$V4" | sed -n 's/.*\("routes":\[[^]]*\]\).*/\1/p')"
+    T=$(dut "-s -m 40 -X POST http://${DUT_IP}/api/destinations/test -H 'Content-Type: application/json' -d '{\"name\":\"tsroute\"}'" 2>/dev/null)
+    check "destination test through the subnet route answers" "$(echo "$T" | grep -q '"ok":true' && echo 1 || echo 0)" "$(echo "$T" | head -c 200)"
+    REC=$($SRVSSH "sleep 2; curl -s -m 5 'http://127.0.0.1:${RECV_PORT}/__dump?since=${N0:-0}' | python3 -c \"
+import json,sys
+r=[x for x in json.load(sys.stdin) if x.get('path','').endswith('/route')]
+print(r[-1]['peer'] if r else 'none')\"" 2>/dev/null)
+    check "the subnet router saw the request from the tailnet address" "$([ -n "$TSIP" ] && [ "$REC" = "$TSIP" ] && echo 1 || echo 0)" "peer=$REC (expected $TSIP)"
+
+    # --- the Tailscale task stacks (2026-11-01): the state task and the
+    # WireGuard manager live on PSRAM stacks now (their NVS work runs on the
+    # flash worker); a build that moved them back shows here
+    S=$(dut "-s -m 6 http://${DUT_IP}/api/status/tasks" 2>/dev/null | python3 -c "
+import json,sys
+t={x['name']:x for x in json.load(sys.stdin)['tasks']}
+print(' '.join(f\"{n}={t[n].get('stack_ext')}/{t[n].get('stack_hw')}\" if n in t else f'{n}=missing' for n in ('vpn_state','ml_wg_mgr')))" 2>/dev/null)
+    check "vpn_state and ml_wg_mgr stacks in PSRAM" "$(echo "$S" | grep -q 'vpn_state=True' && echo "$S" | grep -q 'ml_wg_mgr=True' && echo 1 || echo 0)" "$S"
+
     # --- internal RAM flat (the leak gate of the same day): a refused relay
     # cost 21 KB PSRAM + 230 B internal per attempt, several a minute
     M0=$(dut_int_free)
@@ -293,10 +376,15 @@ down)
     VCFG=$(dut_vpn_config "d.update({'enabled':False,'type':'wireguard','ts_auth_key':'','ts_control_url':'','ts_device_name':''})" 2>/dev/null)
     if [ -n "${VCFG:-}" ]; then
         printf '%s' "$VCFG" | dut_put_vpn | sed 's/^/DUT vpn disable PUT -> /'; echo
+        echo "DUT destination row removed -> $(dut_dd_config "$DD_ROW_DROP" 2>/dev/null)"
         dut "-X POST http://${DUT_IP}/api/settings/submit" >/dev/null 2>&1 && echo "DUT submitted (VPN off, key blanked)"
     else
-        echo "DUT unreachable: blank ts_auth_key manually when it is back"
+        echo "DUT unreachable: blank ts_auth_key and drop the tsroute destination manually when it is back"
     fi
+    # the subnet router leg's pieces on betty (the pkill alone in its call:
+    # it would self-match through any other mention of the receiver)
+    $SRVSSH "pkill -f '[d]d_receiver.py' 2>/dev/null; true"
+    $SRVSSH "ip addr del ${SUBNET_IP}/24 dev lo 2>/dev/null; true"
     $SRVSSH "$BASE/ts/tailscale --socket=/run/tsb.sock down 2>/dev/null
         pkill -f '[t]ailscaled.*tsb.sock' 2>/dev/null || true
         pkill -f '$BASE/[h]eadscale serve' 2>/dev/null || true

@@ -22,6 +22,7 @@
 #include "cmdline_manager.h"
 #include "dev_status_manager.h"
 #include "event_manager.h"
+#include "flash_jobs.h"
 #include "http_server_manager.h"
 #include "ip4_routes.h"
 #include "j1939.h"
@@ -283,6 +284,38 @@ void main_boot_flash_watch(void)
                  (unsigned long)fl.erase_count);
         dev_status_manager_fault_raise("flash_churn", detail);
     }
+}
+
+/** The flash worker's refusals (2026-11-01): a marshalled flash job was
+ *  refused because the internal heap could not give the worker its stack,
+ *  so a settings save, a file write or an update chunk did not happen
+ *  (the caller answered its error, the worker logged one W line per 10 s).
+ *  Latched ONCE per boot with the count: the device is at its internal-RAM
+ *  cliff, the structural fact the health surface exists for. */
+void main_boot_flash_jobs_watch(void)
+{
+    static bool s_raised;
+    flash_jobs_stats_t fj;
+
+    if (s_raised)
+    {
+        return;
+    }
+
+    flash_jobs_stats(&fj);
+
+    if (fj.refusals == 0)
+    {
+        return;
+    }
+
+    s_raised = true;
+
+    char detail[56];
+
+    snprintf(detail, sizeof(detail), "%lu flash job(s) refused: no internal RAM",
+             (unsigned long)fj.refusals);
+    dev_status_manager_fault_raise("flash_jobs_refused", detail);
 }
 
 /** Init/register one step. NEVER panics: a deterministic init failure

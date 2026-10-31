@@ -35,3 +35,8 @@ void main_boot_health_report(void);
 /** Flash-churn tripwire: call from the 60 s watch loop; latches one
  *  `flash_churn` fault per boot when erases rise 10 windows straight. */
 void main_boot_flash_watch(void);
+
+/** The flash worker's refusals (2026-11-01): call from the 60 s watch
+ *  loop; latches one `flash_jobs_refused` fault per boot once a marshalled
+ *  flash job was refused for want of internal RAM. */
+void main_boot_flash_jobs_watch(void);
