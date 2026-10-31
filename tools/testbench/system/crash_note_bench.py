@@ -62,6 +62,10 @@ SETTINGS_KEPT = ("can_manager", "autopid", "sleep_manager", "j1939",
 # bits, and at most one page erase when the page it lands on is full.
 STORE_MAX_WRITES = 96
 STORE_MAX_BYTES = 2048
+# an NVS page compaction under the store (2026-10-31: 135 writes, 2680 B,
+# one 4 KB erase, twice on one image): the live entries of a page, copied
+NVS_COMPACTION_MAX_WRITES = 200
+NVS_COMPACTION_MAX_BYTES = 4096
 
 KINDS = [
     # name, console command, reset reason, note kind, a function the decoded
@@ -248,15 +252,28 @@ def crash(run, dut, con, elf, kind, st_version):
     same = [ln for ln in lines
             if "crash report: the stored one is this crash" in ln]
     if news:
+        # NVS compacts a full page under a store now and then: the live
+        # entries are copied to a fresh page (about 135 small writes,
+        # 2.7 KB) and the old page erased (one 4 KB erase). It is NVS's own
+        # housekeeping, driven by how full the partition is, not the
+        # firmware's write: on 2026-10-31 the same signature (135, 2680, 1,
+        # 4096) hit the `fault` leg of one run and the `wdt` leg of the
+        # next on one image, while every other store stayed at 10 to 12
+        # writes. Accepted once per store when the erase is there.
+        compacted = flash is not None and flash[2] == 1 \
+            and flash[0] <= STORE_MAX_WRITES + NVS_COMPACTION_MAX_WRITES \
+            and flash[1] <= STORE_MAX_BYTES + NVS_COMPACTION_MAX_BYTES
+        small = flash is not None and 1 <= flash[0] <= STORE_MAX_WRITES \
+            and flash[1] <= STORE_MAX_BYTES and flash[2] == 0
         run.check(f"{name}_stored_by_one_small_write",
-                  flash is not None and 1 <= flash[0] <= STORE_MAX_WRITES
-                  and flash[1] <= STORE_MAX_BYTES and flash[2] <= 1
-                  and len(stored) == 1 and not same,
-                  f"WICAN FLASH {flash}, {len(stored)} `stored` line(s)")
+                  (small or compacted) and len(stored) == 1 and not same,
+                  f"WICAN FLASH {flash}, {len(stored)} `stored` line(s)"
+                  + (" (an NVS page compaction)" if compacted else ""))
         if flash:
             run.metric(f"{name}_store_writes", flash[0])
             run.metric(f"{name}_store_bytes", flash[1], "B")
             run.metric(f"{name}_store_erases", flash[2])
+            run.metric(f"{name}_store_compacted", 1 if compacted else 0)
     else:
         run.check(f"{name}_same_crash_writes_no_flash",
                   flash == (0, 0, 0, 0) and not stored and len(same) == 1,

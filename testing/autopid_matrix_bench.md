@@ -1,0 +1,9 @@
+# AutoPID matrix: standard + custom + vehicle-specific PIDs and passive filters against the ECU simulator
+
+Command: `python tools/testbench/obd/autopid_matrix_bench.py localhost:18081` (the tunnel to the DUT)
+
+Needs: main fw on DUT + ECU simulator reachable (192.168.8.1), autopid gates toggled and restored by the run
+
+Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
+
+**AutoPID matrix: standard + custom + vehicle-specific PIDs and passive filters against the ECU simulator** (prints `AUTOPID MATRIX PASS`, 50 checks + 1 WARN, ~7 min, 3 DUT reboots). Legs: std scan -> 16 rows -> RPM 800 / coolant 90 / speed 0 through the standard table; hand-written custom expressions and a period-0 group; multi-frame UDS DIDs (VIN 22F190 over three frames) and a second ECU on 7E1/7E9 with init + rxheader; all three groups live at once with the update rates and a runtime group toggle; passive filter windows on the simulator broadcast; `std_enabled=false` silences std rows only; restore. 2026-10-24: re-run on the headers-on build of issue #1014 (frame of reference restored): the std legs passed unchanged; the bench's own custom and specific rows were written in the alpha/beta headers-off numbering (`[B2:B3]/4` read 771) and are re-numbered (`[B3:B4]/4`, the VIN's first character at B5, its 17th at B23), and the run now switches the custom and specific type gates on when it finds them off. The WARN is the open filter-on-a-flooded-bus finding (autopid README). The published profiles were also replayed against the private Car Scanner log collection (car_logs repo, `tools/check_profiles.py`): see internal/TASK_profile_frame_ref.md section 8 for the profile defects it found

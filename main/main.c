@@ -57,6 +57,7 @@
 #include "external_storage.h"
 #include "filesystem.h"
 #include "http_client_manager.h"
+#include "flash_jobs.h"
 #include "http_server_manager.h"
 #include "i2c_bus.h"
 #include "web_ui_v2.h"
@@ -131,6 +132,10 @@ void app_main(void)
     /* ---- log pipeline first: everything below needs somewhere to log -----
        (log_manager_init failure falls back to the raw IDF console) */
     main_boot_init("log_manager_init", log_manager_init);
+    /* the internal-stack worker for flash work (2026-10-31): before the
+       first component that may run flash work from a PSRAM stack; a boot
+       call from this (internal) stack runs in line regardless */
+    main_boot_init("flash_jobs_init", flash_jobs_init);
     main_boot_init("restart_tracker_init", restart_tracker_init);
 
     /* a firmware update awaiting its verify milestone: a run the brake

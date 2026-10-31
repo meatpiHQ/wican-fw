@@ -33,6 +33,7 @@
 #include "ble_manager.h"
 #include "cmdline_manager.h"
 #include "dev_status_manager.h"
+#include "flash_jobs.h"
 #include "log_manager.h"
 #include "restart_tracker.h"
 
@@ -116,11 +117,26 @@ static int system_memory(void)
                    mem.psram.largest_block);
     cmdline_printf("PSRAM Min free ever: %" PRIu32 " bytes\n",
                    mem.psram.min_free);
+
+    /* the flash worker (2026-10-31): how often PSRAM-stack callers needed
+       it, whether it is alive now, and the lowest watermark it reported */
+    flash_jobs_stats_t fj;
+
+    flash_jobs_stats(&fj);
+    cmdline_printf("Flash jobs: inline %" PRIu32 " marshalled %" PRIu32
+                   " spawns %" PRIu32 " exits %" PRIu32 " refusals %" PRIu32
+                   " worker %s stack_hw_min %" PRIu32 "\n",
+                   fj.inline_runs, fj.marshalled, fj.spawns, fj.exits,
+                   fj.refusals, fj.worker_alive ? "alive" : "gone",
+                   fj.stack_hw_min);
     cmdline_printf("OK\n");
     return 0;
 }
 
-#define CLI_TASKS_MAX 48
+/* 64 since 2026-10-31: the composition had 49 tasks and the 48-row table
+   dropped the quietest one (fs_writer) without a word; PSRAM statics, so
+   the headroom is cheap */
+#define CLI_TASKS_MAX 64
 
 static int system_tasks(void)
 {

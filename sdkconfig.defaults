@@ -194,6 +194,13 @@ CONFIG_BT_CTRL_BLE_MAX_ACT=4
 # 4018, "generic" to the driver, has no auto-suspend): the bench's 512 KB uploads to the
 # internal flash over a live BLE link still completed byte-exact with no link drop.
 CONFIG_BT_CTRL_RUN_IN_FLASH_ONLY=y
+# 2026-10-31 (internal/TASK_httpd_psram.md): the HTTP server task's stack in PSRAM (12 KB
+# there instead of 8 KB internal). Every flash access a route handler makes (the settings
+# files, the NVS records, an OTA upload, a /data stream) runs through the flash_jobs worker,
+# an internal-stack task that exists only while such work is going on; the filesystem's
+# writer task moved to PSRAM the same day for the same reason. Off = the server's stack
+# back in internal RAM (8 KB), the worker still in use by every PSRAM-stack caller.
+CONFIG_HTTP_SERVER_MANAGER_STACK_PSRAM=y
 # per-handler run counts/time for `system --events`: names the handler that wedges the
 # default event loop instead of inferring it from "Failed to post ... ESP_ERR_TIMEOUT"
 CONFIG_ESP_EVENT_LOOP_PROFILING=y

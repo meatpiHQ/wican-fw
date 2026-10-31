@@ -3741,6 +3741,12 @@ CONFIG_FILESYSTEM_PARTITION_LABEL="storage"
 # end of WiCAN filesystem
 
 #
+# HTTP server manager
+#
+CONFIG_HTTP_SERVER_MANAGER_STACK_PSRAM=y
+# end of HTTP server manager
+
+#
 # WiCAN i2c_bus
 #
 # default:

@@ -269,6 +269,16 @@ def main() -> int:
     args = ap.parse_args()
 
     res = detect(probe=args.probe_psu)
+    if not args.probe_psu:
+        # 2026-10-31: a refresh without the probe (the runner's preflight does
+        # one before every stage) used to drop the PSU pin a --probe-psu run
+        # had confirmed, and with two FTDI ports on the PC (COM50, COM407)
+        # the role went ambiguous again: keep a confirmed pin whose port is
+        # still among the candidates
+        rec = load_record()
+        pinned = (rec or {}).get("roles", {}).get("psu")
+        if pinned and pinned.get("confirmed") and "psu" not in res["roles"] and                 any(c["port"] == pinned["port"] for c in res["candidates"].get("psu", [])):
+            res["roles"]["psu"] = pinned
     if args.dut_ip:
         res["dut_ip"] = resolve_dut_ip(args.pi, args.device_id)
     if not args.no_write:

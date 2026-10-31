@@ -1,0 +1,7 @@
+# A planned restart with the MQTT broker connected leaves no error line
+
+Command: `python tools/testbench/system/restart_mqtt_quiet_bench.py --dut localhost:18081 [--restarts 2]` (PC, the DUT through an ssh tunnel; the DUT's mqtt_manager connected to the Pi's broker)
+
+Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
+
+**A planned restart with the MQTT broker connected leaves no error line** (2026-10-27; prints `RESTART MQTT QUIET PASS`, 23 checks for two restarts, ~1.5 min): before the fix esp_restart()'s shutdown handlers stopped the WiFi stack over the open broker socket and esp-mqtt printed two E lines (`transport_read() error: errno=113`, `mqtt_message_receive() returned -2`) at every planned restart, which every bench whitelisted. mqtt_manager now registers a pre-restart hook (restart_tracker's new bounded table, `restart_tracker_add_pre_restart_hook`, host-tested: 49 restart_tracker tests) that stops the client while a session is up. Per restart the bench POSTs /api/restart, waits for the DUT and the session, and reads the ring from the last `restart_tracker: restarting:` marker on (the ring rotates, so a whole-ring count can lie): no MQTT or transport E line, no E line at all but the e2e noise, `mqtt_manager: stopped before the restart` right before the marker, a planned record in `/api/restart/history` with the unexpected count unchanged, no fault and `log_errors` 0.

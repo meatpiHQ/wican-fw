@@ -177,6 +177,17 @@ def main():
     check("task stats available", code == 200 and len(tasks) > 5,
           f"{len(tasks)} tasks")
 
+    # 2026-10-31: the HTTP server's and the filesystem writer's stacks live
+    # in PSRAM (their flash work runs on the flash_jobs worker); the shipped
+    # configuration keeps them there, a build that moved them back shows
+    # here before it ships
+    for name in ("httpd", "fs_writer"):
+        row = next((x for x in tasks if x.get("name") == name), None)
+        check(f"{name} stack in PSRAM",
+              row is not None and row.get("stack_ext") is True,
+              f"stack_ext {row.get('stack_ext')} stack_hw {row.get('stack_hw')}"
+              if row else "task not found")
+
     low = [(x["name"], x["stack_hw"]) for x in tasks
            if x.get("stack_hw", 1 << 30) < TASK_FAIL_B]
     warn = [(x["name"], x["stack_hw"]) for x in tasks
