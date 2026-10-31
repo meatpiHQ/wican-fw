@@ -181,10 +181,13 @@ def set_sim(sim, base, **fields):
     return False, "simulator did not come back"
 
 
-def dut_set_phy(dut, phy):
-    """PUT ble_manager.phy on the DUT through the Pi and submit (reboots when
-    changed); returns (ok, detail). The DUT's `1m` pins the link to 1M, so
-    the 2M leg needs `auto` (or `2m`) on the DUT."""
+def dut_set_phy(dut, phy, profile=None):
+    """PUT ble_manager.phy (and the memory profile when given) on the DUT
+    through the Pi and submit (reboots when changed); returns (ok, detail).
+    The DUT's `1m` pins the link to 1M, so the 2M leg needs `auto` (or `2m`)
+    on the DUT, and since ble_manager v5 (2026-10-31) those words need the
+    Full memory profile (the Lean default refuses them)."""
+    profile_line = f"d['ble_ram_profile']='{profile}'\n" if profile else ""
     script = (
         "import json,urllib.request,time,subprocess\n"
         f"B='{dut}'\n"
@@ -201,6 +204,7 @@ def dut_set_phy(dut, phy):
         "    boot=req('/api/status').get('boot_count')\n"
         "d=req('/api/settings/ble_manager'); d.pop('degraded',None); d.pop('pending_reboot',None)\n"
         f"d['phy']='{phy}'\n"
+        + profile_line +
         "req('/api/settings/ble_manager','PUT',d)\n"
         "pend=req('/api/settings/ble_manager').get('pending_reboot')\n"
         "req('/api/settings/submit','POST',{})\n"
@@ -334,6 +338,10 @@ def main():
     ap.add_argument("--phys", default="1m,2m")
     ap.add_argument("--seconds", type=int, default=60)
     ap.add_argument("--passkey", type=int, default=421337)
+    ap.add_argument("--keep-dut", action="store_true",
+                    help="leave the DUT's phy and memory profile as they are (a control "
+                         "run on Lean at 1M, 2026-10-31); the 2M leg then cannot "
+                         "negotiate 2M against a DUT pinned to 1m")
     ap.add_argument("--dut-via", default="rpi001", help="ssh host that can reach the DUT when this PC cannot")
     a = ap.parse_args()
     global DUT_VIA
@@ -356,8 +364,14 @@ def main():
 
     sim = Sim(base)
     dut_phy_before = dble.get("phy") if isinstance(dble, dict) else None
-    if dut_phy_before and dut_phy_before != "auto":
-        ok, why = dut_set_phy(dut, "auto")
+    # the 2M leg needs `auto` on the DUT and, since ble_manager v5, the Full
+    # memory profile (Lean pins legacy advertising on 1M); both go back after
+    dut_profile_before = dble.get("ram_profile") if isinstance(dble, dict) else None
+    dut_change = bool(dut_phy_before) and (dut_phy_before != "auto" or
+                                           dut_profile_before not in (None, "full")) \
+        and not a.keep_dut
+    if dut_change:
+        ok, why = dut_set_phy(dut, "auto", "full" if dut_profile_before else None)
         check("dut_phy_auto_for_the_run", ok, why)
     per = {}
     for phy in [p.strip() for p in a.phys.split(",") if p.strip()]:
@@ -374,8 +388,8 @@ def main():
 
     # leave the simulator's central off (it would otherwise keep scanning for the DUT)
     set_sim(sim, base, enabled=False)
-    if dut_phy_before and dut_phy_before != "auto":
-        ok, why = dut_set_phy(dut, dut_phy_before)
+    if dut_change:
+        ok, why = dut_set_phy(dut, dut_phy_before, dut_profile_before)
         check("dut_phy_restored", ok, why)
 
     fails = [n for n, ok in results if not ok]

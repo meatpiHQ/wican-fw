@@ -243,7 +243,11 @@
    "sc_only": true,
    "conn_profile": "ios",
    "phy": "1m",
-   "advertising": "legacy"
+   "advertising": "legacy",
+   "ble_ram_profile": "lean",
+   "ble_max_act": 4,
+   "ble_acl_tx_bufs": 12,
+   "ble_scan_cache": 100
   },
   "schema": {
    "properties": {
@@ -292,6 +296,29 @@
       "extended",
       "both"
      ]
+    },
+    "ble_ram_profile": {
+     "type": "string",
+     "enum": [
+      "full",
+      "lean",
+      "custom"
+     ]
+    },
+    "ble_max_act": {
+     "type": "integer",
+     "minimum": 2,
+     "maximum": 10
+    },
+    "ble_acl_tx_bufs": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 12
+    },
+    "ble_scan_cache": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 1000
     }
    }
   }

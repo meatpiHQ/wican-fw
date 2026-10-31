@@ -247,7 +247,11 @@
    "sc_only": true,
    "conn_profile": "ios",
    "phy": "1m",
-   "advertising": "legacy"
+   "advertising": "legacy",
+   "ble_ram_profile": "lean",
+   "ble_max_act": 4,
+   "ble_acl_tx_bufs": 12,
+   "ble_scan_cache": 100
   },
   "schema": {
    "properties": {
@@ -296,6 +300,29 @@
       "extended",
       "both"
      ]
+    },
+    "ble_ram_profile": {
+     "type": "string",
+     "enum": [
+      "full",
+      "lean",
+      "custom"
+     ]
+    },
+    "ble_max_act": {
+     "type": "integer",
+     "minimum": 2,
+     "maximum": 10
+    },
+    "ble_acl_tx_bufs": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 12
+    },
+    "ble_scan_cache": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 1000
     }
    }
   }
@@ -2080,6 +2107,8 @@
   /* a probe's own station values, e.g. { sta_vpn_pause: true } (2026-10-11) */
   if ((window.__mockPreset || {}).wifi) ov("wifi_manager", window.__mockPreset.wifi);
   ov("ble_manager", { enabled: false });
+  /* a probe's own Bluetooth values, e.g. { enabled: true, ble_ram_profile: "lean" } (2026-10-31) */
+  if ((window.__mockPreset || {}).ble) ov("ble_manager", window.__mockPreset.ble);
   ov("mqtt_manager", { enabled: true, broker: "mqtt://10.42.0.1:1883", topic_prefix: "wican" });
   ov("ha_webhooks", { enabled: true, url: "http://homeassistant.local:8123/api/webhook/8f4a21be", interval_s: 15 });
   ov("data_destinations", { enabled: true, destinations: [
@@ -2650,7 +2679,7 @@
         last_ok_time: i === 0 ? new Date().toISOString() : "", full_sent: i === 1 })) }),
     "/api/webhook": () => J({ url: state.webhookUrl !== undefined ? state.webhookUrl : S.ha_webhooks.values.url, enabled: true, interval: 15, manual_override: false, data_mode: "changed", gzip: false, status: "ok", last_post: new Date().toISOString(), retries: 0, success_count: 512, fail_count: 3, last_error: "", last_error_time: "" }),
     /* `network` + `paused` since 2026-10-11 (issue #976); a probe presets the state through __mockPreset.vpn */
-    "/api/vpn": () => J({ state: "connected", type: "wireguard", endpoint: "vpn.example.com:51820", network: "HomeWiFi", paused: false, routes: ["10.66.0.0/24"], ts_ip: "", ts_peers: 0, connects: 1, failures: 0, uptime_s: 8040, ...((window.__mockPreset || {}).vpn || {}) }),
+    "/api/vpn": () => J({ state: "connected", type: "wireguard", endpoint: "vpn.example.com:51820", network: "HomeWiFi", paused: false, routes: ["10.66.0.0/24"], ts_ip: "", ts_peers: 0, derp: false, reason: "", connects: 1, failures: 0, uptime_s: 8040, ...((window.__mockPreset || {}).vpn || {}) }),
     "/api/usb": () => J(usbScene() ? usbScene().usb : { enabled: true, device_present: true, host_active: true, eth_connected: true, driver: "cdc_ncm", ip: "192.168.7.2", attaches: 1 }),
     /* espnetlink_link: paired steady state by default; state.espnlBlocked
        flips to the fresh-device hold (factory AP password, 2026-09-07);
@@ -4593,7 +4622,14 @@ const store={
       :await confirmModal("Applying these changes restarts WiCAN (~15 s) to take effect. Continue?","Submit changes");
     if(!need)return;
     try{
-      for(const[c,v]of this.pending)await api("/api/settings/"+c,{method:"PUT",body:v});
+      /* a refused PUT names its settings group: the user then knows which
+         page holds the row to fix (2026-10-29, the field report: "Apply
+         failed: br4: unknown endpoint 'udp3333'" on the CAN bus page, the
+         Bridges list staged on another page days earlier) */
+      for(const[c,v]of this.pending){
+        try{await api("/api/settings/"+c,{method:"PUT",body:v});}
+        catch(e){throw new Error(niceName(c)+": "+e.message);}
+      }
       const r=await api("/api/settings/submit",{method:"POST"});
       this.pending.clear();this.dirty.clear();renderSubmit();
       if(r&&r.reboot)expectReboot("Applying settings");else{toast("Saved, no restart needed","ok");refreshSleep();}
@@ -4759,6 +4795,8 @@ const LABELS={
   /* ble_manager */
   passkey:"Pairing passkey",tx_power_dbm:"TX power (dBm)",pairing_at_boot:"Allow pairing at boot",bonding:"Remember paired devices",
   sc_only:"Secure connections only",conn_profile:"Connection profile",
+  ble_ram_profile:"Memory profile",ble_max_act:"Controller activities",ble_acl_tx_bufs:"Static ACL TX buffers",
+  ble_scan_cache:"Scan duplicate cache",
   /* can_manager (the obd_chip group has no UI at all: meatpi 2026-09-07) */
   "can_manager.baud":"Bit rate",silent:"Listen-only (silent) mode",
   /* j1939 (2026-10-03) */
@@ -4908,6 +4946,10 @@ const HELP={
   sntp:"Set the clock from the internet whenever an uplink is available.",
   tx_power_dbm:"Lower values save power and shorten range.",
   conn_profile:"Connection timing tuned for the phone platform.",
+  ble_ram_profile:"Lean frees about 3 KB of internal RAM: one phone at a time, legacy advertising on the 1M PHY, no scanning. Full keeps the BLE 5 options (2M and coded PHY, extended advertising). Custom reads the three controller knobs under Show advanced.",
+  ble_max_act:"Connections plus advertising sets the controller can run at once, 828 bytes each. Two = one phone and one advertising set.",
+  ble_acl_tx_bufs:"Packet buffers reserved when Bluetooth starts, about 270 bytes each. Fewer than 12 risks silently lost notifications when memory runs low.",
+  ble_scan_cache:"Entries of the scan duplicate filter. 0 turns the scan feature off: this device never scans.",
   bonding:"Keep pairing keys so a phone reconnects without re-entering the passkey.",
   ip_mode:"Automatic (DHCP) works for almost every network.",
   sta_ip_mode:"Automatic (DHCP) works for almost every network.",
@@ -4924,6 +4966,7 @@ const ENUMS={
   role:{host:"Host: adapter or dongle plugs in",device:"Device: network over the cable to a PC"},
   device_class:{ncm:"CDC-NCM (Linux / macOS / Windows 11)",rndis:"RNDIS (older Windows)",cdc:"CDC serial"},
   conn_profile:{ios:"iOS",android_fast:"Android (fast)"},pause_mode:{all:"Pause everything",requests_only:"Pause requests only"},
+  ble_ram_profile:{full:"Full (BLE 5 options)",lean:"Lean (recommended)",custom:"Custom"},
   "uds_manager.backend":{auto:"Automatic",obd_chip:"OBD chip",isotp:"ISO-TP"},
   "mqtt_manager.connect_on":{wifi:"The WiFi station is connected (home network)",any:"Any network (WiFi, USB Ethernet, dongle)"},
   data_mode:{changed:"Changed values only",full:"All values"},autopid_log:{off:"Off",changed:"When a value changes",all:"Every poll"},
@@ -5587,6 +5630,21 @@ async function bridgesCard(){
   const servers=sm.servers||[],channels=wm.channels||[];
   const IF=new Set(BR_IFACES.map(x=>x[0]));
   const rows=[],passthru=[];
+  /* the device's own word on each bridge (2026-10-29): /api/bridges carries
+     `reason` for an enabled bridge that did not build at the last start
+     (the endpoint its row names does not exist on this device) */
+  const live=await tryGet("/api/bridges");
+  const reasonOf=name=>{const x=live&&(live.bridges||[]).find(b=>b.name===name);return x&&x.up===false&&x.reason?x.reason:"";};
+  /* A row whose connection side is a jack the device does not have (a server
+     or channel renamed or removed under it, a name typed under All Settings):
+     the name the card itself gives a TCP/UDP server (tcp3300, udp3333) is read
+     back into an editable row, so the next Submit re-creates the server or
+     the row's trash button removes it; any other name stays a custom bridge
+     with a Remove button. Until 2026-10-29 such rows were shown with no way
+     out and the firmware refused every save of the list that still carried
+     them (the field report: two rows, udp3333 and udp23, locked a device out
+     of all its settings pages). */
+  const JACK_RE=/^(tcp|udp)(\d{1,5})$/;
   for(const b of(bm.bridges||[])){
     let iface=null,conn=null;
     if(IF.has(b.a)){iface=b.a;conn=b.b;}else if(IF.has(b.b)){iface=b.b;conn=b.a;}
@@ -5597,9 +5655,17 @@ async function bridgesCard(){
     else if(ch){r.conn="ws";r.path=ch.path;}
     else if(conn==="ble")r.conn="ble";
     else if(conn==="usb_obd")r.conn="usb";
-    else{passthru.push(b);continue;}
+    else{const m=JACK_RE.exec(conn);
+      if(!m){b.missing=conn;passthru.push(b);continue;}
+      r.conn=m[1];r.port=Number(m[2]);r.missing=conn;}
     rows.push(r);
   }
+  /* nothing is staged until the user edits a row: the compiled list differs
+     from the stored one in order and in the a/b side for a device set up
+     elsewhere (the raw editor, an older build), and a stage on open used to
+     light the Submit button and carry a list the user never touched into
+     every later save, from any page (2026-10-29) */
+  let touched=!!BR_PREFILL;
   if(BR_PREFILL){rows.push(BR_PREFILL);BR_PREFILL=null;}
   const listEl=h("div",{style:"display:flex;flex-direction:column;gap:8px"});
   const warnEl=h("div",{style:"display:flex;flex-direction:column;gap:6px"});
@@ -5656,49 +5722,59 @@ async function bridgesCard(){
       ...c.errs.map(e=>banner("warn","alert",e)),
       c.canUsed&&canInfo&&canInfo.enabled===false?banner("info","activity","A connection uses the CAN bus but the CAN interface is disabled: enable it in the CAN Interface card above."):null,
       ...brOrphans(c.srv,c.bridges).map(s=>banner("warn","alert",h("b",{},brWhere(s)+" is switched on but no connection uses it. "),"A client can connect to it and gets nothing. ",
-        h("button",{class:"btn sm","data-orphan":s.name,type:"button",style:"margin-left:6px",onclick:()=>{if(rows.length+passthru.length>=BR_MAX)return toast("Max "+BR_MAX+" connections","err");rows.push(brRowForServer(s));refresh();}},
+        h("button",{class:"btn sm","data-orphan":s.name,type:"button",style:"margin-left:6px",onclick:()=>{if(rows.length+passthru.length>=BR_MAX)return toast("Max "+BR_MAX+" connections","err");rows.push(brRowForServer(s));edit();}},
           ic("plus"),"Add a CAN bus connection on "+String(s.proto||"tcp").toUpperCase()+" "+s.port+" ("+brProtoForPort(s.port)+")"))));
-    if(c.errs.length)return;
+    if(c.errs.length||!touched)return;
     if(JSON.stringify(c.bridges)!==JSON.stringify(bm.bridges||[]))store.stage("bridge_manager",{bridges:c.bridges});
     if(JSON.stringify(c.srv)!==JSON.stringify(servers))store.stage("socket_manager",{servers:c.srv});
     if(JSON.stringify(c.chn)!==JSON.stringify(channels))store.stage("websocket_manager",{channels:c.chn});
   }
   function rowBox(r,i){
-    const sel=(opts,cur,cb)=>h("select",{onchange:e=>{cb(e.target.value);refresh();}},...opts.map(([v,l])=>h("option",{value:v,selected:v===cur},l)));
+    const sel=(opts,cur,cb,key)=>h("select",{"data-sel":key,onchange:e=>{cb(e.target.value);edit();}},...opts.map(([v,l])=>h("option",{value:v,selected:v===cur},l)));
     const line1=h("div",{class:"brline"},
-      sel(BR_IFACES,r.iface,v=>{r.iface=v;if(v!=="can")r.translator="raw";}),
+      sel(BR_IFACES,r.iface,v=>{r.iface=v;if(v!=="can")r.translator="raw";},"iface"),
       h("span",{class:"brarrow"},"⇄"),
       sel(BR_CONNS,r.conn||"",v=>{r.conn=v;
         if(v==="ws"&&!r.path)r.path="/ws/br"+(i+1);
-        if((v==="tcp"||v==="udp")&&!r.port)r.port=3300+i;}),
-      switchCtl(!!r.enabled,v=>{r.enabled=v;refresh();},{sm:true,yes:"Enabled",no:"Disabled",title:"Enable or pause this connection"}),
-      h("button",{class:"btn sm gh danger",type:"button",title:"Remove this connection",onclick:()=>{rows.splice(i,1);refresh();}},ic("trash")));
+        if((v==="tcp"||v==="udp")&&!r.port)r.port=3300+i;},"conn"),
+      switchCtl(!!r.enabled,v=>{r.enabled=v;edit();},{sm:true,yes:"Enabled",no:"Disabled",title:"Enable or pause this connection"}),
+      h("button",{class:"btn sm gh danger","data-remove":r.name||"",type:"button",title:"Remove this connection",onclick:()=>{rows.splice(i,1);edit();}},ic("trash")));
     const detail=h("div",{class:"rowflex",style:"gap:8px;flex-wrap:wrap;margin-top:8px;align-items:center"});
     if(r.conn==="tcp"||r.conn==="udp")detail.append(
       h("span",{class:"help"},"Port"),
-      h("input",{type:"number",min:1,max:65535,value:r.port??"",style:"max-width:110px",onchange:e=>{r.port=Number(e.target.value);refresh();}}));
+      h("input",{type:"number","data-port":"",min:1,max:65535,value:r.port??"",style:"max-width:110px",onchange:e=>{r.port=Number(e.target.value);edit();}}));
     if(r.conn==="ws")detail.append(
       h("span",{class:"help"},"Path"),
-      h("input",{class:"mono",value:r.path||"",placeholder:"/ws/mybridge",style:"max-width:200px",onchange:e=>{r.path=e.target.value;refresh();}}));
+      h("input",{class:"mono","data-path":"",value:r.path||"",placeholder:"/ws/mybridge",style:"max-width:200px",onchange:e=>{r.path=e.target.value;edit();}}));
     if(r.iface==="can")detail.append(
       h("span",{class:"help"},"Protocol"),
-      sel(BR_PROTOS.map(x=>[x,x]),r.translator||"raw",v=>{r.translator=v;}));
+      sel(BR_PROTOS.map(x=>[x,x]),r.translator||"raw",v=>{r.translator=v;},"translator"));
     if(r.conn==="ble")detail.append(h("span",{class:"help"},"Uses the BLE data pipe (pair from the app)."));
     if(r.conn==="usb")detail.append(h("span",{class:"help"},"USB port-B serial channel."));
-    return h("div",{style:"border:1px solid var(--border);border-radius:9px;padding:10px 12px;background:var(--surface-2)"},
-      line1,detail.childNodes.length?detail:null);
+    const why=r.missing?"":reasonOf(r.name);
+    return h("div",{"data-row":r.name||"new","data-missing":r.missing||"",style:"border:1px solid var(--border);border-radius:9px;padding:10px 12px;background:var(--surface-2)"},
+      line1,detail.childNodes.length?detail:null,
+      r.missing?h("div",{style:"margin-top:8px"},banner("warn","alert",h("b",{},r.missing+" does not exist on this device. "),
+        "The server this connection used was renamed or removed. Submit re-creates it as "+String(r.conn).toUpperCase()+" "+r.port+", or remove the connection.")):null,
+      why?h("div",{class:"help",style:"margin-top:6px"},"Not running since the last restart: "+why+"."):null);
   }
   function refresh(){
     listEl.replaceChildren(
-      ...passthru.map(b=>h("div",{class:"help",style:"padding:4px 2px"},
-        "custom bridge ",h("code",{},b.name),": ",h("code",{},b.a)," ⇄ ",h("code",{},b.b),": edit under All Settings → Bridges.")),
+      ...passthru.map(b=>{const why=b.missing?"":reasonOf(b.name);
+        return h("div",{class:"help","data-custom":b.name,style:"padding:4px 2px;display:flex;align-items:center;gap:6px;flex-wrap:wrap"},
+        h("span",{},"custom bridge ",h("code",{},b.name),": ",h("code",{},b.a)," ⇄ ",h("code",{},b.b),
+          b.missing?[": ",h("b",{},b.missing+" does not exist on this device"),", a server or channel renamed or removed under it. Remove it, or add the server or channel back under All Settings."]
+          :why?[": not running since the last restart, "+why+". Edit it under All Settings → Bridges, or remove it."]
+          :": edit under All Settings → Bridges."),
+        h("button",{class:"btn sm gh danger","data-remove":b.name,type:"button",title:"Remove this bridge",onclick:()=>{passthru.splice(passthru.indexOf(b),1);edit();}},ic("trash")));}),
       ...rows.map((r,i)=>rowBox(r,i)));
     stage();
   }
+  function edit(){touched=true;refresh();}
   refresh();
-  const add=h("button",{class:"btn sm",type:"button",onclick:()=>{
+  const add=h("button",{class:"btn sm","data-add":"",type:"button",onclick:()=>{
     if(rows.length+passthru.length>=BR_MAX)return toast("Max "+BR_MAX+" connections","err");
-    rows.push({iface:"obd",conn:"tcp",port:35000,translator:"raw",enabled:true});refresh();},},ic("plus"),"Add connection");
+    rows.push({iface:"obd",conn:"tcp",port:35000,translator:"raw",enabled:true});edit();},},ic("plus"),"Add connection");
   return card("Connections","route",listEl,warnEl,h("div",{style:"margin-top:8px"},add),
     note("","Each row wires a vehicle interface to a connection. TCP/UDP ports and WebSocket paths are created automatically. The OBD chip and the CAN bus can feed several connections at once (the factory setup puts the OBD chip on WebSocket, TCP and USB); a TCP/UDP server, WebSocket path, BLE or USB carries ONE enabled connection. Changes apply from the Submit button (device restarts)."));
 }
@@ -5867,6 +5943,32 @@ PAGES.settings=async(view,sub)=>{
         :cl.tx_ready===false?"Active, but the CAN interface does not let WiCAN transmit (listen-only mode, or no frame has proven the bit rate yet): listening only."
         :"Active: waiting to claim an address.";
       jLive.replaceChildren(h("span",{},txt));};
+    /* the Bluetooth card (ble_manager v5, 2026-10-31): the memory profile
+       row, its three controller knobs behind Custom + Show advanced, and
+       under Lean the advertising and PHY selects follow the profile
+       (legacy on 1M is what the firmware accepts) with a note that says why */
+    const BLE_KNOBS=["ble_max_act","ble_acl_tx_bufs","ble_scan_cache"];
+    const bleForm=async()=>{
+      const bv=await api("/api/settings/ble_manager");
+      const bs=await api("/api/settings/ble_manager/schema");
+      delete bv.degraded;delete bv.pending_reboot;
+      const keys=Object.keys((bs&&bs.properties)||{});
+      let leanSync=()=>{};
+      const rows=await settingsForm("ble_manager",null,{values:bv,schema:bs,
+        advanced:["tx_power_dbm","pairing_at_boot","bonding","sc_only","conn_profile",...BLE_KNOBS],
+        visible:st=>!st.enabled?["enabled"]:(st.ble_ram_profile==="custom"?null:keys.filter(k=>!BLE_KNOBS.includes(k))),
+        onDirty:()=>leanSync()});
+      const leanNote=note("","Lean runs legacy advertising on the 1M PHY, one phone at a time. Choose Full for 2M, coded PHY or extended advertising.");
+      leanNote.dataset.key="ble_lean_note";
+      const rowOf=k=>rows.find(r=>r.dataset&&r.dataset.key===k);
+      const advRow=rowOf("advertising");
+      if(advRow)rows.splice(rows.indexOf(advRow)+1,0,leanNote);
+      leanSync=()=>{const lean=String(bv.ble_ram_profile||"lean")==="lean";
+        if(lean&&(bv.advertising!=="legacy"||bv.phy!=="1m")){bv.advertising="legacy";bv.phy="1m";rows.load();store.stage("ble_manager",bv);}
+        for(const k of["advertising","phy"]){const r=rowOf(k);const s=r&&r.querySelector("select");if(s)s.disabled=lean;}
+        leanNote.style.display=(lean&&bv.enabled)?"":"none";};
+      leanSync();
+      return rows;};
     const[apRows,staRows,bleRows,canRows,mqttRows,imRows,j1939Rows]=await Promise.all([
       settingsForm("wifi_manager",AP_KEYS,{...shared,onDirty:wifiDirty,
         advanced:["ap_ip","ap_channel","ap_bandwidth","ap_hidden",
@@ -5881,8 +5983,7 @@ PAGES.settings=async(view,sub)=>{
           "sta_static_ip","sta_static_netmask","sta_static_gw"],
         visible:st=>st.sta_ip_mode==="static"?null
           :staKeys.filter(k=>!k.startsWith("sta_static_"))}),
-      settingsForm("ble_manager",null,{advanced:["tx_power_dbm",
-        "pairing_at_boot","bonding","sc_only","conn_profile"]}),
+      bleForm(),
       settingsForm("can_manager",null,{advanced:["silent"]}),
       api("/api/settings/mqtt_manager").then(async mv=>
         certSetPicker(await settingsForm("mqtt_manager",null,{values:mv,
@@ -7611,15 +7712,21 @@ PAGES.vpn=async(view)=>{
   const p=page(view,null,"VPN","WireGuard / Tailscale tunnel for secure remote access.",[badge]);
   const wrap=h("div",{style:"display:flex;flex-direction:column;gap:16px"});p.append(wrap);
   const dbgRows=h("div",{});
+  /* why the tunnel is held in waiting (issue #1024, 2026-10-31): /api/vpn
+     `reason` names what frees internal RAM on this device; empty otherwise */
+  const holdNote=note("warn","");holdNote.dataset.key="vpn_hold_note";holdNote.style.display="none";
   async function status(){const v=await tryGet("/api/vpn");if(!v)return;
     const paused=v.state==="paused";
     badge.className="chip "+(v.state==="connected"?"ok":paused?"info":v.state==="disabled"?"":"warn");
     badge.replaceChildren(h("span",{class:"d"}),(v.state==="connected"||paused)?vpnWord(v):(v.state||"disabled"));
+    if(v.reason){holdNote.querySelector("span").textContent="Tailscale "+v.reason+".";holdNote.style.display="";}
+    else holdNote.style.display="none";
     dbgRows.replaceChildren(kv([
       ["Type",v.type||"-"],["State",v.state||"-"],["Endpoint",(v.endpoint&&!/^:\d*$/.test(v.endpoint))?v.endpoint:"-"],
       ["Network",v.network||"-"],
       ["Routes",Array.isArray(v.routes)&&v.routes.length?v.routes.join(", "):"-"],
-      ["Tailscale IP",v.ts_ip||"-"],["Peers",v.ts_peers],["Connects",v.connects],
+      ["Tailscale IP",v.ts_ip||"-"],["Peers",v.ts_peers],
+      ["Relay",v.type==="tailscale"?(v.derp?"up":"down"):"-"],["Connects",v.connects],
       ["Failures",v.failures],["Uptime",fmt.dur(v.uptime_s)]]));}
   await status();
   try{
@@ -7676,7 +7783,7 @@ PAGES.vpn=async(view)=>{
     const modeRow=h("div",{class:"frow"},h("label",{},"VPN"),h("div",{class:"ctl"},modeSel),
       h("div",{class:"help"},"WireGuard: point-to-point tunnel to your own server. Tailscale: zero-config mesh (needs an auth key)."));
     syncKey();
-    wrap.append(
+    wrap.append(holdNote,
       card("VPN Settings","shield",modeRow,impRow,...rows,keyRow,pauseNote),
       card("VPN Debug","bug",
         h("div",{class:"rowflex",style:"gap:10px;margin-bottom:6px;flex-wrap:wrap"},

@@ -147,7 +147,11 @@ def stage_configure(ip, passkey, handover, nm_profile):
 
 def apply_phy(ip, saved, passkey, phy, adv, boot_before, tag, nm_profile=None):
     ble = dict(saved["ble"])
-    ble.update({"enabled": True, "passkey": passkey, "phy": phy, "advertising": adv})
+    # the Full memory profile: the Lean default (ble_manager v5, 2026-10-31)
+    # runs legacy advertising on 1M only and refuses the BLE 5 words; the
+    # restore puts the found profile back with the rest
+    ble.update({"enabled": True, "passkey": passkey, "phy": phy, "advertising": adv,
+                "ble_ram_profile": "full"})
     check(f"{tag}_put_ble", api(ip, "/api/settings/ble_manager", "PUT", ble)[0] == 200, f"phy={phy} adv={adv}")
     bh = dict(saved["ble_http"]); bh["enabled"] = True
     check(f"{tag}_put_ble_http", api(ip, "/api/settings/ble_http", "PUT", bh)[0] == 200)

@@ -184,6 +184,16 @@ CONFIG_BT_CTRL_BLE_STATIC_ACL_TX_BUF_NB=12
 # 2026-09-22 internal-RAM cliff (TASK_internal_ram.md): the controller keeps 828 B per
 # activity; a peripheral needs one connection + two advertising instances + one spare.
 CONFIG_BT_CTRL_BLE_MAX_ACT=4
+# 2026-10-31 (the internal-RAM budget for Bluetooth + Tailscale, TASK_tailscale_1024.md
+# section 10): the BLE controller's code in flash instead of IRAM. On the S3 every byte of
+# IRAM freed is a byte of the internal heap: measured +19.4 KB (idle 51.5 -> 69.3 KB free,
+# Bluetooth on Lean 14.5 -> 37.9 KB), which is what lets Tailscale start beside Bluetooth
+# (TS PUBLIC PASS with Bluetooth on, 18.6 KB steady). Costs, measured: Bluetooth throughput
+# at the 2M PHY about a quarter lower (notify 374 kbps, was 484; 1M unchanged), and the
+# controller cannot run while the cache is off for a flash erase (this flash chip, id 46
+# 4018, "generic" to the driver, has no auto-suspend): the bench's 512 KB uploads to the
+# internal flash over a live BLE link still completed byte-exact with no link drop.
+CONFIG_BT_CTRL_RUN_IN_FLASH_ONLY=y
 # per-handler run counts/time for `system --events`: names the handler that wedges the
 # default event loop instead of inferring it from "Failed to post ... ESP_ERR_TIMEOUT"
 CONFIG_ESP_EVENT_LOOP_PROFILING=y

@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'tspublic', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'canselftest', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'tspublic', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'canselftest', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [ValidateSet('6.0.2', '6.1')][string]$Idf = '6.1',  # the ESP-IDF the build stages use (6.1 since 6.0.0-beta.5, 2026-10-27; 6.0.2 stays installed; build.ps1 -Idf has the same table)
@@ -47,6 +47,11 @@ param(
                               # and the bench's --join-ap)
     [switch]$SdFormat,        # sdformat stage: really format the card WiCAN
                               # cannot read (it erases the card)
+    [switch]$NoHandover,      # blephy stage: keep the station up across the BLE
+                              # link (the bench's --no-handover) on a DUT in
+                              # station-only mode, where the bench cannot fall
+                              # back to the DUT's own AP after a flaky
+                              # re-association (2026-10-31)
     [switch]$SkipSleep        # obdfw stage: drop the sleep-waits leg (no
                               # sleep/wake cycle of the DUT)
 )
@@ -929,8 +934,9 @@ function Show-Inventory {
     Write-Host '  blehttp    - the HTTP API over BLE: storage (/data + /sd), settings, UDS, errors (BLE API PASS + BLE STORAGE PASS)'
     Write-Host '  blej2534   - J2534 PassThru over BLE: CAN, filters, ISO15765, reflash gate, second tester refused'
     Write-Host '  blecanraw  - binary CAN records over BLE (can <-raw-> ble bridge): live bus, answered requests, 29-bit'
-    Write-Host '  blephy     - BLE 5 settings: 1M vs 2M PHY throughput/RTT, legacy + extended advertising sets'
-    Write-Host '  blethru    - BLE throughput with the ECU simulator as the central (notify/write/read/tunnel vs the esp-idf reference)'
+    Write-Host '  blephy     - BLE 5 settings: 1M vs 2M PHY throughput/RTT, legacy + extended advertising sets (-NoHandover keeps the station up across the link: needed on a DUT in station-only mode; the PC legs need this PC''s Bluetooth radio on and no stale Windows pairing record for the DUT)'
+    Write-Host '  blethru    - BLE throughput with the ECU simulator as the central (notify/write/read/tunnel vs the esp-idf reference); the DUT must arrive with BLE on, passkey 421337, phy auto on the Full profile, and on this rig sta_ble_handover off (2026-10-31)'
+    Write-Host '  bleram     - the Bluetooth memory profile (ble_manager v5, 2026-10-31): one boot per profile (off, full, lean), the internal heap at a fixed uptime, the Pi scanning for the DUT as the on-air witness, /api/ble echoing the sizing, Lean refusing the BLE 5 words, the found settings put back (4 planned reboots, ~8 min; the knob rows: the bench --measure)'
     Write-Host '  autobaud   - CAN listen-before-talk, auto bit rate and the autopid bus guard: PCAN keeps the bus alive and counts error frames (~9 min)'
     Write-Host '  profilee2e - a published vehicle profile end to end (2026-10-21): the Leaf ZE1 profile imported the way the web UI imports it (index shift, renames, passive filters) and polled against an ECU played FROM THE PROFILE on the PCAN (every reply and every filter frame with bytes the bench chose); the values the device publishes must be what the profile''s expressions mean, every request answered, the filters decoded, the rows re-read, restore (2 planned restarts, ~5 min; by hand --profiles <checkout>\vehicle_profiles.json tests a profile before it is pushed)'
     Write-Host '  slcan      - slcan over TCP 3333 (2026-10-16): first the trap (the server on with no connection row: client connected, nothing arrives, the W line and bridge:null say why), then the bridged path: python-can on the PC and on rpi001, slcand + SocketCAN, the /ws/can monitor beside the TCP client, exactly-N with PCAN as the generator, TX both ways, restore (2 to 3 planned restarts, ~3 min)'
@@ -1093,7 +1099,12 @@ try {
             Invoke-Stage 'live blephy (BLE 5 PHY + advertising sets)' {
                 $py = $script:BenchPy
                 $pypc = 'C:\Espressif\tools\python\v5.5.3\venv\Scripts\python.exe'   # has bleak (WinRT)
-                $out = & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_phy_bench_pi.py --dut $DutIp --stage configure 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                # -NoHandover: the station stays up across the link (a DUT in
+                # station-only mode has no AP for the bench to fall back to when
+                # the STA re-associates badly after the handover, 2026-10-31)
+                $cfgArgs = @('--dut', $DutIp, '--stage', 'configure')
+                if ($NoHandover) { $cfgArgs += '--no-handover' }
+                $out = & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_phy_bench_pi.py @cfgArgs 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 $out += & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_phy_bench_pi.py --stage adv 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 $out += & $pypc -u "$repo\tools\testbench\ble\ble_phy_pc.py" --phy 1m 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 $out += & $py -u "$repo\tools\testbench\ble\ble_pi_run.py" ble_phy_bench_pi.py --stage switch 2>&1 | ForEach-Object { Write-Host $_; $_ }
@@ -1121,6 +1132,33 @@ try {
                 foreach ($m in ($out | Select-String '^METRIC (\S+)=(\S+) (\S+)')) { Add-Metric $m.Matches[0].Groups[1].Value ([double]$m.Matches[0].Groups[2].Value) $m.Matches[0].Groups[3].Value }
                 if (-not ($out | Select-String -Quiet '^BLE THROUGHPUT PASS')) { throw 'no BLE THROUGHPUT PASS (simulator on USB-NCM with ble_central_bench? DUT BLE on? see the log)' }
                 $script:note = 'BLE THROUGHPUT PASS'
+            }
+        }
+        'bleram' {
+            # The Bluetooth memory profile (ble_manager v5, 2026-10-31): one
+            # boot per profile (off, full, lean), the internal heap read at a
+            # fixed uptime twice, the Pi's UB500 scanning for the DUT's name
+            # as the on-air witness, /api/ble's echo of the sizing applied,
+            # the settings rules (Lean refuses the BLE 5 words, a custom scan
+            # cache of 5), the found settings put back. PC-side through the
+            # tunnel; 4 planned reboots, ~8 min. The knob rows (one knob at a
+            # time against Full) are the bench's own --measure run.
+            Invoke-Stage 'Bluetooth memory profile' {
+                $py = $script:BenchPy
+                $con = Start-ConsoleTail 'ble_ram'
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\ble\ble_ram_bench.py" --dut 'localhost:18081' --pi $BenchHost 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'ble_ram' $out
+                    foreach ($m in ($out | Select-String '^METRIC (\S+)=(\S+) (\S+)')) { Add-Metric $m.Matches[0].Groups[1].Value ([double]$m.Matches[0].Groups[2].Value) $m.Matches[0].Groups[3].Value }
+                    if (-not ($out | Select-String -Quiet '^BLE RAM PASS')) { throw 'no BLE RAM PASS (the DUT on the bench AP? the UB500 on the Pi? see the rows in the log)' }
+                    $script:note = 'BLE RAM PASS'
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
+                }
             }
         }
         'sleep'  {
