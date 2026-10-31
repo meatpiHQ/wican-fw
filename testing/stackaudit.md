@@ -20,3 +20,16 @@ the static half lists `flash_jobs` as `int` now (a dynamic task reads as interna
 its size expression) and `vpn_state` as PSRAM (a `StackType_t *` buffer taken with
 `MALLOC_CAP_SPIRAM`); `em_worker` (event_manager) still reads `?`. Report
 `2026-10-31_2358_stackaudit.md`.
+
+**2026-11-01 02:01 (the NimBLE host task on a 6 KB PSRAM stack,
+`internal/TASK_ble_host_psram.md`): PASS** (the known IDLE/ipc warnings), `httpd stack in
+PSRAM (8940)`, `fs_writer stack in PSRAM (4420)`, the new `nimble_host stack in PSRAM` check
+conditional like the VPN tasks' (absent on this run: Bluetooth was off since the boot before
+it; `blesec` asserts it with Bluetooth on, 3076 B of headroom after a pairing), 49 tasks,
+min_free 51,604 B, largest block 31,744, PSRAM min_free 3.61 MB, the dtc job headroom
+14,192 B, faults clean. The static half read `nimble_host` as `? PSRAM` on that run (its size
+is `CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE + 2048`, a Kconfig value the resolver could not
+see); `stack_audit.py` reads `build/config/sdkconfig.h` since the same night and resolves
+macro bodies through each other, so it prints `6144 PSRAM nimble_host`, and a row of a 2-D
+stack array (`s_worker_stack[i]`) finds its declaration: `em_worker` reads `4096 PSRAM`
+instead of `?`. Report `2026-11-01_0201_stackaudit.md`.

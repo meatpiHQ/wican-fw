@@ -192,7 +192,12 @@ def main():
     # live on PSRAM stacks too (their NVS work runs on the flash worker);
     # they exist only with the VPN enabled, so the check is conditional
     # (the public Tailscale stage asserts them with the tunnel up)
-    for name in ("vpn_state", "ml_wg_mgr"):
+    # 2026-11-01 (later the same day): the NimBLE host task as well (the
+    # bond store's writes run on the flash worker, the host task is a
+    # PSRAM static that parks while Bluetooth is off); it exists once
+    # Bluetooth has been on since boot, so the check is conditional (the
+    # blesec stage asserts it with a bond written through the worker)
+    for name in ("vpn_state", "ml_wg_mgr", "nimble_host"):
         row = next((x for x in tasks if x.get("name") == name), None)
         if row is not None:
             check(f"{name} stack in PSRAM", row.get("stack_ext") is True,

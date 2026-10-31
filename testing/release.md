@@ -19,3 +19,13 @@ r12 BLE skipped (off in the canonical settings), 306 s; sha256 `b8a021d7...`, EL
 `ee3893c4815097f1`; internal heap floor 49,252 B (39,740 on beta.6's tagged image), supply
 133 to 146 mA; r10 the OTA upload on the server's PSRAM stack, r11 a script by `src` (the
 loader by name is `script_file_bench.py`). Report `test-reports/2026-11-01_0001_release.md`.
+
+**2026-11-01 02:02 on the lever 3 image (`internal/TASK_ble_host_psram.md`: the NimBLE host
+task on a 6 KB PSRAM stack, the bond store on the flash worker; not a tagged image, no
+release record; the rig without the dongle, the DUT's USB-C on the PC in the device role):
+`RELEASE TEST PASS`, 59 passed, 0 failed, r12 BLE skipped (off in the canonical settings),
+299 s; sha256 `aec28e7e...`, ELF `096117f1b0e696c4`; internal heap floor 51,032 B, supply 89
+to 92 mA (the PC cable, no dongle: the band TESTING.md names for that wiring). The r0
+coverage matrix lists `nimble_host` among the PSRAM-stack tasks with no release-test step
+(r12 is the step and it is skipped on the canonical set; `blesec` covers it). Report
+`test-reports/2026-11-01_0202_release.md`.

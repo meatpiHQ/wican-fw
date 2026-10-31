@@ -120,6 +120,55 @@ def safe_arith(expr):
         return None
 
 
+SDKCONFIG = {}  # CONFIG_* integer values of the build (sdkconfig.h)
+
+
+def load_sdkconfig(build_dir):
+    """The build's CONFIG_* integers: a task sized from a Kconfig value
+    (the NimBLE host task, 2026-11-01) resolves through here."""
+    path = os.path.join(build_dir, "config", "sdkconfig.h")
+    try:
+        text = open(path, encoding="utf-8", errors="replace").read()
+    except OSError:
+        return
+    for m in re.finditer(r"#define\s+(CONFIG_\w+)\s+(\d+)\b", text):
+        SDKCONFIG[m.group(1)] = int(m.group(2))
+
+
+def macro_body(ident, texts):
+    """The body of `#define ident ...` in the scanned sources, or None."""
+    for t in texts:
+        m = re.search(r"#define\s+" + re.escape(ident) + r"[ \t]+(.+)", t)
+        if m:
+            return m.group(1).split("//")[0].split("/*")[0].strip()
+    return None
+
+
+def eval_expr(expr, texts, depth=0):
+    """Integer value of an arithmetic expression whose identifiers are
+    CONFIG_* values of the build or macros of the scanned sources (one
+    body may name another: NIMBLE_HS_STACK_SIZE + 2048 style, bounded
+    depth), else None."""
+    n = safe_arith(expr)
+    if n is not None or depth > 4:
+        return n
+    idents = set(re.findall(r"\b[A-Za-z_]\w*\b", expr))
+    if not idents:
+        return None
+    for ident in idents:
+        if ident in SDKCONFIG:
+            val = SDKCONFIG[ident]
+        else:
+            body = macro_body(ident, texts)
+            if body is None:
+                return None
+            val = eval_expr(body, texts, depth + 1)
+            if val is None:
+                return None
+        expr = re.sub(r"\b" + re.escape(ident) + r"\b", "(%d)" % val, expr)
+    return safe_arith(expr)
+
+
 def resolve_size(expr, text, all_texts):
     """Best-effort byte count for a stack-size expression."""
     expr = re.sub(r"\s+", " ", expr.strip())
@@ -133,23 +182,20 @@ def resolve_size(expr, text, all_texts):
         r"(?:\s*/\s*sizeof\s*\([^)]*\))?", expr)
     ident = (m.group(1) if m
              else expr if re.fullmatch(r"\w+", expr) else None)
+    texts = [text] + all_texts
     if ident is None:
-        return None, expr
+        # an expression of macros and Kconfig values
+        return eval_expr(expr, texts), expr
     # array decl in the same file, then anywhere; then macro bodies
-    for t in [text] + all_texts:
+    for t in texts:
         m = re.search(r"StackType_t\s+" + re.escape(ident) +
                       r"\s*\[\s*([^\]]+?)\s*\]", t)
         if m:
-            n = safe_arith(m.group(1))
+            n = eval_expr(m.group(1), texts)
             if n is not None:
                 return n, ident
-        m = re.search(r"#define\s+" + re.escape(ident) +
-                      r"[ \t]+(.+)", t)
-        if m:
-            n = safe_arith(m.group(1).split("//")[0].split("/*")[0])
-            if n is not None:
-                return n, ident
-    return None, ident
+    n = eval_expr(ident, texts)
+    return n, ident
 
 
 def find_tasks():
@@ -191,6 +237,9 @@ def find_tasks():
             # a macro (2026-10-21: ha_webhook and fw_update read "?" before)
             if "Static" in call and len(parts) >= 6:
                 buf = parts[5].strip().lstrip("&").strip()
+                # a row of a 2-D buffer (event_manager's s_worker_stack[i],
+                # 2026-11-01): the declaration is the array's
+                buf = re.sub(r"\s*\[[^\]]*\]\s*$", "", buf)
                 if re.fullmatch(r"\w+", buf):
                     ident = buf
             if "WithCaps" in call:
@@ -237,6 +286,7 @@ def main():
                     help="print the task table as JSON and exit (the "
                          "release test's coverage matrix reads it)")
     a = ap.parse_args()
+    load_sdkconfig(a.build)
 
     if a.tasks_json:
         print(json.dumps(find_tasks(), indent=1))
