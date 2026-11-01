@@ -623,7 +623,7 @@
        their POSTs */
     "/api/obd_chip": () => { const d = (window.__mockPreset && window.__mockPreset.diag) || {}; const down = !!d.down;
       return J({ ready: !down, claim: "none", client_idle_ms: 4294967295, baud: down ? 0 : 2000000,
-        eeprom_guard: { rewrites: 0, blocked: 0, protocol_saves: 0 },
+        eeprom_guard: { rewrites: 0, blocked: 0, protocol_saves: 0, memory_off: 1 },
         uart: { rx_bytes: 18, rx_chunks: 1, rx_max_chunk: 18, rx_overflows: 0, rx_buffered: down ? 34 : 0, tx_bytes: 212 },
         fw: { builtin: "V2.3.24", current: "V2.3.22, V2.3.24", chip: down ? "" : (d.chip22 ? "MIC3624 V2.3.22" : "MIC3624 V2.3.24"),
           outdated: !down && !!d.chip22,

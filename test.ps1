@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'tspublic', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'canselftest', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'tspublic', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'canselftest', 'attpstore', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [ValidateSet('6.0.2', '6.1')][string]$Idf = '6.1',  # the ESP-IDF the build stages use (6.1 since 6.0.0-beta.5, 2026-10-27; 6.0.2 stays installed; build.ps1 -Idf has the same table)
@@ -952,6 +952,7 @@ function Show-Inventory {
     Write-Host '  sdformat   - the SD card format from the API (2026-10-25): the slot as found, an unreadable card named by what it holds with a quiet log (W line, no E line), the refusals (no phrase, a wrong phrase, a mounted card), the format behind the phrase and the mount after it with a file round trip, the boot after, then the real page in Chrome; the format legs need a card WiCAN cannot read in the slot and the switch -SdFormat (it erases the card), PARTIAL otherwise (0 to 1 planned restart, ~3 min)'
     Write-Host '  obdfw      - the OBD chip firmware update (issue #1023, 2026-10-28): the packaged image and the current list on /api/obd_chip, the console command, a POST without force on a current chip = nothing to do, the forced reflash (3557 records, the fresh bring-up, the version), a stream cut by a restart recovered by the next boot (the chip answers at 115200 in download mode), and a sleep test typed mid-stream that waits for the update (2 planned restarts + 1 sleep/wake, ~6 min; -SkipSleep drops the sleep leg)'
     Write-Host '  canselftest - the CAN self-test and the chip diagnostics (issue #1023, 2026-10-28): the OBD chip asks 010C and the ESP32 answers as ECU 7EF over the shared bus, PASS with the simulator broadcast as found and flipped, the chip configuration report, the wire tools on a healthy chip, the cached version on /api/obd_chip, and with obd_chip_manager/obd_fw/V2.3.22.txt in the components tree the chip written to V2.3.22 and back (fw.outdated, the warning a chip left on .22 gets), then with AutoPID polling the simulator car a self-test and the proof that polling, the CAN node and the chip carry on as before, the chip without echo (0 to 2 planned DUT restarts: AutoPID switched on for that leg when it is off and put back; 1 to 2 simulator restarts, ~6 min)'
+    Write-Host '  attpstore  - the OBD chip''s protocol store (issue #1023, 2026-11-01): the chip memorises every protocol switch a request answers on into its EEPROM-backed store, RAM-only ATTP or not, and the Audi MEB profile flipped it seven times per poll cycle; the driver now sends ATM0 at the bring-up and ahead of every switch on the request path. The store read back through an ATZ: as found after a test-a-PID switch with an answer (the engine), after a planned restart and an app-path switch (the bring-up''s ATM0), the app''s ATZ answered as a warm start with the ATM0 hidden behind it (one prompt, nothing shifted, a second sooner) and the app path''s own switch after its ATZ no longer writing (the canary) (1 planned restart; the simulator flipped between 11-bit and 29-bit ids, 2 to 6 simulator restarts, ~3 min; on an image without the fix the two legs read the other protocol: the reproduction)'
     Write-Host '  connections - the Connections page bridges and their jacks (2026-10-29, the field report of 2026-10-28): a bridge and its new TCP server in one submit, the server taken away under the bridge (one W line, no fault, the reason on /api/bridges, the list still saves: before the fix "unknown endpoint" refused every save and a boot_errors fault latched at every start), then the real page in Chrome: nothing staged on open, the stranded row with the missing server named and removable, a new connection made from the card (5 to 6 planned restarts, ~5 min)'
     Write-Host '  usbdetach  - a warm restart in the USB device role drops off the bus first (2026-10-17): the DUT cabled to this PC as a USB NCM device (one planned restart when it was host), warm restarts with the link up: gone from the PC within 5 s of each request (2.2 to 2.4 s measured), back, the link answers, software resets only; the internal heap before and after; the DUT stays in the device role (restore: python tools\testbench\usb\usb_detach_bench.py --only d4 --restore-host, a PSU power cycle inside) (~6 min)'
     Write-Host '  abrp       - the ABRP rows against the real Iternio API (2026-10-13): the key checked from the PC, host routes on the Pi for the run, the key as a query parameter / as the Authorization header / a wrong key, the counters over the window, the Test button, get_telemetry as the witness with a user token in internal/abrp_credentials.json (PARTIAL without one: the 401 refusals only), restore (2 planned restarts, ~5 min)'
@@ -1684,6 +1685,36 @@ try {
                     Save-StageLog 'can_selftest' $out
                     if (-not ($out | Select-String -Quiet 'CAN SELFTEST PASS')) { throw 'no CAN SELFTEST PASS (the DUT on the bench AP? the simulator at 192.168.8.1? the chip up?)' }
                 } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                }
+            }
+        }
+        'attpstore' {
+            # The OBD chip's protocol store (issue #1023, 2026-11-01): the
+            # chip's memory function is ON after every reset and wrote every
+            # protocol switch a request answered on into its EEPROM-backed
+            # store, RAM-only ATTP or not (the MEB profile: seven writes per
+            # poll cycle, the store rated for 10k); the driver sends ATM0 at
+            # the bring-up and ahead of every switch on the request path.
+            # PC-side through the tunnel, the simulator flipped between
+            # 11-bit and 29-bit ids, the store read back through an ATZ; the
+            # console beside it for the bring-up's `memory off` line.
+            Invoke-Stage 'OBD chip protocol store' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                $con = Start-ConsoleTail 'attp_store'
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\obd\attp_store_bench.py" --dut localhost:18081 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'attp_store' $out
+                    if (-not ($out | Select-String -Quiet 'ATTP STORE PASS')) { throw 'no ATTP STORE PASS (the DUT on the bench AP? the simulator at 192.168.8.1 on 500 kbit/s? the chip up? an image without the fix reads the other protocol)' }
+                } finally {
+                    Stop-ConsoleTail $con
+                    if ($con -and (Test-Path $con.Log)) {
+                        $mem = @(Select-String -Path $con.Log -Pattern 'started: chip .*memory (off|on)' | ForEach-Object { $_.Line })
+                        if ($mem.Count -gt 0) { Write-Host "console: $($mem.Count) bring-up line(s), the last: $($mem[-1] -replace '^.*obd_chip: ', '')" -ForegroundColor DarkGray }
+                    }
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                 }
             }

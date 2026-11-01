@@ -434,8 +434,12 @@ def main():
         same = all(isinstance(can_a, dict) and isinstance(can_b, dict) and can_a.get(k) == can_b.get(k) for k in ("running", "baud_kbps", "listen_only", "silent", "state"))
         check("the CAN node is as before (running, bitrate, listen-only, state)", same, ({k: (can_a or {}).get(k) for k in ("running", "baud_kbps", "listen_only", "state")}, {k: (can_b or {}).get(k) for k in ("running", "baud_kbps", "listen_only", "state")}))
         check("no bus or tx error from the test", isinstance(can_b, dict) and can_b.get("bus_errors", 1) - (can_a or {}).get("bus_errors", 0) == 0 and can_b.get("tx_errors", 1) - (can_a or {}).get("tx_errors", 0) == 0, ((can_a or {}).get("bus_errors"), (can_b or {}).get("bus_errors"), (can_a or {}).get("tx_errors"), (can_b or {}).get("tx_errors")))
-        st, oc_b = http(DUT, "/api/obd_chip")
-        check("the chip is ready and unclaimed after the test", st == 200 and oc_b.get("ready") and oc_b.get("claim") == "none" and oc_b.get("baud") == (oc_a or {}).get("baud"), oc_b and (oc_b.get("ready"), oc_b.get("claim"), oc_b.get("baud")))
+        # the claim is read between two polls: AutoPID holds COMMAND for
+        # about 40 ms of every 70 at 14 polls/s (33 of 60 samples read
+        # "command" on 2026-11-01), so one GET is a coin flip; what must
+        # hold is that the claim comes free, which a stuck one never does
+        oc_b = wait_ready(5)
+        check("the chip is ready and comes unclaimed between polls after the test", oc_b.get("ready") and oc_b.get("claim") == "none" and oc_b.get("baud") == (oc_a or {}).get("baud"), (oc_b.get("ready"), oc_b.get("claim"), oc_b.get("baud")))
         echoed, txt = probe_echo()
         check("the chip answers without echo after the test (the restore keeps the bring-up's ATE0)", echoed is False, txt)
         if not ap_was_on:

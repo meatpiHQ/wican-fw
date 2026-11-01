@@ -34,6 +34,22 @@ after it; 0 new `E (` lines on that boot. Before the fix on the same
 rig: hinted p50 26 ms at 35 req/s with 8/200 foreign answers, hint-less
 p50 69 ms at 16 req/s with 80/200.
 
+**Bench 2026-11-01 21:45, on the OBD chip protocol store fix with the
+app's reset intercepted** (`testing/attpstore.md`: an app's `ATZ` goes to
+the chip as `ATWS` and an `ATM0` is hidden behind the answer): **PASS**,
+hinted loop 114 req/s, p50 7.5 ms, p95 16.5 ms, max 22 ms, 0 foreign
+answers, `paused_client` seen, `polls_ok` frozen; hint-less loop 22.5
+req/s, p50 40.8 ms, p95 69.6 ms, 0 foreign answers; resume 3.3 s, +64 ok
+/ +0 failed polls after it. The probe's own `ATZ` at the start of each
+session: the second answered with the banner in 50 ms (a plain `ATZ` takes
+about 1.3 s), the first with `STOPPED` in 10 ms because it landed inside
+an AutoPID request before the yield (the chip answers any byte mid-request
+that way, a plain `ATZ` included; the hidden `ATM0` still followed its
+prompt and the session ran clean). Fixture on the bench DUT, where TCP
+35000 is `br_echo` to `ws_can` since 2026-10-29: `br_echo`'s `a` side
+re-pointed at `obd` and AutoPID enabled in ONE submit before, both put
+back in one after (two planned restarts).
+
 **Reference-adapter comparison**: `tools/testbench/obd/elm_compare.py`
 prints one markdown table: the stored before/after rows
 (`tools/testbench/obd/fixtures/elm_latency_2026-09-08.json`) plus live
