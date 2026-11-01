@@ -28,7 +28,7 @@
       "pid": "222AB2",
       "pid_init": "ATSP6;ATSH710;ATFCSH710;ATFCSD300000;ATFCSM1;ATCRA77A;",
       "parameters": {
-        "HV_CAPACITY_KWH": "[B4:B5]*50"
+        "HV_CAPACITY_KWH": "[B4:B5]*50/1000"
       }
     },
     {
@@ -88,10 +88,10 @@
       }
     },
     {
-      "pid": "221E3D",
+      "pid": "221E3D2",
       "pid_init": "ATSP7;ATCP17;ATSHFC007B;ATCRA17FE007B;ATFCSH17FC007B;ATFCSD300000;ATFCSM1;",
       "parameters": {
-        "HV_A": "(150000-[B5:B9])/100"
+        "HV_A": "(150000-(([B5:B7]*256)+B9))/100"
       }
     }
   ]

@@ -21,13 +21,13 @@ jobs:
         working-directory: tools/wican-log-viewer
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -47,7 +47,7 @@ jobs:
         shell: bash
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wican-log-viewer-${{ runner.os }}
           path: tools/wican-log-viewer/wican-log-viewer-${{ runner.os }}.tar.gz
@@ -61,7 +61,7 @@ jobs:
       run:
         working-directory: tools/wican-log-viewer
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - name: Add targets
         run: |
@@ -79,7 +79,7 @@ jobs:
             -output dist/wican-log-viewer
           tar -czf wican-log-viewer-macos-universal.tar.gz -C dist wican-log-viewer
       - name: Upload universal
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wican-log-viewer-macos-universal
           path: tools/wican-log-viewer/wican-log-viewer-macos-universal.tar.gz

@@ -1,0 +1,65 @@
+{
+  "car_model": "Toyota: Sienna 2021-",
+  "init": "ATSP6;ATST96;",
+  "pids": [
+    {
+      "pid": "015B1",
+      "pid_init": "ATSH7E2;ATCRA7EA;",
+      "parameters": {
+        "SOC": "(B3*100)/255"
+      }
+    },
+    {
+      "pid": "01A61",
+      "pid_init": "ATSH7E2;ATCRA7EA;",
+      "parameters": {
+        "ODOMETER": "[B3:B6]/10"
+      }
+    },
+    {
+      "pid": "221F9A2",
+      "pid_init": "ATSH7D2;ATCRA7DA;",
+      "parameters": {
+        "HV_V": "B7*4",
+        "HV_A": "[S10:S11]*0.1"
+      }
+    },
+    {
+      "pid": "2218142",
+      "pid_init": "ATSH7D2;ATCRA7DA;",
+      "parameters": {
+        "HV_T_1": "[B5:B6]/256-50",
+        "HV_T_2": "((B7*256)+B9)/256-50",
+        "HV_T_3": "[B10:B11]/256-50"
+      }
+    },
+    {
+      "pid": "2210021",
+      "pid_init": "ATSH7D2;ATCRA7DA;",
+      "parameters": {
+        "LV_V": "[B4:B5]*12.2/10000"
+      }
+    },
+    {
+      "pid": "21291",
+      "pid_init": "ATSH7C0;ATCRA7C8;",
+      "parameters": {
+        "FUEL_L": "B3/2"
+      }
+    },
+    {
+      "pid": "01051",
+      "pid_init": "ATSH7E0;ATCRA7E8;",
+      "parameters": {
+        "COOLANT_TMP": "B3-40"
+      }
+    },
+    {
+      "pid": "01461",
+      "pid_init": "ATSH7E0;ATCRA7E8;",
+      "parameters": {
+        "OUTSIDE_TEMPERATURE": "B3-40"
+      }
+    }
+  ]
+}

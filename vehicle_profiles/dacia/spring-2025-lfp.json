@@ -1,0 +1,145 @@
+{
+  "car_model": "Dacia: Spring (2025-) LFP",
+  "init": "ATSP7;ATCP18;ATST96;ATSHDADBF1;ATCRA18DAF1DB;ATFCSH18DADBF1;ATFCSD300000;ATFCSM1;",
+  "pids": [
+    {
+      "pid": "2290011",
+      "parameters": {
+        "SOC": "[B4:B5]/100"
+      }
+    },
+    {
+      "pid": "2290021",
+      "parameters": {
+        "SOC_D": "[B4:B5]/100"
+      }
+    },
+    {
+      "pid": "2290031",
+      "parameters": {
+        "SOH": "[B4:B5]/100"
+      }
+    },
+    {
+      "pid": "2290061",
+      "parameters": {
+        "HV_V": "[B4:B7]/1024"
+      }
+    },
+    {
+      "pid": "2292841",
+      "parameters": {
+        "HV_A": "0-([S4:S7]/1000)"
+      }
+    },
+    {
+      "pid": "2291C81",
+      "parameters": {
+        "HV_CAPACITY_R": "[B4:B6]/1000"
+      }
+    },
+    {
+      "pid": "2290121",
+      "parameters": {
+        "BATT_TEMP": "([B4:B5]/16)-40"
+      }
+    },
+    {
+      "pid": "2290111",
+      "parameters": {
+        "LV_V": "[B4:B5]/1000"
+      }
+    },
+    {
+      "pid": "2292451",
+      "parameters": {
+        "KWH_DISCHARGED": "[B4:B7]/1000"
+      }
+    },
+    {
+      "pid": "2292431",
+      "parameters": {
+        "KWH_CHARGED": "[B4:B7]/1000"
+      }
+    },
+    {
+      "pid": "2291311",
+      "parameters": {
+        "HV_T_1": "([B4:B5]/16)-40"
+      }
+    },
+    {
+      "pid": "2291321",
+      "parameters": {
+        "HV_T_2": "([B4:B5]/16)-40"
+      }
+    },
+    {
+      "pid": "2291331",
+      "parameters": {
+        "HV_T_3": "([B4:B5]/16)-40"
+      }
+    },
+    {
+      "pid": "2291341",
+      "parameters": {
+        "HV_T_4": "([B4:B5]/16)-40"
+      }
+    },
+    {
+      "pid": "2291351",
+      "parameters": {
+        "HV_T_5": "([B4:B5]/16)-40"
+      }
+    },
+    {
+      "pid": "2291361",
+      "parameters": {
+        "HV_T_6": "([B4:B5]/16)-40"
+      }
+    },
+    {
+      "pid": "2291371",
+      "parameters": {
+        "HV_T_7": "([B4:B5]/16)-40"
+      }
+    },
+    {
+      "pid": "2291381",
+      "parameters": {
+        "HV_T_8": "([B4:B5]/16)-40"
+      }
+    },
+    {
+      "pid": "2291391",
+      "parameters": {
+        "HV_T_9": "([B4:B5]/16)-40"
+      }
+    },
+    {
+      "pid": "22913A1",
+      "parameters": {
+        "HV_T_10": "([B4:B5]/16)-40"
+      }
+    },
+    {
+      "pid": "22913B1",
+      "parameters": {
+        "HV_T_11": "([B4:B5]/16)-40"
+      }
+    },
+    {
+      "pid": "22913C1",
+      "parameters": {
+        "HV_T_12": "([B4:B5]/16)-40"
+      }
+    },
+    {
+      "pid": "2220061",
+      "pid_init": "ATSHDADAF1;ATCRA18DAF1DA;ATFCSH18DADAF1;",
+      "parameters": {
+        "ODOMETER": "[B4:B6]"
+      }
+    }
+  ]
+}

@@ -126,22 +126,53 @@ async function read_profile(path) {
 
 async function process_profile(data, params) {
   if (!data.pids || typeof data.pids !== "object") {
-    console.warn(`Warning: Skipping file without valid 'pids': ${jsonPath}`);
+    console.warn(
+      `Warning: Skipping file without valid 'pids': ${data.car_model}`,
+    );
     return;
   }
-  Object.keys(data.pids).forEach((key) => {
-    let newParams = [];
-    for (const [param, exp] of Object.entries(data.pids[key].parameters)) {
-      newParams.push({
-        name: param,
-        expression: exp,
-        ...params[param].settings,
-      });
-    }
-    data.pids[key].parameters = newParams;
+  data.pids.forEach((pid) => {
+    pid.parameters = expand_parameters(
+      pid.parameters,
+      params,
+      `${data.car_model}, pid ${pid.pid}`,
+    );
+  });
+  // Passive CAN filters (WiCAN PRO) carry parameters in the same format
+  (data.filters || []).forEach((filter) => {
+    filter.parameters = expand_parameters(
+      filter.parameters,
+      params,
+      `${data.car_model}, filter ${filter.frame_id}`,
+    );
   });
 
   return data;
+}
+
+// Source profiles list parameters as { NAME: "expression" }; the published
+// file carries the array form with unit/class/min/max taken from params.json
+function expand_parameters(parameters, params, where) {
+  if (Array.isArray(parameters) || typeof parameters !== "object") {
+    throw new Error(
+      `${where}: parameters must be an object of name: expression pairs ` +
+        `(see vehicle_profiles/README.md), not ${Array.isArray(parameters) ? "an array" : typeof parameters}`,
+    );
+  }
+  let newParams = [];
+  for (const [param, exp] of Object.entries(parameters)) {
+    if (params[param] === undefined) {
+      throw new Error(
+        `${where}: unknown parameter "${param}", every name needs an entry in params.json`,
+      );
+    }
+    newParams.push({
+      name: param,
+      expression: exp,
+      ...params[param].settings,
+    });
+  }
+  return newParams;
 }
 
 async function save_supported_cars(cars) {

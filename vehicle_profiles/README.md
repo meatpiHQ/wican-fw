@@ -18,6 +18,20 @@ If you would like to add/update a car please make sure it is formatted properly,
 
 **expression**: The expression used to calculate the parameter value
 
+**filters** (optional, WiCAN PRO only): passive CAN filters, broadcast frames that are decoded without sending a request. Each entry has a **frame_id** (hex string such as "0x284"), an optional **monitor_ms** (how long to wait for the frame, default 1000) and **period_ms**, and **parameters** in the same short name: expression form as a PID. Expressions index the frame data, B0 is the first data byte:
+
+```
+    "filters": [
+        {
+          "frame_id": "0x284",
+          "monitor_ms": 500,
+          "parameters": {
+                  "SPEED": "[B4:B5]/98"
+          }
+        }
+    ]
+```
+
 Every parameter must have a corresponding entry in [params.json](../.vehicle_profiles/params.json) with the following information:
 
 **short_name**: Identical to the entry in the vehicle profile
