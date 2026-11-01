@@ -618,9 +618,11 @@
     /* the OBD chip and the CAN self-test (issue #1023, 2026-10-28): the
        System > Maintenance cards from web/diag.js. A probe sets
        window.__mockPreset.diag = {down:true} for a chip that did not come up,
-       {updating:true} for a rewrite in progress; the wire tools and the
+       {chip22:true} for a chip left on V2.3.22 (the update offer),
+       {updating:true} for an update in progress; the wire tools and the
        self-test answer from state.diagProbe / state.diagSelftest, set by
-       their POSTs */
+       their POSTs. fw.chip keeps the chip's own words (MIC3624 V2.3.24):
+       the page names the version alone (Ali, 2026-11-01) */
     "/api/obd_chip": () => { const d = (window.__mockPreset && window.__mockPreset.diag) || {}; const down = !!d.down;
       return J({ ready: !down, claim: "none", client_idle_ms: 4294967295, baud: down ? 0 : 2000000,
         eeprom_guard: { rewrites: 0, blocked: 0, protocol_saves: 0, memory_off: 1 },
@@ -909,8 +911,11 @@
 
     /* the OBD chip and the CAN self-test (issue #1023, 2026-10-28) */
     if (method === "POST" && path === "/api/obd_chip/update") {
-      state.diagRewrites = (state.diagRewrites || 0) + 1;
-      return J({ started: true, source: "builtin", force: !!(body && body.force) }, 202);
+      /* no force since 2026-11-01 (Ali): the device refuses it, and the
+         probe proves the page never sends it */
+      if (body && body.force) { state.diagForced = (state.diagForced || 0) + 1; return J({ error: "force is not supported: the chip is written only when the image is newer than its firmware" }, 400); }
+      state.diagUpdates = (state.diagUpdates || 0) + 1;
+      return J({ started: true, source: (body && body.path) || "builtin" }, 202);
     }
     if (method === "POST" && path === "/api/obd_chip/probe") {
       const kind = (body && body.kind) || "probe", baud = (body && body.baud) || 0, seconds = (body && body.seconds) || 10;

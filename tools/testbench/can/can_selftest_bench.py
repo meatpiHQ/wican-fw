@@ -24,12 +24,15 @@ the OBD chip and CAN self-test cards of System > Maintenance:
                       fw.builtin V2.3.24, fw.outdated false and bringup.wire
                       (empty on a chip that answered at once)
   chip on V2.3.22     (--fw22 <V2.3.22.txt>, Ali 2026-10-28) the image goes
-                      to /data over /api/fs/upload and the chip is written
-                      from it (force + path, ~20 s): the chip reports V2.3.22
-                      and fw.outdated is true; the unforced packaged update
-                      leaves it alone (0 records: the v4.52p policy); the
-                      forced packaged rewrite brings it back to V2.3.24 and
-                      fw.outdated false; the file is deleted
+                      to /data over /api/fs/upload as V2.3.99.txt (the
+                      image's version is its file's name, and no path
+                      writes a chip at or above the image's version since
+                      2026-11-01: the forced rewrite is gone) and the chip
+                      is written from it (~20 s): the chip reports V2.3.22
+                      and fw.outdated is true; POST {force:true} is refused
+                      (400); the packaged update (the card's button) lifts
+                      it back to V2.3.24 and fw.outdated false; the file is
+                      deleted
   after the test      (Ali, 2026-10-28: "make sure the CAN and OBD chip and
                       AutoPID still work properly after the CAN self-test")
                       AutoPID enabled when it is off (one planned restart,
@@ -362,30 +365,31 @@ def main():
     # ---- a chip left on V2.3.22: the warning (--fw22) ----
     if FW22:
         print("== a chip left on V2.3.22 (%s) ==" % FW22)
+        # the image's version is its file's name (the firmware's contract)
+        # and no path writes a chip at or above the image's version
+        # (2026-11-01, Ali: the forced rewrite is gone), so the .22 image
+        # goes up as V2.3.99.txt: the bench's only way onto an older chip
+        # firmware
         data = open(FW22, "rb").read()
-        st, r = http_raw(DUT, "/api/fs/upload?path=/data/V2.3.22.txt", data)
-        check("V2.3.22.txt uploaded to /data (%d bytes)" % len(data), st in (200, 201), (st, r))
-        st, r = http(DUT, "/api/obd_chip/update", "POST", {"force": True, "path": "/data/V2.3.22.txt"})
-        check("POST update {force, path} -> 202", st == 202, (st, r))
+        st, r = http_raw(DUT, "/api/fs/upload?path=/data/V2.3.99.txt", data)
+        check("the V2.3.22 image uploaded to /data as V2.3.99.txt (%d bytes)" % len(data), st in (200, 201), (st, r))
+        st, r = http(DUT, "/api/obd_chip/update", "POST", {"path": "/data/V2.3.99.txt"})
+        check("POST update {path} -> 202", st == 202, (st, r))
         fw = wait_update(90)
         check("the .22 write ends ESP_OK with every record", bool(fw) and fw.get("last") == "ESP_OK" and fw.get("lines") == fw.get("total") and fw.get("total", 0) > 0, fw)
         oc = wait_ready(40)
         check("the chip reports V2.3.22 after it", "V2.3.22" in str(oc.get("fw", {}).get("chip")), oc.get("fw"))
         check("fw.outdated is true on a chip at V2.3.22", oc.get("fw", {}).get("outdated") is True, oc.get("fw"))
-        st, r = http(DUT, "/api/obd_chip/update", "POST", {"force": False})
-        check("POST the packaged update without force -> 202", st == 202, (st, r))
-        fw = wait_update(30)
-        check("it leaves a .22 chip alone (ESP_OK, 0 records: the v4.52p policy)", bool(fw) and fw.get("last") == "ESP_OK" and fw.get("lines") == 0, fw)
-        oc = wait_ready(40)
-        check("still V2.3.22 and still outdated", "V2.3.22" in str(oc.get("fw", {}).get("chip")) and oc.get("fw", {}).get("outdated") is True, oc.get("fw"))
         st, r = http(DUT, "/api/obd_chip/update", "POST", {"force": True})
-        check("POST the packaged update with force -> 202", st == 202, (st, r))
+        check("POST {force:true} -> 400 (the forced rewrite is gone)", st == 400, (st, r))
+        st, r = http(DUT, "/api/obd_chip/update", "POST", {})
+        check("POST the packaged update (the card's button) -> 202", st == 202, (st, r))
         fw = wait_update(90)
-        check("the forced packaged rewrite ends ESP_OK with every record", bool(fw) and fw.get("last") == "ESP_OK" and fw.get("lines") == fw.get("total") and fw.get("total", 0) > 0, fw)
+        check("the packaged update lifts the chip (ESP_OK, every record)", bool(fw) and fw.get("last") == "ESP_OK" and fw.get("lines") == fw.get("total") and fw.get("total", 0) > 0, fw)
         oc = wait_ready(40)
         check("the chip is back on V2.3.24 and not outdated", "V2.3.24" in str(oc.get("fw", {}).get("chip")) and oc.get("fw", {}).get("outdated") is False, oc.get("fw"))
-        st, r = http(DUT, "/api/fs/file?path=/data/V2.3.22.txt", "DELETE")
-        check("V2.3.22.txt deleted from /data", st == 200, (st, r))
+        st, r = http(DUT, "/api/fs/file?path=/data/V2.3.99.txt", "DELETE")
+        check("V2.3.99.txt deleted from /data", st == 200, (st, r))
     else:
         print("(no --fw22 <V2.3.22.txt>: the warning on a chip left on V2.3.22 is not exercised)")
 
