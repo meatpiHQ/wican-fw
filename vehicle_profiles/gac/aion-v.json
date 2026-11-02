@@ -1,0 +1,111 @@
+{
+  "car_model": "GAC: Aion V (2024-)",
+  "init": "ATSP6;ATST96;",
+  "pids": [
+    {
+      "pid": "2211141",
+      "pid_init": "ATSH7E2;ATCRA7EA;",
+      "parameters": {
+        "SOC": "B4"
+      }
+    },
+    {
+      "pid": "22141E1",
+      "pid_init": "ATSH7E2;ATCRA7EA;",
+      "parameters": {
+        "SOC_D": "[B4:B5]"
+      }
+    },
+    {
+      "pid": "22111E1",
+      "pid_init": "ATSH7E2;ATCRA7EA;",
+      "parameters": {
+        "SOH": "[B4:B5]"
+      }
+    },
+    {
+      "pid": "2214011",
+      "pid_init": "ATSH7E2;ATCRA7EA;",
+      "parameters": {
+        "HV_V": "[B4:B5]/10"
+      }
+    },
+    {
+      "pid": "2214041",
+      "pid_init": "ATSH7E2;ATCRA7EA;",
+      "parameters": {
+        "HV_A": "([B4:B5]/10)-800"
+      }
+    },
+    {
+      "pid": "2214021",
+      "pid_init": "ATSH7E2;ATCRA7EA;",
+      "parameters": {
+        "HV_KWH_R": "[B4:B5]*100"
+      }
+    },
+    {
+      "pid": "2214001",
+      "pid_init": "ATSH7E2;ATCRA7EA;",
+      "parameters": {
+        "ODOMETER": "[B4:B6]"
+      }
+    },
+    {
+      "pid": "2220241",
+      "pid_init": "ATSH7E2;ATCRA7EA;",
+      "parameters": {
+        "HV_T_MAX": "B4-40"
+      }
+    },
+    {
+      "pid": "2220261",
+      "pid_init": "ATSH7E2;ATCRA7EA;",
+      "parameters": {
+        "HV_T_MIN": "B4-40"
+      }
+    },
+    {
+      "pid": "22117D1",
+      "pid_init": "ATSH7E2;ATCRA7EA;",
+      "parameters": {
+        "HV_T_I": "(B4*0.5)-40"
+      }
+    },
+    {
+      "pid": "2220201",
+      "pid_init": "ATSH7E2;ATCRA7EA;",
+      "parameters": {
+        "HV_C_V_MAX": "([B4:B5]/1000)-4.35"
+      }
+    },
+    {
+      "pid": "2210001",
+      "pid_init": "ATSH7E2;ATCRA7EA;",
+      "parameters": {
+        "LV_V": "B4/10"
+      }
+    },
+    {
+      "pid": "22114D1",
+      "pid_init": "ATSH7E2;ATCRA7EA;",
+      "parameters": {
+        "KWH_CHARGED": "[B4:B6]/10"
+      }
+    },
+    {
+      "pid": "2211891",
+      "pid_init": "ATSH7E2;ATCRA7EA;",
+      "parameters": {
+        "KWH_DISCHARGED": "[B4:B6]/10"
+      }
+    },
+    {
+      "pid": "2223131",
+      "pid_init": "ATSH7E3;ATCRA7EB;",
+      "parameters": {
+        "HV_AV": "[B4:B5]/100"
+      }
+    }
+  ]
+}
