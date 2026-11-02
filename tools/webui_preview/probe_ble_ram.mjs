@@ -93,6 +93,34 @@ const shown = (el) => { if (!el) return false; for (let e = el; e && e.id !== "v
     /0 turns the scan feature off/.test(row("ble_scan_cache").textContent) && /Fewer than 12/.test(row("ble_acl_tx_bufs").textContent));
   pick("ble_ram_profile", "lean"); await sleep(120);
   check("back on Lean the knobs fold away again", !shown(row("ble_max_act")) && shown(leanNote()));
+
+  /* ble_manager v6 (2026-11-02, the 4.x parity): the address row in the open, the
+     pairing request behind Show advanced (which is open at this point) */
+  const addrParts = () => ({
+    values: sel("address") && [...sel("address").options].map((o) => o.value).join(","),
+    words: sel("address") && [...sel("address").options].map((o) => o.textContent),
+    shown: shown(row("address")),
+    label: !!row("address") && /Bluetooth address/.test(row("address").textContent),
+  });
+  check("the Bluetooth address row offers public and private with the fixed-address word first",
+    !!sel("address") && addrParts().values === "public,private" &&
+    /fixed hardware address/.test(sel("address").options[0].textContent) && /changes at every reconnect/.test(sel("address").options[1].textContent) &&
+    addrParts().shown && addrParts().label, addrParts());
+  check("the address help names 4.x, presence detection and the 15 minute rotation",
+    /firmware 4\.x/.test(row("address").textContent) && /resence/.test(row("address").textContent) && /15 minutes/.test(row("address").textContent));
+  check("the pairing-request switch sits under Show advanced with its 4.x wording",
+    !!row("security_request") && shown(row("security_request")) && /Ask the phone to pair at connect/.test(row("security_request").textContent) &&
+    /Windows app/.test(row("security_request").textContent));
+  /* the data-pipe note (2026-11-02): the mock's bridge list is empty, Bluetooth is on */
+  const bridgeNote = () => $('#view [data-key="ble_bridge_note"]');
+  const noteParts = () => ({
+    shown: shown(bridgeNote()), warn: !!bridgeNote() && bridgeNote().classList.contains("warn"),
+    text: !!bridgeNote() && /No connection carries the Bluetooth data pipe/.test(bridgeNote().textContent),
+    link: !!bridgeNote() && !!bridgeNote().querySelector('a[href="#/settings/connections"]'),
+    in_the_card: !!bridgeNote() && bridgeNote().closest(".section") === bleCard(),
+  });
+  check("with Bluetooth on and no connection on the ble end, the warning names the Connections page",
+    Object.values(noteParts()).every(Boolean), noteParts());
   check("no page errors on the Bluetooth tab", errs.length === 0, errs.slice(0, 2));
 
   /* ---- Bluetooth off: only the switch ---- */
@@ -105,6 +133,8 @@ const shown = (el) => { if (!el) return false; for (let e = el; e && e.id !== "v
   check("with Bluetooth off the profile row and the note stay folded, the switch stays",
     !!bleCard2 && !shown(row2("ble_ram_profile")) && !shown(bleCard2.querySelector('[data-key="ble_lean_note"]')) && shown(row2("enabled")),
     [!!bleCard2, !!row2("ble_ram_profile"), shown(row2("ble_ram_profile")), !!row2("enabled"), shown(row2("enabled"))]);
+  check("with Bluetooth off the data-pipe warning stays hidden",
+    !!bleCard2 && !shown(bleCard2.querySelector('[data-key="ble_bridge_note"]')));
 
   /* ---- the VPN page: a Tailscale tunnel held for internal RAM ---- */
   const reason = "not started: 13 KB of internal RAM free, Tailscale needs 30 KB: set the Bluetooth memory profile to Lean (about 15 KB), turn Bluetooth off (about 40 KB), or use WireGuard";

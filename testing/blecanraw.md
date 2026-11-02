@@ -13,3 +13,17 @@ Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cel
 **2026-10-31 on the Lean Bluetooth memory profile (ble_manager v5, the final image): `BLE CAN RAW PASS` (111 s: 121 records in 8 s from 0C0/1A0, 20/20 answered, the 29-bit write, 0 E lines). The first run that day failed leg A alone, 0 records and the DUT's CAN rx +0: the simulator's `broadcast_enabled` was off (an earlier bench had left it so), nothing to forward; switched on for the run and put back off after. Leg A needs the simulator broadcasting.**
 
 **2026-11-01 01:59 and 02:08 (the NimBLE host task on a 6 KB PSRAM stack, `internal/TASK_ble_host_psram.md`):** the chained run FAILed leg A alone the same way (0 records in 8 s, ids [], every other leg green: 20/20 answered, the 29-bit write, 0 E lines, the restore clean): the simulator's `broadcast_enabled` was off again (the 2026-10-31 run had put it back off, as it says above). Switched on (`PUT /api/settings/ecu_sim` on the simulator + submit, one simulator reboot) and re-run alone: **`BLE CAN RAW PASS`, 113 s: 122 records in 8 s from 0C0/1A0 at 17.3 B/record, 15.25 rec/s, 0 malformed, timestamps monotonic, the device's 8.06 s vs the Pi's 7.94 s, 20/20 answered p50 113 ms, the 29-bit write, 0 E lines, 0 unexpected resets.** Reports `2026-11-01_0159_blecanraw.md` (FAIL, the rig) and `2026-11-01_0208_blecanraw.md` (PASS). A chain that includes this stage should switch the simulator's broadcast on first (the way `can_selftest_bench.py` does with `sim_broadcast()`), or the stage should stage it itself.
+
+**2026-11-02 15:25 (the 4.x parity of Bluetooth, `internal/TASK_ble_address_pairing.md`): the
+first run FAIL on leg A alone** (`0 records in 8.0 s`, every other leg green incl. B 20/20
+and the 29-bit record; the restore clean): the simulator's `broadcast_enabled` had been PUT
+but not submitted, and the simulator, like the WiCAN, applies a setting at its restart
+(`bench_bus.sim_set` does the `POST /api/settings/submit`; a bare PUT stages only). The
+bench itself now disables the factory `br_ble_obd` while its `br_ble_can` row runs (one
+enabled bridge per `ble` end) and restores it: `configure_bridge_slot_free` counted 5
+standing bridges. The re-run with the broadcast live is the next record.
+
+**2026-11-02 15:36 (the same image, the simulator's broadcast submitted): BLE CAN RAW PASS**
+(111.7 s): leg A 120 records in 8 s (ids 0C0, 1A0), B 20/20 answered, the 29-bit record,
+the bridge stats, the restore clean (the factory `br_ble_obd` back enabled, 0 E lines, no
+new fault, no unexpected reset). The simulator's broadcast was put back off afterwards.

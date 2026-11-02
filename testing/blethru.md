@@ -17,3 +17,29 @@ Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cel
 **2026-10-31 (ble_manager v5, the final image): the stage expects the DUT to ARRIVE with BLE on, passkey 421337, `phy` auto on the Full profile (the bench sets auto + full itself when it finds 1m, and puts both back), and on this rig `interface_manager.sta_ble_handover` OFF. Three runs: (1) with Bluetooth off as restored by the gate before it: `dut_ble_enabled` FAIL and no link (the precondition, now written here); (2) Full, auto, handover ON: the 2M link paired and negotiated (phy 2/2, DLE 251, write 485 kbps) but every HTTP-tunnel request timed out (uploads `rsp none`, downloads 404 after them, the blast POST unanswered) and the 1M leg never secured; the DUT then sat on the client-isolated dongle AP, unreachable over WiFi for the next 7.5 min (a PSU cycle brought it back): the station churned between APs during the legs under the handover and the tunnel starved behind it, the same station flake as `blephy`'s first run that day; (3) `--keep-dut --phys 1m` on LEAN at 1M with the handover OFF (a control; the new `--keep-dut` leaves the DUT's phy and profile alone): every functional leg PASS, tunnel 269/244 kbps up and 253/242 kbps down byte-exact with 0 holes, indications 111 kbps, `tx_timeouts 0 rx_overflow 0`; only the two reference speeds are under their marks (notify 244, write 136 kbps) because those marks were set with WiFi suspended and this run kept the station up; (4) `--keep-dut --phys 2m` on FULL with the handover OFF: **`BLE THROUGHPUT PASS`**, notify 484 kbps, write 407 kbps (the reference's ~500), tunnel up 512/456, down 469/487 kbps byte-exact with 0 holes, indications 126 kbps (3.9x), 0 E lines, 0 unexpected resets, internal free 12.2 KB before and 11.0 KB after (min 4.4 KB: the cliff is near on Full with the dongle enumerated). So the Full profile's sizing (identical to the build before v5) carries the full-rate link; what failed was the handover path on today's rig, to re-examine when the bench AP's re-association flake is fixed.
 
 **The same evening on build 1 (the controller's code in flash), both PHYs through the stage with the DUT prepared (BLE on, passkey 421337, auto on Full, handover off): every functional leg PASS, byte-exact tunnels, 0 holes, 0 timeouts, 0 pairing failures; the verdict FAIL is only the two 1M reference marks (notify 244, write 137 kbps, the coex-loaded numbers of the afternoon control, unchanged). The cost of that option shows at 2M: notify 374 kbps (was 484 in the afternoon's handover-off run on the previous image), write 245 (407), tunnel up 333 to 378 (456 to 512), down 377 to 380 (469 to 487), indications 124 (126): about a quarter, the controller now running from the flash cache.**
+
+**2026-11-02 16:50 (the 4.x parity of Bluetooth, `internal/TASK_ble_address_pairing.md`, staged by hand: Bluetooth on, passkey 421337, PHY auto, Full,
+handover off): 1M every functional leg PASS, the two reference speeds under their bars, 2M
+FAIL on the pairing** (notify 249 kbps vs the 300 bar, write 138 kbps with 57k retries vs
+400: the station up and MQTT live, the same picture as the 2026-10-31 1M run with the
+handover off; the tunnel legs up to 265 / down 239 kbps notify and 116 indicate, 0 holes,
+`pair ok/fail 1/0`). At 2M the simulator's central reached the link (phy 2/2, dle 251) and
+stayed in `connecting`: the DUT's log shows two `pairing success` 1.3 s apart on that
+connection. The central starts the pairing itself at its connect event; the device's new
+Security Request (sent from its own connect event) was handled by the NimBLE central after
+its own pairing had completed, as a re-encryption, and the second ENC_CHANGE restarted the
+central's discovery. Fix in the same change: the device sends the request from an esp_timer after the connect
+(`secreq_arm`) and only if the link is still plain by then. A quarter second was not
+enough: the second run showed the same two `pairing success` lines, because the bonded
+central's LL encryption (no SMP procedure on the device's side, so no EALREADY) was still
+in flight at 250 ms and the request went out anyway; at one second a central that pairs or
+encrypts on its own is secured first and gets no request at all. The 2M re-run on that
+image is the next record. Output `test-reports/logs/` of the 16:50 stage.
+
+**2026-11-02 17:30 (the one-second pairing request, `--phys 2m` by hand on the same
+staging): BLE THROUGHPUT PASS**: connected and secured at once (`pair ok/fail 1/0`, one
+`pairing success` on the DUT), MTU 517, 7.5 ms, phy 2/2, DLE 251; notify 413 kbps, write
+272 kbps, read 3 kbps; the tunnel up 384 / 346 kbps, down 416 / 416 kbps (0 holes, 15 and
+120 credits), indicate 129 kbps (notify 3.22 x indicate); the DUT's channel clean. Output
+`test-reports/logs/blethru_2m_secreq_1s.txt` (the quarter-second attempt beside it in
+`blethru_2m_secreq_delay.txt`).

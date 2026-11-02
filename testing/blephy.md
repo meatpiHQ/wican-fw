@@ -13,3 +13,14 @@ Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cel
 **Rig limit:** the TP-Link UB500 (RTL8761BU fw 0xdfc6d922) completes the PHY update to 2M and then both sides Connection Timeout (0x08) on the first 2M event, WiFi on or off; the PC's Intel adapter runs 2M fine, hence the two-host bench.
 
 **2026-10-31 (ble_manager v5, the final image; the bench stages `ble_ram_profile: full` for the BLE 5 words and the restore puts the found profile back): `.\test.ps1 blephy -NoHandover` = `BLE PHY PASS` (237 s)**: legacy 5 legacy / 0 extended reports, both 7 legacy / 1 extended (secondary PHY LE 2M), the 1M link kept at 1M, the UB500 held the 2M link this time (`phy_tx 2M`); PC Intel adapter with the station UP beside the link (coex-loaded, the switch's reason below): 1M upload 17.5 KB/s, download 17.0 KB/s (notify mode now), RTT p50 250 ms; 2M upload 29.1 KB/s, download 42.2 KB/s, RTT p50 187 ms; restore clean. Two rig lessons from the two failed runs before it: (1) with the product's handover ON and a DUT in station-only mode, the STA came back on the client-isolated dongle AP after the first UB500 link and the bench had no AP of the DUT's to fall back to (`switch_dut_reachable ip=None`, the restore skipped: a PSU cycle, the restore stage by hand, then the new `-NoHandover` switch, which passes the bench's own `--no-handover` so the station stays up; the recorded 2026-09-21 run had the DUT in AP+Station); (2) the PC legs need this PC's Bluetooth radio ON (it was off: `BleakBluetoothNotAvailableError`) and no stale Windows pairing record for the DUT (a September record for a rotated address made the ceremony answer status 19 `Failed` while the Pi paired fine; `BleakClient(addr).unpair()` cleared it).
+
+**2026-11-02 16:40 (the 4.x parity of Bluetooth, `internal/TASK_ble_address_pairing.md`,
+`-NoHandover`): BLE PHY PASS** (222.6 s): the legacy set alone, then both sets on air (the
+extended one on the 2M secondary PHY), the UB500's 2M link, the PC's custom pairing with
+the bench's `security_request` false staging, 1M up 23.0 / down 24.5 KB/s (RTT p50 172 ms),
+2M up 25.9 KB/s; the restore clean. The first run that evening failed its PC legs on this
+PC's Bluetooth radio being off (`BleakBluetoothNotAvailableError: POWERED_OFF`); the WinRT
+radio API from PowerShell (`Windows.Devices.Radios.Radio`, `SetStateAsync(On)`) turns it on
+without the Settings app. A stale Windows pairing record for the WiCAN under one of the
+earlier betas' rotating addresses (53:F5:E3:13:FD:5A, status Unknown) did not interfere:
+the device pairs under its public address now.

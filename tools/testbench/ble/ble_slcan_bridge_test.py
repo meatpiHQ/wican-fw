@@ -194,7 +194,12 @@ def stage_configure(ip, keep_sta):
           str(r)[:120])
 
     bm = dict(saved["bm"])
-    bridges = [b for b in bm.get("bridges", []) if b.get("name") != BRIDGE["name"]]
+    bridges = [dict(b) for b in bm.get("bridges", []) if b.get("name") != BRIDGE["name"]]
+    # the `ble` end carries ONE enabled bridge: the factory br_ble_obd (bridge_manager
+    # v2, 2026-11-02) steps aside for the run; the restore puts it back as found
+    for b in bridges:
+        if "ble" in (b.get("a"), b.get("b")):
+            b["enabled"] = False
     check("bridge_slot_free", len(bridges) < 6, f"{len(bridges)} bridges")
     bridges.append(BRIDGE)
     bm["bridges"] = bridges

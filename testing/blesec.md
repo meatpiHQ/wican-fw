@@ -15,3 +15,11 @@ Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cel
 **2026-11-01 01:33, the second image (the load wrapped, the stack 4 KB): `BLE SECURITY PASS`, 142 s, 15 checks.** `nimble_host` on PSRAM with 1844 B of headroom before the pairing and **1028 B after it** (the ECDH of LE Secure Connections is the deepest path): the standard's 1 KB line, so the stack grew to 6 KB (PSRAM: nothing internal). The pairing marshalled 9 jobs (34 → 43, 3 worker spawns, worker `stack_hw_min` 1460 B), the reconnect after the reboot 33 (the bond-count re-sequencing deletes and rewrites each record, then the CCCDs), 0 refusals, 0 E lines, the bond persisted. Report `2026-11-01_0133_blesec.md`.
 
 **2026-11-01 01:39, the final image (the stack 6 KB): `BLE SECURITY PASS`, 142 s, 15 checks.** 102.1 KB internal free with WiFi off and Bluetooth on (no dongle), `nimble_host` headroom 3924 B before the pairing, **3076 B after it and after the reconnect**, the pairing 5 marshalled jobs (38 → 43, worker `stack_hw_min` 1624 B), the reconnect 33 (1 → 34, 1772 B), 0 refusals, 0 E lines, the bond persisted, the found documents back (station mode, Bluetooth off, no key differs). Report `2026-11-01_0139_blesec.md`.
+
+**2026-11-02 17:40 (the 4.x parity of Bluetooth, `internal/TASK_ble_address_pairing.md`:
+the public address, the one-second pairing request, the CCCD gate; the USB role flipped to
+device for the run and back): BLE SECURITY PASS** (137 s): the wrong passkey blocked (no
+characteristic readable unpaired), the pair with the static passkey, the bond surviving a
+reboot with the reconnect reading a gated characteristic without a prompt, the flash worker
+marshalling 1 -> 34 jobs with 0 refusals, `nimble_host` on PSRAM with 2984 B headroom after
+the reconnect, 0 E lines.

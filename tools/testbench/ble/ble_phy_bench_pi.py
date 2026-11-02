@@ -151,7 +151,12 @@ def apply_phy(ip, saved, passkey, phy, adv, boot_before, tag, nm_profile=None):
     # runs legacy advertising on 1M only and refuses the BLE 5 words; the
     # restore puts the found profile back with the rest
     ble.update({"enabled": True, "passkey": passkey, "phy": phy, "advertising": adv,
-                "ble_ram_profile": "full"})
+                "ble_ram_profile": "full",
+                # the PC's WinRT custom pairing (ProvidePin) cannot join a pairing the
+                # device starts: the 4.x-style Security Request at connect (ble_manager
+                # v6, 2026-11-02) stays off for this bench; the restore puts the found
+                # value back
+                "security_request": False})
     check(f"{tag}_put_ble", api(ip, "/api/settings/ble_manager", "PUT", ble)[0] == 200, f"phy={phy} adv={adv}")
     bh = dict(saved["ble_http"]); bh["enabled"] = True
     check(f"{tag}_put_ble_http", api(ip, "/api/settings/ble_http", "PUT", bh)[0] == 200)

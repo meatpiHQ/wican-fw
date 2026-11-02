@@ -131,7 +131,12 @@ def stage_configure(ip, passkey):
     ble = dict(saved["ble"]); ble.update({"enabled": True, "passkey": passkey})
     check("configure_put_ble", api(ip, "/api/settings/ble_manager", "PUT", ble)[0] == 200)
     bm = dict(saved["bm"])
-    bridges = [b for b in bm.get("bridges", []) if b.get("name") != BRIDGE["name"]]
+    bridges = [dict(b) for b in bm.get("bridges", []) if b.get("name") != BRIDGE["name"]]
+    # the `ble` end carries ONE enabled bridge: the factory br_ble_obd (bridge_manager
+    # v2, 2026-11-02) steps aside for the run; the restore puts it back as found
+    for b in bridges:
+        if "ble" in (b.get("a"), b.get("b")):
+            b["enabled"] = False
     check("configure_bridge_slot_free", len(bridges) < 6, f"{len(bridges)} standing bridges")
     bm["bridges"] = bridges + [BRIDGE]
     st2, body = api(ip, "/api/settings/bridge_manager", "PUT", bm)

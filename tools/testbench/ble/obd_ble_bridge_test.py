@@ -45,16 +45,20 @@ def sh(cmd):
                           text=True).stdout
 
 
-def dut_ip_search():
+def dut_ip_search(known=None):
+    """The DUT's address after a restart: the one it had (the P4 bench AP keeps
+    the lease, 2026-11-02) first, then the neighbours of the bench links (usb0 =
+    the P4, wint0 / wtest0 = the Pi's own hotspots of the older rig)."""
     for i in range(30):
-        for dev in ("wint0", "wtest0"):
-            for ip in sh(f"ip neigh show dev {dev} | awk '{{print $1}}'"
-                         ).split():
-                try:
-                    if api(ip, "/api/status").get("version"):
-                        return ip
-                except Exception:
-                    pass
+        cands = [known] if known else []
+        for dev in ("usb0", "wint0", "wtest0"):
+            cands += sh(f"ip neigh show dev {dev} | awk '{{print $1}}'").split()
+        for ip in cands:
+            try:
+                if api(ip, "/api/status", timeout=4).get("version"):
+                    return ip
+            except Exception:
+                pass
         if i % 4 == 3:                    # liveness during the wait
             print(f"  searching for the DUT… (~{(i + 1) * 3} s)",
                   flush=True)
@@ -83,7 +87,7 @@ def submit_and_wait(ip):
     except Exception:
         pass
     time.sleep(8)
-    return dut_ip_search()
+    return dut_ip_search(ip)
 
 
 async def ble_leg(passkey):
@@ -228,7 +232,7 @@ def main():
     # ---- 4. restore (wait for the STA to resume first) ----
     print("waiting for WiFi to resume after BLE disconnect…")
     time.sleep(10)
-    ip = dut_ip_search()
+    ip = dut_ip_search(ip)
     check("wifi_resumed", ip is not None, f"dut_ip={ip}")
     print("PROGRESS 3/4", flush=True)
 

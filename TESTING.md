@@ -183,6 +183,7 @@ serial markers for target apps, pytest verdict for HIL):
 | `.\test.ps1 blephy` | **BLE 5 as settings: PHY + advertising sets** (prints `BLE PHY PASS`, ~9 min). What it covers, the records and the traps: [testing/blephy.md](testing/blephy.md) |
 | `.\test.ps1 blethru` | **BLE throughput with a controlled central** (prints `BLE THROUGHPUT PASS`, ~10 min). What it covers, the records and the traps: [testing/blethru.md](testing/blethru.md) |
 | `.\test.ps1 bleram` | **The Bluetooth memory profile** (prints `BLE RAM PASS`, ~8 min). What it covers, the records and the traps: [testing/bleram.md](testing/bleram.md) |
+| `python tools/testbench/ble/ble_pi_run.py ble_addr_probe_pi.py --dut 10.42.1.194 [--cycles 3] [--expect public\|private]` | **Bluetooth address and unpaired-access probe: what an app sees before it pairs** (prints `RESULT` lines and `BLE ADDR PROBE DONE`; with `--expect` the verdict `BLE ADDR PROBE PASS`: the fixed public address, the subscribe gate, the factory bridge's reply; ~3 min per cycle, two planned restarts). What it covers, the records and the traps: [testing/ble_addr_probe.md](testing/ble_addr_probe.md) | DUT on the bench AP through rpi001 (UB500, bleak, the passkey agent) |
 | `.\test.ps1 all` | host + every target app + hil (live/perf are separate: `all` leaves a test app, not the main firmware, on the DUT) | both |
 
 Options: `-Port COM10` (DUT serial; when absent the preflight falls back to the

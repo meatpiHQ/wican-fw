@@ -239,6 +239,8 @@
    "passkey": 123456,
    "tx_power_dbm": 9,
    "pairing_at_boot": true,
+   "address": "public",
+   "security_request": true,
    "bonding": true,
    "sc_only": true,
    "conn_profile": "ios",
@@ -258,6 +260,16 @@
      "type": "integer",
      "minimum": 0,
      "maximum": 999999
+    },
+    "address": {
+     "type": "string",
+     "enum": [
+      "public",
+      "private"
+     ]
+    },
+    "security_request": {
+     "type": "boolean"
     },
     "tx_power_dbm": {
      "type": "integer",
