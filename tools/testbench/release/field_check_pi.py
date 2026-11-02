@@ -1,8 +1,8 @@
 """The release checklist's last step from the bench: a DUT running the
 PREVIOUS published release takes the new one from the LIVE list, the way a
-user's device does (manifest on raw.githubusercontent.com, the notes, the
-download from the GitHub release, the install, the restart, the
-confirmation). Runs ON the Pi (python3, no extras), prints a stamped
+user's device does (manifest on raw.githubusercontent.com, the notes URL
+the web page fetches, the download from the GitHub release, the install,
+the restart, the confirmation). Runs ON the Pi (python3, no extras), prints a stamped
 transcript, ends with `VERDICT: FIELD CHECK PASS|FAIL`.
 
 The bench is air-gapped, so around this script, by hand:
@@ -15,7 +15,7 @@ The bench is air-gapped, so around this script, by hand:
   3. scp this file to the Pi and run: python3 -u field_check_pi.py <from> <to>
   4. on the Pi: sudo -n ip route del default via 192.168.8.1 dev eth0
 The script switches the DUT's channel (a settings apply = a planned
-restart), checks, reads the notes, installs, waits for the new image's
+restart), checks, fetches the notes the way the page does, installs, waits for the new image's
 boot, restarts once more so the pre-restart hook confirms the image, and
 puts the channel back to stable. First run 2026-10-27 (6.0.0-beta.4 to
 beta.5): the download of 3.9 MB took 38 s through the Pi.
@@ -127,12 +127,40 @@ log("targets.self: installed=%s latest=%s available=%s installable=%s reason=%s"
 check(latest.get("version") == TO_V, "the list offers %s" % TO_V)
 check(me.get("installable") is True, "it is installable from %s" % FROM_V)
 
-# D. the notes the device shows (rendered by the device from the published file)
-try:
-    s, b = get("/api/fw_update/notes?target=self&version=" + TO_V, 20)
-    check(s == 200 and "WiCAN PRO " + TO_V in b, "the notes of %s arrive through the device (%d, %d bytes)" % (TO_V, s, len(b)))
-except Exception as e:
-    check(False, "notes fetch raised %s" % e)
+# D. the notes. This step runs on the PREVIOUS release's firmware. From
+#    2026-11-02 (6.0.0-beta.7) the list names the notes URL and the web page
+#    fetches it itself; an older firmware proxied the file through the device
+#    (and answers 502 for a file over its 16 KB cap: beta.7's notes are 20 KB,
+#    so a beta.5 unit cannot show them before it updates; the install is
+#    untouched). Only the path the running firmware has is checked.
+notes_url = latest.get("notes_url") or ""
+if notes_url:
+    check(notes_url.startswith("https://") and notes_url.endswith("/" + TO_V + ".md"),
+          "the list names the notes URL of %s (%s)" % (TO_V, notes_url))
+    try:
+        with urllib.request.urlopen(notes_url, timeout=20) as r:
+            nb = r.read().decode("utf-8")
+        first = nb.split("\n", 1)[0]
+        check(first.strip() == "# WiCAN PRO " + TO_V and len(nb.encode()) <= 65536,
+              "the notes of %s fetched from that URL the way the page does (%d bytes, first line %r)" % (TO_V, len(nb.encode()), first[:60]))
+    except Exception as e:
+        check(False, "notes fetch from %s raised %s" % (notes_url, e))
+    try:
+        s, b = get("/api/fw_update/notes?target=self&version=" + TO_V, 8)
+        check(s == 404, "the device notes route is gone (%d)" % s)
+    except urllib.error.HTTPError as e:
+        check(e.code == 404, "the device notes route is gone (%d)" % e.code)
+    except Exception as e:
+        check(False, "the device notes route probe raised %s" % e)
+else:
+    try:
+        s, b = get("/api/fw_update/notes?target=self&version=" + TO_V, 25)
+    except urllib.error.HTTPError as e:
+        s, b = e.code, e.read().decode()
+    except Exception as e:
+        s, b = 0, str(e)
+    log("the %s firmware predates the page-fetched notes (no notes_url in its list): its own notes route answered %d %s"
+        % (FROM_V, s, b[:100].replace("\n", " ")))
 
 # E. install
 s, b = send("/api/fw_update/install", {"target": "self"})

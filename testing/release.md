@@ -53,3 +53,11 @@ internal heap floor 55,080 B, supply 89 mA at the close). Report
 Tailscale lwIP threading fix, Bluetooth as 4.x (the public address, the one-second pairing
 request, the CCCD gate, the factory `br_ble_obd`, the page's warning), the release notes
 fetched by the browser.
+
+**2026-11-02 22:49 (THE RELEASE IMAGE of 6.0.0-beta.7: tag `v6.0.0p-beta.7` at 11dc7dd; `build.ps1 -Clean`, fw_build `v6.0.0p-beta.7`, image sha256
+`5c5a4224db46d402...`, ELF `7fb29fe98c97a70e`): RELEASE TEST PASS** (59 passed, 0 failed,
+r12 BLE skipped on the canonical set, 320 s, supply 91 mA at the close, the OTA upload of
+the same image, the writers). Report `test-reports/2026-11-02_2249_release.md`, the record
+`test-reports/release/5c5a4224...json` is the one `release.py publish` read. Published to
+the beta channel the same hour (manifest cff01f2, the pre-release and the mirror with
+their files). The field check from the bench follows in `internal/RELEASE_PROCESS.md`.
