@@ -68,7 +68,7 @@ betty: harmless, the subnet's address is betty's own (loopback). headscale
 learns it from the next map update (a `PeersChanged` entry with the new
 `AllowedIPs`).
 
-- 2026-10-31 23:53, `.	est.ps1 tspublic` on the new image (`v6.0.0p-beta.6-6-ga73e9ef-dirty`,
+- 2026-10-31 23:53, `.\test.ps1 tspublic` on the new image (`v6.0.0p-beta.6-6-ga73e9ef-dirty`,
   the follow-ups of `internal/TASK_httpd_psram_followups.md`): **`TS PUBLIC PASS`**, 326 s,
   every leg: the subnet route learned (`"routes":["10.99.0.0/24"]`), the destination test
   200 in 97 ms, the receiver's record from 100.64.0.1, `vpn_state` 3884 / `ml_wg_mgr` 4096 B
@@ -76,3 +76,18 @@ learns it from the next map update (a `PeersChanged` entry with the new
   83,531 B: Tailscale steady costs about 10 KB on this image, 22 KB before the stacks
   moved; the per-step lines are in `vpn_manager/README.md` Footprint). Report
   `test-reports/2026-10-31_2353_tspublic.md`, console `test-reports/logs/2026-10-31_2353_tspublic/`.
+
+**2026-11-02 14:16 (the WireGuard teardown race fix, `internal/TASK_wg_teardown_race.md`,
+on a `CONFIG_LWIP_CHECK_THREAD_SAFETY=y` build): PASS** (the register, the tunnel IP,
+the direct path via the STUN-mapped address, ICMP 8 of 8 and HTTP 200 through the tunnel,
+the DERP relay up, the subnet route learned and a request through it from 100.64.0.1,
+`vpn_state` 3820 / `ml_wg_mgr` 4192 B headroom on PSRAM, the internal RAM flat over the
+3 min soak, 89,379 to 89,227 B). The two runs before it on the same day's builds asserted
+inside the microlink task (`netif_set_link_down` in `wireguardif_periodic`, then
+`ip4_input` from `wireguardif_process_data_message`: every tunnel packet received on the
+DISCO socket or the relay ran lwIP's IP and TCP input on that task) and are the reason the
+driver posts its link flags and hands decrypted packets to `netif->input` now, and the
+microlink task posts its handshake sends; this run is the proof the Tailscale data path
+runs on the tcpip thread. Logs `test-reports/logs/2026-11-02_1409_tspublic/` (the stage output in
+`stage_diag_rxfix.txt`); `2026-11-02_1403_tspublic/console_ts_public.log` holds the `ip4_input`
+assert of the second run, `2026-11-02_1355_tspublic/` the first run's `netif_set_link_down`.

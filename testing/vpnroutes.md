@@ -17,3 +17,8 @@ default-route leg; internal heap floor 49,456 B. The ip4_routes hook lets a dire
 connected network win since that day (the WireGuard `routes` list included): the r3 LAN leg
 is the same by construction (the station's network is never in the table). Report
 `2026-10-31_2359_vpnroutes.md`.
+
+**2026-11-02 14:28 (the WireGuard teardown race fix, `internal/TASK_wg_teardown_race.md`:
+every lwIP core call of the tunnel on the tcpip thread): PASS** (76.9 s; both routes
+installed, the routed request from the tunnel, the LAN and far requests from the station,
+the two refusals, the default-route leg; the restarts planned, no E line).
