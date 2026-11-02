@@ -243,6 +243,8 @@
    "passkey": 123456,
    "tx_power_dbm": 9,
    "pairing_at_boot": true,
+   "address": "public",
+   "security_request": true,
    "bonding": true,
    "sc_only": true,
    "conn_profile": "ios",
@@ -262,6 +264,16 @@
      "type": "integer",
      "minimum": 0,
      "maximum": 999999
+    },
+    "address": {
+     "type": "string",
+     "enum": [
+      "public",
+      "private"
+     ]
+    },
+    "security_request": {
+     "type": "boolean"
     },
     "tx_power_dbm": {
      "type": "integer",
@@ -2522,7 +2534,10 @@
      downloading, verifying, rebooting) over about four seconds */
   const FW_INSTALLED = "6.1.0-alfa.1";
   const fwScene = () => (window.__mockPreset || {}).fw || "available";
-  const fwRelease = (version, date, summary, extra) => Object.assign({ version, date, summary, notes: true, size: 3791216 }, extra || {});
+  /* notes_url (2026-11-02): the page fetches the notes itself; the shim serves any
+     notes path under the release server's tree (the dispatcher below) */
+  const fwRelease = (version, date, summary, extra) => Object.assign({ version, date, summary,
+    notes_url: "https://raw.githubusercontent.com/meatpiHQ/meatpi-devices/main/wican_pro/firmware/notes/" + version + ".md", size: 3791216 }, extra || {});
   state.fwJob = null; state.fwLast = null; state.fwChecks = 0; state.fwInstalls = []; state.fwAborts = 0;
   /* the probe reads what the page posted */
   window.__mockFw = () => ({ job: state.fwJob, checks: state.fwChecks, installs: state.fwInstalls, aborts: state.fwAborts });
@@ -2535,10 +2550,10 @@
       last_check: { ok: true, error: "" }, latest: null, available: false, installable: false, reason: "up_to_date", target_version: "",
       cellular_needed: sc === "cellular", last_result: state.fwDongleLast };
     if (sc === "dongle_unreachable") d.verdict = "unreachable";
-    else if (sc === "dongle_usb_flash") { d.verdict = "needs_usb_flash"; d.installed.api_level = 6; d.latest = { version: "1.23.0-alfa.1", date: "2026-10-24", summary: "Updatable through a connected WiCAN PRO.", notes: true, size: 1912400 }; }
+    else if (sc === "dongle_usb_flash") { d.verdict = "needs_usb_flash"; d.installed.api_level = 6; d.latest = { version: "1.23.0-alfa.1", date: "2026-10-24", summary: "Updatable through a connected WiCAN PRO.", notes_url: "https://raw.githubusercontent.com/meatpiHQ/meatpi-devices/main/espnetlink/firmware/notes/1.23.0-alfa.1.md", size: 1912400 }; }
     else if (sc === "dongle_available" || sc === "dongle_wifi" || sc === "dongle_job" || sc === "cellular" || sc === "dongle_failed") {
       d.verdict = "update_available"; d.available = true; d.installable = true; d.reason = ""; d.target_version = "1.23.0-alfa.1";
-      d.latest = { version: "1.23.0-alfa.1", date: "2026-10-24", summary: "First build with the version file; updatable through a connected WiCAN PRO.", notes: true, size: 1912400 };
+      d.latest = { version: "1.23.0-alfa.1", date: "2026-10-24", summary: "First build with the version file; updatable through a connected WiCAN PRO.", notes_url: "https://raw.githubusercontent.com/meatpiHQ/meatpi-devices/main/espnetlink/firmware/notes/1.23.0-alfa.1.md", size: 1912400 };
       if (sc === "dongle_failed" && !state.fwDongleLast) d.last_result = state.fwDongleLast = { id: 8, from: DONGLE_FW, to: "1.23.0-alfa.1", state: "failed", error: "timeout_reboot", detail: "the dongle did not come back on the USB link", time: 1784400200, push_s: 24 };
     }
     return d;
@@ -2626,7 +2641,6 @@
   const FIXED = {
     "/api/sdcard": () => J(sdDoc()),
     "/api/fw_update": () => J(fwStatus()),
-    "/api/fw_update/notes": () => T(FW_NOTES),
     "/api/status": () => J({
       usb: (window.__mockPreset || {}).usbStatus || undefined,
       sd: sdSummary(),
@@ -3351,6 +3365,9 @@
     if (path.endsWith("/vehicle_profiles.json") && Array.isArray((window.__mockPreset || {}).profiles)) return J({ cars: window.__mockPreset.profiles });
     /* the Leaf ZE1 (2018-) heads the list (2026-10-27): the first published profile with passive CAN filters, two of its PIDs, its three filters as published */
     if (path.endsWith("/vehicle_profiles.json")) return J({"cars": [{"car_model": "Nissan: Leaf ZE1 (2018-)", "init": "ATSP6;ATST96;ATFCSH79B;ATFCSD300000;ATFCSM1;", "pids": [{"pid": "21018", "parameters": [{"name": "SOC", "expression": "[B39:B41]/10000", "unit": "%", "class": "battery"}, {"name": "HV_V", "expression": "[B22:B23]/100", "unit": "V", "class": "voltage"}, {"name": "HV_A", "expression": "[S4:S7]/1024", "unit": "A", "class": "current"}, {"name": "LV_V", "expression": "B11*0.08", "unit": "V", "class": "voltage"}, {"name": "BATT_CAPACITY", "expression": "[B36:B38]/10000", "unit": "Ah", "class": "none"}]}, {"pid": "2161", "parameters": [{"name": "SOH", "expression": "[B6:B7]/100", "unit": "%", "class": "none"}]}], "filters": [{"frame_id": "0x284", "monitor_ms": 500, "parameters": [{"name": "SPEED", "expression": "[B4:B5]/98", "unit": "km/h", "class": "speed"}]}, {"frame_id": "0x1DA", "monitor_ms": 500, "parameters": [{"name": "DM_F_RPM", "expression": "[S4:S5]/2", "unit": "rpm", "class": "none", "min": "-10100", "max": "10100"}]}, {"frame_id": "0x5C5", "monitor_ms": 500, "parameters": [{"name": "ODOMETER", "expression": "[B1:B3]", "class": "distance", "unit": "km", "min": "0"}]}]}, {"car_model": "AAA: Generic", "init": "ATSP6;", "pids": [{"pid": "010C1", "parameters": [{"name": "EngineRPM", "expression": "[B3:B4]*0.25", "unit": "RPM", "class": "frequency"}]}, {"pid": "010D1", "parameters": [{"name": "VehicleSpeed", "expression": "B3", "unit": "km/h", "class": "speed"}]}, {"pid": "01051", "parameters": [{"name": "Coolant", "expression": "B3-40", "unit": "°C", "class": "temperature"}]}, {"pid": "012F1", "parameters": [{"name": "FuelLevel", "expression": "B3/2.55", "unit": "%", "class": "none"}]}, {"pid": "010F1", "parameters": [{"name": "IntakeAirTemp", "expression": "B3-40", "unit": "°C", "class": "temperature"}]}, {"pid": "01111", "parameters": [{"name": "Throttle", "expression": "B3/2.55", "unit": "%", "class": "none"}]}, {"pid": "01101", "parameters": [{"name": "MAF", "expression": "[B3:B4]*0.01", "unit": "g/s", "class": "none"}]}, {"pid": "010A1", "parameters": [{"name": "FuelPressure", "expression": "B3*3", "unit": "kPa", "class": "pressure"}]}, {"pid": "01061", "parameters": [{"name": "ShortTermFuelTrim", "expression": "(B3/1.28)-100", "unit": "%", "class": "none"}]}, {"pid": "01A61", "parameters": [{"name": "Odometer", "expression": "[B3:B6]", "unit": "km", "class": "distance"}]}]}, {"car_model": "Hyundai: Ioniq2017", "init": "ATSP6;ATSH7E4;ATST96;", "pids": [{"pid": "21057", "parameters": [{"name": "SOC_DISPLAY", "expression": "B39/2", "unit": "%", "class": "battery"}, {"name": "SOH", "expression": "[B33:B34]/10", "unit": "%", "class": ""}]}, {"pid": "2101", "parameters": [{"name": "SOC_BMS", "expression": "B09/2", "unit": "%", "class": "battery"}, {"name": "Charger_Connected", "expression": "B14:5", "unit": "", "class": ""}, {"name": "Charging", "expression": "B14:7", "unit": "", "class": ""}, {"name": "HV_Charger_Connected", "expression": "B14:6", "unit": "", "class": ""}]}]}, {"car_model": "Kia/Hyundai: Niro/Soul/Kona", "init": "ATST96;", "pids": [{"pid_init": "ATSH7E4;", "pid": "2201019", "parameters": [{"name": "SOC_BMS", "expression": "B10/2", "unit": "%", "class": "battery"}, {"name": "Max_REGEN", "expression": "[B11:B12]/100", "unit": "kW", "class": "power"}, {"name": "Max_Power", "expression": "[B13:B14]/100", "unit": "kW", "class": "power"}, {"name": "Batt_Current", "expression": "(65536-([B17:B18]))/10", "unit": "A", "class": "current"}, {"name": "HV_Volts", "expression": "[B19:B20]/10", "unit": "V", "class": "voltage"}, {"name": "HV_Power", "expression": "([B19:B20]/10)*((65536-([B17:B18]))/10)", "unit": "W", "class": "power"}, {"name": "Batt_MaxT", "expression": "B21", "unit": "°C", "class": "temperature"}, {"name": "Batt_MinT", "expression": "B22", "unit": "°C", "class": "temperature"}, {"name": "Batt_Temp_1", "expression": "B23", "unit": "°C", "class": "temperature"}, {"name": "Batt_Temp_2", "expression": "B25", "unit": "°C", "class": "temperature"}, {"name": "Batt_Temp_3", "expression": "B26", "unit": "°C", "class": "temperature"}, {"name": "Batt_Temp_4", "expression": "B27", "unit": "°C", "class": "temperature"}, {"name": "Batt_InletT", "expression": "B30", "unit": "°C", "class": "temperature"}, {"name": "Max_Cell_V", "expression": "B31/50", "unit": "V", "class": "voltage"}, {"name": "Max_Cell_V_No", "expression": "B33", "unit": "none", "class": "none"}, {"name": "Min_Cell_V", "expression": "B34/50", "unit": "V", "class": "voltage"}, {"name": "Min_Cell_V_No", "expression": "B35", "unit": "none", "class": "none"}, {"name": "Aux_Batt_Volts", "expression": "B38*0.1", "unit": "V", "class": "voltage"}]}, {"pid_init": "ATSH7E4;", "pid": "2201057", "parameters": [{"name": "SOH", "expression": "[B34:B35]/10", "unit": "%", "class": "battery"}, {"name": "SOC_D", "expression": "B41/2", "unit": "%", "class": "battery"}, {"name": "Min_Cell_Det_No", "expression": "B39", "unit": "none", "class": "none"}, {"name": "Max_Cell_Det_No", "expression": "B36", "unit": "none", "class": "none"}, {"name": "Min_Cell_Det", "expression": "[B37:B38]/10", "unit": "%", "class": "battery"}]}, {"pid_init": "ATSH7E2;", "pid": "21014", "parameters": [{"name": "GearSelector_Raw", "expression": "B10", "unit": "none", "class": "none"}, {"name": "Speed_Vehicle", "expression": "[B19:B20]/100", "unit": "%", "class": "battery"}, {"name": "Car_Ready", "expression": "B26:3", "unit": "none", "class": "none"}, {"name": "Car_ParkBreak", "expression": "B26:5", "unit": "none", "class": "none"}]}]}]});
+    /* the release notes on the release server (2026-11-02): the page fetches the
+       snapshot's notes_url itself; the shim answers any notes file under that tree */
+    if (path.startsWith("/meatpiHQ/meatpi-devices/main/") && path.endsWith(".md")) return T(FW_NOTES);
     if (FIXED[path]) return FIXED[path](full || path, method, body);   /* a few mutate on method + body */
     return J({ error: "mock: " + method + " " + path + " not implemented" }, 404);
   }
@@ -4800,6 +4817,7 @@ const LABELS={
   /* ble_manager */
   passkey:"Pairing passkey",tx_power_dbm:"TX power (dBm)",pairing_at_boot:"Allow pairing at boot",bonding:"Remember paired devices",
   sc_only:"Secure connections only",conn_profile:"Connection profile",
+  "ble_manager.address":"Bluetooth address",security_request:"Ask the phone to pair at connect",
   ble_ram_profile:"Memory profile",ble_max_act:"Controller activities",ble_acl_tx_bufs:"Static ACL TX buffers",
   ble_scan_cache:"Scan duplicate cache",
   /* can_manager (the obd_chip group has no UI at all: meatpi 2026-09-07) */
@@ -4956,6 +4974,8 @@ const HELP={
   ble_acl_tx_bufs:"Packet buffers reserved when Bluetooth starts, about 270 bytes each. Fewer than 12 risks silently lost notifications when memory runs low.",
   ble_scan_cache:"Entries of the scan duplicate filter. 0 turns the scan feature off: this device never scans.",
   bonding:"Keep pairing keys so a phone reconnects without re-entering the passkey.",
+  "ble_manager.address":"Public is the device's fixed hardware address, as firmware 4.x advertised it: presence detection and apps that remember the address work. Private is a random address that changes at every reconnect and every 15 minutes; paired phones still find the device.",
+  security_request:"The device asks the phone to pair the moment it connects, as firmware 4.x did, so an app's first command already goes over a paired link. Switch off only for a Windows app that runs its own pairing dialog.",
   ip_mode:"Automatic (DHCP) works for almost every network.",
   sta_ip_mode:"Automatic (DHCP) works for almost every network.",
 };
@@ -4972,6 +4992,7 @@ const ENUMS={
   device_class:{ncm:"CDC-NCM (Linux / macOS / Windows 11)",rndis:"RNDIS (older Windows)",cdc:"CDC serial"},
   conn_profile:{ios:"iOS",android_fast:"Android (fast)"},pause_mode:{all:"Pause everything",requests_only:"Pause requests only"},
   ble_ram_profile:{full:"Full (BLE 5 options)",lean:"Lean (recommended)",custom:"Custom"},
+  "ble_manager.address":{public:"Public (fixed hardware address)",private:"Private (changes at every reconnect)"},
   "uds_manager.backend":{auto:"Automatic",obd_chip:"OBD chip",isotp:"ISO-TP"},
   "mqtt_manager.connect_on":{wifi:"The WiFi station is connected (home network)",any:"Any network (WiFi, USB Ethernet, dongle)"},
   data_mode:{changed:"Changed values only",full:"All values"},autopid_log:{off:"Off",changed:"When a value changes",all:"Every poll"},
@@ -5960,7 +5981,7 @@ PAGES.settings=async(view,sub)=>{
       const keys=Object.keys((bs&&bs.properties)||{});
       let leanSync=()=>{};
       const rows=await settingsForm("ble_manager",null,{values:bv,schema:bs,
-        advanced:["tx_power_dbm","pairing_at_boot","bonding","sc_only","conn_profile",...BLE_KNOBS],
+        advanced:["tx_power_dbm","pairing_at_boot","bonding","sc_only","security_request","conn_profile",...BLE_KNOBS],
         visible:st=>!st.enabled?["enabled"]:(st.ble_ram_profile==="custom"?null:keys.filter(k=>!BLE_KNOBS.includes(k))),
         onDirty:()=>leanSync()});
       const leanNote=note("","Lean runs legacy advertising on the 1M PHY, one phone at a time. Choose Full for 2M, coded PHY or extended advertising.");
@@ -5968,10 +5989,20 @@ PAGES.settings=async(view,sub)=>{
       const rowOf=k=>rows.find(r=>r.dataset&&r.dataset.key===k);
       const advRow=rowOf("advertising");
       if(advRow)rows.splice(rows.indexOf(advRow)+1,0,leanNote);
+      /* the data pipe needs a connection (2026-11-02, Ali): the factory br_ble_obd
+         carries it; a user who removed it is told here, since an OBD app that pairs
+         would get no answer at all */
+      const bmv=await api("/api/settings/bridge_manager").catch(()=>null);
+      const bleBridged=()=>!!(bmv&&(bmv.bridges||[]).some(b=>b.enabled&&(b.a==="ble"||b.b==="ble")));
+      const bridgeNote=note("warn",["No connection carries the Bluetooth data pipe, so an OBD app that pairs gets no answer. Add one on the ",h("a",{href:"#/settings/connections"},"Connections page")," (OBD chip to Bluetooth (BLE))."]);
+      bridgeNote.dataset.key="ble_bridge_note";
+      const enRow=rowOf("enabled");
+      if(enRow)rows.splice(rows.indexOf(enRow)+1,0,bridgeNote);
       leanSync=()=>{const lean=String(bv.ble_ram_profile||"lean")==="lean";
         if(lean&&(bv.advertising!=="legacy"||bv.phy!=="1m")){bv.advertising="legacy";bv.phy="1m";rows.load();store.stage("ble_manager",bv);}
         for(const k of["advertising","phy"]){const r=rowOf(k);const s=r&&r.querySelector("select");if(s)s.disabled=lean;}
-        leanNote.style.display=(lean&&bv.enabled)?"":"none";};
+        leanNote.style.display=(lean&&bv.enabled)?"":"none";
+        bridgeNote.style.display=(bv.enabled&&bmv&&!bleBridged())?"":"none";};
       leanSync();
       return rows;};
     const[apRows,staRows,bleRows,canRows,mqttRows,imRows,j1939Rows]=await Promise.all([
@@ -12772,16 +12803,21 @@ function mdLite(text){
   return out.join("");
 }
 
-async function notesModal(target,version){
+/* the notes come straight from the release server into the browser (2026-11-02):
+   the device only names their address (the snapshot's notes_url) and never
+   downloads them; a phone without internet sees the message below while the
+   device's own check and install carry on */
+async function notesModal(url,version,target){
   let body;
   try{
-    const r=await fetch(API+"/api/fw_update/notes?target="+(target||"self")+"&version="+encodeURIComponent(version||""));
+    if(!url)throw new Error("no notes for this release");
+    const r=await fetch(url,{cache:"no-cache"});
     const t=await r.text();
-    if(!r.ok){let m=t;try{m=JSON.parse(t).error||t;}catch{}throw new Error(m);}
+    if(!r.ok)throw new Error("HTTP "+r.status);
     body=h("div",{class:"fwu-notes",html:mdLite(t)});
-  }catch(e){body=h("p",{},"The release notes could not be fetched: "+e.message);}
+  }catch(e){body=h("p",{},"The release notes could not be loaded in this browser (they come from the release server, so this phone or PC needs internet): "+e.message);}
   modal({title:"Release notes"+(version?" "+version:"")+(target==="dongle"?" (ESPNetLink)":""),body,
-    actions:[{label:"Open on GitHub",fn:()=>window.open(NOTES_REPO,"_blank")},{label:"Close",kind:"pri"}]});
+    actions:[{label:"Open on GitHub",fn:()=>window.open(url||NOTES_REPO,"_blank")},{label:"Close",kind:"pri"}]});
 }
 
 async function post(path,body){return api(path,{method:"POST",body:body||{}});}
@@ -12849,7 +12885,7 @@ async function card(){
         +(tg.step?" (first step: more updates follow)":""))
       :h("div",{class:"help fwu-reason"},REASON_TEXT[self.reason]||self.reason||"Up to date");
     const right=[];
-    if(self.latest&&self.latest.notes)right.push(h("button",{class:"btn sm gh fwu-notes-btn",onclick:()=>notesModal("self",tg?tg.version:self.latest.version)},"Release notes"));
+    if(self.latest&&self.latest.notes_url)right.push(h("button",{class:"btn sm gh fwu-notes-btn",onclick:()=>notesModal(self.latest.notes_url,tg?tg.version:self.latest.version,"self")},"Release notes"));
     if(self.available&&tg&&self.installable)right.push(h("button",{class:"btn pri sm fwu-update",disabled:!!(job&&job.active)||mobile(),
       title:mobile()?"Downloads need a WiFi connection":"",onclick:()=>startInstall(tg)},ic("download"),"Update"));
     else if(self.available&&tg&&(tg.verdict==="serial"||tg.verdict==="unknown"))right.push(h("a",{class:"btn sm fwu-usb",href:DOCS_URL,target:"_blank"},"Needs a USB flash"));
@@ -12878,7 +12914,7 @@ async function card(){
       ?h("div",{class:"help fwu-dongle-avail"},d.target_version+" available"+(d.latest&&d.latest.date?", "+d.latest.date:"")+(d.latest&&d.latest.summary?", "+d.latest.summary:""))
       :h("div",{class:"help fwu-dongle-reason"},DONGLE_VERDICT_TEXT[d.verdict]||REASON_TEXT[d.reason]||d.verdict||"Up to date");
     const right=[];
-    if(d.latest&&d.latest.notes)right.push(h("button",{class:"btn sm gh fwu-dongle-notes",onclick:()=>notesModal("dongle",d.target_version||d.latest.version)},"Release notes"));
+    if(d.latest&&d.latest.notes_url)right.push(h("button",{class:"btn sm gh fwu-dongle-notes",onclick:()=>notesModal(d.latest.notes_url,d.target_version||d.latest.version,"dongle")},"Release notes"));
     if(d.verdict==="update_available"&&d.installable)right.push(h("button",{class:"btn pri sm fwu-dongle-update",disabled:!!(job&&job.active)||mobile()||!d.reachable,
       title:mobile()?"Downloads need a WiFi connection":!d.reachable?"The dongle is not reachable":"",onclick:()=>startDongle(d)},ic("download"),"Update dongle"));
     else if(d.verdict==="needs_usb_flash"||d.verdict==="layout_mismatch")right.push(h("a",{class:"btn sm fwu-dongle-usb",href:DONGLE_DOCS_URL,target:"_blank"},"Needs a USB flash"));

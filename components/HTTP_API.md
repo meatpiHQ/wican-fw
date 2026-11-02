@@ -203,7 +203,7 @@ main's glue): do not power off.
 | `/api/fw_update/check` | POST | `{}` -> 202 `{"job_id","state":"checking"}` (both lists); 409 `busy` while an install runs |
 | `/api/fw_update/install` | POST | `{"target":"self"\|"dongle","version"?,"confirm_wipe"?,"max_stage_bytes"?}` -> 202 `{"job_id","state","target","version","from"}`, 200 `{"already":true}`; 400 `bad_request`; 404 `unknown_version \| not_visible \| yanked \| no_release`; 409 `busy \| busy_upload \| no_manifest \| no_network \| no_path \| needs_confirm_wipe (+wipes[]) \| layout_serial \| layout_unknown \| cellular_blocked (no override) \| insufficient_ram \| dongle_absent \| no_dongle \| needs_usb_flash \| no_memory` |
 | `/api/fw_update/abort` | POST | 200 `{"aborted":true,"job_id"}`; 409 `no_job \| too_late` (the restart is scheduled, or a dongle image is being pushed) |
-| `/api/fw_update/notes?target=self\|dongle&version=` | GET | the release notes fetched through the device, `text/markdown` (<= 16 KB); 404 `no_notes`, 409 `busy`, 502 `fetch_failed` |
+| `/api/fw_update/notes` | GET | REMOVED 2026-11-02 (Ali): the device never downloads release notes; the snapshot's `targets.self.latest.notes_url` and `targets.dongle.latest.notes_url` carry the absolute address of the notes on the release server (`""` when a release has none) and the Firmware update page fetches it in the browser |
 
 Errors: `{"error":"<human>","code":"<snake>"}`. Zero flash writes per check;
 a job of this device writes its NVS record at the restart and once more with

@@ -22,3 +22,20 @@ through `flash_jobs_run` from the fw_update task's PSRAM stack), the layout verd
 rollback by the bootloader after one crash, the device back on image A; `fw_update` stack
 headroom 6728 B, internal min_free 48,704 before and 49,648 after the boot, the closing
 floor 41,856 B. Report `test-reports/2026-11-01_0013_fwupdate.md`.
+
+**2026-11-02 17:55 (the release notes fetched by the browser, `internal/TASK_release_notes_browser.md`):
+every leg PASS but one timing check, re-run below** (484 s): the three new f2 legs green
+(`f2_notes_url_named` = the bench server's `https://10.42.1.1:8446/wican_pro/firmware/notes/
+6.1.0-alfa.90.md`, `f2_notes_served_to_a_browser` = the Pi's curl of it begins `# WiCAN PRO
+6.1.0-alfa.90` with the bold, `f2_notes_route_gone` = 404 on the old proxy route), the
+install, the verify milestone, the rollback after one crash, the legacy push back, the
+abort, the close. `f4_ota_sha256_mismatch` read `/api/ota/status` still `receiving`
+(4,038,656 of 4,049,488 B) a moment before the pipe flipped it to `failed`, while
+`f4_job_failed_sha256_mismatch` had already seen the job's `sha256_mismatch`: a race between
+the two routes in `wait_refused`, which now gives the ota route up to 5 s to catch up with
+the job before judging it.
+
+**2026-11-02 18:05 (the same image, the bench's `wait_refused` letting the ota route catch
+up): FW UPDATE PASS** (499 s): every leg green, `f4_ota_sha256_mismatch` now reads `failed`
+with `sha256 mismatch` after 4,049,488 of 4,049,488 B; the DUT back on 6.0.0-beta.7
+(`f11_running_a_again`), the close clean.

@@ -303,6 +303,17 @@ def main():
                 job = j
                 resolved = True
             if resolved and job:
+                # the job's record can land a moment before the pipe's own status
+                # flips (2026-11-02: f4 read the ota route `receiving` 10 KB short
+                # while the job already said sha256_mismatch): give the ota route
+                # a few seconds to catch up with the job before judging it
+                for _ in range(10):
+                    if not ota_error or (ota.get("state") == "failed" and ota_error in ota.get("error", "")):
+                        break
+                    time.sleep(0.5)
+                    code, o = dut.api("/api/ota/status", timeout=4)
+                    if code == 200 and isinstance(o, dict):
+                        ota = o
                 return ota, job, saw
             if resolved and st in ("failed", "idle"):
                 # the ota resolved; the engine runs its due check the moment the
@@ -488,8 +499,14 @@ def main():
             run.check("f2_available", self.get("available") is True and self.get("installable") is True, json.dumps({k: self.get(k) for k in ("available", "installable", "reason")}))
             run.check("f2_target_is_b", tg.get("version") == VER_B and tg.get("verdict") == "none", json.dumps(tg))
             run.check("f2_latest_summary_and_date", (self.get("latest") or {}).get("date") == "2026-10-18" and "Bench release" in (self.get("latest") or {}).get("summary", ""), json.dumps(self.get("latest")))
+            # the notes are the page's own fetch since 2026-11-02: the snapshot names
+            # their address on the release server, the device never downloads them
+            nu = (self.get("latest") or {}).get("notes_url", "")
+            run.check("f2_notes_url_named", nu == base_url + "wican_pro/firmware/notes/%s.md" % VER_B, nu)
+            rc, txt = pi_run("curl -sk -m 10 '%s'" % nu) if nu else (1, "")
+            run.check("f2_notes_served_to_a_browser", rc == 0 and txt.startswith("# WiCAN PRO %s" % VER_B) and "**Bold**" in txt, "%s %s" % (rc, txt[:80]))
             code, txt = raw(base, "/api/fw_update/notes?target=self&version=%s" % VER_B, "GET", None, "text/plain", 30)
-            run.check("f2_notes_proxied", code == 200 and txt.startswith("# WiCAN PRO %s" % VER_B) and "**Bold**" in txt, "%s %s" % (code, txt[:80]))
+            run.check("f2_notes_route_gone", code == 404, "%s" % code)
 
         # ---- f3: the install -------------------------------------------------------------------
         if "f3" in legs:
