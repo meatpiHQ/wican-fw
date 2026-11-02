@@ -29,3 +29,27 @@ to 92 mA (the PC cable, no dongle: the band TESTING.md names for that wiring). T
 coverage matrix lists `nimble_host` among the PSRAM-stack tasks with no release-test step
 (r12 is the step and it is skipped on the canonical set; `blesec` covers it). Report
 `test-reports/2026-11-01_0202_release.md`.
+
+**2026-11-02 16:03 (the WireGuard teardown race fix and the 4.x parity of Bluetooth,
+`internal/TASK_wg_teardown_race.md` + `internal/TASK_ble_address_pairing.md`; image
+744a3f9c795df60d, `v6.0.0p-beta.6-12-ga5f15f8-dirty`): RELEASE TEST PASS** (342.3 s, every
+step r0 to r13 green, the OTA upload of the same image, the writers, BLE, internal heap
+floor 39,740 B). Report `test-reports/2026-11-02_1603_release.md`, the record under
+`test-reports/release/`. Not the release image (nothing committed): the gate run of the
+day's changes. The bridge table on the bench DUT carries the migrated `br_ble_obd` since
+that image.
+
+**2026-11-02 18:15 (the evening's image: the Bluetooth page warning, the one-second pairing
+request, the release notes fetched by the browser; image 5c527b035274d3b5): r0 to r12 PASS,
+r13 FAIL on `supply_current_awake_band` alone** (89 mA against the 90 mA floor; the
+preflight had read the same device at 90 mA as the median of 89 to 92): a station-only
+device without the dongle idles right at that floor on this bench, a parked or sleeping one
+at 47 to 54 mA, so the floor is 75 mA since this run. The re-run is the next record.
+
+**2026-11-02 18:25 (the same image 5c527b035274d3b5, the awake-current floor at 75 mA):
+RELEASE TEST PASS** (r0 to r13 green, the OTA upload of the same image, the writers, BLE,
+internal heap floor 55,080 B, supply 89 mA at the close). Report
+`test-reports/2026-11-02_1724_release.md`. The final image of the day: the WireGuard and
+Tailscale lwIP threading fix, Bluetooth as 4.x (the public address, the one-second pairing
+request, the CCCD gate, the factory `br_ble_obd`, the page's warning), the release notes
+fetched by the browser.

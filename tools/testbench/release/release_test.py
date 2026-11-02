@@ -667,7 +667,10 @@ class ReleaseTest:
         if m:
             ma = int(m.group(1))
             run.metric("supply_ma_after", ma)
-            run.check("supply_current_awake_band", 90 <= ma <= 300, "%d mA" % ma)
+            # awake: a station-only device without the dongle idles at 89 to 92 mA
+            # on this bench (the median of the helper's readings; 2026-11-02 read 89
+            # against a floor of 90), a parked or sleeping one at 47 to 54 mA
+            run.check("supply_current_awake_band", 75 <= ma <= 300, "%d mA" % ma)
 
     def restore(self):
         """The settings as found, one submit when anything differs."""
