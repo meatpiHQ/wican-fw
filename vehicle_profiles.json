@@ -1608,6 +1608,205 @@
       ]
     },
     {
+      "car_model": "GAC: Aion V (2024-)",
+      "init": "ATSP6;ATST96;",
+      "pids": [
+        {
+          "pid": "2211141",
+          "pid_init": "ATSH7E2;ATCRA7EA;",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "B4",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22141E1",
+          "pid_init": "ATSH7E2;ATCRA7EA;",
+          "parameters": [
+            {
+              "name": "SOC_D",
+              "expression": "[B4:B5]",
+              "unit": "%",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "22111E1",
+          "pid_init": "ATSH7E2;ATCRA7EA;",
+          "parameters": [
+            {
+              "name": "SOH",
+              "expression": "[B4:B5]",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "105"
+            }
+          ]
+        },
+        {
+          "pid": "2214011",
+          "pid_init": "ATSH7E2;ATCRA7EA;",
+          "parameters": [
+            {
+              "name": "HV_V",
+              "expression": "[B4:B5]/10",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "480"
+            }
+          ]
+        },
+        {
+          "pid": "2214041",
+          "pid_init": "ATSH7E2;ATCRA7EA;",
+          "parameters": [
+            {
+              "name": "HV_A",
+              "expression": "([B4:B5]/10)-800",
+              "unit": "A",
+              "class": "current"
+            }
+          ]
+        },
+        {
+          "pid": "2214021",
+          "pid_init": "ATSH7E2;ATCRA7EA;",
+          "parameters": [
+            {
+              "name": "HV_KWH_R",
+              "expression": "[B4:B5]*100",
+              "unit": "Wh",
+              "class": "energy",
+              "min": "0",
+              "max": "77000"
+            }
+          ]
+        },
+        {
+          "pid": "2214001",
+          "pid_init": "ATSH7E2;ATCRA7EA;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B4:B6]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "2220241",
+          "pid_init": "ATSH7E2;ATCRA7EA;",
+          "parameters": [
+            {
+              "name": "HV_T_MAX",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2220261",
+          "pid_init": "ATSH7E2;ATCRA7EA;",
+          "parameters": [
+            {
+              "name": "HV_T_MIN",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "22117D1",
+          "pid_init": "ATSH7E2;ATCRA7EA;",
+          "parameters": [
+            {
+              "name": "HV_T_I",
+              "expression": "(B4*0.5)-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2220201",
+          "pid_init": "ATSH7E2;ATCRA7EA;",
+          "parameters": [
+            {
+              "name": "HV_C_V_MAX",
+              "expression": "([B4:B5]/1000)-4.35",
+              "unit": "V",
+              "class": "voltage"
+            }
+          ]
+        },
+        {
+          "pid": "2210001",
+          "pid_init": "ATSH7E2;ATCRA7EA;",
+          "parameters": [
+            {
+              "name": "LV_V",
+              "expression": "B4/10",
+              "unit": "V",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "22114D1",
+          "pid_init": "ATSH7E2;ATCRA7EA;",
+          "parameters": [
+            {
+              "name": "KWH_CHARGED",
+              "expression": "[B4:B6]/10",
+              "unit": "kWh",
+              "class": "energy",
+              "min": "0",
+              "max": "1000000"
+            }
+          ]
+        },
+        {
+          "pid": "2211891",
+          "pid_init": "ATSH7E2;ATCRA7EA;",
+          "parameters": [
+            {
+              "name": "KWH_DISCHARGED",
+              "expression": "[B4:B6]/10",
+              "unit": "kWh",
+              "class": "energy",
+              "min": "0",
+              "max": "1000000"
+            }
+          ]
+        },
+        {
+          "pid": "2223131",
+          "pid_init": "ATSH7E3;ATCRA7EB;",
+          "parameters": [
+            {
+              "name": "HV_AV",
+              "expression": "[B4:B5]/100",
+              "unit": "kW",
+              "class": "power"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Geely: EX5 2026",
       "init": "ATSP7;ATSHD01635;ATCP1D;ATCRA1EC6AE80;ATFCSH1DD01635;ATFCSD300000;ATFCSM1;",
       "pids": [
@@ -12370,6 +12569,192 @@
               "class": "pressure",
               "unit": "psi",
               "min": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "car_model": "Opel: Mokka-e 50 kWh",
+      "init": "ATSP6;ATST96;",
+      "pids": [
+        {
+          "pid": "22D4101",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATFCSD300000;ATFCSM1;ATCRA694;",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "[B4:B5]/512",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "22D8601",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATFCSD300000;ATFCSM1;ATCRA694;",
+          "parameters": [
+            {
+              "name": "SOH",
+              "expression": "[B5:B6]/16",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "105"
+            }
+          ]
+        },
+        {
+          "pid": "22D8151",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATFCSD300000;ATFCSM1;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_V",
+              "expression": "[B4:B5]/16",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "480"
+            }
+          ]
+        },
+        {
+          "pid": "22D8161",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATFCSD300000;ATFCSM1;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_A",
+              "expression": "([B4:B7]/64)-1200",
+              "unit": "A",
+              "class": "current"
+            }
+          ]
+        },
+        {
+          "pid": "22D8651",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATFCSD300000;ATFCSM1;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_KWH_R",
+              "expression": "[B4:B5]*15.625",
+              "unit": "Wh",
+              "class": "energy",
+              "min": "0",
+              "max": "77000"
+            }
+          ]
+        },
+        {
+          "pid": "22D86F1",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATFCSD300000;ATFCSM1;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_C_V_MIN",
+              "expression": "[B4:B5]/1000",
+              "unit": "V",
+              "class": "voltage"
+            }
+          ]
+        },
+        {
+          "pid": "22D8701",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATFCSD300000;ATFCSM1;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_C_V_MAX",
+              "expression": "[B4:B5]/1000",
+              "unit": "V",
+              "class": "voltage"
+            }
+          ]
+        },
+        {
+          "pid": "22D8771",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATFCSD300000;ATFCSM1;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_T_A",
+              "expression": "([B4:B5]/10)-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "22D8171",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATFCSD300000;ATFCSM1;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_T_MAX",
+              "expression": "([B4:B5]/10)-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "22D87D1",
+          "pid_init": "ATSH6B4;ATFCSH6B4;ATFCSD300000;ATFCSM1;ATCRA694;",
+          "parameters": [
+            {
+              "name": "HV_T_MIN",
+              "expression": "([B4:B5]/10)-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "22D49C1",
+          "pid_init": "ATSH6A2;ATFCSH6A2;ATFCSD300000;ATFCSM1;ATCRA682;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B4:B7]",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
+            }
+          ]
+        },
+        {
+          "pid": "22D8EF1",
+          "pid_init": "ATSH6A2;ATFCSH6A2;ATFCSD300000;ATFCSM1;ATCRA682;",
+          "parameters": [
+            {
+              "name": "BATT_TEMP",
+              "expression": "B4",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "80"
+            }
+          ]
+        },
+        {
+          "pid": "22D8FB1",
+          "pid_init": "ATSH6A2;ATFCSH6A2;ATFCSD300000;ATFCSM1;ATCRA682;",
+          "parameters": [
+            {
+              "name": "COOLANT_TMP",
+              "expression": "[S4:S5]*0.1",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "22D4341",
+          "pid_init": "ATSH6A2;ATFCSH6A2;ATFCSD300000;ATFCSM1;ATCRA682;",
+          "parameters": [
+            {
+              "name": "OUTSIDE_TEMPERATURE",
+              "expression": "S4",
+              "unit": "°C",
+              "class": "temperature",
+              "max": "100"
             }
           ]
         }
