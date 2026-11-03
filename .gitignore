@@ -7,6 +7,8 @@ build_clang/
 build_public/
 # bench-run artifacts (test.ps1 writes dated reports here)
 test-reports/
+# exact DUT settings retained only until the public relay bench restores them
+state/ts-public-*/
 # per-machine bench overrides (copy benchboard.local.example.toml)
 benchboard.local.toml
 # the port detector's last record (tools/testbench/detect_ports.py)
