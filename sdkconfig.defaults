@@ -72,6 +72,12 @@ CONFIG_LWIP_HOOK_IP6_INPUT_NONE=y
 CONFIG_MBEDTLS_THREADING_C=n
 CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 CONFIG_MBEDTLS_SSL_PROTO_TLS1_3=y
+# A server chain that ends in a cross-signed copy of a root the bundle holds
+# (Cloudflare: WE1 under GTS Root R4 as signed by GlobalSign Root CA, which
+# left the bundle) is trusted at the root the bundle knows (2026-11-03,
+# the Home Assistant webhook behind a Cloudflare tunnel; about 700 B of heap
+# per TLS session)
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_CROSS_SIGNED_VERIFY=y
 CONFIG_MBEDTLS_ECP_FIXED_POINT_OPTIM=y
 CONFIG_MBEDTLS_LARGE_KEY_SOFTWARE_MPI=n
 CONFIG_NVS_ALLOCATE_CACHE_IN_SPIRAM=y

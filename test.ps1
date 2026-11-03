@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'canselftest', 'attpstore', 'obdbringup', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'canselftest', 'attpstore', 'obdbringup', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [ValidateSet('6.0.2', '6.1')][string]$Idf = '6.1',  # the ESP-IDF the build stages use (6.1 since 6.0.0-beta.5, 2026-10-27; 6.0.2 stays installed; build.ps1 -Idf has the same table)
@@ -946,6 +946,7 @@ function Show-Inventory {
     Write-Host '  vpnroutes  - the split tunnel (issue #975): a request to a routed network leaves through wg-bench on the Pi, one to any other address through the station, judged at the receiver by the source address (~6 min)'
     Write-Host '  wgcycle    - WireGuard torn down while MQTT runs through it, N times (the beta.5 vpn_state crashes, 2026-11-02): wg-bench on the Pi, the broker at its tunnel address, a station trial to a network that does not exist drops the uplink each cycle; connects grows, MQTT returns, no reboot (~30 s per cycle, 10 cycles)'
     Write-Host '  tspublic   - Tailscale against the public rig (issue #1024, 2026-10-31): headscale and a peer on betty, the public Tailscale DERP map; register, tunnel IP, direct path, ICMP + HTTP through the tunnel, the DERP relay up over TLS, the internal RAM flat over a 3 min soak; everything torn down and the keys wiped at the end (~8 min; needs betty and internet for the DUT)'
+    Write-Host '  tlschain   - An HTTPS chain ending in a cross-signed root (Cloudflare under GTS Root R4 as signed by GlobalSign Root CA, 2026-11-03) accepted by the built-in certificate bundle: the HA webhook pointed at such a host must get an HTTP answer, never a transport error; restored afterwards (~40 s; needs internet for the DUT)'
     Write-Host '  espnleasy  - the ESPNetLink easy-setup surfaces on the DUT (2026-10-13): the usb summary on /api/status against /api/espnetlink, the sim_pin key (a no-op PUT, no restart), the UI doors in the served page, the GPS hint counting away from home (ap off on the P4 for 100 s, home again) (~6 min; needs the P4 daemon)'
     Write-Host '  espnlapn   - the carrier settings relay in the USB modes (2026-10-28): a bench APN set on the WiCAN reaches the dongle through the share pass (one planned dongle restart), a plain WiCAN restart writes nothing, the APN restored as found and the LTE back (~8 min, 3 to 4 planned WiCAN restarts, 2 dongle restarts; the dongle on the connector in a USB mode with its console on; its LTE is down while the bench APN is on it)'
     Write-Host '  garage     - the garage story with the ESPNetLink (2026-10-12): home WiFi on the P4, away on the dongle LTE with the VPN to betty, home again, flaps, a dongle reboot away, sleep/wake both ways; the data path judged at a receiver on betty by the source address of every POST; the default legs in usb_rndis with VPN variant A (~35 min; wifi_modem, variant B, g9 and g11 by hand)'
@@ -1510,6 +1511,28 @@ try {
                     $out = & $py -u "$repo\tools\testbench\vpn\wg_teardown_cycle_bench.py" '--dut' 'localhost:18083' '--dut-ip' $DutIp '--pi' $BenchHost 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'wg_cycle' $out
                     if (-not ($out | Select-String -Quiet 'WG TEARDOWN CYCLE PASS')) { throw 'no WG TEARDOWN CYCLE PASS (wg-bench on the Pi? the broker on 1883? the DUT on the bench AP?)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
+                }
+            }
+        }
+        'tlschain' {
+            # The built-in certificate bundle against a chain that ends in a
+            # cross-signed copy of a root it carries (2026-11-03, the Home
+            # Assistant webhook behind a Cloudflare tunnel): the webhook is
+            # pointed at developers.cloudflare.com for a few pushes and must
+            # get an HTTP answer, never a transport error; restored after.
+            Invoke-Stage 'HTTPS chain ending in a cross-signed root' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18083:${DutIp}:80", $BenchHost)
+                $con = Start-ConsoleTail 'tls_chain'
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18083 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\ha\tls_chain_bench.py" '--dut' 'localhost:18083' 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'tls_chain' $out
+                    if (-not ($out | Select-String -Quiet 'TLS CHAIN PASS')) { throw 'no TLS CHAIN PASS (the DUT on the bench AP with internet? does the host still serve the cross-signed chain? testing/tlschain.md)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                     Stop-ConsoleTail $con
