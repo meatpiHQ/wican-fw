@@ -1,0 +1,250 @@
+{
+  "groups": [
+    {
+      "name": "default",
+      "enabled_default": true,
+      "period_ms": 5000
+    }
+  ],
+  "car_model": "Audi: eTron",
+  "pids": [
+    {
+      "name": "SOC_real",
+      "cmd": "22028C1",
+      "init": "ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATCRA17FE007B;",
+      "group": "default",
+      "period_ms": 0,
+      "type": "specific",
+      "parameters": [
+        {
+          "name": "SOC_real",
+          "expression": "B4-3",
+          "unit": "%",
+          "class": "battery",
+          "min": "0",
+          "max": "100"
+        }
+      ],
+      "enabled": false
+    },
+    {
+      "name": "RANGE",
+      "cmd": "222AB6",
+      "init": "ATSP6;ATCP18;ATSH710;ATFCSH710;ATCRA77A;",
+      "group": "default",
+      "period_ms": 0,
+      "type": "specific",
+      "parameters": [
+        {
+          "name": "Range",
+          "expression": "[B5:B6]",
+          "unit": "km",
+          "class": "distance"
+        }
+      ]
+    },
+    {
+      "name": "SOC",
+      "cmd": "221DD0",
+      "init": "ATSP6;ATCP18;ATSH744;ATFCSH744;ATFCSD300000;ATFCSM1;ATCRA7AE;",
+      "group": "default",
+      "period_ms": 0,
+      "type": "specific",
+      "parameters": [
+        {
+          "name": "SOC",
+          "expression": "B4/2",
+          "unit": "%",
+          "class": "battery"
+        }
+      ]
+    },
+    {
+      "name": "HV Voltage",
+      "cmd": "221E3B",
+      "group": "default",
+      "period_ms": 0,
+      "type": "specific",
+      "init": "ATSP6;ATCP18;ATSH7E5;ATFCSH7E5;ATFCSD300000;ATFCSM1;ATCRA7ED;",
+      "parameters": [
+        {
+          "name": "HV Voltage",
+          "expression": "([B4:B5]/10)",
+          "unit": "V"
+        }
+      ]
+    },
+    {
+      "name": "SOH",
+      "cmd": "2251E0",
+      "group": "default",
+      "period_ms": 0,
+      "type": "specific",
+      "init": "ATSP6;ATCP18;ATSH7E5;ATFCSH7E5;ATFCSD300000;ATFCSM1;ATCRA7ED;",
+      "parameters": [
+        {
+          "name": "SOH",
+          "expression": "(([B4:B5]*0.127)-1798.574)",
+          "unit": "%"
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "name": "BatteryTemp",
+      "cmd": "222A0B",
+      "group": "default",
+      "period_ms": 0,
+      "type": "specific",
+      "init": "ATSP6;ATCP18;ATSH7E5;ATFCSH7E5;ATFCSD300000;ATFCSM1;ATCRA7ED;",
+      "parameters": [
+        {
+          "name": "Battery Temp",
+          "expression": "((B4/2)-40)",
+          "unit": "°"
+        }
+      ]
+    },
+    {
+      "name": "Charging",
+      "cmd": "227448",
+      "group": "default",
+      "period_ms": 0,
+      "type": "specific",
+      "init": "ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATCRA17FE007B;ATFCSD300000;ATFCSM1;",
+      "parameters": [
+        {
+          "name": "Fast Charging",
+          "expression": "(B4 >> 4) & 1",
+          "unit": ""
+        },
+        {
+          "name": "AC Charging",
+          "expression": "(B4 >> 5) & 1",
+          "unit": ""
+        }
+      ]
+    },
+    {
+      "name": "Outside Temp",
+      "cmd": "22220C",
+      "group": "default",
+      "period_ms": 0,
+      "type": "specific",
+      "init": "ATSP6;ATCP18;ATSH714;ATFCSH714;ATFCSD300000;ATFCSM1;ATCRA77E;",
+      "parameters": [
+        {
+          "name": "Outside Temp",
+          "expression": "((B4/2)-50)",
+          "unit": "°"
+        }
+      ]
+    },
+    {
+      "name": "Odometer",
+      "cmd": "2222B8",
+      "group": "default",
+      "period_ms": 0,
+      "type": "specific",
+      "init": "ATSP6;ATCP18;ATSH714;ATFCSH714;ATFCSD300000;ATFCSM1;ATCRA77E;",
+      "parameters": [
+        {
+          "name": "Odometer",
+          "expression": "([B4:B7]/1000)",
+          "unit": "km"
+        }
+      ]
+    },
+    {
+      "name": "Max Cell Voltage",
+      "cmd": "221E33",
+      "group": "default",
+      "period_ms": 0,
+      "type": "specific",
+      "init": "ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATCRA17FE007B;ATFCSD300000;ATFCSM1;",
+      "parameters": [
+        {
+          "name": "Max Cell Voltage",
+          "expression": "([B4:B5]/1000)",
+          "unit": "V"
+        }
+      ]
+    },
+    {
+      "name": "Min Cell Voltage",
+      "cmd": "221E34",
+      "group": "default",
+      "period_ms": 0,
+      "type": "specific",
+      "init": "ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATCRA17FE007B;ATFCSD300000;ATFCSM1;",
+      "parameters": [
+        {
+          "name": "Min Cell Voltage",
+          "expression": "([B4:B5]/1000)",
+          "unit": "V"
+        }
+      ]
+    },
+    {
+      "name": "Max Charge Current",
+      "cmd": "221E1B",
+      "group": "default",
+      "period_ms": 0,
+      "type": "specific",
+      "init": "ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATCRA17FE007B;ATFCSD300000;ATFCSM1;",
+      "parameters": [
+        {
+          "name": "Max charge current",
+          "expression": "([B4:B5]/5)",
+          "unit": "A"
+        }
+      ]
+    },
+    {
+      "name": "Max Discharge Current",
+      "cmd": "221E1C",
+      "group": "default",
+      "period_ms": 0,
+      "type": "specific",
+      "init": "ATSP7;ATCP17;ATSHFC007B;ATFCSH17FC007B;ATCRA17FE007B;ATFCSD300000;ATFCSM1;",
+      "parameters": [
+        {
+          "name": "Max discharge current",
+          "expression": "([B4:B5]/5)",
+          "unit": "A"
+        }
+      ]
+    },
+    {
+      "name": "HV Current",
+      "cmd": "221E3D",
+      "group": "default",
+      "period_ms": 0,
+      "type": "specific",
+      "init": "ATSP6;ATCP18;ATSH7E5;ATFCSH7E5;ATFCSD300000;ATFCSM1;ATCRA7ED;",
+      "parameters": [
+        {
+          "name": "HV Current",
+          "expression": "(([B4:B6]/100)-1500)",
+          "unit": "A"
+        }
+      ]
+    },
+    {
+      "name": "Speed",
+      "cmd": "22F40D",
+      "group": "default",
+      "period_ms": 0,
+      "type": "specific",
+      "init": "ATSP6;ATCP18;ATSH7E0;ATFCSH7E0;ATFCSD300000;ATFCSM1;ATCRA7E8;",
+      "parameters": [
+        {
+          "name": "Speed",
+          "expression": "B4",
+          "unit": "kmh"
+        }
+      ]
+    }
+  ],
+  "filters": []
+}
