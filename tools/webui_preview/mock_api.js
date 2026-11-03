@@ -16,6 +16,8 @@
   /* a probe's own Bluetooth values, e.g. { enabled: true, ble_ram_profile: "lean" } (2026-10-31) */
   if ((window.__mockPreset || {}).ble) ov("ble_manager", window.__mockPreset.ble);
   ov("mqtt_manager", { enabled: true, broker: "mqtt://10.42.0.1:1883", topic_prefix: "wican" });
+  /* a probe's own MQTT values, e.g. { enabled: false } (2026-11-03, the Status row) */
+  if ((window.__mockPreset || {}).mqtt) ov("mqtt_manager", window.__mockPreset.mqtt);
   ov("ha_webhooks", { enabled: true, url: "http://homeassistant.local:8123/api/webhook/8f4a21be", interval_s: 15 });
   ov("data_destinations", { enabled: true, destinations: [
     { name: "dest1", type: "mqtt", enabled: true, url: "~/autopid", period_s: 5, auth: "none", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "", cert_set: "", car_model: "", retain: true, full_first: true },
@@ -175,7 +177,7 @@
        identity file, the broker bit and HA's registration are toggles */
     apDefaultPassword: (window.__mockPreset || {}).apDefaultPassword === true,
     staConnected: (window.__mockPreset || {}).staConnected !== false,
-    mqttConnected: true,
+    mqttConnected: (window.__mockPreset || {}).mqttConnected !== false,   /* the broker bit (2026-11-03) */
     webhookUrl: undefined,            /* undefined = the ha_webhooks setting */
     vehicle: (window.__mockPreset || {}).vehicle || null,   /* null = no vehicle.json yet */
     /* the vehicle STORE (second pass): entries keyed by VIN or fp:<hash> */

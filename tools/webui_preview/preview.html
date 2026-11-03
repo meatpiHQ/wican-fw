@@ -265,6 +265,14 @@
      "minimum": 0,
      "maximum": 999999
     },
+    "tx_power_dbm": {
+     "type": "integer",
+     "minimum": -12,
+     "maximum": 9
+    },
+    "pairing_at_boot": {
+     "type": "boolean"
+    },
     "address": {
      "type": "string",
      "enum": [
@@ -273,14 +281,6 @@
      ]
     },
     "security_request": {
-     "type": "boolean"
-    },
-    "tx_power_dbm": {
-     "type": "integer",
-     "minimum": -12,
-     "maximum": 9
-    },
-    "pairing_at_boot": {
      "type": "boolean"
     },
     "bonding": {
@@ -2122,6 +2122,8 @@
   /* a probe's own Bluetooth values, e.g. { enabled: true, ble_ram_profile: "lean" } (2026-10-31) */
   if ((window.__mockPreset || {}).ble) ov("ble_manager", window.__mockPreset.ble);
   ov("mqtt_manager", { enabled: true, broker: "mqtt://10.42.0.1:1883", topic_prefix: "wican" });
+  /* a probe's own MQTT values, e.g. { enabled: false } (2026-11-03, the Status row) */
+  if ((window.__mockPreset || {}).mqtt) ov("mqtt_manager", window.__mockPreset.mqtt);
   ov("ha_webhooks", { enabled: true, url: "http://homeassistant.local:8123/api/webhook/8f4a21be", interval_s: 15 });
   ov("data_destinations", { enabled: true, destinations: [
     { name: "dest1", type: "mqtt", enabled: true, url: "~/autopid", period_s: 5, auth: "none", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "", cert_set: "", car_model: "", retain: true, full_first: true },
@@ -2281,7 +2283,7 @@
        identity file, the broker bit and HA's registration are toggles */
     apDefaultPassword: (window.__mockPreset || {}).apDefaultPassword === true,
     staConnected: (window.__mockPreset || {}).staConnected !== false,
-    mqttConnected: true,
+    mqttConnected: (window.__mockPreset || {}).mqttConnected !== false,   /* the broker bit (2026-11-03) */
     webhookUrl: undefined,            /* undefined = the ha_webhooks setting */
     vehicle: (window.__mockPreset || {}).vehicle || null,   /* null = no vehicle.json yet */
     /* the vehicle STORE (second pass): entries keyed by VIN or fp:<hash> */
@@ -5557,6 +5559,10 @@ PAGES.status=async(view)=>{
   p.append(cardsEl,hintEl,colsEl);
   /* this boot's cause is fixed for the whole boot, fetched once, not every refresh */
   const hist=await tryGet("/api/restart/history");
+  /* whether MQTT is enabled at all (2026-11-03): "Off" read as disabled while a
+     broker behind a VPN was merely unreachable; the setting is fetched once */
+  const mq=await tryGet("/api/settings/mqtt_manager");
+  const mqttOn=!!(mq&&mq.enabled);
   const recs=(hist&&hist.records)||[];
   const wake=wakeSource(recs.find(r=>hist&&r.seq===hist.boot_count)||recs[0]);
   const crashed=recs.find(r=>r.crash); /* newest first: the last crash on record */
@@ -5594,7 +5600,7 @@ PAGES.status=async(view)=>{
         ["mDNS",(st.device_id||(conn.info&&conn.info.device_id))?("wican_"+(st.device_id||conn.info.device_id)+".local"):"-"],
         ["Bluetooth ID",st.bluetooth_id||(st.device_id||(conn.info&&conn.info.device_id)?("WiC_"+(st.device_id||conn.info.device_id)):"-")],
         ["WiFi MAC",st.wifi_mac||(conn.info&&conn.info.mac)||"-"],
-        ["MQTT",b.mqtt_connected?"Connected":"Off"],
+        ["MQTT",b.mqtt_connected?"Connected":(mqttOn?"Not connected":"Off")],
         ["VPN",vpn?vpnWord(vpn):"-"]])),
       card("System","cpu",kv([
         ["Firmware",st.version||"-"],

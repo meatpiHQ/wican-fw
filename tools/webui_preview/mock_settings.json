@@ -261,6 +261,14 @@
      "minimum": 0,
      "maximum": 999999
     },
+    "tx_power_dbm": {
+     "type": "integer",
+     "minimum": -12,
+     "maximum": 9
+    },
+    "pairing_at_boot": {
+     "type": "boolean"
+    },
     "address": {
      "type": "string",
      "enum": [
@@ -269,14 +277,6 @@
      ]
     },
     "security_request": {
-     "type": "boolean"
-    },
-    "tx_power_dbm": {
-     "type": "integer",
-     "minimum": -12,
-     "maximum": 9
-    },
-    "pairing_at_boot": {
      "type": "boolean"
     },
     "bonding": {
