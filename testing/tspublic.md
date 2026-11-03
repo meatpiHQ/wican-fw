@@ -14,24 +14,54 @@ documents of that day (`internal/TASK_tailscale_1024.md`,
 Tailscale DERP map), a disposable preauth key (root-only file, delivered to
 the DUT over curl's stdin, never printed), the DUT joined as `wican-pub`
 through `vpn_manager` type `tailscale` (one submit, one restart), a real
-tailscale peer `betty-peer` on betty, then the legs: registered, tailnet IP,
-disco ping, ICMP and HTTP through the tunnel, the DUT's peer surface, the
-DERP relay up (`/api/vpn` `derp`, issue 1024), **the subnet router legs
-(2026-11-01)**: betty advertises `10.99.0.0/24` (an alias on its loopback)
-and headscale enables the route, the DUT must list it on `/api/vpn`
-`routes` within 2 min of the map update and a destinations test
-(`POST /api/destinations/test`, the `tsroute` row the script stages to
-`http://10.99.0.1:8199/route`) must arrive at the receiver on betty
-(`dd_receiver.py --no-tls`) from the DUT's tailnet address; **the task
-stacks (2026-11-01)**: `vpn_state` and `ml_wg_mgr` read `stack_ext` true on
-`/api/status/tasks`; then the internal RAM flat over 60 s (`up`) or over the
-soak (`run`, 30 s samples of the state, the peers, the relay, the free
-internal RAM). `down` blanks the key and the destination row on the DUT,
+tailscale peer `betty-peer` on betty (its WireGuard port pinned to 41641),
+then the legs: registered, tailnet IP, **the relay-only pass (2026-11-03)**:
+before the peer joins, betty drops its WireGuard UDP (`iptables` on port
+41641, in and out), so no direct path can exist in either direction and the
+peer never contacts the DUT; the DERP relay up (`/api/vpn` `derp`, issue
+1024); **the subnet router legs (2026-11-01)**: betty advertises
+`10.99.0.0/24` (an alias on its loopback) and headscale enables the route,
+the DUT must list it on `/api/vpn` `routes` within 2 min of the map update
+and a destinations test (`POST /api/destinations/test`, the `tsroute` row
+the script stages to `http://10.99.0.1:8199/route`) must arrive at the
+receiver on betty (`dd_receiver.py --no-tls`) from the DUT's tailnet
+address: in the relay-only pass that request is the first packet ever
+between the two, initiated by the DUT, carried by the relay (the peer's
+own region, Sydney for betty, the DUT's home being Dallas), and the pass
+asserts the drops bit (the peer on 41641, the OUTPUT counter above zero);
+the drops come off, then the direct-path legs: disco ping, ICMP and HTTP
+through the tunnel, the DUT's peer surface, the subnet request once more
+over the direct path; **the task stacks (2026-11-01)**: `vpn_state` and
+`ml_wg_mgr` read `stack_ext` true on `/api/status/tasks`; then the internal
+RAM flat over 60 s (`up`) or over the soak (`run`, 30 s samples of the
+state, the peers, the relay, the free internal RAM). `down` blanks the key and the destination row on the DUT,
 takes the peer, headscale, the state, the keys, the receiver and the alias
 off betty. `run` tears down from an EXIT trap.
 
 **Records.**
 
+- 2026-11-03 (the relay-only pass, written for the field report of an MQTT
+  broker behind a home subnet router unreachable from a phone hotspot;
+  `internal/TASK_tailscale_relay.md`): on the published beta.7 the
+  relay-only request fails (the DUT never starts a session for its own
+  traffic, and relays only through its home region 9 while betty is homed in
+  5: `DERP PeerGone` after every packet). With the session-on-demand, the
+  per-region relay pool and the `ip4_routes` link-independent routing, the
+  session comes up over the relay (`session wanted ... handshake through the
+  relay`, up in 539 ms, betty's wireguard-go accepts the keepalive) and a
+  request on a confirmed session passes over the pure relay (12:00: 200 in
+  361 ms, the receiver's record from 100.64.0.1, direct UDP blocked by the
+  DUT's public IP, 11 packets dropped); but on a session the DUT initiated the
+  data segments after the TCP handshake are not acknowledged by betty, and a
+  warm session later failed five requests in a row at the SYN while betty
+  re-handshaked ("stopped hearing back after 15 seconds"). **`TS PUBLIC FAIL`
+  on every run of the day (the relay-only request and, after the unblock,
+  the disco ping, ICMP and HTTP legs); the relay session's stability with the
+  DUT as initiator is the open item.** The three runs:
+  `test-reports/logs/2026-11-03_1052_tspublic` (the port-41641 drop, direct
+  leaked through tailscaled's second socket), `_1114_tspublic` (the drop by
+  the DUT's public IP, no session: the routing deadlock),
+  `_1132_tspublic` (the deadlock fixed, session up, data not acknowledged).
 - 2026-10-31 13:40 (the issue 1024 fix: the relay's TLS 1.3 tolerance, the
   leak, lwip_guard, the 30 KB floor): `TS PUBLIC PASS` 302 s on the image
   `96b9c640f76cb3d3`, the relay connected, RAM flat 31123 to 31327 B over the

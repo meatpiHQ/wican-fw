@@ -246,33 +246,44 @@ EOF
     NODES=$($SRVSSH "$BASE/headscale nodes list 2>/dev/null | grep -c wican-pub")
     check "node registered in headscale" "$([ "${NODES:-0}" -ge 1 ] && echo 1 || echo 0)"
 
+    # --- the relay-only pass (2026-11-03; the field report of an MQTT broker
+    # behind a home subnet router that the WiCAN on a phone hotspot could
+    # not reach while the VPN said connected and listed the route): ALL UDP
+    # between betty and the DUT's public address is dropped on betty BEFORE
+    # the peer joins, so no direct path can exist in either direction and
+    # the peer never contacts the DUT: the DUT must open the session itself,
+    # through the relay (DERP is TCP 443 to the public relays, not to betty,
+    # so it is untouched). The drop is by the DUT's public IP, not by port:
+    # tailscaled binds more than one UDP socket (a --port pin covers only one;
+    # the first attempt dropped port 41641 and the DUT still found a direct
+    # path through the second socket, latched betty's address and black-holed
+    # its own data). Every earlier run had a direct path to betty's public
+    # address and the peer pinging first, which hid two defects: lwIP traffic
+    # never started a WireGuard handshake (the driver answered ERR_CONN and
+    # nobody initiated), and the relay sent through the DUT's own home region
+    # only (Dallas by default), which answers PeerGone for a peer homed
+    # anywhere else (Sydney for betty). The rules come off before the
+    # direct-path legs. DUT_PUB = the Pi's public IP (the DUT's NAT).
+    DUT_PUB=$($PI "curl -s -m 8 https://api.ipify.org" 2>/dev/null)
+    if [ -z "$DUT_PUB" ] || [ "$DUT_PUB" = "$EP_IP" ]; then
+        echo "WARNING: no distinct DUT public IP (got '${DUT_PUB}'); the relay-only pass cannot block the direct path"
+    else
+        echo "relay-only: dropping all UDP between betty and the DUT ($DUT_PUB)"
+        $SRVSSH "iptables -I INPUT -p udp -s ${DUT_PUB} -j DROP
+            iptables -I OUTPUT -p udp -d ${DUT_PUB} -j DROP"
+    fi
+
     # --- real peer on betty (reads the key from the root-only file itself)
-    $SRVSSH "nohup $BASE/ts/tailscaled --state=$BASE/tsb_state --socket=/run/tsb.sock > /var/log/tsdb.log 2>&1 < /dev/null & sleep 4
+    # --port pinned so betty-peer's main socket is deterministic in the log
+    $SRVSSH "nohup $BASE/ts/tailscaled --state=$BASE/tsb_state --socket=/run/tsb.sock --port=41641 > /var/log/tsdb.log 2>&1 < /dev/null & sleep 4
         $BASE/ts/tailscale --socket=/run/tsb.sock up --login-server http://127.0.0.1:${HSPORT} \
             --auth-key \"file:$KEYFILE\" --hostname betty-peer --accept-dns=false 2>/dev/null \
         || $BASE/ts/tailscale --socket=/run/tsb.sock up --login-server http://127.0.0.1:${HSPORT} \
             --auth-key \"\$(cat $KEYFILE)\" --hostname betty-peer --accept-dns=false"
     RC=$?
     check "betty peer joined" "$([ "$RC" = "0" ] && echo 1 || echo 0)" "rc=$RC"
-
-    # --- data plane over the real path
-    # Give disco time to punch a direct path before the ping legs (over
-    # LTE the first punch can take >30 s; ICMP legs ran too early once
-    # and false-failed while HTTP-over-DERP passed).
-    end=$((SECONDS+60))
-    while [ $SECONDS -lt $end ]; do
-        tsq "status" 2>/dev/null | grep -qiE "wican.*direct" && break
-        sleep 5
-    done
-    P=$(tsq "ping -c 5 --timeout 5s $TSIP" 2>&1 | tail -1)
-    check "disco ping" "$(echo "$P" | grep -q pong && echo 1 || echo 0)" "$P"
-    I=$($SRVSSH "ping -c 8 -W 4 -q $TSIP" | grep -E "received" || true)
-    check "ICMP through tunnel" "$(echo "$I" | grep -qE ' [1-8] received' && echo 1 || echo 0)" "$I"
-    H=$($SRVSSH "curl -s -m 30 -o /dev/null -w '%{http_code}' http://$TSIP/api/status")
-    check "HTTP through tunnel" "$([ "$H" = "200" ] && echo 1 || echo 0)" "code=$H"
-    V2=$(dut "-s http://${DUT_IP}/api/vpn")
-    check "DUT sees the peer" "$(echo "$V2" | grep -q '"ts_peers":0' && echo 0 || echo 1)" "$(echo "$V2" | head -c 240)"
-    echo "path: $(tsq status 2>/dev/null | grep -i wican || echo '?')"
+    REL=$(tsq "status --json" 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin)['Self'].get('Relay',''))" 2>/dev/null)
+    echo "betty peer's home relay: ${REL:-?} (the DUT's own is region 9, dfw, unless the map lacks it)"
 
     # --- the DERP relay (2026-10-31, issue 1024): the public Tailscale relays
     # over TLS on :443 (the derpmap above). Every handshake failed on v6
@@ -294,6 +305,8 @@ EOF
     # address. Before 2026-11-01 the firmware ignored a peer's AllowedIPs
     # beyond its own address, so the request left over the station and
     # died (the reporter's "WiCAN says it can't connect to the MQTT server").
+    # Since 2026-11-03 this first request runs in the relay-only pass (see
+    # above): the DUT initiates, no direct path, the peer silent until now.
     scp -q -o BatchMode=yes "$RECEIVER_SRC" "$SRV:$BASE/dd_receiver.py"
     # the pkill in its own ssh call: the start block below carries the plain
     # 'dd_receiver.py' in its nohup line, and a same-shell pkill self-matches
@@ -322,8 +335,47 @@ for r in json.load(sys.stdin) or []:
     done
     check "subnet route learned from the map" "$R" "$(echo "$V4" | sed -n 's/.*\("routes":\[[^]]*\]\).*/\1/p')"
     T=$(dut "-s -m 40 -X POST http://${DUT_IP}/api/destinations/test -H 'Content-Type: application/json' -d '{\"name\":\"tsroute\"}'" 2>/dev/null)
-    check "destination test through the subnet route answers" "$(echo "$T" | grep -q '"ok":true' && echo 1 || echo 0)" "$(echo "$T" | head -c 200)"
+    check "relay-only: a request the DUT initiates through the subnet route answers" "$(echo "$T" | grep -q '"ok":true' && echo 1 || echo 0)" "$(echo "$T" | head -c 200)"
     REC=$($SRVSSH "sleep 2; curl -s -m 5 'http://127.0.0.1:${RECV_PORT}/__dump?since=${N0:-0}' | python3 -c \"
+import json,sys
+r=[x for x in json.load(sys.stdin) if x.get('path','').endswith('/route')]
+print(r[-1]['peer'] if r else 'none')\"" 2>/dev/null)
+    check "relay-only: the subnet router saw the request from the tailnet address" "$([ -n "$TSIP" ] && [ "$REC" = "$TSIP" ] && echo 1 || echo 0)" "peer=$REC (expected $TSIP)"
+    echo "relay-only path: $(tsq status 2>/dev/null | grep -i wican || echo '?')"
+    # the pass is only worth its name while the drops bit: the OUTPUT rule's
+    # packet counter (UDP to the DUT that betty tried to send and could not)
+    DROPPED=$($SRVSSH "iptables -L OUTPUT -v -n 2>/dev/null | grep -F '${DUT_PUB}' | awk '{print \$1}' | head -1")
+    check "relay-only: the direct UDP path was blocked throughout" "$([ -n "$DUT_PUB" ] && [ "$DUT_PUB" != "$EP_IP" ] && [ "${DROPPED:-0}" -gt 0 ] 2>/dev/null && echo 1 || echo 0)" "dut_pub=${DUT_PUB:-?} dropped=${DROPPED:-0} packets"
+
+    # the direct UDP path back on: the direct-path legs below
+    $SRVSSH "iptables -D INPUT -p udp -s ${DUT_PUB} -j DROP 2>/dev/null
+        iptables -D OUTPUT -p udp -d ${DUT_PUB} -j DROP 2>/dev/null; true"
+
+    # --- data plane over the real path
+    # Give disco time to punch a direct path before the ping legs (over
+    # LTE the first punch can take >30 s; ICMP legs ran too early once
+    # and false-failed while HTTP-over-DERP passed).
+    end=$((SECONDS+60))
+    while [ $SECONDS -lt $end ]; do
+        tsq "status" 2>/dev/null | grep -qiE "wican.*direct" && break
+        sleep 5
+    done
+    P=$(tsq "ping -c 5 --timeout 5s $TSIP" 2>&1 | tail -1)
+    check "disco ping" "$(echo "$P" | grep -q pong && echo 1 || echo 0)" "$P"
+    I=$($SRVSSH "ping -c 8 -W 4 -q $TSIP" | grep -E "received" || true)
+    check "ICMP through tunnel" "$(echo "$I" | grep -qE ' [1-8] received' && echo 1 || echo 0)" "$I"
+    H=$($SRVSSH "curl -s -m 30 -o /dev/null -w '%{http_code}' http://$TSIP/api/status")
+    check "HTTP through tunnel" "$([ "$H" = "200" ] && echo 1 || echo 0)" "code=$H"
+    V2=$(dut "-s http://${DUT_IP}/api/vpn")
+    check "DUT sees the peer" "$(echo "$V2" | grep -q '"ts_peers":0' && echo 0 || echo 1)" "$(echo "$V2" | head -c 240)"
+    echo "path: $(tsq status 2>/dev/null | grep -i wican || echo '?')"
+
+    # --- the subnet route once more, now with the direct path up (the
+    # 2026-11-01 leg as it was): the receiver records the second request
+    N1=$(recv_count)
+    T=$(dut "-s -m 40 -X POST http://${DUT_IP}/api/destinations/test -H 'Content-Type: application/json' -d '{\"name\":\"tsroute\"}'" 2>/dev/null)
+    check "destination test through the subnet route answers" "$(echo "$T" | grep -q '"ok":true' && echo 1 || echo 0)" "$(echo "$T" | head -c 200)"
+    REC=$($SRVSSH "sleep 2; curl -s -m 5 'http://127.0.0.1:${RECV_PORT}/__dump?since=${N1:-0}' | python3 -c \"
 import json,sys
 r=[x for x in json.load(sys.stdin) if x.get('path','').endswith('/route')]
 print(r[-1]['peer'] if r else 'none')\"" 2>/dev/null)
@@ -385,6 +437,19 @@ down)
     # it would self-match through any other mention of the receiver)
     $SRVSSH "pkill -f '[d]d_receiver.py' 2>/dev/null; true"
     $SRVSSH "ip addr del ${SUBNET_IP}/24 dev lo 2>/dev/null; true"
+    # the relay-only pass's UDP drops, in case `up` stopped inside it: by the
+    # DUT's public IP (recomputed here, down being its own invocation), and a
+    # sweep of any leftover `-p udp -j DROP` rule (the only UDP drops on this
+    # test VPS are ours) so nothing is stranded if the IP moved
+    DUT_PUB=$($PI "curl -s -m 8 https://api.ipify.org" 2>/dev/null)
+    [ -n "$DUT_PUB" ] && $SRVSSH "iptables -D INPUT -p udp -s ${DUT_PUB} -j DROP 2>/dev/null
+        iptables -D OUTPUT -p udp -d ${DUT_PUB} -j DROP 2>/dev/null; true"
+    $SRVSSH "for c in INPUT OUTPUT; do
+            while iptables -S \$c 2>/dev/null | grep -q -- '-p udp -j DROP'; do
+                r=\$(iptables -S \$c | grep -m1 -- '-p udp -j DROP' | sed 's/^-A/-D/')
+                iptables \$r 2>/dev/null || break
+            done
+        done; true"
     $SRVSSH "$BASE/ts/tailscale --socket=/run/tsb.sock down 2>/dev/null
         pkill -f '[t]ailscaled.*tsb.sock' 2>/dev/null || true
         pkill -f '$BASE/[h]eadscale serve' 2>/dev/null || true
