@@ -945,7 +945,7 @@ function Show-Inventory {
     Write-Host '  vpnpause   - the VPN pauses on networks marked Pause VPN (issue #976): the bench AP marked / unmarked, away on the dongle AP, home again; wg-bench on the Pi, the console for the away leg (~12 min)'
     Write-Host '  vpnroutes  - the split tunnel (issue #975): a request to a routed network leaves through wg-bench on the Pi, one to any other address through the station, judged at the receiver by the source address (~6 min)'
     Write-Host '  wgcycle    - WireGuard torn down while MQTT runs through it, N times (the beta.5 vpn_state crashes, 2026-11-02): wg-bench on the Pi, the broker at its tunnel address, a station trial to a network that does not exist drops the uplink each cycle; connects grows, MQTT returns, no reboot (~30 s per cycle, 10 cycles)'
-    Write-Host '  tspublic   - Tailscale against the public rig (issue #1024, 2026-10-31): headscale and a peer on betty, the public Tailscale DERP map; register, tunnel IP, the relay-only pass (the peer''s UDP dropped, the DUT''s first request through a subnet route goes through the peer''s relay region, 2026-11-03), direct path, ICMP + HTTP through the tunnel, the DERP relay up over TLS, the internal RAM flat over a 3 min soak; everything torn down and the keys wiped at the end (~10 min; needs betty and internet for the DUT)'
+    Write-Host '  tspublic   - Tailscale on Betty: six DUT-initiated subnet requests over pure relay through rekey (direct UDP blocked), no false direct endpoint, direct DISCO/ICMP/HTTP recovery, PSRAM stacks, flat RAM, zero errors/faults, exact settings restoration and scoped teardown (~10 min; needs betty and the DUT on the Pi''s internet path)'
     Write-Host '  tlschain   - An HTTPS chain ending in a cross-signed root (Cloudflare under GTS Root R4 as signed by GlobalSign Root CA, 2026-11-03) accepted by the built-in certificate bundle: the HA webhook pointed at such a host must get an HTTP answer, never a transport error; restored afterwards (~40 s; needs internet for the DUT)'
     Write-Host '  espnleasy  - the ESPNetLink easy-setup surfaces on the DUT (2026-10-13): the usb summary on /api/status against /api/espnetlink, the sim_pin key (a no-op PUT, no restart), the UI doors in the served page, the GPS hint counting away from home (ap off on the P4 for 100 s, home again) (~6 min; needs the P4 daemon)'
     Write-Host '  espnlapn   - the carrier settings relay in the USB modes (2026-10-28): a bench APN set on the WiCAN reaches the dongle through the share pass (one planned dongle restart), a plain WiCAN restart writes nothing, the APN restored as found and the LTE back (~8 min, 3 to 4 planned WiCAN restarts, 2 dongle restarts; the dongle on the connector in a USB mode with its console on; its LTE is down while the bench APN is on it)'
@@ -1543,12 +1543,10 @@ try {
             # Tailscale against the canonical public rig (issue #1024,
             # 2026-10-31): ts_public_soak.sh brings headscale and a real peer
             # up on betty with the public Tailscale DERP map, joins the DUT
-            # over its real uplink, runs the legs (register, tunnel IP,
-            # direct path, ICMP + HTTP through the tunnel, the DERP relay up
-            # over TLS, internal RAM flat) and a 3 min soak, and tears it all
-            # down with the keys wiped. The DUT must reach the internet (the
-            # Pi's NAT or the dongle's LTE); the script talks to the DUT
-            # through the Pi, so no tunnel is needed here.
+            # over the Pi's NAT, runs six relay-only subnet requests through
+            # rekey, then the direct path and a 3 min RAM/health soak.
+            # Exact settings restoration and scoped teardown are mandatory.
+            # Management goes through the Pi, so no SSH tunnel is needed here.
             Invoke-Stage 'Tailscale on the public rig' {
                 $con = Start-ConsoleTail 'ts_public'
                 try {
@@ -1560,8 +1558,11 @@ try {
                     if (-not $gitBash) { throw 'Git Bash not found (Git for Windows; the IDF portable git on PATH has no bash)' }
                     $sh = "$repo\tools\testbench\vpn\ts_public_soak.sh" -replace '\\', '/'
                     $out = & $gitBash $sh 'run' '3' 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    $rc = $LASTEXITCODE
                     Save-StageLog 'ts_public' $out
-                    if (-not ($out | Select-String -Quiet 'TS PUBLIC PASS')) { throw 'no TS PUBLIC PASS (betty reachable? the DUT on the internet? the relay refused?)' }
+                    if ($rc -ne 0 -or -not ($out | Select-String -Quiet '^TS PUBLIC PASS$')) {
+                        throw 'Tailscale public bench or its teardown failed; see ts_public.log'
+                    }
                 } finally {
                     Remove-Item Env:DUT_IP -ErrorAction SilentlyContinue
                     Stop-ConsoleTail $con

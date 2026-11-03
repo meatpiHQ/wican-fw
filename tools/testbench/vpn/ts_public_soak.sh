@@ -9,13 +9,10 @@
 #   betty:  headscale 0.23.0 on :8080 (HTTP control)  +  a real tailscale
 #           peer node "betty-peer" (static build, own tun)
 #   DUT:    joins as "wican-pub" via vpn_manager type=tailscale
-#   legs:   register -> tailnet IP -> disco ping -> ICMP -> HTTP through
-#           the tunnel -> DUT peer-detail surface -> the DERP relay up
-#           (/api/vpn derp, 2026-10-31) -> a subnet route the betty peer
-#           advertises learned from the map and a request through it
-#           (2026-11-01) -> the Tailscale task stacks on PSRAM -> internal
-#           RAM flat over 60 s (`up`) or over the soak (`run`); then the
-#           soak loop.
+#   legs:   register -> relay-only subnet requests through rekey (UDP
+#           blocked before the peer joins) -> unblock -> direct DISCO,
+#           ICMP, HTTP and subnet request -> PSRAM task stacks -> RAM
+#           flat over the soak -> zero errors/faults -> exact restore.
 #
 # KEY HYGIENE (same rules as wg_public_soak.sh):
 #   * headscale's noise private key + node db live only on betty; `down`
@@ -25,7 +22,9 @@
 #     and delivered to the DUT via curl stdin (-d @-) so it never appears in
 #     argv, logs, or this repo. The betty peer reads it from the file
 #     directly. It is NEVER printed; `down` blanks the DUT copy.
-#   * `run` tears everything down via an EXIT trap.
+#   * Exact DUT settings are saved privately under state/ts-public-<ip>
+#     (gitignored) until `down` verifies their restoration after restart.
+#   * `run` tears everything down via an EXIT trap; cleanup failures fail it.
 #
 # Usage:
 #   ts_public_soak.sh provision       # one-time: fetch binaries onto betty
@@ -52,6 +51,27 @@ PI="ssh -o BatchMode=yes -o ConnectTimeout=10 rpi001"
 SRVSSH="ssh -o BatchMode=yes -o ConnectTimeout=12 $SRV"
 HS_VER=0.23.0                    # same version the rpi001 rig verified
 TS_VER=1.78.1
+SNAPSHOT="$(dirname "$0")/../../../state/ts-public-${DUT_IP}"
+
+stop_bench_process() {
+    local name="$1"
+    $SRVSSH "if [ -f $BASE/${name}.pid ]; then
+        pid=\$(cat $BASE/${name}.pid)
+        case \$pid in ''|*[!0-9]*) echo 'invalid bench PID' >&2; exit 1;; esac
+        if [ -d /proc/\$pid ]; then
+            grep -zqF '$BASE/' /proc/\$pid/cmdline || {
+                echo 'bench PID no longer belongs to this rig' >&2; exit 1;
+            }
+            kill -TERM \$pid || exit 1
+            for n in 1 2 3 4 5; do
+                [ ! -d /proc/\$pid ] && break
+                sleep 1
+            done
+            [ ! -d /proc/\$pid ] || { echo 'bench process did not stop' >&2; exit 1; }
+        fi
+        rm $BASE/${name}.pid
+    fi"
+}
 
 FAILS=()
 check() { # name ok [detail]
@@ -59,7 +79,7 @@ check() { # name ok [detail]
     if [ "$2" = "1" ]; then echo "PASS: $1${d:+ ($d)}"
     else echo "FAIL: $1${d:+ ($d)}"; FAILS+=("$1"); fi
 }
-dut() { $PI "curl -s -m 10 $*"; }
+dut() { $PI "curl -sS -m 10 $*"; }
 tsq() { $SRVSSH "$BASE/ts/tailscale --socket=/run/tsb.sock $*"; }
 # the subnet router leg (2026-11-01): a network betty advertises (an alias on
 # its loopback) that the DUT must learn from the map and reach through the
@@ -85,7 +105,7 @@ print(json.dumps(d))" | $PI "curl -s -o /dev/null -w '%{http_code}' -m 10 \
 DD_ROW_DROP="d['destinations']=[r for r in d.get('destinations',[]) if r.get('name')!='tsroute']"
 DD_ROW_ADD="${DD_ROW_DROP}
 d['enabled']=True
-d['destinations'].append({'name':'tsroute','type':'http','enabled':True,'url':'http://${SUBNET_IP}:${RECV_PORT}/route','period_s':86400,'auth':'none','auth_token':'','auth_name':'','basic_username':'','basic_password':'','api_key':'','query':'','cert_set':'','car_model':'','retain':True,'full_first':True})"
+d['destinations'].append({'name':'tsroute','type':'http','enabled':False,'url':'http://${SUBNET_IP}:${RECV_PORT}/route','period_s':86400,'auth':'none','auth_token':'','auth_name':'','basic_username':'','basic_password':'','api_key':'','query':'','cert_set':'','car_model':'','retain':True,'full_first':True})"
 dut_int_free() { # the DUT's internal RAM free, bytes ("" when unreachable)
     dut "-s -m 6 http://${DUT_IP}/api/status" 2>/dev/null | python3 -c \
         "import json,sys; print(json.load(sys.stdin)['memory']['internal']['free'])" 2>/dev/null
@@ -123,10 +143,32 @@ provision)
     ;;
 
 up|run)
+    umask 077
+    if [ -e "$SNAPSHOT" ]; then
+        echo "Saved settings already exist at $SNAPSHOT; run down to restore them first"
+        exit 1
+    fi
+    mkdir -p "$SNAPSHOT" || exit 1
+    for comp in vpn_manager data_destinations; do
+        if ! dut "-f http://${DUT_IP}/api/settings/${comp}" > "$SNAPSHOT/$comp.json"; then
+            echo "Cannot save $comp settings; DUT left unchanged"
+            rm -f "$SNAPSHOT/vpn_manager.json" "$SNAPSHOT/data_destinations.json"
+            rmdir "$SNAPSHOT"
+            exit 1
+        fi
+    done
     if [ "$1" = "run" ]; then
         MINS="${2:-10}"
-        teardown() { echo; echo "=== teardown (trap) ==="; "$0" down; }
-        trap teardown EXIT INT TERM
+        teardown() {
+            local result=$?
+            trap - EXIT
+            echo; echo "=== teardown (trap) ==="
+            "$0" down || result=1
+            exit "$result"
+        }
+        trap teardown EXIT
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
     fi
 
     EP_IP=$($SRVSSH "curl -s -m 8 https://api.ipify.org")
@@ -143,12 +185,9 @@ up|run)
 
     # --- headscale up from FRESH state (phantom-peers gate, see
     # BUG_TS_PHANTOM_PEERS.md: a stale node db can mask NVS-cached phantoms)
-    # separate ssh for the kills: the bracket trick protects against the
-    # pattern itself, but the START block below carries the plain
-    # 'headscale serve' string in its nohup line: same-shell pkill would
-    # self-match through THAT and kill the block (burned twice here)
-    $SRVSSH "pkill -f '$BASE/[h]eadscale serve' 2>/dev/null || true
-        pkill -f '[t]ailscaled.*tsb.sock' 2>/dev/null || true; sleep 1"
+    # Only stop processes whose PID files were written by this rig.
+    stop_bench_process headscale || exit 1
+    stop_bench_process tailscaled || exit 1
     $SRVSSH "set -e; umask 077
         rm -rf /var/lib/headscale /etc/headscale /run/tsb.sock $BASE/tsb_state
         mkdir -p /etc/headscale /var/lib/headscale /var/run/headscale
@@ -196,6 +235,7 @@ logtail:
 randomize_client_port: false
 EOF
         nohup $BASE/headscale serve > /var/log/hs_bench.log 2>&1 < /dev/null &
+        echo \$! > $BASE/headscale.pid
         sleep 4"
     HS_OK=$($SRVSSH "curl -s -m 5 -o /dev/null -w '%{http_code}' http://127.0.0.1:${HSPORT}/health")
     check "headscale serving" "$([ "$HS_OK" = "200" ] && echo 1 || echo 0)" "health=$HS_OK"
@@ -227,7 +267,8 @@ EOF
            'ts_control_url':os.environ['EP']+':'+os.environ['HSPORT']})" \
         | dut_put_vpn)
     check "DUT vpn PUT" "$([ "$CODE" = "200" ] && echo 1 || echo 0)" "http $CODE"
-    # the destination row the subnet leg tests with (one submit for both)
+    # Test runs disabled rows too. Keep scheduled delivery off so no request
+    # precedes the receiver, peer or route, and every request is accounted for.
     CODE=$(dut_dd_config "$DD_ROW_ADD")
     check "DUT destination row PUT" "$([ "$CODE" = "200" ] && echo 1 || echo 0)" "http $CODE"
     dut "-X POST http://${DUT_IP}/api/settings/submit" >/dev/null
@@ -265,17 +306,22 @@ EOF
     # anywhere else (Sydney for betty). The rules come off before the
     # direct-path legs. DUT_PUB = the Pi's public IP (the DUT's NAT).
     DUT_PUB=$($PI "curl -s -m 8 https://api.ipify.org" 2>/dev/null)
-    if [ -z "$DUT_PUB" ] || [ "$DUT_PUB" = "$EP_IP" ]; then
-        echo "WARNING: no distinct DUT public IP (got '${DUT_PUB}'); the relay-only pass cannot block the direct path"
+    if [[ ! "$DUT_PUB" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+       [ "$DUT_PUB" = "$EP_IP" ]; then
+        echo "No distinct DUT public IPv4 address; cannot enforce the relay-only pass"
+        exit 1
     else
         echo "relay-only: dropping all UDP between betty and the DUT ($DUT_PUB)"
-        $SRVSSH "iptables -I INPUT -p udp -s ${DUT_PUB} -j DROP
-            iptables -I OUTPUT -p udp -d ${DUT_PUB} -j DROP"
+        printf '%s' "$DUT_PUB" > "$SNAPSHOT/public_ip"
+        $SRVSSH "iptables -I INPUT -p udp -s ${DUT_PUB} -m comment --comment ts-public-bench -j DROP
+            iptables -I OUTPUT -p udp -d ${DUT_PUB} -m comment --comment ts-public-bench -j DROP" || exit 1
     fi
 
     # --- real peer on betty (reads the key from the root-only file itself)
     # --port pinned so betty-peer's main socket is deterministic in the log
-    $SRVSSH "nohup $BASE/ts/tailscaled --state=$BASE/tsb_state --socket=/run/tsb.sock --port=41641 > /var/log/tsdb.log 2>&1 < /dev/null & sleep 4
+    $SRVSSH "nohup $BASE/ts/tailscaled --verbose=2 --state=$BASE/tsb_state --socket=/run/tsb.sock --port=41641 > /var/log/tsdb.log 2>&1 < /dev/null &
+        echo \$! > $BASE/tailscaled.pid
+        sleep 4
         $BASE/ts/tailscale --socket=/run/tsb.sock up --login-server http://127.0.0.1:${HSPORT} \
             --auth-key \"file:$KEYFILE\" --hostname betty-peer --accept-dns=false 2>/dev/null \
         || $BASE/ts/tailscale --socket=/run/tsb.sock up --login-server http://127.0.0.1:${HSPORT} \
@@ -308,13 +354,10 @@ EOF
     # Since 2026-11-03 this first request runs in the relay-only pass (see
     # above): the DUT initiates, no direct path, the peer silent until now.
     scp -q -o BatchMode=yes "$RECEIVER_SRC" "$SRV:$BASE/dd_receiver.py"
-    # the pkill in its own ssh call: the start block below carries the plain
-    # 'dd_receiver.py' in its nohup line, and a same-shell pkill self-matches
-    # through it and kills the block (the headscale trap above, met again
-    # here on 2026-10-31)
-    $SRVSSH "pkill -f '[d]d_receiver.py' 2>/dev/null; sleep 1; true"
+    stop_bench_process receiver || exit 1
     $SRVSSH "ip addr add ${SUBNET_IP}/24 dev lo 2>/dev/null || true
         nohup python3 $BASE/dd_receiver.py --no-tls --mqtt none > /var/log/ddr_bench.log 2>&1 < /dev/null &
+        echo \$! > $BASE/receiver.pid
         $BASE/ts/tailscale --socket=/run/tsb.sock set --advertise-routes=${SUBNET} 2>&1 | tail -2
         sleep 3
         $BASE/headscale routes list -o json 2>/dev/null | python3 -c \"
@@ -342,14 +385,32 @@ r=[x for x in json.load(sys.stdin) if x.get('path','').endswith('/route')]
 print(r[-1]['peer'] if r else 'none')\"" 2>/dev/null)
     check "relay-only: the subnet router saw the request from the tailnet address" "$([ -n "$TSIP" ] && [ "$REC" = "$TSIP" ] && echo 1 || echo 0)" "peer=$REC (expected $TSIP)"
     echo "relay-only path: $(tsq status 2>/dev/null | grep -i wican || echo '?')"
+    check "relay-only: the peer has no false direct endpoint" \
+        "$(tsq status 2>/dev/null | grep -qE 'wican-pub.*relay' && echo 1 || echo 0)"
+    if echo "$T" | grep -q '"ok":true'; then
+        # Exercise a warm session through WireGuard's 120 s rekey boundary.
+        for n in 1 2 3 4 5; do
+            sleep 30
+            T=$(dut "-s -m 40 -X POST http://${DUT_IP}/api/destinations/test -H 'Content-Type: application/json' -d '{\"name\":\"tsroute\"}'")
+            check "relay-only: warm request $n" \
+                "$(echo "$T" | grep -q '\"ok\":true,\"status\":200' && echo 1 || echo 0)" "$T"
+        done
+        N2=$(recv_count)
+        check "relay-only: all six requests arrived exactly once" \
+            "$([ -n "$N2" ] && [ "$((N2 - N0))" -eq 6 ] && echo 1 || echo 0)" \
+            "records ${N0:-?} -> ${N2:-?}"
+    fi
     # the pass is only worth its name while the drops bit: the OUTPUT rule's
     # packet counter (UDP to the DUT that betty tried to send and could not)
     DROPPED=$($SRVSSH "iptables -L OUTPUT -v -n 2>/dev/null | grep -F '${DUT_PUB}' | awk '{print \$1}' | head -1")
     check "relay-only: the direct UDP path was blocked throughout" "$([ -n "$DUT_PUB" ] && [ "$DUT_PUB" != "$EP_IP" ] && [ "${DROPPED:-0}" -gt 0 ] 2>/dev/null && echo 1 || echo 0)" "dut_pub=${DUT_PUB:-?} dropped=${DROPPED:-0} packets"
 
     # the direct UDP path back on: the direct-path legs below
-    $SRVSSH "iptables -D INPUT -p udp -s ${DUT_PUB} -j DROP 2>/dev/null
-        iptables -D OUTPUT -p udp -d ${DUT_PUB} -j DROP 2>/dev/null; true"
+    if [ -f "$SNAPSHOT/public_ip" ]; then
+        $SRVSSH "iptables -D INPUT -p udp -s ${DUT_PUB} -m comment --comment ts-public-bench -j DROP
+            iptables -D OUTPUT -p udp -d ${DUT_PUB} -m comment --comment ts-public-bench -j DROP" || exit 1
+        rm "$SNAPSHOT/public_ip"
+    fi
 
     # --- data plane over the real path
     # Give disco time to punch a direct path before the ping legs (over
@@ -414,6 +475,10 @@ print(' '.join(f\"{n}={t[n].get('stack_ext')}/{t[n].get('stack_hw')}\" if n in t
         M1=$(dut_int_free)
         check "internal RAM flat over the soak" "$([ -n "$M0" ] && [ -n "$M1" ] && [ $((M0 - M1)) -lt 4096 ] && echo 1 || echo 0)" "${M0} -> ${M1} B"
     fi
+    HEALTH=$(dut "-f http://${DUT_IP}/api/status")
+    check "zero error logs and zero faults" \
+        "$(echo "$HEALTH" | grep -q '\"log_errors\":0' &&
+           echo "$HEALTH" | grep -q '\"faults\":0' && echo 1 || echo 0)"
     ;;
 
 status)
@@ -424,39 +489,61 @@ status)
 
 down)
     echo "=== tearing down ==="
-    # DUT first (blank the key), tolerate an unreachable DUT
-    VCFG=$(dut_vpn_config "d.update({'enabled':False,'type':'wireguard','ts_auth_key':'','ts_control_url':'','ts_device_name':''})" 2>/dev/null)
-    if [ -n "${VCFG:-}" ]; then
-        printf '%s' "$VCFG" | dut_put_vpn | sed 's/^/DUT vpn disable PUT -> /'; echo
-        echo "DUT destination row removed -> $(dut_dd_config "$DD_ROW_DROP" 2>/dev/null)"
-        dut "-X POST http://${DUT_IP}/api/settings/submit" >/dev/null 2>&1 && echo "DUT submitted (VPN off, key blanked)"
-    else
-        echo "DUT unreachable: blank ts_auth_key and drop the tsroute destination manually when it is back"
-    fi
-    # the subnet router leg's pieces on betty (the pkill alone in its call:
-    # it would self-match through any other mention of the receiver)
-    $SRVSSH "pkill -f '[d]d_receiver.py' 2>/dev/null; true"
-    $SRVSSH "ip addr del ${SUBNET_IP}/24 dev lo 2>/dev/null; true"
-    # the relay-only pass's UDP drops, in case `up` stopped inside it: by the
-    # DUT's public IP (recomputed here, down being its own invocation), and a
-    # sweep of any leftover `-p udp -j DROP` rule (the only UDP drops on this
-    # test VPS are ours) so nothing is stranded if the IP moved
-    DUT_PUB=$($PI "curl -s -m 8 https://api.ipify.org" 2>/dev/null)
-    [ -n "$DUT_PUB" ] && $SRVSSH "iptables -D INPUT -p udp -s ${DUT_PUB} -j DROP 2>/dev/null
-        iptables -D OUTPUT -p udp -d ${DUT_PUB} -j DROP 2>/dev/null; true"
-    $SRVSSH "for c in INPUT OUTPUT; do
-            while iptables -S \$c 2>/dev/null | grep -q -- '-p udp -j DROP'; do
-                r=\$(iptables -S \$c | grep -m1 -- '-p udp -j DROP' | sed 's/^-A/-D/')
-                iptables \$r 2>/dev/null || break
+    RESTORED=1
+    for comp in vpn_manager data_destinations; do
+        if [ -f "$SNAPSHOT/$comp.json" ]; then
+            CODE=$($PI "curl -s -m 10 -o /dev/null -w '%{http_code}' -X PUT \
+                http://${DUT_IP}/api/settings/${comp} -H 'Content-Type: application/json' \
+                -d @-" < "$SNAPSHOT/$comp.json")
+            if [ "$CODE" != "200" ]; then
+                echo "Restore $comp failed (HTTP $CODE); saved settings retained"
+                RESTORED=0
+            fi
+        fi
+    done
+    if [ "$RESTORED" = "1" ] && [ -d "$SNAPSHOT" ]; then
+        dut "-f -X POST http://${DUT_IP}/api/settings/submit" >/dev/null || RESTORED=0
+        echo "DUT settings restore submitted (planned restart)"
+        sleep 8
+        for comp in vpn_manager data_destinations; do
+            end=$((SECONDS+90))
+            MATCH=0
+            while [ $SECONDS -lt $end ]; do
+                if dut "-f http://${DUT_IP}/api/settings/${comp}" > "$SNAPSHOT/verify.json" &&
+                   cmp -s "$SNAPSHOT/$comp.json" "$SNAPSHOT/verify.json"; then
+                    MATCH=1
+                    break
+                fi
+                sleep 3
             done
-        done; true"
-    $SRVSSH "$BASE/ts/tailscale --socket=/run/tsb.sock down 2>/dev/null
-        pkill -f '[t]ailscaled.*tsb.sock' 2>/dev/null || true
-        pkill -f '$BASE/[h]eadscale serve' 2>/dev/null || true
-        sleep 1
+            if [ "$MATCH" != "1" ]; then
+                echo "Restored $comp settings did not match; snapshot retained"
+                RESTORED=0
+            fi
+        done
+        rm -f "$SNAPSHOT/verify.json"
+    fi
+    # Remove only the receiver, alias and tagged firewall rules of this rig.
+    stop_bench_process receiver || exit 1
+    $SRVSSH "ip addr del ${SUBNET_IP}/24 dev lo 2>/dev/null; true"
+    # Use the saved address even if the DUT's public IP has changed.
+    if [ -f "$SNAPSHOT/public_ip" ]; then
+        DUT_PUB=$(cat "$SNAPSHOT/public_ip")
+        $SRVSSH "iptables -D INPUT -p udp -s ${DUT_PUB} -m comment --comment ts-public-bench -j DROP
+            iptables -D OUTPUT -p udp -d ${DUT_PUB} -m comment --comment ts-public-bench -j DROP" || exit 1
+        rm "$SNAPSHOT/public_ip"
+    fi
+    stop_bench_process tailscaled || exit 1
+    stop_bench_process headscale || exit 1
+    $SRVSSH "
         rm -rf /var/lib/headscale /etc/headscale $BASE/tsb_state /run/tsb.sock $KEYFILE
         left=\$(ls /var/lib/headscale /etc/headscale $BASE/tsb_state $KEYFILE 2>/dev/null | wc -l)
-        pgrep -f '$BASE/([h]eadscale|ts/[t]ailscaled)' >/dev/null && echo 'WARNING: processes still up' || echo \"betty: control+peer down, state+keys wiped (residue files: \$left)\""
+        echo \"betty: control+peer down, state+keys wiped (residue files: \$left)\"" || exit 1
+    if [ "$RESTORED" = "1" ] && [ -d "$SNAPSHOT" ]; then
+        rm "$SNAPSHOT/vpn_manager.json" "$SNAPSHOT/data_destinations.json"
+        rmdir "$SNAPSHOT"
+    fi
+    [ "$RESTORED" = "1" ] || exit 1
     ;;
 
 *)

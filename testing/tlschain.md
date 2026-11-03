@@ -30,6 +30,10 @@ the firmware update check, the ABRP push) shares the bundle and the
 
 **Records.**
 
+- 2026-11-03 16:07, final relay-fix image `8b3f8068ef52c85b`:
+  **TLS CHAIN PASS**, 13.4 s, two HTTP 405 responses (TLS succeeded),
+  webhook restored to unregistered. Report:
+  `test-reports/2026-11-03_1607_tlschain.md`.
 - 2026-11-03 10:22, the reproduction on the published beta.7 (bundle as it
   was): 5 of 5 pushes `esp_err=ESP_ERR_HTTP_CONNECT`, the console
   `esp-x509-crt-bundle: No matching trusted root certificate found`,

@@ -9,3 +9,9 @@ Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cel
 Host **unit** suites (`components/*/host_test`, 526 tests across 44 components as of 2026-07-26; the summary prints a per-suite and TOTAL count) on the bench Pi's IDF linux target, syncs sources automatically (the tree it syncs is printed as `components: <path>`: since 2026-10-29 the dev layout's live tree by default, `MEATPI_COMPONENTS_PATH` to override, and nothing found stops the run; before that an unset variable silently synced the stale `components/meatpi` clone, which is gone). Optional component name runs just that suite.
 
 **Pi offline:** `bash tools/testbench/host_gcc_wsl.sh <vpn_manager|config_backup>` from WSL compiles that PURE suite with the system gcc + Unity under ASan/UBSan (no IDF build; 2026-10-16, issues #985 to #989: `vpn_manager` 11, `config_backup` 24; add a case per IDF-free suite)
+
+**2026-11-03:** `.\test.ps1 host microlink` PASS, 8 tests. Compiles the
+production DISCO pong module with transport, RNG and NaCl test doubles:
+same-transport replies, exact UDP source, frame encoding, invalid addresses,
+crypto and send failures, and no cross-transport fallback. Report:
+`test-reports/2026-11-03_1549_host_microlink.md`.
