@@ -126,6 +126,13 @@
       "max": "200"
     }
   },
+  "CLIMATER": {
+    "description": "Is EV Climatizing",
+    "settings": {
+      "unit": "",
+      "type": "binary_sensor"
+    }
+  },
   "CO2": {
     "description": "CO2 Concentration",
     "settings": {
@@ -285,6 +292,27 @@
   },
   "HV_AV": {
     "description": "High Voltage Battery Power Available",
+    "settings": {
+      "unit": "kW",
+      "class": "power"
+    }
+  },
+  "HV_VA": {
+    "description": "High Voltage Battery Power",
+    "settings": {
+      "unit": "kW",
+      "class": "power"
+    }
+  },
+  "HV_AUX_A": {
+    "description": "High Voltage Battery Auxillary Current",
+    "settings": {
+      "unit": "A",
+      "class": "current"
+    }
+  },
+  "HV_AUX_VA": {
+    "description": "High Voltage Battery Auxillary Power",
     "settings": {
       "unit": "kW",
       "class": "power"
